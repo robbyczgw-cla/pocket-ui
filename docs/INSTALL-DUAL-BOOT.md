@@ -93,11 +93,11 @@ this project is the Mini V2's only), the package
 `pocket-ui-<version>-rocknix-install.zip` puts pocket-ui on it in place of EmulationStation and keeps games, saves and
 settings. It is built with `scripts/make-install-zip.sh` and does phase 6 of the appendix on the device itself, over
 SSH, with no computer-side tools: copy the zip to `/storage`, unpack it, `sh install.sh --check`, then `sh install.sh`.
-The `README.txt` inside is the user's guide.
+The `README.txt` inside is the user's guide. New to ROCKNIX on the Mini V2? Since September 2026 ROCKNIX there needs its own one-time bootloader setup; this guide does not repeat it, the user follows [ROCKNIX's guide](https://rocknix.org/devices/retroid/retroid-pocket-mini/) first.
 
 **Without SSH: `Install pocket-ui.sh` in `roms/ports`** (`deploy/package/port-installer.sh`; the build writes it next to
 the zip, with the whole package as a tar.gz after the script, about 10 MB). The player copies this one file into
-`roms/ports` (ROCKNIX's file sharing, or the card in a computer), has EmulationStation reload its list (Start → Game
+`roms/ports` (ROCKNIX's file sharing: Samba on in its Network Settings, then `\\<name or IP>` on Windows or `smb://<name or IP>` on a Mac, see [ROCKNIX: Add Games](https://rocknix.org/play/add-games/); or the card in a computer), has EmulationStation reload its list (Start → Game
 Settings → Update Gamelists) and starts **Install pocket-ui** in Ports. The script is only a front end: it unpacks the
 package to `/storage/.pocket-ui-port`, runs `install.sh --check` and then `install.sh --no-restart` unchanged, so every
 check and the "nothing written until all passed" rule are install.sh's. What the screen shows is ROCKNIX's own
@@ -115,15 +115,15 @@ Without the package inside, the file looks for `pocket-ui-*-rocknix-install.zip`
 uninstall) and on the Odin 2 Mini on 2026-10-28, launched through ROCKNIX's `runemu.sh` as EmulationStation does
 (`INSTALLER-TEST-2026-10-28`, ssh, no button pressed: Close was simulated by ending the viewer).
 
-`install.sh` writes nothing until every check has passed: the package's own checksums, ROCKNIX for SM8250 or SM8550 (aarch64) in a
-tested version (`TESTED_ROCKNIX`, today 20261001), the device tree's model "Retroid Pocket Mini V2" (or, noted as
+`install.sh` writes nothing until every check has passed: the package's own checksums, ROCKNIX for SM8250 or SM8550 (aarch64) in the
+tested version or a newer one (`TESTED_ROCKNIX`, today 20261001; newer gets a note, older is asked to update ROCKNIX first), the device tree's model "Retroid Pocket Mini V2" (or, noted as
 experimental, a known handheld: "Retroid Pocket 5", "Retroid Pocket Flip2", their "… Visionox" variants, Pocket 6 (including TOP-DPAD), Nova, the AYN Odin 2 family and
 "Retroid Pocket Mini"; [DEVICES.md](DEVICES.md#installing)), essway and
 `start_es.sh`, ROCKNIX's first start done, free space on `/storage`, both programs running and printing the package's
 version, and `pocket-ui --check-os-update /` on the running system: pocket-ui's own compatibility check
 ([UPDATES.md](UPDATES.md#os-what-pocket-ui-needs-from-the-new-system)) without its bootloader guard, which is about
-update tars and refuses every upstream system. `--allow-untested-rocknix` and `--allow-other-device` relax the version
-and the model, never the compatibility check. Then it lays out `/storage/pocket-ui` as `dev.sh` and the updater do
+update tars and refuses every upstream system. `--allow-untested-rocknix` (for a ROCKNIX older than the tested one) and `--allow-other-device` relax the version
+and the model, never the compatibility check. The compatibility check, not the version number, decides about a newer ROCKNIX. Then it lays out `/storage/pocket-ui` as `dev.sh` and the updater do
 (`releases/<version>`, `current`, `previous`, the three links, the launcher), puts the drop-in in place, checks that
 systemd took it (else removes it again), puts the boot screen's unit and its link in place (from the next start,
 [BOOT-SPLASH.md](BOOT-SPLASH.md)) and restarts essway, unless it runs inside essway itself. Running it again

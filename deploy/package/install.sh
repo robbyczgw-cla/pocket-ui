@@ -6,7 +6,7 @@
 #   sh install.sh             checks, installs, then restarts the interface: pocket-ui comes up
 #   sh install.sh --check     only the checks; nothing changes
 #   sh install.sh --no-restart   installs, but pocket-ui only comes up at the next start of the device
-#   --allow-untested-rocknix  a ROCKNIX version other than the tested ones, if pocket-ui's own check passes
+#   --allow-untested-rocknix  a ROCKNIX older than the tested one, if pocket-ui's own check passes (newer ones need no option)
 #   --allow-other-device      another SM8250 device than these four (untested, unknown to pocket-ui)
 #
 # What it writes, and only after every check passed: /storage/pocket-ui/ (the programs, as the updater lays them out)
@@ -19,7 +19,7 @@
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 R=${POCKETUI_INSTALL_ROOT:-}
-# The ROCKNIX versions this release was tested on. Another one needs --allow-untested-rocknix and pocket-ui's check.
+# The ROCKNIX version this release was tested on. Newer ones are accepted (pocket-ui's check still has to pass); older ones are not.
 TESTED_ROCKNIX="20261001"
 MODEL_WANTED="Retroid Pocket Mini V2"
 # The Mini V2's siblings on the same ROCKNIX SM8250 image, as their device trees name them (src/device.rs): pocket-ui
@@ -80,13 +80,19 @@ OSR=$R/etc/os-release
 [ "$(field OS_NAME "$OSR")" = ROCKNIX ] || die "this system is $(field OS_NAME "$OSR" || echo unknown), not ROCKNIX"
 dev=$(field HW_DEVICE "$OSR") arch=$(field HW_ARCH "$OSR") ver=$(field OS_VERSION "$OSR")
 { [ "$dev" = SM8250 ] || [ "$dev" = SM8550 ]; } && [ "$arch" = aarch64 ] || die "this is ROCKNIX for $dev/$arch; pocket-ui needs ROCKNIX for SM8250 or SM8550 (aarch64)"
-case " $TESTED_ROCKNIX " in
-  *" $ver "*) ok "ROCKNIX $ver for $dev (Mini V2 tested; other devices experimental)" ;;
-  *)
-    [ $ANY_ROCKNIX = 1 ] || die "ROCKNIX $ver is not a version this pocket-ui was tested on ($TESTED_ROCKNIX). Use a card with ROCKNIX $TESTED_ROCKNIX, or try --allow-untested-rocknix (pocket-ui's compatibility check still runs)"
-    note "ROCKNIX $ver is untested (tested: $TESTED_ROCKNIX); allowed by --allow-untested-rocknix"
-    ;;
-esac
+# ROCKNIX versions are dates (20261001). The tested one and any newer one go ahead (the compatibility check below is the
+# real contract and still blocks); an older one is asked to update first.
+case $ver in *[!0-9]* | '') vernum=0 ;; *) vernum=$ver ;; esac
+if [ "$ver" = "$TESTED_ROCKNIX" ]; then
+  ok "ROCKNIX $ver for $dev (Mini V2 tested; other devices experimental)"
+elif [ "$vernum" -gt "$TESTED_ROCKNIX" ] 2>/dev/null; then
+  ok "ROCKNIX $ver for $dev"
+  note "tested with ROCKNIX $TESTED_ROCKNIX; your ROCKNIX is newer. pocket-ui's compatibility check passed, so it goes ahead"
+elif [ $ANY_ROCKNIX = 1 ]; then
+  note "ROCKNIX $ver is older than the tested $TESTED_ROCKNIX; allowed by --allow-untested-rocknix"
+else
+  die "this ROCKNIX ($ver) is older than the one pocket-ui was tested with ($TESTED_ROCKNIX). Please update ROCKNIX first (its own updater, or a fresh image from rocknix.org), then run this again"
+fi
 model=$(tr -d '\000' <"$MODEL_FILE" 2>/dev/null)
 experimental=0
 case "|$MODELS_EXPERIMENTAL|" in *"|$model|"*) [ -n "$model" ] && experimental=1 ;; esac

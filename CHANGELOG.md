@@ -3,6 +3,21 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a minor version may change anything).
 
+## [0.1.1] - 2026-10-28
+
+### Changed
+
+- A newer ROCKNIX no longer blocks the install. The Ports installer and `install.sh` accept the tested ROCKNIX 20261001
+  and anything newer, say "tested with 20261001; your ROCKNIX is newer" and let pocket-ui's own compatibility check
+  (`pocket-ui --check-os-update /`) decide; that check still blocks. An older ROCKNIX is asked to update first. The card
+  drop-in never looked at the version.
+- The install guides are honest about the start: ROCKNIX on the Mini V2 needs its own one-time bootloader setup since
+  September 2026. README, getting started, the install guide and the card zip's README point to ROCKNIX's own guide
+  for the Mini V2 instead of saying "flash and switch on".
+- The device list is the same everywhere: the Mini V2 is the target; the Pocket 5, Flip 2, first Mini, Pocket 6, Nova
+  and the AYN Odin 2 family are experimental.
+- A hint how to copy files into `roms/ports` with ROCKNIX's file sharing (Samba) from Windows and macOS.
+
 ## [Unreleased]
 
 ### Added

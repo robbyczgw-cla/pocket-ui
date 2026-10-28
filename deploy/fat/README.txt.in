@@ -8,8 +8,9 @@ You need
 --------
 
 - A Retroid Pocket Mini V2 and a microSD card, and a PC or Mac with a card reader.
-- The official ROCKNIX image for SM8250, version @TESTED_ROCKNIX@ (the tested one), from rocknix.org.
-  Flash it to the card as ROCKNIX describes, and set the device up to boot it as ROCKNIX describes.
+- The official ROCKNIX image for SM8250, version @TESTED_ROCKNIX@ (the tested one) or newer, from rocknix.org.
+  New to ROCKNIX on the Mini V2? Set it up once with ROCKNIX's own guide (flashing the card and its one-time
+  bootloader step): https://rocknix.org/devices/retroid/pocket-mini-v2/ , then come back here.
 - These two files from the zip: mount-storage.sh and pocket-ui-seed.tar.gz.
 
 Install

@@ -7,7 +7,7 @@ pocket-ui is a controller-first home screen and game player for the **Retroid Po
 PlayStation 2, gets the same small pause menu with save slots, pictures and a step back in time. Games show up with
 box art, their own card and facts, and a Curator that knows what you own and what you have not touched yet.
 
-Version **0.1.0** is out as a public alpha: [download it](../../releases/tag/v0.1.0),
+Version **0.1.1** is out as a public alpha: [download it](../../releases/tag/v0.1.1),
 watch the [trailer](https://pocketui.xyz), and read more at **[pocketui.xyz](https://pocketui.xyz)**.
 
 <p align="center">
@@ -39,14 +39,14 @@ The pictures are rendered from the code with made-up data (`pocket-ui --snapshot
 
 ## Get it
 
-Download from the [v0.1.0 release](../../releases/tag/v0.1.0) and pick one way.
+Download from the [v0.1.1 release](../../releases/tag/v0.1.1) and pick one way.
 Checksums are in `SHA256SUMS`.
 
 | Way | When | What to do |
 |---|---|---|
-| **Ports installer** | ROCKNIX is already on your card | Unzip [pocket-ui-0.1.0-ports-installer.zip](../../releases/download/v0.1.0/pocket-ui-0.1.0-ports-installer.zip) into `roms/ports`, then in EmulationStation open **Ports → Install pocket-ui**. To go back: **Ports → Uninstall pocket-ui** |
-| **Fresh card** | New card, nothing on it yet | Flash the official ROCKNIX 20261001 image, copy the two files from [pocket-ui-0.1.0-rocknix-card.zip](../../releases/download/v0.1.0/pocket-ui-0.1.0-rocknix-card.zip) onto the card's `ROCKNIX` partition and boot. It installs on the second start |
-| **Over SSH** | You like a terminal | Unzip [pocket-ui-0.1.0-rocknix-install.zip](../../releases/download/v0.1.0/pocket-ui-0.1.0-rocknix-install.zip) in `/storage`, run `sh install.sh --check`, then `sh install.sh` |
+| **Ports installer** | ROCKNIX is already on your card | Unzip [pocket-ui-0.1.1-ports-installer.zip](../../releases/download/v0.1.1/pocket-ui-0.1.1-ports-installer.zip) into `roms/ports` (the games share of ROCKNIX's file sharing: switch on Samba in ROCKNIX's Network Settings, then open `\\<device name or IP>` on Windows or `smb://<device name or IP>` on a Mac; [ROCKNIX explains it](https://rocknix.org/play/add-games/)), then in EmulationStation open **Ports → Install pocket-ui**. To go back: **Ports → Uninstall pocket-ui** |
+| **Fresh card** | New card, nothing on it yet | New to ROCKNIX on the Mini V2? Set it up once with [ROCKNIX's own guide](https://rocknix.org/devices/retroid/retroid-pocket-mini/) (flashing the card plus its one-time bootloader step), then come back. With ROCKNIX 20261001 or newer on the card, copy the two files from [pocket-ui-0.1.1-rocknix-card.zip](../../releases/download/v0.1.1/pocket-ui-0.1.1-rocknix-card.zip) onto the card's `ROCKNIX` partition and boot. It installs on the second start |
+| **Over SSH** | You like a terminal | Unzip [pocket-ui-0.1.1-rocknix-install.zip](../../releases/download/v0.1.1/pocket-ui-0.1.1-rocknix-install.zip) in `/storage`, run `sh install.sh --check`, then `sh install.sh` |
 
 pocket-ui replaces exactly one thing: the program ROCKNIX's `essway` service starts. Remove it and stock ROCKNIX with
 EmulationStation is back; your games, saves and ROCKNIX settings stay where they are. Android on the internal storage
@@ -59,8 +59,8 @@ download a [starter pack](docs/STARTER-PACK.md) of nine free homebrew games, eac
 
 | | |
 |---|---|
-| Made for | Retroid Pocket Mini V2 (Snapdragon 865 / SM8250), ROCKNIX SM8250 build 20261001, 1240 x 1080 screen |
-| Experimental | Retroid Pocket 5, Flip 2 and the first Mini (same ROCKNIX build); Pocket 6, Nova and the AYN Odin 2 family (ROCKNIX SM8550 image) |
+| Made for | Retroid Pocket Mini V2 (Snapdragon 865 / SM8250), ROCKNIX SM8250 build 20261001 (newer builds are accepted when pocket-ui's compatibility check passes), 1240 x 1080 screen |
+| Experimental | Retroid Pocket 5, Flip 2, the first Mini, Pocket 6, Nova and the AYN Odin 2 family (Pocket 5, Flip 2 and the first Mini use the same ROCKNIX SM8250 build; the others the SM8550 image) |
 
 Alpha: it is developed and tested on a Mini V2, and the experimental devices are best-effort. If something is off,
 **Settings → System → About → Report a problem** makes a file for a report, or [open an issue](../../issues).

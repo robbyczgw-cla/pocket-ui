@@ -33,7 +33,7 @@ This zip is the way for people who have SSH. Without a terminal, take the single
    then the switch. Press Close when it says so; pocket-ui starts. The entry removes itself and
    leaves "Uninstall pocket-ui" in Ports.
 
-If something does not fit (another device, an untested ROCKNIX version, too little space), the screen
+If something does not fit (another device, a ROCKNIX older than the tested one, too little space), the screen
 says so in a sentence, nothing on the card is changed, and Close takes you back to EmulationStation.
 Starting it twice is harmless. It uses the same install.sh as below, unchanged.
 Alternative with two files: put this zip next to a copy of the small starter "Install pocket-ui.sh"
@@ -44,8 +44,9 @@ You need (the SSH way below)
 ----------------------------
 
 - A Retroid Pocket Mini V2 (or, experimental, a Retroid Pocket 5, Flip 2 or first Mini) with ROCKNIX
-  for SM8250, version @TESTED_ROCKNIX@ (the tested one), started normally at least once. Another ROCKNIX
-  version or another device is refused; see "Options" below.
+  for SM8250, version @TESTED_ROCKNIX@ or newer, started normally at least once. A newer ROCKNIX is fine when
+  pocket-ui's own check passes; an older one is refused ("update ROCKNIX first"), as is another device;
+  see "Options" below.
 - SSH switched on in ROCKNIX (EmulationStation: Network Settings -> Enable SSH) and a computer on the
   same Wi-Fi. ROCKNIX's login is root, password rocknix unless you changed it.
 - About @NEED_MB@ MB free on the card.
@@ -82,7 +83,7 @@ What the checks refuse
 
 install.sh changes nothing unless all of these pass:
 - the package is complete (files/SHA256SUMS),
-- the system is ROCKNIX for SM8250 (aarch64), version @TESTED_ROCKNIX@,
+- the system is ROCKNIX for SM8250 (aarch64), version @TESTED_ROCKNIX@ or newer,
 - the device is a Retroid Pocket Mini V2, or one of the experimental Pocket 5, Flip 2 and first Mini
   (its device tree says so; the experimental ones are noted, not refused),
 - ROCKNIX's interface unit (essway) and EmulationStation's start script are there, ROCKNIX's first
@@ -94,7 +95,7 @@ install.sh changes nothing unless all of these pass:
 Options:
   --check                     only the checks
   --no-restart                install, but start pocket-ui only at the next start of the device
-  --allow-untested-rocknix    another ROCKNIX version; the compatibility check still has to pass
+  --allow-untested-rocknix    a ROCKNIX older than @TESTED_ROCKNIX@; the compatibility check still has to pass
   --allow-other-device        another SM8250 device pocket-ui doesn't know (untested; the screen layout
                               may not fit)
 

@@ -34,7 +34,7 @@ The SD card contains no games and no BIOS files. Add only games and BIOS files y
 If you flashed the official ROCKNIX image yourself, you can add pocket-ui from your computer, without Wi-Fi and without
 any command line:
 
-1. Flash ROCKNIX to the card as usual, but **don't switch the device on yet**.
+1. New to ROCKNIX on the Mini V2? Set it up once with [ROCKNIX's own guide](https://rocknix.org/devices/retroid/retroid-pocket-mini/) (it covers flashing the card and ROCKNIX's one-time bootloader step), then come back. Flash ROCKNIX 20261001 or newer to the card, but **don't switch the device on yet**.
 2. Take the card out and put it in again. Your computer shows one drive called **ROCKNIX**.
 3. Copy two files into that drive, in the top folder: `mount-storage.sh` and `pocket-ui-seed.tar.gz` (both are in the
    pocket-ui card zip). Don't rename them or unpack them. Eject the card.
@@ -71,7 +71,7 @@ mode: Android**, then **Start**. The SD card can stay in.
 **If the screen stays black** with Boot mode: Loader, switch back to Android as above and see "If something goes
 wrong" in the [install guide](../INSTALL-DUAL-BOOT.md). The guide also has the way for a ROCKNIX card you
 already use, with no computer commands: copy the one file **Install pocket-ui.sh** into the `roms/ports` folder of the
-card, open **Ports** in EmulationStation (restart its list once: Start → Game Settings → Update Gamelists) and start
+card (switch on Samba in ROCKNIX's Network Settings, then open `\\<device name or IP>` on Windows or `smb://<device name or IP>` on a Mac and use the games share; [ROCKNIX explains it](https://rocknix.org/play/add-games/)), open **Ports** in EmulationStation (restart its list once: Start → Game Settings → Update Gamelists) and start
 **Install pocket-ui**. The screen shows what it checks and installs; if something does not fit, it says what, changes
 nothing and **Close** takes you back to EmulationStation. To remove pocket-ui again, start **Uninstall pocket-ui** in
 Ports (the installer leaves it there).

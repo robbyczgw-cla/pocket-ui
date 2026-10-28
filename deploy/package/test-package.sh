@@ -279,18 +279,28 @@ for SH in $SHELLS; do
   refused "a package with an empty crate licence file" "licences/THIRD-PARTY-LICENSES.txt is missing"
   make_pkg
   make_root
-  sed -i 's/20261001/20261101/' "$r/etc/os-release"
-  refused "an untested ROCKNIX version" "ROCKNIX 20261101 is not a version"
+  sed -i 's/20261001/20260901/' "$r/etc/os-release"
+  refused "an older ROCKNIX version" "older than the one pocket-ui was tested with (20261001). Please update ROCKNIX first"
   inst --allow-untested-rocknix --check
   rc=$?
-  check "$SH: --allow-untested-rocknix lets it through when the compatibility check passes" '[ $rc = 0 ] && said "untested"'
+  check "$SH: --allow-untested-rocknix still lets an older one through when the compatibility check passes" '[ $rc = 0 ] && said "older than the tested"'
+  # A newer ROCKNIX needs no option: a note, and pocket-ui's own check decides.
+  make_root
+  sed -i 's/20261001/20261101/' "$r/etc/os-release"
+  inst --check
+  rc=$?
+  check "$SH: a newer ROCKNIX goes ahead without an option, with a note" '[ $rc = 0 ] && said "your ROCKNIX is newer" && said "compatibility check passed, so it goes ahead"'
   make_root
   FAKE_COMPAT=glibc
   export FAKE_COMPAT
   sed -i 's/20261001/20261101/' "$r/etc/os-release"
-  refused "untested version allowed, but the compatibility check fails" "lacks something pocket-ui needs" --allow-untested-rocknix
+  refused "a newer ROCKNIX, but the compatibility check fails" "lacks something pocket-ui needs"
   check "$SH: ... and it names what is missing" 'said "missing  pocket-ui needs glibc 2.38"'
   unset FAKE_COMPAT
+  make_root
+  inst --check
+  rc=$?
+  check "$SH: the tested ROCKNIX passes without the newer-note" '[ $rc = 0 ] && ! said "is newer"'
   for experimental in 'Retroid Pocket 5' 'Retroid Pocket 5 Visionox' 'Retroid Pocket Flip2' 'Retroid Pocket Flip2 Visionox' 'Retroid Pocket Mini' 'Retroid Pocket 6' 'Retroid Pocket 6 TOP-DPAD' 'Retroid Pocket Nova' 'AYN Odin 2' 'AYN Odin 2 Mini' 'AYN Odin 2 Portal'; do
     make_root
     case "$experimental" in 'Retroid Pocket 6'*|'Retroid Pocket Nova'|'AYN Odin 2'*) sed -i 's/SM8250/SM8550/' "$r/etc/os-release" ;; esac
@@ -464,9 +474,16 @@ for SH in $SHELLS; do
     check "$SH: port: $name: nothing changed, no restart, the entry stays" '[ "$(tree)" = "$before" ] && ! grep -q "restart" "$r/calls" && [ -f "$r/$PORTS/Install pocket-ui.sh" ]'
   }
   make_root
+  sed -i 's/20261001/20260901/' "$r/etc/os-release"
+  make_port payload
+  portfail "an older ROCKNIX version" "Please update ROCKNIX first"
+  make_root
   sed -i 's/20261001/20261101/' "$r/etc/os-release"
   make_port payload
-  portfail "an untested ROCKNIX version" "ROCKNIX 20261101 is not a version"
+  port "Install pocket-ui.sh"
+  rc=$?
+  check "$SH: port: a newer ROCKNIX installs, and the screen says it is newer" \
+    '[ $rc = 0 ] && shown "your ROCKNIX is newer" && shown "pocket-ui $V is installed" && [ "$(readlink "$r/$APP/current")" = "releases/$V" ]' || sed 's/^/     /' "$T/viewer.out" "$T/out"
   make_root
   printf 'AYN Thor Lite\000' >"$r/sys/firmware/devicetree/base/model"
   make_port payload
