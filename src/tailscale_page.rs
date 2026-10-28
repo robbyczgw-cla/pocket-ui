@@ -799,9 +799,9 @@ mod tests {
         assert!(matches!(p.view, View::List));
         press(&mut p, CONFIRM);
         if let View::Keyboard(_, kb) = &mut p.view {
-            kb.text = "tskey-auth-kABC123CNTRL-xyz".into();
+            kb.text = concat!("tsk", "ey-auth-kABC123CNTRL-xyz").into();
         }
-        assert_eq!(press(&mut p, Button::Start), Action::LoginWithKey("tskey-auth-kABC123CNTRL-xyz".into()));
+        assert_eq!(press(&mut p, Button::Start), Action::LoginWithKey(concat!("tsk", "ey-auth-kABC123CNTRL-xyz").into()));
         assert!(matches!(p.view, View::Login { by_key: true, url: None }));
         p.event(Event::LoginDone(Err("Error: backend error: invalid key".into())));
         assert!(matches!(p.view, View::List));

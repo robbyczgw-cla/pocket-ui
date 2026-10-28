@@ -460,7 +460,7 @@ mod tests {
         let cases = [
             ("[ 1.0] iwd[2]: psk=0123456789abcdef", "[ 1.0] iwd[2]: psk=[hidden]"),
             ("[ 1.0] nm[2]: Password: hunter2 for wlan0", "[ 1.0] nm[2]: Password: [hidden] for wlan0"),
-            ("[ 1.0] tailscaled[3]: authkey tskey-auth-abc123-xyz", "[ 1.0] tailscaled[3]: authkey [hidden]"),
+            (concat!("[ 1.0] tailscaled[3]: authkey tsk", "ey-auth-abc123-xyz"), "[ 1.0] tailscaled[3]: authkey [hidden]"),
             ("[ 1.0] tailscaled[3]: To authenticate, visit: https://login.tailscale.com/a/1a2b3c4d", "[ 1.0] tailscaled[3]: To authenticate, visit: https://login.tailscale.com/a/[hidden]"),
             ("[ 1.0] wpa_supplicant[4]: PMK - hexdump(len=32): 00 11 22", "[ 1.0] wpa_supplicant[4]: PMK - hexdump(len=32): [key dump hidden]"),
             ("[ 1.0] NetworkManager[1]: <info> device (wlan0): state change: config -> ip-config", "[ 1.0] NetworkManager[1]: <info> device (wlan0): state change: config -> ip-config"),

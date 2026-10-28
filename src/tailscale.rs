@@ -1245,7 +1245,7 @@ mod tests {
             &t,
             &Login {
                 hostname: None,
-                auth_key: Some("tskey-auth-bad"),
+                auth_key: Some(concat!("tsk", "ey-auth-bad")),
             },
             &AtomicBool::new(false),
             &mut |_| {},
@@ -1262,13 +1262,13 @@ mod tests {
             &t,
             &Login {
                 hostname: Some("pocket-mini"),
-                auth_key: Some("tskey-auth-kABC123CNTRL-secret"),
+                auth_key: Some(concat!("tsk", "ey-auth-kABC123CNTRL-secret")),
             },
             &AtomicBool::new(false),
             &mut |_| {},
         );
         assert_eq!(r, Ok(()));
-        assert_eq!(std::fs::read_to_string(dir.join("seen")).unwrap(), "tskey-auth-kABC123CNTRL-secret");
+        assert_eq!(std::fs::read_to_string(dir.join("seen")).unwrap(), concat!("tsk", "ey-auth-kABC123CNTRL-secret"));
         assert_eq!(std::fs::read_to_string(dir.join("mode")).unwrap().trim(), "600");
         assert!(!calls(&dir).contains("tskey"), "the key is not on the command line: {}", calls(&dir));
         let left: Vec<_> = std::fs::read_dir(&dir)

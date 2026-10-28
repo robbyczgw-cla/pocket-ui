@@ -1,16 +1,14 @@
 # pocket-ui
 
-A controller-first game frontend for the **Retroid Pocket Mini V2**, running on [ROCKNIX](https://rocknix.org).
-It replaces ROCKNIX's EmulationStation with a shelf of your games that starts in tens of milliseconds, puts
-"continue where you left off" first, and gives every system the same small pause menu, from Game Boy to
-PlayStation 2. It brings its own libretro host, **pocket-core**, for the systems where that works better than
-RetroArch.
+**Your whole game collection on one calm shelf, and your handheld ready in a blink.**
 
-The interface is inspired by [NextUI](https://github.com/LoveRetro/NextUI) (one flat list, "continue" first, a
-small pause menu, game-time tracking). No NextUI code or assets are used.
+pocket-ui is a controller-first home screen and game player for the **Retroid Pocket Mini V2**, running on
+[ROCKNIX](https://rocknix.org). Press A and you are playing, right where you left off. Every system, from Game Boy to
+PlayStation 2, gets the same small pause menu with save slots, pictures and a step back in time. Games show up with
+box art, their own card and facts, and a Curator that knows what you own and what you have not touched yet.
 
-> **Early, one device, tested by its developer.** pocket-ui is built on and for one Retroid Pocket Mini V2 with
-> ROCKNIX 20261001. There is no published image yet: installing it today means the manual setup described below.
+Version **0.1.0** is out as a public alpha: [download it](../../releases/tag/v0.1.0),
+watch the [trailer](https://pocketui.xyz), and read more at **[pocketui.xyz](https://pocketui.xyz)**.
 
 <p align="center">
   <img src="docs/media/home.png" width="49%" alt="Home: the last game, favourites, Curator and the systems">
@@ -24,30 +22,65 @@ small pause menu, game-time tracking). No NextUI code or assets are used.
 The pictures are rendered from the code with made-up data (`pocket-ui --snapshot`, see
 [docs/DEVELOPING.md](docs/DEVELOPING.md)); more are in [docs/media](docs/media/README.md).
 
-## Status
+## What it feels like
 
-Early. pocket-ui is developed and tested on **one** Retroid Pocket Mini V2, plus a virtual device in Docker.
+- **Instant.** The shelf appears within tens of milliseconds, and a game starts from the picture of where you left it.
+- **One shelf, five looks.** Shelf, Minimal, Split, Cards and Cabinet, in dark or light, with real box art, system
+  pictures, favourites and ratings.
+- **One pause menu everywhere.** HOME opens Continue, Save and Load with 8 slots and previews, Earlier (step back a few
+  minutes), screen frames and effects (scanlines, CRT, LCD grid), shortcuts, rewind, run-ahead and cheats.
+- **Curator and Surprise me.** Browse by feel, find games like this one, or let it pick.
+- **Your own player.** pocket-core plays Game Boy to PSP, Dreamcast and DS; PlayStation 2, GameCube and Wii run on
+  their own emulators behind the same menu.
+- **Web companion** on your own tailnet: library, what is playing, favourites, ratings, uploads.
+- **Looks after itself.** Wi-Fi (even hotel sign-in pages), Bluetooth pads and headphones, sleep and power, signed
+  updates with a way back. English and German.
+- **Private.** No accounts, no tracking. It goes online for box art, game info and the downloads you ask for.
 
-- Measured or checked on the device: the shelf and its speed, pocket-core for its systems up to Nintendo DS and
-  Dreamcast, the pause menu with save slots and options, PlayStation 2 and GameCube through their standalone
-  emulators, run-ahead, cover art, Wi-Fi setup, file sharing, UI sounds, waking from deep sleep, Smooth fan,
-  Curator and play history, the web companion over a real tailnet (a smoke check), and signed app updates with
-  automatic rollback. Starting from the SD card next to Android was tested with a u-boot loaded from memory and set up
-  by hand; the permanent setup is described in the install guide.
-- Much of what came since was built and tested in the virtual device or in tests only, and is **not confirmed on a
-  real device yet**; among others touch, Bluetooth pads, Wii and 3DS, Bluetooth audio (heard distorted on the test device on 2026-10-27; a fix is in progress), the new picture effects and frames, the night
-  light, RetroAchievements, Syncthing with a second device, the Store and the starter pack. Nobody has measured the
-  battery drain of a long sleep. [docs/STATUS.md](docs/STATUS.md) lists every feature with how it was verified and
-  what is still open; the user guide says so on each page where it matters.
-- Not available: a published SD card image (it builds and passes its offline checks and was started on a fresh card
-  on the Mini V2 on 2026-10-27; that run found a Wi-Fi first-start bug, since fixed, and a full first start as a new
-  player has not been repeated), a public update server, a public store catalogue.
-- The Retroid Pocket 5, Flip 2 (Snapdragon 865) and first Retroid Pocket Mini are **experimental**: they run the same
-  ROCKNIX SM8250 build, pocket-ui recognises them and lays out for their screens, but nobody on the project has one
-  and nothing has run on their hardware. Pocket 6, Nova and the AYN Odin 2 family are experimental on the SM8550 image, with screen off
-  instead of suspend and ROCKNIX-controlled cooling ([docs/DEVICES.md](docs/DEVICES.md)). Other devices are not supported.
+## Get it
 
-Expect rough edges. Please do not use it on a device you cannot afford to reflash.
+Download from the [v0.1.0 release](../../releases/tag/v0.1.0) and pick one way.
+Checksums are in `SHA256SUMS`.
+
+| Way | When | What to do |
+|---|---|---|
+| **Ports installer** | ROCKNIX is already on your card | Unzip [pocket-ui-0.1.0-ports-installer.zip](../../releases/download/v0.1.0/pocket-ui-0.1.0-ports-installer.zip) into `roms/ports`, then in EmulationStation open **Ports → Install pocket-ui**. To go back: **Ports → Uninstall pocket-ui** |
+| **Fresh card** | New card, nothing on it yet | Flash the official ROCKNIX 20261001 image, copy the two files from [pocket-ui-0.1.0-rocknix-card.zip](../../releases/download/v0.1.0/pocket-ui-0.1.0-rocknix-card.zip) onto the card's `ROCKNIX` partition and boot. It installs on the second start |
+| **Over SSH** | You like a terminal | Unzip [pocket-ui-0.1.0-rocknix-install.zip](../../releases/download/v0.1.0/pocket-ui-0.1.0-rocknix-install.zip) in `/storage`, run `sh install.sh --check`, then `sh install.sh` |
+
+pocket-ui replaces exactly one thing: the program ROCKNIX's `essway` service starts. Remove it and stock ROCKNIX with
+EmulationStation is back; your games, saves and ROCKNIX settings stay where they are. Android on the internal storage
+is not touched. More: [docs/INSTALL-DUAL-BOOT.md](docs/INSTALL-DUAL-BOOT.md).
+
+You bring your own games and, for a few systems, BIOS files; pocket-ui includes neither. On an empty card it can
+download a [starter pack](docs/STARTER-PACK.md) of nine free homebrew games, each from its author's page.
+
+## Devices
+
+| | |
+|---|---|
+| Made for | Retroid Pocket Mini V2 (Snapdragon 865 / SM8250), ROCKNIX SM8250 build 20261001, 1240 x 1080 screen |
+| Experimental | Retroid Pocket 5, Flip 2 and the first Mini (same ROCKNIX build); Pocket 6, Nova and the AYN Odin 2 family (ROCKNIX SM8550 image) |
+
+Alpha: it is developed and tested on a Mini V2, and the experimental devices are best-effort. If something is off,
+**Settings → System → About → Report a problem** makes a file for a report, or [open an issue](../../issues).
+[docs/STATUS.md](docs/STATUS.md) lists every feature and how far it has been checked.
+
+## How far it is proven
+
+The details behind the alpha label, from [docs/STATUS.md](docs/STATUS.md):
+
+- Measured or checked on the Mini V2: the shelf and its speed, pocket-core up to Nintendo DS and Dreamcast, the pause
+  menu with save slots and options, PlayStation 2 and GameCube, run-ahead, cover art, Wi-Fi setup, file sharing, UI
+  sounds, waking from deep sleep, Smooth fan, Curator and play history, the web companion over a real tailnet, signed
+  app updates with automatic rollback, and the fresh-card install.
+- Built and tested in the virtual device or in tests, still waiting for more real-device time: touch, Bluetooth pads,
+  Wii and 3DS, the newest picture effects and frames, the night light, RetroAchievements, Syncthing between two
+  devices, the Store and the starter pack. Battery drain of a long sleep is not measured yet.
+- The Retroid Pocket 5, Flip 2 and first Mini run the same ROCKNIX SM8250 build, so pocket-ui recognises them and lays
+  out for their screens; Pocket 6, Nova and the AYN Odin 2 family use the SM8550 image (screen off instead of
+  suspend, ROCKNIX-controlled cooling, see [docs/DEVICES.md](docs/DEVICES.md)). Nobody on the project has most of
+  these yet; the Odin 2 Mini has been tried once. Other devices are not supported.
 
 ## Supported devices
 
@@ -109,21 +142,15 @@ feature has been proven is in [docs/STATUS.md](docs/STATUS.md).
 - **Dual boot next to Android:** a boot chain from the SD card leaves Android and its partitions untouched
   ([docs/INSTALL-DUAL-BOOT.md](docs/INSTALL-DUAL-BOOT.md)).
 
-## Installing
+## More ways to install
 
-There is no download yet. What exists today:
+Besides the three downloads above:
 
-| Way | State | Guide |
-|---|---|---|
-| **SD card image** next to Android (Retroid's boot mode switch, nothing flashed) | Builds and passes its offline checks; **started once on a fresh card** (2026-10-27, which found the Wi-Fi first-start bug, since fixed), not yet repeated as a full new-player first start. Not published | [docs/SD-IMAGE.md](docs/SD-IMAGE.md), [docs/INSTALL-DUAL-BOOT.md](docs/INSTALL-DUAL-BOOT.md) |
-| **Manual install on a ROCKNIX card** next to Android | Done on the developer's device (phases 1 to 6) | [docs/INSTALL-DUAL-BOOT.md](docs/INSTALL-DUAL-BOOT.md#appendix-manual-install-on-an-existing-rocknix-card) |
-| **Developer deploy** onto a Mini V2 running ROCKNIX, over SSH | The daily development path | [docs/DEVELOPING.md](docs/DEVELOPING.md#the-dev-loop-on-a-real-device) |
-
-pocket-ui replaces exactly one thing: the program ROCKNIX's `essway` service starts. Remove its drop-in file and
-stock ROCKNIX with EmulationStation comes back. Android on the internal storage is not touched.
-
-You need your own games and, for some systems, BIOS files. pocket-ui includes neither; for an empty SD card it can
-download a [starter pack](docs/STARTER-PACK.md) of nine free homebrew games, each from its author's page.
+| Way | Guide |
+|---|---|
+| **SD card image** next to Android (Retroid's boot mode switch, nothing flashed) | [docs/SD-IMAGE.md](docs/SD-IMAGE.md), [docs/INSTALL-DUAL-BOOT.md](docs/INSTALL-DUAL-BOOT.md) |
+| **Manual install on a ROCKNIX card** next to Android | [docs/INSTALL-DUAL-BOOT.md](docs/INSTALL-DUAL-BOOT.md#appendix-manual-install-on-an-existing-rocknix-card) |
+| **Developer deploy** onto a Mini V2 running ROCKNIX, over SSH | [docs/DEVELOPING.md](docs/DEVELOPING.md#the-dev-loop-on-a-real-device) |
 
 ## Building
 
@@ -177,7 +204,8 @@ libretro cores, the system pictures (public-domain photos by Evan Amos, converte
 - Several libretro cores that ROCKNIX ships (snes9x, genesis_plus_gx, picodrive, fbneo) are licensed for
   non-commercial use only, and so are ROCKNIX's branding and artwork (CC BY-NC-SA 4.0). pocket-ui contains none of
   them, but an image that bundles them must not be sold. Check [NOTICE.md](NOTICE.md) before you redistribute one.
-- pocket-ui does not include games, ROMs, BIOS files or ROCKNIX itself. `scripts/check-release-tree.py` checks
+- pocket-ui does not include games, ROMs, BIOS files or ROCKNIX itself, and nothing here offers any. Game footage and
+  box art on pocketui.xyz belong to their owners. `scripts/check-release-tree.py` checks
   a tree, a tar or an image for them.
 - `assets/gamedb.bin` holds data from Wikidata, released under CC0. No Wikipedia text is included.
 - `assets/curatordb.bin` and `assets/data/curator-tags.json` (Curator's feel tags) are our own data, derived at

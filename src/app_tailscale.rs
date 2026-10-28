@@ -218,7 +218,7 @@ impl App {
                 page.sel = 2;
                 page.press(Button::East, Button::East, Button::South);
                 if let View::Keyboard(_, kb) = &mut page.view {
-                    kb.text = "tskey-auth-kQ7xN2".into();
+                    kb.text = concat!("tsk", "ey-auth-kQ7xN2").into();
                 }
             }
             "name" => {

@@ -700,6 +700,11 @@ fn every_relative_link_and_anchor_resolves() {
                 Some((p, a)) => (p, Some(a)),
                 None => (target.as_str(), None),
             };
+            // The README links GitHub's own pages of the repository (../../releases/..., ../../issues), relative to
+            // blob/main/README.md, so that the tree names no owner. They are not files of the tree.
+            if rel == "README.md" && (path.starts_with("../../releases") || path.starts_with("../../issues")) {
+                continue;
+            }
             let dest = if path.is_empty() {
                 file.clone()
             } else {
