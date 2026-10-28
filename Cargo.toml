@@ -1,0 +1,105 @@
+[package]
+name = "pocket-ui"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-2.0-or-later"
+description = "Controller-first game frontend for the Retroid Pocket Mini V2 on ROCKNIX"
+
+[[bin]]
+name = "hello-pad"
+path = "src/bin/hello_pad.rs"
+
+[[bin]]
+name = "pocket-ui"
+path = "src/main.rs"
+
+[[bin]]
+name = "pocket-core"
+path = "src/bin/pocket_core.rs"
+
+[[bin]]
+name = "pocket-splash"
+path = "src/bin/pocket_splash.rs"
+
+[[bin]]
+name = "store-tool"
+path = "src/bin/store_tool.rs"
+
+[dependencies]
+font8x8 = { version = "0.3", default-features = false }
+fontdue = "0.9"
+# The system's CJK font for the letters Barlow lacks (`text_fallback`): mapped, and one glyph outlined at a time.
+# Both already in the tree (through fontdue and winit).
+ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
+memmap2 = "0.9"
+png = "0.17"
+jpeg-decoder = { version = "0.3", default-features = false }
+roxmltree = "0.20"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libc = "0.2"
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+sha2 = "0.10"
+base64 = "0.22"
+libloading = "0.8"
+miniz_oxide = "0.8"
+# ZIP entry checksums (`archive`); already in the tree through png and flate2.
+crc32fast = "1"
+glutin = { version = "0.32", default-features = false, features = ["egl", "wayland"] }
+glutin-winit = { version = "0.5", default-features = false, features = ["egl", "wayland"] }
+glow = "0.14"
+raw-window-handle = "0.6"
+softbuffer = { version = "0.4", default-features = false, features = ["wayland", "wayland-dlopen"] }
+winit = { version = "0.30", default-features = false, features = ["rwh_06", "wayland", "wayland-dlopen"] }
+qrcode = { version = "0.14.1", default-features = false }
+
+[build-dependencies]
+# Builds src/log_shim.c (see build.rs); already in the tree through other crates.
+cc = "1"
+
+[dev-dependencies]
+# Scratch folders of the tests (`testutil::TestDir`, and `tempfile::tempdir()` in tests/): removed on drop, also when the
+# test panics. Dev-only, so it is not in the shipped binaries (docs/THIRD-PARTY-CRATES.md lists what ships). Its crates
+# (fastrand, getrandom, once_cell, rustix) are already in the tree.
+tempfile = "3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+evdev = "0.13"
+# wlr-gamma-control for the display look (src/gamma.rs); both are already in the tree through winit
+wayland-client = "0.31"
+wayland-protocols-wlr = { version = "0.3", default-features = false, features = ["client"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+# A panic ends the process (smaller binary; a panic cannot unwind through the extern "C" callbacks of
+# libretro cores and EGL anyway). The panic hook still runs first: `crash::install` in pocket-ui and
+# pocket-core logs the panic with a timestamp, appends it to crash.log and leaves a notice for the next
+# screen. What can fail for a moment (surface, buffer, GL setup) is an error value instead; see `frame`.
+panic = "abort"
+
+# The merge gate's profile (scripts/gate.sh, docs/DEVELOPING.md "Merge gate"): `cargo test --profile gate`. The same
+# code generation level as release (opt-level 3, no debug assertions, no overflow checks), so the tests see what the
+# device runs, but it builds in well under half the time (a tenth after a small change): no LTO, 16 codegen units instead of 1, incremental. It also
+# unwinds: cargo builds tests (and the crates they link) with unwinding anyway, so with `panic = "abort"` in release the
+# library and every dependency are compiled twice, once per strategy. With one strategy they are compiled once.
+# NOT used for anything that ships: release builds (scripts/release-app.sh, cargo zigbuild --release) use [profile.release].
+[profile.gate]
+inherits = "release"
+lto = false
+codegen-units = 16
+panic = "unwind"
+incremental = true
+
+# Development checks use cheaper code generation for this large crate; the merge gate above still checks opt-level 3.
+# Dependencies keep gate's optimisation/partitioning, so the hot font/image paths stay fast in render checks.
+[profile.quick]
+inherits = "gate"
+opt-level = 1
+codegen-units = 256
+
+[profile.quick.package."*"]
+opt-level = 3
+codegen-units = 16

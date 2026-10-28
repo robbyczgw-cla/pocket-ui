@@ -1,0 +1,11 @@
+Device 3C:4D:BE:01:02:03 (public)
+	Name: DualSense Wireless Controller
+	Alias: DualSense Wireless Controller
+	Class: 0x00002508 (9480)
+	Paired: no
+	Bonded: no
+	Trusted: no
+	Blocked: no
+	Connected: no
+	LegacyPairing: no
+	RSSI: 0xffffffb8 (-72)

@@ -1,0 +1,6 @@
+# Tool image for unpacking a ROCKNIX .img (GPT -> FAT -> SYSTEM squashfs) into a rootfs.
+# Only used by scripts/vdev.sh image; nothing of ROCKNIX ends up in this image.
+FROM debian:trixie-slim
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends 7zip squashfs-tools ca-certificates \
+ && rm -rf /var/lib/apt/lists/*

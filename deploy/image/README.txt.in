@@ -1,0 +1,107 @@
+pocket-ui @VERSION@ for the Retroid Pocket Mini V2: SD card image
+================================================================
+
+pocket-ui is a game launcher with its own libretro frontend. This card starts it next to Android:
+Android and its partitions stay as they are, and nothing is flashed to the device.
+
+The system underneath is based on ROCKNIX @ROCKNIX_TAG@ (https://rocknix.org). pocket-ui is not made or
+endorsed by the ROCKNIX team.
+
+
+Install
+-------
+
+1. Write pocket-ui-@VERSION@-rp-mini-v2.img.xz to a microSD card with balenaEtcher or Raspberry Pi
+   Imager. Both read the .xz file directly. Everything on the card is erased. 8 GB or more.
+2. Put the card into the switched-off device.
+3. Once: hold Volume Down and press Power. Retroid's fastboot menu opens, and its bottom line reads
+   "Boot mode: Android". Pick "Switch boot mode" with the volume keys and press Power until it reads
+   "Boot mode: Loader", then pick "Start".
+   Volume Up + Power does not start the loader on current Retroid firmware; use the boot mode.
+4. The first start takes a few minutes and restarts once by itself while the card's storage is set up.
+   Then pocket-ui's first-start setup opens: look, Wi-Fi, extras.
+
+The boot mode is stored: from now on, switching on starts pocket-ui while the card is in.
+
+Back to Android: hold Volume Down and press Power, pick "Switch boot mode" until the bottom line reads
+"Boot mode: Android", then "Start". The card can stay in.
+
+If the screen stays black with "Boot mode: Loader", the device's loader partition holds no u-boot
+(an Android update can replace it). Switch back to Android as above and see the pocket-ui
+documentation (INSTALL-DUAL-BOOT.md, "Only if the loader holds no u-boot").
+
+This card contains no BIOS files and no games. Add only games and BIOS files you own.
+Remote access (SSH) is off until you turn it on in Settings.
+Do not install ROCKNIX updates on this card: they replace the system but not the kernel in
+boot/pocket/, and the two must match.
+
+
+What is on the card
+-------------------
+
+FAT partition "ROCKNIX" (readable on any computer):
+  KERNEL, SYSTEM, *.md5      ROCKNIX @ROCKNIX_TAG@, unchanged (ROCKNIX-SM8250.aarch64-@ROCKNIX_TAG@.img.gz)
+  EFI/BOOT/BOOTAA64.EFI      GRUB, started by Retroid's u-boot in "Boot mode: Loader"
+  boot/grub/grub.cfg         no menu, starts boot/pocket/Image
+  boot/pocket/Image          the Linux kernel, unpacked unchanged from KERNEL
+  boot/pocket/miniv2-noufs.dtb   the Mini V2 device tree from KERNEL, with the internal storage
+                             switched off, so the system never sees Android
+  post-flash.sh              boot hook: starts without the ROCKNIX logo
+  mount-storage.sh           boot hook: puts pocket-ui's start entry in place once the storage has
+                             grown, then deletes itself
+  pocket-ui-info/            this file, pocket-ui's LICENSE and NOTICE.md, and licences/ (the Rust crates' licence
+                             texts and the fonts' OFL; also in STORAGE as /storage/pocket-ui/licences)
+
+Partition "STORAGE" (grows to fill the card at the first start):
+  pocket-ui/                 pocket-ui, pocket-core and pocket-splash (the boot screen) @VERSION@, the launcher
+  .pocket-seed/              the start entry for pocket-ui and the boot screen's unit (moved to
+                             .config/system.d at the second start)
+
+Changes from the ROCKNIX image: the files above were added; the folder rocknix_abl/ (a
+replacement for Retroid's bootloader, not used here) was removed; the partition table, KERNEL and
+SYSTEM are unchanged. ROCKNIX's own interface, EmulationStation, stays on the card and takes over if
+pocket-ui cannot start.
+
+
+Licences
+--------
+
+This image may be shared free of charge, for non-commercial use only. Do not sell it, and do not
+bundle it with hardware you sell. Reasons: ROCKNIX includes components licensed for non-commercial use
+only (for example the libretro cores snes9x, genesis_plus_gx, picodrive and fbneo), and its artwork is
+licensed CC BY-NC-SA 4.0.
+
+ROCKNIX (KERNEL, SYSTEM)
+  Copyright ROCKNIX (https://github.com/ROCKNIX). ROCKNIX is a fork of JELOS
+  (https://github.com/JustEnoughLinuxOS/distribution); credit to the JELOS team.
+  The ROCKNIX team's own software and scripts: GNU GPL version 2. Every bundled component keeps its own
+  licence (see ROCKNIX's licenses folder and each package's PKG_LICENSE).
+  ROCKNIX branding and images (logos, splash artwork, EmulationStation themes inside SYSTEM):
+  CC BY-NC-SA 4.0, https://creativecommons.org/licenses/by-nc-sa/4.0/ . They are included unchanged
+  inside SYSTEM; this image does not use them as its own branding.
+
+Linux kernel (boot/pocket/Image, the kernel in KERNEL): GNU GPL version 2.
+  The device tree is ROCKNIX's, with two nodes set to "disabled".
+
+GRUB (EFI/BOOT/BOOTAA64.EFI): GNU GPL version 3 or later.
+  Debian package @GRUB_VERSION@, made with grub-mkimage.
+
+pocket-ui and pocket-core
+  GNU GPL version 2 or later (pocket-ui-info/LICENSE).
+  Built from the pocket-ui repository, commit @REPO_COMMIT@.
+  Third-party credits (fonts, Rust crates and other parts, each under its own licence) are in
+  NOTICE.md: pocket-ui-info/NOTICE.md on this card, and in the repository. The licence texts of the Rust crates
+  and of the fonts (SIL Open Font License) are in pocket-ui-info/licences/.
+
+
+Source code
+-----------
+
+ROCKNIX @ROCKNIX_TAG@, including the kernel and its patches:
+  https://github.com/ROCKNIX/distribution/tree/@ROCKNIX_TAG@
+  tag @ROCKNIX_TAG@, commit @ROCKNIX_COMMIT@
+  ("make docker-SM8250" builds it; "make src-pkg" packs every source archive it uses.)
+GRUB: Debian source package grub2, @GRUB_SOURCE_URL@
+pocket-ui, pocket-core and this image: the pocket-ui repository, commit @REPO_COMMIT@
+  (scripts/make-image.sh rebuilds this image from the ROCKNIX release above; scripts/check-image.sh
+  checks it).

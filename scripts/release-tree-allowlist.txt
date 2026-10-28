@@ -1,0 +1,12 @@
+# Paths that scripts/check-release-tree.py lets through although they look like a ROM, BIOS or core.
+# One glob per line (relative to the repository root or archive root), then "# reason".
+# Every entry must name the licence of the file and where it comes from. Nothing third-party belongs here:
+# test fixtures and our own homebrew test files with a known licence only.
+
+# Our own libretro core, built by scripts/make-test-catalog.sh from store/test-catalog/src/testpattern/testpattern.c
+# (colour bars and a square the D-pad moves). The catalog metadata still says MIT for it.
+store/test-catalog/packages/testpattern_libretro.so   # own code, store test catalog
+
+# A 96-byte stand-in for a GameCube disc, written for the Pixel Path test (src/pixel_standalone.rs): only the header
+# fields Dolphin reads (6-byte game ID, the disc magic, the title), zeros otherwise. No game data, nothing copied.
+testdata/pixel-path/dolphin/roms/*.iso   # own test data: a disc header with no content

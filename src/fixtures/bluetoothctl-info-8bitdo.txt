@@ -1,0 +1,17 @@
+Device E4:17:D8:0B:1D:0E (public)
+	Name: 8BitDo Ultimate 2C Wireless
+	Alias: 8BitDo Ultimate 2C Wireless
+	Class: 0x00002508 (9480)
+	Icon: input-gaming
+	Paired: yes
+	Bonded: yes
+	Trusted: yes
+	Blocked: no
+	Connected: yes
+	WakeAllowed: yes
+	LegacyPairing: no
+	UUID: Human Interface Device... (00001124-0000-1000-8000-00805f9b34fb)
+	UUID: PnP Information           (00001200-0000-1000-8000-00805f9b34fb)
+	Modalias: usb:v2DC8p301Bd0001
+	RSSI: 0xffffffc4 (-60)
+	Battery Percentage: 0x5a (90)

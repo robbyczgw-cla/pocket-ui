@@ -1,0 +1,40 @@
+# Licence of every libretro core pocket-core hosts (src/hostsys.rs: HANDHELD_CORES and SYSTEMS), at the commit ROCKNIX
+# 20261001 builds. Read by scripts/check-core-licences.sh. The evidence is in NOTICE.md; checked 2026-10-22.
+#
+# core|verdict|commit|evidence (file: quoted licence line)
+#
+# verdict:
+#   or-later        GPL-2.0-or-later (or GPL-2+ together with GPL-3 / LGPL / permissive parts): fine next to Apache-2.0
+#   v3              GPL-3.0-or-later: fine (the combination is GPLv3)
+#   permissive      MIT / MPL-2.0 / zlib: fine
+#   v2-only         GPL-2.0-only: cannot be combined with the Apache-2.0 crates (winit, glutin, glutin_egl_sys, dpi)
+#   mixed-v2        mostly fine, but one or more files are GPL-2.0-only: same problem as v2-only
+#   non-commercial  licence forbids commercial use: a separate issue (NOTICE.md, "Non-commercial cores"), only noted
+#
+gambatte|v2-only|d9d6cd0|libgambatte/include/inputgetter.h: "GNU General Public License version 2 as published by the Free Software Foundation"
+mgba|permissive|e31759b|src/core/core.c: "subject to the terms of the Mozilla Public License, v. 2.0" (MPL-2.0)
+nestopia|or-later|b08b473|source/core/NstFds.hpp: "either version 2 of the License, or (at your option) any later version"
+snes9x|non-commercial|890b5d4|LICENSE: "Snes9x is freeware for PERSONAL USE only"
+genesis_plus_gx|non-commercial|b7e79b3|LICENSE.txt: "Redistributions may not be sold, nor may they be used in a commercial product"
+gearsystem|v3|2c72542|src/Cartridge.cpp: "either version 3 of the License, or any later version"
+picodrive|non-commercial|733c711|COPYING: "Redistributions may not be sold, nor may they be used in a commercial product"
+beetle_pce_fast|or-later|bebe2b1|mednafen/mednafen-endian.c: "either version 2 of the License, or (at your option) any later version"
+beetle_supergrafx|or-later|3c6fcd3|libretro.cpp: "either version 2 of the License, or (at your option) any later version"; COPYING is GPLv2
+beetle_vb|or-later|83ed426|libretro.cpp: "either version 2 of the License, or (at your option) any later version"; COPYING is GPLv2
+beetle_ngp|or-later|a50d5ac|libretro.c: "either version 2 of the License, or (at your option) any later version"
+beetle_wswan|or-later|4b01295|mednafen/state.c: "either version 2 of the License, or (at your option) any later version"
+handy|permissive|bc55d46|lynx/ram.h: "Permission is granted to anyone to use this software for any purpose" (zlib)
+stella|or-later|c1ffb83|Copyright.txt: "either version 2 of the License, or any later version"
+prosystem|or-later|8a88014|core/Sally.h: "either version 2 of the License, or (at your option) any later version"
+pokemini|v3|132111b|LICENSE: "either version 3 of the License, or (at your option) any later version"
+pcsx_rearmed|or-later|da2cb8e|frontend/main.h: "either version 2 of the License, or (at your option) any later version"
+fbneo|non-commercial|f3b7749|src/license.txt: "You may not sell, lease, rent or otherwise seek to gain monetary profit"
+mupen64plus_next|mixed-v2|f275caf|GLideN64/LICENSE: "GLideN64 is licensed under the GNU General Public License version 2"
+flycast|or-later|c3763d8|core/cheats.cpp: "either version 2 of the License, or (at your option) any later version"
+ppsspp|mixed-v2|fa50bb1|Common/CPUDetect.cpp: "the Free Software Foundation, version 2.0." (no later)
+melondsds|v3|bc4e4b6|src/libretro/exceptions.cpp: "either version 3 of the License, or (at your option) any later version"
+yabasanshiro|or-later|39535a6|yabause/src/yabause.c: "either version 2 of the License, or (at your option) any later version"
+dosbox_pure|or-later|7f6e8fb|dosbox_pure_libretro.cpp: "either version 2 of the License, or (at your option) any later version"
+scummvm|v3|292e409|video/avi_decoder.h: "either version 3 of the License, or (at your option) any later version"
+fake08|permissive|814991a|LICENSE.MD: "License: MIT"
+tic80|permissive|7020500|LICENSE: "MIT License"

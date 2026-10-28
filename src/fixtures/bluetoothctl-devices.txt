@@ -1,0 +1,7 @@
+Device E4:17:D8:0B:1D:0E 8BitDo Ultimate 2C Wireless
+Device 98:B6:E9:12:34:56 Pro Controller
+Device 4C:B9:9B:0A:1B:2C Xbox Wireless Controller
+Device 7A:41:0F:0A:0B:0C 7A-41-0F-0A-0B-0C
+Device A0:5A:5D:11:22:33 JBL Flip 5
+Device 3C:4D:BE:01:02:03 DualSense Wireless Controller
+Device 5F:12:C0:AA:BB:CC 5F-12-C0-AA-BB-CC

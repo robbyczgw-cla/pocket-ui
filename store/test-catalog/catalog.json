@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "serial": 1793033662,
+  "packages": [
+    { "id": "frames-graphite-monitor", "name": "Graphite monitor", "category": "frames", "version": "1.0",
+      "description": "A plain graphite bezel around Game Boy and Game Boy Advance games, in place of the built-in handheld frames. Shows with Screen frame set to Auto.",
+      "size": 168968, "url": "packages/frames-graphite-monitor.tar.gz", "sha256": "e146b6204717ef9295324320ce8329f912d6dac0dc77bef0f6bd1016cb59ef91",
+      "kind": "tar", "dest": "/storage/.config/pocket-ui/frames", "author": "pocket-ui", "license": "MIT" },
+    { "id": "type-titillium", "name": "Titillium type", "category": "themes", "version": "1.0",
+      "description": "Titillium Web for every title and line of text in pocket-ui, in place of Barlow. Remove it to go back.",
+      "size": 60239, "url": "packages/type-titillium.tar.gz", "sha256": "c0e6530d8b5d291e94e65f4e3a04302989641e6426ddc99e224642fe0ee13f23",
+      "kind": "tar", "dest": "/storage/.config/pocket-ui/fonts", "author": "pocket-ui", "license": "OFL-1.1" },
+    { "id": "tool-storage-report", "name": "Storage report", "category": "tools", "version": "1.0",
+      "description": "Shows the free space on the card and how many files your game folders hold. Also listed under Tools in Settings.",
+      "size": 526, "url": "packages/storage-report.sh", "sha256": "d2ab4b22c1cc84cd41847ae6809a913bcff9b433e6c585019fe1a1aee1fec770",
+      "kind": "file", "dest": "/storage/.config/pocket-ui/tools", "name_on_disk": "Storage report.sh", "run": "Storage report.sh", "author": "pocket-ui", "license": "MIT" },
+    { "id": "core-testpattern", "name": "Test pattern core", "category": "cores", "version": "1.0",
+      "description": "A tiny libretro core that draws colour bars and a square you move with the D-pad. Checks that cores from the store load.",
+      "size": 6096, "url": "packages/testpattern_libretro.so", "sha256": "1024c1bf2d3a1e0437b7fe6516fa1703a18f580d7b57f16152c889913f11d9b9",
+      "kind": "file", "dest": "/storage/cores", "name_on_disk": "testpattern_libretro.so", "author": "pocket-ui", "license": "MIT" }
+  ]
+}

@@ -1,0 +1,192 @@
+{
+ "config": {
+  "asleep": 15,
+  "cold": false,
+  "cpu_secs": 10,
+  "cycles": 2,
+  "gap": 150,
+  "moves": 100,
+  "opens": 5,
+  "runs": 3,
+  "settle": 2.0,
+  "starts": 5,
+  "systems": [
+   "gbc:uCity",
+   "gba:Maximum",
+   "snes:Stars"
+  ],
+  "wake": false,
+  "wakes": 3,
+  "warmup": true
+ },
+ "meta": {
+  "commit": "0eacac4",
+  "date": "2026-10-25T08:15:13+0100",
+  "kernel": "7.2.0",
+  "seconds": 378,
+  "target": "device"
+ },
+ "metrics": {
+  "cpu.behind_game": {
+   "runs": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "spread": 0.0,
+   "unit": "%",
+   "value": 0.0
+  },
+  "cpu.shelf_idle": {
+   "runs": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "spread": 0.0,
+   "unit": "%",
+   "value": 0.0
+  },
+  "launch.gba": {
+   "runs": [
+    189.514,
+    181.017,
+    187.262
+   ],
+   "spread": 8.497,
+   "unit": "ms",
+   "value": 187.262
+  },
+  "launch.gbc": {
+   "runs": [
+    160.478,
+    135.519,
+    129.543
+   ],
+   "spread": 30.935,
+   "unit": "ms",
+   "value": 135.519
+  },
+  "launch.snes": {
+   "runs": [
+    199.551,
+    206.132,
+    199.478
+   ],
+   "spread": 6.654,
+   "unit": "ms",
+   "value": 199.551
+  },
+  "nav.p50": {
+   "runs": [
+    5.624,
+    4.928,
+    4.514
+   ],
+   "spread": 1.11,
+   "unit": "ms",
+   "value": 4.928
+  },
+  "nav.p95": {
+   "runs": [
+    14.118,
+    15.856,
+    14.387
+   ],
+   "spread": 1.738,
+   "unit": "ms",
+   "value": 14.387
+  },
+  "open.pause_menu": {
+   "runs": [
+    24.212,
+    28.519,
+    24.148
+   ],
+   "spread": 4.371,
+   "unit": "ms",
+   "value": 24.212
+  },
+  "open.pause_menu_again": {
+   "runs": [
+    28.631,
+    17.03,
+    25.763
+   ],
+   "spread": 11.601,
+   "unit": "ms",
+   "value": 25.763
+  },
+  "open.settings": {
+   "runs": [
+    11.759,
+    4.844,
+    10.137
+   ],
+   "spread": 6.915,
+   "unit": "ms",
+   "value": 10.137
+  },
+  "open.switcher": {
+   "runs": [
+    9.056,
+    17.187,
+    15.344
+   ],
+   "spread": 8.131,
+   "unit": "ms",
+   "value": 15.344
+  },
+  "open.switcher_game": {
+   "runs": [
+    19.718,
+    34.425,
+    34.544
+   ],
+   "spread": 14.826,
+   "unit": "ms",
+   "value": 34.425
+  },
+  "quit.to_shelf": {
+   "runs": [
+    54.801,
+    61.761,
+    55.939
+   ],
+   "spread": 6.959,
+   "unit": "ms",
+   "value": 55.939
+  },
+  "start.cold": {
+   "runs": [
+    55.364,
+    50.986,
+    57.815
+   ],
+   "spread": 6.829,
+   "unit": "ms",
+   "value": 55.364
+  },
+  "start.process": {
+   "runs": [
+    48.735,
+    45.171,
+    50.193
+   ],
+   "spread": 5.022,
+   "unit": "ms",
+   "value": 48.735
+  },
+  "switch.game": {
+   "runs": [
+    220.519,
+    208.558,
+    239.807
+   ],
+   "spread": 31.249,
+   "unit": "ms",
+   "value": 220.519
+  }
+ },
+ "schema": 1
+}

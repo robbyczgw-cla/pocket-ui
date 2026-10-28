@@ -1,0 +1,6 @@
+# Virtual Mini V2: the kiosk settings ROCKNIX ships (/usr/share/sway/config.kiosk) on a headless
+# 1240x1080 output, which is the Mini V2's panel as sway sees it.
+seat * hide_cursor 1000
+default_border none
+output HEADLESS-1 mode --custom 1240x1080@60Hz
+output HEADLESS-1 bg #000000 solid_color

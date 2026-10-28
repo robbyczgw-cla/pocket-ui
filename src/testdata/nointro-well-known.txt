@@ -1,0 +1,222 @@
+gb/Tetris (World) (Rev 1).gb
+gb/Super Mario Land (World) (Rev 1).gb
+gb/Super Mario Land 2 - 6 Golden Coins (USA, Europe).gb
+gb/Wario Land - Super Mario Land 3 (World).gb
+gb/Legend of Zelda, The - Link's Awakening (USA, Europe) (Rev 2).gb
+gb/Pokemon - Red Version (USA, Europe) (SGB Enhanced).gb
+gb/Pokemon - Blue Version (USA, Europe) (SGB Enhanced).gb
+gb/Pokemon - Yellow Version - Special Pikachu Edition (USA, Europe) (CGB+SGB Enhanced).gb
+gb/Metroid II - Return of Samus (World).gb
+gb/Kirby's Dream Land (USA, Europe).gb
+gb/Kirby's Dream Land 2 (USA, Europe) (SGB Enhanced).gb
+gb/Donkey Kong (World) (Rev 1) (SGB Enhanced).gb
+gb/Donkey Kong Land (USA, Europe) (SGB Enhanced).gb
+gb/Final Fantasy Legend, The (USA).gb
+gb/Final Fantasy Adventure (USA).gb
+gb/Mega Man - Dr. Wily's Revenge (USA).gb
+gb/Dr. Mario (World) (Rev 1).gb
+gb/Castlevania - The Adventure (USA).gb
+gb/Kid Icarus - Of Myths and Monsters (USA, Europe).gb
+gb/Gargoyle's Quest (USA, Europe).gb
+gbc/Legend of Zelda, The - Link's Awakening DX (USA, Europe) (Rev 2) (SGB Enhanced).gbc
+gbc/Legend of Zelda, The - Oracle of Ages (USA).gbc
+gbc/Legend of Zelda, The - Oracle of Seasons (USA).gbc
+gbc/Pokemon - Gold Version (USA, Europe) (SGB Enhanced).gbc
+gbc/Pokemon - Silver Version (USA, Europe) (SGB Enhanced).gbc
+gbc/Pokemon - Crystal Version (USA, Europe) (Rev 1).gbc
+gbc/Pokemon Pinball (USA) (Rumble Version) (SGB Enhanced).gbc
+gbc/Pokemon Trading Card Game (USA) (SGB Enhanced).gbc
+gbc/Super Mario Bros. Deluxe (USA, Europe) (Rev 2).gbc
+gbc/Wario Land II (USA, Europe) (SGB Enhanced).gbc
+gbc/Wario Land 3 (World) (En,Ja).gbc
+gbc/Shantae (USA).gbc
+gbc/Dragon Warrior Monsters (USA, Europe) (SGB Enhanced).gbc
+gbc/Metal Gear Solid (USA).gbc
+gbc/Tetris DX (World) (SGB Enhanced).gbc
+gba/Pokemon - Emerald Version (USA, Europe).gba
+gba/Pokemon - Ruby Version (USA, Europe) (Rev 2).gba
+gba/Pokemon - FireRed Version (USA, Europe) (Rev 1).gba
+gba/Metroid Fusion (USA).gba
+gba/Metroid - Zero Mission (USA).gba
+gba/Legend of Zelda, The - The Minish Cap (USA).gba
+gba/Legend of Zelda, The - A Link to the Past & Four Swords (USA).gba
+gba/Advance Wars (USA) (Rev 1).gba
+gba/Advance Wars 2 - Black Hole Rising (USA).gba
+gba/Fire Emblem (USA).gba
+gba/Fire Emblem - The Sacred Stones (USA).gba
+gba/Golden Sun (USA, Europe).gba
+gba/Golden Sun - The Lost Age (USA, Europe).gba
+gba/Mario Kart - Super Circuit (USA).gba
+gba/Mario & Luigi - Superstar Saga (USA).gba
+gba/Super Mario Advance 4 - Super Mario Bros. 3 (USA) (Rev 1).gba
+gba/WarioWare, Inc. - Mega Microgame$! (USA).gba
+gba/Castlevania - Aria of Sorrow (USA).gba
+gba/Castlevania - Circle of the Moon (USA).gba
+gba/Final Fantasy Tactics Advance (USA).gba
+gba/Kirby & The Amazing Mirror (USA).gba
+gba/Mother 3 (Japan).gba
+gba/Drill Dozer (USA).gba
+gba/Sonic Advance (USA) (En,Ja).gba
+gba/Tony Hawk's Pro Skater 2 (USA, Europe).gba
+nes/Super Mario Bros. (World).nes
+nes/Super Mario Bros. 2 (USA) (Rev 1).nes
+nes/Super Mario Bros. 3 (USA) (Rev 1).nes
+nes/Legend of Zelda, The (USA) (Rev 1).nes
+nes/Zelda II - The Adventure of Link (USA).nes
+nes/Metroid (USA).nes
+nes/Mega Man 2 (USA).nes
+nes/Mega Man 3 (USA).nes
+nes/Castlevania (USA) (Rev 1).nes
+nes/Castlevania III - Dracula's Curse (USA).nes
+nes/Contra (USA).nes
+nes/Kirby's Adventure (USA) (Rev 1).nes
+nes/Punch-Out!! (USA).nes
+nes/Mike Tyson's Punch-Out!! (USA) (Rev 1).nes
+nes/Final Fantasy (USA).nes
+nes/Dragon Warrior (USA) (Rev 1).nes
+nes/Ninja Gaiden (USA).nes
+nes/Duck Hunt (World).nes
+nes/Excitebike (Japan, USA) (En).nes
+nes/Tetris (USA).nes
+nes/Dr. Mario (Japan, USA) (Rev 1).nes
+nes/DuckTales (USA).nes
+nes/Kid Icarus (USA, Europe) (Rev 1).nes
+nes/Batman - The Video Game (USA).nes
+nes/Teenage Mutant Ninja Turtles (USA).nes
+snes/Super Mario World (USA).sfc
+snes/Legend of Zelda, The - A Link to the Past (USA).sfc
+snes/Super Metroid (Japan, USA) (En,Ja).sfc
+snes/Chrono Trigger (USA).sfc
+snes/Final Fantasy III (USA) (Rev 1).sfc
+snes/Final Fantasy II (USA) (Rev 1).sfc
+snes/Secret of Mana (USA).sfc
+snes/Super Mario Kart (USA).sfc
+snes/Donkey Kong Country (USA) (Rev 2).sfc
+snes/Donkey Kong Country 2 - Diddy's Kong Quest (USA) (En,Fr) (Rev 1).sfc
+snes/Super Mario World 2 - Yoshi's Island (USA, Asia) (Rev 1).sfc
+snes/Super Mario RPG - Legend of the Seven Stars (USA).sfc
+snes/EarthBound (USA).sfc
+snes/Star Fox (USA) (Rev 2).sfc
+snes/F-Zero (USA).sfc
+snes/Mega Man X (USA) (Rev 1).sfc
+snes/Super Castlevania IV (USA).sfc
+snes/Street Fighter II Turbo (USA) (Rev 1).sfc
+snes/Kirby Super Star (USA).sfc
+snes/Super Punch-Out!! (USA).sfc
+snes/Contra III - The Alien Wars (USA).sfc
+snes/Actraiser (USA).sfc
+snes/Breath of Fire II (USA).sfc
+snes/Illusion of Gaia (USA).sfc
+snes/Teenage Mutant Ninja Turtles IV - Turtles in Time (USA).sfc
+n64/Super Mario 64 (USA).z64
+n64/Legend of Zelda, The - Ocarina of Time (USA) (Rev 2).z64
+n64/Legend of Zelda, The - Majora's Mask (USA).z64
+n64/Mario Kart 64 (USA).z64
+n64/GoldenEye 007 (USA).z64
+n64/Banjo-Kazooie (USA) (Rev 1).z64
+n64/Star Fox 64 (USA) (Rev 1).z64
+n64/Super Smash Bros. (USA).z64
+n64/Paper Mario (USA).z64
+n64/Perfect Dark (USA) (Rev 1).z64
+n64/Donkey Kong 64 (USA).z64
+n64/Conker's Bad Fur Day (USA).z64
+n64/F-Zero X (USA).z64
+n64/Wave Race 64 (USA) (Rev 1).z64
+n64/Pokemon Snap (USA).z64
+megadrive/Sonic The Hedgehog (USA, Europe).md
+megadrive/Sonic The Hedgehog 2 (World) (Rev A).md
+megadrive/Sonic & Knuckles (World).md
+megadrive/Streets of Rage 2 (USA).md
+megadrive/Gunstar Heroes (USA).md
+megadrive/Phantasy Star IV (USA).md
+megadrive/Shining Force (USA).md
+megadrive/Ecco the Dolphin (USA, Europe, Korea).md
+megadrive/Earthworm Jim (USA).md
+megadrive/Castlevania - Bloodlines (USA).md
+megadrive/Contra - Hard Corps (USA, Korea).md
+megadrive/Golden Axe (World) (Rev A).md
+megadrive/Aladdin (USA).md
+megadrive/Altered Beast (USA, Europe).md
+megadrive/Comix Zone (USA).md
+megadrive/Shinobi III - Return of the Ninja Master (USA).md
+megadrive/Vectorman (USA, Europe).md
+megadrive/Rocket Knight Adventures (USA).md
+megadrive/ToeJam & Earl (USA, Europe, Korea).md
+megadrive/Mortal Kombat II (World).md
+mastersystem/Alex Kidd in Miracle World (USA, Europe) (Rev 1).sms
+mastersystem/Phantasy Star (USA, Europe) (Rev 1).sms
+mastersystem/Wonder Boy III - The Dragon's Trap (USA, Europe).sms
+mastersystem/Sonic The Hedgehog (USA, Europe).sms
+mastersystem/Shinobi (USA, Europe).sms
+mastersystem/Castle of Illusion Starring Mickey Mouse (USA).sms
+mastersystem/R-Type (World).sms
+mastersystem/Golden Axe Warrior (USA, Europe).sms
+gamegear/Columns (USA, Europe).gg
+gamegear/Shinobi (USA, Europe).gg
+gamegear/Sonic Chaos (USA, Europe).gg
+gamegear/Shining Force - The Sword of Hajya (USA).gg
+gamegear/Defenders of Oasis (USA, Europe).gg
+gamegear/Ax Battler - A Legend of Golden Axe (USA, Europe) (Rev 1).gg
+psx/Final Fantasy VII (USA) (Disc 1).cue
+psx/Metal Gear Solid (USA) (Disc 1) (Rev 1).cue
+psx/Castlevania - Symphony of the Night (USA).cue
+psx/Crash Bandicoot (USA).cue
+psx/Crash Bandicoot - Warped (USA).cue
+psx/Spyro the Dragon (USA).cue
+psx/Resident Evil 2 (USA) (Disc 1).cue
+psx/Silent Hill (USA).cue
+psx/Chrono Cross (USA) (Disc 1).cue
+psx/Final Fantasy Tactics (USA).cue
+psx/Tekken 3 (USA).cue
+psx/Gran Turismo 2 (USA) (Arcade Mode) (Rev 1).cue
+psx/Tony Hawk's Pro Skater 2 (USA).cue
+psx/Suikoden II (USA).cue
+psx/Vagrant Story (USA).cue
+psx/Ape Escape (USA).cue
+psx/Tomb Raider (USA) (Rev 6).cue
+psx/Final Fantasy IX (USA) (Disc 1).cue
+psx/Parasite Eve (USA) (Disc 1).cue
+psx/Legend of Dragoon, The (USA) (Disc 1).cue
+ps2/Shadow of the Colossus (USA).iso
+ps2/Grand Theft Auto - San Andreas (USA).iso
+ps2/Final Fantasy X (USA).iso
+ps2/Kingdom Hearts (USA).iso
+ps2/Metal Gear Solid 3 - Snake Eater (USA).iso
+ps2/Okami (USA).iso
+ps2/God of War (USA).iso
+ps2/Shin Megami Tensei - Persona 4 (USA).iso
+ps2/Silent Hill 2 (USA).iso
+ps2/Ratchet & Clank (USA).iso
+psp/Grand Theft Auto - Liberty City Stories (USA).iso
+psp/Monster Hunter Freedom Unite (USA).iso
+psp/Crisis Core - Final Fantasy VII (USA).iso
+psp/God of War - Chains of Olympus (USA).iso
+psp/Patapon (USA).iso
+psp/Lumines (USA).iso
+nds/New Super Mario Bros. (USA).nds
+nds/Mario Kart DS (USA, Australia).nds
+nds/Pokemon - Diamond Version (USA).nds
+nds/Pokemon - HeartGold Version (USA).nds
+nds/Legend of Zelda, The - Phantom Hourglass (USA) (En,Fr,Es).nds
+nds/Castlevania - Dawn of Sorrow (USA).nds
+nds/Professor Layton and the Curious Village (USA).nds
+nds/Phoenix Wright - Ace Attorney (USA).nds
+nds/Chrono Trigger (USA) (En,Fr).nds
+nds/Animal Crossing - Wild World (USA, Australia).nds
+gamecube/Super Mario Sunshine (USA).iso
+gamecube/Legend of Zelda, The - The Wind Waker (USA).iso
+gamecube/Metroid Prime (USA).iso
+gamecube/Super Smash Bros. Melee (USA) (Rev 2).iso
+gamecube/Paper Mario - The Thousand-Year Door (USA).iso
+gamecube/Pikmin (USA).iso
+pcengine/Bomberman '93 (USA).pce
+pcengine/Blazing Lazers (USA).pce
+pcengine/Splatterhouse (USA).pce
+pcengine/Military Madness (USA).pce
+pcengine/Devil's Crush (USA).pce
+saturn/Nights into Dreams... (USA).cue
+saturn/Panzer Dragoon Saga (USA) (Disc 1).cue
+saturn/Guardian Heroes (USA).cue
+dreamcast/Jet Grind Radio (USA).cue
+dreamcast/Shenmue (USA) (Disc 1).cue
+dreamcast/Soulcalibur (USA).cue

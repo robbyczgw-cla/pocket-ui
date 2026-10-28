@@ -1,0 +1,25 @@
+name: Feature idea
+description: Something pocket-ui should do, or do differently.
+labels: [idea]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        pocket-ui is built for one device and a calm, controller-first experience. Ideas that make playing simpler
+        are the most welcome. `docs/STATUS.md` in the repository shows what exists already and how far it is proven.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could it work?
+      description: "Which screen, which button. A sketch or a screenshot of another frontend helps."
+  - type: textarea
+    id: else
+    attributes:
+      label: Anything else
+      description: "Other frontends that do it well, the system or emulator it concerns."

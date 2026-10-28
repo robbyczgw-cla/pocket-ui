@@ -1,0 +1,151 @@
+pocket-ui @VERSION@: install on an existing ROCKNIX card (Retroid Pocket Mini V2)
+==================================================================================
+
+Also for the Retroid Pocket 5, Retroid Pocket Flip 2 (Snapdragon 865) and the first Retroid Pocket
+Mini, as EXPERIMENTAL: they run the same ROCKNIX for SM8250, but pocket-ui has not been tested on
+them yet. Most things should work; if something doesn't, Settings -> System -> About -> Report a
+problem saves a file you can attach to a report.
+
+pocket-ui is a game launcher with its own libretro frontend. This package puts it on a microSD card
+that already runs ROCKNIX, in place of EmulationStation. Your games, saves and ROCKNIX settings stay.
+EmulationStation stays installed too: pocket-ui hands over to it if it cannot start, and uninstall.sh
+brings it back.
+
+pocket-ui is not made or endorsed by the ROCKNIX team.
+
+New card instead? On a Mini V2 the SD card image (pocket-ui-@VERSION@-rp-mini-v2.img.xz) is the
+easier way: it needs no SSH and sets everything up by itself. It is for the Mini V2 only: on the
+other devices, install ROCKNIX for your device as ROCKNIX describes, start it once, then use this
+package.
+
+
+No SSH? Use the one file "Install pocket-ui.sh"
+-----------------------------------------------
+
+This zip is the way for people who have SSH. Without a terminal, take the single file
+"Install pocket-ui.sh" instead (it carries this whole package; it is a separate download next to this zip):
+
+1. Copy "Install pocket-ui.sh" into the folder roms/ports of the card: over ROCKNIX's file sharing
+   from your computer, or with the SD card in the computer.
+2. In EmulationStation restart the list once (Start -> Game Settings -> Update Gamelists), open
+   Ports and start "Install pocket-ui".
+3. The screen shows what it checks (nothing is written until every check passed), then the install,
+   then the switch. Press Close when it says so; pocket-ui starts. The entry removes itself and
+   leaves "Uninstall pocket-ui" in Ports.
+
+If something does not fit (another device, an untested ROCKNIX version, too little space), the screen
+says so in a sentence, nothing on the card is changed, and Close takes you back to EmulationStation.
+Starting it twice is harmless. It uses the same install.sh as below, unchanged.
+Alternative with two files: put this zip next to a copy of the small starter "Install pocket-ui.sh"
+(without the package inside) in roms/ports; the starter finds the zip.
+
+
+You need (the SSH way below)
+----------------------------
+
+- A Retroid Pocket Mini V2 (or, experimental, a Retroid Pocket 5, Flip 2 or first Mini) with ROCKNIX
+  for SM8250, version @TESTED_ROCKNIX@ (the tested one), started normally at least once. Another ROCKNIX
+  version or another device is refused; see "Options" below.
+- SSH switched on in ROCKNIX (EmulationStation: Network Settings -> Enable SSH) and a computer on the
+  same Wi-Fi. ROCKNIX's login is root, password rocknix unless you changed it.
+- About @NEED_MB@ MB free on the card.
+
+
+Install
+-------
+
+1. Copy the zip to the device and unpack it there (replace <device-ip>):
+
+     scp pocket-ui-@VERSION@-rocknix-install.zip root@<device-ip>:/storage/
+     ssh root@<device-ip>
+     cd /storage && unzip -o pocket-ui-@VERSION@-rocknix-install.zip
+     cd pocket-ui-@VERSION@-rocknix-install
+
+2. Check first (changes nothing):
+
+     sh install.sh --check
+
+3. Install:
+
+     sh install.sh
+
+   The checks run again, then the programs go to /storage/pocket-ui and one start entry to
+   /storage/.config/system.d/essway.service.d/10-pocket-ui.conf. The interface restarts (a running
+   game ends) and pocket-ui opens its first-start setup. Running install.sh again is safe.
+
+After that, every start of the device opens pocket-ui. The package folder and the zip in /storage can
+be deleted.
+
+
+What the checks refuse
+----------------------
+
+install.sh changes nothing unless all of these pass:
+- the package is complete (files/SHA256SUMS),
+- the system is ROCKNIX for SM8250 (aarch64), version @TESTED_ROCKNIX@,
+- the device is a Retroid Pocket Mini V2, or one of the experimental Pocket 5, Flip 2 and first Mini
+  (its device tree says so; the experimental ones are noted, not refused),
+- ROCKNIX's interface unit (essway) and EmulationStation's start script are there, ROCKNIX's first
+  start has run, and there is enough free space on /storage,
+- pocket-ui and pocket-core run on this system and print version @VERSION@,
+- pocket-ui's own compatibility check of the running system passes (the libraries and their versions
+  both programs need, the programs and ROCKNIX scripts they call, the emulator cores).
+
+Options:
+  --check                     only the checks
+  --no-restart                install, but start pocket-ui only at the next start of the device
+  --allow-untested-rocknix    another ROCKNIX version; the compatibility check still has to pass
+  --allow-other-device        another SM8250 device pocket-ui doesn't know (untested; the screen layout
+                              may not fit)
+
+
+Uninstall
+---------
+
+Without SSH: start "Uninstall pocket-ui" in Ports (the installer leaves it in roms/ports; the file
+"Uninstall pocket-ui.sh" is also built next to the installer). With SSH:
+
+  sh /storage/pocket-ui/uninstall.sh
+
+removes the start entry and /storage/pocket-ui, puts back what pocket-ui changed in ROCKNIX's
+configuration (its file-sharing settings and Syncthing start entry), and restarts EmulationStation.
+pocket-ui's own settings stay in /storage/.config/pocket-ui unless you add --purge. Games and saves
+in /storage/roms are never touched. Settings pocket-ui changed in ROCKNIX's system settings (Wi-Fi,
+volume, SSH) stay as they are. --keep-programs removes only the start entry.
+
+By hand, the same in one step: delete /storage/.config/system.d/essway.service.d/10-pocket-ui.conf
+and restart the device.
+
+
+Good to know
+------------
+
+- Do not install ROCKNIX updates while pocket-ui is on the card unless a pocket-ui release says the
+  new version is supported. Run "sh install.sh --check" from a newer pocket-ui package after one.
+- Remote access (SSH) stays as ROCKNIX had it. pocket-ui's switch is Settings -> Connections ->
+  Remote access.
+- The log is /var/log/pocket-ui.log; a copy that survives a restart is in
+  /storage/.config/pocket-ui/logs/.
+
+
+Package contents
+----------------
+
+  install.sh, uninstall.sh   the two scripts above (uninstall.sh is also copied to /storage/pocket-ui)
+  files/pocket-ui, files/pocket-core   pocket-ui @VERSION@ (aarch64, built from commit @REPO_COMMIT@)
+  files/portmaster-setup.sh  PortMaster's first start under pocket-ui
+  files/run-pocket-ui.sh     the launcher (restarts after crashes, rolls back, falls back to EmulationStation)
+  files/10-pocket-ui.conf    the start entry (a systemd drop-in for ROCKNIX's essway unit)
+  files/VERSION, files/SHA256SUMS
+  LICENSE, NOTICE.md         pocket-ui's licence and third-party credits
+  licences/                  the licence texts that go with the programs: the Rust crates' (THIRD-PARTY-LICENSES.txt,
+                             THIRD-PARTY-CRATES.md) and the fonts' (FONTS-OFL.txt); install.sh copies them to
+                             /storage/pocket-ui/licences, and Settings -> System -> About names that folder
+
+
+Licence
+-------
+
+pocket-ui and pocket-core: GNU GPL version 2 or later (LICENSE). Third-party credits (fonts, Rust
+crates and other parts, each under its own licence): NOTICE.md. Source: the pocket-ui repository,
+commit @REPO_COMMIT@. This package contains no BIOS files and no games.

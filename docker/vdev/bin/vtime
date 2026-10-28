@@ -1,0 +1,5 @@
+#!/bin/bash
+# Runs a command and reports its CPU time next to the wall time: CPU % = (user + sys) / wall.
+# Used by `vdev.sh run-core ... --bench N`; the Mini V2 numbers in docs/HOST.md are the same measure.
+TIMEFORMAT='cpu: user %U s + sys %S s in %R s wall'
+time "$@"

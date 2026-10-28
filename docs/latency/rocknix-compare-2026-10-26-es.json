@@ -1,0 +1,1648 @@
+{
+ "schema": 1,
+ "ui": "es",
+ "dir": "full-20261026 + cpu-20261026",
+ "recording": {
+  "frames": 35252,
+  "head": {
+   "format": 875709016,
+   "width": 180,
+   "height": 1240,
+   "stride": 720,
+   "step": 4,
+   "sw": 45,
+   "region": [
+    0,
+    450,
+    1240,
+    180
+   ],
+   "sh": 310,
+   "output": "DSI-1",
+   "mode": [
+    1080,
+    1240,
+    59999
+   ],
+   "clock": "CLOCK_MONOTONIC ns",
+   "manager_version": 3,
+   "started_ns": 18828621429411
+  },
+  "lag_ms_median": 2.3435740000000003,
+  "lag_ms_max": 25.318299
+ },
+ "thresholds": {
+  "change_frac": 0.003,
+  "match_frac": 0.01,
+  "done_frac": 0.1,
+  "game_done_frac": 0.5,
+  "motion_ms": 1000,
+  "tail_ms": 300
+ },
+ "run": {
+  "args": {
+   "cmd": "drive",
+   "ui": "es",
+   "plan": "/tmp/rocknix-compare/scripts/rocknix-compare-plan.json",
+   "codes": "/tmp/rocknix-compare/out/codes.json",
+   "inject": "source",
+   "out": "/tmp/rocknix-compare/out/es",
+   "scenarios": [
+    "start",
+    "nav",
+    "launch",
+    "switch",
+    "wake",
+    "cpu",
+    "play"
+   ],
+   "systems": [
+    "gbc",
+    "gba",
+    "snes"
+   ],
+   "reps": 3,
+   "reps_start": 5,
+   "moves": 30,
+   "nav_gap": 0.9,
+   "window": 2.0,
+   "launch_window": 6.0,
+   "hold": 100,
+   "step": 4,
+   "region": "0,450,1240,180",
+   "asleep": 15,
+   "cpu_secs": 20,
+   "play_secs": 300,
+   "play_boot": 20,
+   "showcase_systems": "gba,gbc",
+   "showcase_audio": 1
+  },
+  "pad_source": "/dev/inputplumber/sources/event5",
+  "dualsense": true,
+  "codes": {
+   "A": 305,
+   "B": 304,
+   "X": 307,
+   "Y": 308,
+   "L": 310,
+   "R": 311,
+   "SELECT": 314,
+   "START": 315,
+   "HOME": 316,
+   "UP": 544,
+   "DOWN": 545,
+   "LEFT": 546,
+   "RIGHT": 547
+  }
+ },
+ "metrics": {
+  "nav.react": {
+   "median": 40.841921,
+   "n": 30,
+   "missing": 0,
+   "min": 17.634672,
+   "max": 50.255586
+  },
+  "nav.done": {
+   "median": 40.841921,
+   "n": 30,
+   "missing": 0,
+   "min": 17.634672,
+   "max": 50.255586
+  },
+  "input.inputplumber": {
+   "median": 1.322319,
+   "n": 81,
+   "missing": 0,
+   "min": 0.222817,
+   "max": 3.054578
+  },
+  "launch.gbc.react": {
+   "median": 1795.038813,
+   "n": 3,
+   "missing": 0,
+   "min": 1754.910624,
+   "max": 1797.519572
+  },
+  "launch.gbc.done": {
+   "median": 1795.038813,
+   "n": 3,
+   "missing": 0,
+   "min": 1754.910624,
+   "max": 1797.519572
+  },
+  "pause.gbc.react": {
+   "median": 239.010068,
+   "n": 3,
+   "missing": 0,
+   "min": 42.593626,
+   "max": 240.680321
+  },
+  "pause.gbc.done": {
+   "median": 240.680321,
+   "n": 3,
+   "missing": 0,
+   "min": 239.010068,
+   "max": 256.933157
+  },
+  "quit.gbc.react": {
+   "median": 122.662085,
+   "n": 3,
+   "missing": 0,
+   "min": 81.06535,
+   "max": 135.289686
+  },
+  "quit.gbc.done": {
+   "median": 856.544396,
+   "n": 3,
+   "missing": 0,
+   "min": 856.492185,
+   "max": 862.718943
+  },
+  "launch.gba.react": {
+   "median": 66.609093,
+   "n": 3,
+   "missing": 0,
+   "min": 60.762824,
+   "max": 73.194176
+  },
+  "launch.gba.done": {
+   "median": 1686.72534,
+   "n": 3,
+   "missing": 0,
+   "min": 1627.484863,
+   "max": 2169.236615
+  },
+  "pause.gba.react": {
+   "median": 69.09451,
+   "n": 3,
+   "missing": 0,
+   "min": 43.742806,
+   "max": 182.144046
+  },
+  "pause.gba.done": {
+   "median": 182.144046,
+   "n": 3,
+   "missing": 0,
+   "min": 182.046296,
+   "max": 187.428787
+  },
+  "quit.gba.react": {
+   "median": 157.078898,
+   "n": 3,
+   "missing": 0,
+   "min": 103.346466,
+   "max": 186.236853
+  },
+  "quit.gba.done": {
+   "median": 901.057346,
+   "n": 3,
+   "missing": 0,
+   "min": 806.241598,
+   "max": 907.618182
+  },
+  "launch.snes.react": {
+   "median": 67.323191,
+   "n": 3,
+   "missing": 0,
+   "min": 59.092123,
+   "max": 94.011974
+  },
+  "launch.snes.done": {
+   "median": 2031.041451,
+   "n": 3,
+   "missing": 0,
+   "min": 1976.041691,
+   "max": 5127.420401
+  },
+  "pause.snes.react": {
+   "median": 30.120154,
+   "n": 3,
+   "missing": 0,
+   "min": 11.685295,
+   "max": 200.709725
+  },
+  "pause.snes.done": {
+   "median": 190.31459,
+   "n": 3,
+   "missing": 0,
+   "min": 166.086889,
+   "max": 200.709725
+  },
+  "quit.snes.react": {
+   "median": 167.287158,
+   "n": 3,
+   "missing": 0,
+   "min": 141.446154,
+   "max": 233.553615
+  },
+  "quit.snes.done": {
+   "median": 933.519492,
+   "n": 3,
+   "missing": 0,
+   "min": 913.386291,
+   "max": 991.202453
+  },
+  "switch.step0.done": {
+   "median": 866.432673,
+   "n": 3,
+   "missing": 0,
+   "min": 839.459226,
+   "max": 962.700281
+  },
+  "switch.step1.done": {
+   "median": 74.240617,
+   "n": 3,
+   "missing": 0,
+   "min": 59.304368,
+   "max": 79.786131
+  },
+  "switch.step2.done": {
+   "median": 327.908538,
+   "n": 3,
+   "missing": 0,
+   "min": 321.165874,
+   "max": 329.294775
+  },
+  "switch.step3.done": {
+   "median": 324.364207,
+   "n": 3,
+   "missing": 0,
+   "min": 320.837346,
+   "max": 330.812422
+  },
+  "switch.step4.done": {
+   "median": 59.44567,
+   "n": 3,
+   "missing": 0,
+   "min": 54.738094,
+   "max": 65.322505
+  },
+  "switch.step5.done": {
+   "median": 135.757988,
+   "n": 3,
+   "missing": 0,
+   "min": 135.165396,
+   "max": 139.849564
+  },
+  "switch.step6.done": {
+   "median": null,
+   "n": 0,
+   "missing": 3,
+   "min": null,
+   "max": null
+  },
+  "switch.step7.done": {
+   "median": 1654.421737,
+   "n": 3,
+   "missing": 0,
+   "min": 1617.164967,
+   "max": 4626.208424
+  },
+  "switch.total": {
+   "median": 3544.384552,
+   "n": 3,
+   "missing": 0,
+   "min": 3385.393129,
+   "max": 6394.603122
+  },
+  "start.first_frame": {
+   "median": 1723.615264,
+   "n": 5,
+   "missing": 0,
+   "min": 1551.631827,
+   "max": 1763.286934
+  },
+  "start.screen": {
+   "median": 2082.73184,
+   "n": 5,
+   "missing": 0,
+   "min": 1900.04693,
+   "max": 2160.129936
+  },
+  "start.process_seen": {
+   "median": 1331.306462,
+   "n": 5,
+   "missing": 0,
+   "min": 1210.521726,
+   "max": 1378.251035
+  },
+  "start.input": {
+   "median": 2135.787441,
+   "n": 5,
+   "missing": 0,
+   "min": 1960.297705,
+   "max": 2215.287492
+  },
+  "start.input_press": {
+   "median": 45.452653,
+   "n": 5,
+   "missing": 0,
+   "min": 35.33069,
+   "max": 45.625095
+  },
+  "wake.screen_on": {
+   "median": 0.299571,
+   "n": 3,
+   "missing": 0,
+   "min": 0.293477,
+   "max": 0.386026
+  },
+  "wake.first_frame": {
+   "median": 20.945958,
+   "n": 3,
+   "missing": 0,
+   "min": 20.107972,
+   "max": 22.694481
+  },
+  "wake.input": {
+   "median": 54.560352,
+   "n": 3,
+   "missing": 0,
+   "min": 35.476557,
+   "max": 56.106071
+  },
+  "cpu.list_idle.ui": {
+   "median": 6.149816172769993,
+   "n": 3,
+   "missing": 0,
+   "min": 6.04981612128364,
+   "max": 6.749729919681356
+  },
+  "cpu.list_idle.system": {
+   "median": 20.989433237271854,
+   "n": 3,
+   "missing": 0,
+   "min": 20.04215597711533,
+   "max": 22.755427265620302
+  },
+  "cpu.behind_game.ui": {
+   "median": 0.0,
+   "n": 3,
+   "missing": 0,
+   "min": 0.0,
+   "max": 0.0
+  },
+  "cpu.behind_game.system": {
+   "median": 24.897861091083872,
+   "n": 3,
+   "missing": 0,
+   "min": 24.87071557426338,
+   "max": 29.31836020044678
+  },
+  "cpu.behind_game.game": {
+   "median": 8.249378811463481,
+   "n": 3,
+   "missing": 0,
+   "min": 8.149252021718143,
+   "max": 12.599099403143782
+  },
+  "play.gbc.game_cpu": {
+   "median": 11.979191011170274,
+   "n": 1,
+   "missing": 0,
+   "min": 11.979191011170274,
+   "max": 11.979191011170274
+  },
+  "play.gbc.ui_cpu": {
+   "median": 0.0,
+   "n": 1,
+   "missing": 0,
+   "min": 0.0,
+   "max": 0.0
+  },
+  "play.gbc.system_cpu": {
+   "median": 28.373590982286633,
+   "n": 1,
+   "missing": 0,
+   "min": 28.373590982286633,
+   "max": 28.373590982286633
+  },
+  "play.gbc.watts": {
+   "median": null,
+   "n": 0,
+   "missing": 1,
+   "min": null,
+   "max": null
+  },
+  "play.gba.game_cpu": {
+   "median": 44.73755904913673,
+   "n": 1,
+   "missing": 0,
+   "min": 44.73755904913673,
+   "max": 44.73755904913673
+  },
+  "play.gba.ui_cpu": {
+   "median": 0.0,
+   "n": 1,
+   "missing": 0,
+   "min": 0.0,
+   "max": 0.0
+  },
+  "play.gba.system_cpu": {
+   "median": 59.387900585195716,
+   "n": 1,
+   "missing": 0,
+   "min": 59.387900585195716,
+   "max": 59.387900585195716
+  },
+  "play.gba.watts": {
+   "median": null,
+   "n": 0,
+   "missing": 1,
+   "min": null,
+   "max": null
+  },
+  "play.snes.game_cpu": {
+   "median": 32.514887678641536,
+   "n": 1,
+   "missing": 0,
+   "min": 32.514887678641536,
+   "max": 32.514887678641536
+  },
+  "play.snes.ui_cpu": {
+   "median": 0.0,
+   "n": 1,
+   "missing": 0,
+   "min": 0.0,
+   "max": 0.0
+  },
+  "play.snes.system_cpu": {
+   "median": 48.48279779096325,
+   "n": 1,
+   "missing": 0,
+   "min": 48.48279779096325,
+   "max": 48.48279779096325
+  },
+  "play.snes.watts": {
+   "median": null,
+   "n": 0,
+   "missing": 1,
+   "min": null,
+   "max": null
+  }
+ },
+ "samples": [
+  {
+   "metric": "nav.react",
+   "value": 48.734708,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 48.734708,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 49.301091,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 49.301091,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 47.27326,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 47.27326,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 48.703305,
+   "rep": 3,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 48.703305,
+   "rep": 3,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 36.6034,
+   "rep": 4,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 36.6034,
+   "rep": 4,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 36.39268,
+   "rep": 5,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 36.39268,
+   "rep": 5,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 41.161333,
+   "rep": 6,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 41.161333,
+   "rep": 6,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 25.575169,
+   "rep": 7,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 25.575169,
+   "rep": 7,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 37.949177,
+   "rep": 8,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 37.949177,
+   "rep": 8,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 38.834869,
+   "rep": 9,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 38.834869,
+   "rep": 9,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 37.610025,
+   "rep": 10,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 37.610025,
+   "rep": 10,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 41.546526,
+   "rep": 11,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 41.546526,
+   "rep": 11,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 45.605157,
+   "rep": 12,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 45.605157,
+   "rep": 12,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 17.634672,
+   "rep": 13,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 17.634672,
+   "rep": 13,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 47.554398,
+   "rep": 14,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 47.554398,
+   "rep": 14,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 50.255586,
+   "rep": 15,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 50.255586,
+   "rep": 15,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 39.671658,
+   "rep": 16,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 39.671658,
+   "rep": 16,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 44.937166,
+   "rep": 17,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 44.937166,
+   "rep": 17,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 39.548904,
+   "rep": 18,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 39.548904,
+   "rep": 18,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 39.63213,
+   "rep": 19,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 39.63213,
+   "rep": 19,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 38.002407,
+   "rep": 20,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 38.002407,
+   "rep": 20,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 40.522509,
+   "rep": 21,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 40.522509,
+   "rep": 21,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 48.1575,
+   "rep": 22,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 48.1575,
+   "rep": 22,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 45.260175,
+   "rep": 23,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 45.260175,
+   "rep": 23,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 41.305706,
+   "rep": 24,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 41.305706,
+   "rep": 24,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 39.152359,
+   "rep": 25,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 39.152359,
+   "rep": 25,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 41.621422,
+   "rep": 26,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 41.621422,
+   "rep": 26,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 33.550304,
+   "rep": 27,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 33.550304,
+   "rep": 27,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 33.680559,
+   "rep": 28,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 33.680559,
+   "rep": 28,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 49.196052,
+   "rep": 29,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 49.196052,
+   "rep": 29,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "launch.gbc.react",
+   "value": 1754.910624,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.gbc.done",
+   "value": 1754.910624,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "pause.gbc.react",
+   "value": 42.593626,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.gbc.done",
+   "value": 256.933157,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.gbc.react",
+   "value": 122.662085,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.gbc.done",
+   "value": 856.492185,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.gbc.react",
+   "value": 1795.038813,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.gbc.done",
+   "value": 1795.038813,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "pause.gbc.react",
+   "value": 239.010068,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.gbc.done",
+   "value": 239.010068,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.gbc.react",
+   "value": 135.289686,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.gbc.done",
+   "value": 862.718943,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.gbc.react",
+   "value": 1797.519572,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.gbc.done",
+   "value": 1797.519572,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "pause.gbc.react",
+   "value": 240.680321,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.gbc.done",
+   "value": 240.680321,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.gbc.react",
+   "value": 81.06535,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.gbc.done",
+   "value": 856.544396,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.gba.react",
+   "value": 73.194176,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.gba.done",
+   "value": 1686.72534,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "pause.gba.react",
+   "value": 182.144046,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.gba.done",
+   "value": 182.144046,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.gba.react",
+   "value": 157.078898,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.gba.done",
+   "value": 907.618182,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "launch.gba.react",
+   "value": 60.762824,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.gba.done",
+   "value": 1627.484863,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "pause.gba.react",
+   "value": 43.742806,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.gba.done",
+   "value": 182.046296,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.gba.react",
+   "value": 186.236853,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.gba.done",
+   "value": 901.057346,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "launch.gba.react",
+   "value": 66.609093,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.gba.done",
+   "value": 2169.236615,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "pause.gba.react",
+   "value": 69.09451,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.gba.done",
+   "value": 187.428787,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.gba.react",
+   "value": 103.346466,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.gba.done",
+   "value": 806.241598,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "launch.snes.react",
+   "value": 59.092123,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.snes.done",
+   "value": 1976.041691,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.snes.react",
+   "value": 11.685295,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.snes.done",
+   "value": 166.086889,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.snes.react",
+   "value": 233.553615,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.snes.done",
+   "value": 991.202453,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "launch.snes.react",
+   "value": 94.011974,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.snes.done",
+   "value": 5127.420401,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "pause.snes.react",
+   "value": 200.709725,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.snes.done",
+   "value": 200.709725,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.snes.react",
+   "value": 167.287158,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.snes.done",
+   "value": 913.386291,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "launch.snes.react",
+   "value": 67.323191,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.snes.done",
+   "value": 2031.041451,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.snes.react",
+   "value": 30.120154,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.snes.done",
+   "value": 190.31459,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.snes.react",
+   "value": 141.446154,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.snes.done",
+   "value": 933.519492,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step0.done",
+   "value": 839.459226,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "switch.step1.done",
+   "value": 74.240617,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step2.done",
+   "value": 329.294775,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step3.done",
+   "value": 330.812422,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step4.done",
+   "value": 54.738094,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step5.done",
+   "value": 139.849564,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step6.done",
+   "value": null,
+   "rep": 0,
+   "how": "nothing changed"
+  },
+  {
+   "metric": "switch.step7.done",
+   "value": 4626.208424,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step0.done",
+   "value": 866.432673,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "switch.step1.done",
+   "value": 59.304368,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step2.done",
+   "value": 321.165874,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step3.done",
+   "value": 320.837346,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step4.done",
+   "value": 65.322505,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step5.done",
+   "value": 135.165396,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step6.done",
+   "value": null,
+   "rep": 1,
+   "how": "nothing changed"
+  },
+  {
+   "metric": "switch.step7.done",
+   "value": 1617.164967,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step0.done",
+   "value": 962.700281,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "switch.step1.done",
+   "value": 79.786131,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step2.done",
+   "value": 327.908538,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step3.done",
+   "value": 324.364207,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step4.done",
+   "value": 59.44567,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step5.done",
+   "value": 135.757988,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step6.done",
+   "value": null,
+   "rep": 2,
+   "how": "nothing changed"
+  },
+  {
+   "metric": "switch.step7.done",
+   "value": 1654.421737,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.total",
+   "value": 6394.603122,
+   "rep": 0,
+   "presses": 8,
+   "unseen": 1
+  },
+  {
+   "metric": "switch.total",
+   "value": 3385.393129,
+   "rep": 1,
+   "presses": 8,
+   "unseen": 1
+  },
+  {
+   "metric": "switch.total",
+   "value": 3544.384552,
+   "rep": 2,
+   "presses": 8,
+   "unseen": 1
+  },
+  {
+   "metric": "start.first_frame",
+   "value": 1551.631827,
+   "rep": 0
+  },
+  {
+   "metric": "start.screen",
+   "value": 1900.04693,
+   "rep": 0
+  },
+  {
+   "metric": "start.process_seen",
+   "value": 1210.521726,
+   "rep": 0
+  },
+  {
+   "metric": "start.first_frame",
+   "value": 1763.286934,
+   "rep": 1
+  },
+  {
+   "metric": "start.screen",
+   "value": 2160.129936,
+   "rep": 1
+  },
+  {
+   "metric": "start.process_seen",
+   "value": 1378.251035,
+   "rep": 1
+  },
+  {
+   "metric": "start.first_frame",
+   "value": 1723.615264,
+   "rep": 2
+  },
+  {
+   "metric": "start.screen",
+   "value": 2082.048445,
+   "rep": 2
+  },
+  {
+   "metric": "start.process_seen",
+   "value": 1266.344558,
+   "rep": 2
+  },
+  {
+   "metric": "start.first_frame",
+   "value": 1703.908527,
+   "rep": 3
+  },
+  {
+   "metric": "start.screen",
+   "value": 2082.73184,
+   "rep": 3
+  },
+  {
+   "metric": "start.process_seen",
+   "value": 1331.306462,
+   "rep": 3
+  },
+  {
+   "metric": "start.first_frame",
+   "value": 1736.850964,
+   "rep": 4
+  },
+  {
+   "metric": "start.screen",
+   "value": 2085.152139,
+   "rep": 4
+  },
+  {
+   "metric": "start.process_seen",
+   "value": 1348.414094,
+   "rep": 4
+  },
+  {
+   "metric": "start.input",
+   "value": 1960.297705,
+   "rep": 0,
+   "presses": 1
+  },
+  {
+   "metric": "start.input_press",
+   "value": 45.452653,
+   "rep": 0
+  },
+  {
+   "metric": "start.input",
+   "value": 2215.287492,
+   "rep": 1,
+   "presses": 1
+  },
+  {
+   "metric": "start.input_press",
+   "value": 45.625095,
+   "rep": 1
+  },
+  {
+   "metric": "start.input",
+   "value": 2130.298013,
+   "rep": 2,
+   "presses": 1
+  },
+  {
+   "metric": "start.input_press",
+   "value": 37.945734,
+   "rep": 2
+  },
+  {
+   "metric": "start.input",
+   "value": 2142.567376,
+   "rep": 3,
+   "presses": 1
+  },
+  {
+   "metric": "start.input_press",
+   "value": 45.462864,
+   "rep": 3
+  },
+  {
+   "metric": "start.input",
+   "value": 2135.787441,
+   "rep": 4,
+   "presses": 1
+  },
+  {
+   "metric": "start.input_press",
+   "value": 35.33069,
+   "rep": 4
+  },
+  {
+   "metric": "wake.screen_on",
+   "value": 0.386026,
+   "rep": 0
+  },
+  {
+   "metric": "wake.first_frame",
+   "value": 20.107972,
+   "rep": 0
+  },
+  {
+   "metric": "wake.input",
+   "value": 35.476557,
+   "rep": 0,
+   "presses": 1
+  },
+  {
+   "metric": "wake.screen_on",
+   "value": 0.293477,
+   "rep": 1
+  },
+  {
+   "metric": "wake.first_frame",
+   "value": 20.945958,
+   "rep": 1
+  },
+  {
+   "metric": "wake.input",
+   "value": 54.560352,
+   "rep": 1,
+   "presses": 1
+  },
+  {
+   "metric": "wake.screen_on",
+   "value": 0.299571,
+   "rep": 2
+  },
+  {
+   "metric": "wake.first_frame",
+   "value": 22.694481,
+   "rep": 2
+  },
+  {
+   "metric": "wake.input",
+   "value": 56.106071,
+   "rep": 2,
+   "presses": 1
+  },
+  {
+   "metric": "cpu.list_idle.ui",
+   "value": 6.749729919681356,
+   "rep": 0
+  },
+  {
+   "metric": "cpu.list_idle.system",
+   "value": 22.755427265620302,
+   "rep": 0
+  },
+  {
+   "metric": "cpu.list_idle.ui",
+   "value": 6.04981612128364,
+   "rep": 1
+  },
+  {
+   "metric": "cpu.list_idle.system",
+   "value": 20.989433237271854,
+   "rep": 1
+  },
+  {
+   "metric": "cpu.list_idle.ui",
+   "value": 6.149816172769993,
+   "rep": 2
+  },
+  {
+   "metric": "cpu.list_idle.system",
+   "value": 20.04215597711533,
+   "rep": 2
+  },
+  {
+   "metric": "cpu.behind_game.ui",
+   "value": 0.0,
+   "rep": 0
+  },
+  {
+   "metric": "cpu.behind_game.system",
+   "value": 29.31836020044678,
+   "rep": 0
+  },
+  {
+   "metric": "cpu.behind_game.game",
+   "value": 12.599099403143782,
+   "rep": 0
+  },
+  {
+   "metric": "cpu.behind_game.ui",
+   "value": 0.0,
+   "rep": 1
+  },
+  {
+   "metric": "cpu.behind_game.system",
+   "value": 24.87071557426338,
+   "rep": 1
+  },
+  {
+   "metric": "cpu.behind_game.game",
+   "value": 8.149252021718143,
+   "rep": 1
+  },
+  {
+   "metric": "cpu.behind_game.ui",
+   "value": 0.0,
+   "rep": 2
+  },
+  {
+   "metric": "cpu.behind_game.system",
+   "value": 24.897861091083872,
+   "rep": 2
+  },
+  {
+   "metric": "cpu.behind_game.game",
+   "value": 8.249378811463481,
+   "rep": 2
+  },
+  {
+   "metric": "play.gbc.game_cpu",
+   "value": 11.979191011170274
+  },
+  {
+   "metric": "play.gbc.ui_cpu",
+   "value": 0.0
+  },
+  {
+   "metric": "play.gbc.system_cpu",
+   "value": 28.373590982286633
+  },
+  {
+   "metric": "play.gbc.watts",
+   "value": null,
+   "on_battery": false,
+   "n": 60,
+   "temp_max_mC": 46670
+  },
+  {
+   "metric": "play.gba.game_cpu",
+   "value": 44.73755904913673
+  },
+  {
+   "metric": "play.gba.ui_cpu",
+   "value": 0.0
+  },
+  {
+   "metric": "play.gba.system_cpu",
+   "value": 59.387900585195716
+  },
+  {
+   "metric": "play.gba.watts",
+   "value": null,
+   "on_battery": false,
+   "n": 60,
+   "temp_max_mC": 47578
+  },
+  {
+   "metric": "play.snes.game_cpu",
+   "value": 32.514887678641536
+  },
+  {
+   "metric": "play.snes.ui_cpu",
+   "value": 0.0
+  },
+  {
+   "metric": "play.snes.system_cpu",
+   "value": 48.48279779096325
+  },
+  {
+   "metric": "play.snes.watts",
+   "value": null,
+   "on_battery": false,
+   "n": 60,
+   "temp_max_mC": 47676
+  }
+ ],
+ "failures": [],
+ "note": "times from compare-results/full-20261026; CPU and play from cpu-20261026 (the full run read CPU from schedstat, which this kernel doesn't have)"
+}

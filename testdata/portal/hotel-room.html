@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Hotel Seeblick – Internet</title>
+<script src="/js/jquery.min.js"></script>
+<script>$(function(){ $('#room').focus(); });</script></head>
+<body>
+<div class="header"><img src="logo.png" alt="Hotel Seeblick"></div>
+<h1>Internet access for guests</h1>
+<p>Please sign in with your room number and the surname of the booking.</p>
+<div class="terms"><h3>Terms of use</h3>
+<p>The internet access is provided for guests of Hotel Seeblick only. Access is limited to five devices per room.
+You agree not to use the service for unlawful purposes. The hotel may log the time and amount of use as required by law.
+The service is provided as it is, without warranty.</p></div>
+<form id="login" method="post" action="login.php" onsubmit="return check();">
+  <input type="hidden" name="csrf" value="b7e1&amp;9">
+  <p><label for="room">Room number</label> <input id="room" name="room" type="text" maxlength="5" required></p>
+  <p><label for="name">Surname</label> <input id="name" name="surname" type="text" required></p>
+  <p><label><input type="checkbox" name="accept" value="1" required> I have read and accept the terms of use</label></p>
+  <p><button type="submit" name="action" value="login">Connect</button></p>
+</form>
+<script>function check(){ return true; }</script>
+</body></html>

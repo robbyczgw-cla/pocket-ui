@@ -1,0 +1,2337 @@
+{
+ "version": 1,
+ "licence": "Our own vocabulary (pocket-ui, GPL-2.0-or-later). The genre names it maps are Wikidata labels (CC0).",
+ "axes": [
+  {
+   "id": "family",
+   "label": "Family",
+   "single": false,
+   "hint": "The broad kind of game. Usually 1, at most 2."
+  },
+  {
+   "id": "subgenre",
+   "label": "Sub-genre",
+   "single": false,
+   "hint": "A narrower kind within a family. 0-3."
+  },
+  {
+   "id": "mechanics",
+   "label": "Mechanics",
+   "single": false,
+   "hint": "Distinctive things you do in the game. Only defining or prominent ones."
+  },
+  {
+   "id": "pace",
+   "label": "Pace",
+   "single": true,
+   "hint": "How fast the moment-to-moment play is. Exactly one."
+  },
+  {
+   "id": "session",
+   "label": "Session",
+   "single": true,
+   "hint": "How a typical play session feels."
+  },
+  {
+   "id": "length",
+   "label": "Length",
+   "single": true,
+   "hint": "Time to see the end of the main game (or 'endless')."
+  },
+  {
+   "id": "difficulty",
+   "label": "Difficulty",
+   "single": true,
+   "hint": "How hard for an average player."
+  },
+  {
+   "id": "story",
+   "label": "Story",
+   "single": false,
+   "hint": "How much the game is about its story."
+  },
+  {
+   "id": "text",
+   "label": "Text",
+   "single": true,
+   "hint": "Whether you need to read a lot (a language you read matters)."
+  },
+  {
+   "id": "grinding",
+   "label": "Grinding",
+   "single": false,
+   "hint": "Repetition needed to progress."
+  },
+  {
+   "id": "controls",
+   "label": "Controls",
+   "single": false,
+   "hint": "What the controls need or suit."
+  },
+  {
+   "id": "mood",
+   "label": "Mood",
+   "single": false,
+   "hint": "How the game feels. 1-3."
+  },
+  {
+   "id": "multiplayer",
+   "label": "Multiplayer",
+   "single": false,
+   "hint": "Playing with others on one system or linked handhelds."
+  },
+  {
+   "id": "setting",
+   "label": "Setting",
+   "single": false,
+   "hint": "Where and what the game's world is. 0-2."
+  }
+ ],
+ "tags": [
+  {
+   "id": "action",
+   "axis": "family",
+   "label": "action",
+   "hint": "Reflex-driven play that fits no narrower family (arcade action, run-and-gun hybrids)."
+  },
+  {
+   "id": "platformer",
+   "axis": "family",
+   "label": "platformer",
+   "hint": "Jumping between platforms is the core."
+  },
+  {
+   "id": "action-adventure",
+   "axis": "family",
+   "label": "action-adventure",
+   "hint": "Exploration and combat in a world with items and puzzles (Zelda, Tomb Raider, GTA)."
+  },
+  {
+   "id": "survival-horror",
+   "axis": "family",
+   "label": "survival horror",
+   "hint": "Scarce resources, fear, puzzles (Resident Evil, Silent Hill)."
+  },
+  {
+   "id": "adventure",
+   "axis": "family",
+   "label": "adventure",
+   "hint": "Story, exploration and puzzles with little or no reflex play (point-and-click, text, detective)."
+  },
+  {
+   "id": "visual-novel",
+   "axis": "family",
+   "label": "visual novel",
+   "hint": "Mostly reading text with pictures, with choices."
+  },
+  {
+   "id": "rpg",
+   "axis": "family",
+   "label": "role-playing",
+   "hint": "Character growth through stats, levels and equipment drives play."
+  },
+  {
+   "id": "strategy",
+   "axis": "family",
+   "label": "strategy",
+   "hint": "Planning armies, units or resources."
+  },
+  {
+   "id": "shooter",
+   "axis": "family",
+   "label": "shooter",
+   "hint": "Aiming and shooting from first/third person or with a light gun (not shoot 'em ups)."
+  },
+  {
+   "id": "shmup",
+   "axis": "family",
+   "label": "shoot 'em up",
+   "hint": "Scrolling or fixed-screen ship/character shooting at waves of enemies."
+  },
+  {
+   "id": "fighting",
+   "axis": "family",
+   "label": "fighting",
+   "hint": "One-on-one (or small group) versus combat."
+  },
+  {
+   "id": "beat-em-up",
+   "axis": "family",
+   "label": "beat 'em up",
+   "hint": "Brawling through waves of enemies."
+  },
+  {
+   "id": "racing",
+   "axis": "family",
+   "label": "racing",
+   "hint": "Racing vehicles (or animals) to the finish."
+  },
+  {
+   "id": "sports",
+   "axis": "family",
+   "label": "sports",
+   "hint": "Real-world sports and fitness."
+  },
+  {
+   "id": "puzzle",
+   "axis": "family",
+   "label": "puzzle",
+   "hint": "Puzzles are the core."
+  },
+  {
+   "id": "simulation",
+   "axis": "family",
+   "label": "simulation",
+   "hint": "Simulating vehicles, systems or businesses."
+  },
+  {
+   "id": "life-sim",
+   "axis": "family",
+   "label": "life sim",
+   "hint": "Daily life, farming, pets, relationships."
+  },
+  {
+   "id": "rhythm",
+   "axis": "family",
+   "label": "music & rhythm",
+   "hint": "Pressing to the beat, dancing, singing."
+  },
+  {
+   "id": "party",
+   "axis": "family",
+   "label": "party game",
+   "hint": "Many short minigames for a group."
+  },
+  {
+   "id": "tabletop",
+   "axis": "family",
+   "label": "board & card",
+   "hint": "Board, card, mahjong, casino or pachinko games."
+  },
+  {
+   "id": "quiz",
+   "axis": "family",
+   "label": "quiz",
+   "hint": "Trivia and game shows."
+  },
+  {
+   "id": "educational",
+   "axis": "family",
+   "label": "educational",
+   "hint": "Made mainly to teach or train the brain."
+  },
+  {
+   "id": "arcade",
+   "axis": "family",
+   "label": "classic arcade",
+   "hint": "Score-chasing arcade designs: maze, Breakout, pinball, single-screen."
+  },
+  {
+   "id": "other",
+   "axis": "family",
+   "label": "other",
+   "hint": "Not really a game: apps, demos, tools."
+  },
+  {
+   "id": "2d-platformer",
+   "axis": "subgenre",
+   "label": "2D platforming"
+  },
+  {
+   "id": "3d-platformer",
+   "axis": "subgenre",
+   "label": "3D platforming"
+  },
+  {
+   "id": "puzzle-platformer",
+   "axis": "subgenre",
+   "label": "puzzle platforming"
+  },
+  {
+   "id": "collectathon",
+   "axis": "subgenre",
+   "label": "collect-a-thon",
+   "hint": "3D platformer built around collecting many items in open levels (Banjo-Kazooie, Super Mario 64, Spyro). Not linear platformers."
+  },
+  {
+   "id": "metroidvania",
+   "axis": "subgenre",
+   "label": "metroidvania",
+   "hint": "One connected map opened up by new abilities (Super Metroid, SotN)."
+  },
+  {
+   "id": "top-down-adventure",
+   "axis": "subgenre",
+   "label": "top-down adventure",
+   "hint": "Zelda-like action-adventure seen from above (2D). Not 3D games."
+  },
+  {
+   "id": "stealth",
+   "axis": "subgenre",
+   "label": "stealth",
+   "hint": "Avoiding detection is central (Metal Gear Solid)."
+  },
+  {
+   "id": "hack-and-slash",
+   "axis": "subgenre",
+   "label": "hack and slash",
+   "hint": "Stylish melee combat against many enemies (Devil May Cry, God of War)."
+  },
+  {
+   "id": "jrpg",
+   "axis": "subgenre",
+   "label": "Japanese RPG",
+   "hint": "Party-based, story-led, usually turn-based (Final Fantasy, Dragon Quest)."
+  },
+  {
+   "id": "western-rpg",
+   "axis": "subgenre",
+   "label": "western RPG",
+   "hint": "Open-ended, choice-led RPG (Baldur's Gate, Fallout)."
+  },
+  {
+   "id": "action-rpg",
+   "axis": "subgenre",
+   "label": "action RPG",
+   "hint": "Real-time combat with RPG growth (Secret of Mana, Diablo, Kingdom Hearts)."
+  },
+  {
+   "id": "tactics-rpg",
+   "axis": "subgenre",
+   "label": "tactics RPG",
+   "hint": "Grid battles with growing units (Fire Emblem, Final Fantasy Tactics)."
+  },
+  {
+   "id": "dungeon-crawler",
+   "axis": "subgenre",
+   "label": "dungeon crawling",
+   "hint": "Descending through dungeons, often first-person (Etrian Odyssey)."
+  },
+  {
+   "id": "roguelike",
+   "axis": "subgenre",
+   "label": "roguelike",
+   "hint": "Random dungeons, permanent death, runs (Mystery Dungeon, Shiren)."
+  },
+  {
+   "id": "monster-taming",
+   "axis": "subgenre",
+   "label": "monster collecting",
+   "hint": "Catching and raising creatures to fight (Pokémon)."
+  },
+  {
+   "id": "rts",
+   "axis": "subgenre",
+   "label": "real-time strategy"
+  },
+  {
+   "id": "turn-based-strategy",
+   "axis": "subgenre",
+   "label": "turn-based strategy",
+   "hint": "Including grid wargames (Advance Wars)."
+  },
+  {
+   "id": "fps",
+   "axis": "subgenre",
+   "label": "first-person shooting"
+  },
+  {
+   "id": "third-person-shooter",
+   "axis": "subgenre",
+   "label": "third-person shooting"
+  },
+  {
+   "id": "light-gun-shooter",
+   "axis": "subgenre",
+   "label": "light-gun shooting",
+   "hint": "Pointing at the screen (Time Crisis, House of the Dead)."
+  },
+  {
+   "id": "rail-shooter",
+   "axis": "subgenre",
+   "label": "on-rails shooting",
+   "hint": "The game moves you along (Star Fox, Panzer Dragoon)."
+  },
+  {
+   "id": "run-and-gun",
+   "axis": "subgenre",
+   "label": "run and gun",
+   "hint": "On-foot side-scrolling shooting (Contra, Metal Slug)."
+  },
+  {
+   "id": "vertical-shmup",
+   "axis": "subgenre",
+   "label": "vertical shmup"
+  },
+  {
+   "id": "horizontal-shmup",
+   "axis": "subgenre",
+   "label": "horizontal shmup"
+  },
+  {
+   "id": "bullet-hell",
+   "axis": "subgenre",
+   "label": "bullet hell",
+   "hint": "Dense bullet patterns (Cave, Touhou)."
+  },
+  {
+   "id": "2d-fighter",
+   "axis": "subgenre",
+   "label": "2D fighting"
+  },
+  {
+   "id": "3d-fighter",
+   "axis": "subgenre",
+   "label": "3D fighting"
+  },
+  {
+   "id": "platform-fighter",
+   "axis": "subgenre",
+   "label": "platform fighting",
+   "hint": "Super Smash Bros. style."
+  },
+  {
+   "id": "arcade-racing",
+   "axis": "subgenre",
+   "label": "arcade racing",
+   "hint": "Forgiving handling, speed and spectacle (Ridge Racer, Burnout, OutRun)."
+  },
+  {
+   "id": "sim-racing",
+   "axis": "subgenre",
+   "label": "sim racing",
+   "hint": "Realistic handling and car tuning (Gran Turismo, Forza)."
+  },
+  {
+   "id": "kart-racing",
+   "axis": "subgenre",
+   "label": "kart racing",
+   "hint": "Items and cartoon karts (Mario Kart, Crash Team Racing)."
+  },
+  {
+   "id": "futuristic-racing",
+   "axis": "subgenre",
+   "label": "futuristic racing",
+   "hint": "Anti-gravity and sci-fi craft (F-Zero, Wipeout)."
+  },
+  {
+   "id": "rally-offroad",
+   "axis": "subgenre",
+   "label": "rally & off-road",
+   "hint": "Rally, motocross and off-road racing."
+  },
+  {
+   "id": "motorbike-racing",
+   "axis": "subgenre",
+   "label": "motorbike racing"
+  },
+  {
+   "id": "car-combat",
+   "axis": "subgenre",
+   "label": "car combat",
+   "hint": "Vehicles fighting with weapons (Twisted Metal)."
+  },
+  {
+   "id": "team-sports",
+   "axis": "subgenre",
+   "label": "team sports",
+   "hint": "Football, basketball, hockey, baseball, American football ..."
+  },
+  {
+   "id": "football",
+   "axis": "subgenre",
+   "label": "football (soccer)"
+  },
+  {
+   "id": "individual-sports",
+   "axis": "subgenre",
+   "label": "individual sports",
+   "hint": "Tennis, golf, boxing, athletics, bowling ..."
+  },
+  {
+   "id": "extreme-sports",
+   "axis": "subgenre",
+   "label": "extreme sports",
+   "hint": "Skateboarding, snowboarding, BMX, surfing (Tony Hawk's, SSX)."
+  },
+  {
+   "id": "wrestling",
+   "axis": "subgenre",
+   "label": "wrestling",
+   "hint": "Pro wrestling."
+  },
+  {
+   "id": "fishing-hunting",
+   "axis": "subgenre",
+   "label": "fishing & hunting"
+  },
+  {
+   "id": "fitness",
+   "axis": "subgenre",
+   "label": "fitness",
+   "hint": "Exercise games (Wii Fit)."
+  },
+  {
+   "id": "falling-block",
+   "axis": "subgenre",
+   "label": "falling blocks",
+   "hint": "Tetris, Puyo Puyo, Columns."
+  },
+  {
+   "id": "match-3",
+   "axis": "subgenre",
+   "label": "match three"
+  },
+  {
+   "id": "logic-puzzle",
+   "axis": "subgenre",
+   "label": "logic puzzles",
+   "hint": "Nonograms, sudoku, sokoban, Professor Layton style riddles."
+  },
+  {
+   "id": "brain-training",
+   "axis": "subgenre",
+   "label": "brain training"
+  },
+  {
+   "id": "flight-sim",
+   "axis": "subgenre",
+   "label": "flight & space combat",
+   "hint": "Flying aircraft or spacecraft in combat or simulation (Ace Combat, Star Wars Rogue Squadron)."
+  },
+  {
+   "id": "vehicle-sim",
+   "axis": "subgenre",
+   "label": "vehicle simulation",
+   "hint": "Trains, trucks, ships, mechs, tanks."
+  },
+  {
+   "id": "management",
+   "axis": "subgenre",
+   "label": "management & building",
+   "hint": "Tycoon, city building, god games (SimCity, Theme Park)."
+  },
+  {
+   "id": "farming",
+   "axis": "subgenre",
+   "label": "farming",
+   "hint": "Harvest Moon, Story of Seasons."
+  },
+  {
+   "id": "virtual-pet",
+   "axis": "subgenre",
+   "label": "pet raising",
+   "hint": "Nintendogs, Tamagotchi."
+  },
+  {
+   "id": "dating-sim",
+   "axis": "subgenre",
+   "label": "dating sim",
+   "hint": "Romance and relationships, including otome games."
+  },
+  {
+   "id": "point-and-click",
+   "axis": "subgenre",
+   "label": "point and click"
+  },
+  {
+   "id": "detective",
+   "axis": "subgenre",
+   "label": "detective work",
+   "hint": "Investigation, interrogation, trials (Phoenix Wright)."
+  },
+  {
+   "id": "interactive-movie",
+   "axis": "subgenre",
+   "label": "interactive movie",
+   "hint": "Full-motion video or choice-driven cinematic games."
+  },
+  {
+   "id": "maze",
+   "axis": "subgenre",
+   "label": "maze chase",
+   "hint": "Pac-Man style."
+  },
+  {
+   "id": "brick-breaker",
+   "axis": "subgenre",
+   "label": "brick breaking",
+   "hint": "Breakout / Arkanoid."
+  },
+  {
+   "id": "pinball",
+   "axis": "subgenre",
+   "label": "pinball"
+  },
+  {
+   "id": "card-battler",
+   "axis": "subgenre",
+   "label": "card battles",
+   "hint": "Collectible card games (Yu-Gi-Oh!, Pokémon TCG)."
+  },
+  {
+   "id": "board-game",
+   "axis": "subgenre",
+   "label": "board games",
+   "hint": "Board games, chess, shogi, mahjong, Monopoly, Mario Party-style boards excluded."
+  },
+  {
+   "id": "casino",
+   "axis": "subgenre",
+   "label": "casino & pachinko"
+  },
+  {
+   "id": "dance",
+   "axis": "subgenre",
+   "label": "dance"
+  },
+  {
+   "id": "minigames",
+   "axis": "subgenre",
+   "label": "minigame collection"
+  },
+  {
+   "id": "compilation",
+   "axis": "subgenre",
+   "label": "game collection",
+   "hint": "Several separate games on one disc/cartridge."
+  },
+  {
+   "id": "crash-takedowns",
+   "axis": "mechanics",
+   "label": "crash takedowns",
+   "hint": "Ramming rivals off the road as a goal (Burnout 3, Revenge)."
+  },
+  {
+   "id": "drifting",
+   "axis": "mechanics",
+   "label": "drifting",
+   "hint": "Powersliding is central and rewarded (Ridge Racer, Initial D, Mario Kart boosts)."
+  },
+  {
+   "id": "traffic",
+   "axis": "mechanics",
+   "label": "racing through traffic",
+   "hint": "Civilian traffic on the road is part of the race (Burnout, OutRun, Crazy Taxi)."
+  },
+  {
+   "id": "car-tuning",
+   "axis": "mechanics",
+   "label": "car tuning & collecting",
+   "hint": "Buying, collecting and upgrading many cars (Gran Turismo)."
+  },
+  {
+   "id": "police-chases",
+   "axis": "mechanics",
+   "label": "police chases"
+  },
+  {
+   "id": "open-world",
+   "axis": "mechanics",
+   "label": "open world",
+   "hint": "A large freely explorable world."
+  },
+  {
+   "id": "ability-gating",
+   "axis": "mechanics",
+   "label": "new abilities open the map",
+   "hint": "Backtracking with new powers."
+  },
+  {
+   "id": "turn-based-combat",
+   "axis": "mechanics",
+   "label": "turn-based battles"
+  },
+  {
+   "id": "atb",
+   "axis": "mechanics",
+   "label": "active-time battles",
+   "hint": "Turn-based with real-time gauges, as in Final Fantasy IV-IX and Chrono Trigger. Not Final Fantasy X's turn order."
+  },
+  {
+   "id": "random-encounters",
+   "axis": "mechanics",
+   "label": "random encounters",
+   "hint": "Battles start at random while walking. Not for games with visible enemies on the map (Chrono Trigger, EarthBound)."
+  },
+  {
+   "id": "party-building",
+   "axis": "mechanics",
+   "label": "party building",
+   "hint": "Recruiting and managing a party of several characters."
+  },
+  {
+   "id": "character-builds",
+   "axis": "mechanics",
+   "label": "character builds",
+   "hint": "Deep, central build systems: job systems (Final Fantasy Tactics), skill trees, Materia, Pokémon movesets. Not ordinary level-ups or equipment."
+  },
+  {
+   "id": "loot",
+   "axis": "mechanics",
+   "label": "loot hunting",
+   "hint": "Randomised equipment drops are a main reward (Diablo-like)."
+  },
+  {
+   "id": "combos",
+   "axis": "mechanics",
+   "label": "combos",
+   "hint": "Chaining attacks is a central skill (fighting games, character-action). Not for run-and-gun, platformers or menu battles."
+  },
+  {
+   "id": "time-travel",
+   "axis": "mechanics",
+   "label": "time travel",
+   "hint": "Travelling through time is part of play (Chrono Trigger, Ocarina of Time)."
+  },
+  {
+   "id": "multiple-endings",
+   "axis": "mechanics",
+   "label": "multiple endings"
+  },
+  {
+   "id": "choices",
+   "axis": "mechanics",
+   "label": "story choices",
+   "hint": "Your choices change the story's course or ending."
+  },
+  {
+   "id": "collectibles",
+   "axis": "mechanics",
+   "label": "lots to collect",
+   "hint": "Many optional collectibles; 100 % completion is a big part of the game."
+  },
+  {
+   "id": "side-quests",
+   "axis": "mechanics",
+   "label": "side quests"
+  },
+  {
+   "id": "minigame-heavy",
+   "axis": "mechanics",
+   "label": "lots of minigames"
+  },
+  {
+   "id": "score-attack",
+   "axis": "mechanics",
+   "label": "score chasing",
+   "hint": "High scores, ranks or time trials are the point of playing (arcade games, Tony Hawk's, Crazy Taxi)."
+  },
+  {
+   "id": "permadeath",
+   "axis": "mechanics",
+   "label": "permanent death",
+   "hint": "Units or characters lost for good (Fire Emblem, roguelikes)."
+  },
+  {
+   "id": "pace-calm",
+   "axis": "pace",
+   "label": "calm pace",
+   "hint": "No time pressure: turn-based games (RPG battles, tactics), puzzles at your own speed, visual novels, life sims."
+  },
+  {
+   "id": "pace-measured",
+   "axis": "pace",
+   "label": "measured pace",
+   "hint": "Steady real-time play with room to think: exploration, deliberate platformers (Castlevania), most action-adventures and RPG overworlds."
+  },
+  {
+   "id": "pace-fast",
+   "axis": "pace",
+   "label": "fast pace",
+   "hint": "Quick reflexes much of the time: racing, shooters, Sonic, fighting games."
+  },
+  {
+   "id": "pace-frantic",
+   "axis": "pace",
+   "label": "frantic pace",
+   "hint": "Relentless speed and chaos (Burnout, F-Zero, Contra, bullet hell, WarioWare)."
+  },
+  {
+   "id": "session-pickup",
+   "axis": "session",
+   "label": "short sessions",
+   "hint": "Fun in 15 minutes or less: a race, a level, a match."
+  },
+  {
+   "id": "session-sitdown",
+   "axis": "session",
+   "label": "long sessions",
+   "hint": "Needs longer sittings to make progress (story RPGs, strategy)."
+  },
+  {
+   "id": "length-short",
+   "axis": "length",
+   "label": "under 5 hours"
+  },
+  {
+   "id": "length-medium",
+   "axis": "length",
+   "label": "5–15 hours"
+  },
+  {
+   "id": "length-long",
+   "axis": "length",
+   "label": "15–40 hours"
+  },
+  {
+   "id": "length-epic",
+   "axis": "length",
+   "label": "40+ hours"
+  },
+  {
+   "id": "length-endless",
+   "axis": "length",
+   "label": "endless",
+   "hint": "No real end: score attack, sports seasons, versus, sandbox."
+  },
+  {
+   "id": "difficulty-easy",
+   "axis": "difficulty",
+   "label": "easy-going",
+   "hint": "Most players finish without trouble."
+  },
+  {
+   "id": "difficulty-moderate",
+   "axis": "difficulty",
+   "label": "fair challenge"
+  },
+  {
+   "id": "difficulty-hard",
+   "axis": "difficulty",
+   "label": "tough",
+   "hint": "Demanding; many players get stuck."
+  },
+  {
+   "id": "difficulty-brutal",
+   "axis": "difficulty",
+   "label": "very hard",
+   "hint": "Notorious for difficulty (Ghosts 'n Goblins, bullet hell)."
+  },
+  {
+   "id": "story-driven",
+   "axis": "story",
+   "label": "story-driven",
+   "hint": "Weight 1 some story, 2 important, 3 the main reason to play."
+  },
+  {
+   "id": "cinematic",
+   "axis": "story",
+   "label": "cinematic",
+   "hint": "Many cutscenes and set pieces."
+  },
+  {
+   "id": "lore",
+   "axis": "story",
+   "label": "rich world and lore"
+  },
+  {
+   "id": "text-heavy",
+   "axis": "text",
+   "label": "lots of reading",
+   "hint": "Hard to enjoy without reading the game's language well."
+  },
+  {
+   "id": "grinding",
+   "axis": "grinding",
+   "label": "grinding",
+   "hint": "Weight 1 a little, 2 noticeable, 3 heavy repetition to level up or unlock."
+  },
+  {
+   "id": "dpad-friendly",
+   "axis": "controls",
+   "label": "plays well on a D-pad",
+   "hint": "Plays fully and comfortably on a d-pad: 2D games, grid and menu games, fighting games, most PS1 games."
+  },
+  {
+   "id": "needs-analog",
+   "axis": "controls",
+   "label": "needs an analogue stick",
+   "hint": "Awkward without an analog stick (3D movement or camera built for a stick). Most PS1 and Saturn games, all 2D games and fighting games play fine on a d-pad."
+  },
+  {
+   "id": "touch-screen",
+   "axis": "controls",
+   "label": "touch controls",
+   "hint": "Uses the touch screen for core play (DS/3DS)."
+  },
+  {
+   "id": "two-screens",
+   "axis": "controls",
+   "label": "two screens",
+   "hint": "Play happens on both DS/3DS screens at once (not just a map or menu on the second one)."
+  },
+  {
+   "id": "motion-controls",
+   "axis": "controls",
+   "label": "motion controls",
+   "hint": "Wii remote/tilt/gyro motion is core."
+  },
+  {
+   "id": "pointer",
+   "axis": "controls",
+   "label": "pointer aiming",
+   "hint": "Wii remote pointer or light gun aiming."
+  },
+  {
+   "id": "simple-controls",
+   "axis": "controls",
+   "label": "simple controls",
+   "hint": "One or two buttons do almost everything (Atari games, NES Zelda, Kirby, Wii Sports, Tetris)."
+  },
+  {
+   "id": "precise-timing",
+   "axis": "controls",
+   "label": "precise timing",
+   "hint": "Frame-tight inputs matter (rhythm games, fighting games, hard platformers, timed hits)."
+  },
+  {
+   "id": "cosy",
+   "axis": "mood",
+   "label": "cosy",
+   "hint": "Warm, gentle, safe."
+  },
+  {
+   "id": "cheerful",
+   "axis": "mood",
+   "label": "cheerful",
+   "hint": "Bright and upbeat."
+  },
+  {
+   "id": "cute",
+   "axis": "mood",
+   "label": "cute"
+  },
+  {
+   "id": "funny",
+   "axis": "mood",
+   "label": "funny",
+   "hint": "Played for laughs."
+  },
+  {
+   "id": "quirky",
+   "axis": "mood",
+   "label": "quirky",
+   "hint": "Odd, surreal, offbeat."
+  },
+  {
+   "id": "mysterious",
+   "axis": "mood",
+   "label": "mysterious"
+  },
+  {
+   "id": "tense",
+   "axis": "mood",
+   "label": "tense"
+  },
+  {
+   "id": "scary",
+   "axis": "mood",
+   "label": "scary"
+  },
+  {
+   "id": "dark",
+   "axis": "mood",
+   "label": "dark",
+   "hint": "Grim themes or atmosphere."
+  },
+  {
+   "id": "melancholic",
+   "axis": "mood",
+   "label": "melancholic"
+  },
+  {
+   "id": "epic",
+   "axis": "mood",
+   "label": "epic",
+   "hint": "A grand-scale adventure. Not for fighting, sports or arcade games."
+  },
+  {
+   "id": "gritty",
+   "axis": "mood",
+   "label": "gritty",
+   "hint": "Rough, violent, realistic."
+  },
+  {
+   "id": "stylish",
+   "axis": "mood",
+   "label": "stylish",
+   "hint": "Cool, flashy presentation."
+  },
+  {
+   "id": "adrenaline",
+   "axis": "mood",
+   "label": "adrenaline rush",
+   "hint": "Thrilling speed and spectacle."
+  },
+  {
+   "id": "competitive",
+   "axis": "mood",
+   "label": "competitive",
+   "hint": "About beating other players or rankings."
+  },
+  {
+   "id": "couch-coop",
+   "axis": "multiplayer",
+   "label": "co-op on one screen",
+   "hint": "Two or more play together on ONE system at the same time. Taking turns is pass-and-play."
+  },
+  {
+   "id": "couch-versus",
+   "axis": "multiplayer",
+   "label": "versus on one screen",
+   "hint": "Two or more play against each other on ONE system (split screen, same screen or hot-seat). DS/PSP wireless play is link-play."
+  },
+  {
+   "id": "party-4p",
+   "axis": "multiplayer",
+   "label": "up to four players",
+   "hint": "Three or four people on ONE system with several controllers (not over link cable or wireless)."
+  },
+  {
+   "id": "pass-and-play",
+   "axis": "multiplayer",
+   "label": "take turns",
+   "hint": "Players take turns on one system."
+  },
+  {
+   "id": "link-play",
+   "axis": "multiplayer",
+   "label": "link play",
+   "hint": "Multiplayer that needs a second handheld or console (link cable, DS/PSP/GBA local wireless)."
+  },
+  {
+   "id": "fantasy",
+   "axis": "setting",
+   "label": "fantasy"
+  },
+  {
+   "id": "sci-fi",
+   "axis": "setting",
+   "label": "sci-fi"
+  },
+  {
+   "id": "cyberpunk",
+   "axis": "setting",
+   "label": "cyberpunk"
+  },
+  {
+   "id": "post-apocalyptic",
+   "axis": "setting",
+   "label": "post-apocalyptic"
+  },
+  {
+   "id": "horror-setting",
+   "axis": "setting",
+   "label": "horror",
+   "hint": "Monsters, zombies, the occult, gothic horror (Castlevania, Resident Evil)."
+  },
+  {
+   "id": "historical",
+   "axis": "setting",
+   "label": "historical"
+  },
+  {
+   "id": "military",
+   "axis": "setting",
+   "label": "military",
+   "hint": "War and soldiers."
+  },
+  {
+   "id": "urban-crime",
+   "axis": "setting",
+   "label": "crime & city streets"
+  },
+  {
+   "id": "superhero",
+   "axis": "setting",
+   "label": "superheroes"
+  },
+  {
+   "id": "cartoon",
+   "axis": "setting",
+   "label": "cartoon world",
+   "hint": "Mascots and cartoon characters or a cartoon look."
+  },
+  {
+   "id": "anime",
+   "axis": "setting",
+   "label": "anime style"
+  },
+  {
+   "id": "mecha",
+   "axis": "setting",
+   "label": "mecha",
+   "hint": "Giant robots."
+  },
+  {
+   "id": "licensed",
+   "axis": "setting",
+   "label": "film or TV tie-in",
+   "hint": "Based on a film, TV show, comic or other media licence (not real cars or sports teams)."
+  },
+  {
+   "id": "real-world-sport",
+   "axis": "setting",
+   "label": "real cars, teams and players",
+   "hint": "Real licensed cars, teams, athletes or leagues (Gran Turismo's cars, FIFA's teams)."
+  }
+ ],
+ "genre_map": {
+  "2D computer graphics": [],
+  "2D fighting game": [
+   "fighting",
+   "2d-fighter"
+  ],
+  "2D platform game": [
+   "platformer",
+   "2d-platformer"
+  ],
+  "3D computer graphics": [],
+  "3D fighting game": [
+   "fighting",
+   "3d-fighter"
+  ],
+  "3D platform game": [
+   "platformer",
+   "3d-platformer"
+  ],
+  "3D video game": [],
+  "4X": [
+   "strategy",
+   "turn-based-strategy"
+  ],
+  "action game": [
+   "action"
+  ],
+  "action puzzle video game": [
+   "puzzle"
+  ],
+  "action role-playing game": [
+   "rpg",
+   "action-rpg"
+  ],
+  "action-adventure game": [
+   "action-adventure"
+  ],
+  "adventure": [
+   "adventure"
+  ],
+  "adventure anime and manga": [],
+  "adventure video game": [
+   "adventure"
+  ],
+  "advergame": [
+   "other"
+  ],
+  "aerobics": [
+   "sports",
+   "fitness"
+  ],
+  "air hockey video game": [
+   "sports",
+   "individual-sports"
+  ],
+  "alternate history video game": [
+   "sci-fi"
+  ],
+  "American football video game": [
+   "sports",
+   "team-sports"
+  ],
+  "arcade": [
+   "action"
+  ],
+  "arcade racing game": [
+   "racing",
+   "arcade-racing"
+  ],
+  "arcade video game machine": [],
+  "archery video game": [
+   "sports"
+  ],
+  "arena fighter": [
+   "fighting",
+   "3d-fighter"
+  ],
+  "arena shooter": [
+   "shooter"
+  ],
+  "art": [],
+  "art game": [
+   "other"
+  ],
+  "artificial life": [
+   "life-sim"
+  ],
+  "artillery game": [
+   "strategy"
+  ],
+  "association football management game": [
+   "sports",
+   "management"
+  ],
+  "association football video game": [
+   "sports",
+   "football"
+  ],
+  "athletics video game": [
+   "sports"
+  ],
+  "audio game": [
+   "rhythm"
+  ],
+  "augmented reality video game": [],
+  "Australian football video game": [
+   "sports",
+   "team-sports"
+  ],
+  "auto-runner video game": [
+   "action"
+  ],
+  "B movie": [],
+  "backgammon video game": [
+   "tabletop",
+   "board-game"
+  ],
+  "baseball video game": [
+   "sports",
+   "team-sports"
+  ],
+  "basketball video game": [
+   "sports",
+   "team-sports"
+  ],
+  "beach volleyball video game": [
+   "sports",
+   "team-sports"
+  ],
+  "beat 'em up": [
+   "beat-em-up"
+  ],
+  "biathlon video game": [
+   "sports"
+  ],
+  "billiard video game": [
+   "sports",
+   "individual-sports"
+  ],
+  "bingo": [
+   "tabletop",
+   "casino"
+  ],
+  "biological simulation video game": [
+   "life-sim"
+  ],
+  "biopunk": [
+   "sci-fi"
+  ],
+  "bishōjo game": [
+   "visual-novel"
+  ],
+  "BMX video game": [
+   "sports",
+   "extreme-sports"
+  ],
+  "board video game": [
+   "tabletop",
+   "board-game"
+  ],
+  "boomer shooter": [
+   "shooter",
+   "fps"
+  ],
+  "bootleg video game": [],
+  "bowling video game": [
+   "sports",
+   "individual-sports"
+  ],
+  "boxing": [
+   "sports",
+   "individual-sports"
+  ],
+  "boxing video game": [
+   "sports",
+   "individual-sports"
+  ],
+  "Boys' Love game": [
+   "visual-novel"
+  ],
+  "Breakout clone": [
+   "arcade",
+   "brick-breaker"
+  ],
+  "bullet hell": [
+   "shmup",
+   "bullet-hell"
+  ],
+  "bus simulation video game": [
+   "simulation"
+  ],
+  "business simulation game": [
+   "simulation",
+   "management"
+  ],
+  "cabal shooter": [
+   "shooter",
+   "light-gun-shooter"
+  ],
+  "card battle video game": [
+   "tabletop",
+   "card-battler"
+  ],
+  "card video game": [
+   "tabletop"
+  ],
+  "casino game": [
+   "tabletop",
+   "casino"
+  ],
+  "casual game": [],
+  "character-action video game": [
+   "action"
+  ],
+  "charage": [
+   "visual-novel"
+  ],
+  "cheerleading video game": [
+   "sports"
+  ],
+  "chess video game": [
+   "tabletop",
+   "board-game"
+  ],
+  "Christian video game": [],
+  "Christmas film": [],
+  "Christmas video game": [],
+  "chuunige": [
+   "visual-novel"
+  ],
+  "cinematic platformer": [
+   "platformer",
+   "2d-platformer"
+  ],
+  "city-building game": [
+   "simulation",
+   "management"
+  ],
+  "collect-a-thon platformer": [
+   "platformer",
+   "collectathon"
+  ],
+  "collectible card video game": [
+   "tabletop",
+   "card-battler"
+  ],
+  "combat flight simulator game": [
+   "simulation",
+   "flight-sim"
+  ],
+  "comedy anime and manga": [],
+  "comedy television program": [],
+  "comedy video game": [],
+  "comic": [],
+  "computer chess": [
+   "tabletop",
+   "board-game"
+  ],
+  "computer wargame": [
+   "strategy"
+  ],
+  "construction and management simulation": [
+   "simulation",
+   "management"
+  ],
+  "cooking": [],
+  "cooking simulation video game": [
+   "simulation"
+  ],
+  "cosmic horror video game": [
+   "horror-setting"
+  ],
+  "cricket video game": [
+   "sports",
+   "team-sports"
+  ],
+  "crossover fiction": [],
+  "crowd-combat": [
+   "action-adventure",
+   "hack-and-slash"
+  ],
+  "crowd-combat video game": [
+   "action-adventure",
+   "hack-and-slash"
+  ],
+  "cue sports video game": [
+   "sports",
+   "individual-sports"
+  ],
+  "curling video game": [
+   "sports",
+   "individual-sports"
+  ],
+  "cyberpunk video game": [
+   "cyberpunk"
+  ],
+  "cycling video game": [
+   "sports"
+  ],
+  "dance video game": [
+   "rhythm",
+   "dance"
+  ],
+  "dark fantasy video game": [
+   "fantasy"
+  ],
+  "darts video game": [
+   "sports",
+   "individual-sports"
+  ],
+  "dating sim": [
+   "life-sim",
+   "dating-sim"
+  ],
+  "demolition derby": [
+   "racing"
+  ],
+  "desire horror fiction": [
+   "horror-setting"
+  ],
+  "detective fiction": [
+   "adventure",
+   "detective"
+  ],
+  "detective video game": [
+   "adventure",
+   "detective"
+  ],
+  "dictionary": [
+   "other"
+  ],
+  "digital pet": [
+   "life-sim",
+   "virtual-pet"
+  ],
+  "digital poetry": [
+   "other"
+  ],
+  "digital tabletop game": [
+   "tabletop",
+   "board-game"
+  ],
+  "dodgeball video game": [
+   "sports",
+   "team-sports"
+  ],
+  "drag racing video game": [
+   "racing"
+  ],
+  "drama anime and manga": [],
+  "drama television series": [],
+  "dress-up video game": [
+   "life-sim"
+  ],
+  "driving simulator": [
+   "racing",
+   "sim-racing"
+  ],
+  "driving video game": [
+   "racing"
+  ],
+  "dungeon crawl": [
+   "rpg",
+   "dungeon-crawler"
+  ],
+  "dystopian video game": [
+   "sci-fi"
+  ],
+  "ecchi": [],
+  "education": [
+   "educational"
+  ],
+  "educational entertainment": [
+   "educational"
+  ],
+  "educational video game": [
+   "educational"
+  ],
+  "endless runner game": [
+   "action"
+  ],
+  "episodic video game": [],
+  "equestrian video game": [
+   "sports"
+  ],
+  "eroge": [
+   "visual-novel"
+  ],
+  "erotic game": [
+   "visual-novel"
+  ],
+  "erotic video game": [
+   "visual-novel"
+  ],
+  "erotica": [],
+  "escape room video game": [
+   "adventure"
+  ],
+  "espionage video game": [
+   "action-adventure",
+   "stealth"
+  ],
+  "extreme sports video game": [
+   "sports",
+   "extreme-sports"
+  ],
+  "falling block puzzle game": [
+   "puzzle",
+   "falling-block"
+  ],
+  "Family game": [
+   "party",
+   "minigames"
+  ],
+  "fantasy anime and manga": [
+   "fantasy"
+  ],
+  "fantasy sports video game": [
+   "sports"
+  ],
+  "fantasy video game": [
+   "fantasy"
+  ],
+  "farm life sim": [
+   "life-sim",
+   "farming"
+  ],
+  "farming simulation game": [
+   "life-sim",
+   "farming"
+  ],
+  "fighting game": [
+   "fighting"
+  ],
+  "figure skating video game": [
+   "sports"
+  ],
+  "first-person shooter": [
+   "shooter",
+   "fps"
+  ],
+  "fishing video game": [
+   "sports",
+   "fishing-hunting"
+  ],
+  "fitness video game": [
+   "sports",
+   "fitness"
+  ],
+  "fixed shooter": [
+   "arcade"
+  ],
+  "flight simulation video game": [
+   "simulation",
+   "flight-sim"
+  ],
+  "full motion video": [
+   "adventure",
+   "interactive-movie"
+  ],
+  "futuristic racing game": [
+   "racing",
+   "futuristic-racing"
+  ],
+  "gaelic games video game": [
+   "sports",
+   "team-sports"
+  ],
+  "gambling video game": [
+   "tabletop",
+   "casino"
+  ],
+  "game show": [
+   "quiz"
+  ],
+  "game show video game": [
+   "quiz"
+  ],
+  "generative literature": [
+   "other"
+  ],
+  "go video game": [
+   "tabletop",
+   "board-game"
+  ],
+  "god game": [
+   "simulation",
+   "management"
+  ],
+  "golf video game": [
+   "sports",
+   "individual-sports"
+  ],
+  "gothic video game": [
+   "horror-setting"
+  ],
+  "government simulation game": [
+   "simulation"
+  ],
+  "grand strategy wargame": [
+   "strategy",
+   "turn-based-strategy"
+  ],
+  "graphic adventure game": [
+   "adventure"
+  ],
+  "graphic novel": [],
+  "hack and slash": [
+   "action-adventure",
+   "hack-and-slash"
+  ],
+  "halloween video game": [
+   "horror-setting"
+  ],
+  "hanafuda video game": [
+   "tabletop"
+  ],
+  "harem": [
+   "visual-novel"
+  ],
+  "hentai": [
+   "visual-novel"
+  ],
+  "hidden object game": [
+   "adventure"
+  ],
+  "high fantasy": [
+   "fantasy"
+  ],
+  "high fantasy video game": [
+   "fantasy"
+  ],
+  "historical fiction": [
+   "historical"
+  ],
+  "historical video game": [
+   "historical"
+  ],
+  "hockey video game": [
+   "sports",
+   "team-sports"
+  ],
+  "horizontally scrolling shooter": [
+   "shmup",
+   "horizontal-shmup"
+  ],
+  "horror anime and manga": [
+   "horror-setting"
+  ],
+  "horror video game": [
+   "horror-setting"
+  ],
+  "horse racing video game": [
+   "racing"
+  ],
+  "hunting video game": [
+   "sports",
+   "fishing-hunting"
+  ],
+  "ice hockey video game": [
+   "sports",
+   "team-sports"
+  ],
+  "immersive sim": [
+   "action-adventure"
+  ],
+  "incremental game": [
+   "arcade"
+  ],
+  "interactive fiction": [
+   "adventure"
+  ],
+  "interactive film": [
+   "adventure",
+   "interactive-movie"
+  ],
+  "interactive storytelling": [
+   "adventure"
+  ],
+  "interpreter": [
+   "other"
+  ],
+  "isometric platformer": [
+   "platformer",
+   "3d-platformer"
+  ],
+  "Japanese role-playing video game": [
+   "rpg",
+   "jrpg"
+  ],
+  "karaoke": [
+   "rhythm"
+  ],
+  "karaoke video game": [
+   "rhythm"
+  ],
+  "karate video game": [
+   "fighting"
+  ],
+  "kart racing game": [
+   "racing",
+   "kart-racing"
+  ],
+  "kinetic novel": [
+   "visual-novel"
+  ],
+  "kyōtei video game": [
+   "racing"
+  ],
+  "lacrosse video game": [
+   "sports",
+   "team-sports"
+  ],
+  "language learning video game": [
+   "educational"
+  ],
+  "legal drama": [],
+  "LGBT-themed video game": [],
+  "life simulation game": [
+   "life-sim"
+  ],
+  "light gun": [
+   "shooter",
+   "light-gun-shooter"
+  ],
+  "light-gun shooter": [
+   "shooter",
+   "light-gun-shooter"
+  ],
+  "live action video game": [
+   "adventure",
+   "interactive-movie"
+  ],
+  "machine translation": [
+   "other"
+  ],
+  "magical girl anime and manga": [
+   "fantasy"
+  ],
+  "magical girl video game": [
+   "fantasy"
+  ],
+  "mahjong solitaire video game": [
+   "tabletop",
+   "board-game"
+  ],
+  "mahjong video game": [
+   "tabletop",
+   "board-game"
+  ],
+  "management simulation game": [
+   "simulation",
+   "management"
+  ],
+  "mascot racer": [
+   "racing",
+   "kart-racing"
+  ],
+  "massively multiplayer online game": [],
+  "massively multiplayer online role-playing game": [
+   "rpg"
+  ],
+  "match-three video game": [
+   "puzzle",
+   "match-3"
+  ],
+  "mathematical education video game": [
+   "educational"
+  ],
+  "mating": [],
+  "maze chase": [
+   "arcade",
+   "maze"
+  ],
+  "maze video game": [
+   "arcade",
+   "maze"
+  ],
+  "mech simulation game": [
+   "simulation"
+  ],
+  "mecha": [
+   "mecha"
+  ],
+  "mecha video game": [
+   "mecha"
+  ],
+  "medieval fantasy": [
+   "fantasy"
+  ],
+  "memory video game": [
+   "puzzle"
+  ],
+  "Metroidvania": [
+   "action-adventure",
+   "metroidvania"
+  ],
+  "mind game": [
+   "strategy"
+  ],
+  "miniature golf video game": [
+   "sports",
+   "individual-sports"
+  ],
+  "minigame": [
+   "party",
+   "minigames"
+  ],
+  "minigame collection": [
+   "party",
+   "minigames"
+  ],
+  "monster-taming game": [
+   "rpg",
+   "monster-taming"
+  ],
+  "motocross racing video game": [
+   "racing",
+   "rally-offroad"
+  ],
+  "motorcycle video game": [
+   "racing",
+   "motorbike-racing"
+  ],
+  "multicart": [
+   "compilation"
+  ],
+  "multidirectional shooter": [
+   "shooter"
+  ],
+  "multiple perspectives role-playing": [
+   "rpg"
+  ],
+  "murder mystery game": [
+   "adventure",
+   "detective"
+  ],
+  "music video game": [
+   "rhythm"
+  ],
+  "Myst-like": [
+   "adventure"
+  ],
+  "mystery video game": [
+   "adventure",
+   "detective"
+  ],
+  "NASCAR video game": [
+   "racing",
+   "sim-racing",
+   "real-world-sport"
+  ],
+  "neo-noir video game": [
+   "urban-crime"
+  ],
+  "non-game": [
+   "other"
+  ],
+  "nonogram video game": [
+   "puzzle",
+   "logic-puzzle"
+  ],
+  "off-road racing video game": [
+   "racing",
+   "rally-offroad"
+  ],
+  "olympic video game": [
+   "sports"
+  ],
+  "otome game": [
+   "visual-novel",
+   "dating-sim"
+  ],
+  "pachinko": [
+   "tabletop",
+   "casino"
+  ],
+  "pachinko video game": [
+   "tabletop",
+   "casino"
+  ],
+  "paintball video game": [
+   "shooter"
+  ],
+  "parlour game": [
+   "tabletop",
+   "board-game"
+  ],
+  "parody": [],
+  "party video game": [
+   "party",
+   "minigames"
+  ],
+  "personal watercraft racing video game": [
+   "racing"
+  ],
+  "photography game": [
+   "simulation"
+  ],
+  "physics game": [
+   "puzzle"
+  ],
+  "pinball machine game": [
+   "arcade",
+   "pinball"
+  ],
+  "pinball video game": [
+   "arcade",
+   "pinball"
+  ],
+  "platform fighter": [
+   "fighting",
+   "platform-fighter"
+  ],
+  "platform game": [
+   "platformer"
+  ],
+  "point-and-click adventure": [
+   "adventure",
+   "point-and-click"
+  ],
+  "poker video game": [
+   "tabletop",
+   "casino"
+  ],
+  "pool video game": [
+   "sports",
+   "individual-sports"
+  ],
+  "pop music": [],
+  "post-apocalyptic video game": [
+   "post-apocalyptic"
+  ],
+  "productivity": [
+   "other"
+  ],
+  "professional wrestling video game": [
+   "sports",
+   "wrestling"
+  ],
+  "psychological horror fiction": [
+   "horror-setting"
+  ],
+  "psychological thriller video game": [],
+  "Puzz Loop clone": [
+   "puzzle"
+  ],
+  "puzzle video game": [
+   "puzzle"
+  ],
+  "puzzle-platformer": [
+   "platformer",
+   "puzzle-platformer"
+  ],
+  "quiz video game": [
+   "quiz"
+  ],
+  "race game": [
+   "racing"
+  ],
+  "racing video game": [
+   "racing"
+  ],
+  "rail shooter": [
+   "shooter",
+   "rail-shooter"
+  ],
+  "raising sim video game": [
+   "life-sim"
+  ],
+  "rally racing video game": [
+   "racing",
+   "rally-offroad"
+  ],
+  "reader-participation game": [
+   "adventure"
+  ],
+  "real-time strategy": [
+   "strategy",
+   "rts"
+  ],
+  "real-time tactics": [
+   "strategy",
+   "rts"
+  ],
+  "retro-style video game": [],
+  "rhythm game": [
+   "rhythm"
+  ],
+  "rhythm platformer": [
+   "platformer",
+   "rhythm"
+  ],
+  "rocks-and-diamonds video game": [
+   "puzzle"
+  ],
+  "roguelike": [
+   "rpg",
+   "roguelike"
+  ],
+  "role-playing video game": [
+   "rpg"
+  ],
+  "roller skating video game": [
+   "sports"
+  ],
+  "romance adventure game": [
+   "visual-novel",
+   "dating-sim"
+  ],
+  "romance anime and manga": [],
+  "romance film": [],
+  "romance video game": [
+   "life-sim",
+   "dating-sim"
+  ],
+  "romantic comedy anime and manga": [],
+  "rugby union video game": [
+   "sports",
+   "team-sports"
+  ],
+  "run and gun": [
+   "shooter",
+   "run-and-gun"
+  ],
+  "sandbox game": [
+   "simulation",
+   "management"
+  ],
+  "school anime and manga": [],
+  "science fiction horror video game": [
+   "horror-setting"
+  ],
+  "science fiction video game": [
+   "sci-fi"
+  ],
+  "scrolling shooter": [
+   "shmup"
+  ],
+  "ship simulation game": [
+   "simulation"
+  ],
+  "shogi video game": [
+   "tabletop",
+   "board-game"
+  ],
+  "shoot 'em up": [
+   "shmup"
+  ],
+  "shooter game": [
+   "shooter"
+  ],
+  "shooting gallery game": [
+   "shooter",
+   "light-gun-shooter"
+  ],
+  "show jumping": [
+   "sports"
+  ],
+  "side-scrolling beat 'em up": [
+   "beat-em-up"
+  ],
+  "side-scrolling video game": [
+   "platformer"
+  ],
+  "sim racing": [
+   "racing",
+   "sim-racing"
+  ],
+  "simulation video game": [
+   "simulation"
+  ],
+  "skateboarding video game": [
+   "sports",
+   "extreme-sports"
+  ],
+  "skeet shooting": [
+   "shooter"
+  ],
+  "ski jumping video game": [
+   "sports"
+  ],
+  "skiing video game": [
+   "sports"
+  ],
+  "skill-based video game": [
+   "action"
+  ],
+  "snake video game": [
+   "action"
+  ],
+  "snooker": [
+   "sports",
+   "individual-sports"
+  ],
+  "snooker video game": [
+   "sports",
+   "individual-sports"
+  ],
+  "snowboarding video game": [
+   "sports",
+   "extreme-sports"
+  ],
+  "snowmobile racing video game": [
+   "racing"
+  ],
+  "social simulation game": [
+   "life-sim"
+  ],
+  "sokoban video game": [
+   "puzzle",
+   "logic-puzzle"
+  ],
+  "solitaire video game": [
+   "tabletop"
+  ],
+  "sound novel": [
+   "visual-novel"
+  ],
+  "space combat simulation game": [
+   "simulation",
+   "flight-sim"
+  ],
+  "space flight simulation game": [
+   "simulation",
+   "flight-sim"
+  ],
+  "space opera video game": [
+   "sci-fi"
+  ],
+  "space simulator": [
+   "simulation",
+   "flight-sim"
+  ],
+  "space trading and combat game": [
+   "simulation",
+   "flight-sim"
+  ],
+  "speculative fiction": [
+   "sci-fi"
+  ],
+  "sports management video game": [
+   "sports",
+   "management"
+  ],
+  "sports video game": [
+   "sports"
+  ],
+  "squash video game": [
+   "sports",
+   "individual-sports"
+  ],
+  "stealth game": [
+   "action-adventure",
+   "stealth"
+  ],
+  "steampunk video game": [
+   "sci-fi"
+  ],
+  "strategy guide": [
+   "other"
+  ],
+  "strategy video game": [
+   "strategy"
+  ],
+  "strip mahjong": [
+   "tabletop",
+   "board-game"
+  ],
+  "strip poker video game": [
+   "tabletop",
+   "casino"
+  ],
+  "stunt racing video game": [
+   "racing"
+  ],
+  "submarine simulator": [
+   "simulation"
+  ],
+  "sudoku video game": [
+   "puzzle",
+   "logic-puzzle"
+  ],
+  "sumo wrestling video game": [
+   "fighting"
+  ],
+  "superhero video game": [
+   "superhero"
+  ],
+  "surfing video game": [
+   "sports",
+   "extreme-sports"
+  ],
+  "survival game": [
+   "survival-horror"
+  ],
+  "survival horror": [
+   "survival-horror",
+   "horror-setting"
+  ],
+  "suspense anime and manga": [],
+  "table tennis video game": [
+   "sports",
+   "individual-sports"
+  ],
+  "tactical role-playing game": [
+   "rpg",
+   "tactics-rpg"
+  ],
+  "tactical shooter": [
+   "shooter"
+  ],
+  "tactical wargame": [
+   "strategy"
+  ],
+  "tank simulation game": [
+   "simulation"
+  ],
+  "tech noir": [
+   "sci-fi"
+  ],
+  "technology demonstration": [
+   "other"
+  ],
+  "tennis video game": [
+   "sports",
+   "individual-sports"
+  ],
+  "third-person shooter": [
+   "shooter",
+   "third-person-shooter"
+  ],
+  "third-person view": [],
+  "tile-matching video game": [
+   "puzzle",
+   "match-3"
+  ],
+  "time management video game": [
+   "simulation"
+  ],
+  "time travel video game": [
+   "sci-fi"
+  ],
+  "top-down shooter": [
+   "shooter"
+  ],
+  "tournament": [
+   "sports"
+  ],
+  "tower defense": [
+   "strategy"
+  ],
+  "traditional video game": [
+   "tabletop",
+   "board-game"
+  ],
+  "train simulator": [
+   "simulation"
+  ],
+  "trivia video game": [
+   "quiz"
+  ],
+  "tube shooter": [
+   "shmup"
+  ],
+  "turn-based Japanese role-playing game": [
+   "rpg",
+   "jrpg"
+  ],
+  "turn-based role-playing game": [
+   "rpg",
+   "jrpg"
+  ],
+  "turn-based strategy video game": [
+   "strategy",
+   "turn-based-strategy"
+  ],
+  "turn-based tactics": [
+   "strategy",
+   "turn-based-strategy"
+  ],
+  "twin-stick shooter": [
+   "shooter"
+  ],
+  "typing game": [
+   "educational"
+  ],
+  "urban crawl": [
+   "rpg",
+   "dungeon-crawler"
+  ],
+  "urban fantasy video game": [
+   "fantasy"
+  ],
+  "vampire video game": [
+   "horror-setting"
+  ],
+  "vehicle simulation game": [
+   "simulation"
+  ],
+  "vehicular combat game": [
+   "racing",
+   "car-combat"
+  ],
+  "vertically scrolling shooter": [
+   "shmup",
+   "vertical-shmup"
+  ],
+  "video game art": [
+   "other"
+  ],
+  "video game compilation": [
+   "compilation"
+  ],
+  "video game with LGBT character": [],
+  "virtual pet video game": [
+   "life-sim",
+   "virtual-pet"
+  ],
+  "visual novel": [
+   "visual-novel"
+  ],
+  "volleyball video game": [
+   "sports",
+   "team-sports"
+  ],
+  "walking simulator": [
+   "adventure"
+  ],
+  "water sports video game": [
+   "sports"
+  ],
+  "Western": [
+   "historical"
+  ],
+  "winter sports video game": [
+   "sports"
+  ],
+  "word video game": [
+   "puzzle"
+  ],
+  "yuri": [],
+  "yuri game": [
+   "visual-novel"
+  ],
+  "zombie apocalyptic video game": [
+   "horror-setting"
+  ],
+  "zombie video game": [
+   "horror-setting"
+  ],
+  "အနုပညာ": [],
+  "パチンコ": [
+   "tabletop",
+   "casino"
+  ]
+ }
+}

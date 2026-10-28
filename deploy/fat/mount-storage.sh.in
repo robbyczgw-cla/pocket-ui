@@ -1,0 +1,100 @@
+# pocket-ui, install from the FAT partition of an official ROCKNIX card. Copy this file and pocket-ui-seed.tar.gz to the
+# card's "ROCKNIX" partition (scripts/make-fat-install.sh builds both, deploy/fat/README.txt.in explains it).
+#
+# ROCKNIX's initramfs sources /flash/mount-storage.sh instead of mounting /storage itself (init, mount_storage(): "if [ -f
+# /flash/mount-storage.sh ]"), every boot, with $disk from the kernel command line (disk=LABEL=STORAGE). This file mounts
+# /storage exactly as ROCKNIX would, then, only once STORAGE has been grown, unpacks pocket-ui-seed.tar.gz into it,
+# and deletes itself and the tar. The same hook seeds our own SD image (deploy/image/mount-storage.sh); this one takes the
+# files from the tar on /flash instead of /storage/.pocket-seed.
+#
+# What it promises:
+#  - /storage/.please_resize_me still there (first boot, ROCKNIX grows STORAGE and refuses to if /storage/.config exists)
+#    or STORAGE still small: it does nothing and stays for the next boot.
+#  - Whatever goes wrong, the hook returns, ROCKNIX boots EmulationStation as usual, and the reason is in
+#    /flash/pocket-ui-install.log (readable on a PC) and /storage/pocket-ui-install.log. The hook and the tar stay, so the
+#    next boot tries again (a wrong checksum: copy the tar again).
+#  - It never deletes anything in /storage (roms, saves, settings); files it unpacks are only added.
+#  - It deletes itself and the tar only after the install was checked.
+#
+# Runs in the initramfs: BusyBox ash, no `set -e`; only applets that ROCKNIX's initramfs has (tar, md5sum, cp, df, cut, ...).
+# mount_part and progress come from ROCKNIX's init. Placeholders are filled in by scripts/make-fat-install.sh.
+# Tests: deploy/fat/test-hook.sh
+
+pu_flash=${PU_FLASH:-/flash}
+pu_storage=${PU_STORAGE:-/storage}
+pu_tar=$pu_flash/pocket-ui-seed.tar.gz
+pu_ver=@VERSION@
+pu_md5=@SEED_MD5@
+pu_need_kb=@NEED_KB@
+pu_log=
+
+pu_say() { pu_log="$pu_log$*
+"; }
+
+# Writes the log to the FAT partition (readable on a PC) and to STORAGE.
+pu_flush() {
+  mount -o remount,rw "$pu_flash" 2>/dev/null
+  printf 'pocket-ui %s, install from the card\n%s' "$pu_ver" "$pu_log" >"$pu_flash/pocket-ui-install.log" 2>/dev/null
+  mount -o remount,ro "$pu_flash" 2>/dev/null
+  printf 'pocket-ui %s, install from the card\n%s' "$pu_ver" "$pu_log" >"$pu_storage/pocket-ui-install.log" 2>/dev/null
+}
+
+# Deletes the hook and the tar. Only called when nothing is left to do.
+pu_cleanup() {
+  mount -o remount,rw "$pu_flash" 2>/dev/null
+  rm -f "$pu_tar" "$pu_flash/mount-storage.sh"
+  sync
+  mount -o remount,ro "$pu_flash" 2>/dev/null
+}
+
+pu_fail() { pu_say "NOT INSTALLED: $*"; pu_say "ROCKNIX starts as usual. This file stays and tries again at the next start."; pu_flush; return 1; }
+
+pu_install() {
+  # Not grown yet: the normal first start. Say nothing, write nothing (the first start must not be disturbed).
+  [ -e "$pu_storage/.please_resize_me" ] && return 0
+  pu_say "STORAGE is grown (no .please_resize_me)."
+  [ -f "$pu_tar" ] || { pu_fail "pocket-ui-seed.tar.gz is not on this partition next to mount-storage.sh."; return 1; }
+
+  marker=$pu_storage/pocket-ui/releases/$pu_ver/.installed-from-card
+  if [ -e "$marker" ]; then
+    pu_say "pocket-ui $pu_ver was installed from the card before; nothing to do."
+    pu_cleanup; pu_flush; return 0
+  fi
+  if [ -e "$pu_storage/pocket-ui/current" ] && [ ! -e "$pu_storage/.pocket-ui-install-running" ]; then
+    pu_say "pocket-ui is already installed on this card; left untouched."
+    pu_cleanup; pu_flush; return 0
+  fi
+
+  free=$(df -k "$pu_storage" 2>/dev/null | tail -n 1 | tr -s ' ' | cut -d' ' -f4)
+  case $free in '' | *[!0-9]*) pu_fail "cannot read the free space of STORAGE."; return 1 ;; esac
+  if [ "$free" -lt "$pu_need_kb" ]; then
+    pu_fail "STORAGE has only $((free / 1024)) MB free, $((pu_need_kb / 1024)) MB needed: it was not grown to the card's size. Flash the card again."
+    return 1
+  fi
+
+  sum=$(md5sum "$pu_tar" 2>/dev/null | cut -d' ' -f1)
+  [ "$sum" = "$pu_md5" ] || { pu_fail "pocket-ui-seed.tar.gz is damaged or from another version (md5 $sum, expected $pu_md5). Copy it to the card again."; return 1; }
+  tar -tzf "$pu_tar" >/dev/null 2>&1 || { pu_fail "pocket-ui-seed.tar.gz cannot be read."; return 1; }
+
+  progress "pocket-ui: installing"
+  stage=$pu_storage/.pocket-ui-stage
+  rm -rf "$stage"
+  mkdir -p "$stage" && tar -xzf "$pu_tar" -C "$stage" >/dev/null 2>&1 &&
+    [ -x "$stage/pocket-ui/releases/$pu_ver/pocket-ui" ] && [ -f "$stage/.config/system.d/essway.service.d/10-pocket-ui.conf" ] ||
+    { rm -rf "$stage"; pu_fail "unpacking pocket-ui-seed.tar.gz failed (card full or damaged file)."; return 1; }
+  # A retry after a half-finished copy may overwrite what this hook put there before.
+  : >"$pu_storage/.pocket-ui-install-running"
+  cp -a "$stage/." "$pu_storage/" 2>/dev/null && : >"$pu_storage/pocket-ui/releases/$pu_ver/.installed-from-card" &&
+    [ -x "$pu_storage/pocket-ui/current/pocket-ui" ] ||
+    { rm -rf "$stage"; pu_fail "copying pocket-ui into STORAGE failed."; return 1; }
+  rm -rf "$stage"
+  rm -f "$pu_storage/.pocket-ui-install-running"
+  sync
+  pu_say "pocket-ui $pu_ver installed. It starts with this start."
+  pu_cleanup; pu_flush
+  return 0
+}
+
+mount_part "$disk" "/storage" "rw,noatime"
+pu_install
+true

@@ -1,0 +1,8 @@
+rcheevos, the RetroAchievements client library: https://github.com/RetroAchievements/rcheevos
+Version: v12.5.0 (commit 1433173220a7eaede6a9ed7a18e94117be1821e0), MIT licence (LICENSE).
+
+Taken unchanged: include/*.h, src/rc_client*.{c,h}, src/rc_compat.*, src/rc_util.c, src/rc_version.*,
+src/rc_libretro.{c,h}, src/rapi/, src/rcheevos/, src/rhash/ (minus the Visual Studio and natvis files).
+libretro/libretro.h is rcheevos' own test/libretro.h (the libretro structures rc_libretro.c needs), same licence.
+Built by build.rs; pocket-ui's glue is src/rc_shim.c. To update: copy the same files from a newer tag, run
+cargo test --lib achievements.

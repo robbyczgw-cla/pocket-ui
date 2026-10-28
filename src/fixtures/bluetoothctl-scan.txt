@@ -1,0 +1,10 @@
+Discovery started
+[0;93m[CHG][0m Controller 2C:CF:67:00:11:22 Discovering: yes
+[0;92m[NEW][0m Device 3C:4D:BE:01:02:03 DualSense Wireless Controller
+[0;92m[NEW][0m Device 7A:41:0F:0A:0B:0C 7A-41-0F-0A-0B-0C
+[0;93m[CHG][0m Device 7A:41:0F:0A:0B:0C RSSI: 0xffffffa6 (-90)
+[0;92m[NEW][0m Device A0:5A:5D:11:22:33 JBL Flip 5
+[0;93m[CHG][0m Device 3C:4D:BE:01:02:03 Name: DualSense Wireless Controller
+[0;91m[DEL][0m Device 11:22:33:44:55:66 Gone Speaker
+[1;30m[NEW][0m [1;30mDevice 6E:00:11:22:33:44 6E-00-11-22-33-44[0m
+[K[bluetooth]# 

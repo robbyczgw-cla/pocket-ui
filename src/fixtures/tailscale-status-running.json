@@ -1,0 +1,72 @@
+{
+  "Version": "1.98.8-t8f3c0d1a2-g5e6f7a8b9",
+  "TUN": true,
+  "BackendState": "Running",
+  "HaveNodeKey": true,
+  "AuthURL": "",
+  "TailscaleIPs": [
+    "100.101.102.103",
+    "fd7a:115c:a1e0::5601:6667"
+  ],
+  "Self": {
+    "ID": "nXyz1CNTRL",
+    "PublicKey": "nodekey:6a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9",
+    "HostName": "pocket-mini",
+    "DNSName": "pocket-mini.tail1a2b3.ts.net.",
+    "OS": "linux",
+    "UserID": 4711000000000001,
+    "TailscaleIPs": [
+      "100.101.102.103",
+      "fd7a:115c:a1e0::5601:6667"
+    ],
+    "Online": true,
+    "InNetworkMap": true,
+    "InMagicSock": true,
+    "InEngine": true
+  },
+  "Health": [],
+  "MagicDNSSuffix": "tail1a2b3.ts.net",
+  "CurrentTailnet": {
+    "Name": "alex@example.com",
+    "MagicDNSSuffix": "tail1a2b3.ts.net",
+    "MagicDNSEnabled": true
+  },
+  "CertDomains": null,
+  "Peer": {
+    "nodekey:11111111111111111111111111111111111111111111111111111111111111aa": {
+      "ID": "nPeer1CNTRL",
+      "HostName": "macbook",
+      "DNSName": "macbook.tail1a2b3.ts.net.",
+      "OS": "macOS",
+      "UserID": 4711000000000001,
+      "TailscaleIPs": ["100.64.0.7", "fd7a:115c:a1e0::7"],
+      "Online": true
+    },
+    "nodekey:22222222222222222222222222222222222222222222222222222222222222bb": {
+      "ID": "nPeer2CNTRL",
+      "HostName": "phone",
+      "DNSName": "phone.tail1a2b3.ts.net.",
+      "OS": "android",
+      "UserID": 4711000000000001,
+      "TailscaleIPs": ["100.64.0.9", "fd7a:115c:a1e0::9"],
+      "Online": false
+    },
+    "nodekey:33333333333333333333333333333333333333333333333333333333333333cc": {
+      "ID": "nPeer3CNTRL",
+      "HostName": "nas",
+      "DNSName": "nas.tail1a2b3.ts.net.",
+      "OS": "linux",
+      "UserID": 4711000000000001,
+      "TailscaleIPs": ["100.64.0.12"],
+      "Online": true
+    }
+  },
+  "User": {
+    "4711000000000001": {
+      "ID": 4711000000000001,
+      "LoginName": "alex@example.com",
+      "DisplayName": "Alex",
+      "ProfilePicURL": ""
+    }
+  }
+}

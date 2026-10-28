@@ -1,0 +1,1556 @@
+{
+ "schema": 1,
+ "ui": "pocket-ui",
+ "dir": "full-20261026 + cpu-20261026",
+ "recording": {
+  "frames": 14898,
+  "head": {
+   "format": 875709016,
+   "width": 180,
+   "height": 1240,
+   "stride": 720,
+   "step": 4,
+   "sw": 45,
+   "region": [
+    0,
+    450,
+    1240,
+    180
+   ],
+   "sh": 310,
+   "output": "DSI-1",
+   "mode": [
+    1080,
+    1240,
+    59999
+   ],
+   "clock": "CLOCK_MONOTONIC ns",
+   "manager_version": 3,
+   "started_ns": 20765162335130
+  },
+  "lag_ms_median": 9.226081,
+  "lag_ms_max": 41.353154
+ },
+ "thresholds": {
+  "change_frac": 0.003,
+  "match_frac": 0.01,
+  "done_frac": 0.1,
+  "game_done_frac": 0.5,
+  "motion_ms": 1000,
+  "tail_ms": 300
+ },
+ "run": {
+  "args": {
+   "cmd": "drive",
+   "ui": "pocket-ui",
+   "plan": "/tmp/rocknix-compare/scripts/rocknix-compare-plan.json",
+   "codes": "/tmp/rocknix-compare/out/codes.json",
+   "inject": "source",
+   "out": "/tmp/rocknix-compare/out/pocket-ui",
+   "scenarios": [
+    "start",
+    "nav",
+    "launch",
+    "switch",
+    "wake",
+    "cpu",
+    "play"
+   ],
+   "systems": [
+    "gbc",
+    "gba",
+    "snes"
+   ],
+   "reps": 3,
+   "reps_start": 5,
+   "moves": 30,
+   "nav_gap": 0.9,
+   "window": 2.0,
+   "launch_window": 6.0,
+   "hold": 100,
+   "step": 4,
+   "region": "0,450,1240,180",
+   "asleep": 15,
+   "cpu_secs": 20,
+   "play_secs": 300,
+   "play_boot": 20,
+   "showcase_systems": "gba,gbc",
+   "showcase_audio": 1
+  },
+  "pad_source": "/dev/inputplumber/sources/event5",
+  "dualsense": true,
+  "codes": {
+   "A": 305,
+   "B": 304,
+   "X": 307,
+   "Y": 308,
+   "L": 310,
+   "R": 311,
+   "SELECT": 314,
+   "START": 315,
+   "HOME": 316,
+   "UP": 544,
+   "DOWN": 545,
+   "LEFT": 546,
+   "RIGHT": 547
+  }
+ },
+ "metrics": {
+  "nav.react": {
+   "median": 12.049091,
+   "n": 30,
+   "missing": 0,
+   "min": 7.553701,
+   "max": 35.03112
+  },
+  "nav.done": {
+   "median": 156.61028900000002,
+   "n": 30,
+   "missing": 0,
+   "min": 127.547337,
+   "max": 167.242276
+  },
+  "input.inputplumber": {
+   "median": 1.446151,
+   "n": 69,
+   "missing": 0,
+   "min": 0.156854,
+   "max": 2.948898
+  },
+  "launch.gbc.react": {
+   "median": 51.693928,
+   "n": 3,
+   "missing": 0,
+   "min": 47.987569,
+   "max": 53.815404
+  },
+  "launch.gbc.done": {
+   "median": 202.929099,
+   "n": 3,
+   "missing": 0,
+   "min": 165.025805,
+   "max": 274.643667
+  },
+  "pause.gbc.react": {
+   "median": 29.303282,
+   "n": 3,
+   "missing": 0,
+   "min": 22.022746,
+   "max": 182.456029
+  },
+  "pause.gbc.done": {
+   "median": 182.456029,
+   "n": 3,
+   "missing": 0,
+   "min": 172.068799,
+   "max": 195.930844
+  },
+  "quit.gbc.react": {
+   "median": 9.303058,
+   "n": 3,
+   "missing": 0,
+   "min": 6.234745,
+   "max": 12.051278
+  },
+  "quit.gbc.done": {
+   "median": 118.99675,
+   "n": 3,
+   "missing": 0,
+   "min": 84.35551,
+   "max": 119.045758
+  },
+  "launch.gba.react": {
+   "median": 38.854662,
+   "n": 3,
+   "missing": 0,
+   "min": 34.65749,
+   "max": 39.93217
+  },
+  "launch.gba.done": {
+   "median": 187.590821,
+   "n": 3,
+   "missing": 0,
+   "min": 181.288943,
+   "max": 197.353234
+  },
+  "pause.gba.react": {
+   "median": 163.777472,
+   "n": 3,
+   "missing": 0,
+   "min": 151.298033,
+   "max": 173.903256
+  },
+  "pause.gba.done": {
+   "median": 163.777472,
+   "n": 3,
+   "missing": 0,
+   "min": 151.298033,
+   "max": 173.903256
+  },
+  "quit.gba.react": {
+   "median": 8.908802,
+   "n": 3,
+   "missing": 0,
+   "min": 8.031703,
+   "max": 12.57558
+  },
+  "quit.gba.done": {
+   "median": 127.667125,
+   "n": 3,
+   "missing": 0,
+   "min": 88.500966,
+   "max": 238.444992
+  },
+  "launch.snes.react": {
+   "median": 43.672017,
+   "n": 3,
+   "missing": 0,
+   "min": 36.327629,
+   "max": 48.187145
+  },
+  "launch.snes.done": {
+   "median": 231.333513,
+   "n": 3,
+   "missing": 0,
+   "min": 192.234642,
+   "max": 260.41472
+  },
+  "pause.snes.react": {
+   "median": 119.012011,
+   "n": 3,
+   "missing": 0,
+   "min": 114.212363,
+   "max": 122.359165
+  },
+  "pause.snes.done": {
+   "median": 165.067471,
+   "n": 3,
+   "missing": 0,
+   "min": 147.322468,
+   "max": 189.167372
+  },
+  "quit.snes.react": {
+   "median": 8.412104,
+   "n": 3,
+   "missing": 0,
+   "min": 7.680415,
+   "max": 10.344525
+  },
+  "quit.snes.done": {
+   "median": 98.408425,
+   "n": 3,
+   "missing": 0,
+   "min": 75.664616,
+   "max": 151.039087
+  },
+  "switch.step0.done": {
+   "median": 182.589569,
+   "n": 3,
+   "missing": 0,
+   "min": 180.370232,
+   "max": 213.568511
+  },
+  "switch.step1.done": {
+   "median": 30.297304,
+   "n": 3,
+   "missing": 0,
+   "min": 28.340352,
+   "max": 51.835798
+  },
+  "switch.step2.done": {
+   "median": 189.4283,
+   "n": 3,
+   "missing": 0,
+   "min": 181.52029,
+   "max": 191.463424
+  },
+  "switch.step3.done": {
+   "median": 325.217907,
+   "n": 3,
+   "missing": 0,
+   "min": 258.312307,
+   "max": 3874.738365
+  },
+  "switch.total": {
+   "median": 758.512022,
+   "n": 3,
+   "missing": 0,
+   "min": 658.486315,
+   "max": 4290.684022
+  },
+  "start.first_frame": {
+   "median": 191.876424,
+   "n": 5,
+   "missing": 0,
+   "min": 185.368513,
+   "max": 217.892651
+  },
+  "start.screen": {
+   "median": 191.876424,
+   "n": 5,
+   "missing": 0,
+   "min": 185.368513,
+   "max": 217.892651
+  },
+  "start.process_seen": {
+   "median": 134.670794,
+   "n": 5,
+   "missing": 0,
+   "min": 108.190419,
+   "max": 152.867915
+  },
+  "start.input": {
+   "median": 589.444957,
+   "n": 5,
+   "missing": 0,
+   "min": 586.746682,
+   "max": 606.055945
+  },
+  "start.input_press": {
+   "median": 19.619823,
+   "n": 5,
+   "missing": 0,
+   "min": 17.906195,
+   "max": 35.017213
+  },
+  "wake.screen_on": {
+   "median": 11.018352,
+   "n": 3,
+   "missing": 0,
+   "min": 5.63253,
+   "max": 11.124753
+  },
+  "wake.first_frame": {
+   "median": 3.868696,
+   "n": 3,
+   "missing": 0,
+   "min": 3.298511,
+   "max": 8.599909
+  },
+  "wake.input": {
+   "median": 698.859043,
+   "n": 3,
+   "missing": 0,
+   "min": 689.100901,
+   "max": 702.561652
+  },
+  "cpu.list_idle.ui": {
+   "median": 0.1499949807479716,
+   "n": 3,
+   "missing": 0,
+   "min": 0.09999644423143908,
+   "max": 0.19999347825268732
+  },
+  "cpu.list_idle.system": {
+   "median": 10.208816705336426,
+   "n": 3,
+   "missing": 0,
+   "min": 10.013432653559654,
+   "max": 10.25390625
+  },
+  "cpu.behind_game.ui": {
+   "median": 0.14999502764233272,
+   "n": 3,
+   "missing": 0,
+   "min": 0.09999689070668032,
+   "max": 0.14999536224837864
+  },
+  "cpu.behind_game.system": {
+   "median": 29.40966860672289,
+   "n": 3,
+   "missing": 0,
+   "min": 28.917378917378915,
+   "max": 31.5005659141002
+  },
+  "cpu.behind_game.game": {
+   "median": 10.699669173717679,
+   "n": 3,
+   "missing": 0,
+   "min": 9.949690625314691,
+   "max": 13.299559117620166
+  },
+  "play.gbc.game_cpu": {
+   "median": 10.095946056940099,
+   "n": 1,
+   "missing": 0,
+   "min": 10.095946056940099,
+   "max": 10.095946056940099
+  },
+  "play.gbc.ui_cpu": {
+   "median": 0.2099850120789786,
+   "n": 1,
+   "missing": 0,
+   "min": 0.2099850120789786,
+   "max": 0.2099850120789786
+  },
+  "play.gbc.system_cpu": {
+   "median": 27.617838827404324,
+   "n": 1,
+   "missing": 0,
+   "min": 27.617838827404324,
+   "max": 27.617838827404324
+  },
+  "play.gbc.watts": {
+   "median": null,
+   "n": 0,
+   "missing": 1,
+   "min": null,
+   "max": null
+  },
+  "play.gba.game_cpu": {
+   "median": 24.858422510940347,
+   "n": 1,
+   "missing": 0,
+   "min": 24.858422510940347,
+   "max": 24.858422510940347
+  },
+  "play.gba.ui_cpu": {
+   "median": 0.12999175086171544,
+   "n": 1,
+   "missing": 0,
+   "min": 0.12999175086171544,
+   "max": 0.12999175086171544
+  },
+  "play.gba.system_cpu": {
+   "median": 40.06487598401836,
+   "n": 1,
+   "missing": 0,
+   "min": 40.06487598401836,
+   "max": 40.06487598401836
+  },
+  "play.gba.watts": {
+   "median": null,
+   "n": 0,
+   "missing": 1,
+   "min": null,
+   "max": null
+  },
+  "play.snes.game_cpu": {
+   "median": 17.082075518332747,
+   "n": 1,
+   "missing": 0,
+   "min": 17.082075518332747,
+   "max": 17.082075518332747
+  },
+  "play.snes.ui_cpu": {
+   "median": 0.20665145017300107,
+   "n": 1,
+   "missing": 0,
+   "min": 0.20665145017300107,
+   "max": 0.20665145017300107
+  },
+  "play.snes.system_cpu": {
+   "median": 36.71648625816181,
+   "n": 1,
+   "missing": 0,
+   "min": 36.71648625816181,
+   "max": 36.71648625816181
+  },
+  "play.snes.watts": {
+   "median": null,
+   "n": 0,
+   "missing": 1,
+   "min": null,
+   "max": null
+  }
+ },
+ "samples": [
+  {
+   "metric": "nav.react",
+   "value": 35.03112,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 141.137562,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 7.553701,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 146.236103,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 8.696988,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 161.271842,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 10.222342,
+   "rep": 3,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 163.939494,
+   "rep": 3,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 10.590869,
+   "rep": 4,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 147.793696,
+   "rep": 4,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 8.604179,
+   "rep": 5,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 155.270109,
+   "rep": 5,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 9.200249,
+   "rep": 6,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 127.547337,
+   "rep": 6,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 12.655576,
+   "rep": 7,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 164.599624,
+   "rep": 7,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 8.566004,
+   "rep": 8,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 163.002553,
+   "rep": 8,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 11.297142,
+   "rep": 9,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 151.983004,
+   "rep": 9,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 12.134192,
+   "rep": 10,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 150.988774,
+   "rep": 10,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 14.57706,
+   "rep": 11,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 166.388717,
+   "rep": 11,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 15.959972,
+   "rep": 12,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 143.307629,
+   "rep": 12,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 12.366838,
+   "rep": 13,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 146.82259,
+   "rep": 13,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 11.869567,
+   "rep": 14,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 151.921861,
+   "rep": 14,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 10.826744,
+   "rep": 15,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 151.355998,
+   "rep": 15,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 16.665152,
+   "rep": 16,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 150.38583,
+   "rep": 16,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 11.217094,
+   "rep": 17,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 161.033624,
+   "rep": 17,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 12.714063,
+   "rep": 18,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 157.896564,
+   "rep": 18,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 19.029118,
+   "rep": 19,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 165.177569,
+   "rep": 19,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 15.113236,
+   "rep": 20,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 149.129423,
+   "rep": 20,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 10.401919,
+   "rep": 21,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 159.405878,
+   "rep": 21,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 11.96399,
+   "rep": 22,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 161.636725,
+   "rep": 22,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 15.193337,
+   "rep": 23,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 161.43366,
+   "rep": 23,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 13.169983,
+   "rep": 24,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 146.38464,
+   "rep": 24,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 11.791653,
+   "rep": 25,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 161.603392,
+   "rep": 25,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 19.549461,
+   "rep": 26,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 163.954858,
+   "rep": 26,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 8.425489,
+   "rep": 27,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 155.324014,
+   "rep": 27,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 14.467533,
+   "rep": 28,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 167.242276,
+   "rep": 28,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "nav.react",
+   "value": 19.650968,
+   "rep": 29,
+   "how": "changed"
+  },
+  {
+   "metric": "nav.done",
+   "value": 162.408828,
+   "rep": 29,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "launch.gbc.react",
+   "value": 53.815404,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.gbc.done",
+   "value": 274.643667,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "pause.gbc.react",
+   "value": 182.456029,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.gbc.done",
+   "value": 182.456029,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.gbc.react",
+   "value": 12.051278,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.gbc.done",
+   "value": 119.045758,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "launch.gbc.react",
+   "value": 51.693928,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.gbc.done",
+   "value": 202.929099,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "pause.gbc.react",
+   "value": 29.303282,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.gbc.done",
+   "value": 195.930844,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.gbc.react",
+   "value": 9.303058,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.gbc.done",
+   "value": 118.99675,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "launch.gbc.react",
+   "value": 47.987569,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.gbc.done",
+   "value": 165.025805,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "pause.gbc.react",
+   "value": 22.022746,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.gbc.done",
+   "value": 172.068799,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.gbc.react",
+   "value": 6.234745,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.gbc.done",
+   "value": 84.35551,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "launch.gba.react",
+   "value": 38.854662,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.gba.done",
+   "value": 197.353234,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "pause.gba.react",
+   "value": 151.298033,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.gba.done",
+   "value": 151.298033,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.gba.react",
+   "value": 12.57558,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.gba.done",
+   "value": 88.500966,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "launch.gba.react",
+   "value": 34.65749,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.gba.done",
+   "value": 181.288943,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "pause.gba.react",
+   "value": 173.903256,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.gba.done",
+   "value": 173.903256,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.gba.react",
+   "value": 8.031703,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.gba.done",
+   "value": 127.667125,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "launch.gba.react",
+   "value": 39.93217,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.gba.done",
+   "value": 187.590821,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "pause.gba.react",
+   "value": 163.777472,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.gba.done",
+   "value": 163.777472,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.gba.react",
+   "value": 8.908802,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.gba.done",
+   "value": 238.444992,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "launch.snes.react",
+   "value": 36.327629,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.snes.done",
+   "value": 192.234642,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "pause.snes.react",
+   "value": 122.359165,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.snes.done",
+   "value": 189.167372,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.snes.react",
+   "value": 7.680415,
+   "rep": 0,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.snes.done",
+   "value": 98.408425,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "launch.snes.react",
+   "value": 43.672017,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.snes.done",
+   "value": 260.41472,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "pause.snes.react",
+   "value": 114.212363,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.snes.done",
+   "value": 165.067471,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.snes.react",
+   "value": 8.412104,
+   "rep": 1,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.snes.done",
+   "value": 151.039087,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "launch.snes.react",
+   "value": 48.187145,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "launch.snes.done",
+   "value": 231.333513,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "pause.snes.react",
+   "value": 119.012011,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "pause.snes.done",
+   "value": 147.322468,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "quit.snes.react",
+   "value": 10.344525,
+   "rep": 2,
+   "how": "changed"
+  },
+  {
+   "metric": "quit.snes.done",
+   "value": 75.664616,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step0.done",
+   "value": 180.370232,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step1.done",
+   "value": 28.340352,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step2.done",
+   "value": 191.463424,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step3.done",
+   "value": 258.312307,
+   "rep": 0,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step0.done",
+   "value": 213.568511,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step1.done",
+   "value": 30.297304,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step2.done",
+   "value": 189.4283,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step3.done",
+   "value": 325.217907,
+   "rep": 1,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step0.done",
+   "value": 182.589569,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step1.done",
+   "value": 51.835798,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step2.done",
+   "value": 181.52029,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.step3.done",
+   "value": 3874.738365,
+   "rep": 2,
+   "how": "changed+lit"
+  },
+  {
+   "metric": "switch.total",
+   "value": 658.486315,
+   "rep": 0,
+   "presses": 4,
+   "unseen": 0
+  },
+  {
+   "metric": "switch.total",
+   "value": 758.512022,
+   "rep": 1,
+   "presses": 4,
+   "unseen": 0
+  },
+  {
+   "metric": "switch.total",
+   "value": 4290.684022,
+   "rep": 2,
+   "presses": 4,
+   "unseen": 0
+  },
+  {
+   "metric": "start.first_frame",
+   "value": 217.892651,
+   "rep": 0
+  },
+  {
+   "metric": "start.screen",
+   "value": 217.892651,
+   "rep": 0
+  },
+  {
+   "metric": "start.process_seen",
+   "value": 134.670794,
+   "rep": 0
+  },
+  {
+   "metric": "start.first_frame",
+   "value": 191.876424,
+   "rep": 1
+  },
+  {
+   "metric": "start.screen",
+   "value": 191.876424,
+   "rep": 1
+  },
+  {
+   "metric": "start.process_seen",
+   "value": 152.867915,
+   "rep": 1
+  },
+  {
+   "metric": "start.first_frame",
+   "value": 191.444306,
+   "rep": 2
+  },
+  {
+   "metric": "start.screen",
+   "value": 191.444306,
+   "rep": 2
+  },
+  {
+   "metric": "start.process_seen",
+   "value": 138.238774,
+   "rep": 2
+  },
+  {
+   "metric": "start.first_frame",
+   "value": 185.368513,
+   "rep": 3
+  },
+  {
+   "metric": "start.screen",
+   "value": 185.368513,
+   "rep": 3
+  },
+  {
+   "metric": "start.process_seen",
+   "value": 108.190419,
+   "rep": 3
+  },
+  {
+   "metric": "start.first_frame",
+   "value": 211.690562,
+   "rep": 4
+  },
+  {
+   "metric": "start.screen",
+   "value": 211.690562,
+   "rep": 4
+  },
+  {
+   "metric": "start.process_seen",
+   "value": 125.276752,
+   "rep": 4
+  },
+  {
+   "metric": "start.input",
+   "value": 597.856748,
+   "rep": 0,
+   "presses": 2
+  },
+  {
+   "metric": "start.input_press",
+   "value": 17.906195,
+   "rep": 0
+  },
+  {
+   "metric": "start.input",
+   "value": 589.444957,
+   "rep": 1,
+   "presses": 2
+  },
+  {
+   "metric": "start.input_press",
+   "value": 20.850293,
+   "rep": 1
+  },
+  {
+   "metric": "start.input",
+   "value": 588.374949,
+   "rep": 2,
+   "presses": 2
+  },
+  {
+   "metric": "start.input_press",
+   "value": 19.619823,
+   "rep": 2
+  },
+  {
+   "metric": "start.input",
+   "value": 586.746682,
+   "rep": 3,
+   "presses": 2
+  },
+  {
+   "metric": "start.input_press",
+   "value": 35.017213,
+   "rep": 3
+  },
+  {
+   "metric": "start.input",
+   "value": 606.055945,
+   "rep": 4,
+   "presses": 2
+  },
+  {
+   "metric": "start.input_press",
+   "value": 19.456965,
+   "rep": 4
+  },
+  {
+   "metric": "wake.screen_on",
+   "value": 11.124753,
+   "rep": 0
+  },
+  {
+   "metric": "wake.first_frame",
+   "value": 8.599909,
+   "rep": 0
+  },
+  {
+   "metric": "wake.input",
+   "value": 698.859043,
+   "rep": 0,
+   "presses": 5
+  },
+  {
+   "metric": "wake.screen_on",
+   "value": 11.018352,
+   "rep": 1
+  },
+  {
+   "metric": "wake.first_frame",
+   "value": 3.298511,
+   "rep": 1
+  },
+  {
+   "metric": "wake.input",
+   "value": 689.100901,
+   "rep": 1,
+   "presses": 5
+  },
+  {
+   "metric": "wake.screen_on",
+   "value": 5.63253,
+   "rep": 2
+  },
+  {
+   "metric": "wake.first_frame",
+   "value": 3.868696,
+   "rep": 2
+  },
+  {
+   "metric": "wake.input",
+   "value": 702.561652,
+   "rep": 2,
+   "presses": 5
+  },
+  {
+   "metric": "cpu.list_idle.ui",
+   "value": 0.09999644423143908,
+   "rep": 0
+  },
+  {
+   "metric": "cpu.list_idle.system",
+   "value": 10.208816705336426,
+   "rep": 0
+  },
+  {
+   "metric": "cpu.list_idle.ui",
+   "value": 0.1499949807479716,
+   "rep": 1
+  },
+  {
+   "metric": "cpu.list_idle.system",
+   "value": 10.013432653559654,
+   "rep": 1
+  },
+  {
+   "metric": "cpu.list_idle.ui",
+   "value": 0.19999347825268732,
+   "rep": 2
+  },
+  {
+   "metric": "cpu.list_idle.system",
+   "value": 10.25390625,
+   "rep": 2
+  },
+  {
+   "metric": "cpu.behind_game.ui",
+   "value": 0.14999536224837864,
+   "rep": 0
+  },
+  {
+   "metric": "cpu.behind_game.system",
+   "value": 29.40966860672289,
+   "rep": 0
+  },
+  {
+   "metric": "cpu.behind_game.game",
+   "value": 10.699669173717679,
+   "rep": 0
+  },
+  {
+   "metric": "cpu.behind_game.ui",
+   "value": 0.09999689070668032,
+   "rep": 1
+  },
+  {
+   "metric": "cpu.behind_game.system",
+   "value": 28.917378917378915,
+   "rep": 1
+  },
+  {
+   "metric": "cpu.behind_game.game",
+   "value": 9.949690625314691,
+   "rep": 1
+  },
+  {
+   "metric": "cpu.behind_game.ui",
+   "value": 0.14999502764233272,
+   "rep": 2
+  },
+  {
+   "metric": "cpu.behind_game.system",
+   "value": 31.5005659141002,
+   "rep": 2
+  },
+  {
+   "metric": "cpu.behind_game.game",
+   "value": 13.299559117620166,
+   "rep": 2
+  },
+  {
+   "metric": "play.gbc.game_cpu",
+   "value": 10.095946056940099
+  },
+  {
+   "metric": "play.gbc.ui_cpu",
+   "value": 0.2099850120789786
+  },
+  {
+   "metric": "play.gbc.system_cpu",
+   "value": 27.617838827404324
+  },
+  {
+   "metric": "play.gbc.watts",
+   "value": null,
+   "on_battery": false,
+   "n": 60,
+   "temp_max_mC": 47416
+  },
+  {
+   "metric": "play.gba.game_cpu",
+   "value": 24.858422510940347
+  },
+  {
+   "metric": "play.gba.ui_cpu",
+   "value": 0.12999175086171544
+  },
+  {
+   "metric": "play.gba.system_cpu",
+   "value": 40.06487598401836
+  },
+  {
+   "metric": "play.gba.watts",
+   "value": null,
+   "on_battery": false,
+   "n": 60,
+   "temp_max_mC": 48000
+  },
+  {
+   "metric": "play.snes.game_cpu",
+   "value": 17.082075518332747
+  },
+  {
+   "metric": "play.snes.ui_cpu",
+   "value": 0.20665145017300107
+  },
+  {
+   "metric": "play.snes.system_cpu",
+   "value": 36.71648625816181
+  },
+  {
+   "metric": "play.snes.watts",
+   "value": null,
+   "on_battery": false,
+   "n": 60,
+   "temp_max_mC": 47254
+  }
+ ],
+ "failures": [
+  {
+   "name": "play",
+   "why": "pocket-ui: no pocket-core with 'Stars' in its command line after the launch of snes (check the plan's sequence)",
+   "kind": "scenario-failed",
+   "ui": "pocket-ui",
+   "t": 22453735896846
+  }
+ ],
+ "note": "times from compare-results/full-20261026; CPU and play from cpu-20261026 (the full run read CPU from schedstat, which this kernel doesn't have)"
+}

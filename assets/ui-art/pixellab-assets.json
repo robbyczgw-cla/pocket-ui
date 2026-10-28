@@ -1,0 +1,566 @@
+{
+ "note": "PixelLab create-image-pixflux generations behind assets/ui-art/empty-*.png and sticker-*.png (text prompts only, no input image). Every request, the ones not used included; 'result' names the shipped file. Post-processing: tools/finalize.py.",
+ "images": {
+  "t_shelf": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a small empty wooden bookshelf with one plant pot, cozy, warm muted colours, front view, single object, game item",
+   "seed": 101,
+   "image_size": [
+    128,
+    96
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "e_history_b": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a closed leather journal with a ribbon bookmark and a cup of tea, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 32,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "e_noGames_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "an empty wooden shelf with a small green plant in a pot on top, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 11,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "assets/ui-art/empty-no-games.png"
+  },
+  "e_noFav_b": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "an empty glass display dome on a wooden base with a tiny golden star sparkle, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 22,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "e_noFav_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a small paper star resting on an empty soft velvet cushion, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 21,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "assets/ui-art/empty-no-favorites.png"
+  },
+  "e_noGames_b": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "an open cardboard box full of retro game cartridges waiting to be unpacked, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 12,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "e_history_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "an open blank diary notebook with a pencil lying on it, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 31,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "assets/ui-art/empty-history.png"
+  },
+  "e_hotel_b": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a hotel room key with a wooden key tag next to a small hourglass, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 52,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "e_offline_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a small sleeping cloud with a loose unplugged cable hanging below it, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 41,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "e_shots_b": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "an empty wooden photo frame with nothing in it, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 62,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "e_hotel_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a brass hotel reception desk bell next to an hourglass with sand running, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 51,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "e_offline_b": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a vintage wooden radio with its antenna folded down and a power cable unplugged lying beside it, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 42,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "e_shots_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "an empty instant photo with a blank white picture leaning on a small retro camera, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 61,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "e_store_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a small closed shop stall with an awning and empty shelves, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 81,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "assets/ui-art/empty-store.png"
+  },
+  "e_search_b": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a magnifying glass next to a small empty open cardboard box, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 72,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "assets/ui-art/empty-search.png"
+  },
+  "e_search_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a magnifying glass lying on a blank sheet of paper, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 71,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "e_played_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a retro handheld game console resting on a cushion with a small blanket, sleeping, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 91,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "assets/ui-art/empty-nothing-played.png"
+  },
+  "e_shots_d": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "an empty open photo album with blank pages and a small camera, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 64,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "e_hotel_d": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a small hourglass with golden sand next to a folded hotel towel and a brass service bell, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 54,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "e_hotel_c": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a shiny brass service bell on a small wooden reception desk with an hourglass beside it, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 53,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "assets/ui-art/empty-hotel.png"
+  },
+  "e_offline_d": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a small wooden radio with its antenna pushed down and a little moon and stars above it, sleeping, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 44,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "assets/ui-art/empty-offline.png"
+  },
+  "e_shots_c": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a retro instant camera with a blank photo lying in front of it, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 63,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "assets/ui-art/empty-screenshots.png"
+  },
+  "e_offline_c": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "two tin can telephones connected by a loose slack string lying on the ground, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 43,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "s_done_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a small golden trophy cup with a star, die-cut vinyl sticker with a thick white border, cute, warm muted colours, single object, centered, no text, no letters, no numbers",
+   "seed": 201,
+   "image_size": [
+    96,
+    96
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "assets/ui-art/sticker-completed.png"
+  },
+  "s_hours_b": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a cozy steaming mug of cocoa next to a clock, die-cut vinyl sticker with a thick white border, cute, warm muted colours, single object, centered, no text, no letters, no numbers",
+   "seed": 212,
+   "image_size": [
+    96,
+    96
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "s_hours_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a golden hourglass with sparkles, die-cut vinyl sticker with a thick white border, cute, warm muted colours, single object, centered, no text, no letters, no numbers",
+   "seed": 211,
+   "image_size": [
+    96,
+    96
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "assets/ui-art/sticker-hundred-hours.png"
+  },
+  "s_ten_b": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a small row of game cartridges standing on a shelf with a ribbon, die-cut vinyl sticker with a thick white border, cute, warm muted colours, single object, centered, no text, no letters, no numbers",
+   "seed": 222,
+   "image_size": [
+    96,
+    96
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "assets/ui-art/sticker-ten-games.png"
+  },
+  "s_done_b": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a little checkered finish flag on a pole, die-cut vinyl sticker with a thick white border, cute, warm muted colours, single object, centered, no text, no letters, no numbers",
+   "seed": 202,
+   "image_size": [
+    96,
+    96
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "s_ten_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a neat stack of retro game cartridges, die-cut vinyl sticker with a thick white border, cute, warm muted colours, single object, centered, no text, no letters, no numbers",
+   "seed": 221,
+   "image_size": [
+    96,
+    96
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "s_streak_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a small flame like a candle flame, warm orange, die-cut vinyl sticker with a thick white border, cute, warm muted colours, single object, centered, no text, no letters, no numbers",
+   "seed": 231,
+   "image_size": [
+    96,
+    96
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "assets/ui-art/sticker-streak.png"
+  },
+  "s_back_b": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a small bird returning to its birdhouse, die-cut vinyl sticker with a thick white border, cute, warm muted colours, single object, centered, no text, no letters, no numbers",
+   "seed": 242,
+   "image_size": [
+    96,
+    96
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "assets/ui-art/sticker-came-back.png"
+  },
+  "s_streak_b": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a little calendar page with check marks, die-cut vinyl sticker with a thick white border, cute, warm muted colours, single object, centered, no text, no letters, no numbers",
+   "seed": 232,
+   "image_size": [
+    96,
+    96
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "s_back_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-27",
+   "description": "a paper airplane flying back with a curved dotted trail, die-cut vinyl sticker with a thick white border, cute, warm muted colours, single object, centered, no text, no letters, no numbers",
+   "seed": 241,
+   "image_size": [
+    96,
+    96
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  }
+ }
+}

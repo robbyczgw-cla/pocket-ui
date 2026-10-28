@@ -1,0 +1,46 @@
+pocket-ui @VERSION@: install from the card's PC-readable partition (Retroid Pocket Mini V2)
+==========================================================================================
+
+No SSH, no Wi-Fi, no command line. You flash the official ROCKNIX image, copy two files onto the card
+from your PC, and start the device twice. pocket-ui is not made or endorsed by the ROCKNIX team.
+
+You need
+--------
+
+- A Retroid Pocket Mini V2 and a microSD card, and a PC or Mac with a card reader.
+- The official ROCKNIX image for SM8250, version @TESTED_ROCKNIX@ (the tested one), from rocknix.org.
+  Flash it to the card as ROCKNIX describes, and set the device up to boot it as ROCKNIX describes.
+- These two files from the zip: mount-storage.sh and pocket-ui-seed.tar.gz.
+
+Install
+-------
+
+1. Flash the ROCKNIX image to the card. Do NOT start the device with it yet.
+2. Take the card out and in again so your PC shows it. It shows ONE drive, called ROCKNIX (the other
+   partitions are Linux ones and stay invisible; that is normal).
+3. Copy mount-storage.sh and pocket-ui-seed.tar.gz into the top folder of that drive. Do not rename them,
+   do not unpack the .tar.gz. Eject the card safely.
+4. Put the card in the device and switch it on. First start: ROCKNIX grows its storage to the size of
+   the card and restarts by itself. It looks like a normal ROCKNIX start. Wait.
+5. Second start: you see "pocket-ui: installing", then pocket-ui opens with its first-start setup.
+   The two files vanish from the drive by themselves. You are done.
+
+It also works on a card that already runs ROCKNIX (copy the two files, switch the device on; it installs
+at that start). About @NEED_MB@ MB free are needed. Your games, saves and settings are never touched;
+the installer only adds files.
+
+If it did not work
+------------------
+
+ROCKNIX always starts (with EmulationStation) even when the install fails, and the reason is written
+into the file pocket-ui-install.log on the same drive. Read it on your PC. Typical reasons:
+- "damaged": the tar did not copy completely. Copy it again.
+- "not grown": ROCKNIX did not enlarge its storage. Flash the card again and copy the files before the first start.
+Both files stay on the card until the install worked, so you can fix the cause and start again.
+Without the log: you copied the files to the wrong partition (the drive must be the ROCKNIX one).
+
+To remove pocket-ui later: open an SSH session to the device (ROCKNIX: root / rocknix) and run
+  sh /storage/pocket-ui/uninstall.sh
+EmulationStation is back after the next start.
+
+Built from commit @REPO_COMMIT@.

@@ -1,0 +1,36 @@
+{
+  "Version": "1.98.8-t8f3c0d1a2-g5e6f7a8b9",
+  "TUN": true,
+  "BackendState": "Stopped",
+  "HaveNodeKey": true,
+  "AuthURL": "",
+  "TailscaleIPs": null,
+  "Self": {
+    "ID": "nXyz1CNTRL",
+    "PublicKey": "nodekey:6a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9",
+    "HostName": "pocket-mini",
+    "DNSName": "pocket-mini.tail1a2b3.ts.net.",
+    "OS": "linux",
+    "UserID": 4711000000000001,
+    "TailscaleIPs": null,
+    "Online": false
+  },
+  "Health": [
+    "Tailscale is stopped."
+  ],
+  "MagicDNSSuffix": "tail1a2b3.ts.net",
+  "CurrentTailnet": {
+    "Name": "alex@example.com",
+    "MagicDNSSuffix": "tail1a2b3.ts.net",
+    "MagicDNSEnabled": true
+  },
+  "CertDomains": null,
+  "Peer": null,
+  "User": {
+    "4711000000000001": {
+      "ID": 4711000000000001,
+      "LoginName": "alex@example.com",
+      "DisplayName": "Alex"
+    }
+  }
+}

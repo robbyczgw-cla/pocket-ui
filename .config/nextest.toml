@@ -1,0 +1,14 @@
+# Optional runner comparison: cargo nextest run --cargo-profile gate.
+# No retries for ordinary correctness tests. These two rendering benchmarks and the inotify header test measure
+# real scheduling intervals and have failed under shared-builder load; retry each at most once.
+[profile.default]
+test-threads = 4
+fail-fast = false
+
+[profile.default.junit]
+path = "junit.xml"
+
+[[profile.default.overrides]]
+filter = 'test(=standalone::tests::a_header_peek_is_not_taken_for_the_state_load) | binary(settings_open) | binary(shelf_moves)'
+retries = 1
+threads-required = 4

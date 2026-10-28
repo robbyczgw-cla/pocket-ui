@@ -1,0 +1,2547 @@
+{
+ "about": "Input of scripts/build-console-credits.py: the facts chosen for each console's Credits & links, each with the source the script checks it against (see the script's docstring). `words` are the short phrases that prove a 'lead' fact (all of a group in one sentence of the article's lead); they are never shipped. `summary` and `role` are our own words. Chosen and checked 2026-10-23.",
+ "consoles": {
+  "3do": {
+   "summary": "A design by The 3DO Company that other firms built and sold: Panasonic first, then GoldStar, Sanyo and Creative. An ARM60 runs it.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "The 3DO Company",
+     "qid": "Q1062171",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Panasonic",
+     "qid": "Q53247",
+     "source": "wikidata:P176"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "GoldStar",
+     "qid": "Q494683",
+     "source": "wikidata:P176"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Sanyo",
+     "qid": "Q49203",
+     "source": "wikidata:P176"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Creative Technology",
+     "qid": "Q477016",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "ARM60",
+     "source": "infobox:cpu"
+    },
+    {
+     "role": "Graphics",
+     "name": "Madam",
+     "source": "infobox:graphics"
+    },
+    {
+     "role": "Sound",
+     "name": "Clio",
+     "source": "infobox:sound"
+    }
+   ],
+   "family": [
+    {
+     "relation": "after",
+     "name": "Panasonic M2",
+     "qid": "Q7130104",
+     "source": "wikidata:P156"
+    }
+   ]
+  },
+  "3ds": {
+   "summary": "Developed by Nintendo's research and engineering team and built by Nintendo and Foxconn. Two ARM processors and a DMP PICA200 graphics chip run it.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Nintendo Research & Engineering",
+     "source": "infobox:developer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Nintendo",
+     "qid": "Q8093",
+     "source": "wikidata:P176"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Foxconn",
+     "source": "infobox:manufacturer"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "ARM11 MPCore (dual-core)",
+     "match": "Dual-core ARM11 MPCore",
+     "source": "infobox:cpu"
+    },
+    {
+     "role": "Second CPU",
+     "name": "ARM9",
+     "match": "Single-core ARM9",
+     "source": "infobox:cpu"
+    },
+    {
+     "role": "Graphics",
+     "name": "DMP PICA200",
+     "source": "infobox:graphics"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Nintendo DS",
+     "qid": "Q170323",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Nintendo Switch",
+     "qid": "Q19610114",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "model",
+     "name": "Nintendo 3DS XL",
+     "qid": "Q1371123",
+     "source": "wikidata:family"
+    },
+    {
+     "relation": "model",
+     "name": "Nintendo 2DS",
+     "qid": "Q14743726",
+     "source": "wikidata:family"
+    },
+    {
+     "relation": "model",
+     "name": "New Nintendo 3DS",
+     "qid": "Q17679679",
+     "source": "wikidata:family"
+    },
+    {
+     "relation": "model",
+     "name": "New Nintendo 2DS XL",
+     "qid": "Q29583519",
+     "source": "wikidata:family"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Mario Kart 7",
+     "figure": "18.99 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Nintendo"
+   ]
+  },
+  "atari2600": {
+   "summary": "Atari's subsidiary Cyan Engineering built the prototype, codenamed Stella, after Nolan Bushnell went looking for a programmable home console. A MOS 6507 processor and the Television Interface Adaptor (TIA) run it.",
+   "people": [
+    {
+     "name": "Nolan Bushnell",
+     "role": "Atari's CEO, who wanted a programmable home console",
+     "source": "lead",
+     "words": [
+      [
+       "CEO Nolan Bushnell to seek",
+       "programmable home system"
+      ]
+     ]
+    }
+   ],
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "Atari, Inc.",
+     "qid": "Q13409231",
+     "source": "wikidata:P176"
+    },
+    {
+     "role": "Prototype",
+     "name": "Cyan Engineering",
+     "source": "lead",
+     "words": [
+      [
+       "prototyped under the codename Stella by Atari subsidiary Cyan Engineering"
+      ]
+     ]
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "MOS 6507",
+     "qid": "Q1196571",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "MOS Technology",
+      "qid": "Q852174",
+      "source": "wikidata:P176"
+     }
+    },
+    {
+     "role": "Graphics",
+     "name": "Television Interface Adaptor (TIA)",
+     "match": "Television Interface Adaptor",
+     "source": "infobox:graphics"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Atari Home Pong",
+     "source": "infobox:predecessor"
+    },
+    {
+     "relation": "before",
+     "name": "Atari Video Pinball",
+     "source": "infobox:predecessor"
+    },
+    {
+     "relation": "after",
+     "name": "Atari 5200",
+     "qid": "Q743222",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "after",
+     "name": "Atari 7800",
+     "qid": "Q753600",
+     "source": "wikidata:P156"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Pac-Man",
+     "figure": "8 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Atari, Inc."
+   ]
+  },
+  "atari7800": {
+   "summary": "Designed for Atari by General Computer Corporation; its MARIA chip draws arcade-style graphics, and it plays almost all 2600 cartridges.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "General Computer Corporation",
+     "source": "infobox:developer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Atari Corporation",
+     "qid": "Q3627870",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Atari SALLY",
+     "qid": "Q114562232",
+     "source": "wikidata:P880"
+    },
+    {
+     "role": "Graphics",
+     "name": "MARIA",
+     "source": "infobox:graphics"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Atari 2600",
+     "qid": "Q206261",
+     "source": "wikidata:^P156"
+    },
+    {
+     "relation": "before",
+     "name": "Atari 5200",
+     "qid": "Q743222",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Atari XEGS",
+     "qid": "Q1840662",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "after",
+     "name": "Atari Jaguar",
+     "qid": "Q650601",
+     "source": "wikidata:P156"
+    }
+   ],
+   "game_makers": [
+    "Atari Corporation"
+   ]
+  },
+  "atarijaguar": {
+   "summary": "Atari's last console, built for it by IBM. Two custom chips, Tom and Jerry, do the graphics and sound beside a Motorola 68000.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Atari Corporation",
+     "qid": "Q3627870",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "IBM",
+     "source": "infobox:manufacturer"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Motorola 68000",
+     "qid": "Q667808",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "Motorola",
+      "qid": "Q259011",
+      "source": "wikidata:P176"
+     }
+    },
+    {
+     "role": "Graphics",
+     "name": "Tom",
+     "source": "infobox:graphics",
+     "match": "Tom chip"
+    },
+    {
+     "role": "Sound",
+     "name": "Jerry",
+     "source": "infobox:sound",
+     "match": "Jerry chip"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Atari 7800",
+     "qid": "Q753600",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "before",
+     "name": "Atari Lynx",
+     "qid": "Q753657",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Atari Jaguar CD",
+     "qid": "Q2739670",
+     "source": "wikidata:P156"
+    }
+   ],
+   "game_makers": [
+    "Atari Corporation"
+   ]
+  },
+  "atarilynx": {
+   "summary": "Atari's colour handheld, developed at Epyx by Dave Needle and RJ Mical, two of the Amiga's designers.",
+   "people": [
+    {
+     "name": "Dave Needle",
+     "role": "Designed it",
+     "qid": "Q21063729",
+     "source": "wikidata:P287"
+    },
+    {
+     "name": "Robert J. Mical",
+     "role": "Designed it",
+     "qid": "Q93039",
+     "source": "wikidata:P287"
+    }
+   ],
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Epyx",
+     "qid": "Q1347787",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Atari Corporation",
+     "qid": "Q3627870",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "WDC 65C02",
+     "qid": "Q1323895",
+     "source": "wikidata:P880"
+    },
+    {
+     "role": "Graphics",
+     "name": "Suzy",
+     "source": "infobox:graphics"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Atari XEGS",
+     "qid": "Q1840662",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Atari Lynx II",
+     "qid": "Q111472895",
+     "source": "wikidata:P156"
+    }
+   ],
+   "game_makers": [
+    "Atari Corporation"
+   ]
+  },
+  "colecovision": {
+   "summary": "Coleco's console, built around a Zilog Z80, a TMS9928A video chip and an SN76489 sound chip.",
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "Coleco",
+     "qid": "Q954124",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Zilog Z80",
+     "qid": "Q203315",
+     "source": "wikidata:P880"
+    },
+    {
+     "role": "Graphics",
+     "name": "TMS9928A",
+     "source": "infobox:graphics"
+    },
+    {
+     "role": "Sound",
+     "name": "SN76489",
+     "source": "infobox:sound"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Coleco Telstar series",
+     "qid": "Q1064163",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Coleco Adam",
+     "qid": "Q1108054",
+     "source": "wikidata:P156"
+    }
+   ],
+   "game_makers": [
+    "Coleco"
+   ]
+  },
+  "dreamcast": {
+   "summary": "Developed by a team under Hideki Sato, with a Hitachi SH-4, NEC's PowerVR2 graphics and a Yamaha sound chip. Sega's NAOMI arcade board is based on it.",
+   "people": [
+    {
+     "name": "Hideki Sato",
+     "role": "Led the team that developed it",
+     "source": "lead",
+     "words": [
+      [
+       "team led by Hideki Sato",
+       "developing the Dreamcast"
+      ]
+     ]
+    }
+   ],
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "Sega",
+     "qid": "Q122741",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Hitachi SH-4",
+     "source": "infobox:cpu"
+    },
+    {
+     "role": "Graphics",
+     "name": "NEC PowerVR2",
+     "source": "infobox:graphics"
+    },
+    {
+     "role": "Sound",
+     "name": "Yamaha AICA",
+     "source": "infobox:sound"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Sega Saturn",
+     "qid": "Q200912",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "family",
+     "name": "Sega NAOMI (arcade)",
+     "qid": "Q1369174",
+     "match": "Sega NAOMI",
+     "source": "wikidata:^P144"
+    },
+    {
+     "relation": "family",
+     "name": "Atomiswave (arcade)",
+     "qid": "Q757617",
+     "source": "wikidata:^P144"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Sonic Adventure",
+     "figure": "2.5 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Sega"
+   ]
+  },
+  "fds": {
+   "summary": "Nintendo's disk drive for the Famicom; its Ricoh 2C33 adds a wavetable sound channel.",
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "Nintendo",
+     "qid": "Q8093",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "Sound",
+     "name": "Ricoh 2C33",
+     "source": "infobox:sound"
+    }
+   ],
+   "family": [
+    {
+     "relation": "after",
+     "name": "Satellaview",
+     "source": "infobox:successor",
+     "system": "satellaview"
+    },
+    {
+     "relation": "after",
+     "name": "Nintendo 64DD",
+     "source": "infobox:successor",
+     "system": "n64dd"
+    }
+   ],
+   "game_makers": [
+    "Nintendo"
+   ]
+  },
+  "gamecube": {
+   "summary": "Developed and made by Nintendo, with Foxconn also building it. IBM made its Gekko processor and ATI its Flipper graphics chip; the Triforce arcade board is based on it.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Nintendo",
+     "qid": "Q8093",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Nintendo",
+     "qid": "Q8093",
+     "source": "wikidata:P176"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Foxconn",
+     "source": "infobox:manufacturer"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "IBM Gekko",
+     "qid": "Q2467811",
+     "match": "Gekko",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "IBM",
+      "qid": "Q37156",
+      "source": "wikidata:P176"
+     }
+    },
+    {
+     "role": "Graphics",
+     "name": "ATI Flipper",
+     "qid": "Q63109262",
+     "source": "wikidata:P2560",
+     "maker": {
+      "name": "ATI Technologies",
+      "qid": "Q213849",
+      "source": "wikidata:P176"
+     }
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Nintendo 64",
+     "qid": "Q184839",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Wii",
+     "qid": "Q8079",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "family",
+     "name": "Triforce (arcade)",
+     "qid": "Q1324477",
+     "source": "wikidata:^P144",
+     "system": "triforce"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Super Smash Bros. Melee",
+     "figure": "7.09 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Nintendo"
+   ]
+  },
+  "gamegear": {
+   "summary": "Sega's colour handheld, built around a Zilog Z80 and the Texas Instruments sound chip of the Master System. The Genesis Nomad came after it.",
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "Sega",
+     "qid": "Q122741",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Zilog Z80",
+     "qid": "Q203315",
+     "source": "wikidata:P880"
+    },
+    {
+     "role": "Sound",
+     "name": "Texas Instruments SN76489",
+     "qid": "Q2708134",
+     "source": "infobox:sound"
+    }
+   ],
+   "family": [
+    {
+     "relation": "after",
+     "name": "Genesis Nomad",
+     "qid": "Q540868",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "model",
+     "name": "Game Gear Micro",
+     "qid": "Q96033186",
+     "source": "wikidata:^P144"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Sonic the Hedgehog 2",
+     "figure": "400,000",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Sega"
+   ]
+  },
+  "gb": {
+   "summary": "Nintendo R&D1 designed it under Gunpei Yokoi and Satoru Okada. Its Sharp SM83 processor carried on in the Game Boy Color and, for the older games, in the Game Boy Advance.",
+   "people": [
+    {
+     "name": "Gunpei Yokoi",
+     "role": "Led the design team at Nintendo R&D1",
+     "source": "lead",
+     "words": [
+      [
+       "under Gunpei Yokoi and Satoru Okada",
+       "designed the Game Boy"
+      ]
+     ]
+    },
+    {
+     "name": "Satoru Okada",
+     "role": "Led the design with Yokoi; developed the Game Link Cable",
+     "source": "lead",
+     "words": [
+      [
+       "under Gunpei Yokoi and Satoru Okada",
+       "designed the Game Boy"
+      ],
+      [
+       "Game Link Cable",
+       "developed by Okada"
+      ]
+     ]
+    }
+   ],
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Nintendo R&D1",
+     "qid": "Q2633052",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Nintendo",
+     "qid": "Q8093",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Sharp SM83",
+     "qid": "Q121742041",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "Sharp",
+      "qid": "Q53227",
+      "source": "wikidata:P176"
+     }
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Game & Watch",
+     "qid": "Q215034",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Game Boy Color",
+     "qid": "Q203992",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "model",
+     "name": "Game Boy Pocket",
+     "qid": "Q2297261",
+     "source": "wikidata:family"
+    },
+    {
+     "relation": "model",
+     "name": "Game Boy Light",
+     "qid": "Q2089269",
+     "source": "wikidata:family"
+    },
+    {
+     "relation": "family",
+     "name": "Super Game Boy",
+     "qid": "Q1190117",
+     "source": "wikidata:family"
+    },
+    {
+     "relation": "family",
+     "name": "Game Boy Advance",
+     "qid": "Q188642",
+     "source": "wikidata:family"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Pokémon Red, Blue, and Yellow",
+     "figure": "46 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Nintendo Research & Development 1"
+   ]
+  },
+  "gba": {
+   "summary": "Built by Nintendo's research and engineering team around an ARM7TDMI. The Game Boy's Sharp SM83 sits beside it, so the older cartridges still play.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Nintendo Research & Engineering",
+     "source": "infobox:developer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Nintendo",
+     "qid": "Q8093",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "ARM7TDMI",
+     "qid": "Q13551274",
+     "source": "wikidata:P880"
+    },
+    {
+     "role": "Second CPU",
+     "name": "Sharp SM83",
+     "qid": "Q121742041",
+     "source": "infobox:cpu"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Game Boy Color",
+     "qid": "Q203992",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Nintendo DS",
+     "qid": "Q170323",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "model",
+     "name": "Game Boy Advance SP",
+     "qid": "Q842836",
+     "source": "wikidata:family"
+    },
+    {
+     "relation": "model",
+     "name": "Game Boy Micro",
+     "qid": "Q865012",
+     "source": "wikidata:family"
+    },
+    {
+     "relation": "family",
+     "name": "Game Boy",
+     "qid": "Q186437",
+     "source": "wikidata:family"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Pokémon Ruby and Sapphire",
+     "figure": "16 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Nintendo"
+   ]
+  },
+  "gbc": {
+   "summary": "The Game Boy in colour, from Nintendo's research and engineering team. It keeps the Game Boy's Sharp SM83 processor and plays its cartridges.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Nintendo Research & Engineering",
+     "qid": "Q3877252",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Nintendo",
+     "qid": "Q8093",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Sharp SM83",
+     "qid": "Q121742041",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "Sharp",
+      "qid": "Q53227",
+      "source": "wikidata:P176"
+     }
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Game Boy",
+     "qid": "Q186437",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Game Boy Advance",
+     "qid": "Q188642",
+     "source": "wikidata:P156"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Pokémon Gold and Silver",
+     "figure": "23 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Nintendo"
+   ]
+  },
+  "intellivision": {
+   "summary": "Mattel's console, run on a General Instrument CP1600; INTV Corporation took it over in 1984.",
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "Mattel",
+     "qid": "Q596139",
+     "source": "wikidata:P176"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "INTV Corporation",
+     "qid": "Q105741166",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "General Instrument CP1600",
+     "qid": "Q663715",
+     "source": "wikidata:P880"
+    },
+    {
+     "role": "Graphics",
+     "name": "Standard Television Interface Chip",
+     "qid": "Q107524933",
+     "source": "wikidata:P2560"
+    },
+    {
+     "role": "Sound",
+     "name": "General Instrument AY-3-8910",
+     "qid": "Q300264",
+     "source": "wikidata:P7501"
+    }
+   ],
+   "game_makers": [
+    "Mattel"
+   ]
+  },
+  "mastersystem": {
+   "summary": "Sega's third-generation console, made by Sega and by Tectoy. A Zilog Z80 runs it; its Texas Instruments sound chip is the one of the SG-1000 and the Game Gear.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Sega",
+     "source": "infobox:developer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Sega",
+     "qid": "Q122741",
+     "source": "wikidata:P176"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Tectoy",
+     "qid": "Q2985314",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Zilog Z80",
+     "qid": "Q203315",
+     "source": "wikidata:P880"
+    },
+    {
+     "role": "Sound",
+     "name": "Texas Instruments SN76489",
+     "qid": "Q2708134",
+     "source": "infobox:sound"
+    },
+    {
+     "role": "FM sound",
+     "name": "Yamaha YM2413",
+     "qid": "Q1192638",
+     "source": "wikidata:P7501",
+     "maker": {
+      "name": "Yamaha",
+      "qid": "Q188454",
+      "source": "wikidata:P176"
+     }
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "SG-1000",
+     "qid": "Q1136956",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Mega Drive",
+     "qid": "Q10676",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "model",
+     "name": "Sega Mark III",
+     "qid": "Q1192432",
+     "source": "wikidata:P144"
+    },
+    {
+     "relation": "family",
+     "name": "Game Gear",
+     "qid": "Q751719",
+     "source": "infobox:related"
+    }
+   ],
+   "game_makers": [
+    "Sega"
+   ]
+  },
+  "megadrive": {
+   "summary": "Designed by a Sega team under Hideki Sato and Masami Ishikawa. A Motorola 68000 and a Zilog Z80 run it; the sound comes from a Yamaha YM2612 and the SN76489 of the Master System.",
+   "people": [
+    {
+     "name": "Hideki Sato",
+     "role": "Supervised the design team",
+     "source": "lead",
+     "words": [
+      [
+       "Designed by an R&D team",
+       "supervised by Hideki Sato and Masami Ishikawa"
+      ]
+     ]
+    },
+    {
+     "name": "Masami Ishikawa",
+     "role": "Supervised the design team",
+     "source": "lead",
+     "words": [
+      [
+       "Designed by an R&D team",
+       "supervised by Hideki Sato and Masami Ishikawa"
+      ]
+     ]
+    }
+   ],
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Sega",
+     "source": "infobox:developer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Sega",
+     "qid": "Q122741",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Motorola 68000",
+     "qid": "Q667808",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "Motorola",
+      "qid": "Q259011",
+      "source": "wikidata:P176"
+     }
+    },
+    {
+     "role": "Second CPU",
+     "name": "Zilog Z80",
+     "qid": "Q203315",
+     "source": "wikidata:P880"
+    },
+    {
+     "role": "Sound",
+     "name": "Yamaha YM2612",
+     "source": "infobox:sound"
+    },
+    {
+     "role": "Sound",
+     "name": "Texas Instruments SN76489",
+     "qid": "Q2708134",
+     "source": "infobox:sound"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Master System",
+     "qid": "Q209868",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Sega Saturn",
+     "qid": "Q200912",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "family",
+     "name": "Sega CD",
+     "qid": "Q1047516",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "family",
+     "name": "32X",
+     "qid": "Q1063978",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "model",
+     "name": "Sega Wondermega",
+     "qid": "Q111682239",
+     "source": "wikidata:P4969"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Sonic the Hedgehog",
+     "figure": "15 million",
+     "source": "infobox:top_game"
+    },
+    {
+     "title": "Sonic the Hedgehog 2",
+     "figure": "6 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Sega"
+   ]
+  },
+  "n64": {
+   "summary": "Nintendo developed it with Silicon Graphics. NEC made its VR4300 processor and the Reality Coprocessor (RCP), which draws the picture.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Nintendo IRD",
+     "qid": "Q3877245",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Developer",
+     "name": "Silicon Graphics",
+     "qid": "Q623459",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Nintendo",
+     "qid": "Q8093",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "NEC VR4300",
+     "qid": "Q63098429",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "NEC",
+      "qid": "Q219203",
+      "source": "wikidata:P176"
+     }
+    },
+    {
+     "role": "Graphics",
+     "name": "Reality Coprocessor (RCP)",
+     "qid": "Q7276125",
+     "source": "wikidata:P2560",
+     "maker": {
+      "name": "NEC",
+      "qid": "Q219203",
+      "source": "wikidata:P176"
+     }
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Super Nintendo",
+     "qid": "Q183259",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "GameCube",
+     "qid": "Q182172",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "family",
+     "name": "64DD",
+     "qid": "Q253044",
+     "match": "Nintendo 64DD",
+     "source": "infobox:related"
+    },
+    {
+     "relation": "family",
+     "name": "iQue Player",
+     "qid": "Q285025",
+     "source": "wikidata:^P144"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Super Mario 64",
+     "figure": "11.62 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Nintendo Integrated Research & Development"
+   ]
+  },
+  "nds": {
+   "summary": "Developed by Nintendo and built by Foxconn, with two ARM processors: an ARM946E-S, and the Game Boy Advance's ARM7TDMI.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Nintendo",
+     "qid": "Q8093",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Nintendo",
+     "qid": "Q8093",
+     "source": "wikidata:P176"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Foxconn",
+     "source": "infobox:manufacturer"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "ARM946E-S",
+     "source": "infobox:cpu"
+    },
+    {
+     "role": "Second CPU",
+     "name": "ARM7TDMI",
+     "qid": "Q13551274",
+     "source": "infobox:cpu"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Game Boy Advance",
+     "qid": "Q188642",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Nintendo 3DS",
+     "qid": "Q203597",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "model",
+     "name": "Nintendo DS Lite",
+     "qid": "Q844552",
+     "source": "wikidata:family"
+    },
+    {
+     "relation": "model",
+     "name": "Nintendo DSi",
+     "qid": "Q637178",
+     "source": "infobox:related"
+    },
+    {
+     "relation": "model",
+     "name": "Nintendo DSi XL",
+     "qid": "Q3771823",
+     "source": "wikidata:family"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "New Super Mario Bros.",
+     "figure": "30.80 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Nintendo"
+   ]
+  },
+  "neocd": {
+   "summary": "The Neo Geo on CD-ROM instead of cartridges, with the same Motorola 68000 as the cartridge console.",
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "SNK",
+     "qid": "Q1044563",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Motorola 68000",
+     "source": "infobox:cpu"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Neo Geo",
+     "qid": "Q1054350",
+     "source": "wikidata:P155"
+    }
+   ],
+   "game_makers": [
+    "SNK"
+   ]
+  },
+  "neogeo": {
+   "summary": "SNK's home console with the same hardware as its MVS arcade board: a Motorola 68000 runs the games, a Z80 the sound.",
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "SNK",
+     "qid": "Q1073880",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Motorola 68000",
+     "qid": "Q667808",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "Motorola",
+      "qid": "Q259011",
+      "source": "wikidata:P176"
+     }
+    },
+    {
+     "role": "Sound CPU",
+     "name": "Zilog Z80A",
+     "source": "infobox:cpu",
+     "match": "Z80A"
+    },
+    {
+     "role": "Sound",
+     "name": "Yamaha YM2610",
+     "source": "infobox:sound"
+    }
+   ],
+   "family": [
+    {
+     "relation": "after",
+     "name": "Neo Geo CD",
+     "qid": "Q2703883",
+     "source": "wikidata:P156"
+    }
+   ],
+   "game_makers": [
+    "SNK"
+   ]
+  },
+  "nes": {
+   "summary": "Designed by Masayuki Uemura, first as the Famicom, and developed by Nintendo R&D2. Ricoh made its 2A03 processor and the 2C02 picture chip.",
+   "people": [
+    {
+     "name": "Masayuki Uemura",
+     "role": "Designed the Famicom",
+     "source": "lead",
+     "words": [
+      [
+       "The engineer Masayuki Uemura designed the 8-bit Famicom"
+      ]
+     ]
+    }
+   ],
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Nintendo R&D2",
+     "qid": "Q2668532",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Nintendo",
+     "qid": "Q8093",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Ricoh 2A03",
+     "qid": "Q1125051",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "Ricoh",
+      "qid": "Q178778",
+      "source": "wikidata:P176"
+     }
+    },
+    {
+     "role": "Graphics",
+     "name": "Ricoh 2C02 (PPU)",
+     "match": "Ricoh 2C02",
+     "source": "infobox:graphics"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Color TV-Game",
+     "qid": "Q1073032",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Super Nintendo",
+     "qid": "Q183259",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "model",
+     "name": "NES-101",
+     "qid": "Q2457408",
+     "source": "wikidata:^P279"
+    },
+    {
+     "relation": "family",
+     "name": "Famicom Disk System",
+     "qid": "Q135321",
+     "source": "infobox:related"
+    },
+    {
+     "relation": "family",
+     "name": "Famicom 3D System",
+     "source": "infobox:related"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Super Mario Bros.",
+     "figure": "40 million, pack-in",
+     "match": [
+      "Super Mario Bros. (40 million)",
+      "Pack-in"
+     ],
+     "source": "infobox:top_game"
+    },
+    {
+     "title": "Super Mario Bros. 3",
+     "figure": "18 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Nintendo Research & Development 2"
+   ]
+  },
+  "ngpc": {
+   "summary": "SNK's colour handheld: a Toshiba TLCS-900/H runs the games and a Z80 the sound.",
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "SNK",
+     "qid": "Q1073880",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Toshiba TLCS-900/H",
+     "source": "infobox:cpu",
+     "match": "TLCS900H"
+    },
+    {
+     "role": "Sound CPU",
+     "name": "Zilog Z80",
+     "source": "infobox:cpu",
+     "match": "Z80"
+    },
+    {
+     "role": "Sound",
+     "name": "T6W28",
+     "source": "infobox:sound"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Neo Geo Pocket",
+     "qid": "Q939881",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Neo-Geo X",
+     "qid": "Q1186868",
+     "source": "wikidata:P156"
+    }
+   ],
+   "game_makers": [
+    "SNK"
+   ]
+  },
+  "pcengine": {
+   "summary": "Made by NEC with Hudson Soft. The processor is Hudson Soft's HuC6280, the picture chips its HuC6270 and HuC6260.",
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "NEC",
+     "qid": "Q219203",
+     "source": "wikidata:P176"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Hudson Soft",
+     "source": "infobox:manufacturer"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Hudson Soft HuC6280",
+     "qid": "Q1323830",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "Hudson Soft",
+      "qid": "Q1049502",
+      "source": "wikidata:P176"
+     }
+    },
+    {
+     "role": "Graphics",
+     "name": "Hudson Soft HuC6270 (VDC)",
+     "match": "HuC6270 VDC",
+     "source": "infobox:graphics"
+    },
+    {
+     "role": "Colour",
+     "name": "Hudson Soft HuC6260 (VCE)",
+     "match": "HuC6260 VCE",
+     "source": "infobox:graphics"
+    }
+   ],
+   "family": [
+    {
+     "relation": "after",
+     "name": "PC Engine SuperGrafx",
+     "qid": "Q202375",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "after",
+     "name": "PC-FX",
+     "qid": "Q1136902",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "model",
+     "name": "TurboDuo",
+     "qid": "Q841252",
+     "source": "wikidata:^P155"
+    },
+    {
+     "relation": "family",
+     "name": "LaserActive",
+     "source": "infobox:related"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Bonk's Adventure",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "NEC",
+    "Hudson Soft"
+   ]
+  },
+  "pokemini": {
+   "summary": "Made by Nintendo with The Pokémon Company. A small Seiko Epson S1C88 processor runs the games.",
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "Nintendo",
+     "source": "infobox:manufacturer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "The Pokémon Company",
+     "source": "infobox:manufacturer"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "S1C88",
+     "source": "infobox:cpu"
+    }
+   ],
+   "family": [
+    {
+     "relation": "family",
+     "name": "Pokémon Pikachu",
+     "source": "infobox:related"
+    }
+   ],
+   "game_makers": [
+    "Nintendo"
+   ]
+  },
+  "ps2": {
+   "summary": "The PlayStation's successor, from Sony Computer Entertainment. Its Emotion Engine processor was developed with Toshiba; the Graphics Synthesizer draws the picture.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Sony Computer Entertainment",
+     "qid": "Q18594",
+     "source": "infobox:developer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Sony Corporation",
+     "source": "infobox:manufacturer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Foxconn",
+     "source": "infobox:manufacturer"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Emotion Engine",
+     "qid": "Q522233",
+     "source": "wikidata:P880",
+     "maker": [
+      {
+       "name": "Sony Computer Entertainment",
+       "qid": "Q18594",
+       "source": "wikidata:P178"
+      },
+      {
+       "name": "Toshiba",
+       "qid": "Q49125",
+       "source": "wikidata:P178"
+      }
+     ]
+    },
+    {
+     "role": "Graphics",
+     "name": "Graphics Synthesizer",
+     "qid": "Q122810812",
+     "source": "wikidata:P2560"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "PlayStation",
+     "qid": "Q10677",
+     "source": "wikidata:P1365"
+    },
+    {
+     "relation": "after",
+     "name": "PlayStation 3",
+     "qid": "Q10683",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "model",
+     "name": "PlayStation 2 Slim",
+     "qid": "Q6078262",
+     "source": "wikidata:family"
+    },
+    {
+     "relation": "family",
+     "name": "PSX (video recorder)",
+     "qid": "Q1378740",
+     "match": "PSX",
+     "source": "infobox:related"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Grand Theft Auto: San Andreas",
+     "figure": "17.33 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Sony Interactive Entertainment"
+   ]
+  },
+  "psp": {
+   "summary": "A handheld from Sony Computer Entertainment, with a processor based on the MIPS R4000. It came in several models, among them the PSP Go.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Sony Computer Entertainment",
+     "qid": "Q18594",
+     "source": "infobox:developer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Sony Electronics",
+     "source": "infobox:manufacturer"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "MIPS R4000-based",
+     "qid": "Q3032799",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "MIPS Technologies",
+      "qid": "Q1631366",
+      "source": "wikidata:P178"
+     }
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "PocketStation",
+     "qid": "Q1147129",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "PlayStation Vita",
+     "qid": "Q188808",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "model",
+     "name": "PSP-2000",
+     "qid": "Q2539086",
+     "source": "wikidata:^P279"
+    },
+    {
+     "relation": "model",
+     "name": "PSP-3000",
+     "qid": "Q2737730",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "model",
+     "name": "PSP Go",
+     "qid": "Q941558",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "model",
+     "name": "PSP E1000",
+     "qid": "Q4047066",
+     "source": "wikidata:P156"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Grand Theft Auto: Liberty City Stories",
+     "figure": "8 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Sony Interactive Entertainment"
+   ]
+  },
+  "psx": {
+   "summary": "Designed mainly by Ken Kutaragi and Sony Computer Entertainment in Japan, around an R3000 processor designed by MIPS Technologies. The PS one model followed.",
+   "people": [
+    {
+     "name": "Ken Kutaragi",
+     "role": "Its main designer",
+     "source": "lead",
+     "words": [
+      [
+       "primarily designed by Ken Kutaragi"
+      ]
+     ]
+    }
+   ],
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Sony Computer Entertainment",
+     "qid": "Q18594",
+     "source": "infobox:developer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Sony Electronics",
+     "source": "infobox:manufacturer"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "R3000",
+     "qid": "Q1243971",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "MIPS Technologies",
+      "qid": "Q1631366",
+      "source": "wikidata:P178"
+     }
+    }
+   ],
+   "family": [
+    {
+     "relation": "after",
+     "name": "PlayStation 2",
+     "qid": "Q10680",
+     "source": "wikidata:P1366"
+    },
+    {
+     "relation": "model",
+     "name": "PS one",
+     "qid": "Q8017670",
+     "source": "wikidata:P156"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Gran Turismo",
+     "figure": "10.85 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Sony Interactive Entertainment"
+   ]
+  },
+  "saturn": {
+   "summary": "Sega's fifth-generation console, with two Hitachi SH-2 processors, two picture processors (VDP1 and VDP2) and a Yamaha sound chip.",
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "Sega",
+     "qid": "Q122741",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Hitachi SH-2 (two)",
+     "qid": "Q114413769",
+     "match": "SH-2",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "Hitachi",
+      "qid": "Q53238",
+      "source": "wikidata:P178"
+     }
+    },
+    {
+     "role": "Graphics",
+     "name": "VDP1 and VDP2",
+     "match": "VDP1 & VDP2",
+     "source": "infobox:graphics"
+    },
+    {
+     "role": "Sound",
+     "name": "Yamaha YMF292",
+     "source": "infobox:sound"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Mega Drive",
+     "qid": "Q10676",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Dreamcast",
+     "qid": "Q184198",
+     "source": "wikidata:P156"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Virtua Fighter 2",
+     "figure": "1.7 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Sega"
+   ]
+  },
+  "sega32x": {
+   "summary": "Sega's add-on for the Mega Drive, with two SH-2 processors of its own; it was meant to carry players over to the Saturn.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Sega",
+     "source": "infobox:developer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Sega",
+     "qid": "Q122741",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "SH-2 (two)",
+     "source": "infobox:cpu",
+     "match": "SH-2"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Mega Drive",
+     "qid": "Q10676",
+     "source": "wikidata:^P156"
+    },
+    {
+     "relation": "before",
+     "name": "Sega CD",
+     "qid": "Q1047516",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Sega Saturn",
+     "qid": "Q200912",
+     "source": "wikidata:P156"
+    }
+   ],
+   "game_makers": [
+    "Sega"
+   ]
+  },
+  "segacd": {
+   "summary": "Sega's CD-ROM add-on for the Mega Drive. Its own Motorola 68000, faster than the Mega Drive's, runs the CD side, a custom ASIC scales and rotates graphics, and a Ricoh chip handles the sound.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Sega",
+     "source": "infobox:developer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Sega",
+     "qid": "Q122741",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Motorola 68000",
+     "qid": "Q667808",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "Motorola",
+      "qid": "Q259011",
+      "source": "wikidata:P176"
+     }
+    },
+    {
+     "role": "Graphics",
+     "name": "Custom ASIC",
+     "match": "custom ASIC",
+     "source": "infobox:graphics"
+    },
+    {
+     "role": "Sound",
+     "name": "Ricoh RF5C164",
+     "source": "infobox:sound"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Mega Drive",
+     "qid": "Q10676",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Sega Saturn",
+     "qid": "Q200912",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "family",
+     "name": "32X",
+     "qid": "Q1063978",
+     "source": "wikidata:^P155"
+    },
+    {
+     "relation": "model",
+     "name": "Sega Wondermega",
+     "qid": "Q111682239",
+     "source": "wikidata:P4969"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Sonic CD",
+     "figure": "1.5 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Sega"
+   ]
+  },
+  "sg-1000": {
+   "summary": "Made on the advice of Hayao Nakayama, then head of Sega in Japan. Texas Instruments made its picture and sound chips; the sound chip returned in the Master System and the Game Gear.",
+   "people": [
+    {
+     "name": "Hayao Nakayama",
+     "role": "Head of Sega in Japan; it was made on his advice",
+     "source": "lead",
+     "words": [
+      [
+       "on the advice of Hayao Nakayama",
+       "president of Sega's Japanese arm"
+      ]
+     ]
+    }
+   ],
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "Sega",
+     "qid": "Q122741",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "NEC µPD780C",
+     "qid": "Q922881",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "NEC",
+      "qid": "Q219203",
+      "source": "wikidata:P176"
+     }
+    },
+    {
+     "role": "Graphics",
+     "name": "Texas Instruments TMS9918",
+     "qid": "Q1976230",
+     "source": "wikidata:P2560",
+     "maker": {
+      "name": "Texas Instruments",
+      "qid": "Q193412",
+      "source": "wikidata:P176"
+     }
+    },
+    {
+     "role": "Sound",
+     "name": "Texas Instruments SN76489",
+     "qid": "Q2708134",
+     "source": "wikidata:P7501",
+     "maker": {
+      "name": "Texas Instruments",
+      "qid": "Q193412",
+      "source": "wikidata:P176"
+     }
+    }
+   ],
+   "family": [
+    {
+     "relation": "after",
+     "name": "Master System",
+     "qid": "Q209868",
+     "source": "wikidata:P156"
+    },
+    {
+     "relation": "model",
+     "name": "SG-1000 II",
+     "qid": "Q17227743",
+     "source": "wikidata:P4969"
+    },
+    {
+     "relation": "family",
+     "name": "Sega SC-3000",
+     "qid": "Q1322287",
+     "source": "wikidata:P144"
+    }
+   ],
+   "game_makers": [
+    "Sega"
+   ]
+  },
+  "snes": {
+   "summary": "Designed by Masayuki Uemura and developed by Nintendo R&D2. Ricoh made its 5A22 processor and the picture chips; the sound runs on Nintendo's S-SMP.",
+   "people": [
+    {
+     "name": "Masayuki Uemura",
+     "role": "Designed it",
+     "source": "lead",
+     "words": [
+      [
+       "Masayuki Uemura, a Nintendo engineer, designed the 16-bit SNES"
+      ]
+     ]
+    }
+   ],
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Nintendo R&D2",
+     "qid": "Q2668532",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Nintendo",
+     "qid": "Q8093",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Ricoh 5A22",
+     "qid": "Q1192691",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "Ricoh",
+      "qid": "Q178778",
+      "source": "wikidata:P176"
+     }
+    },
+    {
+     "role": "Graphics",
+     "name": "S-PPU1 and S-PPU2",
+     "qid": "Q63109209",
+     "source": "wikidata:P2560",
+     "maker": {
+      "name": "Ricoh",
+      "qid": "Q178778",
+      "source": "wikidata:P176"
+     }
+    },
+    {
+     "role": "Sound",
+     "name": "Nintendo S-SMP",
+     "source": "infobox:sound"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "NES",
+     "qid": "Q172742",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Nintendo 64",
+     "qid": "Q184839",
+     "source": "wikidata:P156"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Super Mario World",
+     "figure": "20.6 million, pack-in",
+     "match": [
+      "Super Mario World (20.6 million)",
+      "Pack-in"
+     ],
+     "source": "infobox:top_game"
+    },
+    {
+     "title": "Street Fighter II: The World Warrior",
+     "figure": "6.3 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Nintendo Research & Development 2"
+   ]
+  },
+  "supergrafx": {
+   "summary": "Made by NEC Home Electronics. It has the PC Engine's HuC6280A processor, with two HuC6270 picture chips and a HuC6202 to blend them.",
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "NEC Home Electronics",
+     "source": "infobox:manufacturer"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Hudson Soft HuC6280A",
+     "source": "infobox:cpu",
+     "match": "HuC6280A"
+    },
+    {
+     "role": "Graphics",
+     "name": "Hudson Soft HuC6270 (VDC), two of them",
+     "match": "HuC6270 VDC",
+     "source": "infobox:graphics"
+    },
+    {
+     "role": "Graphics",
+     "name": "Hudson Soft HuC6202 (VPC)",
+     "match": "HuC6202 VPC",
+     "source": "infobox:graphics"
+    },
+    {
+     "role": "Colour",
+     "name": "Hudson Soft HuC6260A (VCE)",
+     "match": "HuC6260A VCE",
+     "source": "infobox:graphics"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "PC Engine",
+     "source": "infobox:predecessor",
+     "system": "pcengine"
+    },
+    {
+     "relation": "after",
+     "name": "PC Engine Duo",
+     "source": "infobox:successor",
+     "system": "pcenginecd"
+    }
+   ]
+  },
+  "vectrex": {
+   "summary": "Conceived by John Ross at Smith Engineering as a handheld; it became a tabletop console with its own vector screen.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Smith Engineering",
+     "source": "infobox:developer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "General Consumer Electronics",
+     "source": "infobox:manufacturer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Milton Bradley",
+     "qid": "Q2150493",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Motorola 6809",
+     "qid": "Q1545600",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "Motorola",
+      "qid": "Q259011",
+      "source": "wikidata:P176"
+     }
+    },
+    {
+     "role": "Sound",
+     "name": "AY-3-8912",
+     "source": "infobox:sound"
+    }
+   ]
+  },
+  "virtualboy": {
+   "summary": "Made at Nintendo R&D1 under Gunpei Yokoi; an NEC V810 drives its red 3D display.",
+   "people": [
+    {
+     "name": "Gunpei Yokoi",
+     "role": "Led its development as general manager of Nintendo R&D1",
+     "source": "lead",
+     "words": [
+      [
+       "Development of the Virtual Boy",
+       "under general manager Gunpei Yokoi"
+      ]
+     ]
+    }
+   ],
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Nintendo R&D1",
+     "qid": "Q2633052",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Nintendo",
+     "qid": "Q8093",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "NEC V810",
+     "qid": "Q58820781",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "NEC",
+      "qid": "Q219203",
+      "source": "wikidata:P176"
+     }
+    }
+   ],
+   "game_makers": [
+    "Nintendo"
+   ]
+  },
+  "wii": {
+   "summary": "Shigeru Miyamoto and Genyo Takeda led its development. IBM made the Broadway processor; the graphics chip is ATI's Hollywood.",
+   "people": [
+    {
+     "name": "Shigeru Miyamoto",
+     "role": "Led its development, with Genyo Takeda",
+     "source": "lead",
+     "words": [
+      [
+       "Shigeru Miyamoto and Genyo Takeda led development"
+      ]
+     ]
+    },
+    {
+     "name": "Genyo Takeda",
+     "role": "Led its development, with Shigeru Miyamoto",
+     "source": "lead",
+     "words": [
+      [
+       "Shigeru Miyamoto and Genyo Takeda led development"
+      ]
+     ]
+    }
+   ],
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Nintendo",
+     "qid": "Q8093",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Nintendo",
+     "qid": "Q8093",
+     "source": "wikidata:P176"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Foxconn",
+     "qid": "Q463094",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "IBM Broadway",
+     "qid": "Q2477766",
+     "match": "Broadway",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "IBM",
+      "qid": "Q37156",
+      "source": "wikidata:P176"
+     }
+    },
+    {
+     "role": "Graphics",
+     "name": "ATI Hollywood",
+     "source": "infobox:graphics"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "GameCube",
+     "qid": "Q182172",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Wii U",
+     "qid": "Q56942",
+     "source": "wikidata:P156"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Wii Sports",
+     "figure": "82.9 million, pack-in",
+     "match": [
+      "Wii Sports (82.9 million)",
+      "Pack-in"
+     ],
+     "source": "infobox:top_game"
+    },
+    {
+     "title": "Mario Kart Wii",
+     "figure": "37.3 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Nintendo"
+   ]
+  },
+  "wonderswan": {
+   "summary": "Bandai's handheld, developed with Gunpei Yokoi's company Koto Laboratory; it was the last hardware he worked on. An NEC V30 MZ runs it.",
+   "people": [
+    {
+     "name": "Gunpei Yokoi",
+     "role": "Developed it with Bandai through his company, Koto Laboratory; his last hardware",
+     "source": "lead",
+     "words": [
+      [
+       "Gunpei Yokoi's company Koto Laboratory",
+       "final piece of hardware Yokoi worked on"
+      ]
+     ]
+    }
+   ],
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "Bandai",
+     "qid": "Q507269",
+     "source": "wikidata:P176"
+    },
+    {
+     "role": "Co-developer",
+     "name": "Koto Laboratory",
+     "source": "lead",
+     "words": [
+      [
+       "in collaboration with",
+       "Gunpei Yokoi's company Koto Laboratory"
+      ]
+     ]
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "NEC V30 MZ",
+     "qid": "Q114725977",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "NEC",
+      "qid": "Q219203",
+      "source": "wikidata:P176"
+     }
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Design Master Senshi Mangajukuu",
+     "qid": "Q18149876",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "WonderSwan Color",
+     "qid": "Q1048035",
+     "source": "wikidata:P156"
+    }
+   ],
+   "game_makers": [
+    "Bandai"
+   ]
+  }
+ },
+ "ids": {
+  "mastersystem": {
+   "qid": "Q209868"
+  },
+  "megadrive": {
+   "qid": "Q10676"
+  },
+  "sg-1000": {
+   "qid": "Q1136956"
+  }
+ }
+}

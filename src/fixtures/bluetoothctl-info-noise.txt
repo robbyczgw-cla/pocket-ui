@@ -1,0 +1,13 @@
+Device 7A:41:0F:0A:0B:0C (random)
+	Alias: 7A-41-0F-0A-0B-0C
+	Paired: no
+	Bonded: no
+	Trusted: no
+	Blocked: no
+	Connected: no
+	LegacyPairing: no
+	ManufacturerData.Key: 0x004c (76)
+	ManufacturerData.Value:
+  10 05 41 1c 6e 8f 3a                             ..A.n.:         
+	RSSI: 0xffffffa6 (-90)
+	TxPower: 0x000c (12)

@@ -1,0 +1,47 @@
+{
+  "_about": "How rocknix-compare.py gets around in each UI (docs/COMPARE-ROCKNIX.md, 'The plan'). Sequences: buttons by their place on the Pocket (A right, B bottom, X top, Y left; UP DOWN LEFT RIGHT L R SELECT START HOME), HOME+X = hold HOME and press X, w500 = wait 500 ms, A:300 = hold 300 ms. Positions: 'start' is the start screen with the cursor on its first entry; a system's list has the cursor on the test game. Calibrated on the Mini V2 on 2026-10-26 (ROCKNIX 20261001, its 332 games; es-theme-art-book-next; pocket-ui main 9df5564 in the carousel look, German) with screenshots: another card's library needs other counts.",
+  "calibrated": true,
+  "games": {"gbc": "uCity", "gba": "Maximum", "snes": "Stars"},
+  "_brightness": "the backlight while playing, the same for both: the owner's level (pocket-ui's saved level, 12 of 255)",
+  "brightness": "12",
+  "es": {
+    "_start_screen": "EmulationStation's system view, opening on Atari 2600; 26 systems, the carousel wraps (SNES 6, GBC 8, GBA 10 to the right)",
+    "move": "RIGHT",
+    "move_back": "LEFT",
+    "to_system": {"gbc": "RIGHT RIGHT RIGHT RIGHT RIGHT RIGHT RIGHT RIGHT w800 A", "gba": "RIGHT RIGHT RIGHT RIGHT RIGHT RIGHT RIGHT RIGHT RIGHT RIGHT w800 A", "snes": "RIGHT RIGHT RIGHT RIGHT RIGHT RIGHT w800 A"},
+    "from_system": {"gbc": "B w800 LEFT LEFT LEFT LEFT LEFT LEFT LEFT LEFT", "gba": "B w800 LEFT LEFT LEFT LEFT LEFT LEFT LEFT LEFT LEFT LEFT", "snes": "B w800 LEFT LEFT LEFT LEFT LEFT LEFT"},
+    "to_game_first": {"gbc": "", "gba": "DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN", "snes": "DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN"},
+    "_launch": "global.autosave=1: A opens the Savestate manager (Start new game selected), RIGHT is the auto save (or a new one), A starts. Timed from the last A",
+    "launch": "A w1200 RIGHT w600 A",
+    "list_system": "gba",
+    "list_move": "DOWN",
+    "list_back": "UP",
+    "pause": "HOME+X",
+    "pause_close": "HOME+X",
+    "quit": "HOME+START w600 HOME+START",
+    "switch": {
+      "gbc>gba": ["HOME+START w600 HOME+START", "B", "RIGHT", "RIGHT", "A", "A", "RIGHT", "A"]
+    },
+    "ignore": []
+  },
+  "pocket-ui": {
+    "remembers_cursor": false,
+    "_start_screen": "pocket-ui's Home (carousel), opening on the first recent game: Search, six recents, Favorites, Curator, then the systems (GBA 11, GBC 12, SNES 28 down)",
+    "move": "DOWN",
+    "move_back": "UP",
+    "to_system": {"gbc": "DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN w600 A", "gba": "DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN w600 A", "snes": "DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN w600 A"},
+    "from_system": {"gbc": "B w600 UP UP UP UP UP UP UP UP UP UP UP UP", "gba": "B w600 UP UP UP UP UP UP UP UP UP UP UP", "snes": "B w600 UP UP UP UP UP UP UP UP UP UP UP UP UP UP UP UP UP UP UP UP UP UP UP UP UP UP UP UP"},
+    "to_game_first": {"gbc": "", "gba": "DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN", "snes": "DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN"},
+    "launch": "A",
+    "list_system": "gba",
+    "list_move": "DOWN",
+    "list_back": "UP",
+    "pause": "HOME",
+    "pause_close": "B",
+    "quit": "HOME w900 DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN DOWN A",
+    "switch": {
+      "gbc>gba": ["HOME", "SELECT", "RIGHT", "A"]
+    },
+    "ignore": []
+  }
+}

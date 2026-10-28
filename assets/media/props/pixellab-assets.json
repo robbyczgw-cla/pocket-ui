@@ -1,0 +1,85 @@
+{
+ "note": "PixelLab create-image-pixflux (v2), no background. Post-processing: pixels under alpha 200 cleared (floor shadows), cropped to the picture; the bookend is the right piece of the generated pair.",
+ "images": {
+  "plant": {
+   "endpoint": "create-image-pixflux",
+   "seed": 101,
+   "request": {
+    "description": "a small potted house plant with lush green leaves in a warm terracotta clay pot, cozy, calm, muted warm colours, soft light, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 48,
+     "height": 64
+    },
+    "no_background": true,
+    "seed": 101,
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people"
+   },
+   "generated": "2026-10-27T13:04:34"
+  },
+  "lamp": {
+   "endpoint": "create-image-pixflux",
+   "seed": 201,
+   "request": {
+    "description": "a small vintage brass desk lamp with a warm cream fabric lampshade, switched on, warm glow, cozy, calm, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 48,
+     "height": 72
+    },
+    "no_background": true,
+    "seed": 201,
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people"
+   },
+   "generated": "2026-10-27T13:04:33"
+  },
+  "cactus": {
+   "endpoint": "create-image-pixflux",
+   "seed": 401,
+   "request": {
+    "description": "a tiny round cactus in a small white ceramic pot, cozy, calm, muted colours, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 32,
+     "height": 48
+    },
+    "no_background": true,
+    "seed": 401,
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people"
+   },
+   "generated": "2026-10-27T13:04:50"
+  },
+  "bookend": {
+   "endpoint": "create-image-pixflux",
+   "seed": 302,
+   "request": {
+    "description": "a pair of simple dark wooden bookends shaped like an L, side by side, cozy, calm, muted warm colours, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 64,
+     "height": 48
+    },
+    "no_background": true,
+    "seed": 302,
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people"
+   },
+   "generated": "2026-10-27T13:05:34"
+  }
+ }
+}

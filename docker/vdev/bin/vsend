@@ -1,0 +1,9 @@
+#!/bin/sh
+# Drives pocket-ui through its command FIFO, like `scripts/dev.sh send` does over SSH.
+#   vsend up down a
+# A FIFO without a reader blocks the writer: give up if pocket-ui isn't running.
+pidof pocket-ui >/dev/null || { echo 'pocket-ui is not running' >&2; exit 1; }
+for cmd in "$@"; do
+  timeout 2 sh -c 'echo "$1" > /tmp/pocket-ui.in' sh "$cmd" || exit 1
+  sleep 0.2
+done

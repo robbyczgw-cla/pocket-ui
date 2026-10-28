@@ -1,0 +1,29 @@
+[    10.0] launcher: starting pocket-ui at 10:00:00
+[    10.2] wifi: connected to Heimnetz Müller 5G (192.0.2.10/24, gateway 198.51.100.7)
+[    10.3] wifi: profile psk=hunter2-secret-psk
+[    10.4] nmcli: wifi.ssid=Heimnetz Müller 5G wifi.key=hunter2-secret-psk
+[    10.5] wlan0: associated with {mac1}, controller {mac2}
+[    10.6] nm: saved network psk: x9y8z7
+[    11.0] tailscale: up as alexs-pocket ({ts-ip}, {ts-ip6}) {tailnet-name}
+[    11.1] tailscale: up --authkey={ts-key}
+[    11.2] net: address 2001:db8:85a3:0000:0000:8a2e:0370:7334 on wlan0
+[    12.0] achievements: signed in as RetroFan1987 (token Zx81RaTokenAbCdEf0123)
+[    12.1] achievements: {"username": "RetroFan1987", "token": "{ra-token}"}
+[    13.0] sync: device MFZWI3D-BONSGYC-YLTMRWG-C43ENR5-QXGZDMM-FZWI3DP-BONSGYY-LTMRWAD connected
+[    13.1] web: pocket_session=s3cr3t-cookie csrf token: webtoken123
+[    13.2] web: pairing code=482913
+[    14.0] share: password share-pass-77qq
+[    14.1] remote: ssh password: pa55word
+[    14.2] build path {home}/src/pocket-ui/src/main.rs
+[    14.3] update: {login-url}
+[    14.4] feedback from alex@example.org
+[    14.5] usb: mounted /var/media/MyCard
+[    15.0] pocket-core 0.1.0: kernel 6.8.0-rocknix, retroarch at 127.0.0.1:55355
+[    15.1] start /storage/roms/snes/Chrono Trigger (USA).sfc with mgba_libretro.so fps=60
+[    15.2] notice: Chrono Trigger did not start
+[    15.3] game ended: roms/gba/Pokemon - Emerald Version (USA, Europe).gba exit code 1
+[    15.4] card: Pokémon Emerald
+[    15.5] fallback: roms/psx/Final Fantasy VII (Disc 1).chd
+[    15.6] screenshot: /storage/roms/screenshots/snes/Secret of Mana 2026-10-24 18-05-09.png
+[    16.0] error: pocket_ui::web::server: can't bind
+[    16.1] sensors: temp=61C at 10:00:00

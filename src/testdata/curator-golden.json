@@ -1,0 +1,3704 @@
+{
+"Q1043375": {
+"system": "nes",
+"title": "Castlevania",
+"must": [
+"platformer",
+"2d-platformer",
+"horror-setting",
+"dpad-friendly",
+"precise-timing"
+],
+"ok": [
+"action",
+"dark",
+"fantasy",
+"pace-measured",
+"tense"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"hard",
+"brutal"
+],
+"text_heavy": false
+},
+"Q1046604": {
+"system": "n64",
+"title": "Mario Kart 64",
+"must": [
+"racing",
+"kart-racing",
+"couch-versus",
+"party-4p",
+"cartoon"
+],
+"ok": [
+"pace-fast",
+"pace-frantic",
+"competitive",
+"cheerful",
+"funny",
+"drifting",
+"arcade-racing",
+"cute",
+"fantasy",
+"dpad-friendly",
+"needs-analog"
+],
+"length": [
+"short",
+"medium"
+],
+"session": "pickup",
+"difficulty": [
+"easy",
+"moderate"
+],
+"text_heavy": false
+},
+"Q1052131": {
+"system": "gamecube",
+"title": "Super Smash Bros. Melee",
+"must": [
+"fighting",
+"platform-fighter",
+"couch-versus",
+"party-4p",
+"competitive",
+"cartoon"
+],
+"ok": [
+"pace-fast",
+"pace-frantic",
+"cheerful",
+"funny",
+"simple-controls",
+"needs-analog",
+"precise-timing",
+"collectibles",
+"action",
+"dpad-friendly"
+],
+"length": [
+"short",
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+},
+"Q1060323": {
+"system": "gb",
+"title": "The Legend of Zelda: Link's Awakening",
+"must": [
+"action-adventure",
+"top-down-adventure",
+"fantasy",
+"dpad-friendly"
+],
+"ok": [
+"epic",
+"collectibles",
+"side-quests",
+"pace-measured",
+"story-driven",
+"lore",
+"mysterious",
+"ability-gating",
+"cheerful",
+"open-world",
+"quirky",
+"melancholic",
+"cute",
+"simple-controls"
+],
+"length": [
+"medium"
+],
+"session": null,
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q1060715": {
+"system": "dreamcast",
+"title": "Soulcalibur",
+"must": [
+"fighting",
+"3d-fighter",
+"couch-versus",
+"combos",
+"fantasy"
+],
+"ok": [
+"competitive",
+"historical",
+"pace-fast",
+"stylish",
+"precise-timing",
+"collectibles"
+],
+"length": [
+"short",
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q1061560": {
+"system": "snes",
+"title": "Super Mario Kart",
+"must": [
+"racing",
+"kart-racing",
+"couch-versus",
+"cartoon"
+],
+"ok": [
+"pace-fast",
+"pace-frantic",
+"competitive",
+"cheerful",
+"funny",
+"drifting",
+"arcade-racing",
+"cute",
+"fantasy",
+"dpad-friendly",
+"precise-timing"
+],
+"length": [
+"short",
+"medium"
+],
+"session": "pickup",
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+},
+"Q1062106": {
+"system": "psx",
+"title": "Tekken 3",
+"must": [
+"fighting",
+"3d-fighter",
+"couch-versus",
+"combos",
+"competitive"
+],
+"ok": [
+"precise-timing",
+"pace-fast",
+"minigame-heavy",
+"dpad-friendly",
+"stylish"
+],
+"length": [
+"short",
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q1063119": {
+"system": "snes",
+"title": "Super Mario RPG",
+"must": [
+"rpg",
+"jrpg",
+"turn-based-combat",
+"precise-timing",
+"cartoon",
+"funny"
+],
+"ok": [
+"cheerful",
+"quirky",
+"party-building",
+"story-driven",
+"dpad-friendly",
+"fantasy",
+"minigame-heavy",
+"pace-measured",
+"pace-calm"
+],
+"length": [
+"medium",
+"long"
+],
+"session": "sitdown",
+"difficulty": [
+"easy"
+],
+"text_heavy": true
+},
+"Q1069373": {
+"system": "psp",
+"title": "Lumines",
+"must": [
+"puzzle",
+"falling-block",
+"rhythm",
+"stylish",
+"score-attack"
+],
+"ok": [
+"pace-fast",
+"pace-measured",
+"link-play",
+"dpad-friendly",
+"simple-controls",
+"competitive"
+],
+"length": [
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q1069752": {
+"system": "megadrive",
+"title": "Gunstar Heroes",
+"must": [
+"shooter",
+"run-and-gun",
+"couch-coop",
+"pace-frantic",
+"sci-fi",
+"dpad-friendly"
+],
+"ok": [
+"action",
+"platformer",
+"quirky",
+"stylish",
+"adrenaline",
+"combos",
+"anime",
+"couch-versus",
+"pace-fast",
+"cheerful"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"hard",
+"moderate"
+],
+"text_heavy": false
+},
+"Q1072868": {
+"system": "gba",
+"title": "Final Fantasy Tactics Advance",
+"must": [
+"rpg",
+"tactics-rpg",
+"character-builds",
+"fantasy",
+"dpad-friendly",
+"pace-calm"
+],
+"ok": [
+"strategy",
+"turn-based-strategy",
+"party-building",
+"side-quests",
+"grinding",
+"cute",
+"anime",
+"story-driven",
+"link-play",
+"pace-measured",
+"turn-based-combat"
+],
+"length": [
+"long",
+"epic"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": true
+},
+"Q1112940": {
+"system": "megadrive",
+"title": "Columns",
+"must": [
+"puzzle",
+"falling-block",
+"dpad-friendly",
+"score-attack"
+],
+"ok": [
+"match-3",
+"arcade",
+"couch-versus",
+"pace-measured",
+"pace-fast",
+"competitive",
+"simple-controls",
+"historical"
+],
+"length": [
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"moderate",
+"easy"
+],
+"text_heavy": false
+},
+"Q11168": {
+"system": "nes",
+"title": "Super Mario Bros.",
+"must": [
+"platformer",
+"2d-platformer",
+"dpad-friendly",
+"cartoon"
+],
+"ok": [
+"collectibles",
+"pace-fast",
+"pace-measured",
+"fantasy",
+"cute",
+"precise-timing",
+"pass-and-play",
+"simple-controls",
+"cheerful",
+"score-attack"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+},
+"Q1133204": {
+"system": "snes",
+"title": "Street Fighter II",
+"must": [
+"fighting",
+"2d-fighter",
+"couch-versus",
+"competitive",
+"precise-timing"
+],
+"ok": [
+"combos",
+"dpad-friendly",
+"pace-fast",
+"pace-frantic",
+"arcade",
+"action"
+],
+"length": [
+"short",
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+},
+"Q1139272": {
+"system": "dreamcast",
+"title": "Crazy Taxi",
+"must": [
+"racing",
+"arcade-racing",
+"traffic",
+"score-attack",
+"pace-frantic"
+],
+"ok": [
+"action",
+"funny",
+"stylish",
+"adrenaline",
+"open-world",
+"needs-analog",
+"cheerful"
+],
+"length": [
+"short",
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q1142287": {
+"system": "megadrive",
+"title": "Out Run",
+"must": [
+"racing",
+"arcade-racing",
+"traffic",
+"dpad-friendly"
+],
+"ok": [
+"pace-fast",
+"score-attack",
+"cheerful",
+"stylish",
+"adrenaline"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q1154044": {
+"system": "gb",
+"title": "Kirby's Dream Land",
+"must": [
+"platformer",
+"2d-platformer",
+"cute",
+"dpad-friendly"
+],
+"ok": [
+"simple-controls",
+"cheerful",
+"cartoon",
+"pace-measured",
+"pace-fast",
+"fantasy"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"easy"
+],
+"text_heavy": false
+},
+"Q116578": {
+"system": "ps2",
+"title": "Guitar Hero",
+"must": [
+"rhythm",
+"precise-timing",
+"score-attack"
+],
+"ok": [
+"couch-versus",
+"couch-coop",
+"competitive",
+"stylish",
+"adrenaline",
+"pace-fast",
+"pace-frantic",
+"licensed"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q1194825": {
+"system": "snes",
+"title": "Super Metroid",
+"must": [
+"action-adventure",
+"metroidvania",
+"ability-gating",
+"sci-fi",
+"dpad-friendly"
+],
+"ok": [
+"platformer",
+"2d-platformer",
+"shooter",
+"action",
+"tense",
+"mysterious",
+"lore",
+"pace-measured",
+"pace-fast",
+"collectibles",
+"run-and-gun",
+"dark"
+],
+"length": [
+"short",
+"medium"
+],
+"session": null,
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+},
+"Q1195267": {
+"system": "gba",
+"title": "WarioWare, Inc.: Mega Microgames!",
+"must": [
+"minigames",
+"minigame-heavy",
+"pace-frantic",
+"quirky",
+"funny",
+"simple-controls"
+],
+"ok": [
+"party",
+"action",
+"arcade",
+"score-attack",
+"dpad-friendly",
+"cartoon",
+"stylish",
+"precise-timing"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"easy",
+"moderate"
+],
+"text_heavy": false
+},
+"Q1195476": {
+"system": "nds",
+"title": "Professor Layton and the Curious Village",
+"must": [
+"puzzle",
+"logic-puzzle",
+"adventure",
+"story-driven",
+"touch-screen",
+"mysterious",
+"pace-calm"
+],
+"ok": [
+"detective",
+"cosy",
+"quirky",
+"collectibles",
+"two-screens",
+"anime"
+],
+"length": [
+"medium"
+],
+"session": null,
+"difficulty": [
+"moderate"
+],
+"text_heavy": true
+},
+"Q1198484": {
+"system": "gamecube",
+"title": "Pikmin",
+"must": [
+"strategy",
+"rts",
+"cute",
+"needs-analog"
+],
+"ok": [
+"puzzle",
+"action",
+"collectibles",
+"sci-fi",
+"tense",
+"pace-measured",
+"mysterious",
+"quirky"
+],
+"length": [
+"short"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q1198491": {
+"system": "snes",
+"title": "F-Zero",
+"must": [
+"racing",
+"futuristic-racing",
+"pace-frantic",
+"sci-fi",
+"dpad-friendly"
+],
+"ok": [
+"adrenaline",
+"precise-timing",
+"score-attack",
+"competitive",
+"arcade-racing",
+"pace-fast"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"hard",
+"moderate"
+],
+"text_heavy": false
+},
+"Q1198580": {
+"system": "gb",
+"title": "Dr. Mario",
+"must": [
+"puzzle",
+"falling-block",
+"link-play",
+"dpad-friendly"
+],
+"ok": [
+"match-3",
+"score-attack",
+"pace-measured",
+"pace-fast",
+"competitive",
+"simple-controls"
+],
+"length": [
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q1206519": {
+"system": "ps2",
+"title": "Katamari Damacy",
+"must": [
+"quirky",
+"funny",
+"needs-analog"
+],
+"ok": [
+"action",
+"puzzle",
+"arcade",
+"cheerful",
+"cute",
+"stylish",
+"collectibles",
+"couch-versus",
+"pace-measured",
+"score-attack"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"easy",
+"moderate"
+],
+"text_heavy": false
+},
+"Q12395": {
+"system": "nes",
+"title": "The Legend of Zelda",
+"must": [
+"action-adventure",
+"top-down-adventure",
+"fantasy",
+"dpad-friendly"
+],
+"ok": [
+"epic",
+"collectibles",
+"side-quests",
+"pace-measured",
+"story-driven",
+"lore",
+"mysterious",
+"ability-gating",
+"cheerful",
+"open-world",
+"simple-controls"
+],
+"length": [
+"medium"
+],
+"session": null,
+"difficulty": [
+"hard",
+"moderate"
+],
+"text_heavy": false
+},
+"Q129000": {
+"system": "n64",
+"title": "Banjo-Kazooie",
+"must": [
+"platformer",
+"3d-platformer",
+"collectathon",
+"cartoon",
+"funny",
+"needs-analog",
+"collectibles"
+],
+"ok": [
+"cheerful",
+"quirky",
+"cute",
+"fantasy",
+"pace-measured"
+],
+"length": [
+"medium"
+],
+"session": null,
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q1322480": {
+"system": "nds",
+"title": "Phoenix Wright: Ace Attorney",
+"must": [
+"adventure",
+"detective",
+"story-driven",
+"funny",
+"pace-calm"
+],
+"ok": [
+"visual-novel",
+"touch-screen",
+"quirky",
+"anime",
+"mysterious",
+"tense",
+"dpad-friendly",
+"urban-crime"
+],
+"length": [
+"medium"
+],
+"session": null,
+"difficulty": [
+"moderate",
+"easy"
+],
+"text_heavy": true
+},
+"Q1326889": {
+"system": "snes",
+"title": "Star Fox",
+"must": [
+"shooter",
+"rail-shooter",
+"sci-fi",
+"pace-fast"
+],
+"ok": [
+"shmup",
+"flight-sim",
+"simulation",
+"dpad-friendly",
+"cartoon",
+"score-attack",
+"action"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q1340462": {
+"system": "psx",
+"title": "PaRappa the Rapper",
+"must": [
+"rhythm",
+"precise-timing",
+"quirky",
+"funny",
+"cartoon"
+],
+"ok": [
+"cute",
+"cheerful",
+"stylish",
+"simple-controls",
+"score-attack"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+},
+"Q1368099": {
+"system": "snes",
+"title": "Contra III: The Alien Wars",
+"must": [
+"shooter",
+"run-and-gun",
+"couch-coop",
+"sci-fi",
+"pace-frantic",
+"dpad-friendly"
+],
+"ok": [
+"action",
+"platformer",
+"adrenaline",
+"gritty",
+"precise-timing",
+"military"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"hard",
+"brutal"
+],
+"text_heavy": false
+},
+"Q1399011": {
+"system": "pcengine",
+"title": "Bonk's Adventure",
+"must": [
+"platformer",
+"2d-platformer",
+"cartoon",
+"dpad-friendly"
+],
+"ok": [
+"funny",
+"cute",
+"quirky",
+"cheerful",
+"historical",
+"simple-controls"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q1416303": {
+"system": "nds",
+"title": "The World Ends with You",
+"must": [
+"rpg",
+"action-rpg",
+"touch-screen",
+"two-screens",
+"stylish",
+"story-driven"
+],
+"ok": [
+"jrpg",
+"urban-crime",
+"anime",
+"quirky",
+"character-builds",
+"collectibles",
+"pace-fast",
+"pace-frantic",
+"loot"
+],
+"length": [
+"long"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": true
+},
+"Q1421439": {
+"system": "psx",
+"title": "Bust a Groove",
+"must": [
+"rhythm",
+"dance",
+"couch-versus",
+"stylish",
+"precise-timing"
+],
+"ok": [
+"quirky",
+"competitive",
+"pace-fast",
+"cheerful"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q1470515": {
+"system": "dreamcast",
+"title": "Jet Set Radio",
+"must": [
+"stylish",
+"pace-fast"
+],
+"ok": [
+"action",
+"platformer",
+"sports",
+"extreme-sports",
+"score-attack",
+"cheerful",
+"quirky",
+"needs-analog",
+"urban-crime",
+"collectibles"
+],
+"length": [
+"short",
+"medium"
+],
+"session": "pickup",
+"difficulty": [
+"hard",
+"moderate"
+],
+"text_heavy": false
+},
+"Q149998": {
+"system": "n64",
+"title": "Paper Mario",
+"must": [
+"rpg",
+"turn-based-combat",
+"cartoon",
+"funny",
+"story-driven"
+],
+"ok": [
+"jrpg",
+"party-building",
+"cheerful",
+"quirky",
+"cute",
+"collectibles",
+"side-quests",
+"pace-measured",
+"needs-analog",
+"precise-timing",
+"fantasy",
+"pace-calm"
+],
+"length": [
+"long"
+],
+"session": "sitdown",
+"difficulty": [
+"easy"
+],
+"text_heavy": true
+},
+"Q150180": {
+"system": "gba",
+"title": "Fire Emblem: The Blazing Blade",
+"must": [
+"tactics-rpg",
+"permadeath",
+"story-driven",
+"fantasy",
+"dpad-friendly",
+"pace-calm"
+],
+"ok": [
+"rpg",
+"strategy",
+"turn-based-strategy",
+"party-building",
+"character-builds",
+"anime",
+"epic",
+"melancholic",
+"military",
+"pace-measured",
+"turn-based-combat"
+],
+"length": [
+"long"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": true
+},
+"Q15087581": {
+"system": "psx",
+"title": "Ridge Racer",
+"must": [
+"racing",
+"arcade-racing",
+"drifting",
+"pace-fast"
+],
+"ok": [
+"adrenaline",
+"stylish",
+"score-attack",
+"pace-frantic",
+"dpad-friendly",
+"needs-analog",
+"competitive"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q1516419": {
+"system": "psp",
+"title": "Patapon",
+"must": [
+"rhythm",
+"precise-timing",
+"quirky",
+"stylish",
+"cute"
+],
+"ok": [
+"strategy",
+"grinding",
+"fantasy",
+"pace-measured",
+"dpad-friendly",
+"simple-controls",
+"character-builds"
+],
+"length": [
+"medium"
+],
+"session": "pickup",
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+},
+"Q1538485": {
+"system": "psx",
+"title": "Tony Hawk's Pro Skater 2",
+"must": [
+"sports",
+"extreme-sports",
+"score-attack",
+"combos",
+"real-world-sport"
+],
+"ok": [
+"pace-fast",
+"couch-versus",
+"stylish",
+"competitive",
+"dpad-friendly",
+"collectibles",
+"adrenaline"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q1545555": {
+"system": "gba",
+"title": "Golden Sun",
+"must": [
+"rpg",
+"jrpg",
+"turn-based-combat",
+"random-encounters",
+"story-driven",
+"fantasy",
+"dpad-friendly"
+],
+"ok": [
+"party-building",
+"character-builds",
+"link-play",
+"epic",
+"lore",
+"pace-measured",
+"grinding",
+"cheerful",
+"pace-calm"
+],
+"length": [
+"long"
+],
+"session": "sitdown",
+"difficulty": [
+"easy",
+"moderate"
+],
+"text_heavy": true
+},
+"Q1573878": {
+"system": "atari2600",
+"title": "Pitfall!",
+"must": [
+"dpad-friendly",
+"simple-controls"
+],
+"ok": [
+"platformer",
+"action",
+"arcade",
+"score-attack",
+"2d-platformer",
+"pace-measured"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q170489": {
+"system": "wii",
+"title": "Super Mario Galaxy",
+"must": [
+"platformer",
+"3d-platformer",
+"collectathon",
+"pointer",
+"motion-controls",
+"cartoon",
+"cheerful"
+],
+"ok": [
+"collectibles",
+"couch-coop",
+"sci-fi",
+"fantasy",
+"needs-analog",
+"cute",
+"epic",
+"pace-measured"
+],
+"length": [
+"medium",
+"long"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q1765733": {
+"system": "gamecube",
+"title": "Metroid Prime",
+"must": [
+"ability-gating",
+"sci-fi"
+],
+"ok": [
+"action-adventure",
+"shooter",
+"fps",
+"metroidvania",
+"collectibles",
+"lore",
+"tense",
+"mysterious",
+"needs-analog",
+"pace-measured",
+"melancholic"
+],
+"length": [
+"medium",
+"long"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q1773171": {
+"system": "nds",
+"title": "Brain Age: Train Your Brain in Minutes a Day!",
+"must": [
+"educational",
+"brain-training",
+"touch-screen"
+],
+"ok": [
+"puzzle",
+"logic-puzzle",
+"quirky",
+"simple-controls",
+"pace-calm",
+"pace-fast",
+"two-screens"
+],
+"length": [
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"easy"
+],
+"text_heavy": null
+},
+"Q1797550": {
+"system": "gba",
+"title": "Mario & Luigi: Superstar Saga",
+"must": [
+"rpg",
+"turn-based-combat",
+"precise-timing",
+"funny",
+"cartoon",
+"story-driven"
+],
+"ok": [
+"jrpg",
+"quirky",
+"cheerful",
+"dpad-friendly",
+"side-quests",
+"minigame-heavy",
+"fantasy",
+"pace-measured",
+"pace-calm"
+],
+"length": [
+"long",
+"medium"
+],
+"session": "sitdown",
+"difficulty": [
+"easy",
+"moderate"
+],
+"text_heavy": true
+},
+"Q1800173": {
+"system": "snes",
+"title": "Secret of Mana",
+"must": [
+"rpg",
+"action-rpg",
+"couch-coop",
+"fantasy",
+"dpad-friendly",
+"epic"
+],
+"ok": [
+"jrpg",
+"story-driven",
+"party-4p",
+"party-building",
+"character-builds",
+"grinding",
+"cheerful",
+"melancholic",
+"lore",
+"pace-measured",
+"pace-fast",
+"action-adventure"
+],
+"length": [
+"long"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": true
+},
+"Q1855957": {
+"system": "saturn",
+"title": "Nights into Dreams...",
+"must": [
+"score-attack",
+"pace-fast"
+],
+"ok": [
+"action",
+"arcade",
+"platformer",
+"cheerful",
+"mysterious",
+"quirky",
+"stylish",
+"cute",
+"fantasy",
+"needs-analog",
+"dpad-friendly"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q189784": {
+"system": "psx",
+"title": "Doom",
+"must": [
+"shooter",
+"fps",
+"pace-fast",
+"horror-setting",
+"sci-fi"
+],
+"ok": [
+"pace-frantic",
+"dark",
+"tense",
+"scary",
+"adrenaline",
+"gritty",
+"link-play",
+"dpad-friendly",
+"action"
+],
+"length": [
+"short",
+"medium"
+],
+"session": "pickup",
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+},
+"Q1991104": {
+"system": "ps2",
+"title": "Pro Evolution Soccer 5",
+"must": [
+"sports",
+"football",
+"couch-versus",
+"competitive",
+"real-world-sport"
+],
+"ok": [
+"team-sports",
+"couch-coop",
+"party-4p",
+"pace-fast",
+"pace-measured"
+],
+"length": [
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q2006613": {
+"system": "psx",
+"title": "Time Crisis",
+"must": [
+"shooter",
+"light-gun-shooter",
+"pointer"
+],
+"ok": [
+"rail-shooter",
+"adrenaline",
+"pace-fast",
+"pace-frantic",
+"action",
+"tense"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+},
+"Q2007022": {
+"system": "psx",
+"title": "Castlevania: Symphony of the Night",
+"must": [
+"action-adventure",
+"metroidvania",
+"ability-gating",
+"horror-setting",
+"dpad-friendly"
+],
+"ok": [
+"platformer",
+"2d-platformer",
+"rpg",
+"action-rpg",
+"character-builds",
+"loot",
+"collectibles",
+"multiple-endings",
+"dark",
+"mysterious",
+"stylish",
+"fantasy",
+"lore",
+"pace-measured",
+"pace-fast",
+"grinding",
+"story-driven",
+"action"
+],
+"length": [
+"medium"
+],
+"session": null,
+"difficulty": [
+"easy",
+"moderate"
+],
+"text_heavy": false
+},
+"Q2014882": {
+"system": "nes",
+"title": "Mega Man 2",
+"must": [
+"platformer",
+"2d-platformer",
+"dpad-friendly",
+"sci-fi",
+"precise-timing"
+],
+"ok": [
+"action",
+"run-and-gun",
+"shooter",
+"pace-fast",
+"cartoon"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"hard",
+"moderate"
+],
+"text_heavy": false
+},
+"Q2045645": {
+"system": "gba",
+"title": "Pokémon Emerald",
+"must": [
+"rpg",
+"monster-taming",
+"turn-based-combat",
+"random-encounters",
+"link-play",
+"collectibles",
+"dpad-friendly"
+],
+"ok": [
+"jrpg",
+"grinding",
+"cute",
+"cheerful",
+"fantasy",
+"pace-measured",
+"pace-calm",
+"party-building",
+"competitive",
+"side-quests",
+"cosy",
+"character-builds"
+],
+"length": [
+"long"
+],
+"session": null,
+"difficulty": [
+"easy"
+],
+"text_heavy": true
+},
+"Q2068675": {
+"system": "gba",
+"title": "Mario Kart: Super Circuit",
+"must": [
+"racing",
+"kart-racing",
+"cartoon",
+"link-play"
+],
+"ok": [
+"pace-fast",
+"pace-frantic",
+"competitive",
+"cheerful",
+"funny",
+"drifting",
+"arcade-racing",
+"cute",
+"fantasy",
+"dpad-friendly"
+],
+"length": [
+"short",
+"medium"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q2079604": {
+"system": "ps2",
+"title": "Burnout 3: Takedown",
+"must": [
+"racing",
+"arcade-racing",
+"crash-takedowns",
+"traffic",
+"pace-frantic",
+"adrenaline",
+"couch-versus"
+],
+"ok": [
+"action",
+"score-attack",
+"stylish",
+"competitive",
+"pass-and-play",
+"party-4p",
+"dpad-friendly",
+"needs-analog",
+"drifting",
+"pace-fast"
+],
+"length": [
+"medium",
+"long"
+],
+"session": "pickup",
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+},
+"Q213911": {
+"system": "n64",
+"title": "The Legend of Zelda: Ocarina of Time",
+"must": [
+"action-adventure",
+"fantasy",
+"epic",
+"needs-analog",
+"time-travel"
+],
+"ok": [
+"story-driven",
+"lore",
+"side-quests",
+"collectibles",
+"mysterious",
+"ability-gating",
+"pace-measured",
+"melancholic",
+"open-world"
+],
+"length": [
+"long"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q214232": {
+"system": "psx",
+"title": "Final Fantasy VII",
+"must": [
+"rpg",
+"jrpg",
+"atb",
+"random-encounters",
+"story-driven",
+"cinematic",
+"character-builds",
+"epic",
+"pace-measured"
+],
+"ok": [
+"party-building",
+"side-quests",
+"minigame-heavy",
+"cyberpunk",
+"sci-fi",
+"fantasy",
+"melancholic",
+"dark",
+"lore",
+"grinding",
+"dpad-friendly",
+"turn-based-combat",
+"pace-calm"
+],
+"length": [
+"long",
+"epic"
+],
+"session": "sitdown",
+"difficulty": [
+"easy",
+"moderate"
+],
+"text_heavy": true
+},
+"Q216995": {
+"system": "n64",
+"title": "Super Mario 64",
+"must": [
+"platformer",
+"3d-platformer",
+"collectathon",
+"needs-analog",
+"cartoon",
+"cheerful"
+],
+"ok": [
+"collectibles",
+"pace-measured",
+"pace-fast",
+"fantasy",
+"cute"
+],
+"length": [
+"medium"
+],
+"session": null,
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q2207176": {
+"system": "ps2",
+"title": "Burnout Revenge",
+"must": [
+"racing",
+"arcade-racing",
+"crash-takedowns",
+"traffic",
+"pace-frantic",
+"adrenaline",
+"couch-versus"
+],
+"ok": [
+"action",
+"score-attack",
+"stylish",
+"competitive",
+"pass-and-play",
+"party-4p",
+"dpad-friendly",
+"needs-analog",
+"drifting",
+"pace-fast",
+"gritty"
+],
+"length": [
+"medium",
+"long"
+],
+"session": "pickup",
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+},
+"Q223381": {
+"system": "ps2",
+"title": "Final Fantasy X",
+"must": [
+"rpg",
+"jrpg",
+"turn-based-combat",
+"story-driven",
+"cinematic",
+"fantasy",
+"epic",
+"character-builds"
+],
+"ok": [
+"party-building",
+"minigame-heavy",
+"side-quests",
+"grinding",
+"lore",
+"random-encounters",
+"melancholic",
+"dpad-friendly",
+"needs-analog",
+"pace-measured",
+"pace-calm"
+],
+"length": [
+"epic",
+"long"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": null
+},
+"Q225912": {
+"system": "ps2",
+"title": "Kingdom Hearts",
+"must": [
+"rpg",
+"action-rpg",
+"fantasy",
+"cartoon",
+"story-driven",
+"needs-analog"
+],
+"ok": [
+"epic",
+"cheerful",
+"melancholic",
+"cinematic",
+"lore",
+"collectibles",
+"licensed",
+"side-quests",
+"grinding",
+"pace-fast",
+"pace-measured",
+"action-adventure",
+"combos",
+"character-builds"
+],
+"length": [
+"long"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": null
+},
+"Q2289666": {
+"system": "ps2",
+"title": "Burnout",
+"must": [
+"racing",
+"arcade-racing",
+"traffic",
+"pace-fast"
+],
+"ok": [
+"pace-frantic",
+"adrenaline",
+"couch-versus",
+"dpad-friendly",
+"needs-analog",
+"score-attack",
+"crash-takedowns",
+"drifting"
+],
+"length": [
+"short",
+"medium"
+],
+"session": "pickup",
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+},
+"Q2291309": {
+"system": "gba",
+"title": "Castlevania: Aria of Sorrow",
+"must": [
+"action-adventure",
+"metroidvania",
+"ability-gating",
+"horror-setting",
+"dpad-friendly"
+],
+"ok": [
+"platformer",
+"2d-platformer",
+"rpg",
+"action-rpg",
+"character-builds",
+"loot",
+"collectibles",
+"multiple-endings",
+"dark",
+"mysterious",
+"stylish",
+"fantasy",
+"lore",
+"pace-measured",
+"pace-fast",
+"grinding",
+"story-driven",
+"action"
+],
+"length": [
+"short",
+"medium"
+],
+"session": null,
+"difficulty": [
+"easy",
+"moderate"
+],
+"text_heavy": false
+},
+"Q2306443": {
+"system": "gba",
+"title": "Kirby & the Amazing Mirror",
+"must": [
+"platformer",
+"cute",
+"dpad-friendly",
+"link-play"
+],
+"ok": [
+"metroidvania",
+"2d-platformer",
+"ability-gating",
+"action-adventure",
+"cheerful",
+"cartoon",
+"collectibles",
+"fantasy",
+"pace-measured",
+"pace-fast",
+"couch-coop"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"easy"
+],
+"text_heavy": false
+},
+"Q2313869": {
+"system": "nes",
+"title": "Dragon Quest",
+"must": [
+"rpg",
+"jrpg",
+"turn-based-combat",
+"random-encounters",
+"grinding",
+"fantasy",
+"dpad-friendly"
+],
+"ok": [
+"pace-calm",
+"pace-measured",
+"story-driven",
+"lore",
+"anime"
+],
+"length": [
+"medium",
+"short"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": true
+},
+"Q2316943": {
+"system": "snes",
+"title": "Tetris Attack",
+"must": [
+"puzzle",
+"match-3",
+"couch-versus",
+"competitive",
+"dpad-friendly"
+],
+"ok": [
+"score-attack",
+"falling-block",
+"precise-timing",
+"cartoon",
+"cute",
+"pace-fast",
+"pace-frantic",
+"cheerful"
+],
+"length": [
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q2478949": {
+"system": "gba",
+"title": "Metroid Fusion",
+"must": [
+"action-adventure",
+"metroidvania",
+"ability-gating",
+"sci-fi",
+"dpad-friendly"
+],
+"ok": [
+"platformer",
+"2d-platformer",
+"shooter",
+"action",
+"tense",
+"scary",
+"mysterious",
+"story-driven",
+"pace-fast",
+"pace-measured",
+"collectibles",
+"run-and-gun",
+"dark"
+],
+"length": [
+"short",
+"medium"
+],
+"session": null,
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+},
+"Q2529000": {
+"system": "snes",
+"title": "EarthBound",
+"must": [
+"rpg",
+"jrpg",
+"turn-based-combat",
+"quirky",
+"funny",
+"story-driven",
+"dpad-friendly"
+],
+"ok": [
+"mysterious",
+"melancholic",
+"cheerful",
+"lore",
+"grinding",
+"pace-measured",
+"party-building",
+"pace-calm"
+],
+"length": [
+"long"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": true
+},
+"Q25536523": {
+"system": "gb",
+"title": "Pokémon Red",
+"must": [
+"rpg",
+"monster-taming",
+"turn-based-combat",
+"random-encounters",
+"link-play",
+"collectibles",
+"dpad-friendly"
+],
+"ok": [
+"jrpg",
+"grinding",
+"cute",
+"cheerful",
+"fantasy",
+"pace-measured",
+"pace-calm",
+"party-building",
+"competitive",
+"side-quests",
+"cosy",
+"character-builds"
+],
+"length": [
+"long"
+],
+"session": null,
+"difficulty": [
+"easy"
+],
+"text_heavy": true
+},
+"Q2569030": {
+"system": "megadrive",
+"title": "Streets of Rage 2",
+"must": [
+"beat-em-up",
+"couch-coop",
+"urban-crime",
+"pace-fast",
+"dpad-friendly"
+],
+"ok": [
+"action",
+"gritty",
+"stylish",
+"combos",
+"couch-versus"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q25991446": {
+"system": "gbc",
+"title": "Pokémon Gold",
+"must": [
+"rpg",
+"monster-taming",
+"turn-based-combat",
+"random-encounters",
+"link-play",
+"collectibles",
+"dpad-friendly"
+],
+"ok": [
+"jrpg",
+"grinding",
+"cute",
+"cheerful",
+"fantasy",
+"pace-measured",
+"pace-calm",
+"party-building",
+"competitive",
+"side-quests",
+"cosy",
+"character-builds"
+],
+"length": [
+"long",
+"epic"
+],
+"session": null,
+"difficulty": [
+"easy"
+],
+"text_heavy": true
+},
+"Q2609497": {
+"system": "n64",
+"title": "F-Zero X",
+"must": [
+"racing",
+"futuristic-racing",
+"pace-frantic",
+"sci-fi",
+"party-4p",
+"couch-versus"
+],
+"ok": [
+"adrenaline",
+"competitive",
+"needs-analog",
+"precise-timing",
+"arcade-racing",
+"score-attack"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"hard"
+],
+"text_heavy": false
+},
+"Q2626874": {
+"system": "atari2600",
+"title": "Pac-Man",
+"must": [
+"arcade",
+"maze",
+"score-attack",
+"simple-controls",
+"dpad-friendly"
+],
+"ok": [
+"pace-fast"
+],
+"length": [
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q2705496": {
+"system": "nes",
+"title": "Punch-Out!!",
+"must": [
+"sports",
+"individual-sports",
+"precise-timing",
+"dpad-friendly"
+],
+"ok": [
+"fighting",
+"funny",
+"quirky",
+"cartoon",
+"pace-fast",
+"simple-controls"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"hard"
+],
+"text_heavy": false
+},
+"Q286205": {
+"system": "psx",
+"title": "Wipeout",
+"must": [
+"racing",
+"futuristic-racing",
+"pace-frantic",
+"sci-fi",
+"stylish"
+],
+"ok": [
+"adrenaline",
+"car-combat",
+"link-play",
+"dpad-friendly",
+"needs-analog",
+"competitive"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"hard"
+],
+"text_heavy": false
+},
+"Q301555": {
+"system": "nds",
+"title": "New Super Mario Bros.",
+"must": [
+"platformer",
+"2d-platformer",
+"dpad-friendly",
+"cartoon",
+"cheerful"
+],
+"ok": [
+"collectibles",
+"pace-fast",
+"pace-measured",
+"fantasy",
+"cute",
+"precise-timing",
+"pass-and-play",
+"simple-controls",
+"minigames",
+"minigame-heavy",
+"link-play",
+"touch-screen",
+"couch-versus"
+],
+"length": [
+"short",
+"medium"
+],
+"session": "pickup",
+"difficulty": [
+"easy",
+"moderate"
+],
+"text_heavy": false
+},
+"Q3460038": {
+"system": "ps2",
+"title": "SSX 3",
+"must": [
+"sports",
+"extreme-sports",
+"pace-fast",
+"stylish"
+],
+"ok": [
+"racing",
+"open-world",
+"adrenaline",
+"couch-versus",
+"combos",
+"needs-analog",
+"score-attack",
+"competitive"
+],
+"length": [
+"medium"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q3519191": {
+"system": "gb",
+"title": "Tetris",
+"must": [
+"puzzle",
+"falling-block",
+"score-attack",
+"dpad-friendly",
+"link-play"
+],
+"ok": [
+"arcade",
+"simple-controls",
+"pace-fast",
+"pace-measured",
+"pace-frantic",
+"competitive",
+"precise-timing"
+],
+"length": [
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"moderate",
+"easy",
+"hard"
+],
+"text_heavy": false
+},
+"Q35627": {
+"system": "megadrive",
+"title": "Sonic the Hedgehog 2",
+"must": [
+"platformer",
+"2d-platformer",
+"pace-fast",
+"cartoon",
+"dpad-friendly"
+],
+"ok": [
+"pace-frantic",
+"adrenaline",
+"cheerful",
+"collectibles",
+"stylish",
+"simple-controls",
+"cute",
+"couch-coop",
+"couch-versus"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q369086": {
+"system": "n64",
+"title": "GoldenEye 007",
+"must": [
+"shooter",
+"fps",
+"couch-versus",
+"party-4p",
+"licensed"
+],
+"ok": [
+"stealth",
+"military",
+"tense",
+"competitive",
+"needs-analog",
+"pace-fast",
+"gritty",
+"action"
+],
+"length": [
+"medium",
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+},
+"Q370055": {
+"system": "snes",
+"title": "The Legend of Zelda: A Link to the Past",
+"must": [
+"action-adventure",
+"top-down-adventure",
+"fantasy",
+"dpad-friendly"
+],
+"ok": [
+"epic",
+"collectibles",
+"side-quests",
+"pace-measured",
+"story-driven",
+"lore",
+"mysterious",
+"ability-gating",
+"cheerful",
+"open-world"
+],
+"length": [
+"medium",
+"long"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q37123": {
+"system": "megadrive",
+"title": "Sonic the Hedgehog",
+"must": [
+"platformer",
+"2d-platformer",
+"pace-fast",
+"cartoon",
+"dpad-friendly"
+],
+"ok": [
+"pace-frantic",
+"adrenaline",
+"cheerful",
+"collectibles",
+"stylish",
+"simple-controls",
+"cute"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q378928": {
+"system": "psp",
+"title": "Monster Hunter Freedom Unite",
+"must": [
+"action-rpg",
+"grinding",
+"link-play",
+"fantasy"
+],
+"ok": [
+"rpg",
+"action",
+"loot",
+"character-builds",
+"epic",
+"hack-and-slash",
+"pace-measured",
+"pace-fast",
+"needs-analog"
+],
+"length": [
+"epic"
+],
+"session": null,
+"difficulty": [
+"hard"
+],
+"text_heavy": false
+},
+"Q389254": {
+"system": "snes",
+"title": "Super Castlevania IV",
+"must": [
+"platformer",
+"2d-platformer",
+"horror-setting",
+"dpad-friendly"
+],
+"ok": [
+"action",
+"dark",
+"fantasy",
+"pace-measured",
+"tense",
+"precise-timing"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"hard",
+"moderate"
+],
+"text_heavy": false
+},
+"Q44462": {
+"system": "3ds",
+"title": "Animal Crossing: New Leaf",
+"must": [
+"life-sim",
+"cosy",
+"cute",
+"pace-calm",
+"collectibles"
+],
+"ok": [
+"cheerful",
+"funny",
+"quirky",
+"simulation",
+"fishing-hunting",
+"touch-screen",
+"link-play"
+],
+"length": [
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"easy"
+],
+"text_heavy": true
+},
+"Q474798": {
+"system": "gba",
+"title": "The Legend of Zelda: The Minish Cap",
+"must": [
+"action-adventure",
+"top-down-adventure",
+"fantasy",
+"dpad-friendly"
+],
+"ok": [
+"epic",
+"collectibles",
+"side-quests",
+"pace-measured",
+"story-driven",
+"lore",
+"mysterious",
+"ability-gating",
+"cheerful",
+"open-world",
+"cute",
+"cartoon"
+],
+"length": [
+"medium"
+],
+"session": null,
+"difficulty": [
+"easy",
+"moderate"
+],
+"text_heavy": false
+},
+"Q518987": {
+"system": "snes",
+"title": "Donkey Kong Country",
+"must": [
+"platformer",
+"2d-platformer",
+"dpad-friendly",
+"cartoon"
+],
+"ok": [
+"couch-coop",
+"pass-and-play",
+"collectibles",
+"pace-fast",
+"precise-timing",
+"cheerful"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+},
+"Q5345827": {
+"system": "gamecube",
+"title": "Animal Crossing",
+"must": [
+"life-sim",
+"cosy",
+"cute",
+"pace-calm",
+"collectibles"
+],
+"ok": [
+"cheerful",
+"funny",
+"quirky",
+"simulation",
+"fishing-hunting",
+"cartoon"
+],
+"length": [
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"easy"
+],
+"text_heavy": true
+},
+"Q535940": {
+"system": "snes",
+"title": "Final Fantasy VI",
+"must": [
+"rpg",
+"jrpg",
+"atb",
+"random-encounters",
+"party-building",
+"story-driven",
+"fantasy",
+"epic",
+"dpad-friendly",
+"pace-measured"
+],
+"ok": [
+"turn-based-combat",
+"character-builds",
+"side-quests",
+"dark",
+"melancholic",
+"lore",
+"grinding",
+"cinematic",
+"sci-fi",
+"post-apocalyptic",
+"pace-calm"
+],
+"length": [
+"long",
+"epic"
+],
+"session": "sitdown",
+"difficulty": [
+"easy",
+"moderate"
+],
+"text_heavy": true
+},
+"Q5721431": {
+"system": "gamecube",
+"title": "Mario Kart: Double Dash",
+"must": [
+"racing",
+"kart-racing",
+"couch-versus",
+"party-4p",
+"cartoon"
+],
+"ok": [
+"pace-fast",
+"pace-frantic",
+"competitive",
+"cheerful",
+"funny",
+"drifting",
+"arcade-racing",
+"cute",
+"fantasy",
+"dpad-friendly",
+"couch-coop",
+"needs-analog"
+],
+"length": [
+"short",
+"medium"
+],
+"session": "pickup",
+"difficulty": [
+"easy",
+"moderate"
+],
+"text_heavy": false
+},
+"Q578147": {
+"system": "psp",
+"title": "Burnout Dominator",
+"must": [
+"racing",
+"arcade-racing",
+"crash-takedowns",
+"traffic",
+"pace-frantic",
+"adrenaline"
+],
+"ok": [
+"action",
+"score-attack",
+"stylish",
+"competitive",
+"pass-and-play",
+"party-4p",
+"dpad-friendly",
+"needs-analog",
+"drifting",
+"pace-fast",
+"link-play"
+],
+"length": [
+"medium"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q591378": {
+"system": "psx",
+"title": "Final Fantasy Tactics",
+"must": [
+"rpg",
+"tactics-rpg",
+"character-builds",
+"story-driven",
+"fantasy",
+"dpad-friendly",
+"pace-calm"
+],
+"ok": [
+"strategy",
+"turn-based-strategy",
+"party-building",
+"grinding",
+"dark",
+"historical",
+"permadeath",
+"lore",
+"epic",
+"military",
+"pace-measured",
+"turn-based-combat"
+],
+"length": [
+"long",
+"epic"
+],
+"session": "sitdown",
+"difficulty": [
+"hard",
+"moderate"
+],
+"text_heavy": true
+},
+"Q626822": {
+"system": "megadrive",
+"title": "Phantasy Star IV",
+"must": [
+"rpg",
+"jrpg",
+"turn-based-combat",
+"random-encounters",
+"sci-fi",
+"story-driven",
+"dpad-friendly"
+],
+"ok": [
+"party-building",
+"fantasy",
+"epic",
+"grinding",
+"lore",
+"pace-measured",
+"anime",
+"combos",
+"pace-calm"
+],
+"length": [
+"long",
+"medium"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": true
+},
+"Q647249": {
+"system": "gb",
+"title": "Super Mario Land",
+"must": [
+"platformer",
+"2d-platformer",
+"dpad-friendly",
+"cartoon"
+],
+"ok": [
+"collectibles",
+"pace-fast",
+"pace-measured",
+"fantasy",
+"cute",
+"precise-timing",
+"pass-and-play",
+"simple-controls",
+"cheerful",
+"quirky",
+"action",
+"shmup"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"moderate",
+"easy"
+],
+"text_heavy": false
+},
+"Q6507722": {
+"system": "n64",
+"title": "Mario Party",
+"must": [
+"party",
+"minigames",
+"party-4p",
+"board-game",
+"cartoon",
+"couch-versus"
+],
+"ok": [
+"minigame-heavy",
+"funny",
+"cheerful",
+"competitive",
+"tabletop",
+"pass-and-play",
+"needs-analog",
+"cute"
+],
+"length": [
+"short",
+"endless"
+],
+"session": null,
+"difficulty": [
+"easy"
+],
+"text_heavy": false
+},
+"Q6582527": {
+"system": "psx",
+"title": "Metal Gear Solid",
+"must": [
+"action-adventure",
+"stealth",
+"cinematic",
+"story-driven",
+"military",
+"tense"
+],
+"ok": [
+"third-person-shooter",
+"sci-fi",
+"dark",
+"gritty",
+"stylish",
+"lore",
+"pace-measured",
+"dpad-friendly",
+"shooter"
+],
+"length": [
+"medium",
+"short"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": true
+},
+"Q7146181": {
+"system": "snes",
+"title": "Harvest Moon",
+"must": [
+"life-sim",
+"farming",
+"cosy",
+"pace-calm",
+"dpad-friendly"
+],
+"ok": [
+"simulation",
+"cheerful",
+"cute",
+"dating-sim",
+"grinding"
+],
+"length": [
+"endless",
+"long"
+],
+"session": null,
+"difficulty": [
+"easy"
+],
+"text_heavy": false
+},
+"Q719176": {
+"system": "psx",
+"title": "Crash Bandicoot",
+"must": [
+"platformer",
+"3d-platformer",
+"cartoon",
+"dpad-friendly"
+],
+"ok": [
+"pace-fast",
+"funny",
+"collectibles",
+"precise-timing",
+"cheerful",
+"2d-platformer"
+],
+"length": [
+"medium",
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"hard",
+"moderate"
+],
+"text_heavy": false
+},
+"Q71936": {
+"system": "wii",
+"title": "Wii Sports",
+"must": [
+"sports",
+"individual-sports",
+"motion-controls",
+"party-4p",
+"couch-versus",
+"simple-controls"
+],
+"ok": [
+"team-sports",
+"fitness",
+"cheerful",
+"competitive",
+"pass-and-play"
+],
+"length": [
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"easy"
+],
+"text_heavy": false
+},
+"Q733992": {
+"system": "psx",
+"title": "Resident Evil 2",
+"must": [
+"survival-horror",
+"horror-setting",
+"scary",
+"tense"
+],
+"ok": [
+"action-adventure",
+"third-person-shooter",
+"story-driven",
+"dark",
+"gritty",
+"pace-measured",
+"dpad-friendly",
+"multiple-endings",
+"urban-crime",
+"shooter",
+"cinematic"
+],
+"length": [
+"short",
+"medium"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q752835": {
+"system": "ps2",
+"title": "Silent Hill 2",
+"must": [
+"survival-horror",
+"horror-setting",
+"scary",
+"dark",
+"story-driven"
+],
+"ok": [
+"action-adventure",
+"melancholic",
+"mysterious",
+"tense",
+"multiple-endings",
+"cinematic",
+"pace-calm",
+"pace-measured",
+"needs-analog",
+"lore"
+],
+"length": [
+"short",
+"medium"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q753164": {
+"system": "psx",
+"title": "Silent Hill",
+"must": [
+"survival-horror",
+"horror-setting",
+"scary",
+"dark",
+"multiple-endings"
+],
+"ok": [
+"action-adventure",
+"tense",
+"mysterious",
+"story-driven",
+"dpad-friendly",
+"pace-measured",
+"cinematic"
+],
+"length": [
+"short",
+"medium"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q761815": {
+"system": "snes",
+"title": "Chrono Trigger",
+"must": [
+"rpg",
+"jrpg",
+"atb",
+"time-travel",
+"multiple-endings",
+"story-driven",
+"fantasy",
+"epic",
+"dpad-friendly",
+"pace-measured"
+],
+"ok": [
+"turn-based-combat",
+"party-building",
+"side-quests",
+"sci-fi",
+"anime",
+"lore",
+"melancholic",
+"cheerful",
+"character-builds",
+"grinding",
+"combos",
+"pace-calm"
+],
+"length": [
+"long"
+],
+"session": "sitdown",
+"difficulty": [
+"easy",
+"moderate"
+],
+"text_heavy": true
+},
+"Q775889": {
+"system": "ps2",
+"title": "Dynasty Warriors 4",
+"must": [
+"hack-and-slash",
+"historical",
+"couch-coop"
+],
+"ok": [
+"action",
+"action-adventure",
+"strategy",
+"military",
+"epic",
+"grinding",
+"simple-controls",
+"pace-fast",
+"character-builds",
+"needs-analog",
+"combos"
+],
+"length": [
+"medium",
+"long"
+],
+"session": null,
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q81777": {
+"system": "saturn",
+"title": "Panzer Dragoon Saga",
+"must": [
+"rpg",
+"story-driven"
+],
+"ok": [
+"jrpg",
+"atb",
+"random-encounters",
+"fantasy",
+"sci-fi",
+"epic",
+"melancholic",
+"mysterious",
+"lore",
+"cinematic",
+"dpad-friendly",
+"post-apocalyptic",
+"pace-calm"
+],
+"length": [
+"long",
+"medium"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": null
+},
+"Q83265": {
+"system": "ps2",
+"title": "Grand Theft Auto: San Andreas",
+"must": [
+"action-adventure",
+"open-world",
+"urban-crime",
+"gritty",
+"side-quests"
+],
+"ok": [
+"third-person-shooter",
+"minigame-heavy",
+"story-driven",
+"cinematic",
+"funny",
+"police-chases",
+"needs-analog",
+"grinding",
+"couch-coop",
+"dark",
+"racing",
+"pace-fast",
+"character-builds"
+],
+"length": [
+"epic",
+"long"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q840121": {
+"system": "wii",
+"title": "Wii Fit",
+"must": [
+"sports",
+"fitness",
+"motion-controls"
+],
+"ok": [
+"pace-calm",
+"cosy",
+"simple-controls",
+"cheerful",
+"educational",
+"minigames"
+],
+"length": [
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"easy"
+],
+"text_heavy": false
+},
+"Q840889": {
+"system": "ps2",
+"title": "Devil May Cry",
+"must": [
+"hack-and-slash",
+"combos",
+"stylish",
+"pace-fast"
+],
+"ok": [
+"action-adventure",
+"action",
+"pace-frantic",
+"horror-setting",
+"dark",
+"fantasy",
+"adrenaline",
+"needs-analog",
+"score-attack",
+"precise-timing"
+],
+"length": [
+"short",
+"medium"
+],
+"session": null,
+"difficulty": [
+"hard",
+"brutal"
+],
+"text_heavy": false
+},
+"Q845695": {
+"system": "ps2",
+"title": "Gran Turismo 4",
+"must": [
+"racing",
+"sim-racing",
+"car-tuning",
+"real-world-sport"
+],
+"ok": [
+"simulation",
+"pace-measured",
+"pace-fast",
+"grinding",
+"collectibles",
+"competitive",
+"couch-versus",
+"needs-analog",
+"precise-timing",
+"drifting"
+],
+"length": [
+"epic",
+"endless",
+"long"
+],
+"session": null,
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+},
+"Q846051": {
+"system": "ps2",
+"title": "Shadow of the Colossus",
+"must": [
+"action-adventure",
+"melancholic",
+"epic",
+"needs-analog",
+"fantasy"
+],
+"ok": [
+"mysterious",
+"open-world",
+"pace-measured",
+"cinematic",
+"story-driven",
+"puzzle"
+],
+"length": [
+"medium",
+"short"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q849328": {
+"system": "nes",
+"title": "Contra",
+"must": [
+"shooter",
+"run-and-gun",
+"couch-coop",
+"sci-fi",
+"pace-frantic",
+"dpad-friendly"
+],
+"ok": [
+"action",
+"platformer",
+"adrenaline",
+"gritty",
+"precise-timing",
+"military",
+"pace-fast"
+],
+"length": [
+"short"
+],
+"session": "pickup",
+"difficulty": [
+"hard",
+"brutal"
+],
+"text_heavy": false
+},
+"Q852563": {
+"system": "gamecube",
+"title": "The Legend of Zelda: The Wind Waker",
+"must": [
+"action-adventure",
+"fantasy",
+"cartoon",
+"cheerful",
+"needs-analog"
+],
+"ok": [
+"open-world",
+"side-quests",
+"collectibles",
+"story-driven",
+"stylish",
+"cute",
+"pace-measured",
+"epic"
+],
+"length": [
+"long"
+],
+"session": "sitdown",
+"difficulty": [
+"easy",
+"moderate"
+],
+"text_heavy": false
+},
+"Q853143": {
+"system": "snes",
+"title": "Super Mario World",
+"must": [
+"platformer",
+"2d-platformer",
+"dpad-friendly",
+"cartoon",
+"cheerful"
+],
+"ok": [
+"collectibles",
+"pace-fast",
+"pace-measured",
+"fantasy",
+"cute",
+"precise-timing",
+"pass-and-play",
+"simple-controls"
+],
+"length": [
+"short",
+"medium"
+],
+"session": "pickup",
+"difficulty": [
+"moderate",
+"easy"
+],
+"text_heavy": false
+},
+"Q858391": {
+"system": "psx",
+"title": "Spyro the Dragon",
+"must": [
+"platformer",
+"3d-platformer",
+"collectathon",
+"cute",
+"fantasy",
+"collectibles"
+],
+"ok": [
+"cheerful",
+"cartoon",
+"needs-analog",
+"dpad-friendly",
+"pace-measured",
+"funny"
+],
+"length": [
+"medium"
+],
+"session": "pickup",
+"difficulty": [
+"easy"
+],
+"text_heavy": false
+},
+"Q858564": {
+"system": "nds",
+"title": "Mario Kart DS",
+"must": [
+"racing",
+"kart-racing",
+"cartoon",
+"link-play"
+],
+"ok": [
+"pace-fast",
+"pace-frantic",
+"competitive",
+"cheerful",
+"funny",
+"drifting",
+"arcade-racing",
+"cute",
+"fantasy",
+"dpad-friendly",
+"two-screens",
+"score-attack"
+],
+"length": [
+"short",
+"medium"
+],
+"session": "pickup",
+"difficulty": [
+"easy",
+"moderate"
+],
+"text_heavy": false
+},
+"Q864389": {
+"system": "nds",
+"title": "Nintendogs",
+"must": [
+"life-sim",
+"virtual-pet",
+"touch-screen",
+"cute",
+"cosy",
+"pace-calm"
+],
+"ok": [
+"cheerful",
+"simulation",
+"link-play",
+"simple-controls"
+],
+"length": [
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"easy"
+],
+"text_heavy": false
+},
+"Q866397": {
+"system": "ps2",
+"title": "Need for Speed: Hot Pursuit 2",
+"must": [
+"racing",
+"arcade-racing",
+"police-chases",
+"pace-fast"
+],
+"ok": [
+"traffic",
+"pace-frantic",
+"adrenaline",
+"couch-versus",
+"real-world-sport",
+"dpad-friendly",
+"needs-analog",
+"competitive",
+"stylish"
+],
+"length": [
+"medium"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q870981": {
+"system": "n64",
+"title": "Super Smash Bros.",
+"must": [
+"fighting",
+"platform-fighter",
+"couch-versus",
+"party-4p",
+"competitive",
+"cartoon"
+],
+"ok": [
+"pace-fast",
+"pace-frantic",
+"cheerful",
+"funny",
+"simple-controls",
+"needs-analog",
+"precise-timing",
+"collectibles",
+"action",
+"dpad-friendly"
+],
+"length": [
+"short",
+"endless"
+],
+"session": "pickup",
+"difficulty": [
+"moderate"
+],
+"text_heavy": false
+},
+"Q944320": {
+"system": "psx",
+"title": "Gran Turismo",
+"must": [
+"racing",
+"sim-racing",
+"car-tuning",
+"real-world-sport"
+],
+"ok": [
+"simulation",
+"pace-measured",
+"pace-fast",
+"grinding",
+"collectibles",
+"competitive",
+"couch-versus",
+"needs-analog",
+"dpad-friendly",
+"precise-timing"
+],
+"length": [
+"long",
+"epic",
+"endless"
+],
+"session": null,
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+},
+"Q953229": {
+"system": "gba",
+"title": "Advance Wars",
+"must": [
+"strategy",
+"turn-based-strategy",
+"military",
+"pace-calm",
+"dpad-friendly",
+"pass-and-play"
+],
+"ok": [
+"cheerful",
+"cartoon",
+"anime",
+"story-driven",
+"competitive",
+"link-play",
+"tactics-rpg",
+"turn-based-combat",
+"couch-versus"
+],
+"length": [
+"long",
+"medium"
+],
+"session": "sitdown",
+"difficulty": [
+"moderate",
+"hard"
+],
+"text_heavy": false
+}
+}

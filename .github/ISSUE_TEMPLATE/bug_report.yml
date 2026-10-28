@@ -1,0 +1,74 @@
+name: Bug report
+description: Something does not work as the manual says.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing. Please do not attach or link ROMs, BIOS files or anything you got them from, and remove
+        private data (Wi-Fi names, addresses, tailnet names, serial numbers) from logs and screenshots.
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device
+      options:
+        - Retroid Pocket Mini V2
+        - Another device (not supported, but tell us)
+        - Virtual device (scripts/vdev.sh)
+    validations:
+      required: true
+  - type: input
+    id: rocknix
+    attributes:
+      label: ROCKNIX version
+      description: "In the report file's system.txt, or `cat /etc/os-release` over SSH, or the version EmulationStation showed before. For example 20261001."
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: pocket-ui version
+      description: "Settings → System → About (the report file has it too). For a build of your own: the commit."
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it?
+      options:
+        - SD card image
+        - Manual install on a ROCKNIX card (docs/INSTALL-DUAL-BOOT.md, appendix)
+        - Developer deploy (scripts/dev.sh deploy)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System and emulator, if a game is involved
+      description: "For example: SNES on pocket-core, PS2 on ARMSX2, GBA on RetroArch. Name the game, but do not link it."
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. On Home, press ...
+        2. ...
+  - type: textarea
+    id: report
+    attributes:
+      label: Report file
+      description: "On the Pocket: Settings → System → About → Report a problem. It saves `report-<date>-<time>.zip` in the `reports` folder of the games share (`roms/reports` on the SD card), with versions, logs and settings, and with Wi-Fi names, addresses, accounts and game names left out (the manual's troubleshooting page, \"Report a problem\"). Drag the zip into this box."
+      placeholder: Drop report-2026-10-26-140507.zip here
+  - type: textarea
+    id: log
+    attributes:
+      label: Log, if you could not make a report file
+      description: "The logs from `/storage/.config/pocket-ui/logs/` (Settings → System → About shows the folder; the manual's troubleshooting page, \"What to send when something crashes\", says which file). Check them for private data first."
+      render: text

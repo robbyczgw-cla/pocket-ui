@@ -1,0 +1,1604 @@
+{
+ "version": 1,
+ "generated": "2026-10-22",
+ "license": "Facts from Wikidata (CC0), Wikipedia (CC BY-SA, facts only, summaries written fresh) and manufacturer sources listed per system",
+ "systems": [
+  {
+   "id": "3do",
+   "name": "3DO Interactive Multiplayer",
+   "aka": [
+    "3DO"
+   ],
+   "maker": "The 3DO Company; built by Panasonic, GoldStar, Sanyo and Creative",
+   "kind": "home",
+   "generation": 5,
+   "released": {
+    "NA": "1993-10-04",
+    "JP": "1994-03-20",
+    "EU": "1994-06-10",
+    "KR": "1994-12-03"
+   },
+   "discontinued": "1996",
+   "units_sold": {
+    "value": 2000000,
+    "note": "Wikipedia infobox: 2 million units (cited); no as-of date."
+   },
+   "launch_price": {
+    "NA": "US$699.99",
+    "JP": "¥79,800"
+   },
+   "cpu": "ARM60 32-bit RISC, 12.5 MHz",
+   "gpu": "Madam graphics accelerator",
+   "memory": "2 MB RAM, 1 MB VRAM",
+   "media": "CD-ROM",
+   "summary": "A console format from The 3DO Company, started by EA's founder Trip Hawkins and built under licence by Panasonic, GoldStar, Sanyo and others. Its high price kept it behind Sega and Sony.",
+   "lines": {
+    "headline": "3DO · 1993 · fifth generation",
+    "released": "1993 NA · 1994 JP/EU/KR",
+    "ended": "1996",
+    "inside": "ARM60 12.5 MHz · Madam",
+    "sold": "2 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/3DO",
+    "https://www.wikidata.org/wiki/Q229429"
+   ]
+  },
+  {
+   "id": "3ds",
+   "name": "Nintendo 3DS",
+   "aka": [
+    "iQue 3DS (China)"
+   ],
+   "maker": "Nintendo",
+   "kind": "handheld",
+   "generation": 8,
+   "released": {
+    "JP": "2011-02-26",
+    "EU": "2011-03-25",
+    "NA": "2011-03-27",
+    "AU": "2011-03-31"
+   },
+   "discontinued": "2020-09-16",
+   "units_sold": {
+    "value": 75940000,
+    "as_of": "2026-06-30",
+    "note": "Nintendo IR 'Dedicated Video Game Sales Units' page (as of June 30, 2026): Nintendo 3DS hardware 75.94 million, worldwide consolidated, life-to-date (covers the whole 3DS family). Wikipedia infobox lists same figure as units shipped (as of 2022-09-30)."
+   },
+   "launch_price": {
+    "JP": "¥25,000",
+    "NA": "US$249.99"
+   },
+   "cpu": "Dual-core ARM11 @ 268 MHz + ARM9",
+   "gpu": "DMP PICA200 @ 268 MHz",
+   "memory": "128 MB FCRAM, 6 MB VRAM",
+   "media": "3DS Game Card; SD card for digital",
+   "display": "Top 3.53\" 3D LCD 800x240 (400x240 per eye); bottom 3.00\" touch 320x240",
+   "predecessor": "Nintendo DS",
+   "successor": "Nintendo Switch",
+   "summary": "The successor to the DS, whose upper screen shows 3D without glasses. The family sold about 75.9 million units before it ended in 2020.",
+   "lines": {
+    "headline": "Nintendo · 2011 · eighth generation",
+    "released": "2011 JP/NA/EU/AU",
+    "ended": "2020",
+    "inside": "ARM11 268 MHz · PICA200",
+    "sold": "75.9 million (all models)"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Nintendo_3DS",
+    "https://www.nintendo.co.jp/ir/en/finance/hard_soft/index.html",
+    "https://www.wikidata.org/wiki/Q203597"
+   ]
+  },
+  {
+   "id": "atari2600",
+   "name": "Atari 2600",
+   "aka": [
+    "Atari Video Computer System",
+    "Atari VCS"
+   ],
+   "maker": "Atari, Inc.",
+   "kind": "home",
+   "generation": 2,
+   "released": {
+    "NA": "1977-09"
+   },
+   "discontinued": "1992",
+   "units_sold": {
+    "value": 30000000,
+    "note": "Wikipedia lead/infobox: estimated 30 million across the system's lifetime (infobox cites a BusinessWeek piece, archived 2007-05-09). No as-of date."
+   },
+   "launch_price": {
+    "NA": "US$199"
+   },
+   "cpu": "MOS Technology 6507, 1.19 MHz",
+   "gpu": "Television Interface Adaptor (TIA)",
+   "memory": "128 bytes RAM",
+   "media": "ROM cartridge",
+   "predecessor": "Atari Home Pong / Atari Video Pinball",
+   "successor": "Atari 5200",
+   "summary": "Atari's cartridge console from 1977, which made swappable games a household thing. It stayed in production until 1992.",
+   "lines": {
+    "headline": "Atari · 1977 · second generation",
+    "released": "1977 NA",
+    "ended": "1992",
+    "inside": "MOS 6507 1.19 MHz · TIA",
+    "sold": "30 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/w/api.php?action=parse&page=Atari_2600&prop=wikitext&section=0&format=json",
+    "https://en.wikipedia.org/wiki/Atari_2600",
+    "https://www.wikidata.org/wiki/Q206261"
+   ]
+  },
+  {
+   "id": "atari7800",
+   "name": "Atari 7800",
+   "aka": [
+    "Atari 7800 ProSystem"
+   ],
+   "maker": "Atari Corporation",
+   "kind": "home",
+   "generation": 3,
+   "released": {
+    "NA": "1986-05",
+    "EU": "1987"
+   },
+   "discontinued": "1992",
+   "launch_price": {
+    "NA": "US$140"
+   },
+   "cpu": "Atari SALLY, 1.19–1.79 MHz",
+   "gpu": "MARIA, 7.16 MHz",
+   "memory": "4 KB RAM",
+   "media": "ROM cartridge",
+   "predecessor": "Atari 2600, Atari 5200",
+   "summary": "Atari's successor to the 2600 and 5200, designed by General Computer Corporation. It plays almost all 2600 cartridges, which made it the first console that could run its predecessor's games.",
+   "lines": {
+    "headline": "Atari · 1986 · third generation",
+    "released": "1986 NA · 1987 EU",
+    "ended": "1992",
+    "inside": "SALLY 1.79 MHz · MARIA"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Atari_7800",
+    "https://www.wikidata.org/wiki/Q753600"
+   ]
+  },
+  {
+   "id": "atarijaguar",
+   "name": "Atari Jaguar",
+   "maker": "Atari Corporation",
+   "kind": "home",
+   "generation": 5,
+   "released": {
+    "NA": "1993-11-23",
+    "EU": "1994-06-27",
+    "JP": "1994-12-08"
+   },
+   "discontinued": "1996",
+   "units_sold": {
+    "value": 250000,
+    "note": "Wikipedia infobox: 250,000 (cited); no as-of date."
+   },
+   "cpu": "Motorola 68000, 13.295 MHz; two custom RISC processors, 26.591 MHz",
+   "gpu": "Tom, 26.591 MHz",
+   "memory": "2 MB RAM",
+   "media": "ROM cartridge; CD-ROM with the Jaguar CD",
+   "predecessor": "Atari 7800",
+   "summary": "Atari's last console, sold as the first 64-bit system, a claim others disputed. Its many chips made it hard to program, and 63 licensed games came out.",
+   "lines": {
+    "headline": "Atari · 1993 · fifth generation",
+    "released": "1993 NA · 1994 EU/JP",
+    "ended": "1996",
+    "inside": "Tom 26.6 MHz · 68000",
+    "sold": "250,000"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Atari_Jaguar",
+    "https://www.wikidata.org/wiki/Q650601"
+   ]
+  },
+  {
+   "id": "atarilynx",
+   "name": "Atari Lynx",
+   "maker": "Atari Corporation",
+   "kind": "handheld",
+   "generation": 4,
+   "released": {
+    "NA": "1989-09-01",
+    "EU": "1990",
+    "JP": "1990"
+   },
+   "discontinued": "1995",
+   "units_sold": {
+    "value": 2000000,
+    "note": "Wikipedia infobox: 2 million (cites a book); no as-of date."
+   },
+   "launch_price": {
+    "NA": "US$179.99"
+   },
+   "cpu": "VLSI VL65NC02 (65C02) in the Mikey chip, 4 MHz",
+   "gpu": "Suzy, 16-bit custom chip",
+   "memory": "64 KB RAM",
+   "media": "ROM cartridge",
+   "display": "3.5-inch backlit colour LCD, 160×102",
+   "summary": "The first handheld with a colour screen, designed at Epyx by two of the Amiga's designers. A smaller Lynx II followed in 1991.",
+   "lines": {
+    "headline": "Atari · 1989 · fourth generation",
+    "released": "1989 NA · 1990 EU/JP",
+    "ended": "1995",
+    "inside": "65C02 4 MHz · Suzy",
+    "sold": "2 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Atari_Lynx",
+    "https://www.wikidata.org/wiki/Q753657"
+   ]
+  },
+  {
+   "id": "colecovision",
+   "name": "ColecoVision",
+   "aka": [
+    "CBS ColecoVision (Europe)"
+   ],
+   "maker": "Coleco",
+   "kind": "home",
+   "generation": 2,
+   "released": {
+    "NA": "1982-08",
+    "EU": "1983-07"
+   },
+   "discontinued": "1985-08",
+   "units_sold": {
+    "value": 2000000,
+    "as_of": "1983",
+    "note": "Wikipedia infobox: more than 2 million (1982–83)."
+   },
+   "cpu": "Zilog Z80A, 3.58 MHz",
+   "gpu": "TMS9928A (NTSC), TMS9929A (PAL)",
+   "memory": "1 KB RAM, 16 KB video RAM, 8 KB ROM",
+   "media": "ROM cartridge",
+   "summary": "Coleco's console, closer to the arcades than its rivals, with the first home Donkey Kong in the box. An expansion module plays Atari 2600 cartridges.",
+   "lines": {
+    "headline": "Coleco · 1982 · second generation",
+    "released": "1982 NA · 1983 EU",
+    "ended": "1985",
+    "inside": "Z80A 3.58 MHz · TMS9928A",
+    "sold": "over 2 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/ColecoVision",
+    "https://www.wikidata.org/wiki/Q1046862"
+   ]
+  },
+  {
+   "id": "dreamcast",
+   "name": "Dreamcast",
+   "aka": [],
+   "maker": "Sega",
+   "kind": "home",
+   "generation": 6,
+   "released": {
+    "JP": "1998-11-27",
+    "NA": "1999-09-09",
+    "EU": "1999-10-14",
+    "AU": "1999-11-30"
+   },
+   "discontinued": "2001-03-31",
+   "units_sold": {
+    "value": 8200000,
+    "as_of": "2001-03-31",
+    "note": "Sega Annual Report 2001 (FY ended Mar 2001): cumulative 8.20 million hardware units since launch (JP, US, Europe, Asia). Wikipedia infobox gives 9.13 million (Routledge), a later cumulative estimate; some sources say 10.6 million."
+   },
+   "launch_price": {
+    "JP": "¥29,800",
+    "NA": "US$199",
+    "UK": "£200"
+   },
+   "cpu": "Hitachi SH-4, 200 MHz",
+   "gpu": "NEC PowerVR2, 100 MHz",
+   "memory": "16 MB main, 8 MB video, 2 MB sound",
+   "media": "GD-ROM (~1 GB), CD-ROM",
+   "predecessor": "Sega Saturn",
+   "summary": "Sega's last home console and the first of its generation, with a built-in modem. Sega ended production in 2001 and became a game publisher.",
+   "lines": {
+    "headline": "Sega · 1998 · sixth generation",
+    "released": "1998 JP · 1999 NA/EU/AU",
+    "ended": "2001",
+    "inside": "SH-4 200 MHz · PowerVR2",
+    "sold": "8.2 million by March 2001 (Sega)"
+   },
+   "sources": [
+    "https://en.wikipedia.org/w/api.php?action=parse&page=Dreamcast&prop=wikitext&section=0&format=json",
+    "https://en.wikipedia.org/wiki/Dreamcast",
+    "https://segaretro.org/Sega_Dreamcast",
+    "https://segaretro.org/images/8/80/AnnualReport2001_English.pdf",
+    "https://web.archive.org/web/2019/https://sega.jp/history/hard/dreamcast/",
+    "https://www.wikidata.org/wiki/Q184198"
+   ]
+  },
+  {
+   "id": "fds",
+   "name": "Famicom Disk System",
+   "maker": "Nintendo",
+   "kind": "add-on",
+   "generation": 3,
+   "released": {
+    "JP": "1986-02-21"
+   },
+   "discontinued": "1993",
+   "units_sold": {
+    "value": 4400000,
+    "as_of": "1993",
+    "note": "Wikipedia: 4.4 million units when sales of the device ended in 1993."
+   },
+   "memory": "32 KB disk cache, 8 KB game RAM",
+   "media": "Disk Card (112 KB floppy disk)",
+   "summary": "Nintendo's disk drive for the Famicom. Games came on rewritable Disk Cards that shops rewrote with new games for a small fee, and it adds a sound channel.",
+   "lines": {
+    "headline": "Nintendo · 1986 · third generation",
+    "released": "1986 JP",
+    "ended": "1993",
+    "inside": "Ricoh 2C33 · 32 KB",
+    "sold": "4.4 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Famicom_Disk_System",
+    "https://www.wikidata.org/wiki/Q135321"
+   ]
+  },
+  {
+   "id": "gamecube",
+   "name": "GameCube",
+   "aka": [
+    "Nintendo GameCube",
+    "ニンテンドーゲームキューブ"
+   ],
+   "maker": "Nintendo",
+   "kind": "home",
+   "generation": 6,
+   "released": {
+    "JP": "2001-09-14",
+    "NA": "2001-11-18",
+    "EU": "2002-05-03",
+    "AU": "2002-05-17"
+   },
+   "discontinued": "2007-02",
+   "units_sold": {
+    "value": 21740000,
+    "as_of": "2008-03-31",
+    "note": "Nintendo lifetime hardware shipments (4.04 M Japan, 12.94 M Americas, 4.77 M other); last increase in FY3/2008, unchanged in the FY3/2016 and FY3/2026 tables"
+   },
+   "launch_price": {
+    "JP": "¥25,000",
+    "NA": "US$199",
+    "EU": "€199"
+   },
+   "cpu": "IBM Gekko, 486 MHz",
+   "gpu": "ATI Flipper, 162 MHz",
+   "memory": "24 MB main, 3 MB video, 16 MB audio/I/O",
+   "media": "GameCube Game Disc (8 cm optical disc)",
+   "predecessor": "Nintendo 64",
+   "successor": "Wii",
+   "summary": "Nintendo's first home console to use optical discs, small 8 cm ones. A compact sixth-generation machine that sold about 21.7 million units.",
+   "lines": {
+    "headline": "Nintendo · 2001 · sixth generation",
+    "released": "2001 JP/NA · 2002 EU/AU",
+    "ended": "2007",
+    "inside": "Gekko 486 MHz · Flipper",
+    "sold": "21.7 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/GameCube",
+    "https://www.nintendo.co.jp/ir/finance/historical_data/xls/consolidated_sales_e2603.xlsx",
+    "https://www.nintendo.co.jp/ir/library/historical_data/pdf/consolidated_sales_e1603.pdf",
+    "https://www.wikidata.org/wiki/Q182172"
+   ]
+  },
+  {
+   "id": "gamegear",
+   "name": "Game Gear",
+   "aka": [],
+   "maker": "Sega",
+   "kind": "handheld",
+   "generation": 4,
+   "released": {
+    "JP": "1990-10-06",
+    "NA": "1991-04",
+    "EU": "1991-06",
+    "AU": "1992"
+   },
+   "discontinued": "1997-04-30",
+   "units_sold": {
+    "value": 14000000,
+    "note": "Approximately 14 million units, as stated in the Wikipedia article"
+   },
+   "launch_price": {
+    "JP": "¥19,800",
+    "NA": "US$149.99",
+    "UK": "£99.99"
+   },
+   "cpu": "Zilog Z80A, 3.58 MHz",
+   "gpu": "Sega custom VDP",
+   "memory": "8 KB RAM, 16 KB VRAM",
+   "media": "ROM cartridge",
+   "display": "3.2 in backlit LCD, 160 × 144 px",
+   "successor": "Genesis Nomad",
+   "summary": "Sega's colour handheld, built on Master System hardware and aimed at the Game Boy. Its backlit screen was a strength, though it used up six AA batteries quickly.",
+   "lines": {
+    "headline": "Sega · 1990 · fourth generation",
+    "released": "1990 JP · 1991 NA/EU · 1992 AU",
+    "ended": "1997",
+    "inside": "Z80A 3.58 MHz · Sega VDP",
+    "sold": "14 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/w/api.php?action=parse&page=Game_Gear&prop=wikitext&section=0&format=json",
+    "https://en.wikipedia.org/wiki/Game_Gear",
+    "https://segaretro.org/Sega_Game_Gear",
+    "https://web.archive.org/web/2019/https://sega.jp/history/hard/gamegear/",
+    "https://www.wikidata.org/wiki/Q751719"
+   ]
+  },
+  {
+   "id": "gb",
+   "name": "Game Boy",
+   "aka": [
+    "DMG-01",
+    "Mini Comboy (KR)"
+   ],
+   "maker": "Nintendo",
+   "kind": "handheld",
+   "generation": 4,
+   "released": {
+    "JP": "1989-04-21",
+    "NA": "1989-07-31",
+    "EU": "1990-09-28"
+   },
+   "discontinued": "2003-03",
+   "units_sold": {
+    "value": 118690000,
+    "as_of": "2026-03-31",
+    "note": "Nintendo reports Game Boy and Game Boy Color together (all variants): 32.47 M Japan, 44.06 M Americas, 42.16 M other. Not a Game Boy-only number; Wikipedia gives 64.42 M for the monochrome models alone in late 1998 (cited to Nintendo data)"
+   },
+   "launch_price": {
+    "JP": "¥12,500"
+   },
+   "cpu": "Sharp LR35902 (SM83), 4.2 MHz",
+   "memory": "8 KB RAM, 8 KB VRAM",
+   "media": "Game Pak (ROM cartridge)",
+   "display": "2.5 in reflective STN LCD, 160 × 144 px, 4 shades",
+   "predecessor": "Game & Watch",
+   "successor": "Game Boy Color",
+   "summary": "Nintendo's first handheld with swappable cartridges, designed under Gunpei Yokoi. Simple, tough and frugal with batteries, it ran from 1989 to 2003.",
+   "lines": {
+    "headline": "Nintendo · 1989 · fourth generation",
+    "released": "1989 JP/NA · 1990 EU",
+    "ended": "2003",
+    "inside": "Sharp SM83 4.2 MHz",
+    "sold": "118.7 million (with Game Boy Color)"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Game_Boy",
+    "https://www.nintendo.co.jp/ir/finance/historical_data/xls/consolidated_sales_e2603.xlsx",
+    "https://www.nintendo.co.jp/ir/library/historical_data/pdf/consolidated_sales_e1603.pdf",
+    "https://www.nintendo.co.jp/n02/dmg/hardware/gb/index.html",
+    "https://www.wikidata.org/wiki/Q186437"
+   ]
+  },
+  {
+   "id": "gba",
+   "name": "Game Boy Advance",
+   "aka": [
+    "GBA",
+    "iQue Game Boy Advance (CN)"
+   ],
+   "maker": "Nintendo",
+   "kind": "handheld",
+   "generation": 6,
+   "released": {
+    "JP": "2001-03-21",
+    "NA": "2001-06-11",
+    "EU": "2001-06-22"
+   },
+   "discontinued": "2010",
+   "units_sold": {
+    "value": 81510000,
+    "as_of": "2026-03-31",
+    "note": "Nintendo lifetime hardware shipments across all GBA models incl. SP and Micro (16.96 M Japan, 41.64 M Americas, 22.91 M other); same 8,151 x 10,000 in the e1603 and e2603 tables"
+   },
+   "launch_price": {
+    "NA": "US$99.99"
+   },
+   "cpu": "ARM7TDMI 16.8 MHz + SM83 (GB/GBC mode)",
+   "memory": "288 KB RAM, 98 KB VRAM",
+   "media": "Game Pak (also plays GB and GBC Game Paks)",
+   "display": "2.9 in reflective TFT LCD, 240 × 160 px",
+   "predecessor": "Game Boy Color",
+   "successor": "Nintendo DS",
+   "summary": "Nintendo's 32-bit handheld, which brought near-SNES graphics to a pocket device. It also plays Game Boy and Game Boy Color games.",
+   "lines": {
+    "headline": "Nintendo · 2001 · sixth generation",
+    "released": "2001 JP/NA/EU",
+    "ended": "2010",
+    "inside": "ARM7TDMI 16.8 MHz",
+    "sold": "81.5 million (all models)"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Game_Boy_Advance",
+    "https://web.archive.org/web/20200915010832/https://www.ign.com/articles/2013/10/15/the-real-cost-of-gaming-inflation-time-and-purchasing-power",
+    "https://www.nintendo.co.jp/ir/finance/historical_data/xls/consolidated_sales_e2603.xlsx",
+    "https://www.nintendo.co.jp/ir/library/historical_data/pdf/consolidated_sales_e1603.pdf",
+    "https://www.wikidata.org/wiki/Q188642"
+   ]
+  },
+  {
+   "id": "gbc",
+   "name": "Game Boy Color",
+   "aka": [
+    "GBC"
+   ],
+   "maker": "Nintendo",
+   "kind": "handheld",
+   "generation": 5,
+   "released": {
+    "JP": "1998-10-21",
+    "NA": "1998-11-18",
+    "EU": "1998-11-23",
+    "AU": "1998-11-27"
+   },
+   "discontinued": "2003-03",
+   "units_sold": null,
+   "launch_price": {
+    "JP": "¥6,800 (excl. tax)",
+    "NA": "US$79.95"
+   },
+   "cpu": "Sharp SM83, 4.2 / 8.4 MHz",
+   "memory": "32 KB RAM, 16 KB VRAM",
+   "media": "Game Boy Color Game Pak (also plays Game Boy Game Pak)",
+   "display": "Reflective TFT LCD, 160 × 144 px, 44 × 40 mm",
+   "predecessor": "Game Boy",
+   "successor": "Game Boy Advance",
+   "summary": "The Game Boy with a colour screen and a faster processor, launched in 1998. It still plays original Game Boy cartridges.",
+   "lines": {
+    "headline": "Nintendo · 1998 · fifth generation",
+    "released": "1998 JP/NA/EU/AU",
+    "ended": "2003",
+    "inside": "Sharp SM83, up to 8.4 MHz",
+    "sold": "118.7 million, counted with the Game Boy"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Game_Boy_Color",
+    "https://www.nintendo.co.jp/n02/dmg/hardware/color/index.html",
+    "https://www.wikidata.org/wiki/Q203992"
+   ]
+  },
+  {
+   "id": "intellivision",
+   "name": "Intellivision",
+   "maker": "Mattel Electronics",
+   "kind": "home",
+   "generation": 2,
+   "released": {
+    "NA": "1979",
+    "JP": "1982"
+   },
+   "discontinued": "1990",
+   "units_sold": {
+    "value": 3750000,
+    "as_of": "1983",
+    "note": "Wikipedia: more than 3.75 million consoles sold through 1983."
+   },
+   "launch_price": {
+    "NA": "US$275",
+    "UK": "£199",
+    "JP": "¥49,800"
+   },
+   "cpu": "General Instrument CP1610",
+   "gpu": "STIC (Standard Television Interface Chip)",
+   "memory": "1 KB RAM, 6 KB ROM",
+   "media": "ROM cartridge",
+   "display": "159×96, 16 colours",
+   "summary": "Mattel's console, known for more realistic sports and strategy games than its rivals. INTV Corporation took it over in 1984 and kept it going until 1990.",
+   "lines": {
+    "headline": "Mattel · 1979 · second generation",
+    "released": "1979 NA · 1982 JP",
+    "ended": "1990",
+    "inside": "GI CP1610 · STIC",
+    "sold": "over 3.75 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Intellivision",
+    "https://www.wikidata.org/wiki/Q1061441"
+   ]
+  },
+  {
+   "id": "mastersystem",
+   "name": "Master System",
+   "aka": [
+    "Sega Mark III (JP original model)",
+    "Samsung Gam*Boy (KR)"
+   ],
+   "maker": "Sega",
+   "kind": "home",
+   "generation": 3,
+   "released": {
+    "JP": "1987-10-18",
+    "NA": "1986-09",
+    "EU": "1987-08",
+    "KR": "1989-04",
+    "BR": "1989-09"
+   },
+   "discontinued": "1996",
+   "units_sold": {
+    "value": 13000000,
+    "note": "Wikipedia infobox/lead: estimated 13 million worldwide (Forster 2005), not counting ~8 million Tectoy variants in Brazil; no as-of date. Sega Retro gives ~20 million (secondary)."
+   },
+   "launch_price": {
+    "JP": "¥16,800 (1987)",
+    "NA": "US$200 (1986)",
+    "EU": "£99.95 (1987)"
+   },
+   "cpu": "Zilog Z80A, 3.58 MHz",
+   "gpu": "Sega VDP",
+   "memory": "8 KB RAM, 16 KB VRAM",
+   "media": "ROM cartridge, Sega Card",
+   "display": "256 × 192, 32 colors on-screen",
+   "predecessor": "SG-1000",
+   "successor": "Sega Genesis",
+   "summary": "Sega's 8-bit console, an export version of the Japanese Mark III. It trailed the NES in Japan and North America but did well in Europe and Brazil.",
+   "lines": {
+    "headline": "Sega · 1986 · third generation",
+    "released": "1986 NA · 1987 JP/EU",
+    "ended": "1996",
+    "inside": "Z80A 3.58 MHz · Sega VDP",
+    "sold": "13 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Master_System",
+    "https://segaretro.org/Sega_Master_System",
+    "https://web.archive.org/web/2019/https://sega.jp/history/hard/mastersystem/"
+   ]
+  },
+  {
+   "id": "megadrive",
+   "name": "Mega Drive",
+   "aka": [
+    "Genesis (North America)",
+    "Super Aladdin Boy (KR)"
+   ],
+   "maker": "Sega",
+   "kind": "home",
+   "generation": 4,
+   "released": {
+    "JP": "1988-10-29",
+    "NA": "1989-08",
+    "EU": "1990-09"
+   },
+   "discontinued": "1997",
+   "units_sold": {
+    "value": 30750000,
+    "note": "Wikipedia: 30.75 million (Sega-produced units, worldwide). Not included: Tectoy ~3M (Brazil), Majesco 1.5M (projected, US). Sega Retro cites ~40M (secondary, interview)."
+   },
+   "launch_price": {
+    "JP": "¥21,000 (1988)",
+    "NA": "US$189 (1989)",
+    "EU": "£189.99 (1990)"
+   },
+   "cpu": "Motorola 68000 7.67 MHz, Zilog Z80 3.58 MHz",
+   "gpu": "Yamaha YM7101 VDP",
+   "memory": "64 KB RAM, 64 KB VRAM, 8 KB audio RAM",
+   "media": "ROM cartridge",
+   "predecessor": "Master System",
+   "successor": "Sega Saturn",
+   "summary": "Sega's 16-bit console, sold as the Genesis in North America. Built around a Motorola 68000, it became Sega's best-selling home console.",
+   "lines": {
+    "headline": "Sega · 1988 · fourth generation",
+    "released": "1988 JP · 1989 NA · 1990 EU",
+    "ended": "1997",
+    "inside": "68000 7.67 MHz + Z80 · YM7101",
+    "sold": "30.8 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Sega_Genesis",
+    "https://segaretro.org/Sega_Mega_Drive",
+    "https://web.archive.org/web/20180322225700/https://sega.jp/history/hard/megadrive/"
+   ]
+  },
+  {
+   "id": "n64",
+   "name": "Nintendo 64",
+   "aka": [
+    "N64",
+    "Ultra 64 (prerelease title)",
+    "Hyundai Comboy 64 (KOR)"
+   ],
+   "maker": "Nintendo",
+   "kind": "home",
+   "generation": 5,
+   "released": {
+    "JP": "1996-06-23",
+    "NA": "1996-09-29",
+    "EU/AU": "1997-03-01",
+    "CHL/BR": "1997-12-10"
+   },
+   "discontinued": "2002",
+   "units_sold": {
+    "value": 32930000,
+    "as_of": "2026-03-31",
+    "note": "Nintendo lifetime hardware shipments (5.54 M Japan, 20.63 M Americas, 6.75 M other); shipments were effectively zero after FY3/2002, so the total has been stable since then"
+   },
+   "launch_price": {
+    "NA": "US$199",
+    "UK": "£249.99"
+   },
+   "cpu": "NEC VR4300, 93.75 MHz",
+   "gpu": "SGI RCP, 62.5 MHz",
+   "memory": "4 MB RDRAM (8 MB with Expansion Pak)",
+   "media": "Game Pak (cartridge); 64DD disc add-on (JP)",
+   "predecessor": "Super Nintendo Entertainment System",
+   "successor": "GameCube",
+   "summary": "Nintendo's last cartridge-based home console and one of the first designed around 3D. Its controller made the analog stick standard for 3D games.",
+   "lines": {
+    "headline": "Nintendo · 1996 · fifth generation",
+    "released": "1996 JP/NA",
+    "ended": "2002",
+    "inside": "VR4300 93.75 MHz · SGI RCP",
+    "sold": "32.9 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Nintendo_64",
+    "https://www.nintendo.co.jp/ir/finance/historical_data/xls/consolidated_sales_e2603.xlsx",
+    "https://www.nintendo.co.jp/ir/library/historical_data/pdf/consolidated_sales_e1603.pdf",
+    "https://www.wikidata.org/wiki/Q184839"
+   ]
+  },
+  {
+   "id": "nds",
+   "name": "Nintendo DS",
+   "aka": [],
+   "maker": "Nintendo",
+   "kind": "handheld",
+   "generation": 7,
+   "released": {
+    "NA": "2004-11-21",
+    "JP": "2004-12-02",
+    "AU": "2005-02-24",
+    "EU": "2005-03-11"
+   },
+   "discontinued": null,
+   "units_sold": {
+    "value": 154020000,
+    "as_of": "2016-03-31 (last published Nintendo figure)",
+    "note": "Nintendo 'Consolidated Sales Transition by Region' (FY3/2016): Nintendo DS family total 154.02M incl. DS Lite, DSi, DSi XL; Nintendo reports hardware shipments"
+   },
+   "launch_price": {
+    "NA": "US$149.99",
+    "JP": "¥15,000",
+    "UK": "£99",
+    "EU": "€149.99"
+   },
+   "cpu": "ARM946E-S 67 MHz + ARM7TDMI 33 MHz",
+   "memory": "4 MB RAM",
+   "media": "Nintendo DS Game Card (plus Game Boy Advance Game Pak slot)",
+   "display": "Two 3-inch TFT LCDs, 256 × 192 px",
+   "predecessor": "Game Boy Advance",
+   "successor": "Nintendo 3DS",
+   "summary": "Nintendo's folding handheld with two screens, the lower one a touchscreen. The DS family sold about 154 million units.",
+   "lines": {
+    "headline": "Nintendo · 2004 · seventh generation",
+    "released": "2004 JP/NA · 2005 EU/AU",
+    "ended": null,
+    "inside": "ARM9 67 MHz + ARM7 33 MHz",
+    "sold": "154 million (all models)"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Nintendo_DS",
+    "https://www.nintendo.co.jp/ir/library/historical_data/pdf/consolidated_sales_e1603.pdf",
+    "https://www.wikidata.org/wiki/Q170323"
+   ]
+  },
+  {
+   "id": "neocd",
+   "name": "Neo Geo CD",
+   "maker": "SNK",
+   "kind": "home",
+   "generation": 4,
+   "released": {
+    "JP": "1994-09-09",
+    "EU": "1994-12-03",
+    "AU": "1994-12-23",
+    "NA": "1996-01-15"
+   },
+   "discontinued": "1997",
+   "units_sold": {
+    "value": 570000,
+    "as_of": "1997-09-30",
+    "note": "Wikipedia: 570,000 Neo Geo CD units sold worldwide as of 30 September 1997."
+   },
+   "launch_price": {
+    "JP": "¥49,800",
+    "NA": "US$399"
+   },
+   "cpu": "Motorola 68000, 12 MHz",
+   "media": "CD-ROM",
+   "predecessor": "Neo Geo AES",
+   "summary": "The Neo Geo on CD instead of cartridges, so its games cost far less than the AES versions. Loading times of 30 to 60 seconds held it back.",
+   "lines": {
+    "headline": "SNK · 1994 · fourth generation",
+    "released": "1994 JP/EU/AU · 1996 NA",
+    "ended": "1997",
+    "inside": "68000 12 MHz",
+    "sold": "570,000"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Neo_Geo_CD",
+    "https://www.wikidata.org/wiki/Q2703883"
+   ]
+  },
+  {
+   "id": "neogeo",
+   "name": "Neo Geo AES",
+   "aka": [
+    "Neo Geo",
+    "Advanced Entertainment System"
+   ],
+   "maker": "SNK",
+   "kind": "home",
+   "generation": 4,
+   "released": {
+    "JP": "1990-04-26"
+   },
+   "discontinued": "1997",
+   "units_sold": {
+    "value": 410000,
+    "note": "Wikipedia infobox: 410,000 AES home consoles, beside 1 million MVS arcade boards (Game Data Library; Consoles+ no. 73, February 1998)."
+   },
+   "launch_price": {
+    "NA": "US$649.99"
+   },
+   "cpu": "Motorola 68000, 12 MHz; Zilog Z80A, 4 MHz",
+   "memory": "64 KB RAM, 84 KB VRAM, 2 KB sound memory",
+   "media": "ROM cartridge",
+   "display": "320×224, 3,840 colours on screen out of 65,536",
+   "summary": "The home version of SNK's MVS arcade board, with the same hardware, so its games play exactly as in the arcade. At first only rented out in Japan, it then sold as a luxury console.",
+   "lines": {
+    "headline": "SNK · 1990 · fourth generation",
+    "released": "1990 JP",
+    "ended": "1997",
+    "inside": "68000 12 MHz · Z80A",
+    "sold": "410,000"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Neo_Geo",
+    "https://www.wikidata.org/wiki/Q1054350"
+   ]
+  },
+  {
+   "id": "nes",
+   "name": "Nintendo Entertainment System",
+   "aka": [
+    "NES",
+    "Family Computer",
+    "Famicom"
+   ],
+   "maker": "Nintendo",
+   "kind": "home",
+   "generation": 3,
+   "released": {
+    "JP": "1983-07-15",
+    "NA": "1985-10-18",
+    "EU": "1986-09-01",
+    "UK/IE/IT/AU": "1987"
+   },
+   "discontinued": "1995-08-14",
+   "units_sold": {
+    "value": 61910000,
+    "as_of": "2026-03-31",
+    "note": "Nintendo lifetime hardware shipments (19.35 M Japan, 34.00 M Americas, 8.56 M other); the NES row has not changed between the FY3/2016 and FY3/2026 tables"
+   },
+   "launch_price": {
+    "JP": "¥14,800",
+    "NA": "US$179.99 (Deluxe Set, 1985 test market)"
+   },
+   "cpu": "Ricoh 2A03, 1.79 MHz (NTSC)",
+   "gpu": "Ricoh 2C02 PPU",
+   "memory": "2 KB work RAM, 2 KB video RAM",
+   "media": "Game Pak (ROM cartridge)",
+   "predecessor": "Color TV-Game",
+   "successor": "Super Nintendo Entertainment System",
+   "summary": "Nintendo's first cartridge console, launched in Japan as the Famicom in 1983 and brought to North America after the 1983 market crash. It set the template for home consoles and sold about 61.9 million units.",
+   "lines": {
+    "headline": "Nintendo · 1983 · third generation",
+    "released": "1983 JP · 1985 NA (test) · 1986 EU",
+    "ended": "1995",
+    "inside": "Ricoh 2A03 1.79 MHz · 2C02",
+    "sold": "61.9 million",
+    "ended_note": "1995 in North America and Europe, 2003 in Japan"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Nintendo_Entertainment_System",
+    "https://www.nintendo.co.jp/ir/finance/historical_data/xls/consolidated_sales_e2603.xlsx",
+    "https://www.nintendo.co.jp/ir/library/historical_data/pdf/consolidated_sales_e1603.pdf",
+    "https://www.wikidata.org/wiki/Q172742"
+   ]
+  },
+  {
+   "id": "ngpc",
+   "name": "Neo Geo Pocket Color",
+   "maker": "SNK",
+   "kind": "handheld",
+   "generation": 5,
+   "released": {
+    "JP": "1999-03-19",
+    "NA": "1999-08-06",
+    "EU": "1999-10-01"
+   },
+   "discontinued": "2001-10-30",
+   "launch_price": {
+    "JP": "¥8,900",
+    "NA": "US$69.95"
+   },
+   "cpu": "Toshiba TLCS-900/H, 6.144 MHz; Zilog Z80, 3.072 MHz (sound)",
+   "memory": "12 KB RAM, 4 KB for the Z80",
+   "media": "ROM cartridge",
+   "display": "2.7-inch colour LCD, 160×152, 146 colours on screen out of 4,096",
+   "predecessor": "Neo Geo Pocket",
+   "summary": "SNK's colour handheld, out a few months after the black-and-white Neo Geo Pocket, whose games it also plays. Liked for its clicky microswitch stick and SNK's fighting games.",
+   "lines": {
+    "headline": "SNK · 1999 · fifth generation",
+    "released": "1999 JP/NA/EU",
+    "ended": "2001",
+    "inside": "TLCS-900/H 6.1 MHz"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Neo_Geo_Pocket",
+    "https://www.wikidata.org/wiki/Q1977455"
+   ]
+  },
+  {
+   "id": "pcengine",
+   "name": "PC Engine",
+   "aka": [
+    "PC Engine",
+    "TurboGrafx-16"
+   ],
+   "maker": "NEC / Hudson Soft",
+   "kind": "home",
+   "generation": 4,
+   "released": {
+    "JP": "1987-10-30",
+    "NA": "1989-08-29"
+   },
+   "discontinued": "1994-12",
+   "units_sold": {
+    "value": 10000000,
+    "as_of": "1995",
+    "note": "Wikipedia infobox: 10 million (HuCard consoles) plus 1.92 million CD-ROM2/Duo units (as of March 1996), i.e. over 11.9 million combined; the body ties the 10 million to Japan as of 1995."
+   },
+   "launch_price": {
+    "JP": "¥24,800",
+    "NA": "US$199.99"
+   },
+   "cpu": "HuC6280, 7.16 MHz",
+   "gpu": "HuC6270 VDC, HuC6260 VCE",
+   "memory": "8 KB RAM, 64 KB video RAM",
+   "media": "HuCard",
+   "successor": "PC Engine SuperGrafx, PC-FX",
+   "summary": "A tiny console by NEC and Hudson Soft that played games on card-sized HuCards. Popular in Japan; it was sold as the TurboGrafx-16 in North America.",
+   "lines": {
+    "headline": "NEC · 1987 · fourth generation",
+    "released": "1987 JP · 1989 NA",
+    "ended": "1994",
+    "inside": "HuC6280 7.16 MHz · HuC6270",
+    "sold": "10 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/w/api.php?action=parse&page=TurboGrafx-16&prop=wikitext&section=0&format=json",
+    "https://en.wikipedia.org/wiki/TurboGrafx-16",
+    "https://necretro.org/PC_Engine",
+    "https://necretro.org/TurboGrafx-16",
+    "https://www.wikidata.org/wiki/Q1057377"
+   ]
+  },
+  {
+   "id": "pokemini",
+   "name": "Pokémon mini",
+   "aka": [
+    "Pokémon Mini"
+   ],
+   "maker": "Nintendo",
+   "kind": "handheld",
+   "generation": 6,
+   "released": {
+    "NA": "2001-11-16",
+    "JP": "2001-12-14",
+    "EU": "2002-03-15"
+   },
+   "launch_price": {
+    "NA": "US$40",
+    "JP": "¥4,800",
+    "EU": "£40 (UK)"
+   },
+   "cpu": "S1C88, 4 MHz",
+   "memory": "4 KB RAM",
+   "media": "ROM cartridge",
+   "display": "Monochrome LCD, 96×64",
+   "summary": "Nintendo's smallest cartridge handheld, made with The Pokémon Company: it fits in a palm and weighs under 70 g. Only ten games came out for it, and a small homebrew scene followed.",
+   "lines": {
+    "headline": "Nintendo · 2001 · sixth generation",
+    "released": "2001 NA/JP · 2002 EU",
+    "inside": "S1C88 4 MHz"
+   },
+   "sources": [
+    "https://en.wikipedia.org/w/api.php?action=parse&page=Pok%C3%A9mon_Mini&prop=wikitext&section=0&format=json",
+    "https://en.wikipedia.org/wiki/Pok%C3%A9mon_Mini",
+    "https://www.wikidata.org/wiki/Q1759168"
+   ]
+  },
+  {
+   "id": "ps2",
+   "name": "PlayStation 2",
+   "aka": [
+    "PS2"
+   ],
+   "maker": "Sony",
+   "kind": "home",
+   "generation": 6,
+   "released": {
+    "JP": "2000-03-04",
+    "NA": "2000-10-26",
+    "EU": "2000-11-24"
+   },
+   "discontinued": "2013-01-04",
+   "units_sold": {
+    "value": 160000000,
+    "as_of": "undated (Sony PlayStation history page, fetched 2026-10-22: 'over 160,000,000 consoles sold worldwide since 2000')",
+    "note": "Sony's wording is 'sold'; Wikipedia infobox also 160 million. Guardian 2013-01-04 reported 150 million at end of production."
+   },
+   "launch_price": {
+    "JP": "¥39,800",
+    "NA": "US$299",
+    "UK": "£299"
+   },
+   "cpu": "Emotion Engine, 294.912 MHz",
+   "gpu": "Graphics Synthesizer, 150 MHz",
+   "memory": "32 MB RAM, 4 MB video RAM",
+   "media": "DVD, CD",
+   "predecessor": "PlayStation",
+   "successor": "PlayStation 3",
+   "summary": "Sony's second console, which also played DVDs and original PlayStation games. With more than 160 million sold, it is the best-selling home console.",
+   "lines": {
+    "headline": "Sony · 2000 · sixth generation",
+    "released": "2000 JP/NA/EU",
+    "ended": "2013",
+    "inside": "Emotion Engine 295 MHz · GS",
+    "sold": "over 160 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/PlayStation_2",
+    "https://web.archive.org/web/2012/http://www.scei.co.jp/corporate/data/bizdataeu_e.html",
+    "https://web.archive.org/web/2012/http://www.scei.co.jp/corporate/data/bizdatajpn2004_e.html",
+    "https://web.archive.org/web/2012/http://www.scei.co.jp/corporate/data/bizdatausa_e.html",
+    "https://www.playstation.com/en-gb/playstation-history/2000-ps2-psp/",
+    "https://www.playstation.com/en-us/playstation-history/2000-ps2-psp/",
+    "https://www.theguardian.com/technology/2013/jan/04/playstation-2-manufacture-ends-years",
+    "https://www.wikidata.org/wiki/Q10680"
+   ]
+  },
+  {
+   "id": "psp",
+   "name": "PlayStation Portable",
+   "aka": [
+    "PSP"
+   ],
+   "maker": "Sony",
+   "kind": "handheld",
+   "generation": 7,
+   "released": {
+    "JP": "2004-12-12",
+    "NA": "2005-03-24",
+    "EU": "2005-09-01"
+   },
+   "discontinued": "2014",
+   "units_sold": {
+    "value": 80000000,
+    "as_of": "undated (Sony PlayStation history page, fetched 2026-10-22: 'Over its lifetime, PSP sold over 80 million units worldwide')",
+    "note": "'over 80 million'; Wikipedia infobox says 80 million"
+   },
+   "launch_price": {
+    "JP": "¥19,800 (¥20,790 incl. tax)",
+    "NA": "US$249.99",
+    "EU": "€249"
+   },
+   "cpu": "MIPS R4000-based, 222–333 MHz",
+   "gpu": "Custom Rendering Engine + Surface Engine",
+   "memory": "32–64 MB RAM, 2 MB video",
+   "media": "UMD (not PSP Go), digital download",
+   "display": "4.3 in 480×272 LCD (PSP Go 3.8 in)",
+   "predecessor": "PocketStation",
+   "successor": "PlayStation Vita",
+   "summary": "Sony's first handheld, with a widescreen display and games on UMD discs. It also played video and music and sold over 80 million units.",
+   "lines": {
+    "headline": "Sony · 2004 · seventh generation",
+    "released": "2004 JP · 2005 NA/EU",
+    "ended": "2014",
+    "inside": "MIPS 222–333 MHz",
+    "sold": "over 80 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/PlayStation_Portable",
+    "https://sonyinteractive.com/uploads/sites/5/2023/02/041027a.pdf",
+    "https://web.archive.org/web/2012/http://www.scei.co.jp/corporate/data/bizdataeu_e.html",
+    "https://web.archive.org/web/2012/http://www.scei.co.jp/corporate/data/bizdatajpn2004_e.html",
+    "https://web.archive.org/web/2012/http://www.scei.co.jp/corporate/data/bizdatausa_e.html",
+    "https://www.playstation.com/en-us/playstation-history/2000-ps2-psp/",
+    "https://www.wikidata.org/wiki/Q170325"
+   ]
+  },
+  {
+   "id": "psx",
+   "name": "PlayStation",
+   "aka": [
+    "PS",
+    "PS1",
+    "PS one (2000 redesign)",
+    "PSX (codename)"
+   ],
+   "maker": "Sony",
+   "kind": "home",
+   "generation": 5,
+   "released": {
+    "JP": "1994-12-03",
+    "NA": "1995-09-09",
+    "EU": "1995-09-29"
+   },
+   "discontinued": "2006-03-23",
+   "units_sold": {
+    "value": 102490000,
+    "as_of": "2005-03-31 (reached; SCEI table shows no change through its last row, 2007-03-31)",
+    "note": "Cumulative production shipments per SCEI, not sell-through"
+   },
+   "launch_price": {
+    "JP": "¥39,800",
+    "NA": "US$299",
+    "UK": "£299"
+   },
+   "cpu": "R3000, 33.87 MHz",
+   "memory": "2 MB RAM, 1 MB video (2 MB in later models)",
+   "media": "CD-ROM",
+   "successor": "PlayStation 2",
+   "summary": "Sony's first console. Its CD-ROM games helped move the industry from cartridges to discs, and it was the first platform to pass 100 million units shipped.",
+   "lines": {
+    "headline": "Sony · 1994 · fifth generation",
+    "released": "1994 JP · 1995 NA/EU",
+    "ended": "2006",
+    "inside": "R3000 33.87 MHz",
+    "sold": "102.5 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/PlayStation_(console)",
+    "https://web.archive.org/web/20110722094946/http://scei.co.jp/corporate/data/bizdataps_e.html",
+    "https://web.archive.org/web/2012/http://www.scei.co.jp/corporate/data/bizdataeu_e.html",
+    "https://web.archive.org/web/2012/http://www.scei.co.jp/corporate/data/bizdatajpn2004_e.html",
+    "https://web.archive.org/web/2012/http://www.scei.co.jp/corporate/data/bizdatausa_e.html",
+    "https://www.wikidata.org/wiki/Q10677"
+   ]
+  },
+  {
+   "id": "saturn",
+   "name": "Sega Saturn",
+   "aka": [
+    "SegaSaturn (Asia)",
+    "Samsung Saturn (KR)"
+   ],
+   "maker": "Sega",
+   "kind": "home",
+   "generation": 5,
+   "released": {
+    "JP": "1994-11-22",
+    "NA": "1995-05-11",
+    "EU": "1995-07-08"
+   },
+   "discontinued": "2000",
+   "units_sold": {
+    "value": 9260000,
+    "note": "Worldwide total in the Wikipedia infobox; as-of date not stated"
+   },
+   "launch_price": {
+    "JP": "¥44,800 (1994)",
+    "NA": "US$399.99 (1995)",
+    "EU": "£399.99 (1995)"
+   },
+   "cpu": "2× Hitachi SH-2, 28.6 MHz",
+   "gpu": "VDP1 + VDP2, 28.6 MHz each",
+   "memory": "2 MB RAM, 1.5 MB VRAM, 512 KB sound RAM",
+   "media": "CD-ROM",
+   "predecessor": "Sega Genesis",
+   "successor": "Dreamcast",
+   "summary": "Sega's CD console with two SH-2 processors, strong in Japan and with arcade-style 2D games. It was followed by the Dreamcast.",
+   "lines": {
+    "headline": "Sega · 1994 · fifth generation",
+    "released": "1994 JP · 1995 NA/EU",
+    "ended": "2000",
+    "inside": "2× SH-2 28.6 MHz · VDP1/VDP2",
+    "sold": "9.3 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Sega_Saturn",
+    "https://segaretro.org/Sega_Saturn",
+    "https://web.archive.org/web/20180712005640/https://sega.jp/history/hard/segasaturn/index.html",
+    "https://www.wikidata.org/wiki/Q200912"
+   ]
+  },
+  {
+   "id": "sega32x",
+   "name": "32X",
+   "aka": [
+    "Genesis 32X (North America)",
+    "Mega Drive 32X (Europe)",
+    "Super 32X (Japan, South Korea)",
+    "Mega 32X (Brazil)"
+   ],
+   "maker": "Sega",
+   "kind": "add-on",
+   "generation": 5,
+   "released": {
+    "NA": "1994-11-21",
+    "EU": "1994-11",
+    "JP": "1994-12-03",
+    "BR": "1995-03"
+   },
+   "discontinued": "1996",
+   "units_sold": {
+    "value": 665000,
+    "as_of": "end of 1994",
+    "note": "Wikipedia: Sega produced 800,000 32X units and sold an estimated 665,000 by the end of 1994, the rest at steep discounts until 1996."
+   },
+   "launch_price": {
+    "JP": "¥16,800",
+    "NA": "US$159.99",
+    "UK": "£169.99"
+   },
+   "cpu": "2× SH-2 32-bit RISC, 23 MHz",
+   "memory": "256 KB RAM, 256 KB VRAM",
+   "media": "ROM cartridge; CD-ROM with the Sega CD",
+   "display": "320×240, 32,768 colours on screen",
+   "summary": "Sega's add-on that sits in the Mega Drive's cartridge slot and adds two 32-bit SH-2 processors, meant to bridge the gap to the Saturn. It got 40 games of its own.",
+   "lines": {
+    "headline": "Sega · 1994 · fifth generation",
+    "released": "1994 NA/EU/JP · 1995 BR",
+    "ended": "1996",
+    "inside": "2× SH-2 23 MHz",
+    "sold": "665,000"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/32X",
+    "https://www.wikidata.org/wiki/Q1063978"
+   ]
+  },
+  {
+   "id": "segacd",
+   "name": "Sega CD",
+   "aka": [
+    "Mega-CD (Japan, Europe)"
+   ],
+   "maker": "Sega",
+   "kind": "add-on",
+   "generation": 4,
+   "released": {
+    "JP": "1991-12-12",
+    "NA": "1992-10-15",
+    "EU": "1993-04"
+   },
+   "discontinued": "1996",
+   "units_sold": {
+    "value": 2240000,
+    "note": "Wikipedia: 2.24 million Sega CD units sold worldwide when Sega discontinued it in the first quarter of 1996 (Famitsu, 21 June 1996); no as-of date in the article. The article puts the US at 1.5 million and Western Europe at 415,000 by 1994."
+   },
+   "launch_price": {
+    "JP": "¥49,800",
+    "NA": "US$299",
+    "UK": "£269.99"
+   },
+   "cpu": "Motorola 68000, 12.5 MHz",
+   "gpu": "Custom ASIC (scaling and rotation)",
+   "memory": "6.5 Mbit RAM, 128 Kbit CD-ROM cache, 64 Kbit backup memory, 1 Mbit boot ROM",
+   "media": "CD-ROM, CD+G",
+   "summary": "Sega's CD-ROM add-on for the Mega Drive, sold as the Mega-CD in Japan and Europe. It has its own 12.5 MHz 68000 and a custom chip for scaling and rotating graphics.",
+   "lines": {
+    "headline": "Sega · 1991 · fourth generation",
+    "released": "1991 JP · 1992 NA · 1993 EU",
+    "ended": "1996",
+    "inside": "68000 12.5 MHz · custom ASIC",
+    "sold": "2.2 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Sega_CD",
+    "https://www.wikidata.org/wiki/Q1047516"
+   ]
+  },
+  {
+   "id": "sg-1000",
+   "name": "SG-1000",
+   "aka": [
+    "Esu Jī Sen (JP)"
+   ],
+   "maker": "Sega",
+   "kind": "home",
+   "generation": 3,
+   "released": {
+    "JP": "1983-07-15",
+    "AU": "1983-11"
+   },
+   "discontinued": "1984-07",
+   "units_sold": null,
+   "launch_price": {
+    "JP": "¥15,000"
+   },
+   "cpu": "Zilog Z80A, 3.58 MHz",
+   "gpu": "Texas Instruments TMS9918A",
+   "memory": "1 KB RAM, 16 KB VRAM",
+   "media": "ROM cartridge, Sega My Card",
+   "successor": "Master System",
+   "summary": "Sega's first home console, released in Japan on the same day as Nintendo's Famicom in July 1983. Its line led to the Mark III, sold abroad as the Master System.",
+   "lines": {
+    "headline": "Sega · 1983 · third generation",
+    "released": "1983 JP/AU",
+    "ended": "1984",
+    "inside": "Z80A 3.58 MHz · TMS9918A",
+    "sold": null
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/SG-1000",
+    "https://segaretro.org/SG-1000",
+    "https://web.archive.org/web/2019/https://sega.jp/history/hard/sg1000/"
+   ]
+  },
+  {
+   "id": "snes",
+   "name": "Super Nintendo Entertainment System",
+   "aka": [
+    "Super Famicom",
+    "Super NES",
+    "SNES",
+    "Super Nintendo",
+    "Super Comboy (KOR)"
+   ],
+   "maker": "Nintendo",
+   "kind": "home",
+   "generation": 4,
+   "released": {
+    "JP": "1990-11-21",
+    "NA": "1991-08-23",
+    "EU": "1992-06"
+   },
+   "discontinued": "1999",
+   "units_sold": {
+    "value": 49100000,
+    "as_of": "2026-03-31",
+    "note": "Nintendo lifetime hardware shipments (17.17 M Japan, 23.35 M Americas, 8.58 M other); identical in the FY3/2015, FY3/2016 and FY3/2026 tables"
+   },
+   "launch_price": {
+    "JP": "¥25,000",
+    "NA": "US$199"
+   },
+   "cpu": "Ricoh 5A22, 3.58 MHz",
+   "gpu": "S-PPU1 + S-PPU2",
+   "memory": "128 KB work, 64 KB video, 64 KB audio RAM",
+   "media": "Super NES Game Pak (ROM cartridge)",
+   "predecessor": "Nintendo Entertainment System",
+   "successor": "Nintendo 64",
+   "summary": "Nintendo's 16-bit console, known in Japan as the Super Famicom. Its Mode 7 graphics and sound chip made it a showcase for 2D games through the 1990s.",
+   "lines": {
+    "headline": "Nintendo · 1990 · fourth generation",
+    "released": "1990 JP · 1991 NA · 1992 EU",
+    "ended": "1999",
+    "inside": "Ricoh 5A22 3.58 MHz · S-PPU",
+    "sold": "49.1 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Super_Nintendo_Entertainment_System",
+    "https://www.nintendo.co.jp/ir/finance/historical_data/xls/consolidated_sales_e2603.xlsx",
+    "https://www.nintendo.co.jp/ir/library/historical_data/pdf/consolidated_sales_e1509.pdf",
+    "https://www.nintendo.co.jp/ir/library/historical_data/pdf/consolidated_sales_e1603.pdf",
+    "https://www.wikidata.org/wiki/Q183259"
+   ]
+  },
+  {
+   "id": "supergrafx",
+   "name": "PC Engine SuperGrafx",
+   "aka": [
+    "SuperGrafx"
+   ],
+   "maker": "NEC Home Electronics",
+   "kind": "home",
+   "generation": 4,
+   "released": {
+    "JP": "1989-12-08"
+   },
+   "units_sold": {
+    "value": 75000,
+    "note": "Wikipedia: 'selling only 75,000 units total'; no as-of date. Six retail games used its extra hardware."
+   },
+   "cpu": "HuC6280A, 1.79 or 7.16 MHz",
+   "gpu": "2 × HuC6270 VDC, HuC6202 VPC, HuC6260A VCE",
+   "memory": "32 KB + 128 KB",
+   "media": "HuCard, CD-ROM²",
+   "display": "512 colours; 282×242, 377×242 or 565×242",
+   "predecessor": "PC Engine",
+   "summary": "NEC's 1989 follow-up to the PC Engine, rushed out in Japan with a second graphics chip and more memory. Only six games used the extra power, so it sold poorly and was soon left behind.",
+   "lines": {
+    "headline": "NEC · 1989 · fourth generation",
+    "released": "1989 JP",
+    "inside": "HuC6280A 7.16 MHz · 2 × HuC6270",
+    "sold": "75,000"
+   },
+   "sources": [
+    "https://en.wikipedia.org/w/api.php?action=parse&page=SuperGrafx&prop=wikitext&section=0&format=json&redirects=1",
+    "https://en.wikipedia.org/wiki/PC_Engine_SuperGrafx",
+    "https://www.wikidata.org/wiki/Q202375"
+   ]
+  },
+  {
+   "id": "vectrex",
+   "name": "Vectrex",
+   "maker": "General Consumer Electronics, later Milton Bradley",
+   "kind": "home",
+   "generation": 2,
+   "released": {
+    "NA": "1982-10",
+    "EU": "1983",
+    "JP": "1983"
+   },
+   "discontinued": "1984-02",
+   "launch_price": {
+    "NA": "US$199"
+   },
+   "cpu": "Motorola MC68A09, 1.5 MHz",
+   "memory": "1 KB RAM",
+   "media": "ROM cartridge",
+   "display": "Built-in 9-inch monochrome vector CRT",
+   "summary": "The only home console with a vector display, on its own built-in screen. Games came with colour overlays for the screen, and Mine Storm is built in.",
+   "lines": {
+    "headline": "GCE · 1982 · second generation",
+    "released": "1982 NA · 1983 EU/JP",
+    "ended": "1984",
+    "inside": "MC68A09 1.5 MHz"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Vectrex",
+    "https://www.wikidata.org/wiki/Q767631"
+   ]
+  },
+  {
+   "id": "virtualboy",
+   "name": "Virtual Boy",
+   "maker": "Nintendo",
+   "kind": "home",
+   "generation": 5,
+   "released": {
+    "JP": "1995-07-21",
+    "NA": "1995-08-14",
+    "BR": "1995-09-18"
+   },
+   "discontinued": "1996",
+   "units_sold": {
+    "value": 770000,
+    "note": "Wikipedia infobox: 770,000 (cited); no as-of date."
+   },
+   "launch_price": {
+    "NA": "US$179.99"
+   },
+   "cpu": "NEC V810, 20 MHz",
+   "memory": "64 KB work RAM, 128 KB graphics DRAM, 128 KB video RAM",
+   "media": "ROM cartridge",
+   "display": "Red monochrome, 3D, 384×224",
+   "summary": "Nintendo's tabletop console with a red monochrome 3D display seen through a visor on a stand, made under Gunpei Yokoi. Only 22 games came out before it was dropped in 1996.",
+   "lines": {
+    "headline": "Nintendo · 1995 · fifth generation",
+    "released": "1995 JP/NA/BR",
+    "ended": "1996",
+    "inside": "NEC V810 20 MHz",
+    "sold": "770,000"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Virtual_Boy",
+    "https://www.wikidata.org/wiki/Q164651"
+   ]
+  },
+  {
+   "id": "wii",
+   "name": "Wii",
+   "aka": [
+    "Revolution (codename)"
+   ],
+   "maker": "Nintendo",
+   "kind": "home",
+   "generation": 7,
+   "released": {
+    "NA": "2006-11-19",
+    "JP": "2006-12-02",
+    "AU": "2006-12-07",
+    "EU": "2006-12-08"
+   },
+   "discontinued": "2013-10",
+   "units_sold": {
+    "value": 101630000,
+    "as_of": "2026-03-31",
+    "note": "Nintendo lifetime hardware shipments (12.75 M Japan, 48.64 M Americas, 40.23 M other); unchanged at 10,163 x 10,000 since FY3/2016. Wikipedia labels the figure units shipped"
+   },
+   "launch_price": {
+    "NA": "US$249.99",
+    "JP": "¥25,000",
+    "EU": "€249.99"
+   },
+   "cpu": "IBM Broadway, 729 MHz",
+   "gpu": "ATI Hollywood, 243 MHz",
+   "memory": "24 MB 1T-SRAM + 64 MB GDDR3",
+   "media": "Wii optical disc (GameCube discs on original model only)",
+   "predecessor": "GameCube",
+   "successor": "Wii U",
+   "summary": "Nintendo's motion-controlled console, which reached far beyond regular players and sold about 101.6 million units. The original model also plays GameCube discs.",
+   "lines": {
+    "headline": "Nintendo · 2006 · seventh generation",
+    "released": "2006 JP/NA/EU/AU",
+    "ended": "2013",
+    "inside": "Broadway 729 MHz · Hollywood",
+    "sold": "101.6 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Wii",
+    "https://web.archive.org/web/20150924152537/http://www.ign.com/articles/2006/09/14/japanese-wii-price-release-date-revealed",
+    "https://web.archive.org/web/20151019021234/http://www.ign.com/articles/2006/09/14/us-wii-price-launch-date-revealed",
+    "https://www.nintendo.co.jp/ir/finance/historical_data/xls/consolidated_sales_e2603.xlsx",
+    "https://www.nintendo.co.jp/ir/library/historical_data/pdf/consolidated_sales_e1603.pdf",
+    "https://www.wikidata.org/wiki/Q8079"
+   ]
+  },
+  {
+   "id": "wonderswan",
+   "name": "WonderSwan",
+   "aka": [
+    "ワンダースワン (WandāSuwan)"
+   ],
+   "maker": "Bandai",
+   "kind": "handheld",
+   "generation": 6,
+   "released": {
+    "JP": "1999-03-04"
+   },
+   "discontinued": "2003",
+   "units_sold": {
+    "value": 3500000,
+    "as_of": "undated estimate",
+    "note": "Wikipedia 'estimated 3.5 million' for all models combined (WonderSwan 1.55M, Color at least 1.1M, SwanCrystal roughly 0.85M); secondary sources (Retro Gamer), no Bandai figure found"
+   },
+   "launch_price": {
+    "JP": "¥4,800"
+   },
+   "cpu": "NEC V30 MZ, 3.072 MHz",
+   "memory": "64 KB RAM",
+   "media": "ROM cartridge",
+   "display": "224x144 LCD (FSTN; TFT on SwanCrystal)",
+   "predecessor": "Design Master Senshi Mangajukuu",
+   "successor": "WonderSwan Color",
+   "summary": "Bandai's Japan-only handheld, the last hardware Gunpei Yokoi worked on. It could be held upright or sideways and ran on a single AA battery.",
+   "lines": {
+    "headline": "Bandai · 1999 · sixth generation",
+    "released": "1999 JP",
+    "ended": "2003",
+    "inside": "NEC V30 MZ 3.07 MHz",
+    "sold": "3.5 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/WonderSwan",
+    "https://en.wikipedia.org/wiki/WonderSwan (cites Retro Gamer issues 36 and 126, and Koto Laboratory source)",
+    "https://en.wikipedia.org/wiki/WonderSwan (lead: followed by WonderSwan Color and SwanCrystal)",
+    "https://www.wikidata.org/wiki/Q1065792"
+   ]
+  }
+ ],
+ "schema": "lines.* are ready-made English display strings (shelf rows); the other fields are the verified data for the details page; sources per system."
+}

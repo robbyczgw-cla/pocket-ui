@@ -1,0 +1,959 @@
+# Strings scripts/i18n-extract.py finds in src/ that the painter never gets on their own, so they need no line in
+# de.tsv: log lines and timing marks, errors that a sentence of the table wraps ("The store list can't be read ({s})."),
+# keys and words of other programs' files and protocols (Syncthing, Tailscale, Dolphin, PCSX2, bluetoothctl), names
+# used to look things up (cheat and cover databases), test and snapshot data, and pieces of longer strings that the
+# table translates as a whole ("  ·  {s} left at that rate" is part of "{s} uses about {n}% an hour  ·  {t} left at
+# that rate"). One per line as the script prints it ({s} for a format hole, \n for a line break); `re:` lines are
+# patterns as in keep.txt. Grouped by file; when a string moves, the script lists it again. docs/DEVELOPING.md
+# "Translations".
+
+# src/achievements/http.rs
+pocket-ui/{s} (Linux){s} rcheevos/{s}
+
+# src/achievements/offline.rs
+When
+Success
+User
+Token
+Score
+Messages
+
+# src/achievements/snapshot.rs
+{s} of {s} achievements in {s} {s}
+
+# src/app_bluetooth.rs
+Failed to pair: org.bluez.Error.AuthenticationFailed
+
+# src/app_cabinet.rs
+big spine
+plain front
+lying case
+shelf front
+
+# src/app_curator.rs
+Burnout Paradise
+Need for Speed: Most Wanted
+
+# src/app_menu_open.rs
+menu: picture in
+frame waits for the full size
+menu: game paused
+shot {s}
+
+# src/app_motion.rs
+page transition
+
+# src/app_pixel_path.rs
+set show_fps {s}
+Nintendo GameCube
+
+# src/app_rescue.rs
+systemctl poweroff
+rescue PowerOff
+context: {s}
+surface: {s}
+2026-10-23 07:41:12 UTC pocket-ui panicked at src/image.rs:212:9: attempt to multiply with overflow
+
+# src/audio.rs
+pipewire (alsa)
+
+# src/battery.rs
+·  {s} left at that rate
+
+# src/battery_history.rs
+not a battery history
+version {s}
+too many entries
+cut off
+tag name
+a sample is invalid
+out of order
+
+# src/bin/pocket_core.rs
+DOWN
+LEFT
+RIGHT
+Demo: First steps into the dungeon
+menu shot written
+display: {s}
+no window
+GLES 3 context: {s}
+surface attributes: {s}
+window surface: {s}
+make current: {s}
+video shaders: {s}
+, {s} ms after the game was started in pocket-ui
+FF {s}
+save: state serialized
+save: preview written
+save: state synced to the SD card
+save: battery save checked
+
+# src/bluetooth.rs
+Rejected
+Page Timeout
+Host is down
+timed out
+Timeout
+bluetoothctl {s}: timed out
+bluetoothctl: {s}
+Failed to pair: org.bluez.Error.AlreadyExists
+
+# src/cheats.rs
+, the
+Nintendo - Game Boy
+Nintendo - Game Boy Color
+Nintendo - Game Boy Advance
+Nintendo - Nintendo Entertainment System
+Nintendo - Family Computer Disk System
+Nintendo - Super Nintendo Entertainment System
+Nintendo - Nintendo 64
+Nintendo - Nintendo DS
+Sega - Mega Drive - Genesis
+Sega - Master System - Mark III
+Sega - Game Gear
+Sega - 32X
+Sega - Mega-CD - Sega CD
+NEC - PC Engine - TurboGrafx 16
+NEC - PC Engine CD - TurboGrafx-CD
+NEC - PC Engine SuperGrafx
+Atari - 2600
+Atari - 7800
+Atari - Lynx
+Sony - PlayStation
+
+# src/consoles.rs
+an object of strings or null
+
+# src/control.rs
+sway did not answer in time
+not an answer to our message
+{s} fullscreen disable; {s} fullscreen disable; [app_id="{s}"] focus; [app_id="{s}"] fullscreen enable
+[app_id="{s}"] fullscreen disable; {s} focus; {s} fullscreen enable; {s} focus; {s} fullscreen enable
+quit nosave
+[con_id={s}] fullscreen disable; [app_id="{s}"] focus; [app_id="{s}"] fullscreen enable
+exit 0
+no SWAYSOCK
+
+# src/core_options.rs
+VMU A1
+
+# src/covers.rs
+Named_Boxarts
+Nintendo - Virtual Boy
+Sega - Saturn
+Sega - Dreamcast
+Sony - PlayStation Portable
+SNK - Neo Geo Pocket
+SNK - Neo Geo Pocket Color
+Bandai - WonderSwan
+Bandai - WonderSwan Color
+Nintendo - GameCube
+Sony - PlayStation 2
+Sega - SG-1000
+(World
+(USA
+(Europe
+(Japan
+Collection)
+(Virtual Console
+(Switch Online
+(Classic Mini
+(Evercade
+
+
+# src/display_out.rs
+HDMI
+output {s} mode {s}
+move workspace to output {s}
+output {s} power off
+output {s} enable power on transform {s}
+output {s} enable power on
+sway refused the subscription
+not sway's IPC
+# src/dsv.rs
+{s} bytes is not the size of a DS save (512 bytes to 8 MiB, a power of two)
+it ends like a DeSmuME save but its footer is damaged
+the footer is version {s}, only version 0 is known
+the footer says {s} bytes of save, the file holds {s}
+{s}: could not write {s}: {s}
+# src/game_pictures.rs
+Named_Snaps
+Named_Titles
+# src/crash.rs
+{s}-{s}-{s} {s}:{s}:{s} UTC
+{s} {s} panicked at {s}: {s}
+{s} pocket-ui: previous boot ended without a clean shutdown at {s}; last kernel lines:
+; last sensors:
+
+# src/curatordb.rs
+vocabulary: {s}
+vocabulary: too many tags
+no header
+header is not text
+PCDB1
+
+# src/emu_menu.rs
+opt {s} {s}
+ctl {s} {s}
+
+# src/emu_settings.rs
+False
+True
+Auto 4:3/3:2
+Video_Settings
+GFXBackend
+wideScreenHack
+Video_Hacks
+VISkip
+xBRZ
+{s} = {s}
+ID-{s}
+Button S
+Button E
+Button W
+Button N
+
+# src/fan_curve.rs
+park {s} {s}
+trip {s} {s}
+off-below {s} {s} {s}
+
+# src/fast_switch.rs
+quit handoff
+
+# src/fn_keys.rs
+BTN_S[TE][AL]*
+key.function.b is {s}: left alone
+
+# src/mako_osd.rs
+makoctl {s} failed ({s})
+makoctl {s}: {s}
+wrote the config, but {s}
+no {s} yet ({s}): tried again at the next start
+couldn't write {s}: {s}
+
+# src/frame.rs
+resize: {s}
+present: {s}
+
+# src/fsutil.rs
+card writer: {s} on the SD card
+
+# src/gamedb.rs
+Game Boy video game
+Nintendo Entertainment System
+Famicom
+Famicom Disk System
+Super NES
+Wii video game
+3DS
+Genesis
+Master System
+Game Gear
+Sega CD
+Saturn
+Dreamcast
+PlayStation video game
+PC Engine
+Atari 2600
+Lynx
+PGDB1
+Metacritic
+Famitsu
+single-player video game
+cooperative video game
+multiplayer video game
+
+# src/gamma.rs
+the display has no gamma table (the compositor answered failed)
+no Wayland connection: {s}
+Wayland registry: {s}
+the compositor has no gamma control
+no outputs
+Wayland: {s}
+
+# src/hw_render.rs
+no hardware render request
+core GL context: {s}
+core GL context current: {s}
+core framebuffer incomplete: {s}
+
+# src/i18n.rs
+line {s}: {s}
+
+# src/library.rs
+The
+Die
+Der
+Das
+
+# src/libretro.rs
+{s} (device {s})
+player {s}: {s} (device {s})
+load {s}: {s}
+{s} could not load {s}
+
+# src/logs.rs
+{s} up={s}s temp={s} gpu={s} {s} fan={s} bat={s}
+[kernel messages are not readable here: {s}]
+[{s}] --- {s} started over ---
+[{s}] {s}
+
+# src/app_identify.rs
+games recognised
+after look up again
+
+# src/main.rs
+Seiken Densetsu 3 (Japan).bps
+game exit: shelf ready
+after a game
+after a tool
+after PC streaming
+menu: window known
+menu: screenshot taken
+menu: in front
+menu: built
+set {s} {s}
+save {s}
+load {s}
+library read again
+, charging
+online after boot
+game pictures switched on
+after the Wi-Fi step
+osd {s}
+note {s}
+
+# src/moonlight.rs
+re:^<?xml version="1\.0"?>
+re:^<game>
+
+# src/on_start.rs
+On start is Home
+the first-start setup runs
+the last run ended in a crash or without a clean shutdown
+no recent game
+the last game ended with an error
+the last game was still running when pocket-ui ended
+no record of how the last game ended
+
+# src/os_compat.rs
+ROCKNIX 20261001
+ROCKNIX main 8b70f69
+ROCKNIX 20261001 and main 8b70f69
+{s} of the new system can't be read to check it
+glibc {s} in the new system
+no {s} core in the new system; the copy in /storage/cores plays {s}
+ROCKNIX's {s} is gone from 001-functions: settings pocket-ui writes for ROCKNIX may not be read
+not an ELF file
+not a 64-bit little-endian ELF file
+a damaged ELF file
+, and {s} more (see the log)
+BLOCKS
+WARNS
+
+# src/pad.rs
+{s} {s}  src {s}
+{s}  src {s}
+{s} connected  src {s}
+disconnected  src {s}
+SOUTH
+EAST
+NORTH
+WEST
+BACK
+POWER
+VOL+
+VOL-
+
+# src/perf_fan.rs
+{s} ?
+· GPU {s} MHz
+
+# src/pixel_live.rs
+{s} fps
+
+# src/pixel_path.rs
+{s} {s} (Options > Cheats).
+{s} pocket-core applied the patch {s} from the game's folder when the game started, so this is the changed game.{s}
+Seiken Densetsu 3 (Japan).ips
+{s} Hz
+{s} @ {s}
+
+# src/port_files.rs
+if you want
+if you like
+downloaded automatically
+automatically downloaded
+download automatically
+includes the demo
+demo is included
+demo files are included
+
+# src/proc.rs
+helper program timed out
+
+# src/quick.rs
+look {s} {s} {s}
+
+# src/romfacts.rs
+hong kong
+JUEWGFSIAKCB
+virtual console
+switch online
+classic mini
+nintendo switch online
+gamecube edition
+
+# src/rumble.rs
+{"menu": {s}
+
+# src/run_ahead.rs
+{s} doesn't call its states deterministic
+retro_serialize failed before the first refresh
+{s} of the last {s} compared frames differed ({s} of {s} in all)
+, clock {s} % of the highest on average
+clock unknown
+cpu{s} at {s} of {s} MHz
+
+# src/sleep.rs
+back from deep sleep
+@DEFAULT_SINK@
+a stick
+
+# src/standalone.rs
+Pad1
+Analog
+Guide
+confirmClose
+saveStateWarning
+{s} = ({s}){s}
+Thumb L
+Thumb R
+{s} = {s} | {s}
+
+# src/store.rs
+bad public key: {s}
+signature is not base64
+signature has the wrong length
+signature doesn't match
+catalog {s}
+catalog: {s}
+{s}: its files were gone (ROCKNIX empties its Tools folder at boot); no longer listed as installed
+{s}: moved to {s}{s}
+({s} file(s) were gone already)
+not a file
+
+# src/store_page.rs
+{s} bytes
+
+# src/sync.rs
+PATCH
+pause {s}: HTTP {s} {s}
+rescanIntervalS
+fsWatcherEnabled
+fsWatcherDelayS
+ignorePerms
+Pocket GameCube memory cards
+Pocket Wii saves
+Pocket 3DS saves
+Pocket BIOS
+Pocket saves
+Pocket save states
+Pocket library data
+curl exited with {s}
+a signal
+no status from Syncthing
+{s}: HTTP {s}
+myID
+folder {s}: HTTP {s} {s}
+DELETE
+folder {s}: HTTP {s}
+deviceID
+Pocket PS2 memory cards
+POST
+scan {s}: HTTP {s}
+needTotalItems
+needItems
+
+# src/system_cfg.rs
+{s} is held by process {s}
+{s} is locked (flock) by another program
+
+# src/system_ctl.rs
+NTPSynchronized
+
+# src/tailscale.rs
+Self
+DNSName
+tailscale: {s}
+not JSON: {s}
+not a JSON object
+
+# src/tools.rs
+install rocknix
+update rocknix
+rocknix update
+system update
+en_US.UTF-8
+re:^L="\$1"; shift
+set_kill set "x"
+
+# src/touch.rs
+touch screen
+the picture is on a TV and the panel is dark
+the Pocket is asleep or the screen is off (only a button wakes it)
+a game or app is running and has the screen
+a game is starting
+the pause menu is open (buttons only)
+the first-start setup is open (buttons only)
+a system panel is open (buttons only)
+the last frame had nothing to touch
+touch: ignored, {s}
+
+# src/wifi.rs
+NAME,UUID,TYPE,ACTIVE,STATE
+UUID,TYPE
+iw reg set: {s}
+
+# src/wiki_text.rs
+no curl
+no article
+no text
+
+# Added with the merge of main 6c55b43. src/web/*: what the web companion sends to the browser (its pages stay English)
+
+# src/app_history.rs
+review of {s} ({s} cards)
+
+# src/app_pixel_path.rs
+no sample settings
+
+# src/pixel_standalone.rs
+CASMode
+CASSharpness
+TVShader
+Backend
+Video_{s}
+Enhancements
+
+# src/play_log.rs
+not a play log
+version {s} (this pocket-ui reads {s})
+
+# src/port_perf.rs
+; performance {s} not applied
+; its performance not applied
+pid {s}
+
+# src/power.rs
+fan {s}
+unreadable: {s}
+
+# src/quick_profiles.rs
+set performance {s}
+set fan {s}
+
+# src/web/api.rs
+HEAD
+Cache-Control
+A game is running. The companion waits until it ends.
+Retry-After
+signedIn
+Set-Cookie
+{s}={s}; HttpOnly; SameSite=Strict; Path=/; Max-Age={s}
+{s}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0
+systemName
+gameRunning
+lastPlayed
+shelvesReady
+stickerMax
+noteMax
+shelfMax
+totalSecs
+X-Shot-Age
+X-Screen-Hidden
+Choose a system for this file.
+Unknown kind of upload.
+
+# src/web/assets.rs
+text/html; charset=utf-8
+text/css; charset=utf-8
+text/javascript; charset=utf-8
+
+# src/web/auth.rs
+the SD card refused the write
+Firefox
+Edge
+Chrome
+Safari
+A browser
+iPhone
+iPad
+Android
+Mac
+Windows
+Chromebook
+Linux
+
+# src/web/files.rs
+its games are not in the ROMs folder.
+uploads can't go there.
+that folder is missing.
+can't make the folder: {s}
+the ROMs folder is missing.
+that folder leads outside the ROMs folder.
+that folder leads where uploads can't go.
+That file name can't be used.
+The BIOS folder: {s}
+{s} is not a file pocket-core looks for.
+That folder is a link.
+Can't make the folder: {s}
+That port is not installed or doesn't need files.
+{s}: copy its files with the SD card or SSH (its instructions name no folder).
+That path can't be used.
+Can't make the drop folder.
+{s} is in the way.
+Can't make {s}: {s}
+That file is larger than {s}.
+The Pocket can't tell how much space is left on the SD card.
+Not enough space on the SD card: {s} free.
+{s} is there already.
+Something that is not a file has that name.
+Can't write there: {s}
+The SD card refused the write: {s}
+A folder along the path changed during the upload. Nothing was kept.
+The web companion was switched off. Nothing was kept.
+A game was running for too long; the upload stopped. Nothing was kept.
+That file is a program. Programs don't go into a port's folder. Nothing was kept.
+Can't put the file in place: {s}
+Missing for {s}: {s}
+The upload was cut off. Nothing was kept.
+
+# src/web/http.rs
+Content-Security-Policy
+re:^default-src 'none'; script-src 'self'; style-src 'self'; img
+X-Content-Type-Options
+X-Frame-Options
+DENY
+application/json; charset=utf-8
+Referrer-Policy
+Cross-Origin-Opener-Policy
+Cross-Origin-Resource-Policy
+Permissions-Policy
+re:^HTTP/1\.1 {s} {s}\\r
+Cache-Control: no-store\r
+
+# src/web/mod.rs
+The Pocket is busy. Try again in a moment.
+The Pocket did not answer. Try again in a moment.
+
+# src/web/net.rs
+tailscaled: no status
+tailscaled: unknown peer
+tailscaled: {s}
+tailscaled: no answer
+
+# Put together at run time from lines of the table (sentence by sentence, {t} by {t}); the snapshot test checks
+# them in German (pixel-path:… states), the script can't see through them
+≈ {s} ms · {s} frames, {s} ahead
+≈ {s} ms · {s} frames
+{s} In the last {s} s of play the queue ran empty {s} times, each a short gap in the sound.
+re:^The {s} drew {s} lines\. This emulator renders the 3D scenes 
+The emulator renders at {s}×{s}, the resolution the {s} drew in, {s} times a second.
+The emulator makes a {s}×{s} picture {s} times a second, as the {s} did. {s}
+re:^Every pixel of the {s}×{s} picture covers {s}×{s} panel pixe
+re:^{s} plays the sound itself{s}, into ROCKNIX's sound server, 
+re:^{s} runs this game on its own: pocket-ui starts it and draws
+re:^The panel shows {s} pictures a second at {s}×{s}\. {s} draws 
+
+# More log lines, other programs' words, and what goes to the browser
+other (marquee, toast, OSD, ...)
+no time left
+pocket-ui was started before in this boot (a crash, an update or a restart)
+{s}'s libraries could not be read ({s}), they were not checked
+{s} {s} {s}, which the new system doesn't have
+{s} {s} glibc {s} or later ({s}), the new system has glibc {s}
+{s} {s} {s} from {s}, which the new system's doesn't have
+no {s} core in the new system, so {s} games would not start
+(and {s} more, see the log)
+you can also
+you can add
+pid {s}, its launcher's exec
+save + load {s} ms on average, {s} ms allowed
+{s} of the last {s} refreshes took over {s} ms of CPU (this one {s} ms, {s})
+re:^run-ahead {s}: {s} refreshes, {s} ms each (CPU {s} ms, max {
+re:^; per refresh: real frames {s}, ahead {s}, check {s}, host {
+without run-ahead: {s} refreshes, CPU {s} ms each (max {s})
+, clock {s} % of the highest on average, {s}
+public, max-age=31536000, immutable
+re:^That code is not right, or no code is showing\. On the Pocket
+private, max-age=86400
+this folder holds programs, not games. Use PortMaster on the Pocket.
+{s} takes {s} files, not this one.
+Scripts and programs don't go into the BIOS folder.
+Scripts and programs don't go into a port's folder.
+camera=(), microphone=(), geolocation=(), usb=(), payment=()
+{s}:{s}:{s}:{s}:[U          ]:LCT-{s}:
+Secrets were required, but not provided
+
+# src/app_library.rs, src/library_cache.rs, src/main.rs: why the game list is read again or the cache not used (the log)
+after the game the start began
+after the start
+page opened
+games added
+{s} games added, {s} removed, {s} systems before, {s} now
+none yet
+damaged ({s})
+cache format {s} (this version reads {s})
+written by version {s}
+a game's file was missing
+
+# src/app_starter.rs
+starter pack
+# instant on: trace steps, the wake's log line, sway commands (src/sleep.rs, pad.rs, audio.rs, bin/pocket_core.rs)
+audio: stream reopened
+core: awake
+pad: lost
+sleep: light
+sleep: game on
+no deep sleep
+output * power off
+output * power on
+sleep: screen on
+power key seen by the kernel {s} ms
+screen on {s} ms
+game on {s} ms
+ROCKNIX's wake hooks done {s} ms
+volume set {s} ms
+nothing recorded
+sleep: wake timeline, ms after the system was back: {s}
+sleep: volume set
+sleep: suspending
+sleep: resumed
+sleep: wake hooks done
+no EGL devices: {s}
+no EGL device
+EGL display: {s}
+EGL configs: {s}
+no EGL config
+Advance Wars.gba
+Super Metroid.sfc
+gpu picture: {s} ms mean, median {s}, p99 {s} ({s} passes)
+video: no timer queries on this GL ({s}), GPU timing is off
+
+# src/disc.rs
+disc {s}
+system volume information
+
+# src/sync_conflicts.rs (errors of moving a file, after the file's path in the log)
+{s} is there
+the copy came out short
+
+# src/app_sync_conflicts.rs (snapshot data: the name Syncthing gives the other version)
+{s}.sync-conflict-20261024-181502-K3QW7ZD.{s}
+# src/archive.rs: the sentences are put together from a first part and its advice; de.tsv translates each whole
+# (shown by the notice:* snapshot states)
+The zip file
+{s} holds {s} game files.
+{s} holds 2 game files.
+{s} is password-protected, and pocket-core can't open it.
+{s} is packed in a way pocket-core can't open.
+{s} is damaged: the game inside doesn't match its checksum.
+{s} is damaged or not complete.
+{s} is empty.
+Unpack it on a computer and keep only the one you want.
+Unpack it on a computer and copy the game file itself.
+Pack it again as a normal zip file, or copy the game file itself.
+Copy the file to the SD card again.
+Check that it is the right file.
+
+# src/main.rs: made-up cht files of the Cheats snapshots (snapshot_cheats)
+cheat{s}_desc = "{s}"\ncheat{s}_address = "{s}"\ncheat{s}_value = "9"\ncheat{s}_cheat_type = "1"\ncheat{s}_handler = "1"
+cheat0_desc = "Infinite lives"\ncheat0_code = "01FF57D8"\ncheat1_desc = "Full energy"\ncheat1_code = "01FF5AD8"\n{s}{s}
+
+# src/app_storage.rs
+picture cache cleared
+at start
+
+# src/library_sync.rs: why another device's file was skipped (the log only)
+{s}: not a file of ours ({s} bytes)
+
+# src/library_sync/tests.rs
+AAAAAAA-AAAAAAA
+BBBBBBB-BBBBBBB
+after the first boss
+Link's Awakening
+water temple
+fire temple
+keep me
+from B
+typed on A
+disc 2 next
+another game
+Two players
+made while off
+CCCCCCC-CCCCCCC
+# src/net_check.rs
+NetworkManager is online
+
+# src/softpatch.rs
+the IPS patch is cut short
+not an IPS patch
+the patch is cut short
+a number in the patch is too big
+the patch doesn't match its checksum
+the patch copies from outside the game
+the patched game doesn't match the patch's checksum
+Patch the game on a computer instead.
+not a patch of its kind
+the patch writes past the end of the game
+# the advice after a refusal's first sentence: de.tsv translates each sentence whole
+Use the version it was made for, or take the patch out of the folder to play the original.
+Copy it to the SD card again, or take it out of the folder to play the original.
+Patch the game on a computer, or take the patch out of the folder to play the original.
+
+# src/app_gallery.rs: a log line (why the folder was read), src/gallery.rs: the reason of an error that is logged
+card row
+not a plain file
+not a screenshot of the folder
+# timeline.rs: pocket-core's command, its exit report and the writer's log
+load {s} {s}
+earlier: {s} states ({s} in play, {s} in a pause), {s} copied, {s} failed; serialize {s} ms (max {s}), {s} KB; written {s} in {s} ms each, {s} skipped, {s} removed by the caps
+the state is empty
+a state of {s} is more than a game's {s}
+the SD card is nearly full
+# A game's title on a tile without box art, its last line cut with "…" (home_panel::title_lines): a name, not a sentence
+{s} …
+
+# src/sleep.rs (power button set to Screen off: a timing mark and pocket-core's command)
+sleep: screen off, the game on
+screen off
+
+# src/system_ctl.rs (Restart pocket-ui through `Hw::power`: never asked for, never painted)
+Only pocket-ui itself can restart pocket-ui.
+
+# src/report.rs (the report's own files, never painted)
+Alias
+from the Store
+versions, device, uptime, battery, temperatures, free space, the last crash
+the cores and emulators on this Pocket
+a settings file of pocket-ui
+the last Wi-Fi sign-in page that needed a full browser
+the sign-in page of that start that needed a full browser
+the end of the same log from the start before
+the end of the same log from the start before that
+each power off or restart: which one, the clock alarm, the command and how it ended
+the end of the log of pocket-ui, pocket-core and the launcher
+the end of the system's own log
+temperatures, clocks, fan and battery every 5 seconds
+one line for each crash or unexpected shutdown
+why the last game stopped
+{s} B
+no answer
+did not answer
+{s} d {s} h {s} min
+removable card or stick {s}
+{s} = {s} free of {s}, {s}{s}
+, read-only
+unknown = /proc/mounts could not be read
+{s} available of {s}
+{s} (commit {s})
+not recorded, a build of its own
+NAME
+VERSION
+unknown (no /etc/os-release)
+{s}, version unknown
+unknown (no name or version in /etc/os-release)
+none recorded
+waiting to be shown
+version not recorded
+date unknown
+size unknown
+[game {s} {s}{s}{s}{s}]
+clock_settime: {s}
+RTC_SET_TIME on {s}: {s}
+Users
+Auml
+Ouml
+Uuml
+Mozilla/5.0 (Linux; aarch64) pocket-ui sign-in helper
+Accept: text/html,application/xhtml+xml,*/*;q=0.8
+Accept-Language: de,en;q=0.8
+Accept-Language: en,de;q=0.5
+Content-Type: {s}
+odd form
+multipart/form-data; boundary={s}
+no session
+# The device found at the start (src/device.rs) and the lid in the log (pad.rs, sleep.rs)
+no device tree model
+device: {s} ({s}), experimental
+device: {s} ({s})
+device: unknown ({s}), generic
+{s} (POCKETUI_DEVICE)
+lid {s}  src {s}
+the lid
+# The report's device line (report.rs): file text
+device_profile
+unknown to pocket-ui
+{s}, {s}
+tested
+experimental
+# pocket-splash's log lines (journal only, src/bin/pocket_splash.rs, src/splash.rs)
+{s}: cannot read its layout ({s})
+{s}: not a true colour frame buffer (visual {s})
+told to stop
+sway is starting
+sway has the screen
+cannot write to {s}: {s}
+frame buffer {s}x{s} with {s} bytes a row
+
+# src/auto_off.rs (log lines and the names of /proc/driver/rtc's fields, never painted)
+alarm_IRQ
+start: {s}
+
+# src/shutdown_log.rs (how a command ended, for shutdown.log)
+exit {s}
+not started: {s}
+
+# src/system_ctl.rs (shutdown.log lines)
+{s}: systemctl ended: exit 0
+
+# src/net_state.rs, src/system_ctl.rs, src/quick.rs (log lines, the reasons of a failed switch or scan: they go to the log, the
+# page says the sentences above), test data
+wifictl enable exited with 1
+connect saved
+{s} {s} exited with {s}: {s}
+{s} {s} was stopped: {s}
+nmcli did not answer in {s} s
+nmcli: {s}
+stopped for a switch
+dropped (stale)
+wifi.enabled could not be stored
+
+# Wi-Fi activation diagnostics: logged and mapped to fixed sentences before painting.
+Error: Timeout expired (45 seconds)
+Error: Connection activation failed: Secrets were required, but not provided.
+No network with SSID '{s}' found.
+GENERAL.STATE,GENERAL.CON-UUID,GENERAL.REASON
+Couldn't read the Wi-Fi device state
+Timeout expired while Wi-Fi was waking
+Timeout expired while identifying the Wi-Fi network
+Activation failed while waiting for Wi-Fi
+Timeout expired while connecting to Wi-Fi
+Timeout expired while leaving the previous network
+
+# Joined activation reason and local-device readiness are logged, never painted directly.
+Activation failed: {s}
+wlan0 not ready yet
+
+# net.log lines and the report README's description of it (src/net_log.rs, src/report.rs): log text, not UI
+[{s}] --- journal not readable: {s} ---
+[{s}] --- journal follower ended ({s}), starting again in {s} s ---
+[{s}] --- saved connections (nmcli) ---
+[{s}] --- saved connections: nmcli gave nothing ({s}) ---
+[{s}] --- iwd known networks ({s}): {s} ---
+{s}[key dump hidden]
+NAME,UUID,TYPE
+what the network programs said (Wi-Fi, Tailscale) and the names of the saved networks

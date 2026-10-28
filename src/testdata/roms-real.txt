@@ -1,0 +1,27 @@
+atari2600/a2600-test.a26
+dreamcast/Sonic Adventure 2 (Europe)[!].cdi
+gamecube/Mario Kart - Double Dash!! (USA).nkit.iso
+gamegear/gg-test.gg
+gb/Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev 2).gb
+gba/0902 - MegaMan & Bass (U)(Rev A).gba
+gba/Final Fantasy VI Advance [Restored].gba
+gbc/uCity.gbc
+mastersystem/sms-test.sms
+megadrive/Old-Towers.bin
+n64/Harvest Moon 64 (USA).n64
+n64/Mario Kart 64 (USA).n64
+nds/New Super Mario Bros. (USA, Australia).nds
+nes/Nova the Squirrel.nes
+pcengine/Reflectron (aetherbyte).pce
+pcengine/Santatlantean (aetherbyte).pce
+ps2/Mcd002.ps2
+ps2/Mcd001.ps2
+ps2/Burnout 3 - Takedown (USA).chd
+ps2/Ico (USA).chd
+psp/Bomberman (US).iso
+psx/Crash Bandicoot 2.bin
+psx/Crash Bandicoot 2.cue
+sg-1000/sg-test.sg
+snes/Donkey Kong 1 - Country.smc
+snes/Contra III - The Alien Wars.smc
+wonderswan/ws-test.ws

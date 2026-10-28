@@ -1,0 +1,15 @@
+Device 4C:B9:9B:0A:1B:2C (public)
+	Name: Xbox Wireless Controller
+	Alias: Xbox Wireless Controller
+	Appearance: 0x03c4 (964)
+	Icon: input-gaming
+	Paired: yes
+	Bonded: yes
+	Trusted: yes
+	Blocked: no
+	Connected: no
+	WakeAllowed: yes
+	LegacyPairing: no
+	UUID: Generic Access Profile    (00001800-0000-1000-8000-00805f9b34fb)
+	UUID: Human Interface Device    (00001812-0000-1000-8000-00805f9b34fb)
+	Modalias: usb:v045Ep0B13d0517

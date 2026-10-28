@@ -1,0 +1,372 @@
+# What pocket-ui expects of a ROCKNIX system: the data of scripts/rocknix-contract.sh, explained row by row in
+# docs/ROCKNIX-CONTRACT.md. One row per promise:
+#
+#   kind|label|where pocket-ui relies on it|path in the system (no leading /)|argument
+#
+# The argument is the rest of the line (it may contain |). Kinds:
+#   file       the path exists (alternatives separated by ;)
+#   absent     the path does not exist (an override that would change what pocket-ui relies on)
+#   exec       an executable file
+#   grep       the file has a line matching the extended regular expression in the argument
+#   fn         001-functions-style file <path> defines the shell function <argument>
+#   body       <file>:<function>: the function's body has a line matching the argument
+#   keys       the script reads every system.cfg key of the argument (get_setting, game_setting, add_setting)
+#   cfg        the file (ROCKNIX's default system.cfg) has the key <argument>=
+#   sha        the file's sha256 is one of the argument's (versions the launcher knows)
+#   calls      the ROCKNIX functions (defined in the argument's first word) the script calls are all among the rest
+#   lockstyle  wait_lock in the file takes the lock in a way src/system_cfg.rs knows (create-exclusive or flock)
+#   trips      ROCKNIX's fancontrol trip temperatures for a profile: "<profile> t1 t2 t3 t4 t5 t6"
+#   sys        es_systems.cfg's system <path>: "<folder> <extensions...>" as in ROCKNIX 20261001, or "-" (not there)
+#   sysroot    every system folder in es_systems.cfg starts with the argument's first word, but those of the systems
+#              named after it (Tools, Music and the like)
+#   core       <path>/<argument>_libretro.so is there
+#   text       a fixed string in a (binary) file; the path's last part may be a shell pattern
+#   glibc      the C library at the path is at least the argument's version
+#   systemd    systemd (libsystemd-shared-<n>.so in the folder) is at least the argument
+#   live:KIND  only on a running system (--host); n/a on a folder or a source tree
+#   src        not a check: for --ref, where the file at <path> comes from in ROCKNIX's source tree (the argument;
+#              alternatives separated by ;, the first one there counts, for files that moved in the tree)
+#
+# Some rows are kept in step with the code by cargo test (os_compat::tests::the_rocknix_contract_data_matches_the_code):
+# the sha rows (os_compat::KNOWN_UI_START), the file rows of os_compat::FILES and DLOPEN, the core rows
+# (hostsys::routed_cores), a sys row for every system name of hostsys, the lock and the path of system_cfg, the keys of
+# setsettings.sh and input_sense (emu_choice::RA_SETTINGS, fn_keys::KEYS), and the trips rows (fan_curve). Every row
+# needs its line in docs/ROCKNIX-CONTRACT.md (the_rocknix_contract_doc_lists_every_row). The sys rows are ROCKNIX
+# 20261001's es_systems.cfg.
+
+# ---- The UI start the launcher repeats (deploy/run-pocket-ui.sh, "ROCKNIX's UI start") ------------------------------
+sha|start_es.sh is a version the launcher repeats|deploy/run-pocket-ui.sh ROCKNIX's UI start; os_compat::KNOWN_UI_START|usr/bin/start_es.sh|463acec36231a2230f311e0281fe80693c0046c531985bd75bd4c8d83b95161e 142a7f97832b7af8bda71c144d45a2e58c54ac2b41a184aaa9c67a79b45be9dc
+sha|es_settings is a version the launcher repeats|deploy/run-pocket-ui.sh ROCKNIX's UI start; os_compat::KNOWN_UI_START|usr/bin/es_settings|d6498b7f5dc09be4bd42615c48f7b98cdeec02b2fe4e8c25020854847bbfacc6
+calls|start_es.sh calls only ROCKNIX functions the launcher repeats|deploy/run-pocket-ui.sh prerotate_start, scanout_reset_stale|usr/bin/start_es.sh|etc/profile.d/001-functions prerotate_env scanout_reset_stale
+calls|es_settings calls only ROCKNIX functions the launcher repeats|deploy/run-pocket-ui.sh rocknix_ui_env, rocknix_ui_chores|usr/bin/es_settings|etc/profile.d/001-functions get_setting set_kill
+grep|start_es.sh loads es_settings|deploy/run-pocket-ui.sh repeats es_settings in its place|usr/bin/start_es.sh|es_settings
+grep|start_es.sh starts EmulationStation|deploy/run-pocket-ui.sh run_es: EmulationStation as the fallback|usr/bin/start_es.sh|^[[:space:]]*(exec[[:space:]]+)?emulationstation([[:space:]]|$)
+grep|es_settings exports SDL_AUDIODRIVER|deploy/run-pocket-ui.sh rocknix_scan reads the value from this line|usr/bin/es_settings|^[[:space:]]*export[[:space:]]+SDL_AUDIODRIVER=[A-Za-z0-9_,-]+[[:space:]]*$
+keys|es_settings reads system.timezone and system.language|deploy/run-pocket-ui.sh rocknix_ui_env, rocknix_ui_chores (cfg_value)|usr/bin/es_settings|system.timezone system.language
+grep|es_settings compiles locales under /storage/.config/emulationstation/locale|deploy/run-pocket-ui.sh LOCALE_DIR|usr/bin/es_settings|/storage/\.config/emulationstation
+grep|es_settings writes /storage/.cache/timezone|deploy/run-pocket-ui.sh TZ_CACHE, rocknix_ui_chores|usr/bin/es_settings|TIMEZONE=.*/storage/\.cache/timezone
+grep|es_settings restarts tz-data.service|deploy/run-pocket-ui.sh rocknix_ui_chores|usr/bin/es_settings|systemctl restart tz-data\.service
+grep|es_settings imports 999-export into systemd|deploy/run-pocket-ui.sh rocknix_ui_chores|usr/bin/es_settings|/etc/profile\.d/999-export
+grep|es_settings sets the kill chord's target|deploy/run-pocket-ui.sh rocknix_ui_chores (set_kill set "emulationstation")|usr/bin/es_settings|set_kill set "emulationstation"
+file|999-export, the quirk variables|deploy/run-pocket-ui.sh rocknix_ui_chores|etc/profile.d/999-export|
+file|/etc/profile, which loads 001-functions|deploy/run-pocket-ui.sh in_rocknix (ROCKNIX_PROFILE)|etc/profile|
+grep|essway.service runs start_es.sh|deploy/essway-pocket-ui.conf replaces ExecStart; scripts/autostart.sh|usr/lib/systemd/system/essway.service|^ExecStart=/usr/bin/start_es\.sh
+grep|essway.service restarts always|deploy/essway-pocket-ui.conf: EmulationStation ending starts the launcher again|usr/lib/systemd/system/essway.service|^Restart=always
+grep|essway.service comes after sway.service|deploy/run-pocket-ui.sh waits for sway (SWAY_WAIT)|usr/lib/systemd/system/essway.service|^After=.*sway\.service
+grep|sway's socket is where the launcher looks|deploy/run-pocket-ui.sh SWAYSOCK|etc/profile.d/050-sway.conf|SWAYSOCK="?\$\{?XDG_RUNTIME_DIR\}?/sway-ipc\.0\.sock
+grep|sway's Wayland display is wayland-1|deploy/run-pocket-ui.sh WAYLAND_DISPLAY|etc/profile.d/050-sway.conf|WAYLAND_DISPLAY=wayland-1
+grep|XDG_RUNTIME_DIR is /var/run/0-runtime-dir|deploy/run-pocket-ui.sh XDG_RUNTIME_DIR|etc/profile.d/050-sway.conf|XDG_RUNTIME_DIR=/var/run/0-runtime-dir
+systemd|systemd 254 or later (RestartSteps in the drop-in)|deploy/essway-pocket-ui.conf; scripts/autostart.sh|usr/lib/systemd|254
+text|systemd reads units and drop-ins from /storage/.config/system.d|deploy/essway-pocket-ui.conf (scripts/autostart.sh), sync.rs DROPIN_PATH|usr/lib/systemd/libsystemd-shared-*.so|/storage/.config/system.d
+file|tz-data.service|deploy/run-pocket-ui.sh rocknix_ui_chores; system_ctl time zone|usr/lib/systemd/system/tz-data.service|
+file|localedef and its sources|deploy/run-pocket-ui.sh rocknix_ui_chores|usr/bin/localedef|
+file|/usr/share/i18n|deploy/run-pocket-ui.sh rocknix_ui_chores (I18NPATH)|usr/share/i18n|
+
+# ---- system.cfg, its lock and ROCKNIX's functions (src/system_cfg.rs, emu_choice.rs, fn_keys.rs) --------------------
+grep|system.cfg lives in /storage/.config/system/configs|system_cfg::PATH|etc/profile.d/001-functions|^J_DIR="/storage/\.config/system"
+grep|J_CONF is $J_DIR/configs/system.cfg|system_cfg::PATH|etc/profile.d/001-functions|^J_CONF="\$\{J_DIR\}/configs/system\.cfg"
+grep|the lock is /tmp/.system.cfg.lock|system_cfg::LOCK|etc/profile.d/001-functions|^J_CONF_LOCK="/tmp/\.system\.cfg\.lock"
+lockstyle|wait_lock takes the lock in a style system_cfg knows|src/system_cfg.rs LockStyle::of_device|etc/profile.d/001-functions|
+fn|get_setting|emu_choice, fn_keys, port_perf, the launcher (in_rocknix)|etc/profile.d/001-functions|get_setting
+fn|set_setting|system_cfg::set imitates it; fn_keys, port_perf call it|etc/profile.d/001-functions|set_setting
+fn|del_setting|system_cfg::with_setting imitates it|etc/profile.d/001-functions|del_setting
+fn|wait_lock|system_cfg::LockStyle|etc/profile.d/001-functions|wait_lock
+fn|set_kill|deploy/run-pocket-ui.sh rocknix_ui_chores|etc/profile.d/001-functions|set_kill
+body|set_setting starts from the shipped system.cfg|system_cfg SEED (SystemCfg::edit)|etc/profile.d/001-functions:set_setting|cp .*/usr/config/system/configs/system\.cfg
+body|set_setting takes only keys starting with a letter or digit|system_cfg::valid_key|etc/profile.d/001-functions:set_setting|\[\[:alnum:\]\]
+body|set_setting deletes the key first|system_cfg::with_setting|etc/profile.d/001-functions:set_setting|del_setting "\$\{1\}"
+body|set_setting appends key=value|system_cfg::with_setting|etc/profile.d/001-functions:set_setting|echo "\$\{1\}=\$\{2\}" >> "\$\{J_CONF\}"
+body|set_setting's value "default" only removes|system_cfg::with_setting|etc/profile.d/001-functions:set_setting|"default"
+body|del_setting removes every key= line|system_cfg::with_setting|etc/profile.d/001-functions:del_setting|sed -i "/\^\$\{1\}=/d"
+body|get_setting reads per-game keys system["file"].key|emu_choice::resolve, emu_settings::es_game_key|etc/profile.d/001-functions:get_setting|\[\\"
+body|get_setting falls back to system.key|emu_choice RA_SETTINGS levels|etc/profile.d/001-functions:get_setting|system\.['"]*\$\{1\}
+body|get_setting falls back to global.key|emu_choice RA_SETTINGS levels|etc/profile.d/001-functions:get_setting|global\.['"]*\$\{1\}
+file|ROCKNIX's default system.cfg|system_cfg SEED; emu_choice::SHIPPED_CFG (Restore defaults)|usr/config/system/configs/system.cfg|
+cfg|default system.language|i18n (system language), the launcher (LANG)|usr/config/system/configs/system.cfg|system.language
+cfg|default system.timezone|system_ctl time zone, the launcher|usr/config/system/configs/system.cfg|system.timezone
+cfg|default wifi.enabled|system_ctl Wi-Fi switch|usr/config/system/configs/system.cfg|wifi.enabled
+cfg|default ssh.enabled|remote.rs|usr/config/system/configs/system.cfg|ssh.enabled
+cfg|default samba.enabled|wifi.rs shares|usr/config/system/configs/system.cfg|samba.enabled
+cfg|default updates.enabled|rescue.rs|usr/config/system/configs/system.cfg|updates.enabled
+cfg|default cooling.profile|fan_curve Auto, power.rs|usr/config/system/configs/system.cfg|cooling.profile
+cfg|default audio.volume|sleep.rs volume after wake|usr/config/system/configs/system.cfg|audio.volume
+
+# ---- Games through runemu.sh (src/main.rs spawn_game, emu_choice.rs, standalone.rs) --------------------------------
+exec|runemu.sh|main.rs spawn_game|usr/bin/runemu.sh|
+grep|runemu.sh takes the game as its first argument|main.rs spawn_game: runemu.sh <rom> -P<system> --core= --emulator= --controllers=|usr/bin/runemu.sh|ROMNAME="\$1"
+grep|runemu.sh reads -P<system>|main.rs spawn_game|usr/bin/runemu.sh|PLATFORM="\$\{ARGUMENTS##\*-P\}"
+grep|runemu.sh reads --core=|main.rs spawn_game|usr/bin/runemu.sh|CORE="\$\{ARGUMENTS##\*--core=\}"
+grep|runemu.sh reads --emulator=|main.rs spawn_game|usr/bin/runemu.sh|EMULATOR="\$\{ARGUMENTS##\*--emulator=\}"
+grep|runemu.sh reads --controllers=|main.rs spawn_game|usr/bin/runemu.sh|--controllers=
+grep|RetroArch loads cores from /tmp/cores|emu_choice::installed; store::core_path|usr/bin/runemu.sh|/tmp/cores/\$\{CORE\}_libretro\.so
+grep|standalone emulators start as start_<core>.sh|emu_choice::installed|usr/bin/runemu.sh|/usr/bin/start_\$\{CORE%-\*\}\.sh
+grep|Mednafen starts with start_mednafen.sh|emu_choice::installed|usr/bin/runemu.sh|start_mednafen\.sh
+grep|GameCube starts with start_dolphin_gc.sh|emu_choice::installed|usr/bin/runemu.sh|start_dolphin_gc\.sh
+grep|Wii starts with start_dolphin_wii.sh|emu_choice::installed|usr/bin/runemu.sh|start_dolphin_wii\.sh
+grep|runemu.sh runs setsettings.sh for RetroArch|emu_choice RA_SETTINGS (the Runs on page)|usr/bin/runemu.sh|/usr/bin/setsettings\.sh
+grep|runemu.sh switches cooling.profile per game|fan_curve (runemu games), system_cfg (the lock exists for this)|usr/bin/runemu.sh|set_setting cooling\.profile
+keys|runemu.sh reads cooling.profile and MangoHud|fan_curve; emu_settings MANGOHUD_KEY|usr/bin/runemu.sh|cooling.profile rocknix.mangohud.enabled
+grep|runemu.sh sets the kill chord back to EmulationStation|control.rs, deploy/run-pocket-ui.sh (same target)|usr/bin/runemu.sh|set_kill set "emulationstation"
+exec|setsettings.sh|emu_choice RA_SETTINGS|usr/bin/setsettings.sh|
+keys|setsettings.sh reads the Runs on page's keys|emu_choice::RA_SETTINGS|usr/bin/setsettings.sh|ratio integerscale smooth shaderset rewind runahead autosave
+grep|setsettings.sh has NO_REWIND|emu_choice NO_REWIND|usr/bin/setsettings.sh|NO_REWIND=\(
+grep|setsettings.sh has NO_RUNAHEAD|emu_choice NO_RUNAHEAD|usr/bin/setsettings.sh|NO_RUNAHEAD=\(
+exec|start_armsx2.sh|standalone.rs, emu_settings (PS2)|usr/bin/start_armsx2.sh|
+keys|start_armsx2.sh reads the PS2 options|emu_settings PS2 table|usr/bin/start_armsx2.sh|internal_resolution graphics_backend enable_widescreen_patches aspect_ratio show_fps
+exec|start_azahar.sh|standalone.rs, emu_settings (3DS)|usr/bin/start_azahar.sh|
+keys|start_azahar.sh reads the 3DS options|emu_settings 3DS table|usr/bin/start_azahar.sh|resolution_scale screen_layout graphics_backend
+exec|start_dolphin_gc.sh|standalone.rs, emu_settings (GameCube)|usr/bin/start_dolphin_gc.sh|
+keys|start_dolphin_gc.sh reads the GameCube options|emu_settings DOLPHIN more()|usr/bin/start_dolphin_gc.sh|gamecube_controller_profile swap_shoulders rumble shader_mode shader_precompile vsync clock_speed sync_gpu_thread skip_efb_cpu_access store_efb_to_texture_only store_xfb_to_texture_only texture_cache_accuracy
+exec|start_dolphin_wii.sh|standalone.rs, emu_settings (Wii)|usr/bin/start_dolphin_wii.sh|
+keys|start_dolphin_wii.sh reads the Wii options|emu_settings WII more()|usr/bin/start_dolphin_wii.sh|wii_controller_profile shader_mode vsync
+exec|start_mednafen.sh|emu_choice::installed|usr/bin/start_mednafen.sh|
+exec|start_scummvm.sh|hostsys (ScummVM)|usr/bin/start_scummvm.sh|
+exec|start_pico8.sh|hostsys, app_emu_choice (PICO-8)|usr/bin/start_pico8.sh|
+exec|start_portmaster.sh|ports.rs|usr/bin/start_portmaster.sh|
+file|/storage/cores and /tmp/cores (the cores overlay)|store::CORES_DIR, emu_choice::installed|usr/lib/systemd/system/tmp-cores.mount|
+file|/tmp/shaders|emu_choice::SHADER_DIR|usr/lib/systemd/system/tmp-shaders.mount|
+file|RetroArch's cheat database|cheats.rs|usr/share/libretro-database/cht|
+
+# ---- The library: es_systems.cfg (src/library.rs, hostsys.rs) -------------------------------------------------------
+file|es_systems.cfg|library::load, library::all_systems|usr/config/emulationstation/es_systems.cfg|
+sysroot|every game system's folder is under /storage/roms/|library::all_systems (folder = path without /storage/); the others are Tools, Music and the like|usr/config/emulationstation/es_systems.cfg|/storage/roms/ idtech music scummvm steam tools
+grep|es_systems lists emulators by name|library.rs, emu_choice (Runs on)|usr/config/emulationstation/es_systems.cfg|<emulator name="
+grep|es_systems marks the default core|library.rs default core|usr/config/emulationstation/es_systems.cfg|<core default="true">
+
+# ---- Sleep, sound, fan, keys, lights (src/sleep.rs, audio.rs, power.rs, fan_curve.rs, fn_keys.rs, leds.rs) ----------
+grep|logind suspends on the power key|sleep.rs holds a handle-power-key inhibitor while pocket-ui handles the key|etc/systemd/logind.conf|^HandlePowerKey=suspend
+exec|ROCKNIX's sleep hook|sleep.rs (volume after wake)|usr/lib/systemd/system-sleep/sleep|
+keys|the wake hook restores audio.volume|sleep.rs writes audio.volume through volume before it suspends|usr/lib/systemd/system-sleep/sleep|audio.volume
+exec|volume|sleep.rs, system_ctl (volume <n>)|usr/bin/volume|
+grep|volume takes a number|sleep.rs, system_ctl: volume <n>|usr/bin/volume|VOLUME=\$\{1\}
+grep|volume sets PipeWire's sink|sleep.rs|usr/bin/volume|pactl .*set-sink-volume @DEFAULT_SINK@
+grep|volume stores audio.volume|sleep.rs|usr/bin/volume|set_setting "?audio\.volume"?
+exec|quantum|audio.rs resets PipeWire's quantum; the launcher after a crash|usr/sbin/quantum|
+exec|fancontrol|power.rs, fan_curve.rs (ROCKNIX's profiles)|usr/bin/fancontrol|
+grep|fancontrol hands over to the platform's quirk|power.rs, fan_curve.rs (the SM8250 profiles below)|usr/bin/fancontrol|quirks/platforms/\$\{HW_DEVICE\}/bin/fancontrol
+absent|no fancontrol of the Mini V2's own|power.rs, fan_curve.rs (the SM8250 profiles below)|usr/lib/autostart/quirks/devices/Retroid Pocket Mini V2/bin/fancontrol|
+file|the Mini V2's own quirks|docs/device-baseline (DEVICE_* variables)|usr/lib/autostart/quirks/devices/Retroid Pocket Mini V2|
+trips|fancontrol's quiet trips|fan_curve::rocknix_trips, power::Fan::Quiet|usr/lib/autostart/quirks/platforms/SM8250/bin/fancontrol|quiet 52000 62000 69000 75000 80000 85000
+trips|fancontrol's moderate trips|fan_curve::rocknix_trips|usr/lib/autostart/quirks/platforms/SM8250/bin/fancontrol|moderate 45000 55000 62000 68000 73000 78000
+trips|fancontrol's aggressive trips|fan_curve::rocknix_trips, power::Fan::Cool|usr/lib/autostart/quirks/platforms/SM8250/bin/fancontrol|aggressive 40000 48000 55000 61000 66000 71000
+grep|fancontrol writes the zone's trip points|power.rs, fan_curve.rs (only the active trips)|usr/lib/autostart/quirks/platforms/SM8250/bin/fancontrol|trip_point_\$\{idx\}_temp
+exec|gpu_overclock|system_ctl GPU cap|usr/lib/autostart/quirks/platforms/SM8250/bin/gpu_overclock|
+exec|input_sense|fn_keys.rs|usr/bin/input_sense|
+keys|input_sense reads the function key settings|fn_keys::KEYS|usr/bin/input_sense|key.function.b key.function.b.up key.function.b.down
+grep|input_sense runs the configured action|fn_keys::KEYS (true = do nothing)|usr/bin/input_sense|FN_B_ACTION_UP
+file|input.service|fn_keys restarts it|usr/lib/systemd/system/input.service|
+exec|mako-notify|mako_osd.rs (the box it shows is hidden by a mako mode)|usr/bin/mako-notify|
+exec|makoctl|mako_osd.rs (mode -a/-r pocket-ui, reload)|usr/bin/makoctl|
+grep|input_sense shows its volume and brightness box with mako-notify|mako_osd.rs hides it while pocket-ui is in front|usr/bin/input_sense|/usr/bin/mako-notify .*-no-es
+exec|ledcontrol|leds.rs|usr/bin/ledcontrol|
+grep|ledcontrol hands over to the platform's quirk|leds.rs|usr/bin/ledcontrol|quirks/platforms/\$\{HW_DEVICE\}/bin/ledcontrol
+absent|no ledcontrol of the Mini V2's own|leds.rs|usr/lib/autostart/quirks/devices/Retroid Pocket Mini V2/bin/ledcontrol|
+grep|ledcontrol off|leds.rs|usr/lib/autostart/quirks/platforms/SM8250/bin/ledcontrol|^[[:space:]]*off\)
+grep|ledcontrol rgb|leds.rs|usr/lib/autostart/quirks/platforms/SM8250/bin/ledcontrol|^[[:space:]]*rgb\)
+grep|ledcontrol battery starts batteryledstatus.service|leds.rs|usr/lib/autostart/quirks/platforms/SM8250/bin/ledcontrol|systemctl restart batteryledstatus\.service
+grep|ledcontrol stores led.color|leds.rs|usr/lib/autostart/quirks/platforms/SM8250/bin/ledcontrol|set_setting led\.color
+exec|analog_sticks_ledcontrol|leds.rs|usr/bin/analog_sticks_ledcontrol|
+exec|the SM8250 analog_sticks_ledcontrol|leds.rs|usr/lib/autostart/quirks/platforms/SM8250/bin/analog_sticks_ledcontrol|
+file|batteryledstatus.service|leds.rs|usr/lib/systemd/system/batteryledstatus.service|
+
+# ---- Wi-Fi, Bluetooth, time, services (src/wifi.rs, bluetooth.rs, system_ctl.rs, remote.rs, sync.rs, tailscale.rs) --
+exec|wifictl|system_ctl Wi-Fi switch|usr/bin/wifictl|
+grep|wifictl enable|system_ctl: wifictl enable|usr/bin/wifictl|^[[:space:]]*"?enable"?\)
+grep|wifictl disable|system_ctl: wifictl disable|usr/bin/wifictl|^[[:space:]]*"?disable"?\)
+keys|wifictl reads wifi.ssid, wifi.key and wifi.country|wifi.rs writes them|usr/bin/wifictl|wifi.ssid wifi.key wifi.country
+exec|rocknix-bluetooth|bluetooth.rs, system_ctl|usr/bin/rocknix-bluetooth|
+grep|rocknix-bluetooth enable|system_ctl|usr/bin/rocknix-bluetooth|^[[:space:]]*"enable"\)
+grep|rocknix-bluetooth disable|system_ctl|usr/bin/rocknix-bluetooth|^[[:space:]]*"disable"\)
+grep|rocknix-bluetooth save|bluetooth.rs (after pairing)|usr/bin/rocknix-bluetooth|^[[:space:]]*"save"\)
+grep|rocknix-bluetooth stores controllers.bluetooth.enabled|bluetooth.rs|usr/bin/rocknix-bluetooth|set_setting controllers\.bluetooth\.enabled
+file|bluetooth.service|bluetooth.rs, system_ctl|usr/lib/systemd/system/bluetooth.service|
+file|bluetooth-agent.service|bluetooth.rs|usr/lib/systemd/system/bluetooth-agent.service|
+exec|steamos-set-timezone|system_ctl time zone|usr/bin/steamos-polkit-helpers/steamos-set-timezone|
+grep|steamos-set-timezone stores system.timezone|system_ctl time zone|usr/bin/steamos-polkit-helpers/steamos-set-timezone|set_setting system\.timezone
+file|/usr/share/zoneinfo|system_ctl time zones|usr/share/zoneinfo|
+file|systemd-timesyncd.service|system_ctl (time sync)|usr/lib/systemd/system/systemd-timesyncd.service|
+grep|sshd.service starts only with /storage/.cache/services/sshd.conf|remote.rs SERVICE_FLAG|usr/lib/systemd/system/sshd.service|^ConditionPathExists=\|?/storage/\.cache/services/sshd\.conf
+file|smbd.service|wifi.rs shares|usr/lib/systemd/system/smbd.service|
+file|nmbd.service|wifi.rs shares|usr/lib/systemd/system/nmbd.service|
+file|syncthing.service|sync.rs|usr/lib/systemd/system/syncthing.service|
+file|tailscaled.service|tailscale.rs|usr/lib/systemd/system/tailscaled.service|
+file|tailscale|tailscale.rs|usr/sbin/tailscale|
+file|tailscaled.defaults|tailscale.rs (copied when missing)|usr/config/tailscaled.defaults|
+file|inputplumber.service|tools.rs INPUT_SERVICE|usr/lib/systemd/system/inputplumber.service|
+grep|ROCKNIX mirrors /usr/config/modules at every boot|store::ROCKNIX_MODULES (Store tools go elsewhere)|usr/lib/autostart/common/001-sync-modules|rsync .*--delete.*/usr/config/modules/? .*/storage/\.config/modules
+file|/usr/config/modules|tools::ROCKNIX_DIRS|usr/config/modules|
+file|foot|tools::TERMINAL|usr/bin/foot|
+file|ScummVM's data|hostsys (ScummVM)|usr/share/scummvm|
+
+# ---- The system itself (src/update.rs, os_compat.rs) ----------------------------------------------------------------
+grep|os-release has OS_VERSION|update.rs (the version shown and compared)|etc/os-release|^OS_VERSION=
+grep|os-release has HW_DEVICE|update.rs (same device)|etc/os-release|^HW_DEVICE=
+grep|os-release has HW_ARCH|update.rs (same device)|etc/os-release|^HW_ARCH=
+glibc|glibc 2.38 or newer|pocket-ui and pocket-core are built for glibc 2.38 (zigbuild)|usr/lib/libc.so.6|2.38
+
+# Programs and files os_compat::FILES checks before an OS update (kept in step by cargo test).
+file|sh|os_compat::FILES|bin/sh|
+file|bash|os_compat::FILES|usr/bin/bash|
+file|sway|os_compat::FILES|usr/bin/sway|
+file|swaymsg|os_compat::FILES|usr/bin/swaymsg|
+file|systemctl|os_compat::FILES|usr/bin/systemctl|
+file|start_es.sh|os_compat::FILES|usr/bin/start_es.sh|
+file|emulationstation|os_compat::FILES|usr/bin/emulationstation|
+file|001-functions|os_compat::FILES|etc/profile.d/001-functions|
+file|nmcli|os_compat::FILES|usr/bin/nmcli|
+file|iwd|os_compat::FILES|usr/lib/iwd;usr/libexec/iwd|
+file|pipewire|os_compat::FILES|usr/bin/pipewire|
+file|pactl|os_compat::FILES|usr/bin/pactl|
+file|pw-metadata|os_compat::FILES|usr/bin/pw-metadata|
+file|bluetoothctl|os_compat::FILES|usr/bin/bluetoothctl|
+file|curl|os_compat::FILES|usr/bin/curl|
+file|tar|os_compat::FILES|usr/bin/tar|
+file|unsquashfs|os_compat::FILES|usr/bin/unsquashfs|
+file|timeout|os_compat::FILES|usr/bin/timeout|
+file|grim|os_compat::FILES|usr/bin/grim|
+file|moonlight|os_compat::FILES|usr/bin/moonlight|
+# Libraries pocket-ui and pocket-core open at run time (os_compat::DLOPEN).
+file|libwayland-client.so.0|os_compat::DLOPEN|usr/lib/libwayland-client.so.0|
+file|libxkbcommon.so.0|os_compat::DLOPEN|usr/lib/libxkbcommon.so.0|
+file|libEGL.so.1|os_compat::DLOPEN|usr/lib/libEGL.so.1|
+file|libwayland-egl.so.1|os_compat::DLOPEN|usr/lib/libwayland-egl.so.1|
+file|libasound.so.2 or libpulse-simple.so.0|os_compat::DLOPEN|usr/lib/libasound.so.2;usr/lib/libpulse-simple.so.0|
+
+# ---- libretro cores pocket-core plays with (hostsys::routed_cores) -------------------------------------------------
+core|gambatte|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|gambatte
+core|mgba|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|mgba
+core|nestopia|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|nestopia
+core|snes9x|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|snes9x
+core|genesis_plus_gx|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|genesis_plus_gx
+core|gearsystem|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|gearsystem
+core|beetle_pce_fast|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|beetle_pce_fast
+core|beetle_wswan|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|beetle_wswan
+core|stella|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|stella
+core|pcsx_rearmed|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|pcsx_rearmed
+core|mupen64plus_next|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|mupen64plus_next
+core|ppsspp|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|ppsspp
+core|flycast|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|flycast
+core|melondsds|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|melondsds
+core|yabasanshiro|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|yabasanshiro
+core|dosbox_pure|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|dosbox_pure
+core|scummvm|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|scummvm
+core|fake08|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|fake08
+core|tic80|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|tic80
+core|beetle_supergrafx|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|beetle_supergrafx
+core|beetle_vb|hostsys::routed_cores (pocket-core plays with it)|usr/lib/libretro|beetle_vb
+
+# ---- es_systems.cfg entries of the systems pocket-ui knows by name (hostsys), as in ROCKNIX 20261001 ---------------
+sys|gb|hostsys.rs (pocket-core), library.rs|gb|/storage/roms/gb .gb .gbc .zip .7z
+sys|gbc|hostsys.rs (pocket-core), library.rs|gbc|/storage/roms/gbc .gb .gbc .zip .7z
+sys|gba|hostsys.rs (pocket-core), library.rs|gba|/storage/roms/gba .gba .zip .7z
+sys|nes|hostsys.rs (pocket-core), library.rs|nes|/storage/roms/nes .nes .unif .unf .zip .7z
+sys|snes|hostsys.rs (pocket-core), library.rs|snes|/storage/roms/snes .smc .fig .sfc .swc .zip .7z
+sys|megadrive|hostsys.rs (pocket-core), library.rs|megadrive|/storage/roms/megadrive .bin .gen .md .sg .smd .zip .7z
+sys|megadrive-japan|hostsys.rs (pocket-core), library.rs|megadrive-japan|/storage/roms/megadrive-japan .bin .gen .md .sg .smd .zip .7z
+sys|genesis|hostsys.rs (pocket-core), library.rs|genesis|/storage/roms/genesis .bin .gen .md .sg .smd .zip .7z
+sys|genh|hostsys.rs (pocket-core), library.rs|genh|/storage/roms/genh .bin .gen .md .sg .smd .zip .7z
+sys|megadriveh|hostsys.rs (pocket-core), library.rs|megadriveh|/storage/roms/megadriveh .bin .gen .md .sg .smd .zip .7z
+sys|mastersystem|hostsys.rs (pocket-core), library.rs|mastersystem|/storage/roms/mastersystem .bin .sms .zip .7z
+sys|gamegear|hostsys.rs (pocket-core), library.rs|gamegear|/storage/roms/gamegear .bin .gg .zip .7z
+sys|ggh|hostsys.rs (pocket-core), library.rs|ggh|/storage/roms/gamegearh .bin .gg .zip .7z
+sys|sg-1000|hostsys.rs (pocket-core), library.rs|sg-1000|/storage/roms/sg-1000 .bin .sg .zip .7z
+sys|segacd|hostsys.rs (pocket-core), library.rs|segacd|/storage/roms/segacd .chd .cue .iso .m3u
+sys|megacd|hostsys.rs (pocket-core), library.rs|megacd|/storage/roms/megacd .chd .cue .iso .m3u
+sys|sega32x|hostsys.rs (pocket-core), library.rs|sega32x|/storage/roms/sega32x .32x .smd .bin .md .zip .7z
+sys|pcengine|hostsys.rs (pocket-core), library.rs|pcengine|/storage/roms/pcengine .pce .bin .zip .7z
+sys|tg16|hostsys.rs (pocket-core), library.rs|tg16|/storage/roms/tg16 .pce .bin .zip .7z
+sys|pcenginecd|hostsys.rs (pocket-core), library.rs|pcenginecd|/storage/roms/pcenginecd .cue .ccd .chd .toc .m3u
+sys|tg16cd|hostsys.rs (pocket-core), library.rs|tg16cd|/storage/roms/tg16cd .cue .ccd .chd .toc .m3u
+sys|ngp|hostsys.rs (pocket-core), library.rs|ngp|/storage/roms/ngp .ngp .ngc .zip .7z
+sys|ngpc|hostsys.rs (pocket-core), library.rs|ngpc|/storage/roms/ngpc .ngp .ngc .zip .7z
+sys|wonderswan|hostsys.rs (pocket-core), library.rs|wonderswan|/storage/roms/wonderswan .ws .wsc .zip .7z
+sys|wonderswancolor|hostsys.rs (pocket-core), library.rs|wonderswancolor|/storage/roms/wonderswancolor .ws .wsc .zip .7z
+sys|atarilynx|hostsys.rs (pocket-core), library.rs|atarilynx|/storage/roms/atarilynx .lnx .lyx .o .zip .7z
+sys|atari2600|hostsys.rs (pocket-core), library.rs|atari2600|/storage/roms/atari2600 .a26 .bin .zip .7z
+sys|atari7800|hostsys.rs (pocket-core), library.rs|atari7800|/storage/roms/atari7800 .a78 .bin .zip .7z
+sys|pokemini|hostsys.rs (pocket-core), library.rs|pokemini|/storage/roms/pokemini .min .zip .7z
+sys|psx|hostsys.rs (pocket-core), library.rs|psx|/storage/roms/psx .bin .cue .img .mdf .pbp .toc .cbn .m3u .ccd .chd .iso
+sys|neogeo|hostsys.rs (pocket-core), library.rs|neogeo|/storage/roms/neogeo .7z .zip .neo
+sys|cps1|hostsys.rs (pocket-core), library.rs|cps1|/storage/roms/cps1 .zip .7z
+sys|cps2|hostsys.rs (pocket-core), library.rs|cps2|/storage/roms/cps2 .zip .7z
+sys|cps3|hostsys.rs (pocket-core), library.rs|cps3|/storage/roms/cps3 .zip .7z
+sys|fbn|hostsys.rs (pocket-core), library.rs|fbn|/storage/roms/fbneo .7z .zip
+sys|n64|hostsys.rs (pocket-core), library.rs|n64|/storage/roms/n64 .z64 .n64 .v64 .zip .7z
+sys|psp|hostsys.rs (pocket-core), library.rs|psp|/storage/roms/psp .iso .cso .pbp .chd
+sys|dreamcast|hostsys.rs (pocket-core), library.rs|dreamcast|/storage/roms/dreamcast .cdi .gdi .chd .m3u .cue
+sys|nds|hostsys.rs (pocket-core), library.rs|nds|/storage/roms/nds .nds .zip .7z
+sys|saturn|hostsys.rs (pocket-core), library.rs|saturn|/storage/roms/saturn .cue .chd .iso .zip
+sys|pc|hostsys.rs (pocket-core), library.rs|pc|/storage/roms/pc .com .bat .exe .dosz
+sys|scummvm|hostsys.rs (pocket-core), library.rs|scummvm|/storage/.config/scummvm/games .sh .svm .scummvm
+sys|pico-8|hostsys.rs (pocket-core), library.rs|pico-8|/storage/roms/pico-8 .p8 .png
+sys|tic-80|hostsys.rs (pocket-core), library.rs|tic-80|/storage/roms/tic-80 .tic
+sys|famicom|hostsys.rs (pocket-core), library.rs|famicom|/storage/roms/famicom .nes .unif .unf .zip .7z
+sys|nesh|hostsys.rs (pocket-core), library.rs|nesh|/storage/roms/nesh .nes .unif .unf .zip .7z
+sys|sfc|hostsys.rs (pocket-core), library.rs|sfc|/storage/roms/sfc .smc .fig .sfc .swc .zip .7z
+sys|snesh|hostsys.rs (pocket-core), library.rs|snesh|/storage/roms/snesh .smc .fig .sfc .swc .zip .7z
+sys|gbh|hostsys.rs (pocket-core), library.rs|gbh|/storage/roms/gbh .gb .zip .7z
+sys|gbch|hostsys.rs (pocket-core), library.rs|gbch|/storage/roms/gbch .gb .gbc .zip .7z
+sys|gbah|hostsys.rs (pocket-core), library.rs|gbah|/storage/roms/gbah .gba .zip .7z
+sys|gbav|hostsys.rs (pocket-core), library.rs|gbav|/storage/roms/gbav .gba .zip .7z
+sys|fds|hostsys.rs (pocket-core), library.rs|fds|/storage/roms/fds .fds .zip .7z
+sys|supergrafx|hostsys.rs (pocket-core), library.rs|supergrafx|/storage/roms/sgfx .pce .sgx .cue .ccd .chd .zip .7z
+sys|virtualboy|hostsys.rs (pocket-core), library.rs|virtualboy|/storage/roms/virtualboy .vb .zip .7z
+sys|naomi|hostsys.rs (pocket-core), library.rs|naomi|/storage/roms/naomi .lst .bin .dat .zip .7z
+sys|atomiswave|hostsys.rs (pocket-core), library.rs|atomiswave|/storage/roms/atomiswave .lst .bin .dat .zip .7z
+sys|ps2|library.rs; a folder named in our code|ps2|/storage/roms/ps2 .iso .mdf .nrg .bin .img .dump .gz .cso .chd
+sys|gamecube|library.rs; a folder named in our code|gamecube|/storage/roms/gamecube .gcm .iso .gcz .ciso .wbfs .rvz .dol .m3u
+sys|wii|library.rs; a folder named in our code|wii|/storage/roms/wii .gcm .iso .gcz .ciso .wbfs .rvz .dol .wad .m3u
+sys|3ds|library.rs; a folder named in our code|3ds|/storage/roms/3ds .3ds .3dsx .app .axf .cci .cxi .cia .elf .z3dsx .zcia .zcci .zcxi
+sys|ports|library.rs; a folder named in our code|ports|/storage/roms/ports .sh .appimage
+sys|moonlight|library.rs; a folder named in our code|moonlight|/storage/roms/moonlight/ .sh
+
+# ---- Only on a running system (--host) ------------------------------------------------------------------------------
+live:file|system.cfg on the card|system_cfg::PATH|storage/.config/system/configs/system.cfg|
+live:file|the games folder|library.rs, hostsys::BIOS_DIR|storage/roms|
+live:file|/storage/.config/system.d, systemd's folder for drop-ins|scripts/autostart.sh, sync.rs DROPIN_PATH|storage/.config/system.d|
+
+# ---- Where --ref finds each file in ROCKNIX's source tree ----------------------------------------------------------
+src|-|-|usr/bin/start_es.sh|projects/ROCKNIX/packages/ui/emulationstation/sources/start_es.sh
+src|-|-|usr/bin/es_settings|projects/ROCKNIX/packages/ui/emulationstation/sources/es_settings
+src|-|-|usr/lib/systemd/system/essway.service|projects/ROCKNIX/packages/ui/emulationstation/system.d/essway.service
+src|-|-|etc/profile.d/001-functions|projects/ROCKNIX/packages/rocknix/profile.d/001-functions
+src|-|-|etc/profile.d/999-export|projects/ROCKNIX/packages/hardware/quirks/profile.d/999-export
+src|-|-|etc/profile.d/050-sway.conf|projects/ROCKNIX/packages/wayland/compositor/sway/profile.d/050-sway.conf
+src|-|-|usr/config/system/configs/system.cfg|projects/ROCKNIX/packages/rocknix/config/system/configs/system.cfg
+src|-|-|usr/bin/runemu.sh|projects/ROCKNIX/packages/rocknix/sources/scripts/runemu.sh
+src|-|-|usr/bin/setsettings.sh|projects/ROCKNIX/packages/rocknix/sources/scripts/setsettings.sh
+src|-|-|usr/bin/wifictl|projects/ROCKNIX/packages/rocknix/sources/scripts/wifictl
+src|-|-|usr/bin/rocknix-bluetooth|projects/ROCKNIX/packages/rocknix/sources/scripts/rocknix-bluetooth
+src|-|-|usr/bin/volume|projects/ROCKNIX/packages/rocknix/sources/scripts/volume
+src|-|-|usr/bin/steamos-polkit-helpers/steamos-set-timezone|projects/ROCKNIX/packages/emulators/standalone/steam/scripts/steamos-polkit-helpers/steamos-set-timezone
+src|-|-|usr/bin/input_sense|projects/ROCKNIX/packages/sysutils/system-utils/sources/scripts/input_sense
+src|-|-|usr/lib/systemd/system-sleep/sleep|projects/ROCKNIX/packages/sysutils/sleep/sources/sleep.sh
+src|-|-|usr/lib/autostart/common/001-sync-modules|projects/ROCKNIX/packages/misc/modules/autostart/001-sync-modules
+src|-|-|usr/lib/autostart/quirks/platforms/SM8250/bin/gpu_overclock|projects/ROCKNIX/packages/hardware/quirks/platforms/SM8250/bin/gpu_overclock
+src|-|-|usr/bin/start_armsx2.sh|projects/ROCKNIX/packages/emulators/standalone/armsx2-sa/scripts/start_armsx2.sh
+src|-|-|usr/bin/start_azahar.sh|projects/ROCKNIX/packages/emulators/standalone/azahar-sa/scripts/start_azahar.sh
+src|-|-|usr/bin/start_dolphin_gc.sh|projects/ROCKNIX/packages/emulators/standalone/dolphin-sa/scripts/start_dolphin_gc.sh
+src|-|-|usr/bin/start_dolphin_wii.sh|projects/ROCKNIX/packages/emulators/standalone/dolphin-sa/scripts/start_dolphin_wii.sh
+src|-|-|usr/bin/start_mednafen.sh|projects/ROCKNIX/packages/emulators/standalone/mednafen/scripts/start_mednafen.sh
+src|-|-|usr/bin/start_scummvm.sh|projects/ROCKNIX/packages/emulators/standalone/scummvm-sa/scripts/start_scummvm.sh
+src|-|-|usr/bin/start_pico8.sh|projects/ROCKNIX/packages/emulators/standalone/pico-8/scripts/start_pico8.sh
+src|-|-|usr/bin/start_portmaster.sh|projects/ROCKNIX/packages/apps/portmaster/scripts/start_portmaster.sh
+src|-|-|usr/lib/systemd/system/tmp-cores.mount|projects/ROCKNIX/packages/emulators/libretro/retroarch/system.d/tmp-cores.mount
+src|-|-|usr/lib/systemd/system/tmp-shaders.mount|projects/ROCKNIX/packages/emulators/libretro/retroarch/system.d/tmp-shaders.mount
+src|-|-|usr/lib/systemd/system/input.service|projects/ROCKNIX/packages/sysutils/system-utils/system.d/input.service
+src|-|-|usr/lib/systemd/system/batteryledstatus.service|projects/ROCKNIX/packages/sysutils/system-utils/system.d/batteryledstatus.service
+src|-|-|usr/lib/systemd/system/bluetooth-agent.service|projects/ROCKNIX/packages/rocknix/system.d/bluetooth-agent.service
+src|-|-|usr/lib/systemd/system/bluetooth.service|packages/network/bluez/system.d/bluetooth.service
+src|-|-|usr/lib/systemd/system/sshd.service|projects/ROCKNIX/packages/network/openssh/system.d/sshd.service
+src|-|-|usr/lib/systemd/system/smbd.service|projects/ROCKNIX/packages/network/samba/system.d/smbd.service
+src|-|-|usr/lib/systemd/system/nmbd.service|projects/ROCKNIX/packages/network/samba/system.d/nmbd.service
+src|-|-|usr/lib/systemd/system/syncthing.service|projects/ROCKNIX/packages/network/syncthing/system.d/syncthing.service
+src|-|-|usr/lib/systemd/system/tailscaled.service|projects/ROCKNIX/packages/network/tailscale/system.d/tailscaled.service
+src|-|-|usr/lib/systemd/system/inputplumber.service|projects/ROCKNIX/packages/tools/inputplumber/sources/usr/lib/systemd/system/inputplumber.service;projects/ROCKNIX/packages/tools/inputplumber/sources/rootfs/usr/lib/systemd/system/inputplumber.service
+src|-|-|usr/lib/systemd/system/tz-data.service|packages/sysutils/tz/system.d/tz-data.service
+src|-|-|usr/bin/fancontrol|projects/ROCKNIX/packages/sysutils/system-utils/sources/scripts/fancontrol
+src|-|-|usr/lib/autostart/quirks/platforms/SM8250/bin/fancontrol|projects/ROCKNIX/packages/hardware/quirks/platforms/SM8250/bin/fancontrol
+src|-|-|usr/bin/ledcontrol|projects/ROCKNIX/packages/sysutils/system-utils/sources/scripts/ledcontrol
+src|-|-|usr/lib/autostart/quirks/platforms/SM8250/bin/ledcontrol|projects/ROCKNIX/packages/hardware/quirks/platforms/SM8250/bin/ledcontrol
+src|-|-|usr/lib/autostart/quirks/platforms/SM8250/bin/analog_sticks_ledcontrol|projects/ROCKNIX/packages/hardware/quirks/platforms/SM8250/bin/analog_sticks_ledcontrol
+src|-|-|usr/sbin/quantum|projects/ROCKNIX/devices/SM8250/filesystem/usr/sbin/quantum

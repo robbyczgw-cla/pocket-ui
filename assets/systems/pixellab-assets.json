@@ -1,0 +1,859 @@
+{
+ "note": "PixelLab image-to-pixelart conversions behind assets/systems/*.png. The endpoint returns no seed and none was sent, so seed is null; the input is reproducible from the source and the crop in tools/prep.py (object box + 3 % margin, long side 1280 px; nes, snes, psx and n64 uncropped). Post-processing: tools/cutout.py, tools/fix.py with tools/cleanup-ops.json, tools/finalize.py. The two entries t_sg_* and t_pm_* (supergrafx, pokemini) are different: PixelLab create-image-pixflux from a text prompt alone (no photo; 11 generations in all, the ones not used included, 'result' names the shipped file). Their post-processing is tools/text_art.py.",
+ "images": {
+  "pd_3do": {
+   "system": "3do",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-10-27",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    704
+   ],
+   "output_size": [
+    256,
+    141
+   ],
+   "source": "Wikimedia Commons File:3DO-GDO-101M-Console-Set.png (https://commons.wikimedia.org/wiki/File:3DO-GDO-101M-Console-Set.png), 1280 px thumbnail",
+   "result": "assets/systems/3do.png"
+  },
+  "pd_3ds": {
+   "system": "3ds",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    1167
+   ],
+   "output_size": [
+    256,
+    233
+   ],
+   "source": "Wikimedia Commons File:Nintendo-3DS-AquaOpen.jpg (https://commons.wikimedia.org/wiki/File:Nintendo-3DS-AquaOpen.jpg), 1280 px thumbnail",
+   "result": "assets/systems/3ds.png"
+  },
+  "pd_atari2600": {
+   "system": "atari2600",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    751
+   ],
+   "output_size": [
+    256,
+    150
+   ],
+   "source": "Wikimedia Commons File:Atari-2600-Wood-4Sw-Set.jpg (https://commons.wikimedia.org/wiki/File:Atari-2600-Wood-4Sw-Set.jpg), 1280 px thumbnail",
+   "result": "assets/systems/atari2600.png"
+  },
+  "pd_atari7800": {
+   "system": "atari7800",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-10-27",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    817
+   ],
+   "output_size": [
+    256,
+    163
+   ],
+   "source": "Wikimedia Commons File:Atari-7800-Console-FL.jpg (https://commons.wikimedia.org/wiki/File:Atari-7800-Console-FL.jpg), 1280 px thumbnail",
+   "result": "assets/systems/atari7800.png"
+  },
+  "pd_atarijaguar": {
+   "system": "atarijaguar",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-10-27",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    885
+   ],
+   "output_size": [
+    256,
+    177
+   ],
+   "source": "Wikimedia Commons File:Atari-Jaguar-Bare-HL.jpg (https://commons.wikimedia.org/wiki/File:Atari-Jaguar-Bare-HL.jpg), 1280 px thumbnail",
+   "result": "assets/systems/atarijaguar.png"
+  },
+  "pd_atarilynx": {
+   "system": "atarilynx",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-10-27",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    753
+   ],
+   "output_size": [
+    256,
+    151
+   ],
+   "source": "Wikimedia Commons File:Atari-Lynx-Handheld-Angled.jpg (https://commons.wikimedia.org/wiki/File:Atari-Lynx-Handheld-Angled.jpg), 1280 px thumbnail",
+   "result": "assets/systems/atarilynx.png"
+  },
+  "pd_colecovision": {
+   "system": "colecovision",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-10-27",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    689
+   ],
+   "output_size": [
+    256,
+    138
+   ],
+   "source": "Wikimedia Commons File:ColecoVision-Console-FL.jpg (https://commons.wikimedia.org/wiki/File:ColecoVision-Console-FL.jpg), 1280 px thumbnail",
+   "result": "assets/systems/colecovision.png"
+  },
+  "pd_dreamcast": {
+   "system": "dreamcast",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    916
+   ],
+   "output_size": [
+    256,
+    183
+   ],
+   "source": "Wikimedia Commons File:Sega-Dreamcast-Console-FL.jpg (https://commons.wikimedia.org/wiki/File:Sega-Dreamcast-Console-FL.jpg), 1280 px thumbnail",
+   "result": "assets/systems/dreamcast.png"
+  },
+  "pd_fds": {
+   "system": "fds",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-10-27",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    1170
+   ],
+   "output_size": [
+    256,
+    234
+   ],
+   "source": "Wikimedia Commons File:Nintendo-Famicom-Disk-System.jpg (https://commons.wikimedia.org/wiki/File:Nintendo-Famicom-Disk-System.jpg), 1280 px thumbnail",
+   "result": "assets/systems/fds.png"
+  },
+  "pd_gamecube": {
+   "system": "gamecube",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    718
+   ],
+   "output_size": [
+    256,
+    144
+   ],
+   "source": "Wikimedia Commons File:GameCube-Set.jpg (https://commons.wikimedia.org/wiki/File:GameCube-Set.jpg), 1280 px thumbnail",
+   "result": "assets/systems/gamecube.png"
+  },
+  "pd_gamegear": {
+   "system": "gamegear",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    803
+   ],
+   "output_size": [
+    256,
+    161
+   ],
+   "source": "Wikimedia Commons File:Game-Gear-Handheld.jpg (https://commons.wikimedia.org/wiki/File:Game-Gear-Handheld.jpg), 1280 px thumbnail",
+   "result": "assets/systems/gamegear.png"
+  },
+  "pd_gb": {
+   "system": "gb",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1065,
+    1280
+   ],
+   "output_size": [
+    213,
+    256
+   ],
+   "source": "Wikimedia Commons File:Game-Boy-FL.jpg (https://commons.wikimedia.org/wiki/File:Game-Boy-FL.jpg), 1280 px thumbnail",
+   "result": "assets/systems/gb.png"
+  },
+  "pd_gba": {
+   "system": "gba",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    860
+   ],
+   "output_size": [
+    256,
+    172
+   ],
+   "source": "Wikimedia Commons File:Nintendo-Game-Boy-Advance-Purple-FL.jpg (https://commons.wikimedia.org/wiki/File:Nintendo-Game-Boy-Advance-Purple-FL.jpg), 1280 px thumbnail",
+   "result": "assets/systems/gba.png"
+  },
+  "pd_gbc": {
+   "system": "gbc",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    948,
+    1280
+   ],
+   "output_size": [
+    190,
+    256
+   ],
+   "source": "Wikimedia Commons File:Nintendo-Game-Boy-Color-FL.jpg (https://commons.wikimedia.org/wiki/File:Nintendo-Game-Boy-Color-FL.jpg), 1280 px thumbnail",
+   "result": "assets/systems/gbc.png"
+  },
+  "pd_intellivision": {
+   "system": "intellivision",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-10-27",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    684
+   ],
+   "output_size": [
+    256,
+    137
+   ],
+   "source": "Wikimedia Commons File:Mattel-Intellivision-Console-FL.jpg (https://commons.wikimedia.org/wiki/File:Mattel-Intellivision-Console-FL.jpg), 1280 px thumbnail",
+   "result": "assets/systems/intellivision.png"
+  },
+  "pd_mastersystem": {
+   "system": "mastersystem",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    704
+   ],
+   "output_size": [
+    256,
+    141
+   ],
+   "source": "Wikimedia Commons File:Sega-Master-System-Set.jpg (https://commons.wikimedia.org/wiki/File:Sega-Master-System-Set.jpg), 1280 px thumbnail",
+   "result": "assets/systems/mastersystem.png"
+  },
+  "pd_megadrive": {
+   "system": "megadrive",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    640
+   ],
+   "output_size": [
+    256,
+    128
+   ],
+   "source": "Wikimedia Commons File:Sega-Mega-Drive-JP-Mk1-Console-Set.jpg (https://commons.wikimedia.org/wiki/File:Sega-Mega-Drive-JP-Mk1-Console-Set.jpg), 1280 px thumbnail",
+   "result": "assets/systems/megadrive.png"
+  },
+  "pd_n64": {
+   "system": "n64",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    689
+   ],
+   "output_size": [
+    256,
+    138
+   ],
+   "source": "Wikimedia Commons File:N64-Console-Set.jpg (https://commons.wikimedia.org/wiki/File:N64-Console-Set.jpg), 1280 px thumbnail",
+   "result": "assets/systems/n64.png"
+  },
+  "pd_nds": {
+   "system": "nds",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    1170
+   ],
+   "output_size": [
+    256,
+    234
+   ],
+   "source": "Wikimedia Commons File:Nintendo-DS-Fat-Blue.jpg (https://commons.wikimedia.org/wiki/File:Nintendo-DS-Fat-Blue.jpg), 1280 px thumbnail",
+   "result": "assets/systems/nds.png"
+  },
+  "pd_neocd": {
+   "system": "neocd",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-10-27",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    611
+   ],
+   "output_size": [
+    256,
+    122
+   ],
+   "source": "Wikimedia Commons File:Neo-Geo-CD-TopLoader-wController-FL.jpg (https://commons.wikimedia.org/wiki/File:Neo-Geo-CD-TopLoader-wController-FL.jpg), 1280 px thumbnail",
+   "result": "assets/systems/neocd.png"
+  },
+  "pd_neogeo": {
+   "system": "neogeo",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-10-27",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    789
+   ],
+   "output_size": [
+    256,
+    158
+   ],
+   "source": "Wikimedia Commons File:Neo-Geo-AES-FL.jpg (https://commons.wikimedia.org/wiki/File:Neo-Geo-AES-FL.jpg), 1280 px thumbnail",
+   "result": "assets/systems/neogeo.png"
+  },
+  "pd_nes": {
+   "system": "nes",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    695
+   ],
+   "output_size": [
+    256,
+    139
+   ],
+   "source": "Wikimedia Commons File:NES-Console-Set.jpg (https://commons.wikimedia.org/wiki/File:NES-Console-Set.jpg), 1280 px thumbnail",
+   "result": "assets/systems/nes.png"
+  },
+  "pd_ngpc": {
+   "system": "ngpc",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-10-27",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    930
+   ],
+   "output_size": [
+    256,
+    186
+   ],
+   "source": "Wikimedia Commons File:Neo-Geo-Pocket-Color-Blue-Left.jpg (https://commons.wikimedia.org/wiki/File:Neo-Geo-Pocket-Color-Blue-Left.jpg), 1280 px thumbnail",
+   "result": "assets/systems/ngpc.png"
+  },
+  "pd_pcengine": {
+   "system": "pcengine",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    553
+   ],
+   "output_size": [
+    256,
+    111
+   ],
+   "source": "Wikimedia Commons File:PC-Engine-Console-Set.jpg (https://commons.wikimedia.org/wiki/File:PC-Engine-Console-Set.jpg), 1280 px thumbnail",
+   "result": "assets/systems/pcengine.png"
+  },
+  "pd_pcenginecd": {
+   "system": "pcenginecd",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-10-27",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    970
+   ],
+   "output_size": [
+    256,
+    194
+   ],
+   "source": "Wikimedia Commons File:NEC-TurboGrafx-16-CD-FL.jpg (https://commons.wikimedia.org/wiki/File:NEC-TurboGrafx-16-CD-FL.jpg), 1280 px thumbnail",
+   "result": "assets/systems/pcenginecd.png"
+  },
+  "pd_pico-8": {
+   "system": "pico-8",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    893,
+    1280
+   ],
+   "output_size": [
+    179,
+    256
+   ],
+   "source": "drawn for this project: tools/draw_generic.py",
+   "result": "assets/systems/pico-8.png"
+  },
+  "pd_ports": {
+   "system": "ports",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    962
+   ],
+   "output_size": [
+    256,
+    192
+   ],
+   "source": "drawn for this project: tools/draw_generic.py",
+   "result": "assets/systems/ports.png"
+  },
+  "pd_ps2": {
+   "system": "ps2",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1055,
+    1280
+   ],
+   "output_size": [
+    211,
+    256
+   ],
+   "source": "Wikimedia Commons File:PS2-Fat-Console-Set.jpg (https://commons.wikimedia.org/wiki/File:PS2-Fat-Console-Set.jpg), 1280 px thumbnail",
+   "result": "assets/systems/ps2.png"
+  },
+  "pd_psp": {
+   "system": "psp",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    727
+   ],
+   "output_size": [
+    256,
+    145
+   ],
+   "source": "Wikimedia Commons File:Psp-1000.jpg (https://commons.wikimedia.org/wiki/File:Psp-1000.jpg), 1280 px thumbnail",
+   "result": "assets/systems/psp.png"
+  },
+  "pd_psx": {
+   "system": "psx",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    587
+   ],
+   "output_size": [
+    256,
+    117
+   ],
+   "source": "Wikimedia Commons File:PSX-Console-wController.jpg (https://commons.wikimedia.org/wiki/File:PSX-Console-wController.jpg), 1280 px thumbnail",
+   "result": "assets/systems/psx.png"
+  },
+  "pd_sega32x": {
+   "system": "sega32x",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-10-27",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    1015
+   ],
+   "output_size": [
+    256,
+    203
+   ],
+   "source": "Wikimedia Commons File:Sega-Genesis-Model2-32X.jpg (https://commons.wikimedia.org/wiki/File:Sega-Genesis-Model2-32X.jpg), 1280 px thumbnail",
+   "result": "assets/systems/sega32x.png"
+  },
+  "pd_segacd": {
+   "system": "segacd",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-10-27",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    991
+   ],
+   "output_size": [
+    256,
+    198
+   ],
+   "source": "Wikimedia Commons File:Sega-CD-Model1-Set.jpg (https://commons.wikimedia.org/wiki/File:Sega-CD-Model1-Set.jpg), 1280 px thumbnail",
+   "result": "assets/systems/segacd.png"
+  },
+  "pd_sg-1000": {
+   "system": "sg-1000",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    772
+   ],
+   "output_size": [
+    256,
+    154
+   ],
+   "source": "Wikimedia Commons File:Sega-SG-1000-Console-Set.jpg (https://commons.wikimedia.org/wiki/File:Sega-SG-1000-Console-Set.jpg), 1280 px thumbnail",
+   "result": "assets/systems/sg-1000.png"
+  },
+  "pd_snes": {
+   "system": "snes",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    664
+   ],
+   "output_size": [
+    256,
+    133
+   ],
+   "source": "Wikimedia Commons File:SNES-Mod1-Console-Set.jpg (https://commons.wikimedia.org/wiki/File:SNES-Mod1-Console-Set.jpg), 1280 px thumbnail",
+   "result": "assets/systems/snes.png"
+  },
+  "pd_vectrex": {
+   "system": "vectrex",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-10-27",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    946,
+    1280
+   ],
+   "output_size": [
+    189,
+    256
+   ],
+   "source": "Wikimedia Commons File:GCE-Vectrex-Bare-FL.jpg (https://commons.wikimedia.org/wiki/File:GCE-Vectrex-Bare-FL.jpg), 1280 px thumbnail",
+   "result": "assets/systems/vectrex.png"
+  },
+  "pd_virtualboy": {
+   "system": "virtualboy",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-10-27",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1008,
+    1280
+   ],
+   "output_size": [
+    202,
+    256
+   ],
+   "source": "Wikimedia Commons File:Virtual-Boy-Set.png (https://commons.wikimedia.org/wiki/File:Virtual-Boy-Set.png), 1280 px thumbnail",
+   "result": "assets/systems/virtualboy.png"
+  },
+  "pd_wii": {
+   "system": "wii",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1185,
+    1280
+   ],
+   "output_size": [
+    237,
+    256
+   ],
+   "source": "Wikimedia Commons File:Wii-console.jpg (https://commons.wikimedia.org/wiki/File:Wii-console.jpg), 1280 px thumbnail",
+   "result": "assets/systems/wii.png"
+  },
+  "pd_wonderswan": {
+   "system": "wonderswan",
+   "endpoint": "image-to-pixelart",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    907
+   ],
+   "output_size": [
+    256,
+    181
+   ],
+   "source": "Wikimedia Commons File:WonderSwan-Black-Left.jpg (https://commons.wikimedia.org/wiki/File:WonderSwan-Black-Left.jpg), 1280 px thumbnail",
+   "result": "assets/systems/wonderswan.png"
+  },
+  "t_sg_a": {
+   "system": "supergrafx",
+   "endpoint": "create-image-pixflux",
+   "api": "v2, 2026-10-27",
+   "seed": 11,
+   "text_guidance_scale": 8.0,
+   "image_size": [
+    256,
+    160
+   ],
+   "description": "a black rectangular retro game console with a card slot on top and a small black game controller with a cable next to it, flat dark charcoal plastic, no logo, no text, no letters, single object group, centered",
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "high top-down",
+   "direction": "south",
+   "source": "text prompt only, no input image",
+   "generations": 1.0,
+   "result": null
+  },
+  "t_sg_12": {
+   "system": "supergrafx",
+   "endpoint": "create-image-pixflux",
+   "api": "v2, 2026-10-27",
+   "seed": 12,
+   "text_guidance_scale": 8.0,
+   "image_size": [
+    256,
+    160
+   ],
+   "description": "a flat black plastic retro home game console, wide and boxy with a rectangular card slot on its top, seen from the front at an angle, with a small black rectangular game pad with a cross d-pad and two round buttons lying in front of it, single colour dark charcoal, no logo, no text, no letters",
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "high top-down",
+   "direction": "south",
+   "source": "text prompt only, no input image",
+   "generations": 1.0,
+   "result": null
+  },
+  "t_sg_13": {
+   "system": "supergrafx",
+   "endpoint": "create-image-pixflux",
+   "api": "v2, 2026-10-27",
+   "seed": 13,
+   "text_guidance_scale": 8.0,
+   "image_size": [
+    256,
+    160
+   ],
+   "description": "a flat black plastic retro home game console, wide and boxy with a rectangular card slot on its top, seen from the front at an angle, with a small black rectangular game pad with a cross d-pad and two round buttons lying in front of it, single colour dark charcoal, no logo, no text, no letters",
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "high top-down",
+   "direction": "south",
+   "source": "text prompt only, no input image",
+   "generations": 1.0,
+   "result": null
+  },
+  "t_pm_21": {
+   "system": "pokemini",
+   "endpoint": "create-image-pixflux",
+   "api": "v2, 2026-10-27",
+   "seed": 21,
+   "text_guidance_scale": 8.0,
+   "image_size": [
+    192,
+    160
+   ],
+   "description": "a tiny rounded pocket handheld game console in translucent blue plastic, small grey LCD screen on the upper part, a small cross d-pad on the left, two small round buttons on the right, a small cartridge slot on top, seen from the front slightly from above, no logo, no text, no letters, single object",
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "high top-down",
+   "direction": "south",
+   "source": "text prompt only, no input image",
+   "generations": 1.0,
+   "result": null
+  },
+  "t_pm_22": {
+   "system": "pokemini",
+   "endpoint": "create-image-pixflux",
+   "api": "v2, 2026-10-27",
+   "seed": 22,
+   "text_guidance_scale": 8.0,
+   "image_size": [
+    192,
+    160
+   ],
+   "description": "a tiny rounded pocket handheld game console in translucent blue plastic, small grey LCD screen on the upper part, a small cross d-pad on the left, two small round buttons on the right, a small cartridge slot on top, seen from the front slightly from above, no logo, no text, no letters, single object",
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "high top-down",
+   "direction": "south",
+   "source": "text prompt only, no input image",
+   "generations": 1.0,
+   "result": null
+  },
+  "t_pm_23": {
+   "system": "pokemini",
+   "endpoint": "create-image-pixflux",
+   "api": "v2, 2026-10-27",
+   "seed": 23,
+   "text_guidance_scale": 8.0,
+   "image_size": [
+    192,
+    160
+   ],
+   "description": "a tiny rounded pocket handheld game console in translucent blue plastic, small grey LCD screen on the upper part, a small cross d-pad on the left, two small round buttons on the right, a small cartridge slot on top, seen from the front slightly from above, no logo, no text, no letters, single object",
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "high top-down",
+   "direction": "south",
+   "source": "text prompt only, no input image",
+   "generations": 1.0,
+   "result": null
+  },
+  "t_sg_14": {
+   "system": "supergrafx",
+   "endpoint": "create-image-pixflux",
+   "api": "v2, 2026-10-27",
+   "seed": 14,
+   "text_guidance_scale": 8.0,
+   "image_size": [
+    256,
+    160
+   ],
+   "description": "a wide low black plastic retro home video game console, boxy with slightly sloped top, a horizontal card slot on the top, seen from the front at a three-quarter angle, next to a small black rectangular game pad with a cross d-pad, two red round buttons and a cable plugged into the console, matte dark charcoal, no logo, no text, no letters",
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "high top-down",
+   "direction": "south",
+   "source": "text prompt only, no input image",
+   "generations": 1.0,
+   "result": null
+  },
+  "t_sg_15": {
+   "system": "supergrafx",
+   "endpoint": "create-image-pixflux",
+   "api": "v2, 2026-10-27",
+   "seed": 15,
+   "text_guidance_scale": 8.0,
+   "image_size": [
+    256,
+    160
+   ],
+   "description": "a wide low black plastic retro home video game console, boxy with slightly sloped top, a horizontal card slot on the top, seen from the front at a three-quarter angle, next to a small black rectangular game pad with a cross d-pad, two red round buttons and a cable plugged into the console, matte dark charcoal, no logo, no text, no letters",
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "high top-down",
+   "direction": "south",
+   "source": "text prompt only, no input image",
+   "generations": 1.0,
+   "result": "assets/systems/supergrafx.png"
+  },
+  "t_sg_16": {
+   "system": "supergrafx",
+   "endpoint": "create-image-pixflux",
+   "api": "v2, 2026-10-27",
+   "seed": 16,
+   "text_guidance_scale": 8.0,
+   "image_size": [
+    256,
+    160
+   ],
+   "description": "a wide low black plastic retro home video game console, boxy with slightly sloped top, a horizontal card slot on the top, seen from the front at a three-quarter angle, next to a small black rectangular game pad with a cross d-pad, two red round buttons and a cable plugged into the console, matte dark charcoal, no logo, no text, no letters",
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "high top-down",
+   "direction": "south",
+   "source": "text prompt only, no input image",
+   "generations": 1.0,
+   "result": null
+  },
+  "t_pmL_22": {
+   "system": "pokemini",
+   "endpoint": "create-image-pixflux",
+   "api": "v2, 2026-10-27",
+   "seed": 22,
+   "text_guidance_scale": 8.0,
+   "image_size": [
+    256,
+    224
+   ],
+   "description": "a tiny rounded pocket handheld game console in translucent blue plastic, small grey LCD screen on the upper part, a small cross d-pad on the left, two small round buttons on the right, a small cartridge slot on top, seen from the front slightly from above, no logo, no text, no letters, single object",
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "high top-down",
+   "direction": "south",
+   "source": "text prompt only, no input image",
+   "generations": 1.0,
+   "result": null
+  },
+  "t_pmL_24": {
+   "system": "pokemini",
+   "endpoint": "create-image-pixflux",
+   "api": "v2, 2026-10-27",
+   "seed": 24,
+   "text_guidance_scale": 8.0,
+   "image_size": [
+    256,
+    224
+   ],
+   "description": "a tiny rounded pocket handheld game console in translucent blue plastic, small grey LCD screen on the upper part, a small cross d-pad on the left, two small round buttons on the right, a small cartridge slot on top, seen from the front slightly from above, no logo, no text, no letters, single object",
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "high top-down",
+   "direction": "south",
+   "source": "text prompt only, no input image",
+   "generations": 1.0,
+   "result": "assets/systems/pokemini.png"
+  }
+ }
+}

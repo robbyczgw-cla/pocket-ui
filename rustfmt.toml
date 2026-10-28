@@ -1,0 +1,2 @@
+# The code base uses long lines; keeps `cargo fmt` from rewrapping everything.
+max_width = 160

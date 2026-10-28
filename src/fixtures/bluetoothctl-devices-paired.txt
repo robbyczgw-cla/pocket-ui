@@ -1,0 +1,2 @@
+Device E4:17:D8:0B:1D:0E 8BitDo Ultimate 2C Wireless
+Device 4C:B9:9B:0A:1B:2C Xbox Wireless Controller

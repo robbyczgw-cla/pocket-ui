@@ -1,0 +1,12 @@
+Device A0:5A:5D:11:22:33 (public)
+	Name: JBL Flip 5
+	Alias: JBL Flip 5
+	Class: 0x00240414 (2360340)
+	Icon: audio-card
+	Paired: no
+	Bonded: no
+	Trusted: no
+	Blocked: no
+	Connected: no
+	LegacyPairing: no
+	RSSI: 0xffffffbe (-66)

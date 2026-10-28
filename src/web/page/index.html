@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F3EFE7" media="(prefers-color-scheme: light)">
+<meta name="referrer" content="no-referrer">
+<title>Pocket</title>
+<link rel="icon" href="/icon.svg?v={{v}}" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest?v={{v}}">
+<link rel="stylesheet" href="/app.css?v={{v}}">
+<script src="/app.js?v={{v}}" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="bar">
+    <a class="brand" href="#/library" id="brand">Pocket</a>
+    <span class="meta" id="battery"></span>
+  </div>
+  <nav class="tabs" id="tabs" hidden>
+    <a href="#/library" data-tab="library">Library</a>
+    <a href="#/shelves" data-tab="shelves">Shelves</a>
+    <a href="#/upload" data-tab="upload">Upload</a>
+    <a href="#/stats" data-tab="stats">Stats</a>
+  </nav>
+</header>
+<section id="now" class="now" hidden></section>
+<main id="main" aria-live="polite">
+  <p class="quiet">Loading…</p>
+</main>
+<footer class="foot">
+  <span id="who"></span>
+  <span id="version"></span>
+</footer>
+<noscript><p class="quiet">The web companion needs JavaScript.</p></noscript>
+</body>
+</html>

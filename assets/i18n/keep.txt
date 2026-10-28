@@ -1,0 +1,472 @@
+# Strings the German interface shows in English on purpose (tests/i18n_snapshots.rs, scripts/i18n-extract.py):
+# names of games, systems, emulators, cores, brands, places and people, and data that isn't prose. One per line,
+# exactly as shown; `re:` lines are patterns (`^` `$` anchor, `.*` any text, `\d` one or more digits, `\` before another
+# character takes it literally: `\.` `\+` `\\`; nothing else is special). See
+# docs/i18n-glossary.md for what stays English and why.
+
+# Paths, addresses, versions; a console or system with a year ("PS2 · 2004", credits and Echoes)
+re:.* · \d$
+# The game card's row of the screenshots, "Screenshots (5)": the German word is the same (src/app_gallery.rs)
+re:^Screenshots \(\d\)$
+re:^/
+re:^v\d
+re:^pocket-ui \d
+re:^http://
+re:^https://
+re:^www\.
+re:^\.
+re:^\\\\
+re:^smb:
+re:^ssh 
+re:\.lan$
+re:\.ts\.net$
+re:@example\.com$
+re:^tskey-
+re:^report-\d-\d-\d-\d\.zip$
+
+# Patch file names next to a game (the game card's Patch row, `softpatch`), stacked ones numbered
+re:.*\.ips$
+re:.*\.bps$
+re:.*\.ups$
+re:.*\.ips\d$
+re:.*\.bps\d$
+re:.*\.ups\d$
+
+# Names kept in English (docs/i18n-glossary.md): pocket-ui's own feature names, brands, services
+pocket-ui
+pocket-core
+Curator
+Lens
+Echoes
+Pixel Path
+RetroAchievements
+RetroArch
+EmulationStation
+ROCKNIX
+PortMaster
+Moonlight
+Sunshine
+Syncthing
+Tailscale
+Bluetooth
+re:^Bluetooth: 
+Soundcore Q30
+WH-1000XM4 Wireless Headset
+Home
+Auto
+Core
+Pocket
+8BitDo Pro 2
+English
+Deutsch
+‹ English ›
+‹ Deutsch ›
+‹ Normal ›
+Ports
+Vulkan
+OpenGL
+Wikipedia
+Wikidata
+Internet Archive
+re:^Wikipedia · 
+re:^Little 
+re:^Big 
+re:^Prime 
+
+# Buttons as printed on the Pocket
+A
+B
+X
+Y
+L1
+R1
+L2
+R2
+L3
+R3
+L1 R1
+SELECT
+START
+HOME
+BACK
+UP
+re:^HOME \+
+
+# Emulators and cores (with versions)
+ARMSX2
+Azahar
+Dolphin
+PPSSPP
+Flycast
+DuckStation
+melonDS
+Mupen64Plus
+re:^mGBA
+re:^Snes9x
+re:^Mupen64Plus
+re:^PCSX
+re:^melonDS
+re:^RetroArch · 
+re:^pocket-core · 
+
+# Systems
+Game Boy
+Game Boy Color
+Game Boy Advance
+Game Boy Pocket, Game Boy Light
+Super Game Boy, Game Boy Advance
+Super Nintendo
+Super Nintendo · Game Boy Advance
+Nintendo
+Nintendo 64
+Nintendo DS
+GameCube
+Mega Drive
+PlayStation
+PlayStation 2
+PlayStation Portable
+Xbox
+GBA
+GBC
+SNES
+NES
+PS1
+PS2
+PSP
+DS
+N64
+
+# Made-up data of the snapshots: controllers, networks, PCs, devices, accounts, sync IDs, demo achievements
+8BitDo Ultimate 2C Wireless
+8BitDo Ultimate 2C
+DualSense
+DualSense Wireless Controller
+Xbox Wireless Controller
+Pro Controller
+JBL Flip 5
+Cafe guest
+Neighbour:5G
+Desktop
+Hades II
+Steam Big Picture
+RetroFan
+pocket-mini
+login.tailscale.com
+MFZWI3D-BONSGYC-YLTMRWG-C43ENR5
+QXGZDMM-FZWI3DP-BONSGYY-LTMRWAD
+uCity
+Okage: Shadow King
+Final Fantasy VII
+Beneath a Steel Sky
+Town planner
+Build a town of 1,000 people.
+Power for all
+Connect every building to a power plant.
+Clean air
+Reach a year without pollution warnings.
+Metropolis
+Grow the city to 10,000 people.
+First street
+Build your first road.
+Open for business
+Zone a commercial area.
+Ribbon cutting
+Open a school.
+mario
+mario kart
+nario kart
+pokemon crystal
+castlevania
+metroid
+zelda
+
+# PortMaster's catalog (its own descriptions and instructions)
+Celeste Classic
+Join the numbers and get to the 2048 tile.
+Purchase the game from Steam. Download the game and place the game files in sprout/assets.
+puzzle
+
+# Game makers and Wikidata's genre names (game card)
+Criterion Games
+Konami
+Metroidvania
+Electronic Arts
+Square Enix, Square
+Nintendo, Nintendo
+Nintendo, Nintendo Entertainment Analysis & Development
+Platform game
+re:^A \d .*game
+re:^A .*game by 
+re:^An .*game
+
+# Curator's smart shelves and stickers of the made-up library (the player's own names)
+Unplayed RPGs
+Unplayed
+RPGs
+Revenge
+Takedown
+Burnout
+
+# Game names of the made-up library (scripts/curator-fake-library.py) as the shelf shows them
+Advance Wars
+Astro Boy - Omega Factor
+Burnout 2 - Point of Impact
+Burnout 3 - Takedown
+Burnout Dominator
+Burnout Legends
+Burnout Revenge
+Burnout Legends · Burnout 3 - Takedown · Burnout 2 - Point of Impact
+Castlevania - Aria of Sorrow
+Castlevania - Aria of Sorrow (USA) (Virtual Console)
+Castlevania - Symphony of the Night
+Chrono Cross
+Chrono Trigger
+Chrono Cross · Final Fantasy VI Advance · The Legend of Zelda - Ocarina of Time
+Crash Team Racing
+F-Zero
+F-Zero - Maximum Velocity
+F-Zero GX
+F-Zero X
+Final Fantasy III
+Final Fantasy VI
+Final Fantasy VI Advance
+Golden Sun
+Gran Turismo 4
+Gunstar Super Heroes
+Katamari Damacy
+Kirby - Nightmare in Dream Land
+Kirby's Dream Land
+Lumines
+Mario & Luigi - Superstar Saga
+Mario Kart - Double Dash!!
+Mario Kart - Super Circuit
+Mario Kart 64
+Mario Kart DS
+Mega Man Zero
+Metroid - Zero Mission
+Metroid Fusion
+Mother 3
+Need for Speed - Hot Pursuit 2
+OutRun 2006 - Coast 2 Coast
+Pokemon - Emerald Version
+R4 - Ridge Racer Type 4
+Ridge Racer
+Secret of Mana
+Shadow of the Colossus
+Super Mario All-Stars
+Super Mario Kart
+Super Mario World · New Super Mario Bros. · Super Mario 64
+Super Metroid
+Tetris
+The Legend of Zelda - Link's Awakening
+The Legend of Zelda - Ocarina of Time
+The Legend of Zelda - The Minish Cap
+WarioWare, Inc. - Mega Microgame$!
+Wipeout 2097
+
+# What the snapshot states type in (sys:search)
+vie
+
+
+# Names in the source (scripts/i18n-extract.py)
+
+# src/consoles.rs: Cores, sources and makers on the console pages
+Sega Retro
+NEC Retro
+Sony Interactive
+The Guardian
+Gambatte
+gpSP
+Nestopia
+FCEUmm
+Mesen
+Genesis Plus GX
+Gearsystem
+SMS Plus
+Beetle PCE Fast
+Beetle SuperGrafx
+Beetle VB
+Beetle NeoPop
+Beetle WonderSwan
+Beetle PSX
+Beetle Saturn
+Handy
+Stella
+FinalBurn Neo
+MAME
+ParaLLEl N64
+Yabause
+Kronos
+Citra
+Play!
+DOSBox Pure
+FAKE-08
+TIC-80
+Gearboy
+Gearcoleco
+DOSBox
+PICO-8
+
+# src/curator/echoes.rs: Studio names (Echoes)
+Nintendo Entertainment Analysis & Development
+Nintendo EAD
+Nintendo Research & Development 1
+Nintendo R&D1
+Nintendo Research & Development 2
+Nintendo R&D2
+Nintendo Software Planning & Development
+Nintendo SPD
+Nintendo Entertainment Planning & Development
+Nintendo EPD
+Sony Interactive Entertainment
+Sony
+Sega AM2
+Sega AM3
+
+# src/emu_choice.rs: Emulator and core names (Runs on, Settings → Performance & fan)
+VBA-M
+VBA Next
+Beetle GBA
+TGB Dual
+Mesen-S
+bsnes HD beta
+bsnes-mercury Accuracy
+bsnes-mercury Balanced
+bsnes-mercury Performance
+bsnes 2014 Accuracy
+bsnes 2014 Balanced
+bsnes 2014 Performance
+Beetle Supafaust
+Genesis Plus GX Wide
+Beetle PCE
+Geargrafx
+RACE
+Beetle Lynx
+Gearlynx
+FB Alpha 2012
+FB Alpha 2019
+MAME 2003-Plus
+MAME 2010
+MAME 2015
+Flycast 2021
+DOSBox Core
+PUAE
+PUAE 2021
+UAE4ARM
+Geolith
+Opera
+blueMSX
+fMSX
+Virtual Jaguar
+Hatari
+Atari800
+Daphne
+FFmpeg
+Mednafen
+VICE
+Hypseus Singe
+GZDoom
+DSPerate
+Amiberry
+touchHLE
+RPCS3
+Cemu
+Supermodel
+MPlayer
+Qt
+
+# src/game_card.rs: Names
+An
+
+# src/hostsys.rs: System names
+NAOMI
+Atomiswave
+PC Engine CD
+
+# src/perf_fan.rs: Names
+Little
+Big
+Prime
+
+# src/pixel_path.rs: Names
+2.6-Vulkan
+
+# src/players.rs: Controller makers (Players)
+Sony Computer Entertainment
+Microsoft
+
+# Made-up data of the new snapshot states (a port, browsers paired with the web companion)
+Deltarune
+re:^Safari on 
+re:^Firefox on 
+re:^Chrome on 
+Max
+mGBA
+re:^Warm \d
+
+# Renderers, sound outputs and the sample games of Pixel Path for PS2, GameCube, Wii and 3DS
+SLUS-21050 (12345678)
+Sony PlayStation 2
+Mario Kart 7 (USA).3ds
+Nintendo 3DS
+Vulkan (Auto)
+Software
+Software Renderer
+Cubeb
+SDL2
+re:^Shader 
+re:^Layout 
+
+# Names and readouts
+{s} FPS   EMU {s}   CPU {s}%
+Nintendo Co., Ltd.
+
+# Starter pack: the games' titles (assets/starter-pack.json)
+Tobu Tobu Girl
+Libbet and the Magic Floor
+Thwaite
+Concentration Room
+Elevator Madness DX
+Pipes
+KleleAtoms MD
+Attack on Voxelburg
+Acclaim Entertainment
+# Save files and memory cards named on the page of a save with two versions (src/app_sync_conflicts.rs)
+re:\.srm$
+re:^Mcd\d\.ps2$
+
+# Made-up cheat names of the Cheats snapshots (cheats-more, cheats-only): names from the cheat database stay English
+Infinite lives
+Full energy
+Coins to 99
+Start with all items
+Code 01FF57D8
+Code 01FF5AD8
+Final Quest
+Pocket CD Demo
+# Key names and a studio of the rating and Surprise me snapshots
+LEFT RIGHT
+RIGHT
+EA Jawbreaker
+BIOS Test
+Racer (Disc 2)
+Old Hack
+# Cabinet box: the last line of "Castlevania - Symphony of the Night" when the title wraps
+Night
+# The SM8250 Retroids by name (src/device.rs, docs/DEVICES.md): the names on About and the first start
+Retroid Pocket Mini V2
+Retroid Pocket Mini V1
+Retroid Pocket 5
+Retroid Pocket Flip 2
+# ... and as their device trees name them
+Retroid Pocket Mini
+Retroid Pocket Flip2
+
+Retroid Pocket 6
+Retroid Pocket Nova
+Retroid Pocket 6 TOP-DPAD
+Xiaomi 15
+
+AYN Odin 2
+AYN Odin 2 Mini
+AYN Odin 2 Portal

@@ -1,0 +1,30 @@
+# pocket-ui's boot screen (docs/BOOT-SPLASH.md): pocket-splash draws a calm picture on the frame buffer from systemd's
+# early start until sway takes over, then fades to black, and pocket-ui fades in from black.
+# Installed next to the essway drop-in, in the same folder and taken out the same way (install.sh/uninstall.sh,
+# scripts/autostart.sh, scripts/dev.sh deploy, the SD image's .pocket-seed):
+#   /storage/.config/system.d/pocket-splash.service                     this file
+#   /storage/.config/system.d/sysinit.target.wants/pocket-splash.service -> ../pocket-splash.service
+# Deleting both (then daemon-reload, or a reboot) brings the boot back as it was.
+#
+# It never holds up the boot: Type=simple (systemd goes on as soon as it runs), ordered before nothing but shutdown,
+# and no Conflicts= with sway: in the boot's one transaction systemd would drop sway's start for it. The program sees
+# sway's unit start by itself (its processes in /proc) and ends. It draws through /dev/fb0, never /dev/dri, so it is
+# never DRM master and sway always gets the screen. Without the program, or without a frame buffer: no picture,
+# nothing else changes.
+
+[Unit]
+Description=pocket-ui boot screen
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=shutdown.target
+ConditionFileIsExecutable=/storage/pocket-ui/current/pocket-splash
+
+[Service]
+Type=simple
+ExecStart=/storage/pocket-ui/current/pocket-splash
+TimeoutStopSec=1
+# A failure is no picture, never another try.
+Restart=no
+
+[Install]
+WantedBy=sysinit.target
