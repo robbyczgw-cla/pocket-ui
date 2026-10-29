@@ -168,6 +168,10 @@ impl App {
         self.quick_profiles_sync();
         let moment = self.perf_fan_moment();
         self.perf.awake.store(!moment.asleep, Ordering::Relaxed);
+        // No fan (the H700 handhelds): no curve thread, no trip profiles, no sysfs writes.
+        if !pocket_ui::device::current().has_fan() {
+            return;
+        }
         let prefs = self.perf.prefs;
         if prefs.smooth_fan {
             // The trip profiles are not used with the curve (the first sync also undoes a crashed run's).
@@ -204,6 +208,9 @@ impl App {
     /// originals, finds the system's trips.
     pub(crate) fn perf_fan_before_game(&mut self) {
         self.perf.games += 1;
+        if !pocket_ui::device::current().has_fan() {
+            return;
+        }
         if self.perf.prefs.smooth_fan {
             let _ = std::fs::remove_file(fan_curve::GAME_REQUEST_FILE);
         } else {
@@ -249,16 +256,19 @@ impl App {
         self.perf.page.as_ref().map(|p| (p.sel, p.prefs))
     }
 
-    /// `--snapshot perf[:<row>][:waiting]`: the page with made-up choices and readings (the shelf's fan on Cool).
+    /// `--snapshot perf[:<row>][:waiting][:veryquiet]`: the page with made-up choices and readings (the shelf's fan on Cool;
+    /// `veryquiet`: both fan rows on Very quiet, the readout on its curve).
     pub(crate) fn perf_fan_snapshot(&mut self, state: &str) -> bool {
         let Some(rest) = state.strip_prefix("perf") else { return false };
         let mut parts = rest.trim_start_matches(':').split(':');
         let row: usize = parts.next().and_then(|r| r.parse().ok()).unwrap_or(0);
-        let waiting = parts.next() == Some("waiting");
+        let flags: Vec<&str> = parts.collect();
+        let waiting = flags.contains(&"waiting");
+        let vq = flags.contains(&"veryquiet");
         let prefs = Prefs {
             games_performance: Performance::Performance,
-            games_fan: Fan::Auto,
-            outside_fan: Fan::Cool,
+            games_fan: if vq { Fan::VeryQuiet } else { Fan::Auto },
+            outside_fan: if vq { Fan::VeryQuiet } else { Fan::Cool },
             smooth_fan: true,
         };
         let mut page = PerfFanPage::new(prefs);
@@ -269,7 +279,7 @@ impl App {
                 curve: Some(fan_curve::Beat {
                     driving: true,
                     mode: Some(fan_curve::Mode::Curve),
-                    shape: Some(fan_curve::Shape::Cool),
+                    shape: Some(if vq { fan_curve::Shape::VeryQuiet } else { fan_curve::Shape::Cool }),
                     ema: Some(46_800),
                 }),
                 ..Readout::demo()
@@ -291,8 +301,7 @@ impl App {
     fn paint_perf_fan_page(&mut self, c: &mut Canvas, page: &PerfFanPage) {
         c.clear(pal().void);
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, SETTINGS_NAME);
+        self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         for (i, r) in ROWS.iter().enumerate() {
             let y = top + i as i32 * row;
@@ -326,14 +335,11 @@ impl App {
         let (left, width) = (pad + NU_BTN_PAD, c.w - 2 * (pad + NU_BTN_PAD));
         let mut y = top + ROWS.len() as i32 * row + 44;
         let [what, choice] = page.describe(page.row());
-        for (text, color) in [(what.as_str(), pal().dust), (choice.as_str(), pal().text)] {
-            for line in self.text.wrap(Face::Body, NU_SMALL, text, width) {
-                self.text.draw(c, Face::Body, NU_SMALL, left, y, color, &line);
-                y += pocket_ui::type_scale::line(NU_SMALL, 12);
-            }
-            y += 6;
-        }
-        y += 14;
+        let desc_step = pocket_ui::type_scale::line(NU_SMALL, 12);
+        let wrapped = [(what.as_str(), pal().dust), (choice.as_str(), pal().text)]
+            .map(|(t, color)| (self.text.wrap(Face::Body, NU_SMALL, t, width), color));
+        // Where the descriptions would end, to place the readout.
+        let y_full = y + wrapped.iter().map(|(l, _)| l.len() as i32 * desc_step + 6).sum::<i32>() + 14;
         // The readout, in a panel above the hints; the note takes the room left above it (with larger text it may
         // be shortened, ending with "…").
         let hints_top = c.h - pad - NU_PILL;
@@ -342,8 +348,32 @@ impl App {
         // Two lines side by side when the four under each other would reach into the hints (the Mini V1's 960 lines,
         // docs/DEVICES.md); on 1080 lines they never do, at every text size.
         let tall = head + lines.len() as i32 * line_h + 14;
-        let cols = if (hints_top - 22 - tall).max(y + 12) + tall > hints_top { 2 } else { 1 };
+        let cols = if (hints_top - 22 - tall).max(y_full + 12) + tall > hints_top { 2 } else { 1 };
         let panel_h = head + (lines.len() as i32 + cols - 1) / cols * line_h + 14;
+        // The panel keeps its place above the hints; at Large text on 960 lines the descriptions are what gives way
+        // (the second, about the choice, last: it says what the selected value does). Found by the size sweep 2026-10-29:
+        // the panel's last line ran under the hints.
+        let desc_room = ((hints_top - 22 - panel_h - 12 - y) / desc_step).max(0) as usize;
+        let choice_lines = wrapped[1].0.len().min(desc_room);
+        let rooms = [desc_room - choice_lines, choice_lines];
+        for ((lines, color), room) in wrapped.iter().zip(rooms) {
+            if lines.len() <= room {
+                for line in lines {
+                    self.text.draw(c, Face::Body, NU_SMALL, left, y, *color, line);
+                    y += desc_step;
+                }
+            } else if room > 0 {
+                let mut shown = lines[..room].to_vec();
+                let last = shown.last_mut().unwrap();
+                *last = self.text.fit(Face::Body, NU_SMALL, &format!("{last} …"), width);
+                for line in &shown {
+                    self.text.draw(c, Face::Body, NU_SMALL, left, y, *color, line);
+                    y += desc_step;
+                }
+            }
+            y += 6;
+        }
+        y += 14;
         let step = pocket_ui::type_scale::line(24, 8);
         // As many lines as leave the panel (12 px under them) clear of the hints.
         let room = ((hints_top - 8 - panel_h - 12 - y) / step).max(0) as usize;
@@ -352,7 +382,7 @@ impl App {
             y += step;
         }
         let panel_y = (hints_top - 22 - panel_h).max(y + 12);
-        c.round_rect(pad, panel_y, right - pad, panel_h, 24, pal().pill);
+        pocket_ui::kit::panel(c, pad, panel_y, right - pad, panel_h);
         let (px, label_w) = (pad + NU_BTN_PAD, pocket_ui::type_scale::wide(210, 26));
         self.text.draw(c, Face::Body, 24, px, panel_y + 36, pal().dust, "Now");
         let col_w = (right - NU_BTN_PAD - px) / cols;

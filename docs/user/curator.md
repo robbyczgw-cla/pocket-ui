@@ -14,7 +14,7 @@ runs. Until it is done (with a large library, a second or two), its rows say **G
 
 ### Lens
 
-**Curator** is a row on Home, right after Favourites (in the Cabinet look, a shelf: see
+**Curator** is the first row on Home, before the recent games (in the Cabinet look, a shelf: see
 [Playing](playing.md#looks)). A opens it: the **Lens** first, then your smart shelves, **History** and **Year in
 review** (once you have played something) and your stickers. The Lens combines
 filters, for example "Game Boy Advance · Racing · Never played", or "PlayStation · Story-driven · Not known for

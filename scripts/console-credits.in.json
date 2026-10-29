@@ -2531,6 +2531,58 @@
    "game_makers": [
     "Bandai"
    ]
+  },
+  "xbox": {
+   "summary": "Microsoft's first console, built from PC parts. Flextronics and Wistron made it; an Intel Pentium III processor and an Nvidia NV2A graphics chip sit inside.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Microsoft",
+     "source": "infobox:developer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Flextronics",
+     "source": "infobox:manufacturer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Wistron",
+     "source": "infobox:manufacturer"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Intel Pentium III",
+     "match": "Pentium III",
+     "source": "infobox:cpu"
+    },
+    {
+     "role": "Graphics",
+     "name": "Nvidia NV2A",
+     "match": "NV2A",
+     "source": "infobox:graphics"
+    }
+   ],
+   "family": [
+    {
+     "relation": "after",
+     "name": "Xbox 360",
+     "match": "Xbox 360",
+     "source": "infobox:successor"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Halo 2",
+     "figure": "8.46 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Microsoft"
+   ]
   }
  },
  "ids": {

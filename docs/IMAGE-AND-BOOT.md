@@ -82,7 +82,9 @@ Android stays untouched, and the only flash target (if any) is the small `loader
 - `rocknix-update` polls `https://update.rocknix.org` (line 10). Delete it or point it at our own endpoint. pocket-ui never calls it.
 - Edit `devices/SM8250/bootloader/update.sh`: remove the `rocknix_abl`/`openabl` copy and the `updateabl` call, and drop `openabl` from `ADDITIONAL_PACKAGES`. The init runs the **new** SYSTEM's `update.sh` on every update (`update_bootloader`) [V].
 - Push updates: `scp <tar> root@host:/storage/.update && reboot` (rocknix.org/contribute/modify) [V].
-- Change `ROOT_PASSWORD="rocknix"` and decide on SSH.
+- Change `ROOT_PASSWORD="rocknix"` and decide on SSH. (For the SD card image, which keeps ROCKNIX's build: SSH,
+  Samba and Syncthing are off by default and pocket-ui sets a per-device password when they are turned on; see
+  [SECURITY-HARDENING.md](SECURITY-HARDENING.md#rollout-order).)
 
 ### Licensing (not legal advice)
 - **GPL:** kernel, busybox, RetroArch, PPSSPP, bash and others. Offer the corresponding source: our fork plus `make src-pkg` (tar of `sources/`) [V]. Keep copyright headers.

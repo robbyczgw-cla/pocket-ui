@@ -17,7 +17,7 @@ PortMaster files, see your play time and the battery, and look at the Pocket's s
 3. Below the list the page shows the address to open, for example `http://pocket-mini`, and the Pocket's Tailscale
    addresses (`http://100.x.y.z`). Open one of them in a browser on your phone or computer.
 
-If the page says **Not listening**, it gives the reason (for example another program uses port 80) and tries again
+If the page says **Not listening**, it gives the reason (for example something else is using the address) and tries again
 every 30 seconds. If it says **Waiting for Tailscale**, Tailscale is off or not signed in; the companion starts listening by
 itself as soon as Tailscale is connected. The short name (`http://pocket-mini`) needs MagicDNS, which Tailscale
 switches on by default; the `100.x.y.z` address always works.

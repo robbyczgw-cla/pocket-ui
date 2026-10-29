@@ -201,6 +201,9 @@ pub fn current(sys: &impl System) -> Output {
 }
 
 /// The keeper's state: what it set, and what it last saw. Driven by [`Keeper`]'s thread, and by the tests directly.
+/// The largest quantum `audio::Ring::Short` (10 ms, 480 frames, less two writer chunks of margin) is used under.
+const SMALL_MAX: u32 = 256;
+
 pub struct Router<S: System> {
     sys: S,
     /// The quantum asked for on the speaker (`POCKET_CORE_QUANTUM`); 0 never sets one (the pulse path, or turned off).
@@ -210,6 +213,9 @@ pub struct Router<S: System> {
     forced: bool,
     /// The next game takes over (`keep`): nothing is changed any more, nothing put back.
     kept: bool,
+    /// pocket-ui started this game and puts ROCKNIX's quantum back itself when it ends (`POCKET_CORE_QUANTUM_OWNER`,
+    /// `ui_sound::game_ended`), in order with its own and never under a sound; the end of the game leaves it.
+    owner_restores: bool,
     links: Option<Vec<String>>,
     /// When the links last changed (or the game started with one), for `SETTLE`.
     changed: Option<Instant>,
@@ -225,7 +231,7 @@ impl<S: System> Router<S> {
         let links = sys.connections();
         // A link at the start may be headphones still connecting: watched for `SETTLE` like a new one.
         let changed = links.as_ref().is_some_and(|l| !l.is_empty()).then_some(now);
-        let mut r = Router { sys, frames, output: Output::Speaker, forced: false, kept: false, links, changed, bluetooth, small };
+        let mut r = Router { sys, frames, output: Output::Speaker, forced: false, kept: false, owner_restores: false, links, changed, bluetooth, small };
         let output = r.ask();
         r.apply(output, true);
         r
@@ -257,8 +263,14 @@ impl<S: System> Router<S> {
         if wanted.is_none() {
             self.small.store(false, Ordering::Relaxed);
         }
+        // Whether the small quantum runs now: after a wake ROCKNIX's 1024 is back whatever `forced` remembers, so a
+        // force that fails then must not leave `small` set (audit 2026-10-28).
+        let mut runs = self.forced;
         match wanted {
-            Some(q) if again || !self.forced => self.forced |= self.sys.force(q),
+            Some(q) if again || !self.forced => {
+                runs = self.sys.force(q);
+                self.forced |= runs;
+            }
             Some(_) => {}
             None if self.forced => {
                 self.sys.restore();
@@ -266,8 +278,9 @@ impl<S: System> Router<S> {
             }
             None => {}
         }
-        // After it came down (a failed `force` leaves ROCKNIX's).
-        self.small.store(wanted.is_some() && self.forced, Ordering::Relaxed);
+        // After it came down (a failed `force` leaves ROCKNIX's). Only a quantum the short buffer holds counts: 10 ms
+        // is 480 frames, so POCKET_CORE_QUANTUM=512 gets the cycle's buffer.
+        self.small.store(wanted.is_some_and(|q| q <= SMALL_MAX) && runs, Ordering::Relaxed);
     }
 
     /// Every `CHECK_EVERY`: follows a Bluetooth sink that came or went.
@@ -309,7 +322,7 @@ impl<S: System> Router<S> {
 
     /// The game ends: ROCKNIX's quantum back if this game changed it.
     pub fn stop(&mut self) {
-        if self.forced && !self.kept {
+        if self.forced && !self.kept && !self.owner_restores {
             self.sys.restore();
             self.forced = false;
         }
@@ -340,10 +353,15 @@ pub struct Keeper {
 impl Keeper {
     /// `frames`: the quantum for the speaker, 0 for none (the output is still followed, for Pixel Path).
     pub fn spawn(frames: u32) -> Keeper {
-        Self::spawn_with(Real, frames, CHECK_EVERY)
+        Self::spawn_owned(Real, frames, CHECK_EVERY, std::env::var("POCKET_CORE_QUANTUM_OWNER").is_ok_and(|v| v == "pocket-ui"))
     }
 
     pub fn spawn_with<S: System>(sys: S, frames: u32, every: Duration) -> Keeper {
+        Self::spawn_owned(sys, frames, every, false)
+    }
+
+    /// `owner_restores`: see `Router::owner_restores`.
+    fn spawn_owned<S: System>(sys: S, frames: u32, every: Duration, owner_restores: bool) -> Keeper {
         let (tx, rx) = mpsc::channel();
         let (done_tx, done) = mpsc::channel();
         // Reads "speaker" until the first look is done.
@@ -353,6 +371,7 @@ impl Keeper {
         // If the thread can't start, the channels close: nothing is set, and dropping returns at once.
         let spawned = std::thread::Builder::new().name("audio-route".into()).spawn(move || {
             let mut r = Router::start(sys, frames, flag, small_flag, Instant::now());
+            r.owner_restores = owner_restores;
             decided_flag.store(true, Ordering::Relaxed);
             loop {
                 match rx.recv_timeout(every) {
@@ -588,6 +607,35 @@ mod tests {
 
     /// The writer sizes its ALSA buffer by `small` (`audio::Ring`): a buffer shorter than one graph cycle is what made
     /// games on Bluetooth headphones sound broken (2026-10-27). Small only while this game's 256 really runs.
+    /// pocket-ui owns the quantum for the games it starts (`POCKET_CORE_QUANTUM_OWNER`): pocket-core's end leaves it, so
+    /// the restore comes from pocket-ui's quantum thread, in order and not under a sound.
+    #[test]
+    fn a_game_pocket_ui_started_leaves_the_restore_to_it() {
+        let f = Fake::new(&[], SPK_SINK);
+        let mut r = Router::start(f.clone(), 256, Arc::default(), Arc::default(), Instant::now());
+        r.owner_restores = true;
+        r.stop();
+        assert_eq!(f.log(), ["force 256"], "set, not put back");
+    }
+
+    /// Audit 2026-10-28: after a wake `forced` was still true while ROCKNIX had put 1024 back; a force that failed
+    /// then left `small` set and pocket-core's writer on 10 ms under 1024 cycles. And a quantum above 256 never
+    /// gets the short buffer.
+    #[test]
+    fn small_is_cleared_when_the_force_after_a_wake_fails_and_never_set_above_256() {
+        let t0 = Instant::now();
+        let small = Arc::new(AtomicBool::new(false));
+        let f = Fake::new(&[], SPK_SINK);
+        let mut r = Router::start(f.clone(), 256, Arc::default(), small.clone(), t0);
+        assert!(small.load(Ordering::Relaxed));
+        f.0.lock().unwrap().force_fails = true;
+        r.wake(t0 + CHECK_EVERY);
+        assert!(!small.load(Ordering::Relaxed), "ROCKNIX's 1024 runs after the wake");
+        let small = Arc::new(AtomicBool::new(true));
+        let _r = Router::start(Fake::new(&[], SPK_SINK), 512, Arc::default(), small.clone(), t0);
+        assert!(!small.load(Ordering::Relaxed), "512 is more than 10 ms holds");
+    }
+
     #[test]
     fn small_follows_the_quantum_that_really_runs() {
         let t0 = Instant::now();

@@ -33,9 +33,10 @@ project's GRUB path has one tree and no choice, and a second image per device is
 ## How the image is made
 
 **Approach: the official ROCKNIX image, with files added, nothing rebuilt.** The alternatives in
-[IMAGE-AND-BOOT.md](IMAGE-AND-BOOT.md) part B (repacking SYSTEM, or a ROCKNIX fork) cost days and would replace
-the kernel and system that are verified on the device. This way the kernel, the system and the boot files are
-byte for byte the ones that boot on the author's device today.
+[IMAGE-AND-BOOT.md](IMAGE-AND-BOOT.md) part B (a ROCKNIX fork) cost days and would replace the kernel and system that
+are verified on the device. This way the kernel and the boot files are byte for byte the ones that boot on the
+author's device today. Since 2026-10-28 SYSTEM is repacked without eight paths whose licences do not allow passing
+them on (below, "SYSTEM without a few files"); every other file in it is ROCKNIX's, unchanged.
 
 1. `ROCKNIX-SM8250.aarch64-20261001.img.gz` from the GitHub release `20261001`, checked against the published
    sha256 (pinned in `scripts/image/pins.sh`), cached in `downloads/rocknix-20261001/`.
@@ -51,15 +52,48 @@ byte for byte the ones that boot on the author's device today.
 4. pocket-ui and pocket-core are built with `POCKETUI_VERSION=<version>`, as `scripts/release-app.sh` does.
 5. The container half (`scripts/image/build.sh`, tools in `scripts/image/Dockerfile`) adds the files with
    `mtools` (FAT) and `debugfs` (STORAGE ext4), without loop mounts, as root, with the commit's time stamp.
+6. `build.sh strip-system` repacks SYSTEM without `SYSTEM_REMOVE` (`scripts/image/pins.sh`): `unsquashfs` as root,
+   `rm`, `mksquashfs` with ROCKNIX's settings (zstd level 19, 1 MiB blocks, no xattrs, ROCKNIX's own creation time
+   from the superblock, so the md5 does not depend on our commit). It fails unless the new listing (path, mode, owner) is the old one minus exactly those paths, and the
+   result must have the pinned md5 `POCKET_SYSTEM_MD5`. About 20 minutes with 4 cores (`SQUASH_CPUS`).
+7. After the FAT partition is written, `scripts/image/fat-free-zero.py` zeroes its free clusters: replacing SYSTEM frees
+   the clusters of ROCKNIX's original SYSTEM without clearing them, so its bytes (with the files left out on purpose)
+   would otherwise ride along in the image (540 MiB, found on 2026-10-28 by the image's size: 2.07 GB instead of
+   1.52 GB). `fsck.vfat -n` must then find the partition clean; `check.sh` checks both again.
+8. The notes get ROCKNIX's `LICENSE.md` and `licenses/` folder from the tag (a sparse git clone, checked against
+   the pinned commit, cached next to the ROCKNIX image), `deploy/image/firmware-licences/` and the source offer
+   (`deploy/image/SOURCE-OFFER.txt.in`). `--source` and `--release-url` set where the notes say pocket-ui's source
+   and the source archives are; for the public image: the public repository's release commit and release page.
+
+### SYSTEM without a few files
+
+Checked on 2026-10-28 in the unpacked ROCKNIX 20261001 SYSTEM and ROCKNIX's package files at the tag:
+
+| Path in SYSTEM | What it is | Decision |
+|---|---|---|
+| `usr/config/amiberry/whdboot/save-data/Kickstarts/kick*.RTB` (6 files, 3.9–5 KB) | Kickstart relocation tables for WHDLoad in Amiberry, copied from Amiberry's repository (`whdboot/`, commit `5c54536`). Byte for byte the files in SKick 3.46 by Pavel Troller (aminet.net `util/boot/skick346.lha`). No ROM code, but SKick.doc section 1: "This archive may be freely redistributed, but only in totally unchanged state, i.e. no files can be added, deleted, modified". Loose files are not covered | **removed.** Amiberry is not the default Amiga emulator on SM8250 (PUAE is, `virtual/emulators/package.mk`); WHDLoad games in Amiberry need the `.RTB` files from that archive copied to `/storage/.config/amiberry/whdboot/save-data/Kickstarts` (the notes say so) |
+| `usr/config/amiberry/whdboot/boot-data.zip`: `Devs/Kickstarts/*.RTB` | The same six SKick tables again, inside Amiberry's WHDLoad boot archive (found by `check-release-tree.py` on the unpacked SYSTEM) | **removed from the archive** with `zip -d` (`SYSTEM_ZIP_REMOVE`); its other entries (AmigaOS-style commands and libraries, WHDLoad configs) stay as Amiberry and ROCKNIX ship them; not investigated further |
+| `usr/share/idtech/doom.tar.gz` | The DOOM shareware IWAD (`doom.wad` v1.9, 4,196,020 bytes, md5 `f0cefca4…`), downloaded by `idtech-lr`'s `PKG_DOOM_SHAREWARE` from `ROCKNIX/packages` for the manual "Scan id Tech Games" tool. A game, alone, without the shareware package's other files and terms | **removed**: the card says "no games". Without it `generate-idtech.sh` creates no Doom entry; prboom itself stays |
+| `usr/share/bootloader/rocknix_abl/` | ROCKNIX's ABL: `abl_signed-SM8250.elf` and the scripts that flash it, from the `rocknix-abl` package, a prebuilt release asset of `github.com/ROCKNIX/abl` (README and `update.sh` only: no licence, no source). Its upstream asset no longer matches the package's sha256 (2026-10-28), so not even that can be fetched again | **removed**, as the same folder on the FAT partition already is: this boot path never flashes an ABL |
+| `usr/lib/kernel-overlays/base/lib/firmware/qcom/sm8250/ayn/`, `…/mangmi/` | Firmware for the AYN Thor and the Mangmi Pocket Max from ROCKNIX's `extra-firmware` repository (`PKG_LICENSE="proprietary"`, no licence file in the repository) | **removed.** The Mini V2's device tree asks only for `qcom/sm8250/{a650_zap,adsp,cdsp,slpi}.mbn` |
+| `usr/config/nanoboyadvance/bios/gba_bios.bin` (16 KiB, md5 `1876f71b…`) | Not Nintendo's BIOS: ROCKNIX's `nanoboyadvance-sa` package downloads `PKG_OPEN_SOURCE_BIOS` = `github.com/Nebuleon/ReGBA/raw/master/bios/gba_bios.bin`, the open-source replacement BIOS by Normmatt and the VBA-M team (`bios/source/*.c`: GPL-2.0-or-later). Same md5 as ReGBA's file at `7f37905` | **kept**; named in the notes, its source goes next to the image (`regba-bios-source.tar.gz`), `check.sh` pins its md5 |
+| Firmware for the Mini V2 (GPU, DSP, video, Wi-Fi, Bluetooth, USB network, regulatory database) | linux-firmware 20260309 and wireless-regdb 2026.05.30, every file md5-identical to upstream | **kept**; their terms (WHENCE: "Redistributable", `LICENSE.qcom` requires the text to travel with the files) go into `pocket-ui-info/firmware-licences/` with a file list. ROCKNIX's SYSTEM itself carries none of these texts |
+
+Proprietary or NC packages that stay, as in ROCKNIX: `aethersx2-sa` (CC BY-NC-ND 4.0 plus an LGPL library whose
+source its authors offer by e-mail; `AETHERSX2.pdf` in `rocknix-licenses/licenses/`), `bigpemu` (free, non-commercial,
+"may not distribute … without the inclusion of this document in unmodified form": `usr/share/bigpemu/ReadMe.txt` is in
+SYSTEM unchanged), `duckstation-sa` (CC BY-NC-ND 4.0, passed on unchanged), the NC libretro cores (LICENCES.md §8). All
+fit "free, non-commercial, unchanged, credited". DraStic, whose author asked people not to redistribute it, is **not**
+in the SM8250 SYSTEM (only two sleep scripts of the Anbernic RG DS name it).
 
 ### What changes on the card
 
 | Partition | Added | Removed |
 |---|---|---|
-| FAT, label `ROCKNIX` (`/flash`) | `EFI/BOOT/BOOTAA64.EFI`, `boot/grub/grub.cfg`, `boot/grub/grub-efi-arm64-bin.version`, `boot/pocket/{Image,miniv2-noufs.dtb,KERNEL.source.md5}`, `post-flash.sh`, `mount-storage.sh`, `pocket-ui-info/` (notes and licences) | `rocknix_abl/`: ROCKNIX's replacement for Retroid's bootloader and the scripts that flash it. This boot path never uses it, and flashing it is what this setup avoids |
+| FAT, label `ROCKNIX` (`/flash`) | `EFI/BOOT/BOOTAA64.EFI`, `boot/grub/grub.cfg`, `boot/grub/grub-efi-arm64-bin.version`, `boot/pocket/{Image,miniv2-noufs.dtb,KERNEL.source.md5}`, `post-flash.sh`, `mount-storage.sh`, `pocket-ui-info/` (`README.txt`, `SOURCE-OFFER.txt`, `LICENSE`, `NOTICE.md`, `licences/`, `rocknix-licenses/`, `firmware-licences/`) | `rocknix_abl/`: ROCKNIX's replacement for Retroid's bootloader and the scripts that flash it. This boot path never uses it, and flashing it is what this setup avoids. `SYSTEM` and `SYSTEM.md5` are replaced by the repacked SYSTEM (above) |
 | STORAGE, ext4 | `pocket-ui/` (launcher, `releases/<version>/` with pocket-ui, pocket-core and pocket-splash, `current` and the three links, as `dev.sh` and the updater lay it out), `.pocket-seed/.config/system.d/`: `essway.service.d/10-pocket-ui.conf`, and the boot screen `pocket-splash.service` with its link `sysinit.target.wants/pocket-splash.service` ([BOOT-SPLASH.md](BOOT-SPLASH.md)) | nothing (`.please_resize_me` and `lost+found` stay) |
 
-Partition table, partition sizes, KERNEL and SYSTEM are unchanged. Image: 2,198,863,872 bytes raw, 1,518,697,476
+Partition table, partition sizes and KERNEL are unchanged; SYSTEM only lost the paths above. Image: 2,198,863,872 bytes raw, 1,518,697,476
 bytes as `.img.xz` (version 0.1.0, commit 4cc9c97, 2026-10-26). STORAGE holds 16 MB of its 32 MB before the first start
 (6.9 MB on 2026-10-22: the programs have grown; the check warns above 24 MB).
 
@@ -117,8 +151,15 @@ the three `--version` ones, which warned because the virtual device's base image
 (`scripts/vdev.sh image`); on 2026-10-26 both programs printed `0.1.0` in that base image on the Mac instead:
 
 - SHA256SUMS; GPT with exactly ROCKNIX's two partitions (start, size, type, name); image size unchanged.
-- FAT: label `ROCKNIX`; **exactly** the expected file list; KERNEL and SYSTEM md5 against the pins and their
-  `.md5` files.
+- FAT: label `ROCKNIX`; **exactly** the expected file list (ROCKNIX's licence folder counted, `ROCKNIX_LICENSE_FILES`);
+  KERNEL and SYSTEM md5 against the pins and their `.md5` files.
+- Inside SYSTEM (since 2026-10-28): none of `SYSTEM_REMOVE`; `ssh.enabled=0`, `samba.enabled=0`,
+  `syncthing.enabled=0` in ROCKNIX's default `system.cfg`; no `authorized_keys` or host keys; no `ssh` on the kernel
+  command line; the only BIOS-named file is ReGBA's (md5 pinned); every firmware file is listed in
+  `firmware-licences/README.txt`.
+- Notes: what was removed and why, the ReGBA BIOS, remote access off, the pointer to `SOURCE-OFFER.txt`; the offer
+  itself (three years, how to ask, ROCKNIX commit, version); `firmware-licences/` is the repository's; a warning if the
+  pocket-ui source named is a `-dirty` commit.
 - GRUB: `grub.cfg` is `deploy/sd-efi/grub.cfg`, searches `--label ROCKNIX`, loads `/boot/pocket/Image` and
   `/boot/pocket/miniv2-noufs.dtb` with `boot=LABEL=ROCKNIX disk=LABEL=STORAGE`, the quiet start
   (`rootwait quiet loglevel=3 vt.global_cursor_default=0`, no `echo` command, no `fbcon=` outside the comments: the
@@ -154,25 +195,50 @@ The notes (`pocket-ui-info/README.txt` on the card, and `pocket-ui-<version>-rp-
   pocket-ui cannot start.
 - **Free, non-commercial distribution only**: ROCKNIX "includes components licensed for non-commercial use only"
   (libretro cores such as snes9x, genesis_plus_gx, picodrive, fbneo) and its artwork is NC.
-- **pocket-ui and pocket-core: GNU GPL version 2 or later.** `make-image.sh` copies the repository's `LICENSE` and
-  `NOTICE.md` to `pocket-ui-info/` on the card; third-party credits (fonts, Rust crates) are in `NOTICE.md`, not
-  repeated in the notes. The licence texts that have to travel with the programs (the Rust crates' from
-  `scripts/third-party.sh --texts`, `THIRD-PARTY-CRATES.md`, the fonts' `assets/fonts/OFL.txt`) are collected by
-  `scripts/licence-files.sh` into `pocket-ui-info/licences/` on the card and `/storage/pocket-ui/licences` in STORAGE. `check-image.sh` compares both with the repository's files, and only warns while the
-  repository has none (the licence files arrive from another branch): **an image built before they reach main is
-  not releasable.**
-- **GPL source:** ROCKNIX tag `20261001`, commit `c445081a59518f37d9776e5412dd7b14910696f7` (kernel and patches
-  included; `make src-pkg` packs every source archive); GRUB's Debian source package at snapshot.debian.org;
-  pocket-ui, pocket-core and this build script at the pocket-ui commit the image was built from.
-- **No BIOS files and no ROMs** (checked, see above).
+- **pocket-ui and pocket-core: GNU GPL version 2 or later.** `LICENSE`, `NOTICE.md` and `licences/` (the crates' texts,
+  `THIRD-PARTY-CRATES.md`, the fonts' OFL, from `scripts/licence-files.sh`) go to `pocket-ui-info/`, the texts also to
+  `/storage/pocket-ui/licences` (Settings → About).
+- **ROCKNIX's licences:** its `LICENSE.md` and the 75 texts of its `licenses/` folder at the tag (none of them is
+  inside SYSTEM) go to `pocket-ui-info/rocknix-licenses/`.
+- **Firmware:** `pocket-ui-info/firmware-licences/` (see "SYSTEM without a few files").
+- **No BIOS files and no ROMs** of our own; the one BIOS file in ROCKNIX's SYSTEM is ReGBA's GPL replacement.
+
+### GPL source: hosted next to the image, plus a written offer
+
+Chosen route (2026-10-28): **we host the complete corresponding source ourselves**, as release assets next to the
+image, and the card carries a **written offer** (GPLv2 §3(b), GPLv3 §6(b)) as a second way, valid three years, asked
+for through the repository's issues. `pocket-ui-info/SOURCE-OFFER.txt` lists the files:
+
+| File | Made by | What |
+|---|---|---|
+| `pocket-ui-<version>-source.tar.gz` | `scripts/image/source-bundle.sh` (`git archive` of the public release commit) | pocket-ui, pocket-core, pocket-splash and the image scripts |
+| `rocknix-20261001-distribution.tar.xz` | `scripts/image/rocknix-source.sh` | ROCKNIX's build tree at the tag: package recipes, kernel config, all patches |
+| `rocknix-20261001-SM8250-sources.tar.xz.part-NN`, `packages.txt` | `scripts/image/rocknix-source.sh` | every source archive and checkout (without git history) of the SM8250 build: the package list of ROCKNIX's own `scripts/genbuildplan.py --build image` for `ARCH=aarch64` and `ARCH=arm` (the Makefile's `SM8250` target builds both), fetched with ROCKNIX's `scripts/get` (the input of `make src-pkg`, without building anything) |
+| `regba-bios-source.tar.gz` | `source-bundle.sh` | ReGBA's `bios/` at `7f37905`, checked against the BIOS md5 |
+| `grub2_2.12-9+deb13u2.dsc`, `.orig.tar.xz`, `.debian.tar.xz` | `source-bundle.sh` | Debian's GRUB source, checked against the `.dsc` |
+| `SOURCE-SHA256SUMS` | `source-bundle.sh` | |
+
+```sh
+scripts/image/rocknix-source.sh ~/pocket-review/rocknix-source-20261001      # once per ROCKNIX tag
+scripts/image/source-bundle.sh OUT --version 0.1.1 --rocknix-source ~/pocket-review/rocknix-source-20261001 \
+  --pocket-ui ../public-011 <public release commit>
+```
+
+First run (2026-10-28, on the build machine): 654 packages, about 85 minutes to fetch, 34 GB as fetched (git checkouts with their
+history); packed without `.git` and xz-compressed. Packages whose source `scripts/get` cannot fetch end in
+`failed.txt`; `source-bundle.sh` refuses to run unless each one is in its `NOT_ON_CARD` list with a reason (today only
+`rocknix-abl`, whose release asset changed upstream and which is removed from SYSTEM). Not covered by `scripts/get`:
+files a package downloads during its own build (in SYSTEM: the ReGBA BIOS, whose source is added separately, and the
+DOOM shareware, which is removed). Others found by `grep -E '(curl|wget) '` over the packages of the SM8250 plan, not in
+the bundle yet (open point; the written offer covers them): `portmaster` (`PortMaster.zip`, `compat.tar.gz`),
+`mangohud` and `xemu-sa` (meson subproject tarballs), `wine` (`winetricks`, a script), and data files without code
+(`ppsspp-sa` cheat database, `rpcs3-sa` config database, `armsx2-sa` patches).
 
 Open points:
 
-- **The repository is not public yet.** Now that pocket-ui itself is
-  GPL, its source has to be available to everyone who gets the image: publish the repository (or the source of
-  the exact commit) before the image is shared.
-- For a public release, consider hosting a copy of the corresponding source (`make src-pkg` of the tag, the GRUB
-  source package, pocket-ui's commit) next to the image instead of only linking to it.
+- The ROCKNIX team has not been asked; a friendly note is drafted next to the release files.
+- The written offer names GitHub issues as the way to ask. A postal or e-mail contact would make it independent of
+  GitHub.
 
 ## Unverified
 

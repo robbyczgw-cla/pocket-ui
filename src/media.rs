@@ -1,11 +1,11 @@
 //! The games' media as they stand on a shelf: a pixel-art template per kind of cartridge or case
 //! (`assets/media`, drawn by `assets/media/tools/draw_media.py`), painted with the colour of the game's cover,
-//! its title and its cover. Shared by the Cabinet look (cases standing on the shelves, `app_cabinet.rs`) and the
-//! Shelf look (cases lying in a stack, one row each, `main.rs`).
+//! its title and its cover. Shared by the Shelf look (every entry a spine on one shelf, the selected one shown with
+//! its front, `app_cabinet.rs` "the Shelf look") and the Cabinet look (cases standing on a cabinet's shelves).
 //!
-//! A template pixel is two screen pixels at the shelf's size (`Medium::size`). Spines stretch along their length
-//! between their two ends (9-slice: the ends keep their pixels, the middle is stretched), so the same template is a
-//! case standing on the Cabinet's shelf and a row of the Shelf look. Templates are decoded once, on first use.
+//! A template pixel is `SHELF_SCALE` screen pixels at the Cabinet's size (`Medium::size`, `k` = 1); the Shelf look
+//! picks its own scale for the screen. Scaling is by nearest pixel, so pixel art stays pixel art. Templates are
+//! decoded once, on first use.
 
 use crate::cabinet::{ink_on, luma, Size};
 use crate::cabinet_art::{self as art, Look, Pic};
@@ -13,9 +13,6 @@ use crate::gfx::mix;
 use crate::image::Image;
 use crate::system_art::Sprite;
 use crate::text::Text;
-
-/// A rectangle: x, y, width, height.
-pub type Rect = (i32, i32, i32, i32);
 
 /// The kinds of media, each with a template of its own.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -49,6 +46,8 @@ pub enum Medium {
     Umd,
     Ds,
     N3ds,
+    /// The original Xbox's black DVD case with its green top band.
+    Xbox,
 }
 
 /// Where things are on a template (template pixels): the spine's label and its band at the top (cases whose band
@@ -59,17 +58,24 @@ struct Template {
     spine_label: (i32, i32, i32, i32),
     front_label: (i32, i32, i32, i32),
     band: Option<(i32, i32, i32, i32)>,
+    /// The spine's two ends (template rows) that a stretched spine would keep: printed by `draw_media.py` with the
+    /// rest, checked by the tests; nothing stretches a spine at the moment.
+    #[allow(dead_code)]
     caps: (i32, i32),
     /// Drawn in neutral grey, coloured with the system's plastic.
     tint: bool,
 }
+
+/// Screen pixels a template pixel on the Cabinet's shelf (`k` = 1 everywhere below): two and a half, so a shelf of
+/// a few games still fills the cabinet and the titles on the spines are 30 px.
+pub const SHELF_SCALE: f32 = 2.5;
 
 /// The template's neutral plastic grey (`draw_media.py`'s GREY).
 const GREY: u32 = 156;
 
 /// Printed by `assets/media/tools/draw_media.py`, in the order of `Medium::ALL`.
 #[rustfmt::skip]
-const TEMPLATES: [Template; 18] = [
+const TEMPLATES: [Template; 19] = [
     // snes
     Template { spine: (22, 78), front: (88, 78), spine_label: (3, 21, 16, 52), front_label: (13, 14, 62, 57), band: None, caps: (20, 4), tint: true },
     // n64
@@ -106,10 +112,12 @@ const TEMPLATES: [Template; 18] = [
     Template { spine: (16, 95), front: (85, 95), spine_label: (2, 14, 12, 79), front_label: (3, 3, 79, 89), band: None, caps: (14, 3), tint: false },
     // 3ds
     Template { spine: (15, 93), front: (85, 93), spine_label: (1, 13, 13, 79), front_label: (3, 3, 79, 87), band: None, caps: (13, 2), tint: false },
+    // xbox
+    Template { spine: (19, 120), front: (84, 120), spine_label: (2, 19, 15, 99), front_label: (3, 17, 78, 100), band: None, caps: (19, 3), tint: false },
 ];
 
 /// The templates' pictures: (spine, front) per medium, in the order of `Medium::ALL`.
-const PNGS: [(&[u8], &[u8]); 18] = [
+const PNGS: [(&[u8], &[u8]); 19] = [
     (include_bytes!("../assets/media/snes-spine.png"), include_bytes!("../assets/media/snes-front.png")),
     (include_bytes!("../assets/media/n64-spine.png"), include_bytes!("../assets/media/n64-front.png")),
     (include_bytes!("../assets/media/nes-spine.png"), include_bytes!("../assets/media/nes-front.png")),
@@ -128,10 +136,11 @@ const PNGS: [(&[u8], &[u8]); 18] = [
     (include_bytes!("../assets/media/umd-spine.png"), include_bytes!("../assets/media/umd-front.png")),
     (include_bytes!("../assets/media/ds-spine.png"), include_bytes!("../assets/media/ds-front.png")),
     (include_bytes!("../assets/media/3ds-spine.png"), include_bytes!("../assets/media/3ds-front.png")),
+    (include_bytes!("../assets/media/xbox-spine.png"), include_bytes!("../assets/media/xbox-front.png")),
 ];
 
 impl Medium {
-    pub const ALL: [Medium; 18] = [
+    pub const ALL: [Medium; 19] = [
         Medium::Snes,
         Medium::N64,
         Medium::Nes,
@@ -150,6 +159,7 @@ impl Medium {
         Medium::Umd,
         Medium::Ds,
         Medium::N3ds,
+        Medium::Xbox,
     ];
 
     /// What a ROCKNIX system's games come in; a generic cartridge or disc case for the rest.
@@ -171,6 +181,7 @@ impl Medium {
             "psp" | "pspockets" => Medium::Umd,
             "nds" => Medium::Ds,
             "3ds" | "n3ds" => Medium::N3ds,
+            "xbox" => Medium::Xbox,
             _ => match FormFactor::of(system) {
                 FormFactor::HandheldCart => Medium::Gb,
                 FormFactor::ConsoleCart => Medium::Cart,
@@ -190,13 +201,24 @@ impl Medium {
         &TEMPLATES[self.index()]
     }
 
-    /// Its size on the Cabinet's shelf, in screen pixels: twice the template.
+    /// Its size on the Cabinet's shelf, in screen pixels: the template at `SHELF_SCALE`.
     pub fn size(self) -> Size {
         let t = self.template();
+        let s = |v: i32| (v as f32 * SHELF_SCALE).round() as i32;
         Size {
-            spine: t.spine.0 * 2,
-            front: t.front.0 * 2,
-            h: t.spine.1 * 2,
+            spine: s(t.spine.0),
+            front: s(t.front.0),
+            h: s(t.spine.1),
+        }
+    }
+
+    /// The template's own size, one pixel a template pixel: the Shelf look scales it to the screen.
+    pub fn template_size(self) -> Size {
+        let t = self.template();
+        Size {
+            spine: t.spine.0,
+            front: t.front.0,
+            h: t.spine.1,
         }
     }
 
@@ -206,7 +228,7 @@ impl Medium {
 
     /// The decoded templates, (spine, front).
     fn pics(self) -> &'static (Sprite, Sprite) {
-        static DECODED: [std::sync::OnceLock<(Sprite, Sprite)>; 18] = [const { std::sync::OnceLock::new() }; 18];
+        static DECODED: [std::sync::OnceLock<(Sprite, Sprite)>; 19] = [const { std::sync::OnceLock::new() }; 19];
         let i = self.index();
         DECODED[i].get_or_init(|| {
             let empty = || Sprite { w: 1, h: 1, px: vec![0] };
@@ -253,17 +275,34 @@ fn scale_rect((x, y, w, h): (i32, i32, i32, i32), f: f32) -> (i32, i32, i32, i32
 fn scaled(s: &Sprite, f: f32, tint: Option<u32>) -> Pic {
     let (w, h) = ((s.w as f32 * f).round() as i32, (s.h as f32 * f).round() as i32);
     let mut p = Pic::new(w, h, 0);
+    // The template column of each screen column, worked out once (a front is half a million pixels at the Shelf look's
+    // size).
+    let cols: Vec<u32> = (0..w).map(|x| ((x as f32 / f) as u32).min(s.w - 1)).collect();
     for y in 0..h {
         let sy = ((y as f32 / f) as u32).min(s.h - 1);
-        for x in 0..w {
-            let sx = ((x as f32 / f) as u32).min(s.w - 1);
-            let px = s.px[(sy * s.w + sx) as usize];
+        let src = &s.px[(sy * s.w) as usize..((sy + 1) * s.w) as usize];
+        let dst = &mut p.px[(y * w) as usize..((y + 1) * w) as usize];
+        for (d, &sx) in dst.iter_mut().zip(&cols) {
+            let px = src[sx as usize];
             if px >> 24 != 0 {
-                p.px[(y * w + x) as usize] = 0xff00_0000 | colour(px, tint);
+                *d = 0xff00_0000 | colour(px, tint);
             }
         }
     }
     p
+}
+
+/// A picture scaled by `k`, nearest pixel (pixel art stays pixel art): the props at the Shelf look's scale.
+pub fn rescaled(p: &Pic, k: f32) -> Pic {
+    let (w, h) = ((p.w as f32 * k).round() as i32, (p.h as f32 * k).round() as i32);
+    let mut out = Pic::new(w, h, 0);
+    for y in 0..out.h {
+        let sy = ((y as f32 / k) as i32).min(p.h - 1);
+        for x in 0..out.w {
+            out.px[(y * out.w + x) as usize] = p.px[(sy * p.w + ((x as f32 / k) as i32).min(p.w - 1)) as usize];
+        }
+    }
+    out
 }
 
 /// A label's paper in `color`: a little lighter at the top, darker at the bottom, its edges catching the light.
@@ -281,14 +320,6 @@ fn paper(p: &mut Pic, (x, y, w, h): (i32, i32, i32, i32), color: u32) {
     p.tint(x + 1, y + 1, w - 2, 1, 0xffffff, 50);
 }
 
-/// A cover's colour made calm for the Shelf look's rows: half its saturation, a third of the way to the row's
-/// colour `row` (pocket-ui's spine colour), so a list of loud covers still reads as one quiet list.
-pub fn muted(c: u32, row: u32) -> u32 {
-    let l = luma(c);
-    let grey = l << 16 | l << 8 | l;
-    mix(mix(c, grey, 128), row, 85)
-}
-
 fn scale(c: u32, k: f32) -> u32 {
     let ch = |s: u32| (((c >> s & 0xff) as f32 * k).round().clamp(0.0, 255.0) as u32) << s;
     ch(16) | ch(8) | ch(0)
@@ -301,8 +332,33 @@ fn tint_of(m: Medium, look: Look) -> Option<u32> {
 /// The spine of a game's case standing on the shelf, `k` times its shelf size: the template, the label in the
 /// cover's colour with the title read top to bottom, the band (on cases that have one) in the cover's accent.
 pub fn spine(text: &mut Text, m: Medium, k: f32, look: Look, title: &str) -> Pic {
+    // 24 px, or 21 on a narrow label (the Game Boy's, the thin jewel case's): the two sizes the shelf has always used,
+    // so a new spine finds its letters drawn already. Bigger (a case out of the shelf) at the nearest size the app
+    // paints anyway, never past the label.
+    let (_, _, w, _) = scale_rect(m.template().spine_label, SHELF_SCALE * k);
+    let want = (if (w as f32 / k) < 25.0 { 21.0 } else { 24.0 }) * k;
+    spine_with(text, m, k, look, title, want)
+}
+
+/// The sizes a spine's title is written in: the ones the app paints anyway, so a spine made in a frame draws no
+/// letters of its own (tests/shelf_moves.rs).
+const SPINE_PX: [u32; 8] = [21, 24, 28, 30, 37, 44, 50, 67];
+
+/// The title size for a spine label `w` pixels across: the largest of `SPINE_PX` up to `want` whose letters, capitals
+/// to descenders, still fit across the label with a little paper on both sides; 21 at the least.
+pub fn spine_px(w: i32, want: f32) -> u32 {
+    SPINE_PX
+        .into_iter()
+        .rev()
+        .find(|&s| s as f32 <= want + 0.5 && (s as f32 * 0.86).round() as i32 <= w - 6)
+        .unwrap_or(SPINE_PX[0])
+}
+
+/// `spine` with the title at `want` pixels or the nearest size below it that fits the label (`spine_px`): the Shelf
+/// look's spines, whose title follows Settings → Text size.
+pub fn spine_with(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, want: f32) -> Pic {
     let t = m.template();
-    let f = 2.0 * k;
+    let f = SHELF_SCALE * k;
     let (spine, _) = m.pics();
     let mut p = scaled(spine, f, tint_of(m, look));
     if let Some(band) = t.band {
@@ -311,11 +367,7 @@ pub fn spine(text: &mut Text, m: Medium, k: f32, look: Look, title: &str) -> Pic
     }
     let (x, y, w, h) = scale_rect(t.spine_label, f);
     paper(&mut p, (x, y, w, h), look.color);
-    // 24 px, or 21 on a narrow label (the Game Boy's, the thin jewel case's): the two sizes the shelf has always used,
-    // so a new spine finds its letters drawn already.
-    // Bigger (a case out of the shelf) at the nearest size the app paints anyway, never past the label.
-    let want = (if (w as f32 / k) < 25.0 { 21.0 } else { 24.0 }) * k;
-    let px = [21u32, 24, 28, 30, 37, 44, 50, 67].into_iter().rev().find(|&s| s as f32 <= want + 0.5).unwrap_or(21);
+    let px = spine_px(w, want);
     let pad = (4.0 * k).round() as i32;
     art::spine_title(text, &mut p, title, px, x, w, y + pad, h - 2 * pad, ink_on(look.color));
     p
@@ -324,26 +376,29 @@ pub fn spine(text: &mut Text, m: Medium, k: f32, look: Look, title: &str) -> Pic
 /// The size a case's front is made at for `k` times its shelf size.
 pub fn front_size(m: Medium, k: f32) -> (i32, i32) {
     let t = m.template();
-    let f = 2.0 * k;
+    let f = SHELF_SCALE * k;
     ((t.front.0 as f32 * f).round() as i32, (t.front.1 as f32 * f).round() as i32)
 }
 
 /// Where the cover sits on the front made at `k` times the shelf size: (x, y, width, height).
 pub fn label_rect(m: Medium, k: f32) -> (i32, i32, i32, i32) {
-    scale_rect(m.template().front_label, 2.0 * k)
+    scale_rect(m.template().front_label, SHELF_SCALE * k)
 }
 
-/// The front of a case, `k` times its shelf size: the cover (`cover`, already `cabinet_art::cover_fill`ed to the
+/// The front of a case, `k` times its shelf size: the cover (`cover`, already `cabinet_art::cover_fit` to the
 /// size of `label_rect`) in the case, or a plain label with the console (`art`) and the title.
 pub fn front(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, cover: Option<&Image>, console: Option<&Sprite>) -> Pic {
     let (_, tpl) = m.pics();
-    let mut p = scaled(tpl, 2.0 * k, tint_of(m, look));
+    let mut p = scaled(tpl, SHELF_SCALE * k, tint_of(m, look));
     let (lx, ly, lw, lh) = label_rect(m, k);
     match cover {
         Some(img) => {
+            let w = lw.min(img.w as i32).min(p.w - lx).max(0) as usize;
             for y in 0..lh.min(img.h as i32).min(p.h - ly) {
-                for x in 0..lw.min(img.w as i32).min(p.w - lx) {
-                    p.px[((ly + y) * p.w + lx + x) as usize] = 0xff00_0000 | img.px[(y as u32 * img.w + x as u32) as usize];
+                let src = &img.px[(y as u32 * img.w) as usize..][..w];
+                let dst = &mut p.px[((ly + y) * p.w + lx) as usize..][..w];
+                for (d, &s) in dst.iter_mut().zip(src) {
+                    *d = 0xff00_0000 | s;
                 }
             }
         }
@@ -354,51 +409,6 @@ pub fn front(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, cover:
         art::sheen(&mut p, 18);
     }
     p
-}
-
-/// A case lying flat with its spine to you, `len` x `thick` screen pixels, its top end at the left: the Shelf look's
-/// rows. Only the template: the label (returned, x y w h) and the band are painted by the caller in the game's
-/// colours, so one picture serves every game of a system. The ends keep their pixels; the middle is stretched.
-pub fn lying(m: Medium, plastic: u32, len: i32, thick: i32) -> (Pic, Rect, Option<Rect>) {
-    let t = m.template();
-    let (spine, _) = m.pics();
-    let tint = m.is_cart().then_some(plastic);
-    let (tw, th) = (spine.w as i32, spine.h as i32);
-    let f = thick as f32 / tw as f32;
-    let (c0, c1) = t.caps;
-    let (e0, e1) = ((c0 as f32 * f).round() as i32, (c1 as f32 * f).round() as i32);
-    let mid = (len - e0 - e1).max(1);
-    // Template row for each column along the length.
-    let along: Vec<i32> = (0..len)
-        .map(|x| {
-            if x < e0 {
-                (x as f32 / f) as i32
-            } else if x >= len - e1 {
-                th - 1 - ((len - 1 - x) as f32 / f) as i32
-            } else {
-                c0 + ((x - e0) as i64 * (th - c0 - c1) as i64 / mid as i64) as i32
-            }
-            .clamp(0, th - 1)
-        })
-        .collect();
-    let mut p = Pic::new(len, thick, 0);
-    for y in 0..thick {
-        let tx = ((y as f32 / f) as i32).min(tw - 1);
-        for (x, &ty) in along.iter().enumerate() {
-            let px = spine.px[(ty * tw + tx) as usize];
-            if px >> 24 != 0 {
-                p.px[(y * len + x as i32) as usize] = 0xff00_0000 | colour(px, tint);
-            }
-        }
-    }
-    // A rectangle of the template in the lying picture: its rows become columns.
-    let place = |(rx, ry, rw, rh): (i32, i32, i32, i32)| {
-        let cols: Vec<i32> = (0..len).filter(|&x| (ry..ry + rh).contains(&along[x as usize])).collect();
-        let (x0, x1) = (cols.first().copied().unwrap_or(0), cols.last().copied().unwrap_or(0) + 1);
-        let (y, h) = span(rx, rw, f);
-        (x0, y, x1 - x0, h)
-    };
-    (p, place(t.spine_label), t.band.map(place))
 }
 
 /// The two colours of a cover: the one it is mostly (`cabinet::spine_color`) and an accent, a clear colour of the
@@ -465,7 +475,7 @@ pub enum Prop {
 impl Prop {
     pub const ALL: [Prop; 4] = [Prop::Plant, Prop::Lamp, Prop::Cactus, Prop::Bookend];
 
-    /// The picture at the shelf's size (two screen pixels a pixel), decoded on first use.
+    /// The picture at the Cabinet's size (`SHELF_SCALE` screen pixels a pixel), decoded on first use.
     pub fn pic(self) -> &'static Pic {
         static DECODED: [std::sync::OnceLock<Pic>; 4] = [const { std::sync::OnceLock::new() }; 4];
         let i = Prop::ALL.iter().position(|p| *p == self).unwrap_or(0);
@@ -476,24 +486,18 @@ impl Prop {
                 Prop::Cactus => include_bytes!("../assets/media/props/cactus.png"),
                 Prop::Bookend => include_bytes!("../assets/media/props/bookend.png"),
             };
-            crate::system_art::decode(png).map_or_else(|| Pic::new(1, 1, 0), |s| scaled(&s, 2.0, None))
+            crate::system_art::decode(png).map_or_else(|| Pic::new(1, 1, 0), |s| scaled(&s, SHELF_SCALE, None))
         })
     }
 
-    /// Which prop (if any) stands on a shelf, from a number the shelf keeps (its key); the same one every time.
-    /// About one shelf in three gets one; the tall lamp only where it fits.
-    pub fn for_shelf(seed: u32, room_h: i32) -> Option<Prop> {
+    /// The prop that stands further along a shelf with room, after its bookend: a plant, a lamp or a cactus, picked by a
+    /// number the shelf keeps (the same one every time), the tallest that fits `room_h` if the pick doesn't.
+    pub fn beside(seed: u32, room_h: i32) -> Option<Prop> {
         let h = seed.wrapping_mul(2654435761) >> 7;
-        let pick = match h % 12 {
-            0 | 1 => Prop::Plant,
-            2 => Prop::Lamp,
-            3 => Prop::Cactus,
-            4 | 5 => Prop::Bookend,
-            _ => return None,
-        };
-        let pick = if pick.pic().h > room_h { Prop::Cactus } else { pick };
-        (pick.pic().h <= room_h).then_some(pick)
+        let pick = [Prop::Plant, Prop::Lamp, Prop::Cactus, Prop::Plant][(h % 4) as usize];
+        [pick, Prop::Plant, Prop::Cactus].into_iter().find(|p| p.pic().h <= room_h)
     }
+
 }
 
 #[cfg(test)]
@@ -539,7 +543,7 @@ mod tests {
             ("3ds", Medium::N3ds),
             ("atari2600", Medium::Cart),
             ("ngp", Medium::Gb),
-            ("xbox", Medium::Keep),
+            ("xbox", Medium::Xbox),
             ("something-new", Medium::Disc),
         ] {
             assert_eq!(Medium::of(system), want, "{system}");
@@ -554,20 +558,6 @@ mod tests {
         assert!(h(Medium::GameCube) < h(Medium::Ps2) && h(Medium::Ps1) < h(Medium::GameCube));
     }
 
-    #[test]
-    fn a_lying_spine_keeps_its_ends_and_its_label_is_inside() {
-        for m in Medium::ALL {
-            for (len, thick) in [(800, 72), (1500, 82)] {
-                let (p, (x, y, w, h), band) = lying(m, 0x8b8a87, len, thick);
-                assert_eq!((p.w, p.h), (len, thick));
-                assert!(x > 0 && y >= 0 && x + w < len && y + h <= thick && w > len / 2, "{m:?} label {x} {y} {w} {h}");
-                if let Some((bx, _, bw, _)) = band {
-                    assert!(bx + bw <= x + 2, "{m:?} band before the label");
-                }
-            }
-        }
-    }
-
     /// A game without box art still shows something you can read: its system's colour on the label, its name on the
     /// spine, and a front with a plain label and its name (never an empty case).
     #[test]
@@ -576,7 +566,7 @@ mod tests {
         let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2 };
         for m in Medium::ALL {
             let spine = spine(&mut text, m, 1.0, look, "Chrono Trigger");
-            let (x, y, w, h) = scale_rect(m.template().spine_label, 2.0);
+            let (x, y, w, h) = scale_rect(m.template().spine_label, SHELF_SCALE);
             let ink = ink_on(look.color);
             let inked = (y..y + h).flat_map(|r| (x..x + w).map(move |c| (c, r))).filter(|&(c, r)| spine.get(c, r) & 0xffffff == ink).count();
             assert!(inked > 20, "{m:?}: the title on the spine ({inked} pixels)");
@@ -588,15 +578,20 @@ mod tests {
     }
 
     #[test]
-    fn props_are_small_and_come_on_some_shelves_only() {
+    fn every_shelf_with_room_gets_a_prop_beside_its_bookend() {
+        assert!((0..100).all(|s| Prop::beside(s, 300).is_some_and(|p| p != Prop::Bookend)));
+        assert!((0..100).all(|s| Prop::beside(s, 80).is_none_or(|p| p.pic().h <= 80)), "never taller than the room");
+        let kinds: std::collections::HashSet<Prop> = (0..100).filter_map(|s| Prop::beside(s, 300)).collect();
+        assert!(kinds.len() >= 3, "not the same plant on every shelf: {kinds:?}");
+        assert_eq!(Prop::beside(7, 300), Prop::beside(7, 300));
+    }
+
+    #[test]
+    fn props_are_small() {
         for p in Prop::ALL {
             let pic = p.pic();
-            assert!(pic.w > 20 && pic.h > 40 && pic.h < 140 && pic.w < 90, "{p:?} {}x{}", pic.w, pic.h);
+            assert!(pic.w > 25 && pic.h > 50 && pic.h < 175 && pic.w < 113, "{p:?} {}x{}", pic.w, pic.h);
         }
-        let with = (0..300).filter(|&s| Prop::for_shelf(s, 300).is_some()).count();
-        assert!((60..180).contains(&with), "{with} of 300 shelves");
-        assert!((0..300).all(|s| Prop::for_shelf(s, 60).is_none_or(|p| p.pic().h <= 60)), "never taller than the room");
-        assert_eq!(Prop::for_shelf(7, 300), Prop::for_shelf(7, 300));
     }
 
     #[test]

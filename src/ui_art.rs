@@ -1,6 +1,7 @@
 //! Small pixel-art pictures of the interface (assets/ui-art, sources and licences in assets/ui-art/SOURCES.md):
 //! the vignettes above an empty page's words, the handhelds on About, first start and the manual's Controls page,
-//! the Settings categories' icons and the Year in review's stickers. Compiled into the binary like the system
+//! the Settings categories' icons, the Year in review's stickers and the emblems on the fronts of boxes that are not a
+//! game. Compiled into the binary like the system
 //! pictures (`system_art`) and decoded the first time one is painted, then kept: a page that never shows one
 //! never decodes it, and a frame that does only copies pixels.
 
@@ -34,6 +35,21 @@ pub enum Art {
     Device(Model),
     Icon(Icon),
     Sticker(Sticker),
+    Emblem(Emblem),
+}
+
+/// What is printed on the front of a box on the shelf that is not a game (`app_cabinet`'s `emblem`; the others there
+/// borrow an empty page's vignette).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Emblem {
+    /// A wooden crate of cartridges with a brass label holder: Curator.
+    Curator,
+    /// A wrapped gift box: Surprise me, before its pick's cover is read.
+    Surprise,
+    /// A monitor with a game pad in front of it: PC streaming.
+    Streaming,
+    /// Round stickers on a peeled sheet: a sticker's shelf.
+    Sticker,
 }
 
 /// The Settings categories (`SETTINGS_GROUPS` in main.rs, in that order).
@@ -87,6 +103,10 @@ const FILES: &[(Art, &[u8])] = &[
     (Art::Sticker(Sticker::TenGames), include_bytes!("../assets/ui-art/sticker-ten-games.png")),
     (Art::Sticker(Sticker::Streak), include_bytes!("../assets/ui-art/sticker-streak.png")),
     (Art::Sticker(Sticker::CameBack), include_bytes!("../assets/ui-art/sticker-came-back.png")),
+    (Art::Emblem(Emblem::Curator), include_bytes!("../assets/ui-art/emblem-curator.png")),
+    (Art::Emblem(Emblem::Surprise), include_bytes!("../assets/ui-art/emblem-surprise.png")),
+    (Art::Emblem(Emblem::Streaming), include_bytes!("../assets/ui-art/emblem-streaming.png")),
+    (Art::Emblem(Emblem::Sticker), include_bytes!("../assets/ui-art/emblem-sticker.png")),
 ];
 
 /// The decoded picture, decoded on first use and kept.

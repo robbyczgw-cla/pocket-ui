@@ -94,6 +94,8 @@ re:^HOME \+
 
 # Emulators and cores (with versions)
 ARMSX2
+hakuX
+hakuX (RetroArch)
 Azahar
 Dolphin
 PPSSPP
@@ -156,6 +158,7 @@ MFZWI3D-BONSGYC-YLTMRWG-C43ENR5
 QXGZDMM-FZWI3DP-BONSGYY-LTMRWAD
 uCity
 Okage: Shadow King
+Jade Empire
 Final Fantasy VII
 Beneath a Steel Sky
 Town planner
@@ -470,3 +473,5 @@ Xiaomi 15
 AYN Odin 2
 AYN Odin 2 Mini
 AYN Odin 2 Portal
+Anbernic RG28XX
+Anbernic RG35XX SP

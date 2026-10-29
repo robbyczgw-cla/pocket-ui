@@ -65,7 +65,7 @@ pub const OFFLINE: &str = "Connect to Wi-Fi first to sign in (Settings › Conne
 /// What the page says about RetroAchievements, under the status.
 pub const ABOUT: [&str; 3] = [
     "Earn achievements in the games pocket-core plays: unlocks are checked as you play and count on retroachievements.org.",
-    "Save states, rewind and cheats stay usable (softcore). Without Wi-Fi, unlocks are kept and sent the next time a game starts online.",
+    "Save states, rewind and cheats stay usable. Without Wi-Fi, unlocks are kept and sent the next time a game starts online.",
     "You need a free account from retroachievements.org. Your password is sent once to sign in and is not kept; the Pocket keeps only the sign-in key the site gives back.",
 ];
 

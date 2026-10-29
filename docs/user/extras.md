@@ -49,11 +49,15 @@ Good to know:
   console's list of known releases. That gives the release's usual name: "0902 - MM&B (U).gba" is found as "Mega Man &
   Bass (USA)". The list is downloaded once for each console you have games for, when the Pocket is online (a few
   hundred KB), and kept on the SD card. A file is read again only when it changes.
-- Games the list doesn't know, disc games (PlayStation, Saturn, Dreamcast, PSP, ...), 7z files and files over 64 MB are
-  matched **by the title in the file name**. Region and version tags in brackets are ignored, a
+- Games the list doesn't know, discs of the other consoles (Saturn, Dreamcast, PSP, GameCube, ...), 7z files and files
+  over 64 MB are matched **by the title in the file name**. Region and version tags in brackets are ignored, a
   leading release number ("0902 - ") is dropped, and when several regions exist the original release is
   preferred. Names in the usual "No-Intro" style, such as "Tetris (World) (Rev 1)", match best. If a name is
   too different, no cover is chosen rather than a wrong one.
+- A **PlayStation 1 or 2** disc is recognised by the **serial on the disc** instead: pocket-ui reads the disc's
+  little boot file ("SLES_556.73"), looks it up in the console's list of releases, and the cover, the pictures and
+  the facts follow that release's name ([the game card](library.md#playstation-1-and-2-discs)). The discs of a
+  multi-disc game show "(Disc 2)".
 - A game for which nothing was found is remembered and skipped on later runs, so running it again
   only looks up new games. A game recognised by its checksum later (once the console's list is on the SD card) is
   looked up again by itself.
@@ -140,7 +144,7 @@ Installed games appear on Home under the **Ports** system and start like any oth
 itself is prepared automatically the first time you install something.
 
 A port has no pause menu. Its performance and fan are on its card: X on the port, then START opens **Performance &
-fan** (Battery, Auto or Performance; Quiet, Auto or Cool). A port that keeps a processor core busy all the time is
+fan** (Battery, Auto or Performance; Very quiet, Quiet, Auto or Cool). A port that keeps a processor core busy all the time is
 pointed out there once, with Battery in one press. See [PortMaster ports](performance.md#portmaster-ports).
 
 ### Games that need your own files

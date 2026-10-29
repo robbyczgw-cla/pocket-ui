@@ -11,7 +11,8 @@ they are translated like every other text.
 Made with [PixelLab](https://www.pixellab.ai) `create-image-pixflux` from a text prompt alone (no input image) on
 2026-10-27: transparent background, `single color black outline`, `medium shading`, `medium detail`, view `side`,
 text guidance 8. Every prompt ended with ", cozy, calm, warm muted colours, soft light, single object, centered,
-front view, no text, no letters" (the vignettes) or ", die-cut vinyl sticker with a thick white border, cute, warm
+front view, no text, no letters" (the vignettes, and the `emblem-*` pictures of 2026-10-29 on the fronts of the shelf's
+boxes that are not a game) or ", die-cut vinyl sticker with a thick white border, cute, warm
 muted colours, single object, centered, no text, no letters, no numbers" (the stickers). Every request, the ones not
 used included, with its seed: `pixellab-assets.json`.
 
@@ -31,6 +32,10 @@ used included, with its seed: `pixellab-assets.json`.
 | `sticker-ten-games.png` | a small row of game cartridges standing on a shelf with a ribbon | 222 | 96x96 |
 | `sticker-streak.png` | a small flame like a candle flame, warm orange | 231 | 96x96 |
 | `sticker-came-back.png` | a small bird returning to its birdhouse | 242 | 96x96 |
+| `emblem-curator.png` | a tidy little wooden crate holding a row of plain coloured game cartridges, a small brass label holder on its front | 304 | 160x120 |
+| `emblem-surprise.png` | a small wrapped gift box with a ribbon bow | 311 | 160x120 |
+| `emblem-streaming.png` | a small desktop computer monitor with a game controller resting in front of it | 321 | 160x120 |
+| `emblem-sticker.png` | a few round colourful paper stickers on a peeled sticker sheet | 331 | 160x120 |
 
 What was changed (`tools/finalize.py`): cut to the picture with a 1 px margin, transparency made on/off (solid from
 half on); the stickers got the same edge each, 2 px of paper white and 1 px of dark outline, in place of the uneven

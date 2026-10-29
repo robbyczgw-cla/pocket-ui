@@ -76,9 +76,9 @@ EOF
 #!$TEST_SH
 if [ "\$1" = --log-daemon ]; then
   echo "logd \$0 \$*" >>"$T/calls"
-  trap 'echo logd-term >>"$T/calls"; exit 0' TERM
+  trap 'echo logd-term >>"$T/calls"; : >"$T/logd-dead"; exit 0' TERM
   env | grep -E '^POCKETUI_TEST_' | sort >"$T/logd-env"
-  [ -f "$T/logd-fails" ] && exit 1
+  if [ -f "$T/logd-fails" ]; then : >"$T/logd-dead"; exit 1; fi
   echo \$\$ >"$T/logd-pid"
   while :; do sleep 0.2; done
 fi
@@ -238,16 +238,42 @@ stale_scanout() {
   echo "0.5 $1 DSI-1" >"$T/run/fullscreen-scale-hint"
   echo 30 >"$T/msm/dpu_de_sharpen1"
 }
-# Waits up to 5 s for shell condition $1 (the UI-start chores run in the background, after the first picture).
+# --- waiting for the launcher, without a clock --------------------------------------------------------------------
+# The launcher and its background helpers do real work, and a loaded machine (a gate next to other compiles, a hundred
+# other processes) only makes that work slower, never stuck. So a wait is on the event itself and has no time limit;
+# it is only given up on when nothing at all has happened for STALL seconds (no file below $T changed), i.e. something
+# hangs. Raising a timeout would hide a bug on an idle machine and still fail on a busy one.
+STALL=60
+progress_stamp=
+progress_at=0
+# Everything below $T that changes from now on counts as progress (the launcher keeps writing $T/calls and $T/log; a
+# scenario's own fan heartbeat does not count, or a hung launcher would look busy because of it).
+watch_progress() {
+  progress_stamp=$T/.progress
+  : >"$progress_stamp"
+  progress_at=$(date +%s)
+}
+# Waits for shell condition $1; true when it holds. It ends when the condition holds or when there was no progress for
+# STALL seconds. Every check evaluates its condition again, so a stall shows up as that check's failure, not as a hang.
 wait_for() {
-  i=0
-  while ! eval "$1" && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+  watch_progress
+  while ! eval "$1"; do
+    sleep 0.1
+    if [ -n "$(find "$T" -type f -newer "$progress_stamp" ! -name .progress ! -name 'fan.beat*' -print -quit 2>/dev/null)" ]; then
+      : >"$progress_stamp"
+      progress_at=$(date +%s)
+    elif [ $(($(date +%s) - progress_at)) -ge "$STALL" ]; then
+      break
+    fi
+  done
   eval "$1"
 }
 
 # setsid, where there is one, so launch() can end the launcher's whole process group afterwards.
 SETSID=; command -v setsid >/dev/null 2>&1 && SETSID=setsid
-# Runs the launcher against $T; gives up after 60 s.
+# Runs the launcher against $T. It is waited for as long as it takes (the background UI-start chores run after the
+# first picture; a loaded machine is slower): only a launcher that made no progress for STALL seconds is killed, which
+# none of its own time limits allow (`bounded`), so that is a bug. The checks below then fail with their own message.
 launch() {
   env PATH="$T/bin:$PATH" POCKETUI_ROOT="$ROOT" POCKETUI_LOG="$T/log" POCKETUI_BACKLIGHT="$T/backlight" \
     POCKETUI_DARK_FILE="$T/dark" POCKETUI_GAME_FILE="$T/game" POCKETUI_QUANTUM="$T/bin/quantum" \
@@ -258,21 +284,19 @@ launch() {
     POCKETUI_ROCKNIX_PROFILE="$T/rocknix/profile" POCKETUI_ROCKNIX_FUNCTIONS="$T/rocknix/001-functions" \
     POCKETUI_ES_SETTINGS="$T/rocknix/es_settings" POCKETUI_SYSTEM_CFG="$T/system.cfg" POCKETUI_TZ_CACHE="$T/cache" \
     POCKETUI_LOCALE_DIR="$T/locale" POCKETUI_FAN_ROOT="$T/fansys" POCKETUI_FAN_NOTE="$T/fan.restore" \
-    POCKETUI_FAN_BEAT="$T/fan.beat" POCKETUI_FAN_CHECK_SECS="${FANCHECK:-2}" POCKETUI_FAN_STALE_CHECKS=3 \
+    POCKETUI_FAN_BEAT="$T/fan.beat" POCKETUI_FAN_CHECK_SECS="${FANCHECK:-2}" POCKETUI_FAN_STALE_CHECKS="${FANSTALE:-3}" \
     $SETSID "$TEST_SH" "$LAUNCHER" &
   pid=$!
-  i=0
-  while kill -0 $pid 2>/dev/null && [ $i -lt 600 ]; do sleep 0.1; i=$((i + 1)); done
+  wait_for '! kill -0 $pid 2>/dev/null'
   if kill -0 $pid 2>/dev/null; then
-    echo "     (launcher still running after 60 s, killed)"
+    echo "     (the launcher made no progress for $STALL s, killed)"
     kill -9 $pid
   fi
   wait $pid 2>/dev/null
   # Did the logger outlive the launcher (essway mode: EmulationStation takes over the process)? Then end it.
-  # The logger runs in the background: under load (a gate next to compiles) the launcher can exec EmulationStation
-  # before the fake has written its pid. WAIT_LOGD=1 waits for the pid file, the fake's last step (up to 3 s).
-  i=0
-  while [ -n "${WAIT_LOGD:-}" ] && [ ! -s "$T/logd-pid" ] && [ $i -lt 30 ]; do sleep 0.1; i=$((i + 1)); done
+  # The launcher starts the logger in the background: on a loaded machine it may not have written its pid yet when the
+  # launcher execs EmulationStation, so WAIT_LOGD waits for that event itself (or for the logger's own exit note).
+  [ -n "${WAIT_LOGD:-}" ] && wait_for '[ -s "$T/logd-pid" ] || [ -e "$T/logd-dead" ]'
   logd_left=0
   if [ -f "$T/logd-pid" ] && kill -0 "$(cat "$T/logd-pid")" 2>/dev/null; then
     logd_left=1
@@ -318,6 +342,8 @@ es_execd() { [ "$(cat "$T/es-pid" 2>/dev/null)" = "$pid" ]; }
 no_essway_calls() { ! grep -q "systemctl .*essway" "$T/calls"; }
 # Line number of the first call matching $1 (999 if none).
 at() { grep -n -m1 -e "$1" "$T/calls" | cut -d: -f1 | grep . || echo 999; }
+# The same for the launcher's own log, to read the order of what it decided.
+log_at() { grep -n -m1 -e "$1" "$T/log" | cut -d: -f1 | grep . || echo 999; }
 
 echo "# a crash restarts pocket-ui instead of going back to EmulationStation"
 setup "139 134 77"
@@ -667,18 +693,25 @@ echo "# every helper has a time limit: a hung pocket-core --restore-system, sway
 setup "139 77"
 cat >"$T/bin/hang" <<EOS
 #!$TEST_SH
+# The launcher's `bounded` cuts it off with SIGTERM; that is noted per name, so the checks read the event and not how
+# long the machine took to get there.
+trap 'echo "cut off: \$(basename "\$0") \$*" >>"$T/calls"; exit 0' TERM
 echo "\$(basename "\$0") \$*" >>"$T/calls"
 sleep 300
 EOS
 chmod +x "$T/bin/hang"
-printf 'echo "pocket-core $*" >>"%s"\nsleep 300\n' "$T/calls" >>"$ROOT/pocket-core"
+cat >>"$ROOT/pocket-core" <<EOS
+echo "pocket-core \$*" >>"$T/calls"
+trap 'echo "cut off: pocket-core \$*" >>"$T/calls"; exit 0' TERM
+sleep 300
+EOS
 cp "$T/bin/hang" "$T/bin/systemctl"
 cp "$T/bin/hang" "$T/bin/swaymsg"
 echo 120 >"$T/dark"
-t0=$(date +%s)
 ESSWAY=1 HELPER=1 SWAY_WAIT=2 launch
-check "both runs happened and the launcher ended by itself, in time" '[ "$(runs)" = 2 ] && es_execd && [ $(($(date +%s) - t0)) -lt 40 ]'
+check "both runs happened and the launcher ended by itself" '[ "$(runs)" = 2 ] && es_execd'
 check "the hung helpers were called" 'grep -q "pocket-core --restore-system" "$T/calls" && grep -q "^systemctl " "$T/calls" && grep -q "^swaymsg output" "$T/calls"'
+check "each hung helper was cut off by its own limit instead of being waited for" 'grep -q "^cut off: pocket-core --restore-system" "$T/calls" && grep -q "^cut off: systemctl " "$T/calls" && grep -q "^cut off: swaymsg " "$T/calls"'
 
 echo "# ROCKNIX's UI start on 20261001: es_settings' steps, nothing of ROCKNIX's profile before the first picture"
 setup "77"
@@ -865,29 +898,45 @@ check "nothing outside the sysfs root written" '[ "$(cat "$T/victim")" = secret 
 check "the rest was still handed back" '[ "$(trips)" = "$SYSTEM_TRIPS" ]'
 
 echo "# Smooth fan: the watchdog gives the fan back when the curve's heartbeat stops, while pocket-ui runs"
-setup "77:3 77"
+setup "77 77"
 fan_driven 58000
 cat >"$T/hook" <<EOF
 if [ \$n = 1 ]; then
   echo "7 1700000000 curve quiet 551 46" >"$T/fan.beat"
-  ( sleep 2.5; if [ -f "$T/fan.restore" ]; then echo "during run 1: note still there" >>"$T/calls"; else echo "during run 1: fan handed back" >>"$T/calls"; fi ) &
+  # The run lasts until the launcher's watchdog has decided (no clock): the note is the launcher's own decision, so a
+  # loaded machine that needs longer for its three looks still sees the handback while pocket-ui runs.
+  i=0
+  while [ -f "$T/fan.restore" ] && [ \$i -lt 300 ]; do sleep 0.1; i=\$((i + 1)); done
 fi
 EOF
 FANCHECK=0.2 launch
-check "handed back during the run" 'grep -q "during run 1: fan handed back" "$T/calls"'
-check "logged as the watchdog's" 'grep -q "the fan curve stopped answering" "$T/log" && [ "$(trips)" = "$SYSTEM_TRIPS" ]'
+check "handed back during the run" '[ "$(log_at "the fan curve stopped answering")" -lt "$(log_at "exit code")" ]'
+check "the note is gone and the trips are ROCKNIX.s again" '[ ! -f "$T/fan.restore" ] && [ "$(trips)" = "$SYSTEM_TRIPS" ]'
 
 echo "# Smooth fan: a curve whose heartbeat moves is left alone"
 setup "77:3 77"
 fan_driven 58000
 cat >"$T/hook" <<EOF
 if [ \$n = 1 ]; then
-  ( k=0; while [ \$k -lt 40 ]; do k=\$((k + 1)); echo "\$k 1700000000 curve quiet 551 46" >"$T/fan.beat"; sleep 0.1; done ) &
-  ( sleep 2.5; [ -f "$T/fan.restore" ] && echo "during run 1: note still there" >>"$T/calls" ) &
+  # A beat as fast as this machine lets it, for as long as pocket-ui runs (the note is still there), each one written
+  # whole and then renamed into place: a read never sees a truncated beat, so no scheduling gap under load can look like
+  # a stopped curve. The writer says how it ended ("note-gone": clean_up took the note, i.e. it moved through the whole
+  # run), so the check reads the run itself and not a clock. The watchdog needs 20 unchanged looks in a row, so the beat
+  # would have to stand still 20 looks long.
+  echo "0 1700000000 curve quiet 551 46" >"$T/fan.beat"
+  ( k=0; ended=cap
+    while [ \$k -lt 100000 ]; do
+      k=\$((k + 1))
+      echo "\$k 1700000000 curve quiet 551 46" >"$T/fan.beat.new"
+      mv -f "$T/fan.beat.new" "$T/fan.beat"
+      if [ ! -f "$T/fan.restore" ]; then ended=note-gone; break; fi
+    done
+    echo "beat writer: \$k beats, ended: \$ended" >>"$T/calls" ) &
 fi
 EOF
-FANCHECK=0.2 launch
-check "the note stayed while the beat moved" 'grep -q "during run 1: note still there" "$T/calls" && ! grep -q "stopped answering" "$T/log"'
+FANCHECK=0.2 FANSTALE=20 launch
+check "the beat moved for the whole run" 'grep -qE "^beat writer: [0-9]{3,} beats, ended: note-gone" "$T/calls"'
+check "and the watchdog left it alone" '! grep -q "stopped answering" "$T/log"'
 check "and clean_up gave it back at the end" '[ ! -f "$T/fan.restore" ] && [ "$(trips)" = "$SYSTEM_TRIPS" ]'
 
 echo "# Smooth fan: TERM to the launcher (shutdown, essway stopped) gives the fan back before it ends"

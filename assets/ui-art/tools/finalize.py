@@ -24,6 +24,11 @@ PICKS = {
     "sticker-ten-games": "s_ten_b",
     "sticker-streak": "s_streak_a",
     "sticker-came-back": "s_back_b",
+    # the fronts of boxes that are not a game (2026-10-29, cohesion)
+    "emblem-curator": "curator_d",
+    "emblem-surprise": "surprise_a",
+    "emblem-streaming": "streaming_a",
+    "emblem-sticker": "sticker_a",
 }
 PAPER = (0xf4, 0xf1, 0xea, 255)
 EDGE = (0x2a, 0x27, 0x24, 255)

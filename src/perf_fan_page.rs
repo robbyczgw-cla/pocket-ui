@@ -22,8 +22,8 @@ pub const ROWS: [Row; 4] = [Row::GamesPerformance, Row::GamesFan, Row::OutsideFa
 
 /// The choices of each row, in the order Left/Right walk through them.
 const PERFORMANCE: [Performance; 3] = [Performance::Battery, Performance::Auto, Performance::Performance];
-const GAMES_FAN: [Fan; 3] = [Fan::Quiet, Fan::Auto, Fan::Cool];
-const OUTSIDE_FAN: [Fan; 3] = [Fan::Auto, Fan::Quiet, Fan::Cool];
+const GAMES_FAN: [Fan; 4] = [Fan::VeryQuiet, Fan::Quiet, Fan::Auto, Fan::Cool];
+const OUTSIDE_FAN: [Fan; 4] = [Fan::Auto, Fan::VeryQuiet, Fan::Quiet, Fan::Cool];
 
 /// What a press asks the App to do.
 #[derive(Clone, Debug, PartialEq)]
@@ -71,10 +71,16 @@ pub fn performance_label(p: Performance) -> &'static str {
 
 pub fn fan_label(f: Fan) -> &'static str {
     match f {
+        Fan::VeryQuiet => "Very quiet",
         Fan::Quiet => "Quiet",
         Fan::Auto => "Auto",
         Fan::Cool => "Cool",
     }
+}
+
+/// The fan rows cannot be changed here: ROCKNIX owns the fan (SM8550), or there is none (the H700 handhelds).
+fn fan_not_ours(row: Row) -> bool {
+    row != Row::GamesPerformance && (crate::device::current().screen_off_only() || !crate::device::current().has_fan())
 }
 
 impl PerfFanPage {
@@ -113,7 +119,7 @@ impl PerfFanPage {
             _ => return Action::Nothing,
         };
         let row = self.row();
-        if crate::device::current().screen_off_only() && row != Row::GamesPerformance {
+        if fan_not_ours(row) {
             return Action::Nothing;
         }
         let p = &mut self.prefs;
@@ -141,7 +147,10 @@ impl PerfFanPage {
     }
 
     pub fn value(&self, row: Row) -> &'static str {
-        if crate::device::current().screen_off_only() && row != Row::GamesPerformance {
+        if !crate::device::current().has_fan() && row != Row::GamesPerformance {
+            return "No fan";
+        }
+        if fan_not_ours(row) {
             return "ROCKNIX";
         }
         match row {
@@ -154,7 +163,10 @@ impl PerfFanPage {
 
     /// Under the list for the selected row: what the row is for, then what its current choice does.
     pub fn describe(&self, row: Row) -> [String; 2] {
-        if crate::device::current().screen_off_only() && row != Row::GamesPerformance {
+        if !crate::device::current().has_fan() && row != Row::GamesPerformance {
+            return ["This device has no fan.".into(), "Only the processor speed can be changed here.".into()];
+        }
+        if fan_not_ours(row) {
             return ["ROCKNIX controls the fan on this device.".into(), "".into()];
         }
         let what = match row {
@@ -196,12 +208,14 @@ pub fn fan_blurb(f: Fan, smooth: bool) -> String {
     use crate::fan_curve::Shape;
     if smooth {
         return match f {
+            Fan::VeryQuiet => format!("Very quiet: fan only when it gets warm ({} °C); the Pocket feels a bit warmer.", Shape::VeryQuiet.start() as i32),
             Fan::Quiet => format!("Quiet: the fan starts slowly at {} °C and stays slow. The Pocket gets a little warmer.", Shape::Quiet.start() as i32),
             Fan::Cool => format!("Cool: the fan starts at {} °C and turns faster. Cooler to hold, and you hear it more.", Shape::Cool.start() as i32),
             Fan::Auto => "Auto: follows the system's cooling profile, as a smooth curve.".to_string(),
         };
     }
     match (f, f.starts_at()) {
+        (Fan::VeryQuiet, Some(t)) => format!("Very quiet: fan only when it gets warm ({t} °C); the Pocket feels a bit warmer."),
         (Fan::Quiet, Some(t)) => format!("Quiet: the fan starts at {t} °C. The Pocket gets warmer, the fan stays quiet longer."),
         (Fan::Cool, Some(t)) => format!("Cool: the fan starts at {t} °C and spins faster. Cooler to hold, and you hear it more."),
         _ => "Auto: the system's own cooling.".to_string(),
@@ -292,7 +306,9 @@ mod tests {
         press(&mut p, Button::Down);
         assert_eq!(p.value(Row::OutsideFan), "Auto");
         press(&mut p, Button::Right);
-        assert_eq!(p.value(Row::OutsideFan), "Quiet", "outside games: Auto, Quiet, Cool");
+        assert_eq!(p.value(Row::OutsideFan), "Very quiet", "outside games: Auto, Very quiet, Quiet, Cool");
+        press(&mut p, Button::Right);
+        assert_eq!(p.value(Row::OutsideFan), "Quiet");
         press(&mut p, Button::Right);
         assert_eq!(p.prefs.outside_fan, Fan::Cool);
         assert_eq!(p.prefs.games_fan, Fan::Auto, "each row has its own value");

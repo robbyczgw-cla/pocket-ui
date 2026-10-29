@@ -81,20 +81,26 @@ SCREEN_W, SCREEN_H = map(int, os.environ.get("VDEV_SCREEN", "1240x1080").split("
 TOUCH_ROT = int(os.environ.get("VDEV_TOUCH_ROT", "90"))
 ABS_X, ABS_Y, ABS_MT_SLOT, ABS_MT_X, ABS_MT_Y, ABS_MT_ID = 0, 1, 0x2F, 0x35, 0x36, 0x39
 BTN_TOUCH = 330
-tfd = os.open("/dev/uinput", os.O_RDWR | os.O_NONBLOCK)
-fcntl.ioctl(tfd, 0x40045564, 1)  # EV_KEY
-fcntl.ioctl(tfd, 0x40045565, BTN_TOUCH)
-fcntl.ioctl(tfd, 0x40045564, 3)  # EV_ABS
-for code in (ABS_X, ABS_Y, ABS_MT_SLOT, ABS_MT_X, ABS_MT_Y, ABS_MT_ID):
-    fcntl.ioctl(tfd, 0x40045567, code)
-fcntl.ioctl(tfd, 0x4004556E, 1)  # UI_SET_PROPBIT INPUT_PROP_DIRECT
-tmax = [0] * 64
-tmax[ABS_X], tmax[ABS_Y], tmax[ABS_MT_SLOT] = PANEL_W - 1, PANEL_H - 1, 4
-tmax[ABS_MT_X], tmax[ABS_MT_Y], tmax[ABS_MT_ID] = PANEL_W - 1, PANEL_H - 1, 65535
-os.write(tfd, struct.pack("80sHHHHI" + "i" * 256, b"generic ft5x06 (8d)", 0x18, 0, 0, 0, 0, *tmax, *([0] * 64), *([0] * 128)))
-fcntl.ioctl(tfd, 0x5501)  # UI_DEV_CREATE
-touch_node = make_node(tfd)
-print(f"touch {touch_node} rotation {TOUCH_ROT}", flush=True)
+# No touch panel on the H700 handhelds (VDEV_TOUCH=0): the kernel has no touch driver there, so neither has the vdev.
+HAS_TOUCH = os.environ.get("VDEV_TOUCH", "1") != "0"
+tfd = None
+if HAS_TOUCH:
+    tfd = os.open("/dev/uinput", os.O_RDWR | os.O_NONBLOCK)
+    fcntl.ioctl(tfd, 0x40045564, 1)  # EV_KEY
+    fcntl.ioctl(tfd, 0x40045565, BTN_TOUCH)
+    fcntl.ioctl(tfd, 0x40045564, 3)  # EV_ABS
+    for code in (ABS_X, ABS_Y, ABS_MT_SLOT, ABS_MT_X, ABS_MT_Y, ABS_MT_ID):
+        fcntl.ioctl(tfd, 0x40045567, code)
+    fcntl.ioctl(tfd, 0x4004556E, 1)  # UI_SET_PROPBIT INPUT_PROP_DIRECT
+    tmax = [0] * 64
+    tmax[ABS_X], tmax[ABS_Y], tmax[ABS_MT_SLOT] = PANEL_W - 1, PANEL_H - 1, 4
+    tmax[ABS_MT_X], tmax[ABS_MT_Y], tmax[ABS_MT_ID] = PANEL_W - 1, PANEL_H - 1, 65535
+    os.write(tfd, struct.pack("80sHHHHI" + "i" * 256, b"generic ft5x06 (8d)", 0x18, 0, 0, 0, 0, *tmax, *([0] * 64), *([0] * 128)))
+    fcntl.ioctl(tfd, 0x5501)  # UI_DEV_CREATE
+    touch_node = make_node(tfd)
+    print(f"touch {touch_node} rotation {TOUCH_ROT}", flush=True)
+else:
+    print("no touch screen on this device (VDEV_TOUCH=0)", flush=True)
 finger_id = 0
 
 
@@ -106,6 +112,8 @@ def to_panel(x, y):
 
 
 def temit(*events):
+    if tfd is None:
+        return
     for etype, code, value in events:
         os.write(tfd, struct.pack("llHHi", 0, 0, etype, code, value))
     os.write(tfd, struct.pack("llHHi", 0, 0, 0, 0, 0))  # SYN_REPORT
@@ -113,6 +121,9 @@ def temit(*events):
 
 def finger(kind, x=0, y=0):
     global finger_id
+    if tfd is None:
+        print("no touch screen on this device", flush=True)
+        return
     if kind == "up":
         temit((3, ABS_MT_SLOT, 0), (3, ABS_MT_ID, -1), (1, BTN_TOUCH, 0))
         return

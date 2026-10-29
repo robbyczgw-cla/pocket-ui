@@ -290,8 +290,7 @@ impl App {
         // Rows a little tighter than other pages' 54 px: nine of them leave room for the device ID and the web interface
         // (taller with Settings → Text size, where the list scrolls instead).
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(49, 34), 34u32);
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, "Sync");
+        self.sheet_header(c, "Sync");
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         // The details under the list keep their room above the hints: with larger text (Settings → Text size) the
         // list shows fewer rows and scrolls, with a bar at the edge.
@@ -300,9 +299,7 @@ impl App {
         let first = super::window_start(page.sel, visible, ROWS.len());
         if ROWS.len() > visible {
             let track = visible as i32 * row;
-            let (bar_h, bar_y) = (track * visible as i32 / ROWS.len() as i32, track * first as i32 / ROWS.len() as i32);
-            c.rect(c.w - 12, top, 4, track, pal().pill);
-            c.rect(c.w - 12, top + bar_y, 4, bar_h.max(12), pal().chip);
+            pocket_ui::kit::scrollbar(c, top, track, first, visible, ROWS.len());
         }
         for (i, r) in ROWS.iter().enumerate().skip(first).take(visible) {
             let y = top + (i - first) as i32 * row;

@@ -206,7 +206,7 @@ impl App {
             && self.setup.is_none()
             && !self.settings_page.as_ref().is_some_and(settings_page_holds_games)
             && !self.find.is_open()
-            && self.cabinet.launch_due().is_none()
+            && !self.cabinet.insert_playing(std::time::Instant::now())
     }
 
     /// Swaps a waiting list in when it may (called after each event, `about_to_wait`). Cheap when nothing waits.

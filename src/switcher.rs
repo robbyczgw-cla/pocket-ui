@@ -37,6 +37,12 @@ const SLIDE_TAU: Duration = Duration::from_millis(34);
 const BOX_W: i32 = 760;
 const BOX_H: i32 = 570;
 const TOP: i32 = 140;
+
+/// Shorter screens give up picture height so title, metadata and hints retain separate rows.
+fn card_height(screen_h: i32) -> i32 {
+    (BOX_H - (1080 - screen_h).max(0)).max(200)
+}
+
 /// Distance between card centres; the neighbours peek in at the screen edges.
 pub const STEP: f32 = 700.0;
 /// Neighbours are this much smaller.
@@ -744,7 +750,7 @@ impl Switcher {
         // Title (scrolling when it is too long) and what it is.
         let e = &self.entries[self.sel];
         let (name, meta) = (e.name.clone(), e.meta.clone());
-        let y = TOP + BOX_H + 108;
+        let y = TOP + card_height(c.h) + 108;
         marquee.draw_centered(text, c, Face::Title, 67, MARGIN, y, c.w - 2 * MARGIN, pal().pick(0xf4f2ec, 0x2b2925), &name);
         let meta = text.fit(Face::Body, 28, &meta, c.w - 2 * MARGIN);
         let mw = text.width(Face::Body, 28, &meta);
@@ -819,6 +825,7 @@ impl Switcher {
     }
 
     fn paint_card(&mut self, c: &mut Canvas, text: &mut Text, i: usize, d: f32) {
+        let text_mark = crate::text::boxes::mark();
         let near = d.abs().min(1.0);
         let s = 1.0 - SHRINK * near;
         let e = &mut self.entries[i];
@@ -826,11 +833,13 @@ impl Switcher {
         let (name, label, system) = (e.name.clone(), e.label.clone(), e.system.clone());
         let pic = e.picture().map(|p| (p.img.clone(), p.aspect, p.shot));
         let aspect = pic.as_ref().map_or(4.0 / 3.0, |p| p.1).clamp(0.5, 2.5);
-        let (bw, bh) = (BOX_W as f32 * s, BOX_H as f32 * s);
+        let box_h = card_height(c.h);
+        let box_w = BOX_W * box_h / BOX_H;
+        let (bw, bh) = (box_w as f32 * s, box_h as f32 * s);
         let (w, h) = if aspect > bw / bh { (bw, bw / aspect) } else { (bh * aspect, bh) };
         let (w, h) = (w as i32, h as i32);
         let cx = c.w / 2 + (d * STEP) as i32;
-        let cy = TOP + BOX_H / 2;
+        let cy = TOP + box_h / 2;
         let (x, y) = (cx - w / 2, cy - h / 2);
         let hit = (x - 18, y - 18, w + 36, h + 36, i);
         self.card_areas.push(hit);
@@ -854,7 +863,12 @@ impl Switcher {
                 let (iw, ih) = img.fit(w - 24, h - 24);
                 c.blit_scaled(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
             }
-            None => title_card(c, text, x, y, w, h, color, &system, &name, &label, s > 0.83),
+            None => title_card(c, text, x, y, w, h, color, &system, &name, &label, s > 0.83, if current && near < 0.5 { BADGE_ROOM } else { 0 }),
+        }
+        // Neighbour cards deliberately peek through the screen edge; their internal title still fits
+        // the card. Keep testing the selected card and every text overlap normally.
+        if i != self.sel && (x < 0 || x + w > c.w) {
+            crate::text::boxes::cut_on_purpose(text_mark);
         }
         if near > 0.01 {
             c.shade_rect(x - pad - 2, y - pad - 2, w + 2 * pad + 4, h + 2 * pad + 4, pal().void, (near * 150.0) as u8);
@@ -875,9 +889,15 @@ impl Switcher {
     }
 }
 
-/// A card for a game with no picture yet: its system's colour, the system's name, the title set large.
+/// How far a title card's system name moves down when the "Now playing" pill sits in the same corner (the pill ends 62 px
+/// below the card's top; the smaller card's name starts 30 px below it). Found by the monkey test: they were painted on
+/// each other for a running game without a cover.
+const BADGE_ROOM: i32 = 34;
+
+/// A card for a game with no picture yet: its system's colour, the system's name, the title set large. `badge_room`:
+/// pixels the system name moves down for the "Now playing" pill.
 #[allow(clippy::too_many_arguments)]
-fn title_card(c: &mut Canvas, text: &mut Text, x: i32, y: i32, w: i32, h: i32, color: u32, system: &str, name: &str, label: &str, big: bool) {
+fn title_card(c: &mut Canvas, text: &mut Text, x: i32, y: i32, w: i32, h: i32, color: u32, system: &str, name: &str, label: &str, big: bool, badge_room: i32) {
     // Lighter at the top, like light falling on a label.
     for row in 0..h {
         c.rect(x, y + row, w, 1, mix(mix(color, 0, 70), mix(color, 0, 170), (row * 255 / h.max(1)) as u32));
@@ -885,17 +905,17 @@ fn title_card(c: &mut Canvas, text: &mut Text, x: i32, y: i32, w: i32, h: i32, c
     c.rect(x, y, STRIPE + 4, h, color);
     let (tp, lp, inset) = if big { (67u32, 28u32, 44) } else { (46, 21, 30) };
     let label = text.fit(Face::Body, lp, label, w - 2 * inset);
-    text.draw(c, Face::Body, lp, x + inset, y + inset + lp as i32, mix(0xffffff, color, 70), &label);
+    text.draw(c, Face::Body, lp, x + inset, y + inset + badge_room + lp as i32, mix(0xffffff, color, 70), &label);
     let mut lines = text.wrap(Face::Title, tp, name, w - 2 * inset);
     if lines.len() > 3 {
         lines.truncate(3);
         let last = lines[2].clone() + "…";
         lines[2] = text.fit(Face::Title, tp, &last, w - 2 * inset);
     }
-    let line_h = tp as i32 + 4;
+    let line_h = crate::type_scale::line(tp, 4);
     // The console between the system's name and the title.
     if let Some(art) = crate::system_art::get(system) {
-        let (top, bottom) = (y + inset + lp as i32 + 24, y + h - inset - tp as i32 - (lines.len() as i32 - 1) * line_h - 20);
+        let (top, bottom) = (y + inset + badge_room + lp as i32 + 24, y + h - inset - tp as i32 - (lines.len() as i32 - 1) * line_h - 20);
         let (room_w, room_h) = ((w - 2 * inset) * 7 / 10, bottom - top);
         if room_h > 40 {
             let sprite = art.fitted(room_w, room_h);
@@ -1248,6 +1268,15 @@ mod tests {
         assert!((display_aspect("gbc", 160, 144) - 160.0 / 144.0).abs() < 1e-6);
         assert!((display_aspect("snes", 256, 224) - 4.0 / 3.0).abs() < 1e-6);
         assert!((display_aspect("gba", 240, 160) - 1.5).abs() < 1e-6);
+    }
+
+    /// The "Now playing" pill ends 62 px below the card's top (`paint_card`: 18 + 44); the system name of a title card
+    /// starts below it at both sizes, instead of on it.
+    #[test]
+    fn title_card_system_name_starts_below_the_now_playing_pill() {
+        for inset in [30, 44] {
+            assert!(inset + BADGE_ROOM >= 18 + 44, "inset {inset}");
+        }
     }
 }
 #[cfg(test)]

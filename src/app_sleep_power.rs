@@ -78,8 +78,7 @@ impl App {
         let config = self.sleep.config;
         c.clear(pal().void);
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, SETTINGS_NAME);
+        self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         let heading_h = pocket_ui::type_scale::line(NU_SMALL, 30);
         let mut y = top;

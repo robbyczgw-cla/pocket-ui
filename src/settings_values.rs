@@ -28,6 +28,8 @@ pub const MAX_W: i32 = 440;
 pub enum Wifi {
     /// Switched off (ROCKNIX's Wi-Fi switch, rfkill).
     Off,
+    /// The device has no Wi-Fi chip (the RG28XX).
+    Absent,
     NotConnected,
     /// Connected; the network's name when NetworkManager gave it.
     Connected(Option<String>),
@@ -37,6 +39,7 @@ impl Wifi {
     pub fn label(&self) -> String {
         match self {
             Wifi::Off => "Off".into(),
+            Wifi::Absent => "None on this device".into(),
             Wifi::NotConnected => "Not connected".into(),
             Wifi::Connected(Some(name)) => name.clone(),
             Wifi::Connected(None) => "Connected".into(),
@@ -136,6 +139,8 @@ pub fn read(hw: &dyn Hw, net: &Arc<NetState>, data_dir: &Path, connected: bool) 
     let mock = std::env::var_os("POCKETUI_MOCK").is_some();
     let wifi = if connected {
         Wifi::Connected(if mock { Some("Home".into()) } else { crate::wifi::connected_ssid() })
+    } else if radio_of(net) == Radio::Absent {
+        Wifi::Absent
     } else if radio_of(net).is_off() {
         Wifi::Off
     } else {

@@ -280,7 +280,30 @@ pub fn parse_charge(status: &str) -> Charge {
     }
 }
 
+/// The Steam package's helper (SM8250, SM8550). Absent on the H700 image.
+const STEAMOS_TIMEZONE: &str = "usr/bin/steamos-polkit-helpers/steamos-set-timezone";
+
 impl RealHw {
+    /// The time zone without the Steam helper, in the helper's own steps: `system.timezone` stored (ROCKNIX's
+    /// `set_setting`, a shell function from /etc/profile.d/001-functions), `tz-data.service` writes the link, then
+    /// `timedatectl`. Only the first step must work; the others are tried and logged.
+    fn set_timezone_rocknix(&self, zone: &str) -> bool {
+        let stored = Command::new("bash")
+            .args(["-c", ". /etc/profile.d/001-functions && set_setting system.timezone \"$1\"", "set_setting", zone])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success());
+        if !stored {
+            return false;
+        }
+        if !run("systemctl", &["restart", "tz-data.service"]) {
+            eprintln!("time: tz-data.service did not restart; trying timedatectl alone");
+        }
+        run("timedatectl", &["set-timezone", zone]) || self.timezone().as_deref() == Some(zone)
+    }
+
     pub fn system() -> Self {
         Self::with_root("/")
     }
@@ -401,7 +424,12 @@ impl RealHw {
         self.battery().is_some()
     }
     pub fn has_time(&self) -> bool {
-        self.systemd() && self.root.join("usr/bin/steamos-polkit-helpers/steamos-set-timezone").exists()
+        self.systemd() && (self.root.join(STEAMOS_TIMEZONE).exists() || self.has_rocknix_timezone())
+    }
+    /// ROCKNIX without the Steam package (the H700 image): the zone goes through `set_setting` and `tz-data.service`,
+    /// the way the helper does it.
+    fn has_rocknix_timezone(&self) -> bool {
+        self.root.join("etc/profile.d/001-functions").exists()
     }
     /// systemd is PID 1 (not a container without it).
     pub fn systemd(&self) -> bool {
@@ -546,7 +574,12 @@ impl Hw for RealHw {
         if !timezone::is_valid(zone) || !self.root.join("usr/share/zoneinfo").join(zone).is_file() {
             return Err(format!("Unknown time zone {zone}."));
         }
-        if run("/usr/bin/steamos-polkit-helpers/steamos-set-timezone", &[zone]) {
+        let ok = if self.root.join(STEAMOS_TIMEZONE).exists() {
+            run(&format!("/{STEAMOS_TIMEZONE}"), &[zone])
+        } else {
+            self.set_timezone_rocknix(zone)
+        };
+        if ok {
             Ok(())
         } else {
             Err("The system didn't take the new time zone.".into())
@@ -960,6 +993,12 @@ impl AutoHw {
     fn wifi_is_real(&self) -> bool {
         self.caps.wifi || (!self.forced_mock && self.real.has_wifi())
     }
+
+    /// A device without a Wi-Fi chip (the RG28XX, `device::Device::has_wifi`) and none showing up: not the mock's
+    /// pretend radio and networks, but "no radio" (`Radio::Absent`), which the Wi-Fi pages say in words.
+    fn wifi_absent(&self) -> bool {
+        !self.wifi_is_real() && !crate::device::current().has_wifi()
+    }
 }
 
 impl Hw for AutoHw {
@@ -1013,21 +1052,27 @@ impl Hw for AutoHw {
         }
     }
     fn wifi(&self) -> Option<bool> {
-        if self.wifi_is_real() {
+        if self.wifi_absent() {
+            None
+        } else if self.wifi_is_real() {
             self.real.wifi()
         } else {
             self.mock.wifi()
         }
     }
     fn wifi_radio(&self) -> Radio {
-        if self.wifi_is_real() {
+        if self.wifi_absent() {
+            Radio::Absent
+        } else if self.wifi_is_real() {
             self.real.wifi_radio()
         } else {
             self.mock.wifi_radio()
         }
     }
     fn set_wifi(&self, on: bool) -> Result<(), String> {
-        if self.wifi_is_real() {
+        if self.wifi_absent() {
+            Err("This device has no Wi-Fi.".into())
+        } else if self.wifi_is_real() {
             self.real.set_wifi(on)
         } else {
             self.mock.set_wifi(on)
@@ -1332,6 +1377,19 @@ mod tests {
         assert!(hw.set_timezone("Mars/Olympus").is_err(), "not in zoneinfo");
         put(&root, "proc/cmdline", "console=tty0 nodtbo quiet");
         assert!(hw.ram_booted());
+    }
+
+    /// The H700 image has no Steam helper: the zone goes through ROCKNIX's `set_setting` and `tz-data.service`.
+    #[test]
+    fn the_time_zone_works_without_the_steam_helper_on_rocknix() {
+        let root = fake_root("tz-h700");
+        put(&root, "run/systemd/system/.keep", "");
+        let hw = RealHw::with_root(&root);
+        assert!(!hw.has_time(), "no helper and no ROCKNIX functions: no time zone setting");
+        put(&root, "etc/profile.d/001-functions", "set_setting() { :; }\n");
+        assert!(hw.has_time(), "ROCKNIX's set_setting is enough");
+        put(&root, "usr/bin/steamos-polkit-helpers/steamos-set-timezone", "#!/bin/sh\n");
+        assert!(hw.has_time());
     }
 
     #[test]

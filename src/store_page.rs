@@ -387,6 +387,7 @@ impl App {
         self.status_pill(c);
         let title = match &self.store.view {
             View::Categories => "Store".to_string(),
+            View::List(key) | View::Detail(key, _) if key.is_empty() => "Store".to_string(),
             View::List(key) | View::Detail(key, _) => page_title(key),
         };
         self.text.draw(c, Face::Title, 50, NU_PAD + NU_BTN_PAD, NU_PAD + 58, pal().chalk, &title);
@@ -469,6 +470,18 @@ impl App {
     fn paint_store_list(&mut self, c: &mut Canvas, key: &str) {
         let top = NU_PAD + NU_PILL + 12;
         let list = self.store.packages(key);
+        if list.is_empty() {
+            // Never a blank page: the same stall as the categories view, and the way back.
+            let (msg, err) = match &self.store.error {
+                Some(e) => (e.clone(), true),
+                None => ("Nothing here yet.".to_string(), false),
+            };
+            let art = if err { pocket_ui::ui_art::Art::Offline } else { pocket_ui::ui_art::Art::Store };
+            let dy = pocket_ui::ui_art::above_words(c, art, c.w / 2, true, top + 8, c.h / 2 - 60, 40);
+            self.store_paragraph(c, c.h / 2 - 60 + dy, &msg, if err { pal().alert } else { pal().chalk });
+            self.nu_hints(c, &[("B", "Back")]);
+            return;
+        }
         let visible = ((c.h - top - NU_PILL - 170) / row_h()).max(1) as usize;
         let sel = self.store.list_sel.min(list.len().saturating_sub(1));
         let first = crate::window_start(sel, visible, list.len());
@@ -636,6 +649,8 @@ impl App {
         }
         let level = parts.next().unwrap_or("");
         let key = parts.next().map(str::to_string).or_else(|| self.store.categories().first().cloned()).unwrap_or_default();
+        // No catalog, no category: the categories page says so; a list or detail of "" would have no title.
+        let level = if key.is_empty() { "" } else { level };
         let row: usize = parts.next().and_then(|n| n.parse().ok()).unwrap_or(0);
         self.store.action_sel = parts.next().and_then(|n| n.parse().ok()).unwrap_or(0);
         self.store.cat_sel = self.store.categories().iter().position(|k| *k == key).unwrap_or(0);

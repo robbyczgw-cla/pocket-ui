@@ -345,8 +345,13 @@ fn roms_of(bios_dir: &Path) -> &Path {
 }
 
 /// The emulator and core that play a game pocket-core doesn't (or can't), when es_systems.cfg's default can't:
-/// without the official PICO-8, start_pico8.sh has nothing to start, so RetroArch's fake08 does. None: the default.
+/// without the official PICO-8, start_pico8.sh has nothing to start, so RetroArch's fake08 does; Xbox games go to hakuX
+/// once its core is installed. None: the default.
 pub fn default_emulator(system: &str, bios_dir: &Path) -> Option<(&'static str, &'static str)> {
+    // Xbox: ROCKNIX's xemu doesn't run on this hardware; with the hakuX core installed (`hakux`) it plays, in RetroArch.
+    if system == "xbox" && crate::hakux::installed() {
+        return Some(("hakux", "hakux"));
+    }
     let o = find(system)?.official.as_ref()?;
     (!(o.installed)(roms_of(bios_dir))).then_some(o.otherwise)
 }

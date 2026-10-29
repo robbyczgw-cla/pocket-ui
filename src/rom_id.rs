@@ -15,6 +15,12 @@
 //! [`DAT_MAX_AGE`]. pocket-ui ships none of it (NOTICE.md). Offline and before the first download the
 //! checksum waits, and the file name is used.
 //!
+//! **Discs.** PlayStation 1 and 2 images are too big for a checksum, so their serial is read instead — the `BOOT`
+//! line of the ISO 9660 file `SYSTEM.CNF` — and looked up in libretro-database's Redump DAT of the system, which
+//! names every release by its serial (CC BY-SA 4.0 as a repository). That is [`crate::disc_serial`], run and cached
+//! with the checksums here (`identify/discs.tsv`, `identify/<list>.serials.tsv`); its names come back from [`known`]
+//! and [`run_until`] just like the cartridges', so the covers, pictures, facts and Curator need no special case.
+//!
 //! **Look up again** on the game card ([`forget`]): the game's box art, screenshot and title screen, its lines in
 //! the three `.missing` lists and its checksum are dropped, and the app looks it up afresh, checksum first, then name.
 
@@ -44,8 +50,8 @@ const CARTRIDGE: [&str; 26] = [
     "ngp", "ngpc", "atarilynx", "atari2600", "wonderswan", "wonderswancolor", "sg-1000", "sg1000",
 ];
 
-/// The No-Intro list of a system, named as libretro names it ("Nintendo - Game Boy"); None for disc systems and
-/// systems without one.
+/// The No-Intro list of a system, named as libretro names it ("Nintendo - Game Boy"); None for disc systems (their
+/// serial names them, `disc_serial`) and systems without one.
 pub fn dat_name(system: &str) -> Option<&'static str> {
     CARTRIDGE.contains(&system).then(|| crate::covers::playlist(system)).flatten()
 }
@@ -277,8 +283,12 @@ fn table_due(data_dir: &Path, dat: &str) -> bool {
         .is_none_or(|age| age > DAT_MAX_AGE)
 }
 
-/// Downloads a DAT from libretro-database (several MB as text, a fifth of that compressed). None offline.
+/// Downloads a DAT from libretro-database (several MB as text, a fifth of that compressed). None offline. The disc
+/// systems' lists are the Redump ones (`disc_serial`), the others the No-Intro ones.
 pub fn fetch_dat(dat: &str) -> Option<String> {
+    if crate::disc_serial::is_disc_dat(dat) {
+        return crate::disc_serial::fetch_dat(dat);
+    }
     crate::covers::fetch_text(&dat_url(dat))
 }
 
@@ -291,20 +301,19 @@ fn name_in(table: &HashMap<u32, String>, sums: Sums) -> Option<&String> {
 /// Nothing is read through or downloaded and no file is looked at, so it is quick enough for any background thread
 /// (Curator's catalog, the cover download); a file changed since is caught by the next [`run_until`].
 pub fn known(data_dir: &Path, games: &[(String, PathBuf)]) -> Names {
+    let mut out = crate::disc_serial::known(data_dir, games);
     let cache = Cache::load(data_dir);
     if cache.is_empty() {
-        return Names::new();
+        return out;
     }
     let mut tables: HashMap<&str, Option<HashMap<u32, String>>> = HashMap::new();
-    games
-        .iter()
-        .filter_map(|(sys, rom)| {
-            let dat = dat_name(sys)?;
-            let sums = cache.files.get(rom)?.sums?;
-            let table = tables.entry(dat).or_insert_with(|| load_table(data_dir, dat)).as_ref()?;
-            Some((rom.clone(), name_in(table, sums)?.clone()))
-        })
-        .collect()
+    out.extend(games.iter().filter_map(|(sys, rom)| {
+        let dat = dat_name(sys)?;
+        let sums = cache.files.get(rom)?.sums?;
+        let table = tables.entry(dat).or_insert_with(|| load_table(data_dir, dat)).as_ref()?;
+        Some((rom.clone(), name_in(table, sums)?.clone()))
+    }));
+    out
 }
 
 /// What a [`run_until`] did.
@@ -312,7 +321,7 @@ pub fn known(data_dir: &Path, games: &[(String, PathBuf)]) -> Names {
 pub struct Identified {
     /// Every game of the run the lists know, by path.
     pub names: Names,
-    /// Files read through or whose zip directory was read this time.
+    /// Files read through, whose zip directory was read this time, or whose disc serial was read.
     pub hashed: usize,
     /// A system's list could not be had (offline, a failed download): its games keep their file names until then.
     pub lists_missing: bool,
@@ -398,6 +407,12 @@ pub fn run_until(data_dir: &Path, games: &[(String, PathBuf)], fetch: &dyn Fn(&s
             }
         }
     }
+    // PlayStation discs: their serial, read from the image and looked up in the Redump list (`disc_serial`).
+    let discs = crate::disc_serial::run_until(data_dir, games, fetch, prune, stop);
+    out.hashed += discs.read;
+    out.lists_missing |= discs.lists_missing;
+    out.stopped |= discs.stopped;
+    out.names.extend(discs.names);
     out
 }
 
@@ -410,8 +425,9 @@ fn missing_lists(data_dir: &Path, system: &str) -> [PathBuf; 3] {
     ]
 }
 
-/// Takes the game off its system's `.missing` lists (they name games by file stem).
-fn unlist_everywhere(data_dir: &Path, system: &str, rom: &Path) {
+/// Takes the game off its system's `.missing` lists (they name games by file stem). `pub(crate)` for the disc reader
+/// (`disc_serial`).
+pub(crate) fn unlist_everywhere(data_dir: &Path, system: &str, rom: &Path) {
     let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
     for file in missing_lists(data_dir, system) {
         let Ok(now) = std::fs::read_to_string(&file) else { continue };
@@ -435,6 +451,7 @@ pub fn forget(data_dir: &Path, system: &str, rom: &Path) {
     if cache.files.remove(rom).is_some() {
         let _ = cache.save(data_dir);
     }
+    crate::disc_serial::forget(data_dir, rom);
 }
 
 /// How "Look up again" came out, for the line the card shows.

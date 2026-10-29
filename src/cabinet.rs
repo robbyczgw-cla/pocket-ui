@@ -316,15 +316,16 @@ pub const PULL: Duration = Duration::from_millis(240);
 pub const PUSH: Duration = Duration::from_millis(160);
 /// Moving the view to another shelf or along one.
 pub const SCROLL: Duration = Duration::from_millis(220);
-/// From A to the cartridge or disc sitting in the console; the launch fade follows.
-pub const INSERT: Duration = Duration::from_millis(380);
-/// When the game is started: as the cartridge or disc reaches the slot. A game's window can come up a quarter
-/// of a second after its start, and would cover a cartridge still in the air.
-pub const LAUNCH_AT: Duration = Duration::from_millis(260);
+/// From A to the cartridge or disc sitting in the console and its glow fading: the launch animation
+/// (Settings → Look & feel → Launch animation). The game is started at A, not at the end of it: the animation plays
+/// while the emulator loads (150-300 ms on a Mini V2), and a game whose window comes up sooner simply covers it.
+pub const INSERT: Duration = Duration::from_millis(300);
+/// When the cartridge or disc is in: the click (`ui_sound::Sound::Insert`) and the glow come here.
+pub const IN_AT: Duration = Duration::from_millis(180);
 
-/// How long the launch fade waits after the game was started: until the cartridge or disc is in.
+/// How long the launch fade waits after A while the launch animation plays: until the cartridge or disc is in.
 pub fn fade_delay() -> Duration {
-    INSERT - LAUNCH_AT
+    IN_AT
 }
 
 pub fn ease_out(t: f32) -> f32 {
@@ -447,23 +448,29 @@ impl Pull {
 }
 
 /// Where the start of a game is, `elapsed` after A: the console comes up (`rise`), the case travels to it
-/// (`carry`), then the cartridge or disc goes in (`sink`); `dim` darkens the cabinet behind.
+/// (`carry`), then the cartridge or disc goes in (`sink`) and the slot lights up for a moment (`glow`, 0 until it is
+/// in, up to 1 and down again); `dim` darkens the cabinet behind.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Insert {
     pub rise: f32,
     pub carry: f32,
     pub sink: f32,
+    pub glow: f32,
     pub dim: f32,
 }
 
 pub fn insert_at(elapsed: Duration) -> Insert {
     let t = (elapsed.as_secs_f32() / INSERT.as_secs_f32()).min(1.0);
     let phase = |a: f32, b: f32| ((t - a) / (b - a)).clamp(0.0, 1.0);
-    let rise = ease_out(phase(0.0, 0.4));
+    let rise = ease_out(phase(0.0, 0.3));
+    // In at IN_AT (0.6 of the way): the glow comes up fast and fades slower.
+    let glow_up = phase(0.52, 0.6);
+    let glow_down = phase(0.6, 1.0);
     Insert {
         rise,
-        carry: ease_in_out(phase(0.12, 0.68)),
-        sink: phase(0.7, 1.0).powi(2),
+        carry: ease_in_out(phase(0.06, 0.45)),
+        sink: phase(0.45, 0.6).powi(2),
+        glow: if t >= 1.0 { 0.0 } else { glow_up * (1.0 - glow_down * glow_down) },
         dim: 0.6 * rise,
     }
 }
@@ -881,9 +888,9 @@ mod tests {
     #[test]
     fn a_game_start_brings_the_console_carries_the_case_then_puts_it_in() {
         let start = insert_at(Duration::ZERO);
-        assert_eq!((start.rise, start.carry, start.sink), (0.0, 0.0, 0.0));
+        assert_eq!((start.rise, start.carry, start.sink, start.glow), (0.0, 0.0, 0.0, 0.0));
         let end = insert_at(INSERT);
-        assert_eq!((end.rise, end.carry, end.sink), (1.0, 1.0, 1.0));
+        assert_eq!((end.rise, end.carry, end.sink, end.glow), (1.0, 1.0, 1.0, 0.0));
         assert_eq!(insert_at(INSERT * 3), end, "stays put after");
         let mut last = start;
         for k in 1..=52 {
@@ -895,21 +902,23 @@ mod tests {
             last = s;
         }
         let early = insert_at(INSERT / 5);
-        assert!(early.rise > 0.0 && early.sink == 0.0, "the console comes first");
-        let late = insert_at(INSERT * 9 / 10);
+        assert!(early.rise > 0.0 && early.sink == 0.0 && early.glow == 0.0, "the console comes first");
+        let late = insert_at(INSERT / 2);
         assert!(late.carry == 1.0 && late.sink > 0.0, "it goes in once it is there");
         assert!(end.dim > 0.3 && end.dim < 0.9, "the cabinet stays faintly there under the fade");
     }
 
     #[test]
-    fn the_game_starts_when_the_cartridge_reaches_the_slot_and_the_fade_waits_for_the_rest() {
-        // A game's window can come up a quarter of a second after it is started: started at A, it would cover
-        // the cartridge in mid-air. Started when the cartridge is over the slot, the window comes as it goes in.
-        assert!(LAUNCH_AT < INSERT);
-        assert!(LAUNCH_AT <= Duration::from_millis(300), "no more than that added before a game starts");
-        let at = insert_at(LAUNCH_AT);
-        assert!(at.carry > 0.98 && at.sink < 0.05, "over the slot, not yet in: {at:?}");
-        assert_eq!(fade_delay(), INSERT - LAUNCH_AT, "the fade starts once it is in");
+    fn the_cartridge_is_in_and_glows_while_a_game_still_loads_and_the_fade_waits_for_it() {
+        // The game starts at A; the animation has to say its part within a typical start (150-300 ms on a Mini V2).
+        assert!(INSERT <= Duration::from_millis(300), "{INSERT:?}");
+        let at = insert_at(IN_AT);
+        assert!(at.carry == 1.0 && at.sink > 0.98, "in at IN_AT: {at:?}");
+        assert!(at.glow > 0.8, "and the slot lights up: {at:?}");
+        let before = insert_at(IN_AT - Duration::from_millis(40));
+        assert!(before.glow == 0.0, "no glow before it is in: {before:?}");
+        assert!(insert_at(INSERT - Duration::from_millis(30)).glow < at.glow, "the glow fades");
+        assert_eq!(fade_delay(), IN_AT, "the fade starts once it is in");
     }
 
     fn picture(parts: &[(u32, usize)]) -> Vec<u32> {

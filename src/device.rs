@@ -25,6 +25,9 @@
 //! is None, and every caller behaves exactly as before this module existed (the Mini V2's numbers), with nothing
 //! said about the device.
 //!
+//! **H700** (Anbernic RG28XX, RG35XX SP; ROCKNIX's H700 image, `anbernic,rg28xx` / `anbernic,rg35xx-sp`): experimental
+//! like the others, 640x480, no fan, no touch, no sticks, 1 GB; the SP has a lid, the RG28XX no Wi-Fi (docs/DEVICES.md).
+//!
 //! `POCKETUI_DEVICE` stands in for the device tree (snapshots, tests, the virtual device): a short name (`miniv2`,
 //! `mini`, `rp5`, `rp5-visionox`, `flip2`, `flip2-visionox`) or a `model` string.
 
@@ -52,6 +55,10 @@ pub enum Model {
     Odin2Mini,
     /// SM8550: 1080p OLED, 270-degree portrait panel, Xbox labels.
     Odin2Portal,
+    /// Allwinner H700: 640x480 (native 480x640, turned), no Wi-Fi, no fan, no touch, no sticks.
+    Rg28xx,
+    /// Allwinner H700: 640x480 clamshell with a lid switch, no fan, no touch, no sticks.
+    Rg35xxSp,
 }
 
 /// Which panel the Pocket 5 or Flip 2 has (ROCKNIX's "Visionox" device trees): the touch axes differ, which the
@@ -87,6 +94,8 @@ impl Model {
             Model::Odin2 => "AYN Odin 2",
             Model::Odin2Mini => "AYN Odin 2 Mini",
             Model::Odin2Portal => "AYN Odin 2 Portal",
+            Model::Rg28xx => "Anbernic RG28XX",
+            Model::Rg35xxSp => "Anbernic RG35XX SP",
         }
     }
 
@@ -95,6 +104,7 @@ impl Model {
         match self {
             Model::MiniV2 => MINI_V2_SCREEN,
             Model::MiniV1 | Model::Nova => (1280, 960),
+            Model::Rg28xx | Model::Rg35xxSp => (640, 480),
             Model::Pocket5 | Model::Flip2 | Model::Pocket6 | Model::Odin2 | Model::Odin2Mini | Model::Odin2Portal => (1920, 1080),
         }
     }
@@ -106,7 +116,12 @@ impl Model {
 
     /// The Flip 2's hall sensor: `SW_LID` on a `gpio-keys` device (docs/SLEEP.md "Lid").
     pub fn has_lid(self) -> bool {
-        self == Model::Flip2
+        matches!(self, Model::Flip2 | Model::Rg35xxSp)
+    }
+
+    /// The Allwinner H700 handhelds (ROCKNIX's H700 image): 1 GB, no fan, no touch, no sticks.
+    pub fn is_h700(self) -> bool {
+        matches!(self, Model::Rg28xx | Model::Rg35xxSp)
     }
 
     /// The short names `POCKETUI_DEVICE` takes.
@@ -121,6 +136,8 @@ impl Model {
             Model::Odin2 => "odin2",
             Model::Odin2Mini => "odin2mini",
             Model::Odin2Portal => "odin2portal",
+            Model::Rg28xx => "rg28xx",
+            Model::Rg35xxSp => "rg35xx-sp",
         }
     }
 }
@@ -128,7 +145,38 @@ impl Model {
 impl Device {
     /// ROCKNIX SM8550 disables suspend and owns its userspace fan loop.
     pub fn screen_off_only(&self) -> bool {
+        self.is_sm8550()
+    }
+
+    /// The Snapdragon 8 Gen 2 handhelds (Adreno 740).
+    pub fn is_sm8550(&self) -> bool {
         matches!(self.model, Some(Model::Pocket6 | Model::Nova | Model::Odin2 | Model::Odin2Mini | Model::Odin2Portal))
+    }
+
+    /// A fan the system can run. None on the H700 handhelds: the fan page says so instead of offering a fan.
+    pub fn has_fan(&self) -> bool {
+        !self.model.is_some_and(Model::is_h700)
+    }
+
+    /// A touch screen. None on the H700 handhelds (the kernel has no touch driver there).
+    pub fn has_touch(&self) -> bool {
+        !self.model.is_some_and(Model::is_h700)
+    }
+
+    /// Analog sticks, and so the lights around them. None on the H700 handhelds.
+    pub fn has_sticks(&self) -> bool {
+        !self.model.is_some_and(Model::is_h700)
+    }
+
+    /// A Wi-Fi chip. Not on the RG28XX (rocknix.org lists it without connectivity; its device tree enables one anyway,
+    /// so a chip that does answer still wins: `system_ctl::AutoHw` only calls it absent when none shows up).
+    pub fn has_wifi(&self) -> bool {
+        self.model != Some(Model::Rg28xx)
+    }
+
+    /// Memory in MB where the device is known to have less than the Mini V2's (1 GB on the H700, no swap).
+    pub fn ram_mb(&self) -> Option<u32> {
+        self.model.filter(|m| m.is_h700()).map(|_| 1024)
     }
 
     /// Printed face letters on AYN's product images; saved menu choices still win.
@@ -216,6 +264,9 @@ pub fn identify(model: &str, compatible: &[u8]) -> Device {
             "ayn,odin2" => Some(Model::Odin2),
             "ayn,odin2mini" => Some(Model::Odin2Mini),
             "ayn,odin2portal" => Some(Model::Odin2Portal),
+            "anbernic,rg28xx" => Some(Model::Rg28xx),
+            // The second panel revision's device tree (`...-rg35xx-sp-v2-panel.dtb`) names the same board.
+            "anbernic,rg35xx-sp" | "anbernic,rg35xx-sp-v2" | "anbernic,rg35xx-sp-v2-panel" => Some(Model::Rg35xxSp),
             _ => None,
         });
     let found = by_compatible.or(match model.strip_suffix(" Visionox").unwrap_or(model) {
@@ -228,6 +279,8 @@ pub fn identify(model: &str, compatible: &[u8]) -> Device {
         "AYN Odin 2" => Some(Model::Odin2),
         "AYN Odin 2 Mini" => Some(Model::Odin2Mini),
         "AYN Odin 2 Portal" => Some(Model::Odin2Portal),
+        "Anbernic RG28XX" => Some(Model::Rg28xx),
+        "Anbernic RG35XX SP" => Some(Model::Rg35xxSp),
         _ => None,
     });
     let panel = if model.ends_with(" Visionox") { Panel::Visionox } else { Panel::Original };
@@ -242,7 +295,7 @@ pub fn from_override(v: &str) -> Device {
         Some(k) => (k, Panel::Visionox),
         None => (lower.as_str(), Panel::Original),
     };
-    match [Model::MiniV2, Model::MiniV1, Model::Pocket5, Model::Flip2, Model::Pocket6, Model::Nova, Model::Odin2, Model::Odin2Mini, Model::Odin2Portal]
+    match [Model::MiniV2, Model::MiniV1, Model::Pocket5, Model::Flip2, Model::Pocket6, Model::Nova, Model::Odin2, Model::Odin2Mini, Model::Odin2Portal, Model::Rg28xx, Model::Rg35xxSp]
         .into_iter()
         .find(|m| m.key() == key)
     {
@@ -439,6 +492,33 @@ mod tests {
             assert_eq!(d.about_line(), Some(format!("{} (experimental)", model.name())));
         }
         assert!(!from_override("miniv2").screen_off_only());
+    }
+
+    #[test]
+    fn h700_profiles_are_experimental_and_lack_fan_touch_and_sticks() {
+        for (model, compatible, want, lid, wifi) in [
+            ("Anbernic RG28XX\0", &b"anbernic,rg28xx\0allwinner,sun50i-h700\0"[..], Model::Rg28xx, false, false),
+            ("Anbernic RG35XX SP\0", &b"anbernic,rg35xx-sp\0allwinner,sun50i-h700\0"[..], Model::Rg35xxSp, true, true),
+            ("Anbernic RG35XX SP\0", &b"anbernic,rg35xx-sp-v2-panel\0anbernic,rg35xx-sp\0allwinner,sun50i-h700\0"[..], Model::Rg35xxSp, true, true),
+        ] {
+            let d = identify(model, compatible);
+            assert_eq!(d.model, Some(want));
+            assert_eq!(identify(model, b"").model, Some(want), "the model alone says the same");
+            assert!(d.experimental() && !d.screen_off_only());
+            assert_eq!(d.screen(), (640, 480));
+            assert_eq!(d.has_lid(), lid);
+            assert_eq!(d.has_wifi(), wifi);
+            assert!(!d.has_fan() && !d.has_touch() && !d.has_sticks());
+            assert_eq!(d.ram_mb(), Some(1024));
+            assert_eq!(d.menu_layout(), crate::button_layout::ButtonLayout::Nintendo);
+            assert_eq!(d.about_line(), Some(format!("{} (experimental)", want.name())));
+        }
+        assert_eq!(from_override("rg28xx").model, Some(Model::Rg28xx));
+        assert_eq!(from_override("rg35xx-sp").model, Some(Model::Rg35xxSp));
+        // Every other device keeps its fan, touch, sticks and Wi-Fi; an unknown one too.
+        for d in [from_override("miniv2"), from_override("flip2"), from_override("odin2"), identify("", b"")] {
+            assert!(d.has_fan() && d.has_touch() && d.has_sticks() && d.has_wifi() && d.ram_mb().is_none());
+        }
     }
 
     #[test]

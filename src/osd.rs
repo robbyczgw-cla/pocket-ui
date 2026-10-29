@@ -17,6 +17,7 @@ const FONT: u32 = 28;
 const PAD: i32 = 36;
 const LABEL_COL: i32 = 230;
 const VALUE_COL: i32 = 118;
+const MIN_BAR: i32 = 120;
 const BAR_H: i32 = 14;
 const TRACK: u32 = 0x3a3a40;
 
@@ -68,13 +69,26 @@ impl Data {
     }
 }
 
+/// The label to draw and the widths of the label and value columns. The columns are the usual fixed ones, wider
+/// when the text needs it (longer name, Large text size, German), so the bar never starts under its own label;
+/// the bar keeps `MIN_BAR` and the label is cut ("…") only when nothing else is left to give.
+fn layout(text: &mut Text, d: &Data) -> (String, i32, i32) {
+    let gap = 24;
+    let value_col = VALUE_COL.max(text.width(Face::Body, FONT, &d.value) + gap);
+    let room = (W - 2 * PAD - value_col - MIN_BAR).max(LABEL_COL);
+    let label = text.fit(Face::Body, FONT, &d.label, room - gap);
+    let label_col = LABEL_COL.max(text.width(Face::Body, FONT, &label) + gap);
+    (label, label_col, value_col)
+}
+
 /// Draws the pill with its top-left corner at (x, y). `bg` is the pill colour.
 pub fn paint(c: &mut Canvas, text: &mut Text, x: i32, y: i32, d: &Data, bg: u32) {
     c.round_rect(x, y, W, H, H / 2, bg);
     let base = y + H / 2 + crate::type_scale::mid(FONT);
-    text.draw(c, Face::Body, FONT, x + PAD, base, CHALK, &d.label);
+    let (label, label_col, value_col) = layout(text, d);
+    text.draw(c, Face::Body, FONT, x + PAD, base, CHALK, &label);
     text.draw_right(c, Face::Body, FONT, x + W - PAD, base, CHALK, &d.value);
-    let (bx, bw) = (x + PAD + LABEL_COL, W - 2 * PAD - LABEL_COL - VALUE_COL);
+    let (bx, bw) = (x + PAD + label_col, W - 2 * PAD - label_col - value_col);
     let by = y + (H - BAR_H) / 2;
     c.round_rect(bx, by, bw, BAR_H, BAR_H / 2, TRACK);
     if d.centered {
@@ -172,6 +186,20 @@ mod tests {
         assert_eq!(Data::percent("Brightness", 0).value, "0%");
         assert_eq!(Data::new("x", "y", 3.0, false).frac, 1.0);
         assert_eq!(Data::new("x", "y", -1.0, false).frac, 0.0);
+    }
+
+    #[test]
+    fn the_bar_starts_after_its_label_whatever_the_name() {
+        let mut text = Text::new();
+        for (label, value) in [("Colour temperature", "Warm 4"), ("Farbtemperatur", "Warm 4"), ("Brightness", "60%"), ("A very long made-up setting name", "Cooler 10")] {
+            let d = Data::new(label, value, 0.5, true);
+            let (shown, label_col, value_col) = layout(&mut text, &d);
+            assert!(text.width(Face::Body, FONT, &shown) < label_col, "{label}: the bar would start under the label");
+            assert!(W - 2 * PAD - label_col - value_col >= MIN_BAR, "{label}: the bar keeps a usable length");
+            if label == "Colour temperature" {
+                assert_eq!(shown, label, "a name that fits is never cut");
+            }
+        }
     }
 
     #[test]

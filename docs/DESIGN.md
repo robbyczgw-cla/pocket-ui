@@ -7,10 +7,94 @@
 - **Primary job:** get into a game within two presses, and back into the last game with one.
 
 ## Concept
-Every list is a shelf of **spines**. A game or system is a horizontal spine with a coloured edge stripe.
-The selected spine is **pulled out**: it grows into a paper label with the title set large in ink.
-This is the one memorable element; everything around it stays quiet.
+Every list is a shelf of **spines**. In the Shelf look (the default) every game stands on one shelf as its
+system's real case, seen from the spine: a SNES cartridge, a PlayStation jewel case, a PS2 DVD case. The selected
+one is **pulled out**: it rises out of the row and is shown large above the shelf, turned to its front with the
+cover. This is the one memorable element; everything around it stays quiet. (The other looks keep the older idea,
+a list of spines with an edge stripe.)
 (Socket inspired the physical-media idea; NextUI inspired the flat, minimal list and "continue first".)
+
+## Design language
+One product, two kinds of surface (decided 2026-10-29, "cohesion"; the parts are in `src/kit.rs`). Snapshot states in
+brackets show each rule (`pocket-ui --snapshot <state>`, docs/DEVELOPING.md).
+
+- **The shelf** is where games are: spines, cases, the paper label, wood, props, the game box. It is pixel art and
+  physical (`home`, `cabinet:dd`, `box:gba:advance`).
+- **The sheet** is where things are set: Settings and its pages, quick settings, the pause menu, dialogs, safe mode.
+  It is flat and calm, built for reading (`settings:0:0`, `sys:quick`, `main`).
+- **Where they meet:** the selection is the same paper on both (the pulled-out label's `#ECE9E1`, `select` =
+  `label`; the pause menu's title pill too), the neutrals lean warm like paper and walnut (never blue-grey), and the
+  sheet borrows the shelf's pixel art only for things: an empty page's vignette, the handheld, the category icons,
+  the emblem on a box that is not a game. Text is never pixel art; a physical thing is never a flat drawing.
+
+**Type.** Barlow Condensed SemiBold (Title) for names and headings, Barlow Medium (Body) for everything read. Shelf:
+Title 67 / 50 / 37, Body 28, hints 21. Sheet: page title Title 50, the pause menu's items Body 46, rows Body 36,
+explanations, pills and hint labels Body 30, notes 26. Sentence case, no capitals for emphasis. Every size goes
+through `type_scale` (Text size).
+
+**Grid.** Multiples of 6 px. Shelf: a 72 px margin, hints 52 px above the bottom edge. Sheet: pills and bands 30 px
+from the edge (`kit::PAD`), text 36 px inside them (`BTN_PAD`, so 66 px from the edge), rows 66 px around Body 36
+(`kit::row`), pills 90 px high, 12 px from the top pill to the first row, 24 px between a description and the pill.
+The top line of a sheet page: its title in Title 50 at the left, the status corner in its pill at the right, the title
+cut with "…" 24 px short of the pill (`App::sheet_header`).
+
+**Radii.** A pill, a band, a key and a row's selection are round at half their height. A panel (a live readout or
+a state, not a choice: Performance & fan's "Now", safe mode's "What happened", the status of Tailscale and
+RetroAchievements) is the pill colour with 24 px corners (`kit::panel`). A sheet over a page (a dialog, a picker) is
+square paper with a hairline and, in Light, the label's 6 px shadow (`kit::sheet`), like a card laid on the table.
+Over a game: the power menu 40 px corners; a toast (a game that didn't start) the OSD's surface and corners at the
+OSD's height, clear of the top line's ends or across the whole width, never half over the clock.
+
+**Colour roles** (tables under [Appearance](#appearance-dark-and-light-srcpaletters-srcappearancers)): page
+(`void`), surface (`spine` on the shelf, `pill` on the sheet), paper (`label` = `select`: the selection, the
+pulled-out label, the pause title), ink on paper, `text`/`chalk` on the page, `quiet`/`dust` for what explains,
+`band` behind a selected row (a warm grey; over a game the game's system stripe), `amber` for Favourites and
+suggestions, `alert` for what went wrong. Colour that means something comes from content (system stripes, covers),
+never from a UI accent.
+
+**Lists.** One row style per surface. Sheet: the name 36 px in, the value at the right in the row's colour, the
+selection a band across with the name on a paper pill (`kit::selection`, `kit::row_label`), a 4 px scroll bar at
+the right edge when the list is longer than its window (`kit::scrollbar`). Shelf lists (search, the Lens, first
+start): spine-coloured rows, the selected one paper with ink, the label's lift shadow in Light. The sheet's lists
+wrap at their ends; the shelf stops at its ends (it is a physical shelf with bookends).
+
+**Hint bar.** Shelf pages: loose round key caps with Dust labels at the bottom left, A first (`kit::page_hints`).
+Sheet pages: one pill at the bottom right, A last, next to the face buttons (`kit::pill_hints`). The explanation of
+the selected row stands at the bottom left, never under the pill: its last line on the pill's line, the two lowest
+lines in the column beside the pill, longer ones across the page above (`kit::footer`: `settings:0:0`, `sys:quick`,
+`options`, `picture`). Every page has hints, the pause menu's pages too: B Back first in the pill, then A Open (a
+row that opens a page), A Choose (an action) or "< >" Change (a value). Same word, same action: Back goes up a level,
+Close shuts an overlay (quick settings), Cancel leaves a dialog. Labels go before keys when the line is full; at
+most five keys.
+
+**Empty pages.** The vignette above the words, left aligned with them on the text column; the heading in Title 37,
+what to do next in Body 30 Quiet, at most three lines (`kit::empty_state`: `gallery:empty`, `tools:empty`). A page
+whose words are placed already puts the vignette in the free room under them, aligned with them (`tailscale:offline`).
+The search puts it right of the words (the keyboard may take the room below). "Loading…" pages have none.
+
+**Fronts without a cover** are a printed title card: the console (or the box's emblem: Curator's crate of cartridges,
+Surprise me's gift, PC streaming's monitor, a sticker's sheet, Favourites' star on a cushion, the search's and the
+Lens's glass, a smart shelf's row of cartridges, the history's notebook) over the name, both
+centred, the pair a little above the label's middle; the name on two lines of about the same width, never a lone
+word or number on the second (`home`, `curator:hub`, `sys:osd-warmth`).
+
+**Icons.** Drawn, one colour, 16 x 16 painted twice their size in the row's colour (Settings' categories); status
+marks are drawn (dot, bars, tick, dash); keys are their printed names in chips ("A", "SELECT", "< >"), never glyphs.
+
+**Motion** (details under [Motion](#motion-srcmotionrs-srcapp_motionrs)): only in answer to input, ease-out, no
+bounce. A row's selection glides ~150 ms, a page comes in 28 px in 150 ms, the shelf lifts 120 ms and turns 220 ms,
+the game box flips in 280 ms, the launch puts the cartridge in at 180 ms and is done at 300 ms, toasts and OSD come
+down 20 px in 150 ms, hints crossfade in 120 ms. Motion Off: everything at once.
+
+**Sound** (`src/ui_sound.rs`, the sample set in `assets/ui-sounds`): one sound per kind of feedback, the same on
+both surfaces. Selection or value moved: Nav. Chosen, switched, the box turned: Confirm. Up a level or closed: Back.
+Pause menu or quick settings opened: Menu. Switcher: Switcher. Refused: Error. Vol+/Vol-: Volume. Screenshot:
+Shutter. The launch's cartridge going in: Insert (the click lands with the motion, at 180 ms). Never during play.
+
+**Voice.** Plain gamer words, short, sentence case; say what happens, then what to do ("No screenshots yet" / "Hold
+HOME and press A while you play to take one."). No hi-fi or engineering jargon, no exclamation marks, "…" for
+something under way. German: Du, the glossary's words (docs/i18n-glossary.md: Spielstand, WLAN, Regal), „…“
+quotes, "45 %" with a space.
 
 ## Tokens
 | Name | Hex | Use |
@@ -105,32 +189,66 @@ for the new size (its layouts are kept per width and size).
 writes one line for text that runs into another string or into a hint bar (`O`), for two strings on one line closer than
 a space (`T`) and for text cut by the left or right edge of what it is painted into (`E`). `tests/text_size.rs` renders
 every state of `tests/i18n-states.txt` in Medium and in Large, English and German, and fails on any line. Pages mark what is covered
-(a dialog, a sheet), painted over (Up next's card) or cut on purpose (the Cards look's neighbours).
+(a dialog, a sheet), painted over (Up next's card), covered by an overlay of their own (the letter an L2/R2 jump shows
+over the list) or cut on purpose (the Cards look's neighbours).
+
+## Small-panel presentation
+
+On panels up to 720 px tall, compose the same supported layout on a logical canvas, then reduce the completed
+0RGB frame (`scaled_layout`, `frame::Presenter::draw_scaled`). 640×480 uses 1280×960, 720×480 uses 1440×960,
+and 720×720 uses 1280×1280. This keeps margins, shelves, panels, text and hit areas in one coordinate space;
+page painters must not mix physical panel coordinates into their layout. `App::screen_size` returns logical dimensions.
+The actual output wins over the profile, so a large HDMI output keeps its native layout. `pocket-core`'s game
+rendering and touch mapping do not use this UI scaler.
+
+Use a rounded four-pixel box average for exact 2:1 reduction and exact area coverage for fractional reductions.
+Keep the canvas and coverage tables between frames, and reduce only when the UI already needs a frame. Text is
+rasterised on the logical canvas with the rest of the page; there is no second text pass that could move glyphs away
+from their measured layout. Normal, Medium and Large remain the player's text-size choices. Snapshots use the same
+logical dimensions and reduction; their text-box findings describe the logical canvas before reduction.
+[H700 scaled-layout measurements](H700-SCALED-LAYOUT.md) record JPEG inspection and performance limits.
 
 ## Layout (1240×1080, left aligned, 72 px margin)
 ```
  place (left, Dust)                    13:28  ((·  76 % (status corner, right, Dust)
 
- ┌───────────────────────────────────────────────┐
- ▌ uCity                                          │  ← pulled-out label (Label paper, 200 px)
- ▌ Game Boy Color · played 2 min ago              │
- └───────────────────────────────────────────────┘
- ▌ Nova the Squirrel                         NES    ← spines (72 px, Spine body, stripe 12 px)
- ▌ Game Boy Color                              1
- ▌ Nintendo Entertainment System               1
-
+ ┌────────────┐  Continue                          ← kicker (Body 28, Dust)
+ │  the case's │  Chrono Trigger ★                  ← name, Title 67, two lines at most
+ │  front with │  Last played 2 days ago            ← meta line(s), Body 28
+ │  the cover  │  (a system: its fact sheet; Curator, Favourites: their covers)
+ └────────────┘
+ ┃┃ ┃┃┃┃▲┃┃┃┃┃┃┃┃┃ ┃┃┃┃┃┃     ┐▒   (plant)            ← spines standing on the board; the selected one lifted
+ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀        ← the shelf board (walnut dark, oak light)
  (A) Play   (B) Back                                  ← hints, bottom left, Dust
 ```
-- **Home:** "Continue" (last game) pulled out first, then up to five recent games, then systems.
-  Systems lead to that system's game shelf (same component). Above Continue, the two ways to find something else:
-  Curator on top, then Search ([Home panels](#home-panels-srchome_panelrs-srcapp_home_panelrs)); Home opens on
-  Continue, so at rest they are the two spines above the pulled-out label.
-- **Where the Shelf look rests** (`shelf_first` in `src/main.rs`): the selection is the third row, two rows of what
-  came before above it, and the list glides there. Near the end the list stops: the last row sits at the bottom of the
-  list and the selection moves down the last rows, as in Minimal, so the end never leaves most of the screen empty (the
-  owner's choice, 2026-10-26: at 1920x1080 the last system had stood in the third row over two empty thirds). At the
-  start the first row is the top one; a list that fits whole doesn't scroll. With Motion off the list jumps there.
-  `tests/shelf_end.rs` measures it at 1240x1080, 1920x1080 and 1280x960.
+- **Home:** Curator and Search, the recent games (the last one is "Continue"), Favourites and the pinned rows,
+  PC streaming, then the systems; a wider gap on the shelf where one group ends. Systems lead to that system's game
+  shelf (same component). Home opens on Continue.
+- **One visual language** (the owner's decision, 2026-10-28, after the trailer showed lists of bars with a small
+  cover beside a cabinet of tiny cases): every entry is a spine standing on the same board, the same light and the
+  same baseline for all; only the case's shape changes, and heights differ only where the real media do. Games stand
+  as their system's case (`media::Medium::of`), systems, Curator, Favourites, Search and PC streaming as plain
+  DVD-size boxes in their colours with their names (a system's short name: "SNES").
+- **Scale** (`app_cabinet.rs` `shelf_layout`): the tallest case (a DVD case, 120 template pixels) takes about two
+  fifths of the room between the top line and the hints, in half steps so the pixel art stays even: three screen
+  pixels a template pixel at 1080 lines (a DVD case 360 px, a SNES cartridge 66 px thick), 2.5 at 960, 1.5 at 720, one
+  at 480. The same on every list of a screen, nearest pixel, never smoothed.
+- **The shown case** (`show_k`): its front as large as the room above the row's tallest case lets it, at most 45 % of
+  the screen's width and six template pixels a pixel, in half steps; a shelf of cartridges leaves it more room than a
+  shelf of DVD cases. It is never cut: `shelf_tests` checks every medium at 1240x1080, 1920x1080, 1280x960, 1280x720,
+  1024x768 and 640x480. The cover is in the front's label (`media::front`); a game without one, a system (its console
+  above its name) and the rest get a printed title card in the cover's place, never an empty hole. While a cover is
+  still being read the label stays plain for a moment.
+- **Spine titles** (`media::spine_with`, `spine_px`): the cover's main colour on the label (`media::cover_colors`, the
+  system's colour without a cover), the title read top to bottom at the text size's size (Normal 30 px, Large 37 on a
+  wide label at 1080 lines), never wider than the label with paper on both sides; a long title ends in "…", nothing
+  scrolls on a spine. Sizes are the ones the app paints anyway, so a spine made in a frame draws no letters of its own.
+- **Where the shelf rests:** the selection keeps a fifth of the shelf beside it; the row glides (220 ms, Motion Off:
+  jumps) and fades into the page where it goes on past an end. A row that fits stands still from the left; where it
+  ends a bookend holds it up and a plant, lamp or cactus (`media::Prop`, the same for the same list) stands further
+  along, so a system with three games is not an empty board.
+- **On a wide screen** (1920x1080) the shelf stands in the 1440 px column in the middle, as Settings does
+  (`app_column`): more spines in view than on the Mini V2, the same sizes.
 - **Status corner** (`src/status_corner.rs`): the top line's right end on Home (every look; Chalk over the Cards
   wash), the game card, console pages, the search and Curator's pages. The time (24 h), a Wi-Fi symbol only while
   connected (a fan of a wedge and two arcs, 45° to either side, drawn with the canvas, as big as the figures), the
@@ -171,8 +289,9 @@ every state of `tests/i18n-states.txt` in Medium and in Large, English and Germa
 ## Motion (`src/motion.rs`, `src/app_motion.rs`)
 Motion is there to make the device feel quicker, like the well-damped needle of a good amplifier: it shows
 where something went, never makes anyone wait for it. Only in answer to input; nothing moves on its own, with
-one exception: a selected title too long for its row scrolls (rest 1.4 s, then about 1.7 × its font size in
-pixels per second, `src/marquee.rs`), as on NextUI.
+one exception: a selected title too long for its row scrolls (rest at least 1.5 s with an ellipsis, then about 1.7 × its font size in
+pixels per second, `src/marquee.rs`). A single text layer travels to the end, pauses, and returns to the
+full beginning. Changing selection or available width resets it; fitting titles also reset the selection key.
 
 **Rules.**
 - *Input first.* A press changes the state at once (selection, page, value); the animation is only a picture of
@@ -193,10 +312,10 @@ pixels per second, `src/marquee.rs`), as on NextUI.
 **What moves.**
 | Where | What | Time |
 |---|---|---|
-| Shelf look | the selected spine pulls out into its label; the list scrolls smoothly under two edges (the top of the list and the end of the last spine that fits whole, so nothing is cut at rest), one row at a time and on L1/R1 | pull 120 ms, scroll ~150-200 ms |
+| Shelf look | the selected spine rises out of the row (the one before goes back), the case above the shelf turns from its spine to its front (`SHELF_TURN`); the shelf glides along under its faded ends, a spine at a time and five on L1/R1 | lift 120 ms, turn 220 ms, glide 220 ms |
 | Minimal, Split, Settings list | the pill / the system-coloured bar / the band glides to the new row, the pill's width follows the name; a name turns to the highlight's text colour as it comes under it; the list scrolls under its edges | ~150 ms |
 | Cards look | the carousel slides; size, shade and place of every card follow its distance from the middle; the card in the middle is lifted (3 % larger, a soft shadow on paper); the wash behind turns from one card's colour to the next | ~150 ms |
-| Pages | a deeper page (a system's shelf, Settings and its pages, the console page) comes in from 28 px to the right and fades up from the page colour, its list rows one after another (16 ms apart, at most four steps); going back comes in from the left, all at once; the game card rises out of the selected label; the switcher fades in | 150 ms (+ up to 64 ms) |
+| Pages | a deeper page (a system's shelf, Settings and its pages, the console page) comes in from 28 px to the right and fades up from the page colour, its list rows one after another (16 ms apart, at most four steps); going back comes in from the left, all at once; the game card rises out of the selected case (the Shelf look) or label; the switcher fades in | 150 ms (+ up to 64 ms) |
 | Curator, Search | Curator's list, the Lens, Echoes, Versions and the search are pages like the others (pushed in, popped back; sheets over the card or the list are not pages); their lists scroll smoothly under their edges (the Lens's values start at rest when another facet is picked), the selected row turns to paper at once | 150 ms |
 | Letter jump (L2/R2) | the big letter shows, then fades out as one layer (box and letter together) over 220 ms; one frame is drawn after it has gone, so nothing faint stays behind | 700 ms in all |
 | Hint bar | when the hints change, the old ones fade out quickly while the new ones fade in | 120 ms |
@@ -357,9 +476,9 @@ alone would be only 1.1:1 against the page), and pickers get a paper sheet with 
 | label_dust | `#5A5852` | `#5F5B53` | secondary text on the label |
 | keycap | `#2A2A2E` | `#DCD6CA` | hint key caps |
 | alert / on_alert | `#E0705C` / `#151515` | `#A63A28` / `#FFFDF8` | errors; text on an alert band (a row asking to confirm) |
-| text / quiet / soft | `#FFFFFF` / `#AAA79F` / `#CCCCCC` | `#1F1D1A` / `#57534C` / `#3C3A35` | Settings-style lists, pills |
-| pill / chip | `#262626` / `#8F8F8F` | `#E3DED3` / `#5E5A53` | status and hint pills, their key chips, scroll bars |
-| band / select | `#71757B` / `#E9F2F1` | `#CFC8BA` / `#FFFDF8` | selected row of the Settings-style lists |
+| text / quiet / soft | `#FFFFFF` / `#AAA79F` / `#D2CEC6` | `#1F1D1A` / `#57534C` / `#3C3A35` | Settings-style lists, pills |
+| pill / chip | `#272523` / `#938E85` | `#E3DED3` / `#5E5A53` | status and hint pills, their key chips, scroll bars, panels |
+| band / select | `#77736B` / `#ECE9E1` | `#CFC8BA` / `#FFFDF8` | selected row of the Settings-style lists (select is the label's paper) |
 | amber / star | `#D39A2C` / `#F2C14E` | `#8F5E0C` / `#B07A12` | Favourites, "Playing? Press Y", stars |
 | split_bg / split_dim | `#12161B` / `#AAB3BD` | `#ECE7DD` / `#58544D` | Split look |
 
@@ -372,7 +491,10 @@ sits on, goes into that list). Dark had four pairs below it until 2026-10-24: Du
 3.9:1: the count at a spine's end, Curator's rows, Split's top line), the white value on the Settings band (3.3:1) and the key letters on
 the hint chips (3.8:1). Dust went from `#77746D` to `#8A877F` (the Pixel Path strip's grey; 4.6:1 on a spine, 5.9:1
 on black), the band from `#8A8F96` to `#71757B` (4.6:1) and the chip from `#7F7F7F` to `#8F8F8F` (4.7:1); the
-rest of Dark is as it was. Light needed nothing but `on_alert` (ink on its red was 2.7:1).
+rest of Dark is as it was. Light needed nothing but `on_alert` (ink on its red was 2.7:1). On 2026-10-29 Dark's
+neutrals turned warm at the same contrast (see [Design language](#design-language)): the band `#77736B` (4.7:1 under
+white), the chip `#938E85` (4.7:1 under the pill's letters), the pill `#272523`, its text `#D2CEC6`, and the
+selected name's pill is the label's paper `#ECE9E1` instead of a bluish white.
 
 **Which surfaces follow the appearance:** every full screen of pocket-ui: the five looks (Cabinet turns from
 walnut on black to light oak on paper, same grain and shading; its spines, cases and brass name cards stay),
@@ -393,52 +515,71 @@ The physical idea taken literally: a dark walnut cabinet, one shelf per system (
 then Favourites), every game standing in its real case.
 
 ### Media (`src/media.rs`, `assets/media`)
-Eighteen kinds of media, one pixel-art template each (spine and front, `assets/media/<kind>-spine.png`, `-front.png`),
+Nineteen kinds of media, one pixel-art template each (spine and front, `assets/media/<kind>-spine.png`, `-front.png`),
 shared by the Cabinet and the Shelf look: Super Nintendo / Super Famicom cartridge (grips at the top corners), Nintendo
 64 cartridge (wide, a ribbed slope), NES / Famicom cartridge (tall, a grooved end), Game Boy / Color cartridge (the cut
 corner), Game Boy Advance cartridge (wide, the notch), a generic console cartridge, the Mega Drive's clamshell case,
 the Master System's and Game Gear's case with the white grid, the thin PlayStation jewel case, the light Saturn /
 Dreamcast / Mega-CD case, a generic jewel case, the tall black PS2 case, the GameCube's, the white Wii case, a plain DVD
-case (other DVD systems and Curator's boxes), the PSP's UMD case, the DS and the 3DS card boxes (`Medium::of`).
+case (other DVD systems and Curator's boxes), the PSP's UMD case, the DS and the 3DS card boxes, the original Xbox's black case with its green band (`Medium::of`).
 - **Drawn, not generated.** The templates come from `assets/media/tools/draw_media.py` (plain shapes, no logo or
   lettering; it prints the table of label rectangles that `media.rs` keeps). PixelLab was tried for them first (bitforge
   and pixflux with the drawn shape as init image, the console pictures as style): it either returned the drawing
   unchanged or invented consoles, so the media are drawn by the script and only the props are PixelLab's.
-- **One template pixel is two screen pixels** on the shelf; scaled by nearest pixel, so they stay pixel art.
+- **One template pixel is 2.5 screen pixels** on the Cabinet's shelf (`media::SHELF_SCALE`; it was two until
+  2026-10-28, when a cabinet of a few games looked empty), the Shelf look's own scale on its shelf; scaled by nearest
+  pixel, so they stay pixel art.
   Cartridges are drawn in a neutral grey and take their system's plastic (`cabinet_art::plastic`: Game Boy grey, GBA
   indigo-grey, N64 charcoal…); cases are drawn in their own colours. Every template pixel is solid or empty (the decoder
   reads half-transparent as empty).
-- **Sizes** keep the real order (GBA 112 px high, Game Boy 132, SNES 156, NES 176, PS1 176, DS 190, UMD 206, GameCube
-  222, Mega Drive 236, PS2 and Wii 240); thicknesses are exaggerated so a title fits (26 px for the thin jewel case
-  with a 20 px title, 44 for a SNES cartridge). Each case stands at its own size, all on the board (one baseline); a shelf
+- **Sizes** keep the real order (in the Cabinet: GBA 140 px high, Game Boy 165, SNES 195, NES 220, PS1 220, DS 238,
+  UMD 258, GameCube 278, Mega Drive 295, PS2 and Wii 300); thicknesses are exaggerated so a title fits (33 px for the
+  thin jewel case, 55 for a SNES cartridge). Each case stands at its own size, all on the board (one baseline); a shelf
   is as tall as its tallest case.
 - **Spines** (`media::spine`): the template, the label in the cover's main colour with a thin printed edge, the title
-  read top to bottom in ink or chalk by the colour's brightness (24 px, a size smaller on narrow labels); cases with a
+  read top to bottom in ink or chalk by the colour's brightness, as large as the label takes up to 37 px (28 on a Game
+  Boy Advance cartridge, 24 on the thin jewel case; it was 21 to 24, too small at arm's length); cases with a
   band at the top (Mega Drive, the light Sega case, the generic ones) paint it in the cover's **accent**
   (`media::cover_colors`: a clear colour of the cover far from the main one, at least 1.5 % of it; the main one again when
   there is none). Without a cover: the system's stripe, darkened. The colours are read on the `cabinet-art` thread
   and kept for the session; no frame decodes a cover.
-- **Spines stretch** between their two ends (9-slice: `Template::caps`, the ends keep their pixels), which is how the
-  Shelf look lays the same template down as a row of any length (`media::lying`).
-- **Fronts** (`media::front`): the template with the real cover in its label (`cabinet_art::cover_fill`, cut to the
-  label's shape on the thread), a sheen of clear plastic over cases; without a cover a plain label with the console.
+- **Fronts** (`media::front`): the template with the real cover in its label, whole and undistorted
+  (`cabinet_art::cover_fit`, on the thread): a cover of another shape than the label (a near-square Game Boy Advance
+  box on its wide cartridge label) is scaled down until it fits, the rest of the label in the cover's edge colour a
+  little darker, like a printed margin. A sheen of clear plastic over cases; without a cover a title card with the
+  console and the name in two lines at most (a smaller size first, then "…").
 
 ### Props (`media::Prop`, `assets/media/props`)
 A potted plant, a desk lamp, a small cactus and a bookend (PixelLab pixflux, seeds and prompts in
-`assets/media/props/pixellab-assets.json`). Which one a shelf gets follows from the shelf (its system's name), so it is
-the same every time; about half the shelves get one, at most two are painted per screen, only on a shelf that doesn't
-scroll, only in the free part of it (a bookend right after the last case, the others at least 60 px further), never
-taller than the shelf's room. Never over a game.
+`assets/media/props/pixellab-assets.json`). Every shelf with room beside its games gets the bookend right after the
+last case and a plant, lamp or cactus further along (`Prop::beside`; which one follows from the shelf, its system's
+name, so it is the same every time), at least 60 px from the games, so a shelf of one game is not a bare board. At most four are painted per screen, only on a shelf that doesn't scroll, never taller
+than the shelf's room. Never over a game. The Shelf look uses the same props at its own scale.
 
+- **The showcase** (`showcase`, a photo of 2026-10-28: the case held up in front of the shelf above hid the
+  spines of two shelves, the bottom row was cut by the hints, the cover was cropped): the cabinet's top board sits
+  right over the selected shelf, and the room between the title and that board is the showcase, as high as the case
+  out of the shelf needs. Under the selected shelf come the next ones as far as they fit whole, then the plinth; no
+  shelf is cut by the hints (only one taller than the whole room is, fading out). The board glides with the cabinet
+  when the room changes (`show_top`).
 - **Selecting** pulls the case out and turns it to show its cover (240 ms; the last one goes back in 160 ms
-  from wherever it had got to, so holding a direction never waits). Out, it is held up in front of the shelf
-  above, so its own row stays in view. Simple perspective: each face is a run of columns whose height
+  from wherever it had got to, so holding a direction never waits). Out, it stands in the showcase on the top
+  board, above its own slot as far as the screen lets it: nothing of the shelves is under it. It is never taller
+  than the showcase (`show_scale`). Simple perspective: each face is a run of columns whose height
   follows its distance; at rest the front is copied as it is, sharp.
-- **Starting** a game: the console's pixel-art picture comes up, the cartridge goes into its slot, a disc
-  slides out of its case first (380 ms), then the usual launch fade. The game is started when the cartridge
-  reaches the slot (260 ms after A; buttons wait until then): a game's window can come up a quarter of a
-  second after its start and would otherwise cover the cartridge in mid-air. Cartridges stay half out of
-  the console, as they do.
+- **Starting** a game (Settings → Look & feel → Launch animation, Cabinet and Shelf looks; `app_cabinet::launch_animation`):
+  the game is started at A, and while it loads the console's pixel-art picture comes up, the cartridge goes into
+  its slot, a disc slides out of its case first; in at 180 ms (`cabinet::IN_AT`) with a click (`Sound::Insert`, the
+  shutter's second click, queued at A with 170 ms of silence before it) and a glow in the label's colour, done at
+  300 ms (`cabinet::INSERT`). The launch fade waits for the click. Nothing waits for the animation: a game whose
+  window comes up first covers it, and any button skips it. Until 2026-10-28 the game was started only when the
+  cartridge reached the slot (260 ms after A), which added that to every start in these looks. Cartridges stay
+  half out of the console, as they do.
+- **The game box** (X on a game; SELECT switches to the page and back, `game_box.rs`): the card as the game's box in its case's style, front and
+  back, turned over with Left/Right in 280 ms (Motion Off: at once) by narrowing one face to its edge and widening
+  the other. The frames of the backs and of the cartridges' cardboard box are PixelLab pixel art
+  (`assets/media/back`, `tools/` there), nine-slice at a whole number of screen pixels a template pixel; the back's
+  paper is the cover's colour, deep, with white type; missing pictures and text get their own plain places.
 - Names of the shelves are on small paper cards in brass holders on the board edges, Body 20 px; a sticker's
   shelf has the sticker itself there instead (round, in the stickers' colour).
 - **Curator** (between Favourites and the systems): a shelf of DVD-size boxes in Curator's colour for the Lens, the
@@ -450,20 +591,15 @@ taller than the shelf's room. Never over a game.
 - Everything around stays as in the other looks: black around the cabinet, the shelf's name and the battery
   in Dust, the game's title in Title 50 Chalk with its meta line under it, the hint pills at the bottom.
 
-## Shelf look's games (`app_cabinet.rs`, "the Shelf look's games")
-The Shelf look keeps its character, a calm list of spines; a game's row is now its case lying in a stack, spine to
-you, from the same templates as the Cabinet (`media::lying`): as long as the case is tall on the Cabinet's shelf (a DVD
-case the whole row, a Game Boy Advance cartridge three fifths, all from the same left edge), as thick as the row. The
-label is the cover's colour made quiet (`media::muted`: half its saturation, a third of the way to the Spine colour;
-on the dark page never brighter than luma 120, so every row keeps light letters), the plastic dimmed to 70 % on the
-dark page. The title is Title 37 on the label as before; a system name (Home's recent games) stands after the case,
-or at the label's end when the case is long. Systems, Curator and the other rows stay plain spines.
-- **Selecting** slides the case 40 px out of the stack while its label opens (the pull's 120 ms), and on the label the
-  case turns from its spine to its front with the real cover (220 ms, `SHELF_TURN`, the Cabinet's perspective turn;
-  Motion Off: there at once). A game without a cover keeps the label as before (no case, no letters drawn).
-- **Cost.** One lying picture per (medium, plastic, length, thickness), not per game: the label and the band are plain
-  rectangles painted over it in the game's colours, so a system's whole list shares one picture. The front on the label
-  is made once per game and size and kept; colours and covers come from the Cabinet's reader thread.
+## Shelf look (`app_cabinet.rs`, "the Shelf look")
+The default look; its layout is under [Layout](#layout-12401080-left-aligned-72-px-margin).
+- **Cost.** A spine per entry and scale (`stand`), made the first time it is in view and kept (about 0.2 ms each);
+  the shown front per entry and size (`shelf_shown`), made once its cover is read on the `cabinet-art` thread; the
+  board and the props once per size. A frame only copies pictures. The row's places are worked out again only when
+  the list changes. Covers' colours come from the same thread as the Cabinet's and are kept for the session.
+- **Launch:** the shown front stays lit while the rest of the shelf fades to black.
+- **Touch:** a tap on a spine selects it, a tap on the selected one (or its front) starts it; a sideways swipe moves
+  along the shelf a spine at a time.
 
 ## Self-review against defaults
 - A black background with one acid accent is a known default. Here black is required by the AMOLED panel,

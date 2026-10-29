@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generated": "2026-10-27",
+ "generated": "2026-10-28",
  "license": "Facts from Wikidata (CC0) and the consoles' English Wikipedia articles (names only, CC BY-SA); summaries and role texts written for pocket-ui",
  "schema": "Built by scripts/build-console-credits.py from scripts/console-credits.in.json; every fact was checked against its source (wikidata:<P>, infobox:<field>, lead). Don't edit by hand.",
  "systems": [
@@ -2599,6 +2599,61 @@
    "sources": {
     "wikidata": "https://www.wikidata.org/wiki/Q1065792",
     "wikipedia": "https://en.wikipedia.org/wiki/WonderSwan"
+   }
+  },
+  {
+   "id": "xbox",
+   "qid": "Q132020",
+   "summary": "Microsoft's first console, built from PC parts. Flextronics and Wistron made it; an Intel Pentium III processor and an Nvidia NV2A graphics chip sit inside.",
+   "makers": [
+    {
+     "name": "Microsoft",
+     "role": "Developer",
+     "source": "infobox:developer"
+    },
+    {
+     "name": "Flextronics",
+     "role": "Manufacturer",
+     "source": "infobox:manufacturer"
+    },
+    {
+     "name": "Wistron",
+     "role": "Manufacturer",
+     "source": "infobox:manufacturer"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Intel Pentium III",
+     "source": "infobox:cpu"
+    },
+    {
+     "role": "Graphics",
+     "name": "Nvidia NV2A",
+     "source": "infobox:graphics"
+    }
+   ],
+   "family": [
+    {
+     "relation": "after",
+     "name": "Xbox 360",
+     "source": "infobox:successor"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Halo 2",
+     "figure": "8.46 million",
+     "source": "infobox:top_game"
+    }
+   ],
+   "game_makers": [
+    "Microsoft"
+   ],
+   "sources": {
+    "wikidata": "https://www.wikidata.org/wiki/Q132020",
+    "wikipedia": "https://en.wikipedia.org/wiki/Xbox_(console)"
    }
   }
  ]

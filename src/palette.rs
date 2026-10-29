@@ -90,12 +90,15 @@ pub const DARK: Palette = Palette {
     label_dust: 0x5a5852,
     off: 0x4a4945,
     text: 0xffffff,
-    soft: 0xcccccc,
+    // The neutrals lean warm, like the paper and the walnut of the shelf (2026-10-29, docs/DESIGN.md "Colour roles"):
+    // the pills, their chips and the band were cool greys, the selected name a bluish white.
+    soft: 0xd2cec6,
     quiet: 0xaaa79f,
-    pill: 0x262626,
-    chip: 0x8f8f8f,
-    band: 0x71757b,
-    select: 0xe9f2f1,
+    pill: 0x272523,
+    chip: 0x938e85,
+    band: 0x77736b,
+    // The selected row's name is on the pulled-out label's paper, as everywhere on the shelf.
+    select: LABEL,
     amber: 0xd39a2c,
     star: 0xf2c14e,
     split_bg: 0x12161b,

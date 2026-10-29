@@ -993,10 +993,14 @@ mod tests {
         let d = Dir::new("writer");
         let base = d.base("gba", "Game");
         let mut tl = Timeline::new(roomy());
-        let t = Instant::now();
         // 20 MB with a picture: handed over, not written, on this thread.
-        tl.submit_state(&base, vec![7; 20_000_000], Some(frame()), 3.0, Moment::Quiet);
-        assert!(t.elapsed() < Duration::from_millis(50), "{:?}", t.elapsed());
+        let (state, pic) = (vec![7; 20_000_000], frame());
+        // This thread's own CPU time, not the clock: the hand-over costs next to nothing, while a loaded machine can
+        // pause the thread for tens of milliseconds (a gate saw 95 ms) without the code doing any more work.
+        let cpu0 = crate::run_ahead::thread_cpu_ms();
+        tl.submit_state(&base, state, Some(pic), 3.0, Moment::Quiet);
+        let cpu = crate::run_ahead::thread_cpu_ms() - cpu0;
+        assert!(cpu < 5.0, "{cpu:.2} ms of this thread's CPU for a 20 MB state: the writer thread copies it");
         tl.wait();
         let e = entries(&base);
         assert_eq!(e.len(), 1);

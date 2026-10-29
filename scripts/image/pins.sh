@@ -14,6 +14,44 @@ ROCKNIX_IMG_SHA256=1bb73b7d3bc94923e2db39a0f98951698753da26e0717a9c7175909c7aaae
 KERNEL_MD5=e313a71b97a3112981bd7597a4016847
 SYSTEM_MD5=6b3248528b2f19d11009a85eb90abf91
 
+# SYSTEM on our card: ROCKNIX's, repacked without the files below (scripts/image/build.sh strip-system,
+# docs/SD-IMAGE.md "What changes on the card"). Everything else in it is unchanged, file for file.
+#   - SKick's Kickstart relocation tables for Amiberry: SKick's licence allows passing them on only inside its
+#     unchanged archive (aminet.net util/boot/skick346.lha, SKick.doc section 1), not as loose files.
+#   - firmware for the AYN Thor and the Mangmi Pocket Max (ROCKNIX's extra-firmware, no licence stated): the
+#     Mini V2's device tree never asks for it.
+#   - ROCKNIX's ABL (usr/share/bootloader/rocknix_abl/: a signed bootloader binary and the scripts that flash it;
+#     github.com/ROCKNIX/abl states no licence and has no source): this boot path never flashes an ABL, and the
+#     same folder is already left off the FAT partition.
+#   - the DOOM shareware IWAD (usr/share/idtech/doom.tar.gz, doom.wad v1.9, md5 f0cefca4...), which ROCKNIX's
+#     idtech-lr package downloads for its "Scan id Tech Games" tool: a game, and the shareware terms ask for the
+#     complete, unchanged shareware package. The card promises no games; without it the tool adds no Doom entry.
+SYSTEM_REMOVE="
+usr/config/amiberry/whdboot/save-data/Kickstarts/kick33180.A500.RTB
+usr/config/amiberry/whdboot/save-data/Kickstarts/kick33192.A500.RTB
+usr/config/amiberry/whdboot/save-data/Kickstarts/kick34005.A500.RTB
+usr/config/amiberry/whdboot/save-data/Kickstarts/kick40063.A600.RTB
+usr/config/amiberry/whdboot/save-data/Kickstarts/kick40068.A1200.RTB
+usr/config/amiberry/whdboot/save-data/Kickstarts/kick40068.A4000.RTB
+usr/lib/kernel-overlays/base/lib/firmware/qcom/sm8250/ayn
+usr/lib/kernel-overlays/base/lib/firmware/qcom/sm8250/mangmi
+usr/share/bootloader/rocknix_abl
+usr/share/idtech/doom.tar.gz
+"
+# Members taken out of a zip inside SYSTEM ("zip-path member-glob"): the same SKick tables ride along in Amiberry's
+# WHDLoad boot archive (Devs/Kickstarts). The rest of that archive stays as it is (zip -d keeps the other entries).
+SYSTEM_ZIP_REMOVE="
+usr/config/amiberry/whdboot/boot-data.zip Devs/Kickstarts/*.RTB
+"
+# md5 of the repacked SYSTEM (mksquashfs from scripts/image/Dockerfile, zstd level 19, 1 MiB blocks as ROCKNIX's).
+POCKET_SYSTEM_MD5=91cfd1d6d696cd907eb7136bce956d36
+# ROCKNIX's LICENSE.md plus its licenses/ folder at the tag (pocket-ui-info/rocknix-licenses/ on the card).
+ROCKNIX_LICENSE_FILES=76
+# usr/config/nanoboyadvance/bios/gba_bios.bin in SYSTEM: the open-source replacement BIOS from
+# https://github.com/Nebuleon/ReGBA/raw/master/bios/gba_bios.bin (Normmatt, VBA-M team; GPL-2.0-or-later), which
+# ROCKNIX's nanoboyadvance-sa package downloads (PKG_OPEN_SOURCE_BIOS). Not Nintendo's BIOS.
+REGBA_BIOS_MD5=1876f71b0d8c65eef3454547896ffb11
+
 # What our boot files must be. Both are byte for byte the files on the author's device (/flash/boot/pocket,
 # read 2026-10-22), which booted through Boot mode: Loader.
 #   Image: the arm64 Image unpacked from KERNEL (scripts/make-sd-efi.sh)

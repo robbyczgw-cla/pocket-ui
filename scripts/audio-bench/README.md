@@ -30,6 +30,28 @@ the driver, S24_32 like the device's speaker). On Bluetooth the case takes `audi
 `POCKET_CORE_QUANTUM=0` (no quantum of its own: the same `game_quantum == None`), since the container has no
 Bluetooth link.
 
+## UI sounds through a game (off the device)
+
+`ui-guest.sh [OUT]` (from the audit branch fix/audio-after-guest-sol, `AUDIO_BENCH_HOST`): `examples/audio_ui_guest`
+drives the real UI mixer (`ui_sound`) through a launch, the pause menu over a guest (a silent pulse client at
+ROCKNIX's 1024, or the same with 256 forced as a pocket-core game does), the game's end (`ui_sound::game_ended`),
+240 clicks every 250 ms and, after 3 s of quiet, 20 more. `analyze-ui-guest.py` aligns every click on the Nav WAV
+and reports, per group, D+N against it and padded audible frames; the first click after the start, in the guest and
+after the quiet are groups of their own (the moments the quantum used to change under a sound). Any click above
+-40 dB D+N or with a padded frame fails.
+
+## UI sounds after a game (on the device)
+
+`ui-after-game.sh [GAME] [PLAY_SECONDS] [OUT]` (default `xbox:jade 20`): on a Mini V2 (`POCKETUI_HOST`, under the
+device lock) it stops pocket-ui, starts it with the trace as `scripts/latency.py` does, records the speaker sink's
+monitor (before volume and mute, so it works and stays silent with the speaker muted; the script never touches either) while it moves on the shelf, starts GAME, opens the pause menu and moves there, quits, goes back
+to the shelf and moves at once, then again after the output has closed; it follows `clock.force-quantum` meanwhile,
+puts pocket-ui back and runs `verify-device.sh`. pocket-ui plays no menu sound into a muted sink: with the speaker
+muted (at night) run it with `UAG_SINK=null`, which records a null sink made the default for the run and puts
+everything back after it. `analyze_ui.py OUT` counts gaps per phase: runs of
+digital silence, at most a cycle long, that cut a sound off (a quiet tail passing through zero doesn't count).
+Results: docs/HOST.md "UI sounds", "Buffer and quantum".
+
 ## What analyze.py measures, and the limits
 
 | Measure | How | Limit |

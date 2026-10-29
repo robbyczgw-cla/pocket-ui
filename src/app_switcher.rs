@@ -235,7 +235,12 @@ impl App {
 
     pub(crate) fn switcher_input(&mut self, b: Button) {
         let Some(sw) = self.switcher.as_mut() else { return };
-        match sw.input(b) {
+        let before = sw.sel;
+        let action = sw.input(b);
+        if sw.sel != before {
+            self.marquee.restart();
+        }
+        match action {
             Action::None => {}
             Action::Close => {
                 let back_to_game = sw.in_game && !sw.from_menu;

@@ -310,6 +310,7 @@ impl Readout {
             Some(b) => Some(format!(
                 "smooth, {}",
                 match b.shape {
+                    Some(crate::fan_curve::Shape::VeryQuiet) => "Very quiet",
                     Some(crate::fan_curve::Shape::Quiet) => "Quiet",
                     Some(crate::fan_curve::Shape::Cool) => "Cool",
                     _ => "Auto",

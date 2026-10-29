@@ -493,9 +493,7 @@ impl App {
         let first = super::window_start(sel, visible, rows.len());
         if rows.len() > visible {
             let track = visible as i32 * row;
-            let (bar_h, bar_y) = (track * visible as i32 / rows.len() as i32, track * first as i32 / rows.len() as i32);
-            c.rect(c.w - 12, top, 4, track, pal().pill);
-            c.rect(c.w - 12, top + bar_y, 4, bar_h.max(12), pal().chip);
+            pocket_ui::kit::scrollbar(c, top, track, first, visible, rows.len());
         }
         if rows.is_empty() {
             // Never an empty list: what it would hold, in words.

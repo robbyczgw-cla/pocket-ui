@@ -39,7 +39,7 @@ pub const NOTE_FILE: &str = "/tmp/pocket-ui-fan-curve.restore";
 /// `<count> <unix seconds> <state> <shape> <smoothed tenths °C> <pwm>`, rewritten every tick. The launcher's watchdog
 /// hands the fan back when the count stops moving while the note exists; Settings > Performance & fan shows the state.
 pub const BEAT_FILE: &str = "/tmp/pocket-ui-fan.beat";
-/// A pocket-core game's fan choice (`quiet`, `auto`, `cool`), written by pocket-core when pocket-ui told it to
+/// A pocket-core game's fan choice (`veryquiet`, `quiet`, `auto`, `cool`), written by pocket-core when pocket-ui told it to
 /// ([`REQUEST_ENV`]) instead of changing the trips itself.
 pub const GAME_REQUEST_FILE: &str = "/tmp/pocket-ui-fan.game";
 /// Set by pocket-ui for the pocket-core games it starts while Smooth fan is on: where pocket-core writes its choice.
@@ -93,6 +93,8 @@ const RETRY_SECS: f64 = 60.0;
 /// same temperature as the profile's first trip, but rise gradually instead of in six steps.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Shape {
+    /// Off until 60 °C, the gentlest ramp (the "Very quiet" choice).
+    VeryQuiet,
     Quiet,
     Balanced,
     Cool,
@@ -102,6 +104,9 @@ impl Shape {
     /// (°C, PWM 0-255), rising; the last point is full speed at the guard.
     pub fn points(self) -> &'static [(f32, f32)] {
         match self {
+            // Starts at 60 (Quiet's second point), reaches Quiet's 100 at 74 instead of 71 and its 160 at 76.5 instead
+            // of 75; full speed at the guard like the others. Never above Quiet's PWM at the same temperature.
+            Shape::VeryQuiet => &[(60.0, 40.0), (66.0, 44.0), (71.0, 60.0), (74.0, 100.0), (76.5, 160.0), (78.0, 255.0)],
             Shape::Quiet => &[(52.0, 40.0), (60.0, 46.0), (66.0, 64.0), (71.0, 100.0), (75.0, 160.0), (78.0, 255.0)],
             Shape::Balanced => &[(46.0, 40.0), (55.0, 56.0), (62.0, 85.0), (68.0, 128.0), (73.0, 185.0), (78.0, 255.0)],
             Shape::Cool => &[
@@ -124,6 +129,7 @@ impl Shape {
     /// Below this (smoothed, for [`STOP_HOLD`]) it stops again.
     pub fn stop(self) -> f32 {
         match self {
+            Shape::VeryQuiet => 55.0,
             Shape::Quiet => 46.0,
             Shape::Balanced => 40.0,
             Shape::Cool => 35.0,
@@ -147,6 +153,7 @@ impl Shape {
 
     pub fn name(self) -> &'static str {
         match self {
+            Shape::VeryQuiet => "veryquiet",
             Shape::Quiet => "quiet",
             Shape::Balanced => "balanced",
             Shape::Cool => "cool",
@@ -154,7 +161,7 @@ impl Shape {
     }
 
     pub fn parse(s: &str) -> Option<Shape> {
-        [Shape::Quiet, Shape::Balanced, Shape::Cool].into_iter().find(|x| x.name() == s)
+        [Shape::VeryQuiet, Shape::Quiet, Shape::Balanced, Shape::Cool].into_iter().find(|x| x.name() == s)
     }
 }
 
@@ -163,6 +170,7 @@ impl Shape {
 /// stays ROCKNIX's.
 pub fn shape_for(fan: Fan, rocknix: &str) -> Option<Shape> {
     match fan {
+        Fan::VeryQuiet => Some(Shape::VeryQuiet),
         Fan::Quiet => Some(Shape::Quiet),
         Fan::Cool => Some(Shape::Cool),
         Fan::Auto => match rocknix {
@@ -1280,7 +1288,7 @@ mod tests {
 
     #[test]
     fn every_curve_rises_from_its_start_to_full_speed_at_the_guard() {
-        for s in [Shape::Quiet, Shape::Balanced, Shape::Cool] {
+        for s in [Shape::VeryQuiet, Shape::Quiet, Shape::Balanced, Shape::Cool] {
             let p = s.points();
             assert!(p.windows(2).all(|w| w[1].0 > w[0].0 && w[1].1 > w[0].1), "{s:?} rises");
             assert_eq!(p.last().unwrap(), &(GUARD_ON, 255.0), "{s:?} meets the guard");
@@ -1294,14 +1302,89 @@ mod tests {
         }
         // The profiles start where ROCKNIX's do: quiet 52, moderate 45-46, aggressive 40.
         assert_eq!((Shape::Quiet.start(), Shape::Balanced.start(), Shape::Cool.start()), (52.0, 46.0, 40.0));
-        // Cool is never quieter than Balanced, Balanced never quieter than Quiet.
+        // Very quiet starts at 60 and stops below 55; the others are unchanged.
+        assert_eq!((Shape::VeryQuiet.start(), Shape::VeryQuiet.stop()), (60.0, 55.0));
+        // Cool is never quieter than Balanced, Balanced never quieter than Quiet, Quiet never than Very quiet.
         for t in 30..90 {
             let t = t as f32;
+            assert!(Shape::Quiet.pwm_at(t) >= Shape::VeryQuiet.pwm_at(t), "{t}");
             assert!(
                 Shape::Cool.pwm_at(t) >= Shape::Balanced.pwm_at(t) && Shape::Balanced.pwm_at(t) >= Shape::Quiet.pwm_at(t),
                 "{t}"
             );
         }
+    }
+
+    #[test]
+    fn very_quiet_stays_off_until_60_and_does_not_toggle_around_it() {
+        let vq = Shape::VeryQuiet;
+        // 59 °C for ten minutes: the fan never starts (Quiet would be running at 46).
+        let mut c = Controller::new(0, MIN_RUN_PWM);
+        assert_eq!(hold(&mut c, 59.0, 600.0, vq), Output { pwm: 0, mode: Mode::Off });
+        assert!(hold(&mut Controller::new(0, MIN_RUN_PWM), 59.0, 60.0, Shape::Quiet).pwm > 0);
+        // 61 °C: it starts, at the start level, then settles on the curve's gentle end.
+        let mut c = Controller::new(0, MIN_RUN_PWM);
+        hold(&mut c, 50.0, 30.0, vq);
+        let mut started = false;
+        for _ in 0..120 {
+            let o = c.step(0.5, 62.0, Some(if c.pwm > 0.0 { 2000 } else { 0 }), vq);
+            started |= o.mode == Mode::Start && o.pwm == START_PWM;
+        }
+        assert!(started, "start pulse kept");
+        let settled = hold(&mut c, 62.0, 30.0, vq);
+        assert!((MIN_RUN_PWM..=48).contains(&settled.pwm), "running minimum on the gentlest ramp: {settled:?}");
+        // Hysteresis: wobbling between 56 and 59 °C (above the stop at 55) keeps it turning without any new start.
+        let mut starts = 0;
+        for i in 0..400 {
+            let t = if i % 20 < 10 { 56.0 } else { 59.0 };
+            let o = c.step(0.5, t, Some(2000), vq);
+            starts += (o.mode == Mode::Start) as u32;
+            assert!(o.pwm > 0, "{t}: still turning above the stop temperature");
+        }
+        assert_eq!(starts, 0);
+        // Below 55 for the hold time (45 s): off, and it takes the full hold.
+        assert!(hold(&mut c, 50.0, 30.0, vq).pwm > 0, "not yet");
+        assert_eq!(hold(&mut c, 50.0, 60.0, vq).pwm, 0, "then off");
+        // Off again, and 57 °C (between stop and start) does not start it.
+        assert_eq!(hold(&mut c, 57.0, 120.0, vq).pwm, 0);
+    }
+
+    #[test]
+    fn very_quiet_is_gentle_and_the_guard_still_wins() {
+        let vq = Shape::VeryQuiet;
+        assert!(vq.pwm_at(70.0) < 64.0 && vq.pwm_at(73.0) < 100.0 && vq.pwm_at(76.0) < 160.0, "later than Quiet's points");
+        // Full speed from the guard, whatever the profile.
+        let mut c = Controller::new(0, MIN_RUN_PWM);
+        hold(&mut c, 50.0, 30.0, vq);
+        assert_eq!(c.step(0.5, GUARD_ON, Some(0), vq), Output { pwm: 255, mode: Mode::Guard });
+        assert_eq!(c.step(0.5, 74.0, Some(5000), vq).mode, Mode::Guard, "held until below {GUARD_OFF}");
+    }
+
+    #[test]
+    fn very_quiet_parses_and_names_round_trip() {
+        assert_eq!(Fan::parse("veryquiet"), Fan::VeryQuiet);
+        assert_eq!(Fan::VeryQuiet.value(), "veryquiet");
+        assert_eq!(shape_for(Fan::VeryQuiet, "aggressive"), Some(Shape::VeryQuiet), "an explicit choice is ours");
+        assert_eq!(shape_for(Fan::VeryQuiet, "custom"), Some(Shape::VeryQuiet));
+    }
+
+    #[test]
+    fn very_quiet_leaves_the_kernel_backstop_hot_and_critical_exactly_as_with_quiet() {
+        let rig = Rig::new("veryquiet-backstop");
+        rig.temps(57.0, 53.0);
+        let mut e = rig.engine();
+        e.tick(0.0, &on(Fan::VeryQuiet));
+        assert!(e.driving());
+        assert_eq!(rig.active(), ["83500"; 6], "the same backstop");
+        assert_eq!(rig.others(), OTHERS, "hot, critical and passive untouched");
+        assert_eq!(rig.pwm(), 0, "57 °C: below Very quiet's 60 °C, the fan stays off");
+        rig.temps(64.0, 60.0);
+        run(&mut e, &rig, &on(Fan::VeryQuiet), 0.5, 30.0);
+        assert!(rig.pwm() >= MIN_RUN_PWM as i64, "64 °C: running");
+        assert_eq!(rig.active(), ["83500"; 6]);
+        e.release("test");
+        assert_eq!(rig.active(), SYSTEM);
+        assert_eq!(rig.others(), OTHERS);
     }
 
     #[test]

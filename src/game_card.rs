@@ -245,7 +245,7 @@ pub enum Out {
     SetChoice(crate::gamedb::Choice),
     /// A on a Curator row.
     Row(RowKind),
-    /// START: which emulator plays the game ("Runs on", `emu_choice_page`).
+    /// START: the "This game" page (`this_game_page`), with "Runs on" (`emu_choice_page`) in it.
     Emulator,
     /// Right on a card opened by "Surprise me": pick another game.
     Another,
@@ -255,6 +255,8 @@ pub enum Out {
     PlanDelete,
     /// The second A on Delete.
     Delete { with_saves: bool },
+    /// SELECT switched between the box and the page: kept for the next card (`App::game_box`).
+    Details { boxed: bool },
 }
 
 pub struct Card {
@@ -272,6 +274,8 @@ pub struct Card {
     /// last paint.
     row_at: std::cell::RefCell<Vec<(i32, i32)>>,
     view_h: i32,
+    /// Shown as the game's box (`game_box`, SELECT switches); None: the page.
+    pub boxed: Option<crate::game_box::BoxView>,
 }
 
 /// A picture on the card besides the box art. The file is known to be there (its header was read), so the
@@ -307,6 +311,7 @@ impl Card {
             focus: None,
             row_at: Default::default(),
             view_h: 0,
+            boxed: None,
         }
     }
 
@@ -445,6 +450,26 @@ impl Card {
     }
 
     pub fn press(&mut self, b: Button) -> Out {
+        // The box: LEFT/RIGHT turn it over, up and down scroll its back, SELECT shows the page; the rest as on the page.
+        if let (Mode::View, Some(bx)) = (&self.mode, self.boxed.as_mut()) {
+            match b {
+                Button::Right if self.data.surprise.is_some() => return Out::Another,
+                Button::Left | Button::Right => {
+                    bx.flip();
+                    return Out::None;
+                }
+                Button::Up | Button::Down | Button::L1 | Button::R1 => {
+                    let step = if matches!(b, Button::L1 | Button::R1) { 4 * STEP } else { STEP };
+                    bx.scroll_by(if matches!(b, Button::Up | Button::L1) { -step } else { step });
+                    return Out::None;
+                }
+                Button::Select => {
+                    self.boxed = None;
+                    return Out::Details { boxed: false };
+                }
+                _ => {}
+            }
+        }
         match &mut self.mode {
             Mode::View => match b {
                 Button::East => match self.focus.and_then(|i| self.data.rows.get(i)) {
@@ -453,6 +478,11 @@ impl Card {
                 },
                 Button::South => Out::Back,
                 Button::Start => Out::Emulator,
+                // SELECT: the game's box again (`game_box`).
+                Button::Select => {
+                    self.boxed = Some(crate::game_box::BoxView::new());
+                    Out::Details { boxed: true }
+                }
                 Button::Up => self.up(),
                 Button::Down => self.down(),
                 Button::Right if self.data.surprise.is_some() => Out::Another,
@@ -635,10 +665,27 @@ impl Card {
     /// The button hints for the current mode.
     pub fn hints(&self) -> Vec<(&'static str, &'static str)> {
         match self.mode {
+            Mode::View if self.boxed.is_some() => {
+                // Y (the status) and X (the note) work as on the page; their hints make room for the box's own, so the
+                // bar fits a 640 px screen.
+                let mut h = vec![("A", "Play"), ("B", "Back"), ("LEFT RIGHT", "Turn over"), ("SELECT", "Page")];
+                // START as on the page: the game's settings, a port's performance and fan.
+                if self.data.surprise.is_none() {
+                    h.push(("START", if self.data.port.is_some() { "Performance" } else { "This game" }));
+                }
+                if self.data.surprise.is_some() {
+                    h[2] = ("LEFT", "Turn over");
+                    h.insert(2, ("RIGHT", "Another"));
+                }
+                if self.boxed.as_ref().is_some_and(|b| b.scrollable()) {
+                    h.push(("L1 R1", "Scroll"));
+                }
+                h
+            }
             Mode::View => {
                 let a = if self.focus.is_some() { "Open" } else { "Play" };
-                // START: which emulator plays the game ("Runs on"); a port has one, so its performance and fan instead.
-                let start = if self.data.port.is_some() { "Performance & fan" } else { "Emulator" };
+                // START: "This game" (picture, performance, controls, "Runs on"); a port has one emulator, so its performance and fan instead.
+                let start = if self.data.port.is_some() { "Performance & fan" } else { "This game" };
                 let mut h = vec![("A", a), ("B", "Back"), ("Y", "Status"), ("X", "Note"), ("START", start)];
                 if self.data.surprise.is_some() {
                     // A card of "Surprise me": another pick is the first thing after Play and Back; the emulator waits.
@@ -680,12 +727,15 @@ impl Card {
         let system = text.fit(Face::Body, 28, &self.data.system, crate::status_corner::room_left_of(left, c.w - MARGIN) - MARGIN);
         text.draw(c, Face::Body, 28, MARGIN, 72, pal().dust, &system);
         self.paint_label(c, text, cover);
-        // The body scrolls inside its own strip of the screen; whatever falls outside is cut off there.
-        let bottom = c.h - BODY_BOTTOM_GAP;
-        let view_h = bottom - BODY_TOP;
+        // The body scrolls inside its own strip of the screen; whatever falls outside is cut off there. On a screen
+        // too short for the label and the hints (640x480: 440 px top, 380 px bottom) the strip is empty rather than
+        // upside down; the card's top still paints, the body simply has no room.
+        let top = BODY_TOP.clamp(0, c.h);
+        let bottom = (c.h - BODY_BOTTOM_GAP).clamp(top, c.h);
+        let view_h = bottom - top;
         let w = c.w;
         {
-            let start = (BODY_TOP * w) as usize;
+            let start = (top * w) as usize;
             let end = (bottom * w) as usize;
             let mut body = Canvas::new(&mut c.buf[start..end], w as u32, view_h as u32);
             let height = self.paint_body(&mut body, text, -self.scroll);
@@ -704,13 +754,37 @@ impl Card {
                 }
             }
         }
-        if self.max_scroll > 0 {
+        if self.max_scroll > 0 && view_h > 0 {
             // A thin bar on the right: where in the page the view is.
             let total = view_h + self.max_scroll;
             let bar_h = (view_h * view_h / total).max(40);
             let bar_y = BODY_TOP + (view_h - bar_h) * self.scroll / self.max_scroll.max(1);
             c.rect(c.w - 28, BODY_TOP, 4, view_h, pal().spine);
             c.rect(c.w - 28, bar_y, 4, bar_h, pal().dust);
+        }
+        crate::setup::hints(c, text, &self.hints());
+        match &self.mode {
+            Mode::Status { sel, stars } => self.paint_picker(c, text, *sel, *stars),
+            Mode::Choose { sel, rows } => self.paint_chooser(c, text, *sel, rows),
+            Mode::Manage { sel } => self.paint_manage(c, text, *sel),
+            Mode::Delete(d) => self.paint_delete(c, text, d),
+            _ => {}
+        }
+    }
+
+    /// Paints the card as the game's box (`game_box`): the top line, the box, the hints and whatever is open over it.
+    pub fn paint_box(&mut self, c: &mut Canvas, text: &mut Text, inputs: &crate::game_box::Inputs, corner: Option<&crate::status_corner::Corner>) {
+        if matches!(self.mode, Mode::Note(_)) || self.boxed.is_none() {
+            return self.paint(c, text, None, corner);
+        }
+        c.clear(pal().void);
+        let top_y = crate::game_box::top_line(c.h);
+        let left = corner.map_or(c.w - MARGIN, |k| k.paint(c, text, c.w - MARGIN, top_y, pal().dust));
+        let line = format!("{} · {}", self.data.system, self.data.title);
+        let line = text.fit(Face::Body, 28, &line, crate::status_corner::room_left_of(left, c.w - MARGIN) - MARGIN);
+        text.draw(c, Face::Body, 28, MARGIN, top_y, pal().dust, &line);
+        if let Some(bx) = self.boxed.as_mut() {
+            bx.paint(c, text, &self.data, &self.pictures, inputs);
         }
         crate::setup::hints(c, text, &self.hints());
         match &self.mode {
@@ -1070,7 +1144,7 @@ impl Card {
         for (i, (name, meta)) in choices.iter().enumerate() {
             let y = top + i as i32 * (row + gap);
             let selected = i == sel;
-            c.rect(x, y, w, row, if selected { pal().label } else { pal().spine });
+            crate::kit::shelf_row(c, x, y, w, row, selected);
             c.rect(x, y, STRIPE, row, if selected { self.data.stripe } else { mix(self.data.stripe, pal().spine, 150) });
             let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else { (pal().chalk, pal().dust) };
             let name = text.fit(Face::Title, 37, name, w - STRIPE - 56);
@@ -1179,7 +1253,7 @@ impl Card {
         for (i, s) in Status::ALL.iter().enumerate() {
             let y = top + i as i32 * (row + gap);
             let selected = i == sel;
-            c.rect(x, y, w, row, if selected { pal().label } else { pal().spine });
+            crate::kit::shelf_row(c, x, y, w, row, selected);
             c.rect(x, y, STRIPE, row, if selected { self.data.stripe } else { mix(self.data.stripe, pal().spine, 150) });
             let fg = if selected { pal().ink } else { pal().chalk };
             paint_mark(c, x + STRIPE + 40, y + row / 2, *s, fg);
@@ -1198,7 +1272,7 @@ impl Card {
         // The rating: a spine like the statuses, its stars at the right end; left and right change them.
         let y = top + Status::ALL.len() as i32 * (row + gap) - gap + extra_gap;
         let selected = sel == RATING_ROW;
-        c.rect(x, y, w, row, if selected { pal().label } else { pal().spine });
+        crate::kit::shelf_row(c, x, y, w, row, selected);
         c.rect(x, y, STRIPE, row, if selected { self.data.stripe } else { mix(self.data.stripe, pal().spine, 150) });
         let (fg, dim, back) = if selected { (pal().ink, pal().label_dust, pal().label) } else { (pal().chalk, pal().dust, pal().spine) };
         // A star where the statuses have their marks.
@@ -1245,7 +1319,7 @@ impl Card {
         for (i, r) in rows.iter().enumerate() {
             let y = top + i as i32 * (row + gap);
             let selected = i == sel;
-            c.rect(x, y, w, row, if selected { pal().label } else { pal().spine });
+            crate::kit::shelf_row(c, x, y, w, row, selected);
             c.rect(x, y, STRIPE, row, if selected { self.data.stripe } else { mix(self.data.stripe, pal().spine, 150) });
             let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else { (pal().chalk, pal().dust) };
             let side = if r.current { "now" } else { "" };
@@ -1279,13 +1353,7 @@ pub fn cover_box() -> (i32, i32) {
 /// The sheet under a picker: the page colour; on the light page with a hairline edge and a shadow, since the
 /// washed-out card behind it is nearly the same colour.
 fn sheet(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32) {
-    // For the snapshot checks of Settings → Text size: the card under the sheet is dimmed, not read.
-    crate::text::boxes::covered();
-    c.rect(x, y, w, h, pal().void);
-    if pal().t > 0 {
-        c.frame(x, y, w, h, 1, pal().pick(VOID, 0xd6d0c4));
-        lift_shadow(c, x, y + h, w, pal().t);
-    }
+    crate::kit::sheet(c, x, y, w, h);
 }
 
 /// On the light page, a paper label lifts off the shelf: a soft shadow 6 px deep under its bottom edge (x, y, w).
@@ -1563,7 +1631,7 @@ mod tests {
         assert_eq!(battery_split("About 4 h left (Game Boy Color games)"), Some(("About 4 h left", "(Game Boy Color games)")));
         assert_eq!(battery_split("Measuring this game\u{2026}"), None);
         // START: the emulator for a game, Performance & fan for a port.
-        assert!(Card::new(data()).hints().contains(&("START", "Emulator")));
+        assert!(Card::new(data()).hints().contains(&("START", "This game")));
         let mut d = data();
         d.port = Some(("Auto, fan Auto".into(), true));
         d.battery = Some("About 3 h 20 min left, 18% an hour".into());

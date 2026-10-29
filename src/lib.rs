@@ -1,6 +1,9 @@
+/// OS adapters used at I/O boundaries; UI and matching logic stay shared.
+pub mod platform;
 pub mod control;
 pub mod proc;
 pub mod frame;
+pub mod scaled_layout;
 pub mod crash;
 pub mod logs;
 pub mod net_log;
@@ -20,6 +23,7 @@ pub mod players_page;
 pub mod touch;
 pub mod recents;
 pub mod text;
+pub mod this_game_page;
 /// The boot screen pocket-splash draws until sway takes over (docs/BOOT-SPLASH.md).
 pub mod splash;
 /// The first frame after the Pocket starts fades in from black (docs/BOOT-SPLASH.md).
@@ -39,6 +43,7 @@ pub mod sockets;
 pub mod remote;
 pub mod report;
 pub mod palette;
+pub mod kit;
 pub mod appearance;
 pub mod setup;
 // The feature registry, its cards and their previews (first start, Settings → Tour, "New in this version").
@@ -70,6 +75,8 @@ pub mod video;
 pub mod picture_fx;
 #[cfg(target_os = "linux")]
 pub mod headless_gl;
+pub mod hakux;
+pub mod heap_trim;
 pub mod hostsys;
 pub mod notice;
 pub mod archive;
@@ -177,8 +184,12 @@ pub mod curatordb;
 pub mod romfacts;
 /// Games recognised by their checksum: the No-Intro name for covers, pictures and the game facts (`rom_id`).
 pub mod rom_id;
+/// PlayStation discs recognised by the serial on the disc: the Redump name for covers, pictures and the game facts
+/// (`disc_serial`, the disc half of `rom_id`).
+pub mod disc_serial;
 pub mod library_meta;
 pub mod library_sync;
+pub mod game_box;
 pub mod game_card;
 pub mod consoles;
 pub mod console_page;
@@ -254,3 +265,28 @@ pub mod kept;
 // Helpers for the unit tests (fake programs the code under test runs).
 #[cfg(test)]
 pub(crate) mod testutil;
+
+/// The row above or below `sel` in a short menu of `n` rows, wrapping at the ends (Up from the top is the last row).
+pub fn wrap_step(sel: usize, n: usize, up: bool) -> usize {
+    match (n, up) {
+        (0, _) => 0,
+        (_, true) => (sel + n - 1) % n,
+        (_, false) => (sel + 1) % n,
+    }
+}
+
+#[cfg(test)]
+mod wrap_tests {
+    use super::wrap_step;
+
+    /// The pause menu clamped while every other menu wrapped: Quit took 8 presses from Continue, now Up once.
+    #[test]
+    fn short_menus_wrap_at_both_ends() {
+        assert_eq!(wrap_step(0, 7, true), 6, "Up from Continue reaches Quit");
+        assert_eq!(wrap_step(6, 7, false), 0);
+        assert_eq!((wrap_step(3, 7, true), wrap_step(3, 7, false)), (2, 4));
+        assert_eq!(wrap_step(0, 1, true), 0);
+        assert_eq!(wrap_step(0, 0, false), 0, "an empty menu doesn't divide by zero");
+    }
+}
+

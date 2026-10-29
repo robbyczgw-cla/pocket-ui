@@ -300,8 +300,9 @@ always go to RetroArch.
 
 ## Report a problem
 
-When something goes wrong, Settings → System → About → **Report a problem** puts what we need to find it into one
-file. Press A once. A few seconds later the Pocket shows the file's name, for example `report-2026-10-26-164007.zip`
+When something goes wrong, Settings → System → **Report a problem** (also in About, and in the question of
+SELECT + START held on the shelf) puts what we need to find it into one
+file. Press A once. When a game doesn't start, the message on the shelf says how to get there. A few seconds later the Pocket shows the file's name, for example `report-2026-10-26-164007.zip`
 (the date and time on the Pocket's clock, as for screenshots).
 
 **Where it is.** In the `reports` folder of the games share, the same place as `screenshots`: `roms/reports` on the SD

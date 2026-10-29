@@ -257,7 +257,7 @@ The list puts controllers first (icon `input-gaming`, Class of Device peripheral
 
 **After it connects** the controller is a new `/dev/input/event*` node. `pad::linux::supervise` looks at
 `/dev/input` once a second (`pad::event_nodes`, `Supervisor::tick`) and opens every new node with `BTN_SOUTH`,
-`KEY_POWER` or `KEY_VOLUMEUP`, so the menus take it without a restart; a node that goes and comes back (sleep,
+`KEY_POWER`, `KEY_VOLUMEUP` or `KEY_VOLUMEDOWN` (on the Mini V2 Vol- is its own node, `pm8941_resin`), so the menus take it without a restart; a node that goes and comes back (sleep,
 reconnect) has a new identity and is opened again (tests in `pad.rs`). Menus go by position: `BTN_EAST` confirms,
 `BTN_SOUTH` goes back, so on an Xbox pad B confirms.
 

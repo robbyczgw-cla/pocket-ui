@@ -745,16 +745,35 @@ pub mod boxes {
     }
 
     /// `(x, y, w, h)` of `c` was painted over (a card over the bottom of the shelf): what was there is not seen.
-    pub fn painted_over(c: &Canvas, (x, y, w, h): (i32, i32, i32, i32)) {
+    pub fn painted_over(c: &Canvas, rect: (i32, i32, i32, i32)) {
+        painted_over_or_covered(usize::MAX, c, rect, true);
+    }
+
+    /// What was painted before `mark` and lies under `(x, y, w, h)` is not read: an overlay (the letter of a jump)
+    /// covers the page there on purpose. What the overlay itself paints (after `mark`) stays.
+    pub fn covered_since(mark: usize, c: &Canvas, rect: (i32, i32, i32, i32)) {
+        painted_over_or_covered(mark, c, rect, false);
+    }
+
+    /// Drops what lies inside `rect` (`inside_only`) or anywhere under it, if it was painted before `mark`.
+    fn painted_over_or_covered(mark: usize, c: &Canvas, (x, y, w, h): (i32, i32, i32, i32), inside_only: bool) {
         let Some(Ok(mut rec)) = record().map(|r| r.lock()) else { return };
         let at = (c.buf.as_ptr() as usize / 4) as i64;
+        let before = mark.min(rec.len());
+        let mut i = 0;
         rec.retain(|(p, cw, (x0, y0, x1, y1), _, _)| {
-            if *cw != c.w {
+            let seen_before = i < before;
+            i += 1;
+            if !seen_before || *cw != c.w {
                 return true;
             }
             let dy = ((*p / 4) as i64 - at) / c.w as i64;
             let (y0, y1) = (*y0 as i64 + dy, *y1 as i64 + dy);
-            !(*x0 >= x && *x1 <= x + w && y0 >= y as i64 && y1 <= (y + h) as i64)
+            if inside_only {
+                return !(*x0 >= x && *x1 <= x + w && y0 >= y as i64 && y1 <= (y + h) as i64);
+            }
+            // Under it at all (the same 2 px as `finish` counts as running into something).
+            !(*x1.min(&(x + w)) - x0.max(&x) > 2 && y1.min((y + h) as i64) - y0.max(y as i64) > 2)
         });
     }
 

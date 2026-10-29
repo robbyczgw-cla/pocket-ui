@@ -2,6 +2,7 @@
 # The container half of scripts/make-image.sh. Runs in pocket-image-tools with the repository at /repo (read-only)
 # and the work directory at /w. Writes only to files in /w; never to a block device (there are none in here).
 #   build.sh extract              /w/base.img -> /w/KERNEL, /w/miniv2-noufs.dtb
+#   build.sh strip-system         /w/base.img's SYSTEM -> /w/SYSTEM, repacked without pins.sh SYSTEM_REMOVE
 #   build.sh assemble VERSION EPOCH
 #       /w/image.img (a copy of base.img) gets the boot files from /w/sd-efi, the initramfs hooks, the notes from
 #       /w/info, and pocket-ui from /w/bin on STORAGE. EPOCH (seconds) is the time stamp of every added file.
@@ -27,6 +28,57 @@ extract() {
   echo "KERNEL and miniv2-noufs.dtb extracted, both as expected"
 }
 
+# ROCKNIX's SYSTEM without the files in SYSTEM_REMOVE. Unpacked as root (owners, modes, device nodes and times
+# stay), the files removed, the directories that held them given back their old time, and packed again with the
+# settings ROCKNIX used (unsquashfs -s: zstd level 19, 1 MiB blocks, no xattrs) and its creation time. The listing of the new SYSTEM must be
+# the old one minus exactly the removed paths.
+strip_system() {
+  FAT="$W/base.img@@$((P1_START * 512))"
+  rm -rf "$W/SYSTEM.orig" "$W/SYSTEM" "$W/sysroot"
+  mcopy -n -i "$FAT" ::/SYSTEM "$W/SYSTEM.orig"
+  [ "$(md5 "$W/SYSTEM.orig")" = "$SYSTEM_MD5" ] || die "SYSTEM md5 is not ROCKNIX $ROCKNIX_TAG's $SYSTEM_MD5"
+  # The new SYSTEM keeps ROCKNIX's creation time (superblock bytes 8-11), so its md5 does not depend on our commit.
+  MKFS_TIME=$(od -An -t u4 -j 8 -N 4 "$W/SYSTEM.orig" | tr -d ' ')
+  unsquashfs -q -n -d "$W/sysroot" "$W/SYSTEM.orig" >/dev/null || die "unsquashfs failed"
+  for p in $SYSTEM_REMOVE; do
+    [ -e "$W/sysroot/$p" ] || die "$p is not in ROCKNIX's SYSTEM"
+    parent=$(dirname "$W/sysroot/$p")
+    stamp=$(stat -c %Y "$parent")
+    rm -rf "${W:?}/sysroot/$p"
+    touch -d "@$stamp" "$parent"
+  done
+  echo "$SYSTEM_ZIP_REMOVE" | while read -r z glob; do
+    [ -n "$z" ] || continue
+    [ -f "$W/sysroot/$z" ] || die "$z is not in ROCKNIX's SYSTEM"
+    n=$(unzip -Z1 "$W/sysroot/$z" | grep -c "^$(echo "$glob" | sed 's/\./\\./g; s/\*/[^\/]*/g')\$")
+    [ "$n" -gt 0 ] || die "$z holds nothing like $glob"
+    # zip -d writes a new file and renames it: the archive's and its folder's times are put back afterwards.
+    stamp=$(stat -c %Y "$W/sysroot/$z")
+    dstamp=$(stat -c %Y "$(dirname "$W/sysroot/$z")")
+    zip -q -d "$W/sysroot/$z" "$glob" || die "zip -d $z $glob failed"
+    touch -d "@$stamp" "$W/sysroot/$z"
+    touch -d "@$dstamp" "$(dirname "$W/sysroot/$z")"
+    ! unzip -Z1 "$W/sysroot/$z" | grep -q "^$(echo "$glob" | sed 's/\./\\./g; s/\*/[^\/]*/g')\$" || die "$glob still in $z"
+    unzip -tq "$W/sysroot/$z" >/dev/null || die "$z is damaged after zip -d"
+    echo "$z: $n entries $glob removed"
+  done
+  mksquashfs "$W/sysroot" "$W/SYSTEM" -comp zstd -Xcompression-level 19 -b 1048576 -no-xattrs -noappend \
+    -mkfs-time "$MKFS_TIME" -processors "${SQUASH_CPUS:-4}" -quiet -no-progress >/dev/null || die "mksquashfs failed"
+  rm -rf "$W/sysroot"
+  unsquashfs -lln "$W/SYSTEM.orig" | sed -n 's#^\([^ ]*\) \([^ ]*\) .* squashfs-root#\1 \2 #p' | sort >/tmp/list.orig
+  unsquashfs -lln "$W/SYSTEM" | sed -n 's#^\([^ ]*\) \([^ ]*\) .* squashfs-root#\1 \2 #p' | sort >/tmp/list.new
+  # Everything that went: the removed paths and whatever was below them.
+  comm -23 /tmp/list.orig /tmp/list.new | sed 's#^[^ ]* [^ ]* ##' >/tmp/gone
+  while read -r g; do
+    ok=0
+    for p in $SYSTEM_REMOVE; do case $g in "/$p" | "/$p"/*) ok=1 ;; esac; done
+    [ $ok = 1 ] || die "repacked SYSTEM lost $g, which is not in SYSTEM_REMOVE"
+  done </tmp/gone
+  [ -z "$(comm -13 /tmp/list.orig /tmp/list.new)" ] || die "repacked SYSTEM has entries ROCKNIX's has not: $(comm -13 /tmp/list.orig /tmp/list.new | head -3)"
+  rm -f "$W/SYSTEM.orig"
+  echo "SYSTEM repacked without $(wc -l </tmp/gone) entries: $(stat -c %s "$W/SYSTEM") bytes, md5 $(md5 "$W/SYSTEM")"
+}
+
 assemble() {
   VERSION=$1
   EPOCH=$2
@@ -41,15 +93,15 @@ assemble() {
   # Everything that goes in, staged here so owners (root), modes and times are exact.
   S=/tmp/stage
   rm -rf "$S"
-  mkdir -p "$S/fat/EFI/BOOT" "$S/fat/boot/grub" "$S/fat/boot/pocket" "$S/fat/pocket-ui-info/licences" "$S/storage/licences"
+  mkdir -p "$S/fat/EFI/BOOT" "$S/fat/boot/grub" "$S/fat/boot/pocket" "$S/fat/pocket-ui-info" "$S/storage/licences"
   cp "$E/EFI/BOOT/BOOTAA64.EFI" "$S/fat/EFI/BOOT/"
   cp "$E/boot/grub/grub.cfg" "$E/boot/grub/grub-efi-arm64-bin.version" "$S/fat/boot/grub/"
   cp "$E/boot/pocket/Image" "$E/boot/pocket/miniv2-noufs.dtb" "$E/boot/pocket/KERNEL.source.md5" "$S/fat/boot/pocket/"
   cp /repo/deploy/image/post-flash.sh /repo/deploy/image/mount-storage.sh "$S/fat/"
-  cp "$W/info/README.txt" "$S/fat/pocket-ui-info/"
-  for f in LICENSE NOTICE.md; do [ ! -f "$W/info/$f" ] || cp "$W/info/$f" "$S/fat/pocket-ui-info/"; done
-  # The same texts on the card and in STORAGE (/storage/pocket-ui/licences, where Settings > About points).
-  cp "$W/info/licences/"* "$S/fat/pocket-ui-info/licences/"
+  # The notes, the source offer, pocket-ui's LICENSE and NOTICE.md, licences/ (crates, fonts), rocknix-licenses/
+  # (ROCKNIX's LICENSE.md and licenses folder at the tag) and firmware-licences/ (the firmware's terms).
+  cp -r "$W/info/." "$S/fat/pocket-ui-info/"
+  # The crates' and fonts' texts also in STORAGE (/storage/pocket-ui/licences, where Settings > About points).
   cp "$W/info/licences/"* "$S/storage/licences/"
   for f in pocket-ui pocket-core pocket-splash; do install -m 755 "$W/bin/$f" "$S/storage/$f"; done
   install -m 755 /repo/deploy/portmaster-setup.sh "$S/storage/portmaster-setup.sh"
@@ -63,13 +115,32 @@ assemble() {
   # rocknix_abl/ holds ROCKNIX's replacement for Retroid's bootloader (abl) and scripts that flash it. This boot
   # path never uses it, and flashing it is what this setup avoids, so it is not on the card.
   mdeltree -i "$FAT" ::/rocknix_abl
-  for d in EFI EFI/BOOT boot boot/grub boot/pocket pocket-ui-info pocket-ui-info/licences; do
+  # SYSTEM without the files in pins.sh SYSTEM_REMOVE (strip-system), and its .md5 in ROCKNIX's format.
+  # A new SYSTEM_REMOVE (or a new mksquashfs) gives a new md5: then pins.sh is "unset" for one build, which prints it.
+  sysmd5=$(md5 "$W/SYSTEM")
+  if [ "$POCKET_SYSTEM_MD5" = unset ]; then
+    echo "WARNING: POCKET_SYSTEM_MD5 is unset; this SYSTEM's md5 is $sysmd5 (pin it in pins.sh and build again)" >&2
+  elif [ "$sysmd5" != "$POCKET_SYSTEM_MD5" ]; then
+    die "SYSTEM md5 $sysmd5 is not POCKET_SYSTEM_MD5 ($POCKET_SYSTEM_MD5)"
+  fi
+  printf '%s  target/SYSTEM\n' "$sysmd5" >"$S/SYSTEM.md5"
+  touch -d "@$EPOCH" "$S/SYSTEM.md5" "$W/SYSTEM"
+  mdel -i "$FAT" ::/SYSTEM ::/SYSTEM.md5
+  mcopy -m -i "$FAT" "$W/SYSTEM" ::/SYSTEM
+  mcopy -m -i "$FAT" "$S/SYSTEM.md5" ::/SYSTEM.md5
+  (cd "$S/fat" && find . -mindepth 1 -type d | sed 's#^\./##' | sort) | while read -r d; do
     mmd -i "$FAT" "::/$d"
   done
   (cd "$S/fat" && find . -type f | sed 's#^\./##' | sort) | while read -r f; do
     mcopy -m -i "$FAT" "$S/fat/$f" "::/$f"
   done
   mdir -/ -b -i "$FAT" ::/ | sed 's#^::/#  #'
+  # The clusters of ROCKNIX's original SYSTEM are free now but still hold its bytes, with the files SYSTEM_REMOVE
+  # leaves out: zero every free cluster (scripts/image/fat-free-zero.py), then let fsck.vfat look at the result.
+  python3 -I /repo/scripts/image/fat-free-zero.py "$IMG" "$((P1_START * 512))" || die "zeroing the free FAT clusters failed"
+  dd if="$IMG" of=/tmp/p1.fat bs=512 skip="$P1_START" count="$P1_SIZE" status=none
+  fsck.vfat -n /tmp/p1.fat >/tmp/fsck.log 2>&1 || { cat /tmp/fsck.log >&2; die "fsck.vfat found errors on the FAT partition"; }
+  rm -f /tmp/p1.fat
 
   echo "== STORAGE partition"
   P2=$W/p2.ext4
@@ -130,6 +201,7 @@ assemble() {
 
 case ${1:-} in
   extract) extract ;;
+  strip-system) shift; strip_system "$@" ;;
   assemble) shift; assemble "$@" ;;
-  *) die "usage: build.sh extract | assemble VERSION EPOCH" ;;
+  *) die "usage: build.sh extract | strip-system | assemble VERSION EPOCH" ;;
 esac

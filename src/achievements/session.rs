@@ -743,6 +743,21 @@ mod tests {
         Session::start(config, memory, Box::new(Shared2(mock))).expect("session")
     }
 
+    /// Waits up to 10 s for what the worker writes (`menu_opened`): the pause menu's list and the summary the shelf
+    /// shows come from its thread, and how long that takes is the machine's business, not a test's sleep.
+    fn until<T>(mut f: impl FnMut() -> Option<T>) -> Option<T> {
+        let until = Instant::now() + Duration::from_secs(10);
+        loop {
+            if let Some(v) = f() {
+                return Some(v);
+            }
+            if Instant::now() > until {
+                return None;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
     /// Runs frames until rc_client has loaded the set (its activation happens in a frame: memory is read only there).
     /// The bounds are generous (10 s): these loops end as soon as the condition holds, and inside a full gate next to
     /// compiles the mock server and rc_client's threads took longer than 2 s (2026-10-25).
@@ -802,10 +817,12 @@ mod tests {
         );
         assert!(!offline::Pending::path(&dir).exists(), "the server confirmed it: nothing waits");
         s.menu_opened();
-        std::thread::sleep(Duration::from_millis(200));
-        let menu = Snapshot::read(&dir.join("snapshot.json"), &dir.join("Game.nes")).expect("the menu's list");
+        // The worker writes the menu's list and the shelf's summary: wait for them with what the session unlocked
+        // (200 ms of sleep was a guess about the machine; in a gate the write took longer and the test read nothing).
+        let read = || Snapshot::read(&dir.join("snapshot.json"), &dir.join("Game.nes"));
+        let menu = until(|| read().filter(|s| (s.unlocked, s.total) == (2, 2))).expect("the menu's list");
         assert_eq!((menu.unlocked, menu.total, menu.points_unlocked, menu.points), (2, 2, 7, 7));
-        assert_eq!(Summary::load(&dir, "nes", &dir.join("Game.nes")).unwrap().text().as_deref(), Some("2 of 2"));
+        assert_eq!(until(|| Summary::load(&dir, "nes", &dir.join("Game.nes"))).expect("the summary").text().as_deref(), Some("2 of 2"));
         s.close(Duration::from_secs(5));
     }
 

@@ -23,60 +23,20 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Fullscreen, Window, WindowId};
 
-use super::{App, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_BUTTON, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
 
 // ---- painting, shared by safe mode and the App ------------------------------------------------------------------
 
 /// Button hints in a dark pill at the bottom right (the App's `nu_hints`, and safe mode's); returns where the pill
-/// starts.
+/// starts (`kit::pill_hints`).
 pub(crate) fn paint_hints(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, hints: &[(&str, &str)]) -> i32 {
-    let (pad, pill, btn) = (NU_PAD, NU_PILL, NU_BUTTON);
-    let gap = (pill - btn) / 2;
-    let mut widths: Vec<(i32, i32)> = hints.iter().map(|(k, l)| (text.width(Face::Body, NU_SMALL, k).max(btn - 16), text.width(Face::Body, NU_SMALL, l))).collect();
-    // Larger text (`type_scale`) or a long translation: labels that don't fit on the line go, last first, and their
-    // keys stay.
-    let shown = pocket_ui::type_scale::hint_labels_that_fit(&widths.iter().map(|(kw, lw)| ((kw + 16).max(btn) + gap, lw + gap * 2)).collect::<Vec<_>>(), c.w - 2 * pad - gap);
-    for w in widths.iter_mut().skip(shown) {
-        w.1 = -gap;
-    }
-    let inner: i32 = widths.iter().map(|(kw, lw)| (kw + 16).max(btn) + gap + lw + gap * 2).sum();
-    let w = inner + gap;
-    let (x0, y0) = (c.w - pad - w, c.h - pad - pill);
-    c.round_rect(x0, y0, w, pill, pill / 2, pal().pill);
-    // For the snapshot checks of Settings → Text size: nothing else may run under the pill.
-    pocket_ui::text::boxes::area(c, (x0, y0, w, pill), "‹hints›");
-    let mut x = x0 + gap;
-    for ((key, label), (kw, lw)) in hints.iter().zip(widths) {
-        let bw = (kw + 16).max(btn);
-        let start = x;
-        c.round_rect(x, y0 + gap, bw, btn, btn / 2, pal().chip);
-        let tw = text.width(Face::Body, NU_SMALL, key);
-        let base = y0 + pill / 2 + pocket_ui::type_scale::mid(NU_SMALL);
-        text.draw(c, Face::Body, NU_SMALL, x + (bw - tw) / 2, base, pal().pill, key);
-        x += bw + gap;
-        if lw >= 0 {
-            text.draw(c, Face::Body, NU_SMALL, x, base, pal().soft, label);
-        }
-        x += lw + gap * 2;
-        if let Some(b) = touch::hint_button(key) {
-            hits.button(Area::new(start - gap, y0 - 8, x - start - gap, pill + 16), b);
-        }
-    }
-    x0
+    pocket_ui::kit::pill_hints(c, text, hits, hints)
 }
 
-/// A list row in the Settings style: the band across, the name on a pill when selected. Returns its text baseline.
-pub(crate) fn paint_row(c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, i32), font: u32, label: &str, selected: bool) -> i32 {
-    let base = y + h / 2 + pocket_ui::type_scale::mid(font);
-    if selected {
-        let lw = text.width(Face::Body, font, label) + 2 * NU_BTN_PAD;
-        c.round_rect(x, y + 4, w, h - 8, (h - 8) / 2, pal().band);
-        c.round_rect(x, y + 4, lw.min(w), h - 8, (h - 8) / 2, pal().select);
-        text.draw(c, Face::Body, font, x + NU_BTN_PAD, base, pal().ink, label);
-    } else {
-        text.draw(c, Face::Body, font, x + NU_BTN_PAD, base, pal().text, label);
-    }
-    base
+/// A list row in the Settings style: the band across, the name on a pill when selected. Returns its text baseline
+/// (`kit::row_label`).
+pub(crate) fn paint_row(c: &mut Canvas, text: &mut Text, rect: (i32, i32, i32, i32), font: u32, label: &str, selected: bool) -> i32 {
+    pocket_ui::kit::row_label(c, text, rect, font, label, selected)
 }
 
 /// A dialog on a sheet over the dimmed page: the title, what to know (warnings with a mark in the alert colour), the
@@ -96,9 +56,8 @@ pub(crate) fn paint_dialog(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, d
     let choices = d.choices();
     let h = 48 + 58 + 26 + body_h + 16 + choices.len() as i32 * row + 36;
     let y = ((c.h - NU_PILL - NU_PAD - h) / 2).max(NU_PAD);
-    // A sheet like Curator's (`paint_sheet`): the page colour, a hairline round it.
-    c.rect(x, y, w, h, pal().void);
-    c.frame(x, y, w, h, 1, if pal().t > 0 { pal().pick(VOID, 0xd6d0c4) } else { pal().pill });
+    // A sheet like Curator's and the game card's pickers (`kit::sheet`).
+    pocket_ui::kit::sheet(c, x, y, w, h);
     let left = x + 48;
     let mut ty = y + 48 + 46;
     text.draw(c, Face::Title, 50, left, ty, pal().chalk, d.title());
@@ -161,7 +120,7 @@ fn paint_page(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, page: &RescueP
     let head = 46;
     let panel_h = head + lines.iter().map(|(_, px, _)| pocket_ui::type_scale::line(*px, 12)).sum::<i32>() + 20;
     let panel_y = pad + 58 + 48 + 30 + sub_extra;
-    c.round_rect(pad, panel_y, c.w - 2 * pad, panel_h, 24, pal().pill);
+    pocket_ui::kit::panel(c, pad, panel_y, c.w - 2 * pad, panel_h);
     text.draw(c, Face::Body, 24, left, panel_y + 36, pal().dust, "What happened");
     let mut y = panel_y + head;
     for (l, px, colour) in &lines {
@@ -223,6 +182,13 @@ impl App {
             DialogOut::Close => self.leave = None,
             DialogOut::Chose(c) => {
                 self.leave = None;
+                // Report a problem: Settings → System → About, where the sheet says where the file went.
+                if c == rescue::Choice::Report {
+                    self.settings_page = self.open_about();
+                    self.write_report();
+                    self.request_redraw();
+                    return true;
+                }
                 if let Some(code) = rescue::exit_code(c) {
                     println!("rescue: leaving pocket-ui ({c:?}, exit {code})");
                     self.exit_code = code;
@@ -354,7 +320,7 @@ impl Rescue {
         let size = window.inner_size();
         let (Some(w), Some(h)) = (NonZeroU32::new(size.width), NonZeroU32::new(size.height)) else { return };
         let mut surface = std::mem::replace(&mut self.surface, pocket_ui::frame::Presenter::empty());
-        let drawn = surface.draw(w, h, &mut |pixels| self.paint(&mut Canvas::new(pixels, w.get(), h.get())));
+        let drawn = surface.draw_scaled(w, h, &mut |pixels, lw, lh| self.paint(&mut Canvas::new(pixels, lw, lh)));
         self.surface = surface;
         if drawn && !self.drew_first {
             self.drew_first = true;
@@ -403,7 +369,8 @@ impl ApplicationHandler<UserEvent> for Rescue {
             UserEvent::Touch(t) => {
                 let Some(window) = &self.window else { return };
                 let size = window.inner_size();
-                let (x, y) = touch::to_px((t.x, t.y), size.width, size.height);
+                let (w, h) = pocket_ui::scaled_layout::logical_size((size.width, size.height));
+                let (x, y) = touch::to_px((t.x, t.y), w, h);
                 match self.touch_rec.feed(t.phase, x, y, std::time::Instant::now(), self.hits.pitch()) {
                     Some(Gesture::Tap { x, y }) => match self.hits.tap(x, y) {
                         TapAction::Nothing => {}

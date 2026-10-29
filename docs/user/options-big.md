@@ -24,6 +24,20 @@ The 3DS has its own list:
 | Show FPS | on/off (a small counter in the corner) |
 | Performance | Max, Auto, Battery |
 
+## Xbox (experimental)
+
+Options of an Xbox game (hakuX in RetroArch). There are no save states yet, so a change **takes effect the next time the game
+starts** (the page says so); pocket-ui does not restart the game under you.
+
+| Option | Xbox |
+|---|---|
+| Resolution | Original (480p, the Xbox's own), 2x (960p: sharper, more GPU). The default is 2x on the AYN Odin 2 and the other Snapdragon 8 Gen 2 handhelds, Original elsewhere |
+| Screen scaling | Aspect (4:3 with black bars, the default), Fullscreen (stretches to the whole screen), Integer (whole-number multiples) |
+| Performance | Max, Auto, Battery (applies at once) |
+
+Set it for one game here; set it for all Xbox games with `xbox.pocket_resolution` and `xbox.pocket_scaling` in ROCKNIX's
+system.cfg. The same names as pocket-core's Options → Picture → Screen scaling.
+
 With **Top only** the bottom screen is hidden; games that need the touch screen need one of the
 others.
 

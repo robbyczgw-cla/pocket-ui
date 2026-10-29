@@ -187,10 +187,16 @@ pub fn rows_above(max_rows: usize, top_for: impl Fn(usize) -> i32, bottom: i32, 
 /// images stay put when a sub-choice appears; Medium and Large show as many as leave the images `LARGE_MIN_SHARE` of the screen
 /// (`rows_above`) and keeps at most the five lines the explanation shows free for it.
 pub fn picture_page(screen: (i32, i32), pad: i32, list_top: i32, max_rows: usize, desc_lines: usize, desc_font: u32) -> (usize, Layout) {
+    picture_page_over(screen, pad, pad, list_top, max_rows, desc_lines, desc_font)
+}
+
+/// `picture_page` with the explanation's lines standing `foot` px higher than `pad` from the bottom edge would put
+/// them: over the hint pill (`kit::footer`).
+pub fn picture_page_over(screen: (i32, i32), pad: i32, foot: i32, list_top: i32, max_rows: usize, desc_lines: usize, desc_font: u32) -> (usize, Layout) {
     let (w, h) = screen;
     let large = crate::type_scale::scaled();
     let lines = if large { desc_lines.min(5) } else { desc_lines };
-    let footer_top = h - pad - lines as i32 * crate::type_scale::line(desc_font, 10) + desc_font as i32 / 4;
+    let footer_top = h - foot - lines as i32 * crate::type_scale::line(desc_font, 10) + desc_font as i32 / 4;
     let bottom = footer_top - 20;
     let row = crate::type_scale::row(66, 36);
     let top_for = |n: usize| list_top + n as i32 * row + 18;

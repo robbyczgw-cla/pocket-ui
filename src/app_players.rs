@@ -20,7 +20,7 @@ use pocket_ui::text::Face;
 use winit::application::ApplicationHandler;
 use winit::event_loop::ActiveEventLoop;
 
-use super::{stripe, App, MainItem, Page, UserEvent, CANCEL, CONFIRM, DUST, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{stripe, App, MainItem, Page, UserEvent, CANCEL, CONFIRM, DARK, DUST, INK, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
 
 /// How often the reader looks at pocket-core's seats while the page is open.
 const LOOK_EVERY: Duration = Duration::from_millis(250);
@@ -218,8 +218,8 @@ impl App {
             let name_w = self.text.width(Face::Body, font, &name) + 2 * NU_BTN_PAD;
             if i == sel {
                 c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, accent);
-                c.round_rect(pad, y + 4, name_w, row - 8, (row - 8) / 2, 0xe9f2f1);
-                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, 0x151515, &name);
+                c.round_rect(pad, y + 4, name_w, row - 8, (row - 8) / 2, DARK.select);
+                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, INK, &name);
             } else {
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, 0xffffff, &name);
             }

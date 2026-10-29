@@ -4,6 +4,10 @@
     scripts/build-gamedb.py                 query what is not cached yet, then write assets/gamedb.bin
     scripts/build-gamedb.py --refresh       query everything again
     scripts/build-gamedb.py --only gb,nes   only these systems (for trying the queries)
+    scripts/build-gamedb.py --only xbox --merge
+                                            these systems added to (or replaced in) the file as it is, every other
+                                            system's section kept byte for byte (a new system without a new query of
+                                            all the others; its works are resolved among its own games only)
 
 For every system pocket-ui knows, the Wikidata SPARQL endpoint is asked for video games whose platform
 (P400) is that console: English label and aliases (or the language-neutral "mul" ones, which Wikidata
@@ -93,6 +97,8 @@ SYSTEMS = {
     "naomi": ["Q1369174", "Q843916"],  # Sega NAOMI, NAOMI 2
     "atomiswave": ["Q757617"],
     "pokemini": ["Q1759168"],
+    # Added 2026-10-29 with hakuX (docs/XBOX.md), merged into the file of 2026-10-23 (--merge).
+    "xbox": ["Q132020"],  # Xbox (the first one)
 }
 
 FIELDS = ["qid", "label", "year", "developers", "publishers", "genres", "series", "modes", "players", "scores", "aliases", "enwiki", "sitelinks", "redump",
@@ -483,11 +489,24 @@ def resolve_works(systems, refresh=False):
     return works
 
 
+def read_sections():
+    """The file as it is: (system, zlib stream) in its order; empty when there is none."""
+    if not OUT.exists():
+        return []
+    data = OUT.read_bytes()
+    end = data.index(b"\n\n")
+    lines = data[:end].decode().split("\n")
+    assert lines[0] == "PGDB1", f"{OUT}: not a PGDB1 file"
+    base = end + 2
+    return [(n, data[base + int(o):base + int(o) + int(ln)]) for n, o, ln in (l.split() for l in lines[1:])]
+
+
 def write(sections):
+    """`sections`: (system, text) to compress, or (system, bytes) already compressed (kept as they were)."""
     blobs, header = [], ["PGDB1"]
     offset = 0
     for system, text in sections:
-        blob = zlib.compress(text.encode(), 9)
+        blob = text if isinstance(text, bytes) else zlib.compress(text.encode(), 9)
         header.append(f"{system} {offset} {len(blob)}")
         blobs.append(blob)
         offset += len(blob)
@@ -503,6 +522,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--refresh", action="store_true", help="query everything again instead of using the cache")
     ap.add_argument("--only", help="comma-separated system ids")
+    ap.add_argument("--merge", action="store_true", help="keep the other systems of the existing file as they are")
     args = ap.parse_args()
     only = set(args.only.split(",")) if args.only else None
     sections, raw, games = [], 0, 0
@@ -521,6 +541,12 @@ def main():
         games += n
         print(f"{system:16} {n:6} games", file=sys.stderr)
         sections.append((system, text))
+    if args.merge:
+        built = dict(sections)
+        kept = read_sections()
+        names = [n for n, _ in kept]
+        sections = [(n, built.get(n, blob)) for n, blob in kept] + [(n, t) for n, t in sections if n not in names]
+        print(f"merged: {len(kept)} systems kept, {sorted(built)} written", file=sys.stderr)
     size = write(sections)
     print(f"{games} entries, {raw / 1e6:.2f} MB of text, {size / 1e6:.2f} MB compressed -> {OUT}", file=sys.stderr)
 

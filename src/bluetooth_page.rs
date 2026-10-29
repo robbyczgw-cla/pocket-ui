@@ -343,7 +343,8 @@ impl BluetoothPage {
                 match &self.busy {
                     Some(Busy::Pairing { address, step }) if *address == d.address => match step {
                         Step::Looking => "Looking".into(),
-                        Step::Trusting => "Trusting".into(),
+                        // "Trusting" is bluetoothctl's word; the player sees one word for the whole pairing.
+                        Step::Trusting => "Pairing".into(),
                         Step::Connecting => "Connecting".into(),
                         _ => "Pairing".into(),
                     },
@@ -647,7 +648,7 @@ mod tests {
         assert!(scan.load(Ordering::Relaxed) && p.searching.is_none(), "discovery gets in the way of pairing");
         assert_eq!(p.value(p.row()), "Pairing");
         assert_eq!(press(&mut p, CONFIRM), Action::Nothing, "one thing at a time");
-        for (step, word) in [(Step::Trusting, "Trusting"), (Step::Connecting, "Connecting")] {
+        for (step, word) in [(Step::Trusting, "Pairing"), (Step::Connecting, "Connecting")] {
             p.event(Event::Progress {
                 address: "E4:17:D8:0B:1D:0E".into(),
                 step,

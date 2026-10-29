@@ -13,7 +13,7 @@ use pocket_ui::home_panel::{self, CuratorToday, List, Panel, Tile};
 use pocket_ui::palette::pal;
 use pocket_ui::text::Face;
 
-use super::{stripe, App, Item, Screen};
+use super::{stripe, App, Item};
 
 /// The colours a panel is painted with: the captions', and the page under it (the label's paper, Split's panel).
 pub(crate) struct Ink {
@@ -59,11 +59,11 @@ impl App {
                 let games = self.favorite_items().into_iter().filter_map(|i| if let Item::Game(s, g) = i { self.game_tile(s, g) } else { None }).collect();
                 Some(home_panel::list(List::Favorites, games, self.describe(item).3, true))
             }
-            // Only where they are rows of Home: pinned ones have their first games kept (`curator_counts`).
-            Item::SmartShelf(i) if self.screen == Screen::Home => {
+            // Rows of Home and of Curator's list alike: the first games of each are kept (`curator_counts`).
+            Item::SmartShelf(i) => {
                 Some(home_panel::list(List::SmartShelf, tiles(self.curator.shelf_tops.get(&i)), self.describe(item).3, ready))
             }
-            Item::Sticker(id) if self.screen == Screen::Home => {
+            Item::Sticker(id) => {
                 Some(home_panel::list(List::Sticker, tiles(self.curator.sticker_tops.get(&id)), self.describe(item).3, ready))
             }
             _ => None,

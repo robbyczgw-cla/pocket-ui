@@ -369,8 +369,7 @@ impl App {
 
     pub(crate) fn paint_starter(&mut self, c: &mut Canvas) {
         c.clear(pal().void);
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, NU_PAD + NU_BTN_PAD, NU_PAD + 58, pal().chalk, "Starter pack");
+        self.sheet_header(c, "Starter pack");
         let top = NU_PAD + NU_PILL + 12;
         let rows = self.starter.rows();
         let sel = self.starter.sel.min(rows.len().saturating_sub(1));

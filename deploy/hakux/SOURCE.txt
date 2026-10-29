@@ -1,0 +1,17 @@
+hakuX core for pocket-ui (Xbox, experimental)
+
+Program:   hakuX, an Xbox emulator by rfandango (GPL-3.0-or-later)
+Port:      Linux / libretro port by portare-ch (PortareOS), https://github.com/rfandango/hakuX/pull/9
+Commit:    531ce8d965f4758a16c36fa2c09e55a84c67fc93 (head of PR #9 on 2026-10-28)
+Patch:     + audio relaunch fix (ours, GPL-3.0-or-later, submitted upstream): the APU's DSP preference is set on every new APU state, so
+           the sound no longer stays silent after a title relaunch. Commit 951124c7b4 (branch fix/apu-relaunch-silence-final);
+           the patch is in the pocket-ui source: deploy/hakux/patches/0001-apu-dsp-preference-per-apu-state.patch
+Source:    https://github.com/rfandango/hakuX/pull/9  (head branch: https://github.com/portare-ch/hakuX)
+             (git fetch https://github.com/rfandango/hakuX.git refs/pull/9/head)
+Built by:  the PR's own tools/native/linux-build.sh in its pinned Debian image (arm64, Clang 19, glibc 2.41), run in an aarch64
+           container on an Apple Silicon Mac; see scripts/build-hakux-core.sh. STRIP=strip, JOBS=2, HAKUX_VERSION=pr9-531ce8d-audiofix.
+Package:   hakux-pr9-531ce8d-audiofix-aarch64.tar.gz, sha256 232ac101070893ebc55cf8ad1c83355e460ede2a7813672e560cdc70ac7f43af
+Core:      hakux_libretro.so, sha256 4822d1563ac57225b19bbf9820221c67c6792ce96cb05d9ff3fc915f22f5ecf4 (needs glibc 2.38 at most)
+
+The core is loaded by ROCKNIX's RetroArch (GPL-3.0-or-later), a separate program that pocket-ui starts. Licence texts of hakuX and
+of the parts built into the core (FEX, SDL3, SoftFloat, VulkanMemoryAllocator and others) are in the "licenses" folder beside it.

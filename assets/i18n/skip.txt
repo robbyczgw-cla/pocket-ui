@@ -27,8 +27,9 @@ Failed to pair: org.bluez.Error.AuthenticationFailed
 # src/app_cabinet.rs
 big spine
 plain front
-lying case
-shelf front
+standing spine
+shown front
+shelf tile
 
 # src/app_curator.rs
 Burnout Paradise
@@ -258,6 +259,7 @@ PlayStation video game
 PC Engine
 Atari 2600
 Lynx
+Xbox video game
 PGDB1
 Metacritic
 Famitsu
@@ -305,6 +307,8 @@ games recognised
 after look up again
 
 # src/main.rs
+Mario Kart 8
+Demon's Souls
 Seiken Densetsu 3 (Japan).bps
 game exit: shelf ready
 after a game
@@ -957,3 +961,9 @@ wlan0 not ready yet
 {s}[key dump hidden]
 NAME,UUID,TYPE
 what the network programs said (Wi-Fi, Tailscale) and the names of the saved networks
+
+# src/hakux.rs, src/pixel_standalone.rs: RetroArch's core-options file and network commands, a log line
+hakux_render_scale = "{s}"\nhakux_crop_overscan = "enabled"\nhakux_screen_format = "normal"\nhakux_language = "english"\nhakux_video_region = "auto"
+SAVE_STATE_SLOT {s}
+LOAD_STATE_SLOT {s}
+hakuX has no settings pocket-ui reads (Pixel Path)

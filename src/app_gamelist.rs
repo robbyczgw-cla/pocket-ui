@@ -251,8 +251,7 @@ impl App {
     fn paint_gamelist_page(&mut self, c: &mut Canvas, page: &Page) {
         c.clear(pal().void);
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(58, 34), 34u32);
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, SETTINGS_NAME);
+        self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         let list_bottom = c.h - pad - NU_PILL - 16 - DETAILS_H;
         for (i, r) in page_mod::ROWS.iter().enumerate() {

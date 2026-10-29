@@ -17,7 +17,7 @@ To pair a device:
    press of the power or Bluetooth button.
 2. Select **Search for devices** and press A. Controllers appear at the top of the list, with a small controller
    in front of their name.
-3. Select your device and press A. The row shows Pairing, Trusting and Connecting, and the page tells you when it
+3. Select your device and press A. The row shows Pairing and Connecting, and the page tells you when it
    is connected. If it did not work, the page says why, most often: "Put the device in pairing mode first."
 
 A paired controller reconnects by itself when you switch it on, even after the Pocket has slept. You can use it in the

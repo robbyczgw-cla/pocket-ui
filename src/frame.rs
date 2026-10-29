@@ -32,6 +32,7 @@ const LOG_EVERY: Duration = Duration::from_secs(10);
 
 pub struct Presenter<T: Target> {
     target: Option<T>,
+    scaled: crate::scaled_layout::ScaledFrame,
     make: Option<Box<dyn FnMut() -> Result<T, String>>>,
     /// Frames in a row that failed.
     failures: u32,
@@ -44,6 +45,7 @@ impl<T: Target> Presenter<T> {
     pub fn empty() -> Self {
         Presenter {
             target: None,
+            scaled: Default::default(),
             make: None,
             failures: 0,
             retry_at: None,
@@ -55,6 +57,14 @@ impl<T: Target> Presenter<T> {
     pub fn set_factory(&mut self, make: impl FnMut() -> Result<T, String> + 'static) {
         self.make = Some(Box::new(make));
         self.target = None;
+    }
+
+    /// Paint a supported logical layout and reduce it into the compositor's physical buffer.
+    pub fn draw_scaled(&mut self, w: NonZeroU32, h: NonZeroU32, paint: &mut dyn FnMut(&mut [u32], u32, u32)) -> bool {
+        let mut scaled = std::mem::take(&mut self.scaled);
+        let drawn = self.draw(w, h, &mut |output| scaled.render(output, (w.get(), h.get()), paint));
+        self.scaled = scaled;
+        drawn
     }
 
     /// Draws one frame. False when it was skipped: the target is made anew for the next try, and
@@ -175,6 +185,23 @@ mod tests {
         assert_eq!(seen, 12);
         assert_eq!(script.borrow().presented, 1);
         assert!(p.retry_at().is_none());
+    }
+
+    #[test]
+    fn scaled_presenter_keeps_surface_physical_and_rebuilds_after_resize() {
+        let script = Rc::new(RefCell::new(Script::default()));
+        let mut p = presenter(&script);
+        for (panel, logical) in [((640, 480), (1280, 960)), ((720, 720), (1280, 1280)), ((1240, 1080), (1240, 1080))] {
+            assert!(p.draw_scaled(nz(panel.0), nz(panel.1), &mut |buf, w, h| {
+                assert_eq!((w, h), logical);
+                assert_eq!(buf.len(), w as usize * h as usize);
+                buf.fill(0xabcdef);
+            }));
+            let surface = p.target.as_ref().unwrap();
+            assert_eq!(surface.buf.len(), panel.0 as usize * panel.1 as usize);
+            assert!(surface.buf.iter().all(|v| *v == 0xabcdef));
+        }
+        assert_eq!(script.borrow().presented, 3);
     }
 
     #[test]

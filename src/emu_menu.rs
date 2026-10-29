@@ -82,6 +82,14 @@ impl EmuMenu {
         Some(EmuMenu { file, values, mapping, system: system.to_string() })
     }
 
+    /// The Controls page for a game that is not running ("This game" on the shelf): the standard button names, the
+    /// mapping from the saved `ctl.*` values. There is no snapshot of the core's own names before the game runs.
+    pub fn offline(system: &str, settings: &GameSettings) -> EmuMenu {
+        let mapping = Mapping::from_values(system, &settings.values);
+        let file = CoreOptionsFile { controls: mapping.to_file(Vec::new()), ..CoreOptionsFile::default() };
+        EmuMenu { file, values: HashMap::new(), mapping, system: system.to_string() }
+    }
+
     /// Whether the core has anything to show on the Emulator page.
     pub fn has_options(&self) -> bool {
         !self.file.options.is_empty()

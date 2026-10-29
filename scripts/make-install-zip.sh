@@ -8,6 +8,8 @@
 #     --version  pocket-ui version (default: Cargo.toml); the binaries are built with POCKETUI_VERSION=V
 #     --bin-dir  take pocket-ui, pocket-core and pocket-splash from DIR instead of building them (must be that version)
 #     --out      output directory (default build/image, gitignored)
+#     --hakux    DIR from `scripts/build-hakux-core.sh` (hakux_libretro.so, BUILD-INFO, licenses/): the package then carries the
+#                Xbox core (hakux/, docs/XBOX.md); without it Xbox games keep ROCKNIX's xemu
 #
 # The zip holds deploy/package/install.sh and uninstall.sh, the programs, the launcher, the essway drop-in and the
 # boot screen's unit (deploy/pocket-splash.service) in
@@ -20,12 +22,14 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 TARGET=aarch64-unknown-linux-gnu
 VERSION=
 BIN_DIR=
+HAKUX_DIR=
 OUT=$ROOT/build/image
 while [ $# -gt 0 ]; do
   case $1 in
     --version) VERSION=$2; shift ;;
     --bin-dir) BIN_DIR=$2; shift ;;
     --out) OUT=$2; shift ;;
+    --hakux) HAKUX_DIR=$2; shift ;;
     -h | --help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -67,6 +71,23 @@ printf '%s\n' "$VERSION" >"$P/files/VERSION"
 (cd "$P/files" && sha256sum pocket-ui pocket-core pocket-splash portmaster-setup.sh run-pocket-ui.sh 10-pocket-ui.conf pocket-splash.service VERSION >SHA256SUMS)
 install -m 755 "$ROOT/deploy/package/install.sh" "$ROOT/deploy/package/uninstall.sh" "$P/"
 install -m 644 "$ROOT/LICENSE" "$ROOT/NOTICE.md" "$P/"
+# The Xbox core (hakuX, GPL-3.0, docs/XBOX.md) with the texts that must travel with it: install.sh puts it in /storage/pocket-ui/hakux.
+if [ -n "$HAKUX_DIR" ]; then
+  H=$P/hakux
+  mkdir -p "$H/licenses"
+  SO=$HAKUX_DIR/lib/libretro/hakux_libretro.so
+  [ -s "$SO" ] || SO=$HAKUX_DIR/hakux_libretro.so
+  [ -s "$SO" ] || die "--hakux: no hakux_libretro.so in $HAKUX_DIR"
+  LICS=$HAKUX_DIR/share/licenses/hakux
+  [ -d "$LICS" ] || LICS=$HAKUX_DIR/licenses
+  [ -s "$LICS/COPYING" ] || die "--hakux: the core's licence texts are missing ($LICS/COPYING)"
+  install -m 755 "$SO" "$H/hakux_libretro.so"
+  install -m 644 "$ROOT/deploy/hakux/hakux_libretro.info" "$ROOT/deploy/hakux/SOURCE.txt" "$H/"
+  mkdir -p "$H/patches" && install -m 644 "$ROOT"/deploy/hakux/patches/*.patch "$H/patches/"   # our patch to the GPL source travels with the binary
+  [ ! -s "$HAKUX_DIR/BUILD-INFO" ] || install -m 644 "$HAKUX_DIR/BUILD-INFO" "$H/"
+  cp "$LICS/"* "$H/licenses/" && chmod 644 "$H/licenses/"*
+  (cd "$H" && find . -type f ! -name SHA256SUMS | sort | xargs sha256sum >SHA256SUMS)
+fi
 sh "$ROOT/scripts/licence-files.sh" "$P/licences" || die "the licence texts could not be collected"
 chmod 644 "$P/licences/"*
 NEED_MB=$(( ($(du -sk "$P/files" | cut -f1) * 2 + 10240) / 1024 ))

@@ -189,10 +189,11 @@ While HOME is held, the game gets no buttons. See [Options](options.md#shortcuts
 
 | Button | What it does |
 |---|---|
-| D-pad Up / Down | Move. |
+| D-pad Up / Down | Move. The menu wraps: Up from Continue is Quit. |
 | D-pad Left / Right | On Save or Load: choose the save slot (not with RetroArch, which has one save). |
 | A | Choose. On **Quit**: end the game, keeping the moment or not as Settings → Playing → [Remember where I quit](settings.md#remember-where-i-quit) says. |
 | B or HOME | Back to the game. In the quick settings opened from this menu: back to this menu. |
+| START | Open the [quick settings](quick-settings.md) (brightness, volume, fan); B there comes back to this menu. |
 | SELECT | Open the game switcher; B there comes back to this menu. |
 
 On the **Achievements** page, Up / Down move and L1 / R1 skip five; B goes back to the menu. On **Pixel Path**,

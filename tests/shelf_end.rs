@@ -1,9 +1,9 @@
-//! The Shelf look at the ends of its list (`shelf_first` in src/main.rs, docs/DESIGN.md "Layout"): at rest the selection
-//! is the third row, but the list stops at its end, so with the last row selected the list reaches down to the hints
-//! instead of leaving most of the screen empty; with the first row selected it starts at the top; a short list shows
-//! whole. Rendered at the Mini V2's 1240x1080, the Pocket 5's 1920x1080 and the Mini V1's 1280x960, dark and light,
-//! with scripts/curator-fake-library.py's library, and measured in the pictures: the bands of rows down the list's
-//! middle.
+//! The Shelf look at the ends of its shelf (`app_cabinet.rs` "the Shelf look", docs/DESIGN.md "Layout"): with the first
+//! entry selected the row starts at the shelf's left end, with the last one selected it reaches the right end (or
+//! stands whole from the left, where it fits), so the end of the row never leaves the shelf half empty; a short list
+//! shows whole; nothing is painted past the shelf's ends. Rendered at the Mini V2's 1240x1080, the Pocket 5's
+//! 1920x1080 (in its column) and the Mini V1's 1280x960, dark and light, with scripts/curator-fake-library.py's
+//! library, and measured in the pictures: the spines along a line just above the board.
 //!
 //! Needs python3 (and, on Linux without a compositor, scripts/wayland-stub.py), as tests/text_size.rs.
 
@@ -11,9 +11,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const ROOT: &str = env!("CARGO_MANIFEST_DIR");
-/// Where the Shelf look's list starts (`paint_shelf`'s `top`) and how far above the bottom edge it ends at most.
-const TOP: i32 = 112;
-const BOTTOM_GAP: i32 = 120;
+/// The page's side margin (`palette::MARGIN`).
+const MARGIN: i32 = 72;
 
 struct Stub(std::process::Child, PathBuf);
 
@@ -96,21 +95,34 @@ fn shot(tmp: &Path, stub: &Option<Stub>, look: &str, size: &str, state: &str) ->
     (info.width as i32, info.height as i32, buf[..info.buffer_size()].to_vec())
 }
 
-/// The rows down the middle of the list: (top, bottom) of each band of pixels that differ from the page's background.
-fn bands((w, h, px): &(i32, i32, Vec<u8>)) -> Vec<(i32, i32)> {
-    let at = |x: i32, y: i32| {
+/// The shelf on a screen `w` x `h` as `app_cabinet::shelf_layout` lays it out: its left and right end (in the column
+/// of a wide screen, `app_column::column_width`) and the line to look along, above the lifted spine's foot.
+fn shelf_line(w: i32, h: i32) -> (i32, i32, i32) {
+    let top = if h < 600 { 80 } else { 104 };
+    let bottom = h - 112;
+    let f = (((bottom - top).max(200) as f32 * 0.42 / 120.0 * 2.0).floor() / 2.0).clamp(1.0, 4.0);
+    let floor = bottom - (8.0 * f).round() as i32;
+    let lift = (10.0 * f).round() as i32;
+    let col = if w >= 1600 { (w * 3 / 4).max(1440).min(w) } else { w };
+    let x0 = (w - col) / 2;
+    (x0 + MARGIN, x0 + col - MARGIN, floor - lift - 12)
+}
+
+/// What stands on the shelf along that line: (left, right) of each run of pixels that differ from the page.
+fn runs((w, _, px): &(i32, i32, Vec<u8>), y: i32) -> Vec<(i32, i32)> {
+    let at = |x: i32| {
         let i = ((y * w + x) * 3) as usize;
         (px[i], px[i + 1], px[i + 2])
     };
-    let bg = at(2, h / 2);
+    let bg = at(2);
     let mut out: Vec<(i32, i32)> = Vec::new();
-    for y in TOP..h - BOTTOM_GAP {
-        if at(w / 2, y) == bg {
+    for x in 0..*w {
+        if at(x) == bg {
             continue;
         }
         match out.last_mut() {
-            Some(b) if b.1 == y - 1 => b.1 = y,
-            _ => out.push((y, y)),
+            Some(r) if r.1 == x - 1 => r.1 = x,
+            _ => out.push((x, x)),
         }
     }
     out
@@ -126,19 +138,25 @@ fn the_shelf_stops_at_the_ends_of_its_list_at_every_size() {
         for size in ["1240x1080", "1920x1080", "1280x960"] {
             for state in ["home", "home:-2", "home:0", "curator:hub:shelf:6"] {
                 let pic = shot(&tmp, &stub, look, size, state);
-                let b = bands(&pic);
-                let h = pic.1;
-                let (first, last) = (b.first().map_or(i32::MAX, |r| r.0), b.last().map_or(0, |r| r.1));
-                let what = format!("{state} at {size}, {look}: rows {b:?}");
-                // Every case: the list starts at its top edge.
-                if first > TOP + 4 {
-                    wrong.push(format!("{what}: the list doesn't start at the top"));
+                let (left, right, y) = shelf_line(pic.0, pic.1);
+                let r = runs(&pic, y);
+                let what = format!("{state} at {size}, {look}: along y {y} from {left} to {right}: {r:?}");
+                let (first, last) = (r.first().map_or(i32::MAX, |r| r.0), r.last().map_or(0, |r| r.1));
+                if first < left || last > right {
+                    wrong.push(format!("{what}: painted past the shelf's ends"));
                 }
+                let from_left = first <= left + 4;
+                let to_right = last >= right - 4;
                 match state {
-                    // The long list: it reaches down to the hints, whichever end is selected; less than a row is left.
-                    "home" | "home:-2" | "home:0" if last < h - BOTTOM_GAP - 90 => wrong.push(format!("{what}: empty below the list")),
-                    // The short list (Curator's seven rows, the last selected): all of them, none scrolled away.
-                    "curator:hub:shelf:6" if b.len() != 7 => wrong.push(format!("{what}: not the seven rows")),
+                    // The first entry selected: the row starts at the shelf's left end.
+                    "home:0" if !from_left => wrong.push(format!("{what}: doesn't start at the left end")),
+                    // The last ones: the row reaches the right end, or stands whole from the left.
+                    "home" | "home:-2" if !(to_right || from_left) => wrong.push(format!("{what}: the shelf's end left empty")),
+                    // The short list (Curator's seven entries, the last selected): all of them, from the left (counted on
+                    // the dark page; on the light one the cases' shadows fill the gaps between them).
+                    "curator:hub:shelf:6" if !from_left || (look == "dark" && r.len() < 7) => {
+                        wrong.push(format!("{what}: not the seven entries from the left"))
+                    }
                     _ => {}
                 }
             }

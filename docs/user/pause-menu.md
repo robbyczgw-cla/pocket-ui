@@ -11,8 +11,12 @@ later. What the menu offers depends on the emulator the system uses (see
 | pocket-ui's own host, signed in to RetroAchievements | Continue, Save, Load, Earlier, Options, Achievements, Quick settings, Quit |
 | pocket-ui's own host, for ScummVM, PICO-8 and TIC-80 (no save states) | Continue, Options, Quick settings, Quit |
 | PlayStation 2 (ARMSX2), GameCube and Wii (Dolphin), 3DS (Azahar) | Continue, Save, Load, Options, Quick settings, Quit |
+| Xbox (hakuX in RetroArch, experimental) | Continue, Options, Quick settings, Quit |
 | RetroArch | Continue, Save, Load, Options, Quick settings, Quit |
 | Other emulators | Continue, Options, Quick settings, Quit |
+
+**Up** from Continue wraps to Quit, and **Down** from Quit to Continue, like every other menu. **START** opens the
+[quick settings](quick-settings.md) from any row of the menu (brightness, volume and fan without walking down to them).
 
 At the right of the title the menu says how long the battery lasts **in this game**, for example "About 3 h 20 min
 left in this game". See [Battery in this game](#battery-in-this-game).
@@ -42,6 +46,8 @@ and Quit, where saving is: for example "This emulator keeps its own saves. Save 
   GameCube, Wii and 3DS: see [Options for PlayStation 2, GameCube, Wii and 3DS](options-big.md)).
   For RetroArch and the other emulators it opens [Runs on](options.md#runs-on): which emulator plays the game,
   and RetroArch's own picture and rewind settings. On the own host, Runs on is an entry of Options.
+  Its pages say what the selected row does at the bottom left and which buttons work at the bottom right: B goes
+  back, A opens a page or chooses, Left and Right change a value.
 - **Achievements** (own host, signed in to RetroAchievements) lists the game's achievements, locked and
   unlocked, with your progress. See [Achievements](achievements.md#the-pause-menu).
 - **Players** (pocket-ui's own host, a second controller connected) shows which controller is which player and changes
@@ -246,7 +252,7 @@ second. 100% is one processor core. While fast-forwarding it adds the frames the
 - the fan, as its speed in percent, or "Fan off" while it stands still;
 - what the battery gives out in watts, to a tenth, or "charging" while it is charging.
 
-In German the words are German ("Lüfter 45%", "lädt"); the numbers and units stay as they are.
+In German the words are German ("Lüfter 45 %", "lädt"); the numbers and units stay as they are.
 The numbers are read twice a second, beside the game and not in its way. Whatever a device doesn't have, because there is
 no fan or no battery gauge, is simply left out of the line.
 
@@ -407,11 +413,27 @@ A PlayStation 2 game has no Save and Load in the first moments after it starts: 
 game, and until it has said which game runs there is nothing to save to. The menu says "Save and Load aren't ready
 yet. Save in the game before you quit." Open the menu again once the game runs.
 
+## Xbox
+
+Xbox games (`roms/xbox`, `.iso`) run in RetroArch with the hakuX core, which is experimental. The menu has Continue, Options
+(resolution and screen scaling, applied at the next start),
+Quick settings and Quit, and says "No save states for Xbox games yet: save in the game before you quit." There is no
+Save, Load or Earlier: the core cannot save states yet. The Xbox's own saves in the game work, and they stay on the Pocket
+(not in `roms/xbox`). Quit closes the game cleanly; if it hangs, pocket-ui stops it after about 20 seconds. The Save and Load rows
+appear by themselves when a later core can save states. More in [Systems](systems.md#xbox).
+
 ## Other emulators
 
-Other emulators (for example for Wii U) keep their own saves. Their menu has no Save or Load and says, beside
+Other emulators (for example for Xbox) keep their own saves. Their menu has no Save or Load and says, beside
 Continue, Options and Quit: "This emulator keeps its own saves. Save in the game before you quit." Quit asks the
 emulator to close; if it has not closed after about five seconds, pocket-ui stops it, and anything unsaved is lost.
+
+**Wii U and PlayStation 3 (experimental, AYN Odin 2 family and the other SM8550 handhelds).** Cemu and RPCS3 have no
+save states, so their menu is the same: Continue, Options, Quick settings, Quit, with the line above. HOME opens the
+menu over the game, and Continue goes back to it. Quit closes the emulator's window, as its own Exit would, and gives
+it about eight seconds to finish; if it hangs, pocket-ui stops it (and, after five more seconds, ends it), and
+anything not saved in the game is lost. While one of them runs, the pad belongs to the game; only HOME is pocket-ui's.
+Performance in Quick settings and Settings → Playing → Performance & fan applies as for the other big systems.
 
 ScummVM, PICO-8 and TIC-80 on pocket-ui's own host have no save states either. Their menu has no Save or Load and
 says where their saving is, for example "No save states for ScummVM: START opens its own Save and Load".

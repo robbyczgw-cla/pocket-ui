@@ -352,7 +352,6 @@ pub fn close_window(con: i64) -> bool {
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
-    use std::time::Instant;
 
     fn sh(script: &str) -> Command {
         let mut c = Command::new("sh");
@@ -375,20 +374,28 @@ mod tests {
 
     #[test]
     fn a_swaymsg_that_hangs_costs_the_timeout_not_the_ui() {
-        let t0 = Instant::now();
-        assert!(!sway_ok(&mut sh("sleep 5"), Duration::from_millis(200)));
-        assert!(focused_window_via(&mut sh("sleep 5"), Duration::from_millis(200)).is_none());
-        assert!(t0.elapsed() < Duration::from_secs(2), "waited {:?}", t0.elapsed());
+        // The hung children note it when they get through their sleep: one of them getting there is what "the UI waited
+        // for it" looks like, and it is an event, not a duration (the wall clock only says how loaded the machine is:
+        // in a gate this took 2 s and more).
+        let dir = TestDir::new("sway-hang");
+        let marker = dir.join("finished");
+        let hung = || sh(&format!("sleep 30; touch {}", marker.display()));
+        assert!(!sway_ok(&mut hung(), Duration::from_millis(200)));
+        assert!(focused_window_via(&mut hung(), Duration::from_millis(200)).is_none());
+        assert!(!marker.exists(), "a hung swaymsg ran to its end: the UI waited for it");
     }
 
     #[test]
     fn a_spent_budget_does_not_even_start_swaymsg() {
-        let t0 = Instant::now();
         let dir = TestDir::new("spent-budget");
         let marker = dir.join("marker");
+        // This thread's own CPU time, not the clock: a spent budget is over before anything is forked, so it costs
+        // nothing at all. The wall clock measured the machine's load instead (over 100 ms in a gate).
+        let cpu0 = crate::run_ahead::thread_cpu_ms();
         assert!(!sway_ok(&mut sh(&format!("touch {}", marker.display())), Duration::ZERO));
+        let cpu = crate::run_ahead::thread_cpu_ms() - cpu0;
         assert!(!marker.exists(), "the program was started");
-        assert!(t0.elapsed() < Duration::from_millis(100));
+        assert!(cpu < 5.0, "{cpu:.2} ms of this thread's CPU for a spent budget");
     }
 
     /// A stand-in for sway's socket: answers each message with `reply` (or not at all), and hands back what it got.
@@ -453,11 +460,11 @@ mod tests {
     #[test]
     fn a_sway_that_does_not_answer_costs_the_timeout_and_no_socket_means_swaymsg() {
         let (_dir, path, server) = fake_sway(None);
-        let t0 = Instant::now();
+        // The kind is the event: the stand-in answers only after 600 ms, so a `TimedOut` from the 150 ms limit is the
+        // deadline and nothing else (a wall clock here measured the load).
         let e = ipc::request_at(&path, ipc::RUN_COMMAND, "focus", Duration::from_millis(150)).unwrap_err();
         assert_eq!(e.kind(), std::io::ErrorKind::TimedOut);
         assert!(!ipc::unreachable(&e), "a slow sway is not asked twice");
-        assert!(t0.elapsed() < Duration::from_millis(500), "waited {:?}", t0.elapsed());
         server.join().unwrap();
         let _ = std::fs::remove_file(&path);
         let e = ipc::request_at(&path, ipc::RUN_COMMAND, "focus", Duration::from_millis(150)).unwrap_err();

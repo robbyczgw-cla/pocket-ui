@@ -251,6 +251,17 @@ Do not take performance numbers from here.
 - `docker/vdev/{sway-config,pipewire-null-sink.conf,roms-link.py,vdev-pad.py,bin/}`
 
 
+### Experimental H700 profiles
+
+`up --device rg28xx|rg35xx-sp` writes the device tree of Anbernic's H700 handhelds (`Anbernic RG28XX` /
+`anbernic,rg28xx`, `Anbernic RG35XX SP` / `anbernic,rg35xx-sp`, then `allwinner,sun50i-h700`), sets the screen to
+**640×480** and creates **no touch panel** (`VDEV_TOUCH=0`; the touch commands say so). The SP also gets the
+`gpio-keys-lid` input (`lid close|open` as on the Flip 2). The userland is still the **SM8250** one, so the Steam
+time-zone helper, `quantum` and InputPlumber are present here: the H700 fallbacks (time zone via `set_setting`, no
+fan, no Wi-Fi on the RG28XX) are exercised by the unit tests and by `POCKETUI_DEVICE=rg28xx` snapshots, not by this
+container. A container on the real H700 SYSTEM is a later step (`extract-rocknix.sh` assumes a GPT image; the H700 image
+is MBR). Not tested in a container yet: this was added without starting one.
+
 ### Experimental SM8550 profiles
 
 `up --device rp6|nova|odin2mini|odin2|odin2portal` uses the same **SM8250 userland**, with an SM8550 device tree:

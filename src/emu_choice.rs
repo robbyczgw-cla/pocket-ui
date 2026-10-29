@@ -408,6 +408,8 @@ pub fn installed(r: &Runner, system: &str, exists: impl Fn(&Path) -> bool) -> bo
                 .iter()
                 .any(|d| exists(&Path::new(d).join(&so)))
         }
+        // hakuX is started by pocket-ui itself: its core in pocket-ui's folder and ROCKNIX's RetroArch.
+        Kind::Standalone if r.emulator == "hakux" => exists(&crate::hakux::core_path()) && exists(Path::new(crate::hakux::RETROARCH)),
         Kind::Standalone => {
             let script = match (r.emulator.as_str(), system) {
                 ("mednafen", _) => "start_mednafen.sh".to_string(),
@@ -555,6 +557,7 @@ pub fn emulator_label(emulator: &str) -> String {
         "vita3k" => "Vita3K",
         "cemu" => "Cemu",
         "xemu" => "xemu",
+        "hakux" => "hakuX (RetroArch)",
         "supermodel" => "Supermodel",
         "mplayer" => "MPlayer",
         "drastic" => "DraStic",
@@ -606,6 +609,10 @@ pub fn note(r: &Runner, system: &str) -> String {
                 // Azahar has its quick slot and no shortcut for another (docs/user/pause-menu.md "The 3DS has one slot").
                 Some(crate::standalone::Emu::Azahar) => {
                     format!("{name} on its own, with pocket-ui's Save (one slot), Load, Options and continuing where you left off.")
+                }
+                Some(crate::standalone::Emu::Hakux) => {
+                    "Xbox games in RetroArch with the hakuX core. Experimental: Continue and Quit from pocket-ui's menu, saves in the game, no save states yet."
+                        .to_string()
                 }
                 Some(_) => format!("{name} on its own, with pocket-ui's Save, Load, Options and continuing where you left off."),
                 None => {

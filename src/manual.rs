@@ -661,8 +661,10 @@ fn heading_color() -> u32 {
 fn code_color() -> u32 {
     crate::palette::pal().pick(0xe8d9a0, 0x6e5208)
 }
+// Links are the page's brightest text with their underline, not a web blue (docs/DESIGN.md "Colour roles": colour
+// that means something comes from content).
 fn link_color() -> u32 {
-    crate::palette::pal().pick(0x8fc4d8, 0x1f5f78)
+    crate::palette::pal().pick(0xf2efe8, 0x1a1916)
 }
 fn grid_color() -> u32 {
     crate::palette::pal().pick(0x2c2c30, 0xd6d0c4)

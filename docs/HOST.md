@@ -483,7 +483,7 @@ game shows (below): the FPS line, or Pixel Path's strip beside the picture (`src
     thermal zone, the fan's PWM duty or rpm or "Fan off", the battery draw in watts or "charging"; `src/osd_sensors.rs`).
     Read the way `perf_fan::Readout` reads them, but by a thread of its own that `Hud::set_sensors` starts when the level
     is switched on and ends when it is switched off, every 500 ms (the counter's cadence); that thread also words the
-    part in the interface's language ("Lüfter 45%", "lädt": each part with words through `de.tsv` on its own, numbers and
+    part in the interface's language ("Lüfter 45 %", "lädt": each part with words through `de.tsv` on its own, numbers and
     units as they are), so the emulation thread opens no file and formats nothing for it, `Hud::frame` only appends the
     last line twice a second. A sensor the device doesn't have (no fan, no
     gauge, a gauge without current, a full battery on the charger) is left out of the line, never shown as 0 or "?".
@@ -1611,8 +1611,8 @@ What changes is the quantum (`src/audio_route.rs`):
   force succeeded, cleared before ROCKNIX's quantum comes back), 32 ms otherwise (a 1024 cycle and two writer chunks;
   22-50 ms all had no dropout). It waits for the keeper's first look (at most 0.5 s, beside the core's first frames)
   and opens the stream again when that changes during play, so headphones connected or switched off mid-game get the
-  right buffer within one 2 s check. The shelf (`ui_sound::ui_ring`) does the same from what its quantum thread saw
-  last (asked at its start and with every opening outside a game).
+  right buffer within one 2 s check. The shelf's stream (`ui_sound::ui_ring`) goes by the quantum the graph is seen
+  at instead (below, "UI sounds": "Buffer and quantum").
 - **Queue.** 20 ms on the speaker at 256 (48 ms for 3D cores), as before. At 1024 the writer takes a whole cycle out
   of it at once, so it is 48 ms there (`CYCLE_TARGET_MS`; at 2048 a 20 ms queue underran in the bench). Together with
   the 32 ms buffer that adds about 60 ms on headphones, against the 100-250 ms the codec and the radio add.
@@ -1838,7 +1838,8 @@ the Pocket's motor at the same time, and the Players page (A on each controller)
   with ElevenLabs sound effects (paid Creator plan, commercial use; `docs/LICENCES.md`), prompts for "warm, tactile retro
   hardware": a soft wooden tick (Nav), a cartridge click (Confirm), a low wooden knock (Back), a drawer sliding open
   with a click (Menu), cartridges flipping past (Switcher), a muted button that does not engage (Error), a knob detent
-  (Volume), an old shutter (Shutter). Each file is trimmed, faded in over 2 ms and out over up to 30 ms, and normalised to a
+  (Volume), an old shutter (Shutter; its second click, cut out of it at 85 %, is Insert: the launch animation's
+  cartridge going in, `app_cabinet::launch_animation`). Each file is trimmed, faded in over 2 ms and out over up to 30 ms, and normalised to a
   peak of -1.5 dBFS (Nav -3), 90 to 450 ms long. `ui_sound::synth` decodes them; `synth_at` resamples for pocket-core's
   shutter. The loudness of the set is `Config::gain` alone. The earlier synthesised sine tones peaked at -6 to -10 dBFS
   in the file and then took the default gain of -17.5 dB, so they reached the output at -23 to -28 dBFS, about 20 dB
@@ -1881,6 +1882,48 @@ the Pocket's motor at the same time, and the Players page (A on each controller)
   before it. Without the priority, quantum 256 gave 4-5 xrun lines in 25 presses where 1024 gave 0-1 (the virtual
   device draws with llvmpipe on the same cores as the mixer); with it 0-2. Expect about 14 ms queued on the device, not
   55. Not heard on the device: check for crackle (below).
+- **Buffer and quantum** (2026-10-28). The stream's ALSA buffer must hold a whole graph cycle, or part of every cycle
+  goes out as silence. It was chosen by belief: 10 ms "on the shelf, or in any game (pocket-core holds 256)". A
+  standalone game (RetroArch, hakuX) runs at ROCKNIX's 1024, so its pause menu played broken, and the stream stayed
+  open on the shelf while clicks came less than 2 s apart, without the shelf's 256 ever being asked for: "all menu
+  sounds distorted for a while" after an Xbox game. Now:
+  - **What is seen decides.** A thread (`ui_sound::watch_quantum`) runs `pw-metadata -m -n settings 0
+    clock.force-quantum`, which prints the value and every change after it, whoever makes it (pocket-core, the shelf,
+    ROCKNIX's wake script); it blocks in between, no polling. 10 ms only while the graph is seen forced to 256 or less
+    and not on Bluetooth, 32 ms otherwise (also while unknown: no `pw-metadata`, not read yet). The mixer compares
+    before every chunk: to the longer buffer at once, back to 10 ms between sounds. So the first sound after quiet
+    opens at 32 ms and the stream shrinks once the shelf's 256 is seen.
+  - **One owner, and the quantum never changes under a sound.** PipeWire leaves a part of a cycle out of whatever
+    plays while the forced quantum changes, whatever the buffer (the bench's first click after quiet and the click at a
+    game's end). So the shelf's 256 now holds while pocket-ui is on the shelf, not only while a sound plays (the graph
+    idles without streams, so it costs nothing): set when the mixer starts at launch, set again right after every game
+    or app (`ui_sound::game_ended`, from `game_exited` and `app_exited`), given back only when a game or app starts
+    (`ui_sound::stop_for`; a pocket-core game keeps it, it sets the same 256, so nothing changes under the launch
+    animation's click, and `close_when_done` only leaves the shelf then). All of it runs on the quantum thread, in order (before 2026-10-28 the restore after a game had a
+    thread of its own that could land after the shelf's 256). Each change marks `CHANGING` from the moment the mixer asks for it (a new sound
+    waits for it, at most 0.9 s; marked only when the quantum thread took it up, a sound let in meanwhile was lost
+    when the output reopened), waits for the sounds that play to end (`VOICES`, at most 0.5 s), announces a raise (`RAISING`,
+    25 ms ahead, so an open 10 ms stream has moved to 32 ms first) and ends when the watcher has seen the new value. A
+    value seen on the shelf other than its own (ROCKNIX's wake script) is set right again. After a pocket-core game the
+    shelf's 256 already runs, so nothing changes at all.
+  - **pocket-core's side** (`audio_route`): a game pocket-ui started (`POCKET_CORE_QUANTUM_OWNER=pocket-ui`) sets 256
+    for itself but leaves the restore at its end to pocket-ui; started any other way it restores as before. `small`
+    needs the force to have worked now (after a wake ROCKNIX's 1024 is back whatever was set before) and a quantum the
+    10 ms buffer holds (≤ 256).
+  - **Off the device** (`scripts/audio-bench/ui-guest.sh`, from the audit branch fix/audio-after-guest-sol: the real
+    mixer, each Nav click aligned on its WAV and compared, D+N and padded frames; a guest at ROCKNIX's 1024 through
+    pulse, or one at 256, then 240 clicks every 250 ms with no pause): before 202709 padded frames after the guest,
+    D+N up to +5.6 dB, and the first click after quiet broken in either case; after 0 padded frames and -72.4 dB in
+    every group, the first click, the guest's first click and the first after quiet included; worst -46.7 dB, the
+    click asked for at the very moment the game ends, which waits for the quantum change and plays 0.1 s later.
+  - **Measured on the device** (`scripts/audio-bench/ui-after-game.sh`, Jade Empire 40 s on hakuX, pause menu, quit,
+    20 moves on the shelf every 0.3 s, then 10 after a pause; the speaker's monitor, unmuted at 8 % for these two runs;
+    gaps = runs of digital silence that cut a sound off): before 35 gaps in the game's pause menu, 82 (759 ms of
+    1.38 s of sound) on the shelf right after, 0 once the output had closed. After the first fix 0 everywhere. With
+    the final design (387fb7d, silent: `UAG_SINK=null`, Jade Empire 20 s): 0 gaps in the pause menu, the quit, 20
+    moves right after and 10 after the pause; the quantum went 256 on the shelf, 1024 (announced) at the game's start,
+    and at its end 1024 then 256 within 31 ms, before the first sound on the shelf. One gap of exactly one cycle in
+    the game's own sound as HOME paused RetroArch: its stream stops hard (not a menu sound).
 - **Volume**: Settings > Look & feel > Sounds, A switches, Left/Right 1 to 10 (default on, 7), stored in `<data>/sounds.json`
   through `fsutil::write_json`. Gain is 2.5 dB per step below 10: step 3 is -17.5 dB, so the loudest default sound
   (Confirm) peaks near -24 dBFS before the system volume.

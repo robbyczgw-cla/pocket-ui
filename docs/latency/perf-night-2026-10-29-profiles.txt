@@ -1,0 +1,73 @@
+2026-10-29: e5a7d29 + bench-shelf game-list option (before optimization)
+x86_64 Ryzen 5 PRO 4650G; opt-level 3 gate, symbols retained, frame pointers.
+perf record -F 499 --call-graph dwarf,16384 -- python3 scripts/perf-profile.py SCENARIO
+Self CPU percentages; all process/thread samples, including startup and PNG writing.
+Snapshot programs use POCKETUI_MOCK=1, generated 5000-game GBC library, 1200x1700 RGB covers.
+These profiles locate work; they are NOT input-to-frame timings. Air vdev runs measure those.
+Raw recordings retained by the maintainer outside the repo; summaries below are perf report --no-children.
+
+start-cold (start-cold scenario): 12 launches to Home (no page-cache drop; empty process caches)
+2.96%  profile-before   [kernel.kallsyms]            [k] __d_lookup_rcu
+2.27%  profile-before   [kernel.kallsyms]            [k] clear_page_rep
+2.19%  profile-before   profile-before               [.] <str>::to_lowercase
+1.89%  profile-before   [kernel.kallsyms]            [k] apparmor_inode_getattr
+1.75%  profile-before   [kernel.kallsyms]            [k] memset_orig
+1.75%  profile-before   profile-before               [.] ttf_parser[7186b53616d8d36d]::tables::glyf::outline_impl
+1.69%  profile-before   profile-before               [.] <core[a9090a07a7fa7517]::iter::adapters::map::Map<core[a9090a07a7fa7517]::str::iter::Chars, <char>::to_lowercase> as core[a9090a07a7fa7517]::iter::traits::iterator::Iterator>::try_fold::<(), <core[a9090a07a7fa7517]::iter::adapters::flatten::FlattenCompat<_, _>>::iter_try_fold::flatten<core[a9090a07a7fa7517]::char::ToLowercase, (), core[a9090a07a7fa7517]::ops::control_flow::ControlFlow<core[a9090a07a7fa7517]::ops::control_flow::ControlFlow<(), core[a9090a07a7fa7517]::cmp::Ordering>>, <core[a9090a07a7fa7517]::iter::adapters::flatten::FlattenCompat<_, _> as core[a9090a07a7fa7517]::iter::traits::iterator::Iterator>::try_fold::flatten<core[a9090a07a7fa7517]::char::ToLowercase, (), core[a9090a07a7fa7517]::ops::control_flow::ControlFlow<core[a9090a07a7fa7517]::ops::control_flow::ControlFlow<(), core[a9090a07a7fa7517]::cmp::Ordering>>, core[a9090a07a7fa7517]::iter::traits::iterator::Iterator::try_for_each::call<char, core[a9090a07a7fa7517]::ops::control_flow::ControlFlow<core[a9090a07a7fa7517]::ops::control_flow::ControlFlow<(), core[a9090a07a7fa7517]::cmp::Ordering>>, core[a9090a07a7fa7517]::iter::traits::iterator::iter_compare::compare<core[a9090a07a7fa7517]::iter::adapters::flatten::FlatMap<core[a9090a07a7fa7517]::str::iter::Chars, core[a9090a07a7fa7517]::char::ToLowercase, <char>::to_lowercase>, char, (), core[a9090a07a7fa7517]::iter::traits::iterator::Iterator::eq_by::compare<char, char, <core[a9090a07a7fa7517]::iter::adapters::flatten::FlatMap<core[a9090a07a7fa7517]::str::iter::Chars, core[a9090a07a7fa7517]::char::ToLowercase, <char>::to_lowercase> as core[a9090a07a7fa7517]::iter::traits::iterator::Iterator>::eq<core[a9090a07a7fa7517]::iter::adapters::flatten::FlatMap<core[a9090a07a7fa7517]::str::iter::Chars, core[a9090a07a7fa7517]::char::ToLowercase, <char>::to_lowercase>>::{closure#0}>::{closure#0}>::{closure#0}>::{closure#0}>::{closure#0}>::{closure#0}, core[a9090a07a7fa7517]::ops::control_flow::ControlFlow<core[a9090a07a7fa7517]::ops::control_flow::ControlFlow<(), core[a9090a07a7fa7517]::cmp::Ordering>>>
+1.65%  profile-before   [kernel.kallsyms]            [k] security_inode_getattr
+1.52%  profile-before   libc.so.6                    [.] malloc
+1.49%  profile-before   [kernel.kallsyms]            [k] ext4_getattr
+
+list-cold: 12 launches to shelf:gbc:split:games:15 (cold decoded covers)
+5.42%  profile-before   profile-before               [.] <pocket_ui[de628e3578c21d92]::image::Image>::resized
+4.54%  profile-before   profile-before               [.] <fdeflate[df76ae203f4324ac]::decompress::Decompressor>::read
+3.21%  profile-before   [kernel.kallsyms]            [k] clear_page_rep
+2.21%  profile-before   profile-before               [.] <alloc[12ca63220423dfc2]::vec::Vec<u32> as alloc[12ca63220423dfc2]::vec::spec_from_iter::SpecFromIter<u32, core[a9090a07a7fa7517]::iter::adapters::map::Map<core[a9090a07a7fa7517]::slice::iter::ChunksExact<u8>, pocket_ui[de628e3578c21d92]::image::load_png::{closure#1}>>>::from_iter
+2.16%  profile-before   [kernel.kallsyms]            [k] __d_lookup_rcu
+1.84%  profile-before   profile-before               [.] <core[a9090a07a7fa7517]::iter::adapters::map::Map<core[a9090a07a7fa7517]::str::iter::Chars, <char>::to_lowercase> as core[a9090a07a7fa7517]::iter::traits::iterator::Iterator>::try_fold::<(), <core[a9090a07a7fa7517]::iter::adapters::flatten::FlattenCompat<_, _>>::iter_try_fold::flatten<core[a9090a07a7fa7517]::char::ToLowercase, (), core[a9090a07a7fa7517]::ops::control_flow::ControlFlow<core[a9090a07a7fa7517]::ops::control_flow::ControlFlow<(), core[a9090a07a7fa7517]::cmp::Ordering>>, <core[a9090a07a7fa7517]::iter::adapters::flatten::FlattenCompat<_, _> as core[a9090a07a7fa7517]::iter::traits::iterator::Iterator>::try_fold::flatten<core[a9090a07a7fa7517]::char::ToLowercase, (), core[a9090a07a7fa7517]::ops::control_flow::ControlFlow<core[a9090a07a7fa7517]::ops::control_flow::ControlFlow<(), core[a9090a07a7fa7517]::cmp::Ordering>>, core[a9090a07a7fa7517]::iter::traits::iterator::Iterator::try_for_each::call<char, core[a9090a07a7fa7517]::ops::control_flow::ControlFlow<core[a9090a07a7fa7517]::ops::control_flow::ControlFlow<(), core[a9090a07a7fa7517]::cmp::Ordering>>, core[a9090a07a7fa7517]::iter::traits::iterator::iter_compare::compare<core[a9090a07a7fa7517]::iter::adapters::flatten::FlatMap<core[a9090a07a7fa7517]::str::iter::Chars, core[a9090a07a7fa7517]::char::ToLowercase, <char>::to_lowercase>, char, (), core[a9090a07a7fa7517]::iter::traits::iterator::Iterator::eq_by::compare<char, char, <core[a9090a07a7fa7517]::iter::adapters::flatten::FlatMap<core[a9090a07a7fa7517]::str::iter::Chars, core[a9090a07a7fa7517]::char::ToLowercase, <char>::to_lowercase> as core[a9090a07a7fa7517]::iter::traits::iterator::Iterator>::eq<core[a9090a07a7fa7517]::iter::adapters::flatten::FlatMap<core[a9090a07a7fa7517]::str::iter::Chars, core[a9090a07a7fa7517]::char::ToLowercase, <char>::to_lowercase>>::{closure#0}>::{closure#0}>::{closure#0}>::{closure#0}>::{closure#0}>::{closure#0}, core[a9090a07a7fa7517]::ops::control_flow::ControlFlow<core[a9090a07a7fa7517]::ops::control_flow::ControlFlow<(), core[a9090a07a7fa7517]::cmp::Ordering>>>
+1.84%  profile-before   libc.so.6                    [.] malloc
+1.74%  profile-before   [kernel.kallsyms]            [k] apparmor_inode_getattr
+1.55%  profile-before   [kernel.kallsyms]            [k] asm_exc_page_fault
+1.38%  profile-before   [kernel.kallsyms]            [k] memset_orig
+
+cabinet: 2 bench-shelf:cabinet runs (Home); cabinet-art is the worker thread
+4.63%  profile-before   profile-before            [.] <alloc[12ca63220423dfc2]::collections::btree::set::BTreeSet<alloc[12ca63220423dfc2]::string::String>>::is_subset
+4.23%  cabinet-art      profile-before            [.] <fdeflate[df76ae203f4324ac]::decompress::Decompressor>::read
+3.00%  profile-before   profile-before            [.] <pocket_ui[de628e3578c21d92]::gfx::Canvas>::clear
+2.29%  cabinet-art      profile-before            [.] <alloc[12ca63220423dfc2]::vec::Vec<u32> as alloc[12ca63220423dfc2]::vec::spec_from_iter::SpecFromIter<u32, core[a9090a07a7fa7517]::iter::adapters::map::Map<core[a9090a07a7fa7517]::slice::iter::ChunksExact<u8>, pocket_ui[de628e3578c21d92]::image::load_png::{closure#1}>>>::from_iter
+1.81%  profile-before   profile-before            [.] <alloc[12ca63220423dfc2]::collections::btree::set::Iter<alloc[12ca63220423dfc2]::string::String> as core[a9090a07a7fa7517]::iter::traits::iterator::Iterator>::try_fold::<(), core[a9090a07a7fa7517]::iter::traits::iterator::Iterator::all::check<&alloc[12ca63220423dfc2]::string::String, <alloc[12ca63220423dfc2]::collections::btree::set::BTreeSet<alloc[12ca63220423dfc2]::string::String>>::is_subset::{closure#1}>::{closure#0}, core[a9090a07a7fa7517]::ops::control_flow::ControlFlow<()>>
+1.70%  profile-before   profile-before            [.] pocket_ui[de628e3578c21d92]::cabinet_art::blit
+1.53%  profile-before   profile-before            [.] <alloc[12ca63220423dfc2]::collections::btree::map::Iter<alloc[12ca63220423dfc2]::string::String, alloc[12ca63220423dfc2]::collections::btree::set_val::SetValZST> as core[a9090a07a7fa7517]::iter::traits::iterator::Iterator>::next
+1.53%  profile-before   libc.so.6                 [.] 0x000000000018891d
+1.48%  profile-before   profile-before            [.] pocket_ui[de628e3578c21d92]::media::scaled
+1.34%  python3          python3.12                [.] 0x000000000021d988
+
+box: 12 launches to box:gbc:Perf (front)
+10.34%  profile-before   profile-before               [.] <pocket_ui[de628e3578c21d92]::image::Image>::resized
+6.19%  profile-before   profile-before               [.] <alloc[12ca63220423dfc2]::collections::btree::set::BTreeSet<alloc[12ca63220423dfc2]::string::String>>::is_subset
+4.96%  profile-before   profile-before               [.] <fdeflate[df76ae203f4324ac]::decompress::Decompressor>::read
+3.98%  profile-before   profile-before               [.] pocket_ui[de628e3578c21d92]::cabinet_art::cover_fill
+2.76%  profile-before   profile-before               [.] <alloc[12ca63220423dfc2]::vec::Vec<u32> as alloc[12ca63220423dfc2]::vec::spec_from_iter::SpecFromIter<u32, core[a9090a07a7fa7517]::iter::adapters::map::Map<core[a9090a07a7fa7517]::iter::adapters::filter::Filter<core[a9090a07a7fa7517]::iter::adapters::enumerate::Enumerate<core[a9090a07a7fa7517]::slice::iter::Iter<alloc[12ca63220423dfc2]::collections::btree::set::BTreeSet<alloc[12ca63220423dfc2]::string::String>>>, <pocket_ui[de628e3578c21d92]::gamedb::SystemDb>::find::{closure#5}>, <pocket_ui[de628e3578c21d92]::gamedb::SystemDb>::find::{closure#6}>>>::from_iter
+2.59%  profile-before   profile-before               [.] <alloc[12ca63220423dfc2]::collections::btree::map::Iter<alloc[12ca63220423dfc2]::string::String, alloc[12ca63220423dfc2]::collections::btree::set_val::SetValZST> as core[a9090a07a7fa7517]::iter::traits::iterator::Iterator>::next
+2.20%  profile-before   libc.so.6                    [.] 0x0000000000188711
+1.93%  profile-before   [kernel.kallsyms]            [k] clear_page_rep
+1.81%  profile-before   [kernel.kallsyms]            [k] __d_lookup_rcu
+1.80%  profile-before   profile-before               [.] <alloc[12ca63220423dfc2]::vec::Vec<u32> as alloc[12ca63220423dfc2]::vec::spec_from_iter::SpecFromIter<u32, core[a9090a07a7fa7517]::iter::adapters::map::Map<core[a9090a07a7fa7517]::slice::iter::ChunksExact<u8>, pocket_ui[de628e3578c21d92]::image::load_png::{closure#1}>>>::from_iter
+
+pause-quick: 2 x menu:pocket-core and game-quick, POCKETUI_FRAME_BENCH=1
+47.43%  profile-before   profile-before        [.] <pocket_ui[de628e3578c21d92]::gfx::Canvas>::clear
+5.34%  profile-before   profile-before        [.] <pocket_ui[de628e3578c21d92]::text::Text>::draw_raw
+3.56%  profile-before   profile-before        [.] <pocket_ui[de628e3578c21d92]::gfx::Canvas>::rect
+1.14%  python3          python3.12            [.] 0x000000000021d988
+
+Interpretation:
+Cold Split and box frames decode PNGs and run Image::resized on the main thread (App::cover).
+Box paint asks for the old card-size cover before branching to its box-size cover, decoding twice.
+Cabinet already decodes on cabinet-art; its frame work is painting/blitting and cached art.
+Pause/quick underlying frames are dominated by Canvas::clear, then text and rectangles (~1-2 ms).
+Startup samples include filesystem metadata, allocations, lowercasing names and first glyphs.
+No optimization of sub-10 ms timing drifts or the already-fast warm menu raster was attempted.
+
+Benchmark caveat: before this pass POCKETUI_FRAME_BENCH dropped the Quick Settings overlay
+after its first frame. Those quick samples time the background. The benchmark now repeats
+the overlay too; use latency.sh open.quick/close.quick for a before/after comparison.

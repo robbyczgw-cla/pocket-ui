@@ -209,6 +209,7 @@ pub fn system_colour(system: &str) -> u32 {
         "wii" | "wiiware" => 0x5aa9d6,
         "3ds" | "n3ds" => 0x6b7f8c,
         "ps2" => 0x2b46a8,
+        "xbox" => 0x107c10,
         "saturn" => 0x5b5f7a,
         "settings" => 0x8a8f96,
         "favorites" => 0xd39a2c,

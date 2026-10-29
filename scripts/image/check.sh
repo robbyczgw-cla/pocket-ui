@@ -69,15 +69,23 @@ boot/pocket/miniv2-noufs.dtb
 mount-storage.sh
 pocket-ui-info/
 pocket-ui-info/README.txt
+pocket-ui-info/SOURCE-OFFER.txt
 post-flash.sh
 EOF
+# The firmware's terms, as in the repository.
+echo "pocket-ui-info/firmware-licences/" >>"$W/lists/fat.expected"
+for f in /repo/deploy/image/firmware-licences/*; do echo "pocket-ui-info/firmware-licences/${f##*/}" >>"$W/lists/fat.expected"; done
 # pocket-ui's LICENSE and NOTICE.md belong on the card as soon as the repository has them.
 for f in LICENSE NOTICE.md; do [ ! -f "/repo/$f" ] || echo "pocket-ui-info/$f" >>"$W/lists/fat.expected"; done
 # The crates' licence texts and the fonts' OFL (scripts/licence-files.sh); mdir lists the directory too.
 echo "pocket-ui-info/licences/" >>"$W/lists/fat.expected"
 for f in LICENSE NOTICE.md FONTS-OFL.txt THIRD-PARTY-CRATES.md THIRD-PARTY-LICENSES.txt; do echo "pocket-ui-info/licences/$f" >>"$W/lists/fat.expected"; done
 sort -o "$W/lists/fat.expected" "$W/lists/fat.expected"
-check "exactly the expected files (no rocknix_abl, nothing else)" 'same "$W/lists/fat" "$W/lists/fat.expected"' || diff "$W/lists/fat.expected" "$W/lists/fat" | sed 's/^/     /'
+# ROCKNIX's LICENSE.md and licenses folder come from the tag at build time; counted and spot-checked below.
+grep -v '^pocket-ui-info/rocknix-licenses/' "$W/lists/fat" >"$W/lists/fat.own"
+check "exactly the expected files (no rocknix_abl, nothing else)" 'same "$W/lists/fat.own" "$W/lists/fat.expected"' || diff "$W/lists/fat.expected" "$W/lists/fat.own" | sed 's/^/     /'
+check "rocknix-licenses/: ROCKNIX's LICENSE.md and its licenses folder ($ROCKNIX_LICENSE_FILES files)" \
+  '[ "$(grep -c "^pocket-ui-info/rocknix-licenses/.*[^/]$" "$W/lists/fat")" = "$ROCKNIX_LICENSE_FILES" ] && grep -qx "pocket-ui-info/rocknix-licenses/LICENSE.md" "$W/lists/fat" && grep -qx "pocket-ui-info/rocknix-licenses/licenses/GPL-2.0-only.txt" "$W/lists/fat"'
 for f in KERNEL KERNEL.md5 SYSTEM.md5 EFI/BOOT/BOOTAA64.EFI boot/grub/grub.cfg boot/grub/grub-efi-arm64-bin.version \
   boot/pocket/Image boot/pocket/KERNEL.source.md5 boot/pocket/miniv2-noufs.dtb mount-storage.sh post-flash.sh \
   pocket-ui-info/README.txt; do
@@ -86,8 +94,45 @@ for f in KERNEL KERNEL.md5 SYSTEM.md5 EFI/BOOT/BOOTAA64.EFI boot/grub/grub.cfg b
 done
 check "KERNEL is ROCKNIX $ROCKNIX_TAG (md5 $KERNEL_MD5)" '[ "$(md5 "$W/fat/KERNEL")" = "$KERNEL_MD5" ]'
 check "KERNEL.md5 agrees" '[ "$(cut -d" " -f1 "$W/fat/KERNEL.md5")" = "$KERNEL_MD5" ]'
-check "SYSTEM is ROCKNIX $ROCKNIX_TAG (md5 $SYSTEM_MD5)" '[ "$(mtype -i "$FAT" ::/SYSTEM | md5sum | cut -d" " -f1)" = "$SYSTEM_MD5" ]'
-check "SYSTEM.md5 agrees" '[ "$(mtype -i "$FAT" ::/SYSTEM.md5 | cut -d" " -f1)" = "$SYSTEM_MD5" ]'
+mcopy -n -i "$FAT" ::/SYSTEM "$W/SYSTEM" 2>/dev/null
+check "SYSTEM is ROCKNIX $ROCKNIX_TAG's without SYSTEM_REMOVE (md5 $POCKET_SYSTEM_MD5)" '[ "$(md5 "$W/SYSTEM")" = "$POCKET_SYSTEM_MD5" ]'
+check "SYSTEM.md5 agrees, in ROCKNIX's format" '[ "$(mtype -i "$FAT" ::/SYSTEM.md5)" = "$POCKET_SYSTEM_MD5  target/SYSTEM" ]'
+
+check "FAT free space is all zeros (no remnant of ROCKNIX's original SYSTEM)" \
+  'python3 -I /repo/scripts/image/fat-free-zero.py "$IMG" "$((P1_START * 512))" --check >/dev/null'
+dd if="$IMG" of="$W/p1.fat" bs=512 skip="$P1_START" count="$P1_SIZE" status=none
+check "FAT file system clean (fsck.vfat -n)" 'fsck.vfat -n "$W/p1.fat" >"$W/lists/fsck.vfat" 2>&1'
+rm -f "$W/p1.fat"
+
+echo "== inside SYSTEM"
+unsquashfs -lln "$W/SYSTEM" 2>/dev/null | sed -n 's#^.* squashfs-root/##p' >"$W/lists/system"
+check "SYSTEM lists its files ($(wc -l <"$W/lists/system") entries)" '[ "$(wc -l <"$W/lists/system")" -gt 60000 ]'
+for p in $SYSTEM_REMOVE; do
+  check "not in SYSTEM: $p" '! grep -q "^$p\\( \\|/\\|$\\)" "$W/lists/system"'
+done
+syscat() { unsquashfs -cat "$W/SYSTEM" "$1" 2>/dev/null; }
+echo "$SYSTEM_ZIP_REMOVE" | while read -r z glob; do
+  [ -n "$z" ] || continue
+  syscat "$z" >"$W/lists/zip"
+  check "$z: intact, without $glob" \
+    'unzip -tq "$W/lists/zip" >/dev/null && [ -z "$(unzip -Z1 "$W/lists/zip" | grep "^$(echo "$glob" | sed "s/\\*/[^\\/]*/g")\$")" ]' || echo "FAILED-ZIP" >>"$W/lists/zipfail"
+done
+check "every SYSTEM_ZIP_REMOVE archive checked out" '[ ! -e "$W/lists/zipfail" ]'
+rm -f "$W/lists/zip" "$W/lists/zipfail"
+# Remote access stays off until the player turns it on in pocket-ui (docs/SECURITY-HARDENING.md).
+for k in ssh.enabled samba.enabled syncthing.enabled; do
+  check "ROCKNIX's default $k=0 (nothing listens until it is turned on)" 'syscat usr/config/system/configs/system.cfg | grep -qx "$k=0"'
+done
+check "no SSH keys or host keys in SYSTEM (usr/config/ssh/authorized_keys, ssh_host_*)" \
+  '! grep -Eq "(^usr/config/ssh/authorized_keys|ssh_host_.*key)" "$W/lists/system"'
+check "the kernel command line does not turn SSH on (no ssh word)" '! grep -Eq "^ *linux .* ssh( |$)" "$W/fat/boot/grub/grub.cfg"'
+check "the only BIOS file in SYSTEM is ReGBA's open-source GBA BIOS (GPL, md5 $REGBA_BIOS_MD5)" \
+  '[ "$(grep -i "bios.*\\.bin$" "$W/lists/system")" = usr/config/nanoboyadvance/bios/gba_bios.bin ] && [ "$(syscat usr/config/nanoboyadvance/bios/gba_bios.bin | md5sum | cut -d" " -f1)" = "$REGBA_BIOS_MD5" ]'
+FW=usr/lib/kernel-overlays/base/lib/firmware
+unsquashfs -lln "$W/SYSTEM" "$FW" 2>/dev/null | grep '^-' | sed -n "s#^.* squashfs-root/$FW/##p" | sort >"$W/lists/firmware"
+check "every firmware file in SYSTEM ($(wc -l <"$W/lists/firmware")) is listed with its terms in firmware-licences/README.txt" \
+  '( while read -r f; do grep -q " $f " /repo/deploy/image/firmware-licences/README.txt || { echo "     not listed: $f"; exit 1; }; done <"$W/lists/firmware" )'
+rm -f "$W/SYSTEM"
 
 echo "== boot files"
 check "grub.cfg is deploy/sd-efi/grub.cfg" 'same "$W/fat/boot/grub/grub.cfg" /repo/deploy/sd-efi/grub.cfg'
@@ -134,6 +179,20 @@ check "source offer: ROCKNIX tag $ROCKNIX_TAG and commit" 'grep -q "tag $ROCKNIX
 check "artwork under CC BY-NC-SA 4.0" 'grep -q "CC BY-NC-SA 4.0" "$R"'
 check "free, non-commercial distribution only" 'grep -qi "non-commercial" "$R"'
 check "says: no BIOS files, no games" 'grep -q "no BIOS files" "$R"'
+check "says what was removed from SYSTEM and why (SKick, extra firmware)" 'grep -q "skick346.lha" "$R" && grep -q "AYN Thor" "$R"'
+check "names the GBA BIOS as ReGBA's open-source replacement" 'grep -q "Nebuleon/ReGBA" "$R"'
+check "says remote access is off, and that pocket-ui makes the password" 'grep -q "Remote access (SSH), file sharing and Syncthing are off" "$R"'
+check "points to the source next to the image and to SOURCE-OFFER.txt" 'grep -q "pocket-ui-info/SOURCE-OFFER.txt" "$R"'
+warn "names a clean pocket-ui source (no -dirty commit)" '! grep -q -- "-dirty" "$R"'
+mcopy -n -i "$FAT" ::/pocket-ui-info/SOURCE-OFFER.txt "$W/fat/pocket-ui-info/SOURCE-OFFER.txt" 2>/dev/null
+O=$W/fat/pocket-ui-info/SOURCE-OFFER.txt
+check "SOURCE-OFFER.txt: written offer for three years, how to ask, ROCKNIX tag and commit" \
+  'grep -q "^Written offer" "$O" && grep -q "at least three years" "$O" && grep -q "https://github.com/.*/issues" "$O" && grep -q "$ROCKNIX_COMMIT" "$O" && grep -q "pocket-ui $VERSION" "$O"'
+mkdir -p "$W/fat/pocket-ui-info/firmware-licences"
+for f in /repo/deploy/image/firmware-licences/*; do
+  mcopy -n -i "$FAT" "::/pocket-ui-info/firmware-licences/${f##*/}" "$W/fat/pocket-ui-info/firmware-licences/${f##*/}" 2>/dev/null
+done
+check "firmware-licences/ is deploy/image/firmware-licences/" 'diff -r -q "$W/fat/pocket-ui-info/firmware-licences" /repo/deploy/image/firmware-licences >/dev/null'
 check "pocket-ui licensed GPL-2.0-or-later, credits in NOTICE.md" \
   'grep -q "GNU GPL version 2 or later (pocket-ui-info/LICENSE)" "$R" && grep -q "pocket-ui-info/NOTICE.md" "$R"'
 for f in LICENSE NOTICE.md; do

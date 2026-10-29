@@ -45,7 +45,7 @@ impl Theme {
     /// One line for the theme choice in setup.
     pub fn blurb(self) -> &'static str {
         match self {
-            Theme::Shelf => "Games as cartridge spines. The one you pick slides out.",
+            Theme::Shelf => "Your games standing on a shelf. The one you pick shows its cover.",
             Theme::Minimal => "Just the names, nothing else.",
             Theme::Split => "List on the left, details on the right.",
             Theme::Cards => "Big cards you flip through sideways.",
@@ -259,6 +259,14 @@ pub struct Settings {
     /// Options (`over_game`). Off when unset (and not written then).
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "is_off")]
     pub over_game: crate::over_game::Level,
+    /// Settings → Look & feel → Launch animation, kept as its opposite so that unset is On: in the Cabinet and the
+    /// Shelf look a game's case goes into its console while the game loads (`app_cabinet`).
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
+    pub no_launch_animation: bool,
+    /// The game card opens as a page instead of the game's box (`game_box`): SELECT on the card switches, and the
+    /// choice is kept here; unset is the box.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
+    pub details_page: bool,
 }
 
 fn is_off(l: &crate::over_game::Level) -> bool {
@@ -438,6 +446,8 @@ mod tests {
             art_off: false,
             text_size: TextSize::Large,
             over_game: crate::over_game::Level::Sensors,
+            no_launch_animation: true,
+            details_page: true,
         }
     }
 

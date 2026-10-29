@@ -4,6 +4,7 @@ Pause menu → **Options**: the settings of the running game. This page describe
 pocket-ui's own host (see [Systems](systems.md#on-pocket-uis-own-host)). PlayStation 2, GameCube, Wii and 3DS
 have a shorter list of their own ([Options for PlayStation 2, GameCube, Wii and 3DS](options-big.md)); for RetroArch and the
 other emulators, Options opens [Runs on](#runs-on): which emulator plays the game, and RetroArch's own settings.
+The same settings for one game are on its card without starting it: [This game](#this-game).
 
 | Entry | What it holds |
 |---|---|
@@ -266,7 +267,7 @@ Pause menu → Options → **Extras** ("Settings you rarely need."). Values in b
 | **Over the game** | **Off**, FPS, FPS + sensors, Pixel Path | What is drawn over the game while you play. **FPS** shows frames per second and CPU load in the top left corner, for example "60 FPS   CPU 23%", updated twice a second. **FPS + sensors** adds temperature, fan and battery draw: see [the FPS line and sensors](pause-menu.md#the-fps-line-and-sensors). **Pixel Path** shows one line beside the picture instead, which turns orange when something slips: see [Pixel Path over the game](pause-menu.md#pixel-path-over-the-game). The start value is the one under Settings → Playing → [Over the game](settings.md#over-the-game). |
 | **Rumble** | Off, Low, **Medium**, High | How strongly games that rumble shake the console. |
 | **Performance** | Battery, **Auto**, Max | **Auto**: the system decides how fast the CPU runs (until October 2026 this was called Balanced). Battery limits the CPU to half speed: enough for Game Boy and NES. Max keeps the CPU at full speed for demanding games. |
-| **Fan** | **Quiet**, Auto, Cool | Quiet starts the fan later and keeps it slow. Auto keeps the system's cooling profile. Cool starts it earlier. With [Smooth fan](performance.md#smooth-fan) on, each is a smooth curve. |
+| **Fan** | Very quiet, **Quiet**, Auto, Cool | Very quiet keeps the fan off until the Pocket gets warm (60 °C); the Pocket feels a bit warmer. Quiet starts the fan later and keeps it slow. Auto keeps the system's cooling profile. Cool starts it earlier. With [Smooth fan](performance.md#smooth-fan) on, each is a smooth curve. |
 | **Run-ahead** | **Off**, 1 frame, 2 frames | The game responds to your buttons 1 or 2 frames sooner (a frame is 1/60 s). Only on NES, Famicom Disk System, SNES, Game Boy, Game Boy Color, Game Boy Advance, Mega Drive, Master System, Game Gear, SG-1000, PC Engine, SuperGrafx, Atari 2600, WonderSwan and Virtual Boy; the row is not shown for other systems. See [Run-ahead](#run-ahead). |
 
 - Rewind is off by default because keeping the history costs processor time, most on SNES.
@@ -325,7 +326,7 @@ you save it "For this console" or restore the defaults.
 ## Runs on
 
 **Runs on** chooses the emulator that plays a game, for this game alone or for every game of its console. Open it
-with **START** on a game's card or a console page, or in the pause menu: Options → **Runs on** on pocket-ui's own
+with **START** on a console page, with **START** on a game's card and then the **Runs on** row of [This game](#this-game), or in the pause menu: Options → **Runs on** on pocket-ui's own
 host, **Options** for RetroArch and the other emulators. (PlayStation 2, GameCube, Wii and 3DS have other Options in
 the pause menu; use START on the card for them.)
 
@@ -364,3 +365,26 @@ emulators themselves. RetroArch settings for one game need a file name ROCKNIX's
 `[`, `*`, `$` and the like the page asks to save them for the console.
 
 PlayStation 2, GameCube, Wii and 3DS games have their own, shorter Options: see [Options for PlayStation 2, GameCube, Wii and 3DS](options-big.md).
+
+## This game
+
+Press **START** on a game's card (or its box) to set up one game without starting it. It is the pause menu's
+Options for that game, reachable from the shelf: so the picture you want is there before you play, not twelve
+presses into a running game.
+
+| Row | What it holds |
+|---|---|
+| **Screen scaling**, **Screen sharpness**, **Screen effect**, **Screen frame** (with its colour or finish), **Screen orientation** | The [Picture](#picture) settings. A frame's sub-choices show up under it, as in the pause menu. |
+| **Fast-forward speed**, **Rewind**, **Earlier states**, **Over the game**, **Rumble**, **Performance**, **Fan**, **Run-ahead** | The same rows as [Extras](#extras). |
+| **Save state**, **Load state**, **Change slot**, **Fast-forward**, **Rewind**, **Screenshot**, **Over the game** | The [Shortcuts](#shortcuts): which HOME + button does what. |
+| **Controls** | Which button does what, and the left stick ([Controls](#controls)). The page names the buttons the standard way; the pause menu shows the console's own names. |
+| **Runs on** | Which emulator plays this game ([Runs on](#runs-on)). B from there comes back here. |
+| **Resolution** and the other rows of the emulator | For PlayStation 2, GameCube, Wii, 3DS and Xbox games: the rows of [their Options](options-big.md). They take effect the next time the game starts. |
+| **Use the console's settings** | Only when the game has settings of its own: takes it off them, so it starts like the other games on its console. |
+
+Left and Right change a value, B goes back to the card. Every change is kept at once as **this game's own** settings,
+exactly what **Save changes → For this game** keeps in the pause menu, so the game starts with it and the pause menu
+shows it. The two places read and write the same file; there is nothing to save twice. Picture settings have no
+running game to show them on here: you see them when the game starts, and Options → Picture in the pause menu shows
+them live. A game that RetroArch plays shows its own Runs on only, with a line saying why; one that pocket-core could
+play but RetroArch does now keeps its picture rows, which apply when it runs on pocket-core.

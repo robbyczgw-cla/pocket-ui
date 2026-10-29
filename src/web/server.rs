@@ -125,7 +125,7 @@ pub fn reply_busy(mut stream: std::net::TcpStream) {
 /// Why a listening socket could not be opened, as Settings > Connections > Web companion says it (the next try is 30 s later).
 pub fn why_not(e: &std::io::Error) -> String {
     match e.kind() {
-        std::io::ErrorKind::AddrInUse => format!("Another program on the Pocket uses port {PORT}."),
+        std::io::ErrorKind::AddrInUse => "Something else on the Pocket is using the address.".to_string(),
         std::io::ErrorKind::PermissionDenied => format!("The system did not allow port {PORT}."),
         _ => format!("It could not listen: {e}."),
     }

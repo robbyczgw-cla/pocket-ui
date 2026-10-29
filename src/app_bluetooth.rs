@@ -365,8 +365,7 @@ impl App {
 
     fn paint_bluetooth_list(&mut self, c: &mut Canvas, page: &BluetoothPage) {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(58, 34), 34u32);
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, "Bluetooth");
+        self.sheet_header(c, "Bluetooth");
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         let rows = page.rows();
         let list_bottom = c.h - pad - NU_PILL - 16 - DETAILS_H;
@@ -374,9 +373,7 @@ impl App {
         let first = super::window_start(page.sel, visible, rows.len());
         if rows.len() > visible {
             let track = visible as i32 * row;
-            let (bar_h, bar_y) = (track * visible as i32 / rows.len() as i32, track * first as i32 / rows.len() as i32);
-            c.rect(c.w - 12, top, 4, track, pal().pill);
-            c.rect(c.w - 12, top + bar_y, 4, bar_h.max(12), pal().chip);
+            pocket_ui::kit::scrollbar(c, top, track, first, visible, rows.len());
         }
         // Device names start after the place of the controller mark, so they line up whatever kind they are.
         let mark_w = 56;

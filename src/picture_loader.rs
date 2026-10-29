@@ -1,7 +1,7 @@
 //! Pictures decoded and scaled on a thread of their own, so that the shelf never waits for a PNG: the app asks
 //! (`Loader::request`), draws what it has, and the picture arrives as an event, to be put in the image cache
-//! (`app_pictures.rs`). Used for the in-game screenshots and title screens, which come after the box art and
-//! cycle in by themselves. One thread, one picture at a time, started on the first request.
+//! (`app_pictures.rs`). Used for box art, in-game screenshots and title screens. One thread, one picture at a
+//! time, started on the first request; the same decoder and box filter as the synchronous snapshots.
 
 use std::path::PathBuf;
 use std::sync::mpsc;
@@ -50,6 +50,27 @@ impl Loader {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn the_worker_returns_fitted_pixels_with_the_same_alpha_and_box_filter() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cover.png");
+        let mut encoder = png::Encoder::new(std::fs::File::create(&path).unwrap(), 2, 2);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder.write_header().unwrap().write_image_data(&[
+            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 128,
+        ]).unwrap();
+        let (tx, rx) = mpsc::channel();
+        let loader = Loader::start(move |key, img| { tx.send((key, img)).unwrap(); });
+        let key = (path, 1, 1);
+        loader.request(key.clone());
+        let (returned, img) = rx.recv_timeout(Duration::from_secs(5)).expect("cover decoded off-thread");
+        assert_eq!(returned, key);
+        let img = img.expect("valid cover");
+        assert_eq!((img.w, img.h), (1, 1));
+        assert_eq!(img.px, [0x5f5f5f]);
+    }
 
     #[test]
     fn the_size_known_from_the_header_is_the_size_drawn() {

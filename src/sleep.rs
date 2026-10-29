@@ -2612,11 +2612,12 @@ mod tests {
         (dir, sleep, level)
     }
 
-    /// Waits (up to 5 s) for the power-off thread to run the command.
+    /// Waits (up to 5 s) for the power-off thread to run the command: the note has its line. The shell's `>>` makes the
+    /// file before it writes, so the file being there is not the command having run (a gate read it empty once).
     fn powered_off(dir: &Path) -> bool {
         let end = Instant::now() + Duration::from_secs(5);
         while Instant::now() < end {
-            if dir.join("powered-off").exists() {
+            if std::fs::read_to_string(dir.join("powered-off")).is_ok_and(|s| !s.trim().is_empty()) {
                 return true;
             }
             std::thread::sleep(Duration::from_millis(20));

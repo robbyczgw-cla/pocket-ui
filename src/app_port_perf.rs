@@ -190,8 +190,7 @@ impl App {
     fn paint_port_perf_page(&mut self, c: &mut Canvas, page: &PortPerfPage) {
         c.clear(pal().void);
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, "Performance & fan");
+        self.sheet_header(c, "Performance & fan");
         let sub = self.text.fit(Face::Body, 28, &page.title, c.w - 2 * pad - 2 * NU_BTN_PAD - 330);
         self.text.draw(c, Face::Body, 28, pad + NU_BTN_PAD, pad + 104, pal().dust, &sub);
         let (top, right) = (pad + NU_PILL + 46, c.w - pad);

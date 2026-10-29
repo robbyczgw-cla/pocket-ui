@@ -69,6 +69,11 @@ pub fn not_started_notice(name: &str, missing_bios: Option<&str>) -> String {
     }
 }
 
+/// A pocket-core run that failed at once where no other emulator is listed for the system: the likeliest reason, and what to do.
+pub fn core_missing_notice(name: &str) -> String {
+    format!("{name} didn't start. The system's core may not be installed: add it in RetroArch (Flatpak) > Online Updater > Core Downloader.")
+}
+
 /// What pocket-ui tells the player when a game goes to the system's default emulator (`emulator`, as in
 /// es_systems.cfg) from now on.
 pub fn notice(emulator: &str) -> String {
@@ -103,6 +108,14 @@ mod tests {
         ] {
             assert!(!should_retry(false, 1, false, Some(refused)), "the zip's own problem is told, not passed on");
         }
+    }
+
+    #[test]
+    fn a_missing_core_is_told_in_words() {
+        assert_eq!(
+            core_missing_notice("Test Cartridge"),
+            "Test Cartridge didn't start. The system's core may not be installed: add it in RetroArch (Flatpak) > Online Updater > Core Downloader."
+        );
     }
 
     #[test]

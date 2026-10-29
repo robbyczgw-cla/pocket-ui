@@ -1228,9 +1228,19 @@ pub mod linux {
     /// The one place that decides which input devices we read: gamepads, the power and volume keys, and a lid switch
     /// (the Flip 2's hall sensor), plus InputPlumber's keyboard aliases. Touch has its own reader.
     pub fn is_wanted(d: &Device) -> bool {
-        d.supported_keys().is_some_and(|k| k.contains(KeyCode::BTN_SOUTH) || k.contains(KeyCode::KEY_POWER) || k.contains(KeyCode::KEY_VOLUMEUP)
-            || (d.name().is_some_and(|n| n.contains("InputPlumber")) && (k.contains(KeyCode::KEY_F1) || k.contains(KeyCode::KEY_HOME))))
+        d.supported_keys().is_some_and(|k| wants_keys(|c| k.contains(c), d.name().is_some_and(|n| n.contains("InputPlumber"))))
             || d.supported_switches().is_some_and(|s| s.contains(SwitchCode::SW_LID))
+    }
+
+    /// The key part of `is_wanted`, for a device with these keys. Vol- counts on its own: on the Mini V2 the two volume
+    /// keys are two devices, Vol+ is `gpio-keys` and Vol- is `pm8941_resin` (that one has nothing else), so without it
+    /// the OSD never saw Vol- from the real key (only what InputPlumber's keyboard echoes of it, now and then).
+    pub(super) fn wants_keys(has: impl Fn(KeyCode) -> bool, inputplumber: bool) -> bool {
+        has(KeyCode::BTN_SOUTH)
+            || has(KeyCode::KEY_POWER)
+            || has(KeyCode::KEY_VOLUMEUP)
+            || has(KeyCode::KEY_VOLUMEDOWN)
+            || (inputplumber && (has(KeyCode::KEY_F1) || has(KeyCode::KEY_HOME)))
     }
 
     /// A switch event as ours: `SW_LID` 1 is the lid closed, 0 opened; every other switch (headphones, a tablet mode)
@@ -1507,5 +1517,25 @@ mod ayn_input_tests {
         // Plain ds5 target currently drops the Edge-only paddles. Do not turn them into face/menu buttons.
         assert_eq!(linux::button(KeyCode::BTN_Z), None);
         assert_eq!(linux::button(KeyCode::BTN_C), None);
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod volume_key_device_tests {
+    use super::linux::wants_keys;
+    use evdev::KeyCode;
+
+    /// The Mini V2 (2026-10-28, `/proc/bus/input/devices`): Vol+ is `gpio-keys`, Vol- is `pm8941_resin`, a device with
+    /// that one key. Alex's "Vol- changes the volume and shows nothing": the resin node was not read.
+    #[test]
+    fn each_device_with_a_volume_key_is_read_also_when_it_has_only_vol_down() {
+        let keys = |list: &'static [KeyCode]| move |c: KeyCode| list.contains(&c);
+        assert!(wants_keys(keys(&[KeyCode::KEY_VOLUMEDOWN]), false), "pm8941_resin");
+        assert!(wants_keys(keys(&[KeyCode::KEY_VOLUMEUP]), false), "gpio-keys");
+        assert!(wants_keys(keys(&[KeyCode::KEY_POWER]), false), "pm8941_pwrkey");
+        assert!(wants_keys(keys(&[KeyCode::BTN_SOUTH]), false), "a pad");
+        assert!(!wants_keys(keys(&[KeyCode::KEY_A, KeyCode::KEY_MUTE]), false), "a keyboard");
+        assert!(!wants_keys(keys(&[KeyCode::KEY_F1]), false), "F1 alone is not ours");
+        assert!(wants_keys(keys(&[KeyCode::KEY_F1]), true), "InputPlumber's keyboard");
     }
 }

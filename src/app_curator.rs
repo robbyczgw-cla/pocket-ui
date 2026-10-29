@@ -140,7 +140,7 @@ pub(crate) struct CuratorUi {
     /// Games on each smart shelf and sticker, for the rows' counts.
     shelf_counts: Vec<usize>,
     sticker_counts: HashMap<u32, usize>,
-    /// The first games of the smart shelves and stickers pinned to Home, in their order: their rows' covers
+    /// The first games of the smart shelves and stickers, in their order: their rows' covers on Home and in Curator's list
     /// (`app_home_panel`).
     pub shelf_tops: HashMap<usize, Vec<usize>>,
     pub sticker_tops: HashMap<u32, Vec<usize>>,
@@ -376,10 +376,11 @@ impl App {
         let merge = self.curator.prefs.merge_versions;
         self.curator.shelf_counts = self.curator.prefs.shelves.iter().map(|s| ix.list(&ix.matches(&s.lens), merge).len()).collect();
         self.curator.sticker_counts = self.library.stickers().iter().map(|st| (st.id, ix.list(&ix.matches(&sticker_lens(st.id)), merge).len())).collect();
-        // The covers of the rows on Home: only the pinned ones, which are few.
+        // The covers of the rows on Home and in Curator's list: every shelf and sticker shows its first games (the
+        // counts above matched them all already).
         let top = |lens: &Lens, order: Order| ix.sorted(&ix.matches(lens), merge, order).into_iter().take(pocket_ui::home_panel::MAX_COVERS).collect::<Vec<_>>();
-        self.curator.shelf_tops = self.curator.prefs.shelves.iter().enumerate().filter(|(_, s)| s.pinned).map(|(i, s)| (i, top(&s.lens, s.order))).collect();
-        self.curator.sticker_tops = self.library.stickers().iter().filter(|st| st.pinned).map(|st| (st.id, top(&sticker_lens(st.id), Order::Name))).collect();
+        self.curator.shelf_tops = self.curator.prefs.shelves.iter().enumerate().map(|(i, s)| (i, top(&s.lens, s.order))).collect();
+        self.curator.sticker_tops = self.library.stickers().iter().map(|st| (st.id, top(&sticker_lens(st.id), Order::Name))).collect();
     }
 
     /// The App's item for a game of the catalog, while the library still has that file there.
@@ -1538,10 +1539,7 @@ impl App {
 
     /// A spine or, selected, the paper label: the row's background and stripe; returns (text, secondary) colours.
     fn row_back(&self, c: &mut Canvas, (x, y, w, h): (i32, i32, i32, i32), stripe_colour: u32, selected: bool) -> (u32, u32) {
-        c.rect(x, y, w, h, if selected { pal().label } else { pal().spine });
-        if selected {
-            game_card::lift_shadow(c, x, y + h, w, pal().t);
-        }
+        pocket_ui::kit::shelf_row(c, x, y, w, h, selected);
         c.rect(x, y, STRIPE, h, if selected { stripe_colour } else { mix(stripe_colour, pal().spine, 150) });
         if selected {
             (pal().ink, pal().label_dust)
@@ -1893,8 +1891,7 @@ impl App {
     pub(crate) fn paint_curator_settings(&mut self, c: &mut Canvas) {
         c.clear(pal().void);
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, SETTINGS_NAME);
+        self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         let sel = self.curator.settings_sel;
         for (i, (name, _)) in SETTINGS_ROWS.iter().enumerate() {

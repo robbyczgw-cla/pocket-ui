@@ -39,8 +39,13 @@ const VM_SHUTDOWN_WAIT: Duration = Duration::from_secs(10);
 const EXIT_WAIT: Duration = Duration::from_millis(500);
 const AZAHAR_EXIT_WAIT: Duration = Duration::from_secs(8);
 const KILL_WAIT: Duration = Duration::from_secs(8);
+/// RetroArch's `QUIT` closes the core (the HDD image and caches are flushed) and the window in about a second.
+const RA_EXIT_WAIT: Duration = Duration::from_secs(10);
 /// The longest an ARMSX2 Quit takes when every step runs out its time.
 pub const ARMSX2_QUIT_WORST: Duration = SAVE_WAIT.saturating_add(VM_SHUTDOWN_WAIT).saturating_add(EXIT_WAIT).saturating_add(KILL_WAIT);
+
+/// How long the main loop waits after a guest's Quit (`guest::WORST` plus slack) before it stops the process group.
+pub const GUEST_GRACE: Duration = Duration::from_secs(20);
 
 const SYSTEM_CFG: &str = "/storage/.config/system/configs/system.cfg";
 
@@ -49,16 +54,19 @@ pub enum Emu {
     Armsx2,
     Dolphin,
     Azahar,
+    /// Xbox: hakuX in ROCKNIX's RetroArch (`hakux.rs`).
+    Hakux,
 }
 
 impl Emu {
-    /// The emulators handled here. Dolphin's Qt build has no pad hotkeys; WiiWare, Wii U, PS3 and Xbox stay
-    /// without (Continue/Quit only).
+    /// The emulators handled here. Dolphin's Qt build has no pad hotkeys; WiiWare and xemu stay
+    /// without (Continue/Quit only); Wii U and PS3 are `guest`s. Xbox's hakuX has Continue/Quit and gets the rest with save states (`hakux`).
     pub fn detect(system: &str, emulator: &str, core: &str) -> Option<Emu> {
         match (system, emulator) {
             ("ps2", "armsx2") => Some(Emu::Armsx2),
             ("gamecube" | "wii", "dolphin") if !core.contains("qt") => Some(Emu::Dolphin),
             ("3ds", "azahar") => Some(Emu::Azahar),
+            ("xbox", "hakux") => Some(Emu::Hakux),
             _ => None,
         }
     }
@@ -66,7 +74,7 @@ impl Emu {
     /// Whether the state file names of this game are known: Dolphin names WAD channels after an id inside the
     /// file, Azahar names CIA and compressed games after a title id we don't read.
     fn handles(self, rom: &Path) -> bool {
-        self == Emu::Armsx2 || state_base(self, rom).is_some()
+        matches!(self, Emu::Armsx2 | Emu::Hakux) || state_base(self, rom).is_some()
     }
 
     /// Start of the emulator's process name (`comm` is cut at 15 characters).
@@ -75,6 +83,7 @@ impl Emu {
             Emu::Armsx2 => "armsx2-qt",
             Emu::Dolphin => "dolphin-emu-nog",
             Emu::Azahar => "azahar",
+            Emu::Hakux => "retroarch",
         }
     }
 }
@@ -86,6 +95,8 @@ fn state_base(emu: Emu, rom: &Path) -> Option<String> {
         Emu::Armsx2 => None,
         Emu::Dolphin => dolphin::state_base(rom),
         Emu::Azahar => azahar::title_id(rom).map(|t| format!("{t:016X}")),
+        // RetroArch names its states after the content without its extension.
+        Emu::Hakux => rom.file_stem().and_then(|s| s.to_str()).map(str::to_string),
     }
 }
 
@@ -177,11 +188,19 @@ fn bound_game_runs() -> bool {
 impl Session {
     /// The states of this game, once the names are known (ARMSX2: once the game runs).
     fn states(&self) -> Option<StateSet> {
+        self.states_with(self.emu == Emu::Hakux && crate::hakux::core_has_states())
+    }
+
+    /// `states`, with whether hakuX's core has save states given (the core's `.info`, `hakux::states_supported`).
+    fn states_with(&self, hakux_states: bool) -> Option<StateSet> {
         let base = self.base.as_deref()?;
         Some(match self.emu {
             Emu::Armsx2 => StateSet::armsx2(base),
             Emu::Dolphin => StateSet::dolphin(&self.system, base),
             Emu::Azahar => StateSet::azahar(base, self.rom.file_name()?.to_str()?),
+            // Only once the core has save states: until then the menu offers none (`no_states_line`).
+            Emu::Hakux if hakux_states => StateSet::hakux(base),
+            Emu::Hakux => return None,
         })
     }
 
@@ -196,9 +215,13 @@ impl Session {
 pub fn launch(system: &str, emulator: &str, core: &str, rom: &Path, data_dir: &Path) -> bool {
     let Some(emu) = Emu::detect(system, emulator, core).filter(|e| e.handles(rom)) else {
         exited();
+        guest::launch(system, emulator, rom);
         return false;
     };
     defaults::apply(emu, system, rom, data_dir);
+    if emu == Emu::Hakux && crate::hakux::prepare(data_dir, rom).is_none() {
+        println!("standalone: hakuX's folders or config could not be written");
+    }
     let id = LAUNCHES.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
     let session = Session {
         emu,
@@ -229,7 +252,7 @@ fn transit_of(s: &Session) -> Option<(PathBuf, PathBuf, PathBuf)> {
     let quick = match s.emu {
         Emu::Azahar => states.slots.first()?.clone(),
         Emu::Dolphin => StateSet::dolphin_transit(&s.system, s.base.as_deref()?),
-        Emu::Armsx2 => return None,
+        Emu::Armsx2 | Emu::Hakux => return None,
     };
     Some((quick, states.auto.first()?.clone(), states.undo.clone()))
 }
@@ -239,6 +262,7 @@ pub fn exited() {
     if let Ok(mut s) = SESSION.lock() {
         *s = None;
     }
+    guest::ended();
     restore_performance();
 }
 
@@ -360,6 +384,13 @@ enum Step {
     VmDown(Duration),
     /// Wait until the process has ended, at most this long.
     Exit(Duration),
+    /// RetroArch's own `QUIT` command, on this game's network port.
+    RaQuit,
+    /// SIGKILL to the whole process group of the game: whatever is left of RetroArch and the core.
+    KillGroup,
+    /// SIGKILL every process of the emulator's name in the game's group (not runemu.sh, which restores the governor):
+    /// RPCS3 starts a second `rpcs3-sa --error` for its error dialog, which outlives the first and stays on screen.
+    KillSame,
 }
 
 /// Resume state first, then the emulator's own graceful shutdown (memory cards, settings, caches); force it
@@ -390,6 +421,9 @@ fn quit_plan(emu: Emu) -> &'static [Step] {
             Exit(KILL_WAIT),
             Signal(libc::SIGKILL),
         ],
+        // The state of a Quit only when the core has states (`Session::states`; else the step finds no file name and
+        // does nothing). RetroArch's own QUIT first (it leaves the core cleanly), then the signals, then the group.
+        Emu::Hakux => &[SaveResume, RaQuit, Exit(RA_EXIT_WAIT), Signal(libc::SIGTERM), Exit(KILL_WAIT), KillGroup],
     }
 }
 
@@ -409,7 +443,7 @@ fn quit_worst_of(emu: Emu, save: bool) -> Duration {
     quit_steps(emu, save).fold(Duration::ZERO, |sum, step| match step {
         Step::SaveResume => sum + SAVE_WAIT,
         Step::VmDown(d) | Step::Exit(d) => sum + d,
-        Step::CloseWindow | Step::Signal(_) => sum,
+        Step::CloseWindow | Step::Signal(_) | Step::RaQuit | Step::KillGroup | Step::KillSame => sum,
     })
 }
 
@@ -452,6 +486,20 @@ fn armsx2_slot(target: Target) -> u8 {
     }
 }
 
+/// RetroArch's slot number of a state (`StateSet::hakux`).
+fn hakux_slot(target: Target) -> i32 {
+    match target {
+        Target::Auto => crate::hakux::AUTO_SLOT,
+        Target::Undo => crate::hakux::UNDO_SLOT,
+        Target::Slot(n) => i32::from(n),
+    }
+}
+
+/// What the pause menu says in place of Save and Load for the running game, if its emulator has none yet.
+pub fn no_states_line() -> Option<&'static str> {
+    current().filter(|s| s.emu == Emu::Hakux && s.states().is_none()).map(|_| crate::hakux::NO_STATES)
+}
+
 /// Writes `target` and waits until the file is complete. False if the emulator didn't write it. Called with the
 /// session's [`Turn`] held.
 fn save_target(s: &Session, target: Target) -> bool {
@@ -472,6 +520,7 @@ fn save_target(s: &Session, target: Target) -> bool {
             Some(quick) => azahar::save(&quick, Some(&dest)),
             None => false,
         },
+        (Emu::Hakux, _) => crate::hakux::send(&crate::hakux::save_command(hakux_slot(target))) && wait_written(s.emu, &dest, before),
     };
     println!("standalone: save {target:?}: {}", if ok { "written" } else { "failed" });
     ok
@@ -493,6 +542,7 @@ fn load_target(s: &Session, target: Target) -> bool {
             Some(quick) => azahar::load(&quick, Some(path.as_path())),
             None => false,
         },
+        (Emu::Hakux, _) => crate::hakux::send(&crate::hakux::load_command(hakux_slot(target))),
     };
     println!("standalone: load {target:?}: {}", if ok { "sent" } else { "failed" });
     ok
@@ -591,6 +641,13 @@ fn resume(mut s: Session) {
             }
             std::thread::sleep(azahar::SETTLE);
         }
+        Emu::Hakux => {
+            // RetroArch answers GET_STATUS once the core runs the game; the core needs a moment to boot the console.
+            if !wait_for(&|| crate::hakux::status().is_some_and(|st| crate::hakux::playing(&st))) {
+                return;
+            }
+            std::thread::sleep(Duration::from_secs(2));
+        }
     }
     if let Some(_turn) = turn(&s) {
         // The emulator runs, so runemu.sh has set ROCKNIX's governor already: ours goes on top of it.
@@ -601,7 +658,12 @@ fn resume(mut s: Session) {
 
 /// Runs the rest of `quit_plan` on the emulator's process.
 fn close(emu: Emu, pgid: Option<i32>) {
-    let Some(pid) = find_pid(pgid, emu.process()) else { return };
+    run_plan(quit_plan(emu), emu.process(), pgid);
+}
+
+/// Runs `plan` on the process named `process` (in the game's group `pgid`) until it has ended.
+fn run_plan(plan: &[Step], process: &str, pgid: Option<i32>) {
+    let Some(pid) = find_pid(pgid, process) else { return };
     let alive = || Path::new(&format!("/proc/{pid}")).exists();
     let wait = |within: Duration, done: &dyn Fn() -> bool| {
         let end = Instant::now() + within;
@@ -609,14 +671,19 @@ fn close(emu: Emu, pgid: Option<i32>) {
             std::thread::sleep(Duration::from_millis(100));
         }
     };
-    for step in quit_plan(emu) {
-        if !alive() {
-            break;
+    for step in plan {
+        // Whatever else of the emulator's name is left (a second process of RPCS3) goes even if the first one is gone.
+        if !alive() && *step != Step::KillSame {
+            continue;
         }
         match *step {
             Step::SaveResume => {}
+            Step::KillSame => kill_same(process, pgid),
+            // Every process of the name that has a window (RPCS3's error dialog is a second one).
             Step::CloseWindow => {
-                azahar::close_window(pid);
+                for p in pids_of(pgid, process) {
+                    azahar::close_window(p);
+                }
             }
             // SAFETY: kill(2) on the emulator's own process.
             Step::Signal(sig) => unsafe {
@@ -624,19 +691,51 @@ fn close(emu: Emu, pgid: Option<i32>) {
             },
             Step::VmDown(within) => wait(within, &|| !matches!(pine::status(), Some(s) if s != pine::SHUTDOWN)),
             Step::Exit(within) => wait(within, &|| !alive()),
+            Step::RaQuit => {
+                // The menu still covers the game's window, and RetroArch/hakuX hangs in presenting to a covered surface:
+                // QUIT and SIGTERM then wait until SIGKILL (18 s, measured on the Mini V2). In front, it ends in ~0.3 s.
+                crate::control::show_game();
+                crate::hakux::send("QUIT");
+            }
+            // SAFETY: kill(2) on the process group pocket-ui started for this game.
+            Step::KillGroup => unsafe {
+                if let Some(g) = pgid.filter(|g| *g > 1) {
+                    libc::kill(-g, libc::SIGKILL);
+                }
+            },
+        }
+    }
+}
+
+/// SIGKILL to every process whose name starts with `name` in the group `pgid` (any group when None).
+fn kill_same(name: &str, pgid: Option<i32>) {
+    while let Some(pid) = find_pid(pgid, name) {
+        // SAFETY: kill(2) on a process of the emulator's own name in the game's group.
+        unsafe {
+            libc::kill(pid, libc::SIGKILL);
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        if Path::new(&format!("/proc/{pid}")).exists() {
+            break;
         }
     }
 }
 
 /// The process of `pgid` whose name starts with `name` (any process of that name without a group).
 fn find_pid(pgid: Option<i32>, name: &str) -> Option<i32> {
-    std::fs::read_dir("/proc").ok()?.flatten().find_map(|e| {
+    pids_of(pgid, name).first().copied()
+}
+
+/// Every process of `pgid` whose name starts with `name`.
+fn pids_of(pgid: Option<i32>, name: &str) -> Vec<i32> {
+    let Ok(dir) = std::fs::read_dir("/proc") else { return Vec::new() };
+    dir.flatten().filter_map(|e| {
         let pid: i32 = e.file_name().to_str()?.parse().ok()?;
         let stat = std::fs::read_to_string(e.path().join("stat")).ok()?;
         let (comm, rest) = (stat.get(stat.find('(')? + 1..stat.rfind(')')?)?, stat.get(stat.rfind(')')? + 2..)?);
         let group: i32 = rest.split(' ').nth(2)?.parse().ok()?;
         (comm.starts_with(name) && pgid.is_none_or(|g| g == group)).then_some(pid)
-    })
+    }).collect()
 }
 
 /// True once `emu` has written a new version of `path` (not the one `before` stamped) and finished it: the same in two
@@ -1243,6 +1342,8 @@ mod defaults {
             }
         }
         match emu {
+            // Everything hakuX needs is in the appendconfig `hakux::prepare` writes at every start.
+            Emu::Hakux => {}
             // PINE for save/load; no "are you sure" box on quit; HOME (Guide) belongs to pocket-ui, not to the
             // DualShock's analog button. No vsync: with it, ARMSX2's GS thread waits for the compositor, which
             // shows nothing of the game while the pause menu is up, so the Quit save never finished.
@@ -1448,7 +1549,19 @@ pub fn quiet_wiimote(profile: &str) -> String {
 
 /// One of ARMSX2, Dolphin nogui or Azahar is running (started by us or not).
 pub fn emulator_running() -> bool {
-    [Emu::Armsx2, Emu::Dolphin, Emu::Azahar].iter().any(|e| find_pid(None, e.process()).is_some())
+    [Emu::Armsx2, Emu::Dolphin, Emu::Azahar, Emu::Hakux].iter().any(|e| find_pid(None, e.process()).is_some())
+        || [guest::Guest::Cemu, guest::Guest::Rpcs3].iter().any(|g| find_pid(None, g.process()).is_some())
+}
+
+/// A Wii U (Cemu) or PS3 (RPCS3) game is running as a guest (`guest`): Continue and Quit, no states.
+pub fn guest_active() -> bool {
+    guest::current().is_some()
+}
+
+/// Quit from the pause menu for a guest (the game has just been resumed): the emulator's window is closed as its
+/// own close button would, then SIGTERM, then SIGKILL (`guest::PLAN`).
+pub fn guest_quit(pgid: Option<i32>) {
+    guest::quit(pgid);
 }
 
 /// Sets `key=value` in `[section]` of Azahar's qt-config.ini, with `key\default=false` so Azahar takes it.
@@ -1498,6 +1611,104 @@ pub fn save_and_close(pgid: Option<i32>, frame: Option<Image>, done: impl FnOnce
             close(s.emu, pgid);
         }
     });
+}
+
+/// Wii U (Cemu) and PS3 (RPCS3) on the SM8550 handhelds: guests of the pause menu without states. Neither emulator
+/// has a save state we could press or ask for (Cemu has none at all; RPCS3 has no savestates, and no IPC), so the
+/// menu offers Continue and Quit and says honestly that the game keeps its own saves (`pause_saves::OWN_SAVES`).
+/// pocket-ui starts them through ROCKNIX's `runemu.sh` as ever; what it adds is the CPU/GPU profile of the other big
+/// emulators (Games: performance, Quick settings) and a Quit that closes the emulator's window and escalates, with
+/// the process found by name inside the game's process group. Code paths in `main.rs`: `Quit if guest_active()`.
+mod guest {
+    use super::*;
+
+    #[derive(Clone, Copy, PartialEq, Debug)]
+    pub enum Guest {
+        Cemu,
+        Rpcs3,
+    }
+
+    impl Guest {
+        pub fn detect(system: &str, emulator: &str) -> Option<Guest> {
+            match (system, emulator) {
+                ("wiiu", "cemu") => Some(Guest::Cemu),
+                ("ps3", "rpcs3") => Some(Guest::Rpcs3),
+                _ => None,
+            }
+        }
+
+        /// Start of the emulator's process name (`comm`; `/usr/bin/cemu`, `/usr/bin/rpcs3-sa`).
+        pub fn process(self) -> &'static str {
+            match self {
+                Guest::Cemu => "cemu",
+                Guest::Rpcs3 => "rpcs3-sa",
+            }
+        }
+    }
+
+    /// How long each step of a guest's Quit waits before it moves on.
+    const CLOSE_WAIT: Duration = Duration::from_secs(8);
+    const TERM_WAIT: Duration = Duration::from_secs(5);
+    /// The longest a guest's Quit takes when every step runs out its time (the main loop stops it after this plus slack).
+    pub(super) const WORST: Duration = CLOSE_WAIT.saturating_add(TERM_WAIT);
+    /// The same for both: the window's close request (Cemu's File > Exit, RPCS3 with its exit question off) flushes
+    /// the shader caches and settings; SIGTERM and SIGKILL only if it hangs.
+    pub(super) const PLAN: &[Step] = &[
+        Step::CloseWindow,
+        Step::Exit(CLOSE_WAIT),
+        Step::Signal(libc::SIGTERM),
+        Step::Exit(TERM_WAIT),
+        Step::Signal(libc::SIGKILL),
+        Step::KillSame,
+    ];
+
+    static GUEST: Mutex<Option<(u64, Guest)>> = Mutex::new(None);
+
+    pub fn current() -> Option<(u64, Guest)> {
+        *GUEST.lock().ok()?
+    }
+
+    /// A game of a guest emulator starts: noted, and its performance profile set once the emulator's process runs.
+    pub fn launch(system: &str, emulator: &str, rom: &Path) {
+        let Some(g) = Guest::detect(system, emulator) else { return };
+        let id = LAUNCHES.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        if let Ok(mut cur) = GUEST.lock() {
+            *cur = Some((id, g));
+        }
+        let (system, rom) = (system.to_string(), rom.to_path_buf());
+        std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(120);
+            while find_pid(None, g.process()).is_none() {
+                if Instant::now() > deadline || current().is_none_or(|(i, _)| i != id) {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(250));
+            }
+            // runemu.sh has set ROCKNIX's governor before it started the emulator: ours goes on top of it.
+            if current().is_some_and(|(i, _)| i == id) {
+                set_performance(chosen_performance(&system, &rom));
+            }
+        });
+    }
+
+    pub fn ended() {
+        if let Ok(mut cur) = GUEST.lock() {
+            *cur = None;
+        }
+    }
+
+    /// Runs [`PLAN`] on the emulator's process, on a thread (the caller is the UI).
+    pub fn quit(pgid: Option<i32>) {
+        let Some((_, g)) = current() else { return };
+        std::thread::spawn(move || {
+            let started = Instant::now();
+            println!("standalone: quitting {g:?}, at most {WORST:?}");
+            // A window hidden behind our menu may ignore the close request (the Xbox guest's lesson): in front first.
+            crate::control::show_game();
+            run_plan(PLAN, g.process(), pgid);
+            println!("standalone: {g:?} closed after {:?}", started.elapsed());
+        });
+    }
 }
 
 #[cfg(test)]
@@ -1578,6 +1789,19 @@ mod tests {
         let t = defaults::ARMSX2_ENFORCED.iter().fold(INI.to_string(), |t, (s, k, v)| ini_set(&t, s, k, *v));
         assert!(t.contains("[EmuCore/GS]\nOsdMessagesPos = 0\n") || t.contains("\nOsdMessagesPos = 0\n"), "{t}");
         assert!(t.contains("EnablePINE = true"), "the PINE switch is still there");
+    }
+
+    #[test]
+    fn wii_u_and_ps3_are_guests_that_close_by_their_window() {
+        use super::guest::{Guest, PLAN, WORST};
+        assert_eq!(Guest::detect("wiiu", "cemu"), Some(Guest::Cemu));
+        assert_eq!(Guest::detect("ps3", "rpcs3"), Some(Guest::Rpcs3));
+        assert_eq!(Guest::detect("ps3", "retroarch"), None);
+        assert_eq!(Guest::detect("wii", "dolphin"), None);
+        assert_eq!(PLAN.first(), Some(&Step::CloseWindow), "the emulator's own close first");
+        assert_eq!(PLAN.last(), Some(&Step::KillSame), "RPCS3's error-dialog process too");
+        assert!(PLAN.iter().all(|s| *s != Step::SaveResume), "no states to write");
+        assert!(WORST < GUEST_GRACE, "the main loop's backstop comes after the plan");
     }
 
     #[test]
@@ -1683,9 +1907,11 @@ mod tests {
         assert_eq!(Emu::detect("3ds", "azahar", "azahar-sa"), Some(Emu::Azahar));
         // Experimental: no pause-menu Save/Load.
         assert_eq!(Emu::detect("wiiware", "dolphin", "dolphin-sa-wii"), None);
-        assert_eq!(Emu::detect("wiiu", "cemu", "cemu-sa"), None);
+        assert_eq!(Emu::detect("wiiu", "cemu", "cemu-sa"), None, "Cemu and RPCS3 are guests without states (`guest`)");
         assert_eq!(Emu::detect("ps3", "rpcs3", "rpcs3-sa"), None);
         assert_eq!(Emu::detect("xbox", "xemu", "xemu-sa"), None);
+        assert_eq!(Emu::detect("xbox", "hakux", "hakux"), Some(Emu::Hakux));
+        assert_eq!(Emu::detect("ps2", "hakux", "hakux"), None, "only Xbox games");
         // Games whose state file name can't be told from the file stay without, too.
         assert!(Emu::Dolphin.handles(Path::new("/storage/roms/wii/Game.wbfs")));
         assert!(!Emu::Dolphin.handles(Path::new("/storage/roms/wii/Channel.wad")));
@@ -2050,15 +2276,20 @@ mod tests {
         let path = dir.join("T.00.cst");
         std::fs::write(&path, vec![7u8; 1 << 16]).unwrap();
         let watch = azahar::opened::Watch::new(&path).unwrap();
+        let (peeked, peeks_done) = std::sync::mpsc::channel();
         let reader = {
             let path = path.clone();
             std::thread::spawn(move || {
-                // Azahar lists the slots first (header reads), then loads: the file stays open meanwhile.
+                // Azahar lists the slots first (header reads), then loads: the file stays open meanwhile. The reads are
+                // over before pocket-ui looks (it is busy with its own frame), so their open/close pairs are there as
+                // events and cancel out instead of being timed one by one: a peek lasts microseconds, but a thread
+                // paused by a loaded machine must not look like a load (a gate saw exactly that, 2026-10-28).
                 for _ in 0..3 {
                     let mut head = [0u8; 256];
                     std::fs::File::open(&path).unwrap().read_exact(&mut head).unwrap();
                     std::thread::sleep(Duration::from_millis(40));
                 }
+                peeked.send(()).unwrap();
                 let mut f = std::fs::File::open(&path).unwrap();
                 let started = Instant::now();
                 std::thread::sleep(Duration::from_millis(200));
@@ -2066,6 +2297,7 @@ mod tests {
                 started
             })
         };
+        peeks_done.recv().unwrap();
         assert!(watch.held_open(Duration::from_millis(25), Duration::from_secs(3)));
         let seen = Instant::now();
         let load_started = reader.join().unwrap();
@@ -2213,4 +2445,62 @@ mod tests {
         let p = defaults::with_extra_triggers("Triggers/L = `Trigger L`\nTriggers/R = `Trigger R`\n", "Guide");
         assert!(p.contains("(`Guide` & `Thumb L` & !`Thumb R`)") && p.contains("(`Guide` & `Thumb R` & !`Thumb L`)"));
     }
+
+    fn xbox_session() -> Session {
+        Session {
+            emu: Emu::Hakux,
+            system: "xbox".into(),
+            rom: PathBuf::from("/storage/roms/xbox/Jade Empire (USA).iso"),
+            base: state_base(Emu::Hakux, Path::new("/storage/roms/xbox/Jade Empire (USA).iso")),
+            id: 7,
+        }
+    }
+
+    #[test]
+    fn only_hakux_brings_the_game_window_forward_before_quitting() {
+        // `Step::RaQuit` is what shows the game's window (control::show_game) before RetroArch's QUIT; no other guest's plan has it.
+        for emu in [Emu::Armsx2, Emu::Dolphin, Emu::Azahar] {
+            assert!(!quit_plan(emu).contains(&Step::RaQuit), "{emu:?}");
+        }
+        assert_eq!(quit_plan(Emu::Hakux).iter().filter(|s| **s == Step::RaQuit).count(), 1);
+    }
+
+    #[test]
+    fn hakux_quits_with_retroarchs_own_command_then_signals_then_the_group() {
+        use Step::*;
+        let plan = quit_plan(Emu::Hakux);
+        let at = |s: Step| plan.iter().position(|p| *p == s).unwrap();
+        assert_eq!(plan.first(), Some(&SaveResume));
+        assert!(at(RaQuit) < at(Signal(libc::SIGTERM)), "RetroArch's QUIT before any signal");
+        assert_eq!(plan.last(), Some(&KillGroup), "the process group is the last resort");
+        assert!(matches!(plan[plan.len() - 2], Exit(_)), "a wait before the group goes");
+        assert!(QUIT_GRACE >= quit_worst(Emu::Hakux) + Duration::from_secs(2), "{:?}", quit_worst(Emu::Hakux));
+        assert_eq!(Emu::Hakux.process(), "retroarch");
+    }
+
+    #[test]
+    fn hakux_offers_save_and_load_only_when_the_core_has_states() {
+        let s = xbox_session();
+        assert_eq!(s.base.as_deref(), Some("Jade Empire (USA)"), "RetroArch names states after the content without its extension");
+        // The core reports serialize_size 0 today: no states, and the menu says why.
+        assert!(s.states_with(false).is_none());
+        let line = Some(crate::hakux::NO_STATES);
+        assert_eq!(crate::pause_saves::Saves::of(crate::quit::Saver::Standalone, false, line), crate::pause_saves::Saves::InGame(crate::hakux::NO_STATES));
+        // Once the core's info says it has them, Save, Load and the auto state of Quit appear without another change.
+        let st = s.states_with(true).expect("states with a core that has them");
+        assert_eq!(st.slot_count(), 8);
+        assert_eq!(st.target_path(Target::Slot(1)), Some(Path::new("/storage/roms/savestates/xbox/Jade Empire (USA).state1")));
+        assert_eq!(st.target_path(Target::Auto), Some(Path::new("/storage/roms/savestates/xbox/Jade Empire (USA).state.auto")));
+        assert_eq!(st.target_path(Target::Undo), Some(Path::new("/storage/roms/savestates/xbox/Jade Empire (USA).state98")));
+        assert_eq!(crate::pause_saves::Saves::of(crate::quit::Saver::Standalone, true, line), crate::pause_saves::Saves::Slots);
+        assert_eq!((hakux_slot(Target::Auto), hakux_slot(Target::Undo), hakux_slot(Target::Slot(3))), (-1, 98, 3));
+    }
+
+    #[test]
+    fn the_shipped_hakux_info_does_not_claim_states() {
+        // If this fails the core has been updated with save states: the pause menu then offers them (`Session::states`),
+        // so the device test of docs/XBOX.md "Save states" has to be done first.
+        assert!(!crate::hakux::states_supported(include_str!("../deploy/hakux/hakux_libretro.info")));
+    }
 }
+

@@ -3,6 +3,54 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a minor version may change anything).
 
+## [0.1.2] - 2026-10-29
+
+### Added
+
+- **Xbox games**, played by hakuX (rfandango's Xbox emulator, with the Linux/libretro port by portare-ch) in RetroArch, as
+  a system of its own on the shelf with its console picture, case and fact sheet. pocket-ui is the pause menu, as for PS2:
+  save slots, quick settings and Quit. Paced by RetroArch's own clock it shows about 60 new pictures a second (was about
+  47), the sound comes back after the game's relaunch (an audio fix of ours, submitted upstream), and Quit through the
+  pause menu is quick. It runs on the Mini V2 and on the SM8550 handhelds (Odin 2 family, Pocket 6, Nova); only on SM8550 it runs at 2x resolution
+  by default, at the speed of 1x on the Odin 2 Mini. The install packages carry the hakuX core with its licence and source notes
+  ([docs/XBOX.md](docs/XBOX.md)). Experimental.
+- Wii U (Cemu) and PS3 (RPCS3) as guests of the pause menu, on the SM8550 handhelds only (the ones ROCKNIX ships them for), with a performance profile and a clean
+  Quit that also closes the emulators' own windows and extra processes.
+- A launch animation while a game loads, and the game card shown as the game's box.
+- A **This game** page: the game's own picture, extras, controls, shortcuts (Fast-forward, Rewind, Earlier, Rumble), and the
+  Runs on and standalone rows, reachable from the card and the pause menu.
+- In preparation: profiles for the Anbernic RG28XX and RG35XX SP (H700) and a scaled layout for their small screens are in the
+  code. The installer does not accept these handhelds yet, so they are not supported or installable in 0.1.2.
+- A very quiet fan profile (off until 60 °C, stops below 55 °C).
+- PlayStation 1 and 2 games are recognised by the serial on the disc, not only by their file name: the shelf shows
+  the release's name ("Final Fantasy VII") for a file called `SLES_556.73.Something.iso` or `SLUS_209.46.iso`, and the
+  box art, screenshots and facts follow it. Read with a few sector reads from `.iso`, `.bin` and the `.cue`/`.m3u`
+  that names them (`.chd`, `.cso` and `.pbp` keep their file name), named by libretro-database's Redump lists
+  ([docs/user/library.md](docs/user/library.md#playstation-1-and-2-discs)).
+- Report a problem is reachable from Settings and with SELECT+START.
+- The pause menu's START opens quick settings; the pause menu wraps around, so Quit is one press Up from Continue.
+
+### Changed
+
+- One design language across the app: shared parts, warm neutrals, the selection on the label's paper, rows that lift off the
+  page in Light, one scroll bar, one header for the Settings pages, toasts and status panels in the same look, new emblems for
+  Curator, Surprise me, PC streaming and stickers.
+- The Cabinet look: every game stands as its system's real case on a shelf, the selected one large with its cover, no shelf is
+  cut off, and long titles stay readable.
+- Big libraries and memory: cover decoding stays off the UI thread, generated libraries are reused after a core writes its
+  save, and free memory is given back to the system every 20 s.
+- Game menu sounds follow the audio graph's real buffer size, so they no longer change under a sound.
+
+### Fixed
+
+- Audio after big emulators: the menu sounds are heard again after a game of a large emulator.
+- Pressing Quit once is enough; the Xbox's Quit no longer takes 18 s when its window is covered.
+- A system with no other emulator is no longer relaunched for ever when a game fails; the error card says how to report it.
+- Store lists and detail pages are never blank without a catalogue.
+- A small screen (640x480) no longer crashes the interface.
+- Volume-down on the Mini V2 shows the volume box every time.
+- Several smaller fixes to text fitting, wording (German) and the search field's caret.
+
 ## [0.1.1] - 2026-10-28
 
 ### Changed
@@ -18,7 +66,9 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
   and the AYN Odin 2 family are experimental.
 - A hint how to copy files into `roms/ports` with ROCKNIX's file sharing (Samba) from Windows and macOS.
 
-## [Unreleased]
+## [0.1.1], further items
+
+Listed as Unreleased until now; they were in the 0.1.1 tree.
 
 ### Added
 
@@ -81,6 +131,10 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ### Fixed
 
+- A small screen no longer crashes the interface: at 640x480 (the size of the H700 handhelds' screens) the painter
+  cut past its picture on 62 of the 620 snapshot states — the first start, the tour and every game card among them —
+  and the build aborts on a panic. Rectangles and the game card's scrolling body are now cut off at the edge, so
+  every state renders; the compact layout for such a screen is a separate piece of work.
 - Settings: the line under each category ("Look, language, text size, ...") was cut with "…" at Medium and Large text.
   It now wraps to a second line, whole, in English and German; the rows get taller and the page scrolls with the
   selection when five no longer fit. Normal text looks as before.

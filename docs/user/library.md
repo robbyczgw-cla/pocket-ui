@@ -15,10 +15,31 @@ The hint bar shows "X Details" whenever a game is selected.
 | B | Back to the list, at the same game. |
 | Y | Set the play status, or your [rating](#my-rating) (the row under the statuses). Under them: [Wrong game? Choose another](#wrong-game-choose-another) and [Wrong pictures? Look up again](#wrong-pictures-look-up-again). |
 | X | Write or change your note. |
-| START | Choose the emulator that plays this game: [Runs on](options.md#runs-on). On a PortMaster port: its [Performance & fan](performance.md#portmaster-ports). |
+| START | Open [This game](options.md#this-game): the game's picture, frame, performance, controls and emulator, without starting it. On a PortMaster port: its [Performance & fan](performance.md#portmaster-ports). |
 | D-pad Up / Down | Scroll the page. Down moves onto the rows (the save line, Curator's rows) once they are in view, Up from the first one goes back to scrolling. At the end of the card Down lands on **Hide or delete**. |
 | L1 / R1 | Scroll a whole page. |
 | D-pad Right | Only on a card opened by [Surprise me](curator.md#surprise-me): pick another game. |
+
+## The game box
+
+The card opens as the game's box, almost the whole screen, in the style of its case: a cardboard box for cartridges (as wide as the cover: a Super Nintendo box lies
+on its side), the jewel case of a PlayStation or Saturn disc, the DVD case of a PS2, GameCube, Wii or Xbox game in
+its colour, the Mega Drive's clamshell, the UMD case, the DS case. The front is the cover. A picture that has not been loaded yet appears when it is ready; you can keep moving through the list or opening the box while it loads.
+
+| Button | On the box |
+|---|---|
+| D-pad Left / Right | Turn the box over. (On a card of [Surprise me](curator.md#surprise-me), Right picks another game and Left turns it.) |
+| D-pad Up / Down, L1 / R1 | On the back: scroll it. |
+| A, B, Y, X | As on the card below: play, back, status and rating, note. |
+| START | [This game](options.md#this-game), as on the card. |
+| SELECT | Show the card as a page, with its rows (Echoes, Screenshots, Hide or delete…). SELECT on the page brings the box back. pocket-ui keeps your choice: the next card opens the same way. |
+
+The back is laid out like a real box's: the title on a band at the top, the screenshot and the title screen beside the
+description, then the facts (year, developer, publisher, genre, players, reviews) and your game (status, play time,
+rating, achievements), the system's name at the foot. Without a description from Wikipedia or your gamelist the
+English card shows a sentence made of the facts; in German the back leaves it out, since the facts under it say the same. What isn't there yet gets a plain place of its own: a dark
+screen with the console and "No picture yet", "No description yet", or the line that the game isn't in the offline
+list.
 
 ## What the card shows
 
@@ -110,14 +131,16 @@ or its file name in the libretro thumbnail collection, not through these facts; 
 section.
 
 The facts are matched the way the covers are: by the usual name of the release when pocket-ui recognised the game
-by its checksum ([Extras](extras.md#cover-art)), else by the file name. A choice made here comes before both.
+by its checksum or, for a PlayStation 1 or 2 disc, by the serial on the disc ([below](#playstation-1-and-2-discs)),
+else by the file name. A choice made here comes before both.
 
 ## Wrong pictures? Look up again
 
 If a game shows the wrong box art, screenshot or title screen, or none although the collection should have them,
 press **Y** on its card and pick the last row, **Wrong pictures? Look up again**. pocket-ui deletes the game's
-pictures, reads the game file again to recognise it by its checksum, and looks it up once more, by the name the
-checksum gives first and by the file name after it. The card says how it went, for example "Found 3 pictures for
+pictures, reads the game file again to recognise it by its checksum (for a PlayStation 1 or 2 disc: by the serial on
+the disc, [below](#playstation-1-and-2-discs)), and looks it up once more, by the name that gives first and by the
+file name after it. The card says how it went, for example "Found 3 pictures for
 Mega Man & Bass (USA)" or "No pictures found for this game"; when it found the game's usual name, the facts follow
 it too.
 
@@ -218,6 +241,31 @@ A damaged, cut-off or very large (over 32 MB) gamelist never breaks the library:
 count, a file in another encoding (Latin-1, UTF-16) is read, and a file that can't be read at all is skipped.
 What pocket-ui read is kept in `/storage/.config/pocket-ui/gamelist-cache.json`, so a start does not read the XML
 again; a changed file is read again, and deleting the cache file does no harm.
+
+## PlayStation 1 and 2 discs
+
+A PlayStation disc is recognised by the **serial on the disc itself**, not by its file name. pocket-ui reads the
+short boot file in the disc's file system (`SYSTEM.CNF`, whose `BOOT` line says "SLES_556.73") — a few kilobytes at
+the start of the image, never the whole image — and looks that serial up in the list of PlayStation 1 and 2 releases
+(Redump, through libretro-database), the same way a cartridge is recognised by its checksum ([Extras](extras.md#cover-art)).
+A file called `SLES_556.73.Something.iso` or `SLUS_209.46.iso` then shows the game's name on the shelf ("Final Fantasy
+VII", "Gran Turismo 4"), gets that game's facts and its box art and pictures. The list is downloaded once for the
+console you have games for, when the Pocket is online (about 4 MB per console), and kept on the SD card.
+
+- A name you gave the game yourself comes first: a name from your
+  [EmulationStation gamelist](#your-emulationstation-gamelists) stays as it is.
+- A serial no list knows keeps the file name, with a serial in front left out when a title follows it
+  ("SLES_556.73.Something" is "Something", "SLUS_209.46" stays as it is).
+- Read are `.iso`, `.bin` and the `.cue` or `.m3u` that names them, including a PlayStation disc's own sector format
+  (MODE2/2352, with a header in front of the data). A `.chd`, `.cso` or `.pbp` is not opened: such a game keeps its
+  file name.
+- The two discs of a multi-disc game show "(Disc 2)" after the name, so they tell apart.
+- Reading a disc takes a few milliseconds and runs in the background, at the lowest priority and never while a game
+  runs; each image is read once, and again only when the file changes.
+
+The same goes for the game card's facts, which then match the release the serial names, and for Curator. The two
+consoles are PlayStation (PS1) and PlayStation 2. Other discs (Saturn, Dreamcast, PSP, GameCube, …) are still matched
+by their file names.
 
 ## Matching your files
 

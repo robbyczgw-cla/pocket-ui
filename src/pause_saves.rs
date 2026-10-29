@@ -7,6 +7,7 @@
 //! | pocket-core | eight slots, Auto, Before load |
 //! | pocket-core for ScummVM, PICO-8, TIC-80 (`hostsys::HostSystem::no_states`) | none: the console's own line |
 //! | ARMSX2, Dolphin, Azahar, once their state names are known (`standalone::states`) | slots (Azahar one) |
+//! | hakuX (Xbox) while its core has no save states (`standalone::no_states_line`) | none: `hakux::NO_STATES` |
 //! | ARMSX2 before it has named the game (PINE): nothing could be written | none: [`NOT_READY`] |
 //! | RetroArch | its one save |
 //! | any other emulator | none: [`OWN_SAVES`] |
@@ -40,7 +41,8 @@ impl Saves {
             Saver::PocketCore { states: true } => Saves::Slots,
             Saver::PocketCore { states: false } => Saves::InGame(no_states.unwrap_or(NO_STATES)),
             Saver::Standalone if states_known => Saves::Slots,
-            Saver::Standalone => Saves::InGame(NOT_READY),
+            // Xbox (hakuX) without save states says so; ARMSX2 before it has named the game says it isn't ready.
+            Saver::Standalone => Saves::InGame(no_states.unwrap_or(NOT_READY)),
             Saver::RetroArch => Saves::One,
             Saver::Other => Saves::InGame(OWN_SAVES),
         }

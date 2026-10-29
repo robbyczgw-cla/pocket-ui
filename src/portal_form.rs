@@ -132,7 +132,11 @@ pub fn field_name(f: &Field) -> String {
         Kind::Password => "Password".into(),
         Kind::Email => "E-mail address".into(),
         Kind::Checkbox => "Tick box".into(),
-        _ if !f.name.is_empty() => f.name.chars().take(60).collect(),
+        _ if !f.name.is_empty() => {
+            // The HTML name ("duration") is a code word, not a label: start it like the neighbouring labels do.
+            let mut c = f.name.chars().take(60);
+            c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
+        }
         _ => "Field without a name".into(),
     }
 }
@@ -235,8 +239,8 @@ impl SignIn {
             State::Ended(_) => {
                 let rows = self.end_rows();
                 match b {
-                    Button::Up => self.end_sel = self.end_sel.saturating_sub(1),
-                    Button::Down => self.end_sel = (self.end_sel + 1).min(rows.len().saturating_sub(1)),
+                    Button::Up => self.end_sel = crate::wrap_step(self.end_sel, rows.len(), true),
+                    Button::Down => self.end_sel = crate::wrap_step(self.end_sel, rows.len(), false),
                     Button::East => return rows.into_iter().nth(self.end_sel).map_or(Ask::Back, |(_, a)| a),
                     Button::South => return Ask::Back,
                     _ => {}
@@ -485,7 +489,7 @@ impl SignIn {
         for (i, (name, _)) in rows.iter().enumerate() {
             let ry = y + i as i32 * row;
             let selected = i == self.end_sel;
-            c.rect(MARGIN, ry, w, row - 8, if selected { pal().label } else { pal().spine });
+            crate::kit::shelf_row(c, MARGIN, ry, w, row - 8, selected);
             text.draw(c, Face::Title, 37, MARGIN + 28, ry + (row - 8) / 2 + crate::type_scale::base(13, 37), if selected { pal().ink } else { pal().chalk }, name);
         }
         let mut h = Vec::new();
@@ -562,7 +566,7 @@ impl SignIn {
         for (k, r) in f.rows.iter().enumerate().skip(first).take(visible) {
             let ry = top + (k - first) as i32 * row;
             let selected = k == f.sel;
-            c.rect(MARGIN, ry, w, row - 8, if selected { pal().label } else { pal().spine });
+            crate::kit::shelf_row(c, MARGIN, ry, w, row - 8, selected);
             let fg = if selected { pal().ink } else { pal().chalk };
             let quiet = if selected { pal().label_dust } else { pal().dust };
             let mid = ry + (row - 8) / 2;
@@ -609,6 +613,15 @@ impl SignIn {
                 cut = true;
             }
             text.set_translate(true);
+        }
+        // The hotel's bell and hourglass in the room under the rows, as on the page before (`portal_page`), when the
+        // rows leave it (Muse's review A18: two lines of text in the top third and nothing else).
+        let rows_end = top + f.rows.len().min(visible) as i32 * row;
+        let k = crate::ui_art::empty_scale(c.h);
+        let (aw, ah) = crate::ui_art::size(crate::ui_art::Art::Hotel, k);
+        let free = bottom - rows_end;
+        if free >= ah + 80 {
+            crate::ui_art::paint(c, crate::ui_art::Art::Hotel, (c.w - aw) / 2, rows_end + (free - ah) / 2, k);
         }
         // The selected field's whole label (a long "I accept …" is cut on its row).
         if let Some(field) = f.selected().filter(|_| cut) {

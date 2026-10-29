@@ -198,7 +198,7 @@ pub enum Row {
 /// The dialogs: in front of EmulationStation, and in front of a reset.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DialogKind {
-    /// SELECT + START held or Escape on the shelf: Cancel, Restart pocket-ui, Open EmulationStation.
+    /// SELECT + START held or Escape on the shelf: Cancel, Restart pocket-ui, Report a problem, Open EmulationStation.
     Leave,
     /// Settings → About and the rescue page: Cancel, Open EmulationStation.
     OpenEs,
@@ -213,6 +213,8 @@ pub enum Choice {
     RestartUi,
     OpenEs,
     Reset,
+    /// "Report a problem": the dialog is where a player looks when something is wrong (`app_report`).
+    Report,
 }
 
 impl Choice {
@@ -222,6 +224,7 @@ impl Choice {
             Choice::RestartUi => "Restart pocket-ui",
             Choice::OpenEs => "Open EmulationStation",
             Choice::Reset => "Reset settings",
+            Choice::Report => crate::report::ROW,
         }
     }
 }
@@ -283,7 +286,7 @@ impl Dialog {
 
     pub fn choices(&self) -> &'static [Choice] {
         match self.kind {
-            DialogKind::Leave => &[Choice::Cancel, Choice::RestartUi, Choice::OpenEs],
+            DialogKind::Leave => &[Choice::Cancel, Choice::RestartUi, Choice::Report, Choice::OpenEs],
             DialogKind::OpenEs => &[Choice::Cancel, Choice::OpenEs],
             DialogKind::Reset => &[Choice::Cancel, Choice::Reset],
         }
@@ -322,7 +325,7 @@ pub fn exit_code(c: Choice) -> Option<i32> {
     match c {
         Choice::RestartUi => Some(RESTART_CODE),
         Choice::OpenEs => Some(OPEN_ES_CODE),
-        Choice::Cancel | Choice::Reset => None,
+        Choice::Cancel | Choice::Reset | Choice::Report => None,
     }
 }
 
@@ -576,10 +579,13 @@ mod tests {
     #[test]
     fn dialogs_start_on_cancel_and_say_what_harms_the_device() {
         let mut d = Dialog::new(DialogKind::Leave);
-        assert_eq!(d.choices(), [Choice::Cancel, Choice::RestartUi, Choice::OpenEs]);
+        assert_eq!(d.choices(), [Choice::Cancel, Choice::RestartUi, Choice::Report, Choice::OpenEs]);
         assert_eq!(d.press(A, A, B), DialogOut::Close, "A at once is Cancel");
         assert_eq!(d.press(Button::Down, A, B), DialogOut::Stay);
         assert_eq!(d.press(A, A, B), DialogOut::Chose(Choice::RestartUi));
+        d.press(Button::Down, A, B);
+        assert_eq!(d.press(A, A, B), DialogOut::Chose(Choice::Report), "something is wrong: the report is one row from Restart");
+        assert_eq!(exit_code(Choice::Report), None, "the report doesn't leave pocket-ui");
         d.press(Button::Down, A, B);
         assert_eq!(d.press(A, A, B), DialogOut::Chose(Choice::OpenEs));
         assert_eq!(d.press(Button::Down, A, B), DialogOut::Stay, "wraps around");

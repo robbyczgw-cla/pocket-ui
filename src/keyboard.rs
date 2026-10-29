@@ -10,6 +10,8 @@ const LETTERS: [&str; 4] = ["1234567890", "qwertyuiop", "asdfghjkl-", "zxcvbnm_.
 const SYMBOLS: [&str; 4] = ["!@#$%^&*()", "-_=+[]{}|\\", ";:'\",.<>/?", "`~"];
 /// The game search's layout: what a game's name can be found by.
 const SEARCH: [&str; 4] = ["1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm"];
+/// The same with the German thumb's y and z (the search folds accents, so umlaut keys are not needed).
+const SEARCH_DE: [&str; 4] = ["1234567890", "qwertzuiop", "asdfghjkl", "yxcvbnm"];
 pub const SEARCH_SPECIALS: [Special; 3] = [Special::Space, Special::Delete, Special::Done];
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -61,7 +63,8 @@ impl Keyboard {
     /// Rows of keys as currently shown; the last row holds the special keys.
     pub fn rows(&self) -> Vec<Vec<Key>> {
         if self.search {
-            let mut rows: Vec<Vec<Key>> = SEARCH.iter().map(|r| r.chars().map(Key::Char).collect()).collect();
+            let layout = if crate::i18n::current() == crate::i18n::Lang::De { SEARCH_DE } else { SEARCH };
+            let mut rows: Vec<Vec<Key>> = layout.iter().map(|r| r.chars().map(Key::Char).collect()).collect();
             rows.push(SEARCH_SPECIALS.iter().map(|s| Key::Special(*s)).collect());
             return rows;
         }

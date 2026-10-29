@@ -55,6 +55,7 @@ const ART: &[(&str, &[u8])] = &[
     ("virtualboy", include_bytes!("../assets/systems/virtualboy.png")),
     ("wii", include_bytes!("../assets/systems/wii.png")),
     ("wonderswan", include_bytes!("../assets/systems/wonderswan.png")),
+    ("xbox", include_bytes!("../assets/systems/xbox.png")),
 ];
 
 /// Other ROCKNIX names for the same hardware.
@@ -209,6 +210,7 @@ mod tests {
         "intellivision",
         "vectrex",
         "wonderswan",
+        "xbox",
         "atari2600",
         "pokemini",
         "psx",

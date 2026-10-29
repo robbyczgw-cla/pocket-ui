@@ -28,7 +28,8 @@ const NOTE: u32 = 26;
 /// The accent bar of the power menu's selected row: the Settings band of the dark design (the panel is dark in both
 /// appearances).
 const ACCENT: u32 = crate::palette::DARK.band;
-const NAME_PILL: u32 = 0xe9f2f1;
+/// The selected row's name pill: the label's paper, as in the pause menu and Settings.
+const NAME_PILL: u32 = crate::palette::DARK.select;
 
 /// A row: 66 px around `FONT`, taller with Settings → Text size (`type_scale`).
 fn row() -> i32 {
@@ -288,7 +289,7 @@ impl Sys {
                 vx -= note_w;
             }
             if let Some((frac, centered)) = r.bar {
-                let (fill, track) = if selected { (pal().pick(NAME_PILL, 0x2b2925), pal().pick(0x5c6066, 0xb3ab9c)) } else { (pal().pick(LABEL, 0x5e5a53), pal().pick(0x3a3a40, 0xd6d0c4)) };
+                let (fill, track) = if selected { (pal().pick(NAME_PILL, 0x2b2925), pal().pick(0x5f5b55, 0xb3ab9c)) } else { (pal().pick(LABEL, 0x5e5a53), pal().pick(0x3c3a37, 0xd6d0c4)) };
                 osd::paint_bar(c, vx - bar_w, y + row() / 2, bar_w, frac, centered, fill, track);
             }
             y += row();
@@ -296,54 +297,20 @@ impl Sys {
         self.hits.list(sel, rows.len(), 0.0, row() as f32);
         if rows.len() > visible {
             let track = visible as i32 * row();
-            let (bar_h, bar_y) = (track * visible as i32 / rows.len() as i32, track * first as i32 / rows.len() as i32);
-            c.rect(c.w - 12, top, 4, track, pal().pill);
-            c.rect(c.w - 12, top + bar_y, 4, bar_h.max(12), pal().chip);
+            crate::kit::scrollbar(c, top, track, first, visible, rows.len());
         }
     }
 
     /// The explanation of the selected row, centred above the bottom edge (at most four lines).
-    fn footer(&self, c: &mut Canvas, text: &mut Text, desc: &str, color: u32) {
-        let mut lines: Vec<String> = desc.lines().flat_map(|l| text.wrap(Face::Body, SMALL, l, c.w - 4 * PAD)).collect();
-        lines.truncate(4);
-        let line_h = crate::type_scale::line(SMALL, 10);
-        let hints_top = c.h - PAD - PILL;
-        let mut y = hints_top - 14 - (lines.len() as i32 - 1) * line_h;
-        for l in &lines {
-            let w = text.width(Face::Body, SMALL, l);
-            text.draw(c, Face::Body, SMALL, (c.w - w) / 2, y, color, l);
-            y += line_h;
-        }
+    /// The explanation and the hints, as on every Settings page (`kit::footer`).
+    fn footer(&mut self, c: &mut Canvas, text: &mut Text, hints: &[(&str, &str)], desc: &str, color: u32) {
+        crate::kit::footer(c, text, &mut self.hits, hints, desc, 4, color);
     }
 
-    /// Button hints in a dark pill at the bottom right (as `nu_hints` in main.rs).
+    /// Button hints in a dark pill at the bottom right (`kit::pill_hints`, as `nu_hints` in main.rs).
     fn hints(&mut self, c: &mut Canvas, text: &mut Text, hints: &[(&str, &str)]) {
-        let (btn, gap) = (60, (PILL - 60) / 2);
-        let widths: Vec<(i32, i32)> = hints
-            .iter()
-            .map(|(k, l)| (text.width(Face::Body, SMALL, k).max(btn - 16), text.width(Face::Body, SMALL, l)))
-            .collect();
-        let inner: i32 = widths.iter().map(|(kw, lw)| (kw + 28).max(btn) + gap + lw + gap * 2).sum();
-        let w = inner + gap;
-        let (x0, y0) = (c.w - PAD - w, c.h - PAD - PILL);
-        c.round_rect(x0, y0, w, PILL, PILL / 2, pal().pill);
-        let mut x = x0 + gap;
-        for ((key, label), (kw, lw)) in hints.iter().zip(widths) {
-            let bw = (kw + 28).max(btn);
-            c.round_rect(x, y0 + gap, bw, btn, btn / 2, pal().chip);
-            let tw = text.width(Face::Body, SMALL, key);
-            let base = y0 + PILL / 2 + crate::type_scale::mid(SMALL);
-            text.draw(c, Face::Body, SMALL, x + (bw - tw) / 2, base, pal().pill, key);
-            if let Some(b) = crate::touch::hint_button(key) {
-                self.hits.button(Area::new(x - gap / 2, y0, bw + gap + lw + gap, PILL), b);
-            }
-            x += bw + gap;
-            text.draw(c, Face::Body, SMALL, x, base, pal().soft, label);
-            x += lw + gap * 2;
-        }
+        crate::kit::pill_hints(c, text, &mut self.hits, hints);
     }
-
-    // ---- quick settings ----------------------------------------------------------------------------------------
 
     fn paint_quick(&mut self, c: &mut Canvas, text: &mut Text) {
         let now = std::time::Instant::now();
@@ -408,13 +375,13 @@ impl Sys {
             ),
             Row::Power => ("Sleep, Restart, Power off and Restart pocket-ui.".to_string(), pal().text),
         };
-        self.footer(c, text, &desc, color);
         let hints: &[(&str, &str)] = match rows[sel] {
             Row::Brightness | Row::Volume => &[("< >", "Change"), ("B", "Close")],
             Row::Performance | Row::Fan => &[("< >", "Change"), ("B", "Close"), ("A", "Next")],
             _ => &[("B", "Close"), ("A", "Choose")],
         };
-        self.hints(c, text, hints);
+        // The explanation beside the hints or over them, left aligned, as on every Settings page (`kit::footer`).
+        crate::kit::footer(c, text, &mut self.hits, hints, &desc, 4, color);
     }
 
     /// The power menu: a panel in the middle over whatever is behind it, dimmed. The battery at the top right (the
@@ -444,7 +411,7 @@ impl Sys {
         let note_h = if note.is_empty() { 0 } else { 28 + note.len() as i32 * note_step };
         let panel_h = title_h + choices.len() as i32 * row_h + note_h + 30;
         let (x, y) = ((c.w - panel_w) / 2, ((c.h - panel_h) / 2 - 30).max(PAD));
-        c.round_rect(x - 3, y - 3, panel_w + 6, panel_h + 6, 43, 0x3a3a40);
+        c.round_rect(x - 3, y - 3, panel_w + 6, panel_h + 6, 43, 0x3c3a37);
         c.round_rect(x, y, panel_w, panel_h, 40, SPINE);
         let title_base = y + 72 + crate::type_scale::grow(50) / 2;
         text.draw(c, Face::Title, 50, x + BTN_PAD, title_base, CHALK, "Power");
@@ -458,11 +425,11 @@ impl Sys {
                 let level_base = y + 30 + crate::type_scale::px(LEVEL) as i32;
                 text.draw_right(c, Face::Title, LEVEL, right, level_base, CHALK, level);
                 let time = text.fit(Face::Body, HINT_SIZE, &battery.time, room);
-                text.draw_right(c, Face::Body, HINT_SIZE, right, level_base + crate::type_scale::line(HINT_SIZE, 10), 0xb4b4bc, &time);
+                text.draw_right(c, Face::Body, HINT_SIZE, right, level_base + crate::type_scale::line(HINT_SIZE, 10), 0xb8b4ac, &time);
             }
             None => {
                 let time = text.fit(Face::Body, HINT_SIZE, &battery.time, room);
-                text.draw_right(c, Face::Body, HINT_SIZE, right, title_base, 0xb4b4bc, &time);
+                text.draw_right(c, Face::Body, HINT_SIZE, right, title_base, 0xb8b4ac, &time);
             }
         }
 
@@ -487,7 +454,7 @@ impl Sys {
             text.draw(c, Face::Body, FONT, label_x, mid + crate::type_scale::mid(FONT), fg, label);
             let hint = text.fit(Face::Body, HINT_SIZE, choice.hint(ctx), rx + rw - BTN_PAD / 2 - label_x);
             let hint_base = ry + top_h + hint_h / 2 + crate::type_scale::mid(HINT_SIZE) - 4;
-            text.draw(c, Face::Body, HINT_SIZE, label_x, hint_base, if selected { 0xffffff } else { 0xb4b4bc }, &hint);
+            text.draw(c, Face::Body, HINT_SIZE, label_x, hint_base, if selected { 0xffffff } else { 0xb8b4ac }, &hint);
             ry += row_h;
         }
         if !note.is_empty() {
@@ -495,7 +462,7 @@ impl Sys {
             c.rect(x + BTN_PAD, line_y, inner_w, 2, 0x3a3a40);
             let mut ty = line_y + 18 + crate::type_scale::px(HINT_SIZE) as i32;
             for l in &note {
-                text.draw(c, Face::Body, HINT_SIZE, x + BTN_PAD, ty, 0xb4b4bc, l);
+                text.draw(c, Face::Body, HINT_SIZE, x + BTN_PAD, ty, 0xb8b4ac, l);
                 ty += note_step;
             }
         }
@@ -564,13 +531,9 @@ impl Sys {
                     text.draw_right(c, Face::Body, FONT, c.w - PAD - BTN_PAD, base, pal().text, value);
                 }
                 let (desc, wrong) = self.time_note(sel, at);
-                self.footer(c, text, &desc, if wrong == Clock::Fine { pal().text } else { pal().amber });
                 // Date and time while network time has set the clock: nothing to open (A only says why).
-                if sel == BY_HAND_ROW && synced {
-                    self.hints(c, text, &[("B", "Back")]);
-                } else {
-                    self.hints(c, text, &[("B", "Back"), ("A", "Open")]);
-                }
+                let hints: &[(&str, &str)] = if sel == BY_HAND_ROW && synced { &[("B", "Back")] } else { &[("B", "Back"), ("A", "Open")] };
+                self.footer(c, text, hints, &desc, if wrong == Clock::Fine { pal().text } else { pal().amber });
             }
             TimePage::Regions { sel } => {
                 let sel = *sel;
@@ -578,11 +541,9 @@ impl Sys {
                 rows.extend(timezone::regions(self.zone_list()).into_iter().map(|r| RowView::new(r, ">")));
                 self.header(c, text, "Time zone");
                 self.paint_rows(c, text, top, &rows, sel, c.h - PAD - PILL - 30);
-                if self.view.zones.is_none() {
-                    // The list is still being read: Search… works, the regions follow.
-                    self.footer(c, text, "Looking at time zones…", pal().dust);
-                }
-                self.hints(c, text, &[("L1 R1", "Page"), ("B", "Back"), ("A", "Open")]);
+                // While the list is still being read: Search… works, the regions follow.
+                let desc = if self.view.zones.is_none() { "Looking at time zones…" } else { "" };
+                self.footer(c, text, &[("L1 R1", "Page"), ("B", "Back"), ("A", "Open")], desc, pal().dust);
             }
             TimePage::Zones { heading, zones, sel } => {
                 let (heading, zones, sel) = (heading.clone(), zones.clone(), *sel);
@@ -618,8 +579,7 @@ impl Sys {
                 let picker = *picker;
                 self.header(c, text, "Date and time");
                 self.paint_picker(c, text, top, &picker);
-                self.footer(c, text, "Up and Down change the value, Left and Right move between them.", pal().dust);
-                self.hints(c, text, &[("B", "Cancel"), ("A", "Set")]);
+                self.footer(c, text, &[("B", "Cancel"), ("A", "Set")], "Up and Down change the value, Left and Right move between them.", pal().dust);
             }
             TimePage::Search(kb) => {
                 c.clear(pal().void);

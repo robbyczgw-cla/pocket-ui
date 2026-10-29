@@ -17,7 +17,7 @@ PAPER = (236, 233, 225, 255)
 SIZES = {
     "snes": (22, 88, 78), "n64": (21, 88, 74), "nes": (22, 75, 88), "gb": (18, 58, 66), "gba": (18, 75, 56),
     "cart": (22, 85, 80), "md": (20, 83, 118), "sms": (20, 83, 118), "ps1": (13, 98, 88), "segadisc": (16, 93, 100),
-    "disc": (15, 98, 88), "ps2": (19, 84, 120), "gc": (18, 81, 111), "wii": (19, 84, 120), "keep": (19, 84, 120),
+    "disc": (15, 98, 88), "ps2": (19, 84, 120), "gc": (18, 81, 111), "wii": (19, 84, 120), "keep": (19, 84, 120), "xbox": (19, 84, 120),
     "umd": (15, 66, 103), "ds": (16, 85, 95), "3ds": (15, 85, 93),
 }
 CARTS = ("snes", "n64", "nes", "gb", "gba", "cart")
@@ -138,10 +138,10 @@ def cart_spine(kind, W, H):
 # ---- cases ----------------------------------------------------------------------------------------------------
 
 RIM = {"md": 0x151517, "sms": 0x151517, "ps1": 0x1c1d22, "segadisc": 0xd9d9dc, "disc": 0x1c1d22, "ps2": 0x0e0f11,
-       "gc": 0x1b1b20, "wii": 0xeaeaeb, "keep": 0x16171a, "umd": 0x111113, "ds": 0xbfc2c7, "3ds": 0xe6e6e8}
+       "gc": 0x1b1b20, "wii": 0xeaeaeb, "keep": 0x16171a, "xbox": 0x0f1411, "umd": 0x111113, "ds": 0xbfc2c7, "3ds": 0xe6e6e8}
 # The band at the top of the spine: (height, colour or None for the cover's accent colour).
 BAND = {"md": (13, None), "sms": (12, 0xf2f2f0), "ps1": (11, 0x0e0e10), "segadisc": (11, None), "disc": (10, None),
-        "ps2": (16, 0x0e0f11), "gc": (12, 0x2a2a31), "wii": (14, 0xf4f4f4), "keep": (14, None), "umd": (12, 0x111113),
+        "ps2": (16, 0x0e0f11), "gc": (12, 0x2a2a31), "wii": (14, 0xf4f4f4), "keep": (14, None), "xbox": (16, 0x2a8a1f), "umd": (12, 0x111113),
         "ds": (11, 0xf6f6f6), "3ds": (11, 0xf6f6f6)}
 
 
@@ -179,6 +179,12 @@ def case_front(kind, W, H):
         if kind == "ds":
             # The DS box's clear case: a light inner rim.
             d.rectangle([2, 2, W - 3, H - 3], outline=k(rc, 1.12))
+    if kind == "xbox":
+        # The green top band of the original Xbox case; the cover sits below it.
+        lab = (3, 17, W - 6, H - 20)
+        d.rectangle([2, 2, W - 3, 15], fill=c3(BAND["xbox"][1]))
+        d.line([2, 2, W - 3, 2], fill=k(c3(BAND["xbox"][1]), 1.25))
+        d.line([2, 16, W - 3, 16], fill=(8, 10, 8, 255))
     x, y, w, h = lab
     # The rim's bevel: light along the top and left, darker at the bottom and right.
     d.line([1, 1, W - 2, 1], fill=k(rc, 1.6 if not light else 1.04))
@@ -204,9 +210,10 @@ def case_spine(kind, W, H):
     band = (r, top, W - 2 * r, band_h)
     d.rectangle([r, top, W - 1 - r, top + band_h - 1], fill=c3(band_c) if band_c is not None else (200, 200, 200, 255))
     d.line([r, top + band_h, W - 1 - r, top + band_h], fill=k(rc, 0.55) if light else (8, 8, 10, 255))
-    if kind == "ps2" or kind == "gc":
+    if kind in ("ps2", "gc", "xbox"):
         # A small light mark in the dark band, where the console's own band has its emblem.
-        d.rectangle([W // 2 - 2, top + band_h // 2 - 1, W // 2 + 1, top + band_h // 2], fill=(120, 122, 130, 255))
+        d.rectangle([W // 2 - 2, top + band_h // 2 - 1, W // 2 + 1, top + band_h // 2],
+                    fill=(120, 122, 130, 255) if kind != "xbox" else (120, 196, 104, 255))
     if kind == "sms":
         for y in range(top + 1, top + band_h - 1, 3):
             d.line([r, y, W - 1 - r, y], fill=(170, 170, 172, 255))

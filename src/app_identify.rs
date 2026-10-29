@@ -119,6 +119,12 @@ impl App {
                 i.due |= run.stopped;
                 i.lists_missing_offline = run.lists_missing;
                 let changed = *i.names != run.names;
+                // A PlayStation disc's name is the shelf's name too (`disc_serial`): a new one reads the list again,
+                // off the UI thread, so the shelf shows it (the scan finds the serial in `<data>/identify/`).
+                let discs_named = changed
+                    && run.names.keys().any(|p| {
+                        self.systems.iter().any(|s| pocket_ui::disc_serial::dat(&s.name).is_some() && s.games.iter().any(|g| &g.path == p))
+                    });
                 i.names = Arc::new(run.names);
                 if changed {
                     self.names_changed();
@@ -129,6 +135,9 @@ impl App {
                 // The covers and descriptions waited for the names (or this runs once more first). Not after a run
                 // a game stopped: the game runs.
                 if !run.stopped {
+                    if discs_named {
+                        self.library_rescan("games recognised");
+                    }
                     self.auto_covers("games recognised");
                 }
             }
@@ -139,6 +148,10 @@ impl App {
                     Some(n) => names.insert(path.clone(), n.clone()).as_ref() != Some(n),
                     None => names.remove(&path).is_some(),
                 };
+                // A disc's name is the shelf's name too (`disc_serial`): the list is read again for it.
+                let disc_renamed = changed
+                    && name.is_some()
+                    && self.systems.iter().any(|s| pocket_ui::disc_serial::dat(&s.name).is_some() && s.games.iter().any(|g| g.path == path));
                 self.identify.names = Arc::new(names);
                 if changed {
                     self.names_changed();
@@ -159,6 +172,9 @@ impl App {
                 if std::mem::take(&mut self.identify.again) {
                     self.identify.due = true;
                     self.auto_covers("after look up again");
+                }
+                if disc_renamed && self.running.is_none() {
+                    self.library_rescan("after look up again");
                 }
             }
         }

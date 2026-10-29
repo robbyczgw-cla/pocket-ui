@@ -293,7 +293,7 @@ pub struct Paint {
 /// A link as a spine at `y` (its top); selected, it is paper.
 fn link(c: &mut Canvas, text: &mut Text, l: &LinkRow, y: i32, selected: bool) {
     let (x, w) = (MARGIN, c.w - 2 * MARGIN);
-    c.rect(x, y, w, LINK_H, if selected { pal().label } else { pal().spine });
+    crate::kit::shelf_row(c, x, y, w, LINK_H, selected);
     c.rect(x, y, STRIPE, LINK_H, if selected { l.stripe } else { mix(l.stripe, pal().spine, 150) });
     let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else { (pal().chalk, pal().dust) };
     let note_w = if l.note.is_empty() { 0 } else { text.width(Face::Body, 21, &l.note) + 40 };

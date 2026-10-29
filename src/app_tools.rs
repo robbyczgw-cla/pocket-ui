@@ -216,8 +216,7 @@ impl App {
     fn paint_tools_page(&mut self, c: &mut Canvas, page: &ToolsPage) {
         c.clear(pal().void);
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(58, 34), 34u32);
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, SETTINGS_NAME);
+        self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         let list_bottom = c.h - pad - NU_PILL - 16 - DETAILS_H;
         let dots = ".".repeat(1 + (self.started.elapsed().as_millis() / 400 % 3) as usize);
@@ -228,10 +227,11 @@ impl App {
             } else {
                 ("No tools found".to_string(), format!("ROCKNIX keeps its tools in {}. X looks again.", pocket_ui::store::ROCKNIX_MODULES))
             };
-            self.text.draw(c, Face::Title, 44, pad + NU_BTN_PAD, top + 60, pal().chalk, &head);
-            for (k, part) in self.text.wrap(Face::Body, NU_SMALL, &line, c.w - 2 * (pad + NU_BTN_PAD)).iter().enumerate() {
-                self.text.draw(c, Face::Body, NU_SMALL, pad + NU_BTN_PAD, top + 110 + pocket_ui::type_scale::grow(44) + k as i32 * pocket_ui::type_scale::line(NU_SMALL, 12), pal().dust, part);
-            }
+            // An empty page like the others (`kit::empty_state`): the magnifying glass by an empty box once the folder
+            // has been looked at.
+            let (left, base) = (pad + NU_BTN_PAD, top + 60 + pocket_ui::type_scale::grow(37));
+            let art = page.tools.is_some().then_some(pocket_ui::ui_art::Art::Search);
+            pocket_ui::kit::empty_state(c, &mut self.text, art, (left, c.w - 2 * left), top + 8, base, c.h - pad - NU_PILL - 16, &head, &line);
             self.nu_hints(c, &[("B", "Back"), ("X", "Look again")]);
             return;
         }
@@ -239,9 +239,7 @@ impl App {
         let first = super::window_start(page.sel, visible, tools.len());
         if tools.len() > visible {
             let track = visible as i32 * row;
-            let (bar_h, bar_y) = (track * visible as i32 / tools.len() as i32, track * first as i32 / tools.len() as i32);
-            c.rect(c.w - 12, top, 4, track, pal().pill);
-            c.rect(c.w - 12, top + bar_y, 4, bar_h.max(12), pal().chip);
+            pocket_ui::kit::scrollbar(c, top, track, first, visible, tools.len());
         }
         for (i, t) in tools.iter().enumerate().skip(first).take(visible) {
             let y = top + (i - first) as i32 * row;

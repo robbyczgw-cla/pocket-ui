@@ -19,7 +19,7 @@ use crate::power::{Fan, Performance};
 
 /// Left to right: less to more.
 pub const PERFORMANCE: [Performance; 3] = [Performance::Battery, Performance::Auto, Performance::Performance];
-pub const FAN: [Fan; 3] = [Fan::Quiet, Fan::Auto, Fan::Cool];
+pub const FAN: [Fan; 4] = [Fan::VeryQuiet, Fan::Quiet, Fan::Auto, Fan::Cool];
 
 /// What runs the game the panel was opened over.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -215,6 +215,7 @@ impl Profiles {
                 Performance::Performance => "Max: full speed all the time. Warmer, and uses more battery.",
             },
             Which::Fan => match self.fan_choice() {
+                Fan::VeryQuiet => "Very quiet: fan only when it gets warm; the Pocket feels a bit warmer.",
                 Fan::Quiet => "Quiet: the fan starts later and stays slow.",
                 Fan::Auto => "Auto: the system's own cooling profile.",
                 Fan::Cool => "Cool: the fan starts early and turns faster.",

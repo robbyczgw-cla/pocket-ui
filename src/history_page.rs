@@ -305,7 +305,7 @@ pub fn facts(s: &Summary, today: i64, names: Names) -> Vec<(String, String)> {
         out.push(("Systems".to_string(), line));
     }
     if !s.leaned_into.is_empty() {
-        out.push(("Leaned into".to_string(), crate::curator::features::capitalise(&s.leaned_into)));
+        out.push(("Mostly".to_string(), crate::curator::features::capitalise(&s.leaned_into)));
     }
     out.extend(streak_line(s, today).map(|l| ("Streak".to_string(), l)));
     if let Some(cb) = s.comebacks.first() {

@@ -103,6 +103,10 @@ impl App {
                 }
             };
         }
+        // The box (`game_box`) unless SELECT chose the page last time.
+        if self.game_box {
+            open.card.boxed = Some(pocket_ui::game_box::BoxView::new());
+        }
         self.card = Some(open);
     }
 
@@ -280,7 +284,11 @@ impl App {
             Out::Row(kind) => self.curator_card_row(kind),
             // A port has one emulator: START is its Performance & fan instead (`app_port_perf`).
             Out::Emulator if open.system == pocket_ui::port_perf::SYSTEM => self.open_port_perf_for_card(),
-            Out::Emulator => self.emu_choice_for_card(),
+            Out::Emulator => self.this_game_for_card(),
+            Out::Details { boxed } => {
+                self.game_box = boxed;
+                self.save_settings();
+            }
             // Hide or delete (`app_storage`).
             Out::Hide => self.card_hide(),
             Out::PlanDelete => self.card_plan_delete(),
@@ -435,10 +443,21 @@ impl App {
 
     pub(crate) fn paint_card(&mut self, c: &mut Canvas) {
         let Some(item) = self.card.as_ref().map(|o| o.item) else { return };
-        let (bw, bh) = game_card::cover_box();
-        let cover = self.cover(item, bw, bh);
         let pictures = self.card_pictures(item, c.w);
         let corner = self.status_corner();
+        if self.card.as_ref().is_some_and(|o| o.card.boxed.is_some()) {
+            // The box: the case's front from the shelf's own machinery, at the box's height (`game_box`).
+            let (medium, look, front) = self.box_front(item, pocket_ui::game_box::front_height(c.w, c.h));
+            let big = self.cover(item, c.w, c.h);
+            let console = self.item_rom(item).and_then(|(system, _)| pocket_ui::system_art::get(&system));
+            let Some(open) = self.card.as_mut() else { return };
+            open.card.pictures = pictures;
+            let inputs = pocket_ui::game_box::Inputs { medium, look, front: front.as_deref(), cover: big.as_deref(), console };
+            open.card.paint_box(c, &mut self.text, &inputs, Some(&corner));
+            return;
+        }
+        let (bw, bh) = game_card::cover_box();
+        let cover = self.cover(item, bw, bh);
         let Some(open) = self.card.as_mut() else { return };
         open.card.pictures = pictures;
         open.card.paint(c, &mut self.text, cover.as_deref(), Some(&corner));

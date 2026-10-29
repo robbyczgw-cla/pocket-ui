@@ -81,6 +81,17 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
                     }
                 }
             }
+            // A PlayStation disc shows the name its serial gave (`disc_serial`, read by `rom_id`): "SLES_556.73.Something"
+            // is "Final Fantasy VII". A gamelist's name comes first; the disc's is read from the card only (no image,
+            // nothing downloaded), so the scan stays quick.
+            if let Some(g) = gamelists.filter(|_| crate::disc_serial::dat(&name).is_some()) {
+                let discs: Vec<(String, PathBuf)> = games.iter().filter(|g| !from_list.contains(&g.path)).map(|g| (name.clone(), g.path.clone())).collect();
+                for (path, title) in crate::rom_id::known(g.data_dir, &discs) {
+                    if let Some(game) = games.iter_mut().find(|g| g.path == path) {
+                        game.name = crate::disc_serial::shelf_name(&title);
+                    }
+                }
+            }
             games.sort_by_key(|g| g.name.to_lowercase());
             tell_apart(&mut games);
             for game in games.iter_mut().filter(|g| !from_list.contains(&g.path)) {
@@ -546,6 +557,8 @@ pub fn display_name(stem: &str) -> String {
     }
     let name = out.split_whitespace().collect::<Vec<_>>().join(" ");
     let name = split_version(&name).0.to_string();
+    // A disc named by its serial ("SLES_556.73.Something"): the serial in front goes, the title stays (`disc_serial`).
+    let name = crate::disc_serial::clean_stem(&name);
     let (head, tail) = match name.split_once(" - ") {
         Some((h, t)) => (h.to_string(), format!(" - {t}")),
         None => (name.clone(), String::new()),
@@ -807,6 +820,59 @@ mod tests {
         std::fs::write(roms.join("gamelist.xml"), b"\xff\xfe<<<not xml & garbage").unwrap();
         let broken = load_with(&cfg, Some(&Gamelists { data_dir: &data, places: &places })).unwrap();
         assert_eq!(names(broken), ["kof98", "Mslug", "sf2ce", "Tetris"]);
+    }
+
+    /// PlayStation 1/2 discs: the shelf shows the title the disc's serial gave (`disc_serial`), a gamelist's name
+    /// comes first, and a disc no list knows keeps its file name without the serial in front.
+    #[test]
+    fn a_disc_shows_the_title_of_its_serial_and_a_gamelist_name_comes_first() {
+        use super::{load_with, Gamelists};
+        let dir = TestDir::new("disc-lib");
+        let roms = dir.join("psx");
+        std::fs::create_dir_all(&roms).unwrap();
+        let cnf = |serial: &str| crate::disc_serial::test_image(&format!("BOOT = cdrom:\\{serial};1\r\nTCB = 4\r\n"), 2048);
+        let files = [
+            ("SLES_556.73.Something.iso", cnf("SLES_556.73")), // the list knows it: "Final Fantasy VII"
+            ("SLES_556.74.iso", cnf("SLES_556.74")),           // its second disc: "... (Disc 2)"
+            ("SCES_003.44.Crash Bandicoot.iso", cnf("SCES_003.44")), // a title in the file name too
+            ("SCUS_999.99.iso", cnf("SCUS_999.99")),           // the gamelist names this one
+            ("SCES_999.98.iso", cnf("SCES_999.98")),           // a serial no list knows
+        ];
+        for (name, bytes) in &files {
+            std::fs::write(roms.join(name), bytes).unwrap();
+        }
+        // A gamelist's name is the player's own: it comes before the serial's title.
+        std::fs::write(
+            roms.join("gamelist.xml"),
+            "<gameList><game><path>./SCUS_999.99.iso</path><name>My own disc name</name></game></gameList>",
+        )
+        .unwrap();
+        let cfg = dir.join("es_systems.cfg");
+        std::fs::write(&cfg, format!("<systemList><system><name>psx</name><fullname>PlayStation</fullname><path>{}</path><extension>.iso</extension></system></systemList>", roms.display())).unwrap();
+        let data = dir.join("data");
+        let games: Vec<(String, std::path::PathBuf)> = files.iter().map(|(name, _)| ("psx".to_string(), roms.join(name))).collect();
+        let dat = "clrmamepro (\n\tname \"Sony - PlayStation\"\n)\n\
+                   game (\n\tname \"Final Fantasy VII (Europe)\"\n\tserial \"SLES-55673\"\n)\n\
+                   game (\n\tname \"Final Fantasy VII (Europe) (Disc 2)\"\n\tserial \"SLES-55674\"\n)\n\
+                   game (\n\tname \"Crash Bandicoot (Europe)\"\n\tserial \"SCES-00344\"\n)\n";
+        let run = crate::rom_id::run_until(&data, &games, &|_| Some(dat.to_string()), true, || false);
+        assert_eq!(run.names.len(), 3, "three discs named, the two unknown serials not");
+        let names = |l: Vec<super::System>| l[0].games.iter().map(|g| g.name.clone()).collect::<Vec<_>>();
+        let places = crate::gamelist::Locations::none();
+        let with = load_with(&cfg, Some(&Gamelists { data_dir: &data, places: &places })).unwrap();
+        assert_eq!(
+            names(with),
+            ["Crash Bandicoot", "Final Fantasy VII", "Final Fantasy VII (Disc 2)", "My own disc name", "SCES_999.98"],
+            "the serial's title (without its region, with its disc), the gamelist's name, and the file name of the disc no list knows"
+        );
+        // Before the serial was read (or without the list), the file name stays, without the serial in front.
+        let empty = dir.join("fresh-data");
+        let plain = load_with(&cfg, Some(&Gamelists { data_dir: &empty, places: &places })).unwrap();
+        assert_eq!(names(plain), ["Crash Bandicoot", "My own disc name", "SCES_999.98", "SLES_556.74", "Something"]);
+        // Two discs of one game that share a title keep what tells them apart, and a system that is no disc system is
+        // left to its names (`disc_serial::dat`).
+        assert_eq!(crate::disc_serial::dat("ps2"), Some("Sony - PlayStation 2"));
+        assert_eq!(crate::disc_serial::dat("gba"), None);
     }
 
     #[test]

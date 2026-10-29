@@ -1,6 +1,6 @@
 //! Part of the pocket-ui binary: the games' screenshots and title screens on the shelf (`pocket_ui::game_pictures`
 //! downloads them next to the box art, `pocket_ui::picture_cycle` times the cycle, `pocket_ui::picture_loader`
-//! decodes them).
+//! decodes them). The same worker also reads and fits the ordinary box-art covers (`App::cover`).
 //!
 //! * The Split look's preview shows the box art; after a short dwell on the selection it fades to the game
 //!   running, then to the title screen, and round again (`paint_preview`). Motion: Off keeps the box art still.
@@ -28,7 +28,8 @@ use super::{App, Item};
 
 /// The selection has to rest this long before its pictures are looked for.
 pub(crate) const REST: Duration = Duration::from_millis(400);
-/// Decoded pictures kept besides the box art (a screenshot is up to ~0.5 MB decoded).
+/// Decoded covers, screenshots and title screens kept together. Scrolling through a large library must
+/// not keep one decoded image per game and size. Cabinet case artwork has its own caches.
 const KEEP: usize = 16;
 
 pub(crate) struct PicturesUi {

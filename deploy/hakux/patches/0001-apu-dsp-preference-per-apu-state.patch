@@ -1,0 +1,194 @@
+# Source and credit: our own fix for the hakuX libretro core (GPL-3.0-or-later, same licence as hakuX), written by Sol (code review)
+# and Claude (device trace), 2026-10-28. git format-patch against hakuX PR #9 commit 531ce8d965f4758a16c36fa2c09e55a84c67fc93
+# (upstream-form commit 951124c7b4, branch fix/apu-relaunch-silence-final); submitted upstream to https://github.com/rfandango/hakuX/pull/9.
+# scripts/build-hakux-core.sh applies it with `git apply` before the build; the text below this header is the unchanged patch.
+From 951124c7b4dcd8e34b0580585a25d9aa981fce45 Mon Sep 17 00:00:00 2001
+From: pocket-ui <noreply@pocket-ui.invalid>
+Date: Wed, 28 Oct 2026 22:04:15 +0100
+Subject: [PATCH] apu: the DSP preference set on each new APU state, not cached
+ in a static; sound after a relaunch in the libretro core
+
+mcpx_apu_update_dsp_preference cached the preference it last applied in a
+function-local static and returned early while it matched. The APU state
+is allocated afresh at each boot (nc_dev_apu_init, zeroed pages), and the
+libretro core boots again in its frontend's process for a reset or a
+title's relaunch (XLaunchNewImage, boot_again). There the static still
+matched, so the new state kept monitor.point 0, MCPX_APU_DEBUG_MON_AC97:
+the VP's mix was not copied into the output frame and the EP's samples
+were refused. The output ring was fed zeros from then on, the stream to
+the frontend running but silent. Jade Empire lost music, speech and
+effects at its relaunch into default.xbe after New Game (about 50 s in,
+Retroid Pocket Mini V2, ROCKNIX, RetroArch). Android is not affected: its
+core runs once per process.
+
+The preference is now set on the state every time (three stores a frame),
+so a new state always gets it and a change still takes effect at the next
+frame.
+
+apu-reinit-smoke makes and frees the APU five times in one process with
+each preference twice in a row, checks the monitor point and the DSPs'
+realtime flags, and sends a known EP frame through the libretro output.
+
+Analysis and test: Sol (code review) and Claude (device trace).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ native/cmake/linux-tests.cmake  |  7 +++
+ native/dev/apu/dsp/gp_ep.c      | 12 ++---
+ tests/native/linux/apu_reinit.c | 83 +++++++++++++++++++++++++++++++++
+ tools/native/linux-build.sh     |  2 +-
+ 4 files changed, 95 insertions(+), 9 deletions(-)
+ create mode 100644 tests/native/linux/apu_reinit.c
+
+diff --git a/native/cmake/linux-tests.cmake b/native/cmake/linux-tests.cmake
+index e12919d298..2395569377 100644
+--- a/native/cmake/linux-tests.cmake
++++ b/native/cmake/linux-tests.cmake
+@@ -20,6 +20,13 @@ add_test(NAME linux-boundaries
+          COMMAND "${Python3_EXECUTABLE}" "${NC_REPO}/tests/native/linux/check.py" "$<TARGET_FILE_DIR:xboxrun>")
+ set_tests_properties(linux-boundaries PROPERTIES TIMEOUT 60)
+ if(TARGET hakux_libretro)
++  # The APU made again in one process (a relaunch), its EP's samples through
++  # the libretro output.
++  add_executable(apu-reinit-smoke "${NC_REPO}/tests/native/linux/apu_reinit.c"
++                                  "${NC_REPO}/native/libretro/audio.c")
++  target_link_libraries(apu-reinit-smoke PRIVATE hakux_native)
++  add_test(NAME apu-reinit-smoke COMMAND apu-reinit-smoke)
++  set_tests_properties(apu-reinit-smoke PROPERTIES TIMEOUT 10)
+   # The core through a minimal frontend: exports, info and a synthetic title.
+   add_executable(libretro-harness "${NC_REPO}/tests/native/libretro/harness.c"
+                                   "${NC_REPO}/tests/native/libretro/vk.c")
+diff --git a/native/dev/apu/dsp/gp_ep.c b/native/dev/apu/dsp/gp_ep.c
+index 0d749c07b2..5ab364d57b 100644
+--- a/native/dev/apu/dsp/gp_ep.c
++++ b/native/dev/apu/dsp/gp_ep.c
+@@ -25,12 +25,10 @@ static const int16_t ep_silence[256][2] = { 0 };
+ 
+ void mcpx_apu_update_dsp_preference(MCPXAPUState *d)
+ {
+-    static int last_known_preference = -1;
+-
+-    if (last_known_preference == (int)g_apu_config.use_dsp) {
+-        return;
+-    }
+-
++    /* Set on the state every time, not cached in a static: the libretro core
++     * boots again in its frontend's process (a reset, a title's relaunch)
++     * with a new, zeroed APU, which kept monitor point 0 (AC97) and sent
++     * only silence to the output. */
+     if (g_apu_config.use_dsp) {
+         d->monitor.point = MCPX_APU_DEBUG_MON_GP_OR_EP;
+         d->gp.realtime = true;
+@@ -40,8 +38,6 @@ void mcpx_apu_update_dsp_preference(MCPXAPUState *d)
+         d->gp.realtime = false;
+         d->ep.realtime = false;
+     }
+-
+-    last_known_preference = g_apu_config.use_dsp;
+ }
+ 
+ static void scatter_gather_rw(MCPXAPUState *d, uint64_t sge_base,
+diff --git a/tests/native/linux/apu_reinit.c b/tests/native/linux/apu_reinit.c
+new file mode 100644
+index 0000000000..79bf999fc6
+--- /dev/null
++++ b/tests/native/linux/apu_reinit.c
+@@ -0,0 +1,83 @@
++/* A title relaunch makes another APU in the frontend's process. No guest
++ * executable, renderer or sound device needed: exercise the real lifecycle
++ * and feed a known EP DMA frame through the real libretro output. */
++#include "native/dev/apu/apu_int.h"
++#include "native/dev/dev.h"
++#include "native/core/irq.h"
++#include "native/core/mmio.h"
++#include "native/core/vm.h"
++#include "native/libretro/libretro_int.h"
++
++static unsigned failures, received, mismatches;
++
++static void check(bool ok, const char *what)
++{
++    printf("%s: %s\n", ok ? "PASS" : "FAIL", what);
++    failures += !ok;
++}
++
++static size_t batch(const int16_t *pcm, size_t frames)
++{
++    for (size_t i = 0; i < frames; i++) {
++        mismatches += pcm[2 * i] != 1234 || pcm[2 * i + 1] != -2345;
++    }
++    received += frames;
++    return frames;
++}
++
++int main(void)
++{
++    setvbuf(stdout, NULL, _IONBF, 0);
++    alarm(8);
++    static uint8_t ram[8192];
++    NcVm vm = {.phys = ram, .ram_size = sizeof(ram)};
++    setenv("NC_APU_WORKERS", "1", 1);
++    unsetenv("NC_TRACE_APU");
++    /* Each preference twice: the bug hides after a preference change and
++     * fails specifically when the next device uses the SAME preference. */
++    const bool modes[] = {false, false, true, true, false};
++    for (unsigned cycle = 0; cycle < ARRAY_SIZE(modes); cycle++) {
++        printf("APU cycle %u, DSP %u\n", cycle + 1, modes[cycle]);
++        setenv("NC_APU_DSP", modes[cycle] ? "1" : "0", 1);
++        nc_dev_apu_init(&vm);
++        MCPXAPUState *d = g_state;
++        /* SECTL is off: the real frame thread remains parked. Hold its
++         * lock while simulating the EP's FIFO DMA callback. */
++        pthread_mutex_lock(&d->lock);
++        check(d->monitor.point == (modes[cycle] ? MCPX_APU_DEBUG_MON_GP_OR_EP : MCPX_APU_DEBUG_MON_VP),
++              "fresh APU selects an audible monitor");
++        check(d->gp.realtime == modes[cycle] && d->ep.realtime == modes[cycle],
++              "fresh APU applies the DSP execution mode");
++        check(apu_out_queued() == 0, "new output ring starts empty");
++        if (modes[cycle]) {
++            int16_t pcm[256][2];
++            for (unsigned i = 0; i < ARRAY_SIZE(pcm); i++) {
++                pcm[i][0] = 1234;
++                pcm[i][1] = -2345;
++            }
++            /* One scatter/gather entry and a 1024-byte output FIFO. */
++            apu_wr32(ram, 4096);
++            d->regs[NV_PAPU_EPFADDR] = 0;
++            d->regs[NV_PAPU_EPFMAXSGE] = 0;
++            d->regs[NV_PAPU_EPOFBASE0] = 0;
++            d->regs[NV_PAPU_EPOFEND0] = sizeof(pcm);
++            d->regs[NV_PAPU_EPOFCUR0] = 0;
++            d->ep.dsp->dma.fifo_rw(d, (uint8_t *)pcm, 0, sizeof(pcm), true);
++            apu_out_push(d->monitor.frame_buf, sizeof(d->monitor.frame_buf));
++            received = mismatches = 0;
++            nc_lr_audio_run(batch);
++            printf("EP callback: %u frames, %u mismatched stereo samples\n", received, mismatches);
++            check(received == 256 && mismatches == 0,
++                  "EP PCM reaches the libretro callback unchanged after re-init");
++        }
++        pthread_mutex_unlock(&d->lock);
++        nc_dev_apu_stop();
++        nc_dev_apu_free();
++        nc_mmio_reset();
++        nc_irq_reset();
++        received = 0;
++        nc_lr_audio_run(batch);
++        check(received == 0, "closed output makes no frontend callback");
++    }
++    return failures ? 1 : 0;
++}
+diff --git a/tools/native/linux-build.sh b/tools/native/linux-build.sh
+index 5f753d4084..376e6e0d4b 100644
+--- a/tools/native/linux-build.sh
++++ b/tools/native/linux-build.sh
+@@ -12,6 +12,6 @@ cmake -S native -B "$build" -G Ninja \
+     -DHAKUX_FEX_DIR="$deps/fex" -DNC_DEPS="$deps" \
+     -DHAKUX_BUILD_LIBRETRO=ON -DHAKUX_VERSION="${HAKUX_VERSION:-dev}" \
+     -DHAKUX_LR_END_PROCESS=ON "$@"
+-cmake --build "$build" --target xboxrun hakux_libretro libretro-harness linux-smoke audio-smoke usb-smoke \
++cmake --build "$build" --target xboxrun hakux_libretro libretro-harness linux-smoke audio-smoke apu-reinit-smoke usb-smoke \
+     vulkan-probe kms-grab -j "${JOBS:-4}"
+ ctest --test-dir "$build" --output-on-failure
+-- 
+2.43.0
+

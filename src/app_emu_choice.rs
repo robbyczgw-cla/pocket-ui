@@ -85,6 +85,12 @@ impl App {
         emu_choice::resolve(&ctx, &emu_choice::cached(), file)
     }
 
+    /// Whether pocket-core can play `path` of `sys` (its host and core), whatever plays it now: the picture, extras and
+    /// controls of "This game" are for it.
+    pub(crate) fn emu_hostable(&self, sys: &System, path: &Path) -> bool {
+        self.runner_inputs(sys, Some(path), true).pocket_core.is_some()
+    }
+
     fn emu_subject(&self, system: &str, game: Option<(&str, &Path)>, host_bin: bool) -> Option<Subject> {
         let sys = self.systems.iter().find(|s| s.name == system)?;
         let i = self.runner_inputs(sys, game.map(|(_, p)| p), host_bin);
@@ -120,15 +126,6 @@ impl App {
     /// The page is open over the shelf (a card or a console page).
     pub(crate) fn emu_choice_on_shelf(&self) -> bool {
         matches!(self.emu.page, Some((_, Opener::Shelf))) && self.running.is_none()
-    }
-
-    /// START on a game's card.
-    pub(crate) fn emu_choice_for_card(&mut self) {
-        let Some(open) = self.card.as_ref() else { return };
-        let (system, name, path) = (open.system.clone(), open.name.clone(), open.path.clone());
-        if !self.open_emu_choice(&system, Some((&name, &path)), Opener::Shelf) {
-            pocket_ui::ui_sound::refuse();
-        }
     }
 
     /// START on a console page.

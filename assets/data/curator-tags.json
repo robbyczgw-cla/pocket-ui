@@ -1487,6 +1487,7 @@
    "puzzle",
    "falling-block"
   ],
+  "family drama": [],
   "Family game": [
    "party",
    "minigames"
@@ -1727,6 +1728,10 @@
    "tabletop",
    "board-game"
   ],
+  "management": [
+   "simulation",
+   "management"
+  ],
   "management simulation game": [
    "simulation",
    "management"
@@ -1835,6 +1840,7 @@
   "non-game": [
    "other"
   ],
+  "nonlinear gameplay": [],
   "nonogram video game": [
    "puzzle",
    "logic-puzzle"
@@ -1907,6 +1913,9 @@
    "individual-sports"
   ],
   "pop music": [],
+  "post-apocalyptic fiction": [
+   "post-apocalyptic"
+  ],
   "post-apocalyptic video game": [
    "post-apocalyptic"
   ],
@@ -2007,6 +2016,9 @@
    "management"
   ],
   "school anime and manga": [],
+  "science fiction horror": [
+   "horror-setting"
+  ],
   "science fiction horror video game": [
    "horror-setting"
   ],
@@ -2045,6 +2057,9 @@
   "sim racing": [
    "racing",
    "sim-racing"
+  ],
+  "simulation": [
+   "simulation"
   ],
   "simulation video game": [
    "simulation"

@@ -6,6 +6,8 @@
     scripts/build-curatordb.py cross [--library LIST] [--sample N]  label a sample again with the other model family
     scripts/build-curatordb.py import --model claude FILE...        add hand/second-family labels (compact lines, see `import_labels`)
     scripts/build-curatordb.py write                                write assets/curatordb.bin from the cache
+    scripts/build-curatordb.py vocab                                only the vocabulary section again (a genre_map change,
+                                                                    no new tags): every label section kept byte for byte
     scripts/build-curatordb.py report                               coverage, agreement and example tag sets
 
 **What it does.** For every game in assets/gamedb.bin with sitelinks >= 3 (plus every game of a library
@@ -610,6 +612,32 @@ def system_tags(e, system):
     return tags
 
 
+def write_vocab(v):
+    """`_vocab` of assets/curatordb.bin replaced by assets/data/curator-tags.json, the systems' sections kept as they are.
+    Refused when the tags themselves changed: the labels name tags, so that needs `write`."""
+    b = OUT.read_bytes()
+    end = b.index(b"\n\n")
+    header = b[:end].decode().split("\n")
+    assert header[0] == "PCDB1", f"{OUT}: not a PCDB1 file"
+    body = end + 2
+    old = [(n, b[body + int(o):body + int(o) + int(ln)]) for n, o, ln in (l.split() for l in header[1:])]
+    shipped = json.loads(zlib.decompress(dict(old)["_vocab"]).decode())
+    if shipped["tags"] != v["tags"] or shipped["axes"] != v["axes"]:
+        raise SystemExit("the tags or axes changed: run `write` (labels name tags)")
+    new = zlib.compress(json.dumps(v, ensure_ascii=False, separators=(",", ":")).encode(), 9)
+    blobs, header, offset = [], ["PCDB1"], 0
+    for system, blob in old:
+        blob = new if system == "_vocab" else blob
+        header.append(f"{system} {offset} {len(blob)}")
+        blobs.append(blob)
+        offset += len(blob)
+    data = ("\n".join(header) + "\n\n").encode() + b"".join(blobs)
+    tmp = OUT.with_suffix(".tmp")
+    tmp.write_bytes(data)
+    tmp.replace(OUT)
+    print(f"vocabulary written, {len(old) - 1} systems kept, {len(data) / 1e3:.0f} KB -> {OUT}", file=sys.stderr)
+
+
 def write(games, labels, v):
     order = {t["id"]: i for i, t in enumerate(v["tags"])}
     by_system = {}
@@ -656,7 +684,7 @@ def write(games, labels, v):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("command", choices=["golden", "label", "cross", "import", "write", "report"])
+    ap.add_argument("command", choices=["golden", "label", "cross", "import", "write", "vocab", "report"])
     ap.add_argument("files", nargs="*", help="label files for `import`")
     ap.add_argument("--model", default="luna", choices=list(MODELS))
     ap.add_argument("--library", help="system/file name list whose games go first (private, never written out)")
@@ -665,6 +693,9 @@ def main():
     ap.add_argument("--systems", help="only games on these systems (comma-separated)")
     args = ap.parse_args()
     v = vocab()
+    if args.command == "vocab":
+        write_vocab(v)
+        return
     db = read_gamedb()
     games = games_by_qid(db)
     golden = json.loads(GOLDEN.read_text())

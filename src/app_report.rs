@@ -65,7 +65,7 @@ impl App {
     }
 
     /// Writes the report on a thread; the result comes back through `done` and a redraw.
-    fn write_report(&mut self) {
+    pub(crate) fn write_report(&mut self) {
         // The library's names, for taking them out of the logs: a copy, made once per press.
         let mut games: Vec<GameName> = self.systems.iter().flat_map(|s| s.games.iter().map(|g| GameName { system: s.name.clone(), name: g.name.clone(), path: g.path.clone() })).collect();
         games.extend(self.recents.list.iter().map(|r| GameName { system: r.system.clone(), name: r.name.clone(), path: r.path.clone() }));

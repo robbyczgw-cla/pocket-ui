@@ -207,3 +207,49 @@ fn the_text_size_in_settings_json_is_used_and_shown_on_its_row() {
     assert!(normal.contains("O\tSchriftgröße") && !normal.contains("Groß"), "nothing chosen: Normal\n{normal}");
     drop(stub);
 }
+
+/// Real game metadata, rather than short synthetic labels: the first frame must fit, including
+/// the selected search result (Marquee) and the two-line game card header.
+#[test]
+fn long_game_titles_fit_at_rest_in_both_languages_and_large_text() {
+    let tmp = tempfile::tempdir().unwrap();
+    let stub = wayland(tmp.path());
+    let output = std::env::var_os("POCKETUI_TEXT_FIT_OUTPUT").map(PathBuf::from);
+    if let Some(dir) = &output {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    for look in ["dark", "light"] {
+        let lib = tmp.path().join(look);
+        let status = Command::new("python3")
+            .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), lib.to_str().unwrap(), look])
+            .env("POCKETUI_TEXT_FIT", "1").stdout(std::process::Stdio::null()).status().unwrap();
+        assert!(status.success());
+        for size in ["normal", "large"] {
+            for lang in ["en", "de"] {
+                for dimensions in ["1240x1080", "1280x960"] {
+                    for state in ["switcher", "search:results:pokemon", "search:results:super mario advance", "curator:card:gba:pokemon", "curator:card:gba:super mario", "curator:card:ps2:revenge"] {
+                        let name = format!("{look}-{size}-{lang}-{dimensions}-{}", state.replace([':', ' '], "-"));
+                        let png = output.as_deref().unwrap_or(tmp.path()).join(format!("{name}.png"));
+                        let boxes = tmp.path().join("text.box");
+                        let visible = tmp.path().join("visible.txt");
+                        let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+                        cmd.args(["--snapshot", state, png.to_str().unwrap()])
+                            .env("POCKETUI_MOCK", "1").env("POCKETUI_LANG", lang)
+                            .env("POCKETUI_TEXT_SIZE", size).env("POCKETUI_SNAPSHOT_SIZE", dimensions)
+                            .env("POCKETUI_TEXT_BOXES", &boxes).env("POCKETUI_VISIBLE_TEXT", &visible)
+                            .env("POCKETUI_ES_SYSTEMS", lib.join("es_systems.cfg"))
+                            .env("POCKETUI_DATA", lib.join("data"));
+                        if let Some(s) = &stub { cmd.env("WAYLAND_DISPLAY", &s.path); }
+                        let out = cmd.output().unwrap();
+                        assert!(out.status.success() && png.exists(), "{name}: {}", String::from_utf8_lossy(&out.stderr));
+                        let painted = std::fs::read_to_string(&visible).expect("visible title record");
+                        let expected = if state.contains("super mario") { "Super Mario" } else if state.contains("revenge") { "Burnout Revenge" } else { "Pokemon" };
+                        assert!(painted.contains(expected), "{name} did not paint {expected}: {painted}");
+                        let problems = std::fs::read_to_string(&boxes).expect("painted text record");
+                        assert!(problems.trim().is_empty(), "{name}: {problems}");
+                    }
+                }
+            }
+        }
+    }
+}

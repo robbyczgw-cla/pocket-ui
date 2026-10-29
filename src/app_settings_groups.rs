@@ -90,9 +90,14 @@ pub(crate) fn set_store_offered(on: bool) {
     STORE_OFFERED.store(on, Ordering::Relaxed);
 }
 
-/// Whether Settings has a row for `opens`, with the Store `store`-offered or not.
+/// Whether Settings has a row for `opens`, with the Store `store`-offered or not. The LEDs row (the lights around the
+/// sticks) is left out on a device without sticks (the H700 handhelds).
 fn shown(opens: Opens, store: bool) -> bool {
-    store || !matches!(opens, Opens::Store)
+    shown_on(opens, store, pocket_ui::device::current().has_sticks())
+}
+
+fn shown_on(opens: Opens, store: bool, sticks: bool) -> bool {
+    (store || !matches!(opens, Opens::Store)) && (sticks || !matches!(opens, Opens::Leds))
 }
 
 /// The rows of category `g` that are shown, as indexes into `SETTINGS`, in their order. Painting, moving, touch and
@@ -162,6 +167,7 @@ impl App {
             Opens::OnStart if i == sel => format!("‹ {} ›", self.on_start.label()),
             Opens::OnStart => self.on_start.label().to_string(),
             Opens::RememberQuit => values::on_off(self.remember_quit).to_string(),
+            Opens::LaunchAnimation => values::on_off(self.launch_animation).to_string(),
             Opens::ButtonLayout if i == sel => format!("‹ {} ›", self.button_layout.label()),
             Opens::ButtonLayout => self.button_layout.label().to_string(),
             Opens::Frames if i == sel => format!("‹ {} ›", self.frames.label()),
@@ -238,8 +244,7 @@ impl App {
         let most = lines.iter().map(Vec::len).max().unwrap_or(1);
         // A row and the lines under it (both taller with Settings → Text size).
         let pitch = row + pocket_ui::type_scale::row(52, NU_SMALL) + (most as i32 - 1) * pocket_ui::type_scale::line(NU_SMALL, BLURB_GAP);
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, "Settings");
+        self.sheet_header(c, "Settings");
         // Five fit with room to spare; should more ever not, the window follows the selection.
         let visible = (((c.h - pad - NU_PILL - 16 - top) / pitch) as usize).max(1);
         let first = window_start(sel, visible, n);
@@ -416,6 +421,14 @@ mod tests {
     }
 
     #[test]
+    fn a_device_without_sticks_has_no_stick_lights_row() {
+        let leds = SETTINGS.iter().position(|s| matches!(s.1, Opens::Leds)).unwrap();
+        assert!(shown_on(Opens::Leds, true, true) && !shown_on(Opens::Leds, true, false));
+        assert!(shown_on(Opens::Tools, true, false), "everything else stays");
+        assert!(rows_with(group_of(leds), true).contains(&leds), "the test machine has sticks (it is no H700)");
+    }
+
+    #[test]
     fn the_flat_list_is_the_categories_one_after_another() {
         let names: Vec<&str> = SETTINGS_GROUPS.iter().flat_map(|c| c.2.iter().map(|r| r.0)).collect();
         assert_eq!(SETTINGS.iter().map(|r| r.0).collect::<Vec<_>>(), names);
@@ -424,11 +437,11 @@ mod tests {
                 assert_eq!(group_of(row), g);
             }
         }
-        // Short lists: the point of the categories. Eight at most (Look & feel since Text size): a list is never longer
-        // than one page, also with Large text, whose taller rows leave room for ten (1080 - 268 px at 76 px a row).
-        assert!(SETTINGS_GROUPS.iter().all(|c| (3..=8).contains(&c.2.len())), "every category holds 3 to 8 rows");
+        // Short lists: the point of the categories. Nine at most (Look & feel since Launch animation): a list is never
+        // longer than one page, also with Large text, whose taller rows leave room for ten (1080 - 268 px at 76 px a row).
+        assert!(SETTINGS_GROUPS.iter().all(|c| (3..=9).contains(&c.2.len())), "every category holds 3 to 9 rows");
         let large_row = pocket_ui::type_scale::grown_in(pocket_ui::type_scale::TextSize::Large, 36) as i32 - 36;
-        assert!(8 * (66 + large_row * 6 / 5) <= 1080 - 268, "eight Large rows fit on the page");
+        assert!(9 * (66 + large_row * 6 / 5) <= 1080 - 268, "nine Large rows fit on the page");
         let mut seen = std::collections::BTreeSet::new();
         assert!(SETTINGS.iter().all(|r| seen.insert(r.0)), "no row twice: settings_row finds rows by name");
     }

@@ -117,3 +117,22 @@ fn an_empty_card_shows_the_starter_pack_and_the_page_speaks_plainly() {
     assert!(has(&there, "Auf deiner SD-Karte"), "{there:?}");
     drop(stub);
 }
+
+/// House rule "never a blank where a figure goes": a store device whose catalog never loaded still paints words and
+/// art on the list and detail pages (they once painted only the two pills).
+#[test]
+fn the_store_pages_are_never_blank_without_a_catalog() {
+    let _tmp_guard = tempfile::tempdir().unwrap();
+    let tmp = _tmp_guard.path().to_path_buf();
+    let status = Command::new("python3")
+        .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.to_str().unwrap(), "dark"])
+        .stdout(std::process::Stdio::null())
+        .status()
+        .expect("python3 for scripts/curator-fake-library.py");
+    assert!(status.success());
+    let stub = wayland(&tmp);
+    for state in ["store", "store:list", "store:detail", "store:list:tools"] {
+        let lines = painted(&tmp, &stub, state);
+        assert!(!lines.is_empty(), "{state} painted no words: {lines:?}");
+    }
+}

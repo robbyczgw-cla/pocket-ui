@@ -461,6 +461,10 @@ fn the_pause_menu_table_matches_the_menu_of_each_emulator() {
             ("pocket-core", page(Saver::PocketCore { states: true }, false, false))
         } else if kind.contains("PlayStation 2") {
             ("standalone", page(Saver::Standalone, true, false))
+        } else if kind.starts_with("Xbox") {
+            // hakuX while its core has no save states: the line in place of Save and Load.
+            let saves = pocket_ui::pause_saves::Saves::of(Saver::Standalone, false, Some(pocket_ui::hakux::NO_STATES));
+            ("hakuX", super::main_items(false, saves, false))
         } else if kind.starts_with("RetroArch") {
             ("retroarch", page(Saver::RetroArch, false, false))
         } else if kind.starts_with("Other emulators") {
@@ -473,7 +477,7 @@ fn the_pause_menu_table_matches_the_menu_of_each_emulator() {
         assert_eq!(doc, code, "docs/user/pause-menu.md, the row {kind:?}");
         seen.insert(key);
     }
-    assert_eq!(seen.len(), 6, "docs/user/pause-menu.md: a row for each kind of emulator, {seen:?}");
+    assert_eq!(seen.len(), 7, "docs/user/pause-menu.md: a row for each kind of emulator, {seen:?}");
     // What Quit does is a setting, not a row: the guide names it beside Quit.
     let name = super::SETTINGS.iter().find(|s| matches!(s.1, super::Opens::RememberQuit)).expect("the Settings row").0;
     assert!(md.contains(&format!("**{name}**")), "docs/user/pause-menu.md names Settings → **{name}** under Quit");

@@ -103,6 +103,19 @@ the **No-Intro name its checksum gives** when the list knows it, and the file na
 | List | libretro-database's `metadat/no-intro/<system>.dat` (clrmamepro), fetched once when online and after 180 days, parsed to `<data>/identify/<system>.tsv` (CRC, name). A CRC several entries share keeps the cleanest name (`covers::rank`: no re-release, the usual region order). Not shipped | `rom_id::parse_dat`, `fetch_dat` |
 | Names | path → No-Intro name for every game whose CRC is in its system's list; from the card alone (no game file read) | `rom_id::known` |
 
+### PlayStation discs: the serial
+
+A PlayStation 1 or 2 image is too big for a checksum, so the serial on the disc names it (`src/disc_serial.rs`, run
+and cached by the same `rom_id::run_until` and given back by the same `rom_id::known`, so the users above need no
+special case):
+
+| Step | What | Where |
+|---|---|---|
+| Serial | The `BOOT`/`BOOT2` line of the ISO 9660 file `SYSTEM.CNF` (`BOOT = cdrom0:\SLES_556.73;1` → `SLES55673`, compared without dashes, dots and case), else the image's volume identifier when that is serial-shaped. A few sector reads: a 37 KB layout probe at the start, the volume descriptor (sector 16), the root directory (up to 64 KB) and that one file (up to 8 KB) — never the image. `.iso`, `.bin` (2048-byte sectors or a MODE2/2352 PlayStation dump) and the `.cue`/`.m3u` that names them; a `.chd`, `.cso` or `.pbp` is not opened (its file name is used) | `disc_serial::serial_of`, `parse_cnf`, `normalize` |
+| Cache | `<data>/identify/discs.tsv`: system, size, mtime (ns), serial, path. An image is read again only when its size or mtime changes; lines of images no longer in the library are dropped | `disc_serial::Cache` |
+| List | libretro-database's `metadat/redump/<system>.dat` (`Sony - PlayStation`, `Sony - PlayStation 2`; clrmamepro, a `serial` field per game), fetched once when online and after 180 days, parsed to `<data>/identify/<system>.serials.tsv` (serial, name). A serial several entries share keeps the cleanest name (`covers::rank`). Not shipped; the licence is the same as the No-Intro lists' ([NOTICE.md](../NOTICE.md#data-sources)) | `disc_serial::parse_dat`, `fetch_dat` |
+| Names | path → Redump name; from the card alone. The shelf shows it without its region tags but with its disc tag ("Final Fantasy VII", "Final Fantasy VII (Disc 2)"); `library::load_with` does that with `disc_serial::shelf_name`, after the gamelist's names. A file name that starts with the serial loses it when a title follows (`disc_serial::clean_stem`) | `rom_id::known`, `disc_serial::known` |
+
 Who uses the name, always before the file name and after the player's own choice:
 
 - `gamedb::GameDb::resolve_rom(system, stem, identified, choice)` and `lookup_rom`: the checksum's name, then the
@@ -112,7 +125,7 @@ Who uses the name, always before the file name and after the player's own choice
 - `covers::pick(stem, identified, index)`: the box art, screenshot and title screen under that name, then by the
   file name as before (`best_match`).
 
-A game the list does not know (homebrew, a hack, a bad dump, a disc game) behaves exactly as before. Offline before
+A game the list does not know (homebrew, a hack, a bad dump, a disc of another console) behaves exactly as before. Offline before
 the first download there are no names; the next run online fetches the list and names the games without reading
 them again. Tests: `rom_id::tests` (the zip's CRC in `archive::tests`), `covers::tests::the_checksums_name_comes_first…`,
 `game_pictures::tests::a_game_recognised_by_its_checksum…`, `curator::tests::a_game_its_checksum_named…`.
@@ -145,7 +158,7 @@ checks these cases.
 
 | Axis | Tags | Notes |
 |---|---|---|
-| family | 24 | The genre map sends all 390 Wikidata genres of gamedb here (`genre_map`) |
+| family | 24 | The genre map sends all 394 Wikidata genres of gamedb here (`genre_map`) |
 | sub-genre | 64 | |
 | mechanics | 22 | |
 | pace | 4 | Exactly one per game |
@@ -232,10 +245,11 @@ because reasons like "sci-fi · on-rails shooting" need it. A new genre in gamed
   (GPL-2.0-or-later).
 - **No Wikipedia text, review text or other copyrighted text is sent, stored or shipped.** The labeller works
   from CC0 facts and its own knowledge, and only tag ids come back.
-- **The No-Intro lists are not shipped.** libretro-database is CC BY-SA 4.0 as a repository; its
+- **The No-Intro and Redump lists are not shipped.** libretro-database is CC BY-SA 4.0 as a repository; its
   `metadat/no-intro` DATs are a bulk import from No-Intro, whose own terms for the DATs are not stated in a licence
-  we could find (UNCERTAIN). The device downloads a system's DAT itself, as RetroArch's updater does, and keeps a
-  CRC → name table on its own card ([NOTICE.md](../NOTICE.md#data-sources)).
+  we could find (UNCERTAIN), and its `metadat/redump` DATs come from Redump. The device downloads a system's DAT
+  itself, as RetroArch's updater does, and keeps a CRC → name table (the discs: serial → name) on its own card
+  ([NOTICE.md](../NOTICE.md#data-sources)).
 - **A library list is private.** It is read at build time, never written to the repository or the shipped
   file, and its lesser-known games are hidden among the chaff (see above). The local build cache
   (`~/.cache/pocket-curator`) keeps answers in the order they were made, library first, so keep that cache
@@ -291,6 +305,11 @@ From `scripts/build-curatordb.py report`:
 Since 2026-10-23 `gamedb.bin` also has NAOMI (12 entries), Atomiswave (1) and Pokémon mini (10), for the systems
 pocket-core took on (docs/HOST.md "More systems"); the table above is from before, and they have no feel tags until
 the next labelling run.
+Since 2026-10-29 it also has the **Xbox** (1066 entries, Wikidata platform Q132020), for hakuX (docs/XBOX.md): queried
+alone and merged into the file with `scripts/build-gamedb.py --only xbox --merge`, which keeps every other system's section
+byte for byte, so its versions are grouped among Xbox games only. Six of its genres were new and are in `genre_map`
+now, also in `curatordb.bin`'s vocabulary (`scripts/build-curatordb.py vocab`: that section only, the labels byte for
+byte); Xbox games have no feel tags until the next labelling run.
 
 Unique games tagged: 9292; entries: 13412; tags per entry: 6.6
 Confidence: {1: 423, 2: 5252, 3: 3617}

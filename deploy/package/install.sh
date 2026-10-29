@@ -186,6 +186,15 @@ rm -rf "$APP/licences.new"
 { mkdir -p "$APP/licences.new" && cp "$LIC/"* "$APP/licences.new/" && chmod 644 "$APP/licences.new/"* &&
   rm -rf "$APP/licences" && mv "$APP/licences.new" "$APP/licences"; } || die "cannot write the licence texts $APP/licences"
 ok "licences (/storage/pocket-ui/licences)"
+# The Xbox core (hakuX, docs/XBOX.md) when the package has it: /storage/pocket-ui/hakux, next to the releases, so an update of
+# pocket-ui leaves it alone. Checked against the package's sums first.
+if [ -d "$HERE/hakux" ]; then
+  (cd "$HERE/hakux" && sha256sum -c SHA256SUMS >/dev/null 2>&1) || die "hakux/ does not match its SHA256SUMS: unpack the package again"
+  rm -rf "$APP/hakux.new"
+  { mkdir -p "$APP/hakux.new" && cp -r "$HERE/hakux/." "$APP/hakux.new/" && rm -f "$APP/hakux.new/SHA256SUMS" &&
+    chmod 755 "$APP/hakux.new/hakux_libretro.so" && rm -rf "$APP/hakux" && mv "$APP/hakux.new" "$APP/hakux"; } || die "cannot write $APP/hakux"
+  ok "Xbox core (/storage/pocket-ui/hakux)"
+fi
 # A copy of uninstall.sh stays with the programs, for when the package folder is gone.
 cp "$HERE/uninstall.sh" "$APP/uninstall.sh" 2>/dev/null && chmod 755 "$APP/uninstall.sh"
 old=$(readlink "$APP/current" 2>/dev/null)

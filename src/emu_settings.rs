@@ -66,6 +66,9 @@ pub enum Live {
     Toggle(Toggle),
     /// Only at the next start: save, quit, start again, load.
     Restart,
+    /// Only the next time the game starts, with no restart offered: a game without save states (Xbox, `hakux`) would lose
+    /// where the player is. The row's description says so.
+    NextStart,
     /// pocket-ui's own CPU and GPU profile for the running game (`standalone::set_performance`).
     Power,
 }
@@ -619,13 +622,44 @@ pub static N3DS: Table = Table {
     more: None,
 };
 
-/// The options of a system's emulator: PS2, GameCube, Wii and 3DS.
+/// Xbox: hakuX in RetroArch (`hakux.rs`). Both rows are pocket-ui's own per-game keys in system.cfg, written into RetroArch's
+/// appendconfig and the core's options at every start; the Xbox default is the same key without a game (`xbox.<key>`) or the
+/// first choice. The core reads its resolution once before the console boots, and RetroArch has no command for the picture
+/// size, so both apply at the next start (`Live::NextStart`: a restart would lose the game, there are no save states yet).
+pub static XBOX: Table = Table {
+    title: "hakuX",
+    platform: "xbox",
+    settings: &[
+        Setting {
+            name: "Resolution",
+            desc: "The resolution the Xbox's picture is drawn at. Original is the Xbox's own 480p; 2x (960p) is sharper and costs the GPU more. Takes effect the next time the game starts.",
+            store: Store::Es(crate::hakux::RESOLUTION_KEY),
+            ini: (BaseFile::SystemCfg, "", crate::hakux::RESOLUTION_KEY),
+            choices: &[c("Original (480p)", "1", "1"), c("2x (960p)", "2", "2")],
+            live: Live::NextStart,
+        },
+        Setting {
+            name: "Screen scaling",
+            desc: "Aspect is as large as fits, in the picture's own shape (4:3), with black bars.\nFullscreen fills the screen and stretches the picture.\nInteger scales by whole numbers. Takes effect the next time the game starts.",
+            store: Store::Es(crate::hakux::SCALING_KEY),
+            ini: (BaseFile::SystemCfg, "", crate::hakux::SCALING_KEY),
+            choices: &[c("Aspect", "aspect", "aspect"), c("Fullscreen", "fullscreen", "fullscreen"), c("Integer", "integer", "integer")],
+            live: Live::NextStart,
+        },
+        PERFORMANCE,
+    ],
+    advanced: None,
+    more: None,
+};
+
+/// The options of a system's emulator: PS2, GameCube, Wii, 3DS and Xbox.
 pub fn table(emu: Emu, system: &str) -> Option<&'static Table> {
     match (emu, system) {
         (Emu::Armsx2, _) => Some(&PS2),
         (Emu::Dolphin, "gamecube") => Some(&GAMECUBE),
         (Emu::Dolphin, "wii") => Some(&WII),
         (Emu::Azahar, "3ds") => Some(&N3DS),
+        (Emu::Hakux, "xbox") => Some(&XBOX),
         _ => None,
     }
 }
@@ -1298,6 +1332,22 @@ impl Menu {
     /// The page for the running standalone game, if its emulator has one.
     pub fn for_running(files: &Files) -> Option<Menu> {
         let crate::standalone::Running { emu, system, rom, disc } = crate::standalone::session()?;
+        let menu = Menu::for_game(emu, &system, &rom, disc.as_deref(), files)?;
+        if let Ok(mut s) = SESSION.lock() {
+            if let Some(s) = s.as_mut().filter(|s| s.rom == rom && s.boot.is_none()) {
+                s.boot = Some(menu.raw.clone());
+                s.running = vec![None; menu.raw.len()];
+            }
+        }
+        Some(menu)
+    }
+
+    /// The page for a game that is not running (the game's "This game" page on the shelf): the same rows, values and
+    /// store as the pause menu's. `disc`: ARMSX2's "<serial> (<CRC>)", known only once the game runs.
+    pub fn for_game(emu: Emu, system: &str, rom: &Path, disc: Option<&str>, files: &Files) -> Option<Menu> {
+        let system = system.to_string();
+        let rom = rom.to_path_buf();
+        let disc = disc.map(str::to_string);
         let table = table(emu, &system)?;
         let target = match emu {
             Emu::Armsx2 => Target::Es {
@@ -1312,7 +1362,7 @@ impl Menu {
                 }
             }
             // ROCKNIX's start script looks the per-game keys up by the file name, and can't with some characters.
-            Emu::Azahar => match rom.file_name()?.to_str()? {
+            Emu::Azahar | Emu::Hakux => match rom.file_name()?.to_str()? {
                 file if es_findable(file) => Target::Es {
                     file: file.to_string(),
                     armsx2_ini: None,
@@ -1350,12 +1400,6 @@ impl Menu {
                 page.limit_choices(0, row);
             }
             menu.attach_more(page);
-        }
-        if let Ok(mut s) = SESSION.lock() {
-            if let Some(s) = s.as_mut().filter(|s| s.rom == rom && s.boot.is_none()) {
-                s.boot = Some(menu.raw.clone());
-                s.running = vec![None; menu.raw.len()];
-            }
         }
         Some(menu)
     }
@@ -1444,7 +1488,14 @@ impl Menu {
             };
             // Not set anywhere: the emulator's own default, which each table lists first; Performance's comes from
             // Games: performance (`default_performance`).
-            let first = if s.store == Store::Es(PERFORMANCE_KEY) { DEFAULT_PERFORMANCE.load(std::sync::atomic::Ordering::Relaxed).min(s.choices.len() - 1) } else { 0 };
+            let first = if s.store == Store::Es(PERFORMANCE_KEY) {
+                DEFAULT_PERFORMANCE.load(std::sync::atomic::Ordering::Relaxed).min(s.choices.len() - 1)
+            } else if s.store == Store::Es(crate::hakux::RESOLUTION_KEY) {
+                // Xbox: the device's default (2x on SM8550, `hakux::default_scale`), not always the first choice.
+                s.choices.iter().position(|c| c.stored == crate::hakux::default_scale()).unwrap_or(0)
+            } else {
+                0
+            };
             let i = if value.trim().is_empty() { Some(first) } else { find_choice(s, &value, stored) };
             let value = if value.trim().is_empty() { s.choices[first].emu.to_string() } else { value };
             own.push(stored);
@@ -1597,9 +1648,16 @@ impl Menu {
         }
         Some(if self.preview().restart {
             "Applies when you go back to the game: it restarts where you are (a state is saved and loaded)."
+        } else if self.next_start_pending() {
+            "Saved. This takes effect the next time the game starts."
         } else {
             "Applies as soon as you go back to the game."
         })
+    }
+
+    /// A changed row that only the next start applies (`Live::NextStart`).
+    fn next_start_pending(&self) -> bool {
+        self.table.settings.iter().enumerate().any(|(i, s)| s.live == Live::NextStart && self.values[i] != self.applied[i])
     }
 
     fn toggles(&self) -> Toggles {
@@ -1640,6 +1698,7 @@ impl Menu {
                     _ => plan.restart = true,
                 },
                 (Live::Restart, _) => plan.restart = true,
+                (Live::NextStart, _) => {}
                 (Live::Power, _) => plan.actions.push(Action::Power(choice.stored)),
             }
         }
@@ -2836,4 +2895,24 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn the_xbox_menu_has_resolution_and_scaling_that_wait_for_the_next_start() {
+        let t = table(Emu::Hakux, "xbox").expect("Xbox has options");
+        assert_eq!(t.title, "hakuX");
+        assert!(table(Emu::Hakux, "ps2").is_none());
+        let names: Vec<&str> = t.settings.iter().map(|s| s.name).collect();
+        assert_eq!(names, ["Resolution", "Screen scaling", "Performance"]);
+        for s in t.settings.iter().filter(|s| s.name != "Performance") {
+            assert_eq!(s.live, Live::NextStart, "{}: no restart, the game has no state to come back to", s.name);
+            assert!(s.desc.contains("next time the game starts"), "{}: the row says when it applies", s.name);
+        }
+        // The first choice is the default: the labels are pocket-core's.
+        let scaling = &t.settings[1];
+        assert_eq!(scaling.choices[0].stored, "aspect");
+        assert_eq!(scaling.choices.iter().map(|c| c.label).collect::<Vec<_>>(), ["Aspect", "Fullscreen", "Integer"]);
+        assert_eq!(t.settings[0].choices[0].stored, crate::hakux::DEFAULT_SCALE, "the first choice is the default (measured)");
+        assert_eq!(t.settings[0].choices.iter().map(|c| c.stored).collect::<Vec<_>>().len(), 2);
+    }
+
 }

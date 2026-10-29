@@ -139,6 +139,7 @@ pub fn emulator_name(emu: Emu) -> &'static str {
         Emu::Armsx2 => "ARMSX2",
         Emu::Dolphin => "Dolphin",
         Emu::Azahar => "Azahar",
+        Emu::Hakux => "hakuX",
     }
 }
 
@@ -160,6 +161,7 @@ pub fn read(emu: Emu, system: &str, rom: &Path, disc: Option<&str>, files: &File
         Emu::Armsx2 => armsx2(disc, files)?,
         Emu::Dolphin => dolphin(rom, files)?,
         Emu::Azahar => azahar(files)?,
+        Emu::Hakux => return Err("hakuX has no settings pocket-ui reads (Pixel Path)".into()),
     };
     s.emulator = emulator_name(emu).to_string();
     s.system = system.to_string();

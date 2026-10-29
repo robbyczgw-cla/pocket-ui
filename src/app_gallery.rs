@@ -446,15 +446,10 @@ impl App {
                 (true, Scope::All) => ("No screenshots yet", "Hold HOME and press A while you play to take one. It shows up here."),
                 (true, Scope::Game(_)) => ("No screenshots of this game", "Hold HOME and press A while you play to take one. It shows up here."),
             };
-            // A camera with a blank photo above the words once the folder is read (`ui_art`).
+            // A camera with a blank photo above the words once the folder is read (`kit::empty_state`).
             let base = top + 60 + type_scale::grow(37);
-            let dy = if page.loaded { pocket_ui::ui_art::above_words(c, pocket_ui::ui_art::Art::Screenshots, left, false, top + 8, base, 37) } else { 0 };
-            self.text.draw(c, Face::Title, 37, left, base + dy, pal().text, head);
-            let mut y = top + 110 + type_scale::grow(37) + type_scale::grow(NU_SMALL) + dy;
-            for l in self.text.wrap(Face::Body, NU_SMALL, line, right - left).into_iter().take(3) {
-                self.text.draw(c, Face::Body, NU_SMALL, left, y, pal().quiet, &l);
-                y += type_scale::line(NU_SMALL, 12);
-            }
+            let art = page.loaded.then_some(pocket_ui::ui_art::Art::Screenshots);
+            pocket_ui::kit::empty_state(c, &mut self.text, art, (left, right - left), top + 8, base, bottom, head, line);
             return;
         }
 
@@ -498,7 +493,7 @@ impl App {
 
     /// One screenshot's spine: its system's stripe, the small picture, the game (or the time) and what else.
     fn paint_gallery_row(&mut self, c: &mut Canvas, shot: &Shot, (x, y, w, h): (i32, i32, i32, i32), selected: bool, all: bool) {
-        c.rect(x, y, w, h, if selected { pal().label } else { pal().spine });
+        pocket_ui::kit::shelf_row(c, x, y, w, h, selected);
         c.rect(x, y, STRIPE, h, if selected { stripe(&shot.system) } else { pocket_ui::gfx::mix(stripe(&shot.system), pal().spine, 150) });
         let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else { (pal().chalk, pal().dust) };
         // The small picture in a tile that is there before the picture is: nothing moves when it arrives.
@@ -608,10 +603,8 @@ impl App {
         let w = type_scale::wide(820, 37).min(c.w - 2 * NU_PAD - 96);
         let h = 150 + type_scale::grow(50) + 2 * type_scale::grow(28);
         let (x, y) = ((c.w - w) / 2, (c.h - h) / 2 - 40);
-        c.rect(x - 48, y - 48, w + 96, h + 96, pal().void);
-        if pal().t > 0 {
-            c.frame(x - 48, y - 48, w + 96, h + 96, 1, pal().pick(VOID, 0xd6d0c4));
-        }
+        // The sheet every dialog has (`kit::sheet`): over the list it floated without an edge in Dark.
+        pocket_ui::kit::sheet(c, x - 48, y - 48, w + 96, h + 96);
         let head = self.text.fit(Face::Title, 50, "Delete this screenshot?", w);
         self.text.draw(c, Face::Title, 50, x, y + type_scale::px(50) as i32, pal().chalk, &head);
         let what = format!("{} · {}", shot.title(), shot.when.clock());

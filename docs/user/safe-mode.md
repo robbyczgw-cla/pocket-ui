@@ -47,7 +47,8 @@ If safe mode comes back after a reset as well, send the files described in
 EmulationStation stays installed as an emergency exit. You open it on purpose:
 
 - On the shelf, hold **SELECT + START** for one second (or press Escape on a keyboard). A question opens:
-  **Cancel**, **Restart pocket-ui** or **Open EmulationStation**.
+  **Cancel**, **Restart pocket-ui**, **Report a problem** (saves the file for a bug report, see
+  [Report a problem](troubleshooting.md#report-a-problem)) or **Open EmulationStation**.
 - Settings → System → **About** → **Open EmulationStation…**.
 - In safe mode, **Open EmulationStation…**.
 

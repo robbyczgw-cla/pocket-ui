@@ -15,7 +15,7 @@ use crate::palette::*;
 use crate::status_corner::Corner;
 use crate::system_art::Sprite;
 use crate::text::{Face, Text};
-use crate::touch::{hint_button, Area};
+use crate::touch::Area;
 
 pub(crate) const TITLE_BASE: i32 = 118;
 pub(crate) const HEAD_BASE: i32 = 162;
@@ -512,35 +512,9 @@ pub fn wrap_url(text: &mut Text, url: &str, max: i32) -> Vec<String> {
     lines
 }
 
-/// The hint keys at the bottom left, as on the shelf; returns where each key can be tapped.
+/// The hint keys at the bottom left, as on the shelf; returns where each key can be tapped (`kit::page_hints`).
 pub fn paint_hints(c: &mut Canvas, text: &mut Text, hints: &[(&str, &str)]) -> Vec<(Area, Button)> {
-    use crate::type_scale;
-    let (mut x, base) = (MARGIN, c.h - 52);
-    let mut areas = Vec::new();
-    // The keys are 36 px around Body 21, taller with larger text (`type_scale`).
-    let key_h = type_scale::row(36, 21);
-    let key_top = base - 9 - key_h / 2 - type_scale::grow(21) / 3;
-    // One letter in a round key, a word in a key as wide as it.
-    let widths: Vec<(i32, i32)> = hints.iter().map(|(k, l)| (text.width(Face::Body, 21, k), text.width(Face::Body, 21, l))).collect();
-    let shown = type_scale::hint_labels_that_fit(&widths.iter().map(|(kw, lw)| ((kw + 24).max(key_h) + 10, lw + 36)).collect::<Vec<_>>(), c.w - MARGIN - 24 + 36);
-    for (k, (key, label)) in hints.iter().enumerate() {
-        let kw = widths[k].0;
-        let key_w = (kw + 24).max(key_h);
-        let start = x;
-        c.round_rect(x, key_top, key_w, key_h, key_h / 2, pal().keycap);
-        text.draw(c, Face::Body, 21, x + (key_w - kw) / 2, base - 1, pal().chalk, key);
-        x += key_w + 10;
-        if k < shown {
-            x += text.draw(c, Face::Body, 21, x, base, pal().dust, label);
-        }
-        x += 36;
-        if let Some(b) = hint_button(key) {
-            areas.push((Area::new(start - 8, base - 46, x - start - 20, 64), b));
-        }
-    }
-    // For the snapshot checks of Settings → Text size: nothing else may run into the hint bar.
-    crate::text::boxes::area(c, (MARGIN - 4, key_top, x - 36 - MARGIN + 8, key_h), "‹hints›");
-    areas
+    crate::kit::page_hints(c, text, hints)
 }
 
 /// Row height of the short facts on the shelf.

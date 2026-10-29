@@ -50,7 +50,13 @@ METRICS = {
     "nav.p95": ("ms", "shelf move: input -> frame (95th pct)"),
     "open.settings": ("ms", "START on the shelf -> Settings frame"),
     "open.switcher": ("ms", "SELECT on the shelf -> switcher frame"),
+    "open.quick": ("ms", "HOME on the shelf -> quick settings frame (FIFO down/up, no physical hold)"),
+    "close.quick": ("ms", "B in quick settings -> shelf frame"),
+    "open.card": ("ms", "X on the first --systems game -> card/box frame"),
+    "open.card_first": ("ms", "first X on the first --systems game in this process -> card/box frame"),
+    "close.card": ("ms", "B on the card/box -> shelf frame"),
     "open.pause_menu": ("ms", "HOME in a game -> pause menu frame"),
+    "close.pause_menu": ("ms", "Continue -> pocket-ui frame behind the game (UI hand-off, not a core frame)"),
     "open.pause_menu_again": ("ms", "HOME after Continue -> pause menu frame"),
     "open.switcher_game": ("ms", "SELECT in the pause menu -> switcher frame"),
     "launch.*": ("ms", "A on a game -> first game frame (pocket-core)"),
@@ -480,7 +486,8 @@ class Run:
 
     def to_home(self):
         for _ in range(4):
-            if self.frame_now()["screen"] == "shelf":
+            # The Cabinet look's Home is every shelf at once: the screen names the shelf the cursor is on.
+            if self.frame_now()["screen"] == "shelf" or (self.a.look == "cabinet" and self.frame_now()["screen"] in SHELF):
                 return
             self.until_screen("b", SHELF)
             self.settle(0.3)
@@ -503,9 +510,12 @@ class Run:
 
     def navigation(self):
         self.to_home()
-        # Up and down over the whole list, so every move changes the selection.
+        if self.a.nav_system:
+            self.open_game(self.a.nav_system)
+        # Cabinet books move horizontally; the list looks move vertically.
+        forward, backward = ("right", "left") if self.a.nav_system and self.a.look == "cabinet" else ("down", "up")
         n = 0
-        direction = "down"
+        direction = forward
         lat = []
         stuck = 0
         while n < self.a.moves:
@@ -516,7 +526,7 @@ class Run:
                 stuck += 1
                 if stuck > 2:
                     raise Fail("the shelf has a single entry: nothing to move between")
-                direction = "up" if direction == "down" else "down"
+                direction = backward if direction == forward else forward
                 time.sleep(self.a.gap / 1000.0)
                 continue
             stuck = 0
@@ -542,6 +552,25 @@ class Run:
             self.until_screen("b", SHELF)
             self.settle(0.4)
 
+        for _ in range(self.a.opens):
+            ms, _ = self.until_screen("home", ("quick",))
+            self.add("open.quick", ms)
+            self.settle(0.4)
+            ms, _ = self.until_screen("b", SHELF)
+            self.add("close.quick", ms)
+            self.settle(0.4)
+        if self.a.systems:
+            self.open_game(self.a.systems[0])
+            for i in range(self.a.opens):
+                ms, _ = self.until_screen("x", ("card",))
+                self.add("open.card", ms)
+                if i == 0:
+                    self.add("open.card_first", ms)
+                self.settle(0.4)
+                ms, _ = self.until_screen("b", SHELF)
+                self.add("close.card", ms)
+                self.settle(0.4)
+
     def cpu_shelf(self):
         self.to_home()
         self.settle(2.0)
@@ -551,6 +580,9 @@ class Run:
         """Shelf -> the system -> the game named by `spec` (system[:part of the file name]). Returns its sel."""
         system, _, part = spec.partition(":")
         self.to_home()
+        # The Cabinet look's Home is the games themselves, on a shelf per system: no system to open first.
+        if self.a.look == "cabinet":
+            return self.goto(lambda s: s.startswith(f"game:{system}/") and part.lower() in s.lower())
         self.goto(lambda s: s == f"system:{system}")
         self.until_screen("a", ("games",))
         self.settle(0.3)
@@ -573,16 +605,16 @@ class Run:
     def pause_menu_again(self):
         """Continue, play a moment, HOME again: the pause menu as it opens in play, after its window was moved
         behind the game once (the first one after a start never was)."""
-        send("a")
+        ms, _ = self.until_screen("a", ("behind-game",))
+        self.add("close.pause_menu", ms)
         self.settle(1.0)
         self.pause_menu("open.pause_menu_again")
 
     def quit_game(self):
-        # The pause menu is open on Continue; Quit is the last entry (Down stops there). Pixel Path and Achievements add
-        # rows (seven with Pixel Path), so press more than there can be rather than counting them.
-        for _ in range(12):
-            self.press("down")
-            time.sleep(0.05)
+        # The pause menu is open on Continue; Quit is the last entry, and the menu wraps around (5c6b510): one Up from
+        # Continue, whatever rows Pixel Path and Achievements add.
+        self.press("up")
+        time.sleep(0.05)
         t = send("a")
         ex = self.trace.wait(lambda e: e["event"] == "game-exited" and e["pid"] == self.ui.pid, t, 60, "the game to end")
         fr = self.trace.wait(lambda e: e["event"] == "frame" and e["pid"] == self.ui.pid and e["screen"] in SHELF, ex["t"], 10, "the shelf after the game")
@@ -1050,7 +1082,7 @@ def _measure(a):
         meta["kernel"] = os.uname().release
     except AttributeError:
         pass
-    config = {k: getattr(a, k) for k in ("runs", "starts", "moves", "opens", "cycles", "systems", "gap", "settle", "cpu_secs", "warmup", "cold", "wake", "wakes", "asleep")}
+    config = {k: getattr(a, k) for k in ("runs", "starts", "moves", "nav_system", "look", "opens", "cycles", "systems", "gap", "settle", "cpu_secs", "warmup", "cold", "wake", "wakes", "asleep")}
     if cpu_sources:
         meta["cpu_source"] = ",".join(sorted(cpu_sources))
     data = {"schema": SCHEMA, "meta": meta, "config": config, "metrics": with_unmeasured(summarize(runs, {}), unmeasured)}
@@ -1534,6 +1566,7 @@ def main():
     m.add_argument("--runs", type=int, default=3, help="passes over everything; each number is the median over them")
     m.add_argument("--starts", type=int, default=5, help="cold starts per run")
     m.add_argument("--moves", type=int, default=100, help="shelf moves per run")
+    m.add_argument("--nav-system", default="", help="move in this system's games instead of Home (large-library/cover checks)")
     m.add_argument("--opens", type=int, default=5, help="Settings and switcher opens per run")
     m.add_argument("--cycles", type=int, default=2, help="game cycles per run (launch, pause menu, quit, switch)")
     m.add_argument("--systems", default="gbc,gba,snes", help="games to start: system[:part of the file name], comma separated; empty: no games")
@@ -1551,6 +1584,7 @@ def main():
     m.add_argument("--minute-secs", dest="minute_secs", type=int, default=4, help="--wake: a sleep 'minute' in seconds (POCKETUI_SLEEP_MINUTE_SECS), so light sleep comes after seconds")
     m.add_argument("--wake-button", dest="wake_button", default="Gamepad:Button:DPadDown", help="--wake: the InputPlumber button pressed after the wake for 'input'")
     m.add_argument("--no-inject", dest="no_inject", action="store_true", help="--wake: press no button through InputPlumber (no 'input' numbers)")
+    m.add_argument("--look", default="", help="'cabinet' when the device's settings.json has the Cabinet look: Home is every shelf, games are started from there (no system's list)")
     m.add_argument("--seed", type=int, default=1)
     m.add_argument("--meta", action="append", default=[], help="KEY=VALUE stored with the result")
     m.add_argument("--root", default="/storage/pocket-ui")

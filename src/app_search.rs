@@ -282,18 +282,23 @@ impl App {
             self.find.flash = None;
             return;
         };
-        let (x, y) = ((c.w - FLASH) / 2, (c.h - FLASH) / 2 - 20);
+        // In the Shelf look over the spines, where the jump lands, not over the name above them (`app_cabinet`).
+        let (x, y) = ((c.w - FLASH) / 2, self.shelf_flash_top(c.w, c.h, FLASH).unwrap_or((c.h - FLASH) / 2 - 20));
         // The inverse of the page, like the selected row of the Minimal look: it reads over spines and labels alike.
         // Painted whole and then mixed over the page as one layer, so box and letter fade together into what is
         // behind them (mixing the letter's colour towards the box's left a bright letter on a faded box).
         let (back, ink) = (pal().text, pal().void);
         let letter = flash.letter.to_string();
         let w = self.text.width(Face::Title, 200, &letter);
+        let mark = pocket_ui::text::boxes::mark();
         let text = &mut self.text;
         pocket_ui::motion::layer(c, x, y, FLASH, FLASH, alpha, |c| {
             blend_round_rect(c, x, y, FLASH, FLASH, 44, back, 240);
             text.draw(c, Face::Title, 200, x + (FLASH - w) / 2, y + FLASH / 2 + 70, ink, &letter);
         });
+        // For the snapshot checks of Settings → Text size: the box covers the page's strings on purpose (as the CJK
+        // check says of `letters:`), so what was under it is not read there; the letter painted into it is.
+        pocket_ui::text::boxes::covered_since(mark, c, (x, y, FLASH, FLASH));
     }
 
     // ---- the search -----------------------------------------------------------------------------------------
@@ -327,8 +332,12 @@ impl App {
     /// A button while the search is open.
     pub(crate) fn search_input(&mut self, b: Button) {
         let Some(page) = self.find.page.as_mut() else { return };
+        let selection = (page.focus, page.sel);
         let before = page.kb.text.clone();
         let action = page.press(b, CONFIRM, CANCEL);
+        if selection != (page.focus, page.sel) || page.kb.text != before {
+            self.marquee.restart();
+        }
         if page.kb.text != before {
             println!("search: {:?} → {} games in {:.2} ms", page.kb.text, page.hits.len(), page.took.as_secs_f64() * 1000.0);
         }
@@ -464,7 +473,9 @@ impl App {
         let room = width - 56 - count_w;
         let text_x = MARGIN + 28;
         let w = if page.kb.text.is_empty() {
-            self.text.draw(c, Face::Title, 50, text_x, FIELD_Y + 62, dim, "Any game, by its name");
+            // The caret stands at the start; the hint begins after it, not under it.
+            let after_caret = if typing { 16 } else { 0 };
+            self.text.draw(c, Face::Title, 50, text_x + after_caret, FIELD_Y + 62, dim, "Any game, by its name");
             0
         } else {
             // A long query shows its end, where the typing is.
@@ -535,7 +546,7 @@ impl App {
                 break;
             }
             let on = selected == Some(i);
-            c.rect(MARGIN, y, width, recent_row(), if on { pal().label } else { pal().spine });
+            pocket_ui::kit::shelf_row(c, MARGIN, y, width, recent_row(), on);
             let q = self.text.fit(Face::Title, 37, q, width - 56);
             self.text.draw(c, Face::Title, 37, MARGIN + 28, y + recent_row() / 2 + pocket_ui::type_scale::base(13, 37), if on { pal().ink } else { pal().chalk }, &q);
             self.find.rows.push((Area::new(MARGIN, y, width, recent_row()), i));
@@ -674,6 +685,7 @@ impl App {
                     if page.focus == Focus::Results && page.sel == i {
                         self.tap_button(el, CONFIRM);
                     } else {
+                        self.marquee.restart();
                         let action = page.tap_row(i, CONFIRM, CANCEL);
                         self.search_action(action);
                         self.request_redraw();
@@ -684,7 +696,11 @@ impl App {
             }
             // The list follows the finger: a swipe up shows what is further down.
             Some(Gesture::Scroll { steps, vertical: true }) => {
+                let before = page.sel;
                 page.scroll(-steps);
+                if page.sel != before {
+                    self.marquee.restart();
+                }
                 self.request_redraw();
                 true
             }
@@ -707,6 +723,10 @@ impl App {
             for _ in 0..presses {
                 self.letter_jump(true);
             }
+            // A snapshot is one picture of a state, painted whenever this machine gets to it: the letter shows whole,
+            // as in the jump's first frame, not faded or gone by the clock (`Flash::alpha`). Its box still covers what
+            // is under it on purpose (`paint_letter_flash`).
+            self.find.flash = self.find.flash.and_then(|f| Flash::pinned(f.letter));
             self.prev_sel = self.sel;
             self.moved_at = Instant::now() - Duration::from_secs(2);
             return true;

@@ -139,6 +139,7 @@ impl App {
             || self.find.is_open()
             || self.port_files.is_some()
             || self.emu_choice_on_shelf()
+            || self.this_game_open()
             || self.leave.is_some()
             || self.notice.as_ref().is_some_and(super::Notice::active)
             || self.sys.is_open();

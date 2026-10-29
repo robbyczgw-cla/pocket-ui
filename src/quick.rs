@@ -2046,6 +2046,68 @@ mod tests {
         assert_eq!(hw.brightness(), Some(75));
     }
 
+    fn shown(s: &Sys) -> Option<Data> {
+        s.osd.as_ref().map(|o| o.data.clone())
+    }
+
+    #[test]
+    fn with_input_sense_running_vol_down_is_shown_every_time_also_after_a_vol_up() {
+        let (mut s, hw) = sys();
+        s.set_rocknix_keys(true);
+        let t0 = Instant::now();
+        hw.set_volume(50);
+        // Ten presses each way, as input_sense changes the volume at the key down.
+        for i in 0..10u64 {
+            for (b, to) in [(Button::VolUp, 55u8), (Button::VolDown, 50u8)] {
+                let now = t0 + Duration::from_secs(2 * i + if b == Button::VolUp { 0 } else { 1 });
+                s.osd = None;
+                hw.set_volume(to);
+                key(&mut s, b, true, &SHELF, now);
+                s.tick(&SHELF, now + Duration::from_millis(5));
+                assert_eq!(shown(&s), Some(Data::percent("Volume", to)), "{b:?} press {i}");
+                key(&mut s, b, false, &SHELF, now + Duration::from_millis(80));
+            }
+        }
+    }
+
+    #[test]
+    fn vol_down_whose_change_comes_after_our_first_look_is_shown_with_the_new_level() {
+        let (mut s, hw) = sys();
+        s.set_rocknix_keys(true);
+        let now = Instant::now();
+        hw.set_volume(50);
+        key(&mut s, Button::VolDown, true, &SHELF, now);
+        s.tick(&SHELF, now + Duration::from_millis(5));
+        // input_sense's `volume down` (a shell script) took its time.
+        hw.set_volume(45);
+        s.tick(&SHELF, now + Duration::from_millis(100));
+        s.tick(&SHELF, now + Duration::from_millis(200));
+        assert_eq!(shown(&s), Some(Data::percent("Volume", 45)));
+    }
+
+    #[test]
+    fn with_input_sense_a_held_vol_down_follows_the_volume_down_to_zero_and_shows_zero() {
+        let (mut s, hw) = sys();
+        s.set_rocknix_keys(true);
+        let now = Instant::now();
+        hw.set_volume(10);
+        hw.set_volume(5);
+        key(&mut s, Button::VolDown, true, &SHELF, now);
+        s.tick(&SHELF, now + Duration::from_millis(10));
+        assert_eq!(shown(&s), Some(Data::percent("Volume", 5)));
+        // The repeat: input_sense steps again while held.
+        hw.set_volume(0);
+        s.tick(&SHELF, now + Duration::from_millis(400));
+        s.tick(&SHELF, now + Duration::from_millis(500));
+        assert_eq!(shown(&s), Some(Data::percent("Volume", 0)));
+        // At 0 the key still gets an answer: the level, unchanged.
+        key(&mut s, Button::VolDown, false, &SHELF, now + Duration::from_millis(600));
+        s.osd = None;
+        key(&mut s, Button::VolDown, true, &SHELF, now + Duration::from_secs(3));
+        s.tick(&SHELF, now + Duration::from_millis(3005));
+        assert_eq!(shown(&s), Some(Data::percent("Volume", 0)));
+    }
+
     #[test]
     fn home_tap_on_the_shelf_opens_quick_settings_but_not_with_another_button_or_in_a_game() {
         let (mut s, _) = sys();

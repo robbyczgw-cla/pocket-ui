@@ -854,6 +854,23 @@
    "source": "text prompt only, no input image",
    "generations": 1.0,
    "result": "assets/systems/pokemini.png"
+  },
+  "pd_xbox": {
+   "system": "xbox",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-10-28",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    795
+   ],
+   "output_size": [
+    256,
+    159
+   ],
+   "source": "Wikimedia Commons File:Xbox-Console-FL.jpg (https://commons.wikimedia.org/wiki/File:Xbox-Console-FL.jpg), 1280 px thumbnail",
+   "result": "assets/systems/xbox.png"
   }
  }
 }

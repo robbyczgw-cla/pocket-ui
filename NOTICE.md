@@ -116,10 +116,18 @@ What the table shows:
 | [Dolphin](https://github.com/dolphin-emu/dolphin) | GameCube, Wii | GPL-2.0-or-later |
 | [Azahar](https://github.com/azahar-emu/azahar) | Nintendo 3DS | GPL-2.0-or-later |
 | [RetroArch](https://github.com/libretro/RetroArch) | every system pocket-ui does not host itself | GPL-3.0-or-later |
+| [hakuX](https://github.com/rfandango/hakuX) core (libretro/Linux port, [PR #9](https://github.com/rfandango/hakuX/pull/9)) | Xbox, in RetroArch (`src/hakux.rs`, experimental) | GPL-3.0-or-later (with FEX and other parts under their own licences, texts in `/storage/pocket-ui/hakux/licenses`) |
 | [PortMaster](https://github.com/PortsMaster/PortMaster-GUI) | PC game ports (`src/ports.rs`) | MIT (each port has its own licence) |
 
 Every other emulator ROCKNIX ships (and pocket-ui can start through `runemu.sh`) keeps its own licence; see
 ROCKNIX.
+
+**Xbox: hakuX by rfandango (GPL-3.0), Linux/libretro port by portare-ch (PortareOS), PR #9 commit
+`531ce8d965f4758a16c36fa2c09e55a84c67fc93` + audio relaunch fix (ours, submitted upstream).** pocket-ui ships the built core (`hakux_libretro.so`, built from that
+commit plus our one patch, `deploy/hakux/patches/`, with the PR's own build scripts) in its own folder, `/storage/pocket-ui/hakux`; it is loaded by ROCKNIX's RetroArch,
+a separate GPL-3.0-or-later program that pocket-ui starts, as ARMSX2 or Dolphin are. pocket-ui and the core do not share
+a process. Source of the shipped binary: <https://github.com/rfandango/hakuX/pull/9> at that commit plus the patch (GPL-3.0-or-later, in the pocket-ui source); `SOURCE.txt` beside
+the core says the same, with the checksums. The licence texts of the core and its parts travel with it.
 
 **How the licences fit together.** pocket-ui is GPL-2.0-or-later, so it can be combined with GPL-2.0 code and,
 by the "or later", with GPL-3.0 code. The cores are not part of this repository or of the pocket-ui programs:

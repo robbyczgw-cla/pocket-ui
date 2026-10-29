@@ -31,7 +31,10 @@ If the screen stays black with "Boot mode: Loader", the device's loader partitio
 documentation (INSTALL-DUAL-BOOT.md, "Only if the loader holds no u-boot").
 
 This card contains no BIOS files and no games. Add only games and BIOS files you own.
-Remote access (SSH) is off until you turn it on in Settings.
+Remote access (SSH), file sharing and Syncthing are off. When you turn on Remote access or file
+sharing in pocket-ui's Settings, it makes a password for this device and shows it on the screen.
+(EmulationStation, ROCKNIX's menu, can also turn SSH on; it then uses ROCKNIX's standard root password
+"rocknix" until you change it there.)
 Do not install ROCKNIX updates on this card: they replace the system but not the kernel in
 boot/pocket/, and the two must match.
 
@@ -40,7 +43,9 @@ What is on the card
 -------------------
 
 FAT partition "ROCKNIX" (readable on any computer):
-  KERNEL, SYSTEM, *.md5      ROCKNIX @ROCKNIX_TAG@, unchanged (ROCKNIX-SM8250.aarch64-@ROCKNIX_TAG@.img.gz)
+  KERNEL, KERNEL.md5         ROCKNIX @ROCKNIX_TAG@, unchanged (ROCKNIX-SM8250.aarch64-@ROCKNIX_TAG@.img.gz)
+  SYSTEM, SYSTEM.md5         ROCKNIX @ROCKNIX_TAG@'s system, repacked without the files listed under
+                             "Changes" below; everything else in it is unchanged
   EFI/BOOT/BOOTAA64.EFI      GRUB, started by Retroid's u-boot in "Boot mode: Loader"
   boot/grub/grub.cfg         no menu, starts boot/pocket/Image
   boot/pocket/Image          the Linux kernel, unpacked unchanged from KERNEL
@@ -49,18 +54,31 @@ FAT partition "ROCKNIX" (readable on any computer):
   post-flash.sh              boot hook: starts without the ROCKNIX logo
   mount-storage.sh           boot hook: puts pocket-ui's start entry in place once the storage has
                              grown, then deletes itself
-  pocket-ui-info/            this file, pocket-ui's LICENSE and NOTICE.md, and licences/ (the Rust crates' licence
-                             texts and the fonts' OFL; also in STORAGE as /storage/pocket-ui/licences)
+  pocket-ui-info/            this file; SOURCE-OFFER.txt; pocket-ui's LICENSE and NOTICE.md;
+                             licences/ (the Rust crates' licence texts and the fonts' OFL; also in
+                             STORAGE as /storage/pocket-ui/licences); rocknix-licenses/ (ROCKNIX's
+                             LICENSE.md and licenses folder at tag @ROCKNIX_TAG@); firmware-licences/
+                             (the terms of the firmware files inside SYSTEM)
 
 Partition "STORAGE" (grows to fill the card at the first start):
   pocket-ui/                 pocket-ui, pocket-core and pocket-splash (the boot screen) @VERSION@, the launcher
   .pocket-seed/              the start entry for pocket-ui and the boot screen's unit (moved to
                              .config/system.d at the second start)
 
-Changes from the ROCKNIX image: the files above were added; the folder rocknix_abl/ (a
-replacement for Retroid's bootloader, not used here) was removed; the partition table, KERNEL and
-SYSTEM are unchanged. ROCKNIX's own interface, EmulationStation, stays on the card and takes over if
-pocket-ui cannot start.
+Changes from the ROCKNIX image: the files above were added. The folder rocknix_abl/ (a replacement for
+Retroid's bootloader, not used here) was removed. Removed from SYSTEM:
+  - the Kickstart relocation tables (kick*.RTB) of Amiberry's WHDLoad booter, loose and inside its
+    boot-data.zip (the rest of that archive is unchanged). They come from SKick
+    (aminet.net, util/boot/skick346.lha), whose licence allows passing them on only inside that unchanged
+    archive. Amiga games run with the standard emulator (PUAE) as before; for WHDLoad games in Amiberry,
+    copy the .RTB files from that archive to /storage/.config/amiberry/whdboot/save-data/Kickstarts.
+  - firmware for the AYN Thor and the Mangmi Pocket Max (no licence stated; the Mini V2 does not use it).
+  - the DOOM shareware game data (usr/share/idtech/doom.tar.gz), so the card holds no games; its
+    shareware terms also ask for the complete, unchanged shareware package.
+  - ROCKNIX's ABL bootloader and its flash scripts (usr/share/bootloader/rocknix_abl; no licence stated, and
+    this card never flashes a bootloader).
+The partition table and KERNEL are unchanged. ROCKNIX's own interface, EmulationStation, stays on the card
+and takes over if pocket-ui cannot start.
 
 
 Licences
@@ -75,10 +93,19 @@ ROCKNIX (KERNEL, SYSTEM)
   Copyright ROCKNIX (https://github.com/ROCKNIX). ROCKNIX is a fork of JELOS
   (https://github.com/JustEnoughLinuxOS/distribution); credit to the JELOS team.
   The ROCKNIX team's own software and scripts: GNU GPL version 2. Every bundled component keeps its own
-  licence (see ROCKNIX's licenses folder and each package's PKG_LICENSE).
+  licence: see pocket-ui-info/rocknix-licenses/ (ROCKNIX's LICENSE.md and licenses folder) and each
+  package's PKG_LICENSE in ROCKNIX's source.
   ROCKNIX branding and images (logos, splash artwork, EmulationStation themes inside SYSTEM):
   CC BY-NC-SA 4.0, https://creativecommons.org/licenses/by-nc-sa/4.0/ . They are included unchanged
   inside SYSTEM; this image does not use them as its own branding.
+  The GBA BIOS file inside SYSTEM (usr/config/nanoboyadvance/bios/gba_bios.bin) is not Nintendo's: it is
+  the open-source replacement BIOS by Normmatt and the VBA-M team from ReGBA
+  (https://github.com/Nebuleon/ReGBA, bios/), GNU GPL version 2 or later. ROCKNIX ships it unchanged.
+
+Firmware inside SYSTEM (usr/lib/kernel-overlays/base/lib/firmware): Qualcomm GPU, DSP, video, Wi-Fi and
+  Bluetooth firmware and a Realtek USB network firmware from linux-firmware 20260309, and the wireless
+  regulatory database from wireless-regdb 2026.05.30, all unchanged. They may be passed on under the terms
+  in pocket-ui-info/firmware-licences/ (README.txt there lists every file and its terms).
 
 Linux kernel (boot/pocket/Image, the kernel in KERNEL): GNU GPL version 2.
   The device tree is ROCKNIX's, with two nodes set to "disabled".
@@ -88,7 +115,7 @@ GRUB (EFI/BOOT/BOOTAA64.EFI): GNU GPL version 3 or later.
 
 pocket-ui and pocket-core
   GNU GPL version 2 or later (pocket-ui-info/LICENSE).
-  Built from the pocket-ui repository, commit @REPO_COMMIT@.
+  Source: @POCKET_UI_SOURCE@.
   Third-party credits (fonts, Rust crates and other parts, each under its own licence) are in
   NOTICE.md: pocket-ui-info/NOTICE.md on this card, and in the repository. The licence texts of the Rust crates
   and of the fonts (SIL Open Font License) are in pocket-ui-info/licences/.
@@ -97,11 +124,14 @@ pocket-ui and pocket-core
 Source code
 -----------
 
+The complete source code of everything on this card that is under the GNU GPL or LGPL is offered next to
+this image: @RELEASE_URL@ (files ending in -source...). See pocket-ui-info/SOURCE-OFFER.txt for the list
+and for our written offer to send it to you.
+
 ROCKNIX @ROCKNIX_TAG@, including the kernel and its patches:
   https://github.com/ROCKNIX/distribution/tree/@ROCKNIX_TAG@
   tag @ROCKNIX_TAG@, commit @ROCKNIX_COMMIT@
-  ("make docker-SM8250" builds it; "make src-pkg" packs every source archive it uses.)
 GRUB: Debian source package grub2, @GRUB_SOURCE_URL@
-pocket-ui, pocket-core and this image: the pocket-ui repository, commit @REPO_COMMIT@
+pocket-ui, pocket-core and the scripts that make this image: @POCKET_UI_SOURCE@
   (scripts/make-image.sh rebuilds this image from the ROCKNIX release above; scripts/check-image.sh
   checks it).

@@ -83,7 +83,7 @@ fn performance_of(v: &str) -> Option<Performance> {
 }
 
 fn fan_of(v: &str) -> Option<Fan> {
-    [Fan::Quiet, Fan::Auto, Fan::Cool].into_iter().find(|f| f.value() == v)
+    [Fan::VeryQuiet, Fan::Quiet, Fan::Auto, Fan::Cool].into_iter().find(|f| f.value() == v)
 }
 
 /// Every port's own choice and what the busy-core look found, in memory, so the card, the page and a port's start

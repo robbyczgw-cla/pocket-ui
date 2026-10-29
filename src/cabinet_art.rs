@@ -159,6 +159,32 @@ pub fn dim(c: &mut Canvas, y0: i32, y1: i32, keep: u32) {
     }
 }
 
+/// A light at (`cx`, `cy`): an ellipse `rx` by `ry` brightening towards `color`, strongest in the middle, `strength`
+/// 0-1. In four steps, not a smooth gradient, so it reads as pixel art beside the console (the launch animation's
+/// glow as the cartridge or disc goes in).
+pub fn glow(c: &mut Canvas, cx: i32, cy: i32, rx: i32, ry: i32, color: u32, strength: f32) {
+    if strength <= 0.0 || rx <= 0 || ry <= 0 {
+        return;
+    }
+    let (x0, x1) = ((cx - rx).max(0), (cx + rx).min(c.w));
+    let (y0, y1) = ((cy - ry).max(0), (cy + ry).min(c.h));
+    let max = (strength.min(1.0) * 200.0) as u32;
+    for y in y0..y1 {
+        let dy = (y - cy) as f32 / ry as f32;
+        for x in x0..x1 {
+            let dx = (x - cx) as f32 / rx as f32;
+            let d = dx * dx + dy * dy;
+            if d >= 1.0 {
+                continue;
+            }
+            // 1, 3/4, 1/2, 1/4 of the light in rings from the middle out.
+            let step = ((1.0 - d) * 4.0).ceil() / 4.0;
+            let i = (y * c.w + x) as usize;
+            c.buf[i] = mix(c.buf[i], color, (max as f32 * step * step) as u32);
+        }
+    }
+}
+
 /// `fade_band` towards `page` instead of black (the light page); black is `fade_band` itself.
 pub fn fade_band_to(c: &mut Canvas, y0: i32, y1: i32, page: u32) {
     if page == 0 {
@@ -210,6 +236,10 @@ pub fn soft_shadow(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, blur: i32, st
         }
     };
     let (x0, x1) = ((x - blur).max(0), (x + w + blur).min(c.w));
+    // Wholly beside the canvas (a case's shadow past a tile of the Shelf look's row): nothing to darken.
+    if x0 >= x1 {
+        return;
+    }
     let cols: Vec<f32> = (x0..x1)
         .map(|col| {
             fall(if col < x {
@@ -628,38 +658,107 @@ pub fn cover_fill(img: &Image, w: i32, h: i32) -> Image {
     Image { w, h, px }
 }
 
-/// A label for a game without box art: its colour, its console and its name, clearly not a real cover.
+/// The whole cover in a label `w` x `h`, undistorted: scaled down (averaging, so it stays smooth) until it fits, in
+/// the middle, the rest of the label in the colour of the cover's edge a little darker, as a printed label's margin.
+/// Box art rarely has its label's shape (a Game Boy Advance box is near square, its cartridge's label wide); filling
+/// the label cut off the box's sides and top (Alex's photo, 2026-10-28).
+pub fn cover_fit(img: &Image, w: i32, h: i32) -> Image {
+    let (w, h) = (w.max(1) as u32, h.max(1) as u32);
+    if img.w == 0 || img.h == 0 {
+        return Image { w, h, px: vec![0; (w * h) as usize] };
+    }
+    // The cover's size in the label: its height or its width the label's.
+    let (fw, fh) = if img.w as u64 * h as u64 > img.h as u64 * w as u64 {
+        (w, ((img.h as u64 * w as u64 / img.w as u64) as u32).clamp(1, h))
+    } else {
+        (((img.w as u64 * h as u64 / img.h as u64) as u32).clamp(1, w), h)
+    };
+    let scaled = cover_fill(img, fw as i32, fh as i32);
+    // The margin: the average of the cover's outermost pixels.
+    let (mut r, mut g, mut b, mut n) = (0u64, 0u64, 0u64, 0u64);
+    for (x, y) in (0..img.w).flat_map(|x| [(x, 0), (x, img.h - 1)]).chain((0..img.h).flat_map(|y| [(0, y), (img.w - 1, y)])) {
+        let p = img.px[(y * img.w + x) as usize];
+        r += (p >> 16 & 0xff) as u64;
+        g += (p >> 8 & 0xff) as u64;
+        b += (p & 0xff) as u64;
+        n += 1;
+    }
+    let n = n.max(1);
+    let margin = mix(((r / n) << 16 | (g / n) << 8 | b / n) as u32, 0x000000, 50);
+    let mut px = vec![margin; (w * h) as usize];
+    let (ox, oy) = ((w - fw) / 2, (h - fh) / 2);
+    for y in 0..fh {
+        let dst = ((oy + y) * w + ox) as usize;
+        px[dst..dst + fw as usize].copy_from_slice(&scaled.px[(y * fw) as usize..((y + 1) * fw) as usize]);
+    }
+    Image { w, h, px }
+}
+
+/// A label for a game without box art: its colour, its console and its name, clearly not a real cover. Laid out as a
+/// printed title card: the picture (the console, or the emblem of a box that isn't a game: Favourites' star, the
+/// search's glass) and the name under it, centred, the pair a little above the label's middle (it read as an empty
+/// box with both at the top, Muse's review of 2026-10-29).
 pub fn plain_label(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i32), look: Look, title: &str, art: Option<&Sprite>) {
     for row in 0..h {
         let c = mix(look.color, 0x000000, 20 + (row as u32 * 90 / h.max(1) as u32));
         p.fill(x, y + row, w, 1, OPAQUE | c);
     }
     let ink = ink_on(mix(look.color, 0x000000, 60));
-    let mut text_top = y + h / 8;
-    if let Some(art) = art.filter(|_| h > 120) {
-        let fitted = art.fitted(w * 3 / 4, h * 2 / 5);
-        let (ax, ay) = (x + (w - fitted.w as i32) / 2, y + h / 10);
+    // Printed on the cover: its size follows the case, not Settings → Text size.
+    let _fixed = crate::type_scale::fixed();
+    // A sixth of the label, or smaller until the name fits in two lines (never a lone word of it on a line of its
+    // own), at the sizes the app paints anyway: a front made in a frame draws no letters of its own
+    // (tests/shelf_moves.rs). A name too long even then ends in "…".
+    let sizes = [24u32, 28, 30, 37, 44, 50];
+    let max_w = w - w / 6;
+    let mut px = sizes.into_iter().rev().find(|&s| s as i32 <= w / 6).unwrap_or(24);
+    let mut lines = text.wrap(Face::Title, px, title, max_w);
+    while lines.len() > 2 {
+        match sizes.into_iter().rev().find(|&s| s < px) {
+            Some(smaller) => {
+                px = smaller;
+                lines = text.wrap(Face::Title, px, title, max_w);
+            }
+            None => {
+                lines = text.wrap_at_most(Face::Title, px, title, max_w, 2);
+                break;
+            }
+        }
+    }
+    if lines.len() == 2 {
+        lines = balanced(text, px, title, max_w).unwrap_or(lines);
+    }
+    let step = px as i32 * 11 / 10;
+    let words_h = lines.len() as i32 * step;
+    // The console only where the whole name still fits under it: a short label gives its room to the name.
+    let gap = h / 16;
+    let fitted = art
+        .filter(|_| h > 120 && h - h / 5 - words_h - gap >= h / 4)
+        .map(|art| art.fitted(w * 4 / 5, (h / 2).min(h - h / 5 - words_h - gap)))
+        .filter(|f| f.w > 0 && f.h > 0);
+    let block_h = fitted.as_ref().map_or(0, |f| f.h as i32 + gap) + words_h;
+    // A little above the middle, where the eye puts the middle of a card.
+    let mut top = y + ((h - block_h) * 2 / 5).max(h / 12);
+    if let Some(fitted) = &fitted {
+        let ax = x + (w - fitted.w as i32) / 2;
         for sy in 0..fitted.h as i32 {
             for sx in 0..fitted.w as i32 {
                 let s = fitted.px[(sy * fitted.w as i32 + sx) as usize];
                 if s >> 24 != 0 {
-                    p.blend(ax + sx, ay + sy, s & 0xffffff, 255);
+                    p.blend(ax + sx, top + sy, s & 0xffffff, 255);
                 }
             }
         }
-        text_top = ay + fitted.h as i32 + h / 14;
+        top += fitted.h as i32 + gap;
     }
-    let px = ((w as f32 / 6.0).clamp(22.0, 50.0)) as u32;
-    // Printed on the cover: its size follows the case, not Settings → Text size.
-    let _fixed = crate::type_scale::fixed();
-    let lines = text.wrap(Face::Title, px, title, w - w / 6);
-    let mut base = text_top + px as i32;
+    let mut base = top + px as i32;
     for line in lines.iter().take(3) {
-        let line = text.fit(Face::Title, px, line, w - w / 6);
+        let line = text.fit(Face::Title, px, line, max_w);
+        let lw = text.width(Face::Title, px, &line);
         let mut buf = vec![0u32; (w * (px as i32 * 3 / 2)) as usize];
         {
             let mut c = Canvas::new(&mut buf, w as u32, (px * 3 / 2) as u32);
-            text.draw(&mut c, Face::Title, px, w / 12, px as i32, 0xffffff, &line);
+            text.draw(&mut c, Face::Title, px, (w - lw) / 2, px as i32, 0xffffff, &line);
         }
         for ty in 0..px as i32 * 3 / 2 {
             for tx in 0..w {
@@ -667,14 +766,36 @@ pub fn plain_label(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i
                 p.blend(x + tx, base - px as i32 + ty, ink, a);
             }
         }
-        base += px as i32 * 11 / 10;
+        base += step;
         if base > y + h {
             break;
         }
     }
 }
 
-/// The front of a case, `k` times its shelf size: the cover (`cover`, already `cover_fill`ed to the label's
+/// `title` on two lines of about the same width, at most `max` wide ("Gran" over "Turismo 4", not "Gran Turismo" over
+/// a lone "4"): the narrowest width that still takes it in two lines. `None` when it needs more than two.
+fn balanced(text: &mut Text, px: u32, title: &str, max: i32) -> Option<Vec<String>> {
+    let (mut lo, mut hi) = (text.width(Face::Title, px, title) / 2, max);
+    let whole = text.wrap(Face::Title, px, title, hi);
+    if whole.len() > 2 {
+        return None;
+    }
+    // Two lines of whole words: a narrower line would break a long word into pieces (`Text::wrap`).
+    let words = whole.join(" ");
+    while hi - lo > 4 {
+        let mid = (lo + hi) / 2;
+        let lines = text.wrap(Face::Title, px, title, mid);
+        if lines.len() <= 2 && lines.join(" ") == words {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    Some(text.wrap(Face::Title, px, title, hi))
+}
+
+/// The front of a case, `k` times its shelf size: the cover (`cover`, already `cover_fit` to the label's
 /// size) in the case's frame, or a plain label with the console (`art`) and the title.
 pub fn front(text: &mut Text, ff: FormFactor, k: f32, look: Look, title: &str, cover: Option<&Image>, art: Option<&Sprite>) -> Pic {
     let (w, h) = front_size(ff, k);
@@ -764,7 +885,11 @@ pub fn front(text: &mut Text, ff: FormFactor, k: f32, look: Look, title: &str, c
 pub fn sheen(p: &mut Pic, strength: u32) {
     let (w, h) = (p.w as f32, p.h as f32);
     for y in 0..p.h {
-        for x in 0..p.w {
+        // Only the columns the band crosses on this row (d within 0.16 of 0.42).
+        let dy = (y as f32 / h) * 0.6;
+        let x0 = (((0.26 - dy) / 0.8 * w).floor() as i32).clamp(0, p.w);
+        let x1 = (((0.58 - dy) / 0.8 * w).ceil() as i32 + 1).clamp(0, p.w);
+        for x in x0..x1 {
             let d = (x as f32 / w) * 0.8 + (y as f32 / h) * 0.6;
             let band = (1.0 - ((d - 0.42) / 0.16).abs()).max(0.0);
             if band > 0.0 {
@@ -946,6 +1071,15 @@ pub fn plate_ink(bg: u32) -> u32 {
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_shadow_beside_the_canvas_darkens_nothing() {
+        let mut buf = vec![0xffffffu32; 64 * 32];
+        let mut c = Canvas::new(&mut buf, 64, 32);
+        soft_shadow(&mut c, 80, 4, 3, 20, 5, 0.3, (0, 32));
+        soft_shadow(&mut c, -40, 4, 3, 20, 5, 0.3, (0, 32));
+        assert!(buf.iter().all(|p| *p == 0xffffff));
+    }
+
     /// CPU time the calling thread has used.
     fn thread_cpu() -> std::time::Duration {
         std::time::Duration::from_secs_f64(crate::run_ahead::thread_cpu_ms() / 1000.0)
@@ -1033,6 +1167,23 @@ mod tests {
         );
         assert!(c.buf.iter().any(|p| *p & 0xff0000 != 0) && c.buf.iter().any(|p| *p & 0x00ff00 != 0));
         assert!(r.2 < size.spine + size.front, "{r:?}");
+    }
+
+    #[test]
+    fn a_cover_is_fitted_whole_into_a_label_of_another_shape() {
+        // A tall cover (red with a blue top row) in a wide label: all of it, the top row included, in the middle.
+        let mut px = vec![0xc02020u32; 40 * 80];
+        px[..40].fill(0x2020c0);
+        let img = Image { w: 40, h: 80, px };
+        let out = cover_fit(&img, 60, 20);
+        assert_eq!((out.w, out.h), (60, 20));
+        let at = |x: u32, y: u32| out.px[(y * 60 + x) as usize];
+        assert_eq!(at(30, 0) & 0xff, (0xc0 + 3 * 0x20) / 4, "the cover's top row is there, not cut off: {:06x}", at(30, 0));
+        assert!(at(30, 10) >> 16 & 0xff > 0xa0, "its middle");
+        assert!(at(2, 10) >> 16 & 0xff < 0xa0, "a margin beside it, darker: {:06x}", at(2, 10));
+        // The same shape: no margin, the cover fills it.
+        let same = cover_fit(&img, 20, 40);
+        assert!(same.px[20 * 20..].iter().all(|p| *p == 0xc02020), "no margin where the shapes agree");
     }
 
     #[test]

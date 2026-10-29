@@ -1030,7 +1030,7 @@ fn a_taken_port_is_reported_not_waited_for() {
         assert!(Instant::now() < deadline, "no reason given");
         std::thread::sleep(Duration::from_millis(10));
     }
-    assert_eq!(shared.problem.lock().unwrap().as_deref(), Some("Another program on the Pocket uses port 80."));
+    assert_eq!(shared.problem.lock().unwrap().as_deref(), Some("Something else on the Pocket is using the address."));
     assert!(shared.listening.lock().unwrap().is_empty());
 }
 

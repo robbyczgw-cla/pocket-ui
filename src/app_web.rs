@@ -561,8 +561,7 @@ impl App {
 
     fn paint_web_list(&mut self, c: &mut Canvas, page: &WebPage) {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, SETTINGS_NAME);
+        self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         for (i, r) in ROWS.iter().enumerate() {
             let y = top + i as i32 * row;
@@ -652,8 +651,7 @@ impl App {
     /// The code in large digits beside a QR code of the address with the code in it (the page pairs by itself).
     fn paint_web_pairing(&mut self, c: &mut Canvas, page: &WebPage) {
         let pad = NU_PAD;
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, "Pair a browser");
+        self.sheet_header(c, "Pair a browser");
         let (left, top) = (pad + NU_BTN_PAD, pad + NU_PILL + 30);
         let address = page.address.clone().unwrap_or_else(|| "http://pocket".into());
         let Some(code) = page.code.clone() else {
@@ -692,8 +690,7 @@ impl App {
 
     fn paint_web_browsers(&mut self, c: &mut Canvas, page: &WebPage, sel: usize, confirm: bool) {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(76, 34), 34u32);
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, "Paired browsers");
+        self.sheet_header(c, "Paired browsers");
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         let visible = ((c.h - top - pad - NU_PILL - 30) / row).max(1) as usize;
         let first = super::window_start(sel, visible, page.browsers.len());

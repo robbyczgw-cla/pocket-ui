@@ -59,16 +59,28 @@ pub fn jump(groups: &[char], at: usize, forward: bool) -> Option<usize> {
 pub struct Flash {
     pub letter: char,
     pub at: Instant,
+    /// Pinned for `--snapshot`: one picture is painted whenever the machine gets to it, so the letter shows whole, as
+    /// in the jump's first frame, instead of fading with however long this run takes (`alpha`, `needs_frames`).
+    pinned: bool,
 }
 
 impl Flash {
     /// A flash for a jump that landed in `group`; None for the rows above the alphabet.
     pub fn new(group: char, now: Instant) -> Option<Flash> {
-        (group != TOP).then_some(Flash { letter: group, at: now })
+        (group != TOP).then_some(Flash { letter: group, at: now, pinned: false })
+    }
+
+    /// The flash of a jump, for a snapshot: the single picture shows the letter whole, whatever the clock says when it
+    /// is painted (a snapshot must not depend on how loaded the machine is; `at` is not read then).
+    pub fn pinned(letter: char) -> Option<Flash> {
+        (letter != TOP).then_some(Flash { letter, at: Instant::now(), pinned: true })
     }
 
     /// How opaque it is at `now` (255 = fully), None once it is gone.
     pub fn alpha(&self, now: Instant) -> Option<u8> {
+        if self.pinned {
+            return Some(255);
+        }
         let age = now.saturating_duration_since(self.at);
         if age >= SHOW {
             return None;
@@ -84,7 +96,7 @@ impl Flash {
     /// Frames are needed until one has been painted after it is gone (`motion::SETTLE`): otherwise its last, faint
     /// picture stays on screen until the next input.
     pub fn needs_frames(&self, now: Instant) -> bool {
-        now < self.at + SHOW + crate::motion::SETTLE
+        !self.pinned && now < self.at + SHOW + crate::motion::SETTLE
     }
 }
 

@@ -228,7 +228,7 @@ fn pages_the_helper_cant_do_end_plainly() {
     let start = net_check::check_with("curl", &away.check()).portal.expect("redirected");
     let session = away.session();
     let mut page = load(&session, &start);
-    type_into(&mut page, "email", "me@example.org");
+    type_into(&mut page, "Email", "me@example.org");
     select(&mut page, Kind::Submit { image: false });
     let Ask::Send { form, submitter, url } = page.press(Button::East) else { panic!("the button sends") };
     assert!(matches!(session.submit(&url, &form, submitter), Outcome::ElseWhere(h) if h == "198.51.100.7"));

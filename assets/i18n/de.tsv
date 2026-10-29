@@ -49,7 +49,7 @@ Locked.	Gesperrt.
 1 point · Locked.	1 Punkt · Gesperrt.
 1 point · Unlocked.	1 Punkt · Freigeschaltet.
 Earn achievements in the games pocket-core plays: unlocks are checked as you play and count on retroachievements.org.	Sammle Erfolge in den Spielen, die pocket-core spielt: Freischaltungen werden beim Spielen geprüft und zählen auf retroachievements.org.
-Save states, rewind and cheats stay usable (softcore). Without Wi-Fi, unlocks are kept and sent the next time a game starts online.	Spielstände, Zurückspulen und Cheats bleiben nutzbar (Softcore). Ohne WLAN werden Freischaltungen aufbewahrt und beim nächsten Spielstart mit Verbindung gesendet.
+Save states, rewind and cheats stay usable. Without Wi-Fi, unlocks are kept and sent the next time a game starts online.	Spielstände, Zurückspulen und Cheats bleiben nutzbar. Ohne WLAN werden Freischaltungen aufbewahrt und beim nächsten Spielstart mit Verbindung gesendet.
 You need a free account from retroachievements.org. Your password is sent once to sign in and is not kept; the Pocket keeps only the sign-in key the site gives back.	Du brauchst ein kostenloses Konto bei retroachievements.org. Dein Passwort wird nur zur Anmeldung gesendet und nicht gespeichert; der Pocket behält nur den Anmeldeschlüssel, den die Seite zurückgibt.
 Invalid user/password combination. Please try again.	Benutzername oder Passwort stimmt nicht. Bitte versuch es noch einmal.
 User name	Benutzername
@@ -157,7 +157,7 @@ Co-developer	Mitentwickler
 Second CPU	Zweite CPU
 Sound	Ton
 FM sound	FM-Ton
-Publisher	Publisher
+Publisher	Herausgeber
 Genre	Genre
 Series	Reihe
 {s} · via Wikidata	{s} · über Wikidata
@@ -412,7 +412,7 @@ Press X again: the PC forgets this Pocket. To stream from it after that, pair it
 Looking.	Suche.
 Looking..	Suche..
 Looking...	Suche...
-Looking…	Suche…
+Looking…	Suche …
 Moonlight isn't on this system	Moonlight ist auf diesem System nicht vorhanden
 ROCKNIX's image includes Moonlight; this one doesn't, so there is nothing to pair.	Das Image von ROCKNIX bringt Moonlight mit; dieses hat keines, also gibt es nichts zu koppeln.
 Once per PC, with a PIN shown here. The PC needs Sunshine (any PC) or GeForce Experience, on the same network.	Einmal pro PC, mit einer PIN, die hier erscheint. Der PC braucht Sunshine (jeder PC) oder GeForce Experience im selben Netzwerk.
@@ -517,7 +517,7 @@ Name on your tailnet	Name in deinem Tailnet
 A key made in the Tailscale admin console (Settings › Keys). It is not kept on the Pocket.	Schlüssel aus der Tailscale-Adminkonsole (Settings › Keys). Der Pocket speichert ihn nicht.
 Letters, digits and hyphens. The Pocket will answer to this name on your other devices.	Buchstaben, Ziffern, Bindestriche. Unter diesem Namen ist der Pocket erreichbar.
 This system image has no Tailscale.	Dieses System-Image hat kein Tailscale.
-Select Sign in: a QR code appears. Scan it with your phone and approve this Pocket there.	Wähl Anmelden: Ein QR-Code erscheint. Scann ihn mit dem Handy und bestätige dort diesen Pocket.
+Select Sign in: a QR code appears. Scan it with your phone and approve this Pocket there.	Wähl Anmelden: Ein QR-Code erscheint. Scanne ihn mit dem Handy und bestätige dort diesen Pocket.
 Approve this Pocket in the Tailscale admin console, then it connects by itself.	Bestätige diesen Pocket in der Tailscale-Adminkonsole, dann verbindet er sich von selbst.
 Tailscale links the Pocket with your phone, computer and other devices in one private network, over Wi-Fi or a hotspot, wherever you are.	Tailscale verbindet den Pocket mit Handy, Computer und anderen Geräten in einem privaten Netzwerk, über WLAN oder Hotspot, wo immer du bist.
 Switch it on, then sign in with a QR code. It stays on after a restart.	Schalte es ein und melde dich mit einem QR-Code an. Es bleibt nach einem Neustart an.
@@ -548,7 +548,7 @@ Look again	Neu suchen
 Running.	Läuft.
 Running..	Läuft..
 Running...	Läuft...
-Running…	Läuft…
+Running…	Läuft …
 Running	Läuft
 Tools	Tools
 Start {t}?	{t} starten?
@@ -936,6 +936,7 @@ ROCKNIX's RetroArch: one save, Quit saves the moment. Starts slower; no pocket-u
 {s} on its own, with pocket-ui's Save (one slot), Load, Options and continuing where you left off.	{s} eigenständig, mit Speichern (ein Platz), Laden, Optionen und Weitermachen von pocket-ui.
 pocket-ui's own host, with Options. No save states for these games: save in the game before you quit.	Der eigene Host von pocket-ui, mit Optionen. Keine Spielstände für diese Spiele: Speichere im Spiel, bevor du beendest.
 {s} on its own, with its own saves and settings. Save in the game before you quit: pocket-ui can't continue it.	{s} eigenständig, mit eigenen Spielständen und Einstellungen. Speichere im Spiel, bevor du beendest: pocket-ui kann es nicht fortsetzen.
+Xbox games in RetroArch with the hakuX core. Experimental: Continue and Quit from pocket-ui's menu, saves in the game, no save states yet.	Xbox-Spiele in RetroArch mit dem hakuX-Kern. Experimentell: Fortsetzen und Beenden im Menü von pocket-ui, Speichern im Spiel, noch keine Spielstände.
 Aspect ratio	Seitenverhältnis
 The shape of the picture. Core provided is what the emulator reports.	Die Form des Bildes. Vom Core ist, was der Emulator meldet.
 Core provided	Vom Core
@@ -1008,6 +1009,13 @@ Advanced…	Erweitert …
 {s}'s own menu, over the game. Close it there to play on; pocket-ui's menu stays on HOME.	Das eigene Menü von {s}, über dem Spiel. Schließ es dort, um weiterzuspielen; das Menü von pocket-ui bleibt auf HOME.
 Applies when you go back to the game: it restarts where you are (a state is saved and loaded).	Gilt, wenn du zum Spiel zurückkehrst: Es startet dort neu, wo du bist (ein Spielstand wird gespeichert und geladen).
 Applies as soon as you go back to the game.	Gilt, sobald du zum Spiel zurückkehrst.
+Saved. This takes effect the next time the game starts.	Gespeichert. Gilt, wenn das Spiel das nächste Mal startet.
+Original (480p)	Original (480p)
+2x (960p)	2× (960p)
+The resolution the Xbox's picture is drawn at. Original is the Xbox's own 480p; 2x (960p) is sharper and costs the GPU more. Takes effect the next time the game starts.	Die Auflösung, in der das Bild der Xbox gezeichnet wird. Original ist die 480p der Xbox; 2× (960p) ist schärfer und kostet die GPU mehr. Gilt, wenn das Spiel das nächste Mal startet.
+Aspect is as large as fits, in the picture's own shape (4:3), with black bars.	Seitenverhältnis ist so groß wie möglich in der eigenen Form des Bildes (4:3), mit schwarzen Balken.
+Fullscreen fills the screen and stretches the picture.	Vollbild füllt den Bildschirm und dehnt das Bild.
+Integer scales by whole numbers. Takes effect the next time the game starts.	Ganzzahlig skaliert in ganzen Vielfachen. Gilt, wenn das Spiel das nächste Mal startet.
 Renderer	Renderer
 Vulkan is the fast one here. OpenGL runs at about half speed on this GPU.	Vulkan ist hier der schnelle. OpenGL läuft auf dieser GPU etwa mit halbem Tempo.
 Widescreen	Breitbild
@@ -1317,6 +1325,7 @@ Both sticks glow in the colour you pick.	Beide Sticks leuchten in der Farbe dein
 Green when charged, orange and then red as it runs low. Always at full brightness.	Grün, wenn geladen, orange und dann rot, wenn er zur Neige geht. Immer in voller Helligkeit.
 
 # --- Library notes (status)
+Playing now	Wird gespielt
 Not started	Nicht begonnen
 Paused	Pausiert
 Completed	Durchgespielt
@@ -1351,6 +1360,7 @@ Applying…	Wird angewendet …
 Quitting…	Wird beendet …
 Saving and quitting…	Speichern und beenden …
 This emulator keeps its own saves. Save in the game before you quit.	Dieser Emulator speichert selbst. Speichere im Spiel, bevor du beendest.
+No save states for Xbox games yet: save in the game before you quit.	Für Xbox-Spiele gibt es noch keine Spielstände: Speichere im Spiel, bevor du beendest.
 Save and Load aren't ready yet. Save in the game before you quit.	Speichern und Laden sind noch nicht bereit. Speichere im Spiel, bevor du beendest.
 This game has no save states. Save in the game before you quit.	Dieses Spiel hat keine Spielstände. Speichere im Spiel, bevor du beendest.
 Disc	Disc
@@ -1405,7 +1415,7 @@ The Pocket stays asleep until you wake it.	Der Pocket bleibt im Ruhezustand, bis
 Switched off after {n} h asleep to save the battery.	Nach {n} h im Ruhezustand ausgeschaltet, um den Akku zu schonen.
 Sleep & power	Ruhezustand & Ein/Aus
 When the screen goes off and the Pocket sleeps, and the power button.	Wann der Bildschirm ausgeht und der Pocket in den Ruhezustand geht, und die Ein/Aus-Taste.
-Time, sleep and power, updates, storage, backup and reset, the manual, about.	Zeit, Ruhezustand und Ein/Aus, Updates, Speicherplatz, Sichern, Handbuch, Info.
+Time, sleep & power, updates, storage, backup & reset, Tour, manual, about.	Zeit, Ruhezustand, Updates, Speicherplatz, Sichern, Tour, Handbuch, Über.
 Battery history, time left, what each game uses.	Akkuverlauf, Restzeit, was jedes Spiel verbraucht.
 When the screen goes off and the Pocket sleeps: Settings › System › Sleep & power.	Wann der Bildschirm ausgeht und der Pocket in den Ruhezustand geht: Einstellungen › System › Ruhezustand & Ein/Aus.
 Screen off after	Bildschirm aus nach
@@ -1463,6 +1473,13 @@ Store	Store
 Emulators, frames, themes, tools.	Emulatoren, Rahmen, Themes, Tools.
 Emulator menus, RetroArch, gamepad test and calibration, terminal.	Emulator-Menüs, RetroArch, Gamepad-Test, Terminal.
 A soft tick as you move.	Ein sanftes Tippen beim Bewegen.
+Launch animation	Start-Animation
+Cabinet and Shelf: the game goes into its console as it starts.	Vitrine und Regal: Das Spiel wandert beim Start in seine Konsole.
+Box	Box
+Turn over	Umdrehen
+No picture yet	Noch kein Bild
+No pictures yet. HOME + A in the game takes one.	Noch keine Bilder. HOME + A im Spiel macht eins.
+No description yet.	Noch keine Beschreibung.
 Soft clicks in menus, not in games. Left/right: how loud.	Klicks nur in Menüs. Links/Rechts: wie laut.
 The lights around the sticks. Off unless you turn them on.	Die Lichter um die Sticks. Aus, bis du sie einschaltest.
 Home, or straight back into the game you played last.	Home oder direkt zurück ins letzte Spiel.
@@ -1481,6 +1498,7 @@ Every feature on a card, with a picture: switch it on or off.	Jede Funktion als 
 Manual	Handbuch
 The user guide, on the device.	Die Anleitung auf dem Gerät, auf Englisch.
 About	Über
+Saves a file for a bug report, to attach on GitHub.	Speichert eine Datei für eine Fehlermeldung, die du bei GitHub anhängst.
 Version, storage and network.	Version, Speicher und Netzwerk.
 
 # --- Settings → Updates
@@ -1615,7 +1633,7 @@ Over the game	Anzeige im Spiel
 Over the game: {t}	Anzeige im Spiel: {t}
 # The FPS + sensors line over the game (src/osd_sensors.rs): its words; numbers and units stay
 Fan off	Lüfter aus
-Fan {n}%	Lüfter {n}%
+Fan {n}%	Lüfter {n} %
 Fan {n} rpm	Lüfter {n} rpm
 charging	lädt
 FPS, sensors or Pixel Path over every game.	FPS, Sensoren oder Pixel Path in jedem Spiel.
@@ -1628,8 +1646,9 @@ Battery limits the CPU to half speed: enough for Game Boy and NES.	Akku begrenzt
 Performance keeps the CPU at full speed for demanding games.	Leistung hält die CPU für anspruchsvolle Spiele auf vollem Tempo.
 What games use unless you save one here: Settings › Performance & fan.	Was Spiele nutzen, wenn du hier nichts speicherst: Einstellungen › Leistung & Lüfter.
 Auto keeps the system's cooling profile.	Auto behält das Kühlprofil des Systems.
-Quiet starts the fan later, Cool starts it earlier.	Leise startet den Lüfter später, Kühl früher.
+Very quiet: fan only when it gets warm. Quiet starts it later, Cool earlier.	Sehr leise: Lüfter nur, wenn es warm wird. Leise startet ihn später, Kühl früher.
 The system's setting comes back when you quit.	Beim Beenden kommt die Einstellung des Systems zurück.
+Very quiet	Sehr leise
 Quiet	Leise
 Cool	Kühl
 It runs ahead and goes back every frame, so it uses more power.	Es läuft voraus und geht jedes Bild zurück, braucht also mehr Strom.
@@ -1752,9 +1771,11 @@ Auto: the system speeds up and slows down as the game needs it.	Auto: Das System
 Performance: full speed all the time, for demanding games. Uses more battery and gets warmer.	Leistung: immer volles Tempo, für anspruchsvolle Spiele. Braucht mehr Akku und wird wärmer.
 On: gently up and down with the temperature instead of on and off, in every game. Full speed above {n} °C.	An: sanft rauf und runter mit der Temperatur statt an und aus, in jedem Spiel. Volles Tempo über {n} °C.
 Off: the system's steps. Games: fan then only applies to games with a pause menu.	Aus: die Stufen des Systems. Spiele: Lüfter gilt dann nur für Spiele mit Pausenmenü.
+Very quiet: fan only when it gets warm ({n} °C); the Pocket feels a bit warmer.	Sehr leise: Lüfter nur, wenn es warm wird ({n} °C); der Pocket fühlt sich etwas wärmer an.
 Quiet: the fan starts slowly at {n} °C and stays slow. The Pocket gets a little warmer.	Leise: Der Lüfter startet sacht bei {n} °C und bleibt langsam. Der Pocket wird etwas wärmer.
 Cool: the fan starts at {n} °C and turns faster. Cooler to hold, and you hear it more.	Kühl: Der Lüfter startet bei {n} °C und dreht schneller. Kühler in der Hand, und du hörst ihn mehr.
 Auto: follows the system's cooling profile, as a smooth curve.	Auto: folgt dem Kühlprofil des Systems, als sanfte Kurve.
+Very quiet: fan only when it gets warm ({n} °C); the Pocket feels a bit warmer.	Sehr leise: Lüfter nur, wenn es warm wird ({n} °C); der Pocket fühlt sich etwas wärmer an.
 Quiet: the fan starts at {n} °C. The Pocket gets warmer, the fan stays quiet longer.	Leise: Der Lüfter startet bei {n} °C. Der Pocket wird wärmer, der Lüfter bleibt länger leise.
 Cool: the fan starts at {n} °C and spins faster. Cooler to hold, and you hear it more.	Kühl: Der Lüfter startet bei {n} °C und dreht schneller. Kühler in der Hand, und du hörst ihn mehr.
 Auto: the system's own cooling.	Auto: die eigene Kühlung des Systems.
@@ -2049,7 +2070,7 @@ Minimal	Minimal
 Split	Geteilt
 Cards	Karten
 Cabinet	Vitrine
-Games as cartridge spines. The one you pick slides out.	Spiele als Modulrücken. Das gewählte gleitet heraus.
+Your games standing on a shelf. The one you pick shows its cover.	Deine Spiele stehen im Regal. Das gewählte zeigt sein Cover.
 Just the names, nothing else.	Nur die Namen, sonst nichts.
 List on the left, details on the right.	Links die Liste, rechts die Details.
 Big cards you flip through sideways.	Große Karten, durch die du seitwärts blätterst.
@@ -2074,7 +2095,7 @@ Looking for networks	Suche Netzwerke
 Scanning.	Suche.
 Scanning..	Suche..
 Scanning...	Suche...
-Scanning…	Suche…
+Scanning…	Suche …
 Scanning	Suche
 No networks found. Press X to scan again.	Keine Netzwerke gefunden. X sucht erneut.
 Couldn't search for networks. Try again (X).	Die Netzwerksuche hat nicht geklappt. X versucht es erneut.
@@ -2220,7 +2241,7 @@ Then a computer on the same network can copy games straight into these folders.	
 Automatic ({s})	Automatisch ({s})
 Connected to {s}	Verbunden mit {s}
 The saved password didn't work. Type it again.	Das gespeicherte Passwort hat nicht funktioniert. Gib es neu ein.
-Connecting…	Verbinde…
+Connecting…	Verbinde …
 Not answering	Antwortet nicht
 Still connecting to {s}. One moment.	Verbinde noch mit {s}. Einen Moment.
 {s} isn't letting this Pocket in. Press A to type the password again.	{s} lässt den Pocket nicht herein. A gibt das Passwort neu ein.
@@ -2306,6 +2327,7 @@ Running {s}	Führe {s} aus
 Small helpers, started from the Store or from Tools in Settings.	Kleine Helfer, gestartet aus dem Store oder über Tools in den Einstellungen.
 Loading the store…	Store wird geladen …
 Nothing in the store yet.	Noch nichts im Store.
+Nothing here yet.	Hier ist noch nichts.
 The store isn't loaded.	Der Store ist nicht geladen.
 Try again	Erneut versuchen
 1 update	1 Update
@@ -2883,10 +2905,10 @@ An estimate from how pocket-core is built, not a camera measurement: {t}, ≈ {s
 Look & feel	Aussehen
 Playing	Spielen
 Connections	Verbindungen
-Look, language, text size, night light, screen frames, sounds, haptics, LEDs.	Ansicht, Sprache, Schriftgröße, Nachtlicht, Bildschirmrahmen, Töne, Haptik, LEDs.
-On start, quitting, buttons, performance, battery, achievements, Curator.	Start, Beenden, Tasten, Leistung, Akku, Erfolge, Curator.
-Add games, extras, the Store, tools, PC streaming.	Spiele hinzufügen, Extras, Store, Tools, PC-Streaming.
-Add games, extras, tools, PC streaming.	Spiele hinzufügen, Extras, Tools, PC-Streaming.
+Look, language, text, night light, frames, sounds, haptics, LEDs, launch animation.	Ansicht, Sprache, Schrift, Nachtlicht, Rahmen, Töne, Haptik, LEDs, Start-Animation.
+On start, quit, buttons, over the game, performance, battery, achievements, Curator.	Start, Beenden, Tasten, Anzeige im Spiel, Leistung, Akku, Erfolge, Curator.
+Add games, starter pack, extras, screenshots, the Store, tools, PC streaming.	Spiele hinzufügen, Startpaket, Extras, Screenshots, Store, Tools, PC-Streaming.
+Add games, starter pack, extras, screenshots, tools, PC streaming.	Spiele hinzufügen, Startpaket, Extras, Screenshots, Tools, PC-Streaming.
 Wi-Fi, Bluetooth, Tailscale, Sync, remote access, web companion.	WLAN, Bluetooth, Tailscale, Sync, Fernzugriff, Web-Begleiter.
 Time, updates, backup and reset, the Tour, the manual, about.	Uhrzeit, Updates, Sichern, Tour, Handbuch, Über.
 Web companion	Web-Begleiter
@@ -2925,6 +2947,7 @@ this game too	dieses Spiel auch
 This device doesn't let pocket-ui set the processor's speed.	Auf diesem Gerät kann pocket-ui das Prozessortempo nicht einstellen.
 How fast the processor may run in games: for every game.	Wie schnell der Prozessor in Spielen laufen darf: für jedes Spiel.
 How early the fan starts while you play: for every game.	Wie früh der Lüfter beim Spielen anläuft: für jedes Spiel.
+Very quiet: fan only when it gets warm; the Pocket feels a bit warmer.	Sehr leise: Lüfter nur, wenn es warm wird; der Pocket fühlt sich etwas wärmer an.
 Quiet: the fan starts later and stays slow.	Leise: Der Lüfter läuft später an und bleibt langsam.
 Auto: the system's own cooling profile.	Auto: das eigene Kühlprofil des Systems.
 Cool: the fan starts early and turns faster.	Kühl: Der Lüfter läuft früh an und dreht schneller.
@@ -3009,7 +3032,7 @@ Counted since	Gezählt seit
 Not counted	Nicht gezählt
 Part of the history file could not be read	Ein Teil der Verlaufsdatei ließ sich nicht lesen
 Systems	Systeme
-Leaned into	Vorliebe
+Mostly	Meist
 Streak	Serie
 Back after a long break	Zurück nach langer Pause
 New to you	Neu für dich
@@ -3040,7 +3063,7 @@ You might like next	Als Nächstes vielleicht
 
 # --- Settings → Connections → Web companion (the page on the Pocket; the browser's pages stay English)
 It could not start: {t}.	Er konnte nicht starten: {t}.
-Another program on the Pocket uses port {n}.	Ein anderes Programm auf dem Pocket nutzt Port {n}.
+Something else on the Pocket is using the address.	Etwas anderes auf dem Pocket belegt die Adresse.
 The system did not allow port {n}.	Das System hat Port {n} nicht erlaubt.
 It could not listen: {s}.	Er konnte nicht lauschen: {s}.
 games uploaded	Spiele hochgeladen
@@ -3058,7 +3081,7 @@ Waiting for Tailscale	Wartet auf Tailscale
 It listens only on the Tailscale network. Switch Tailscale on and sign in (Settings › Connections › Tailscale).	Er lauscht nur im Tailscale-Netz. Schalte Tailscale ein und melde dich an (Einstellungen › Verbindungen › Tailscale).
 Pair a browser	Browser koppeln
 No code: the Pocket gave no random numbers.	Kein Code: Der Pocket lieferte keine Zufallszahlen.
-1.  Scan this with your phone's camera,	1.  Scann das mit der Handykamera
+1.  Scan this with your phone's camera,	1.  Scanne das mit der Handykamera
 or open this address in a browser:	oder öffne diese Adresse im Browser:
 2.  Type this code:	2.  Gib diesen Code ein:
 Five wrong tries and the code is gone.	Nach fünf Fehlversuchen verfällt der Code.
@@ -3448,9 +3471,9 @@ This is the whole memory card. The version you keep holds the saves of every gam
 Nothing is waiting for a choice.	Nichts wartet auf eine Auswahl.
 Nothing else is waiting for a choice.	Sonst wartet nichts auf eine Auswahl.
 When a save changes on two devices before they sync, both versions show here.	Ändert sich ein Spielspeicher auf zwei Geräten, bevor sie synchronisieren, stehen hier beide Versionen.
-Saves changed on two devices before they could sync. Choose which version to keep.	Diese Spielspeicher haben sich auf zwei Geräten geändert, bevor sie synchronisieren konnten. Wähle, welche Version du behältst.
-Saves changed on two devices. Choose which to keep.	Auf zwei Geräten geändert. Wähle, was du behältst.
-Keeping…	Wird übernommen…
+Saves changed on two devices before they could sync. Choose which version to keep.	Diese Spielspeicher haben sich auf zwei Geräten geändert, bevor sie synchronisieren konnten. Wähl, welche Version du behältst.
+Saves changed on two devices. Choose which to keep.	Auf zwei Geräten geändert. Wähl, was du behältst.
+Keeping…	Wird übernommen …
 Kept. The other version is in {s}.	Behalten. Die andere Version liegt in {s}.
 A save has two versions: {s} and {n} more – choose in Settings › Connections › Sync	Ein Spielspeicher hat zwei Versionen: {s} und {n} weitere – wähle unter Einstellungen › Verbindungen › Sync
 A memory card has two versions: {s} and {n} more – choose in Settings › Connections › Sync	Eine Memory Card hat zwei Versionen: {s} und {n} weitere – wähle unter Einstellungen › Verbindungen › Sync
@@ -3460,13 +3483,13 @@ A save has two versions: {s} – open the game's card to choose	Ein Spielspeiche
 A memory card has two versions: {s} – open the game's card to choose	Eine Memory Card hat zwei Versionen: {s} – wähle auf der Spielkarte
 Nothing waiting	Nichts offen
 {n} to choose	{n} zur Auswahl
-Two versions of this game's save. Choose one…	Zwei Versionen des Spielspeichers. Wähle eine…
-{n} versions of this game's save. Choose one…	{n} Versionen des Spielspeichers. Wähle eine…
-Two versions of a save state. Choose one…	Zwei Versionen eines Spielstands. Wähle eine…
-{n} versions of a save state. Choose one…	{n} Versionen eines Spielstands. Wähle eine…
-Two versions of the memory card. Choose one…	Zwei Versionen der Memory Card. Wähle eine…
-{n} versions of the memory card. Choose one…	{n} Versionen der Memory Card. Wähle eine…
-{n} saves of this game have two versions. Choose…	{n} Spielspeicher dieses Spiels haben zwei Versionen. Wähle…
+Two versions of this game's save. Choose one…	Zwei Versionen des Spielspeichers. Wähl eine …
+{n} versions of this game's save. Choose one…	{n} Versionen des Spielspeichers. Wähl eine …
+Two versions of a save state. Choose one…	Zwei Versionen eines Spielstands. Wähl eine …
+{n} versions of a save state. Choose one…	{n} Versionen eines Spielstands. Wähl eine …
+Two versions of the memory card. Choose one…	Zwei Versionen der Memory Card. Wähl eine …
+{n} versions of the memory card. Choose one…	{n} Versionen der Memory Card. Wähl eine …
+{n} saves of this game have two versions. Choose…	{n} Spielspeicher dieses Spiels haben zwei Versionen. Wähl …
 That version is not there any more.	Diese Version ist nicht mehr da.
 That version is not there any more. Nothing was moved.	Diese Version ist nicht mehr da. Nichts wurde verschoben.
 The version in use is not there any more. Nothing was moved.	Die Version in Gebrauch ist nicht mehr da. Nichts wurde verschoben.
@@ -3478,7 +3501,7 @@ Back on the built-in screen	Wieder auf dem eingebauten Bildschirm
 # --- Storage, hide and delete (Settings > System > Storage, the game card's Hide or delete, app_storage.rs)
 Storage	Speicherplatz
 What takes up space on the SD card, and what can go.	Was auf der SD-Karte Platz braucht und was weg kann.
-Time, updates, storage, backup and reset, the Tour, the manual, about.	Uhrzeit, Updates, Speicherplatz, Sichern und Zurücksetzen, die Tour, das Handbuch, Info.
+Time, updates, storage, backup and reset, the Tour, the manual, about.	Uhrzeit, Updates, Speicherplatz, Sichern und Zurücksetzen, die Tour, das Handbuch, Über.
 Free on the SD card	Frei auf der SD-Karte
 What takes the room on the card, and what can go.	Was auf der Karte Platz braucht und was weg kann.
 Free on the card	Frei auf der Karte
@@ -3704,7 +3727,7 @@ Today	Heute
 Yesterday	Gestern
 1 screenshot	1 Screenshot
 {n} screenshots	{n} Screenshots
-Looking for screenshots…	Suche nach Screenshots…
+Looking for screenshots…	Suche nach Screenshots …
 No screenshots yet	Noch keine Screenshots
 No screenshots of this game	Keine Screenshots von diesem Spiel
 Hold HOME and press A while you play to take one. It shows up here.	Halte HOME und drücke A, während du spielst, um einen zu machen. Er erscheint hier.
@@ -3725,6 +3748,7 @@ Could not save it: is the SD card full?	Speichern nicht möglich: Ist die SD-Kar
 
 # --- Report a problem (Settings > System > About, app_report.rs, report.rs)
 Report a problem	Problem melden
+To report it, hold SELECT + START and choose Report a problem.	Zum Melden SELECT + START gedrückt halten und „Problem melden“ wählen.
 Saves a file with the logs and settings that help find a problem. You attach it to your report on GitHub.	Speichert eine Datei mit den Logs und Einstellungen, die bei der Fehlersuche helfen. Du hängst sie an deine Meldung auf GitHub an.
 ROCKNIX's own menu, after a warning. Restart the Pocket to come back.	Das eigene Menü von ROCKNIX, nach einer Warnung. Starte den Pocket neu, um zurückzukommen.
 Writing the report…	Bericht wird geschrieben …
@@ -3759,3 +3783,26 @@ D-pad	Steuerkreuz
 Left stick	Linker Stick
 Right stick	Rechter Stick
 Licences	Lizenzen
+No fan	Kein Lüfter
+This device has no fan.	Dieses Gerät hat keinen Lüfter.
+Only the processor speed can be changed here.	Hier lässt sich nur die Prozessorgeschwindigkeit ändern.
+None on this device	Nicht an diesem Gerät
+This device has no Wi-Fi. Everything else works without it.	Dieses Gerät hat kein WLAN. Alles andere geht auch ohne.
+This device has no Wi-Fi.	Dieses Gerät hat kein WLAN.
+{s} didn't start. The system's core may not be installed: add it in RetroArch (Flatpak) > Online Updater > Core Downloader.	{s} wurde nicht gestartet. Der Core des Systems ist vielleicht nicht installiert: Hol ihn in RetroArch (Flatpak) unter Online-Updater > Core-Downloader.
+This game · {s}	Dieses Spiel · {s}
+Controls · {s}	Steuerung · {s}
+This game	Dieses Spiel
+Which button does what, and the left stick. The pause menu shows this console's own button names.	Welche Taste was macht, und der linke Stick. Das Pausenmenü zeigt die Tastennamen dieser Konsole.
+Use the console's settings	Einstellungen der Konsole verwenden
+Takes this game off its own settings: it starts like the other games on this console.	Nimmt dieses Spiel von den eigenen Einstellungen: Es startet wie die anderen Spiele dieser Konsole.
+This game has its own settings.	Dieses Spiel hat eigene Einstellungen.
+Using this console's settings. Changing a row gives this game its own.	Es gelten die Einstellungen der Konsole. Eine Änderung gibt diesem Spiel eigene.
+Using the defaults. Changing a row gives this game its own settings.	Es gelten die Standardwerte. Eine Änderung gibt diesem Spiel eigene Einstellungen.
+This game plays on another emulator now. These settings apply when it runs on pocket-core.	Dieses Spiel läuft jetzt auf einem anderen Emulator. Die Einstellungen gelten, wenn es auf pocket-core läuft.
+This emulator has no picture settings here. Its own menu has them.	Dieser Emulator hat hier keine Bildeinstellungen. Sein eigenes Menü hat sie.
+This game starts like the others on this console now.	Dieses Spiel startet jetzt wie die anderen dieser Konsole.
+Couldn't save. Is the card full or read-only?	Konnte nicht speichern. Ist die Karte voll oder schreibgeschützt?
+You see it when the game starts. In the pause menu, Options > Picture shows it live.	Du siehst es beim Spielstart. Im Pausenmenü zeigt Optionen > Bild es live.
+Default	Standard
+Shortcut: {t}	Kurzbefehl: {t}

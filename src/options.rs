@@ -303,10 +303,10 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "fan",
                 name: "Fan",
-                desc: "Auto keeps the system's cooling profile.\nQuiet starts the fan later, Cool starts it earlier.\nThe system's setting comes back when you quit.\nWhat games use unless you save one here: Quick settings, or Settings › Playing › Performance & fan.",
-                choices: &[c("quiet", "Quiet"), c("auto", "Auto"), c("cool", "Cool")],
-                // Quiet, as Games: fan starts (`perf_fan::games_fan_default`), which comes first anyway.
-                default: 0,
+                desc: "Auto keeps the system's cooling profile.\nVery quiet: fan only when it gets warm. Quiet starts it later, Cool earlier.\nThe system's setting comes back when you quit.\nWhat games use unless you save one here: Quick settings, or Settings › Playing › Performance & fan.",
+                choices: &[c("veryquiet", "Very quiet"), c("quiet", "Quiet"), c("auto", "Auto"), c("cool", "Cool")],
+                // Quiet, as Games: fan starts (`perf_fan::games_fan_default`).
+                default: 1,
                 shown_when: None,
             },
             // Only for the light systems (`run_ahead::SYSTEMS`, see `applies`).
@@ -533,6 +533,15 @@ impl GameSettings {
     /// loaded (Quick settings over the paused game).
     pub fn set_global(&mut self, key: &str, value: &str) {
         self.globals.insert(key.to_string(), value.to_string());
+    }
+
+    /// Takes this game off its own settings: its file goes and the console's (or the defaults) are read again. For the
+    /// "This game" page's "Use the console's settings".
+    pub fn forget_game(&mut self, data_dir: &Path, rom: &Path) {
+        crate::fsutil::remove_json(&self.game_file());
+        let fresh = GameSettings::load(data_dir, &self.system, rom);
+        self.values = fresh.values;
+        self.level = fresh.level;
     }
 
     /// Back to the built-in defaults: removes both files for this game's console and the game.

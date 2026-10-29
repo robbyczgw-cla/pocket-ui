@@ -134,6 +134,8 @@ impl Performance {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Fan {
+    /// Off until it gets warm (60 °C): the device is noticeably warmer, the fan is rarely heard.
+    VeryQuiet,
     /// Starts later: the device gets warmer, the fan stays quiet.
     Quiet,
     /// Whatever the system's cooling profile is.
@@ -146,6 +148,7 @@ pub enum Fan {
 impl Fan {
     pub fn parse(s: &str) -> Self {
         match s {
+            "veryquiet" => Self::VeryQuiet,
             "quiet" => Self::Quiet,
             "cool" => Self::Cool,
             _ => Self::Auto,
@@ -155,6 +158,7 @@ impl Fan {
     /// The value in the settings files (`options.rs`' choice values).
     pub fn value(self) -> &'static str {
         match self {
+            Self::VeryQuiet => "veryquiet",
             Self::Quiet => "quiet",
             Self::Auto => "auto",
             Self::Cool => "cool",
@@ -169,6 +173,8 @@ impl Fan {
     /// Trip temperatures (millidegrees) of ROCKNIX's quiet and aggressive cooling profiles.
     fn trips(self) -> Option<[u32; 6]> {
         match self {
+            // Smooth fan off: the six trips 8 °C above Quiet's first (top two stay below `hot` 90 °C).
+            Fan::VeryQuiet => Some([60_000, 68_000, 74_000, 79_000, 83_000, 86_000]),
             Fan::Quiet => Some([52_000, 62_000, 69_000, 75_000, 80_000, 85_000]),
             Fan::Cool => Some([40_000, 48_000, 55_000, 61_000, 66_000, 71_000]),
             Fan::Auto => None,
@@ -1023,11 +1029,21 @@ mod tests {
         let path = f.0.join("perf.lock");
         let a = Lease::take(&path, Duration::ZERO, || false).expect("free");
         assert!(Lease::take(&path, Duration::from_millis(30), || false).is_none(), "held");
-        let t0 = Instant::now();
-        assert!(Lease::take(&path, Duration::from_secs(5), || true).is_none());
-        assert!(t0.elapsed() < Duration::from_secs(1), "given up at once");
+        // A wait ends because it was given up, not because the clock ran out: the callback ending it is the event (the
+        // wall clock said how loaded the machine was, and this took over 1 s in a gate).
+        let gave_up = std::sync::atomic::AtomicBool::new(false);
+        assert!(Lease::take(&path, Duration::from_secs(5), || {
+            gave_up.store(true, std::sync::atomic::Ordering::SeqCst);
+            true
+        })
+        .is_none());
+        assert!(gave_up.load(std::sync::atomic::Ordering::SeqCst), "the 5 s wait was not given up");
         drop(a);
-        assert!(Lease::take(&path, Duration::ZERO, || false).is_some(), "free again");
+        // Free again: the next attempt gets it. Not the *first* one: a child another test thread forked (every
+        // `Command::spawn` in the tests) has a copy of this descriptor until it execs, and flock is released only when
+        // the last copy is gone (the window that makes `testutil::write_executable` write through a child). So this
+        // waits for the lease as the games do, and a lease that is never given back still fails here.
+        assert!(Lease::take(&path, LEASE_WAIT, || false).is_some(), "free again");
         assert!(Lease::take(&f.0.join("no/such/dir/lock"), Duration::ZERO, || false).is_none());
     }
 

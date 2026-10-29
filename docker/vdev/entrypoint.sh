@@ -37,11 +37,15 @@ rm -rf /dev/input
 # The screen as sway shows it, the touch panel's portrait size, and the device tree pocket-ui reads to tell the
 # devices apart (src/device.rs): the strings of ROCKNIX's sm8250-retroidpocket-*.dts.
 SOC=qcom,sm8250
-export VDEV_TOUCH_ROT=90
+export VDEV_TOUCH_ROT=90 VDEV_TOUCH=1
 case "${VDEV_DEVICE:-miniv2}" in
   odin2mini) SCREEN=1920x1080 PANEL=1080x1920 MODEL="AYN Odin 2 Mini" COMPAT="ayn,odin2mini" LID=0 SOC=qcom,qcs8550; export VDEV_TOUCH_ROT=270 ;;
   odin2) SCREEN=1920x1080 PANEL=1080x1920 MODEL="AYN Odin 2" COMPAT="ayn,odin2" LID=0 SOC=qcom,qcs8550; export VDEV_TOUCH_ROT=270 ;;
   odin2portal) SCREEN=1920x1080 PANEL=1080x1920 MODEL="AYN Odin 2 Portal" COMPAT="ayn,odin2portal" LID=0 SOC=qcom,qcs8550 ;;
+  # Allwinner H700 (ROCKNIX's H700 image; docs/DEVICES.md): 640x480, no touch panel. The RG28XX's panel is 480x640 turned
+  # 270 degrees, the SP's lid is a gpio-keys SW_LID. Strings from the image's DTBs (sun50i-h700-anbernic-*.dtb).
+  rg28xx) SCREEN=640x480 PANEL=480x640 MODEL="Anbernic RG28XX" COMPAT="anbernic,rg28xx" LID=0 SOC=allwinner,sun50i-h700; export VDEV_TOUCH=0 ;;
+  rg35xx-sp) SCREEN=640x480 PANEL=640x480 MODEL="Anbernic RG35XX SP" COMPAT="anbernic,rg35xx-sp" LID=1 SOC=allwinner,sun50i-h700; export VDEV_TOUCH=0 ;;
   rp6) SCREEN=1920x1080 PANEL=1080x1920 MODEL="Retroid Pocket 6" COMPAT="retroidpocket,rp6" LID=0 SOC=qcom,qcs8550 ;;
   nova) SCREEN=1280x960 PANEL=1280x960 MODEL="Retroid Pocket Nova" COMPAT="retroidpocket,rpnova" LID=0 SOC=qcom,qcs8550; export VDEV_TOUCH_ROT=0 ;;
   rp5) SCREEN=1920x1080 PANEL=1080x1920 MODEL="Retroid Pocket 5" COMPAT="retroidpocket,rp5" LID=0 ;;

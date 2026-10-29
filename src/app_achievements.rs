@@ -257,8 +257,7 @@ impl App {
 
     fn paint_achievements_page(&mut self, c: &mut Canvas, page: &AchievementsPage) {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, SETTINGS_NAME);
+        self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         // One row: Sign in, or Log out with the account at the right.
         let y = top;
@@ -276,8 +275,6 @@ impl App {
         // The status, then what RetroAchievements is and how it works here.
         let (left, width) = (pad + NU_BTN_PAD, c.w - 2 * (pad + NU_BTN_PAD));
         let mut y = top + row + 44;
-        self.text.draw(c, Face::Body, 24, left, y, pal().dust, "Status");
-        y += 48;
         let (status, tone) = page.status();
         let (status, color) = match tone {
             Tone::Good => (status, pal().chalk),
@@ -285,11 +282,19 @@ impl App {
             Tone::Busy => (format!("{status}…"), pal().dust),
             Tone::Alert => (status, pal().alert),
         };
-        for line in self.text.wrap(Face::Title, 44, &status, width).iter().take(2) {
+        // The state in a panel, as Performance & fan's readout (`kit::panel`).
+        let lines = self.text.wrap(Face::Title, 44, &status, width);
+        let shown = lines.len().clamp(1, 2) as i32;
+        let panel_top = y - 30;
+        let panel_h = 30 + 48 + (shown - 1) * pocket_ui::type_scale::line(44, 8) + 24 + pocket_ui::type_scale::grow(44);
+        pocket_ui::kit::panel(c, pad, panel_top, c.w - 2 * pad, panel_h);
+        self.text.draw(c, Face::Body, 24, left, y, pal().dust, "Status");
+        y += 48;
+        for line in lines.iter().take(2) {
             self.text.draw(c, Face::Title, 44, left, y, color, line);
             y += pocket_ui::type_scale::line(44, 8);
         }
-        y += 24;
+        y = y.max(panel_top + panel_h + 40);
         for p in page::ABOUT {
             for line in self.text.wrap(Face::Body, 28, p, width) {
                 self.text.draw(c, Face::Body, 28, left, y, pal().dust, &line);

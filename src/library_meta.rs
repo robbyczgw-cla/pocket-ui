@@ -43,7 +43,7 @@ impl Status {
     pub fn label(self) -> &'static str {
         match self {
             Status::NotStarted => "Not started",
-            Status::Playing => "Playing",
+            Status::Playing => "Playing now",
             Status::Paused => "Paused",
             Status::Completed => "Completed",
             Status::Dropped => "Dropped",

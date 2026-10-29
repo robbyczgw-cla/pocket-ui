@@ -9,7 +9,7 @@
 //!   drops the watcher and the thread ends.
 //! - A value the device doesn't have (no fan, no battery gauge, a gauge without current) is left out of the line,
 //!   never shown as 0 or "?".
-//! - The words are in the interface's language (Settings → Language, which pocket-core reads at its start): "Lüfter 45%",
+//! - The words are in the interface's language (Settings → Language, which pocket-core reads at its start): "Lüfter 45 %",
 //!   "lädt" in German. The painter translates a notice whole (`i18n`), but this line's numbers change twice a second,
 //!   so [`Sensors::text_in`] looks each part with words up in the table itself (`assets/i18n/de.tsv`, "Fan {n}%").
 //!   Numbers and units stay as they are; "FPS" and "CPU" before it are the same in German.
@@ -97,7 +97,7 @@ impl Sensors {
         self.text_in(Lang::En)
     }
 
-    /// [`text`](Self::text) in `lang`: the fan and "charging" through the table ("62 °C   Lüfter 45%   4.8 W"), the
+    /// [`text`](Self::text) in `lang`: the fan and "charging" through the table ("62 °C   Lüfter 45 %   4.8 W"), the
     /// temperature and the watts, only a number and a unit, as they are. A part the table lacks stays English.
     pub fn text_in(&self, lang: Lang) -> String {
         let words = |part: Option<String>| match (lang, part) {
@@ -262,12 +262,12 @@ mod tests {
     #[test]
     fn the_line_is_german_on_a_german_pocket_with_its_numbers_and_units_as_they_are() {
         let de = |s: Sensors| s.text_in(Lang::De);
-        assert_eq!(de(full(Power::Draw(4_760))), "62 °C   Lüfter 45%   4.8 W");
-        assert_eq!(de(full(Power::Charging)), "62 °C   Lüfter 45%   lädt");
+        assert_eq!(de(full(Power::Draw(4_760))), "62 °C   Lüfter 45 %   4.8 W");
+        assert_eq!(de(full(Power::Charging)), "62 °C   Lüfter 45 %   lädt");
         let fan = |rpm, pwm| Sensors { fan_rpm: rpm, fan_pwm: pwm, ..Default::default() };
         assert_eq!(de(fan(Some(0), Some(0))), "Lüfter aus");
         assert_eq!(de(fan(Some(4400), None)), "Lüfter 4400 rpm");
-        assert_eq!(de(fan(None, Some(255))), "Lüfter 100%");
+        assert_eq!(de(fan(None, Some(255))), "Lüfter 100 %");
         assert_eq!(de(Sensors { hottest: Some(9_000), power: Some(Power::Draw(10_040)), ..Default::default() }), "9 °C   10.0 W");
         assert_eq!(de(Sensors::default()), "", "nothing to show is still nothing");
         // English stays as it was.

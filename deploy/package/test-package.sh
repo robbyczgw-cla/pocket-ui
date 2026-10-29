@@ -100,6 +100,11 @@ EOF
   # The licence texts as scripts/licence-files.sh lays them out (stand-in contents; the real ones: LICENCE_FILES below).
   mkdir -p "$P/licences"
   for f in LICENSE NOTICE.md FONTS-OFL.txt THIRD-PARTY-CRATES.md THIRD-PARTY-LICENSES.txt; do echo "text of $f" >"$P/licences/$f"; done
+  # The Xbox core as scripts/make-install-zip.sh --hakux lays it out (stand-in contents).
+  mkdir -p "$P/hakux/licenses"
+  echo "core" >"$P/hakux/hakux_libretro.so"; echo "savestate = \"false\"" >"$P/hakux/hakux_libretro.info"; echo "source" >"$P/hakux/SOURCE.txt"; echo "gpl" >"$P/hakux/licenses/COPYING"
+  mkdir -p "$P/hakux/patches"; echo "patch" >"$P/hakux/patches/0001-apu-dsp-preference-per-apu-state.patch"
+  (cd "$P/hakux" && find . -type f ! -name SHA256SUMS | sort | xargs sha256sum >SHA256SUMS)
   echo "$V" >"$P/files/VERSION"
   (cd "$P/files" && sha256sum pocket-ui pocket-core pocket-splash portmaster-setup.sh run-pocket-ui.sh 10-pocket-ui.conf pocket-splash.service VERSION >SHA256SUMS)
 }
@@ -221,6 +226,8 @@ for SH in $SHELLS; do
   check "$SH: boot screen: never started by the install" '! grep -q "pocket-splash" "$r/calls"'
   check "$SH: licences: all five texts in /storage/pocket-ui/licences, as packaged, mode 644" \
     'for f in LICENSE NOTICE.md FONTS-OFL.txt THIRD-PARTY-CRATES.md THIRD-PARTY-LICENSES.txt; do cmp -s "$T/pkg/licences/$f" "$r/$APP/licences/$f" && [ "$(stat -c %a "$r/$APP/licences/$f")" = 644 ] || exit 1; done && [ -z "$(find "$r/$APP" -name "licences.new")" ]'
+  check "$SH: Xbox core: in /storage/pocket-ui/hakux as packaged, licence texts beside it, no sums or staging left" \
+    'cmp -s "$T/pkg/hakux/hakux_libretro.so" "$r/$APP/hakux/hakux_libretro.so" && [ -x "$r/$APP/hakux/hakux_libretro.so" ] && cmp -s "$T/pkg/hakux/licenses/COPYING" "$r/$APP/hakux/licenses/COPYING" && cmp -s "$T/pkg/hakux/SOURCE.txt" "$r/$APP/hakux/SOURCE.txt" && cmp -s "$T/pkg/hakux/patches/0001-apu-dsp-preference-per-apu-state.patch" "$r/$APP/hakux/patches/0001-apu-dsp-preference-per-apu-state.patch" && [ ! -e "$r/$APP/hakux/SHA256SUMS" ] && [ ! -e "$r/$APP/hakux.new" ]'
   check "$SH: uninstall.sh copied next to the programs" 'cmp -s "$T/pkg/uninstall.sh" "$r/$APP/uninstall.sh"'
   check "$SH: no staging folder left" '[ -z "$(find "$r/storage" -name ".pocket-ui-staging*")" ]'
   check "$SH: daemon-reload, then essway restarted" \

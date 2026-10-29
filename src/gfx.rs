@@ -43,11 +43,16 @@ impl<'a> Canvas<'a> {
     }
 
     pub fn rect(&mut self, x: i32, y: i32, w: i32, h: i32, color: u32) {
-        let (x0, y0) = (x.max(0), y.max(0));
-        let (x1, y1) = ((x + w).min(self.w), (y + h).min(self.h));
+        // Everything outside the canvas is cut off, including a rectangle that starts past its right or bottom edge
+        // (pages are laid out for taller screens: at 640x480 a "row below the fold" can be entirely off-screen).
+        let (x0, x1) = (x.clamp(0, self.w), (x + w).clamp(0, self.w));
+        let (y0, y1) = (y.clamp(0, self.h), (y + h).clamp(0, self.h));
+        if x0 >= x1 || y0 >= y1 {
+            return;
+        }
         for row in y0..y1 {
             let start = (row * self.w) as usize;
-            self.buf[start + x0 as usize..start + x1.max(x0) as usize].fill(color);
+            self.buf[start + x0 as usize..start + x1 as usize].fill(color);
         }
     }
 
@@ -261,6 +266,29 @@ mod tests {
                 buf[(row * cw + col) as usize] = img.px[sy * img.w as usize + sx];
             }
         }
+    }
+
+    #[test]
+    fn a_rectangle_past_the_edge_is_cut_off_and_never_slices_past_the_buffer() {
+        let (w, h) = (4i32, 3i32);
+        let mut buf = vec![0u32; (w * h) as usize];
+        let mut c = Canvas::new(&mut buf, w as u32, h as u32);
+        // Starts past the right edge and past the bottom edge: nothing, and no panic (640x480 pages draw rows and
+        // panels that a taller screen would show).
+        c.rect(10, 1, 5, 1, 0xffffff);
+        c.rect(1, 10, 2, 5, 0xffffff);
+        c.rect(10, 10, 5, 5, 0xffffff);
+        assert!(c.buf.iter().all(|&px| px == 0), "nothing was in the picture");
+        // Entirely to the left or above: clipped to nothing, not to a negative index.
+        c.rect(-10, -10, 5, 5, 0xffffff);
+        // Reaches over the edges: only the part inside.
+        c.rect(2, 1, 10, 10, 0xabcdef);
+        let at = |x: i32, y: i32| c.buf[(y * w + x) as usize];
+        assert_eq!(at(2, 1), 0xabcdef);
+        assert_eq!(at(3, 2), 0xabcdef);
+        assert_eq!(at(1, 1), 0, "left of it");
+        assert_eq!(at(3, 0), 0, "above it");
+        assert_eq!(at(0, 0), 0);
     }
 
     #[test]

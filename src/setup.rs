@@ -551,7 +551,7 @@ impl Setup {
         for (k, (sys, shown)) in rows.enumerate().skip(first).take(visible) {
             let y = top + (k - first) as i32 * row;
             let selected = k == sel;
-            c.rect(MARGIN, y, width, row - 8, if selected { pal().label } else { pal().spine });
+            crate::kit::shelf_row(c, MARGIN, y, width, row - 8, selected);
             let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else if shown { (pal().chalk, pal().dust) } else { (pal().dust, pal().off) };
             // The tick box.
             let (bx, by, bs) = (MARGIN + 28, y + (row - 8 - 34) / 2, 34);
@@ -664,7 +664,7 @@ impl Setup {
             let (r, col) = ((i / cols - first_row) as i32, (i % cols) as i32);
             let (x, y) = (MARGIN + col * (tile_w + GAP), top + r * (TILE_H + GAP));
             let selected = i == grid.sel;
-            c.rect(x, y, tile_w, TILE_H, if selected { pal().label } else { pal().spine });
+            crate::kit::shelf_row(c, x, y, tile_w, TILE_H, selected);
             let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else { (pal().chalk, pal().dust) };
             match tile {
                 Tile::System(s) => {
@@ -1280,7 +1280,7 @@ impl Setup {
     /// Asks the shared picture of the Wi-Fi to look again (`net_state`: the radio, the saved networks first, then the
     /// scan); the answers come as `SetupEvent::Net`. One scan at a time: a press while one runs does nothing.
     fn scan(&mut self) {
-        if self.scanning {
+        if self.scanning || self.radio == Radio::Absent {
             return;
         }
         self.scanning = true;
@@ -1352,6 +1352,9 @@ impl Setup {
     /// The Wi-Fi page's rows: "This network wants a sign-in" while it does (`lead`), the networks (`entries`), then
     /// Other network, then Wi-Fi country.
     fn wifi_rows(&self) -> usize {
+        if self.radio == Radio::Absent {
+            return 0;
+        }
         self.lead() + self.entries.len() + 2
     }
 
@@ -2193,6 +2196,10 @@ impl Setup {
         // The row among the networks, Other network and Wi-Fi country; None on the sign-in row.
         let row = self.sel.checked_sub(self.lead());
         let entry = row.and_then(|r| self.entries.get(r)).cloned();
+        // No Wi-Fi chip: nothing on this page to choose; Start goes on (first start), B goes back.
+        if self.radio == Radio::Absent && !matches!(b, Button::Start | Button::South) {
+            return;
+        }
         // Anything but a second Y keeps the network; B then only takes the question back.
         if b != Button::West && self.forget.take().is_some() {
             self.note = None;
@@ -2525,7 +2532,16 @@ impl Setup {
                     None if self.lead_kind() == Some(Lead::Off) => "Turn on",
                     _ => "Open",
                 };
-                hints(c, text, &wifi_hints(a, saved, self.forget.is_some(), self.only.is_none()));
+                if self.radio == Radio::Absent {
+                    let mut h = Vec::new();
+                    if self.only.is_none() {
+                        h.push(("START", "Next"));
+                    }
+                    h.push(("B", "Back"));
+                    hints(c, text, &h);
+                } else {
+                    hints(c, text, &wifi_hints(a, saved, self.forget.is_some(), self.only.is_none()));
+                }
             }
             Step::Password { ssid, kb, hidden } => {
                 let title = text.fit(Face::Title, 50, &format!("Password for {ssid}"), c.w - 2 * MARGIN);
@@ -2635,7 +2651,7 @@ impl Setup {
         for (i, (title, about, status)) in rows.iter().enumerate() {
             let y = 240 + i as i32 * (h + 18);
             let selected = i == sel;
-            c.rect(MARGIN, y, width, h, if selected { pal().label } else { pal().spine });
+            crate::kit::shelf_row(c, MARGIN, y, width, h, selected);
             // The switch works without Wi-Fi; the downloads and the browser need it.
             let usable = online || i == 1;
             let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else if usable { (pal().chalk, pal().dust) } else { (pal().off, pal().off) };
@@ -2710,7 +2726,7 @@ impl Setup {
             let port = &self.ports[i];
             let y = top + (k - first) as i32 * row;
             let selected = k == sel;
-            c.rect(MARGIN, y, list_w, row - 6, if selected { pal().label } else { pal().spine });
+            crate::kit::shelf_row(c, MARGIN, y, list_w, row - 6, selected);
             let fg = if selected { pal().ink } else { pal().chalk };
             let side = if ports::installed(port) { "Installed".to_string() } else { ports::size_label(port.size) };
             let side_w = text.width(Face::Body, 21, &side);
@@ -2880,7 +2896,7 @@ impl Setup {
             let i = first + k;
             let y = top + k as i32 * row;
             let selected = i == sel;
-            c.rect(MARGIN, y, width, row - 8, if selected { pal().label } else { pal().spine });
+            crate::kit::shelf_row(c, MARGIN, y, width, row - 8, selected);
             let fg = if selected { pal().ink } else { pal().chalk };
             let value_w = text.width(Face::Body, 24, value);
             let name = text.fit(Face::Title, 37, name, width - 56 - value_w - 40);
@@ -2979,6 +2995,7 @@ impl Setup {
     pub(crate) fn wifi_status(&self, dots: &str) -> (String, u32) {
         let active = self.entries.iter().find(|e| e.active);
         match (&self.note, self.scanning) {
+            _ if self.radio == Radio::Absent => ("This device has no Wi-Fi. Everything else works without it.".into(), pal().dust),
             _ if self.switch_failed.is_some() => (self.switch_failed.as_ref().map_or("", |n| n.line(true)).into(), pal().alert),
             _ if self.switching == Some(true) => (format!("Turning Wi-Fi on{dots}"), pal().dust),
             _ if self.switching == Some(false) => (format!("Turning Wi-Fi off{dots}"), pal().dust),
@@ -3013,7 +3030,7 @@ impl Setup {
         let lead = self.lead();
         // The radio off, or a scan that worked and found nobody: a small radio asleep under the rows (`ui_art`), where
         // the networks would be, when there is room for it.
-        if self.radio.is_off() || (self.entries.is_empty() && !self.scanning && self.scan_err.is_none() && self.switching.is_none()) {
+        if self.radio.is_off() || self.radio == Radio::Absent || (self.entries.is_empty() && !self.scanning && self.scan_err.is_none() && self.switching.is_none()) {
             let k = crate::ui_art::empty_scale(c.h);
             let (aw, ah) = crate::ui_art::size(crate::ui_art::Art::Offline, k);
             let y = top + rows.min(visible) as i32 * row + 48;
@@ -3024,7 +3041,7 @@ impl Setup {
         for (k, i) in (first..rows).take(visible).enumerate() {
             let y = top + k as i32 * row;
             let selected = i == self.sel;
-            c.rect(MARGIN, y, width, row - 8, if selected { pal().label } else { pal().spine });
+            crate::kit::shelf_row(c, MARGIN, y, width, row - 8, selected);
             let fg = if selected { pal().ink } else { pal().chalk };
             let quiet = if selected { pal().label_dust } else { pal().dust };
             let Some(i) = i.checked_sub(lead) else {
@@ -3090,7 +3107,7 @@ impl Setup {
         for (k, (code, name)) in list.iter().enumerate().skip(first).take(visible) {
             let y = top + (k - first) as i32 * row;
             let selected = k == sel;
-            c.rect(MARGIN, y, width, row - 8, if selected { pal().label } else { pal().spine });
+            crate::kit::shelf_row(c, MARGIN, y, width, row - 8, selected);
             let fg = if selected { pal().ink } else { pal().chalk };
             let name = text.fit(Face::Title, 37, name, width - 300);
             text.draw(c, Face::Title, 37, MARGIN + 28, y + (row - 8) / 2 + crate::type_scale::base(13, 37), fg, &name);
@@ -3353,34 +3370,9 @@ fn games_hints(more: Option<bool>, sharing: bool, online: bool) -> Vec<(&'static
     h
 }
 
+/// The hint keys at the bottom left, the same as on the shelf (`kit::page_hints`).
 pub fn hints(c: &mut Canvas, text: &mut Text, items: &[(&str, &str)]) -> Vec<(crate::touch::Area, Button)> {
-    use crate::type_scale;
-    let (mut x, base) = (MARGIN, c.h - 52);
-    let mut areas = Vec::new();
-    // The caps are 36 px around Body 21, taller with larger text; labels that don't fit go, last first
-    // (`type_scale::hint_labels_that_fit`), and their caps stay.
-    let cap_h = type_scale::row(36, 21);
-    let cap_top = base - 9 - cap_h / 2 - type_scale::grow(21) / 3;
-    let widths: Vec<(i32, i32)> = items.iter().map(|(k, l)| (text.width(Face::Body, 21, k), text.width(Face::Body, 21, l))).collect();
-    let shown = type_scale::hint_labels_that_fit(&widths.iter().map(|(kw, lw)| ((kw + 20).max(cap_h) + 10, lw + 36)).collect::<Vec<_>>(), c.w - MARGIN - 24 + 36);
-    for (k, (key, label)) in items.iter().enumerate() {
-        let kw = widths[k].0;
-        let cap_w = (kw + 20).max(cap_h);
-        let x0 = x;
-        c.round_rect(x, cap_top, cap_w, cap_h, cap_h / 2, pal().keycap);
-        text.draw(c, Face::Body, 21, x + (cap_w - kw) / 2, base - 1, pal().chalk, key);
-        x += cap_w + 10;
-        if k < shown {
-            x += text.draw(c, Face::Body, 21, x, base, pal().dust, label);
-        }
-        x += 36;
-        if let Some(b) = crate::touch::hint_button(key) {
-            areas.push((crate::touch::Area::new(x0, base - 40, x - 36 - x0 + 18, 60), b));
-        }
-    }
-    // For the snapshot checks of Settings → Text size: nothing else may run into the hint bar.
-    crate::text::boxes::area(c, (MARGIN - 4, cap_top, x - 36 - MARGIN + 8, cap_h), "‹hints›");
-    areas
+    crate::kit::page_hints(c, text, items)
 }
 
 #[cfg(test)]
@@ -4049,6 +4041,30 @@ mod tests {
 
     fn status(s: &Setup) -> String {
         s.wifi_status("").0
+    }
+
+    /// The RG28XX has no Wi-Fi chip: the page says so in words (never an empty list, "No networks found" or a scan that
+    /// fails), offers nothing to choose, and still lets the player leave it.
+    #[test]
+    fn a_device_without_wifi_says_so_instead_of_an_empty_page() {
+        let fake = FakeNet::new(Radio::Absent);
+        let mut s = page_on("wifi-absent", &fake);
+        assert_eq!(status(&s), "This device has no Wi-Fi. Everything else works without it.");
+        assert_eq!(s.wifi_rows(), 0, "no rows to choose from");
+        assert_eq!(fake.scans_run(), 0, "nothing was searched");
+        // Nothing opens: not Other network, not the country list, not a scan.
+        s.scan();
+        assert!(!s.scanning);
+        press(&mut s, &[Button::East, Button::Down, Button::East, Button::North]);
+        assert!(matches!(s.step, Step::Wifi), "A and X do nothing here");
+        // The page paints the words and the small radio, at the Mini V2's size and at the H700's.
+        for (w, h) in [(1240, 1080), (640, 480)] {
+            let mut px = vec![0u32; (w * h) as usize];
+            s.paint(&mut Canvas::new(&mut px, w, h), &mut Text::builtin());
+            assert!(px.iter().any(|p| *p != px[0]), "{w}x{h} is not blank");
+        }
+        // The Settings row says it too.
+        assert_eq!(crate::settings_values::Wifi::Absent.label(), "None on this device");
     }
 
     #[test]

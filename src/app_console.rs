@@ -416,8 +416,17 @@ impl App {
     /// list and Up to its top, and for each move the first frame `draw` makes after it, in thread CPU time (a frame
     /// preempted by a compile is not a slow one), with the letters it drew on the spot and the strings it ran through
     /// the German patterns. The speed guard's `nav` is this frame on the device (tests/shelf_moves.rs).
+    /// An optional `:<system>` after the look uses that system's games, capped at 120 moves each way;
+    /// Cabinet then moves between books with Right/Left rather than between shelves with Down/Up.
     pub(crate) fn bench_shelf(&mut self, look: &str, w: u32, h: u32) -> ShelfBench {
+        let mut parts = look.split(':');
+        let look = parts.next().unwrap_or("split");
+        let system = parts.next();
         self.shelf_snapshot(&format!(":{look}"));
+        if let Some(s) = system.and_then(|id| self.systems.iter().position(|s| s.name == id)) {
+            self.screen = Screen::Games(s);
+            self.rebuild();
+        }
         // Box art the way the app reads it, on the thread (a snapshot reads it at once).
         self.cabinet.inline = false;
         self.pictures.sync = true;
@@ -441,8 +450,9 @@ impl App {
         };
         // Once over the whole list first: every picture is in the cache, as after the first few moves on the device
         // (snapshots decode on the spot; on the device the loader's thread has long been done).
-        let last = self.items.len().saturating_sub(1);
-        let moves: Vec<Button> = std::iter::repeat_n(Button::Down, last).chain(std::iter::repeat_n(Button::Up, last)).collect();
+        let last = self.items.len().saturating_sub(1).min(if system.is_some() { 120 } else { usize::MAX });
+        let (next, previous) = if system.is_some() && look == "cabinet" { (Button::Right, Button::Left) } else { (Button::Down, Button::Up) };
+        let moves: Vec<Button> = std::iter::repeat_n(next, last).chain(std::iter::repeat_n(previous, last)).collect();
         for _ in 0..2 {
             for b in &moves {
                 self.step(*b);

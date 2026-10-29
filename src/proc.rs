@@ -46,10 +46,11 @@ pub fn run_with_timeout(cmd: &mut Command, timeout: Duration) -> io::Result<Outp
     let status = wait(&mut child, Instant::now() + timeout, None)?;
     // The child is gone. A grandchild it left behind may still hold the pipes open; whatever was written
     // before the child exited is already in them, so they get a moment, not the grandchild's lifetime.
+    let group = child.id() as i32;
     Ok(Output {
         status,
-        stdout: stdout.take(GRACE),
-        stderr: stderr.take(GRACE),
+        stdout: stdout.take(GRACE, group),
+        stderr: stderr.take(GRACE, group),
     })
 }
 
@@ -73,15 +74,20 @@ pub fn run_until(cmd: &mut Command, timeout: Duration, stop: &AtomicBool) -> io:
     let mut child = spawn(cmd)?;
     let (stdout, stderr) = (Pipe::drain(child.stdout.take()), Pipe::drain(child.stderr.take()));
     let status = wait(&mut child, Instant::now() + timeout, Some(stop))?;
+    let group = child.id() as i32;
     Ok(Output {
         status,
-        stdout: stdout.take(GRACE),
-        stderr: stderr.take(GRACE),
+        stdout: stdout.take(GRACE, group),
+        stderr: stderr.take(GRACE, group),
     })
 }
 
-/// How long the pipes get to reach end-of-file after the child has exited.
+/// How long the pipes get while something of the child's process group still lives (a daemon it started, `sleep 5 &`,
+/// holding them).
 const GRACE: Duration = Duration::from_millis(100);
+/// The guard for a pipe that a daemon holds after leaving the group (it `setsid`ed): the end-of-file then never comes.
+/// Not a budget to decide the output with — see `Pipe::take`.
+const EOF_PATIENCE: Duration = Duration::from_secs(30);
 
 fn timed_out() -> io::Error {
     io::Error::new(io::ErrorKind::TimedOut, "helper program timed out")
@@ -140,9 +146,29 @@ impl Pipe {
         Pipe { data, eof }
     }
 
-    /// Everything read so far, once the pipe has ended or `grace` is over.
-    fn take(self, grace: Duration) -> Vec<u8> {
-        let _ = self.eof.recv_timeout(grace);
+    /// Everything the command wrote: the pipe has ended, or `grace` is over while something of its group still lives.
+    ///
+    /// The child has exited, so its end of the pipe is closed and everything it wrote is in there: the end-of-file now
+    /// only waits for the reader thread to be scheduled. A loaded machine can take longer than any fixed grace for
+    /// that (the gate read a `bluetoothctl trust` that succeeded as empty and told the player to pair again), so it is
+    /// waited for as long as it takes. `grace` only applies while the group still has processes — a daemon the command
+    /// started may write more later, and the caller isn't waiting for it — and `EOF_PATIENCE` guards the pipe a daemon
+    /// holds after leaving the group.
+    fn take(self, grace: Duration, group: i32) -> Vec<u8> {
+        let started = Instant::now();
+        loop {
+            // SAFETY: kill(2) with signal 0 on a negative pid only asks whether the group exists.
+            let alive = unsafe { libc::kill(-group, 0) } == 0;
+            let limit = if alive { grace } else { EOF_PATIENCE };
+            if started.elapsed() >= limit {
+                break;
+            }
+            let nap = (limit - started.elapsed()).min(Duration::from_millis(20));
+            match self.eof.recv_timeout(nap) {
+                Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+            }
+        }
         std::mem::take(&mut *self.data.lock().unwrap_or_else(|e| e.into_inner()))
     }
 }

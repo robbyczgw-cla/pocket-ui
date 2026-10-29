@@ -86,8 +86,7 @@ impl App {
     pub(crate) fn paint_leds(&mut self, c: &mut Canvas, sel: usize) {
         c.clear(pal().void);
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, "LEDs");
+        self.sheet_header(c, "LEDs");
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         let cfg = self.leds;
         let rows = rows(&cfg);

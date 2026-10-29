@@ -11,11 +11,11 @@ are short; one that is looked up comes a moment later.
 
 | Category | What is in it |
 |---|---|
-| **Look & feel** | Look, Language, Text size, Night light, Screen frames, Sounds, Haptics, LEDs. See [below](#look--feel) |
+| **Look & feel** | Look, Language, Text size, Night light, Screen frames, Sounds, Haptics, LEDs, Launch animation. See [below](#look--feel) |
 | **Playing** | On start, Remember where I quit, Button layout, Over the game, Performance & fan, Battery, RetroAchievements, Curator. See [Playing](#playing) |
 | **Games** | Add games, From EmulationStation, Starter pack, Extras, Screenshots, Store (only on a device with a store set up), Tools, PC streaming. See [Games](#games) |
 | **Connections** | Wi-Fi, Bluetooth, Tailscale, Sync, Remote access (SSH), Web companion. See [Connections](settings-system.md#connections) |
-| **System** | Time, Sleep & power, Updates, Storage, Backup & reset, Tour, Manual, About. See [System](settings-system.md#system) |
+| **System** | Time, Sleep & power, Updates, Storage, Backup & reset, Tour, Manual, Report a problem, About. See [System](settings-system.md#system) |
 
 A page that opens from somewhere else (a hint, a feature card, the pause menu) goes back with B to its category's
 list, and from there to the categories, as if you had opened it from Settings. In this guide a place in Settings is
@@ -39,6 +39,7 @@ Settings → **Look & feel**. How pocket-ui looks, sounds and feels in your hand
 | **Sounds** | Soft clicks in the menus. A turns them on or off, Left/Right set how loud. See [Playing](playing.md#menu-sounds) |
 | **Haptics** | A very short tick in the menus as the selection moves. A turns it on or off. Off by default |
 | **LEDs** | The lights around the sticks: off, one colour, or the battery colours. See [LEDs](#leds) |
+| **Launch animation** | In the Cabinet and Shelf looks, the game's cartridge or disc goes into its console with a click while the game loads. A turns it on or off. On by default. See [Playing](playing.md#starting-a-game) |
 
 ### Look
 
@@ -94,6 +95,9 @@ box, its console and the number of games. All are ticked by default. When Moonli
 The first start does not have this list; every system is on the shelf until you change it here.
 
 ### Text size
+
+On small screens such as the RG28XX and RG35XX SP, the shelf, game cards and menus keep their full layout,
+scaled down to fit the screen. If the writing feels small, choose Medium or Large here.
 
 Settings → Look & feel → **Text size** makes the text larger on every screen. A or Right goes on to the next size,
 Left back to the one before, and the screen shows the new size at once; the choice is saved at once and kept across restarts and updates.

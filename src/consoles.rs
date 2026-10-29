@@ -612,13 +612,14 @@ mod tests {
         "virtualboy",
         "wii",
         "wonderswan",
+        "xbox",
     ];
 
     #[test]
-    fn the_file_loads_with_all_38_consoles() {
+    fn the_file_loads_with_all_39_consoles() {
         let f: File = serde_json::from_str(DATA).expect("consoles.json parses");
-        assert_eq!(f.systems.len(), 38);
-        assert_eq!(all().len(), 38);
+        assert_eq!(f.systems.len(), 39);
+        assert_eq!(all().len(), 39);
         assert!(license().is_some_and(|l| l.contains("Wikidata")));
         for c in all() {
             assert!(!c.name.is_empty(), "{}", c.id);

@@ -88,6 +88,26 @@ the hints, text cut by an edge, strings cut short), and every page was looked at
 - **The Mini V2's 1240x1080:** every state, both looks, three text sizes, compared picture for picture with the code
   before this work: unchanged (only the clock and fades differ between two runs of the same program).
 
+### Small panels (H700)
+
+`src/scaled_layout.rs` chooses a logical canvas for outputs at most 720 px tall. The physical window size wins;
+before a window exists, the device profile supplies it. Thus an H700 on a 1080p TV uses the native large layout.
+
+| Panel | Logical canvas | Final reduction |
+|---|---|---|
+| 640×480 | 1280×960 | 2:1 box average |
+| 720×480 | 1440×960 | 2:1 box average |
+| 720×720 | 1280×1280 | exact area coverage (16:9 reduction on each axis) |
+
+Other small outputs preserve their aspect ratio with at least 1280×960 logical pixels. Transient windows smaller
+than 64 px on either axis or with extreme aspect ratios (outside 1:2–4:1) keep native painting to bound allocation.
+Shelf, Cabinet, game cards, Settings, pause menus, quick settings, first start and safe mode share this path.
+Normalised touch positions map directly into the logical canvas, including quick settings; game touch is unchanged.
+The canvas and filter weights are reused; the scaler adds no timers or idle redraws. Existing animation and redraw
+rules still apply. Device speed, real-panel readability, rotation and suspend still need hardware checks.
+
+See [H700-SCALED-LAYOUT.md](H700-SCALED-LAYOUT.md) for snapshot findings, CPU measurements and their limits.
+
 `scripts/size-sweep.sh` is the tool for the next change: `SIZES="1920x1080 1280x960" scripts/size-sweep.sh` writes one
 `.problems` and one `.md5` file per size, look, text size and language; `KEEP=1` keeps the pictures.
 
@@ -238,6 +258,45 @@ ellipsis, the letter-jump overlay and animation-dependent preview text. The prev
   and the comparison summary in `screenshots/sm8550-validation/` (also gitignored).
 - **Cleanup:** both own virtual containers were removed. No real handheld was contacted, and nothing was merged.
 
+## Anbernic H700 handhelds: RG28XX and RG35XX SP (2026-10-27, experimental)
+
+ROCKNIX's **H700 image** (Allwinner H700, 4× Cortex-A53, Mali-G31, 1 GB, no swap). Computer tests only; research and
+sources are in `RESEARCH-H700-2026-10-27.md` (outside the repo). Both screens are **640×480** landscape for pocket-ui
+(the RG28XX's panel is 480×640, turned by sway). The UI uses the scaled logical layouts below. These profiles
+remain experimental until checked on the owner's devices.
+
+| Device / override | DT model / first compatible | What it has | What it lacks |
+|---|---|---|---|
+| `rg28xx` | `Anbernic RG28XX` / `anbernic,rg28xx` | D-pad, A/B/X/Y, L1/R1/L2/R2, Start, Select, Menu | Wi-Fi (rocknix.org lists none; the DTB enables a chip anyway, a chip that answers still wins), fan, touch, sticks, lid, stick lights |
+| `rg35xx-sp` | `Anbernic RG35XX SP` / `anbernic,rg35xx-sp` (the `-v2-panel` DTB names are accepted too) | the same buttons, **a lid** (`gpio-keys-lid`, `SW_LID`: the Flip 2's lid code applies), Wi-Fi | fan, touch, sticks, stick lights |
+
+Menu labels are Nintendo (A right; the pad is ROCKNIX's `H700 Gamepad`, A is `BTN_EAST`). About says
+"Anbernic RG28XX (experimental)" / "Anbernic RG35XX SP (experimental)".
+
+What pocket-ui does about what is missing (`Device::has_fan`, `has_touch`, `has_sticks`, `has_wifi`, `ram_mb`):
+
+- **Fan:** Settings › Playing › Performance & fan keeps the processor-speed row; the three fan rows read "No fan" and
+  their help line says "This device has no fan." The fan curve thread, the trip profiles and every fan sysfs write are
+  not started. Quick settings already hide the Fan row when the probe finds no fan.
+- **Stick lights:** the LEDs row is not in Settings (Look & feel).
+- **Touch:** nothing to hide; no touch device means no touch events. The vdev has no touch panel for these two.
+- **Tools:** the gamepad-calibration helper's `inputplumber` restart is skipped where the service file is absent (already
+  so); the H700 image has no InputPlumber.
+- **Wi-Fi (RG28XX without a chip):** the Wi-Fi page (first start and Settings) says "This device has no Wi-Fi. Everything
+  else works without it." and offers nothing to choose; the Settings row reads "None on this device"; Quick settings
+  show no Wi-Fi row; the radio is "absent" instead of the mock's pretend networks. Pages that need the network (Store,
+  downloads, updates) keep their own offline states.
+- **Time zone:** the H700 image has no `steamos-set-timezone`. Without it pocket-ui stores the zone with ROCKNIX's
+  `set_setting system.timezone`, restarts `tz-data.service` and calls `timedatectl set-timezone` (the helper's own
+  steps). The service restart is unverified on hardware.
+- **`/usr/sbin/quantum`** missing is tolerated already (`audio::restore_quantum` falls back to `pw-metadata`).
+- **Not done here:** a per-device core allowlist (N64/PSP/DC/NDS stay on ROCKNIX's emulators), the
+  install package's H700 acceptance, `unsquashfs` for OS updates.
+
+Hardware plan (needs the owner's devices): flash ROCKNIX's H700 image with the right DDR type, copy the model's DTB to
+`dtb.img`, check the SP's lid and sleep, the RG28XX's Wi-Fi (an `iw dev` and `ls /sys/class/net`), the battery source and
+the sway rotation of the RG28XX.
+
 ## AYN Odin 2 family (2026-10-27, experimental)
 
 All three use ROCKNIX's SM8550 aarch64 image and the existing 1920×1080 layout. Only computer tests have
@@ -260,6 +319,11 @@ The printed layouts are visible in AYN's [Mini product image](https://www.ayntec
 and [Portal product image](https://www.ayntec.com/cdn/shop/files/odin2-portal_1.jpg?v=1737092883).
 Unspecified menu layout follows those labels, including safe mode; explicit settings are preserved.
 Games retain the existing positional controls: HOME + right face button takes a screenshot (printed B on Mini/Portal).
+
+**Wii U and PS3 (2026-10-28, experimental).** ROCKNIX's SM8550 image ships Cemu (`start_cemu.sh`) and RPCS3
+(`rpcs3-sa`, `start_rpcs3.sh`); they are guests of the pause menu on these devices (`standalone::guest`,
+docs/BIG-EMULATORS.md "Wii U and PS3"): HOME → Continue/Quit, performance profile as for the other big emulators,
+no Save/Load (neither emulator has a control channel for states).
 
 **Sleep decision.** As of 2026-10-27, [PR #3126](https://github.com/ROCKNIX/distribution/pull/3126) is open,
 unmerged. Its tested-device list describes the proposed branch, not stock `next`.

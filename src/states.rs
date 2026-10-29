@@ -69,6 +69,14 @@ impl StateSet {
         }
     }
 
+    /// hakuX in RetroArch: its own state files `<game>.state1` to `.state8`, the auto state RetroArch's `.state.auto` (slot -1)
+    /// and "Before load" in slot 98. Only used once the core has save states (`hakux::core_has_states`).
+    pub fn hakux(base: &str) -> StateSet {
+        let dir = Path::new(crate::slots::STATES_DIR).join("xbox");
+        let file = |slot: i32| crate::hakux::state_file(&dir, base, slot);
+        StateSet { auto: vec![file(crate::hakux::AUTO_SLOT)], undo: file(crate::hakux::UNDO_SLOT), slots: (1..=8).map(file).collect() }
+    }
+
     /// Dolphin's transit slot (`.s00`).
     pub fn dolphin_transit(system: &str, base: &str) -> PathBuf {
         Path::new(crate::slots::STATES_DIR).join(system).join(format!("{base}.s00"))

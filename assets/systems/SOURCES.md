@@ -50,6 +50,7 @@ thumbnail of each was used.
 | virtualboy | https://commons.wikimedia.org/wiki/File:Virtual-Boy-Set.png | Evan-Amos | Public domain | 2026-10-27 |
 | wii | https://commons.wikimedia.org/wiki/File:Wii-console.jpg | Evan-Amos | Public domain | 2026-10-22 |
 | wonderswan | https://commons.wikimedia.org/wiki/File:WonderSwan-Black-Left.jpg | Evan-Amos | Public domain | 2026-10-22 |
+| xbox | https://commons.wikimedia.org/wiki/File:Xbox-Console-FL.jpg | Evan-Amos | Public domain | 2026-10-28 |
 
 The first Dreamcast choice, `Dreamcast-Console-Set.jpg`, is CC BY-SA 3.0 on Commons, so the public-domain
 `Sega-Dreamcast-Console-FL.jpg` (console without controller) was used instead.
@@ -78,6 +79,10 @@ orange button labels on the Lynx; the Atari 7800 logo; NEO GEO POCKET COLOR and 
 the visor, the pad and the stand; JAGUAR and ATARI; 3DO and GoldStar; FAMILY COMPUTER, Nintendo and the Disk System
 lettering; COLECOVISION and the Coleco badge; INTELLIVISION / Mattel Electronics; the Vectrex lettering. For
 slanted strips of lettering `tools/fix.py` takes a polygon (`poly`) instead of a box.
+
+The `xbox` picture (added 2026-10-28; the original Xbox, console only) was made the same way from `Xbox-Console-FL.jpg`. The Xbox
+lettering on the jewel and on the front plate was painted over, as were the small markings on the front and the back edge.
+PixelLab made three conversions (3 credits); the first was kept, the two others are in `assets/pixellab/_check/`.
 
 What was changed in every picture above:
 

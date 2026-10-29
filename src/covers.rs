@@ -1,10 +1,10 @@
 //! Box art from the libretro thumbnail collection (thumbnails.libretro.com): free, no account.
-//! Games are matched by the name their checksum gives (`rom_id`), else by file name (No-Intro style names match
-//! best), and cached on the SD card in `<data>/covers/<system>/<rom stem>.png`. Network calls use the system's curl
-//! and block.
+//! Games are matched by the name their checksum gives (`rom_id`), or the name the serial on a PlayStation disc gives
+//! (`disc_serial`), else by file name (No-Intro style names match best), and cached on the SD card in
+//! `<data>/covers/<system>/<rom stem>.png`. Network calls use the system's curl and block.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use crate::platform::http::{curl_listing, curl_with};
 
 const BASE: &str = "https://thumbnails.libretro.com";
 
@@ -208,33 +208,6 @@ pub fn parse_index(html: &str) -> Vec<String> {
         .filter(|href| href.ends_with(".png"))
         .map(|href| percent_decode(href.trim_end_matches(".png")))
         .collect()
-}
-
-fn curl(url: &str, out: Option<&Path>) -> Option<Vec<u8>> {
-    curl_with(url, out, &[])
-}
-
-/// curl exit code 2: it was started wrong, here by an option this build lacks (`--compressed` without zlib).
-const CURL_BAD_OPTION: i32 = 2;
-
-fn curl_with(url: &str, out: Option<&Path>, extra: &[&str]) -> Option<Vec<u8>> {
-    let mut cmd = Command::new("curl");
-    cmd.args(["-fsSL", "--max-time", "60"]).args(extra).arg(url);
-    if let Some(path) = out {
-        cmd.arg("-o").arg(path);
-    }
-    let o = cmd.output().ok()?;
-    o.status.success().then_some(o.stdout)
-}
-
-/// A directory listing of the collection. Asked for compressed (a listing is 1.5 MB of HTML, 120 KB gzipped),
-/// plain when this curl can't.
-fn curl_listing(url: &str) -> Option<Vec<u8>> {
-    let o = Command::new("curl").args(["-fsSL", "--max-time", "60", "--compressed", url]).output().ok()?;
-    if o.status.success() {
-        return Some(o.stdout);
-    }
-    (o.status.code() == Some(CURL_BAD_OPTION)).then(|| curl(url, None)).flatten()
 }
 
 /// A text file from the web (a game list of libretro-database, `rom_id`), asked for compressed; None offline.

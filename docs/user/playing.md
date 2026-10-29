@@ -2,7 +2,8 @@
 
 ## Home
 
-Home is one list, from top to bottom:
+Home is one shelf, from left to right (in the Shelf look; the other looks show the same entries as a list, top to
+bottom):
 
 1. **Curator**, your library by feel: the Lens, your smart shelves, your stickers and Surprise me
    ([Curator](curator.md#curator)). Its row says which game it picked for you today ("Today: Super Metroid"). It is
@@ -11,7 +12,7 @@ Home is one list, from top to bottom:
    under it, so Continue is still one press away, Search is one press up and Curator two. The Cabinet look has no
    Search row: Up on its top shelf opens the search.
 3. **Your recent games**, up to six. The first one is the game you played last; in the Shelf look
-   it is labelled **Continue**.
+   it is labelled **Continue**, and Home opens on it.
 4. **Favourites**, the games you starred with Y, by name. The row appears once you star a game and
    goes away when you unstar the last one.
 5. The **smart shelves and stickers you pinned to Home**, each as a row of its own. Each part of Curator can be
@@ -23,8 +24,8 @@ Home is one list, from top to bottom:
 7. **Your systems**, in alphabetical order. Only systems with at least one game are shown, and not the ones you
    hid in [Systems on the shelf](settings.md#systems-on-the-shelf). A system opens its own list of games.
 
-**What the rows show when you pick them.** Where a game shows its box art (the pulled-out label in the Shelf look,
-the panel in Split), the other rows show games too:
+**What the rows show when you pick them.** Where a game shows its box art (the case shown above the shelf in the
+Shelf look, the panel in Split), the other rows show games too:
 
 - **Curator**: the cover of today's pick with "Today" under it, and a few of the games waiting for you: the ones
   you started and haven't played for a month ("4 to rediscover"), or, when there are none, the ones you never
@@ -59,8 +60,9 @@ shows the time alone, and while the clock has never been set (no network time ye
 After a game, with [Sync](sync.md) on, a small line next to it says whether the new saves were passed on ("Saves
 synced").
 
-A name too long for its row scrolls slowly sideways while it is selected, after a short pause, and
-starts again from the beginning; the other rows end in "…". A starred game has a small star after its
+A name too long for its row ends in "…" at rest. After at least 1.5 seconds on the selected row it
+scrolls slowly to the end, pauses and returns to the beginning. Moving to another row resets this pause;
+the other rows keep their ellipsis. A starred game has a small star after its
 name.
 
 ## Finding a game
@@ -99,20 +101,20 @@ choose is remembered. Each look comes dark or light: **Y** on the same page ([Ap
 
 | Look | What it shows |
 |---|---|
-| **Shelf** | Games as cartridge spines. The one you pick slides out. |
+| **Shelf** | Your games standing on a shelf. The one you pick shows its cover. |
 | **Minimal** | Just the names, nothing else. |
 | **Split** | List on the left, details on the right. |
 | **Cards** | Big cards you flip through sideways. |
 | **Cabinet** | Your games in their cases on a wooden shelf. Pull one out to see its cover. |
 
-Cover art, when you have it, appears on the pulled-out label (Shelf), in the detail panel (Split),
+Cover art, when you have it, appears on the front of the case shown above the shelf (Shelf), in the detail panel (Split),
 on the cards (Cards) and on the front of the case you pull out (Cabinet), whose spine also takes the
 cover's colour. Minimal shows names only. See [Extras](extras.md#cover-art). In Split the picture also changes
 by itself: after you stay on a game for a moment it fades from the box art to the game running and to the title
 screen, when you have them ([Pictures](extras.md#pictures)); with Motion Off it stays on the box art. Entries without a picture
 (Curator's Lens, shelves and stickers, Favourites, Search) show their count on the card itself in Cards
 ("70 games · 22 filters"); in Split, Curator, Favourites and the pinned rows show their covers in the panel, as on the
-Shelf look's label (above).
+Shelf look (below).
 
 In the Cabinet, every game stands in the case it came in, each system its own: the grey Super Nintendo
 cartridge with its grips, the wide Nintendo 64 one, the tall NES one, the small Game Boy and Game Boy Advance ones,
@@ -120,14 +122,28 @@ the Mega Drive's clamshell case, the Master System's and Game Gear's case with t
 jewel case, the light Saturn and Dreamcast case, the tall black PS2 case, the GameCube's, the white Wii case, the
 slim PSP case, the DS and 3DS card boxes, and a plain cartridge or disc case for any other system. Each spine takes
 its colours from the game's cover and has its name on it; a game without a cover has its system's colour. Tall
-cases stand taller, cartridges lower, all on the shelf's board. Here and there a plant, a lamp or a bookend stands
-beside the games, never in front of one. The top shelf holds the recent games, the next one your Favourites, then
+cases stand taller, cartridges lower, all on the shelf's board. Where a shelf has room, a bookend holds its games up
+and a plant, a lamp or a cactus stands beside them, never in front of one. The case you pick comes out of the shelf
+and stands on top of the cabinet, right over its shelf, turned to its cover; the whole cover shows, never cut. Under
+the picked shelf you see the next ones, as many as fit whole. The top shelf holds the recent games, the next one your Favourites, then
 come Curator's shelves, then one shelf per system. A starts the game: the cartridge or disc goes into the console.
 
-In the Shelf look, a game is its case lying in a stack, spine to you: the same cases as in the Cabinet, a DVD case as
-long as the row, a cartridge shorter, its label in a quiet shade of its cover's colour. The one you pick slides out
-into its label, and its case turns to show you its cover (at once with Motion Off). A game without a cover keeps the
-label as before.
+### Starting a game
+
+In the Cabinet and the Shelf looks, A on a game starts it at once, and while the emulator loads its case goes into
+the console's pixel picture: a cartridge goes into the slot, a disc slides out of its case and in, a short click
+(with menu sounds on) and a glow as it is in. The game does not wait for any of it: when it is ready first, it simply
+comes up over the rest. Any button skips it. Settings → Look & feel → **Launch animation** turns it off; the other
+looks never have it.
+
+In the **Shelf** look, the one pocket-ui starts with, everything stands on one shelf, seen from the spine: each game
+in its system's real case (the same cases as in the Cabinet below), its spine in its cover's colour with its name
+on it; a long name ends in "…". Your systems, Curator, Favourites and Search stand there as plain boxes in their
+colours, a system with its short name ("SNES"). Left and Right (or Up and Down) move along the shelf, L1 and R1 five at a
+time. The one you pick rises out of the row and is shown large above the shelf, turned to its front with the cover
+(at once with Motion Off); beside it are its name and what is known about it: when you last played it, a system's facts,
+the covers of Curator's pick or your Favourites. A game without a cover shows a front with its name printed on it.
+Where a shelf has room left, a bookend holds the games up and a plant or a lamp stands beside them.
 
 Curator in the Cabinet ([Curator](curator.md#curator)): the **Curator** shelf holds a box for the Lens and one for
 each smart shelf and sticker (Y pins one to Home, X opens its options, as in the Curator list). A on a box opens

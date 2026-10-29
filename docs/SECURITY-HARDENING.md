@@ -117,7 +117,12 @@ for good. A key-only sshd that runs while the switch is off is not wanted.
    (sshd still active, no `/run/pocket-ui-ssh-on`, no password file).
 3. Release devices: `ssh.enabled=0` (ROCKNIX's default; set explicitly in the image or at first start),
    so sshd is off from the next boot. Until a user switches remote access on, root's password stays
-   `rocknix`, but nothing listens on 22.
+   `rocknix`, but nothing listens on 22. **SD card image (checked 2026-10-28):** ROCKNIX 20261001's
+   `/usr/config/system/configs/system.cfg` has `ssh.enabled=0`, `samba.enabled=0`, `syncthing.enabled=0`; SYSTEM has
+   no `authorized_keys` and no host keys; the GRUB command line has no `ssh`; STORAGE has no `dev-ssh`, `.ssh` or
+   keys. `scripts/check-image.sh` checks all of it. On a fresh card nothing listens on 22, 139/445 or 8384 until the
+   player turns Remote access or file sharing on in pocket-ui, which sets a per-device password. Only
+   EmulationStation's own SSH switch would start sshd with `rocknix`; the image notes say so.
 4. First switch-on per device: password created and set (`setrootpass`), sshd started for the session.
 5. 30 idle minutes or a restart: off again.
 6. Optional, all devices: rpcbind and LLMNR off (below), without the key-only sshd part on release devices

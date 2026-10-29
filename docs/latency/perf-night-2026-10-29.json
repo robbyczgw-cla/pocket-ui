@@ -1,0 +1,2257 @@
+{
+ "date": "2026-10-29",
+ "first_box_2000_games": {
+  "after": {
+   "config": {
+    "asleep": 15,
+    "cold": false,
+    "cpu_secs": 3.0,
+    "cycles": 1,
+    "gap": 150,
+    "look": "",
+    "moves": 0,
+    "nav_system": "",
+    "opens": 3,
+    "runs": 3,
+    "settle": 2.0,
+    "starts": 3,
+    "systems": [
+     "gbc:ucity"
+    ],
+    "wake": false,
+    "wakes": 3,
+    "warmup": false
+   },
+   "meta": {
+    "commit": "after",
+    "cpu_source": "stat",
+    "date": "2026-10-28T23:31:49+0000",
+    "games": "2000",
+    "host": "macbook-air-m4",
+    "kernel": "6.8.0-117-generic",
+    "seconds": 83,
+    "target": "vdev"
+   },
+   "metrics": {
+    "close.card": {
+     "runs": [
+      1.503,
+      1.92,
+      1.839
+     ],
+     "spread": 0.417,
+     "unit": "ms",
+     "value": 1.839
+    },
+    "close.pause_menu": {
+     "runs": [
+      1.924,
+      5.227,
+      1.17
+     ],
+     "spread": 4.057,
+     "unit": "ms",
+     "value": 1.924
+    },
+    "close.quick": {
+     "runs": [
+      1.654,
+      1.531,
+      1.12
+     ],
+     "spread": 0.534,
+     "unit": "ms",
+     "value": 1.531
+    },
+    "cpu.behind_game": {
+     "runs": [
+      0.0,
+      0.0,
+      0.333
+     ],
+     "spread": 0.333,
+     "unit": "%",
+     "value": 0.0
+    },
+    "cpu.shelf_idle": {
+     "runs": [
+      0.333,
+      0.0,
+      0.0
+     ],
+     "spread": 0.333,
+     "unit": "%",
+     "value": 0.0
+    },
+    "launch.gbc": {
+     "runs": [
+      55.716,
+      31.19,
+      56.035
+     ],
+     "spread": 24.845,
+     "unit": "ms",
+     "value": 55.716
+    },
+    "open.card": {
+     "runs": [
+      20.309,
+      20.118,
+      15.299
+     ],
+     "spread": 5.01,
+     "unit": "ms",
+     "value": 20.118
+    },
+    "open.card_first": {
+     "runs": [
+      15.628,
+      16.402,
+      18.245
+     ],
+     "spread": 2.617,
+     "unit": "ms",
+     "value": 16.402
+    },
+    "open.pause_menu": {
+     "runs": [
+      23.819,
+      20.841,
+      14.589
+     ],
+     "spread": 9.23,
+     "unit": "ms",
+     "value": 20.841
+    },
+    "open.pause_menu_again": {
+     "runs": [
+      12.567,
+      3.872,
+      20.225
+     ],
+     "spread": 16.353,
+     "unit": "ms",
+     "value": 12.567
+    },
+    "open.quick": {
+     "runs": [
+      3.425,
+      3.118,
+      1.598
+     ],
+     "spread": 1.827,
+     "unit": "ms",
+     "value": 3.118
+    },
+    "open.settings": {
+     "runs": [
+      1.227,
+      1.522,
+      1.364
+     ],
+     "spread": 0.295,
+     "unit": "ms",
+     "value": 1.364
+    },
+    "open.switcher": {
+     "runs": [
+      4.478,
+      2.003,
+      1.997
+     ],
+     "spread": 2.481,
+     "unit": "ms",
+     "value": 2.003
+    },
+    "quit.to_shelf": {
+     "runs": [
+      9.561,
+      7.448,
+      8.913
+     ],
+     "spread": 2.113,
+     "unit": "ms",
+     "value": 8.913
+    },
+    "start.cold": {
+     "runs": [
+      26.428,
+      25.242,
+      20.422
+     ],
+     "spread": 6.006,
+     "unit": "ms",
+     "value": 25.242
+    },
+    "start.pads": {
+     "runs": [
+      0.391,
+      0.79,
+      0.786
+     ],
+     "spread": 0.399,
+     "unit": "ms",
+     "value": 0.786
+    },
+    "start.process": {
+     "runs": [
+      25.432,
+      23.792,
+      18.176
+     ],
+     "spread": 7.256,
+     "unit": "ms",
+     "value": 23.792
+    }
+   },
+   "schema": 1
+  },
+  "before": {
+   "config": {
+    "asleep": 15,
+    "cold": false,
+    "cpu_secs": 3.0,
+    "cycles": 1,
+    "gap": 150,
+    "look": "",
+    "moves": 0,
+    "nav_system": "",
+    "opens": 3,
+    "runs": 3,
+    "settle": 2.0,
+    "starts": 3,
+    "systems": [
+     "gbc:ucity"
+    ],
+    "wake": false,
+    "wakes": 3,
+    "warmup": false
+   },
+   "meta": {
+    "commit": "before",
+    "cpu_source": "stat",
+    "date": "2026-10-28T23:20:46+0000",
+    "games": "2000",
+    "host": "macbook-air-m4",
+    "kernel": "6.8.0-117-generic",
+    "seconds": 83,
+    "target": "vdev"
+   },
+   "metrics": {
+    "close.card": {
+     "runs": [
+      2.066,
+      3.196,
+      3.259
+     ],
+     "spread": 1.193,
+     "unit": "ms",
+     "value": 3.196
+    },
+    "close.pause_menu": {
+     "runs": [
+      2.2,
+      2.114,
+      3.377
+     ],
+     "spread": 1.263,
+     "unit": "ms",
+     "value": 2.2
+    },
+    "close.quick": {
+     "runs": [
+      1.043,
+      1.887,
+      1.074
+     ],
+     "spread": 0.844,
+     "unit": "ms",
+     "value": 1.074
+    },
+    "cpu.behind_game": {
+     "runs": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "spread": 0.0,
+     "unit": "%",
+     "value": 0.0
+    },
+    "cpu.shelf_idle": {
+     "runs": [
+      0.333,
+      0.332,
+      0.0
+     ],
+     "spread": 0.333,
+     "unit": "%",
+     "value": 0.332
+    },
+    "launch.gbc": {
+     "runs": [
+      58.169,
+      57.45,
+      56.585
+     ],
+     "spread": 1.584,
+     "unit": "ms",
+     "value": 57.45
+    },
+    "open.card": {
+     "runs": [
+      20.239,
+      21.917,
+      21.619
+     ],
+     "spread": 1.678,
+     "unit": "ms",
+     "value": 21.619
+    },
+    "open.card_first": {
+     "runs": [
+      44.768,
+      45.441,
+      42.023
+     ],
+     "spread": 3.418,
+     "unit": "ms",
+     "value": 44.768
+    },
+    "open.pause_menu": {
+     "runs": [
+      18.951,
+      15.223,
+      27.158
+     ],
+     "spread": 11.935,
+     "unit": "ms",
+     "value": 18.951
+    },
+    "open.pause_menu_again": {
+     "runs": [
+      8.707,
+      9.069,
+      4.95
+     ],
+     "spread": 4.119,
+     "unit": "ms",
+     "value": 8.707
+    },
+    "open.quick": {
+     "runs": [
+      1.899,
+      2.031,
+      2.307
+     ],
+     "spread": 0.408,
+     "unit": "ms",
+     "value": 2.031
+    },
+    "open.settings": {
+     "runs": [
+      2.356,
+      1.39,
+      2.056
+     ],
+     "spread": 0.966,
+     "unit": "ms",
+     "value": 2.056
+    },
+    "open.switcher": {
+     "runs": [
+      2.383,
+      3.821,
+      4.901
+     ],
+     "spread": 2.518,
+     "unit": "ms",
+     "value": 3.821
+    },
+    "quit.to_shelf": {
+     "runs": [
+      11.071,
+      10.361,
+      9.754
+     ],
+     "spread": 1.317,
+     "unit": "ms",
+     "value": 10.361
+    },
+    "start.cold": {
+     "runs": [
+      23.118,
+      34.223,
+      33.47
+     ],
+     "spread": 11.105,
+     "unit": "ms",
+     "value": 33.47
+    },
+    "start.pads": {
+     "runs": [
+      0.572,
+      0.448,
+      0.792
+     ],
+     "spread": 0.344,
+     "unit": "ms",
+     "value": 0.572
+    },
+    "start.process": {
+     "runs": [
+      22.066,
+      33.379,
+      32.486
+     ],
+     "spread": 11.313,
+     "unit": "ms",
+     "value": 32.486
+    }
+   },
+   "schema": 1
+  }
+ },
+ "large_libraries": [
+  {
+   "after": {
+    "latency": {
+     "config": {
+      "asleep": 15,
+      "cold": false,
+      "cpu_secs": 2.0,
+      "cycles": 0,
+      "gap": 150,
+      "look": "split",
+      "moves": 60,
+      "nav_system": "gbc",
+      "opens": 2,
+      "runs": 3,
+      "settle": 2.0,
+      "starts": 3,
+      "systems": [],
+      "wake": false,
+      "wakes": 3,
+      "warmup": false
+     },
+     "meta": {
+      "commit": "11e3ef4",
+      "cpu_source": "stat",
+      "date": "2026-10-28T23:24:18+0000",
+      "games": "2000",
+      "host": "macbook-air-m4",
+      "kernel": "6.8.0-117-generic",
+      "seconds": 65,
+      "target": "vdev"
+     },
+     "metrics": {
+      "close.quick": {
+       "runs": [
+        2.819,
+        2.898,
+        1.612
+       ],
+       "spread": 1.286,
+       "unit": "ms",
+       "value": 2.819
+      },
+      "cpu.shelf_idle": {
+       "runs": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "spread": 0.0,
+       "unit": "%",
+       "value": 0.0
+      },
+      "nav.p50": {
+       "runs": [
+        2.375,
+        2.371,
+        2.46
+       ],
+       "spread": 0.089,
+       "unit": "ms",
+       "value": 2.375
+      },
+      "nav.p95": {
+       "runs": [
+        3.803,
+        4.103,
+        4.257
+       ],
+       "spread": 0.454,
+       "unit": "ms",
+       "value": 4.103
+      },
+      "open.quick": {
+       "runs": [
+        4.425,
+        3.022,
+        3.923
+       ],
+       "spread": 1.402,
+       "unit": "ms",
+       "value": 3.923
+      },
+      "open.settings": {
+       "runs": [
+        3.047,
+        2.524,
+        2.881
+       ],
+       "spread": 0.522,
+       "unit": "ms",
+       "value": 2.881
+      },
+      "open.switcher": {
+       "runs": [
+        11.896,
+        11.884,
+        7.272
+       ],
+       "spread": 4.624,
+       "unit": "ms",
+       "value": 11.884
+      },
+      "start.cold": {
+       "runs": [
+        29.764,
+        31.243,
+        30.279
+       ],
+       "spread": 1.479,
+       "unit": "ms",
+       "value": 30.279
+      },
+      "start.pads": {
+       "runs": [
+        0.985,
+        1.085,
+        1.09
+       ],
+       "spread": 0.105,
+       "unit": "ms",
+       "value": 1.085
+      },
+      "start.process": {
+       "runs": [
+        26.947,
+        29.324,
+        27.001
+       ],
+       "spread": 2.377,
+       "unit": "ms",
+       "value": 27.001
+      }
+     },
+     "schema": 1
+    },
+    "memory": {
+     "peak_rss_kib": 85712,
+     "period_ms": 100,
+     "samples": 603
+    }
+   },
+   "before": {
+    "latency": {
+     "config": {
+      "asleep": 15,
+      "cold": false,
+      "cpu_secs": 2.0,
+      "cycles": 0,
+      "gap": 150,
+      "look": "split",
+      "moves": 60,
+      "nav_system": "gbc",
+      "opens": 2,
+      "runs": 3,
+      "settle": 2.0,
+      "starts": 3,
+      "systems": [],
+      "wake": false,
+      "wakes": 3,
+      "warmup": false
+     },
+     "meta": {
+      "commit": "e5a7d29+bench",
+      "cpu_source": "stat",
+      "date": "2026-10-28T23:11:43+0000",
+      "games": "2000",
+      "host": "macbook-air-m4",
+      "kernel": "6.8.0-117-generic",
+      "seconds": 69,
+      "target": "vdev"
+     },
+     "metrics": {
+      "close.quick": {
+       "runs": [
+        2.473,
+        2.787,
+        2.519
+       ],
+       "spread": 0.314,
+       "unit": "ms",
+       "value": 2.519
+      },
+      "cpu.shelf_idle": {
+       "runs": [
+        0.0,
+        0.0,
+        0.498
+       ],
+       "spread": 0.498,
+       "unit": "%",
+       "value": 0.0
+      },
+      "nav.p50": {
+       "runs": [
+        23.774,
+        23.657,
+        24.196
+       ],
+       "spread": 0.539,
+       "unit": "ms",
+       "value": 23.774
+      },
+      "nav.p95": {
+       "runs": [
+        25.217,
+        25.515,
+        25.692
+       ],
+       "spread": 0.475,
+       "unit": "ms",
+       "value": 25.515
+      },
+      "open.quick": {
+       "runs": [
+        4.572,
+        3.761,
+        4.143
+       ],
+       "spread": 0.811,
+       "unit": "ms",
+       "value": 4.143
+      },
+      "open.settings": {
+       "runs": [
+        3.162,
+        3.357,
+        3.002
+       ],
+       "spread": 0.355,
+       "unit": "ms",
+       "value": 3.162
+      },
+      "open.switcher": {
+       "runs": [
+        3.173,
+        2.616,
+        2.753
+       ],
+       "spread": 0.556,
+       "unit": "ms",
+       "value": 2.753
+      },
+      "start.cold": {
+       "runs": [
+        30.25,
+        31.901,
+        33.373
+       ],
+       "spread": 3.123,
+       "unit": "ms",
+       "value": 31.901
+      },
+      "start.pads": {
+       "runs": [
+        1.142,
+        1.252,
+        1.274
+       ],
+       "spread": 0.132,
+       "unit": "ms",
+       "value": 1.252
+      },
+      "start.process": {
+       "runs": [
+        27.305,
+        29.152,
+        31.23
+       ],
+       "spread": 3.925,
+       "unit": "ms",
+       "value": 29.152
+      }
+     },
+     "schema": 1
+    },
+    "memory": {
+     "peak_rss_kib": 90592,
+     "period_ms": 100,
+     "samples": 635
+    }
+   },
+   "cover_pixels": [
+    1200,
+    1700
+   ],
+   "games": 2000,
+   "look": "split"
+  },
+  {
+   "after": {
+    "latency": {
+     "config": {
+      "asleep": 15,
+      "cold": false,
+      "cpu_secs": 2.0,
+      "cycles": 0,
+      "gap": 150,
+      "look": "cabinet",
+      "moves": 60,
+      "nav_system": "gbc",
+      "opens": 2,
+      "runs": 3,
+      "settle": 2.0,
+      "starts": 3,
+      "systems": [],
+      "wake": false,
+      "wakes": 3,
+      "warmup": false
+     },
+     "meta": {
+      "commit": "11e3ef4",
+      "cpu_source": "stat",
+      "date": "2026-10-28T23:25:29+0000",
+      "games": "2000",
+      "host": "macbook-air-m4",
+      "kernel": "6.8.0-117-generic",
+      "seconds": 64,
+      "target": "vdev"
+     },
+     "metrics": {
+      "close.quick": {
+       "runs": [
+        5.189,
+        6.251,
+        6.338
+       ],
+       "spread": 1.148,
+       "unit": "ms",
+       "value": 6.251
+      },
+      "cpu.shelf_idle": {
+       "runs": [
+        0.0,
+        0.497,
+        0.0
+       ],
+       "spread": 0.497,
+       "unit": "%",
+       "value": 0.0
+      },
+      "nav.p50": {
+       "runs": [
+        8.296,
+        8.536,
+        8.938
+       ],
+       "spread": 0.642,
+       "unit": "ms",
+       "value": 8.536
+      },
+      "nav.p95": {
+       "runs": [
+        14.349,
+        13.766,
+        14.142
+       ],
+       "spread": 0.583,
+       "unit": "ms",
+       "value": 14.142
+      },
+      "open.quick": {
+       "runs": [
+        5.807,
+        3.727,
+        4.924
+       ],
+       "spread": 2.08,
+       "unit": "ms",
+       "value": 4.924
+      },
+      "open.settings": {
+       "runs": [
+        1.23,
+        2.938,
+        1.213
+       ],
+       "spread": 1.725,
+       "unit": "ms",
+       "value": 1.23
+      },
+      "open.switcher": {
+       "runs": [
+        7.587,
+        6.058,
+        8.178
+       ],
+       "spread": 2.12,
+       "unit": "ms",
+       "value": 7.587
+      },
+      "start.cold": {
+       "runs": [
+        31.523,
+        33.532,
+        32.379
+       ],
+       "spread": 2.009,
+       "unit": "ms",
+       "value": 32.379
+      },
+      "start.pads": {
+       "runs": [
+        0.337,
+        0.398,
+        0.901
+       ],
+       "spread": 0.564,
+       "unit": "ms",
+       "value": 0.398
+      },
+      "start.process": {
+       "runs": [
+        29.235,
+        32.569,
+        30.502
+       ],
+       "spread": 3.334,
+       "unit": "ms",
+       "value": 30.502
+      }
+     },
+     "schema": 1
+    },
+    "memory": {
+     "peak_rss_kib": 95864,
+     "period_ms": 100,
+     "samples": 597
+    }
+   },
+   "before": {
+    "latency": {
+     "config": {
+      "asleep": 15,
+      "cold": false,
+      "cpu_secs": 2.0,
+      "cycles": 0,
+      "gap": 150,
+      "look": "cabinet",
+      "moves": 60,
+      "nav_system": "gbc",
+      "opens": 2,
+      "runs": 3,
+      "settle": 2.0,
+      "starts": 3,
+      "systems": [],
+      "wake": false,
+      "wakes": 3,
+      "warmup": false
+     },
+     "meta": {
+      "commit": "e5a7d29+bench",
+      "cpu_source": "stat",
+      "date": "2026-10-28T23:12:54+0000",
+      "games": "2000",
+      "host": "macbook-air-m4",
+      "kernel": "6.8.0-117-generic",
+      "seconds": 65,
+      "target": "vdev"
+     },
+     "metrics": {
+      "close.quick": {
+       "runs": [
+        7.795,
+        8.226,
+        8.242
+       ],
+       "spread": 0.447,
+       "unit": "ms",
+       "value": 8.226
+      },
+      "cpu.shelf_idle": {
+       "runs": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "spread": 0.0,
+       "unit": "%",
+       "value": 0.0
+      },
+      "nav.p50": {
+       "runs": [
+        9.331,
+        9.572,
+        9.584
+       ],
+       "spread": 0.253,
+       "unit": "ms",
+       "value": 9.572
+      },
+      "nav.p95": {
+       "runs": [
+        16.264,
+        16.928,
+        16.32
+       ],
+       "spread": 0.664,
+       "unit": "ms",
+       "value": 16.32
+      },
+      "open.quick": {
+       "runs": [
+        10.03,
+        9.511,
+        10.12
+       ],
+       "spread": 0.609,
+       "unit": "ms",
+       "value": 10.03
+      },
+      "open.settings": {
+       "runs": [
+        2.109,
+        3.28,
+        3.626
+       ],
+       "spread": 1.517,
+       "unit": "ms",
+       "value": 3.28
+      },
+      "open.switcher": {
+       "runs": [
+        2.413,
+        3.207,
+        3.221
+       ],
+       "spread": 0.808,
+       "unit": "ms",
+       "value": 3.207
+      },
+      "start.cold": {
+       "runs": [
+        37.647,
+        37.787,
+        38.716
+       ],
+       "spread": 1.069,
+       "unit": "ms",
+       "value": 37.787
+      },
+      "start.pads": {
+       "runs": [
+        1.092,
+        0.999,
+        0.915
+       ],
+       "spread": 0.177,
+       "unit": "ms",
+       "value": 0.999
+      },
+      "start.process": {
+       "runs": [
+        34.647,
+        35.767,
+        35.975
+       ],
+       "spread": 1.328,
+       "unit": "ms",
+       "value": 35.767
+      }
+     },
+     "schema": 1
+    },
+    "memory": {
+     "peak_rss_kib": 90036,
+     "period_ms": 100,
+     "samples": 597
+    }
+   },
+   "cover_pixels": [
+    1200,
+    1700
+   ],
+   "games": 2000,
+   "look": "cabinet"
+  },
+  {
+   "after": {
+    "latency": {
+     "config": {
+      "asleep": 15,
+      "cold": false,
+      "cpu_secs": 2.0,
+      "cycles": 0,
+      "gap": 150,
+      "look": "split",
+      "moves": 60,
+      "nav_system": "gbc",
+      "opens": 2,
+      "runs": 3,
+      "settle": 2.0,
+      "starts": 3,
+      "systems": [],
+      "wake": false,
+      "wakes": 3,
+      "warmup": false
+     },
+     "meta": {
+      "commit": "11e3ef4",
+      "cpu_source": "stat",
+      "date": "2026-10-28T23:26:40+0000",
+      "games": "5000",
+      "host": "macbook-air-m4",
+      "kernel": "6.8.0-117-generic",
+      "seconds": 65,
+      "target": "vdev"
+     },
+     "metrics": {
+      "close.quick": {
+       "runs": [
+        1.649,
+        0.976,
+        1.19
+       ],
+       "spread": 0.673,
+       "unit": "ms",
+       "value": 1.19
+      },
+      "cpu.shelf_idle": {
+       "runs": [
+        0.497,
+        0.0,
+        0.0
+       ],
+       "spread": 0.497,
+       "unit": "%",
+       "value": 0.0
+      },
+      "nav.p50": {
+       "runs": [
+        1.322,
+        0.993,
+        1.366
+       ],
+       "spread": 0.373,
+       "unit": "ms",
+       "value": 1.322
+      },
+      "nav.p95": {
+       "runs": [
+        2.372,
+        2.596,
+        2.807
+       ],
+       "spread": 0.435,
+       "unit": "ms",
+       "value": 2.596
+      },
+      "open.quick": {
+       "runs": [
+        3.631,
+        3.136,
+        1.582
+       ],
+       "spread": 2.048,
+       "unit": "ms",
+       "value": 3.136
+      },
+      "open.settings": {
+       "runs": [
+        2.11,
+        3.011,
+        1.224
+       ],
+       "spread": 1.787,
+       "unit": "ms",
+       "value": 2.11
+      },
+      "open.switcher": {
+       "runs": [
+        8.012,
+        5.891,
+        8.553
+       ],
+       "spread": 2.662,
+       "unit": "ms",
+       "value": 8.012
+      },
+      "start.cold": {
+       "runs": [
+        24.055,
+        24.941,
+        24.997
+       ],
+       "spread": 0.942,
+       "unit": "ms",
+       "value": 24.941
+      },
+      "start.pads": {
+       "runs": [
+        0.384,
+        0.505,
+        0.604
+       ],
+       "spread": 0.22,
+       "unit": "ms",
+       "value": 0.505
+      },
+      "start.process": {
+       "runs": [
+        23.069,
+        23.882,
+        23.267
+       ],
+       "spread": 0.813,
+       "unit": "ms",
+       "value": 23.267
+      }
+     },
+     "schema": 1
+    },
+    "memory": {
+     "peak_rss_kib": 94580,
+     "period_ms": 100,
+     "samples": 602
+    }
+   },
+   "before": {
+    "latency": {
+     "config": {
+      "asleep": 15,
+      "cold": false,
+      "cpu_secs": 2.0,
+      "cycles": 0,
+      "gap": 150,
+      "look": "split",
+      "moves": 60,
+      "nav_system": "gbc",
+      "opens": 2,
+      "runs": 3,
+      "settle": 2.0,
+      "starts": 3,
+      "systems": [],
+      "wake": false,
+      "wakes": 3,
+      "warmup": false
+     },
+     "meta": {
+      "commit": "e5a7d29+bench",
+      "cpu_source": "stat",
+      "date": "2026-10-28T23:14:09+0000",
+      "games": "5000",
+      "host": "macbook-air-m4",
+      "kernel": "6.8.0-117-generic",
+      "seconds": 69,
+      "target": "vdev"
+     },
+     "metrics": {
+      "close.quick": {
+       "runs": [
+        2.603,
+        2.757,
+        2.943
+       ],
+       "spread": 0.34,
+       "unit": "ms",
+       "value": 2.757
+      },
+      "cpu.shelf_idle": {
+       "runs": [
+        0.498,
+        0.0,
+        0.498
+       ],
+       "spread": 0.498,
+       "unit": "%",
+       "value": 0.498
+      },
+      "nav.p50": {
+       "runs": [
+        23.649,
+        24.233,
+        23.842
+       ],
+       "spread": 0.584,
+       "unit": "ms",
+       "value": 23.842
+      },
+      "nav.p95": {
+       "runs": [
+        25.5,
+        25.647,
+        25.562
+       ],
+       "spread": 0.147,
+       "unit": "ms",
+       "value": 25.562
+      },
+      "open.quick": {
+       "runs": [
+        4.252,
+        4.288,
+        4.442
+       ],
+       "spread": 0.191,
+       "unit": "ms",
+       "value": 4.288
+      },
+      "open.settings": {
+       "runs": [
+        3.223,
+        3.413,
+        3.41
+       ],
+       "spread": 0.19,
+       "unit": "ms",
+       "value": 3.41
+      },
+      "open.switcher": {
+       "runs": [
+        3.115,
+        2.928,
+        2.54
+       ],
+       "spread": 0.576,
+       "unit": "ms",
+       "value": 2.928
+      },
+      "start.cold": {
+       "runs": [
+        30.756,
+        31.246,
+        31.384
+       ],
+       "spread": 0.628,
+       "unit": "ms",
+       "value": 31.246
+      },
+      "start.pads": {
+       "runs": [
+        1.098,
+        1.017,
+        1.025
+       ],
+       "spread": 0.081,
+       "unit": "ms",
+       "value": 1.025
+      },
+      "start.process": {
+       "runs": [
+        27.68,
+        28.349,
+        28.762
+       ],
+       "spread": 1.082,
+       "unit": "ms",
+       "value": 28.349
+      }
+     },
+     "schema": 1
+    },
+    "memory": {
+     "peak_rss_kib": 97348,
+     "period_ms": 100,
+     "samples": 635
+    }
+   },
+   "cover_pixels": [
+    1200,
+    1700
+   ],
+   "games": 5000,
+   "look": "split"
+  },
+  {
+   "after": {
+    "latency": {
+     "config": {
+      "asleep": 15,
+      "cold": false,
+      "cpu_secs": 2.0,
+      "cycles": 0,
+      "gap": 150,
+      "look": "cabinet",
+      "moves": 60,
+      "nav_system": "gbc",
+      "opens": 2,
+      "runs": 3,
+      "settle": 2.0,
+      "starts": 3,
+      "systems": [],
+      "wake": false,
+      "wakes": 3,
+      "warmup": false
+     },
+     "meta": {
+      "commit": "11e3ef4",
+      "cpu_source": "stat",
+      "date": "2026-10-28T23:27:50+0000",
+      "games": "5000",
+      "host": "macbook-air-m4",
+      "kernel": "6.8.0-117-generic",
+      "seconds": 64,
+      "target": "vdev"
+     },
+     "metrics": {
+      "close.quick": {
+       "runs": [
+        8.111,
+        3.413,
+        3.532
+       ],
+       "spread": 4.698,
+       "unit": "ms",
+       "value": 3.532
+      },
+      "cpu.shelf_idle": {
+       "runs": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "spread": 0.0,
+       "unit": "%",
+       "value": 0.0
+      },
+      "nav.p50": {
+       "runs": [
+        7.355,
+        8.591,
+        7.975
+       ],
+       "spread": 1.236,
+       "unit": "ms",
+       "value": 7.975
+      },
+      "nav.p95": {
+       "runs": [
+        13.001,
+        12.922,
+        14.271
+       ],
+       "spread": 1.349,
+       "unit": "ms",
+       "value": 13.001
+      },
+      "open.quick": {
+       "runs": [
+        5.287,
+        5.668,
+        7.435
+       ],
+       "spread": 2.149,
+       "unit": "ms",
+       "value": 5.668
+      },
+      "open.settings": {
+       "runs": [
+        1.203,
+        1.272,
+        1.617
+       ],
+       "spread": 0.415,
+       "unit": "ms",
+       "value": 1.272
+      },
+      "open.switcher": {
+       "runs": [
+        6.358,
+        9.066,
+        6.261
+       ],
+       "spread": 2.805,
+       "unit": "ms",
+       "value": 6.358
+      },
+      "start.cold": {
+       "runs": [
+        33.445,
+        32.022,
+        32.545
+       ],
+       "spread": 1.423,
+       "unit": "ms",
+       "value": 32.545
+      },
+      "start.pads": {
+       "runs": [
+        0.796,
+        0.704,
+        0.831
+       ],
+       "spread": 0.127,
+       "unit": "ms",
+       "value": 0.796
+      },
+      "start.process": {
+       "runs": [
+        30.974,
+        30.504,
+        31.371
+       ],
+       "spread": 0.867,
+       "unit": "ms",
+       "value": 30.974
+      }
+     },
+     "schema": 1
+    },
+    "memory": {
+     "peak_rss_kib": 104248,
+     "period_ms": 100,
+     "samples": 600
+    }
+   },
+   "before": {
+    "latency": {
+     "config": {
+      "asleep": 15,
+      "cold": false,
+      "cpu_secs": 2.0,
+      "cycles": 0,
+      "gap": 150,
+      "look": "cabinet",
+      "moves": 60,
+      "nav_system": "gbc",
+      "opens": 2,
+      "runs": 3,
+      "settle": 2.0,
+      "starts": 3,
+      "systems": [],
+      "wake": false,
+      "wakes": 3,
+      "warmup": false
+     },
+     "meta": {
+      "commit": "e5a7d29+bench",
+      "cpu_source": "stat",
+      "date": "2026-10-28T23:15:19+0000",
+      "games": "5000",
+      "host": "macbook-air-m4",
+      "kernel": "6.8.0-117-generic",
+      "seconds": 64,
+      "target": "vdev"
+     },
+     "metrics": {
+      "close.quick": {
+       "runs": [
+        8.607,
+        7.918,
+        8.34
+       ],
+       "spread": 0.688,
+       "unit": "ms",
+       "value": 8.34
+      },
+      "cpu.shelf_idle": {
+       "runs": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "spread": 0.0,
+       "unit": "%",
+       "value": 0.0
+      },
+      "nav.p50": {
+       "runs": [
+        9.444,
+        8.669,
+        8.799
+       ],
+       "spread": 0.775,
+       "unit": "ms",
+       "value": 8.799
+      },
+      "nav.p95": {
+       "runs": [
+        17.066,
+        17.276,
+        14.876
+       ],
+       "spread": 2.4,
+       "unit": "ms",
+       "value": 17.066
+      },
+      "open.quick": {
+       "runs": [
+        9.575,
+        9.489,
+        9.408
+       ],
+       "spread": 0.166,
+       "unit": "ms",
+       "value": 9.489
+      },
+      "open.settings": {
+       "runs": [
+        3.107,
+        3.021,
+        3.261
+       ],
+       "spread": 0.24,
+       "unit": "ms",
+       "value": 3.107
+      },
+      "open.switcher": {
+       "runs": [
+        3.365,
+        2.637,
+        3.128
+       ],
+       "spread": 0.728,
+       "unit": "ms",
+       "value": 3.128
+      },
+      "start.cold": {
+       "runs": [
+        39.932,
+        37.397,
+        29.889
+       ],
+       "spread": 10.043,
+       "unit": "ms",
+       "value": 37.397
+      },
+      "start.pads": {
+       "runs": [
+        0.911,
+        1.143,
+        0.942
+       ],
+       "spread": 0.232,
+       "unit": "ms",
+       "value": 0.942
+      },
+      "start.process": {
+       "runs": [
+        36.996,
+        34.436,
+        28.25
+       ],
+       "spread": 8.746,
+       "unit": "ms",
+       "value": 34.436
+      }
+     },
+     "schema": 1
+    },
+    "memory": {
+     "peak_rss_kib": 98784,
+     "period_ms": 100,
+     "samples": 598
+    }
+   },
+   "cover_pixels": [
+    1200,
+    1700
+   ],
+   "games": 5000,
+   "look": "cabinet"
+  }
+ ],
+ "long_scroll_5000_games": {
+  "after": {
+   "latency": {
+    "config": {
+     "asleep": 15,
+     "cold": false,
+     "cpu_secs": 2.0,
+     "cycles": 0,
+     "gap": 75.0,
+     "look": "",
+     "moves": 500,
+     "nav_system": "gbc",
+     "opens": 0,
+     "runs": 1,
+     "settle": 2.0,
+     "starts": 1,
+     "systems": [],
+     "wake": false,
+     "wakes": 3,
+     "warmup": false
+    },
+    "meta": {
+     "commit": "final",
+     "cpu_source": "stat",
+     "date": "2026-10-28T23:34:17+0000",
+     "games": "5000",
+     "host": "macbook-air-m4",
+     "kernel": "6.8.0-117-generic",
+     "purpose": "500-move-memory",
+     "seconds": 47,
+     "target": "vdev"
+    },
+    "metrics": {
+     "cpu.shelf_idle": {
+      "runs": [
+       0.0
+      ],
+      "spread": 0.0,
+      "unit": "%",
+      "value": 0.0
+     },
+     "nav.p50": {
+      "runs": [
+       1.705
+      ],
+      "spread": 0.0,
+      "unit": "ms",
+      "value": 1.705
+     },
+     "nav.p95": {
+      "runs": [
+       2.763
+      ],
+      "spread": 0.0,
+      "unit": "ms",
+      "value": 2.763
+     },
+     "start.cold": {
+      "runs": [
+       10.688
+      ],
+      "spread": 0.0,
+      "unit": "ms",
+      "value": 10.688
+     },
+     "start.pads": {
+      "runs": [
+       0.418
+      ],
+      "spread": 0.0,
+      "unit": "ms",
+      "value": 0.418
+     },
+     "start.process": {
+      "runs": [
+       10.155
+      ],
+      "spread": 0.0,
+      "unit": "ms",
+      "value": 10.155
+     }
+    },
+    "schema": 1
+   },
+   "memory": {
+    "peak_rss_kib": 83656,
+    "period_ms": 100,
+    "samples": 463
+   }
+  },
+  "before": {
+   "latency": {
+    "config": {
+     "asleep": 15,
+     "cold": false,
+     "cpu_secs": 2.0,
+     "cycles": 0,
+     "gap": 75.0,
+     "look": "",
+     "moves": 500,
+     "nav_system": "gbc",
+     "opens": 0,
+     "runs": 1,
+     "settle": 2.0,
+     "starts": 1,
+     "systems": [],
+     "wake": false,
+     "wakes": 3,
+     "warmup": false
+    },
+    "meta": {
+     "commit": "before",
+     "cpu_source": "stat",
+     "date": "2026-10-28T23:33:24+0000",
+     "games": "5000",
+     "host": "macbook-air-m4",
+     "kernel": "6.8.0-117-generic",
+     "purpose": "500-move-memory",
+     "seconds": 48,
+     "target": "vdev"
+    },
+    "metrics": {
+     "cpu.shelf_idle": {
+      "runs": [
+       0.0
+      ],
+      "spread": 0.0,
+      "unit": "%",
+      "value": 0.0
+     },
+     "nav.p50": {
+      "runs": [
+       7.014
+      ],
+      "spread": 0.0,
+      "unit": "ms",
+      "value": 7.014
+     },
+     "nav.p95": {
+      "runs": [
+       9.215
+      ],
+      "spread": 0.0,
+      "unit": "ms",
+      "value": 9.215
+     },
+     "start.cold": {
+      "runs": [
+       20.255
+      ],
+      "spread": 0.0,
+      "unit": "ms",
+      "value": 20.255
+     },
+     "start.pads": {
+      "runs": [
+       0.425
+      ],
+      "spread": 0.0,
+      "unit": "ms",
+      "value": 0.425
+     },
+     "start.process": {
+      "runs": [
+       19.788
+      ],
+      "spread": 0.0,
+      "unit": "ms",
+      "value": 19.788
+     }
+    },
+    "schema": 1
+   },
+   "memory": {
+    "peak_rss_kib": 266840,
+    "period_ms": 100,
+    "samples": 484
+   }
+  }
+ },
+ "machine": {
+  "host": "MacBook Air M4",
+  "panel": "1240x1080",
+  "renderer": "headless sway / pixman; pocket-core llvmpipe",
+  "virtual_cpus": 4,
+  "virtual_ram_bytes": 6198562816
+ },
+ "ordinary_vdev": {
+  "after": {
+   "config": {
+    "asleep": 15,
+    "cold": false,
+    "cpu_secs": 3.0,
+    "cycles": 2,
+    "gap": 150,
+    "look": "",
+    "moves": 60,
+    "nav_system": "",
+    "opens": 3,
+    "runs": 3,
+    "settle": 2.0,
+    "starts": 5,
+    "systems": [
+     "gbc"
+    ],
+    "wake": false,
+    "wakes": 3,
+    "warmup": false
+   },
+   "meta": {
+    "commit": "11e3ef4",
+    "cpu_source": "stat",
+    "date": "2026-10-28T23:30:21+0000",
+    "host": "macbook-air-m4",
+    "kernel": "6.8.0-117-generic",
+    "seconds": 145,
+    "target": "vdev"
+   },
+   "metrics": {
+    "close.card": {
+     "runs": [
+      3.433,
+      1.528,
+      3.964
+     ],
+     "spread": 2.436,
+     "unit": "ms",
+     "value": 3.433
+    },
+    "close.pause_menu": {
+     "runs": [
+      4.616,
+      2.663,
+      2.609
+     ],
+     "spread": 2.006,
+     "unit": "ms",
+     "value": 2.663
+    },
+    "close.quick": {
+     "runs": [
+      2.188,
+      0.974,
+      1.295
+     ],
+     "spread": 1.214,
+     "unit": "ms",
+     "value": 1.295
+    },
+    "cpu.behind_game": {
+     "runs": [
+      0.333,
+      0.0,
+      0.0
+     ],
+     "spread": 0.333,
+     "unit": "%",
+     "value": 0.0
+    },
+    "cpu.shelf_idle": {
+     "runs": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "spread": 0.0,
+     "unit": "%",
+     "value": 0.0
+    },
+    "launch.gbc": {
+     "runs": [
+      66.54,
+      59.103,
+      66.885
+     ],
+     "spread": 7.782,
+     "unit": "ms",
+     "value": 66.54
+    },
+    "nav.p50": {
+     "runs": [
+      3.278,
+      3.406,
+      2.753
+     ],
+     "spread": 0.653,
+     "unit": "ms",
+     "value": 3.278
+    },
+    "nav.p95": {
+     "runs": [
+      5.192,
+      5.346,
+      4.895
+     ],
+     "spread": 0.451,
+     "unit": "ms",
+     "value": 5.192
+    },
+    "open.card": {
+     "runs": [
+      15.999,
+      12.002,
+      10.677
+     ],
+     "spread": 5.322,
+     "unit": "ms",
+     "value": 12.002
+    },
+    "open.card_first": {
+     "runs": [
+      20.461,
+      13.96,
+      16.412
+     ],
+     "spread": 6.501,
+     "unit": "ms",
+     "value": 16.412
+    },
+    "open.pause_menu": {
+     "runs": [
+      9.596,
+      18.388,
+      16.473
+     ],
+     "spread": 8.792,
+     "unit": "ms",
+     "value": 16.473
+    },
+    "open.pause_menu_again": {
+     "runs": [
+      4.245,
+      9.616,
+      16.404
+     ],
+     "spread": 12.159,
+     "unit": "ms",
+     "value": 9.616
+    },
+    "open.quick": {
+     "runs": [
+      3.549,
+      1.368,
+      1.338
+     ],
+     "spread": 2.211,
+     "unit": "ms",
+     "value": 1.368
+    },
+    "open.settings": {
+     "runs": [
+      3.14,
+      1.359,
+      1.161
+     ],
+     "spread": 1.979,
+     "unit": "ms",
+     "value": 1.359
+    },
+    "open.switcher": {
+     "runs": [
+      5.438,
+      1.931,
+      3.608
+     ],
+     "spread": 3.507,
+     "unit": "ms",
+     "value": 3.608
+    },
+    "quit.to_shelf": {
+     "runs": [
+      11.149,
+      9.945,
+      13.549
+     ],
+     "spread": 3.604,
+     "unit": "ms",
+     "value": 11.149
+    },
+    "start.cold": {
+     "runs": [
+      24.774,
+      27.074,
+      27.365
+     ],
+     "spread": 2.591,
+     "unit": "ms",
+     "value": 27.074
+    },
+    "start.pads": {
+     "runs": [
+      0.545,
+      0.483,
+      0.601
+     ],
+     "spread": 0.118,
+     "unit": "ms",
+     "value": 0.545
+    },
+    "start.process": {
+     "runs": [
+      23.301,
+      25.866,
+      26.264
+     ],
+     "spread": 2.963,
+     "unit": "ms",
+     "value": 25.866
+    }
+   },
+   "schema": 1
+  },
+  "before": {
+   "config": {
+    "asleep": 15,
+    "cold": false,
+    "cpu_secs": 3.0,
+    "cycles": 2,
+    "gap": 150,
+    "look": "",
+    "moves": 60,
+    "nav_system": "",
+    "opens": 3,
+    "runs": 3,
+    "settle": 2.0,
+    "starts": 5,
+    "systems": [
+     "gbc"
+    ],
+    "wake": false,
+    "wakes": 3,
+    "warmup": false
+   },
+   "meta": {
+    "commit": "e5a7d29+bench",
+    "cpu_source": "stat",
+    "date": "2026-10-28T23:17:53+0000",
+    "host": "macbook-air-m4",
+    "kernel": "6.8.0-117-generic",
+    "seconds": 147,
+    "target": "vdev"
+   },
+   "metrics": {
+    "close.card": {
+     "runs": [
+      3.973,
+      4.098,
+      3.313
+     ],
+     "spread": 0.785,
+     "unit": "ms",
+     "value": 3.973
+    },
+    "close.pause_menu": {
+     "runs": [
+      7.313,
+      8.216,
+      5.056
+     ],
+     "spread": 3.16,
+     "unit": "ms",
+     "value": 7.313
+    },
+    "close.quick": {
+     "runs": [
+      2.692,
+      2.136,
+      2.214
+     ],
+     "spread": 0.556,
+     "unit": "ms",
+     "value": 2.214
+    },
+    "cpu.behind_game": {
+     "runs": [
+      0.0,
+      0.333,
+      0.0
+     ],
+     "spread": 0.333,
+     "unit": "%",
+     "value": 0.0
+    },
+    "cpu.shelf_idle": {
+     "runs": [
+      0.0,
+      0.0,
+      0.333
+     ],
+     "spread": 0.333,
+     "unit": "%",
+     "value": 0.0
+    },
+    "launch.gbc": {
+     "runs": [
+      117.687,
+      73.63,
+      74.268
+     ],
+     "spread": 44.058,
+     "unit": "ms",
+     "value": 74.268
+    },
+    "nav.p50": {
+     "runs": [
+      4.469,
+      4.557,
+      3.316
+     ],
+     "spread": 1.241,
+     "unit": "ms",
+     "value": 4.469
+    },
+    "nav.p95": {
+     "runs": [
+      8.009,
+      7.862,
+      5.25
+     ],
+     "spread": 2.759,
+     "unit": "ms",
+     "value": 7.862
+    },
+    "open.card": {
+     "runs": [
+      14.988,
+      15.391,
+      9.978
+     ],
+     "spread": 5.413,
+     "unit": "ms",
+     "value": 14.988
+    },
+    "open.card_first": {
+     "runs": [
+      22.823,
+      19.878,
+      18.686
+     ],
+     "spread": 4.137,
+     "unit": "ms",
+     "value": 19.878
+    },
+    "open.pause_menu": {
+     "runs": [
+      10.848,
+      13.327,
+      12.945
+     ],
+     "spread": 2.479,
+     "unit": "ms",
+     "value": 12.945
+    },
+    "open.pause_menu_again": {
+     "runs": [
+      11.088,
+      20.434,
+      14.092
+     ],
+     "spread": 9.346,
+     "unit": "ms",
+     "value": 14.092
+    },
+    "open.quick": {
+     "runs": [
+      3.942,
+      3.635,
+      3.247
+     ],
+     "spread": 0.695,
+     "unit": "ms",
+     "value": 3.635
+    },
+    "open.settings": {
+     "runs": [
+      3.062,
+      3.208,
+      2.397
+     ],
+     "spread": 0.811,
+     "unit": "ms",
+     "value": 3.062
+    },
+    "open.switcher": {
+     "runs": [
+      2.737,
+      5.413,
+      6.134
+     ],
+     "spread": 3.397,
+     "unit": "ms",
+     "value": 5.413
+    },
+    "quit.to_shelf": {
+     "runs": [
+      15.299,
+      13.982,
+      15.399
+     ],
+     "spread": 1.418,
+     "unit": "ms",
+     "value": 15.299
+    },
+    "start.cold": {
+     "runs": [
+      33.866,
+      26.217,
+      30.157
+     ],
+     "spread": 7.649,
+     "unit": "ms",
+     "value": 30.157
+    },
+    "start.pads": {
+     "runs": [
+      1.124,
+      0.982,
+      0.722
+     ],
+     "spread": 0.402,
+     "unit": "ms",
+     "value": 0.982
+    },
+    "start.process": {
+     "runs": [
+      31.184,
+      24.506,
+      28.164
+     ],
+     "spread": 6.678,
+     "unit": "ms",
+     "value": 28.164
+    }
+   },
+   "schema": 1
+  }
+ },
+ "source": {
+  "after_measured": "11e3ef4",
+  "after_rebased_patch": "0674b21",
+  "after_ui_sha256": "2452922535730b9d08ca09f719c00c9f14ecaef5245208c1bdbbf064a0b6ea74",
+  "before": "e5a7d29 + bench-shelf game-list option",
+  "before_ui_sha256": "5fd9910269ebe4e29ffa62616fb7b27aa47c60e0434ab2206b0d6fe346aea8a3",
+  "rebase_base": "4dbc0ad"
+ },
+ "validation": {
+  "arm_release": "Measured patch and final rebased source: pocket-ui + pocket-core zigbuild aarch64-unknown-linux-gnu.2.38 succeeded.",
+  "byte_identical": 88,
+  "clippy": "all targets, profile gate: exit 0; existing warnings only",
+  "first_gate": "overloaded shared build host: existing bluetooth fake pair/trust timeout; isolated test passed immediately",
+  "merge_gate": "full merge queue gate required before merge",
+  "settled_snapshot_pngs": 88,
+  "snapshot_conditions": "dark/light x English/German, Motion Off, old/new rendered in pairs to match the clock"
+ },
+ "warm_benches": {
+  "after": [
+   "2000 games; covers 1200x1700; POCKETUI_ES_SYSTEMS=/tmp/perfn-bench-2000/es_systems.cfg POCKETUI_DATA=/tmp/perfn-bench-2000/data",
+   "bench-shelf items=2000 moves=240 p50_us=214 p95_us=236 max_us=632 glyphs=0 patterns=0 worst=Some(Game(0, 96))",
+   "bench-shelf items=2000 moves=240 p50_us=525 p95_us=1240 max_us=1651 glyphs=0 patterns=0 worst=Some(Game(0, 68))",
+   "bench-frame state=home panel=1240x1080 logical=1240x1080 paint_us=232 frame_us=229 p95_us=261",
+   "bench-frame state=settings panel=1240x1080 logical=1240x1080 paint_us=172 frame_us=168 p95_us=186",
+   "bench-frame state=menu:pocket-core panel=1240x1080 logical=1240x1080 paint_us=72 frame_us=72 p95_us=77",
+   "bench-frame state=game-quick panel=1240x1080 logical=1240x1080 paint_us=103 frame_us=103 p95_us=109",
+   "5000 games; covers 1200x1700; POCKETUI_ES_SYSTEMS=/tmp/perfn-bench-5000/es_systems.cfg POCKETUI_DATA=/tmp/perfn-bench-5000/data",
+   "bench-shelf items=5000 moves=240 p50_us=205 p95_us=213 max_us=296 glyphs=0 patterns=0 worst=Some(Game(0, 65))",
+   "bench-shelf items=5000 moves=240 p50_us=514 p95_us=1222 max_us=1277 glyphs=0 patterns=0 worst=Some(Game(0, 67))",
+   "bench-frame state=home panel=1240x1080 logical=1240x1080 paint_us=206 frame_us=206 p95_us=217",
+   "bench-frame state=settings panel=1240x1080 logical=1240x1080 paint_us=154 frame_us=154 p95_us=161",
+   "bench-frame state=menu:pocket-core panel=1240x1080 logical=1240x1080 paint_us=69 frame_us=69 p95_us=74",
+   "bench-frame state=game-quick panel=1240x1080 logical=1240x1080 paint_us=102 frame_us=102 p95_us=109"
+  ],
+  "before": [
+   "2000 games; covers 1200x1700; POCKETUI_ES_SYSTEMS=/tmp/perfn-bench-2000/es_systems.cfg POCKETUI_DATA=/tmp/perfn-bench-2000/data",
+   "bench-shelf items=2000 moves=240 p50_us=213 p95_us=250 max_us=1018 glyphs=0 patterns=0 worst=Some(Game(0, 15))",
+   "bench-shelf items=2000 moves=240 p50_us=528 p95_us=1247 max_us=2318 glyphs=0 patterns=0 worst=Some(Game(0, 36))",
+   "bench-frame state=home panel=1240x1080 logical=1240x1080 paint_us=214 frame_us=212 p95_us=250",
+   "bench-frame state=settings panel=1240x1080 logical=1240x1080 paint_us=165 frame_us=160 p95_us=180",
+   "bench-frame state=menu:pocket-core panel=1240x1080 logical=1240x1080 paint_us=70 frame_us=71 p95_us=77",
+   "bench-frame state=game-quick panel=1240x1080 logical=1240x1080 paint_us=38 frame_us=40 p95_us=46",
+   "5000 games; covers 1200x1700; POCKETUI_ES_SYSTEMS=/tmp/perfn-bench-5000/es_systems.cfg POCKETUI_DATA=/tmp/perfn-bench-5000/data",
+   "bench-shelf items=5000 moves=240 p50_us=201 p95_us=232 max_us=1154 glyphs=0 patterns=0 worst=Some(Game(0, 72))",
+   "bench-shelf items=5000 moves=240 p50_us=525 p95_us=1241 max_us=1483 glyphs=0 patterns=0 worst=Some(Game(0, 93))",
+   "bench-frame state=home panel=1240x1080 logical=1240x1080 paint_us=235 frame_us=227 p95_us=262",
+   "bench-frame state=settings panel=1240x1080 logical=1240x1080 paint_us=168 frame_us=167 p95_us=184",
+   "bench-frame state=menu:pocket-core panel=1240x1080 logical=1240x1080 paint_us=69 frame_us=67 p95_us=76",
+   "bench-frame state=game-quick panel=1240x1080 logical=1240x1080 paint_us=36 frame_us=39 p95_us=46"
+  ]
+ }
+}

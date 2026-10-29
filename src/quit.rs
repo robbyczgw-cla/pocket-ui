@@ -15,6 +15,8 @@ pub enum How {
     RetroArch,
     /// ARMSX2 and Dolphin: resume state first, then their own shutdown (`standalone::quit`).
     Standalone,
+    /// Cemu and RPCS3 (`standalone::guest_quit`): the window's close request, then SIGTERM and SIGKILL.
+    Guest,
     /// The window's close request (pocket-core and the other emulators).
     Window,
 }
@@ -55,6 +57,7 @@ pub fn grace(how: How) -> Duration {
         How::RetroArch => RETROARCH_GRACE,
         How::Standalone => crate::standalone::QUIT_GRACE,
         How::Window => WINDOW_GRACE,
+        How::Guest => crate::standalone::GUEST_GRACE,
     }
 }
 

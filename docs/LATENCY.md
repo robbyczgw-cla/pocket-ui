@@ -93,7 +93,10 @@ All times in milliseconds, lower is better. Each pass measures every number seve
 | `start.cold` | pocket-ui started (process spawned) until its first shelf frame. Median of 5 starts per pass. The launcher's own work before it starts pocket-ui is not included |
 | `start.process` | the same from pocket-ui's `main`: `start.cold` minus loading the program |
 | `start.pads` | from pocket-ui's `main` until its pads are open (its `pad-open` trace line): a press from then on counts. It should stay below `start.process`, so that a press as soon as the shelf is there is acted on (see [First press after a start](#first-press-after-a-start)) |
-| `nav.p50`, `nav.p95` | a Down/Up on Home until the frame showing the new selection. 100 moves per pass, up and down the list, 150 ms apart (so the 120 ms slide of the previous move has ended) |
+| `nav.p50`, `nav.p95` | a Down/Up on Home until the frame showing the new selection. 100 moves per pass, up and down the list (`--nav-system gbc`: that system’s games; Cabinet books Right/Left), 150 ms apart (so the 120 ms slide of the previous move has ended) |
+| `open.quick`, `close.quick` | HOME on the shelf until Quick Settings; B until the shelf. the FIFO sends down/up together, so no physical hold duration is included |
+| `open.card`, `open.card_first`, `close.card` | X on the first `--systems` game until its card/box; the first open per process separately (cold image cache); B until the list |
+| `close.pause_menu` | Continue until pocket-ui commits its frame behind the game. This measures the UI hand-off, not a new core frame or the compositor revealing it |
 | `open.settings` | START on the shelf until the first Settings frame (5 per pass) |
 | `open.switcher` | SELECT on the shelf until the first frame of the game switcher (5 per pass) |
 | `open.pause_menu` | HOME in a game until the first frame of the pause menu. Includes pausing pocket-core (pocket-ui waits for its `paused`) and raising pocket-ui's window; for pocket-core the picture of the game comes after this frame (the `step menu: picture in` of `phases`) |
@@ -367,7 +370,15 @@ Below each moment: how long its first frame took to paint and at which window si
 
 ### Virtual device
 
-`docs/latency/vdev.json`, recorded 2026-10-23 on a MacBook Pro M1 Max, colima 6 CPUs / 8 GB, with other virtual
+`docs/latency/vdev.json` is now the MacBook Air M4 baseline recorded in the 2026-10-29 night pass: four virtual CPUs,
+5.77 GiB Docker MemTotal, one uCity GBC game, the default Shelf look, three measured passes. Every metric and its
+spread are in the JSON; the before/after comparison and limitations are [below](#night-pass-cold-covers-and-large-libraries-2026-10-29).
+The original M1 Max baseline is retained as `docs/latency/vdev-m1max-2026-10-23.json`; do not compare machines as if
+an architecture or VM resource change were a UI regression. Neither file replaces the physical-device baseline.
+
+#### Historical M1 Max baseline
+
+`docs/latency/vdev-m1max-2026-10-23.json`, recorded 2026-10-23 on a MacBook Pro M1 Max, colima 6 CPUs / 8 GB, with other virtual
 devices running at the same time (one of them at about 140 % CPU), commit `ca07625` plus the speed guard. Six passes
 (two runs of `scripts/latency.sh` merged with `latency.py merge`), ROMs: uCity (GBC), MegaMan & Bass (GBA), Contra III
 (SNES), the default Split look, 7 entries on Home (3 recent games, 4 systems).
@@ -653,6 +664,112 @@ together, against `device.json` (`0eacac4`):
 `0eacac4` and `9df5564`, not with this build. Because of it the baseline was **not** saved again: a new
 `device.json` would take the slower start in as the norm. Open: find where the 10 ms of `start.process` went (the
 start line's steps, `--cold`), then save the baseline with the CPU numbers above.
+
+### Night pass: cold covers and large libraries (2026-10-29)
+
+MacBook Air M4, aarch64 virtual device, four virtual CPUs, Docker MemTotal 5.77 GiB, 1240×1080 headless sway;
+only the owned `vdev-perfn` container was used. No physical device was contacted. Before: `e5a7d29` plus the
+benchmark's game-list selector. After: measured `11e3ef4` (the same change rebased as `0674b21` onto `4dbc0ad`).
+Exact binaries, every pass, configurations, sampled memory and warm-bench output:
+[raw A/B results](latency/perf-night-2026-10-29.json).
+
+Generated libraries contain exactly 2,000 or 5,000 GBC games and 1200×1700 RGB PNG covers, from
+`scripts/perf-library.py`; uCity is the real homebrew used for launch tests. Split and Cabinet each ran three passes:
+`latency.sh -- --systems= --nav-system gbc --look <look> --runs 3 --starts 3 --moves 60 --opens 2 --cycles 0
+--cpu-secs 2 --no-warmup`. The fixture was regenerated and the UI deployed before each group. The other Air
+container was idle (about 1% CPU). These are process-cold starts with the Linux page cache warm, not a power-on or
+an SD-card-speed measurement. Medians of the three passes, milliseconds, **before / after**:
+
+| Library / look | Start to first shelf | Navigation p50 | Navigation p95 |
+|---|---|---|---|
+| 2,000 / split | 31.9 / 30.3 | 23.8 / 2.4 | 25.5 / 4.1 |
+| 2,000 / cabinet | 37.8 / 32.4 | 9.6 / 8.5 | 16.3 / 14.1 |
+| 5,000 / split | 31.2 / 24.9 | 23.8 / 1.3 | 25.6 / 2.6 |
+| 5,000 / cabinet | 37.4 / 32.5 | 8.8 / 8.0 | 17.1 / 13.0 |
+
+The user-visible change is Split's cold-image scrolling: roughly 24 ms becomes 1–2 ms. Cabinet already loaded covers
+on its own thread; its smaller differences are not attributed to this patch. Warm game-list frame CPU time stays
+essentially identical: Split 0.20–0.21 ms, Cabinet 0.51–0.53 ms (both library sizes; 240 moves after two warm-up passes,
+`--snapshot bench-shelf:<look>:gbc`). No measured move ran the German patterns or drew a new glyph in those runs.
+
+Opening uCity's box in the 2,000-game Split fixture, first X per process, three passes:
+**44.8 → 16.4 ms**. Repeated opens are
+21.6 → 20.1 ms (the median including the first open),
+so the gain is the cold open. The baseline had decoded and fitted two cover sizes on the UI thread, including the
+old card's unused small cover. Now only the required cover is requested, and the existing `pictures` worker decodes
+and fits it; the UI paints the images already available and redraws when one arrives. The initial live frame may show
+the existing case/console placeholder while a cover loads; the settled image and controls are unchanged.
+
+Memory: a separate, single A/B pair on the 5,000-game Split library, **500 moves 75 ms apart**, sampled UI RSS every
+100 ms, including starts: **260.6 → 81.7 MiB observed peak**. The old fitted-cover cache retained every game and size
+seen; live fitted covers now share the existing 16-entry image cache with screenshots and title screens. The 60-move
+runs are too short for a large peak-RSS difference, and Cabinet retains its separate artwork caches: their per-run
+memory is in the raw results. This is UI RSS, not the container's memory or pocket-core's memory.
+
+Ordinary one-game vdev (default Shelf look, uCity), three passes, five starts / 60 Home moves / three menu opens /
+two game cycles per pass; `--cpu-secs 3 --no-warmup`, before and after. Milliseconds:
+
+| Moment | Before | After |
+|---|---|---|
+| Cold process to first shelf frame | 30.2 | 27.1 |
+| From main() to first shelf frame | 28.2 | 25.9 |
+| Ordinary Shelf navigation p50 / p95 | 4.5 / 7.9 | 3.3 / 5.2 |
+| First box frame (ordinary one-game library) | 19.9 | 16.4 |
+| Box close | 4.0 | 3.4 |
+| Pause open / open again | 12.9 / 14.1 | 16.5 / 9.6 |
+| Pause close (UI hand-off) | 7.3 | 2.7 |
+| Quick Settings open / close | 3.6 / 2.2 | 1.4 / 1.3 |
+| Settings open | 3.1 | 1.4 |
+| Switcher open | 5.4 | 3.6 |
+| uCity / pocket-core launch | 74.3 | 66.5 |
+| Quit to shelf | 15.3 | 11.1 |
+
+CPU behind the game and on the shelf measured 0.0% in both medians, read from `/proc/<pid>/stat`; with three-second
+windows its resolution is about 0.33 percentage points, so this is not a claim of zero CPU work. The night's rule was
+to leave sub-10 ms drifts alone. These small start/menu/game differences are not claimed as optimizations; no
+regression exceeds that floor. The guard's normal 15% / 3 ms defaults remain unchanged. `close.pause_menu` times the
+UI moving behind the game, not a new core frame or panel reveal.
+
+`POCKETUI_FRAME_BENCH=1` on the Air repeats Home, Settings, pause and Quick Settings. The 5,000-game after build
+costs 0.206 / 0.154 / 0.069 / 0.102 ms of median frame CPU respectively. Previously that benchmark painted the Quick
+Settings overlay once, then timed only its background; it now includes the overlay every time. Its old Quick value
+is therefore not a before/after performance comparison. PNG encoding and compositor waits are excluded.
+
+Five sampled profiles on x86 (`perf`, gate optimization with symbols/frame pointers), locating startup, cold list
+covers, Cabinet, the first box and pause/quick background work:
+[profile summaries and caveat](latency/perf-night-2026-10-29-profiles.txt). Reproduce with `scripts/perf-profile.py`
+and the generated fixture. Cover decode/box filtering were on the UI thread; Cabinet decode was already on
+`cabinet-art`. Warm raster time was dominated by clear, text and blit, with no player-visible problem to fix there.
+
+Validation: 88 settled PNGs (English/German × dark/light, covers present, Motion Off, old/new paired within the same
+clock minute) are **byte-identical**; both views were inspected. A worker test checks real PNG alpha conversion and
+box-filtered output. Latency self-tests pass, all-target Clippy exits 0 with existing warnings, and both ARM release
+binaries build. The first overloaded build-host gate hit the existing Bluetooth fake pair/trust timeout; that test passed
+immediately in isolation. The merge queue runs the full gate again with four test threads. No assertions were weakened.
+
+The Mini V2 baseline is untouched. After the night restrictions are lifted, the main session should run the real-device
+speed guard and briefly hold Down through a large covered library, open/turn/close a box, then launch/return from uCity;
+verify that covers settle without stutter and the same pictures and controls remain.
+
+### Launch animation (feat/box-and-launch, 2026-10-28)
+
+The Cabinet look started a game only when its cartridge reached the console's slot, 260 ms after A
+(`cabinet::LAUNCH_AT`, gone). Now every look starts the game at A, and the Cabinet and Shelf looks play their launch
+animation over the shelf while the emulator loads (`app_cabinet::launch_animation`). Virtual device on the MacBook Air
+M4 (`VDEV_NAME=boxl`), uCity (GBC) the one game, `latency.sh -- --look <look> --systems gbc --runs 3 --starts 2
+--moves 60 --opens 2 --cycles 3` (the Cabinet with `--moves 0`: with one game there is nothing to move between; `--look
+cabinet` is new: Home there is every shelf at once, so games are started from it, not from a system's list). Medians of
+the three passes, main 6eb648e against the branch:
+
+| Look | `launch.gbc` before | after | `nav.p50` before / after | `nav.p95` before / after |
+|---|---|---|---|---|
+| Cabinet | 332.6 ms | 67.5 ms | – | – |
+| Shelf (animation on) | 67.3 ms | 68.4 ms | 4.5 / 4.5 ms | 7.5 / 7.9 ms |
+| Split (no animation) | 65.0 ms | 65.7 ms | 2.9 / 3.0 ms | 3.7 / 3.8 ms |
+
+So the animation costs the start about a millisecond (the frames pocket-ui paints while the game loads, on cores the
+emulator doesn't use), and the Cabinet's starts are 265 ms faster than before. In the virtual device a GBC game is up
+after 65 ms, before the cartridge is in (180 ms): there the game covers the animation, as it should.
 
 ## pocket-ui against ROCKNIX (EmulationStation)
 

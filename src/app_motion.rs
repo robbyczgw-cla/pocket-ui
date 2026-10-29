@@ -330,6 +330,7 @@ impl App {
             return;
         }
         self.motion.page = page;
+        self.marquee.restart();
         self.motion.rest();
         self.motion.transition = None;
         let (Some(from), Some(to)) = (last, page) else { return };

@@ -269,8 +269,7 @@ impl App {
 
     fn paint_tailscale_list(&mut self, c: &mut Canvas, page: &TailscalePage) {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(54, 34), 34u32);
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, "Tailscale");
+        self.sheet_header(c, "Tailscale");
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         for (i, r) in ROWS.iter().enumerate() {
             let y = top + i as i32 * row;
@@ -304,8 +303,15 @@ impl App {
     fn paint_tailscale_details(&mut self, c: &mut Canvas, page: &TailscalePage, y0: i32) {
         let left = NU_PAD + NU_BTN_PAD;
         let right = c.w - NU_PAD - NU_BTN_PAD;
-        self.text.draw(c, Face::Body, 24, left, y0 + 20, pal().dust, "Status");
         let snap = page.snap.clone().unwrap_or_default();
+        // The state in a panel, as Performance & fan's readout (`kit::panel`): with the address, the name and the
+        // devices while connected.
+        let connected_rows = snap.status.as_ref().filter(|_| snap.state() == State::Connected).map_or(0, |s| if s.peers_total > 0 { 3 } else { 2 });
+        let panel_h = 104 + pocket_ui::type_scale::grow(44) + connected_rows * 50;
+        pocket_ui::kit::panel(c, NU_PAD, y0 - 10, c.w - 2 * NU_PAD, panel_h);
+        // What follows the panel starts this far under it.
+        let below = y0 - 10 + panel_h + 40;
+        self.text.draw(c, Face::Body, 24, left, y0 + 20, pal().dust, "Status");
         let (status, color) = match (&page.error, page.busy) {
             (Some(e), _) => (self.text.fit(Face::Title, 37, e, right - left), pal().alert),
             (None, Some(b)) => (format!("{b}{}", ".".repeat(1 + (self.started.elapsed().as_millis() / 400 % 3) as usize)), pal().dust),
@@ -319,7 +325,7 @@ impl App {
         };
         self.text.draw(c, Face::Title, 44, left, y0 + 64, color, &status);
 
-        let mut y = y0 + 110;
+        let mut y = y0 + 110 + pocket_ui::type_scale::grow(44);
         let status = snap.status.as_ref().filter(|_| snap.state() == State::Connected);
         if let Some(s) = status {
             let label_w = 190;
@@ -334,7 +340,7 @@ impl App {
             if s.peers_total > 0 {
                 line(self, c, "Devices", &format!("{} of {} online", s.peers_online, s.peers_total));
             }
-            y += 6;
+            y = below;
             let note = "Tailscale only sets up the network. To log in with SSH, switch on Remote access too.";
             for l in self.text.wrap(Face::Body, 24, note, right - left) {
                 self.text.draw(c, Face::Body, 24, left, y, pal().dust, &l);
@@ -342,6 +348,7 @@ impl App {
             }
             return;
         }
+        y = below;
         // What a press could not do without a network: said calmly, in the page's own colour, not as an error.
         if let Some(note) = page.note {
             for line in self.text.wrap(Face::Body, 26, note, right - left) {
@@ -373,13 +380,14 @@ impl App {
             }
             y += 10;
         }
-        // No network to reach the tailnet over: the small radio asleep under the words, when there is room (`ui_art`).
+        // No network to reach the tailnet over: the small radio asleep under the words, aligned with them, when there
+        // is room (`ui_art`; docs/DESIGN.md "Empty pages").
         if snap.state() == State::NoNetwork {
             let k = pocket_ui::ui_art::empty_scale(c.h);
-            let (aw, ah) = pocket_ui::ui_art::size(pocket_ui::ui_art::Art::Offline, k);
+            let (_, ah) = pocket_ui::ui_art::size(pocket_ui::ui_art::Art::Offline, k);
             let y = y + 24;
             if y + ah <= c.h - NU_PAD - NU_PILL - 24 {
-                pocket_ui::ui_art::paint(c, pocket_ui::ui_art::Art::Offline, (c.w - aw) / 2, y, k);
+                pocket_ui::ui_art::paint(c, pocket_ui::ui_art::Art::Offline, left, y, k);
             }
         }
     }
@@ -387,8 +395,7 @@ impl App {
     /// The sign-in screen: the address as a QR code, the same address as short text, and what to do.
     fn paint_tailscale_login(&mut self, c: &mut Canvas, url: Option<&str>, by_key: bool) {
         let pad = NU_PAD;
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, "Sign in to Tailscale");
+        self.sheet_header(c, "Sign in to Tailscale");
         let (left, top) = (pad + NU_BTN_PAD, pad + NU_PILL + 30);
         let dots = ".".repeat(1 + (self.started.elapsed().as_millis() / 400 % 3) as usize);
         match url {

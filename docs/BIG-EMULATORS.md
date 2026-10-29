@@ -5,8 +5,8 @@ The big systems on the Mini V2 run on ROCKNIX's standalone emulators. pocket-ui 
 state written on Quit and loaded on the next start, and **Options** (Continue · Save · Load · Options · Quit, see
 "Options in the pause menu"; Wii and 3DS since 2026-10-22). Code: `src/standalone.rs`, with hooks in `src/main.rs`
 (launch, open menu, Save/Load, Quit, exit) and `src/sleep.rs` (resume state before sleep); Options in
-`src/emu_settings.rs`. Dolphin's Qt builds (`dolphin-qt-gc`, `dolphin-qt-wii`), WiiWare, Wii U, PS3 and Xbox keep
-Continue/Quit.
+`src/emu_settings.rs`. Dolphin's Qt builds (`dolphin-qt-gc`, `dolphin-qt-wii`), WiiWare and Xbox keep
+Continue/Quit; so do Wii U and PS3, now as guests with a clean Quit ("Wii U (Cemu) and PS3 (RPCS3)" at the end).
 
 **Status ledger: [STATUS.md](STATUS.md).** PS2 and GameCube were measured on the device (2026-10-21).
 **Wii and 3DS are implemented and unit-tested, not yet tried on the device** (see "Wii and 3DS" below for the
@@ -184,6 +184,15 @@ shipped, for the same hidden-window reason as PS2 (not seen to hang here, not wo
 `node.latency 1024/48000`); ARMSX2 adds its TimeStretch buffer (`BufferMS = 50`, `OutputLatencyMS = 20`). The real
 output latency can't be read from outside (Pulse reports 0); left at the emulators' defaults.
 **Power**: not measured; USB was connected all session and `bench.sh` only reports watts on battery.
+
+## Xbox (hakuX in RetroArch, 2026-10-28)
+
+The fourth channel is RetroArch's own **network command port** (UDP on localhost, a free port per session, in the appendconfig
+`hakux.rs` writes): `QUIT` closes the core and RetroArch cleanly, `GET_STATUS` says when the game runs, and
+`SAVE_STATE_SLOT n` / `LOAD_STATE_SLOT n` would save and load once the core has save states (today it reports a serialize
+size of 0; `hakux_libretro.info` says `savestate = "false"` and the pause menu offers no Save or Load, only a line saying so).
+Everything else is as for the other guests: the game is stopped while the menu is up, Quit has a plan with a fallback to
+signals and the process group. All of it, with the licence and the device test, is in [XBOX.md](XBOX.md).
 
 ## Options in the pause menu (2026-10-22)
 Continue · Save · Load · **Options** · Quit. Options is a short list per emulator, kept per game, applied when the
@@ -707,3 +716,26 @@ Device check (Syncthing on, no second device needed):
    `/rest/db/browse?folder=pocket-3ds-saves&levels=8` lists only `…/data/…` and `extdata/00000000/…`, no `.app`.
 6. Stop pocket-ui while a PS2 game runs (`kill $(pidof pocket-ui)`; its launcher starts it again): the folder stays
    `true` while ARMSX2 still runs, and turns `false` (with `held` gone) within ~5 s of ARMSX2 ending.
+
+## Wii U (Cemu) and PS3 (RPCS3) on SM8550 (2026-10-28, experimental)
+ROCKNIX's SM8550 image ships `cemu` (`start_cemu.sh`, core `cemu-sa`) and `rpcs3-sa` (`start_rpcs3.sh`). They are guests
+of the pause menu without states (`standalone::guest`, `Saver::Other` in the menu): **Continue · Options · Quick settings ·
+Quit**, with the honest line "This emulator keeps its own saves…" (`pause_saves::OWN_SAVES`).
+- **Start:** as for every emulator, through `runemu.sh` (the shelf's launch path is unchanged). `standalone::launch`
+  notes the guest and, once its process (`cemu`, `rpcs3-sa`, found by `comm`) exists, sets the CPU/GPU profile of the
+  other big emulators (`set_performance(chosen_performance)`: the game's Options row, else Settings → Games: performance;
+  Quick settings' Performance row acts on it, `Kind::Standalone` in `app_quick_profiles`). Fan: Smooth fan follows the
+  same saved choices as for the other games. The profile is put back when the game ends (`exited`).
+- **Pad:** input belongs to the game while it runs (`in_game_input`); only a HOME tap opens the menu. Nothing else of
+  pocket-ui reacts to the pad.
+- **Quit:** `guest::PLAN`: close the emulator's window (`swaymsg [pid=…] kill`, which is a normal close request: Cemu's
+  Exit, RPCS3 with `confirmationBoxExitGame=false` as ROCKNIX ships it) → wait 8 s → SIGTERM → wait 5 s → SIGKILL, always
+  on the process inside the game's process group; the main loop's `Escalation` (`How::Guest`, 20 s) stops the whole group
+  if even that hangs. runemu.sh is not signalled, so it restores the governor and its other clean-up itself.
+- **Save/Load: not offered.** Cemu has no save states. RPCS3 has no save states either, and no IPC or hotkey for them
+  (ROCKNIX's `start_rpcs3.sh` passes no extra arguments; there is only `--no-gui <game>`). Saving is inside the game;
+  the honest line says so. If a control channel appears upstream, extend `guest::Guest` with an `Emu`-style state set.
+- Runs on SM8550 only because the emulators exist only there (`Guest::detect` doesn't check the device; without the
+  binary `runemu.sh` fails to start the game, as before).
+- Device check: see the report of this change (docs/DEVICE-TESTS.md style): start from the shelf, HOME → menu,
+  Continue, HOME → Quit; `pidof cemu rpcs3-sa` empty afterwards, `verify-device.sh` ok.

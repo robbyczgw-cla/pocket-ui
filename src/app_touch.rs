@@ -63,9 +63,8 @@ impl App {
             return self.touch_ignored(why);
         }
         self.ignore_log.accepted();
-        let Some(window) = &self.window else { return };
-        let size = window.inner_size();
-        let (x, y) = touch::to_px((ev.x, ev.y), size.width, size.height);
+        let (w, h) = self.screen_size();
+        let (x, y) = touch::to_px((ev.x, ev.y), w, h);
         let gesture = self.touch_rec.feed(ev.phase, x, y, std::time::Instant::now(), self.hits.pitch());
         // The search: keys, result rows and its list's swipe (`app_search`); its hints go the usual way below.
         if self.find.is_open() && self.search_touch(el, gesture) {
@@ -125,9 +124,8 @@ impl App {
             self.touch_rec.reset();
             return;
         }
-        let Some(window) = &self.window else { return };
-        let size = window.inner_size();
-        let (x, y) = touch::to_px((ev.x, ev.y), size.width, size.height);
+        let (w, h) = self.screen_size();
+        let (x, y) = touch::to_px((ev.x, ev.y), w, h);
         match self.touch_rec.feed(ev.phase, x, y, std::time::Instant::now(), self.sys.hits.pitch()) {
             Some(Gesture::Tap { x, y }) => match self.sys.hits.tap(x, y) {
                 TapAction::Nothing => {}

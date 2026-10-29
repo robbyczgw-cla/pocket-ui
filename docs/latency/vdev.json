@@ -1,223 +1,229 @@
 {
  "config": {
-  "cpu_secs": 10,
+  "asleep": 15,
+  "cold": false,
+  "cpu_secs": 3.0,
   "cycles": 2,
   "gap": 150,
-  "moves": 100,
-  "opens": 5,
-  "runs": 6,
+  "look": "",
+  "moves": 60,
+  "nav_system": "",
+  "opens": 3,
+  "runs": 3,
   "settle": 2.0,
   "starts": 5,
   "systems": [
-   "gbc",
-   "gba",
-   "snes"
+   "gbc"
   ],
-  "warmup": true
+  "wake": false,
+  "wakes": 3,
+  "warmup": false
  },
  "meta": {
-  "commit": "ca07625+dirty",
-  "date": "2026-10-22T22:10:51+0000",
+  "binary_sha256": "2452922535730b9d08ca09f719c00c9f14ecaef5245208c1bdbbf064a0b6ea74",
+  "commit": "11e3ef4",
+  "cpu_source": "stat",
+  "date": "2026-10-28T23:30:21+0000",
+  "games": 1,
+  "host": "macbook-air-m4",
   "kernel": "6.8.0-117-generic",
-  "merged": 2,
-  "seconds": 305,
-  "target": "vdev"
+  "look": "shelf",
+  "machine": "MacBook Air M4",
+  "seconds": 145,
+  "target": "vdev",
+  "virtual_cpus": 4,
+  "virtual_ram_bytes": 6198562816
  },
  "metrics": {
+  "close.card": {
+   "runs": [
+    3.433,
+    1.528,
+    3.964
+   ],
+   "spread": 2.436,
+   "unit": "ms",
+   "value": 3.433
+  },
+  "close.pause_menu": {
+   "runs": [
+    4.616,
+    2.663,
+    2.609
+   ],
+   "spread": 2.006,
+   "unit": "ms",
+   "value": 2.663
+  },
+  "close.quick": {
+   "runs": [
+    2.188,
+    0.974,
+    1.295
+   ],
+   "spread": 1.214,
+   "unit": "ms",
+   "value": 1.295
+  },
   "cpu.behind_game": {
    "runs": [
-    0.042,
-    0.034,
-    0.078,
-    0.022,
-    0.02,
-    0.015
+    0.333,
+    0.0,
+    0.0
    ],
-   "spread": 0.063,
+   "spread": 0.333,
    "unit": "%",
-   "value": 0.028
+   "value": 0.0
   },
   "cpu.shelf_idle": {
    "runs": [
-    0.021,
-    0.044,
-    0.177,
-    0.036,
-    0.041,
-    0.024
+    0.0,
+    0.0,
+    0.0
    ],
-   "spread": 0.156,
+   "spread": 0.0,
    "unit": "%",
-   "value": 0.038
-  },
-  "launch.gba": {
-   "runs": [
-    125.862,
-    138.194,
-    125.388,
-    130.935,
-    124.32,
-    108.637
-   ],
-   "spread": 29.557,
-   "unit": "ms",
-   "value": 125.625
+   "value": 0.0
   },
   "launch.gbc": {
    "runs": [
-    80.846,
-    93.178,
-    102.256,
-    82.995,
-    95.831,
-    87.081
+    66.54,
+    59.103,
+    66.885
    ],
-   "spread": 21.41,
+   "spread": 7.782,
    "unit": "ms",
-   "value": 90.13
-  },
-  "launch.snes": {
-   "runs": [
-    200.983,
-    107.621,
-    104.763,
-    110.338,
-    107.825,
-    99.282
-   ],
-   "spread": 101.701,
-   "unit": "ms",
-   "value": 107.723
+   "value": 66.54
   },
   "nav.p50": {
    "runs": [
-    0.903,
-    0.993,
-    2.683,
-    2.172,
-    2.202,
-    1.149
+    3.278,
+    3.406,
+    2.753
    ],
-   "spread": 1.78,
+   "spread": 0.653,
    "unit": "ms",
-   "value": 1.661
+   "value": 3.278
   },
   "nav.p95": {
    "runs": [
-    4.121,
-    4.76,
-    7.978,
-    6.189,
-    7.678,
-    4.401
+    5.192,
+    5.346,
+    4.895
    ],
-   "spread": 3.857,
+   "spread": 0.451,
    "unit": "ms",
-   "value": 5.474
+   "value": 5.192
+  },
+  "open.card": {
+   "runs": [
+    15.999,
+    12.002,
+    10.677
+   ],
+   "spread": 5.322,
+   "unit": "ms",
+   "value": 12.002
+  },
+  "open.card_first": {
+   "runs": [
+    20.461,
+    13.96,
+    16.412
+   ],
+   "spread": 6.501,
+   "unit": "ms",
+   "value": 16.412
   },
   "open.pause_menu": {
    "runs": [
-    54.066,
-    48.505,
-    47.68,
-    50.732,
-    48.288,
-    46.097
+    9.596,
+    18.388,
+    16.473
    ],
-   "spread": 7.969,
+   "spread": 8.792,
    "unit": "ms",
-   "value": 48.397
+   "value": 16.473
+  },
+  "open.pause_menu_again": {
+   "runs": [
+    4.245,
+    9.616,
+    16.404
+   ],
+   "spread": 12.159,
+   "unit": "ms",
+   "value": 9.616
+  },
+  "open.quick": {
+   "runs": [
+    3.549,
+    1.368,
+    1.338
+   ],
+   "spread": 2.211,
+   "unit": "ms",
+   "value": 1.368
   },
   "open.settings": {
    "runs": [
-    1.631,
-    2.427,
-    2.774,
-    1.854,
-    2.185,
-    5.586
+    3.14,
+    1.359,
+    1.161
    ],
-   "spread": 3.955,
+   "spread": 1.979,
    "unit": "ms",
-   "value": 2.306
+   "value": 1.359
   },
   "open.switcher": {
    "runs": [
-    24.94,
-    18.048,
-    45.004,
-    15.886,
-    32.653,
-    19.191
+    5.438,
+    1.931,
+    3.608
    ],
-   "spread": 29.118,
+   "spread": 3.507,
    "unit": "ms",
-   "value": 22.066
-  },
-  "open.switcher_game": {
-   "runs": [
-    19.566,
-    33.358,
-    32.205,
-    30.828,
-    24.454,
-    30.389
-   ],
-   "spread": 13.792,
-   "unit": "ms",
-   "value": 30.608
+   "value": 3.608
   },
   "quit.to_shelf": {
    "runs": [
-    405.719,
-    411.599,
-    412.399,
-    408.017,
-    408.371,
-    403.707
+    11.149,
+    9.945,
+    13.549
    ],
-   "spread": 8.692,
+   "spread": 3.604,
    "unit": "ms",
-   "value": 408.194
+   "value": 11.149
   },
   "start.cold": {
    "runs": [
-    59.387,
-    47.289,
-    72.216,
-    65.9,
-    72.963,
-    68.077
+    24.774,
+    27.074,
+    27.365
    ],
-   "spread": 25.674,
+   "spread": 2.591,
    "unit": "ms",
-   "value": 66.989
+   "value": 27.074
+  },
+  "start.pads": {
+   "runs": [
+    0.545,
+    0.483,
+    0.601
+   ],
+   "spread": 0.118,
+   "unit": "ms",
+   "value": 0.545
   },
   "start.process": {
    "runs": [
-    58.628,
-    46.627,
-    71.284,
-    63.283,
-    70.601,
-    67.159
+    23.301,
+    25.866,
+    26.264
    ],
-   "spread": 24.657,
+   "spread": 2.963,
    "unit": "ms",
-   "value": 65.221
-  },
-  "switch.game": {
-   "runs": [
-    337.384,
-    360.426,
-    385.196,
-    360.427,
-    362.676,
-    334.279
-   ],
-   "spread": 50.917,
-   "unit": "ms",
-   "value": 360.427
+   "value": 25.866
   }
  },
  "schema": 1

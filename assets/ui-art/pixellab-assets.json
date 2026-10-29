@@ -561,6 +561,142 @@
    "view": "side",
    "text_guidance_scale": 8.0,
    "result": null
+  },
+  "m_curator_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-29",
+   "description": "a small brass desk lamp shining on a short stack of game cartridges, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 301,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "m_surprise_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-29",
+   "description": "a small wrapped gift box with a ribbon bow, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 311,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "emblem-surprise.png"
+  },
+  "m_streaming_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-29",
+   "description": "a small desktop computer monitor with a game controller resting in front of it, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 321,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "emblem-streaming.png"
+  },
+  "m_curator_b": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-29",
+   "description": "a small wooden display shelf with three game boxes and a little brass lamp, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 302,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "m_surprise_b": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-29",
+   "description": "a small present box with a ribbon and a question mark tag, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 312,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "m_sticker_a": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-29",
+   "description": "a few round colourful paper stickers on a peeled sticker sheet, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 331,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "emblem-sticker.png"
+  },
+  "m_curator_c": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-29",
+   "description": "a small wooden shelf with a row of plain coloured game cartridges standing on it and a little brass desk lamp beside them, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 303,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": null
+  },
+  "m_curator_d": {
+   "endpoint": "create-image-pixflux",
+   "date": "2026-10-29",
+   "description": "a tidy little wooden crate holding a row of plain coloured game cartridges, a small brass label holder on its front, cozy, calm, warm muted colours, soft light, single object, centered, front view, no text, no letters",
+   "seed": 304,
+   "image_size": [
+    160,
+    120
+   ],
+   "no_background": true,
+   "outline": "single color black outline",
+   "shading": "medium shading",
+   "detail": "medium detail",
+   "view": "side",
+   "text_guidance_scale": 8.0,
+   "result": "emblem-curator.png"
   }
  }
 }

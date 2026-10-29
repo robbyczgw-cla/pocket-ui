@@ -197,6 +197,7 @@ fn system_names(system: &str) -> &'static [&'static str] {
         "pcengine" => &["TurboGrafx", "PC Engine"],
         "atari2600" => &["Atari 2600"],
         "atarilynx" => &["Lynx"],
+        "xbox" => &["Xbox video game", "Xbox"],
         _ => &[],
     }
 }

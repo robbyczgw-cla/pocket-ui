@@ -82,7 +82,7 @@ They are names, not descriptions, and the manual (still English) uses them:
 | Quick settings | Schnellmenü | |
 | Options (a game's) | Optionen | |
 | Picture, Shortcuts, Extras (Options groups) | Bild, Tastenkürzel, Extras | |
-| Over the game (Settings → Playing, Options → Extras): Off, FPS, FPS + sensors, Pixel Path | Anzeige im Spiel: Aus, FPS, FPS + Sensoren, Pixel Path | what pocket-core draws over a game. Its line: "FPS", "CPU", "EMU" and the units stay; FPS + sensors says "Lüfter 45%", "Lüfter aus", "lädt" (`osd_sensors`) |
+| Over the game (Settings → Playing, Options → Extras): Off, FPS, FPS + sensors, Pixel Path | Anzeige im Spiel: Aus, FPS, FPS + Sensoren, Pixel Path | what pocket-core draws over a game. Its line: "FPS", "CPU", "EMU" and the units stay; FPS + sensors says "Lüfter 45 %", "Lüfter aus", "lädt" (`osd_sensors`) |
 | Screen frame(s) | Bildschirmrahmen | "frames" alone: Rahmen |
 | Runs on | Läuft mit | |
 | Achievements | Erfolge | the service stays RetroAchievements |

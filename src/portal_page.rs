@@ -170,8 +170,8 @@ impl PortalPage {
             View::Overview => {
                 let n = self.rows().len();
                 match b {
-                    Button::Up => self.sel = self.sel.saturating_sub(1),
-                    Button::Down => self.sel = (self.sel + 1).min(n.saturating_sub(1)),
+                    Button::Up => self.sel = crate::wrap_step(self.sel, n, true),
+                    Button::Down => self.sel = crate::wrap_step(self.sel, n, false),
                     Button::East => match self.rows().get(self.sel) {
                         Some(Row::SignIn) => return self.open_signin(),
                         Some(Row::OtherWays) => {
@@ -271,7 +271,7 @@ impl PortalPage {
         for (i, r) in self.rows().iter().enumerate() {
             let ry = top + i as i32 * row;
             let selected = i == self.sel;
-            c.rect(MARGIN, ry, w, row - 8, if selected { pal().label } else { pal().spine });
+            crate::kit::shelf_row(c, MARGIN, ry, w, row - 8, selected);
             let (name, side) = match r {
                 Row::SignIn => ("Sign in…", "On the Pocket"),
                 Row::OtherWays => ("Other ways", "Hotspot, front desk"),

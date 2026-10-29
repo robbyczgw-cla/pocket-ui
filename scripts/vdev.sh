@@ -97,12 +97,12 @@ cmd_up() {
   device=${VDEV_DEVICE:-miniv2}
   while [ $# -gt 0 ]; do
     case $1 in
-      --device) device=${2:-}; shift 2 || die "--device needs a name: miniv2, rp5, flip2, mini1, rp6, nova, odin2mini, odin2, odin2portal" ;;
+      --device) device=${2:-}; shift 2 || die "--device needs a name: miniv2, rp5, flip2, mini1, rp6, nova, odin2mini, odin2, odin2portal, rg28xx, rg35xx-sp" ;;
       --device=*) device=${1#--device=}; shift ;;
       *) die "unknown option for up: $1" ;;
     esac
   done
-  case $device in miniv2 | rp5 | flip2 | mini1 | rp6 | nova | odin2mini | odin2 | odin2portal) ;; *) die "unknown device '$device': miniv2, rp5, flip2, mini1, rp6, nova, odin2mini, odin2 or odin2portal" ;; esac
+  case $device in miniv2 | rp5 | flip2 | mini1 | rp6 | nova | odin2mini | odin2 | odin2portal | rg28xx | rg35xx-sp) ;; *) die "unknown device '$device': miniv2, rp5, flip2, mini1, rp6, nova, odin2mini, odin2, odin2portal, rg28xx or rg35xx-sp" ;; esac
   ensure_image
   if running; then
     have=$(docker inspect -f '{{index .Config.Labels "pocket-vdev.device"}}' "$C" 2>/dev/null)
@@ -275,7 +275,7 @@ case "${1:-}" in
   run-core) shift; cmd_run_core "$@" ;;
   image) shift; cmd_image "$@" ;;
   *)
-    echo "usage: vdev.sh up [--device miniv2|rp5|flip2|mini1|rp6|nova|odin2mini|odin2|odin2portal]|down|deploy|send CMD...|pad ...|lid close|open|shot NAME|log|sh|run-core CORE ROM|stop|ls|image" >&2
+    echo "usage: vdev.sh up [--device miniv2|rp5|flip2|mini1|rp6|nova|odin2mini|odin2|odin2portal|rg28xx|rg35xx-sp]|down|deploy|send CMD...|pad ...|lid close|open|shot NAME|log|sh|run-core CORE ROM|stop|ls|image" >&2
     echo "       VDEV_NAME=<name> picks the instance (default: dev), see the header of this file" >&2
     exit 2
     ;;

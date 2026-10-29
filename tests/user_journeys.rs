@@ -323,8 +323,8 @@ while :; do sleep 0.05; done
         ui.send("home");
         let menu = ui.sees("Quit");
         assert!(menu.contains("Tobu Tobu Girl"), "the pause menu must name the launched game: {menu}");
-        // Navigation clamps at the ends; repeated Down reaches the visible Quit row.
-        ui.send(&("down\n".repeat(12) + "a"));
+        // The menu wraps around: Up from Continue is Quit, one press.
+        ui.send("up\na");
         let mut shelf = String::new();
         ui.wait(|d| {
             shelf = d.frame();
@@ -338,6 +338,48 @@ while :; do sleep 0.05; done
             "quit\n",
             "the stand-in game actually exited"
         );
+    }
+
+    /// The whole way of "This game": card (X), START, change the frame, B, play, and the file the game starts with says the
+    /// same: pocket-core reads it with `GameSettings::load`, as the pause menu does (one source of truth).
+    #[test]
+    fn this_game_changes_the_frame_from_the_card_and_the_game_starts_with_it() {
+        let mut ui = Driver::new("this-game", true);
+        ui.sees("Game Boy");
+        // Into the system's list, X for the card, START for the page: two presses from the list.
+        ui.send("a\nx");
+        ui.sees("START");
+        ui.send("start");
+        let page = ui.sees("This game · Game Boy");
+        for row in ["Screen scaling", "Screen sharpness", "Screen frame"] {
+            assert!(page.contains(row), "{row} is missing: {page}");
+        }
+        // Scaling, sharpness, effect, then the frame: one to the right is Auto.
+        ui.send("down\ndown\ndown\nright");
+        ui.sees("\u{2039} Auto \u{203a}");
+        let rom = ui.card.tmp.join("gb/Tobu Tobu Girl (World).gb");
+        let data = ui.card.tmp.join("data");
+        let file = data.join("game-settings/gb/Tobu Tobu Girl (World).json");
+        ui.wait(|_| file.exists());
+        assert!(std::fs::read_to_string(&file).unwrap().contains("\"frame\": \"auto\""), "{}", std::fs::read_to_string(&file).unwrap());
+        let loaded = pocket_ui::options::GameSettings::load(&data, "gb", &rom);
+        assert_eq!(loaded.effective()["frame"], "auto");
+        assert_eq!(loaded.level, pocket_ui::options::Level::Game);
+        // Back to the card, play: the game starts, and the page still says the same afterwards.
+        ui.send("b");
+        ui.sees("Tobu Tobu Girl");
+        ui.send("a");
+        ui.wait(|d| matches!(std::fs::read_to_string(d.card.tmp.join("run-game.started")).as_deref(), Ok("started\n")));
+        ui.send("home");
+        ui.sees("Quit");
+        ui.send("up\na");
+        ui.wait(|d| matches!(std::fs::read_to_string(d.card.tmp.join("run-game.quit")).as_deref(), Ok("quit\n")));
+        ui.sees("Game Boy");
+        ui.send("x");
+        ui.sees("START");
+        ui.send("start\ndown\ndown\ndown");
+        let again = ui.sees("\u{2039} Auto \u{203a}");
+        assert!(again.contains("This game has its own settings."), "{again}");
     }
 
     /// Every `send` is its own open/write/close on the FIFO. The UI must lose none of them and never hand the writer a
@@ -467,6 +509,139 @@ true
         assert!(!log.contains("connection up"), "nothing connected a saved profile by itself: {log}");
     }
 
+    /// The Game Boy and Sega CD card plus one more system, its files empty.
+    fn add_system(tmp: &Path, id: &str, name: &str, exts: &str, files: &[&str]) {
+        let folder = tmp.join(id);
+        std::fs::create_dir_all(&folder).unwrap();
+        for f in files {
+            std::fs::write(folder.join(f), "").unwrap();
+        }
+        let cfg = tmp.join("es_systems.cfg");
+        let text = std::fs::read_to_string(&cfg).unwrap().replace(
+            "</systemList>",
+            &format!(
+                "  <system><name>{id}</name><fullname>{name}</fullname><path>{}</path><extension>{exts}</extension><command>true</command></system>\n</systemList>",
+                folder.display()
+            ),
+        );
+        std::fs::write(cfg, text).unwrap();
+    }
+
+    /// Xbox is not hosted by pocket-core: HOME in the game opens the guest's menu (with the note that the emulator keeps
+    /// its own saves), and Quit ends the stand-in and gets back to the Xbox list (monkey test 2026-10-29).
+    #[test]
+    fn xbox_guest_starts_home_shows_its_menu_and_quit_gets_back() {
+        let mut ui = Driver::start("xbox-guest", true, |tmp, _| {
+            add_system(tmp, "xbox", "Xbox", ".iso .xbe", &["Halo - Combat Evolved (USA).iso"]);
+        });
+        ui.sees("Game Boy");
+        ui.send("down\ndown\na");
+        ui.sees("Halo - Combat Evolved");
+        ui.send("a");
+        ui.wait(|d| d.card.tmp.join("run-game.started").exists());
+        // The launch animation of a game that is starting: HOME before its end is not the pause menu's yet.
+        std::thread::sleep(Duration::from_secs(3));
+        ui.send("home");
+        let menu = ui.sees("Quit");
+        assert!(menu.contains("Halo - Combat Evolved") && menu.contains("Continue"), "{menu}");
+        assert!(menu.contains("keeps its own saves"), "a guest emulator's menu says that saves are its own: {menu}");
+        // The menu takes buttons once it has settled (a loaded host got the presses too early).
+        std::thread::sleep(Duration::from_millis(600));
+        // The guest's menu wraps: Up from Continue is Quit (Down ×8 came back to Continue in this four-row menu).
+        ui.send("up");
+        std::thread::sleep(Duration::from_millis(200));
+        ui.send("a");
+        // A guest is asked to close first and ended after its grace period: the shelf is back, and the stand-in is gone
+        // (it may be ended before its trap writes a marker, so the process is what is looked at).
+        let mut shelf = String::new();
+        let until = Instant::now() + Duration::from_secs(40);
+        loop {
+            shelf = if Instant::now() < until { ui.frame() } else { panic!("no shelf after Quit:\n{shelf}\nUI log:\n{}", ui.log()) };
+            if shelf.contains("Halo - Combat Evolved") && !shelf.contains("Quit") && !shelf.contains("Continue") {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let pid: i32 = ui.log().lines().find_map(|l| l.strip_prefix("test game pid ")?.parse().ok()).expect("the launch log names the game");
+        let gone = (0..100).any(|_| {
+            std::thread::sleep(Duration::from_millis(100));
+            unsafe { libc::kill(pid, 0) != 0 }
+        });
+        assert!(gone, "the stand-in game still runs after Quit");
+    }
+
+    /// A game that never starts says so: the screen does not just fall back to the list (`fallback::not_started_notice`;
+    /// pocket-core's own missing-core message is the unit test in `fallback.rs`, pocket-core is not on the host).
+    #[test]
+    fn a_game_that_never_starts_says_so() {
+        let mut ui = Driver::start("never-starts", true, |tmp, _| {
+            add_system(tmp, "xbox", "Xbox", ".iso .xbe", &["Broken Demo (USA).iso"]);
+            executable(&tmp.join("run-game"), "#!/bin/sh\nexit 1\n");
+        });
+        ui.sees("Game Boy");
+        ui.send("down\ndown\na");
+        ui.sees("Broken Demo");
+        ui.send("a");
+        let text = ui.sees("didn't start");
+        assert!(text.contains("Broken Demo"), "the notice names the game: {text}");
+    }
+
+    /// A card with no games is not an empty screen: it says so, offers the starter pack, and says what is missing when
+    /// the Pocket is offline.
+    #[test]
+    fn an_empty_card_offers_the_starter_pack_and_says_when_it_is_offline() {
+        let mut ui = Driver::start("starter", true, |tmp, _| {
+            for f in ["gb/Tobu Tobu Girl (World).gb", "segacd/Pocket CD Demo (USA).cue", "segacd/Pocket CD Demo (USA).bin"] {
+                std::fs::remove_file(tmp.join(f)).unwrap();
+            }
+        });
+        let home = ui.sees("No games yet");
+        assert!(home.contains("Get the starter pack") && home.contains("/storage/roms/<system>"), "{home}");
+        ui.send("a");
+        ui.sees("Starter pack");
+        ui.send("a");
+        ui.sees("The Pocket isn't online");
+    }
+
+    /// Delete from the SD card: the card's last row, the sheet, two A presses; the file is gone and the screen says so.
+    #[test]
+    fn deleting_a_game_asks_twice_then_removes_the_file() {
+        let mut ui = Driver::new("delete", true);
+        ui.sees("Game Boy");
+        let rom = ui.card.tmp.join("gb/Tobu Tobu Girl (World).gb");
+        // The game's card (X), turned over (right), its second page (SELECT), down to the last row: Hide or delete.
+        ui.send("a\nx\nright\nselect");
+        ui.sees("Hide or delete");
+        ui.send(&"down\n".repeat(10));
+        ui.send("a");
+        ui.sees("Hide from the shelf");
+        ui.send("down\na");
+        let sheet = ui.sees("Delete Tobu Tobu Girl?");
+        assert!(rom.exists(), "the sheet only asks: {sheet}");
+        ui.send("a");
+        let again = ui.sees("Press A again to delete");
+        assert!(rom.exists(), "one A is not enough: {again}");
+        ui.send("a");
+        ui.sees("Deleted Tobu Tobu Girl");
+        assert!(!rom.exists());
+    }
+
+    /// Bluetooth page with a speaker/headphone-class device (the mock's JBL Flip 5): search, pair, trust, connect,
+    /// and the page says it is connected.
+    #[test]
+    fn bluetooth_page_connects_an_audio_device() {
+        let mut ui = Driver::new("bluetooth", true);
+        ui.sees("Game Boy");
+        ui.send("start\ndown\ndown\ndown\na\ndown\na");
+        ui.sees("Search for devices");
+        ui.send("down\na");
+        ui.sees("JBL Flip 5");
+        ui.send(&"down\n".repeat(5));
+        ui.send("a");
+        let text = ui.sees("JBL Flip 5 is connected");
+        assert!(!text.contains("Couldn't") && !text.contains("Failed"), "{text}");
+    }
+
     #[test]
     fn power_menu_powers_off_once_and_disarms_the_alarm_once() {
         let mut ui = Driver::new("power", true);
@@ -504,4 +679,32 @@ fn wifi_timeout_explains_the_next_step_without_nmcli_diagnostics() {
     let text = shot(&card.tmp, card.stub.as_ref(), "setup:wifi-timeout", "large");
     assert!(text.contains("The network took too long to respond. Try again."), "{text}");
     assert!(!text.contains("Timeout expired") && !text.contains("45 seconds") && !text.contains("Error:"), "{text}");
+}
+
+/// Large text on a 4:3 screen (960 lines, the Mini V1): the readout panel of Performance & fan keeps clear of the hint bar,
+/// the descriptions above it give way (found by `scripts/size-sweep.sh`, 2026-10-29: "Battery draw" ran under the hints).
+#[test]
+fn performance_readout_stays_above_the_hints_at_large_text_on_960_lines() {
+    let card = Card::new("perf-960");
+    let boxes = card.tmp.join("perf.boxes");
+    let png = card.tmp.join("perf.png");
+    std::fs::create_dir_all(card.tmp.join("data")).unwrap();
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+    if let Some(stub) = &card.stub {
+        cmd.env("WAYLAND_DISPLAY", &stub.path);
+    }
+    let out = cmd
+        .args(["--snapshot", "perf:2:veryquiet", png.to_str().unwrap()])
+        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_LANG", "en")
+        .env("POCKETUI_TEXT_SIZE", "large")
+        .env("POCKETUI_SNAPSHOT_SIZE", "1280x960")
+        .env("POCKETUI_TEXT_BOXES", &boxes)
+        .env("POCKETUI_DATA", card.tmp.join("data"))
+        .env("POCKETUI_ES_SYSTEMS", card.tmp.join("es_systems.cfg"))
+        .output()
+        .unwrap();
+    assert!(out.status.success() && png.exists(), "{}", String::from_utf8_lossy(&out.stderr));
+    let found = std::fs::read_to_string(boxes).unwrap_or_default();
+    assert!(found.trim().is_empty(), "text runs into other text or the hints:\n{found}");
 }

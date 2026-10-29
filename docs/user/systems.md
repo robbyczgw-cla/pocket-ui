@@ -242,10 +242,28 @@ not also the controller's Analog button.
 GameCube and Wii games started with Dolphin's other version (Qt) have Continue, Options (Runs on), Quick settings and
 Quit only.
 
+## Xbox
+
+*Experimental.* Original Xbox games go into `roms/xbox` as `.iso` disc images (XISO, no BIOS or hard disk image needed).
+pocket-ui plays them with **hakuX** in RetroArch; the core is part of the pocket-ui install and sits in
+`/storage/pocket-ui/hakux`. Without it, ROCKNIX's xemu stays the default. Pick the emulator under
+[Runs on](options.md#runs-on).
+
+- **Pause menu:** Continue, Options, Quick settings, Quit. HOME opens it over the game. [Options](options-big.md#xbox-experimental): Resolution
+  (Original 480p or 2x 960p) and Screen scaling (Aspect, Fullscreen, Integer); both apply the next time the game starts.
+- **Saves:** the game's own saves work and stay in pocket-ui's folder, never in `roms/xbox`. **Save states do not exist yet**
+  (no Save, Load or "continue where I left off"); the rows appear when the core can do it.
+- Not every game runs, and the speed varies; sound effects of some games may be missing. This is a young port. Please report
+  what you find.
+- Credits: hakuX by rfandango (GPL-3.0), Linux/libretro port by portare-ch (PortareOS), PR #9 commit 531ce8d + audio relaunch fix (ours, submitted upstream). The licence
+  and source link are in `/storage/pocket-ui/licences/NOTICE.md` (Settings → System → About names the folder).
+
 ## On standalone emulators
 
-Other large systems, for example Wii U, PlayStation 3 and Xbox, and WiiWare, use standalone
-emulators without pocket-ui's save support. So do the NAOMI and Atomiswave arcade boards, on ROCKNIX's standalone
+Other large systems, for example Wii U, PlayStation 3, and WiiWare, use standalone
+emulators without pocket-ui's save support. Wii U (Cemu) and PlayStation 3 (RPCS3) are experimental and exist on
+the SM8550 handhelds only (AYN Odin 2 family, Retroid Pocket 6/Nova): HOME opens pocket-ui's pause menu over the game, and
+Quit closes the emulator cleanly. So do the NAOMI and Atomiswave arcade boards, on ROCKNIX's standalone
 Flycast; they need MAME's BIOS sets in `roms/bios/dc` (`naomi.zip`, `naomi2.zip` for NAOMI 2 games, `awbios.zip`).
 
 Pause menu: Continue, Options (Runs on), Quick settings and Quit. These emulators keep their own saves and settings; use their

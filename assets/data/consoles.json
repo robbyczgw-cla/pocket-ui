@@ -1598,6 +1598,50 @@
     "https://en.wikipedia.org/wiki/WonderSwan (lead: followed by WonderSwan Color and SwanCrystal)",
     "https://www.wikidata.org/wiki/Q1065792"
    ]
+  },
+  {
+   "id": "xbox",
+   "name": "Xbox",
+   "aka": [
+    "Original Xbox"
+   ],
+   "maker": "Microsoft",
+   "kind": "home",
+   "generation": 6,
+   "released": {
+    "NA": "2001-11-15",
+    "JP": "2002-02-22",
+    "EU": "2002-03-14"
+   },
+   "discontinued": "2006",
+   "units_sold": {
+    "value": 24000000,
+    "as_of": "undated (Wikipedia infobox, 'units sold: 24 million')",
+    "note": "Round figure as Wikipedia gives it; Japan stopped production in 2005, the rest of the world in 2006"
+   },
+   "launch_price": {
+    "NA": "US$299",
+    "UK": "£299",
+    "EU": "€479"
+   },
+   "cpu": "Intel Pentium III, 733 MHz",
+   "gpu": "Nvidia NV2A, 233 MHz",
+   "memory": "64 MB DDR SDRAM",
+   "media": "DVD, CD",
+   "predecessor": null,
+   "successor": "Xbox 360",
+   "summary": "Microsoft's first game console, built on PC parts, with a hard drive and Ethernet built in. It launched Xbox Live, and about 24 million were sold.",
+   "lines": {
+    "headline": "Microsoft · 2001 · sixth generation",
+    "released": "2001 NA · 2002 JP/EU",
+    "ended": "2006",
+    "inside": "Pentium III 733 MHz · NV2A",
+    "sold": "24 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Xbox_(console)",
+    "https://www.wikidata.org/wiki/Q132020"
+   ]
   }
  ],
  "schema": "lines.* are ready-made English display strings (shelf rows); the other fields are the verified data for the details page; sources per system."

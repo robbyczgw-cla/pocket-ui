@@ -99,11 +99,12 @@ change). Above the lowest trip the fan is never stopped by us.
 
 | Shape | Points (°C → PWM) | Starts | Stops below | Follows |
 |---|---|---|---|---|
+| Very quiet | 60→40, 66→44, 71→60, 74→100, 76.5→160, 78→255 | 60 °C | 55 °C | nothing in ROCKNIX; ours, 8 °C later than Quiet |
 | Quiet | 52→40, 60→46, 66→64, 71→100, 75→160, 78→255 | 52 °C | 46 °C | ROCKNIX quiet |
 | Balanced | 46→40, 55→56, 62→85, 68→128, 73→185, 78→255 | 46 °C | 40 °C | ROCKNIX moderate |
 | Cool | 40→46, 48→70, 55→100, 61→138, 66→180, 71→220, 78→255 | 40 °C | 35 °C | ROCKNIX aggressive |
 
-**Profiles.** Quiet and Cool are those shapes. **Auto** takes the shape of ROCKNIX's `cooling.profile` (looked up as
+**Profiles.** Very quiet, Quiet and Cool are those shapes (Very quiet only by choice, never from Auto). **Auto** takes the shape of ROCKNIX's `cooling.profile` (looked up as
 `get_setting` does: `system.cooling.profile`, `cooling.profile`, `global.cooling.profile`; quiet → Quiet,
 aggressive → Cool, moderate or none → Balanced); `custom` means ROCKNIX's own loop runs, and pocket-ui keeps out.
 The readout calls the Balanced shape "Auto" (it is what Auto gives with ROCKNIX's moderate profile).
@@ -141,6 +142,40 @@ touched, the guard is independent of the profile, and the kernel keeps a full-sp
 pocket-ui stopped without anyone noticing. The remaining risks are the unknowns of the real fan (the running
 minimum, a polling zone), and both are detected (stall, intervention counter) and end in ROCKNIX's control. The
 device test below should confirm it before a release.
+
+## Very quiet (2026-10-28)
+
+The owner wants a quieter device over maximum performance: with Quiet the fan starts at 52 °C and turns ~4500 rpm at its
+minimum during a demanding game while charging. **Very quiet** (German "Sehr leise", `Fan::VeryQuiet`, value
+`veryquiet`, `Shape::VeryQuiet`) keeps the fan **off until 60 °C** (smoothed) and **off again below 55 °C** (45 s hold,
+as for every shape), so a wobble of ±3 °C around 60 does not toggle it. Points: 60→40, 66→44, 71→60, 74→100, 76.5→160,
+78→255 (Quiet: 100 at 71, 160 at 75); never above Quiet's PWM at the same temperature (unit test). Start pulse (2 s at
+51) and the running minimum (`MIN_RUN_PWM` 40) are unchanged. Offered in Games: fan, Fan outside games, Quick settings,
+the pause menu (Options → Extras → Fan) and a port's page. **Not the default** (Games: fan stays Quiet, outside games
+Auto); the owner decides after trying it.
+
+**Margins** (numbers from this document and ROCKNIX's tree above, nothing new measured): the guard is 78 °C raw on any
+CPU/GPU/cluster zone (255 at once, unchanged); the kernel's backstop is the six trips at 83.5 °C (unchanged); `hot`
+is 90 °C and `critical` 110 °C (never written). The CPU and GPU zones' own cooling devices (cpufreq, devfreq) throttle
+by the kernel's rules regardless of the fan; the Quiet runs measured with Burnout saw 60–70 °C and no throttling.
+Very quiet lets the cluster reach ~64–66 °C before the fan is above its minimum, i.e. 12 °C under the guard, 17 °C
+under the backstop and 24 °C under `hot`. The fan is at 100 (40 %) by 74 °C, 4 °C below the guard. The device test
+decides whether a demanding game stays below the throttle point.
+
+**Smooth fan off:** the six trips are 60/68/74/79/83/86 °C (`power::Fan::trips`); `hot` (90) stays above.
+
+**Recommendation as the default for the Mini V2:** not yet. Decide after the device run below: if a demanding game
+(ARMSX2) stays below ~70 °C hottest sensor with no clock throttling and the fan is mostly off or at the minimum,
+Very quiet is a good default for Games on the Mini V2 (it has a large heatsink margin); keep Quiet for Auto outside.
+
+**Device test plan** (the test device, under its device lock, battery above 20 %, remember the fan setting
+and put it back; the watch loop of [On the device](#on-the-device)):
+1. Games: fan → Very quiet; a demanding game through pocket-core or ARMSX2 (Burnout 3), charging, 10 minutes.
+2. From `sensors.log`/the watch loop: hottest sensor max and mean, time with PWM 0, fan starts (target: ≤ 2 per
+   10 min), PWM max, rpm at the minimum, clock throttling (`scaling_cur_freq` against max on cpu7/cpu4).
+3. Acceptable: hottest sensor max ≤ 75 °C, no sustained CPU/GPU clock drop, the guard (78 °C) not reached, `the kernel
+   set the fan` 0. Above that, report instead of tuning the curve blind.
+4. Also outside games on the shelf for 5 minutes (should be off), then restore the setting.
 
 ## Safety
 

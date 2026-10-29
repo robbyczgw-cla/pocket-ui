@@ -34,8 +34,11 @@ SYSTEMS = [
     ("ports", "Ports", ".sh"),
     ("ps2", "PlayStation 2", ".iso .chd"),
     ("psp", "PlayStation Portable", ".iso .cso"),
+    ("ps3", "PlayStation 3", ".iso .ps3"),
     ("psx", "PlayStation", ".chd .cue .m3u"),
     ("snes", "Super Nintendo", ".sfc .smc .zip"),
+    ("wiiu", "Wii U", ".wua .wud .rpx"),
+    ("xbox", "Xbox", ".iso .xiso"),
 ]
 
 # The same library as src/curator/tests.rs (LIBRARY), plus Final Fantasy III on the NES.
@@ -81,6 +84,10 @@ GAMES = {
         "Shadow of the Colossus (USA).iso",
     ],
     "psp": ["Burnout Legends (USA).iso", "Burnout Dominator (USA).iso", "Ridge Racer (USA).iso", "Lumines (USA).iso"],
+    # The newer guests (Cemu, RPCS3, hakuX): no save states, their own menus; two games each for their system pages.
+    "ps3": ["Demon's Souls (USA).iso", "Gran Turismo 6 (USA).iso"],
+    "wiiu": ["Mario Kart 8 (USA).wua", "Xenoblade Chronicles X (USA).wua"],
+    "xbox": ["Halo 2 (USA).iso", "Jet Set Radio Future (USA).iso"],
     "psx": ["Castlevania - Symphony of the Night (USA).chd", "Chrono Cross (USA).m3u", "Chrono Trigger (Japan).chd", "Crash Team Racing (USA).chd", "R4 - Ridge Racer Type 4 (USA).chd", "Wipeout 2097 (Europe).chd"],
     "snes": [
         "Chrono Trigger (USA).sfc",
@@ -166,7 +173,21 @@ def main():
     # A scraped gamelist.xml next to the GBA games, as EmulationStation or ES-DE leaves one (src/gamelist.rs): a
     # description, facts, a favourite and a rating for a few of them, and a game the library does not have.
     with open(os.path.join(files_at, "gba", "gamelist.xml"), "w") as fh:
-        fh.write(GAMELIST)
+        gamelist = GAMELIST
+        if os.environ.get("POCKETUI_TEXT_FIT"):
+            # Scraped names replace cryptic filenames. Readable filenames deliberately keep their
+            # cleaned title, so changing Advance Wars' <name> would not exercise a long title.
+            entries = [
+                ("BPEE.gba", "Pokemon (Emerald Rogue v2.2.0 EX)"),
+                ("AX4E.gba", "Super Mario Advance 4 - Super Mario Bros. 3 - 38 e-Reader levels"),
+            ]
+            extra = ""
+            for filename, title in entries:
+                with open(os.path.join(files_at, "gba", filename), "w") as rom:
+                    rom.write("x")
+                extra += f"<game><path>./{filename}</path><name>{title}</name></game>"
+            gamelist = gamelist.replace("</gameList>", extra + "</gameList>")
+        fh.write(gamelist)
     cfg = ["<systemList>"]
     for sid, name, ext in SYSTEMS:
         cfg.append(f"  <system><name>{sid}</name><fullname>{name}</fullname><path>{roms}/{sid}</path><extension>{ext}</extension></system>")
@@ -213,6 +234,8 @@ def main():
         {"system": "ps2", "name": "Burnout Revenge", "path": path("ps2", "Burnout Revenge (USA).iso"), "last_played": now - 26 * hour, "play_secs": 3 * hour},
         {"system": "nds", "name": "Chrono Trigger", "path": path("nds", "Chrono Trigger (USA) (En,Fr).nds"), "last_played": now - 40 * 24 * hour, "play_secs": 9 * hour},
     ]
+    if os.environ.get("POCKETUI_TEXT_FIT"):
+        recents.insert(0, {"system": "gba", "name": "Pokemon (Emerald Rogue v2.2.0 EX)", "path": path("gba", "BPEE.gba"), "last_played": now, "play_secs": hour})
     curator = {
         "shelves": [
             {"name": "Racing", "pinned": True, "lens": {"picks": {"family": ["racing"]}}},

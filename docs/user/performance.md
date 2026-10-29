@@ -8,9 +8,11 @@ Games: performance, **Fan** is Fan outside games on the shelf and Games: fan ove
 | Row | Choices |
 |---|---|
 | **Games: performance** | Battery, **Auto**, Max |
-| **Games: fan** | **Quiet**, Auto, Cool |
-| **Fan outside games** | **Auto**, Quiet, Cool |
+| **Games: fan** | Very quiet, **Quiet**, Auto, Cool |
+| **Fan outside games** | **Auto**, Very quiet, Quiet, Cool |
 | **Smooth fan** | **On**, Off |
+
+On a handheld with no fan (the experimental Anbernic RG28XX and RG35XX SP) the fan rows read "No fan" and only the processor speed can be changed.
 
 - **Games: performance** is how fast the processor may run while you play. **Auto**: the system decides; it speeds up
   and slows down as the game needs it. For PlayStation 2, GameCube, Wii and 3DS games that is full speed (they need
@@ -19,7 +21,10 @@ Games: performance, **Fan** is Fan outside games on the shelf and Games: fan ove
   it at full speed all the time, for demanding games; it uses more battery and gets warmer.
 - **Games: fan** is how early the fan starts while you play. **Quiet**, the default, starts the fan at 52 °C and
   keeps it slow: the Pocket gets a little warmer, the fan stays quiet (measured with Burnout on the PS2 emulator: the
-  fan ran at about a fifth less than on Auto, the processor stayed at 60–70 °C and never slowed down). **Auto**
+  fan ran at about a fifth less than on Auto, the processor stayed at 60–70 °C and never slowed down). **Very quiet**
+  keeps the fan off until the Pocket gets warm (60 °C), then runs it as gently as possible and stops it again below
+  55 °C: the Pocket feels a bit warmer, and you rarely hear the fan. It still speeds up in time (full speed from
+  78 °C), but it is new and not chosen for you; try it and see. **Auto**
   follows the system's own cooling profile. **Cool** starts it at 40 °C and turns it faster: cooler to hold, and you
   hear it more. Where this page was saved before, the fan saved then stays (Auto too); only a new install, or settings
   saved before this row existed, start on Quiet.
@@ -36,8 +41,8 @@ system has it, with Smooth fan on it is the system's cooling profile as a smooth
 *Tested on a Mini V2 for eight minutes with a game that keeps one core busy: the fan started once where the system's
 own control started it twice. Its lowest speed, the 78 °C limit and how it sounds are not checked yet.*
 
-pocket-ui drives the fan itself and speeds it up and down over seconds, never in jumps. Quiet, Auto and Cool are
-three curves: each starts the fan at its temperature (52, 46 and 40 °C; Auto takes the curve of the system's cooling
+pocket-ui drives the fan itself and speeds it up and down over seconds, never in jumps. Very quiet, Quiet, Auto and Cool are
+four curves: each starts the fan at its temperature (60, 52, 46 and 40 °C; Auto takes the curve of the system's cooling
 profile, quiet, moderate or aggressive) and reaches full speed at 78 °C. It only stops the fan again once the Pocket
 has been clearly cooler for most of a minute. Some things never change:
 - From 78 °C on any processor or graphics sensor the fan runs at full speed at once, whatever you chose.
@@ -76,7 +81,7 @@ press X for its [card](library.md#opening-a-card), then **START**.
 | Row | Choices |
 |---|---|
 | **Performance** | Battery, Auto, Max |
-| **Fan** | Quiet, Auto, Cool |
+| **Fan** | Very quiet, Quiet, Auto, Cool |
 | **Use the defaults** | Forgets the port's own choice (only there when it has one) |
 
 - A change is saved at once and applies from the port's **next start**. A row that shows "(default)" follows

@@ -12,7 +12,7 @@ visible behind the panel). Rows, top to bottom:
 | **Wi-Fi** | A switches it on or off, by what the radio is doing right now (not by what the row showed a moment ago). The row says **Off** when the radio is off, however that came about, and the same on Settings → Wi-Fi. If Wi-Fi is on in your settings but the system blocked the radio while starting, pocket-ui switches it on once by itself; a Wi-Fi you switched off stays off. If the switch does not work, a short line says "Couldn't turn Wi-Fi on. Try again." and the row keeps showing what the radio really does. Switching Wi-Fi off ends a remote login |
 | **Bluetooth** | A switches it on or off. It takes a few seconds. To pair a controller, see [Bluetooth](bluetooth.md) |
 | **Performance** | Left/Right: Battery, Auto, Max; A goes on to the next. What games run with |
-| **Fan** | Left/Right: Quiet, Auto, Cool; A goes on to the next. On the shelf the fan in the menus, over a game the fan in games |
+| **Fan** | Left/Right: Very quiet, Quiet, Auto, Cool; A goes on to the next. On the shelf the fan in the menus, over a game the fan in games |
 | **Power…** | A opens the power menu: Sleep, Restart, Power off, Restart pocket-ui (and Restart to boot menu where the device can) |
 
 The time, the Wi-Fi symbol and the battery level are at the top right, as on Home. B or HOME closes the panel; opened from the pause menu, it

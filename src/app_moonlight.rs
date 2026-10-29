@@ -324,8 +324,7 @@ impl App {
 
     fn paint_pc_list(&mut self, c: &mut Canvas, page: &MoonlightPage) {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(58, 34), 34u32);
-        self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, SETTINGS_NAME);
+        self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         let rows = page.rows();
         let list_bottom = c.h - pad - NU_PILL - 16 - DETAILS_H;

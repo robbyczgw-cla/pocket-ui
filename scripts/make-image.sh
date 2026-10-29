@@ -2,17 +2,23 @@
 # Builds the ready-to-flash SD card image for the Retroid Pocket Mini V2 (docs/SD-IMAGE.md):
 #   build/image/pocket-ui-<version>-rp-mini-v2.img.xz, its notes (.txt) and SHA256SUMS.
 #
-#   scripts/make-image.sh [--version V] [--bin-dir DIR] [--out DIR] [--keep-work] [--no-check]
-#     --version    pocket-ui version (default: Cargo.toml); the binaries are built with POCKETUI_VERSION=V
-#     --bin-dir    take pocket-ui, pocket-core and pocket-splash from DIR instead of building them (must answer --version V)
-#     --out        output directory (default build/image, gitignored)
-#     --keep-work  keep the unpacked image in OUT/work
-#     --no-check   skip scripts/check-image.sh at the end
+#   scripts/make-image.sh [--version V] [--bin-dir DIR] [--source TEXT] [--release-url URL] [--out DIR] [--keep-work] [--no-check]
+#     --version      pocket-ui version (default: Cargo.toml); the binaries are built with POCKETUI_VERSION=V
+#     --bin-dir      take pocket-ui, pocket-core and pocket-splash from DIR instead of building them (must answer --version V)
+#     --source       where the notes say pocket-ui's source is (default: "the pocket-ui repository, commit <HEAD>");
+#                    for a public image the public repository and its tag or commit
+#     --release-url  the page the source archives sit on, for the notes and SOURCE-OFFER.txt
+#                    (https://github.com/<owner>/pocket-ui/releases/tag/vV; its issues page is where the offer
+#                    says to ask; without it the notes name both in words and check-image.sh fails the offer)
+#     --out          output directory (default build/image, gitignored)
+#     --keep-work    keep the unpacked image in OUT/work
+#     --no-check     skip scripts/check-image.sh at the end
 #
 # Starts from the official ROCKNIX 20261001 SM8250 image (downloaded once into downloads/rocknix-20261001/ of the
 # main checkout, or ROCKNIX_CACHE; sha256 pinned in scripts/image/pins.sh) and only adds files: GRUB, kernel and
-# device tree on the FAT partition (scripts/make-sd-efi.sh), two initramfs hooks (deploy/image/), pocket-ui on
-# STORAGE. Partition table, KERNEL and SYSTEM stay as ROCKNIX ships them.
+# device tree on the FAT partition (scripts/make-sd-efi.sh), two initramfs hooks (deploy/image/), the notes, the
+# source offer and the licence texts (pocket-ui-info/), pocket-ui on STORAGE. SYSTEM is repacked without the few files
+# in scripts/image/pins.sh SYSTEM_REMOVE; partition table and KERNEL stay as ROCKNIX ships them.
 #
 # Only writes files below OUT and the download cache. Never touches a disk: no dd to /dev, no flashing.
 # Needs Docker (mtools, debugfs, fdtput and GRUB run in containers), cargo zigbuild unless --bin-dir.
@@ -25,6 +31,8 @@ TARGET=aarch64-unknown-linux-gnu
 
 VERSION=
 BIN_DIR=
+SOURCE=
+RELEASE_URL=
 OUT=$ROOT/build/image
 KEEP=0
 CHECK=1
@@ -32,10 +40,12 @@ while [ $# -gt 0 ]; do
   case $1 in
     --version) VERSION=$2; shift ;;
     --bin-dir) BIN_DIR=$2; shift ;;
+    --source) SOURCE=$2; shift ;;
+    --release-url) RELEASE_URL=$2; shift ;;
     --out) OUT=$2; shift ;;
     --keep-work) KEEP=1 ;;
     --no-check) CHECK=0 ;;
-    -h | --help) sed -n '2,17p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,22p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
@@ -58,6 +68,15 @@ REPO_COMMIT=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)
 [ -z "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ] || REPO_COMMIT=$REPO_COMMIT-dirty
 # Every added file gets the commit's time stamp, so a rebuild of the same commit adds the same files.
 EPOCH=${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || echo 0)}
+[ -n "$SOURCE" ] || SOURCE="the pocket-ui repository, commit $REPO_COMMIT"
+# The public repository's address is not written into the tree (the export allows no owner name): it comes in here.
+if [ -n "$RELEASE_URL" ]; then
+  ISSUES="${RELEASE_URL%%/releases*}/issues"
+else
+  RELEASE_URL="the pocket-ui release page for version $VERSION"
+  ISSUES="the pocket-ui repository's issues page"
+fi
+case $SOURCE$RELEASE_URL in *'|'*) die "--source and --release-url must not contain |" ;; esac
 
 say "ROCKNIX $ROCKNIX_TAG ($ROCKNIX_IMG)"
 if [ -z "${ROCKNIX_CACHE:-}" ]; then
@@ -82,6 +101,9 @@ else
 fi
 [ "$(sha "$W/base.img")" = "$ROCKNIX_IMG_SHA256" ] || die "unpacked image: sha256 mismatch"
 in_tools sh /repo/scripts/image/build.sh extract
+
+say "SYSTEM without $(echo $SYSTEM_REMOVE | wc -w) paths (pins.sh SYSTEM_REMOVE; takes a while: zstd level 19)"
+docker run --rm -e SQUASH_CPUS="${SQUASH_CPUS:-4}" -v "$W:/w" -v "$ROOT:/repo:ro" "$TOOLS" nice -n 19 sh /repo/scripts/image/build.sh strip-system
 
 say "boot files (scripts/make-sd-efi.sh)"
 rm -rf "$W/sd-efi"
@@ -108,10 +130,31 @@ rm -rf "$W/info"
 mkdir -p "$W/info"
 GRUB_SRC=$(sed -n 's/.*(source \([^ ]*\) \([^)]*\)).*/\1 \2/p' "$W/sd-efi/boot/grub/grub-efi-arm64-bin.version")
 GRUB_SOURCE_URL="https://snapshot.debian.org/package/${GRUB_SRC% *}/${GRUB_SRC#* }/"
-sed -e "s|@VERSION@|$VERSION|g" -e "s|@ROCKNIX_TAG@|$ROCKNIX_TAG|g" -e "s|@ROCKNIX_COMMIT@|$ROCKNIX_COMMIT|g" \
-  -e "s|@REPO_COMMIT@|$REPO_COMMIT|g" -e "s|@GRUB_VERSION@|$GRUB_VERSION|g" -e "s|@GRUB_SOURCE_URL@|$GRUB_SOURCE_URL|g" \
-  "$ROOT/deploy/image/README.txt.in" >"$W/info/README.txt"
-! grep -n '@[A-Z_]*@' "$W/info/README.txt" || die "placeholder left in the notes"
+for f in README SOURCE-OFFER; do
+  sed -e "s|@VERSION@|$VERSION|g" -e "s|@ROCKNIX_TAG@|$ROCKNIX_TAG|g" -e "s|@ROCKNIX_COMMIT@|$ROCKNIX_COMMIT|g" \
+    -e "s|@POCKET_UI_SOURCE@|$SOURCE|g" -e "s|@RELEASE_URL@|$RELEASE_URL|g" -e "s|@ISSUES_URL@|$ISSUES|g" -e "s|@GRUB_VERSION@|$GRUB_VERSION|g" \
+    -e "s|@GRUB_DEB_VERSION@|${GRUB_SRC#* }|g" -e "s|@GRUB_SOURCE_URL@|$GRUB_SOURCE_URL|g" \
+    "$ROOT/deploy/image/$f.txt.in" >"$W/info/$f.txt"
+  ! grep -n '@[A-Z_]*@' "$W/info/$f.txt" || die "placeholder left in $f.txt"
+done
+# ROCKNIX's LICENSE.md and licenses folder at the pinned tag (they are not inside SYSTEM), checked against the commit.
+RL=$ROCKNIX_CACHE/licenses-$ROCKNIX_COMMIT
+if [ ! -f "$RL/LICENSE.md" ]; then
+  rm -rf "$RL.git"
+  git clone -q --depth 1 --branch "$ROCKNIX_TAG" --filter=blob:none --sparse https://github.com/ROCKNIX/distribution.git "$RL.git"
+  [ "$(git -C "$RL.git" rev-parse HEAD)" = "$ROCKNIX_COMMIT" ] || die "ROCKNIX tag $ROCKNIX_TAG is not commit $ROCKNIX_COMMIT"
+  git -C "$RL.git" sparse-checkout set licenses
+  mkdir -p "$RL.new"
+  cp "$RL.git/LICENSE.md" "$RL.new/"
+  cp -r "$RL.git/licenses" "$RL.new/licenses"
+  rm -rf "$RL.git" "$RL"
+  mv "$RL.new" "$RL"
+fi
+mkdir -p "$W/info/rocknix-licenses"
+cp "$RL/LICENSE.md" "$W/info/rocknix-licenses/"
+cp -r "$RL/licenses" "$W/info/rocknix-licenses/licenses"
+# The firmware's terms (deploy/image/firmware-licences/README.txt says which file needs which).
+cp -r "$ROOT/deploy/image/firmware-licences" "$W/info/firmware-licences"
 # pocket-ui's licence (GPL-2.0-or-later) and its third-party credits go onto the card as they are in the repository.
 for f in LICENSE NOTICE.md; do
   if [ -f "$ROOT/$f" ]; then
@@ -122,7 +165,7 @@ for f in LICENSE NOTICE.md; do
 done
 # The texts that have to travel with the programs: the crates' licences and the fonts' OFL (scripts/licence-files.sh).
 sh "$ROOT/scripts/licence-files.sh" "$W/info/licences" || die "the licence texts could not be collected"
-chmod 644 "$W/info/licences/"*
+find "$W/info" -type f -exec chmod 644 {} + -o -type d -exec chmod 755 {} +
 
 say "assembling"
 cp "$W/base.img" "$W/image.img"
