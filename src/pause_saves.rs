@@ -10,12 +10,15 @@
 //! | hakuX (Xbox) while its core has no save states (`standalone::no_states_line`) | none: `hakux::NO_STATES` |
 //! | ARMSX2 before it has named the game (PINE): nothing could be written | none: [`NOT_READY`] |
 //! | RetroArch | its one save |
+//! | PortMaster port | none: [`PORT_SAVES`] |
 //! | any other emulator | none: [`OWN_SAVES`] |
 
 use crate::quit::Saver;
 
 /// Other emulators: pocket-ui can't save or continue them; Quit only closes them.
 pub const OWN_SAVES: &str = "This emulator keeps its own saves. Save in the game before you quit.";
+/// A PortMaster port: it keeps its own saves; Quit ends the port without asking it for one.
+pub const PORT_SAVES: &str = "This game saves by itself. Save in the game before you quit.";
 /// A PS2 game whose emulator hasn't said yet which game runs: a Save would have no file to go to, a Quit no
 /// resume state to write.
 pub const NOT_READY: &str = "Save and Load aren't ready yet. Save in the game before you quit.";
@@ -44,6 +47,7 @@ impl Saves {
             // Xbox (hakuX) without save states says so; ARMSX2 before it has named the game says it isn't ready.
             Saver::Standalone => Saves::InGame(no_states.unwrap_or(NOT_READY)),
             Saver::RetroArch => Saves::One,
+            Saver::Port => Saves::InGame(PORT_SAVES),
             Saver::Other => Saves::InGame(OWN_SAVES),
         }
     }
@@ -78,6 +82,8 @@ mod tests {
         // ARMSX2 before PINE named the game: Save went nowhere and Quit wrote no resume state.
         assert_eq!(Saves::of(Saver::Standalone, false, None), Saves::InGame(NOT_READY));
         assert_eq!(Saves::of(Saver::Other, true, None), Saves::InGame(OWN_SAVES));
+        assert_eq!(Saves::of(Saver::Port, false, None), Saves::InGame(PORT_SAVES), "a port saves by itself, with or without state names");
+        assert!(!Saves::of(Saver::Port, true, None).rows());
         for s in [Saves::Slots, Saves::One] {
             assert!(s.rows() && s.line().is_none());
         }

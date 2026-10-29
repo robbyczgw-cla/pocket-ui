@@ -18,7 +18,7 @@ SIZES = {
     "snes": (22, 88, 78), "n64": (21, 88, 74), "nes": (22, 75, 88), "gb": (18, 58, 66), "gba": (18, 75, 56),
     "cart": (22, 85, 80), "md": (20, 83, 118), "sms": (20, 83, 118), "ps1": (13, 98, 88), "segadisc": (16, 93, 100),
     "disc": (15, 98, 88), "ps2": (19, 84, 120), "gc": (18, 81, 111), "wii": (19, 84, 120), "keep": (19, 84, 120), "xbox": (19, 84, 120),
-    "umd": (15, 66, 103), "ds": (16, 85, 95), "3ds": (15, 85, 93),
+    "umd": (15, 66, 103), "ds": (16, 85, 95), "3ds": (15, 85, 93), "vita": (14, 70, 92),
 }
 CARTS = ("snes", "n64", "nes", "gb", "gba", "cart")
 
@@ -138,11 +138,11 @@ def cart_spine(kind, W, H):
 # ---- cases ----------------------------------------------------------------------------------------------------
 
 RIM = {"md": 0x151517, "sms": 0x151517, "ps1": 0x1c1d22, "segadisc": 0xd9d9dc, "disc": 0x1c1d22, "ps2": 0x0e0f11,
-       "gc": 0x1b1b20, "wii": 0xeaeaeb, "keep": 0x16171a, "xbox": 0x0f1411, "umd": 0x111113, "ds": 0xbfc2c7, "3ds": 0xe6e6e8}
+       "gc": 0x1b1b20, "wii": 0xeaeaeb, "keep": 0x16171a, "xbox": 0x0f1411, "umd": 0x111113, "ds": 0xbfc2c7, "3ds": 0xe6e6e8, "vita": 0xcfd3da}
 # The band at the top of the spine: (height, colour or None for the cover's accent colour).
 BAND = {"md": (13, None), "sms": (12, 0xf2f2f0), "ps1": (11, 0x0e0e10), "segadisc": (11, None), "disc": (10, None),
         "ps2": (16, 0x0e0f11), "gc": (12, 0x2a2a31), "wii": (14, 0xf4f4f4), "keep": (14, None), "xbox": (16, 0x2a8a1f), "umd": (12, 0x111113),
-        "ds": (11, 0xf6f6f6), "3ds": (11, 0xf6f6f6)}
+        "ds": (11, 0xf6f6f6), "3ds": (11, 0xf6f6f6), "vita": (13, 0x1a55b8)}
 
 
 def case_front(kind, W, H):
@@ -150,7 +150,7 @@ def case_front(kind, W, H):
     d = ImageDraw.Draw(im)
     rc = c3(RIM[kind])
     light = RIM[kind] > 0x808080
-    r = {"umd": 7, "wii": 3, "ds": 3, "3ds": 3, "gc": 2}.get(kind, 2)
+    r = {"umd": 7, "wii": 3, "ds": 3, "3ds": 3, "vita": 3, "gc": 2}.get(kind, 2)
     d.rounded_rectangle([0, 0, W - 1, H - 1], radius=r, fill=rc, outline=k(rc, 0.6) if light else (5, 5, 7, 255))
     if kind in ("ps1", "segadisc", "disc"):
         # A jewel case: the ribbed hinge at the left.
@@ -185,6 +185,12 @@ def case_front(kind, W, H):
         d.rectangle([2, 2, W - 3, 15], fill=c3(BAND["xbox"][1]))
         d.line([2, 2, W - 3, 2], fill=k(c3(BAND["xbox"][1]), 1.25))
         d.line([2, 16, W - 3, 16], fill=(8, 10, 8, 255))
+    if kind == "vita":
+        # The PS Vita case's blue top band (a plain band, no lettering); the cover sits below it.
+        lab = (3, 15, W - 6, H - 18)
+        d.rectangle([2, 2, W - 3, 13], fill=c3(BAND["vita"][1]))
+        d.line([2, 2, W - 3, 2], fill=k(c3(BAND["vita"][1]), 1.3))
+        d.line([2, 14, W - 3, 14], fill=(10, 20, 40, 255))
     x, y, w, h = lab
     # The rim's bevel: light along the top and left, darker at the bottom and right.
     d.line([1, 1, W - 2, 1], fill=k(rc, 1.6 if not light else 1.04))

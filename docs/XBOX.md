@@ -8,11 +8,11 @@ The spike that preceded this (PR #9 booted Jade Empire in RetroArch on the Mini 
 
 - **Core**: `hakux_libretro.so` and `hakux_libretro.info` in `/storage/pocket-ui/hakux/` (not in ROCKNIX's libretro folder,
   not in a release folder: an update of pocket-ui leaves them alone), with `licenses/` and `SOURCE.txt`.
-  Built from hakuX PR #9 at `531ce8d965f4758a16c36fa2c09e55a84c67fc93` plus one patch of ours (the audio relaunch fix: Jade
-  Empire was silent after its relaunch into the game; `deploy/hakux/patches/`, submitted upstream) with the PR's own tools in an aarch64
+  Built from hakuX PR #9 at `2de4e9cd86a47e9ffaf928c36e240a995a279713`, unpatched (our audio relaunch fix, for Jade
+  Empire's silence after its relaunch into the game, is part of the PR since `77a5871`), with the PR's own tools in an aarch64
   container (`scripts/build-hakux-core.sh`). Needs glibc 2.38 at most, Vulkan 1.3 (Turnip on the Mini V2).
 - **Attribution**: *Xbox: hakuX by rfandango (GPL-3.0), Linux/libretro port by portare-ch (PortareOS), PR #9 commit
-  531ce8d + audio relaunch fix (ours, submitted upstream).* In `NOTICE.md` (on the device in `/storage/pocket-ui/licences`, Settings → System → About), `docs/LICENCES.md`
+  2de4e9c (it includes an audio fix of ours).* In `NOTICE.md` (on the device in `/storage/pocket-ui/licences`, Settings → System → About), `docs/LICENCES.md`
   section 5.2, and the manual. The core is GPL-3.0-or-later and loaded by RetroArch, a separate GPL-3.0-or-later program;
   pocket-ui never loads it. Whoever ships the core ships `SOURCE.txt` (commit, link, checksums) and `licenses/`.
 
@@ -86,16 +86,40 @@ with `pw-record --target RetroArch`, the speaker muted) has signal in every seco
 needed. Not yet measured: the Odin with the fix, 2x with the fix, and the pause menu's Continue (SIGSTOP/SIGCONT) with the
 fix on a device.
 
+**Core with the pickup timing fix (PR commit `7068703`, "time the frame pickup where the front frame is taken"), Mini V2,
+2026-10-29:** Jade Empire from a fresh start into the first scenes, 1x, a copy of the data folder, 70 s per run, same appendconfig
+except `audio_sync`. With our override (`audio_sync` off + `vrr_runloop_enable`): **59.9 new pictures a second**, gap 16.68 ms
+(max 17.7 to 18.1, 0 over 25 ms) in every window once the guest ran at 59.9 fps. With ROCKNIX's `audio_sync` on and no
+`vrr_runloop_enable`: **47.2 to 47.6 new pictures a second**, gap 21.0 to 21.2 ms, 85 to 104 gaps over 25 ms per 10 s. The core change
+does not fix a frontend that blocks in audio, so the override stays. Sound is the same in both: APU 1500 frames/s, `short=0`,
+no PipeWire xrun, the same 5.4 s without signal (the intro) and none after, so audio does not decide it. The Odin 2 Mini could
+not be measured with this harness (the guest stays at its first frame there, with the shipped core as well): open.
+
+**Core rebased onto hakuX master (PR commit `2de4e9c`, with upstream's v1.2.0), Mini V2, 2026-10-29:** the libretro part of the core
+(`native/libretro/`) is byte-identical to `7068703`; the rest is upstream's newer HLE, kernel and network work (system link, XLink
+Kai; no new libretro options, `retro_serialize` still returns 0, so the `.info` still says no save states). One run of 190 s each
+of the old and the new core, Jade Empire from a fresh start through New Game and the relaunch into the game, a copy of the data
+folder, our appendconfig (`audio_sync` off + `vrr_runloop_enable`), the speaker muted and the sink recorded
+(`pw-record --target RetroArch`): both **59.9 new pictures a second**, gap 16.68 ms (max 17.6 to 18.0, 0 over 25 ms) in every
+window once the guest ran at full speed; `retro_run` 59.94 a second; APU 1500 frames a second, `short=0` after the intro (the
+same 3 to 4 short periods while the intro loads); the sound after the relaunch comes back after the same ~5 s of intro silence
+(40 to 44 s) and carries signal to the end; no xrun; a RetroArch QUIT command (network) ends it in 2.0 s with either core. Not
+measured: the Odin 2 Mini and the pause menu's Continue with this core.
+
 ## Shipping the core
 
-`scripts/build-hakux-core.sh` builds the package from PR #9's commit plus the patches in `deploy/hakux/patches/` (applied
-with `git am`, committer and date fixed, so the patched commit is `3c7a682` everywhere) inside the PR's own Debian image on an
+`scripts/build-hakux-core.sh` builds the package from PR #9's commit plus any patches in `deploy/hakux/patches/` (none today; applied
+with `git am`, committer and date fixed, so a patched commit has the same id everywhere) inside the PR's own Debian image on an
 aarch64 Docker host (`HAKUX_BUILD_HOST`, the MacBook Air), with the PR's pinned dependencies cached in `~/hakux-core-deps`
-there; `scripts/make-install-zip.sh --hakux DIR`
-puts `hakux_libretro.so`, the `.info` of `deploy/hakux/` (the one a test pins to "no save states"), `SOURCE.txt`, `BUILD-INFO`, our `patches/` and
-the core's `licenses/` into the package as `hakux/` with its own `SHA256SUMS`; `deploy/package/install.sh` checks the sums and
-installs it to `/storage/pocket-ui/hakux` (tested in `deploy/package/test-package.sh`). Without `--hakux` the package has no
-Xbox core and Xbox games stay with xemu. **The SD-card image build (`scripts/image/build.sh`) does not carry the core yet.**
+there; `scripts/hakux-files.sh DIR DEST` copies everything that must travel with the core (both packages use it, so they cannot
+drift):
+`hakux_libretro.so`, the `.info` of `deploy/hakux/` (the one a test pins to "no save states"), `SOURCE.txt`, `BUILD-INFO`, our `patches/` and
+the core's `licenses/`, with its own `SHA256SUMS`. `scripts/make-install-zip.sh --hakux DIR` puts that into the package as
+`hakux/` for the SSH and ports install, `deploy/package/install.sh` checks the sums and installs it to `/storage/pocket-ui/hakux`
+(tested in `deploy/package/test-package.sh`); `scripts/make-fat-install.sh --hakux DIR` puts the same files into the card seed as
+`pocket-ui/hakux/`, which the card hook copies to the same place (tested in `deploy/fat/test-hook.sh`). Without `--hakux` a
+package has no Xbox core and Xbox games stay with xemu. **The SD-card image build (`scripts/image/build.sh`) does not carry the
+core yet.**
 
 ## Known limits and open points
 
@@ -104,8 +128,8 @@ Xbox core and Xbox games stay with xemu. **The SD-card image build (`scripts/ima
   `NC_PAD_SCRIPT` (START/A injected inside hakuX); a START sent through InputPlumber's virtual pad (`SendButtonChord`) did not
   reach the title screen. A real pad in RetroArch (autoconfig of the Mini V2's pad, hotkeys set to `nul`) needs a hands-on check.
 - **Sound after the relaunch: fixed.** Jade Empire was silent from its relaunch into the game on (music, voices and effects:
-  the core's APU state kept a stale DSP preference; our patch `deploy/hakux/patches/0001-…`, submitted upstream). Measured
-  with the patched core: 193 of 196 s after the relaunch carry signal (the 3 silent ones are the new XBE booting); before,
+  the core's APU state kept a stale DSP preference; our patch, now part of the PR as `77a5871`). Measured
+  with the patched core (531ce8d + the patch; the PR's version of it is identical): 193 of 196 s after the relaunch carry signal (the 3 silent ones are the new XBE booting); before,
   52 of 52 s were digital zero.
 - While a game runs for 120 s without input, the generic sleep logic stops it and darkens the screen like for any game; any
   input wakes it. A test that scripts the game has to keep sending input.

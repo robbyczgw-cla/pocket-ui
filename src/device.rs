@@ -55,10 +55,63 @@ pub enum Model {
     Odin2Mini,
     /// SM8550: 1080p OLED, 270-degree portrait panel, Xbox labels.
     Odin2Portal,
-    /// Allwinner H700: 640x480 (native 480x640, turned), no Wi-Fi, no fan, no touch, no sticks.
-    Rg28xx,
-    /// Allwinner H700: 640x480 clamshell with a lid switch, no fan, no touch, no sticks.
-    Rg35xxSp,
+    /// An Allwinner H700 handheld of ROCKNIX's H700 image: one profile (1 GB, no fan, no touch), the quirks of each
+    /// model are one row of `H700_BOARDS`.
+    H700(&'static H700Board),
+}
+
+/// What differs between the Anbernic H700 models (`H700_BOARDS`, docs/DEVICES.md has the same table). The
+/// device tree's `model` and `compatible` are ROCKNIX's (`sun50i-h700-anbernic-*.dts`); sizes are what sway gives
+/// pocket-ui (landscape, after the turn), from the panel files ROCKNIX loads.
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct H700Board {
+    /// `POCKETUI_DEVICE` and the vdev's name.
+    pub key: &'static str,
+    /// The name people know it by; also the device tree's `model`.
+    pub name: &'static str,
+    /// `compatible` entries that name this board (compared in lower case; the panel variants' device trees keep them).
+    pub compatible: &'static [&'static str],
+    pub screen: (u32, u32),
+    /// Analog sticks (ROCKNIX's `amux-count`; the stick lights page needs them).
+    pub sticks: bool,
+    /// A Wi-Fi chip by the maker's specification. A chip that answers wins either way (`system_ctl::AutoHw`).
+    pub wifi: bool,
+    /// A lid switch (`gpio-keys-lid`, the clamshells).
+    pub lid: bool,
+    /// pocket-ui's frame cost is too high on this panel for now (the 720x720 CubeXX): the installers refuse it.
+    pub not_yet: bool,
+}
+
+const fn board(key: &'static str, name: &'static str, compatible: &'static [&'static str], screen: (u32, u32), sticks: bool, wifi: bool, lid: bool) -> H700Board {
+    H700Board { key, name, compatible, screen, sticks, wifi, lid, not_yet: false }
+}
+
+/// Every H700 model in ROCKNIX's image (`projects/ROCKNIX/config.xml`, H700). The two panel revisions of a model
+/// share a row. Experimental, all of them; the RG28XX has no Wi-Fi (owner), the RG35XX 2024 none either (maker).
+/// Sticks as ROCKNIX's device trees have them: the RG34XX's has none (`amux-count` 0 from the Plus tree).
+pub const H700_BOARDS: &[H700Board] = &[
+    board("rg28xx", "Anbernic RG28XX", &["anbernic,rg28xx"], (640, 480), false, false, false),
+    board("rg35xx-2024", "Anbernic RG35XX 2024", &["anbernic,rg35xx-2024"], (640, 480), false, false, false),
+    board("rg35xx-plus", "Anbernic RG35XX Plus", &["anbernic,rg35xx-plus"], (640, 480), false, true, false),
+    board("rg35xx-h", "Anbernic RG35XX H", &["anbernic,rg35xx-h"], (640, 480), true, true, false),
+    board("rg35xx-pro", "Anbernic RG35XX Pro", &["anbernic,rg35xx-pro"], (640, 480), true, true, false),
+    // The second panel revision's device tree (`...-rg35xx-sp-v2-panel.dtb`) names the same board.
+    board("rg35xx-sp", "Anbernic RG35XX SP", &["anbernic,rg35xx-sp", "anbernic,rg35xx-sp-v2", "anbernic,rg35xx-sp-v2-panel"], (640, 480), false, true, true),
+    board("rg40xx-h", "Anbernic RG40XX H", &["anbernic,rg40xx-h"], (640, 480), true, true, false),
+    board("rg40xx-v", "Anbernic RG40XX V", &["anbernic,rg40xx-v"], (640, 480), true, true, false),
+    board("rg34xx", "Anbernic RG34XX", &["anbernic,rg34xx"], (720, 480), false, true, false),
+    board("rg34xx-sp", "Anbernic RG34XX-SP", &["anbernic,rg34xx-sp"], (720, 480), true, true, true),
+    board("rg-sp", "Anbernic RG-SP", &["anbernic,rg-sp"], (720, 480), false, true, true),
+    H700Board { not_yet: true, ..board("rgcubexx", "Anbernic RG CubeXX", &["anbernic,rgcubexx"], (720, 720), true, true, false) },
+];
+
+/// The H700 model with this `compatible` entry or device tree `model`, if the profile table has it.
+pub fn h700_board(model: &str, compatible: &[&str]) -> Option<&'static H700Board> {
+    let by_compatible = compatible.iter().find_map(|c| {
+        let c = c.trim().to_ascii_lowercase();
+        H700_BOARDS.iter().find(|b| b.compatible.contains(&c.as_str()))
+    });
+    by_compatible.or_else(|| H700_BOARDS.iter().find(|b| b.name.eq_ignore_ascii_case(model)))
 }
 
 /// Which panel the Pocket 5 or Flip 2 has (ROCKNIX's "Visionox" device trees): the touch axes differ, which the
@@ -94,8 +147,7 @@ impl Model {
             Model::Odin2 => "AYN Odin 2",
             Model::Odin2Mini => "AYN Odin 2 Mini",
             Model::Odin2Portal => "AYN Odin 2 Portal",
-            Model::Rg28xx => "Anbernic RG28XX",
-            Model::Rg35xxSp => "Anbernic RG35XX SP",
+            Model::H700(b) => b.name,
         }
     }
 
@@ -104,7 +156,7 @@ impl Model {
         match self {
             Model::MiniV2 => MINI_V2_SCREEN,
             Model::MiniV1 | Model::Nova => (1280, 960),
-            Model::Rg28xx | Model::Rg35xxSp => (640, 480),
+            Model::H700(b) => b.screen,
             Model::Pocket5 | Model::Flip2 | Model::Pocket6 | Model::Odin2 | Model::Odin2Mini | Model::Odin2Portal => (1920, 1080),
         }
     }
@@ -116,12 +168,16 @@ impl Model {
 
     /// The Flip 2's hall sensor: `SW_LID` on a `gpio-keys` device (docs/SLEEP.md "Lid").
     pub fn has_lid(self) -> bool {
-        matches!(self, Model::Flip2 | Model::Rg35xxSp)
+        match self {
+            Model::Flip2 => true,
+            Model::H700(b) => b.lid,
+            _ => false,
+        }
     }
 
-    /// The Allwinner H700 handhelds (ROCKNIX's H700 image): 1 GB, no fan, no touch, no sticks.
+    /// The Allwinner H700 handhelds (ROCKNIX's H700 image): 1 GB, no fan, no touch; sticks and Wi-Fi per model.
     pub fn is_h700(self) -> bool {
-        matches!(self, Model::Rg28xx | Model::Rg35xxSp)
+        matches!(self, Model::H700(_))
     }
 
     /// The short names `POCKETUI_DEVICE` takes.
@@ -136,8 +192,7 @@ impl Model {
             Model::Odin2 => "odin2",
             Model::Odin2Mini => "odin2mini",
             Model::Odin2Portal => "odin2portal",
-            Model::Rg28xx => "rg28xx",
-            Model::Rg35xxSp => "rg35xx-sp",
+            Model::H700(b) => b.key,
         }
     }
 }
@@ -163,15 +218,15 @@ impl Device {
         !self.model.is_some_and(Model::is_h700)
     }
 
-    /// Analog sticks, and so the lights around them. None on the H700 handhelds.
+    /// Analog sticks, and so the lights around them. Per model on the H700 handhelds.
     pub fn has_sticks(&self) -> bool {
-        !self.model.is_some_and(Model::is_h700)
+        !matches!(self.model, Some(Model::H700(b)) if !b.sticks)
     }
 
-    /// A Wi-Fi chip. Not on the RG28XX (rocknix.org lists it without connectivity; its device tree enables one anyway,
-    /// so a chip that does answer still wins: `system_ctl::AutoHw` only calls it absent when none shows up).
+    /// A Wi-Fi chip. Not on the RG28XX and RG35XX 2024 (their device trees enable one anyway, the Plus tree they
+    /// come from, so a chip that does answer still wins: `system_ctl::AutoHw` only calls it absent when none shows up).
     pub fn has_wifi(&self) -> bool {
-        self.model != Some(Model::Rg28xx)
+        !matches!(self.model, Some(Model::H700(b)) if !b.wifi)
     }
 
     /// Memory in MB where the device is known to have less than the Mini V2's (1 GB on the H700, no swap).
@@ -264,10 +319,11 @@ pub fn identify(model: &str, compatible: &[u8]) -> Device {
             "ayn,odin2" => Some(Model::Odin2),
             "ayn,odin2mini" => Some(Model::Odin2Mini),
             "ayn,odin2portal" => Some(Model::Odin2Portal),
-            "anbernic,rg28xx" => Some(Model::Rg28xx),
-            // The second panel revision's device tree (`...-rg35xx-sp-v2-panel.dtb`) names the same board.
-            "anbernic,rg35xx-sp" | "anbernic,rg35xx-sp-v2" | "anbernic,rg35xx-sp-v2-panel" => Some(Model::Rg35xxSp),
             _ => None,
+        })
+        .or_else(|| {
+            let names: Vec<&str> = compatible.split(|b| *b == 0).filter_map(|c| std::str::from_utf8(c).ok()).collect();
+            h700_board("", &names).map(Model::H700)
         });
     let found = by_compatible.or(match model.strip_suffix(" Visionox").unwrap_or(model) {
         "Retroid Pocket Mini V2" => Some(Model::MiniV2),
@@ -279,9 +335,7 @@ pub fn identify(model: &str, compatible: &[u8]) -> Device {
         "AYN Odin 2" => Some(Model::Odin2),
         "AYN Odin 2 Mini" => Some(Model::Odin2Mini),
         "AYN Odin 2 Portal" => Some(Model::Odin2Portal),
-        "Anbernic RG28XX" => Some(Model::Rg28xx),
-        "Anbernic RG35XX SP" => Some(Model::Rg35xxSp),
-        _ => None,
+        other => h700_board(other, &[]).map(Model::H700),
     });
     let panel = if model.ends_with(" Visionox") { Panel::Visionox } else { Panel::Original };
     Device { model: found, panel, reported: model.to_string() }
@@ -295,8 +349,9 @@ pub fn from_override(v: &str) -> Device {
         Some(k) => (k, Panel::Visionox),
         None => (lower.as_str(), Panel::Original),
     };
-    match [Model::MiniV2, Model::MiniV1, Model::Pocket5, Model::Flip2, Model::Pocket6, Model::Nova, Model::Odin2, Model::Odin2Mini, Model::Odin2Portal, Model::Rg28xx, Model::Rg35xxSp]
+    match [Model::MiniV2, Model::MiniV1, Model::Pocket5, Model::Flip2, Model::Pocket6, Model::Nova, Model::Odin2, Model::Odin2Mini, Model::Odin2Portal]
         .into_iter()
+        .chain(H700_BOARDS.iter().map(Model::H700))
         .find(|m| m.key() == key)
     {
         Some(m) => Device {
@@ -495,30 +550,65 @@ mod tests {
     }
 
     #[test]
-    fn h700_profiles_are_experimental_and_lack_fan_touch_and_sticks() {
-        for (model, compatible, want, lid, wifi) in [
-            ("Anbernic RG28XX\0", &b"anbernic,rg28xx\0allwinner,sun50i-h700\0"[..], Model::Rg28xx, false, false),
-            ("Anbernic RG35XX SP\0", &b"anbernic,rg35xx-sp\0allwinner,sun50i-h700\0"[..], Model::Rg35xxSp, true, true),
-            ("Anbernic RG35XX SP\0", &b"anbernic,rg35xx-sp-v2-panel\0anbernic,rg35xx-sp\0allwinner,sun50i-h700\0"[..], Model::Rg35xxSp, true, true),
-        ] {
+    fn h700_profiles_are_experimental_and_lack_fan_and_touch() {
+        // (model, compatible, key, screen, sticks, wifi, lid)
+        let rows: &[(&str, &[u8], &str, (u32, u32), bool, bool, bool)] = &[
+            ("Anbernic RG28XX\0", b"anbernic,rg28xx\0allwinner,sun50i-h700\0", "rg28xx", (640, 480), false, false, false),
+            ("Anbernic RG35XX 2024\0", b"anbernic,rg35xx-2024\0allwinner,sun50i-h700\0", "rg35xx-2024", (640, 480), false, false, false),
+            ("Anbernic RG35XX Plus\0", b"anbernic,rg35xx-plus\0allwinner,sun50i-h700\0", "rg35xx-plus", (640, 480), false, true, false),
+            ("Anbernic RG35XX H\0", b"anbernic,rg35xx-h\0allwinner,sun50i-h700\0", "rg35xx-h", (640, 480), true, true, false),
+            ("Anbernic RG35XX Pro\0", b"anbernic,rg35xx-pro\0allwinner,sun50i-h700\0", "rg35xx-pro", (640, 480), true, true, false),
+            ("Anbernic RG35XX SP\0", b"anbernic,rg35xx-sp\0allwinner,sun50i-h700\0", "rg35xx-sp", (640, 480), false, true, true),
+            ("Anbernic RG35XX SP\0", b"anbernic,rg35xx-sp-v2-panel\0anbernic,rg35xx-sp\0allwinner,sun50i-h700\0", "rg35xx-sp", (640, 480), false, true, true),
+            ("Anbernic RG40XX H\0", b"anbernic,rg40xx-h\0allwinner,sun50i-h700\0", "rg40xx-h", (640, 480), true, true, false),
+            ("Anbernic RG40XX V\0", b"anbernic,rg40xx-V\0allwinner,sun50i-h700\0", "rg40xx-v", (640, 480), true, true, false),
+            ("Anbernic RG34XX\0", b"anbernic,rg34xx\0allwinner,sun50i-h700\0", "rg34xx", (720, 480), false, true, false),
+            ("Anbernic RG34XX-SP\0", b"anbernic,rg34xx-sp\0allwinner,sun50i-h700\0", "rg34xx-sp", (720, 480), true, true, true),
+            ("Anbernic RG-SP\0", b"anbernic,rg-sp\0allwinner,sun50i-h700\0", "rg-sp", (720, 480), false, true, true),
+            ("Anbernic RG CubeXX\0", b"anbernic,rgcubexx\0allwinner,sun50i-h700\0", "rgcubexx", (720, 720), true, true, false),
+        ];
+        for &(model, compatible, key, screen, sticks, wifi, lid) in rows {
             let d = identify(model, compatible);
-            assert_eq!(d.model, Some(want));
-            assert_eq!(identify(model, b"").model, Some(want), "the model alone says the same");
+            let m = d.model.unwrap_or_else(|| panic!("{key} not found"));
+            assert!(m.is_h700() && m.key() == key, "{key}");
+            assert_eq!(identify(model, b"").model, Some(m), "{key}: the model alone says the same");
             assert!(d.experimental() && !d.screen_off_only());
-            assert_eq!(d.screen(), (640, 480));
-            assert_eq!(d.has_lid(), lid);
-            assert_eq!(d.has_wifi(), wifi);
-            assert!(!d.has_fan() && !d.has_touch() && !d.has_sticks());
+            assert_eq!(d.screen(), screen, "{key}");
+            assert_eq!(d.has_lid(), lid, "{key}");
+            assert_eq!(d.has_wifi(), wifi, "{key}");
+            assert_eq!(d.has_sticks(), sticks, "{key}");
+            assert!(!d.has_fan() && !d.has_touch());
             assert_eq!(d.ram_mb(), Some(1024));
             assert_eq!(d.menu_layout(), crate::button_layout::ButtonLayout::Nintendo);
-            assert_eq!(d.about_line(), Some(format!("{} (experimental)", want.name())));
+            assert_eq!(d.about_line(), Some(format!("{} (experimental)", m.name())));
+            assert_eq!(from_override(key).model, Some(m), "{key}");
         }
-        assert_eq!(from_override("rg28xx").model, Some(Model::Rg28xx));
-        assert_eq!(from_override("rg35xx-sp").model, Some(Model::Rg35xxSp));
+        assert_eq!(rows.iter().map(|r| r.2).collect::<std::collections::BTreeSet<_>>().len(), H700_BOARDS.len(), "every row of the table is tested");
+        // Only the 720x720 CubeXX is held back; the installers read the same flag.
+        assert_eq!(H700_BOARDS.iter().filter(|b| b.not_yet).map(|b| b.key).collect::<Vec<_>>(), ["rgcubexx"]);
+        // Another Anbernic (not an H700 model in the table) stays unknown.
+        assert_eq!(identify("Anbernic RG99XX\0", b"anbernic,rg99xx\0allwinner,sun50i-h700\0").model, None);
         // Every other device keeps its fan, touch, sticks and Wi-Fi; an unknown one too.
         for d in [from_override("miniv2"), from_override("flip2"), from_override("odin2"), identify("", b"")] {
             assert!(d.has_fan() && d.has_touch() && d.has_sticks() && d.has_wifi() && d.ram_mb().is_none());
         }
+    }
+
+    /// The installers keep their own lists of the models (shell, no Rust): the same names as `H700_BOARDS`, in the same order.
+    #[test]
+    fn the_installers_accept_exactly_the_h700_models_of_the_table() {
+        fn list(text: &str, var: &str) -> Vec<String> {
+            let line = text.lines().find(|l| l.trim_start().starts_with(var)).unwrap_or_else(|| panic!("{var} missing"));
+            let value = line.split_once('=').unwrap().1.trim().trim_matches('"');
+            value.split('|').filter(|n| !n.is_empty()).map(str::to_string).collect()
+        }
+        let want: Vec<String> = H700_BOARDS.iter().filter(|b| !b.not_yet).map(|b| b.name.to_string()).collect();
+        let not_yet: Vec<String> = H700_BOARDS.iter().filter(|b| b.not_yet).map(|b| b.name.to_string()).collect();
+        let install = include_str!("../deploy/package/install.sh");
+        assert_eq!(list(install, "MODELS_H700="), want, "deploy/package/install.sh MODELS_H700");
+        assert_eq!(list(install, "MODELS_H700_NOT_YET="), not_yet, "deploy/package/install.sh MODELS_H700_NOT_YET");
+        let hook = include_str!("../deploy/fat/mount-storage.sh.in");
+        assert_eq!(list(hook, "pu_h700_models="), want, "deploy/fat/mount-storage.sh.in pu_h700_models");
     }
 
     #[test]

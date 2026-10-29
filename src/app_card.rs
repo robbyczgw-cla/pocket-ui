@@ -10,6 +10,7 @@ use pocket_ui::gamedb::{self, Choice, GameInfo, Owned};
 use pocket_ui::gfx::Canvas;
 use pocket_ui::library_meta::Status;
 use pocket_ui::pad::Button;
+use pocket_ui::settings::Theme;
 
 use super::{stripe, system_label, system_short, App, Item, UserEvent};
 
@@ -103,8 +104,11 @@ impl App {
                 }
             };
         }
-        // The box (`game_box`) unless SELECT chose the page last time.
-        if self.game_box {
+        // The Minimal, Cards and Split looks show the info page (`game_info`); Shelf and Cabinet the box (`game_box`)
+        // unless SELECT chose the page last time.
+        if matches!(self.theme, Theme::Minimal | Theme::Cards | Theme::Split) {
+            open.card.show_info();
+        } else if self.game_box {
             open.card.boxed = Some(pocket_ui::game_box::BoxView::new());
         }
         self.card = Some(open);
@@ -163,6 +167,7 @@ impl App {
             battery: pocket_ui::battery_history::game_card(&pocket_ui::battery_games::Key::new(system, path, ""), &system_short(&self.systems, system)),
             // A port: its performance and fan, and the busy-core hint (`app_port_perf`).
             port: self.port_card_line(system, path),
+            port_update: system == pocket_ui::port_perf::SYSTEM && path.file_name().and_then(|n| n.to_str()).is_some_and(pocket_ui::ports::update_waiting),
             // "Surprise me" sets the reason after the card is made (`app_curator`).
             surprise: None,
             // "Wrong pictures? Look up again" for games whose pictures come from the collection (`app_identify`).
@@ -171,6 +176,7 @@ impl App {
             from_gamelist: false,
             // A patch next to the game (a few file checks, no reading): pocket-core applies it at the start (`softpatch`).
             patch: Some(pocket_ui::softpatch::find(path).iter().map(|p| pocket_ui::softpatch::name(p)).collect::<Vec<_>>().join(", ")).filter(|s| !s.is_empty()),
+            favorite: self.favorites.contains(path),
         };
         // RetroAchievements: what is known, and a lookup in the background when that is old (`app_achievements`).
         data.achievements = self.card_achievements(system, path);
@@ -446,7 +452,9 @@ impl App {
         let pictures = self.card_pictures(item, c.w);
         let corner = self.status_corner();
         if self.card.as_ref().is_some_and(|o| o.card.boxed.is_some()) {
-            // The box: the case's front from the shelf's own machinery, at the box's height (`game_box`).
+            // The box: the case's front from the shelf's own machinery, at the box's height (`game_box`). Its cover is
+            // read on the cabinet's thread: taken here, since the shelf that usually takes it is not painted under a card.
+            self.cabinet_poll();
             let (medium, look, front) = self.box_front(item, pocket_ui::game_box::front_height(c.w, c.h));
             let big = self.cover(item, c.w, c.h);
             let console = self.item_rom(item).and_then(|(system, _)| pocket_ui::system_art::get(&system));
@@ -456,6 +464,18 @@ impl App {
             open.card.paint_box(c, &mut self.text, &inputs, Some(&corner));
             return;
         }
+        if self.card.as_ref().is_some_and(|o| o.card.info.is_some()) {
+            // The info page (`game_info`): the cover as large as its room, the console for a game without one.
+            let Some(open) = self.card.as_ref() else { return };
+            let (bw, bh) = pocket_ui::game_info::cover_room(c.w, c.h, &open.card.data);
+            let cover = self.cover(item, bw, bh);
+            let console = self.item_rom(item).and_then(|(system, _)| pocket_ui::system_art::get(&system));
+            let Some(open) = self.card.as_mut() else { return };
+            open.card.pictures = pictures;
+            open.card.paint_info(c, &mut self.text, cover.as_deref(), console, Some(&corner));
+            self.paint_card_toast(c);
+            return;
+        }
         let (bw, bh) = game_card::cover_box();
         let cover = self.cover(item, bw, bh);
         let Some(open) = self.card.as_mut() else { return };
@@ -463,6 +483,11 @@ impl App {
         open.card.paint(c, &mut self.text, cover.as_deref(), Some(&corner));
         // Curator's rows can be tapped (`app_curator`).
         self.curator_card_hits(c.w);
+        self.paint_card_toast(c);
+    }
+
+    /// A toast over the card's top line.
+    fn paint_card_toast(&mut self, c: &mut Canvas) {
         if let Some((msg, at)) = self.toast.clone() {
             if at.elapsed() < super::TOAST {
                 use pocket_ui::text::Face;

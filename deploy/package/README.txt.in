@@ -6,6 +6,12 @@ Mini, as EXPERIMENTAL: they run the same ROCKNIX for SM8250, but pocket-ui has n
 them yet. Most things should work; if something doesn't, Settings -> System -> About -> Report a
 problem saves a file you can attach to a report.
 
+Also, as EXPERIMENTAL, the Anbernic handhelds of ROCKNIX's H700 image: RG28XX, RG34XX, RG34XX-SP,
+RG35XX 2024, Plus, H, Pro and SP, RG40XX H and V, RG-SP (not the RG CubeXX yet). Their ROCKNIX is the
+H700 build, flashed from the image on rocknix.org (the RG28XX has no Wi-Fi: use the Ports installer or
+the two-file card install, not SSH). Heavy systems (N64, PSP, Dreamcast, DS) stay on ROCKNIX's own
+emulators there. Details: the getting-started guide, "Anbernic H700 handhelds".
+
 pocket-ui is a game launcher with its own libretro frontend. This package puts it on a microSD card
 that already runs ROCKNIX, in place of EmulationStation. Your games, saves and ROCKNIX settings stay.
 EmulationStation stays installed too: pocket-ui hands over to it if it cannot start, and uninstall.sh
@@ -43,8 +49,8 @@ Alternative with two files: put this zip next to a copy of the small starter "In
 You need (the SSH way below)
 ----------------------------
 
-- A Retroid Pocket Mini V2 (or, experimental, a Retroid Pocket 5, Flip 2 or first Mini) with ROCKNIX
-  for SM8250, version @TESTED_ROCKNIX@ or newer, started normally at least once. A newer ROCKNIX is fine when
+- A Retroid Pocket Mini V2 (or, experimental, a Retroid Pocket 5, Flip 2 or first Mini; or an Anbernic
+  H700 handheld with ROCKNIX for H700) with ROCKNIX for SM8250, version @TESTED_ROCKNIX@ or newer, started normally at least once. A newer ROCKNIX is fine when
   pocket-ui's own check passes; an older one is refused ("update ROCKNIX first"), as is another device;
   see "Options" below.
 - SSH switched on in ROCKNIX (EmulationStation: Network Settings -> Enable SSH) and a computer on the
@@ -83,9 +89,10 @@ What the checks refuse
 
 install.sh changes nothing unless all of these pass:
 - the package is complete (files/SHA256SUMS),
-- the system is ROCKNIX for SM8250 (aarch64), version @TESTED_ROCKNIX@ or newer,
+- the system is ROCKNIX for SM8250, SM8550 or H700 (aarch64), version @TESTED_ROCKNIX@ or newer,
 - the device is a Retroid Pocket Mini V2, or one of the experimental Pocket 5, Flip 2 and first Mini
-  (its device tree says so; the experimental ones are noted, not refused),
+  (its device tree says so; the experimental ones are noted, not refused); on the H700 image exactly the
+  Anbernic models above, whatever the options say (the RG CubeXX is refused with its own sentence),
 - ROCKNIX's interface unit (essway) and EmulationStation's start script are there, ROCKNIX's first
   start has run, and there is enough free space on /storage,
 - pocket-ui and pocket-core run on this system and print version @VERSION@,
@@ -97,7 +104,7 @@ Options:
   --no-restart                install, but start pocket-ui only at the next start of the device
   --allow-untested-rocknix    a ROCKNIX older than @TESTED_ROCKNIX@; the compatibility check still has to pass
   --allow-other-device        another SM8250 device pocket-ui doesn't know (untested; the screen layout
-                              may not fit)
+                              may not fit). Never for an H700 handheld: without its profile it can't work
 
 
 Uninstall

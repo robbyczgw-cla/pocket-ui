@@ -467,6 +467,8 @@ fn the_pause_menu_table_matches_the_menu_of_each_emulator() {
             ("hakuX", super::main_items(false, saves, false))
         } else if kind.starts_with("RetroArch") {
             ("retroarch", page(Saver::RetroArch, false, false))
+        } else if kind.starts_with("PortMaster") {
+            ("port", page(Saver::Port, false, false))
         } else if kind.starts_with("Other emulators") {
             ("other", page(Saver::Other, false, false))
         } else {
@@ -477,7 +479,7 @@ fn the_pause_menu_table_matches_the_menu_of_each_emulator() {
         assert_eq!(doc, code, "docs/user/pause-menu.md, the row {kind:?}");
         seen.insert(key);
     }
-    assert_eq!(seen.len(), 7, "docs/user/pause-menu.md: a row for each kind of emulator, {seen:?}");
+    assert_eq!(seen.len(), 8, "docs/user/pause-menu.md: a row for each kind of emulator, {seen:?}");
     // What Quit does is a setting, not a row: the guide names it beside Quit.
     let name = super::SETTINGS.iter().find(|s| matches!(s.1, super::Opens::RememberQuit)).expect("the Settings row").0;
     assert!(md.contains(&format!("**{name}**")), "docs/user/pause-menu.md names Settings → **{name}** under Quit");

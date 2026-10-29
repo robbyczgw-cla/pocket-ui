@@ -3,13 +3,47 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a minor version may change anything).
 
-## [Unreleased]
+## [0.1.3] - 2026-10-29
 
 ### Added
 
-- Anbernic H700 handhelds (RG28XX, RG35XX, RG40XX, RG34XX, RG-SP) can be installed, as **experimental**: the installers
-  accept exactly the models in the per-model table in [docs/DEVICES.md](docs/DEVICES.md#anbernic-h700-handhelds-2026-10-27-installable-2026-10-29-experimental).
-  Only computer tests so far, no real device. The RG CubeXX is not supported yet.
+- **Info page** in the Minimal, Cards and Split looks: X on a game shows everything on one screen (cover, your
+  status, play time and rating, the facts, the description that scrolls in its place, a port's update note); SELECT
+  shows the full card. Shelf and Cabinet keep the game box.
+- Anbernic H700 handhelds can be installed, as **experimental**: the installers accept exactly the 11 models in the
+  per-model table in [docs/DEVICES.md](docs/DEVICES.md#anbernic-h700-handhelds-2026-10-27-installable-2026-10-29-experimental)
+  (RG28XX, five RG35XX, RG40XX H and V, RG34XX, RG34XX-SP, RG-SP), on ROCKNIX's H700 image. Computer tests for all models;
+  the RG35XX Plus was also tried on a handheld, where games from Game Boy to PlayStation 1 run smoothly (Crash Bandicoot 2
+  among them). The RG CubeXX (720x720) is refused with a sentence saying so.
+- **PortMaster ports** are guests of the pause menu: HOME opens Continue, Options (Performance & fan), Quick settings and
+  Quit over a running port. Quit closes the port and everything its start script launched. A port saves by itself, so
+  the menu has no Save or Load.
+- Ports show their PortMaster cover (else the screenshot) as the game box on the shelf, and the spine takes its colour. A
+  port with a newer version in PortMaster says **Update available** in Extras and on its card and box; nothing updates by itself.
+- **PS Vita** (Vita3K) as a guest of the pause menu like Wii U and PS3, with the Vita's own picture, a small blue-topped case on
+  the shelf and covers from libretro's "Sony - PlayStation Vita" thumbnails. SM8550 handhelds only, experimental; the firmware and the
+  games are your own.
+
+### Changed
+
+- **Animations: Cozy or Quick** (Settings → Look & feel → Animations, and on the look page, L1; it replaces the Launch
+  animation switch). Cozy plays the launch animation long enough to see (about a second; a pocket-core game shows itself
+  once it is over, any button skips it) and makes pages, the game box and the menus a little slower and softer; Quick is
+  straight into the game. Until you choose, Cozy goes with the Shelf and Cabinet looks and Quick with the others.
+- The Xbox core (hakuX) is updated to the current head of PR #9 (`2de4e9c`, rebased onto hakuX's own v1.2.0), which includes
+  the pacing fix for the frame pickup and our audio relaunch fix; the build no longer needs a patch of ours. Measured on the
+  Mini V2 with the usual settings it shows 59.9 new pictures a second, and Jade Empire's sound comes back after the relaunch
+  into the game ([docs/XBOX.md](docs/XBOX.md)).
+
+### Fixed
+
+- A port that ends within seconds is a failed start: pocket-ui says "<name> didn't start. It may need files or libraries
+  that aren't installed", with where to look, instead of counting a play session. Quit is not a failed start.
+- A port's game box shows its cover (the cover is read while the card is open).
+- H700: ROCKNIX's own volume box stays hidden from the first start, so only pocket-ui's shows when you change the volume.
+- The pause menu no longer stays black on a screen where sway sends no resize (the H700's 640x480).
+- After a game ends, its case on the Shelf is no longer left blank.
+- The first-start note reads "an Anbernic ..." (the article follows the name).
 
 ## [0.1.2] - 2026-10-29
 

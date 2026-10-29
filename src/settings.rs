@@ -121,6 +121,51 @@ impl Motion {
     }
 }
 
+/// Settings > Look & feel > Animations: Cozy plays the game's launch animation so that it reads (about a second, the
+/// pocket-core game's window waits for it) and slows the other transitions a little; Quick is the timings as designed,
+/// straight into the game. Unset follows the look (`Animations::default_for`).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Animations {
+    Cozy,
+    Quick,
+}
+
+impl Animations {
+    pub const ALL: [Animations; 2] = [Animations::Cozy, Animations::Quick];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Animations::Cozy => "Cozy",
+            Animations::Quick => "Quick",
+        }
+    }
+
+    /// One plain line about the choice, after the row in the look step.
+    pub fn blurb(self) -> &'static str {
+        match self {
+            Animations::Cozy => "Cozy: watch your game slide into the console.",
+            Animations::Quick => "Quick: straight into the game.",
+        }
+    }
+
+    /// Until the player chooses: Cozy for the looks with cases to watch (Shelf, Cabinet), else Quick.
+    pub fn default_for(theme: Theme) -> Animations {
+        match theme {
+            Theme::Shelf | Theme::Cabinet => Animations::Cozy,
+            _ => Animations::Quick,
+        }
+    }
+
+    /// The other choice (L1 on the look step).
+    pub fn next(self) -> Animations {
+        match self {
+            Animations::Cozy => Animations::Quick,
+            Animations::Quick => Animations::Cozy,
+        }
+    }
+}
+
 /// Settings → Look & feel → Text size: the type of every screen as designed, an eighth larger, or a quarter larger
 /// (`crate::type_scale`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize, Default)]
@@ -259,8 +304,11 @@ pub struct Settings {
     /// Options (`over_game`). Off when unset (and not written then).
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "is_off")]
     pub over_game: crate::over_game::Level,
-    /// Settings → Look & feel → Launch animation, kept as its opposite so that unset is On: in the Cabinet and the
-    /// Shelf look a game's case goes into its console while the game loads (`app_cabinet`).
+    /// Settings → Look & feel → Animations, once chosen; unset follows the look (`Animations::default_for`).
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    pub animations: Option<Animations>,
+    /// The "Launch animation" switch of 0.1.2 and the first 0.1.3 builds, kept as its opposite; no longer written. Read
+    /// once: a player who had turned it off gets Quick (`Settings::animations_or_default`).
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub no_launch_animation: bool,
     /// The game card opens as a page instead of the game's box (`game_box`): SELECT on the card switches, and the
@@ -280,6 +328,16 @@ fn is_normal(t: &TextSize) -> bool {
 const FILE: &str = "settings.json";
 
 impl Settings {
+    /// The player's choice: Quick for one who had turned the launch animation off in an earlier build.
+    pub fn animations_chosen(&self) -> Option<Animations> {
+        self.animations.or(self.no_launch_animation.then_some(Animations::Quick))
+    }
+
+    /// The animations in use: the choice, else the look's own (`Animations::default_for`).
+    pub fn animations_or_default(&self) -> Animations {
+        self.animations_chosen().unwrap_or_else(|| Animations::default_for(self.theme))
+    }
+
     /// The saved settings. A file that is there but unreadable (0 bytes, cut off) is replaced by its last good
     /// copy (`settings.json.bak`); with none, the setup is still counted as done, because the file is only
     /// ever written after it ran. Either way it's said on stderr.
@@ -446,7 +504,8 @@ mod tests {
             art_off: false,
             text_size: TextSize::Large,
             over_game: crate::over_game::Level::Sensors,
-            no_launch_animation: true,
+            animations: Some(Animations::Quick),
+            no_launch_animation: false,
             details_page: true,
         }
     }
@@ -475,6 +534,33 @@ mod tests {
         assert_eq!(text_size(&d), TextSize::Large, "the one field, whatever else is wrong");
         std::fs::write(d.join(FILE), "{damaged").unwrap();
         assert_eq!(text_size(&d), TextSize::Normal);
+    }
+
+    #[test]
+    fn animations_follow_the_look_until_chosen_and_the_choice_is_kept() {
+        let d = dir("animations");
+        for (theme, cozy) in [(Theme::Shelf, true), (Theme::Cabinet, true), (Theme::Minimal, false), (Theme::Cards, false), (Theme::Split, false)] {
+            let want = if cozy { Animations::Cozy } else { Animations::Quick };
+            assert_eq!(Animations::default_for(theme), want, "{theme:?}");
+            assert_eq!(Settings { theme, animations: None, ..chosen() }.animations_or_default(), want, "{theme:?}: unset follows the look");
+        }
+        // Once chosen the look no longer matters, and it survives a restart.
+        Settings { theme: Theme::Shelf, animations: Some(Animations::Quick), ..chosen() }.save(&d);
+        let s = Settings::load(&d);
+        assert_eq!((s.animations_or_default(), s.animations), (Animations::Quick, Some(Animations::Quick)));
+        assert!(std::fs::read_to_string(d.join(FILE)).unwrap().contains(r#""animations": "quick""#));
+        Settings { theme: Theme::Split, animations: Some(Animations::Cozy), ..chosen() }.save(&d);
+        assert_eq!(Settings::load(&d).animations_or_default(), Animations::Cozy);
+        // Unset is not written; a value this version doesn't know is dropped, not the file.
+        Settings { animations: None, ..chosen() }.save(&d);
+        assert!(!std::fs::read_to_string(d.join(FILE)).unwrap().contains("animations"));
+        std::fs::write(d.join(FILE), br#"{"theme": "shelf", "animations": "slow"}"#).unwrap();
+        assert_eq!(Settings::load(&d).animations_or_default(), Animations::Cozy, "unknown: the look's own");
+        // The 0.1.2 switch turned off counts as a choice for Quick.
+        std::fs::write(d.join(FILE), br#"{"theme": "shelf", "no_launch_animation": true}"#).unwrap();
+        assert_eq!(Settings::load(&d).animations_chosen(), Some(Animations::Quick));
+        assert_eq!(Animations::Cozy.next(), Animations::Quick);
+        assert_eq!(Animations::Quick.next(), Animations::Cozy);
     }
 
     #[test]

@@ -1473,8 +1473,12 @@ Store	Store
 Emulators, frames, themes, tools.	Emulatoren, Rahmen, Themes, Tools.
 Emulator menus, RetroArch, gamepad test and calibration, terminal.	Emulator-Menüs, RetroArch, Gamepad-Test, Terminal.
 A soft tick as you move.	Ein sanftes Tippen beim Bewegen.
-Launch animation	Start-Animation
-Cabinet and Shelf: the game goes into its console as it starts.	Vitrine und Regal: Das Spiel wandert beim Start in seine Konsole.
+Animations	Animationen
+Cozy	Gemütlich
+Quick	Schnell
+Cozy: watch your game slide into the console.	Gemütlich: Sieh zu, wie dein Spiel in die Konsole rutscht.
+Quick: straight into the game.	Schnell: direkt ins Spiel.
+Cozy: watch your game slide into the console. Quick: straight into the game.	Gemütlich: Sieh zu, wie dein Spiel in die Konsole rutscht. Schnell: direkt ins Spiel.
 Box	Box
 Turn over	Umdrehen
 No picture yet	Noch kein Bild
@@ -2905,7 +2909,7 @@ An estimate from how pocket-core is built, not a camera measurement: {t}, ≈ {s
 Look & feel	Aussehen
 Playing	Spielen
 Connections	Verbindungen
-Look, language, text, night light, frames, sounds, haptics, LEDs, launch animation.	Ansicht, Sprache, Schrift, Nachtlicht, Rahmen, Töne, Haptik, LEDs, Start-Animation.
+Look, language, text, night light, frames, sounds, haptics, LEDs, animations.	Ansicht, Sprache, Schrift, Nachtlicht, Rahmen, Töne, Haptik, LEDs, Animationen.
 On start, quit, buttons, over the game, performance, battery, achievements, Curator.	Start, Beenden, Tasten, Anzeige im Spiel, Leistung, Akku, Erfolge, Curator.
 Add games, starter pack, extras, screenshots, the Store, tools, PC streaming.	Spiele hinzufügen, Startpaket, Extras, Screenshots, Store, Tools, PC-Streaming.
 Add games, starter pack, extras, screenshots, tools, PC streaming.	Spiele hinzufügen, Startpaket, Extras, Screenshots, Tools, PC-Streaming.
@@ -2966,7 +2970,7 @@ Max: full speed all the time, for demanding games. Uses more battery and gets wa
 Fullscreen fills the screen and stretches pixels.	Vollbild füllt den Bildschirm und streckt die Pixel.
 
 # --- A port's Performance & fan
-Ports have no pause menu: these apply to this port from its next start. What every port starts with is in Settings › Playing › Performance & fan.	Ports haben kein Pausenmenü: Diese Werte gelten für diesen Port ab seinem nächsten Start. Womit jeder Port startet, steht unter Einstellungen › Spielen › Leistung & Lüfter.
+These apply to this port from its next start. What every port starts with is in Settings › Playing › Performance & fan.	Diese Werte gelten für diesen Port ab seinem nächsten Start. Womit jeder Port startet, steht unter Einstellungen › Spielen › Leistung & Lüfter.
 Loading…	Wird geladen …
 Still reading the ports' settings…	Die Einstellungen der Ports werden noch gelesen …
 Use Battery for this port	Akku für diesen Port nutzen
@@ -3442,6 +3446,7 @@ Scanlines like a TV's beam, a fine colour mask too small to see at arm's length 
 LCD grid, GBA colours	LCD-Raster, GBA-Farben
 The colours are the Game Boy Advance screen's: darker and softer, as the games were made for.	Die Farben sind die des Game-Boy-Advance-Bildschirms: dunkler und weicher, wie die Spiele dafür gemacht wurden.
 {s} didn't start. The file may be damaged, or the system needs a BIOS file (Settings › Games › Add games).	{s} wurde nicht gestartet. Die Datei ist vielleicht beschädigt, oder das System braucht eine BIOS-Datei (Einstellungen › Spiele › Spiele hinzufügen).
+{s} didn't start. It may need files or libraries that aren't installed: reinstall it in Ports, or check log.txt in its folder.	{s} wurde nicht gestartet. Vielleicht fehlen Dateien oder Bibliotheken: Installier es in Ports neu oder sieh in der log.txt in seinem Ordner nach.
 {s} didn't start. {s2} needs a BIOS file in roms/bios: {s3} or {s4}.	{s} wurde nicht gestartet. {s2} braucht eine BIOS-Datei in roms/bios: {s3} oder {s4}.
 {s} didn't start. {s2} needs a BIOS file in roms/bios: {s3}.	{s} wurde nicht gestartet. {s2} braucht eine BIOS-Datei in roms/bios: {s3}.
 Your progress couldn't be saved to the SD card. Free some space; it will try again.	Dein Fortschritt ließ sich nicht auf der SD-Karte speichern. Mach etwas Platz frei; es wird erneut versucht.
@@ -3763,6 +3768,7 @@ Something went wrong while writing it ({s}). Try again after a restart.	Beim Sch
 Hide	Ausblenden
 {s} (experimental)	{s} (experimentell)
 pocket-ui hasn't been tested on a {s} yet. Most things should work; if something doesn't, Settings › System › About › Report a problem.	pocket-ui wurde auf einem {s} noch nicht getestet. Das meiste sollte laufen; wenn etwas nicht geht: Einstellungen › System › Über › Problem melden.
+pocket-ui hasn't been tested on an {s} yet. Most things should work; if something doesn't, Settings › System › About › Report a problem.	pocket-ui wurde auf einem {s} noch nicht getestet. Das meiste sollte laufen; wenn etwas nicht geht: Einstellungen › System › Über › Problem melden.
 
 # --- The boot screen (pocket-splash, src/splash.rs; docs/BOOT-SPLASH.md)
 Getting ready for the first start…	Der erste Start wird vorbereitet …
@@ -3806,3 +3812,13 @@ Couldn't save. Is the card full or read-only?	Konnte nicht speichern. Ist die Ka
 You see it when the game starts. In the pause menu, Options > Picture shows it live.	Du siehst es beim Spielstart. Im Pausenmenü zeigt Optionen > Bild es live.
 Default	Standard
 Shortcut: {t}	Kurzbefehl: {t}
+This game saves by itself. Save in the game before you quit.	Dieses Spiel speichert selbst. Speichere im Spiel, bevor du beendest.
+Update available	Update verfügbar
+Update available, in Extras	Update verfügbar, unter Extras
+{s} is up to date.	{s} ist auf dem neuesten Stand.
+Battery (default)	Akku (Standard)
+Max (default)	Max (Standard)
+Very quiet (default)	Sehr leise (Standard)
+Quiet (default)	Leise (Standard)
+Cool (default)	Kühl (Standard)
+Favourite	Favorit

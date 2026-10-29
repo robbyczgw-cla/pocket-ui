@@ -133,8 +133,9 @@ come Curator's shelves, then one shelf per system. A starts the game: the cartri
 In the Cabinet and the Shelf looks, A on a game starts it at once, and while the emulator loads its case goes into
 the console's pixel picture: a cartridge goes into the slot, a disc slides out of its case and in, a short click
 (with menu sounds on) and a glow as it is in. The game does not wait for any of it: when it is ready first, it simply
-comes up over the rest. Any button skips it. Settings → Look & feel → **Launch animation** turns it off; the other
-looks never have it.
+comes up over the rest. Any button skips it. With **Animations: Cozy** (Settings → Look & feel → Animations, on until you
+choose in the Shelf and Cabinet looks) the animation is slower, about a second, and a game of pocket-core's waits to show itself until it
+is over; **Quick** keeps the short one. The other looks never have it.
 
 In the **Shelf** look, the one pocket-ui starts with, everything stands on one shelf, seen from the spine: each game
 in its system's real case (the same cases as in the Cabinet below), its spine in its cover's colour with its name

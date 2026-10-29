@@ -139,11 +139,18 @@ processor type and are not marked experimental, in two lists:
    size, or **Installed**.
 3. Press A to **Install**. When it is done: "… is installed. Find it under Ports."
 4. Press A on an installed game to **Remove** it.
+5. When PortMaster has a newer version of an installed game, its row says **Update available** (and so does its
+   card, quietly, under Speed). Press A to update it, the same way it was installed; Y removes it instead. Nothing
+   updates by itself.
+
+The shelf shows the game's cover from PortMaster (else its screenshot) as the box, and the colour of the spine comes from
+it. A game without any picture keeps the plain look.
 
 Installed games appear on Home under the **Ports** system and start like any other game. PortMaster
 itself is prepared automatically the first time you install something.
 
-A port has no pause menu. Its performance and fan are on its card: X on the port, then START opens **Performance &
+HOME opens the [pause menu](pause-menu.md#portmaster-ports) over a running port (Continue, Options, Quick settings,
+Quit). Its performance and fan are in Options there, or on its card: X on the port, then START opens **Performance &
 fan** (Battery, Auto or Performance; Very quiet, Quiet, Auto or Cool). A port that keeps a processor core busy all the time is
 pointed out there once, with Battery in one press. See [PortMaster ports](performance.md#portmaster-ports).
 

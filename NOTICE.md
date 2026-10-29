@@ -2,6 +2,7 @@
 
 pocket-ui's own code, documents and drawings are licensed under the **GNU General Public License,
 version 2 or (at your option) any later version** (see [LICENSE](LICENSE)).
+Copyright (C) 2026 Robby Czesany, the author of pocket-ui (GitHub: [robbyczgw-cla](https://github.com/robbyczgw-cla)).
 
 This file lists everything that is *not* ours, or that pocket-ui starts or downloads: under which licence, and
 where it comes from. Every entry was checked against the repository or the upstream source in October 2026. Where
@@ -123,10 +124,10 @@ Every other emulator ROCKNIX ships (and pocket-ui can start through `runemu.sh`)
 ROCKNIX.
 
 **Xbox: hakuX by rfandango (GPL-3.0), Linux/libretro port by portare-ch (PortareOS), PR #9 commit
-`531ce8d965f4758a16c36fa2c09e55a84c67fc93` + audio relaunch fix (ours, submitted upstream).** pocket-ui ships the built core (`hakux_libretro.so`, built from that
-commit plus our one patch, `deploy/hakux/patches/`, with the PR's own build scripts) in its own folder, `/storage/pocket-ui/hakux`; it is loaded by ROCKNIX's RetroArch,
+`2de4e9cd86a47e9ffaf928c36e240a995a279713`** (includes our audio relaunch fix, accepted into the PR) pocket-ui ships the built core (`hakux_libretro.so`, built from that
+commit, unpatched, with the PR's own build scripts) in its own folder, `/storage/pocket-ui/hakux`; it is loaded by ROCKNIX's RetroArch,
 a separate GPL-3.0-or-later program that pocket-ui starts, as ARMSX2 or Dolphin are. pocket-ui and the core do not share
-a process. Source of the shipped binary: <https://github.com/rfandango/hakuX/pull/9> at that commit plus the patch (GPL-3.0-or-later, in the pocket-ui source); `SOURCE.txt` beside
+a process. Source of the shipped binary: <https://github.com/rfandango/hakuX/pull/9> at that commit (GPL-3.0-or-later); `SOURCE.txt` beside
 the core says the same, with the checksums. The licence texts of the core and its parts travel with it.
 
 **How the licences fit together.** pocket-ui is GPL-2.0-or-later, so it can be combined with GPL-2.0 code and,

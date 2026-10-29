@@ -15,8 +15,15 @@
 #  - the tests are built with [profile.gate] in Cargo.toml: release's optimisation level and checks (opt-level 3, no
 #    debug assertions, no overflow checks), but no LTO, 16 codegen units and incremental compilation. Nothing that
 #    ships is built with it: the app and the release builds keep [profile.release].
-#  - the launcher tests run after cargo, not alongside it: several of them (Smooth fan's watchdog) time real
-#    intervals of 0.1-0.6 s and failed under the load of the compile (2026-10-24). They take about 50 s.
+#  - the shell tests (launcher test in one lane, the small ones in another) run beside cargo on hosts with 8+ cores
+#    (GATE_PARALLEL=0 or fewer cores: after it). Several launcher tests (Smooth fan's watchdog) time real intervals of
+#    0.1-0.6 s and failed under the load of the compile (2026-10-24); if any shell test fails beside cargo, all of them
+#    run again alone and that result counts. They take about 50 s on a quiet machine, about 3 min on the remote host.
+#  - paths changed against the merge base with main (GATE_BASE=<ref>; server2: the list comes from tools/remote-gate.sh)
+#    skip what cannot be affected, and say so ("gate: SKIPPED ..."): the shell tests unless deploy/, scripts/, Cargo.*,
+#    build.rs or a src/ file those scripts name changed; the integration tests (unit tests and doc checks still run) when
+#    only docs/ (not docs/user/, the on-device manual), root *.md, LICENSE or NOTICE* changed. No list, or GATE_FULL=1:
+#    everything runs. GATE_LEAKS_DONE=1 (set by remote-gate.sh, which scans where .git is; the remote host has no .git) skips the scan.
 #  - GATE_PROFILE=release runs the tests with the production profile (thin LTO, one codegen unit, panic=abort for the
 #    binaries): slow, use it when you changed [profile.*] or want the production binaries under test.
 export PATH=$HOME/.cargo/bin:$HOME/opt/zig:$PATH
@@ -29,7 +36,7 @@ name=$(basename "$(pwd)")
 T=/tmp/gate-test-$name.log L=/tmp/gate-launcher-$name.log V=/tmp/gate-verify-$name.log C=/tmp/gate-licences-$name.log
 P=/tmp/gate-package-$name.log Q=/tmp/gate-grub-$name.log G=/tmp/gate-image-grub-$name.log F=/tmp/gate-fat-hook-$name.log
 # Private-data scan (fails fast, before any compile). The script is maintainer tooling and is not in the public export.
-if [ -f scripts/check-leaks.sh ]; then
+if [ -f scripts/check-leaks.sh ] && [ -z "${GATE_LEAKS_DONE:-}" ]; then
     leaks_start=$(date +%s)
     leaks=$(sh scripts/check-leaks.sh "$(pwd)" 2>&1) || {
         echo "GATE: leak scan FAILED (scripts/check-leaks.sh; docs/DEVELOPING.md \"Private-data scan\")"
@@ -78,11 +85,78 @@ fi
 
 unset POCKETUI_TEST_QUICK
 start=$(date +%s)
+
+# What did the branch change? Against the merge base with main (committed, uncommitted and new files). Server2 has no .git:
+# tools/remote-gate.sh writes the list to .gate-changed there. Nothing known or an empty list: run everything.
+changed=
+if [ -f .gate-changed ]; then changed=$(cat .gate-changed)
+elif base=$(git merge-base "${GATE_BASE:-main}" HEAD 2>/dev/null); then
+    changed=$( { git diff --name-only "$base"; git ls-files -o --exclude-standard; } | sort -u )
+fi
+# Only conservative skips: every changed path has to prove it is harmless, one unknown path runs the full gate.
+# docs-only: documents that no build, test or the on-device manual reads (docs/user/ is embedded, so it counts as source).
+# no shell tests: nothing in deploy/, scripts/, Cargo.*, build.rs, nor in a src/ file those scripts mention.
+docs_only=0 shell_tests=1 why_shell=
+if [ -n "$changed" ] && [ -z "${GATE_FULL:-}" ]; then
+    srcrefs=$(grep -ho 'src/[a-z_0-9/]*\.rs' deploy/*.sh deploy/*/*.sh scripts/*.sh scripts/image/*.sh 2>/dev/null | sort -u)
+    docs_only=1 shell_tests=0
+    for f in $changed; do
+        case $f in
+            docs/user/*) docs_only=0 ;;
+            docs/*|*.md|LICENSE|NOTICE*) ;;
+            *) docs_only=0 ;;
+        esac
+        case $f in
+            deploy/*|scripts/*|Cargo.toml|Cargo.lock|build.rs|rust-toolchain*) shell_tests=1; why_shell=$f ;;
+            src/*) case "
+$srcrefs
+" in *"
+$f
+"*) shell_tests=1; why_shell=$f ;; esac ;;
+        esac
+    done
+    [ "$docs_only" -eq 0 ] || shell_tests=0
+fi
+
+# The shell tests: the launcher test and the small ones. Each has its own log and exit-code file in $RCD.
+RCD=$(mktemp -d "${TMPDIR:-/tmp}/gate-rc.XXXXXX")
+shell_launcher() { sh deploy/test-run-pocket-ui.sh >"$L" 2>&1; echo $? >"$RCD/l"; }
+shell_small() {
+    # The device check's shell test (fake ssh and /proc, about 3 s): scripts/verify-device.sh, docs/DEVELOPING.md "Deploy".
+    sh scripts/test-verify-device.sh >"$V" 2>&1; echo $? >"$RCD/v"
+    # The core-licence check's shell test (fixture trees, about 1 s): scripts/check-core-licences.sh must keep reading src/hostsys.rs.
+    bash scripts/test-check-core-licences.sh >"$C" 2>&1; echo $? >"$RCD/c"
+    # The install package's scripts against a fake root (about 8 s): deploy/package/install.sh and uninstall.sh.
+    sh deploy/package/test-package.sh >"$P" 2>&1; echo $? >"$RCD/p"
+    # The quiet start's script against a fake /flash (about 1 s): deploy/grub-quiet.sh.
+    sh deploy/test-grub-quiet.sh >"$Q" 2>&1; echo $? >"$RCD/q"
+    # The SD image check's reading of grub.cfg (about 1 s): scripts/image/grub-checks.sh against deploy/sd-efi/grub.cfg.
+    sh scripts/image/test-grub-checks.sh >"$G" 2>&1; echo $? >"$RCD/g"
+    # The FAT-card install hook against a fake /flash and /storage (about 2 s): deploy/fat/mount-storage.sh.in.
+    sh deploy/fat/test-hook.sh >"$F" 2>&1; echo $? >"$RCD/f"
+}
+shell_tests_run() { shell_launcher & shell_small; wait; }   # two lanes: the launcher (the longest) and all the small ones
+shell_rc() { cat "$RCD/$1" 2>/dev/null || echo 0; }
+shell_failed() { for k in l v c p q g f; do [ "$(shell_rc $k)" = 0 ] || return 0; done; return 1; }
+
+# The shell tests build nothing and use no port or shared directory (mktemp, fakes), so they run beside cargo when the host has
+# cores to spare (GATE_PARALLEL=0 or fewer than 8 cores: one after the other, as before). If they fail beside the compile
+# (the launcher's watchdog tests time real 0.1-0.6 s intervals), they run again alone after cargo, and that result counts.
+cores=$(nproc 2>/dev/null || echo 1)
+parallel=0
+[ "$shell_tests" -eq 1 ] && [ "${GATE_PARALLEL:-1}" != 0 ] && [ "$cores" -ge 8 ] && parallel=1
+if [ "$parallel" -eq 1 ]; then shell_tests_run & shell_pid=$!; fi   # the launcher and the small tests are independent of each other too
+
 # shellcheck disable=SC2086  # pflag is one or two words
 runner=${GATE_RUNNER:-cargo}
 case $runner in
     cargo)
-        nice -n "$nice_increment" cargo test $pflag -q >"$T" 2>&1
+        if [ "$docs_only" -eq 1 ]; then
+            # Unit tests only: they hold the doc-drift checks (src/doc_checks.rs); no source changed, so cargo has nothing to build.
+            nice -n "$nice_increment" cargo test $pflag --lib --bins -q >"$T" 2>&1
+        else
+            nice -n "$nice_increment" cargo test $pflag -q >"$T" 2>&1
+        fi
         trc=$?
         ;;
     nextest)
@@ -94,31 +168,39 @@ case $runner in
     *) echo "GATE: unknown GATE_RUNNER (use cargo or nextest)"; exit 2 ;;
 esac
 tdone=$(date +%s)
-sh deploy/test-run-pocket-ui.sh >"$L" 2>&1
-lrc=$?
-# The device check's shell test (fake ssh and /proc, about 3 s): scripts/verify-device.sh, docs/DEVELOPING.md "Deploy".
-sh scripts/test-verify-device.sh >"$V" 2>&1
-vrc=$?
-# The core-licence check's shell test (fixture trees, about 1 s): scripts/check-core-licences.sh must keep reading src/hostsys.rs.
-bash scripts/test-check-core-licences.sh >"$C" 2>&1
-crc=$?
-# The install package's scripts against a fake root (about 8 s): deploy/package/install.sh and uninstall.sh.
-sh deploy/package/test-package.sh >"$P" 2>&1
-prc=$?
-# The quiet start's script against a fake /flash (about 1 s): deploy/grub-quiet.sh.
-sh deploy/test-grub-quiet.sh >"$Q" 2>&1
-qrc=$?
-# The SD image check's reading of grub.cfg (about 1 s): scripts/image/grub-checks.sh against deploy/sd-efi/grub.cfg.
-sh scripts/image/test-grub-checks.sh >"$G" 2>&1
-grc=$?
-# The FAT-card install hook against a fake /flash and /storage (about 2 s): deploy/fat/mount-storage.sh.in.
-sh deploy/fat/test-hook.sh >"$F" 2>&1
-frc=$?
+sdone=$tdone
+if [ "$parallel" -eq 1 ]; then
+    wait "$shell_pid"
+    sdone=$(date +%s)
+    if shell_failed; then
+        echo "gate: shell tests failed beside cargo, running them again alone (first logs: $L.parallel ...)"
+        cp "$L" "$L.parallel"
+        shell_tests_run
+        sdone=$(date +%s)
+    fi
+elif [ "$shell_tests" -eq 1 ]; then
+    shell_tests_run
+    sdone=$(date +%s)
+fi
+lrc=$(shell_rc l) vrc=$(shell_rc v) crc=$(shell_rc c) prc=$(shell_rc p) qrc=$(shell_rc q) grc=$(shell_rc g) frc=$(shell_rc f)
+rm -rf "$RCD"
 end=$(date +%s)
 cp "$T" /tmp/gate-test.log
-cp "$L" /tmp/gate-launcher.log
-cp "$V" /tmp/gate-verify.log
-echo "gate: profile $profile; tests $((tdone - start)) s, launcher tests $((end - tdone)) s, total $((end - start)) s"
+if [ "$shell_tests" -eq 1 ]; then
+    cp "$L" /tmp/gate-launcher.log
+    cp "$V" /tmp/gate-verify.log
+fi
+if [ "$shell_tests" -eq 1 ]; then
+    echo "gate: profile $profile; tests $((tdone - start)) s, shell tests (launcher etc.) $((sdone - start)) s$([ "$parallel" -eq 1 ] && echo ' beside cargo')$([ -n "$why_shell" ] && echo "; run because of $why_shell"), total $((end - start)) s"
+else
+    echo "gate: profile $profile; tests $((tdone - start)) s, total $((end - start)) s"
+fi
+if [ "$docs_only" -eq 1 ]; then
+    echo "gate: SKIPPED integration tests: only documents changed ($(echo "$changed" | wc -l) files, none read by the build or the manual); unit tests with the doc checks ran"
+fi
+if [ "$shell_tests" -eq 0 ]; then
+    echo "gate: SKIPPED launcher and other shell tests: no change in deploy/, scripts/, Cargo.*, build.rs or a src/ file they read (GATE_FULL=1 runs everything)"
+fi
 
 fail=0
 if [ $trc -ne 0 ]; then

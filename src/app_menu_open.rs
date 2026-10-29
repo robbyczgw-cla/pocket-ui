@@ -41,6 +41,9 @@ pub(crate) struct Raise {
     full: (u32, u32),
     /// When it was put in front (`App::raised`; `open_menu` sets it itself, its borrows allow no call).
     pub(crate) since: Option<std::time::Instant>,
+    /// A frame was held back for the full size: nothing else may come to paint it (sway sends no `Resized` when the
+    /// window already has that size, e.g. on the H700's 640x480), so `due` asks for it when the wait is over.
+    held: bool,
 }
 
 /// How long the helper thread waits for the picture (it takes a few milliseconds; a game still starting has none).
@@ -139,6 +142,11 @@ impl App {
         behind.push((key, c.buf.to_vec()));
     }
 
+    /// When the frame held back for the full size is to be painted anyway (None: no frame is held back).
+    pub(crate) fn held_frame_due(&self) -> Option<std::time::Instant> {
+        self.raise.held.then(|| self.raise.since.map(|t| t + RAISE_WAIT)).flatten()
+    }
+
     /// pocket-ui has just put itself in front of a game (a `swaymsg` that makes it fullscreen).
     pub(crate) fn raised(&mut self) {
         self.raise.since = Some(std::time::Instant::now());
@@ -147,19 +155,51 @@ impl App {
     /// Whether a frame of `w` x `h` should wait: just put in front, and sway's resize to the full size not in yet
     /// (its `Resized` asks for the frame). Notes the full size as it goes.
     pub(crate) fn wait_for_full_size(&mut self, w: u32, h: u32) -> bool {
-        let r = &mut self.raise;
-        if w as u64 * h as u64 > r.full.0 as u64 * r.full.1 as u64 {
-            r.full = (w, h);
+        self.raise.wait(w, h, std::time::Instant::now())
+    }
+}
+
+impl Raise {
+    fn wait(&mut self, w: u32, h: u32, now: std::time::Instant) -> bool {
+        if w as u64 * h as u64 > self.full.0 as u64 * self.full.1 as u64 {
+            self.full = (w, h);
         }
-        match r.since {
-            Some(t) if (w, h) != r.full && t.elapsed() < RAISE_WAIT => {
+        match self.since {
+            Some(t) if (w, h) != self.full && now.saturating_duration_since(t) < RAISE_WAIT => {
                 pocket_ui::trace::step("frame waits for the full size");
+                self.held = true;
                 true
             }
             _ => {
-                r.since = None;
+                self.since = None;
+                self.held = false;
                 false
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Instant;
+
+    /// A frame held back for the full size is due when the wait is over, and then paints (no `Resized` needed).
+    #[test]
+    fn held_frame_is_due_and_then_paints() {
+        let t0 = Instant::now();
+        let mut raise = Raise { full: (640, 480), since: Some(t0), held: false };
+        assert!(raise.wait(320, 480, t0), "held at the old size");
+        assert!(raise.held && raise.since.is_some());
+        assert!(!raise.wait(320, 480, t0 + RAISE_WAIT), "painted once the wait is over");
+        assert!(!raise.held && raise.since.is_none());
+    }
+
+    #[test]
+    fn full_size_frame_is_never_held() {
+        let t0 = Instant::now();
+        let mut raise = Raise { since: Some(t0), ..Default::default() };
+        assert!(!raise.wait(640, 480, t0));
+        assert!(!raise.held);
     }
 }

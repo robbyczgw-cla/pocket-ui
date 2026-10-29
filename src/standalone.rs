@@ -1108,6 +1108,12 @@ mod azahar {
         swaymsg(&format!("[pid={pid}] kill"))
     }
 
+    /// The same for every process of a port's group in one call (whichever of them owns the window).
+    pub fn close_windows(pids: &[i32]) -> bool {
+        let cmd = pids.iter().map(|p| format!("[pid={p}] kill")).collect::<Vec<_>>().join("; ");
+        swaymsg(&cmd)
+    }
+
     fn backup_of(quick: &Path) -> PathBuf {
         PathBuf::from(format!("{}.pocket-ui", quick.display()))
     }
@@ -1550,10 +1556,10 @@ pub fn quiet_wiimote(profile: &str) -> String {
 /// One of ARMSX2, Dolphin nogui or Azahar is running (started by us or not).
 pub fn emulator_running() -> bool {
     [Emu::Armsx2, Emu::Dolphin, Emu::Azahar, Emu::Hakux].iter().any(|e| find_pid(None, e.process()).is_some())
-        || [guest::Guest::Cemu, guest::Guest::Rpcs3].iter().any(|g| find_pid(None, g.process()).is_some())
+        || [guest::Guest::Cemu, guest::Guest::Rpcs3, guest::Guest::Vita3k].iter().any(|g| find_pid(None, g.process()).is_some())
 }
 
-/// A Wii U (Cemu) or PS3 (RPCS3) game is running as a guest (`guest`): Continue and Quit, no states.
+/// A Wii U (Cemu), PS3 (RPCS3) or PS Vita (Vita3K) game is running as a guest (`guest`): Continue and Quit, no states.
 pub fn guest_active() -> bool {
     guest::current().is_some()
 }
@@ -1613,7 +1619,7 @@ pub fn save_and_close(pgid: Option<i32>, frame: Option<Image>, done: impl FnOnce
     });
 }
 
-/// Wii U (Cemu) and PS3 (RPCS3) on the SM8550 handhelds: guests of the pause menu without states. Neither emulator
+/// Wii U (Cemu), PS3 (RPCS3) and PS Vita (Vita3K) on the SM8550 handhelds: guests of the pause menu without states. Neither emulator
 /// has a save state we could press or ask for (Cemu has none at all; RPCS3 has no savestates, and no IPC), so the
 /// menu offers Continue and Quit and says honestly that the game keeps its own saves (`pause_saves::OWN_SAVES`).
 /// pocket-ui starts them through ROCKNIX's `runemu.sh` as ever; what it adds is the CPU/GPU profile of the other big
@@ -1626,6 +1632,9 @@ mod guest {
     pub enum Guest {
         Cemu,
         Rpcs3,
+        /// A PortMaster port: a launch script with children (gptokeyb, the engine, box86), found by its group, not a name.
+        Port,
+        Vita3k,
     }
 
     impl Guest {
@@ -1633,15 +1642,20 @@ mod guest {
             match (system, emulator) {
                 ("wiiu", "cemu") => Some(Guest::Cemu),
                 ("ps3", "rpcs3") => Some(Guest::Rpcs3),
+                ("ports", _) => Some(Guest::Port),
+                ("psvita", "vita3k") => Some(Guest::Vita3k),
                 _ => None,
             }
         }
 
-        /// Start of the emulator's process name (`comm`; `/usr/bin/cemu`, `/usr/bin/rpcs3-sa`).
+        /// Start of the emulator's process name (`comm`; `/usr/bin/cemu`, `/usr/bin/rpcs3-sa`, `/usr/bin/vita3k-sa`).
         pub fn process(self) -> &'static str {
             match self {
                 Guest::Cemu => "cemu",
                 Guest::Rpcs3 => "rpcs3-sa",
+                // No process of one name: `quit_port` works on the whole group.
+                Guest::Port => "",
+                Guest::Vita3k => "vita3k-sa",
             }
         }
     }
@@ -1651,8 +1665,8 @@ mod guest {
     const TERM_WAIT: Duration = Duration::from_secs(5);
     /// The longest a guest's Quit takes when every step runs out its time (the main loop stops it after this plus slack).
     pub(super) const WORST: Duration = CLOSE_WAIT.saturating_add(TERM_WAIT);
-    /// The same for both: the window's close request (Cemu's File > Exit, RPCS3 with its exit question off) flushes
-    /// the shader caches and settings; SIGTERM and SIGKILL only if it hangs.
+    /// The same for all: the window's close request (Cemu's File > Exit, RPCS3 with its exit question off, Vita3K's SDL
+    /// quit event) flushes the shader caches and settings; SIGTERM and SIGKILL only if it hangs.
     pub(super) const PLAN: &[Step] = &[
         Step::CloseWindow,
         Step::Exit(CLOSE_WAIT),
@@ -1674,6 +1688,10 @@ mod guest {
         let id = LAUNCHES.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
         if let Ok(mut cur) = GUEST.lock() {
             *cur = Some((id, g));
+        }
+        // A port's performance and fan are applied by `port_perf` (its own choice per port), not here.
+        if g == Guest::Port {
+            return;
         }
         let (system, rom) = (system.to_string(), rom.to_path_buf());
         std::thread::spawn(move || {
@@ -1700,6 +1718,10 @@ mod guest {
     /// Runs [`PLAN`] on the emulator's process, on a thread (the caller is the UI).
     pub fn quit(pgid: Option<i32>) {
         let Some((_, g)) = current() else { return };
+        if g == Guest::Port {
+            std::thread::spawn(move || quit_port(pgid));
+            return;
+        }
         std::thread::spawn(move || {
             let started = Instant::now();
             println!("standalone: quitting {g:?}, at most {WORST:?}");
@@ -1709,6 +1731,70 @@ mod guest {
             println!("standalone: {g:?} closed after {:?}", started.elapsed());
         });
     }
+}
+
+/// Waits per step of a port's Quit. Most engines end on SIGTERM at once; the window's close request comes first for the
+/// ones that write their save on it (SDL's quit event).
+const PORT_CLOSE_WAIT: Duration = Duration::from_millis(2500);
+const PORT_TERM_WAIT: Duration = Duration::from_millis(2500);
+/// The longest a port's Quit takes (the main loop's backstop, `GUEST_GRACE`, comes after it).
+pub(crate) const PORT_WORST: Duration = PORT_CLOSE_WAIT.saturating_add(PORT_TERM_WAIT).saturating_add(Duration::from_secs(1));
+/// What a port's launch script starts next to the game and may leave behind when it is killed from outside: the
+/// button-to-key translator and the helpers that wait for the engine.
+const PORT_HELPERS: &[&str] = &["gptokeyb", "oga_controls", "sdl2imgui"];
+
+/// Members of the process group `pgid` that still run (zombies are gone for our purposes).
+fn group_members(pgid: i32) -> Vec<i32> {
+    let Ok(dir) = std::fs::read_dir("/proc") else { return Vec::new() };
+    dir.flatten()
+        .filter_map(|e| {
+            let pid: i32 = e.file_name().to_str()?.parse().ok()?;
+            let stat = std::fs::read_to_string(e.path().join("stat")).ok()?;
+            let rest = stat.get(stat.rfind(')')? + 2..)?;
+            let mut f = rest.split(' ');
+            let (state, _ppid, group) = (f.next()?, f.next()?, f.next()?.parse::<i32>().ok()?);
+            (group == pgid && state != "Z").then_some(pid)
+        })
+        .collect()
+}
+
+/// Quit for a PortMaster port: the window is brought in front and asked to close (SDL ports save on it), then SIGTERM
+/// to the whole group, then SIGKILL to the group and to the helpers that left it. Done when no process of the group is
+/// left, in a few seconds at most.
+fn quit_port(pgid: Option<i32>) {
+    let started = Instant::now();
+    println!("standalone: quitting a port, at most {PORT_WORST:?}");
+    let Some(g) = pgid.filter(|g| *g > 1) else { return };
+    let gone = |within: Duration| {
+        let end = Instant::now() + within;
+        while Instant::now() < end && !group_members(g).is_empty() {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        group_members(g).is_empty()
+    };
+    // A window hidden behind our menu may ignore the close request: in front first.
+    crate::control::show_game();
+    let members = group_members(g);
+    if !members.is_empty() {
+        azahar::close_windows(&members);
+    }
+    if !gone(PORT_CLOSE_WAIT) {
+        // SAFETY: kill(2) on the process group pocket-ui started for this port.
+        unsafe {
+            libc::kill(-g, libc::SIGTERM);
+        }
+        if !gone(PORT_TERM_WAIT) {
+            // SAFETY: as above.
+            unsafe {
+                libc::kill(-g, libc::SIGKILL);
+            }
+        }
+    }
+    // gptokeyb and friends may have been started in a group of their own (sudo, setsid): by name.
+    for name in PORT_HELPERS {
+        kill_same(name, None);
+    }
+    println!("standalone: port closed after {:?}", started.elapsed());
 }
 
 #[cfg(test)]
@@ -1792,16 +1878,57 @@ mod tests {
     }
 
     #[test]
-    fn wii_u_and_ps3_are_guests_that_close_by_their_window() {
+    fn wii_u_ps3_and_vita_are_guests_that_close_by_their_window() {
         use super::guest::{Guest, PLAN, WORST};
         assert_eq!(Guest::detect("wiiu", "cemu"), Some(Guest::Cemu));
         assert_eq!(Guest::detect("ps3", "rpcs3"), Some(Guest::Rpcs3));
+        assert_eq!(Guest::detect("psvita", "vita3k"), Some(Guest::Vita3k));
+        assert_eq!(Guest::Vita3k.process(), "vita3k-sa");
+        assert_eq!(Guest::detect("psvita", "retroarch"), None);
         assert_eq!(Guest::detect("ps3", "retroarch"), None);
         assert_eq!(Guest::detect("wii", "dolphin"), None);
         assert_eq!(PLAN.first(), Some(&Step::CloseWindow), "the emulator's own close first");
         assert_eq!(PLAN.last(), Some(&Step::KillSame), "RPCS3's error-dialog process too");
         assert!(PLAN.iter().all(|s| *s != Step::SaveResume), "no states to write");
         assert!(WORST < GUEST_GRACE, "the main loop's backstop comes after the plan");
+    }
+
+    #[test]
+    fn ports_are_guests_found_by_their_group() {
+        assert_eq!(guest::Guest::detect("ports", "sh"), Some(guest::Guest::Port));
+        assert_eq!(guest::Guest::detect("ports", "anything"), Some(guest::Guest::Port));
+        assert!(PORT_WORST < GUEST_GRACE, "the main loop's backstop comes after the port's plan");
+    }
+
+    #[test]
+    fn quit_ends_the_whole_port_a_script_and_the_children_it_left_behind() {
+        use std::os::unix::process::CommandExt;
+        // A launch script with a background child that ignores SIGTERM (an engine, gptokeyb) and a second one.
+        let mut script = std::process::Command::new("sh")
+            .args(["-c", "trap '' TERM; sleep 60 & sleep 60 & wait"])
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let g = script.id() as i32;
+        let waiter = std::thread::spawn(move || script.wait());
+        let end = Instant::now() + Duration::from_secs(5);
+        while group_members(g).len() < 3 && Instant::now() < end {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(group_members(g).len() >= 3, "script and two children are in the group");
+        let started = Instant::now();
+        quit_port(Some(g));
+        assert!(group_members(g).is_empty(), "nothing of the port is left: {:?}", group_members(g));
+        assert!(started.elapsed() < PORT_WORST + Duration::from_secs(2), "took {:?}", started.elapsed());
+        let _ = waiter.join();
+    }
+
+    #[test]
+    fn a_port_that_is_gone_is_quit_at_once() {
+        let started = Instant::now();
+        quit_port(None);
+        quit_port(Some(1));
+        assert!(started.elapsed() < Duration::from_secs(1));
     }
 
     #[test]
@@ -1909,6 +2036,7 @@ mod tests {
         assert_eq!(Emu::detect("wiiware", "dolphin", "dolphin-sa-wii"), None);
         assert_eq!(Emu::detect("wiiu", "cemu", "cemu-sa"), None, "Cemu and RPCS3 are guests without states (`guest`)");
         assert_eq!(Emu::detect("ps3", "rpcs3", "rpcs3-sa"), None);
+        assert_eq!(Emu::detect("psvita", "vita3k", "vita3k-sa"), None);
         assert_eq!(Emu::detect("xbox", "xemu", "xemu-sa"), None);
         assert_eq!(Emu::detect("xbox", "hakux", "hakux"), Some(Emu::Hakux));
         assert_eq!(Emu::detect("ps2", "hakux", "hakux"), None, "only Xbox games");

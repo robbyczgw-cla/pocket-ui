@@ -50,6 +50,7 @@ thumbnail of each was used.
 | virtualboy | https://commons.wikimedia.org/wiki/File:Virtual-Boy-Set.png | Evan-Amos | Public domain | 2026-10-27 |
 | wii | https://commons.wikimedia.org/wiki/File:Wii-console.jpg | Evan-Amos | Public domain | 2026-10-22 |
 | wonderswan | https://commons.wikimedia.org/wiki/File:WonderSwan-Black-Left.jpg | Evan-Amos | Public domain | 2026-10-22 |
+| psvita | https://commons.wikimedia.org/wiki/File:PlayStation-Vita-1101-FL.jpg | Evan-Amos | Public domain | 2026-10-29 |
 | xbox | https://commons.wikimedia.org/wiki/File:Xbox-Console-FL.jpg | Evan-Amos | Public domain | 2026-10-28 |
 
 The first Dreamcast choice, `Dreamcast-Console-Set.jpg`, is CC BY-SA 3.0 on Commons, so the public-domain
@@ -83,6 +84,8 @@ slanted strips of lettering `tools/fix.py` takes a polygon (`poly`) instead of a
 The `xbox` picture (added 2026-10-28; the original Xbox, console only) was made the same way from `Xbox-Console-FL.jpg`. The Xbox
 lettering on the jewel and on the front plate was painted over, as were the small markings on the front and the back edge.
 PixelLab made three conversions (3 credits); the first was kept, the two others are in `assets/pixellab/_check/`.
+
+The `psvita` picture (added 2026-10-29; the first PS Vita, PCH-1000) was made the same way from `PlayStation-Vita-1101-FL.jpg`. The SONY and PS VITA lettering and the PlayStation symbol on the button were painted over on the photo before the conversion. PixelLab made one conversion (1 credit); the rim step (`tools/rim.py`) was applied because the picture is almost entirely dark.
 
 What was changed in every picture above:
 

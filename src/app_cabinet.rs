@@ -176,6 +176,8 @@ struct Inserting {
     front: Rc<Pic>,
     from: (i32, i32, i32, i32),
     tint: u32,
+    /// Cozy or Quick when it started (`App::cozy`): its length and when the cartridge is in.
+    cozy: bool,
 }
 
 #[derive(Default)]
@@ -325,15 +327,14 @@ impl CabinetUi {
 
     /// The launch animation is still moving (the game is loading behind it).
     pub(crate) fn insert_playing(&self, now: Instant) -> bool {
-        self.insert.as_ref().is_some_and(|i| now.saturating_duration_since(i.at) < cabinet::INSERT)
+        self.insert.as_ref().is_some_and(|i| now.saturating_duration_since(i.at) < cabinet::insert_len(i.cozy))
     }
 
     /// The pause before the launch fade: the cartridge or disc going into the console.
     pub(crate) fn launch_delay(&self) -> Duration {
-        if self.insert.is_some() {
-            cabinet::fade_delay()
-        } else {
-            Duration::ZERO
+        match self.insert.as_ref() {
+            Some(i) => cabinet::fade_delay(i.cozy),
+            None => Duration::ZERO,
         }
     }
 
@@ -644,34 +645,41 @@ impl App {
         Some(false)
     }
 
-    /// Settings → Look & feel → Launch animation, started by `launch` right after the game's process: in the
-    /// Cabinet and the Shelf look the case of the game just started goes into its console while the emulator loads,
-    /// with a click (`Sound::Insert`, played by the sound thread) and a glow. Nothing waits for it: the game was
-    /// started already, and its window simply covers what is left of it. Only when the case started from is on
-    /// screen (A or a tap on it), not from the card, the switcher or the start.
-    pub(crate) fn launch_animation(&mut self, path: &std::path::Path, hosted: bool) {
+    /// The launch animation (Settings → Look & feel → Animations), started by `launch` just before the game's process:
+    /// in the Cabinet and the Shelf look the case of the game being started goes into its console while the emulator
+    /// loads, with a click (`Sound::Insert`, played by the sound thread) and a glow. Only when the case started from is
+    /// on screen (A or a tap on it), not from the card, the switcher or the start.
+    ///
+    /// Quick: nothing waits for it, the game's window covers what is left of it. Cozy: a pocket-core game's window is
+    /// held back until the cartridge is in and the fade has run, so the animation can be seen (`startup::HOLD_UNTIL`,
+    /// at most `fade_delay + FADE` after A); the result is how long after A the window may come up, None for no hold.
+    /// A game that needs longer to load than that is not held at all.
+    pub(crate) fn launch_animation(&mut self, path: &std::path::Path, hosted: bool) -> Option<Duration> {
         self.cabinet.insert = None;
-        if !self.launch_animation || !matches!(self.theme, super::Theme::Cabinet | super::Theme::Shelf) {
-            return;
+        if !matches!(self.theme, super::Theme::Cabinet | super::Theme::Shelf) {
+            return None;
         }
         if self.card.is_some() || self.find.is_open() || self.switcher.is_some() || self.menu.is_some() || self.settings_page.is_some() || self.setup.is_some() {
-            return;
+            return None;
         }
-        let Some(item) = self.items.get(self.sel).copied() else { return };
+        let Some(item) = self.items.get(self.sel).copied() else { return None };
         let rom = match item {
             Item::Recent(i) => self.recents.list.get(i).map(|r| r.path.clone()),
             Item::Game(s, g) => self.systems.get(s).and_then(|s| s.games.get(g)).map(|g| g.path.clone()),
             _ => None,
         };
         if rom.as_deref() != Some(path) {
-            return;
+            return None;
         }
-        if self.begin_insert(item) {
-            // The click as it goes in (`cabinet::IN_AT`): queued now, the sound thread plays it on time and then
-            // leaves the device to the game (`ui_sound::close_when_done`).
-            self.play_sound(pocket_ui::ui_sound::Sound::Insert);
-            pocket_ui::ui_sound::close_when_done(!hosted);
+        if !self.begin_insert(item) {
+            return None;
         }
+        // The click as it goes in (`cabinet::IN_AT`): queued now, the sound thread plays it on time and then
+        // leaves the device to the game (`ui_sound::close_when_done`).
+        let cozy = self.cozy();
+        self.play_sound(if cozy { pocket_ui::ui_sound::Sound::InsertCozy } else { pocket_ui::ui_sound::Sound::Insert });
+        pocket_ui::ui_sound::close_when_done(!hosted);
+        (cozy && hosted).then(|| cabinet::fade_delay(true) + super::FADE)
     }
 
     /// The game box's look and its case's front `h` pixels tall (None for a cartridge, whose box is cardboard with the
@@ -686,6 +694,12 @@ impl App {
         let k = h as f32 / m.size().h.max(1) as f32;
         let (_, front) = self.stand_front(item, m, k, false);
         (m, look, front)
+    }
+
+    /// The game ended (or never came up): the case is back on the shelf. The Shelf look paints the insert only while
+    /// `launch_at` is set, so nothing else would clear it, and the played game's case stayed blank in its own list.
+    pub(crate) fn end_insert(&mut self) {
+        self.cabinet.insert = None;
     }
 
     /// The launch animation's case is on its way or in its console (until the game ends).
@@ -720,6 +734,7 @@ impl App {
             front,
             from,
             tint: look.color,
+            cozy: self.cozy(),
         });
         true
     }
@@ -790,7 +805,7 @@ impl App {
         }
     }
 
-    fn cabinet_poll(&mut self) {
+    pub(crate) fn cabinet_poll(&mut self) {
         let Some(reader) = self.cabinet.reader.clone() else { return };
         for (file, kind, got) in reader.take() {
             self.cabinet.pending = self.cabinet.pending.saturating_sub(1);
@@ -1300,7 +1315,7 @@ impl App {
         }
         let Some(ins) = self.cabinet.insert.as_ref() else { return };
         let (system, ff, media, front, from, tint) = (ins.system.clone(), ins.ff, ins.media, ins.front.clone(), ins.from, ins.tint);
-        let st = cabinet::insert_at(now.saturating_duration_since(ins.at));
+        let st = cabinet::insert_at(now.saturating_duration_since(ins.at), ins.cozy);
         art::dim(c, 0, c.h, 256 - (st.dim * 256.0) as u32);
         // The Shelf look has no scene of its own: the console stands on the screen's floor.
         let floor = if self.theme == super::Theme::Cabinet { scene_bottom(c.h) } else { c.h - 110 };

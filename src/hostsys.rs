@@ -332,6 +332,18 @@ pub fn host_core(system: &str) -> Option<&'static str> {
 /// needs: with that BIOS missing from `bios_dir` the game stays on the default emulator.
 /// The official PICO-8 in `roms/pico-8` keeps its games as well (`HostSystem::official`). `bios_dir` is `<roms>/bios`.
 pub fn route(system: &str, bios_dir: &Path) -> Option<&'static str> {
+    route_on(system, bios_dir, crate::device::current().model.is_some_and(|m| m.is_h700()))
+}
+
+/// Systems whose pocket-core cores are far heavier than an H700's four Cortex-A53 allow (docs/DEVICES.md): on those
+/// handhelds they stay on ROCKNIX's own emulators (DraStic for NDS and so on), as an unverified system does.
+pub const H700_STAYS_ON_ROCKNIX: &[&str] = &["n64", "psp", "dreamcast", "nds"];
+
+/// `route` for an H700 handheld (`h700`) or any other device.
+pub fn route_on(system: &str, bios_dir: &Path, h700: bool) -> Option<&'static str> {
+    if h700 && H700_STAYS_ON_ROCKNIX.contains(&system) {
+        return None;
+    }
     let core = host_core(system)?;
     let s = find(system)?;
     let without_bios = s.default_without_bios && s.missing_bios(bios_dir).is_some();
@@ -529,6 +541,19 @@ impl HostSystem {
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    #[test]
+    fn an_h700_leaves_the_heavy_systems_to_rocknix() {
+        let bios = Path::new("/nonexistent/bios");
+        for system in H700_STAYS_ON_ROCKNIX {
+            assert!(find(system).is_some_and(|s| s.verified), "{system} is routed elsewhere, so the list matters");
+            assert!(route_on(system, bios, false).is_some(), "{system} on another device");
+            assert_eq!(route_on(system, bios, true), None, "{system} on an H700");
+        }
+        for light in ["gb", "gba", "snes", "nes", "megadrive"] {
+            assert_eq!(route_on(light, bios, true), route_on(light, bios, false), "{light}");
+        }
+    }
 
     #[test]
     fn routed_cores_are_the_handhelds_and_the_verified_systems_once_each() {

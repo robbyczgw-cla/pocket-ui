@@ -190,6 +190,7 @@ pub mod disc_serial;
 pub mod library_meta;
 pub mod library_sync;
 pub mod game_box;
+pub mod game_info;
 pub mod game_card;
 pub mod consoles;
 pub mod console_page;

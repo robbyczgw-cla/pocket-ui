@@ -23,8 +23,9 @@ for a in cat cp cut df dd gunzip gzip grep head ln ls md5sum mkdir mv readlink r
   ln -s "$BB" "$T/applets/$a"
 done
 
-# A tree as the build makes it, with stand-in programs.
-build_tar() { # $1 = version
+# A tree as the build makes it, with stand-in programs. With $2 = hakux it also has the Xbox core as
+# `scripts/make-fat-install.sh --hakux` lays it out (scripts/hakux-files.sh).
+build_tar() { # $1 = version, $2 = hakux
   rm -rf "$T/tree"
   R=$T/tree/pocket-ui/releases/$1
   mkdir -p "$R" "$T/tree/pocket-ui/licences" "$T/tree/.config/system.d/essway.service.d" "$T/tree/.config/system.d/sysinit.target.wants"
@@ -35,6 +36,16 @@ build_tar() { # $1 = version
   echo '[Service]' >"$T/tree/.config/system.d/essway.service.d/10-pocket-ui.conf"
   echo '[Unit]' >"$T/tree/.config/system.d/pocket-splash.service"
   ln -s ../pocket-splash.service "$T/tree/.config/system.d/sysinit.target.wants/pocket-splash.service"
+  if [ "${2:-}" = hakux ]; then
+    H=$T/tree/pocket-ui/hakux
+    mkdir -p "$H/licenses" "$H/patches"
+    echo core >"$H/hakux_libretro.so"; chmod 755 "$H/hakux_libretro.so"
+    echo 'savestate = "false"' >"$H/hakux_libretro.info"
+    echo source >"$H/SOURCE.txt"; echo build >"$H/BUILD-INFO"
+    echo gpl >"$H/licenses/COPYING"
+    echo patch >"$H/patches/0001-apu-dsp-preference-per-apu-state.patch"
+    (cd "$H" && find . -type f | sort | xargs sha256sum >SHA256SUMS)
+  fi
   tar --format=gnu --sort=name --owner=0 --group=0 --numeric-owner -C "$T/tree" -cf - . | gzip -n -9 >"$T/seed.tar.gz"
 }
 make_hook() { # $1 = version, $2 = md5, $3 = need_kb
@@ -60,7 +71,7 @@ echo "/dev/fake 100000 0 ${FAKE_FREE_KB:-5000000} 0% /storage"'
 printf '%s\n' "$fake_df" >"$T/dfdir.sh"
 
 boot() {
-  env -i PATH="$T/applets" PU_FLASH="$T/flash" PU_STORAGE="$T/storage" FAKE_FREE_KB="${FAKE_FREE_KB:-5000000}" T="$T" \
+  env -i PATH="$T/applets" PU_FLASH="$T/flash" PU_STORAGE="$T/storage" PU_DT="${PU_DT_DIR:-$T/no-dt}" FAKE_FREE_KB="${FAKE_FREE_KB:-5000000}" T="$T" \
     "$BB" sh -c '
     mount_part() { echo "mount_part $*" >>$T/calls; }
     mount() { echo "mount $*" >>$T/calls; }
@@ -72,7 +83,7 @@ boot() {
   ' >"$T/out" 2>&1
 }
 
-build_tar $V
+build_tar $V hakux
 MD5=$(md5sum "$T/seed.tar.gz" | cut -d' ' -f1)
 make_hook $V "$MD5" 200000
 
@@ -92,6 +103,7 @@ check "no shell error" '! grep -qi "not found\|error\|syntax" "$T/out"'
 check "programs in releases/$V" '[ -x "$T/storage/pocket-ui/releases/$V/pocket-ui" ] && [ -x "$T/storage/pocket-ui/releases/$V/pocket-splash" ]'
 check "current and fixed links" '[ "$(readlink "$T/storage/pocket-ui/current")" = "releases/$V" ] && [ "$(readlink "$T/storage/pocket-ui/pocket-ui")" = current/pocket-ui ] && [ -x "$T/storage/pocket-ui/pocket-core" ]'
 check "licences" '[ -f "$T/storage/pocket-ui/licences/LICENSE" ]'
+check "Xbox core in pocket-ui/hakux with what must travel with it" '[ -x "$T/storage/pocket-ui/hakux/hakux_libretro.so" ] && [ -f "$T/storage/pocket-ui/hakux/hakux_libretro.info" ] && [ -f "$T/storage/pocket-ui/hakux/licenses/COPYING" ] && [ -f "$T/storage/pocket-ui/hakux/patches/0001-apu-dsp-preference-per-apu-state.patch" ] && [ -f "$T/storage/pocket-ui/hakux/SHA256SUMS" ]'
 check "drop-in, boot screen unit and its link" '[ -f "$T/storage/.config/system.d/essway.service.d/10-pocket-ui.conf" ] && [ "$(readlink "$T/storage/.config/system.d/sysinit.target.wants/pocket-splash.service")" = ../pocket-splash.service ]'
 check "existing settings and saves untouched" '[ "$(cat "$T/storage/.config/emuelec/settings")" = keep ] && [ "$(cat "$T/storage/roms/gba/game.srm")" = save ]'
 check "no staging or running marker left" '[ ! -e "$T/storage/.pocket-ui-stage" ] && [ ! -e "$T/storage/.pocket-ui-install-running" ]'
@@ -168,12 +180,52 @@ cp "$T/bad.tar.gz" "$T/flash/pocket-ui-seed.tar.gz"
 boot
 check "no-op, no half install, reason in the log" '[ ! -e "$T/storage/pocket-ui" ] && [ ! -e "$T/storage/.pocket-ui-stage" ] && grep -q "unpacking" "$T/flash/pocket-ui-install.log"'
 
+# A device tree as the kernel shows it: model and NUL-separated compatible.
+dt() { # $1 = model, $2 = first compatible, $3 = SoC
+  rm -rf "$T/dt" && mkdir "$T/dt"
+  printf '%s\000' "$1" >"$T/dt/model"
+  printf '%s\000%s\000' "$2" "$3" >"$T/dt/compatible"
+  PU_DT_DIR=$T/dt
+}
+build_tar $V
+MD5=$(md5sum "$T/seed.tar.gz" | cut -d' ' -f1)
+make_hook $V "$MD5" 200000
+for m in "Anbernic RG28XX|anbernic,rg28xx" "Anbernic RG35XX SP|anbernic,rg35xx-sp" "Anbernic RG40XX V|anbernic,rg40xx-V" "Anbernic RG-SP|anbernic,rg-sp" "Anbernic RG34XX-SP|anbernic,rg34xx-sp"; do
+  echo "== H700 card: ${m%%|*}"
+  dt "${m%%|*}" "${m##*|}" allwinner,sun50i-h700
+  setup resized
+  boot
+  check "${m%%|*}: installed, the log names the device" '[ -x "$T/storage/pocket-ui/current/pocket-ui" ] && [ ! -e "$T/flash/mount-storage.sh" ] && grep -q "device: ${m%%|*} (Anbernic H700, experimental)" "$T/flash/pocket-ui-install.log"'
+done
+for m in "Anbernic RG CubeXX|anbernic,rgcubexx" "Anbernic RG99XX|anbernic,rg99xx" "Trimui Smart Pro|trimui,smart-pro"; do
+  echo "== H700 card, no profile: ${m%%|*}"
+  dt "${m%%|*}" "${m##*|}" allwinner,sun50i-h700
+  setup resized
+  boot
+  check "${m%%|*}: refused with a sentence, nothing installed, files stay, ROCKNIX goes on" '[ ! -e "$T/storage/pocket-ui" ] && [ -f "$T/flash/mount-storage.sh" ] && [ -f "$T/flash/pocket-ui-seed.tar.gz" ] && grep -q "has no profile for it" "$T/flash/pocket-ui-install.log" && grep -q "NOT INSTALLED: this H700 handheld is .${m%%|*}." "$T/flash/pocket-ui-install.log" && grep -q "^mount_part LABEL=STORAGE" "$T/calls"'
+done
+echo "== a Snapdragon device is not asked about H700 profiles"
+dt "Retroid Pocket Mini V2" "retroidpocket,rpminiv2" qcom,sm8250
+setup resized
+boot
+check "Mini V2: installed as before" '[ -x "$T/storage/pocket-ui/current/pocket-ui" ]'
+echo "== H700 first boot (not grown yet): silent, as everywhere"
+dt "Anbernic RG99XX" "anbernic,rg99xx" allwinner,sun50i-h700
+setup
+boot
+check "nothing written on the first start" '[ ! -e "$T/flash/pocket-ui-install.log" ]'
+unset PU_DT_DIR
+
 if [ -n "${POCKETUI_FAT_DIR:-}" ]; then
   echo "== the real files from scripts/make-fat-install.sh ($POCKETUI_FAT_DIR)"
   setup resized
   cp "$POCKETUI_FAT_DIR/mount-storage.sh" "$POCKETUI_FAT_DIR/pocket-ui-seed.tar.gz" "$T/flash/"
   boot
   check "installed: programs, links, drop-in; hook and tar gone" '[ -x "$T/storage/pocket-ui/current/pocket-ui" ] && [ -x "$T/storage/pocket-ui/pocket-core" ] && [ -f "$T/storage/.config/system.d/essway.service.d/10-pocket-ui.conf" ] && [ ! -e "$T/flash/mount-storage.sh" ] && [ ! -e "$T/flash/pocket-ui-seed.tar.gz" ]'
+  # make-fat-install.sh --hakux (the card zip): the Xbox core has to arrive as in the SSH package.
+  if tar -tzf "$POCKETUI_FAT_DIR/pocket-ui-seed.tar.gz" | grep -qx './pocket-ui/hakux/hakux_libretro.so'; then
+    check "Xbox core from the tar (--hakux): installed, with its licences" '[ -x "$T/storage/pocket-ui/hakux/hakux_libretro.so" ] && [ -f "$T/storage/pocket-ui/hakux/licenses/COPYING" ] && (cd "$T/storage/pocket-ui/hakux" && sha256sum -c SHA256SUMS >/dev/null)'
+  fi
 fi
 
 echo

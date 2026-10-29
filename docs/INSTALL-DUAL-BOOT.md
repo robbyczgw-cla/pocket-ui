@@ -52,8 +52,10 @@ only: the ROCKNIX system it is based on includes components and artwork licensed
 ## Install with two files on the official ROCKNIX card
 
 For a card flashed with the **official** ROCKNIX image (`ROCKNIX-SM8250.aarch64-<version>.img`), nothing of ROCKNIX is
-redistributed and no SSH is needed. `scripts/make-fat-install.sh` builds `pocket-ui-<version>-rocknix-card.zip` with
-`mount-storage.sh`, `pocket-ui-seed.tar.gz` and a `README.txt` for users. The user flashes ROCKNIX, copies the two files
+redistributed and no SSH is needed. `scripts/make-fat-install.sh --hakux <hakux dir>` builds `pocket-ui-<version>-rocknix-card.zip`
+with `mount-storage.sh`, `pocket-ui-seed.tar.gz` and a `README.txt` for users; with `--hakux` the seed also carries the Xbox core
+(the same files as the SSH package, `scripts/hakux-files.sh`), without it Xbox games keep ROCKNIX's xemu. The user flashes ROCKNIX,
+copies the two files
 to the FAT partition (label `ROCKNIX`) on a PC, and starts the device twice. Research and limits:
 `RESEARCH-ROCKNIX-FAT-INSTALL-2026-10-28.md` (outside this repository).
 
@@ -69,7 +71,10 @@ How it works [V = read in ROCKNIX's initramfs of 20261001, the rest tested with 
   copies it over `/storage` with `cp -a` (only adds files), writes `releases/<ver>/.installed-from-card`, and deletes
   itself and the tar. A retry after a half-finished copy is marked by `/storage/.pocket-ui-install-running`.
 - The tar has the layout of the image's seed: `pocket-ui/releases/<ver>`, `current` and the fixed links, the launcher,
-  `uninstall.sh`, `licences/`, and `.config/system.d` with the essway drop-in and the boot screen's unit.
+  `uninstall.sh`, `licences/`, and `.config/system.d` with the essway drop-in and the boot screen's unit. With `--hakux` it also
+  has `pocket-ui/hakux/` (the Xbox core with its `.info`, `SOURCE.txt`, our patch, `BUILD-INFO`, `licenses/` and `SHA256SUMS`,
+  the folder `src/hakux.rs` starts RetroArch from); the hook copies it like every other file, nothing more to do in the
+  initramfs.
 - If a pocket-ui is already installed (`pocket-ui/current` exists, e.g. by the SSH package), nothing is changed; the
   hook and tar are removed and the log says so.
 - Any failure: the hook returns, ROCKNIX starts EmulationStation as usual, the hook and the tar stay for the next start, and
@@ -78,6 +83,15 @@ How it works [V = read in ROCKNIX's initramfs of 20261001, the rest tested with 
   damaged tar, missing tar, small STORAGE, not a tar, wrong content, with a PATH that holds only the initramfs applets.
   Not yet run on a device or with the initramfs's own aarch64 busybox (`tar -xzf` there is read from its applet list and
   `init`, which uses `tar -xf` and `gunzip` the same way): the first run is the fresh-card test.
+
+### Anbernic H700 handhelds
+
+All three installs (card hook, Ports installer, SSH package) also accept ROCKNIX's **H700** image on the Anbernic
+models of [DEVICES.md](DEVICES.md#anbernic-h700-handhelds-2026-10-27-installable-2026-10-29-experimental), experimental.
+The card for those is flashed from ROCKNIX's H700 image (DDR4 first, DDR3 if it doesn't start) and needs the model's
+`dtb.img` on its FAT partition; the step-by-step guide is in
+[Getting started](user/getting-started.md#anbernic-h700-handhelds-experimental). Another H700 handheld and the RG CubeXX are refused with a
+sentence and nothing is written.
 
 ## Go back to Android
 

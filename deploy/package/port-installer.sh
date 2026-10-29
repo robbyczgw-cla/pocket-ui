@@ -21,7 +21,12 @@ PAYLOAD_BYTES=0
 SELF=$(readlink -f "$0" 2>/dev/null || echo "$0")
 R=${POCKETUI_INSTALL_ROOT:-}
 VIEWER=${POCKETUI_VIEWER:-text_viewer}
-FONT=${POCKETUI_FONT:-44}
+# text_viewer's size: the H700 handhelds' 640x480 (or 720x480) screens hold a quarter of the Mini V2's pixels.
+FONT=${POCKETUI_FONT:-}
+if [ -z "$FONT" ]; then
+  FONT=44
+  grep -q '^HW_DEVICE="\{0,1\}H700' "$R/etc/os-release" 2>/dev/null && FONT=22
+fi
 WORK=$R/tmp/pocket-ui-port
 STAGE=$R/storage/.pocket-ui-port
 APP=$R/storage/pocket-ui
@@ -96,7 +101,7 @@ worker() {
   fi
   # The notes (experimental device, untested version...) as install.sh words them; the passed checks as a count.
   grep '^  note  ' "$WORK/check.out"
-  dev=$(sed -n 's/^  \(ok\|note\)    device: \([^,]*\).*/\2/p' "$WORK/check.out" | head -n 1)
+  dev=$(sed -n 's/^  \(ok\|note\) \{1,4\}device: \([^,]*\).*/\2/p' "$WORK/check.out" | head -n 1)
   say "  $(grep -c '^  ok  ' "$WORK/check.out") checks passed: ROCKNIX $(sed -n 's/^  ok    ROCKNIX \([^ ]*\) for \([A-Za-z0-9]*\).*/\1 (\2)/p' "$WORK/check.out" | head -n 1)${dev:+, $dev}"
   sleep 1
   say "  Nothing was changed so far."

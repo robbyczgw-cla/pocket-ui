@@ -210,6 +210,9 @@ struct App {
     /// (the time per frame is `limit`'s), and no button reaches the game until "wake" (then the ones still held only
     /// once they were let go).
     dark: bool,
+    /// Cozy's launch animation still plays over pocket-ui's shelf: nothing is drawn, so the window stays unmapped
+    /// until it is over (`startup::held`), a button cuts it short. The game itself runs, silently.
+    hold: bool,
     /// Woken from sleep and running: the next frame swapped is the first after the wake (`core-frame wake` in the
     /// trace, for `latency.py measure --wake`).
     woke_frame: bool,
@@ -432,6 +435,10 @@ impl App {
         // Couch co-op: every player's buttons and sticks; player 1's go with `run`, the others' to their ports below.
         let (players, sticks) = self.read_players();
         let (mapped, analog) = (players[0], sticks[0]);
+        // Over when the deadline passed or any button is pressed (pocket-ui skips its animation on the same press).
+        if self.hold && (!pocket_ui::startup::held() || players.iter().any(|p| *p != 0)) {
+            self.hold = false;
+        }
         for note in self.input.take_notes() {
             self.hud.toast(note);
         }
@@ -620,7 +627,7 @@ impl App {
         // Sound is muted while fast-forwarding or rewinding, but the queue still gets its silence
         // so playback continues smoothly when the shortcut is released.
         if let Some(audio) = self.audio.as_mut() {
-            if back || ff.is_some() {
+            if back || ff.is_some() || self.hold {
                 audio.push(&vec![0; if samples.is_empty() { self.nominal_samples } else { samples.len() }]);
             } else {
                 if !samples.is_empty() {
@@ -638,7 +645,7 @@ impl App {
             (_, Some(speed)) => format!("FF {}", speed.label()),
             _ => String::new(),
         };
-        if !self.dark {
+        if !self.dark && !self.hold {
             self.draw();
         }
         // Twice a second the FPS counter's half-second goes into Pixel Path's window, with the underruns so far.
@@ -2022,6 +2029,7 @@ fn main() {
         paused: false,
         sleeping: false,
         dark: false,
+        hold: pocket_ui::startup::held(),
         woke_frame: false,
         held_mask: [0; players::MAX],
         view: (0, 0),

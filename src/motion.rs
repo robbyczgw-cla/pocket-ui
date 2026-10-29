@@ -38,6 +38,20 @@ thread_local! {
     static LEVEL: Cell<Motion> = const { Cell::new(Motion::Full) };
     /// `POCKETUI_MOTION_SCALE`, read on first use.
     static SCALE: Cell<Option<f32>> = const { Cell::new(None) };
+    /// Settings > Look & feel > Animations: Cozy (`set_cozy`).
+    static COZY: Cell<bool> = const { Cell::new(false) };
+}
+
+/// How much slower every timed animation runs in Cozy than in Quick (the timings as designed).
+pub const COZY_SLOWER: f32 = 1.4;
+
+/// Cozy: page slides, the box's turn, the cabinet's cases, fades and the toasts take `COZY_SLOWER` times as long.
+pub fn set_cozy(on: bool) {
+    COZY.with(|c| c.set(on));
+}
+
+pub fn cozy() -> bool {
+    COZY.with(|c| c.get())
 }
 
 /// What an animation does: moves things (off in Reduced) or only fades them.
@@ -65,15 +79,16 @@ pub fn allowed(kind: Kind) -> bool {
 }
 
 /// `POCKETUI_MOTION_SCALE`: 1 normally, 10 makes every animation ten times slower (frame sequences on the
-/// virtual device, where a screenshot takes longer than a frame).
+/// virtual device, where a screenshot takes longer than a frame). Cozy multiplies it by `COZY_SLOWER`.
 pub fn time_scale() -> f32 {
+    let cozy = if self::cozy() { COZY_SLOWER } else { 1.0 };
     SCALE.with(|s| {
         if let Some(v) = s.get() {
-            return v;
+            return v * cozy;
         }
         let v = std::env::var("POCKETUI_MOTION_SCALE").ok().and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.1..=100.0).contains(v)).unwrap_or(1.0);
         s.set(Some(v));
-        v
+        v * cozy
     })
 }
 

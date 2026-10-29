@@ -6,7 +6,7 @@ Playing and Games, and how Settings opens, are on [the first page](settings.md#o
 
 ## Connections
 
-The Wi-Fi page agrees with the Quick settings radio switch: while it is off, the page says so and its first row turns it on again with A. Old scan results are hidden while the radio is off. On a handheld with no Wi-Fi chip (the experimental Anbernic RG28XX) the page says "This device has no Wi-Fi" and offers nothing to choose.
+The Wi-Fi page agrees with the Quick settings radio switch: while it is off, the page says so and its first row turns it on again with A. Old scan results are hidden while the radio is off. On a handheld with no Wi-Fi chip (the experimental Anbernic RG28XX and RG35XX 2024) the page says "This device has no Wi-Fi" and offers nothing to choose.
 
 Settings → **Connections**. Networks, controllers, and reaching the Pocket from your other devices.
 

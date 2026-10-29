@@ -739,3 +739,32 @@ Quit**, with the honest line "This emulator keeps its own saves…" (`pause_save
   binary `runemu.sh` fails to start the game, as before).
 - Device check: see the report of this change (docs/DEVICE-TESTS.md style): start from the shelf, HOME → menu,
   Continue, HOME → Quit; `pidof cemu rpcs3-sa` empty afterwards, `verify-device.sh` ok.
+
+## PS Vita (Vita3K) on SM8550 (2026-10-29, experimental)
+ROCKNIX's SM8550 image ships Vita3K (`vita3k-sa`, `start_vita3k.sh`; es_systems system `psvita`, emulator `vita3k`, core
+`vita3k-sa`, extensions `.pkg .psvita .zip`). It is the third guest of `standalone::guest` (`Guest::Vita3k`, process `vita3k-sa`),
+with the same pause menu (**Continue · Options · Quick settings · Quit**, `pause_saves::OWN_SAVES`), the same performance
+profile once the process exists, and the same Quit (`guest::PLAN`: window close → 8 s → SIGTERM → 5 s → SIGKILL, then every
+`vita3k-sa` of the game's group). Vita3K's window close is an SDL quit event, so it ends like its own Exit.
+- **Games on the shelf:** `roms/psvita/*.psvita` are one-line files with a title ID; `scan_vita3k.sh` (run by the Vita3K tool
+  and after an install) writes them with the game's name from `vita-gamelist.txt`, so the shelf shows real titles. A `.pkg` (needs
+  a `.txt` with the ZRIF next to it) or a `.zip` is installed by `start_vita3k.sh` on its first start and renamed afterwards
+  (`.installed`, not listed). `roms/psvita/vita3k/` is Vita3K's own data folder; pocket-ui reads one folder level only, and
+  that folder holds no game files at its top, so it never shows as a game.
+- **Covers:** libretro thumbnails "Sony - PlayStation Vita" (`covers::playlist`), matched by title as for the other systems.
+- **Art:** `assets/systems/psvita.png` (PixelLab conversion of Evan Amos's public-domain photo, `assets/systems/SOURCES.md`) and
+  the small case with the blue top band (`Medium::Vita`, `assets/media/vita-*.png`, drawn by `assets/media/tools/draw_media.py`;
+  the cabinet files it with the card boxes: `FormFactor::CardBox`, game box `Hull::Card`).
+- **Firmware and games are the player's own.** Vita3K needs the Vita firmware (PUP files in `bios/vita3k`, installed by the
+  `Start Vita3K.sh` tool); pocket-ui ships and fetches neither. Without it ROCKNIX's script says so with a notice and tries anyway.
+- **Save/Load: not offered** (Vita3K has no save states; saves live in the game, in `roms/psvita/vita3k/ux0/user`).
+- Runs on SM8550 only because the emulator exists only there (`Guest::detect` doesn't check the device).
+- **First use:** `start_vita3k.sh` stops with "Vita3K Setup Required" until the tool **Start Vita3K** has been run once (it creates
+  `roms/psvita/vita3k` and Vita3K's config) and, with firmware files in `roms/bios/vita3k`, installs them. A `.psvita` file whose title
+  is not installed makes Vita3K quit at once ("--installed-path: ID not in {}"); the game then ends after a second and the shelf is back.
+- **Device check (Odin 2 Mini, 2026-10-29, build of `feat/vita3k-guest`):** with no firmware and no game on the device, a `.psvita` pointing at
+  a folder in `ux0/app` starts Vita3K (its first-run language page) through the shelf and `runemu.sh`: process `vita3k-sa` found, profile set,
+  HOME → pocket-ui's menu over it (Continue · Options · Quick settings · Quit; Options shows "Runs on: Standalone · Vita3K"), Continue
+  brings the window back, Quit three times: Vita3K gone 0.1-0.2 s after the press, no `vita3k-sa`, `start_vita3k.sh` or `runemu.sh` left,
+  `verify-device.sh` ok. Not tried: a running game (no firmware; an open-source `.vpk`, mGBA for Vita, did not start without it: Vita3K
+  shows its first-run page instead), the `.pkg`/`.zip` install path of `start_vita3k.sh`, Vita3K's `foot` window during an install.

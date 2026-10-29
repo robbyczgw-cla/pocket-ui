@@ -30,8 +30,8 @@ it. A line a known pocket-core game didn't take is logged once (`osd: pocket-cor
 ROCKNIX draws its own box for the same keys (`input_sense` runs `mako-notify "Volume: 25%"`: black, monospace, top centre,
 over everything). `mako-notify` skips it only when EmulationStation is in front, so it used to sit on top of our display.
 `src/mako_osd.rs` hides it with a mako mode: once, a block between `# BEGIN pocket-ui` and `# END pocket-ui` is appended to
-`/storage/.config/mako/config` (`[mode=pocket-ui app-name=mako-notify]` with `invisible=1`; `mako-notify` only creates that file
-when it is missing and never rewrites it), then `makoctl mode -a pocket-ui` while pocket-ui or a pocket-core game is in front,
+`/storage/.config/mako/config` (`[mode=pocket-ui app-name=mako-notify]` with `invisible=1`; pocket-ui writes ROCKNIX's default with the block when the file is missing on a fresh card; `mako-notify` otherwise
+only creates it and never rewrites it), then `makoctl mode -a pocket-ui` while pocket-ui or a pocket-core game is in front,
 `-r` while RetroArch, a standalone emulator or an app is (there we draw nothing, so ROCKNIX's box stays the feedback). The mode
 lives in the daemon: if mako restarts it is off until the next game start or end. "Screenshot Saved" is hidden along with it
 while the mode is on. `deploy/package/uninstall.sh` removes the block and the mode.

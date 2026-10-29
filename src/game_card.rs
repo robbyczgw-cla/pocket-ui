@@ -131,6 +131,8 @@ pub struct CardData {
     /// A PortMaster port: its performance and fan ("Battery, fan Quiet"; START changes them, `port_perf_page`), and
     /// whether to show that it keeps a core busy (`port_perf::card_hint`).
     pub port: Option<(String, bool)>,
+    /// PortMaster has a newer version of this port: a quiet note under the Speed line (A updates it in Extras).
+    pub port_update: bool,
     /// Opened by "Surprise me": why this game ("Not played for 3 months · you like platformers"); Right picks again.
     pub surprise: Option<String>,
     /// The game's pictures come from the libretro collection: the status picker offers "Wrong pictures? Look up
@@ -141,6 +143,8 @@ pub struct CardData {
     pub from_gamelist: bool,
     /// The patch next to the game that pocket-core applies when it starts it ("Game (USA).ips", `softpatch`).
     pub patch: Option<String>,
+    /// The game is one of the player's Favourites (the info page says so, `game_info`).
+    pub favorite: bool,
 }
 
 /// Which Curator row it is.
@@ -276,6 +280,10 @@ pub struct Card {
     view_h: i32,
     /// Shown as the game's box (`game_box`, SELECT switches); None: the page.
     pub boxed: Option<crate::game_box::BoxView>,
+    /// Shown as the one-screen info page (`game_info`; the Minimal, Cards and Split looks); None: the page or the box.
+    pub info: Option<crate::game_info::InfoView>,
+    /// Opened as the info page: SELECT goes between it and the full page, and the box is never shown.
+    pub info_look: bool,
 }
 
 /// A picture on the card besides the box art. The file is known to be there (its header was read), so the
@@ -312,6 +320,8 @@ impl Card {
             row_at: Default::default(),
             view_h: 0,
             boxed: None,
+            info: None,
+            info_look: false,
         }
     }
 
@@ -449,7 +459,32 @@ impl Card {
         self.max_scroll > 0
     }
 
+    /// Opens the card as the info page (`game_info`) instead of the page or the box.
+    pub fn show_info(&mut self) {
+        self.boxed = None;
+        self.info = Some(crate::game_info::InfoView::default());
+        self.info_look = true;
+    }
+
     pub fn press(&mut self, b: Button) -> Out {
+        // The info page: up and down scroll its description, SELECT shows the full page; the rest as on the page.
+        if let (Mode::View, Some(info)) = (&self.mode, self.info.as_mut()) {
+            match b {
+                Button::Up | Button::Down | Button::L1 | Button::R1 => {
+                    let step = if matches!(b, Button::L1 | Button::R1) { 4 * STEP } else { STEP };
+                    info.scroll_by(if matches!(b, Button::Up | Button::L1) { -step } else { step });
+                    return Out::None;
+                }
+                Button::Select => {
+                    self.info = None;
+                    self.scroll = 0;
+                    return Out::None;
+                }
+                Button::Left => return Out::None,
+                Button::Right if self.data.surprise.is_none() => return Out::None,
+                _ => {}
+            }
+        }
         // The box: LEFT/RIGHT turn it over, up and down scroll its back, SELECT shows the page; the rest as on the page.
         if let (Mode::View, Some(bx)) = (&self.mode, self.boxed.as_mut()) {
             match b {
@@ -478,7 +513,12 @@ impl Card {
                 },
                 Button::South => Out::Back,
                 Button::Start => Out::Emulator,
-                // SELECT: the game's box again (`game_box`).
+                // SELECT: back to the info page in the looks that open it, the game's box again in the others.
+                Button::Select if self.info_look => {
+                    self.focus = None;
+                    self.info = Some(crate::game_info::InfoView::default());
+                    Out::None
+                }
                 Button::Select => {
                     self.boxed = Some(crate::game_box::BoxView::new());
                     Out::Details { boxed: true }
@@ -682,6 +722,18 @@ impl Card {
                 }
                 h
             }
+            Mode::View if self.info.is_some() => {
+                let start = if self.data.port.is_some() { "Performance & fan" } else { "This game" };
+                let mut h = vec![("A", "Play"), ("B", "Back"), ("Y", "Status"), ("START", start), ("SELECT", "Details")];
+                if self.data.surprise.is_some() {
+                    h.retain(|(k, _)| *k != "START");
+                    h.insert(2, ("RIGHT", "Another"));
+                }
+                if self.info.as_ref().is_some_and(|i| i.scrollable()) {
+                    h.push(("L1 R1", "Scroll"));
+                }
+                h
+            }
             Mode::View => {
                 let a = if self.focus.is_some() { "Open" } else { "Play" };
                 // START: "This game" (picture, performance, controls, "Runs on"); a port has one emulator, so its performance and fan instead.
@@ -723,6 +775,9 @@ impl Card {
             return;
         }
         c.clear(pal().void);
+        if self.info.is_some() {
+            return self.paint_info(c, text, cover, None, corner);
+        }
         let left = corner.map_or(c.w - MARGIN, |k| k.paint(c, text, c.w - MARGIN, 72, pal().dust));
         let system = text.fit(Face::Body, 28, &self.data.system, crate::status_corner::room_left_of(left, c.w - MARGIN) - MARGIN);
         text.draw(c, Face::Body, 28, MARGIN, 72, pal().dust, &system);
@@ -761,6 +816,31 @@ impl Card {
             let bar_y = BODY_TOP + (view_h - bar_h) * self.scroll / self.max_scroll.max(1);
             c.rect(c.w - 28, BODY_TOP, 4, view_h, pal().spine);
             c.rect(c.w - 28, bar_y, 4, bar_h, pal().dust);
+        }
+        crate::setup::hints(c, text, &self.hints());
+        match &self.mode {
+            Mode::Status { sel, stars } => self.paint_picker(c, text, *sel, *stars),
+            Mode::Choose { sel, rows } => self.paint_chooser(c, text, *sel, rows),
+            Mode::Manage { sel } => self.paint_manage(c, text, *sel),
+            Mode::Delete(d) => self.paint_delete(c, text, d),
+            _ => {}
+        }
+    }
+
+    /// Paints the card as the info page (`game_info`): the status corner on the top line, the page, the hints and
+    /// whatever is open over it.
+    pub fn paint_info(&mut self, c: &mut Canvas, text: &mut Text, cover: Option<&Image>, console: Option<&crate::system_art::Sprite>, corner: Option<&crate::status_corner::Corner>) {
+        if matches!(self.mode, Mode::Note(_)) {
+            return self.paint(c, text, cover, corner);
+        }
+        c.clear(pal().void);
+        if let Some(k) = corner {
+            k.paint(c, text, c.w - MARGIN, crate::game_box::top_line(c.h), pal().dust);
+        }
+        // No Curator rows on this page: none to tap.
+        self.row_at.borrow_mut().clear();
+        if let Some(info) = self.info.as_mut() {
+            info.paint(c, text, &self.data, cover, console);
         }
         crate::setup::hints(c, text, &self.hints());
         match &self.mode {
@@ -963,6 +1043,12 @@ impl Card {
                 // As the status suggestion: one calm line in amber, until the page has shown the offer once.
                 let hint = text.fit(Face::Body, 28, "Busy core? Press START", rw - rkey);
                 text.draw(c, Face::Body, 28, rx + rkey, ry - 6, pal().amber, &hint);
+                ry += row();
+            }
+            if d.port_update {
+                // Quiet: no colour of its own, and where to act on it.
+                let note = text.fit(Face::Body, 28, "Update available, in Extras", rw - rkey);
+                text.draw(c, Face::Body, 28, rx + rkey, ry - 6, pal().dust, &note);
                 ry += row();
             }
         }
@@ -1464,10 +1550,12 @@ mod tests {
             achievements: None,
             battery: None,
             port: None,
+            port_update: false,
             surprise: None,
             look_up: false,
             from_gamelist: false,
             patch: None,
+            favorite: false,
         }
     }
 
@@ -1531,6 +1619,30 @@ mod tests {
         assert_eq!(card.press(Button::East), Out::Row(RowKind::Manage));
         card.press(Button::Up);
         assert_eq!(card.focus, None, "up from it scrolls back into the text");
+    }
+
+    #[test]
+    fn the_info_page_scrolls_its_description_and_select_goes_to_the_full_page_and_back() {
+        let (w, h) = (1280, 960);
+        let mut px = vec![0u32; (w * h) as usize];
+        let mut text = Text::new();
+        let mut d = data();
+        d.summary = Summary::Wikipedia { text: "A long description. ".repeat(80), title: "Tetris".into() };
+        d.rows = vec![manage_row()];
+        let mut card = Card::new(d);
+        card.show_info();
+        card.paint(&mut Canvas::new(&mut px, w as u32, h as u32), &mut text, None, None);
+        assert!(card.info.as_ref().is_some_and(|i| i.scrollable()), "a long description scrolls");
+        assert_eq!(card.press(Button::Down), Out::None);
+        assert!(card.info.as_ref().is_some_and(|i| i.scroll > 0) && card.focus.is_none(), "down scrolls the text, no row");
+        assert_eq!(card.press(Button::Right), Out::None, "nothing to turn over");
+        assert_eq!(card.press(Button::Select), Out::None, "the full page, the box preference untouched");
+        assert!(card.info.is_none() && card.boxed.is_none());
+        assert_eq!(card.press(Button::Select), Out::None);
+        assert!(card.info.is_some() && card.boxed.is_none(), "SELECT comes back to the info page, never the box");
+        assert_eq!(card.press(Button::East), Out::Play);
+        assert_eq!(card.press(Button::South), Out::Back);
+        assert!(card.hints().iter().any(|(k, l)| *k == "SELECT" && *l == "Details"));
     }
 
     #[test]

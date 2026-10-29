@@ -19,6 +19,7 @@ shelf:xbox
 shelf:wiiu
 shelf:ps3
 shelf:ps3:cards
+shelf:psvita
 cabinet:dd
 cabinet:ddrra
 
@@ -30,7 +31,9 @@ setup:first:device=mini
 about:device=flip2
 setup:first:a
 setup:first:aR
+setup:first:aL
 setup:look
+setup:look:L
 setup:play
 setup:play:d
 setup:wifi
@@ -75,6 +78,7 @@ setup:card=lens
 setup:card=pixel_path
 setup:card=frames
 setup:ports
+setup:ports-update
 setup:ports-shared:rx
 port-files:on:wargus.zip
 port-files:off:wargus.zip:6
@@ -391,9 +395,14 @@ menu:ps2-starting
 menu:xbox
 # The other guests: Wii U (Cemu) and PS3 (RPCS3) keep their own saves, no states of ours.
 menu:wiiu
+menu:port
+menu:port:2
+menu:port-perf
 menu:wiiu:3
 menu:ps3
 menu:ps3:3
+menu:psvita
+menu:psvita:3
 menu:pocket-core:0:disc=1/3
 menu:pocket-core:0:disc=?/2
 menu:pocket-core:5:save=full
@@ -573,6 +582,10 @@ curator:card:ps2:revenge:battery=system
 curator:card:ps2:revenge:battery=all
 curator:card:ps2:revenge:battery=measuring
 curator:card:ps2:revenge:battery=charging
+info:minimal:gba:golden
+info:cards:ps2:revenge
+info:split:snes:chrono
+info:minimal:snes:chrono:y
 curator:card:ps2:takedown
 curator:card:ps2:revenge:yddddrr
 curator:card:ps2:pursuit:ydddd

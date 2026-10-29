@@ -29,6 +29,7 @@ pub fn playlist(system: &str) -> Option<&'static str> {
         "dreamcast" => "Sega - Dreamcast",
         "psx" => "Sony - PlayStation",
         "psp" => "Sony - PlayStation Portable",
+        "psvita" => "Sony - PlayStation Vita",
         "pcengine" | "tg16" => "NEC - PC Engine - TurboGrafx 16",
         "pcenginecd" | "tg16cd" => "NEC - PC Engine CD - TurboGrafx-CD",
         "ngp" => "SNK - Neo Geo Pocket",

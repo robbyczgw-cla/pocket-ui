@@ -316,6 +316,43 @@ for SH in $SHELLS; do
     rc=$?
     check "$SH: the $experimental passes as experimental, without an option" '[ $rc = 0 ] && said "device: $experimental, experimental" && said "Report a problem"'
   done
+  # ROCKNIX's H700 image: exactly the Anbernic models pocket-ui has a profile for.
+  for h700 in 'Anbernic RG28XX' 'Anbernic RG35XX 2024' 'Anbernic RG35XX Plus' 'Anbernic RG35XX H' 'Anbernic RG35XX Pro' 'Anbernic RG35XX SP' 'Anbernic RG40XX H' 'Anbernic RG40XX V' 'Anbernic RG34XX' 'Anbernic RG34XX-SP' 'Anbernic RG-SP'; do
+    make_root
+    sed -i 's/SM8250/H700/' "$r/etc/os-release"
+    printf '%s\000' "$h700" >"$r/sys/firmware/devicetree/base/model"
+    inst --check
+    rc=$?
+    check "$SH: the $h700 (H700 image) passes as experimental, without an option" '[ $rc = 0 ] && said "ROCKNIX 20261001 for H700" && said "device: $h700, experimental" && said "Report a problem"'
+  done
+  make_root
+  sed -i 's/SM8250/H700/' "$r/etc/os-release"
+  printf 'Anbernic RG28XX\000' >"$r/sys/firmware/devicetree/base/model"
+  inst
+  rc=$?
+  check "$SH: an RG28XX installs for real: current, start entry, restart" '[ $rc = 0 ] && [ "$(readlink "$r/$APP/current")" = "releases/$V" ] && [ -f "$r/$DROPIN" ] && grep -q "restart essway" "$r/calls"'
+  make_root
+  sed -i 's/SM8250/H700/' "$r/etc/os-release"
+  printf 'Anbernic RG CubeXX\000' >"$r/sys/firmware/devicetree/base/model"
+  refused "the RG CubeXX (720x720, not yet)" "RG CubeXX's square 720x720 screen is not supported yet"
+  refused "the RG CubeXX even with --allow-other-device" "not supported yet" --allow-other-device
+  for other in 'Anbernic RG99XX' 'Trimui Smart Pro' 'Retroid Pocket Mini V2'; do
+    make_root
+    sed -i 's/SM8250/H700/' "$r/etc/os-release"
+    printf '%s\000' "$other" >"$r/sys/firmware/devicetree/base/model"
+    refused "an H700 card of '$other' (no profile)" "this H700 handheld is '$other'; pocket-ui knows the Anbernic RG28XX"
+    refused "an H700 card of '$other', even with --allow-other-device" "has no profile yet" --allow-other-device
+  done
+  make_root
+  sed -i 's/SM8250/H700/' "$r/etc/os-release"
+  rm "$r/sys/firmware/devicetree/base/model"
+  refused "an H700 card without a device tree model" "this H700 handheld is 'unknown'"
+  make_root
+  printf 'Anbernic RG28XX\000' >"$r/sys/firmware/devicetree/base/model"
+  refused "an Anbernic name on the SM8250 image" "this device is 'Anbernic RG28XX'"
+  make_root
+  sed -i 's/SM8250/RK3566/' "$r/etc/os-release"
+  refused "another ROCKNIX platform" "needs ROCKNIX for SM8250, SM8550 or H700"
   make_root
   printf 'AYN Thor Lite\000' >"$r/sys/firmware/devicetree/base/model"
   refused "another device" "this device is 'AYN Thor Lite'"
@@ -495,6 +532,23 @@ for SH in $SHELLS; do
   printf 'AYN Thor Lite\000' >"$r/sys/firmware/devicetree/base/model"
   make_port payload
   portfail "another device" "this device is 'AYN Thor Lite'"
+  make_root
+  sed -i 's/SM8250/H700/' "$r/etc/os-release"
+  printf 'Anbernic RG35XX SP\000' >"$r/sys/firmware/devicetree/base/model"
+  make_port payload
+  port "Install pocket-ui.sh"
+  rc=$?
+  check "$SH: port: an RG35XX SP installs, and the screen names it" '[ $rc = 0 ] && shown "device: Anbernic RG35XX SP, experimental" && shown "ROCKNIX 20261001 (H700), Anbernic RG35XX SP" && shown "pocket-ui $V is installed" && [ "$(readlink "$r/$APP/current")" = "releases/$V" ]' || sed 's/^/     /' "$T/viewer.out" "$T/out"
+  make_root
+  sed -i 's/SM8250/H700/' "$r/etc/os-release"
+  printf 'Anbernic RG CubeXX\000' >"$r/sys/firmware/devicetree/base/model"
+  make_port payload
+  portfail "an RG CubeXX (not yet)" "not supported yet"
+  make_root
+  sed -i 's/SM8250/H700/' "$r/etc/os-release"
+  printf 'Anbernic RG99XX\000' >"$r/sys/firmware/devicetree/base/model"
+  make_port payload
+  portfail "an unknown H700 handheld" "this H700 handheld is 'Anbernic RG99XX'"
   make_root
   sed -i 's/ROCKNIX/Batocera/' "$r/etc/os-release"
   make_port payload

@@ -328,8 +328,8 @@ enum Opens {
     OnStart,
     /// A switch, not a page: whether the pause menu's Quit keeps a resume point (`App::remember_quit`).
     RememberQuit,
-    /// A switch, not a page: the launch animation of the Cabinet and the Shelf look (`App::launch_animation`).
-    LaunchAnimation,
+    /// A switch, not a page: Cozy or Quick animations (`App::animations`).
+    Animations,
     /// A switch, not a page: which face button confirms in the menus (`button_layout`).
     ButtonLayout,
     /// A switch, not a page: Auto frames on the handhelds or on every console (`settings::Frames`).
@@ -394,7 +394,7 @@ type SettingsRow = (&'static str, Opens, &'static str);
 /// naming what is in it, its rows in their order. START opens the categories, A a category's list
 /// (`app_settings_groups.rs`). A new row is one line in its category; `SETTINGS` follows by itself.
 const SETTINGS_GROUPS: [(&str, &str, &[SettingsRow]); 5] = [
-    ("Look & feel", "Look, language, text, night light, frames, sounds, haptics, LEDs, launch animation.", &[
+    ("Look & feel", "Look, language, text, night light, frames, sounds, haptics, LEDs, animations.", &[
         ("Look", Opens::Setup(Only::Look), "Choose how the shelf looks, dark or light."),
         ("Language", Opens::Language, "Menus and messages in English or German."),
         ("Text size", Opens::TextSize, "Larger text on every screen, fewer rows on a page."),
@@ -403,7 +403,7 @@ const SETTINGS_GROUPS: [(&str, &str, &[SettingsRow]); 5] = [
         ("Sounds", Opens::Sounds, "Soft clicks in menus, not in games. Left/right: how loud."),
         ("Haptics", Opens::Haptics, "A soft tick as you move."),
         ("LEDs", Opens::Leds, "The lights around the sticks. Off unless you turn them on."),
-        ("Launch animation", Opens::LaunchAnimation, "Cabinet and Shelf: the game goes into its console as it starts."),
+        ("Animations", Opens::Animations, "Cozy: watch your game slide into the console. Quick: straight into the game."),
     ]),
     ("Playing", "On start, quit, buttons, over the game, performance, battery, achievements, Curator.", &[
         ("On start", Opens::OnStart, "Home, or straight back into the game you played last."),
@@ -709,6 +709,8 @@ enum Page {
     EmuChoice,
     /// Players (`app_players`); its state is in `QuickMenu::players`.
     Players,
+    /// A running port's Performance & fan (`app_port_perf`); its state is in `App::port_perf`.
+    PortPerf,
     /// "Couldn't save. Quit anyway?" before Quit while the game's saves fail (`app_save_trouble`).
     QuitUnsaved { sel: usize },
 }
@@ -1105,8 +1107,8 @@ struct App {
     /// Settings > Remember where I quit (settings.json's `forget_where_quit`, the other way round): what the pause
     /// menu's one Quit does where the emulator can leave out the resume point (`QuickMenu::without_saving`).
     remember_quit: bool,
-    /// Settings → Look & feel → Launch animation (`app_cabinet::launch_animation`).
-    launch_animation: bool,
+    /// Settings → Look & feel → Animations once chosen; unset follows the look (`App::cozy`).
+    animations: Option<pocket_ui::settings::Animations>,
     /// X on a game opens its box (`game_box`), not the page; SELECT on the card switches and is remembered.
     game_box: bool,
     /// Settings > Playing > Button layout (`pocket_ui::button_layout`; the pad threads read it from there).
@@ -1379,6 +1381,12 @@ impl App {
         self.sync_game_started(&system);
         let mut env = emu_settings::launch_env(&system, &path);
         env.push((pocket_ui::startup::LAUNCHED_AT, format!("{asked:.1}")));
+        // The case goes into its console while the game loads (Cabinet and Shelf looks, `app_cabinet`). In Cozy a
+        // pocket-core game keeps its window back until the animation has been seen.
+        pocket_ui::motion::set_cozy(self.cozy());
+        if let Some(hold) = self.launch_animation(&path, emulator == "pocket-core") {
+            env.push((pocket_ui::startup::HOLD_UNTIL, format!("{:.1}", asked + hold.as_secs_f64() * 1000.0)));
+        }
         // Smooth fan: a pocket-core game tells pocket-ui its fan choice instead of changing the trips (`app_perf_fan`).
         env.extend(self.perf_fan_game_env().filter(|_| emulator == "pocket-core"));
         pocket_ui::mark!("launch", "{system} {}", path.display());
@@ -1409,8 +1417,6 @@ impl App {
         pocket_ui::battery_history::set_activity(Some(&system));
         // The battery per game: this game's stretches on battery go to its ledger (`battery_games`).
         pocket_ui::battery_history::set_game(Some(pocket_ui::battery_games::Key::new(&system, &path, &emulator)));
-        // The case goes into its console while the game loads (Cabinet and Shelf looks, `app_cabinet`).
-        self.launch_animation(&path, emulator == "pocket-core");
         self.running = Some(Running { system, name, path, emulator, started: Instant::now(), pgid, options: Default::default() });
         self.launch_at = Some(Instant::now());
         self.held = None;
@@ -1464,8 +1470,12 @@ impl App {
         self.switched_off_after_game();
         // A run that failed at once never put the game on the screen (`fallback::never_started`): it is no play
         // session, and when no one else explains it (pocket-core's own reason, the fallback's notice) pocket-ui does.
-        let never_started = pocket_ui::fallback::never_started(ok, secs, quit_requested);
-        if never_started && !run.hosted() {
+        // A port's script exits 0 whatever happened, so for ports the exit code doesn't count (`port_never_started`).
+        let port = run.system == "ports";
+        let never_started = if port { pocket_ui::fallback::port_never_started(secs, quit_requested) } else { pocket_ui::fallback::never_started(ok, secs, quit_requested) };
+        if never_started && port {
+            self.notice = Some(Notice::new(pocket_ui::fallback::port_not_started_notice(&run.name)));
+        } else if never_started && !run.hosted() {
             // A system whose BIOS pocket-ui knows: the files missing are named, not guessed at (`hostsys::missing_bios`).
             let bios = pocket_ui::hostsys::find(&run.system).and_then(|s| s.missing_bios(std::path::Path::new(pocket_ui::hostsys::BIOS_DIR)));
             self.notice = Some(Notice::new(pocket_ui::fallback::not_started_notice(&run.name, bios.as_deref())));
@@ -1513,6 +1523,7 @@ impl App {
         pocket_ui::mako_osd::set_hidden(true);
         standalone::exited();
         self.launch_at = None;
+        self.end_insert();
         self.launch_picture = None;
         self.menu = None;
         self.home_tap = false;
@@ -1589,6 +1600,7 @@ impl App {
             pocket_ui::moonlight::never_started(secs, ok, self.quit.is_some()).map(String::from)
         };
         self.launch_at = None;
+        self.end_insert();
         self.menu = None;
         self.home_tap = false;
         self.quit = None;
@@ -1713,6 +1725,8 @@ impl App {
             quit::Saver::RetroArch
         } else if standalone::active() {
             quit::Saver::Standalone
+        } else if run.system == pocket_ui::port_perf::SYSTEM {
+            quit::Saver::Port
         } else {
             quit::Saver::Other
         };
@@ -1779,6 +1793,10 @@ impl App {
         }
         if menu.page == Page::EmuChoice {
             self.emu_choice_input(b);
+            return;
+        }
+        if menu.page == Page::PortPerf {
+            self.port_perf_menu_input(b);
             return;
         }
         if matches!(menu.page, Page::QuitUnsaved { .. }) {
@@ -1877,6 +1895,8 @@ impl App {
                     menu.page = Page::Standalone { sel: 0 };
                 }
                 MainItem::Options if menu.hosted => menu.page = Page::Options { sel: 0 },
+                // A port: its own Performance & fan, where "Runs on" would mean nothing (`app_port_perf`).
+                MainItem::Options if menu.saves == pocket_ui::pause_saves::Saves::InGame(pocket_ui::pause_saves::PORT_SAVES) => self.port_perf_in_menu(),
                 // RetroArch and the other emulators: "Runs on" (`app_emu_choice`).
                 MainItem::Options => self.emu_choice_in_menu(),
                 // Read again: pocket-core wrote the list when the menu opened.
@@ -1899,7 +1919,7 @@ impl App {
                     control::quit_retroarch();
                     self.quit = Some(Escalation::new(Instant::now(), quit::grace(How::RetroArch)));
                 }
-                // Cemu and RPCS3 have no states: their window is closed, SIGTERM and SIGKILL if it hangs (`standalone::guest`).
+                // Cemu, RPCS3 and Vita3K have no states: their window is closed, SIGTERM and SIGKILL if it hangs (`standalone::guest`).
                 MainItem::Quit if standalone::guest_active() => {
                     menu.quitting = true;
                     let pgid = menu.frozen.or(self.running.as_ref().and_then(|r| r.pgid));
@@ -2330,6 +2350,10 @@ impl App {
             self.paint_emu_choice(c);
             return;
         }
+        if menu.page == Page::PortPerf {
+            self.paint_port_perf(c);
+            return;
+        }
         if menu.page != Page::Main {
             self.paint_options(c);
             return;
@@ -2633,7 +2657,7 @@ impl App {
                 let rows = menu.save_trouble.map(Self::quit_question_rows).unwrap_or_default();
                 (rows, sel, None, Some(pocket_ui::save_trouble::QUESTION.to_string()))
             }
-            Page::Main | Page::PixelPath | Page::EmuChoice | Page::Players => return,
+            Page::Main | Page::PixelPath | Page::EmuChoice | Page::Players | Page::PortPerf => return,
         };
 
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
@@ -2791,6 +2815,7 @@ impl App {
         .with_streaming(self.streaming, self.streaming_on)
         .with_art(self.art())
         .with_appearance(self.appearance)
+        .with_animations(self.animations)
         .with_catalog(library::all_systems(&self.es_systems).unwrap_or_default())
         .with_switches(self.switches(), self.tour.later.clone())
     }
@@ -2872,9 +2897,8 @@ impl App {
                     self.save_settings();
                     Some(SettingsPage::List(sel))
                 }
-                Opens::LaunchAnimation => {
-                    self.launch_animation = !self.launch_animation;
-                    self.save_settings();
+                Opens::Animations => {
+                    self.switch_animations();
                     Some(SettingsPage::List(sel))
                 }
 
@@ -2921,6 +2945,10 @@ impl App {
             (Some(SettingsPage::List(sel)), Button::Left | Button::Right) if matches!(SETTINGS[sel].1, Opens::OnStart) => {
                 self.on_start = self.on_start.toggled();
                 self.save_settings();
+                Some(SettingsPage::List(sel))
+            }
+            (Some(SettingsPage::List(sel)), Button::Left | Button::Right) if matches!(SETTINGS[sel].1, Opens::Animations) => {
+                self.switch_animations();
                 Some(SettingsPage::List(sel))
             }
             (Some(SettingsPage::List(sel)), Button::Left | Button::Right) if matches!(SETTINGS[sel].1, Opens::ButtonLayout) => {
@@ -3087,7 +3115,7 @@ impl App {
                 // Values that need a process or a file are read on a thread (`app_settings_groups`).
                 self.settings_values_refresh(&rows);
                 // The hints first: where their pill starts says how much room a description has beside it.
-                let hints_at = self.nu_hints(c, &[("B", "Back"), ("A", if matches!(SETTINGS[sel].1, Opens::Haptics | Opens::Sounds | Opens::OnStart | Opens::RememberQuit | Opens::LaunchAnimation | Opens::ButtonLayout | Opens::Frames | Opens::OverGame | Opens::Language | Opens::TextSize) { "Switch" } else { "Open" })]);
+                let hints_at = self.nu_hints(c, &[("B", "Back"), ("A", if matches!(SETTINGS[sel].1, Opens::Haptics | Opens::Sounds | Opens::OnStart | Opens::RememberQuit | Opens::Animations | Opens::ButtonLayout | Opens::Frames | Opens::OverGame | Opens::Language | Opens::TextSize) { "Switch" } else { "Open" })]);
                 let desc_x = pad + NU_BTN_PAD;
                 let beside = hints_at - 24 - desc_x;
                 // A description that doesn't fit beside the hints (German, Large text) takes up to two lines above
@@ -3355,7 +3383,8 @@ impl App {
             box_art_only: !self.pictures.wanted(),
             art_off: self.art_off,
             text_size: pocket_ui::type_scale::get(),
-            no_launch_animation: !self.launch_animation,
+            animations: self.animations,
+            no_launch_animation: false,
             details_page: !self.game_box,
         }
         .save(&self.data_dir);
@@ -3704,8 +3733,26 @@ impl App {
         self.window.as_ref().map_or_else(snapshot_dims, |w| pocket_ui::scaled_layout::logical_size((w.inner_size().width, w.inner_size().height)))
     }
 
+    /// Cozy or Quick: the player's choice, else the look's own (`Animations::default_for`).
+    fn animations_in_use(&self) -> pocket_ui::settings::Animations {
+        self.animations.unwrap_or_else(|| pocket_ui::settings::Animations::default_for(self.theme))
+    }
+
+    fn cozy(&self) -> bool {
+        self.animations_in_use() == pocket_ui::settings::Animations::Cozy
+    }
+
+    /// The other of Cozy and Quick, kept: from now on the look no longer decides.
+    fn switch_animations(&mut self) {
+        self.animations = Some(self.animations_in_use().next());
+        pocket_ui::motion::set_cozy(self.cozy());
+        self.save_settings();
+    }
+
     fn draw(&mut self) {
         let Some(window) = self.window.clone() else { return };
+        // Cozy slows every timed animation a little (`motion::COZY_SLOWER`); the look can change it.
+        pocket_ui::motion::set_cozy(self.cozy());
         let size = window.inner_size();
         let (Some(w), Some(h)) = (NonZeroU32::new(size.width), NonZeroU32::new(size.height)) else { return };
         // Just put in front of a game: not at the old size, which would hold sway's resize (`app_menu_open`).
@@ -4497,12 +4544,14 @@ fn snapshot(app: &mut App, args: &[String]) {
             _ if step.starts_with("wifi-portal-signin=") => setup.only(Only::Wifi).with_wifi_demo().with_portal_signin(&step["wifi-portal-signin=".len()..]),
             // The PortMaster browser with POCKETUI_DATA's ports.json (or a small demo catalog); "ports-shared":
             // file sharing on (the desktop's stand-in), for the "Copy your game files" page (keys r, x).
-            "ports" | "ports-shared" => {
+            "ports" | "ports-shared" | "ports-update" => {
                 #[cfg(not(target_os = "linux"))]
                 if step == "ports-shared" {
                     pocket_ui::wifi::enable_sharing();
                 }
-                setup.only(Only::Extras).show_ports(app_ports::snapshot_catalog(&app.data_dir))
+                let setup = setup.only(Only::Extras).show_ports(app_ports::snapshot_catalog(&app.data_dir));
+                // "ports-update": two ports of the list have a newer version in the catalogue (made up).
+                if step == "ports-update" { setup.with_updates(&["2048.zip", "cceleste.zip"]) } else { setup }
             }
             _ => setup,
         };
@@ -4523,6 +4572,7 @@ fn snapshot(app: &mut App, args: &[String]) {
                 'y' => Button::West,
                 's' => Button::Start,
                 'R' => Button::R1,
+                'L' => Button::L1,
                 _ => continue,
             };
             if let Some(s) = app.setup.as_mut() {
@@ -4596,8 +4646,22 @@ fn snapshot(app: &mut App, args: &[String]) {
         // The case's cover is read at once, not on the thread (as the cabinet's snapshots do).
         app.cabinet.inline = true;
     }
+    // "info:<look>:<system>:<name>[:<keys>]": X on the game in that look (`show_card`): the info page (`game_info`) in
+    // Minimal, Cards and Split, the box in Shelf and Cabinet.
+    let info = state.strip_prefix("info:").and_then(|r| r.split_once(':')).map(|(look, r)| {
+        app.theme = match look {
+            "minimal" => Theme::Minimal,
+            "cards" => Theme::Cards,
+            "split" => Theme::Split,
+            "cabinet" => Theme::Cabinet,
+            _ => Theme::Shelf,
+        };
+        app.game_box = true;
+        app.cabinet.inline = true;
+        format!("card:{r}")
+    });
     // "curator:<what>": Curator's screens (`App::curator_snapshot`).
-    if let Some(rest) = state.strip_prefix("curator:").or(boxed.as_deref()) {
+    if let Some(rest) = state.strip_prefix("curator:").or(boxed.as_deref()).or(info.as_deref()) {
         app.curator_snapshot(rest);
         // ":battery=<case>" on a card: its Battery line with made-up measurements (`App::battery_snapshot`).
         app.battery_snapshot(rest);
@@ -4814,10 +4878,13 @@ fn snapshot(app: &mut App, args: &[String]) {
         _ => None,
     };
     let game_standalone = matches!(menu_kind, Some("ps2" | "ps2-starting" | "xbox"));
-    // The guests that close with their window and keep their own saves: Wii U (Cemu) and PS3 (RPCS3) (Xbox: `game_standalone`).
+    // The guests that close with their window and keep their own saves: Wii U (Cemu), PS3 (RPCS3) and PS Vita (Vita3K) (Xbox: `game_standalone`).
     let guest = match menu_kind {
         Some("wiiu") => Some(("wiiu", "Mario Kart 8", "/storage/roms/wiiu/Mario Kart 8 (USA).wua", "cemu")),
         Some("ps3") => Some(("ps3", "Demon's Souls", "/storage/roms/ps3/Demon's Souls (USA).iso", "rpcs3")),
+        // A PortMaster port: its pause menu, and (`port-perf`) Options → Performance & fan over the paused game.
+        Some("port" | "port-perf") => Some(("ports", "Celeste Classic", "/storage/roms/ports/Celeste Classic.sh", "sh")),
+        Some("psvita") => Some(("psvita", "Tearaway", "/storage/roms/psvita/Tearaway.psvita", "vita3k")),
         _ => None,
     };
     if let Some((system, name, path, emulator)) = guest {
@@ -4954,15 +5021,16 @@ fn snapshot(app: &mut App, args: &[String]) {
         let saver = match kind {
             "ps2" | "ps2-starting" | "xbox" => quit::Saver::Standalone,
             "retroarch" => quit::Saver::RetroArch,
-            // Wii U and PS3 guests: closed by their window, no states of ours.
-            "other" | "wiiu" | "ps3" => quit::Saver::Other,
+            // Wii U, PS3 and PS Vita guests: closed by their window, no states of ours.
+            "other" | "wiiu" | "ps3" | "psvita" => quit::Saver::Other,
+            "port" | "port-perf" => quit::Saver::Port,
             "scummvm" => quit::Saver::PocketCore { states: false },
             _ => quit::Saver::PocketCore { states: true },
         };
         m.hosted = matches!(saver, quit::Saver::PocketCore { .. });
         m.retroarch = saver == quit::Saver::RetroArch;
         m.without_saving = quit_leaves_out_resume(remember_quit, saver);
-        if saver == quit::Saver::Other || kind == "ps2-starting" || kind == "xbox" {
+        if matches!(saver, quit::Saver::Other | quit::Saver::Port) || kind == "ps2-starting" || kind == "xbox" {
             m.states = None;
         }
         let no_states = match kind {
@@ -4997,6 +5065,11 @@ fn snapshot(app: &mut App, args: &[String]) {
         if let Some(m) = app.menu.as_mut() {
             (m.hosted, m.retroarch, m.settings, m.page) = (false, true, None, Page::EmuChoice);
         }
+    }
+    // "menu:port-perf": the port's Options page, Performance & fan, over the paused game (`app_port_perf`).
+    if menu_kind == Some("port-perf") {
+        app.port_perf_wait_loaded();
+        app.port_perf_in_menu();
     }
     let quick_over_game = name == "game-quick";
     if quick_over_game {
@@ -5591,6 +5664,12 @@ impl App {
                 if let Some(size) = self.setup.as_mut().and_then(|s| s.take_text_size()) {
                     self.set_text_size(size);
                 }
+                // L1 on the look step: Cozy or Quick, kept (the look decides only until then).
+                if let Some(a) = self.setup.as_mut().and_then(|s| s.take_animations()) {
+                    self.animations = Some(a);
+                    pocket_ui::motion::set_cozy(self.cozy());
+                    self.save_settings();
+                }
                 // R1 on Settings > Look: Motion is used at once and kept.
                 if let Some(m) = self.setup.as_ref().map(|s| s.motion()).filter(|m| *m != pocket_ui::motion::level()) {
                     pocket_ui::motion::set_level(m);
@@ -6010,6 +6089,15 @@ impl ApplicationHandler<UserEvent> for App {
             }
             wake = Some(wake.map_or(next, |w| w.min(next)));
         }
+        // A frame held back for the window's full size (`app_menu_open`): painted when the wait is over, resized or
+        // not. Without this the pause menu stayed black on a screen where sway sends no resize (H700).
+        if let Some(t) = self.held_frame_due() {
+            let next = if now >= t { now + FRAME } else { t };
+            if now >= t {
+                self.request_redraw();
+            }
+            wake = Some(wake.map_or(next, |w| w.min(next)));
+        }
         el.set_control_flow(wake.map_or(ControlFlow::Wait, ControlFlow::WaitUntil));
     }
 }
@@ -6256,6 +6344,7 @@ fn main() {
     // The Store row is there only when a catalog is set up (`store::catalog_url`; none is public yet).
     app_settings_groups::set_store_offered(pocket_ui::store::catalog_url(settings.store_url.as_deref()).is_some());
     pocket_ui::motion::set_level(settings.motion);
+    pocket_ui::motion::set_cozy(settings.animations_or_default() == pocket_ui::settings::Animations::Cozy);
     // The first start since the device started fades in from black after the boot screen (`boot_fade`); the mark is
     // left even with Motion Off, so that turning it on later doesn't fade a restart.
     let boot_fade = !std::env::args().any(|a| a == "--snapshot")
@@ -6353,6 +6442,8 @@ fn main() {
     let perf_ui = app_perf_fan::PerfFanUi::load(&data_dir);
     // The ports' own performance and fan, read on a thread (`app_port_perf`).
     let port_perf_ui = app_port_perf::PortPerfUi::new(&data_dir);
+    // The catalogue's versions, for the update note on a port's card (read from the cached ports.json, on a thread).
+    pocket_ui::ports::load_versions(&data_dir);
     let mut curator_ui = app_curator::CuratorUi::load(&data_dir);
     // Curator's "Pixel Path over every game" became Settings → Playing → Over the game (2026-10-25): moved once.
     pocket_ui::over_game::adopt_curator(&data_dir, &mut settings, &mut curator_ui.prefs);
@@ -6516,7 +6607,7 @@ fn main() {
         curator: curator_ui,
         on_start: settings.on_start,
         remember_quit: !settings.forget_where_quit,
-        launch_animation: !settings.no_launch_animation,
+        animations: settings.animations_chosen(),
         game_box: !settings.details_page,
         button_layout: settings.button_layout,
         launch_picture: None,

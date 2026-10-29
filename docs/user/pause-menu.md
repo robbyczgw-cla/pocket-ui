@@ -13,6 +13,7 @@ later. What the menu offers depends on the emulator the system uses (see
 | PlayStation 2 (ARMSX2), GameCube and Wii (Dolphin), 3DS (Azahar) | Continue, Save, Load, Options, Quick settings, Quit |
 | Xbox (hakuX in RetroArch, experimental) | Continue, Options, Quick settings, Quit |
 | RetroArch | Continue, Save, Load, Options, Quick settings, Quit |
+| PortMaster ports | Continue, Options, Quick settings, Quit |
 | Other emulators | Continue, Options, Quick settings, Quit |
 
 **Up** from Continue wraps to Quit, and **Down** from Quit to Continue, like every other menu. **START** opens the
@@ -422,13 +423,23 @@ Save, Load or Earlier: the core cannot save states yet. The Xbox's own saves in 
 (not in `roms/xbox`). Quit closes the game cleanly; if it hangs, pocket-ui stops it after about 20 seconds. The Save and Load rows
 appear by themselves when a later core can save states. More in [Systems](systems.md#xbox).
 
+## PortMaster ports
+
+HOME opens the menu over a running port, and **Continue** gives the port its buttons back. A port saves by itself, so
+there is no Save or Load: the menu says "This game saves by itself. Save in the game before you quit."
+
+- **Options** is the port's own **Performance & fan** ([PortMaster ports](performance.md#portmaster-ports)). What you
+  change there applies from the port's next start.
+- **Quit** closes the port's window as its own Exit would, then stops everything the port's start script launched (the
+  game, the button translator, helpers), within about five seconds. Anything not saved in the game is lost.
+
 ## Other emulators
 
 Other emulators (for example for Xbox) keep their own saves. Their menu has no Save or Load and says, beside
 Continue, Options and Quit: "This emulator keeps its own saves. Save in the game before you quit." Quit asks the
 emulator to close; if it has not closed after about five seconds, pocket-ui stops it, and anything unsaved is lost.
 
-**Wii U and PlayStation 3 (experimental, AYN Odin 2 family and the other SM8550 handhelds).** Cemu and RPCS3 have no
+**Wii U, PlayStation 3 and PlayStation Vita (experimental, AYN Odin 2 family and the other SM8550 handhelds).** Cemu, RPCS3 and Vita3K have no
 save states, so their menu is the same: Continue, Options, Quick settings, Quit, with the line above. HOME opens the
 menu over the game, and Continue goes back to it. Quit closes the emulator's window, as its own Exit would, and gives
 it about eight seconds to finish; if it hangs, pocket-ui stops it (and, after five more seconds, ends it), and

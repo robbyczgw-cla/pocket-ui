@@ -12,7 +12,7 @@ Games: performance, **Fan** is Fan outside games on the shelf and Games: fan ove
 | **Fan outside games** | **Auto**, Very quiet, Quiet, Cool |
 | **Smooth fan** | **On**, Off |
 
-On a handheld with no fan (the experimental Anbernic RG28XX and RG35XX SP) the fan rows read "No fan" and only the processor speed can be changed.
+On a handheld with no fan (the experimental Anbernic H700 handhelds) the fan rows read "No fan" and only the processor speed can be changed.
 
 - **Games: performance** is how fast the processor may run while you play. **Auto**: the system decides; it speeds up
   and slows down as the game needs it. For PlayStation 2, GameCube, Wii and 3DS games that is full speed (they need
@@ -75,8 +75,9 @@ a crash, the system's cooling is put back.
 
 ## PortMaster ports
 
-Ports have no pause menu, so each port has its own **Performance & fan** on its card: select the port under Ports,
-press X for its [card](library.md#opening-a-card), then **START**.
+Each port has its own **Performance & fan**: on its card (select the port under Ports, press X for its
+[card](library.md#opening-a-card), then **START**), or while it runs: **HOME**, then **Options** in the
+[pause menu](pause-menu.md#portmaster-ports).
 
 | Row | Choices |
 |---|---|

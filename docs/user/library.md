@@ -20,9 +20,31 @@ The hint bar shows "X Details" whenever a game is selected.
 | L1 / R1 | Scroll a whole page. |
 | D-pad Right | Only on a card opened by [Surprise me](curator.md#surprise-me): pick another game. |
 
+## The info page (Minimal, Cards and Split)
+
+In the Minimal, Cards and Split [looks](settings.md) X opens the game's **info page**: everything on one screen, nothing
+to turn over. The box art at the left (a title card with the console when there is none), under it your game: status,
+time played, when you last played, your rating, achievements, a PortMaster port's speed and "Update available, in
+Extras" when there is a newer version. At the right the title, the system and year ("Favourite" when it is one of
+yours), the facts (developer, publisher, genre, series, players, reviews) and the description from Wikipedia or your
+gamelist, with its source under it. A long description scrolls in its place; without one the page says "No
+description yet."
+
+| Button | On the info page |
+|---|---|
+| A | Play the game. |
+| B | Back to the list, at the same game. |
+| Y | Set the play status or your rating. |
+| X | Write or change your note. |
+| START | [This game](options.md#this-game); on a PortMaster port its Performance & fan. |
+| D-pad Up / Down, L1 / R1 | Scroll the description when it is longer than its place. |
+| SELECT | Details: the card's full page with its rows (Echoes, Screenshots, Hide or delete…). SELECT there comes back to the info page. |
+
+The Shelf and Cabinet looks open the game box instead.
+
 ## The game box
 
-The card opens as the game's box, almost the whole screen, in the style of its case: a cardboard box for cartridges (as wide as the cover: a Super Nintendo box lies
+In the Shelf and Cabinet looks the card opens as the game's box, almost the whole screen, in the style of its case: a cardboard box for cartridges (as wide as the cover: a Super Nintendo box lies
 on its side), the jewel case of a PlayStation or Saturn disc, the DVD case of a PS2, GameCube, Wii or Xbox game in
 its colour, the Mega Drive's clamshell, the UMD case, the DS case. The front is the cover. A picture that has not been loaded yet appears when it is ready; you can keep moving through the list or opening the box while it loads.
 

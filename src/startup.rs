@@ -48,6 +48,21 @@ pub fn clock_ms() -> f64 {
 /// Environment variable with `clock_ms` at the moment the player started the game (pocket-ui sets it for pocket-core).
 pub const LAUNCHED_AT: &str = "POCKET_LAUNCHED_AT";
 
+/// Environment variable with the `clock_ms` until which pocket-core keeps its window back: Cozy's launch animation
+/// (Settings > Look & feel > Animations) plays over the shelf meanwhile. Unset in Quick.
+pub const HOLD_UNTIL: &str = "POCKET_LAUNCH_HOLD_UNTIL";
+
+/// pocket-core's window is still to be held back (`HOLD_UNTIL`). A deadline further away than the longest hold pocket-ui
+/// asks for is a mistake, not a hold.
+pub fn held() -> bool {
+    let Some(until) = std::env::var(HOLD_UNTIL).ok().and_then(|v| v.parse::<f64>().ok()) else { return false };
+    let left = until - clock_ms();
+    left > 0.0 && left <= MAX_HOLD_MS
+}
+
+/// The longest hold pocket-ui asks for (Cozy's fade has run by then).
+pub const MAX_HOLD_MS: f64 = 1500.0;
+
 /// Milliseconds since `LAUNCHED_AT`, if pocket-ui set it.
 pub fn since_launch_ms() -> Option<f64> {
     let at: f64 = std::env::var(LAUNCHED_AT).ok()?.parse().ok()?;

@@ -15,7 +15,7 @@ pub enum How {
     RetroArch,
     /// ARMSX2 and Dolphin: resume state first, then their own shutdown (`standalone::quit`).
     Standalone,
-    /// Cemu and RPCS3 (`standalone::guest_quit`): the window's close request, then SIGTERM and SIGKILL.
+    /// Cemu, RPCS3 and Vita3K (`standalone::guest_quit`): the window's close request, then SIGTERM and SIGKILL.
     Guest,
     /// The window's close request (pocket-core and the other emulators).
     Window,
@@ -29,6 +29,8 @@ pub enum Saver {
     RetroArch,
     /// ARMSX2, Dolphin, Azahar (`standalone`).
     Standalone,
+    /// A PortMaster port: it saves by itself, Quit ends its whole process group.
+    Port,
     /// Any other emulator: it keeps its own saves, Quit only closes it.
     Other,
 }
@@ -169,6 +171,7 @@ mod tests {
         assert!(!offers_quit_without_saving(Saver::PocketCore { states: false }), "ScummVM: nothing to leave out");
         assert!(!offers_quit_without_saving(Saver::RetroArch), "RetroArch writes .state.auto on every exit");
         assert!(!offers_quit_without_saving(Saver::Other));
+        assert!(!offers_quit_without_saving(Saver::Port));
     }
 
     #[test]

@@ -191,6 +191,7 @@ puzzle
 
 # Game makers and Wikidata's genre names (game card)
 Criterion Games
+Camelot Software Planning
 Konami
 Metroidvania
 Electronic Arts
@@ -475,3 +476,16 @@ AYN Odin 2 Mini
 AYN Odin 2 Portal
 Anbernic RG28XX
 Anbernic RG35XX SP
+Anbernic RG35XX 2024
+Anbernic RG35XX Plus
+Anbernic RG35XX H
+Anbernic RG35XX Pro
+Anbernic RG40XX H
+Anbernic RG40XX V
+Anbernic RG34XX
+Anbernic RG34XX-SP
+Anbernic RG-SP
+Anbernic RG CubeXX
+PlayStation Vita
+PS Vita
+Tearaway

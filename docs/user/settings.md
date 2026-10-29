@@ -11,7 +11,7 @@ are short; one that is looked up comes a moment later.
 
 | Category | What is in it |
 |---|---|
-| **Look & feel** | Look, Language, Text size, Night light, Screen frames, Sounds, Haptics, LEDs, Launch animation. See [below](#look--feel) |
+| **Look & feel** | Look, Language, Text size, Night light, Screen frames, Sounds, Haptics, LEDs, Animations. See [below](#look--feel) |
 | **Playing** | On start, Remember where I quit, Button layout, Over the game, Performance & fan, Battery, RetroAchievements, Curator. See [Playing](#playing) |
 | **Games** | Add games, From EmulationStation, Starter pack, Extras, Screenshots, Store (only on a device with a store set up), Tools, PC streaming. See [Games](#games) |
 | **Connections** | Wi-Fi, Bluetooth, Tailscale, Sync, Remote access (SSH), Web companion. See [Connections](settings-system.md#connections) |
@@ -39,7 +39,7 @@ Settings → **Look & feel**. How pocket-ui looks, sounds and feels in your hand
 | **Sounds** | Soft clicks in the menus. A turns them on or off, Left/Right set how loud. See [Playing](playing.md#menu-sounds) |
 | **Haptics** | A very short tick in the menus as the selection moves. A turns it on or off. Off by default |
 | **LEDs** | The lights around the sticks: off, one colour, or the battery colours. See [LEDs](#leds) |
-| **Launch animation** | In the Cabinet and Shelf looks, the game's cartridge or disc goes into its console with a click while the game loads. A turns it on or off. On by default. See [Playing](playing.md#starting-a-game) |
+| **Animations** | **Cozy**: watch your game slide into the console, and the pages, the box and the menus move a little slower and softer. **Quick**: straight into the game, the animations as short as they get. A or Left/Right switches it. Cozy in the Shelf and Cabinet looks until you choose, Quick in the others. See [Animations](#animations) |
 
 ### Look
 
@@ -47,8 +47,8 @@ Settings → Look & feel → **Look** is the first start's look step: a scaled-d
 the shelf itself with a few of your systems and one game (with its box art when it has one; on an SD card without
 games, a built-in set of "Sample game"s). Left/Right or Up/Down switch between the five looks, and the shelf
 behind Settings takes the look at once; A keeps the one shown. See [Playing](playing.md#looks) for what each look
-does. On this page **Y** switches the [appearance](#appearance), **R1** the [motion](#motion) and **X** opens
-[Systems on the shelf](#systems-on-the-shelf).
+does. On this page **Y** switches the [appearance](#appearance), **L1** the [animations](#animations), **R1** the
+[motion](#motion) and **X** opens [Systems on the shelf](#systems-on-the-shelf).
 
 #### Appearance
 
@@ -77,6 +77,19 @@ default and has the [text size](#text-size) in its place).
 None of them makes anything slower: a press changes what is selected or opened at once, whichever you choose,
 and pressing again in the middle of a movement takes it straight to the new place. The choice is saved at once.
 
+#### Animations
+
+Under the appearance is **Animations** (**L1**; also Settings → Look & feel → Animations), the first start asks it on the same page.
+
+- **Cozy**: when you start a game in the Shelf or the Cabinet look, you watch its cartridge or disc slide into the console
+  (about a second, with a click). Pages, the game's box and the menus take about a third longer and ease in more softly.
+- **Quick**: straight into the game; the animations as short as they get.
+
+Until you choose, the look decides: Cozy for Shelf and Cabinet, Quick for Minimal, Card and Split. Once you choose, it stays
+yours, whatever look you pick later. With Cozy, a game of pocket-core's is shown once the animation is over, so it starts
+about a second later than with Quick (a game that needs longer to load is not held at all); any button skips the rest.
+**Motion** (Reduced, Off) still overrides it: nothing slides where Motion says so.
+
 #### Systems on the shelf
 
 On the Look page, press **X** ("Systems on the shelf"). The list has every system that has games, each with a tick
@@ -96,7 +109,7 @@ The first start does not have this list; every system is on the shelf until you 
 
 ### Text size
 
-On small screens such as the RG28XX and RG35XX SP, the shelf, game cards and menus keep their full layout,
+On small screens such as the Anbernic H700 handhelds, the shelf, game cards and menus keep their full layout,
 scaled down to fit the screen. If the writing feels small, choose Medium or Large here.
 
 Settings → Look & feel → **Text size** makes the text larger on every screen. A or Right goes on to the next size,

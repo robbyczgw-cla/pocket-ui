@@ -48,6 +48,8 @@ pub enum Medium {
     N3ds,
     /// The original Xbox's black DVD case with its green top band.
     Xbox,
+    /// The PS Vita's small case with the blue top band.
+    Vita,
 }
 
 /// Where things are on a template (template pixels): the spine's label and its band at the top (cases whose band
@@ -75,7 +77,7 @@ const GREY: u32 = 156;
 
 /// Printed by `assets/media/tools/draw_media.py`, in the order of `Medium::ALL`.
 #[rustfmt::skip]
-const TEMPLATES: [Template; 19] = [
+const TEMPLATES: [Template; 20] = [
     // snes
     Template { spine: (22, 78), front: (88, 78), spine_label: (3, 21, 16, 52), front_label: (13, 14, 62, 57), band: None, caps: (20, 4), tint: true },
     // n64
@@ -114,10 +116,12 @@ const TEMPLATES: [Template; 19] = [
     Template { spine: (15, 93), front: (85, 93), spine_label: (1, 13, 13, 79), front_label: (3, 3, 79, 87), band: None, caps: (13, 2), tint: false },
     // xbox
     Template { spine: (19, 120), front: (84, 120), spine_label: (2, 19, 15, 99), front_label: (3, 17, 78, 100), band: None, caps: (19, 3), tint: false },
+    // vita
+    Template { spine: (14, 92), front: (70, 92), spine_label: (1, 15, 12, 76), front_label: (3, 15, 64, 74), band: None, caps: (15, 2), tint: false },
 ];
 
 /// The templates' pictures: (spine, front) per medium, in the order of `Medium::ALL`.
-const PNGS: [(&[u8], &[u8]); 19] = [
+const PNGS: [(&[u8], &[u8]); 20] = [
     (include_bytes!("../assets/media/snes-spine.png"), include_bytes!("../assets/media/snes-front.png")),
     (include_bytes!("../assets/media/n64-spine.png"), include_bytes!("../assets/media/n64-front.png")),
     (include_bytes!("../assets/media/nes-spine.png"), include_bytes!("../assets/media/nes-front.png")),
@@ -137,10 +141,11 @@ const PNGS: [(&[u8], &[u8]); 19] = [
     (include_bytes!("../assets/media/ds-spine.png"), include_bytes!("../assets/media/ds-front.png")),
     (include_bytes!("../assets/media/3ds-spine.png"), include_bytes!("../assets/media/3ds-front.png")),
     (include_bytes!("../assets/media/xbox-spine.png"), include_bytes!("../assets/media/xbox-front.png")),
+    (include_bytes!("../assets/media/vita-spine.png"), include_bytes!("../assets/media/vita-front.png")),
 ];
 
 impl Medium {
-    pub const ALL: [Medium; 19] = [
+    pub const ALL: [Medium; 20] = [
         Medium::Snes,
         Medium::N64,
         Medium::Nes,
@@ -160,6 +165,7 @@ impl Medium {
         Medium::Ds,
         Medium::N3ds,
         Medium::Xbox,
+        Medium::Vita,
     ];
 
     /// What a ROCKNIX system's games come in; a generic cartridge or disc case for the rest.
@@ -182,6 +188,7 @@ impl Medium {
             "nds" => Medium::Ds,
             "3ds" | "n3ds" => Medium::N3ds,
             "xbox" => Medium::Xbox,
+            "psvita" => Medium::Vita,
             _ => match FormFactor::of(system) {
                 FormFactor::HandheldCart => Medium::Gb,
                 FormFactor::ConsoleCart => Medium::Cart,
@@ -228,7 +235,7 @@ impl Medium {
 
     /// The decoded templates, (spine, front).
     fn pics(self) -> &'static (Sprite, Sprite) {
-        static DECODED: [std::sync::OnceLock<(Sprite, Sprite)>; 19] = [const { std::sync::OnceLock::new() }; 19];
+        static DECODED: [std::sync::OnceLock<(Sprite, Sprite)>; 20] = [const { std::sync::OnceLock::new() }; 20];
         let i = self.index();
         DECODED[i].get_or_init(|| {
             let empty = || Sprite { w: 1, h: 1, px: vec![0] };
@@ -544,6 +551,7 @@ mod tests {
             ("atari2600", Medium::Cart),
             ("ngp", Medium::Gb),
             ("xbox", Medium::Xbox),
+            ("psvita", Medium::Vita),
             ("something-new", Medium::Disc),
         ] {
             assert_eq!(Medium::of(system), want, "{system}");

@@ -7,6 +7,8 @@ shelf:gba:shelf
 shelf:gba:cards
 shelf:psx:split
 shelf:snes:minimal
+info:minimal:gba:golden
+info:split:snes:chrono
 cabinet:ddrra
 setup:first:device=mini
 setup:first:device=rp5

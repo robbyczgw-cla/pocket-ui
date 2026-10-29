@@ -1,13 +1,14 @@
 #!/bin/sh
 # Installs pocket-ui on a ROCKNIX card that is already in use (Retroid Pocket Mini V2, ROCKNIX SM8250; the Pocket 5,
-# Flip 2 and first Mini on the same image are experimental, docs/DEVICES.md). Run it on the
+# Flip 2 and first Mini on the same image, the SM8550 handhelds and the Anbernic H700 models of ROCKNIX's H700 image
+# are experimental, docs/DEVICES.md). Run it on the
 # device as root, from the unpacked package (README.txt):
 #
 #   sh install.sh             checks, installs, then restarts the interface: pocket-ui comes up
 #   sh install.sh --check     only the checks; nothing changes
 #   sh install.sh --no-restart   installs, but pocket-ui only comes up at the next start of the device
 #   --allow-untested-rocknix  a ROCKNIX older than the tested one, if pocket-ui's own check passes (newer ones need no option)
-#   --allow-other-device      another SM8250 device than these four (untested, unknown to pocket-ui)
+#   --allow-other-device      another SM8250 device than these (untested, unknown to pocket-ui; never for an H700 one)
 #
 # What it writes, and only after every check passed: /storage/pocket-ui/ (the programs, as the updater lays them out)
 # and, in /storage/.config/system.d, the start entry essway.service.d/10-pocket-ui.conf, which makes ROCKNIX start
@@ -25,6 +26,10 @@ MODEL_WANTED="Retroid Pocket Mini V2"
 # The Mini V2's siblings on the same ROCKNIX SM8250 image, as their device trees name them (src/device.rs): pocket-ui
 # knows them, nobody on the project has tested on one.
 MODELS_EXPERIMENTAL="Retroid Pocket 5|Retroid Pocket 5 Visionox|Retroid Pocket Flip2|Retroid Pocket Flip2 Visionox|Retroid Pocket Mini|Retroid Pocket 6|Retroid Pocket 6 TOP-DPAD|Retroid Pocket Nova|AYN Odin 2|AYN Odin 2 Mini|AYN Odin 2 Portal"
+# The Anbernic models of ROCKNIX's H700 image that pocket-ui has a profile for (src/device.rs H700_BOARDS; a test keeps the
+# two in step), and the one that has a profile but is held back (720x720 draws too slowly on the H700's Cortex-A53 yet).
+MODELS_H700="Anbernic RG28XX|Anbernic RG35XX 2024|Anbernic RG35XX Plus|Anbernic RG35XX H|Anbernic RG35XX Pro|Anbernic RG35XX SP|Anbernic RG40XX H|Anbernic RG40XX V|Anbernic RG34XX|Anbernic RG34XX-SP|Anbernic RG-SP"
+MODELS_H700_NOT_YET="Anbernic RG CubeXX"
 MODEL_FILE=${POCKETUI_MODEL_FILE:-$R/sys/firmware/devicetree/base/model}
 APP=$R/storage/pocket-ui
 DROPIN_DIR=$R/storage/.config/system.d/essway.service.d
@@ -61,7 +66,7 @@ field() { sed -n "s/^$1=\"\{0,1\}\([^\"]*\)\"\{0,1\}\$/\1/p" "$2" 2>/dev/null | 
 
 [ -f "$F/VERSION" ] || die "files/VERSION is missing: unpack the whole package and run install.sh from its folder"
 VERSION=$(cat "$F/VERSION")
-say "pocket-ui $VERSION for ROCKNIX (Retroid Pocket Mini V2; Pocket 5, Flip 2, Mini, Pocket 6, Nova: experimental)"
+say "pocket-ui $VERSION for ROCKNIX (Retroid Pocket Mini V2; Pocket 5, Flip 2, Mini, Pocket 6, Nova, Odin 2, Anbernic H700 handhelds: experimental)"
 say "== checks (nothing is changed yet)"
 
 # The package itself: every file there and as built.
@@ -74,12 +79,12 @@ for f in LICENSE NOTICE.md FONTS-OFL.txt THIRD-PARTY-CRATES.md THIRD-PARTY-LICEN
   [ -s "$LIC/$f" ] || die "licences/$f is missing from the package: unpack the whole package and run install.sh from its folder"
 done
 
-# The system: ROCKNIX SM8250/SM8550 on aarch64; only the Mini V2 has hardware verification.
+# The system: ROCKNIX SM8250/SM8550/H700 on aarch64; only the Mini V2 has hardware verification.
 OSR=$R/etc/os-release
 [ -f "$OSR" ] || die "no /etc/os-release: this is not ROCKNIX"
 [ "$(field OS_NAME "$OSR")" = ROCKNIX ] || die "this system is $(field OS_NAME "$OSR" || echo unknown), not ROCKNIX"
 dev=$(field HW_DEVICE "$OSR") arch=$(field HW_ARCH "$OSR") ver=$(field OS_VERSION "$OSR")
-{ [ "$dev" = SM8250 ] || [ "$dev" = SM8550 ]; } && [ "$arch" = aarch64 ] || die "this is ROCKNIX for $dev/$arch; pocket-ui needs ROCKNIX for SM8250 or SM8550 (aarch64)"
+{ [ "$dev" = SM8250 ] || [ "$dev" = SM8550 ] || [ "$dev" = H700 ]; } && [ "$arch" = aarch64 ] || die "this is ROCKNIX for $dev/$arch; pocket-ui needs ROCKNIX for SM8250, SM8550 or H700 (aarch64)"
 # ROCKNIX versions are dates (20261001). The tested one and any newer one go ahead (the compatibility check below is the
 # real contract and still blocks); an older one is asked to update first.
 case $ver in *[!0-9]* | '') vernum=0 ;; *) vernum=$ver ;; esac
@@ -96,6 +101,17 @@ fi
 model=$(tr -d '\000' <"$MODEL_FILE" 2>/dev/null)
 experimental=0
 case "|$MODELS_EXPERIMENTAL|" in *"|$model|"*) [ -n "$model" ] && experimental=1 ;; esac
+if [ "$dev" = H700 ]; then
+  experimental=0
+  # An H700 handheld needs its own profile (screen size, buttons, what it has): no profile, no install, whatever the option.
+  case "|$MODELS_H700|" in *"|$model|"*) [ -n "$model" ] && experimental=1 ;; esac
+  if [ $experimental = 0 ]; then
+    case "|$MODELS_H700_NOT_YET|" in
+      *"|$model|"*) [ -n "$model" ] && die "the $model's square 720x720 screen is not supported yet: pocket-ui draws it too slowly on this processor for now. ROCKNIX keeps working as it is" ;;
+    esac
+    die "this H700 handheld is '${model:-unknown}'; pocket-ui knows the Anbernic RG28XX, RG34XX, RG34XX-SP, RG35XX (2024, Plus, H, Pro, SP), RG40XX (H, V) and RG-SP. Another model has no profile yet, so nothing is installed"
+  fi
+fi
 if [ "$model" = "$MODEL_WANTED" ]; then
   ok "device: $model"
 elif [ $experimental = 1 ]; then
@@ -103,7 +119,7 @@ elif [ $experimental = 1 ]; then
 elif [ $ANY_DEVICE = 1 ]; then
   note "device: ${model:-unknown}, not the $MODEL_WANTED; allowed by --allow-other-device"
 else
-  die "this device is '${model:-unknown}'; pocket-ui is made for the $MODEL_WANTED (and, experimental, the Retroid Pocket 5, Flip 2, first Mini, Pocket 6 and Nova; --allow-other-device tries it anyway)"
+  die "this device is '${model:-unknown}'; pocket-ui is made for the $MODEL_WANTED (and, experimental, the Retroid Pocket 5, Flip 2, first Mini, Pocket 6, Nova, Odin 2 and the Anbernic H700 models; --allow-other-device tries another SM8250 one anyway)"
 fi
 
 # ROCKNIX's interface unit, which the drop-in takes over, and the fallback to EmulationStation.

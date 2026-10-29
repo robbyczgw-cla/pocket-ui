@@ -12,7 +12,7 @@
 //! # END pocket-ui
 //! ```
 //!
-//! is appended once to `/storage/.config/mako/config` (the file `mako-notify` creates when it is missing and never
+//! is appended once to `/storage/.config/mako/config` (a missing file is made with ROCKNIX's default; `mako-notify` otherwise never
 //! rewrites; each call only runs `makoctl reload`, which keeps the modes: they are the daemon's state, not the
 //! config's). While the mode `pocket-ui` is on, the notifications of `mako-notify` are not shown. It is on while
 //! pocket-ui or pocket-core is in front (pocket-ui draws the display, or the overlay in pocket-core), and off while
@@ -39,6 +39,11 @@ const END: &str = "# END pocket-ui";
 const APP_NAME: &str = "mako-notify";
 /// Where the session bus is on ROCKNIX when the environment doesn't say (`/etc/profile.d/050-sway.conf`).
 const RUNTIME_DIR: &str = "/var/run/0-runtime-dir";
+
+/// What `mako-notify` writes when the config is missing (ROCKNIX 20261001, H700 and the others alike). A card that
+/// never had a volume press has no file yet: the box of the first press would come before our block, so we write the
+/// same default with the block, and `mako-notify` finds the file there and leaves it.
+const MAKO_DEFAULT: &str = "max-visible=1\nlayer=overlay\nfont=monospace 30\ntext-color=#ffffff\ntext-alignment=center\nbackground-color=#000000\nborder-size=0\nborder-radius=10\ndefault-timeout=1500\nanchor=top-center\nwidth=500\n";
 
 fn block() -> String {
     format!(
@@ -75,8 +80,8 @@ pub fn with_block(text: &str) -> Option<String> {
 }
 
 /// Puts the block into mako's config and tells mako. Slow (a process): call it from a thread. Does nothing without
-/// `mako-notify`; a missing config is left to `mako-notify` (it writes its default at the first box), the next start
-/// of pocket-ui tries again. Returns whether the file changed.
+/// `mako-notify`; a missing config is made with ROCKNIX's default and the block (`MAKO_DEFAULT`). Returns whether
+/// the file changed.
 pub fn ensure() -> Result<bool, String> {
     if !Path::new(NOTIFY).exists() {
         return Ok(false);
@@ -89,7 +94,16 @@ pub fn ensure() -> Result<bool, String> {
 }
 
 fn ensure_in(config: &Path) -> Result<bool, String> {
-    let text = std::fs::read_to_string(config).map_err(|e| format!("no {} yet ({e}): tried again at the next start", config.display()))?;
+    let text = match std::fs::read_to_string(config) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            if let Some(dir) = config.parent() {
+                std::fs::create_dir_all(dir).map_err(|e| format!("couldn't make {}: {e}", dir.display()))?;
+            }
+            MAKO_DEFAULT.to_string()
+        }
+        Err(e) => return Err(format!("couldn't read {}: {e}", config.display())),
+    };
     let Some(new) = with_block(&text) else { return Ok(false) };
     crate::fsutil::write_atomic(config, new.as_bytes()).map_err(|e| format!("couldn't write {}: {e}", config.display()))?;
     Ok(true)
@@ -166,12 +180,14 @@ mod tests {
     }
 
     #[test]
-    fn the_config_is_changed_in_place_and_a_missing_one_is_left_to_mako_notify() {
+    fn the_config_is_changed_in_place_and_a_missing_one_is_made() {
         let dir = TestDir::new("mako");
         let cfg = dir.join("mako/config");
-        assert!(ensure_in(&cfg).unwrap_err().contains("no "), "mako-notify makes the file at the first box");
-        assert!(!cfg.exists());
-        std::fs::create_dir_all(cfg.parent().unwrap()).unwrap();
+        // A fresh card: no config before the first volume press. The block must be there before that press.
+        assert!(ensure_in(&cfg).unwrap());
+        assert_eq!(without_block(&std::fs::read_to_string(&cfg).unwrap()), MAKO_DEFAULT);
+        assert!(!ensure_in(&cfg).unwrap());
+        std::fs::remove_file(&cfg).unwrap();
         std::fs::write(&cfg, ROCKNIX_DEFAULT).unwrap();
         assert!(ensure_in(&cfg).unwrap());
         assert!(!ensure_in(&cfg).unwrap(), "the second start changes nothing");

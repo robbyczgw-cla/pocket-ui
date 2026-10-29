@@ -194,6 +194,7 @@ fn system_names(system: &str) -> &'static [&'static str] {
         "psx" => &["PlayStation video game", "PS1"],
         "ps2" => &["PlayStation 2"],
         "psp" => &["PlayStation Portable", "PSP"],
+        "psvita" => &["PlayStation Vita", "PS Vita"],
         "pcengine" => &["TurboGrafx", "PC Engine"],
         "atari2600" => &["Atari 2600"],
         "atarilynx" => &["Lynx"],

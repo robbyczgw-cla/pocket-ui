@@ -66,7 +66,7 @@ impl Hull {
             Medium::Ps1 | Medium::SegaDisc | Medium::Disc => Hull::Jewel,
             Medium::Ps2 | Medium::GameCube | Medium::Wii | Medium::Keep | Medium::Xbox => Hull::Dvd,
             Medium::Umd => Hull::Umd,
-            Medium::Ds | Medium::N3ds => Hull::Card,
+            Medium::Ds | Medium::N3ds | Medium::Vita => Hull::Card,
         }
     }
 
@@ -176,7 +176,7 @@ pub struct BoxView {
 }
 
 /// Where the box goes on a screen `w` x `h`: (top, bottom) of its room.
-fn room(w: i32, h: i32) -> (i32, i32, i32) {
+pub(crate) fn room(w: i32, h: i32) -> (i32, i32, i32) {
     let top = (h / 9).clamp(52, 104);
     // Above the hint bar, which is as tall on every screen.
     let bottom = h - 104;
@@ -494,19 +494,9 @@ fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[Ca
     }
     // The description: beside the pictures on a wide back, under them on a narrow one.
     let (tx, tw, mut ty) = if wide { (inner_x + shot_w + 2 * pad, inner_w - shot_w - 2 * pad, y) } else { (inner_x, inner_w, shots_bottom + pad) };
-    let (about, credit) = match &d.summary {
-        Summary::Wikipedia { text: t, title } => (Some(t.clone()), Some(format!("Text: Wikipedia, “{title}”, CC BY-SA 4.0"))),
-        Summary::Loading => (d.sentence.clone(), Some("Loading the description from Wikipedia…".to_string())),
-        Summary::Unavailable(why) => (d.sentence.clone(), Some(format!("No description from Wikipedia: {why}"))),
-        Summary::Gamelist(t) => (Some(t.clone()), Some("From your EmulationStation gamelist".to_string())),
-        Summary::None => (d.sentence.clone(), None),
-    };
+    let (about, credit) = about(d);
     ty += type_scale::grow(28) + 22;
-    // The sentence made of the facts (`game_card::sentence`) is English only, and the facts under it say the same in
-    // the player's language: in German the back has no description then rather than an English one.
-    let made_up = matches!(d.summary, Summary::None | Summary::Loading | Summary::Unavailable(_));
-    let about = about.filter(|_| !(made_up && crate::i18n::current() == crate::i18n::Lang::De));
-    match about.filter(|a| !a.trim().is_empty()) {
+    match about {
         Some(about) => {
             for l in text.wrap(Face::Body, 28, &about, tw) {
                 text.draw(c, Face::Body, 28, tx, ty, ink, &l);
@@ -592,7 +582,38 @@ fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[Ca
         text.draw(c, Face::Body, 28, rx + rkey, ry, ink, &fitted);
         ry += row;
     }
+    // A PortMaster port: its performance and fan, the busy-core offer and the note of a newer version, as on the flat card.
+    if let Some((speed, hint)) = &d.port {
+        text.draw(c, Face::Body, 28, rx, ry, soft, "Speed");
+        let fitted = text.fit(Face::Body, 28, speed, rw);
+        text.draw(c, Face::Body, 28, rx + rkey, ry, ink, &fitted);
+        ry += row;
+        for (shown, line) in [(*hint, "Busy core? Press START"), (d.port_update, "Update available")] {
+            if shown {
+                let fitted = text.fit(Face::Body, 28, line, rw);
+                text.draw(c, Face::Body, 28, rx + rkey, ry - 6, soft, &fitted);
+                ry += row;
+            }
+        }
+    }
     ly.max(ry).max(shots_bottom + row) - row + line + pad - y0 + type_scale::grow(28)
+}
+
+/// The description and the line that credits it, as the back shows them (and the info page, `game_info`); None when
+/// there is no description to show.
+pub(crate) fn about(d: &CardData) -> (Option<String>, Option<String>) {
+    let (about, credit) = match &d.summary {
+        Summary::Wikipedia { text: t, title } => (Some(t.clone()), Some(format!("Text: Wikipedia, “{title}”, CC BY-SA 4.0"))),
+        Summary::Loading => (d.sentence.clone(), Some("Loading the description from Wikipedia…".to_string())),
+        Summary::Unavailable(why) => (d.sentence.clone(), Some(format!("No description from Wikipedia: {why}"))),
+        Summary::Gamelist(t) => (Some(t.clone()), Some("From your EmulationStation gamelist".to_string())),
+        Summary::None => (d.sentence.clone(), None),
+    };
+    // The sentence made of the facts (`game_card::sentence`) is English only, and the facts under it say the same in
+    // the player's language: in German the back has no description then rather than an English one.
+    let made_up = matches!(d.summary, Summary::None | Summary::Loading | Summary::Unavailable(_));
+    let about = about.filter(|_| !(made_up && crate::i18n::current() == crate::i18n::Lang::De));
+    (about.filter(|a| !a.trim().is_empty()), credit)
 }
 
 /// A picture of the game on the back in a dark screen's bezel; without one, the screen stays dark with its console on

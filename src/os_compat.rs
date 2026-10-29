@@ -502,15 +502,28 @@ fn dotted(v: &[u32]) -> String {
     v.iter().map(u32::to_string).collect::<Vec<_>>().join(".")
 }
 
+/// Files ROCKNIX's H700 image doesn't have and pocket-ui's H700 profiles handle (docs/DEVICES.md).
+const H700_WITHOUT: &[&str] = &["usr/bin/steamos-polkit-helpers/steamos-set-timezone", "usr/sbin/quantum"];
+
+/// Whether the system is ROCKNIX's H700 image (`HW_DEVICE="H700"` in its os-release).
+fn is_h700_system(sys: &dyn System) -> bool {
+    let text = resolve(sys, "etc/os-release").and_then(|p| sys.read(&p)).map(|b| String::from_utf8_lossy(&b).into_owned());
+    text.is_some_and(|t| t.lines().any(|l| l.trim().strip_prefix("HW_DEVICE=").is_some_and(|v| v.trim_matches('"') == "H700")))
+}
+
 /// Checks `sys` against `needs`.
 pub fn check(sys: &dyn System, needs: &Needs) -> Report {
     let mut r = Report::default();
     for n in &needs.notes {
         r.add(Level::Info, n.clone());
     }
+    let h700 = is_h700_system(sys);
     for f in needs.files {
         if !f.any_of.iter().any(|p| resolve(sys, p).is_some_and(|p| sys.entry(&p).is_some())) {
-            r.add(f.level, format!("/{} is missing: {}", f.any_of[0], f.what));
+            // ROCKNIX's H700 image never had these two; pocket-ui does without them there (`system_ctl` stores the
+            // time zone itself, `audio::restore_quantum` uses pw-metadata): nothing to warn about.
+            let level = if h700 && f.any_of.iter().any(|p| H700_WITHOUT.contains(p)) { Level::Info } else { f.level };
+            r.add(level, format!("/{} is missing: {}", f.any_of[0], f.what));
         }
     }
     for l in &needs.linked {
@@ -1095,6 +1108,27 @@ pub(crate) mod tests {
             "{}",
             rep.text()
         );
+    }
+
+    #[test]
+    fn the_h700_image_may_lack_the_time_zone_helper_and_quantum_but_not_what_pocket_ui_breaks_on() {
+        let r = Root::new("h700");
+        full_system(&r, "2.41", &[]);
+        for gone in ["usr/bin/steamos-polkit-helpers/steamos-set-timezone", "usr/sbin/quantum"] {
+            std::fs::remove_file(r.0.join(gone)).unwrap();
+        }
+        let sd = Dir(r.0.to_path_buf());
+        // Another system (the Mini V2's) still warns about both.
+        let rep = check(&sd, &needs("GLIBC_2.38", &[]));
+        assert_eq!(rep.warnings().len(), 2, "{}", rep.text());
+        // The H700 image is told by its os-release.
+        r.file("etc/os-release", b"OS_NAME=\"ROCKNIX\"\nHW_DEVICE=\"H700\"\nHW_ARCH=\"aarch64\"\n");
+        let rep = check(&sd, &needs("GLIBC_2.38", &[]));
+        assert!(rep.warnings().is_empty() && rep.blocking().is_empty(), "{}", rep.text());
+        assert!(rep.text().contains("info   /usr/bin/steamos-polkit-helpers/steamos-set-timezone is missing"));
+        // Anything pocket-ui would break on is still refused there.
+        std::fs::remove_file(r.0.join("usr/bin/sway")).unwrap();
+        assert!(check(&sd, &needs("GLIBC_2.38", &[])).blocking().iter().any(|t| t.contains("/usr/bin/sway is missing")));
     }
 
     #[test]

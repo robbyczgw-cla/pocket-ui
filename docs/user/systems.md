@@ -255,16 +255,20 @@ pocket-ui plays them with **hakuX** in RetroArch; the core is part of the pocket
   (no Save, Load or "continue where I left off"); the rows appear when the core can do it.
 - Not every game runs, and the speed varies; sound effects of some games may be missing. This is a young port. Please report
   what you find.
-- Credits: hakuX by rfandango (GPL-3.0), Linux/libretro port by portare-ch (PortareOS), PR #9 commit 531ce8d + audio relaunch fix (ours, submitted upstream). The licence
+- Credits: hakuX by rfandango (GPL-3.0), Linux/libretro port by portare-ch (PortareOS), PR #9 commit 2de4e9c (it includes an audio fix of ours). The licence
   and source link are in `/storage/pocket-ui/licences/NOTICE.md` (Settings → System → About names the folder).
 
 ## On standalone emulators
 
-Other large systems, for example Wii U, PlayStation 3, and WiiWare, use standalone
-emulators without pocket-ui's save support. Wii U (Cemu) and PlayStation 3 (RPCS3) are experimental and exist on
+Other large systems, for example Wii U, PlayStation 3, PlayStation Vita, and WiiWare, use standalone
+emulators without pocket-ui's save support. Wii U (Cemu), PlayStation 3 (RPCS3) and PlayStation Vita (Vita3K) are experimental and exist on
 the SM8550 handhelds only (AYN Odin 2 family, Retroid Pocket 6/Nova): HOME opens pocket-ui's pause menu over the game, and
 Quit closes the emulator cleanly. So do the NAOMI and Atomiswave arcade boards, on ROCKNIX's standalone
 Flycast; they need MAME's BIOS sets in `roms/bios/dc` (`naomi.zip`, `naomi2.zip` for NAOMI 2 games, `awbios.zip`).
+
+PlayStation Vita (Vita3K) needs the console's firmware, which you install yourself: put the `.PUP` files in `roms/bios/vita3k`, run
+the tool **Start Vita3K** once (Settings → Games → [Tools](extras.md#tools)), and then add your games to `roms/psvita` (`.psvita`, or `.pkg` with a `.txt`
+holding its key, or `.zip`). pocket-ui shows the games with their titles, covers and the small blue-topped Vita case.
 
 Pause menu: Continue, Options (Runs on), Quick settings and Quit. These emulators keep their own saves and settings; use their
 in-game save feature before quitting. Continuing where you left off is not available for them.

@@ -68,7 +68,7 @@ impl FormFactor {
             | "colecovision" | "intellivision" | "vectrex" | "odyssey2" | "videopac" | "channelf" | "neogeo" | "msx" | "msx2" => ConsoleCart,
             "ps2" | "gamecube" | "wii" | "wiiware" | "wiiu" | "xbox" | "ps3" => DvdCase,
             "psp" | "pspockets" => UmdCase,
-            "nds" | "3ds" | "n3ds" | "switch" => CardBox,
+            "nds" | "3ds" | "n3ds" | "psvita" | "switch" => CardBox,
             _ => JewelCase,
         }
     }
@@ -322,10 +322,26 @@ pub const SCROLL: Duration = Duration::from_millis(220);
 pub const INSERT: Duration = Duration::from_millis(300);
 /// When the cartridge or disc is in: the click (`ui_sound::Sound::Insert`) and the glow come here.
 pub const IN_AT: Duration = Duration::from_millis(180);
+/// The same in Cozy (Settings > Look & feel > Animations): long enough to read, the same shape (IN_AT at 0.6).
+pub const INSERT_COZY: Duration = Duration::from_millis(1330);
+pub const IN_AT_COZY: Duration = Duration::from_millis(800);
+
+/// The launch animation's length in this mode.
+pub fn insert_len(cozy: bool) -> Duration {
+    if cozy {
+        INSERT_COZY
+    } else {
+        INSERT
+    }
+}
 
 /// How long the launch fade waits after A while the launch animation plays: until the cartridge or disc is in.
-pub fn fade_delay() -> Duration {
-    IN_AT
+pub fn fade_delay(cozy: bool) -> Duration {
+    if cozy {
+        IN_AT_COZY
+    } else {
+        IN_AT
+    }
 }
 
 pub fn ease_out(t: f32) -> f32 {
@@ -459,8 +475,8 @@ pub struct Insert {
     pub dim: f32,
 }
 
-pub fn insert_at(elapsed: Duration) -> Insert {
-    let t = (elapsed.as_secs_f32() / INSERT.as_secs_f32()).min(1.0);
+pub fn insert_at(elapsed: Duration, cozy: bool) -> Insert {
+    let t = (elapsed.as_secs_f32() / insert_len(cozy).as_secs_f32()).min(1.0);
     let phase = |a: f32, b: f32| ((t - a) / (b - a)).clamp(0.0, 1.0);
     let rise = ease_out(phase(0.0, 0.3));
     // In at IN_AT (0.6 of the way): the glow comes up fast and fades slower.
@@ -571,6 +587,7 @@ mod tests {
             ("psp", UmdCase),
             ("nds", CardBox),
             ("3ds", CardBox),
+            ("psvita", CardBox),
             ("something-new", JewelCase),
         ] {
             assert_eq!(FormFactor::of(system), want, "{system}");
@@ -887,23 +904,23 @@ mod tests {
 
     #[test]
     fn a_game_start_brings_the_console_carries_the_case_then_puts_it_in() {
-        let start = insert_at(Duration::ZERO);
+        let start = insert_at(Duration::ZERO, false);
         assert_eq!((start.rise, start.carry, start.sink, start.glow), (0.0, 0.0, 0.0, 0.0));
-        let end = insert_at(INSERT);
+        let end = insert_at(INSERT, false);
         assert_eq!((end.rise, end.carry, end.sink, end.glow), (1.0, 1.0, 1.0, 0.0));
-        assert_eq!(insert_at(INSERT * 3), end, "stays put after");
+        assert_eq!(insert_at(INSERT * 3, false), end, "stays put after");
         let mut last = start;
         for k in 1..=52 {
-            let s = insert_at(INSERT * k / 52);
+            let s = insert_at(INSERT * k / 52, false);
             assert!(
                 s.rise >= last.rise && s.carry >= last.carry && s.sink >= last.sink && s.dim >= last.dim,
                 "never goes back at step {k}"
             );
             last = s;
         }
-        let early = insert_at(INSERT / 5);
+        let early = insert_at(INSERT / 5, false);
         assert!(early.rise > 0.0 && early.sink == 0.0 && early.glow == 0.0, "the console comes first");
-        let late = insert_at(INSERT / 2);
+        let late = insert_at(INSERT / 2, false);
         assert!(late.carry == 1.0 && late.sink > 0.0, "it goes in once it is there");
         assert!(end.dim > 0.3 && end.dim < 0.9, "the cabinet stays faintly there under the fade");
     }
@@ -912,13 +929,28 @@ mod tests {
     fn the_cartridge_is_in_and_glows_while_a_game_still_loads_and_the_fade_waits_for_it() {
         // The game starts at A; the animation has to say its part within a typical start (150-300 ms on a Mini V2).
         assert!(INSERT <= Duration::from_millis(300), "{INSERT:?}");
-        let at = insert_at(IN_AT);
+        let at = insert_at(IN_AT, false);
         assert!(at.carry == 1.0 && at.sink > 0.98, "in at IN_AT: {at:?}");
         assert!(at.glow > 0.8, "and the slot lights up: {at:?}");
-        let before = insert_at(IN_AT - Duration::from_millis(40));
+        let before = insert_at(IN_AT - Duration::from_millis(40), false);
         assert!(before.glow == 0.0, "no glow before it is in: {before:?}");
-        assert!(insert_at(INSERT - Duration::from_millis(30)).glow < at.glow, "the glow fades");
-        assert_eq!(fade_delay(), IN_AT, "the fade starts once it is in");
+        assert!(insert_at(INSERT - Duration::from_millis(30), false).glow < at.glow, "the glow fades");
+        assert_eq!(fade_delay(false), IN_AT, "the fade starts once it is in");
+    }
+
+    #[test]
+    fn cozy_is_the_same_animation_over_about_a_second_with_the_fade_waiting_for_the_cartridge() {
+        assert!(INSERT_COZY >= Duration::from_millis(1000) && INSERT_COZY <= Duration::from_millis(1500), "{INSERT_COZY:?}");
+        // The game's window is held until the fade has run (`launch_hold`): that is what a cozy start costs at most.
+        assert!(fade_delay(true) + Duration::from_millis(250) <= Duration::from_millis(1100));
+        assert!((IN_AT_COZY.as_secs_f32() / INSERT_COZY.as_secs_f32() - 0.6).abs() < 0.01, "the cartridge is in at 0.6 of the way, as in Quick");
+        let at = insert_at(IN_AT_COZY, true);
+        assert!(at.carry == 1.0 && at.sink > 0.98 && at.glow > 0.8, "in at IN_AT_COZY: {at:?}");
+        assert!(insert_at(IN_AT_COZY - Duration::from_millis(150), true).glow == 0.0, "no glow before it is in");
+        let mid = insert_at(INSERT_COZY / 4, true);
+        assert!(mid.rise > 0.9 && mid.carry < 1.0, "slow enough to see the case travel: {mid:?}");
+        let end = insert_at(INSERT_COZY, true);
+        assert_eq!((end.rise, end.carry, end.sink, end.glow), (1.0, 1.0, 1.0, 0.0));
     }
 
     fn picture(parts: &[(u32, usize)]) -> Vec<u32> {

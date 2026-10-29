@@ -58,6 +58,17 @@ pub fn never_started(exit_ok: bool, secs: u64, quit_requested: bool) -> bool {
     !exit_ok && secs < NEVER_STARTED_SECS && !quit_requested
 }
 
+/// Whether a PortMaster port run that just ended never started: its launch script usually exits 0 even when the game
+/// died at once (a library missing), so the exit code says nothing; a port gone within `NEVER_STARTED_SECS` without Quit is no session.
+pub fn port_never_started(secs: u64, quit_requested: bool) -> bool {
+    secs < NEVER_STARTED_SECS && !quit_requested
+}
+
+/// What pocket-ui says when a port ended at once: files or libraries missing is the usual reason, not a damaged file or a BIOS.
+pub fn port_not_started_notice(name: &str) -> String {
+    format!("{name} didn't start. It may need files or libraries that aren't installed: reinstall it in Ports, or check log.txt in its folder.")
+}
+
 /// What pocket-ui says when a game that pocket-core doesn't host (RetroArch, a standalone emulator, the next choice
 /// after pocket-core failed) never started: no one else tells the player, the screen just goes back to the shelf.
 /// `missing_bios`: what `hostsys::HostSystem::missing_bios` says for the game's system. Then the files are known and
@@ -127,6 +138,17 @@ mod tests {
         assert_eq!(
             not_started_notice("Final Quest", None),
             "Final Quest didn't start. The file may be damaged, or the system needs a BIOS file (Settings › Games › Add games)."
+        );
+    }
+
+    #[test]
+    fn a_port_that_ends_at_once_never_started_whatever_its_exit_code() {
+        assert!(port_never_started(1, false), "SDL Bomber without libmodplug: the script exits 0 after a second");
+        assert!(!port_never_started(NEVER_STARTED_SECS, false), "played a while");
+        assert!(!port_never_started(1, true), "Quit is not a failed start");
+        assert_eq!(
+            port_not_started_notice("SDL Bomber"),
+            "SDL Bomber didn't start. It may need files or libraries that aren't installed: reinstall it in Ports, or check log.txt in its folder."
         );
     }
 

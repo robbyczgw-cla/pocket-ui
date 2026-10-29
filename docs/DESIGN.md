@@ -410,6 +410,18 @@ a dash (Dropped), a thin ring for Not started in the picker only; on the shelf t
 right end in Dust. The one colour outside the stripes is the amber of Favourites, for the "Playing? Press Y"
 suggestion. Credits are Dust 21 under what they credit ("Text: Wikipedia, …", "Facts: Wikidata, CC0").
 
+### Info page (`src/game_info.rs`)
+X on a game in the Minimal, Cards and Split looks (Shelf and Cabinet keep the box: the collector's looks). One
+screen, Chalk and Dust on the page: the cover at the left in the room `game_info::cover_room` gives it (a printed
+title card with the console when there is none, the label's lift shadow in Light), the player's lines under it (the
+status with its mark across the column, then Played, Last, Rating, Unlocked, a port's Speed and notes, a note), the
+text column beside the cover or the player's lines, whichever is wider. In it the title in Title 50 on two lines at
+most, system · year in Dust (and "Favourite" in amber), the facts one line each with their keys in Dust, and the
+description in the room left above the hints: it scrolls there (up/down, L1/R1) with the card's 36 px fade and 4 px
+bar. The data is the box back's (`CardData`, `game_box::about` for the description and its credit). Narrower than
+900 px the cover goes on top and the player's lines under the facts. Hints: A Play, B Back, Y Status, START This game,
+SELECT Details (the full page; SELECT there comes back). Snapshots: `info:<look>:<system>:<name>`.
+
 ## Console page (`src/console_page.rs`)
 X on a system with a fact sheet (`assets/data/consoles.json`). Built like the game card, without the paper label:
 the system's stripe runs down the whole left edge, the console's name is Title 67 with the fact sheet's headline
@@ -567,7 +579,10 @@ than the shelf's room. Never over a game. The Shelf look uses the same props at 
   board, above its own slot as far as the screen lets it: nothing of the shelves is under it. It is never taller
   than the showcase (`show_scale`). Simple perspective: each face is a run of columns whose height
   follows its distance; at rest the front is copied as it is, sharp.
-- **Starting** a game (Settings → Look & feel → Launch animation, Cabinet and Shelf looks; `app_cabinet::launch_animation`):
+- **Starting** a game (Settings → Look & feel → Animations, Cabinet and Shelf looks; `app_cabinet::launch_animation`). The
+  numbers below are Quick; Cozy plays the same shape over `cabinet::INSERT_COZY` (1330 ms, in at `IN_AT_COZY` 800 ms, click
+  `Sound::InsertCozy`), slows every timed animation by `motion::COZY_SLOWER` (1.4) and holds a pocket-core game's window
+  until the fade has run (`startup::HOLD_UNTIL`; pocket-core draws nothing and is silent meanwhile, a button ends it):
   the game is started at A, and while it loads the console's pixel-art picture comes up, the cartridge goes into
   its slot, a disc slides out of its case first; in at 180 ms (`cabinet::IN_AT`) with a click (`Sound::Insert`, the
   shutter's second click, queued at A with 170 ms of silence before it) and a glow in the label's colour, done at

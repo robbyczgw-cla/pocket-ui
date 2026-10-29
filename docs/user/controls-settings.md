@@ -12,8 +12,8 @@ Settings opens on five categories (Look & feel, Playing, Games, Connections, Sys
 | Button | What it does |
 |---|---|
 | D-pad Up / Down | Move. The list wraps around at the ends. |
-| A | On a category: open its list. In the list: open. On Language, Haptics, Sounds, Launch animation, On start, Remember where I quit, Button layout and Screen frames: switch. |
-| D-pad Left / Right | On Sounds: how loud. On Language, On start, Button layout and Screen frames: switch. |
+| A | On a category: open its list. In the list: open. On Language, Haptics, Sounds, Animations, On start, Remember where I quit, Button layout and Screen frames: switch. |
+| D-pad Left / Right | On Sounds: how loud. On Language, Animations, On start, Button layout and Screen frames: switch. |
 | B | In a category's list: back to the categories, the one you came from selected. On the categories: back to where you came from (the shelf, or a system's game list). |
 
 A page of Settings (Wi-Fi, Tools, Battery and the others below) goes back with B to its category's list, even when

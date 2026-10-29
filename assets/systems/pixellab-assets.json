@@ -871,6 +871,23 @@
    ],
    "source": "Wikimedia Commons File:Xbox-Console-FL.jpg (https://commons.wikimedia.org/wiki/File:Xbox-Console-FL.jpg), 1280 px thumbnail",
    "result": "assets/systems/xbox.png"
+  },
+  "pd_psvita": {
+   "system": "psvita",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-10-29",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    773
+   ],
+   "output_size": [
+    256,
+    154
+   ],
+   "source": "Wikimedia Commons File:PlayStation-Vita-1101-FL.jpg (https://commons.wikimedia.org/wiki/File:PlayStation-Vita-1101-FL.jpg), 1280 px thumbnail",
+   "result": "assets/systems/psvita.png"
   }
  }
 }

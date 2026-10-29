@@ -23,7 +23,7 @@ use crate::pad::Button;
 use crate::palette::*;
 use crate::text::{Face, Text};
 use crate::remote;
-use crate::settings::{Appearance, Art, Motion};
+use crate::settings::{Animations, Appearance, Art, Motion};
 use crate::system_ctl::SharedHw;
 use crate::timezone::{self, Guess};
 use crate::net_state::{NetState, Notice, NoticeKind, Radio, Scan, ScanError, Snapshot};
@@ -63,7 +63,7 @@ pub enum SetupEvent {
     Covers { done: usize, total: usize, found: usize },
     Catalog(Result<Vec<Port>, String>),
     /// `name`: the catalog name of the port, to open its "Copy your game files" page after an install.
-    PortDone { name: String, title: String, result: Result<(), String>, installing: bool },
+    PortDone { name: String, title: String, result: Result<(), String>, installing: bool, updated: bool },
 }
 
 /// The row at the top of the Wi-Fi page, when there is one (`Setup::lead_kind`).
@@ -353,6 +353,10 @@ pub struct Setup {
     language_chosen: Option<crate::i18n::Lang>,
     /// The text size chosen with R1 on the first start's look step, until the app has kept it (`take_text_size`).
     text_size_chosen: Option<crate::type_scale::TextSize>,
+    /// Animations (L1 on the look step): the player's choice, None until then (the look's own shows); and whether the
+    /// app still has to keep a change (`take_animations`).
+    animations: Option<Animations>,
+    animations_changed: bool,
     data_dir: PathBuf,
     /// (system id, ROM path) of every game, for the cover art download.
     games: Vec<(String, PathBuf)>,
@@ -364,6 +368,8 @@ pub struct Setup {
     art: Art,
     art_changed: bool,
     ports: Vec<Port>,
+    /// Snapshots and tests: catalogue names that count as having an update (`with_updates`).
+    fake_updates: Option<Vec<String>>,
     /// Which of the browser's two lists is shown, and the selected row in each.
     port_tab: PortTab,
     port_sel: [usize; 2],
@@ -495,6 +501,23 @@ impl Setup {
         self.text_size_chosen.take()
     }
 
+    /// The animations after L1 on the look step changed them, once; the app keeps them (Settings → Look & feel →
+    /// Animations).
+    pub fn take_animations(&mut self) -> Option<Animations> {
+        std::mem::take(&mut self.animations_changed).then(|| self.animations_shown())
+    }
+
+    /// Cozy or Quick as the look step shows it: the choice, else the look's own for the look being viewed.
+    pub fn animations_shown(&self) -> Animations {
+        self.animations.unwrap_or_else(|| Animations::default_for(crate::settings::Theme::ALL.get(self.theme).copied().unwrap_or_default()))
+    }
+
+    /// The choice made before (Settings > Look); None follows the look.
+    pub fn with_animations(mut self, a: Option<Animations>) -> Self {
+        self.animations = a;
+        self
+    }
+
     /// The hidden systems after a tick changed them, once; the app saves them.
     pub fn take_hidden(&mut self) -> Option<Vec<String>> {
         std::mem::take(&mut self.hidden_changed).then(|| self.hidden.clone())
@@ -587,14 +610,14 @@ impl Setup {
 }
 
 /// Size of a look's preview in the look step: the 1240x1080 shelf at 50 %.
-pub const LOOK_PREVIEW: (i32, i32) = (620, 540);
+pub const LOOK_PREVIEW: (i32, i32) = (620, 470);
 
 /// The preview's size in use on a `screen` (w, h): `LOOK_PREVIEW` on the Mini V2's 1240x1080, or 46 % of the shelf
 /// with larger text (Settings → Text size), which needs the room under it for the look's name and the two rows of
 /// choices. Another screen keeps its own shape: as tall on 1080 lines (1920x1080: 960x540), and on fewer lines that
 /// much shorter, so the rows under it still fit (1280x960: 560x420; docs/DEVICES.md).
 pub fn look_preview(screen: (i32, i32)) -> (i32, i32) {
-    let tall = if crate::type_scale::grow(28) > 0 { 500 } else { LOOK_PREVIEW.1 };
+    let tall = if crate::type_scale::grow(28) > 0 { 420 } else { LOOK_PREVIEW.1 };
     let (w, h) = (screen.0.max(1), screen.1.max(1));
     let ph = (tall - (1080 - h).max(0)).max(200);
     (ph * w / h, ph)
@@ -1022,6 +1045,8 @@ impl Setup {
             motion: crate::motion::level(),
             language_chosen: None,
             text_size_chosen: None,
+            animations: None,
+            animations_changed: false,
             data_dir,
             games,
             covers: None,
@@ -1029,6 +1054,7 @@ impl Setup {
             art: Art::default(),
             art_changed: false,
             ports: Vec::new(),
+            fake_updates: None,
             port_tab: PortTab::Ready,
             port_sel: [0, 0],
             catalog_loading: false,
@@ -1763,21 +1789,26 @@ impl Setup {
             SetupEvent::Catalog(result) => {
                 self.catalog_loading = false;
                 match result {
-                    Ok(ports) => self.ports = ports,
+                    Ok(ports) => {
+                        // The shelf's cards compare their ports with this catalogue (`ports::update_waiting`).
+                        ports::note_versions(&ports);
+                        self.ports = ports;
+                    }
                     Err(e) => self.port_note = Some((e, true)),
                 }
             }
-            SetupEvent::PortDone { name, title, result, installing } => {
+            SetupEvent::PortDone { name, title, result, installing, updated } => {
                 self.port_busy = None;
                 let needs_files = self.ports.iter().find(|p| p.name == name).filter(|p| p.needs_files).cloned();
                 self.port_note = Some(match &result {
+                    Ok(()) if updated => (format!("{title} is up to date."), false),
                     Ok(()) if installing && needs_files.is_some() => (format!("{title} is installed. It needs your game files before it can start."), false),
                     Ok(()) if installing => (format!("{title} is installed. Find it under Ports."), false),
                     Ok(()) => (format!("{title} was removed."), false),
                     Err(e) => (format!("{title}: {e}"), true),
                 });
                 // Straight on to what to copy where, if the player is still in the browser.
-                if let (Ok(()), true, Some(port), Step::Ports) = (&result, installing, needs_files, &self.step) {
+                if let (Ok(()), true, false, Some(port), Step::Ports) = (&result, installing, updated, needs_files, &self.step) {
                     self.open_port_files(&port);
                 }
             }
@@ -1831,12 +1862,15 @@ impl Setup {
         list.get(self.port_sel[self.port_tab.index()]).map(|&i| &self.ports[i])
     }
 
-    fn toggle_port(&mut self) {
+    /// A on the selected port: install it, or update it when the catalogue has a newer version. With `remove`
+    /// (Y on a port that has an update), take it away instead.
+    fn toggle_port(&mut self, remove: bool) {
         let Some(port) = self.selected_port().cloned() else { return };
         if self.port_busy.is_some() {
             return;
         }
-        let installing = !ports::installed(&port);
+        let updating = !remove && self.update_for(&port);
+        let installing = updating || !ports::installed(&port);
         self.port_busy = Some(port.title.clone());
         self.port_note = None;
         let notify = self.notify.clone();
@@ -1846,7 +1880,7 @@ impl Setup {
                 // Its drop folder on the share, if the player never used it.
                 let _ = std::fs::remove_dir(std::path::Path::new(port_files::DROP_DIR).join(&port.dir));
             }
-            notify(SetupEvent::PortDone { name: port.name, title: port.title, result, installing });
+            notify(SetupEvent::PortDone { name: port.name, title: port.title, result, installing, updated: updating });
         });
     }
 
@@ -1935,6 +1969,20 @@ impl Setup {
     }
 
     /// The PortMaster browser with this catalog, without loading it (`--snapshot`).
+    /// For snapshots and tests: these catalogue names have an update, whatever is installed.
+    pub fn with_updates(mut self, names: &[&str]) -> Self {
+        self.fake_updates = Some(names.iter().map(|n| n.to_string()).collect());
+        self
+    }
+
+    /// The catalogue has a newer version of `port` than the one installed.
+    fn update_for(&self, port: &Port) -> bool {
+        match &self.fake_updates {
+            Some(names) => names.contains(&port.name),
+            None => ports::update_available(port),
+        }
+    }
+
     pub fn show_ports(mut self, ports: Vec<Port>) -> Self {
         self.ports = ports;
         self.step = Step::Ports;
@@ -2279,6 +2327,11 @@ impl Setup {
                     let i = Appearance::ALL.iter().position(|a| *a == self.appearance).unwrap_or(0);
                     self.appearance = Appearance::ALL[(i + 1) % Appearance::ALL.len()];
                 }
+                // Cozy or Quick; from the first press the look no longer decides.
+                Button::L1 => {
+                    self.animations = Some(self.animations_shown().next());
+                    self.animations_changed = true;
+                }
                 Button::East | Button::Start => {
                     // The scan starts now, so the networks are there when the Wi-Fi step opens.
                     self.step = if self.only.is_none() { Step::Play { sel: 0 } } else { Step::Wifi };
@@ -2419,7 +2472,9 @@ impl Setup {
                     Button::R1 => *sel = (*sel + 8).min(last),
                     // The two lists side by side, as tabs.
                     Button::Left | Button::Right => self.port_tab = self.port_tab.other(),
-                    Button::East => self.toggle_port(),
+                    Button::East => self.toggle_port(false),
+                    // An update is waiting: A updates, Y still removes.
+                    Button::West if self.selected_port().is_some_and(|p| self.update_for(p)) => self.toggle_port(true),
                     Button::North => {
                         if let Some(port) = self.selected_port().filter(|p| p.needs_files).cloned() {
                             self.open_port_files(&port);
@@ -2504,7 +2559,12 @@ impl Setup {
                 // On one of the Mini V2's siblings nobody on the project has tested: one calm line, once (this step
                 // is only on the first start; docs/DEVICES.md).
                 if let Some(m) = crate::device::current().model.filter(|m| m.experimental()) {
-                    let line = format!("pocket-ui hasn't been tested on a {} yet. Most things should work; if something doesn't, Settings › System › About › Report a problem.", m.name());
+                    let name = m.name();
+                    let line = if name.starts_with(['A', 'E', 'I', 'O', 'U']) {
+                        format!("pocket-ui hasn't been tested on an {} yet. Most things should work; if something doesn't, Settings › System › About › Report a problem.", name)
+                    } else {
+                        format!("pocket-ui hasn't been tested on a {} yet. Most things should work; if something doesn't, Settings › System › About › Report a problem.", name)
+                    };
                     below = paragraphs(c, text, &[line.as_str()], below + 56);
                 }
                 // The languages in their own names; the line after them in the one chosen.
@@ -2728,7 +2788,13 @@ impl Setup {
             let selected = k == sel;
             crate::kit::shelf_row(c, MARGIN, y, list_w, row - 6, selected);
             let fg = if selected { pal().ink } else { pal().chalk };
-            let side = if ports::installed(port) { "Installed".to_string() } else { ports::size_label(port.size) };
+            let side = if self.update_for(port) {
+                "Update available".to_string()
+            } else if ports::installed(port) {
+                "Installed".to_string()
+            } else {
+                ports::size_label(port.size)
+            };
             let side_w = text.width(Face::Body, 21, &side);
             let title = text.fit(Face::Title, 30, &port.title, list_w - side_w - 64);
             text.draw(c, Face::Title, 30, MARGIN + 20, y + 36, fg, &title);
@@ -2779,12 +2845,28 @@ impl Setup {
                 text.draw(c, Face::Body, 24, px, ly + i as i32 * 32, pal().chalk, &l);
             }
         }
-        let action = if ports::installed(&port) { "Remove" } else { "Install" };
-        if port.needs_files {
-            hints(c, text, &[("A", action), ("X", "How to copy"), other, ("L1/R1", "Page"), ("B", "Back")]);
+        let update = self.update_for(&port);
+        let action = if update {
+            "Update"
+        } else if ports::installed(&port) {
+            "Remove"
         } else {
-            hints(c, text, &[("A", action), other, ("L1/R1", "Page"), ("B", "Back")]);
+            "Install"
+        };
+        let mut items = vec![("A", action)];
+        if update {
+            items.push(("Y", "Remove"));
         }
+        if port.needs_files {
+            items.push(("X", "How to copy"));
+        }
+        // With Y beside A the bar is full in large German text: the other list's long name is left out then (the two
+        // tabs above the list show it, and Left/Right still switches).
+        if !update {
+            items.push(other);
+        }
+        items.extend([("L1/R1", "Page"), ("B", "Back")]);
+        hints(c, text, &items);
     }
 
     fn paint_port_files(&mut self, c: &mut Canvas, text: &mut Text, dots: &str) {
@@ -2947,6 +3029,7 @@ impl Setup {
         } else {
             self.paint_text_size(c, text, second);
         }
+        self.paint_animations(c, text, second + pill_h() + 15);
         hints(c, text, &look_hints(self.only == Some(Only::Look), !self.shelf.is_empty()));
     }
 
@@ -2967,6 +3050,15 @@ impl Setup {
         pill_row(c, text, top, "Motion", &names, on, self.motion.blurb(), label_w);
     }
 
+    /// The animations row under them: Cozy / Quick, with the plain line about the one in use.
+    fn paint_animations(&self, c: &mut Canvas, text: &mut Text, top: i32) {
+        let names: Vec<&str> = Animations::ALL.iter().map(|a| a.name()).collect();
+        let shown = self.animations_shown();
+        let on = Animations::ALL.iter().position(|a| *a == shown).unwrap_or(0);
+        let label_w = self.label_w(text);
+        pill_row(c, text, top, "Animations", &names, on, shown.blurb(), label_w);
+    }
+
     /// The text size row under it (the first start): Normal / Medium / Large.
     fn paint_text_size(&self, c: &mut Canvas, text: &mut Text, top: i32) {
         use crate::type_scale::TextSize;
@@ -2985,7 +3077,7 @@ impl Setup {
     /// The labels of the two pill rows line up.
     fn label_w(&self, text: &mut Text) -> i32 {
         let second = if self.only == Some(Only::Look) { "Motion" } else { "Text size" };
-        ["Appearance", second].iter().map(|l| text.width(Face::Body, 24, l)).max().unwrap_or(0)
+        ["Appearance", second, "Animations"].iter().map(|l| text.width(Face::Body, 24, l)).max().unwrap_or(0)
     }
 
     /// The line under the Wi-Fi page's title and its colour. What is true now outranks an old note: a switch under way
@@ -3176,7 +3268,8 @@ fn signal_bars(c: &mut Canvas, x: i32, base: i32, signal: u8, color: u32) {
 /// The look step's hint bar. Settings → Look: Motion on R1, X for the shelf's systems when there are any. The first
 /// start: the text size on R1, and B, which goes back to the welcome (the first-day run, 2026-10-26, found it unnamed).
 fn look_hints(settings: bool, has_systems: bool) -> Vec<(&'static str, &'static str)> {
-    let mut h = vec![("Left/Right", "Change"), ("Y", "Appearance")];
+    // The first start's bar is full with the Animations key: Left/Right says what it does by being there.
+    let mut h = vec![("Left/Right", if settings { "Change" } else { "" }), ("Y", "Appearance")];
     if settings {
         h.extend([("R1", "Motion"), ("A", "Keep this look")]);
         if has_systems {
@@ -3185,6 +3278,8 @@ fn look_hints(settings: bool, has_systems: bool) -> Vec<(&'static str, &'static 
     } else {
         h.extend([("R1", "Text size"), ("A", "Keep this look"), ("B", "Back")]);
     }
+    // Last: on a narrow bar the labels go last first, and the ones that keep the page moving stay.
+    h.push(("L1", "Animations"));
     h
 }
 
@@ -4285,6 +4380,35 @@ mod tests {
     }
 
     #[test]
+    fn the_look_step_asks_cozy_or_quick_and_the_look_decides_until_it_is_answered() {
+        use crate::settings::Theme;
+        let (mut s, _) = setup("look-animations", "UTC", None);
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.at(), "look");
+        // Browsing: Cozy beside Shelf and Cabinet, Quick beside the other looks, nothing chosen yet.
+        for _ in 0..Theme::ALL.len() {
+            let theme = Theme::ALL[s.theme];
+            assert_eq!(s.animations_shown(), Animations::default_for(theme), "{theme:?}");
+            assert_eq!(s.take_animations(), None, "nothing to keep before L1");
+            press(&mut s, &[Button::Right]);
+        }
+        // L1 answers it, once, and from then on the look no longer decides.
+        let first = s.animations_shown();
+        press(&mut s, &[Button::L1]);
+        assert_eq!(s.take_animations(), Some(first.next()));
+        assert_eq!(s.take_animations(), None, "reported once");
+        for _ in 0..Theme::ALL.len() {
+            press(&mut s, &[Button::Right]);
+            assert_eq!(s.animations_shown(), first.next(), "kept while the looks change");
+        }
+        press(&mut s, &[Button::L1]);
+        assert_eq!(s.take_animations(), Some(first));
+        // Settings > Look starts from what was chosen before.
+        let s = setup("look-animations-2", "UTC", None).0.only(Only::Look).with_animations(Some(Animations::Quick));
+        assert_eq!(s.animations_shown(), Animations::Quick);
+    }
+
+    #[test]
     fn the_look_step_switches_the_preview_with_every_direction() {
         let (mut s, _) = setup("look-switch", "UTC", None);
         press(&mut s, &[Button::East]);
@@ -4564,14 +4688,14 @@ mod tests {
     #[test]
     fn installing_a_port_that_needs_files_goes_on_to_where_they_go() {
         let mut s = ports_setup("ports-install");
-        s.on_event(SetupEvent::PortDone { name: "2048.zip".into(), title: "2048".into(), result: Ok(()), installing: true });
+        s.on_event(SetupEvent::PortDone { name: "2048.zip".into(), title: "2048".into(), result: Ok(()), installing: true, updated: false });
         assert_eq!(s.at(), "ports", "a ready port: just the note");
         assert_eq!(s.port_note.as_ref().unwrap().0, "2048 is installed. Find it under Ports.");
 
-        s.on_event(SetupEvent::PortDone { name: "sprout.zip".into(), title: "-SPROUT-".into(), result: Err("No space left".into()), installing: true });
+        s.on_event(SetupEvent::PortDone { name: "sprout.zip".into(), title: "-SPROUT-".into(), result: Err("No space left".into()), installing: true, updated: false });
         assert_eq!(s.at(), "ports", "a failed install stays in the list");
 
-        s.on_event(SetupEvent::PortDone { name: "sprout.zip".into(), title: "-SPROUT-".into(), result: Ok(()), installing: true });
+        s.on_event(SetupEvent::PortDone { name: "sprout.zip".into(), title: "-SPROUT-".into(), result: Ok(()), installing: true, updated: false });
         assert_eq!(s.at(), "port files");
         let Step::PortFiles(page) = &s.step else { unreachable!() };
         assert_eq!(page.place, std::path::PathBuf::from("/storage/roms/ports/sprout/assets"));
@@ -4579,8 +4703,26 @@ mod tests {
         press(&mut s, &[Button::East]);
         assert_eq!(s.port_note.as_ref().unwrap().0, "-SPROUT- is installed. It needs your game files before it can start.");
 
-        s.on_event(SetupEvent::PortDone { name: "sprout.zip".into(), title: "-SPROUT-".into(), result: Ok(()), installing: false });
+        s.on_event(SetupEvent::PortDone { name: "sprout.zip".into(), title: "-SPROUT-".into(), result: Ok(()), installing: false, updated: false });
         assert_eq!(s.at(), "ports", "removing one opens nothing");
+    }
+
+    #[test]
+    fn an_update_is_a_note_in_the_list_and_ends_with_a_word_not_a_page() {
+        let mut s = ports_setup("ports-update").with_updates(&["2048.zip"]);
+        let (first, second) = (s.ports.iter().find(|p| p.name == "2048.zip").unwrap().clone(), s.ports.iter().find(|p| p.name == "cceleste.zip").unwrap().clone());
+        assert!(s.update_for(&first), "the catalogue has a newer 2048");
+        assert!(!s.update_for(&second), "and nothing newer for Celeste");
+        // Y on a port without an update does nothing (it would not be asked what to remove).
+        press(&mut s, &[Button::Down, Button::West]);
+        assert!(s.port_busy.is_none() && s.port_note.is_none());
+        // Done: one word, the list stays; an update of a port that needs files does not open "Copy your game files".
+        s.on_event(SetupEvent::PortDone { name: "2048.zip".into(), title: "2048".into(), result: Ok(()), installing: true, updated: true });
+        assert_eq!(s.port_note.as_ref().unwrap(), &("2048 is up to date.".to_string(), false));
+        s.on_event(SetupEvent::PortDone { name: "sprout.zip".into(), title: "-SPROUT-".into(), result: Ok(()), installing: true, updated: true });
+        assert_eq!(s.at(), "ports", "an update never opens the copy page");
+        s.on_event(SetupEvent::PortDone { name: "2048.zip".into(), title: "2048".into(), result: Err("No space left".into()), installing: true, updated: true });
+        assert_eq!(s.port_note.as_ref().unwrap(), &("2048: No space left".to_string(), true), "a failed update says so");
     }
 }
 
@@ -4601,9 +4743,10 @@ mod hint_bars {
 
     #[test]
     fn the_first_starts_look_step_names_b() {
-        assert_eq!(keys(&look_hints(false, true)), ["Left/Right", "Y", "R1", "A", "B"], "B goes back to the welcome");
-        assert_eq!(keys(&look_hints(true, true)), ["Left/Right", "Y", "R1", "A", "X"]);
-        assert_eq!(keys(&look_hints(true, false)), ["Left/Right", "Y", "R1", "A"], "no systems: no X");
+        assert_eq!(keys(&look_hints(false, true)), ["Left/Right", "Y", "R1", "A", "B", "L1"], "B goes back to the welcome");
+        assert_eq!(keys(&look_hints(true, true)), ["Left/Right", "Y", "R1", "A", "X", "L1"]);
+        assert_eq!(keys(&look_hints(true, false)), ["Left/Right", "Y", "R1", "A", "L1"], "no systems: no X");
+        assert_eq!(look_hints(false, false).last(), Some(&("L1", "Animations")));
         assert_eq!(look_hints(false, false)[2], ("R1", "Text size"));
     }
 

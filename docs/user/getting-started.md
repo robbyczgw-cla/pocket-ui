@@ -15,6 +15,10 @@ This page takes you from an empty microSD card to your first game. You need a co
 > supported as **experimental**: pocket-ui knows them, but hasn't been tested on one yet. The SD card image below is
 > for the Mini V2 only. On the others, see [Other Retroid devices](#other-retroid-devices).
 
+> **Anbernic handhelds (H700).** The **RG28XX**, **RG35XX** (2024, Plus, H, Pro, SP), **RG40XX** (H, V), **RG34XX**,
+> **RG34XX-SP** and **RG-SP** run ROCKNIX's H700 image and are supported as **experimental**. The SD card image below is
+> for the Mini V2 only. See [Anbernic H700 handhelds](#anbernic-h700-handhelds-experimental).
+
 ## 1. Write the SD card
 
 1. Get the SD card image, `pocket-ui-<version>-rp-mini-v2.img.xz`.
@@ -93,8 +97,9 @@ open every step again later from **Settings** (press START on the Home screen).
    with its box art (a plain drawn box with the console where it has none yet), shown as the game to continue
    if you played it, else as "Not played yet". On an empty card it shows three systems and games called
    "Sample game". Left/Right (or Up/Down) switch looks, Y switches between Dark, Light and Automatic
-   ([Appearance](settings.md#appearance)), R1 between Normal, Medium and Large text ([Text size](settings.md#text-size)),
-   then A ("Keep this look"). See [Playing](playing.md#looks) for the five looks.
+   ([Appearance](settings.md#appearance)), L1 between Cozy and Quick animations ("Cozy: watch your game slide into the
+   console. Quick: straight into the game.", [Animations](settings.md#animations)), R1 between Normal, Medium and Large
+   text ([Text size](settings.md#text-size)), then A ("Keep this look"). See [Playing](playing.md#looks) for the five looks.
 3. **How do you like to play?** Three ways to start the extras: **Simple**, **Enthusiast** or **Choose for yourself**.
    See below.
 4. **Wi-Fi.** See below.
@@ -370,3 +375,89 @@ off after a longer dark spell on battery. Screen off still uses battery. ROCKNIX
 pocket-ui's fan choices have no effect here. Touch, LEDs, vibration, battery drain, 120 Hz pacing
 and Zink on the real GPU still need a tester. Mini and Portal menus start with Xbox buttons
 (A bottom); the original Odin 2 uses Nintendo buttons (A right). Saved layout choices win. See [device notes](../DEVICES.md).
+
+## Anbernic H700 handhelds (experimental)
+
+pocket-ui runs on the Anbernic handhelds that ROCKNIX's **H700 image** supports. All of them are **experimental**:
+pocket-ui knows each model (screen, buttons, what it has), but it has only been tested on a computer, not on a real
+handheld yet. If something doesn't work, Settings → System → About → Report a problem saves a file to attach to a
+report. The **RG CubeXX** (square 720×720 screen) is **not supported yet**: pocket-ui draws that screen too slowly on
+this processor for now, and the installers say so and change nothing.
+
+| Model | Screen | Wi-Fi | Sticks | Lid | Lights |
+|---|---|---|---|---|---|
+| RG28XX | 640×480 | none | no | no | |
+| RG35XX 2024 | 640×480 | none | no | no | |
+| RG35XX Plus | 640×480 | yes | no | no | |
+| RG35XX H | 640×480 | yes | yes | no | |
+| RG35XX Pro | 640×480 | yes | yes | no | |
+| RG35XX SP | 640×480 | yes | no | yes | |
+| RG40XX H | 640×480 | yes | yes | no | RGB |
+| RG40XX V | 640×480 | yes | yes | no | RGB |
+| RG34XX | 720×480 | yes | no (ROCKNIX lists none) | no | |
+| RG34XX-SP | 720×480 | yes | yes | yes | |
+| RG-SP | 720×480 | yes | no | yes | |
+| RG CubeXX | 720×720 | yes | yes | no | RGB (**not yet**) |
+
+All of them have 1 GB of memory, no touch screen and no fan. The RGB lights of the RG40XX are ROCKNIX's; pocket-ui
+doesn't change them.
+
+### Install
+
+1. **Use a spare microSD card for ROCKNIX and keep your stock card as it is.** The H700 handhelds have no internal
+   storage: the stock system lives on the card in slot 1, so ROCKNIX goes on a different card and you can switch back
+   by swapping cards. Back up the card with your games before you put it in a ROCKNIX boot.
+2. Download ROCKNIX's **H700 image** from the [official ROCKNIX H700 install page](https://rocknix.org/configure/h700-installation/)
+   (version 20261001 or newer) and flash it with balenaEtcher or Raspberry Pi Imager. There is one image per memory
+   type: **try the DDR4 image first. If the handheld doesn't start from it** (the screen stays black), flash the **DDR3**
+   image onto the same card instead; only the card is at risk.
+3. Take the card out and in again so your computer shows the **ROCKNIX** drive. Copy your model's device tree file
+   from its `device_trees` folder to the top folder of that drive and name the copy **`dtb.img`** (all lower case).
+   Eject the card properly: skipping this step can leave the card unable to start.
+
+   | Model | Device tree file (in `device_trees`) |
+   |---|---|
+   | RG28XX | `sun50i-h700-anbernic-rg28xx.dtb` |
+   | RG35XX 2024 | `sun50i-h700-anbernic-rg35xx-2024.dtb` (`...-2024-rev6-panel.dtb` if the picture is garbled) |
+   | RG35XX Plus | `sun50i-h700-anbernic-rg35xx-plus.dtb` (`...-plus-rev6-panel.dtb`) |
+   | RG35XX H | `sun50i-h700-anbernic-rg35xx-h.dtb` (`...-h-rev6-panel.dtb`) |
+   | RG35XX Pro | `sun50i-h700-anbernic-rg35xx-pro.dtb` |
+   | RG35XX SP | `sun50i-h700-anbernic-rg35xx-sp.dtb` (`...-sp-v2-panel.dtb`) |
+   | RG40XX H | `sun50i-h700-anbernic-rg40xx-h.dtb` (`...-h-v2-panel.dtb`) |
+   | RG40XX V | `sun50i-h700-anbernic-rg40xx-v.dtb` (`...-v-v2-panel.dtb`) |
+   | RG34XX | `sun50i-h700-anbernic-rg34xx.dtb` |
+   | RG34XX-SP | `sun50i-h700-anbernic-rg34xx-sp.dtb` (`...-sp-v2-panel.dtb`) |
+   | RG-SP | `sun50i-h700-anbernic-rg-sp.dtb` |
+
+   The name in brackets is for a newer panel revision: if the first file shows a garbled or striped picture, hold
+   the power button for 10 seconds, flash again and try that one.
+4. Start ROCKNIX from the card. The first start grows its storage and restarts by itself; then ROCKNIX asks its own
+   first questions. Let it come up to EmulationStation once.
+5. Add pocket-ui. Without a network (the RG28XX and RG35XX 2024 have no Wi-Fi), use one of these:
+   - **The Ports installer:** copy the single file *Install pocket-ui.sh* into the `roms/ports` folder of the card
+     (the card in your computer, or ROCKNIX's file sharing), start EmulationStation again, open **Ports** and start
+     **Install pocket-ui**. The screen shows the checks and the install, then pocket-ui starts.
+   - **Two files on the card:** copy `mount-storage.sh` and `pocket-ui-seed.tar.gz` to the top folder of the
+     **ROCKNIX** drive, put the card in and start the handheld. It installs during that start and opens pocket-ui.
+   With Wi-Fi and SSH, the install package for an existing ROCKNIX card works too (see the
+   [install guide](../INSTALL-DUAL-BOOT.md#install-on-a-rocknix-card-you-already-use)).
+
+   All three check the device first: only the models in the table are accepted, and an H700 handheld that isn't in
+   it is refused with a sentence and nothing is changed. ROCKNIX keeps starting as before.
+
+### What works, what is hidden
+
+- **Games.** The consoles ROCKNIX's H700 image ships cores for play in pocket-ui's own player, with its pause menu,
+  states and shortcuts. **N64, PSP, Dreamcast and Nintendo DS stay on ROCKNIX's own emulators** (they ask more than
+  these processors give). PS2, GameCube, Wii and 3DS are not in ROCKNIX's H700 image, so those systems don't appear.
+- **Screen.** pocket-ui draws its normal layout and reduces it to the small screen, so it looks like on the Mini V2,
+  only smaller. Small hint text can be hard to read on the 640×480 handhelds; Settings → Look & feel → Text size
+  makes it larger.
+- **Hidden or reduced.** Fan settings say "No fan"; there is no touch setup. The RG28XX and RG35XX 2024 say
+  "This device has no Wi-Fi" on the Wi-Fi page and offer nothing to switch on there: everything else works offline,
+  while online features (Store, covers, updates, RetroAchievements, file sharing) wait for a network. On the
+  handhelds without sticks, no stick lights are offered.
+- **Time zone** is set the H700 way (ROCKNIX's system setting); the first-start step is there as on the other devices.
+- **To go back:** take the card out and put your stock card in, or run `sh /storage/pocket-ui/uninstall.sh`, or
+  start *Uninstall pocket-ui* in Ports: EmulationStation is back at the next start. Don't run ROCKNIX's online
+  update on a card with pocket-ui until a pocket-ui release says that version was checked.

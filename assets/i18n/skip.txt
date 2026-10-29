@@ -231,7 +231,9 @@ key.function.b is {s}: left alone
 makoctl {s} failed ({s})
 makoctl {s}: {s}
 wrote the config, but {s}
-no {s} yet ({s}): tried again at the next start
+couldn't make {s}: {s}
+couldn't read {s}: {s}
+max-visible=1\nlayer=overlay\nfont=monospace 30\ntext-color=#ffffff\ntext-alignment=center\nbackground-color=#000000\nborder-size=0\nborder-radius=10\ndefault-timeout=1500\nanchor=top-center\nwidth=500
 couldn't write {s}: {s}
 
 # src/frame.rs
@@ -967,3 +969,5 @@ hakux_render_scale = "{s}"\nhakux_crop_overscan = "enabled"\nhakux_screen_format
 SAVE_STATE_SLOT {s}
 LOAD_STATE_SLOT {s}
 hakuX has no settings pocket-ui reads (Pixel Path)
+[pid={s}] kill
+Sony - PlayStation Vita

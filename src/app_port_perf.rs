@@ -106,19 +106,56 @@ impl App {
         self.port_perf.page.is_some() && self.running.is_none()
     }
 
+    /// Options in the pause menu of a running port: its Performance & fan, over the paused game. What it sets applies from
+    /// the port's next start; a port that is running keeps what it started with.
+    pub(crate) fn port_perf_in_menu(&mut self) {
+        let Some(run) = self.running.as_ref() else { return };
+        let (name, path) = (run.name.clone(), run.path.clone());
+        let Some((choice, note)) = self.port_state(&path) else {
+            pocket_ui::ui_sound::refuse();
+            self.toast = Some(("Still reading the ports' settings…".into(), std::time::Instant::now()));
+            return;
+        };
+        let prefs = self.perf_prefs();
+        self.port_perf.page = Some(PortPerfPage::new(&name, path, choice, self.port_defaults(), prefs.smooth_fan, note));
+        if let Some(m) = self.menu.as_mut() {
+            m.page = super::Page::PortPerf;
+        }
+    }
+
+    /// A press on the page in the pause menu; B goes back to the menu's Options row.
+    pub(crate) fn port_perf_menu_input(&mut self, b: Button) {
+        if self.port_perf_press(b) {
+            self.port_perf_back_to_menu();
+        }
+    }
+
+    fn port_perf_back_to_menu(&mut self) {
+        if let Some(m) = self.menu.as_mut() {
+            m.sel = m.items().iter().position(|i| *i == super::MainItem::Options).unwrap_or(0);
+            m.page = super::Page::Main;
+        }
+    }
+
     pub(crate) fn port_perf_mark(&self) -> Option<(usize, Choice)> {
         self.port_perf.page.as_ref().map(|p| p.mark())
     }
 
     pub(crate) fn port_perf_input(&mut self, b: Button) {
-        let Some(page) = self.port_perf.page.as_mut() else { return };
-        // Saved in memory at once, on the card by the card writer (`port_perf::Store::set`).
+        if self.port_perf_press(b) {
+            self.port_perf_card_refresh();
+        }
+    }
+
+    /// One press on the page; true when it closed (the page is gone). A choice is saved in memory at once, on the
+    /// card by the card writer (`port_perf::Store::set`).
+    fn port_perf_press(&mut self, b: Button) -> bool {
+        let Some(page) = self.port_perf.page.as_mut() else { return true };
         let change = match page.press(b, CONFIRM, CANCEL) {
-            Action::Nothing => return,
+            Action::Nothing => return false,
             Action::Close => {
                 self.port_perf.page = None;
-                self.port_perf_card_refresh();
-                return;
+                return true;
             }
             Action::Set { key, value } => Some((key, value)),
             Action::Defaults => None,
@@ -126,6 +163,7 @@ impl App {
         let rom = page.rom.clone();
         // The page only opens once the store is there.
         port_perf::with(&self.port_perf.store, |s| s.set(&rom, change));
+        false
     }
 
     /// Back on the card: its Speed line and hint as they are now.
@@ -240,7 +278,7 @@ impl App {
             y += 6;
         }
         y += 14;
-        let note = "Ports have no pause menu: these apply to this port from its next start. What every port starts with is \
+        let note = "These apply to this port from its next start. What every port starts with is \
 in Settings › Playing › Performance & fan.";
         for line in self.text.wrap(Face::Body, 24, note, width) {
             self.text.draw(c, Face::Body, 24, left, y, pal().quiet, &line);

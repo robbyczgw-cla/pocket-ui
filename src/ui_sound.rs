@@ -52,6 +52,8 @@ pub enum Sound {
     /// A game's cartridge or disc goes into its console (the launch animation, `app_cabinet`): the shutter's second
     /// click, played `INSERT_DELAY` after it is asked for, as it goes in.
     Insert,
+    /// The same click in Cozy: played `INSERT_DELAY_COZY` after it is asked for, when the slower cartridge is in.
+    InsertCozy,
 }
 
 /// What covers the shelf or the game, as far as the sounds care.
@@ -230,7 +232,7 @@ fn wav(sound: Sound) -> &'static [u8] {
         Sound::Error => include_bytes!("../assets/ui-sounds/error.wav"),
         Sound::Volume => include_bytes!("../assets/ui-sounds/volume.wav"),
         Sound::Shutter => include_bytes!("../assets/ui-sounds/shutter.wav"),
-        Sound::Insert => include_bytes!("../assets/ui-sounds/insert.wav"),
+        Sound::Insert | Sound::InsertCozy => include_bytes!("../assets/ui-sounds/insert.wav"),
     }
 }
 
@@ -266,10 +268,12 @@ pub fn synth_at(sound: Sound, rate: u32) -> Vec<i16> {
 
 // ---- playing ----------------------------------------------------------------------------------------------
 
-const ALL: [Sound; 9] = [Sound::Nav, Sound::Confirm, Sound::Back, Sound::Menu, Sound::Switcher, Sound::Error, Sound::Volume, Sound::Shutter, Sound::Insert];
+const ALL: [Sound; 10] = [Sound::Nav, Sound::Confirm, Sound::Back, Sound::Menu, Sound::Switcher, Sound::Error, Sound::Volume, Sound::Shutter, Sound::Insert, Sound::InsertCozy];
 /// How long after it is asked for the insert click sounds: when the cartridge or disc is in (`cabinet::IN_AT`), less
 /// the few milliseconds the output holds ahead.
 const INSERT_DELAY: Duration = Duration::from_millis(170);
+/// The same in Cozy: `cabinet::IN_AT_COZY` less the 10 ms the click's own attack takes.
+const INSERT_DELAY_COZY: Duration = Duration::from_millis(790);
 /// How long the output stays open after the last sound, writing silence: moving through a list then
 /// costs no reopening, and an idle shelf keeps no stream (and no PipeWire graph) running.
 const KEEP_OPEN: Duration = Duration::from_secs(2);
@@ -648,11 +652,13 @@ fn mixer(rx: Receiver<Msg>) {
         .iter()
         .map(|s| {
             let pcm = synth(*s);
-            if *s != Sound::Insert {
-                return pcm;
-            }
+            let delay = match s {
+                Sound::Insert => INSERT_DELAY,
+                Sound::InsertCozy => INSERT_DELAY_COZY,
+                _ => return pcm,
+            };
             // Silence first: the click comes as the cartridge goes in.
-            let mut delayed = vec![0; (RATE as u128 * INSERT_DELAY.as_millis() / 1000) as usize];
+            let mut delayed = vec![0; (RATE as u128 * delay.as_millis() / 1000) as usize];
             delayed.extend(pcm);
             delayed
         })
@@ -1145,6 +1151,10 @@ mod tests {
     fn the_sounds_differ_from_each_other() {
         for (i, a) in ALL.iter().enumerate() {
             for b in &ALL[i + 1..] {
+                // The insert click in Cozy is the same click, delayed longer (`INSERT_DELAY_COZY`).
+                if (*a, *b) == (Sound::Insert, Sound::InsertCozy) {
+                    continue;
+                }
                 assert_ne!(synth(*a), synth(*b), "{a:?} = {b:?}");
             }
         }

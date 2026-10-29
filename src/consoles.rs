@@ -401,6 +401,9 @@ pub fn emulator_name(emulator: &str) -> String {
         "pcsx2" => "PCSX2".to_string(),
         "dolphin" => "Dolphin".to_string(),
         "azahar" => "Azahar".to_string(),
+        "vita3k" => "Vita3K".to_string(),
+        "cemu" => "Cemu".to_string(),
+        "rpcs3" => "RPCS3".to_string(),
         "lime3ds" => "Lime3DS".to_string(),
         "citra" => "Citra".to_string(),
         "flycast" => "Flycast".to_string(),
@@ -772,6 +775,7 @@ mod tests {
         assert_eq!(runner_text("retroarch", "gearsystem").as_deref(), Some("Gearsystem in RetroArch"));
         assert_eq!(runner_text("armsx2", "armsx2").as_deref(), Some("ARMSX2 (standalone)"));
         assert_eq!(runner_text("flycast-sa", "flycast-sa").as_deref(), Some("Flycast (standalone)"));
+        assert_eq!(runner_text("vita3k", "vita3k-sa").as_deref(), Some("Vita3K (standalone)"));
         assert_eq!(runner_text("", ""), None);
     }
 

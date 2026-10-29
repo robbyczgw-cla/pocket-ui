@@ -626,6 +626,32 @@ true
         assert!(!rom.exists());
     }
 
+    /// The Minimal look: X on a game opens its info page (everything on one screen, `game_info`), B goes back to the
+    /// shelf; SELECT shows the card's full page and back.
+    #[test]
+    fn x_in_minimal_opens_the_info_page_and_b_returns() {
+        let mut ui = Driver::start("info-page", true, |tmp, _| {
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"motion":"off","art":"off","theme":"minimal"}"#).unwrap();
+        });
+        ui.sees("Game Boy");
+        ui.send("a");
+        ui.sees("Tobu Tobu Girl");
+        ui.send("x");
+        let page = ui.sees("None. Press Y");
+        assert!(page.contains("Tobu Tobu Girl") && page.contains("Details") && page.contains("No description yet."), "{page}");
+        assert!(!page.contains("Turn over"), "the info page, not the box: {page}");
+        ui.send("select");
+        ui.sees("Hide or delete");
+        ui.send("select");
+        ui.sees("None. Press Y");
+        ui.send("b");
+        let mut shelf = String::new();
+        ui.wait(|d| {
+            shelf = d.frame();
+            shelf.contains("Tobu Tobu Girl") && !shelf.contains("None. Press Y")
+        });
+    }
+
     /// Bluetooth page with a speaker/headphone-class device (the mock's JBL Flip 5): search, pair, trust, connect,
     /// and the page says it is connected.
     #[test]

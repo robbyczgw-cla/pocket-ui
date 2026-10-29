@@ -26,6 +26,10 @@ pu_tar=$pu_flash/pocket-ui-seed.tar.gz
 pu_ver=@VERSION@
 pu_md5=@SEED_MD5@
 pu_need_kb=@NEED_KB@
+pu_dt=${PU_DT:-/sys/firmware/devicetree/base}
+# The Anbernic models of ROCKNIX's H700 image pocket-ui has a profile for (as deploy/package/install.sh MODELS_H700; a test
+# keeps them in step). Any other H700 handheld is refused: without a profile pocket-ui's screen and buttons would be wrong.
+pu_h700_models="|Anbernic RG28XX|Anbernic RG35XX 2024|Anbernic RG35XX Plus|Anbernic RG35XX H|Anbernic RG35XX Pro|Anbernic RG35XX SP|Anbernic RG40XX H|Anbernic RG40XX V|Anbernic RG34XX|Anbernic RG34XX-SP|Anbernic RG-SP|"
 pu_log=
 
 pu_say() { pu_log="$pu_log$*
@@ -63,6 +67,15 @@ pu_install() {
   if [ -e "$pu_storage/pocket-ui/current" ] && [ ! -e "$pu_storage/.pocket-ui-install-running" ]; then
     pu_say "pocket-ui is already installed on this card; left untouched."
     pu_cleanup; pu_flush; return 0
+  fi
+
+  # An H700 handheld (the device tree names the SoC) must be one pocket-ui has a profile for. Unreadable: as before.
+  if tr '\000' '\n' <"$pu_dt/compatible" 2>/dev/null | grep -q 'sun50i-h700'; then
+    model=$(tr -d '\000' <"$pu_dt/model" 2>/dev/null)
+    case "$pu_h700_models" in
+      *"|$model|"*) pu_say "device: $model (Anbernic H700, experimental)." ;;
+      *) pu_fail "this H700 handheld is '${model:-unknown}'; pocket-ui has no profile for it (it knows the Anbernic RG28XX, RG34XX, RG34XX-SP, RG35XX 2024/Plus/H/Pro/SP, RG40XX H/V and RG-SP; the RG CubeXX not yet). Nothing was installed; remove mount-storage.sh and pocket-ui-seed.tar.gz from this partition."; return 1 ;;
+    esac
   fi
 
   free=$(df -k "$pu_storage" 2>/dev/null | tail -n 1 | tr -s ' ' | cut -d' ' -f4)

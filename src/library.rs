@@ -289,6 +289,8 @@ const FOLDER_ALIASES: &[(&str, &str)] = &[
     ("tg16", "pcengine"),
     ("psp", "psp"),
     ("playstationportable", "psp"),
+    ("psvita", "psvita"),
+    ("playstationvita", "psvita"),
     ("arcade", "arcade"),
     ("mame", "mame"),
     ("neogeo", "neogeo"),

@@ -258,44 +258,79 @@ ellipsis, the letter-jump overlay and animation-dependent preview text. The prev
   and the comparison summary in `screenshots/sm8550-validation/` (also gitignored).
 - **Cleanup:** both own virtual containers were removed. No real handheld was contacted, and nothing was merged.
 
-## Anbernic H700 handhelds: RG28XX and RG35XX SP (2026-10-27, experimental)
+## Anbernic H700 handhelds (2026-10-27, installable 2026-10-29, experimental)
 
 ROCKNIX's **H700 image** (Allwinner H700, 4× Cortex-A53, Mali-G31, 1 GB, no swap). Computer tests only; research and
-sources are in `RESEARCH-H700-2026-10-27.md` (outside the repo). Both screens are **640×480** landscape for pocket-ui
-(the RG28XX's panel is 480×640, turned by sway). The UI uses the scaled logical layouts below. These profiles
-remain experimental until checked on the owner's devices.
+sources are in `RESEARCH-H700-2026-10-27.md` (outside the repo). One generic profile (`Model::H700`, no fan, no touch,
+1 GB, Nintendo labels) plus one row per model in `device::H700_BOARDS`; this table is that list. Device tree strings
+are ROCKNIX's (`sun50i-h700-anbernic-*.dts`), sizes are what sway gives pocket-ui (landscape; the RG28XX's panel is
+480×640, turned by sway) from the panel files ROCKNIX loads. Every model stays experimental until checked on a handheld.
 
-| Device / override | DT model / first compatible | What it has | What it lacks |
-|---|---|---|---|
-| `rg28xx` | `Anbernic RG28XX` / `anbernic,rg28xx` | D-pad, A/B/X/Y, L1/R1/L2/R2, Start, Select, Menu | Wi-Fi (rocknix.org lists none; the DTB enables a chip anyway, a chip that answers still wins), fan, touch, sticks, lid, stick lights |
-| `rg35xx-sp` | `Anbernic RG35XX SP` / `anbernic,rg35xx-sp` (the `-v2-panel` DTB names are accepted too) | the same buttons, **a lid** (`gpio-keys-lid`, `SW_LID`: the Flip 2's lid code applies), Wi-Fi | fan, touch, sticks, stick lights |
+| Override / vdev key | DT model / first compatible | Screen (logical canvas) | Sticks | Wi-Fi | Lid | RGB |
+|---|---|---|---|---|---|---|
+| `rg28xx` | `Anbernic RG28XX` / `anbernic,rg28xx` | 640×480 | no | **no** (owner; the DTB enables a chip anyway, a chip that answers still wins) | no | |
+| `rg35xx-2024` | `Anbernic RG35XX 2024` / `anbernic,rg35xx-2024` | 640×480 | no | no (maker's spec) | no | |
+| `rg35xx-plus` | `Anbernic RG35XX Plus` / `anbernic,rg35xx-plus` | 640×480 | no | yes | no | |
+| `rg35xx-h` | `Anbernic RG35XX H` / `anbernic,rg35xx-h` | 640×480 | yes | yes | no | |
+| `rg35xx-pro` | `Anbernic RG35XX Pro` / `anbernic,rg35xx-pro` | 640×480 | yes (`amux-count` 4) | yes | no | |
+| `rg35xx-sp` | `Anbernic RG35XX SP` / `anbernic,rg35xx-sp` (`-v2`, `-v2-panel` names too) | 640×480 | no | yes | **yes** (`gpio-keys-lid`, `SW_LID`: the Flip 2's lid code applies) | |
+| `rg40xx-h` | `Anbernic RG40XX H` / `anbernic,rg40xx-h` | 640×480 | yes | yes | no | `led-rgb` |
+| `rg40xx-v` | `Anbernic RG40XX V` / `anbernic,rg40xx-V` (compared in lower case) | 640×480 | yes | yes | no | `led-rgb` |
+| `rg34xx` | `Anbernic RG34XX` / `anbernic,rg34xx` | 720×480 | no (ROCKNIX's tree has none: it inherits `amux-count` 0 from the Plus tree) | yes | no | |
+| `rg34xx-sp` | `Anbernic RG34XX-SP` / `anbernic,rg34xx-sp` | 720×480 | yes | yes | yes | |
+| `rg-sp` | `Anbernic RG-SP` / `anbernic,rg-sp` | 720×480 | no | yes | yes | |
+| `rgcubexx` | `Anbernic RG CubeXX` / `anbernic,rgcubexx` | 720×720 | yes | yes | no | `led-rgb` |
+
+The panel-revision device trees (`...-rev6-panel`, `...-v2-panel`) keep their model's `model` and `compatible`, so
+they are the same row. **The RG CubeXX has `not_yet`: the profile exists, but both installers refuse it** with
+"the RG CubeXX's square 720×720 screen is not supported yet". Reason: the exact-area 720×720 reduction measured
+8.2–9.3 ms extra per frame on the build host, 44–104 ms estimated on the A53 (H700-SCALED-LAYOUT.md), too slow to
+call experimental-usable; remove `not_yet` (and the installers' `MODELS_H700_NOT_YET`) when that path is cheaper.
+Sticks and Wi-Fi are what ROCKNIX's trees and the makers' specs say, not hardware checks; `has_wifi` only decides
+what is said when no chip shows up.
 
 Menu labels are Nintendo (A right; the pad is ROCKNIX's `H700 Gamepad`, A is `BTN_EAST`). About says
-"Anbernic RG28XX (experimental)" / "Anbernic RG35XX SP (experimental)".
+"Anbernic <model> (experimental)".
 
 What pocket-ui does about what is missing (`Device::has_fan`, `has_touch`, `has_sticks`, `has_wifi`, `ram_mb`):
 
 - **Fan:** Settings › Playing › Performance & fan keeps the processor-speed row; the three fan rows read "No fan" and
   their help line says "This device has no fan." The fan curve thread, the trip profiles and every fan sysfs write are
   not started. Quick settings already hide the Fan row when the probe finds no fan.
-- **Stick lights:** the LEDs row is not in Settings (Look & feel).
-- **Touch:** nothing to hide; no touch device means no touch events. The vdev has no touch panel for these two.
+- **Stick lights:** the LEDs row is not in Settings (Look & feel) on models without sticks.
+- **Touch:** nothing to hide; no touch device means no touch events. The vdev has no touch panel for these.
 - **Tools:** the gamepad-calibration helper's `inputplumber` restart is skipped where the service file is absent (already
   so); the H700 image has no InputPlumber.
-- **Wi-Fi (RG28XX without a chip):** the Wi-Fi page (first start and Settings) says "This device has no Wi-Fi. Everything
-  else works without it." and offers nothing to choose; the Settings row reads "None on this device"; Quick settings
-  show no Wi-Fi row; the radio is "absent" instead of the mock's pretend networks. Pages that need the network (Store,
-  downloads, updates) keep their own offline states.
+- **Wi-Fi (RG28XX, RG35XX 2024 without a chip):** the Wi-Fi page (first start and Settings) says "This device has no
+  Wi-Fi. Everything else works without it." and offers nothing to choose; the Settings row reads "None on this device";
+  Quick settings show no Wi-Fi row; the radio is "absent" instead of the mock's pretend networks. Pages that need the
+  network (Store, downloads, updates) keep their own offline states.
 - **Time zone:** the H700 image has no `steamos-set-timezone`. Without it pocket-ui stores the zone with ROCKNIX's
   `set_setting system.timezone`, restarts `tz-data.service` and calls `timedatectl set-timezone` (the helper's own
   steps). The service restart is unverified on hardware.
-- **`/usr/sbin/quantum`** missing is tolerated already (`audio::restore_quantum` falls back to `pw-metadata`).
-- **Not done here:** a per-device core allowlist (N64/PSP/DC/NDS stay on ROCKNIX's emulators), the
-  install package's H700 acceptance, `unsquashfs` for OS updates.
+- **`/usr/sbin/quantum`** missing is tolerated (`audio::restore_quantum` falls back to `pw-metadata`).
+- **Heavy systems:** `hostsys::H700_STAYS_ON_ROCKNIX` (n64, psp, dreamcast, nds): `hostsys::route` returns None on an
+  H700 handheld, so those games stay on ROCKNIX's emulators (as an unverified system does). The cores they would use
+  (mupen64plus_next, ppsspp, flycast, melondsds) are in ROCKNIX's H700 image, so the contract check still lists them.
+  PS2, GameCube, Wii and 3DS have no emulators in the H700 image: those systems have no entries, nothing to hide.
 
-Hardware plan (needs the owner's devices): flash ROCKNIX's H700 image with the right DDR type, copy the model's DTB to
-`dtb.img`, check the SP's lid and sleep, the RG28XX's Wi-Fi (an `iw dev` and `ls /sys/class/net`), the battery source and
-the sway rotation of the RG28XX.
+**Installing (2026-10-29).** `deploy/package/install.sh` (SSH), the Ports installer and the card hook
+`deploy/fat/mount-storage.sh.in` accept ROCKNIX `HW_DEVICE=H700` and exactly the models of the table above:
+`install.sh` and the hook keep the same name lists (`MODELS_H700`, `pu_h700_models`), and a unit test
+(`the_installers_accept_exactly_the_h700_models_of_the_table`) keeps them equal to `H700_BOARDS`. An H700 handheld
+that is not in the table, the CubeXX, and an empty or Retroid model on the H700 image are refused with a sentence and
+nothing is written, also with `--allow-other-device` (that option is for another SM8250 device). The hook reads the
+device tree's `compatible` (`sun50i-h700`) and `model` in the initramfs; where it can't read them it behaves as before.
+`pocket-ui --check-os-update /` still blocks what pocket-ui would break on; on the H700 image (`HW_DEVICE="H700"` in
+`/etc/os-release`) a missing `steamos-set-timezone` and `quantum` are only logged (`os_compat::H700_WITHOUT`), a missing
+`unsquashfs` still warns (OS updates can't be checked). Tests: `deploy/package/test-package.sh` (H700 fake roots:
+every model accepted, CubeXX / unknown H700 / Retroid on H700 refused, the Ports installer on an SP, a CubeXX and an
+unknown one) and `deploy/fat/test-hook.sh` (hook accepts five models, refuses CubeXX, an unknown Anbernic and a
+Trimui, stays silent on the first start).
+
+Hardware plan (needs the owner's devices): flash ROCKNIX's H700 image (DDR4 first, DDR3 if it doesn't start) onto a
+spare card, copy the model's DTB to `dtb.img`, run the installer, check the SP's lid and sleep, the RG28XX's Wi-Fi
+(an `iw dev` and `ls /sys/class/net`), the battery source and the sway rotation of the RG28XX.
 
 ## AYN Odin 2 family (2026-10-27, experimental)
 
@@ -324,6 +359,10 @@ Games retain the existing positional controls: HOME + right face button takes a 
 (`rpcs3-sa`, `start_rpcs3.sh`); they are guests of the pause menu on these devices (`standalone::guest`,
 docs/BIG-EMULATORS.md "Wii U and PS3"): HOME → Continue/Quit, performance profile as for the other big emulators,
 no Save/Load (neither emulator has a control channel for states).
+
+**PS Vita (2026-10-29, experimental).** ROCKNIX's SM8550 image ships Vita3K (`vita3k-sa`, `start_vita3k.sh`, system `psvita`,
+games as `.psvita` files that hold the title ID, made by `scan_vita3k.sh`; `.pkg` + `.txt` with the ZRIF and `.zip` are installed on
+first start). Vita3K is a guest like Cemu and RPCS3 (`standalone::guest`, docs/BIG-EMULATORS.md "PS Vita (Vita3K)").
 
 **Sleep decision.** As of 2026-10-27, [PR #3126](https://github.com/ROCKNIX/distribution/pull/3126) is open,
 unmerged. Its tested-device list describes the proposed branch, not stock `next`.

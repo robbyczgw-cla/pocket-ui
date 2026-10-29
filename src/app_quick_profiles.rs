@@ -40,8 +40,8 @@ impl App {
         let menu = self.menu.as_ref();
         let kind = match run {
             Some(r) if r.hosted() => Kind::PocketCore,
-            Some(_) if pocket_ui::standalone::active() || pocket_ui::standalone::guest_active() => Kind::Standalone,
             Some(r) if r.system == pocket_ui::port_perf::SYSTEM => Kind::Port,
+            Some(_) if pocket_ui::standalone::active() || pocket_ui::standalone::guest_active() => Kind::Standalone,
             Some(r) if r.emulator == "retroarch" => Kind::RetroArch,
             _ => Kind::Other,
         };
