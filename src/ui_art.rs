@@ -1,5 +1,6 @@
 //! Small pixel-art pictures of the interface (assets/ui-art, sources and licences in assets/ui-art/SOURCES.md):
-//! the vignettes above an empty page's words, the handhelds on About, first start and the manual's Controls page,
+//! the vignettes above an empty page's words, pocket-ui's mark and the handhelds on About, first start and the boot
+//! screen (the mark), the handhelds on the manual's Controls page,
 //! the Settings categories' icons, the Year in review's stickers and the emblems on the fronts of boxes that are not a
 //! game. Compiled into the binary like the system
 //! pictures (`system_art`) and decoded the first time one is painted, then kept: a page that never shows one
@@ -32,6 +33,9 @@ pub enum Art {
     Store,
     /// A handheld asleep under a blanket: nothing played yet.
     NothingPlayed,
+    /// pocket-ui's mark: a cartridge whose paper label has the four system stripes and a "p" (the boot screen, first
+    /// start, About; the logo pack's `pocket-ui-mark.png`).
+    Logo,
     Device(Model),
     Icon(Icon),
     Sticker(Sticker),
@@ -87,6 +91,7 @@ const FILES: &[(Art, &[u8])] = &[
     (Art::Search, include_bytes!("../assets/ui-art/empty-search.png")),
     (Art::Store, include_bytes!("../assets/ui-art/empty-store.png")),
     (Art::NothingPlayed, include_bytes!("../assets/ui-art/empty-nothing-played.png")),
+    (Art::Logo, include_bytes!("../assets/ui-art/logo.png")),
     (Art::Device(Model::MiniV2), include_bytes!("../assets/ui-art/device-miniv2.png")),
     (Art::Device(Model::MiniV1), include_bytes!("../assets/ui-art/device-miniv1.png")),
     (Art::Device(Model::Pocket5), include_bytes!("../assets/ui-art/device-rp5.png")),
@@ -192,16 +197,60 @@ pub fn empty_scale(screen_h: i32) -> i32 {
 /// capitals, and no higher than `top`. Returns how far the words must move down to make room (0 when they already
 /// sit low enough), so the caller adds it to their y.
 pub fn above_words(c: &mut Canvas, art: Art, x: i32, centered: bool, top: i32, title_base: i32, title_px: u32) -> i32 {
+    above_words_row(c, &[art], x, centered, top, title_base, title_px)
+}
+
+/// [`above_words`] for pictures side by side (first start: pocket-ui's mark beside the handheld), standing on one line
+/// `ROW_GAP` pixels of the picture apart. The mark is drawn at twice the row's scale (`row_scale`): one of its pixels
+/// is two of the handheld's, so the small cartridge stands about as tall as the handheld.
+pub fn above_words_row(c: &mut Canvas, arts: &[Art], x: i32, centered: bool, top: i32, title_base: i32, title_px: u32) -> i32 {
     let k = empty_scale(c.h);
-    let (w, h) = size(art, k);
+    let (w, h) = row_size(arts, k);
     if h == 0 {
         return 0;
     }
     let caps = title_base - crate::type_scale::px(title_px) as i32 * 3 / 4;
     let y = (caps - 28 - h).max(top);
     let x = if centered { x - w / 2 } else { x };
-    paint(c, art, x, y, k);
+    paint_row(c, arts, x, y, k);
     (y + h + 28 - caps).max(0)
+}
+
+/// Pixels of the picture between two pictures of a row.
+pub const ROW_GAP: i32 = 16;
+
+/// How many of the row's pixels a pixel of `art` takes in a row: 2 for pocket-ui's 50 px mark, 1 for the rest.
+fn row_scale(art: Art) -> i32 {
+    if art == Art::Logo {
+        2
+    } else {
+        1
+    }
+}
+
+/// Width and height of `arts` side by side at `k` (the tallest sets the height); (0, 0) when none is there.
+pub fn row_size(arts: &[Art], k: i32) -> (i32, i32) {
+    let sizes: Vec<(i32, i32)> = arts.iter().map(|a| size(*a, k * row_scale(*a))).filter(|s| s.1 > 0).collect();
+    if sizes.is_empty() {
+        return (0, 0);
+    }
+    let w = sizes.iter().map(|s| s.0).sum::<i32>() + ROW_GAP * k * (sizes.len() as i32 - 1);
+    (w, sizes.iter().map(|s| s.1).max().unwrap_or(0))
+}
+
+/// `arts` side by side from (x, y), their bottoms on one line (the row's height from `row_size`).
+pub fn paint_row(c: &mut Canvas, arts: &[Art], x: i32, y: i32, k: i32) {
+    let h = row_size(arts, k).1;
+    let mut x = x;
+    for a in arts {
+        let ak = k * row_scale(*a);
+        let (aw, ah) = size(*a, ak);
+        if ah == 0 {
+            continue;
+        }
+        paint(c, *a, x, y + h - ah, ak);
+        x += aw + ROW_GAP * k;
+    }
 }
 
 #[cfg(test)]
@@ -216,6 +265,21 @@ mod tests {
             assert!(s.px.iter().all(|p| p >> 24 == 0 || p >> 24 == 0xff), "{art:?}: only clear or solid pixels");
             assert!(s.px.iter().any(|p| p >> 24 == 0) && s.px.iter().any(|p| p >> 24 == 0xff), "{art:?}: a picture on clear");
         }
+    }
+
+    #[test]
+    fn the_mark_stands_beside_the_handheld_on_one_line() {
+        assert_eq!(size(Art::Logo, 1), (50, 52), "the logo pack's mark, one pixel a pixel");
+        let row = [Art::Logo, Art::Device(Model::MiniV2)];
+        let (dw, dh) = size(Art::Device(Model::MiniV2), 2);
+        // In a row the mark takes two of the row's pixels a pixel: 200 x 208 beside the handheld at twice its size.
+        assert_eq!(row_size(&row, 2), (200 + ROW_GAP * 2 + dw, dh.max(208)));
+        let (w, h) = row_size(&row, 2);
+        let mut buf = vec![0u32; (w * h) as usize];
+        let mut c = Canvas::new(&mut buf, w as u32, h as u32);
+        paint_row(&mut c, &row, 0, 0, 2);
+        let lit_row = |y: i32, x0: i32, x1: i32| (x0..x1).any(|x| buf[(y * w + x) as usize] != 0);
+        assert!((h - 4..h).any(|y| lit_row(y, 0, 200)), "the mark stands on the row's bottom line");
     }
 
     #[test]

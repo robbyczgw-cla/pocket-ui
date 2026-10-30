@@ -11,7 +11,7 @@ are short; one that is looked up comes a moment later.
 
 | Category | What is in it |
 |---|---|
-| **Look & feel** | Look, Language, Text size, Night light, Screen frames, Sounds, Haptics, LEDs, Animations. See [below](#look--feel) |
+| **Look & feel** | Look, Language, Text size, Night light, Screen frames, Sounds, Haptics, LEDs, Animations, Cozy extras. See [below](#look--feel) |
 | **Playing** | On start, Remember where I quit, Button layout, Over the game, Performance & fan, Battery, RetroAchievements, Curator. See [Playing](#playing) |
 | **Games** | Add games, From EmulationStation, Starter pack, Extras, Screenshots, Store (only on a device with a store set up), Tools, PC streaming. See [Games](#games) |
 | **Connections** | Wi-Fi, Bluetooth, Tailscale, Sync, Remote access (SSH), Web companion. See [Connections](settings-system.md#connections) |
@@ -31,7 +31,7 @@ Settings → **Look & feel**. How pocket-ui looks, sounds and feels in your hand
 
 | Entry | What it holds |
 |---|---|
-| **Look** | Choose how the shelf looks, dark or light, how much it moves, with a live preview, and which systems it shows. See [Look](#look) |
+| **Look** | Choose how the shelf looks, dark or light, how much it moves, with a live preview, which systems it shows, and the theme (colours, font, button symbols). See [Look](#look) |
 | **Language** | **English** or **Deutsch**: [Language](language.md) |
 | **Text size** | **Normal** (the default), **Medium** or **Large**: larger text on every screen, fewer rows on a page. A or Left/Right switches it. See [Text size](#text-size) |
 | **Night light** | Warmer, less blue colours in the evening, in the menus and in games: **Off** (the default), **On** or **Scheduled**, with a strength. See [Night light](night-light.md) |
@@ -40,6 +40,7 @@ Settings → **Look & feel**. How pocket-ui looks, sounds and feels in your hand
 | **Haptics** | A very short tick in the menus as the selection moves. A turns it on or off. Off by default |
 | **LEDs** | The lights around the sticks: off, one colour, or the battery colours. See [LEDs](#leds) |
 | **Animations** | **Cozy**: watch your game slide into the console, and the pages, the box and the menus move a little slower and softer. **Quick**: straight into the game, the animations as short as they get. A or Left/Right switches it. Cozy in the Shelf and Cabinet looks until you choose, Quick in the others. See [Animations](#animations) |
+| **Cozy extras** | The little touches, each on or off on its own: case sounds, the old-TV switch-on, the TV on the cabinet, stickers, the memory card in the pause menu, printed discs, game connections, Rediscover, the idle slideshow, light by time of day, decorations, playful animations. See [Cozy extras](#cozy-extras) |
 
 ### Look
 
@@ -48,7 +49,7 @@ the shelf itself with a few of your systems and one game (with its box art when 
 games, a built-in set of "Sample game"s). Left/Right or Up/Down switch between the five looks, and the shelf
 behind Settings takes the look at once; A keeps the one shown. See [Playing](playing.md#looks) for what each look
 does. On this page **Y** switches the [appearance](#appearance), **L1** the [animations](#animations), **R1** the
-[motion](#motion) and **X** opens [Systems on the shelf](#systems-on-the-shelf).
+[motion](#motion), **R2** opens the [Theme](theme.md) and **X** opens [Systems on the shelf](#systems-on-the-shelf).
 
 #### Appearance
 
@@ -109,6 +110,12 @@ box, its console and the number of games. All are ticked by default. When Moonli
 
 The first start does not have this list; every system is on the shelf until you change it here.
 
+#### Theme
+
+On the Look page, press **R2** ("Theme") for the colours of every page (Warm, Indigo Cube, Grey Brick, Green X,
+Blue Station), the font (Barlow, Pixel, Rounded) and the button symbols in the hints (Nintendo, Xbox, PlayStation),
+with a live preview. See [Theme](theme.md).
+
 ### Text size
 
 On small screens such as the Anbernic H700 handhelds, the shelf, game cards and menus keep their full layout,
@@ -164,6 +171,31 @@ ROCKNIX lights them at full brightness out of the box, and pocket-ui switches th
 Left/Right change the selected row, A moves on to the next choice. The choice takes effect at once, is kept across restarts,
 and is the one ROCKNIX applies at the next boot. The lights also go dark while the device sleeps, as ROCKNIX does it.
 
+### Cozy extras
+
+Settings → Look & feel → **Cozy extras** switches the little touches one by one, for when you like some of them and
+not others. Up/Down move, A (or Left/Right) switches the selected one **On** or **Off**; it takes effect at once and is
+kept across restarts. The line under the list says what the selected one does and in which looks you see it or, when
+another switch keeps it from showing, which one. Reset settings (System → Backup & reset) puts them back as they start.
+
+| Extra | What it does | Start |
+|---|---|---|
+| **Case sounds** | Cases click open, cartridges and discs go in with a sound, the old TV hums on. Shelf and Cabinet looks only. Needs Sounds on; the menu sounds are not affected | On |
+| **Old-TV switch-on** | The game's picture comes on like an old TV when it starts. Shelf and Cabinet looks only, with Animations on Cozy and Motion on Full | On |
+| **TV on the cabinet** | A small old TV on top of the cabinet shows the selected game. Cabinet look only | On |
+| **Stickers on cases** | Your stickers on the cases. Off hides them on the shelf and the box; they stay on the game and on its card's Stickers row. Shelf and Cabinet looks only | On |
+| **Memory card in the pause menu** | Save and Load in the pause menu show the game's whole memory card or cartridge with its blocks instead of the slim row of blocks. The info page and the box's back always show it | Off |
+| **Printed discs** | Discs printed with their cover's art and title. Off: a plain disc in its console's colour. Shelf and Cabinet looks only | On |
+| **Game connections** | The developer, publisher, series and genre on the info page and the box's back lead to your other games with the same one ([Curator](curator.md)). Off: they are only shown | On |
+| **Rediscover** | Games you haven't played for a long time, as a row in Curator's list | On |
+| **Light by time of day** | The room's light follows your Pocket's clock: cool and bright in the morning, warm in the evening with the lamp glowing, dim at night. Very gentle: covers and text keep their colours. Shelf and Cabinet looks only | On |
+| **Decorations** | Things on your shelves that grow with your play: the plant grows with your hours, a trophy after your first completed game, a framed "100 %" after your first 100 % sticker, a small figurine for each system you played for 10 hours. Only where a shelf has room. This works with Light by time of day on or off. Off: the shelves as they were. Shelf and Cabinet looks only | On |
+| **Idle slideshow** | Leave the shelf alone for a minute and your games' pictures play, slowly zooming: box art, screenshots, your own screenshots and save pictures. Any button, including an analog L2/R2 pull, takes you back where you were and does nothing else; the screen still goes off as set under Sleep & power. Motion Reduced or Off: cross-fades only. It is Off in every look until you switch it on here. See [Sleep & power](quick-settings.md#sleep--power-settings) | Off |
+| **Playful animations** | Cases spring out and wiggle, each game goes into its console its own way, the open box's disc turns, spines lean as you scroll ([Playing](playing.md#starting-a-game)). Shelf and Cabinet looks only, with Motion on Full | On with Cozy, Off with Quick |
+
+The last two rows lead to **Animations** and **Sounds** of Look & feel, which decide whether anything moves or is heard
+at all; they are not repeated here.
+
 ## Playing
 
 Settings → **Playing**. What happens when you start and quit, how fast games run, the battery, achievements and Curator.
@@ -204,7 +236,8 @@ Left/Right switches it, and the next button you press already works the new way.
 - **Xbox**: A at the bottom, B on the right, X on the left, Y on top, as on an Xbox controller.
 
 Menus only: games and safe mode keep the printed buttons. What it changes and what it leaves alone is in
-[Controls](controls.md#button-layout).
+[Controls](controls.md#button-layout). How the keys look in the hints (letters, Xbox colours or PlayStation shapes) is
+the [Theme](theme.md)'s Button symbols.
 
 ### Remember where I quit
 

@@ -67,6 +67,10 @@ impl<'a> Canvas<'a> {
 
     /// Darkens the whole canvas towards black; `amount` 0 = unchanged, 255 = black.
     pub fn fade(&mut self, amount: u8) {
+        // Nothing to fade (the launch's frames before its fade starts): not a pass over the whole screen.
+        if amount == 0 {
+            return;
+        }
         for px in self.buf.iter_mut() {
             *px = mix(*px, 0, amount as u32);
         }

@@ -36,6 +36,7 @@ used included, with its seed: `pixellab-assets.json`.
 | `emblem-surprise.png` | a small wrapped gift box with a ribbon bow | 311 | 160x120 |
 | `emblem-streaming.png` | a small desktop computer monitor with a game controller resting in front of it | 321 | 160x120 |
 | `emblem-sticker.png` | a few round colourful paper stickers on a peeled sticker sheet | 331 | 160x120 |
+| `logo.png` | pocket-ui's mark (2026-10-30): "app icon: one retro video game cartridge seen straight from the front, warm grey plastic shell, rounded beveled top shoulders, vertical grip ridges along both sides, a large recessed cream paper label with rounded corners in the upper middle, the bottom edge is narrower and stepped with a row of shiny gold contact pins peeking out, small embossed arrow pointing down below the label, simple bold shapes, centered" (no common ending; 64x64, then cut to 50x52; the request is logged with the logo pack, not in `pixellab-assets.json`); finished by hand: greys turned warm, the label's four stripes and a lowercase "p" painted in, gold contacts in the three windows | 31 | 50x52 |
 
 What was changed (`tools/finalize.py`): cut to the picture with a 1 px margin, transparency made on/off (solid from
 half on); the stickers got the same edge each, 2 px of paper white and 1 px of dark outline, in place of the uneven

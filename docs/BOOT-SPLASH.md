@@ -21,18 +21,21 @@ Now:
 2. Black. No kernel text: the kernel command line has `quiet loglevel=3 vt.global_cursor_default=0`, and GRUB prints
    nothing ([Quiet start](#quiet-start)).
 3. When the display driver is up (3.50 s on the first measured boot; the program itself starts with systemd at
-   2.47 s and waits): **pocket-splash**. On true black, one spine of the shelf
-   fades in (400 ms): the "pocket-ui" wordmark in Barlow Condensed (Title 50, Chalk) on a Spine body, where Home's
-   pulled-out label sits. Its 12 px stripe holds each console colour for 1.2 s and crossfades to the next in 400 ms
-   (NES, GB, GBC, GBA, SNES, N64, round again). Nothing else moves; there is no progress bar, because there is no
-   honest progress to show.
+   2.47 s and waits): **pocket-splash**. On true black, pocket-ui's mark fades in (400 ms): the cartridge with the
+   "p" on its label (`ui_art::Art::Logo`, the logo pack's pixel art, whole pixels: two screen pixels a pixel at 480
+   lines, three at 720, four from 960) over the "pocket-ui" wordmark in Barlow Condensed (Title 50, 67 from 960
+   lines, Chalk), in the
+   middle of the screen (since 2026-10-30; before, one spine of the shelf with the wordmark). A 6 px bar as wide as
+   the wordmark sits under it and holds each console colour for 1.2 s, then crossfades to the next in 400 ms (NES, GB,
+   GBC, GBA, SNES, N64, round again). Nothing else moves; there is no progress bar, because there is no honest
+   progress to show.
    - The first start after setting up a card (no `/storage/.configured`) says "Getting ready for the first start…"
      in Dust at the bottom left, where the hints go.
    - After a minute without sway it says "Still starting…". It never just goes blank.
-   - After about three minutes the stripe holds still (nothing more to draw, no more CPU) until the end.
+   - After about three minutes the bar holds still (nothing more to draw, no more CPU) until the end.
    - Settings → Look & feel → Motion: Off shows the picture still, with no fades; Reduced keeps the fades (nothing on
      it moves anyway).
-4. When sway's unit starts, the spine fades to black (250 ms). sway comes up on black.
+4. When sway's unit starts, the picture fades to black (250 ms). sway comes up on black.
 5. pocket-ui's first frame fades in from black (300 ms), in the dark and the light look alike.
 
 Snapshots (`pocket-splash --snapshot`, below): the normal picture, the first start's line, the late line at 1920x1080,
@@ -129,10 +132,11 @@ opened at boot.
 - **The turn from fbcon.** `/sys/class/graphics/fbcon/rotate` (the kernel sets it from the panel's `rotation`; ROCKNIX
   turns sway by it, pocket-ui turns touch by it): 1 on both Minis (the 1080x1240 panel shows a 1240x1080 picture, its
   top left corner at the panel's top right), 3 on the Pocket 5 and Flip 2. The picture is painted landscape and turned
-  in software; any size works (the spine is 72 px from each side and in the middle).
+  in software; any size works (the picture sits in the middle; the first-start line 72 px from the left).
 - **Only what changes.** Frames are painted only when the picture changes (the fades and crossfades), at most 30 a
-  second, and nothing while a colour holds. While only the stripe's colour moves, only the stripe is repainted. Only
-  the frame buffer rows that changed are written, in one write: 12 rows (52 KB) for a stripe step on the Mini V2.
+  second, and nothing while a colour holds. While only the bar's colour moves, only the bar is repainted. Only
+  the frame buffer rows that changed are written, in one write: the bar's columns of the picture are the rows on the
+  Mini V2's turned panel (about 190 rows, 0.8 MB, for a colour step).
 - **Waiting for the frame buffer.** It is not there when systemd starts the program: the first device boot
   measured the program starting at 2.47 s and the msm display driver binding at 3.50 s, and `/dev/fb0` exists only
   after that. The program looks for it every 25 ms for up to 20 s (`splash::wait_for_fb`), then draws at once — the
@@ -203,14 +207,14 @@ The same folder and the same way out as the essway drop-in: nothing of ROCKNIX's
 the Mini V2's 1080x1240 frame buffer, painted, turned and copied as on the device, with the first-start line. On the
 build computer (2026-10-26, gate profile): 177 frames, 8.7 a second on average (30 a second during a fade or a
 crossfade, none while a colour holds), 0.67 ms of work a frame, **0.58 % of one core**; the test's bound is 10 %, and
-it prints its numbers with `--nocapture`. A fade frame writes the spine's 1096 rows of the frame buffer (4.7 MB in one
-write), a stripe step 12 rows (52 KB). Memory: the picture and a copy of the frame buffer, 5.4 MB each. On the device:
+it prints its numbers with `--nocapture` (these figures are from the spine picture before 2026-10-30; the cartridge's
+fade writes about 210 rows, a colour step about 190). Memory: the picture and a copy of the frame buffer, 5.4 MB each. On the device:
 not measured yet (its end line in the journal says frames, bytes and CPU seconds).
 
 ## The fade into the shelf
 
 `src/boot_fade.rs`: pocket-ui's first frames after the Pocket started come up from black over 300 ms (eased out), so
-the boot reads as one: spine, dip to black, shelf. Only at the first start since the device started: pocket-ui leaves
+the boot reads as one: the mark, dip to black, shelf. Only at the first start since the device started: pocket-ui leaves
 `/run/pocket-ui-started` (a tmpfs, empty at every start), so Restart pocket-ui, a restart by the launcher or an update
 show the first frame as it is, and waking from sleep starts nothing. The fade starts at the first frame painted, not
 at the program's start, and adds nothing to the time to the first frame. Motion Off: no fade (the mark is still left).
@@ -241,8 +245,9 @@ On the owner's card, after `scripts/dev.sh deploy` and `scripts/boot-quiet.sh ap
 2. Restart the device and film it from power-on to the shelf. Expected: Retroid logo (sideways, not ours); black —
    in particular *not* the small white version lines of the first reboot (they are still written to the console's
    buffer, but the splash has it in graphics mode from about 2.5 s, before the frame buffer console binds at about
-   3.5 s); the spine fading in (from about 3.5 s, when the frame buffer appears) and the stripe changing colour; a
-   dip to black; the shelf fading in. Check that the spine is the right way up and not sheared, and that no text is
+   3.5 s); the cartridge and wordmark fading in (from about 3.5 s, when the frame buffer appears) and the bar under
+   them changing colour; a dip to black; the shelf fading in. Check that the picture is the right way up and not
+   sheared, and that no text is
    drawn over it. A version line flashing for a blink at the moment the panel lights would mean the frame buffer
    console paints its buffer on bind despite graphics mode on this kernel — the first (black) frame then covers it
    within about a frame; note it on the video either way.

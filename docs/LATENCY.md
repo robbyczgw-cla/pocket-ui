@@ -771,6 +771,32 @@ So the animation costs the start about a millisecond (the frames pocket-ui paint
 emulator doesn't use), and the Cabinet's starts are 265 ms faster than before. In the virtual device a GBC game is up
 after 65 ms, before the cartridge is in (180 ms): there the game covers the animation, as it should.
 
+### Playful animations (feat/playful, 2026-10-30)
+
+What a frame of each playful animation costs on the RG35XX Plus (H700, 640x480, laid out at 1280x960), the extra on and
+off, from `pocket-ui --snapshot bench-playful:<system>:<what>` and `POCKETUI_BENCH_FRAMES=120 --snapshot
+box:psx:castlevania` run on the device on a fixture copy (thread CPU time of `paint`, every frame 16 ms apart; two
+interleaved rounds, they agree within 0.5 ms):
+
+| Frames | Playful on p50 / p95 | off p50 / p95 |
+|---|---|---|
+| Shelf launch, GBA cartridge | 23.1 / 26.1 ms | 23.0 / 26.1 ms |
+| Shelf launch, DS card | 22.8 / 25.6 ms | 22.8 / 25.8 ms |
+| Shelf launch, PS2 tray | 23.0 / 25.8 ms | 24.0 / 26.7 ms |
+| Shelf launch, GameCube lid | 23.4 / 26.4 ms | 24.5 / 27.4 ms |
+| Shelf launch, PlayStation lid | 22.9 / 25.8 ms | 25.3 / 28.3 ms |
+| Ten moves: spring, turn, wiggle | 6.3 / 12.4 ms | 6.3 / 12.5 ms |
+| The open box, its disc turning | 20.3 / 22.0 ms | 16.8 / 18.7 ms (still) |
+
+The pull-out's spring and wiggle cost nothing measurable and stay well inside a 60 Hz frame. The tray, lid and seat cost
+nothing either: the launch's frames are as dear with them as without (the disc goes over the drive at its size, made
+once, instead of being scaled smooth each frame), and the launch was already about 23 ms a frame on the H700 (about 40
+fps): a pass dimming the whole 1280x960 picture behind the console and the fade's pass cost most of it (memory
+bandwidth). `Canvas::fade` now skips its pass while there is nothing to fade (the first 0.6 of the animation), which
+took a fifth of those frames under 16.7 ms. The box's turning disc costs 3.5 ms (nearest pixel in fixed point; the
+first, bilinear version cost 29 ms); the box itself already takes 16.8 ms there, so the disc turns at every other
+refresh where the box costs more than half a refresh (`BoxView::spin_wake`), at every refresh on faster handhelds.
+
 ## pocket-ui against ROCKNIX (EmulationStation)
 
 The numbers above come from pocket-ui's own trace, which EmulationStation and RetroArch don't have. For the

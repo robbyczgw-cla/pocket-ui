@@ -4,6 +4,7 @@
 //! wherever it is. Everything takes its colours from `pal()` (an overlay over a game paints them in
 //! `palette::scoped(0, …)`) and its sizes from `type_scale`, so Text size and the appearance reach every page alike.
 
+use crate::button_prompts;
 use crate::gfx::Canvas;
 use crate::pad::Button;
 use crate::palette::{pal, MARGIN, VOID};
@@ -49,7 +50,7 @@ pub fn page_hints(c: &mut Canvas, text: &mut Text, hints: &[(&str, &str)]) -> Ve
     let key_h = type_scale::row(36, 21);
     let key_top = base - 9 - key_h / 2 - type_scale::grow(21) / 3;
     // One letter in a round key, a word in a key as wide as it.
-    let widths: Vec<(i32, i32)> = hints.iter().map(|(k, l)| (text.width(Face::Body, 21, k), text.width(Face::Body, 21, l))).collect();
+    let widths: Vec<(i32, i32)> = hints.iter().map(|(k, l)| (text.width(Face::Body, 21, button_prompts::shown(k)), text.width(Face::Body, 21, l))).collect();
     // The 36 px between hints remains even when a label goes. Count it with every key, not with labels that
     // may be hidden; otherwise each hidden label leaves an unbudgeted gap and can push START off the edge.
     let shown = type_scale::hint_labels_that_fit(&widths.iter().map(|(kw, lw)| ((kw + 24).max(key_h) + 10 + 36, *lw)).collect::<Vec<_>>(), c.w - MARGIN - 24 + 36);
@@ -57,8 +58,7 @@ pub fn page_hints(c: &mut Canvas, text: &mut Text, hints: &[(&str, &str)]) -> Ve
         let kw = widths[k].0;
         let key_w = (kw + 24).max(key_h);
         let start = x;
-        c.round_rect(x, key_top, key_w, key_h, key_h / 2, pal().keycap);
-        text.draw(c, Face::Body, 21, x + (key_w - kw) / 2, base - 1, pal().chalk, key);
+        key_cap(c, text, (x, key_top, key_w, key_h), key, 21, base - 1, (pal().keycap, pal().chalk));
         x += key_w + 10;
         if k < shown {
             x += text.draw(c, Face::Body, 21, x, base, pal().dust, label);
@@ -87,10 +87,8 @@ pub fn pill_hints(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, hints: &[(
     for ((key, label), (kw, lw)) in hints.iter().zip(widths) {
         let bw = (kw + 16).max(BUTTON);
         let start = x;
-        c.round_rect(x, y0 + gap, bw, BUTTON, BUTTON / 2, pal().chip);
-        let tw = text.width(Face::Body, SMALL, key);
         let base = y0 + PILL / 2 + type_scale::mid(SMALL);
-        text.draw(c, Face::Body, SMALL, x + (bw - tw) / 2, base, pal().pill, key);
+        key_cap(c, text, (x, y0 + gap, bw, BUTTON), key, SMALL, base, (pal().chip, pal().pill));
         x += bw + gap;
         if lw >= 0 {
             text.draw(c, Face::Body, SMALL, x, base, pal().soft, label);
@@ -103,6 +101,17 @@ pub fn pill_hints(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, hints: &[(
     x0
 }
 
+/// A hint key: its round cap (`x`, `y`, `w`, `h`) in `bg` and `key` centred on it in Body `px` in `fg`, its baseline at
+/// `base`, as the Button symbols in use show it (`button_prompts`): A, B, X and Y on Xbox's colours or as the
+/// PlayStation shapes, every other key as it is. Every hint key goes through here (both hint bars, the manual's chips).
+pub fn key_cap(c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, i32), key: &str, px: u32, base: i32, (bg, fg): (u32, u32)) {
+    let (bg, fg) = button_prompts::colours(key).unwrap_or((bg, fg));
+    c.round_rect(x, y, w, h, h / 2, bg);
+    let shown = button_prompts::shown(key);
+    let tw = text.width(Face::Body, px, shown);
+    text.draw(c, Face::Body, px, x + (w - tw) / 2, base, fg, shown);
+}
+
 /// How wide the hint pill of `hints` is on a screen `screen_w` wide (`pill_hints`).
 pub fn pill_width(text: &mut Text, screen_w: i32, hints: &[(&str, &str)]) -> i32 {
     pill_layout(text, screen_w, hints).0
@@ -111,7 +120,7 @@ pub fn pill_width(text: &mut Text, screen_w: i32, hints: &[(&str, &str)]) -> i32
 /// The pill's width and each key's (key, label) widths; a label that doesn't fit is -gap wide (left out).
 fn pill_layout(text: &mut Text, screen_w: i32, hints: &[(&str, &str)]) -> (i32, Vec<(i32, i32)>) {
     let gap = (PILL - BUTTON) / 2;
-    let mut widths: Vec<(i32, i32)> = hints.iter().map(|(k, l)| (text.width(Face::Body, SMALL, k).max(BUTTON - 16), text.width(Face::Body, SMALL, l))).collect();
+    let mut widths: Vec<(i32, i32)> = hints.iter().map(|(k, l)| (text.width(Face::Body, SMALL, button_prompts::shown(k)).max(BUTTON - 16), text.width(Face::Body, SMALL, l))).collect();
     // Larger text (`type_scale`) or a long translation: labels that don't fit on the line go, last first, and their
     // keys stay.
     let shown = type_scale::hint_labels_that_fit(&widths.iter().map(|(kw, lw)| ((kw + 16).max(BUTTON) + gap, lw + gap * 2)).collect::<Vec<_>>(), screen_w - 2 * PAD - gap);

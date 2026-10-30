@@ -683,8 +683,9 @@ impl App {
             items.extend([Item::Lens, Item::Surprise]);
             items.extend((0..self.curator.prefs.shelves.len()).map(Item::SmartShelf));
         }
-        // Rediscover while there is something in it: a year ago today, or not played for a year.
-        if self.rediscover_counts().0 > 0 {
+        // Rediscover while there is something in it: a year ago today, or not played for a year; not with its Cozy
+        // extra off.
+        if pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::Rediscover) && self.rediscover_counts().0 > 0 {
             items.push(Item::Rediscover);
         }
         if self.history_shown() {

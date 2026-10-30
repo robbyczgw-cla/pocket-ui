@@ -3,6 +3,38 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a minor version may change anything).
 
+## [0.1.6] - 2026-10-30
+
+### Added
+
+- **Theme** (Settings → Look & feel → Look, then R2): five colour sets for every page (Warm, the default; Indigo Cube,
+  Grey Brick, Green X, Blue Station, each with a dark and a light version), three fonts (Barlow, Pixel, Rounded) and the
+  button symbols in the hints: Nintendo letters, Xbox colours or PlayStation shapes. A live preview shows the choice
+  ([docs/user/theme.md](docs/user/theme.md)).
+- **Cozy extras** (Settings → Look & feel): each little touch on or off on its own: case sounds, old-TV switch-on, TV on
+  the cabinet, stickers, memory card in the pause menu, printed discs, game connections, Rediscover, idle slideshow,
+  light by time of day, decorations and playful animations.
+- **Light by time of day** and **decorations that grow with your play** (Shelf and Cabinet): the room is cool and bright
+  in the morning, warm with the lamp on in the evening and dim at night, and a plant, a lamp or a cactus stands beside the
+  games where a shelf has room. The plant grows with your hours, a trophy appears after your first completed game, a framed
+  "100 %" after your first 100 % sticker, and a system you played for 10 hours gets a small figurine.
+- **Idle slideshow** (off until you switch it on in Cozy extras): after a quiet minute on the shelf your games' pictures
+  play, slowly zooming. Any button ends it and does nothing else.
+- **Playful animations** (Cozy extras, on with Cozy animations): cases spring out of the shelf and wiggle once, each game
+  goes into its console its own way (a cartridge seats with a squash and a click, a disc tray slides out and shuts, the
+  GameCube's and PlayStation's lid flips open and closed), the disc in an open box turns slowly, and the Shelf's spines
+  lean when you scroll fast.
+- **A new logo**: a pixel cartridge with the four system stripes on the boot screen, the first start, About and the README.
+
+### Changed
+
+- **A calmer pause menu:** Save and Load show the save slots as one slim row of small blocks in the colour of the
+  game's memory card or cartridge, and the preview picture is as large as before. The memory card or cartridge with
+  its blocks stays on the game's info page and box; **Memory card in the pause menu** (Cozy extras, off at first)
+  brings it back to the pause menu.
+- Names on spines get smaller or wrap in the wider fonts before anything is shortened with "…".
+- README: a table of the devices pocket-ui was tested on and those it should run on.
+
 ## [0.1.5] - 2026-10-30
 
 ### Changed

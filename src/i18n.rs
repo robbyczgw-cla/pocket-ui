@@ -753,6 +753,17 @@ pub fn note_cut(english: &str) {
     note('C', english);
 }
 
+/// Whether the snapshot checks are recording (`POCKETUI_I18N_MISSES`).
+pub fn recording() -> bool {
+    recorder().is_some()
+}
+
+/// For the snapshot checks: a line was painted that is the first piece of a word `Text::wrap` broke inside, with no "/",
+/// ".", "-" or "_" to break after (a name's word wider than its line: the painter should have made the text smaller).
+pub fn note_broken(word: &str) {
+    note('W', word);
+}
+
 /// For the snapshot checks: `english` was drawn past the right edge of the picture.
 pub fn note_overflow(english: &str) {
     note('X', english);

@@ -289,6 +289,57 @@ pub struct Slots<'a> {
     pub numbers: bool,
 }
 
+/// The colour of a medium's plastic, for the pause menu's slim row of blocks: the PlayStation's grey, the PS2's
+/// black, the VMU's white, the GameCube's dark grey, a cartridge's own plastic.
+pub fn tint(kind: Kind) -> u32 {
+    match kind {
+        Kind::Card(Card::Ps1) => 0xa7a8ad,
+        Kind::Card(Card::Ps2) => 0x2c2c31,
+        Kind::Card(Card::GameCube) => 0x55535e,
+        Kind::Card(Card::Vmu) => 0xe4e1da,
+        Kind::Card(Card::Xbox) => 0x30342f,
+        Kind::Card(Card::MemoryStick) => 0x262a34,
+        Kind::Cartridge(_, plastic) => plastic,
+        Kind::List => 0x3c3c3c,
+    }
+}
+
+/// The pause menu's slim row: `filled.len()` small blocks `b` pixels square, `gap` apart, centred on (cx, cy), in
+/// the medium's plastic ([`tint`]). An empty block is the plastic's outline, a full one the plastic round the game's
+/// icon; the slot the menu is on has a white ring.
+#[allow(clippy::too_many_arguments)]
+pub fn paint_row(c: &mut Canvas, kind: Kind, cx: i32, cy: i32, b: i32, gap: i32, filled: &[bool], ring: Option<usize>, icon: Icon) {
+    let n = filled.len() as i32;
+    let x0 = cx - (n * b + (n - 1) * gap) / 2;
+    let y = cy - b / 2;
+    let t = tint(kind);
+    // On the menu's black, a dark plastic is lifted a little so its outline shows.
+    let edge = if crate::cabinet::luma(t) < 60 { mix(t, 0xffffff, 60) } else { t };
+    let line = (b / 12).max(2);
+    for (i, full) in filled.iter().enumerate() {
+        let x = x0 + i as i32 * (b + gap);
+        c.round_rect(x, y, b, b, b / 6, edge);
+        if *full {
+            let inner = b - 2 * line;
+            c.rect(x + line, y + line, inner, inner, 0x0c0c0c);
+            match icon {
+                Icon::Cover(img) => {
+                    let (iw, ih) = img.fit(inner, inner);
+                    c.blit_scaled(img, x + (b - iw) / 2, y + (b - ih) / 2, iw, ih);
+                }
+                Icon::Console(sp) => c.blit_sprite(sp, x + (b - sp.w as i32) / 2, y + (b - sp.h as i32) / 2, 0),
+                Icon::None => c.rect(x + 2 * line, y + 2 * line, b - 4 * line, b - 4 * line, edge),
+            }
+        } else {
+            c.round_rect(x + line, y + line, b - 2 * line, b - 2 * line, b / 8, mix(t, 0x000000, 80));
+        }
+        if ring == Some(i) {
+            let r = (b / 7).max(3);
+            c.frame(x - r - 2, y - r - 2, b + 2 * r + 4, b + 2 * r + 4, 3, 0xffffff);
+        }
+    }
+}
+
 /// Paints the medium and its slots with the top left at (x, y); `l` from [`Layout::new`] for the same kind and
 /// number of slots.
 pub fn paint(c: &mut Canvas, text: &mut Text, kind: Kind, x: i32, y: i32, l: &Layout, s: &Slots) {

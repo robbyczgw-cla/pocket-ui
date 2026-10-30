@@ -127,7 +127,11 @@ shell); a game without a cover gets a plain print with its name. Each spine take
 its colours from the game's cover and has its name on it (a long name gets smaller or a second line before anything is
 left off); a game without a cover has its system's colour. Every case has its real size: a PS2 case stands tall, a Game
 Boy Advance box low, all on the shelf's board. Where a shelf has room, a bookend holds its games up
-and a plant, a lamp or a cactus stands beside them, never in front of one. The case you pick comes out of the shelf
+and a plant, a lamp or a cactus stands beside them, never in front of one. The shelves grow with your play: the
+plant starts as a sprout and grows with the hours you play, a trophy appears after your first completed game, a
+framed "100 %" after your first 100 % sticker, and a system you have played for 10 hours gets a small figurine on its
+shelf. The room follows the clock too: cool and bright in the morning, warm in the evening with the lamp on, dim at
+night. Both can be switched off in Settings → Look & feel → Cozy extras. The case you pick comes out of the shelf
 and stands on top of the cabinet, right over its shelf, turned to its cover; the whole cover shows, never cut. Under
 the picked shelf you see the next ones, as many as fit whole. The top shelf holds the recent games, the next one your Favourites, then
 come Curator's shelves, then one shelf per system. A starts the game: its cartridge or disc goes into the console.
@@ -144,6 +148,13 @@ sounds on you hear all of it: the case opening, the cartridge sliding in and cli
 spins up, a game card clicks into its slot), then the TV's soft thunk as it comes on. **Quick** keeps the short one. The
 other looks never have it.
 
+With **Playful animations** (Settings → Look & feel → Cozy extras, on with Cozy) each game goes in its own way: a
+cartridge is pushed into its slot and seats with a little squash as it clicks; a game card clicks all the way in; a disc
+console's tray slides out, the disc drops in and the tray shuts with the sound's clunk; the GameCube, PlayStation,
+Dreamcast and Mega-CD open their lid instead; the Wii and the PSP take the disc or UMD in through the slot. A case you
+pick springs out of the shelf and wiggles once, the disc beside an open box turns slowly for a few seconds, and holding
+Left or Right on the Shelf tips the spines a little until they swing back.
+
 In the **Shelf** look, the one pocket-ui starts with, everything stands on one shelf, seen from the spine: each game
 in its system's real case (the same cases as in the Cabinet below), its spine in its cover's colour with its name
 on it; a long name gets a little smaller or a second line before anything is left off ("…" is the last resort). Your systems, Curator, Favourites and Search stand there as plain boxes in their
@@ -151,7 +162,9 @@ colours, a system with its short name ("SNES"). Left and Right (or Up and Down) 
 time. The one you pick rises out of the row and is shown large above the shelf, turned to its front with the cover
 (at once with Motion Off); beside it are its name and what is known about it: when you last played it, a system's facts,
 the covers of Curator's pick or your Favourites. A game without a cover shows a front with its name printed on it.
-Where a shelf has room left, a bookend holds the games up and a plant or a lamp stands beside them.
+Where a shelf has room left, a bookend holds the games up and a plant or a lamp stands beside them, with what your
+play has earned (the growing plant, the trophy, the framed "100 %", the system's figurine), and the light follows the
+time of day, as in the Cabinet.
 
 Curator in the Cabinet ([Curator](curator.md#curator)): the **Curator** shelf holds a box for the Lens and one for
 each smart shelf and sticker (Y pins one to Home, X opens its options, as in the Curator list). A on a box opens

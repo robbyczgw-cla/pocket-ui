@@ -125,6 +125,26 @@ millimetre) and held at arm's length, so Body 28 (capitals about 1.2 mm high) is
 read rather than glanced at (a fact, an explanation, a note under a list); 21 is for the hint bar, credits and short
 notes beside larger text. Section headings on a page are Title 37 (the console page, credits, the game card).
 
+### Font styles (`src/font_style.rs`)
+Settings → Look & feel → Look → Theme → Font (settings.json `"font"`: `barlow`, `pixel`, `rounded`; Barlow when unset or wrong) swaps the
+two faces; everything above (the scale, Body 28 as the smallest read text) holds for each:
+
+| Style | Title (names, spines, labels) | Body (meta, hints) |
+|---|---|---|
+| Barlow | Barlow Condensed SemiBold | Barlow Medium |
+| Pixel | Pixelify Sans SemiBold | Barlow Medium, so that small text stays readable |
+| Rounded | Nunito ExtraBold | Nunito SemiBold |
+
+All OFL 1.1, static Latin instances compiled in (about 100 KB for the two new families; `assets/fonts/OFL.txt`). Each
+alternative face is **fitted to Barlow's capitals**: it is rasterised at a size scaled so that its "H" (bounds, top to
+bottom) is as high as the Barlow face's at the same size (the idea of `text_fallback::Fit` for Japanese letters), so baselines,
+row heights and `type_scale` keep working; only the widths differ, and Rounded's are wider than Barlow Condensed's.
+Painters therefore measure (`Text::width`, `fit`, `wrap`) and never assume Barlow's widths. A pixel font is crisp
+near whole multiples of its pixel grid and a little soft in between; that is accepted. Letters a style's font lacks
+come from the CJK fallback as before. A store theme's `fonts/title.ttf` and `body.ttf` replace the face they name
+whatever the style says; safe mode is always Barlow. `tests/font_styles.rs` runs the layout-risk states at 640×480, Large,
+German for Pixel and Rounded with the same clipping checks as `tests/text_size.rs`.
+
 ### Japanese, Chinese and Korean names
 Barlow has no kana or kanji. A letter it lacks comes from the system's **Noto Sans CJK** (ROCKNIX installs
 `/usr/share/fonts/truetype/noto-cjk/NotoSansCJKsc-Regular.otf`; we don't ship it), so "ファイナルファンタジーVI" and
@@ -284,7 +304,10 @@ logical dimensions and reduction; their text-box findings describe the logical c
   so one picture fits dark and light, selected or not.
 - **The handheld:** first start's welcome and About show the device pocket-ui runs on (`device::current()`, the Mini
   V2 where it isn't known), drawn in pixels with pocket-ui's shelf on its screen; About only where the room above the
-  hints holds it. The manual's Controls page shows the Mini V2 three or two times its pixels, every control named
+  hints holds it. **pocket-ui's mark** (the cartridge with the four system stripes and a "p" on its label,
+  `ui_art::Art::Logo`): on the welcome it stands beside the handheld on its bottom line at twice the handheld's pixel
+  scale, so both are about as tall (`ui_art::above_words_row`); on About it sits before the version on the Version row,
+  one pixel a pixel, where it clears the row's name. The boot screen shows the mark alone over the wordmark ([BOOT-SPLASH.md](BOOT-SPLASH.md)). The manual's Controls page shows the Mini V2 three or two times its pixels, every control named
   beside it: button names as the text's chips, "D-pad" and the sticks in the interface's language, the face buttons
   lettered as Settings › Playing › Button layout has them (`manual::controls_picture`, from the line of
   `docs/user/controls.md` whose image line points at `pocket-ui:controls`).
@@ -379,6 +402,17 @@ and rare: they never add a frame, a row or a badge to a list.
   or "Off" (Settings → Games → Extras → Pictures) hides them all.
 - **Cost.** PNGs are decoded and scaled on one loader thread into the box art's image cache (16 pictures at most),
   never on the UI thread; the files are stat'ed by their 24-byte header once.
+
+## Idle slideshow (`src/slideshow.rs`, `src/app_slideshow.rs`)
+A shelf left alone for a minute (half the screen-off time when that is shorter) becomes a calm slideshow of the games'
+pictures: box art, scraped screenshots and title screens, and the player's own screenshots and save pictures. Each fades in
+over 1.6 s and then moves slowly (zoom 1.0 to 1.12, a drift in one of eight directions) for its 10 s; the first fades in over
+the shelf itself. The game's title (Title face, 44 px) and its system (Body, 26 px, "Your screenshot" or "From your save" in
+gold after it for the player's own pictures) sit small and centred at the bottom on a dark band, with a shadow; the clock and
+battery stand in the top right corner as on Home. A picture the shape of the screen fills it, any other (a portrait box) is
+shown whole on a dark backdrop of its own colour. Motion Reduced and Off: no zoom or drift, only the cross-fades. 15 frames a
+second while something moves, none between slides when still. Any button or touch ends it and does nothing else; no
+pictures, no show. It is Off in every look until the player switches it on in Cozy extras ([SLEEP.md](SLEEP.md#idle-slideshow-2026-10-30-srcslideshowrs-srcapp_slideshowrs)).
 
 ## Home panels (`src/home_panel.rs`, `src/app_home_panel.rs`)
 Where a game's label has its box art, the rows that are not one game show games too, so no pulled-out label is an
@@ -525,6 +559,17 @@ the power menu panel, the volume/brightness OSD, notices and toasts, the "Saving
 pocket-core draws (it never sets an appearance). The switcher's screen bezel stays dark too: it is the
 handheld's own screen.
 
+**Colours** (Settings → Look & feel → Look → R2 Theme, `palette::Colours`): the table above is **Warm**, the default.
+Four more sets give every token a dark and a light value of their own, named after a feeling, not a product: **Indigo
+Cube** (indigo page and surfaces, lavender paper, a lilac accent), **Grey Brick** (a grey handheld's plastic, its dark
+green for the chips, the band and the accent), **Green X** (green on near-black: the label itself bright green with
+dark ink; on paper, white with deep green), **Blue Station** (cool grey plastic with a deep blue). A set tints the
+selection (label, band, select), frames and key caps (keycap, chip, pill), accents (amber, star) and the page and its
+surfaces, and in the Cabinet the wood (stained towards the set's colour with its grain and shading kept), the name
+plates (holder, card, ink) and the slot's light; covers, case art, console pictures and system stripes keep their own.
+Each set passes the same 4.5:1 test in both appearances, its plates too, and has a page colour of its own. The
+overlays over a game stay Warm's dark.
+
 **Automatic** is light from 07:00 to 20:00 local time (`localtime_r`, so the zone from the first start), fixed
 times rather than a sunrise guess from a zone name. It looks at the clock every 30 s and switches only after
 8 s without input (or at once, unseen, while a game hides the menus). The change crossfades over 600 ms by
@@ -634,7 +679,8 @@ Shelf look (`Medium::of`):
   while there is another way (`media::spine_fit`, trailer frames of 2026-10-29: "Advance…", "Donkey Kon…"): a little
   smaller (seven tenths of its size); on two lines across a thick spine, a subtitle on a line of its own without its
   dash ("Prince of Persia" over "The Sands of Time"); smaller still, down to 21 px; the same without the subtitle after
-  " - " or ": "; only then with "…" (tests/spine_titles.rs: long official titles at 640 × 480 and 1280 × 720). Cases with a
+  " - " or ": "; in a font wider than Barlow Condensed (Theme → Font: Pixel, Rounded) one or two lines at 18 or 16 px, then the title in Barlow Condensed by the same rules; only then
+  with "…" (tests/spine_titles.rs: long official titles at 640 × 480 and 1280 × 720 in all three fonts). Cases with a
   band at the top (Mega Drive, the light Sega case, the generic ones) paint it in the cover's **accent**
   (`media::cover_colors`: a clear colour of the cover far from the main one, at least 1.5 % of it; the main one again when
   there is none). Without a cover: the system's stripe, darkened. The colours are read on the `cabinet-art` thread
@@ -651,6 +697,29 @@ A potted plant, a desk lamp, a small cactus and a bookend (PixelLab pixflux, see
 last case and a plant, lamp or cactus further along (`Prop::beside`; which one follows from the shelf, its system's
 name, so it is the same every time), at least 60 px from the games, so a shelf of one game is not a bare board. At most four are painted per screen, only on a shelf that doesn't scroll, never taller
 than the shelf's room. Never over a game. The Shelf look uses the same props at its own scale.
+
+### The room: light and decorations (`room_light`, `room_deco`, `app_room_extras.rs`)
+Two rows of Settings → Look & feel → Cozy extras, both on from the start, Shelf look and Cabinet only.
+- **Light by time of day** (`room_light::at`): the real clock lights the room. Morning (from 07:30) a little cooler and
+  brighter, afternoon (13:00–16:30) as made, evening (18:30–21:00) warmer with the lamp glowing, night (22:30–05:00)
+  dimmer with the lamp as the main light; between them it eases over one to two hours. It falls on the wood (the
+  cabinet's walls, boards and plinth, the Shelf look's board): channel gains between 0.82 and 1.05, half of that on the
+  Light appearance. Cases and props get half its dimming and no tint (`Light::case_shade`, at least 230/256); the
+  showcase's cover, titles, the name cards and hints none. The lamp's glow is a soft warm ellipse in eight steps round
+  its shade, inside its compartment. Cost: the wood is tinted once when it is made and kept in its cache; the light
+  changes in steps of under 1 % a channel every few minutes, and only a change makes the wood again
+  (`CabinetUi::room_changed`). The app looks once a minute while a Shelf or the Cabinet is on screen
+  (`room_tick`); with Motion off it doesn't wake by itself. `POCKETUI_ROOM_TIME=HH:MM` sets the clock (snapshots).
+- **Decorations that grow with play** (`room_deco::earned`, from `library.json`: each game's time, status and case
+  stickers; no Play history needed): the plant grows from a sprout (under 2 hours in all) to a small plant (2 h), the
+  plant as it was (15 h) and a big one with flowers (60 h); a trophy after the first completed game (the status or the
+  "Completed" sticker); a framed "100 %" after the first "100 %" sticker (the words painted on the frame's empty paper,
+  `media::FRAME_PAPER`); a figurine (robot, knight, dragon, cat, rocket, owl; `Figure::of` the system's name) on a
+  system's own shelf after 10 hours on it. They stand in a row after the bookend, before the plant, lamp or cactus,
+  each only where it fits whole (`room_deco::place`): never over a case, never cut at the shelf's end, never taller
+  than the room. The Shelf look shows the trophy and the frame on every row with room; the Cabinet on the first shelf
+  from the top with room for them (`awards_shelf`). Off: the shelves as they always were (the grown plant). Art:
+  PixelLab pixflux in the props' style, warm, no characters of any game, no logos (`pixellab-assets.json`).
 
 - **The showcase** (`showcase`, a photo of 2026-10-28: the case held up in front of the shelf above hid the
   spines of two shelves, the bottom row was cut by the hints, the cover was cropped): the cabinet's top board sits
@@ -684,6 +753,27 @@ than the shelf's room. Never over a game. The Shelf look uses the same props at 
   frames of the backs (and, while the case's front is not made yet, the cardboard box's front) are PixelLab pixel art
   (`assets/media/back`, `tools/` there), nine-slice at a whole number of screen pixels a template pixel; the back's
   paper is the cover's colour, deep, with white type; missing pictures and text get their own plain places.
+- **Playful animations** (Settings → Look & feel → Cozy extras, `src/playful.rs`; on with Cozy, off with Quick until the
+  player switches it, nothing with Motion Reduced or Off), after Socket's playful feel in our 2D pixel style. Every one is
+  a transform of a picture already made (an offset, a row shear, a nearest-pixel scale, the box disc's turn), nothing
+  is made or decoded per frame:
+  - *Pulled out*, a case springs a touch past its place and back (`playful::back_out`, about 5 %): the Cabinet's case
+    into the showcase, the Shelf's spine up out of the row. Out and turned, it rocks once on its bottom edge
+    (`playful::wiggle`, a row shear of at most 2 % of its height, 420 ms).
+  - *Going in*, each medium its own way (`playful::Loader`), the medium in at `IN_AT` as before so its sound
+    (`ui_sound::going_in`) still lands on it: a cartridge is pushed into its slot and seats flatter and wider for a
+    moment with the click, then springs back out a hair (`playful::seat`); a game card clicks all the way in and its
+    edge springs back out for a moment; a tray (PS2, Xbox and every disc console not named here) slides out under the
+    drive's slot, the disc comes over it, drops in lying down and rides in as the tray shuts with the disc-in sound's
+    clunk (126 ms after it is in, `playful::SHUT_AFTER`); a lid (GameCube, PlayStation, Saturn, Dreamcast, Sega CD,
+    PC Engine CD, Neo Geo CD) flips up behind the disc, the disc drops in over the console's top edge and the lid
+    shuts with the same clunk; a slot-loader (Wii, Wii U, PS3) and the PSP's UMD take it in as before.
+  - *In the open box* a disc (not a UMD, in its shell) turns slowly, one turn in 9 s, for 12 s after the box opens or
+    turns back to its front, slowing to a stop over the last 2 s (`playful::spin`): no frames after that. A frame per
+    refresh, or every other one where the box costs more than half a refresh (the H700, `BoxView::spin_wake`).
+  - *Scrolling fast* on the Shelf, the spines lean against the move, at most about 2 degrees, and swing back when it
+    stops (`playful::Lean`: a spring pulled by the row's speed, so a single step barely tips them). Each row of the
+    strip is copied a little sideways.
 - Names of the shelves are on small paper cards in brass holders on the board edges, Body 20 px; a sticker's
   shelf has the sticker itself there instead (round, in the stickers' colour).
 - **Curator** (between Favourites and the systems): a shelf of DVD-size boxes in Curator's colour for the Lens, the

@@ -256,6 +256,11 @@ impl LibraryMeta {
         self.games.clone()
     }
 
+    /// The milestones the decorations on the shelves show (`room_deco`): read in place, nothing copied.
+    pub fn earned(&self) -> crate::room_deco::Earned {
+        crate::room_deco::earned(self.games.iter().map(|(k, g)| (k.as_str(), g)))
+    }
+
     /// The games with time or sessions counted: (path, seconds, sessions). Only those are copied (Play history's
     /// one migration, `play_log::Seed`).
     pub fn played(&self) -> Vec<(String, u64, u32)> {

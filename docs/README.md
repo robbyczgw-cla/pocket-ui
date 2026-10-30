@@ -33,6 +33,7 @@ Start at [user/index.md](user/index.md).
 | [user/quick-settings.md](user/quick-settings.md) | Quick settings (HOME), the power menu, sleep, power off and low battery |
 | [user/language.md](user/language.md) | Settings → Look & feel → Language: English or German, what stays English |
 | [user/night-light.md](user/night-light.md) | Settings → Look & feel → Night light: warmer, less blue colours in the evening, the schedule, the strength, how it fades and where it reaches |
+| [user/theme.md](user/theme.md) | Settings → Look & feel → Look → R2 Theme: the five colour sets, the three fonts and the button symbols in the hints, with the live preview |
 | [user/performance.md](user/performance.md) | Settings → Playing → Performance & fan: game defaults, the fan in the menus, Smooth fan, the readout |
 | [user/tour.md](user/tour.md) | The feature cards: Settings → System → Tour, what the first start's profiles set, "New in this version" |
 | [user/library.md](user/library.md) | The game card, play status, ratings, notes, hiding games and matching your files |

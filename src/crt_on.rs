@@ -11,6 +11,8 @@ use std::time::Duration;
 
 /// Set by pocket-ui for a pocket-core game whose launch is Cozy with Motion Full; absent in Quick, Reduced and Off.
 pub const ENV: &str = "POCKET_LAUNCH_CRT";
+/// `1`: the effect without its sound (Settings → Look & feel → Cozy extras → Case sounds off, `cozy_extras`).
+pub const SILENT_ENV: &str = "POCKET_LAUNCH_CRT_SILENT";
 
 /// The name the CRT sound hooks in on: [`start`] writes it as a trace event (`POCKETUI_TRACE`) and as the line
 /// `crt-on` on stdout of pocket-core the moment the effect begins. The sound agent plays its sample at that point.
@@ -29,6 +31,11 @@ const LINE_PX: f32 = 3.0;
 /// Whether pocket-ui asked for the effect.
 pub fn wanted() -> bool {
     std::env::var_os(ENV).is_some_and(|v| v == "1")
+}
+
+/// Whether pocket-ui asked for it without its sound.
+pub fn silent() -> bool {
+    std::env::var_os(SILENT_ENV).is_some_and(|v| v == "1")
 }
 
 /// The effect starts now: the hook for the sound.

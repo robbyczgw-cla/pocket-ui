@@ -1566,6 +1566,17 @@ impl Sleep {
         awake
     }
 
+    /// How long no button was pressed and no finger touched the screen, while awake; zero when the screen is off or the
+    /// Pocket sleeps. Read by the idle slideshow (`slideshow`), which starts on it: it changes no timer here, so the
+    /// screen goes off exactly when it would have without the show.
+    pub fn quiet_for(&self) -> Duration {
+        if self.state == State::Awake {
+            self.timers.last_input.elapsed()
+        } else {
+            Duration::ZERO
+        }
+    }
+
     /// Call from the event loop's idle hook. Returns when to call again.
     pub fn tick(&mut self, ctx: Ctx) -> Option<Instant> {
         if self.state == State::Awake {

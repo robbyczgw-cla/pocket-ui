@@ -706,7 +706,8 @@ pub fn paint_review(c: &mut Canvas, text: &mut Text, page: &ReviewPage, names: N
     let width = right - MARGIN;
     text.draw(c, Face::Body, 28, MARGIN, 330, p.dust, &kicker);
     let mut y = 330 + 110;
-    let big_px = if text.width(Face::Title, 96, &big) <= width { 96 } else { 67 };
+    // 67 when it doesn't fit on a line, smaller when a word of it is wider than the line (German, Large text).
+    let big_px = if text.width(Face::Title, 96, &big) <= width { 96 } else { text.title_px(Face::Title, 67, &big, width, 37) };
     for line in text.wrap(Face::Title, big_px, &big, width).iter().take(2) {
         let line = text.fit(Face::Title, big_px, line, width);
         text.draw(c, Face::Title, big_px, MARGIN, y, p.chalk, &line);

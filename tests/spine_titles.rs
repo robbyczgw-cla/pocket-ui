@@ -1,8 +1,8 @@
 //! Long titles on the spines (`media::spine_fit`, docs/DESIGN.md "Media"): a trailer's frames of 2026-10-29 showed
 //! "Advance…", "Tekken…", "Donkey Kon…" and "Prince of Persia - The Sa…" on spines that had the room. The Shelf and the
 //! Cabinet look with long official titles of SNES, GBA and PS2 games, rendered at 640x480 (the H700 handhelds) and
-//! 1280x720, in Normal and Large text: no title, nor its main part, is cut short with "…" (`Text::fit` notes every cut
-//! in `POCKETUI_I18N_MISSES`).
+//! 1280x720, in Normal and Large text, in each font of Theme → Font (Barlow, and the wider Pixel and Rounded): no title,
+//! nor its main part, is cut short with "…" (`Text::fit` notes every cut in `POCKETUI_I18N_MISSES`).
 //!
 //! Needs python3 (and, on Linux without a compositor, scripts/wayland-stub.py), as tests/text_size.rs.
 
@@ -12,7 +12,9 @@ use std::process::Command;
 const ROOT: &str = env!("CARGO_MANIFEST_DIR");
 
 /// (system folder, file, title as the shelf shows it)
-const GAMES: [(&str, &str, &str); 14] = [
+const GAMES: [(&str, &str, &str); 15] = [
+    // A DS case's thin spine: in the wider fonts (Theme → Font) it was "Chrono Trigg…" (2026-10-30).
+    ("nds", "Chrono Trigger (USA) (En,Fr).nds", "Chrono Trigger"),
     ("snes", "Donkey Kong Country 2 - Diddy's Kong Quest (USA).sfc", "Donkey Kong Country 2 - Diddy's Kong Quest"),
     ("snes", "Super Mario World 2 - Yoshi's Island (USA).sfc", "Super Mario World 2 - Yoshi's Island"),
     ("snes", "Teenage Mutant Ninja Turtles IV - Turtles in Time (USA).sfc", "Teenage Mutant Ninja Turtles IV - Turtles in Time"),
@@ -70,8 +72,9 @@ fn library(tmp: &Path) -> PathBuf {
 }
 
 /// The titles cut short while `state` was painted at `size`.
-fn cuts(tmp: &Path, lib: &Path, stub: &Option<Stub>, look: &str, size: &str, text: &str, state: &str) -> Vec<String> {
-    let name = format!("{look}-{size}-{text}-{}", state.replace(':', "_"));
+#[allow(clippy::too_many_arguments)]
+fn cuts(tmp: &Path, lib: &Path, stub: &Option<Stub>, look: &str, size: &str, text: &str, state: &str, font: &str) -> Vec<String> {
+    let name = format!("{look}-{size}-{text}-{font}-{}", state.replace(':', "_"));
     let data = tmp.join(format!("data-{name}"));
     let _ = std::fs::remove_dir_all(&data);
     let status = Command::new("cp").args(["-r", lib.join("data").to_str().unwrap(), data.to_str().unwrap()]).status().unwrap();
@@ -93,6 +96,7 @@ fn cuts(tmp: &Path, lib: &Path, stub: &Option<Stub>, look: &str, size: &str, tex
         .env("POCKETUI_LANG", "en")
         .env("POCKETUI_TEXT_SIZE", text)
         .env("POCKETUI_SNAPSHOT_SIZE", size)
+        .env("POCKETUI_FONT", font)
         .env("POCKETUI_I18N_MISSES", &misses)
         .env("POCKETUI_ES_SYSTEMS", lib.join("es_systems.cfg"))
         .env("POCKETUI_DATA", &data)
@@ -109,13 +113,16 @@ fn long_titles_fit_their_spines_on_small_and_wide_screens() {
     let stub = wayland(&tmp);
     let lib = library(&tmp);
     let mut wrong = Vec::new();
-    for size in ["640x480", "1280x720"] {
-        for text in ["normal", "large"] {
-            for state in ["shelf:snes:shelf:games:0", "shelf:gba:shelf:games:0", "shelf:ps2:shelf:games:0", "shelf:snes:cabinet:games:0", "shelf:gba:cabinet:games:0"] {
-                for cut in cuts(&tmp, &lib, &stub, "shelf", size, text, state) {
-                    // A title, or its part before the subtitle, cut short on a spine.
-                    if GAMES.iter().any(|(_, _, title)| *title == cut || title.split(" - ").next() == Some(cut.as_str())) {
-                        wrong.push(format!("{state} at {size}, {text} text: \"{cut}\" cut short"));
+    // Every font of Theme → Font: the wider ones make a title smaller where Barlow Condensed fits it.
+    for font in ["barlow", "pixel", "rounded"] {
+        for size in ["640x480", "1280x720"] {
+            for text in ["normal", "large"] {
+                for state in ["shelf:snes:shelf:games:0", "shelf:gba:shelf:games:0", "shelf:ps2:shelf:games:0", "shelf:nds:shelf:games:0", "shelf:snes:cabinet:games:0", "shelf:gba:cabinet:games:0"] {
+                    for cut in cuts(&tmp, &lib, &stub, "shelf", size, text, state, font) {
+                        // A title, or its part before the subtitle, cut short on a spine.
+                        if GAMES.iter().any(|(_, _, title)| *title == cut || title.split(" - ").next() == Some(cut.as_str())) {
+                            wrong.push(format!("{state} at {size}, {text} text, {font}: \"{cut}\" cut short"));
+                        }
                     }
                 }
             }
@@ -172,8 +179,8 @@ fn every_box_of_one_system_stands_as_wide_as_the_others() {
     let mut wrong = Vec::new();
     for size in ["1240x1080", "640x480", "1280x720"] {
         for state in ["shelf:snes:shelf:games:0", "shelf:gba:shelf:games:2", "shelf:ps2:shelf:games:1"] {
-            cuts(&tmp, &lib, &stub, "shelf", size, "normal", state);
-            let png = tmp.join(format!("shelf-{size}-normal-{}.png", state.replace(':', "_")));
+            cuts(&tmp, &lib, &stub, "shelf", size, "normal", state, "barlow");
+            let png = tmp.join(format!("shelf-{size}-normal-barlow-{}.png", state.replace(':', "_")));
             let runs = widths(&png);
             // The spines come first, all one width; after them only the bookend and the props (at most three runs): a
             // spine a pixel off would end the run of equal widths among the spines, with more of them after it.

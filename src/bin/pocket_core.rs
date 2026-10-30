@@ -349,7 +349,7 @@ impl App {
                         pocket_ui::crt_on::start();
                         // Its sound, a thunk and a faint whine, into the game's own: the chime, at the UI sounds' volume.
                         let rate = self.core.av.timing.sample_rate;
-                        if self.chime_gain > 0.0 && rate > 0.0 {
+                        if self.chime_gain > 0.0 && rate > 0.0 && !pocket_ui::crt_on::silent() {
                             self.chime.start_samples(pocket_ui::ui_sound::synth_at(pocket_ui::ui_sound::Sound::CrtOn, rate as u32), self.chime_gain);
                         }
                     }

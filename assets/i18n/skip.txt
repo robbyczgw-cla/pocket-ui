@@ -980,3 +980,4 @@ shoot em up
 shootem up
 beat em up
 puzzle game
+{s} frames={s} p50_us={s} p95_us={s} max_us={s} over_16ms={s}

@@ -183,8 +183,186 @@ pub fn blit(c: &mut Canvas, p: &Pic, x: i32, y: i32, shade: u32, clip: (i32, i32
     }
 }
 
+/// One source pixel onto the canvas (straight alpha), as `blit` does.
+#[inline]
+fn put(d: &mut u32, s: u32, shade: u32) {
+    let a = s >> 24;
+    if a == 255 {
+        *d = shaded(s, shade);
+    } else if a != 0 {
+        *d = mix(*d, shaded(s, shade), a);
+    }
+}
+
+/// `blit` with the rows pushed sideways, the top row by `top_dx` and the bottom one not at all: the picture rocks on
+/// its bottom edge (`playful::wiggle`) or leans. A copy with offsets, nothing is made.
+pub fn blit_sheared(c: &mut Canvas, p: &Pic, x: i32, y: i32, top_dx: f32, shade: u32, clip: (i32, i32)) {
+    if top_dx.abs() < 0.5 {
+        return blit(c, p, x, y, shade, clip);
+    }
+    let (y0, y1) = (y.max(clip.0).max(0), (y + p.h).min(clip.1).min(c.h));
+    let last = (p.h - 1).max(1) as f32;
+    for row in y0..y1 {
+        let dx = (top_dx * (1.0 - (row - y) as f32 / last)).round() as i32;
+        let (x0, x1) = ((x + dx).max(0), (x + dx + p.w).min(c.w));
+        if x0 >= x1 {
+            continue;
+        }
+        let src = &p.px[((row - y) * p.w + (x0 - x - dx)) as usize..][..(x1 - x0) as usize];
+        let dst = &mut c.buf[(row * c.w + x0) as usize..(row * c.w + x1) as usize];
+        for (d, &s) in dst.iter_mut().zip(src) {
+            put(d, s, shade);
+        }
+    }
+}
+
+/// `p` drawn `w` x `h` at (x, y), nearest pixel, straight onto the canvas (a squash or a stretch of a few per cent:
+/// nothing is made, unlike `Pic::scaled`).
+#[allow(clippy::too_many_arguments)]
+pub fn blit_scaled(c: &mut Canvas, p: &Pic, x: i32, y: i32, w: i32, h: i32, shade: u32, clip: (i32, i32)) {
+    if w <= 0 || h <= 0 {
+        return;
+    }
+    if (w, h) == (p.w, p.h) {
+        return blit(c, p, x, y, shade, clip);
+    }
+    let (y0, y1) = (y.max(clip.0).max(0), (y + h).min(clip.1).min(c.h));
+    let (x0, x1) = (x.max(0), (x + w).min(c.w));
+    for row in y0..y1 {
+        let sy = (((row - y) as i64 * p.h as i64 / h as i64) as i32).min(p.h - 1);
+        let src = &p.px[(sy * p.w) as usize..][..p.w as usize];
+        let dst = &mut c.buf[(row * c.w) as usize..][..c.w as usize];
+        for col in x0..x1 {
+            let sx = (((col - x) as i64 * p.w as i64 / w as i64) as i32).min(p.w - 1);
+            put(&mut dst[col as usize], src[sx as usize], shade);
+        }
+    }
+}
+
+/// A round picture (a disc) turned by `angle` radians about its middle, drawn with its middle at (cx, cy): each
+/// pixel inside its circle is read from where the turn brings it, between the four nearest (a printed disc's title
+/// stays smooth as it turns). Only the circle is touched.
+pub fn blit_spun(c: &mut Canvas, p: &Pic, cx: f32, cy: f32, angle: f32, clip: (i32, i32)) {
+    // Each row walks the picture in 16.16 fixed point, one step per screen pixel: nearest pixel, a few integer
+    // operations per pixel (on the H700 the bilinear version cost 29 ms a frame for the box's disc).
+    let r = p.w.min(p.h) as f32 / 2.0;
+    let (pcx, pcy) = (p.w as f32 / 2.0, p.h as f32 / 2.0);
+    let (sin, cos) = (-angle).sin_cos();
+    let fx = |v: f32| (v * 65536.0) as i64;
+    let (y0, y1) = (((cy - r).floor() as i32).max(clip.0).max(0), ((cy + r).ceil() as i32).min(clip.1).min(c.h));
+    let (pw, ph) = (p.w as i64, p.h as i64);
+    for row in y0..y1 {
+        let dy = row as f32 + 0.5 - cy;
+        let half = (r * r - dy * dy).max(0.0).sqrt();
+        let (x0, x1) = (((cx - half).ceil() as i32).max(0), ((cx + half).floor() as i32).min(c.w));
+        if x0 >= x1 {
+            continue;
+        }
+        let dx0 = x0 as f32 + 0.5 - cx;
+        let (mut u, mut v) = (fx(pcx + dx0 * cos - dy * sin), fx(pcy + dx0 * sin + dy * cos));
+        let (du, dv) = (fx(cos), fx(sin));
+        let dst = &mut c.buf[(row * c.w + x0) as usize..(row * c.w + x1) as usize];
+        for d in dst.iter_mut() {
+            let (iu, iv) = (u >> 16, v >> 16);
+            if iu >= 0 && iv >= 0 && iu < pw && iv < ph {
+                put(d, p.px[(iv * pw + iu) as usize], 256);
+            }
+            u += du;
+            v += dv;
+        }
+    }
+}
+
+/// A console's disc tray `out` (0-1) of the drive whose slot is at `slot_y`, `w` wide and centred on `cx`: a dark
+/// plate coming towards you under the slot, its top face foreshortened, with the round well the disc lies in.
+/// Returns the well's middle (y) and how tall its top face is drawn.
+pub fn tray(c: &mut Canvas, cx: i32, slot_y: i32, w: i32, out: f32, body: u32) -> (i32, i32) {
+    let depth = (w as f32 * 0.42 * out.clamp(0.0, 1.0)).round() as i32;
+    if depth <= 1 {
+        return (slot_y, 0);
+    }
+    // The top face (seen from above at a slant, lit from above) with a dark outline, and its front edge lighter still.
+    let top = mix(body, 0xffffff, 46);
+    let edge = (w / 28).clamp(4, 12);
+    c.rect(cx - w / 2 - 2, slot_y, w + 4, depth + edge + 2, 0x0a0a0b);
+    c.rect(cx - w / 2, slot_y, w, depth, top);
+    c.rect(cx - w / 2, slot_y + depth, w, edge, mix(body, 0xffffff, 90));
+    // The well: an ellipse a disc lies in, as foreshortened as the face, its far rim in shadow.
+    let (rx, ry) = ((w as f32 * 0.42) as i32, (depth as f32 * 0.42) as i32);
+    let wy = slot_y + depth / 2;
+    ellipse(c, cx, wy, rx, ry.max(1), mix(top, 0x000000, 60));
+    ellipse(c, cx, wy + ry / 6, rx - 3, (ry - 2).max(1), mix(top, 0x000000, 30));
+    (wy, depth)
+}
+
+/// A top-loader's lid over its round opening, middle (cx, cy), radii `rx` x `ry` as the console's picture shows it
+/// lying shut, `open` 0 (shut: nothing is drawn, the picture shows it) to 1 (standing up past upright), hinged at its
+/// back edge. Drawn in two parts so that the disc goes between them: `lid_behind` before the disc (the dark opening,
+/// and the lid while it stands up behind it), `lid_over` after it (the lid on its way down over the disc).
+pub fn lid_behind(c: &mut Canvas, (cx, cy, rx, ry): (i32, i32, i32, i32), open: f32, top: u32) {
+    if open <= 0.0 {
+        return;
+    }
+    ellipse(c, cx, cy, rx + 1, ry + 1, 0x0a0a0b);
+    ellipse(c, cx, cy, rx - 1, (ry - 1).max(1), 0x141417);
+    ellipse(c, cx, cy + ry / 5, rx * 3 / 5, (ry * 3 / 5).max(1), 0x1e1f23);
+    // Standing up behind the opening: its underside, darker.
+    if let Some((y0, y1)) = lid_span(cy, rx, ry, open).filter(|(_, y1)| *y1 <= cy - ry + 2) {
+        lid_face(c, cx, rx, (y0, y1), mix(top, 0x000000, 80));
+    }
+}
+
+/// The lid's second part (`lid_behind`): coming down over the opening, its top side to you.
+pub fn lid_over(c: &mut Canvas, (cx, cy, rx, ry): (i32, i32, i32, i32), open: f32, top: u32) {
+    if open <= 0.0 {
+        return;
+    }
+    if let Some((y0, y1)) = lid_span(cy, rx, ry, open) {
+        if y1 > cy - ry + 2 {
+            lid_face(c, cx, rx, (y0, y1), top);
+        }
+    }
+}
+
+/// The rows the lid covers at `open`: from its back edge (the hinge, `cy - ry`) to its front edge, which swings from
+/// `cy + ry` (shut) up over the hinge (standing, as tall as the lid is wide, a little foreshortened).
+fn lid_span(cy: i32, rx: i32, ry: i32, open: f32) -> Option<(i32, i32)> {
+    let th = open.clamp(0.0, 1.0) * 1.75;
+    let hinge = (cy - ry) as f32;
+    let front = hinge + 2.0 * ry as f32 * th.cos() - 1.7 * rx as f32 * th.sin();
+    let (a, b) = (hinge.min(front).round() as i32, hinge.max(front).round() as i32);
+    (b - a >= 2).then_some((a, b))
+}
+
+fn lid_face(c: &mut Canvas, cx: i32, rx: i32, (y0, y1): (i32, i32), color: u32) {
+    let (my, hy) = ((y0 + y1) / 2, ((y1 - y0) / 2).max(1));
+    ellipse(c, cx, my, rx + 1, hy + 1, 0x0a0a0b);
+    ellipse(c, cx, my, rx, hy, color);
+    // The light catching its rim.
+    ellipse(c, cx, my - hy / 3, rx * 4 / 5, (hy / 3).max(1), mix(color, 0xffffff, 40));
+    ellipse(c, cx, my, rx * 3 / 4, (hy * 3 / 4).max(1), color);
+}
+
+/// A filled ellipse.
+fn ellipse(c: &mut Canvas, cx: i32, cy: i32, rx: i32, ry: i32, color: u32) {
+    for dy in -ry..=ry {
+        let row = cy + dy;
+        if row < 0 || row >= c.h {
+            continue;
+        }
+        let half = (rx as f32 * (1.0 - (dy as f32 / ry as f32).powi(2)).max(0.0).sqrt()) as i32;
+        let (x0, x1) = ((cx - half).max(0), (cx + half + 1).min(c.w));
+        if x0 < x1 {
+            c.buf[(row * c.w + x0) as usize..(row * c.w + x1) as usize].fill(color);
+        }
+    }
+}
+
 /// Darkens every pixel of rows `y0..y1` to `keep`/256 of its brightness.
 pub fn dim(c: &mut Canvas, y0: i32, y1: i32, keep: u32) {
+    if keep >= 256 {
+        return;
+    }
     let (y0, y1) = (y0.clamp(0, c.h), y1.clamp(0, c.h));
     for p in &mut c.buf[(y0 * c.w) as usize..(y1 * c.w) as usize] {
         *p = shaded(*p, keep);
@@ -365,7 +543,9 @@ const BOARD_EDGE: u32 = 0x56402f;
 const WALL_FACE: u32 = 0x4f3a2b;
 
 /// A wood colour in the appearance in use: the dark walnut above, or a light oak on the light page (the same
-/// grain and shading, so it reads as the same cabinet in a lighter wood).
+/// grain and shading, so it reads as the same cabinet in a lighter wood). Stained towards the colours in use
+/// (Settings → Look → Theme → Colours, `palette::Scheme::wood`), each part as much lighter or darker than the board's
+/// top as it was, so the shading stays.
 fn wood(walnut: u32) -> u32 {
     let oak = match walnut {
         BACK => 0xb09372,
@@ -373,7 +553,16 @@ fn wood(walnut: u32) -> u32 {
         BOARD_EDGE => 0xc9a87f,
         _ => 0xc2a07a,
     };
-    crate::palette::pal().pick(walnut, oak)
+    let p = crate::palette::pal();
+    let plain = p.pick(walnut, oak);
+    let s = crate::palette::scheme();
+    if s.stain == 0 {
+        return plain;
+    }
+    let top = p.pick(BOARD_TOP, 0xe2cca8);
+    let k = (crate::palette::luminance(plain) + 0.05) / (crate::palette::luminance(top) + 0.05);
+    let stain = p.pick(s.wood[0], s.wood[1]);
+    mix(plain, scale_rgb(stain, k.sqrt() as f32), s.stain as u32)
 }
 
 /// One compartment of the cabinet, `w` wide: the back panel `inner` pixels high (shaded under the board above
@@ -503,18 +692,18 @@ pub fn plastic(system: &str) -> u32 {
     }
 }
 
-/// The title along a spine, read top to bottom: `len` pixels from `y0`, centred across `x0 .. x0 + thick`.
+/// The title along a spine in `face`, read top to bottom: `len` pixels from `y0`, centred across `x0 .. x0 + thick`.
 #[allow(clippy::too_many_arguments)]
-pub fn spine_title(text: &mut Text, p: &mut Pic, title: &str, px: u32, x0: i32, thick: i32, y0: i32, len: i32, ink: u32) {
+pub fn spine_title(text: &mut Text, p: &mut Pic, face: Face, title: &str, px: u32, x0: i32, thick: i32, y0: i32, len: i32, ink: u32) {
     // As thick as the case: the design's size whatever Settings → Text size says (`type_scale`).
     let _fixed = crate::type_scale::fixed();
-    let title = text.fit(Face::Title, px, title, len);
-    let tw = text.width(Face::Title, px, &title).max(1);
+    let title = text.fit(face, px, title, len);
+    let tw = text.width(face, px, &title).max(1);
     let th = (px as i32 * 3 / 2).max(1);
     let mut buf = vec![0u32; (tw + 4) as usize * th as usize];
     {
         let mut c = Canvas::new(&mut buf, (tw + 4) as u32, th as u32);
-        text.draw(&mut c, Face::Title, px, 2, px as i32, 0xffffff, &title);
+        text.draw(&mut c, face, px, 2, px as i32, 0xffffff, &title);
     }
     let bw = tw + 4;
     let rows: Vec<i32> = (0..th).filter(|&r| (0..bw).any(|x| buf[(r * bw + x) as usize] & 0xff != 0)).collect();
@@ -631,11 +820,17 @@ pub fn plain_label(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i
     let max_w = w - w / 6;
     let mut px = sizes.into_iter().rev().find(|&s| s as i32 <= w / 6).unwrap_or(24);
     let mut lines = text.wrap(Face::Title, px, title, max_w);
-    while lines.len() > 2 {
+    // Smaller also while a word is wider than the label on its own (a wide font: "Favorite" over "n").
+    while lines.len() > 2 || !text.words_fit(Face::Title, px, title, max_w) {
         match sizes.into_iter().rev().find(|&s| s < px) {
             Some(smaller) => {
                 px = smaller;
                 lines = text.wrap(Face::Title, px, title, max_w);
+            }
+            // A word still too wide at the smallest size: the name on one line, ending in "…", not a word in pieces.
+            None if !text.words_fit(Face::Title, px, title, max_w) => {
+                lines = vec![title.to_string()];
+                break;
             }
             None => {
                 lines = text.wrap_at_most(Face::Title, px, title, max_w, 2);

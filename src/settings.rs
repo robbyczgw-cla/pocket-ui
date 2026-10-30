@@ -270,6 +270,16 @@ pub struct Settings {
     /// (A on the right) except Odin 2 Mini/Portal (Xbox) when unset. An explicit saved choice wins.
     #[serde(default, deserialize_with = "lenient")]
     pub button_layout: crate::button_layout::ButtonLayout,
+    /// Settings > Look & feel > Look > Theme > Button symbols: how the hints draw A, B, X and Y (`button_prompts`);
+    /// the device's (Xbox-style on Retroid and AYN, plain letters on Anbernic) when unset. A saved choice wins.
+    #[serde(default, deserialize_with = "lenient")]
+    pub prompts: crate::button_prompts::PromptStyle,
+    /// Settings > Look & feel > Look > Theme > Colours (`palette::Colours`); Warm when unset.
+    #[serde(default, deserialize_with = "lenient")]
+    pub colours: crate::palette::Colours,
+    /// Settings > Look & feel > Look > Theme > Font: Barlow, Pixel or Rounded type (`font_style`); Barlow when unset, wrong or from before it.
+    #[serde(default, deserialize_with = "lenient")]
+    pub font: crate::font_style::FontStyle,
     /// Settings > Look > Motion; Full when unset.
     #[serde(default, deserialize_with = "lenient")]
     pub motion: Motion,
@@ -315,6 +325,10 @@ pub struct Settings {
     /// choice is kept here; unset is the box.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub details_page: bool,
+    /// Settings → Look & feel → Cozy extras: the switches changed from their start (`cozy_extras`); left out while none
+    /// is, and each at its start when unset, so a settings.json from before them keeps every extra as it was.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "crate::cozy_extras::Extras::is_default")]
+    pub extras: crate::cozy_extras::Extras,
 }
 
 fn is_off(l: &crate::over_game::Level) -> bool {
@@ -495,6 +509,9 @@ mod tests {
             on_start: crate::on_start::OnStart::Continue,
             forget_where_quit: true,
             button_layout: crate::button_layout::ButtonLayout::Xbox,
+            prompts: crate::button_prompts::PromptStyle::PlayStation,
+            colours: crate::palette::Colours::GreyBrick,
+            font: crate::font_style::FontStyle::Rounded,
             motion: Motion::Reduced,
             frames: Frames::Every,
             seen_version: Some("0.2.0".into()),
@@ -507,7 +524,55 @@ mod tests {
             animations: Some(Animations::Quick),
             no_launch_animation: false,
             details_page: true,
+            extras: crate::cozy_extras::Extras { cabinet_tv: false, ..Default::default() },
         }
+    }
+
+    #[test]
+    fn the_button_symbols_are_kept_and_the_devices_when_unset_or_wrong() {
+        use crate::button_prompts::PromptStyle;
+        let d = dir("prompts");
+        let device = crate::device::current().prompt_style();
+        std::fs::write(d.join(FILE), br#"{"theme": "cards"}"#).unwrap();
+        assert_eq!(Settings::load(&d).prompts, device, "a settings.json from before them");
+        std::fs::write(d.join(FILE), br#"{"theme": "cards", "prompts": "sega"}"#).unwrap();
+        let s = Settings::load(&d);
+        assert_eq!((s.prompts, s.theme), (device, Theme::Cards), "a wrong value costs nothing else");
+        chosen().save(&d);
+        assert_eq!(Settings::load(&d).prompts, PromptStyle::PlayStation);
+        assert!(std::fs::read_to_string(d.join(FILE)).unwrap().contains(r#""prompts": "playstation""#));
+    }
+
+    #[test]
+    fn the_colours_are_kept_and_warm_when_unset_or_wrong() {
+        use crate::palette::Colours;
+        let d = dir("colours");
+        std::fs::write(d.join(FILE), br#"{"theme": "cards"}"#).unwrap();
+        assert_eq!(Settings::load(&d).colours, Colours::Warm, "a settings.json from before them");
+        std::fs::write(d.join(FILE), br#"{"theme": "cards", "colours": "purple"}"#).unwrap();
+        let s = Settings::load(&d);
+        assert_eq!((s.colours, s.theme), (Colours::Warm, Theme::Cards), "a wrong value costs nothing else");
+        chosen().save(&d);
+        assert_eq!(Settings::load(&d).colours, Colours::GreyBrick);
+        assert!(std::fs::read_to_string(d.join(FILE)).unwrap().contains(r#""colours": "grey-brick""#));
+    }
+
+    #[test]
+    fn cozy_extras_are_all_on_until_switched_off_and_a_switch_survives_a_restart() {
+        let d = dir("extras");
+        std::fs::write(d.join(FILE), br#"{"theme": "cabinet", "onboarded": true}"#).unwrap();
+        assert!(Settings::load(&d).extras.is_default(), "a settings.json from before them");
+        chosen().save(&d);
+        let back = Settings::load(&d);
+        assert!(!back.extras.cabinet_tv && back.extras.case_sounds, "{:?}", back.extras);
+        assert!(std::fs::read_to_string(d.join(FILE)).unwrap().contains(r#""cabinet_tv": false"#));
+        // A wrong "extras" costs nothing else and leaves them on.
+        std::fs::write(d.join(FILE), br#"{"theme": "cabinet", "onboarded": true, "extras": 5}"#).unwrap();
+        let s = Settings::load(&d);
+        assert!(s.extras.is_default() && s.theme == Theme::Cabinet);
+        // All on is not written at all.
+        Settings { extras: Default::default(), ..chosen() }.save(&d);
+        assert!(!std::fs::read_to_string(d.join(FILE)).unwrap().contains("extras"));
     }
 
     #[test]
@@ -581,6 +646,28 @@ mod tests {
         assert_eq!(Settings::load(&d).button_layout, ButtonLayout::Xbox);
         std::fs::write(d.join(FILE), br#"{"button_layout": "xbox"}"#).unwrap();
         assert_eq!(Settings::load(&d).button_layout, ButtonLayout::Xbox);
+    }
+
+    #[test]
+    fn the_font_is_kept_and_barlow_when_unset_or_wrong() {
+        use crate::font_style::FontStyle;
+        let d = dir("font-style");
+        std::fs::write(d.join(FILE), br#"{"theme": "split", "onboarded": true}"#).unwrap();
+        assert_eq!(Settings::load(&d).font, FontStyle::Barlow, "a settings.json from before it");
+        assert_eq!(Settings::load(&d.join("nothing")).font, FontStyle::Barlow, "a new device");
+        for wrong in ["\"comic\"", "7", "null", "{\"a\": 1}", "\"PIXEL\"", "\"\""] {
+            std::fs::write(d.join(FILE), format!(r#"{{"theme": "cards", "font": {wrong}}}"#)).unwrap();
+            let s = Settings::load(&d);
+            assert_eq!((s.font, s.theme), (FontStyle::Barlow, Theme::Cards), "{wrong}: the rest is kept");
+        }
+        std::fs::write(d.join(FILE), "{broken").unwrap();
+        assert_eq!(Settings::load(&d).font, FontStyle::Barlow, "a damaged file");
+        for style in FontStyle::ALL {
+            Settings { font: style, ..chosen() }.save(&d);
+            assert_eq!(Settings::load(&d).font, style);
+        }
+        std::fs::write(d.join(FILE), br#"{"font": "pixel"}"#).unwrap();
+        assert_eq!(Settings::load(&d).font, FontStyle::Pixel);
     }
 
     #[test]

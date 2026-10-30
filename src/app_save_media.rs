@@ -1,5 +1,6 @@
-//! Part of the pocket-ui binary: the pause menu's Save and Load slots on the game's save medium
-//! (`pocket_ui::save_media`): a disc game's memory card, a cartridge with its battery save, a plain row for the rest.
+//! Part of the pocket-ui binary: the pause menu's Save and Load slots (`pocket_ui::save_media`). Under the picture a
+//! slim row of eight small blocks in the game's save medium's plastic (`save_media::paint_row`); with "Memory card in
+//! the pause menu" on ([`pause_memory_card`]) the medium itself beside its blocks, as on the info page.
 //!
 //! It takes the place of the dots under the picture and changes nothing else: the same slots, the same ring on the
 //! slot the row is on (none on Auto and Before load), the same note under it. A slot with a save shows the game's
@@ -13,7 +14,51 @@ use super::App;
 /// How many slots the strip is laid out for: the eight of every emulator with slots, so the window keeps its size.
 const LAID_OUT_FOR: usize = 8;
 
+/// The slim row's blocks and the room between them (screen pixels at the menu's 1240 px).
+const ROW_BLOCK: i32 = 30;
+const ROW_GAP: i32 = 12;
+
+/// The snapshots' "slot-…:<system>:card": the full medium in the pause menu whatever the setting says.
+static SNAPSHOT_CARD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// "Memory card in the pause menu" (off by default): the full medium beside its blocks instead of the slim row.
+/// Settings → Look & feel → Cozy extras switches it (`cozy_extras::Extra::PauseMemoryCard`); the snapshots
+/// "slot-…:<system>:card" show it too.
+pub(crate) fn pause_memory_card() -> bool {
+    pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::PauseMemoryCard) || SNAPSHOT_CARD.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 impl App {
+    /// How much height the slots take under the picture: the slim row as much as the old dots did (28), the full
+    /// medium its own.
+    pub(crate) fn save_strip_h(&self, w: i32) -> i32 {
+        if pause_memory_card() {
+            self.save_strip(w).1.h
+        } else {
+            28
+        }
+    }
+
+    /// The slim row centred on (cx, cy): `filled` one per slot, `ring` the slot the row is on.
+    pub(crate) fn paint_save_row(&mut self, c: &mut Canvas, cx: i32, cy: i32, filled: &[bool], ring: Option<usize>) {
+        let Some(run) = self.running.as_ref() else { return };
+        let (system, path) = (run.system.clone(), run.path.clone());
+        let kind = Kind::of(&system);
+        let inner = ROW_BLOCK - 2 * (ROW_BLOCK / 12).max(2);
+        let cover = self.picture(&pocket_ui::covers::cover_path(&self.data_dir, &system, &path), inner, inner);
+        let console = self
+            .art
+            .entry((system.clone(), inner, inner))
+            .or_insert_with(|| pocket_ui::system_art::get(&system).map(|a| std::rc::Rc::new(a.fitted(inner, inner))))
+            .clone();
+        let icon = match (&cover, &console) {
+            (Some(img), _) => Icon::Cover(img),
+            (None, Some(sp)) => Icon::Console(sp),
+            _ => Icon::None,
+        };
+        save_media::paint_row(c, kind, cx, cy, ROW_BLOCK, ROW_GAP, filled, ring, icon);
+    }
+
     /// The running game's save medium and its strip `w` wide.
     pub(crate) fn save_strip(&self, w: i32) -> (Kind, Layout) {
         let kind = self.running.as_ref().map_or(Kind::List, |r| Kind::of(&r.system));
@@ -50,8 +95,10 @@ impl App {
 
 impl App {
     /// Snapshots: "slot-save:<system>" and the other slot pages run a made-up game of that system (`main.rs`
-    /// `snapshot`); `cover`: with a made-up cover in the data folder, written as a downloaded one would be.
-    pub(crate) fn save_media_snapshot(&mut self, system: &str, cover: bool) {
+    /// `snapshot`); `cover`: with a made-up cover in the data folder, written as a downloaded one would be; `card`:
+    /// the full medium ("…:card", as with Memory card in the pause menu on).
+    pub(crate) fn save_media_snapshot(&mut self, system: &str, cover: bool, card: bool) {
+        SNAPSHOT_CARD.store(card, std::sync::atomic::Ordering::Relaxed);
         let (name, path) = match system {
             "psx" => ("Vagrant Story", "/storage/roms/psx/Vagrant Story (USA).chd"),
             "ps2" => ("Okage: Shadow King", "/storage/roms/ps2/Okage - Shadow King (USA).chd"),

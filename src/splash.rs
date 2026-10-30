@@ -2,8 +2,10 @@
 //! screen, all without a screen, so the host tests run every part of it. `src/bin/pocket_splash.rs` is the program
 //! around it: `/dev/fb0`, the console and the signals.
 //!
-//! The picture is one spine of the shelf on black: the "pocket-ui" wordmark (Barlow Condensed, Title 50, Chalk) on a
-//! Spine body whose 12 px stripe crossfades through the consoles' colours, nothing else moving. It fades in (400 ms),
+//! The picture is pocket-ui's mark on black: the cartridge (`ui_art::Art::Logo`, whole pixels, two to four times its
+//! size by the screen's height) over the "pocket-ui" wordmark (Barlow Condensed, Title 50, 67 from 960 lines, Chalk),
+//! and under the wordmark a short bar that crossfades through the consoles' colours, nothing else moving. It fades in
+//! (400 ms),
 //! and out (250 ms) when sway starts or the program is told to stop. Two states say something in words, never a blank:
 //! the first start after setting up a card ("Getting ready for the first start…") and a start that takes longer than
 //! a minute ("Still starting…").
@@ -19,31 +21,34 @@ use crate::settings::Motion;
 use crate::text::{Face, Text};
 
 pub const VOID: u32 = 0x000000;
-pub const SPINE: u32 = 0x1F1F22;
 pub const CHALK: u32 = 0xD9D6CE;
 pub const DUST: u32 = 0x8A877F;
-/// The stripe's colours in turn: NES, GB, GBC, GBA, SNES, N64 (docs/DESIGN.md, system stripes).
+/// The colour bar's colours in turn: NES, GB, GBC, GBA, SNES, N64 (docs/DESIGN.md, system stripes).
 pub const STRIPES: [u32; 6] = [0xC8102E, 0x8A9A3B, 0x2E8C9A, 0x5B4AA6, 0x7A6CB0, 0x2E7D32];
 
-/// The spine comes up from black.
+/// The picture comes up from black.
 pub const FADE_IN: Duration = Duration::from_millis(400);
 /// Each stripe colour holds this long, then crossfades to the next in `CROSS`.
 pub const HOLD: Duration = Duration::from_millis(1200);
 pub const CROSS: Duration = Duration::from_millis(400);
-/// From the spine to black when sway starts or the program is told to stop.
+/// From the picture to black when sway starts or the program is told to stop.
 pub const FADE_OUT: Duration = Duration::from_millis(250);
 /// After this, a line says the start is taking longer.
 pub const LATE: Duration = Duration::from_secs(60);
-/// After this (120 colours, about three minutes) the stripe holds still: nothing is drawn any more until the end.
+/// After this (120 colours, about three minutes) the bar holds still: nothing is drawn any more until the end.
 pub const STILL_AFTER: Duration = Duration::from_millis(120 * 1600);
 /// At most 30 frames a second.
 pub const FRAME: Duration = Duration::from_millis(33);
 
 const MARGIN: i32 = 72;
-const STRIPE_W: i32 = 12;
-const SPINE_H: i32 = 72;
+/// The colour bar under the wordmark: its height and its gap below the wordmark's baseline.
+const BAR_H: i32 = 6;
+const BAR_GAP: i32 = 18;
+/// Between the cartridge's bottom and the wordmark's capitals.
+const MARK_GAP: i32 = 28;
 const WORDMARK: &str = "pocket-ui";
 const WORDMARK_PX: u32 = 50;
+const WORDMARK_PX_LARGE: u32 = 67;
 const NOTE_PX: u32 = 28;
 /// The note's baseline above the bottom edge: where the hints sit.
 const NOTE_FROM_BOTTOM: i32 = 44;
@@ -72,9 +77,9 @@ impl Note {
 /// What one frame shows.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Look {
-    /// How strongly the spine shows: 0 black, 255 full (the fades in and out).
-    pub spine: u8,
-    /// The stripe's colour at full strength.
+    /// How strongly the picture shows: 0 black, 255 full (the fades in and out).
+    pub shown: u8,
+    /// The colour bar's colour at full strength.
     pub stripe: u32,
     pub note: Note,
     /// How strongly the note shows.
@@ -140,7 +145,7 @@ impl Timeline {
         };
         let note_up = if self.still() || note == Note::None { 255 } else { strength(ratio(t - since, FADE_IN)) };
         Look {
-            spine: (up as u32 * left / 255) as u8,
+            shown: (up as u32 * left / 255) as u8,
             stripe: self.stripe(t),
             note,
             note_a: if note == Note::None { 0 } else { (note_up as u32 * left / 255) as u8 },
@@ -229,23 +234,54 @@ pub struct Scene {
     pub w: i32,
     pub h: i32,
     text: Text,
+    /// The wordmark's size (Title 50, 67 from 960 lines where the cartridge is four times its pixels) and width.
+    wordmark_px: u32,
+    wordmark_w: i32,
+}
+
+/// How many screen pixels a pixel of the cartridge takes: 2 at 480 lines, 3 at 720, 4 from 960 (whole numbers keep
+/// pixel art crisp).
+pub fn mark_scale(h: i32) -> i32 {
+    (h / 240).clamp(1, 4)
 }
 
 impl Scene {
     /// The embedded Barlow only: no theme fonts and no system font are opened during the boot.
     pub fn new(w: u32, h: u32) -> Self {
-        Self { w: w as i32, h: h as i32, text: Text::builtin() }
+        let mut text = Text::builtin();
+        let wordmark_px = if mark_scale(h as i32) >= 4 { WORDMARK_PX_LARGE } else { WORDMARK_PX };
+        let wordmark_w = text.width(Face::Title, wordmark_px, WORDMARK);
+        Self { w: w as i32, h: h as i32, text, wordmark_px, wordmark_w }
     }
 
-    pub fn spine_rect(&self) -> Rect {
-        Rect { x: MARGIN, y: (self.h - SPINE_H) / 2, w: (self.w - 2 * MARGIN).max(STRIPE_W), h: SPINE_H }
+    fn mark_size(&self) -> (i32, i32) {
+        crate::ui_art::size(crate::ui_art::Art::Logo, mark_scale(self.h))
     }
 
-    pub fn stripe_rect(&self) -> Rect {
-        Rect { w: STRIPE_W, ..self.spine_rect() }
+    /// The wordmark's capitals, about three quarters of its size.
+    fn caps(&self) -> i32 {
+        self.wordmark_px as i32 * 3 / 4
     }
 
-    /// The note's line, as wide as the spine.
+    /// The whole picture: the cartridge, the wordmark and the bar, in the middle of the screen.
+    pub fn picture_rect(&self) -> Rect {
+        let (mw, mh) = self.mark_size();
+        let h = mh + MARK_GAP + self.caps() + BAR_GAP + BAR_H;
+        let w = mw.max(self.wordmark_w);
+        Rect { x: (self.w - w) / 2, y: (self.h - h) / 2, w, h }
+    }
+
+    fn baseline(&self) -> i32 {
+        let r = self.picture_rect();
+        r.y + self.mark_size().1 + MARK_GAP + self.caps()
+    }
+
+    /// The colour bar under the wordmark, as wide as it.
+    pub fn bar_rect(&self) -> Rect {
+        Rect { x: (self.w - self.wordmark_w) / 2, y: self.baseline() + BAR_GAP, w: self.wordmark_w, h: BAR_H }
+    }
+
+    /// The note's line, from the left margin to the right one.
     pub fn note_rect(&self) -> Rect {
         let base = self.h - NOTE_FROM_BOTTOM;
         Rect { x: MARGIN, y: base - NOTE_PX as i32 - 8, w: self.w - 2 * MARGIN, h: NOTE_PX as i32 + 20 }
@@ -254,13 +290,14 @@ impl Scene {
     /// The whole frame.
     pub fn paint(&mut self, c: &mut Canvas, look: &Look) {
         c.clear(VOID);
-        if look.spine > 0 {
-            let s = self.spine_rect();
-            let a = look.spine as u32;
-            c.rect(s.x, s.y, s.w, s.h, mix(VOID, SPINE, a));
-            self.paint_stripe(c, look);
-            let baseline = s.y + s.h / 2 + 18;
-            self.text.draw(c, Face::Title, WORDMARK_PX, s.x + STRIPE_W + 28, baseline, mix(VOID, CHALK, a), WORDMARK);
+        if look.shown > 0 {
+            let a = look.shown as u32;
+            let (mw, _) = self.mark_size();
+            let r = self.picture_rect();
+            paint_mark(c, (self.w - mw) / 2, r.y, mark_scale(self.h), a);
+            let x = (self.w - self.wordmark_w) / 2;
+            self.text.draw(c, Face::Title, self.wordmark_px, x, self.baseline(), mix(VOID, CHALK, a), WORDMARK);
+            self.paint_bar(c, look);
         }
         if look.note_a > 0 {
             let r = self.note_rect();
@@ -268,25 +305,38 @@ impl Scene {
         }
     }
 
-    fn paint_stripe(&self, c: &mut Canvas, look: &Look) {
-        let r = self.stripe_rect();
-        c.rect(r.x, r.y, r.w, r.h, mix(VOID, look.stripe, look.spine as u32));
+    fn paint_bar(&self, c: &mut Canvas, look: &Look) {
+        let r = self.bar_rect();
+        c.rect(r.x, r.y, r.w, r.h, mix(VOID, look.stripe, look.shown as u32));
     }
 
-    /// Brings `c`, which shows `prev`, to `look`, and returns the part that changed: only the stripe while just its
+    /// Brings `c`, which shows `prev`, to `look`, and returns the part that changed: only the bar while just its
     /// colour moves, the whole frame the first time, None when nothing changed.
     pub fn update(&mut self, c: &mut Canvas, prev: Option<&Look>, look: &Look) -> Option<Rect> {
         let changed = match prev {
             None => Rect { x: 0, y: 0, w: self.w, h: self.h },
             Some(p) if p == look => return None,
-            Some(p) if (p.spine, p.note, p.note_a) == (look.spine, look.note, look.note_a) => {
-                self.paint_stripe(c, look);
-                return Some(self.stripe_rect().clip(self.w, self.h));
+            Some(p) if (p.shown, p.note, p.note_a) == (look.shown, look.note, look.note_a) => {
+                self.paint_bar(c, look);
+                return Some(self.bar_rect().clip(self.w, self.h));
             }
-            Some(_) => self.spine_rect().union(self.note_rect()),
+            Some(_) => self.picture_rect().union(self.note_rect()),
         };
         self.paint(c, look);
         Some(changed.clip(self.w, self.h))
+    }
+}
+
+/// The cartridge at (x, y), `k` screen pixels a pixel, faded towards black by `a` (0..=255).
+fn paint_mark(c: &mut Canvas, x: i32, y: i32, k: i32, a: u32) {
+    let Some(s) = crate::ui_art::get(crate::ui_art::Art::Logo) else { return };
+    for sy in 0..s.h as i32 {
+        for sx in 0..s.w as i32 {
+            let p = s.px[(sy * s.w as i32 + sx) as usize];
+            if p >> 24 != 0 {
+                c.rect(x + sx * k, y + sy * k, k, k, mix(VOID, p & 0xff_ffff, a));
+            }
+        }
     }
 }
 
@@ -589,20 +639,20 @@ mod tests {
     }
 
     #[test]
-    fn the_spine_fades_in_holds_and_fades_out() {
+    fn the_picture_fades_in_holds_and_fades_out() {
         let mut t = Timeline::new(Motion::Full, false);
-        assert_eq!(t.look(ms(0)).spine, 0, "starts black");
-        let mid = t.look(ms(200)).spine;
+        assert_eq!(t.look(ms(0)).shown, 0, "starts black");
+        let mid = t.look(ms(200)).shown;
         assert!(mid > 100 && mid < 160, "half way up at half time ({mid})");
-        assert_eq!(t.look(ms(400)).spine, 255);
-        assert_eq!(t.look(ms(30_000)).spine, 255);
+        assert_eq!(t.look(ms(400)).shown, 255);
+        assert_eq!(t.look(ms(30_000)).shown, 255);
         assert_eq!(t.look(ms(0)).note, Note::None);
         t.stop(ms(5000));
         t.stop(ms(6000));
         assert_eq!(t.stop_at, Some(ms(5000)), "only the first stop counts");
-        assert_eq!(t.look(ms(4999)).spine, 255);
-        assert!(t.look(ms(5125)).spine < 200);
-        assert_eq!(t.look(ms(5250)).spine, 0);
+        assert_eq!(t.look(ms(4999)).shown, 255);
+        assert!(t.look(ms(5125)).shown < 200);
+        assert_eq!(t.look(ms(5250)).shown, 0);
         assert!(!t.finished(ms(5100)) && t.finished(ms(5250)));
         assert_eq!(t.next_change(ms(5250)), None);
     }
@@ -641,15 +691,15 @@ mod tests {
     fn motion_off_is_a_still_picture_without_fades() {
         let mut t = Timeline::new(Motion::Off, true);
         let first = t.look(ms(0));
-        assert_eq!((first.spine, first.note_a, first.stripe), (255, 255, STRIPES[0]));
+        assert_eq!((first.shown, first.note_a, first.stripe), (255, 255, STRIPES[0]));
         assert_eq!(t.look(ms(1400)), first, "the stripe does not move");
         assert_eq!(t.next_change(ms(0)), Some(LATE), "nothing to draw until the late note");
         t.stop(ms(2000));
-        assert_eq!(t.look(ms(2000)).spine, 0, "gone at once");
+        assert_eq!(t.look(ms(2000)).shown, 0, "gone at once");
         assert!(t.finished(ms(2000)));
         // Reduced keeps the fades: nothing on the splash moves, it only fades.
         let r = Timeline::new(Motion::Reduced, false);
-        assert_eq!(r.look(ms(0)).spine, 0);
+        assert_eq!(r.look(ms(0)).shown, 0);
         assert_ne!(r.look(ms(1400)).stripe, STRIPES[0]);
     }
 
@@ -687,21 +737,29 @@ mod tests {
     }
 
     #[test]
-    fn the_picture_is_one_spine_with_the_wordmark_on_black() {
+    fn the_picture_is_the_cartridge_over_the_wordmark_on_black() {
         let mut s = scene();
         let look = Timeline::new(Motion::Full, false).look(ms(1000));
         let buf = picture(&mut s, &look);
         let at = |x: i32, y: i32| buf[(y * s.w + x) as usize];
-        let sp = s.spine_rect();
-        assert_eq!(sp, Rect { x: 72, y: 504, w: 1096, h: 72 }, "Home's spine place on the Mini V2");
+        let r = s.picture_rect();
+        assert_eq!(mark_scale(1080), 4);
+        assert!((r.y + r.h / 2 - 540).abs() <= 1 && (r.x + r.w / 2 - 620).abs() <= 1, "in the middle of the Mini V2's screen: {r:?}");
         assert_eq!(at(10, 10), VOID, "true black around it");
-        assert_eq!(at(sp.x + 5, sp.y + 5), STRIPES[0], "the NES stripe");
-        assert_eq!(at(sp.x + sp.w - 5, sp.y + 5), SPINE);
-        // The wordmark: Chalk pixels on the spine, right of the stripe, and nowhere else.
-        let chalk: Vec<(i32, i32)> =
-            (0..s.h).flat_map(|y| (0..s.w).map(move |x| (x, y))).filter(|&(x, y)| red(at(x, y)) > 0xb0 && at(x, y) != STRIPES[0]).collect();
-        assert!(chalk.len() > 500, "the wordmark is there ({} px)", chalk.len());
-        assert!(chalk.iter().all(|&(x, y)| x > sp.x + 12 && x < sp.x + 400 && y > sp.y && y < sp.y + sp.h));
+        // The cartridge: its paper label (light, warm) in the top part of the picture, four screen pixels a pixel.
+        let label = (r.y..r.y + 52 * 4).flat_map(|y| (r.x..r.x + r.w).map(move |x| (x, y))).filter(|&(x, y)| {
+            let p = at(x, y);
+            red(p) > 0xf0 && (p & 0xff) < 0xd8
+        }).count();
+        assert!(label > 4000, "the label's paper is there ({label} px)");
+        // The bar under the wordmark in the first colour, the wordmark between the cartridge and the bar.
+        let b = s.bar_rect();
+        assert_eq!(at(b.x + 2, b.y + 2), STRIPES[0]);
+        assert!(b.y > r.y + 52 * 4 && b.y + b.h <= r.y + r.h);
+        let chalk = (r.y + 52 * 4..b.y).flat_map(|y| (0..s.w).map(move |x| (x, y))).filter(|&(x, y)| red(at(x, y)) > 0xb0).count();
+        assert!(chalk > 500, "the wordmark is there ({chalk} px)");
+        // Nothing lit outside the picture.
+        assert!((0..s.h).all(|y| (0..s.w).all(|x| at(x, y) == VOID || (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h))));
         // Black at the start and at the end of a fade.
         assert!(picture(&mut s, &Timeline::new(Motion::Full, false).look(ms(0))).iter().all(|p| *p == VOID));
     }
@@ -711,9 +769,10 @@ mod tests {
         let mut s = scene();
         let buf = picture(&mut s, &Timeline::new(Motion::Full, true).look(ms(1000)));
         let r = s.note_rect();
+        let pic = s.picture_rect();
         let lit: Vec<(i32, i32)> = (0..s.h).flat_map(|y| (0..s.w).map(move |x| (x, y))).filter(|&(x, y)| {
             let p = buf[(y * s.w + x) as usize];
-            p != VOID && !(504..576).contains(&y)
+            p != VOID && !(pic.y..pic.y + pic.h).contains(&y)
         }).collect();
         assert!(!lit.is_empty(), "the first start says so");
         assert!(lit.iter().all(|&(x, y)| x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h), "inside the note's line");
@@ -721,19 +780,22 @@ mod tests {
     }
 
     #[test]
-    fn every_screen_size_gets_the_spine_in_its_middle() {
-        // The Mini V2, the first Mini, the Pocket 5 and Flip 2, and a portrait frame buffer shown unturned.
-        for (w, h) in [(1240, 1080), (1280, 960), (1920, 1080), (1080, 1240)] {
+    fn every_screen_size_gets_the_picture_in_its_middle() {
+        // The Mini V2, the first Mini, the Pocket 5 and Flip 2, a portrait frame buffer shown unturned, and the H700
+        // handhelds' 640x480.
+        for (w, h) in [(1240, 1080), (1280, 960), (1920, 1080), (1080, 1240), (640, 480)] {
             let mut s = Scene::new(w, h);
-            let sp = s.spine_rect();
-            assert_eq!((sp.x, sp.w), (72, w as i32 - 144), "{w}x{h}");
-            assert_eq!(sp.y + sp.h / 2, h as i32 / 2, "{w}x{h}");
+            let r = s.picture_rect();
+            let (cx, cy) = (r.x + r.w / 2, r.y + r.h / 2);
+            assert!((cx - w as i32 / 2).abs() <= 1 && (cy - h as i32 / 2).abs() <= 1, "{w}x{h}: {r:?}");
             let look = Timeline::new(Motion::Full, true).look(LATE + ms(1000));
             let buf = picture(&mut s, &look);
-            assert_eq!(buf[(sp.y * w as i32 + sp.x + 2) as usize], STRIPES[look_index(&look)], "{w}x{h}");
+            let b = s.bar_rect();
+            assert_eq!(buf[(b.y * w as i32 + b.x + 2) as usize], STRIPES[look_index(&look)], "{w}x{h}");
             let nr = s.note_rect();
-            assert!(nr.y + nr.h <= h as i32 && nr.y > sp.y + sp.h, "{w}x{h}: the note under the spine, on screen");
+            assert!(nr.y + nr.h <= h as i32 && nr.y > r.y + r.h, "{w}x{h}: the note under the picture, on screen");
         }
+        assert_eq!((mark_scale(480), mark_scale(720), mark_scale(960)), (2, 3, 4));
     }
 
     fn look_index(look: &Look) -> usize {
@@ -749,16 +811,16 @@ mod tests {
         let mut c = Canvas::new(&mut buf, w, h);
         assert_eq!(s.update(&mut c, None, &t.look(ms(500))), Some(Rect { x: 0, y: 0, w: 1240, h: 1080 }));
         let a = t.look(ms(1300));
-        assert_eq!(s.update(&mut c, Some(&t.look(ms(500))), &a), Some(s.stripe_rect()), "a colour step: the stripe only");
+        assert_eq!(s.update(&mut c, Some(&t.look(ms(500))), &a), Some(s.bar_rect()), "a colour step: the bar only");
         assert_eq!(s.update(&mut c, Some(&a), &a), None);
-        // The stripe-only update gives exactly the picture a full paint gives.
+        // The bar-only update gives exactly the picture a full paint gives.
         let full = picture(&mut s, &a);
         assert!(buf == full);
         let mut t2 = t.clone();
         t2.stop(ms(2000));
         let mut c = Canvas::new(&mut buf, w, h);
         let r = s.update(&mut c, Some(&a), &t2.look(ms(2100))).unwrap();
-        assert_eq!(r, s.spine_rect().union(s.note_rect()), "a fade: the spine and the note's line");
+        assert_eq!(r, s.picture_rect().union(s.note_rect()), "a fade: the picture and the note's line");
     }
 
     /// Turns the frame buffer back into the picture, by the definition of each turn (where the picture's top left
@@ -813,14 +875,13 @@ mod tests {
     #[test]
     fn convert_writes_only_the_rows_of_the_part_that_changed() {
         let fmt = Format::xrgb(1080, 1240);
-        let s = scene();
         let src = vec![0x123456u32; 1240 * 1080];
         let mut frame = vec![0u8; fmt.frame_len()];
-        // The stripe (x 72..84 of the picture) is rows 72..84 of the Mini V2's frame buffer.
-        let rows = convert(&src, 1240, 1080, s.stripe_rect(), Turn::Cw, &fmt, &mut frame);
+        // A part at x 72..84, y 504..576 of the picture is rows 72..84 of the Mini V2's frame buffer.
+        let rows = convert(&src, 1240, 1080, Rect { x: 72, y: 504, w: 12, h: 72 }, Turn::Cw, &fmt, &mut frame);
         assert_eq!(rows, (72, 84));
         let touched = frame.chunks(4).filter(|p| p != &[0, 0, 0, 0]).count();
-        assert_eq!(touched, 12 * 72, "only the stripe's pixels");
+        assert_eq!(touched, 12 * 72, "only the part's pixels");
         // A picture's bottom left is the panel's top left.
         let mut frame = vec![0u8; fmt.frame_len()];
         convert(&src, 1240, 1080, Rect { x: 0, y: 1079, w: 1, h: 1 }, Turn::Cw, &fmt, &mut frame);

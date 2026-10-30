@@ -1048,6 +1048,8 @@ impl Card {
             if let Some(l) = &d.listed_as {
                 rows.push(("Listed as", l.clone()));
             }
+            // A face wider than Barlow (Settings → Look & feel → Look → Theme → Font) or a longer German label: the column holds the widest one.
+            let key_w = rows.iter().map(|(k, _)| text.width(Face::Body, 28, k)).max().map_or(key_w, |w| key_w.max(w + text.width(Face::Body, 28, "  ")));
             for (k, v) in rows {
                 text.draw(c, Face::Body, 28, lx, ly, pal().dust, k);
                 for (i, line) in text.wrap(Face::Body, 28, &v, lw - key_w).iter().take(2).enumerate() {

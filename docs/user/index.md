@@ -85,21 +85,22 @@ today and say clearly where something is still being built or has not been confi
 7. [Settings](settings.md): the Settings categories and the entries of Look & feel, Playing and Games; [Connections and System](settings-system.md): Wi-Fi, Bluetooth, Tailscale, Sync, the clock, sleep, backups and this guide; [quick settings, sleep and power](quick-settings.md); [storage](storage.md): what takes up space on the SD card, clean-ups, hidden games; [Bluetooth](bluetooth.md): pairing controllers, headphones and speakers.
 8. [Language](language.md): English or German menus, and what stays English.
 9. [Night light](night-light.md): warmer, less blue colours in the evening, on a schedule or all the time.
-10. [Performance and fan](performance.md): what games start with, the fan in the menus, Smooth fan, the readout.
-11. [Features and the Tour](tour.md): every feature on a card, the first start's profiles, new in this version.
-12. [Your library](library.md): game cards, play status, ratings and notes; [Curator](curator.md): Lens, smart shelves, stickers, Echoes, Versions and play history.
-13. [Achievements](achievements.md): RetroAchievements, signing in, unlocks, offline play.
-14. [Systems](systems.md): which systems run on which emulator.
-15. [Arcade games](arcade.md): which core plays them, matching romsets, parents, BIOS and CHD files, when a game does not start.
-16. [Patches, translations and MSU-1](patches-msu1.md): patching a game on a computer or with RetroArch, and one MSU-1 recipe (not checked on the device).
-17. [Extras](extras.md): cover art, PortMaster games, tools, the Store (not open yet).
-18. [Sync](sync.md): saves and states on all your devices, with Syncthing.
-19. [Tailscale](remote.md): reach the Pocket from anywhere on your private network.
-20. [Web companion](web-companion.md): your library, uploads and play time in a browser, over Tailscale.
-21. [PC streaming](pc-streaming.md): Moonlight, pairing and leaving a stream.
-22. [Updates](updates.md): updating pocket-ui and the system safely.
-23. [Safe mode and EmulationStation](safe-mode.md): what happens when pocket-ui won't start, and ROCKNIX's own menu.
-24. [Hotel and train Wi-Fi](hotel-wifi.md): networks that want a sign-in first, and the other ways online.
-25. [Troubleshooting and FAQ](troubleshooting.md): known limits and common questions.
+10. [Theme](theme.md): colours, font and button symbols for every screen, with a live preview.
+11. [Performance and fan](performance.md): what games start with, the fan in the menus, Smooth fan, the readout.
+12. [Features and the Tour](tour.md): every feature on a card, the first start's profiles, new in this version.
+13. [Your library](library.md): game cards, play status, ratings and notes; [Curator](curator.md): Lens, smart shelves, stickers, Echoes, Versions and play history.
+14. [Achievements](achievements.md): RetroAchievements, signing in, unlocks, offline play.
+15. [Systems](systems.md): which systems run on which emulator.
+16. [Arcade games](arcade.md): which core plays them, matching romsets, parents, BIOS and CHD files, when a game does not start.
+17. [Patches, translations and MSU-1](patches-msu1.md): patching a game on a computer or with RetroArch, and one MSU-1 recipe (not checked on the device).
+18. [Extras](extras.md): cover art, PortMaster games, tools, the Store (not open yet).
+19. [Sync](sync.md): saves and states on all your devices, with Syncthing.
+20. [Tailscale](remote.md): reach the Pocket from anywhere on your private network.
+21. [Web companion](web-companion.md): your library, uploads and play time in a browser, over Tailscale.
+22. [PC streaming](pc-streaming.md): Moonlight, pairing and leaving a stream.
+23. [Updates](updates.md): updating pocket-ui and the system safely.
+24. [Safe mode and EmulationStation](safe-mode.md): what happens when pocket-ui won't start, and ROCKNIX's own menu.
+25. [Hotel and train Wi-Fi](hotel-wifi.md): networks that want a sign-in first, and the other ways online.
+26. [Troubleshooting and FAQ](troubleshooting.md): known limits and common questions.
 
 For the install guide and the developer documentation, see the [documentation index](../README.md).

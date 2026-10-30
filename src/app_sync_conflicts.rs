@@ -449,7 +449,10 @@ impl App {
         y += 30;
         let rows = page::version_rows(&e.group);
         let (row, x0) = (pocket_ui::type_scale::row(84, 37), NU_PAD);
-        let date_x = left + pocket_ui::type_scale::wide(360, 37);
+        // The dates in a column after the widest name (and its "Newer"): a wider font or German needs more than 360.
+        let newer_w = self.text.width(Face::Body, 24, "Newer") + 18;
+        let names_w = rows.iter().map(|r| self.text.width(Face::Title, 37, &r.label) + if r.newest { newer_w } else { 0 }).max().unwrap_or(0);
+        let date_x = left + pocket_ui::type_scale::wide(360, 37).max(names_w + 24);
         for (i, r) in rows.iter().enumerate() {
             let ry = y + i as i32 * row;
             self.hits.row(Area::new(x0, ry, c.w - 2 * x0, row), i);

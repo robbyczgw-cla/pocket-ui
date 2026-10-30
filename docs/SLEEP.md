@@ -311,6 +311,46 @@ The only difference to Android is that pocket-ui's power menu also offers Restar
 hold where pocket-ui and Android ask first. A short press never opens a menu, and the press that wakes the device
 does nothing else (`WAKE_GUARD`, `WAKE_QUIET`).
 
+## Idle slideshow (2026-10-30, `src/slideshow.rs`, `src/app_slideshow.rs`)
+A quiet shelf is not left static: after a minute without input the games' pictures play, then the screen goes off as
+it always did. Settings → Look & feel → Cozy extras → **Idle slideshow**. **Off in every look** until the player switches it on (not
+everyone wants it; `idle_slideshow: true` under `extras` in `settings.json`, nothing is written while it is off). Read with
+`cozy_extras::on(Extra::IdleSlideshow)`.
+
+- **When.** No button or touch for `slideshow::start_after`: a minute, or half the screen-off time when that is shorter
+  (Screen off after 30 s: the show starts at 15 s; a screen-off time under 16 s: no show; Never: a minute), and the shelf
+  is alone: Home, no game, page, card, menu, dialog, notice or toast, the device awake, not on a TV. The show reads
+  `Sleep::quiet_for` (the time since the last input of sleep's own `last_input`) and nothing else of sleep: **it sets no
+  timer and holds no wake lock**, so the screen goes off at the same moment as without it, the light sleep ends the show
+  (`slideshow_tick` finds the device no longer awake), and Sleep after / Switch off count as before.
+- **What.** On a thread: of a shuffle of the library, one picture per game (box art, in-game screenshot or title
+  screen, whichever exists, in a varying order), plus the player's own screenshots (`screenshots/<system>/`, HOME + A)
+  and save-state pictures (`savestates/<system>/*.pstate*.png`: slots and the auto state, not "Before load"),
+  one slide in three, 36 slides at most. Files are judged by their PNG headers (at least 64 px a side). With Game
+  pictures on "Box art only" the screenshots and title screens that are on the card are left out. **No game with a real
+  picture: no show**, the shelf stays (looked at again after the next input). Each picture is read and scaled for the
+  screen on a second thread (`slideshow::prepare`): a picture close to the screen's shape fills it, any other (a portrait
+  box) is shown whole on a dark backdrop of its own colour; three pictures at most are in memory.
+- **How it looks.** Every 10 s the next picture fades in over 1.6 s (the first one over the shelf itself); each moves
+  while it is there: a slow zoom (1.0 to 1.12, in and out alternately) with a drift in one of eight directions
+  (`slideshow::view`; the pan never takes a filling picture's edge into the screen). The title and the system are small
+  at the bottom (a player's own picture adds "Your screenshot" / "From your save"), the clock and the battery in the
+  corner. Motion Reduced or Off: no zoom or pan, only the cross-fades.
+- **Cheap.** 15 frames a second (`slideshow::FRAME`) while something moves or fades, none between slides when Motion is
+  Reduced or Off; `App::animating` is false while it runs, so the shelf's own animations do not set the pace. The paint
+  is a bilinear window from the prepared picture (`slideshow::paint`: about 3 lerps a pixel, rows and columns worked
+  out once); nothing is decoded on the UI thread, nothing runs in the shelf behind it, no fan is asked for.
+- **Any input ends it, and does nothing else** (`slideshow_input`): a button press (not a release, not the volume keys)
+  or a touch ends the show and is swallowed; the shelf is exactly as it was (the show never changed a thing of it), key
+  repeat is cancelled, the rest of a touch (move, lift) is swallowed too. Sleep has seen the input first (it is the one
+  that restarts the screen-off time). Analog L2/R2 pulls become button edges before sleep and the slideshow see them;
+  further travel while held cannot reach the shelf as a second press, and their release cancels key repeat.
+- **Tests.** Unit: `slideshow` (timing, the camera, painting, the picture lists), `tests/user_journeys.rs` (a real
+  run with `--test-driver`: idle, the show with a real title, a button press or analog R2 pull back to the same shelf
+  with nothing opened, analog R2 wake without moving the shelf, no pictures: no show, off: no show, a touch). `--snapshot slideshow[:<ms>|:fade]` renders a frame;
+  `POCKETUI_SLIDESHOW_AFTER_MS` (with `POCKETUI_MOCK`) shortens the minute for tests, `POCKETUI_SLIDESHOW_STATES` moves the
+  save-state folder.
+
 ## Screen off with the game running (2026-10-26)
 "Short press: Screen off" (`Sleep::screen_off_now`) is for a game whose music you want to keep hearing.
 - With a game being played (no pause menu open): the backlight goes to 0, the game is not paused, its sound goes on.

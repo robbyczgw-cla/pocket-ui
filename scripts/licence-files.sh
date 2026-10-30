@@ -5,7 +5,7 @@
 #
 # DIR gets LICENSE (pocket-ui's GPL), NOTICE.md (credits), THIRD-PARTY-CRATES.md (every linked Rust crate with its
 # licence), THIRD-PARTY-LICENSES.txt (the licence and notice files of those crates, from `third-party.sh --texts`) and
-# FONTS-OFL.txt (the SIL Open Font License of the Barlow fonts compiled into the programs). Settings > About names
+# FONTS-OFL.txt (the SIL Open Font License of the Barlow, Pixelify Sans and Nunito fonts compiled into the programs). Settings > About names
 # where they end up on the device (/storage/pocket-ui/licences). Fails when any is missing or empty.
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)

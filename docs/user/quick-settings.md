@@ -124,3 +124,10 @@ heading **Power button**.
   opening it wakes the screen.
 - Settings from before this page (the times used to be in Settings → Playing → Battery) are kept: 3 minutes there is
   3 min under Screen off after until you change it.
+
+**Idle slideshow.** Leave the shelf alone for a minute and your games' pictures start to play: box art, screenshots, and
+the screenshots and save pictures you took yourself, slowly zooming, with the game's name at the bottom and the clock
+and battery in the corner. Press any button (or touch the screen) and you are back exactly where you were; that press
+does nothing else. It never keeps the Pocket awake: the screen still goes off after **Screen off after**, and the show
+is over with it (with Screen off after 30 s it starts at 15 s). With no pictures yet the shelf just stays. It is Off in every look until you switch it on
+under Settings → Look & feel → Cozy extras → **Idle slideshow**. Motion Reduced or Off keeps only the cross-fades.

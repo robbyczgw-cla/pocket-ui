@@ -13,6 +13,7 @@ use crate::cabinet::{ink_on, luma, Size};
 use crate::cabinet_art::{self as art, Look, Pic};
 use crate::gfx::mix;
 use crate::image::Image;
+use crate::room_deco::Figure;
 use crate::system_art::Sprite;
 use crate::text::Text;
 
@@ -434,6 +435,9 @@ pub fn spine(text: &mut Text, m: Medium, k: f32, look: Look, title: &str) -> Pic
 /// The sizes a spine's title is written in: the ones the app paints anyway, so a spine made in a frame draws no
 /// letters of its own (tests/shelf_moves.rs).
 const SPINE_PX: [u32; 8] = [21, 24, 28, 30, 37, 44, 50, 67];
+/// Below them, only for a font wider than Barlow Condensed (`spine_fit`): one line or two at each, before "…"; a pixel
+/// font reads well this small.
+const WIDE_FONT_PX: [u32; 2] = [18, 16];
 
 /// The title size for a spine label `w` pixels across: the largest of `SPINE_PX` up to `want` whose letters, capitals
 /// to descenders, still fit across the label with a little paper on both sides; 21 at the least.
@@ -464,17 +468,17 @@ pub fn spine_with(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, w
     let (x, y, w, h) = t.at(t.spine_label, f);
     paper(&mut p, (x, y, w, h), look.color);
     let pad = (4.0 * k).round() as i32;
-    let (lines, px) = spine_fit(text, title, w, h - 2 * pad, want);
+    let (lines, px, face) = spine_fit(text, title, w, h - 2 * pad, want);
     let ink = ink_on(look.color);
     match lines.as_slice() {
-        [one] => art::spine_title(text, &mut p, one, px, x, w, y + pad, h - 2 * pad, ink),
+        [one] => art::spine_title(text, &mut p, face, one, px, x, w, y + pad, h - 2 * pad, ink),
         // Two lines across a thick spine: the first at the right (the top of the letters faces right), as printed.
         // The halves of a name are not words to translate.
         [first, second] => {
             let translating = text.translating();
             text.set_translate(false);
-            art::spine_title(text, &mut p, first, px, x + w / 2, w - w / 2, y + pad, h - 2 * pad, ink);
-            art::spine_title(text, &mut p, second, px, x, w / 2, y + pad, h - 2 * pad, ink);
+            art::spine_title(text, &mut p, face, first, px, x + w / 2, w - w / 2, y + pad, h - 2 * pad, ink);
+            art::spine_title(text, &mut p, face, second, px, x, w / 2, y + pad, h - 2 * pad, ink);
             text.set_translate(translating);
         }
         _ => {}
@@ -557,10 +561,34 @@ fn main_title(title: &str) -> Option<(&str, &str)> {
 /// smaller (seven tenths of `want`); on two lines, a subtitle on a line of its own without its dash; smaller still, down
 /// to 21 px (it still reads); the same again without the subtitle after " - " or ": " ("Prince of Persia"); and only
 /// then cut short with "…" (trailer frames, 2026-10-29: "Advance…", "Donkey Kon…" on spines that had the room).
-pub fn spine_fit(text: &mut Text, title: &str, thick: i32, len: i32, want: f32) -> (Vec<String>, u32) {
+///
+/// In a font wider than Barlow Condensed (Theme → Font: Pixel, Rounded) two more tries come before the "…": one or two
+/// lines at 18 and 16 px, then the title in Barlow Condensed (`Face::Narrow`) by the same rules. The face is the third
+/// value.
+pub fn spine_fit(text: &mut Text, title: &str, thick: i32, len: i32, want: f32) -> (Vec<String>, u32, crate::text::Face) {
+    use crate::text::Face;
     // As thick as the case: the design's sizes whatever Settings → Text size says (`type_scale`).
     let _fixed = crate::type_scale::fixed();
-    let face = crate::text::Face::Title;
+    let wide = text.style() != crate::font_style::FontStyle::Barlow;
+    if let Some((lines, px)) = spine_whole(text, Face::Title, title, thick, len, want, wide) {
+        return (lines, px, Face::Title);
+    }
+    if wide {
+        if let Some((lines, px)) = spine_whole(text, Face::Narrow, title, thick, len, want, false) {
+            return (lines, px, Face::Narrow);
+        }
+    }
+    // Only then cut short, at the least size, the title without its subtitle.
+    let across = |s: u32| (s as f32 * 0.86).round() as i32;
+    let s = SPINE_PX.into_iter().find(|&s| s as f32 <= want + 0.5 && across(s) <= thick - 6).unwrap_or(SPINE_PX[0]);
+    let short = main_title(title).map_or(title, |(main, _)| main);
+    (vec![text.fit(Face::Title, s, short, len)], s, Face::Title)
+}
+
+/// `spine_fit` in `face` without the cut: `None` when the title, whole or without its subtitle, fits no way. `wide`: the
+/// face is wider than Barlow Condensed, 18 and 16 px are tried as well.
+#[allow(clippy::too_many_arguments)]
+fn spine_whole(text: &mut Text, face: crate::text::Face, title: &str, thick: i32, len: i32, want: f32, wide: bool) -> Option<(Vec<String>, u32)> {
     let across = |s: u32| (s as f32 * 0.86).round() as i32;
     // The sizes that fit across the label, largest first (the smallest of all on a label too narrow for any).
     let mut sizes: Vec<u32> = SPINE_PX.into_iter().rev().filter(|&s| s as f32 <= want + 0.5 && across(s) <= thick - 6).collect();
@@ -577,7 +605,7 @@ pub fn spine_fit(text: &mut Text, title: &str, thick: i32, len: i32, want: f32) 
     for (i, t) in tries.iter().enumerate() {
         let one = |text: &mut Text, list: &[u32]| list.iter().copied().find(|&s| text.width(face, s, t) <= len);
         if let Some(s) = one(text, &big) {
-            return (vec![t.to_string()], s);
+            return Some((vec![t.to_string()], s));
         }
         for &s in &two {
             // The whole title on two lines: a subtitle on a line of its own, without its dash.
@@ -593,16 +621,40 @@ pub fn spine_fit(text: &mut Text, title: &str, thick: i32, len: i32, want: f32) 
             let fits = lines.iter().all(|l| text.width(face, s, l) <= len);
             text.set_translate(translating);
             if lines.len() == 2 && whole && fits {
-                return (lines, s);
+                return Some((lines, s));
             }
         }
         if let Some(s) = one(text, &small) {
-            return (vec![t.to_string()], s);
+            return Some((vec![t.to_string()], s));
         }
     }
-    let s = *sizes.last().unwrap_or(&SPINE_PX[0]);
-    let short = tries.last().copied().unwrap_or(title);
-    (vec![text.fit(face, s, short, len)], s)
+    // A font wider than Barlow Condensed (Theme → Font: Pixel, Rounded) goes a little smaller still, on one line, before
+    // anything is cut ("Chrono Trigg…" on a DS case's spine in Pixel): the title, then its main part.
+    if wide {
+        for (i, t) in tries.iter().enumerate() {
+            for s in WIDE_FONT_PX {
+                if text.width(face, s, t) <= len {
+                    return Some((vec![t.to_string()], s));
+                }
+                // Two lines of whole words across a spine thick enough for them at this size.
+                if 2 * across(s) + 2 <= thick - 2 {
+                    let lines = match split.filter(|_| i == 0) {
+                        Some((main, sub)) => vec![main.to_string(), sub.to_string()],
+                        None => text.wrap(face, s, t, len),
+                    };
+                    let whole = split.is_some() && i == 0 || lines.join(" ") == t.split_whitespace().collect::<Vec<_>>().join(" ");
+                    let translating = text.translating();
+                    text.set_translate(false);
+                    let fits = lines.iter().all(|l| text.width(face, s, l) <= len);
+                    text.set_translate(translating);
+                    if lines.len() == 2 && whole && fits {
+                        return Some((lines, s));
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 /// The size a case's front is made at for `k` times its shelf size.
@@ -1519,6 +1571,9 @@ pub fn apart(c: u32, bg: u32) -> u32 {
     }
 }
 
+/// The empty paper in `frame_100.png` (x, y, w, h in its pixels) and the picture's width: where the app paints "100 %".
+pub const FRAME_PAPER: (i32, i32, i32, i32, i32) = (3, 4, 19, 16, 26);
+
 /// The few things that stand on the Cabinet's shelves beside the games, at most two in view (`app_cabinet.rs`):
 /// pixel art from PixelLab (`assets/media/props`, how each was made in its `pixellab-assets.json`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -1528,24 +1583,70 @@ pub enum Prop {
     Cactus,
     /// Stands right after the last case of a shelf, holding the row up.
     Bookend,
+    // Decorations that grow with play (`room_deco`): the plant's other stages, a trophy, a framed "100 %" (its paper
+    // empty: the app paints the words, `FRAME_PAPER`) and the figurines.
+    PlantSprout,
+    PlantSmall,
+    PlantBig,
+    Trophy,
+    Hundred,
+    Figure(crate::room_deco::Figure),
 }
 
 impl Prop {
-    pub const ALL: [Prop; 4] = [Prop::Plant, Prop::Lamp, Prop::Cactus, Prop::Bookend];
+    pub const ALL: [Prop; 15] = [
+        Prop::Plant,
+        Prop::Lamp,
+        Prop::Cactus,
+        Prop::Bookend,
+        Prop::PlantSprout,
+        Prop::PlantSmall,
+        Prop::PlantBig,
+        Prop::Trophy,
+        Prop::Hundred,
+        Prop::Figure(Figure::Robot),
+        Prop::Figure(Figure::Knight),
+        Prop::Figure(Figure::Dragon),
+        Prop::Figure(Figure::Cat),
+        Prop::Figure(Figure::Rocket),
+        Prop::Figure(Figure::Owl),
+    ];
 
     /// The picture at the Cabinet's size (`SHELF_SCALE` screen pixels a pixel), decoded on first use.
     pub fn pic(self) -> &'static Pic {
-        static DECODED: [std::sync::OnceLock<Pic>; 4] = [const { std::sync::OnceLock::new() }; 4];
+        static DECODED: [std::sync::OnceLock<Pic>; 15] = [const { std::sync::OnceLock::new() }; 15];
         let i = Prop::ALL.iter().position(|p| *p == self).unwrap_or(0);
-        DECODED[i].get_or_init(|| {
-            let png: &[u8] = match self {
-                Prop::Plant => include_bytes!("../assets/media/props/plant.png"),
-                Prop::Lamp => include_bytes!("../assets/media/props/lamp.png"),
-                Prop::Cactus => include_bytes!("../assets/media/props/cactus.png"),
-                Prop::Bookend => include_bytes!("../assets/media/props/bookend.png"),
-            };
-            crate::system_art::decode(png).map_or_else(|| Pic::new(1, 1, 0), |s| scaled(&s, SHELF_SCALE, None))
-        })
+        DECODED[i].get_or_init(|| crate::system_art::decode(self.png()).map_or_else(|| Pic::new(1, 1, 0), |s| scaled(&s, SHELF_SCALE, None)))
+    }
+
+    fn png(self) -> &'static [u8] {
+        match self {
+            Prop::Plant => include_bytes!("../assets/media/props/plant.png"),
+            Prop::Lamp => include_bytes!("../assets/media/props/lamp.png"),
+            Prop::Cactus => include_bytes!("../assets/media/props/cactus.png"),
+            Prop::Bookend => include_bytes!("../assets/media/props/bookend.png"),
+            Prop::PlantSprout => include_bytes!("../assets/media/props/plant_sprout.png"),
+            Prop::PlantSmall => include_bytes!("../assets/media/props/plant_small.png"),
+            Prop::PlantBig => include_bytes!("../assets/media/props/plant_big.png"),
+            Prop::Trophy => include_bytes!("../assets/media/props/trophy.png"),
+            Prop::Hundred => include_bytes!("../assets/media/props/frame_100.png"),
+            Prop::Figure(Figure::Robot) => include_bytes!("../assets/media/props/figure_robot.png"),
+            Prop::Figure(Figure::Knight) => include_bytes!("../assets/media/props/figure_knight.png"),
+            Prop::Figure(Figure::Dragon) => include_bytes!("../assets/media/props/figure_dragon.png"),
+            Prop::Figure(Figure::Cat) => include_bytes!("../assets/media/props/figure_cat.png"),
+            Prop::Figure(Figure::Rocket) => include_bytes!("../assets/media/props/figure_rocket.png"),
+            Prop::Figure(Figure::Owl) => include_bytes!("../assets/media/props/figure_owl.png"),
+        }
+    }
+
+    /// The plant at stage `stage` (`room_deco::Earned::plant`: 2 is the plant as it always was); any other prop as it is.
+    pub fn grown(self, stage: u8) -> Prop {
+        match (self, stage) {
+            (Prop::Plant, 0) => Prop::PlantSprout,
+            (Prop::Plant, 1) => Prop::PlantSmall,
+            (Prop::Plant, 3..) => Prop::PlantBig,
+            (p, _) => p,
+        }
     }
 
     /// The prop that stands further along a shelf with room, after its bookend: a plant, a lamp or a cactus, picked by a
@@ -2045,23 +2146,51 @@ mod tests {
         // template pixel.
         let (thick, len) = ((20.0 * 2.0) as i32, (91.0 * 2.0) as i32 - 8);
         for title in ["Donkey Kong Country", "Super Mario All-Stars", "Prince of Persia - The Sands of Time", "Street Fighter II - The World Warrior"] {
-            let (lines, px) = spine_fit(&mut text, title, thick, len, 30.0);
+            let (lines, px, _) = spine_fit(&mut text, title, thick, len, 30.0);
             assert!(lines.iter().all(|l| !l.ends_with('…')), "{title}: {lines:?} at {px}");
             assert!(px >= 21, "{title}: readable ({px})");
             assert!(lines.iter().all(|l| !l.starts_with('-') && !l.ends_with('-')), "{title}: no dash at a line's end: {lines:?}");
         }
         // At three screen pixels a template pixel (the Mini V2), two lines across it: the subtitle on a line of its own.
-        let (lines, _) = spine_fit(&mut text, "Prince of Persia - The Sands of Time", 60, 91 * 3 - 12, 30.0);
+        let (lines, ..) = spine_fit(&mut text, "Prince of Persia - The Sands of Time", 60, 91 * 3 - 12, 30.0);
         assert_eq!(lines, ["Prince of Persia", "The Sands of Time"], "the subtitle on a line of its own");
         // A thin spine with no room for two lines: the subtitle goes before anything is cut.
-        let (lines, _) = spine_fit(&mut text, "Astro Boy - Omega Factor", 30, 130, 30.0);
+        let (lines, ..) = spine_fit(&mut text, "Astro Boy - Omega Factor", 30, 130, 30.0);
         assert_eq!(lines, ["Astro Boy"]);
         // A short title stays at the size asked for.
-        assert_eq!(spine_fit(&mut text, "F-Zero", thick, len, 30.0), (vec!["F-Zero".to_string()], 30));
+        assert_eq!(spine_fit(&mut text, "F-Zero", thick, len, 30.0), (vec!["F-Zero".to_string()], 30, crate::text::Face::Title));
         // Only a title too long for anything is cut, at the least size.
-        let (lines, px) = spine_fit(&mut text, "Supercalifragilistic Expialidocious Adventures", 30, 80, 30.0);
+        let (lines, px, _) = spine_fit(&mut text, "Supercalifragilistic Expialidocious Adventures", 30, 80, 30.0);
         assert!(lines[0].ends_with('…') && px == 21, "{lines:?} {px}");
     }
+
+    /// The Pixel and Rounded fonts are wider than Barlow Condensed: a title that fits a thin spine in Barlow still fits
+    /// in them, a little smaller, not cut ("Chrono Trigg…" on a DS case in Pixel, 2026-10-30).
+    #[test]
+    fn a_wider_font_makes_the_spine_title_smaller_before_it_is_cut() {
+        use crate::font_style::FontStyle;
+        use crate::text::Face;
+        let thick = 24;
+        for style in [FontStyle::Barlow, FontStyle::Pixel, FontStyle::Rounded] {
+            let mut text = Text::new().pinned_to(style);
+            // A spine a little shorter than the title at 21 px in this font.
+            let len = text.width(Face::Title, 21, "Chrono Trigger") * 9 / 10;
+            let (lines, px, face) = spine_fit(&mut text, "Chrono Trigger", thick, len, 21.0);
+            if style == FontStyle::Barlow {
+                // Barlow Condensed keeps its least size, 21, and is cut as before.
+                assert!(lines[0].ends_with('…') && px == 21 && face == Face::Title, "{style:?}: {lines:?} at {px}");
+            } else {
+                assert!(lines == ["Chrono Trigger"] && WIDE_FONT_PX.contains(&px) && face == Face::Title, "{style:?}: {lines:?} at {px}");
+            }
+            // Too long for the wide face even at 16 px, but not for Barlow Condensed: in that, whole.
+            let len = Text::new().pinned_to(FontStyle::Barlow).width(Face::Title, 21, "Final Fantasy Tactics Advance") + 2;
+            let (lines, _, face) = spine_fit(&mut text, "Final Fantasy Tactics Advance", thick, len, 21.0);
+            assert!(lines == ["Final Fantasy Tactics Advance"], "{style:?}: {lines:?}");
+            assert_eq!(face == Face::Narrow, style == FontStyle::Pixel, "{style:?}: only a face that needs it goes narrow");
+        }
+    }
+
+
 
     #[test]
     fn every_shelf_with_room_gets_a_prop_beside_its_bookend() {
@@ -2076,7 +2205,7 @@ mod tests {
     fn props_are_small() {
         for p in Prop::ALL {
             let pic = p.pic();
-            assert!(pic.w > 25 && pic.h > 50 && pic.h < 175 && pic.w < 113, "{p:?} {}x{}", pic.w, pic.h);
+            assert!(pic.w > 25 && pic.h > 40 && pic.h <= 160 && pic.w < 125, "{p:?} {}x{}", pic.w, pic.h);
         }
     }
 

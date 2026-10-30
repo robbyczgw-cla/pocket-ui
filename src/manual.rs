@@ -21,7 +21,7 @@ use crate::text::{Face, Text};
 
 /// The guide, in reading order: the order of the "Pages" list on its first page (`index.md`). The names are the files
 /// of `docs/user/`; every file there is either here or in `DESKTOP_ONLY` (checked by `doc_checks`, cargo test).
-pub const PAGES: [(&str, &str); 33] = [
+pub const PAGES: [(&str, &str); 34] = [
     ("index", include_str!("../docs/user/index.md")),
     ("getting-started", include_str!("../docs/user/getting-started.md")),
     ("coming-from", include_str!("../docs/user/coming-from.md")),
@@ -38,6 +38,7 @@ pub const PAGES: [(&str, &str); 33] = [
     ("bluetooth", include_str!("../docs/user/bluetooth.md")),
     ("language", include_str!("../docs/user/language.md")),
     ("night-light", include_str!("../docs/user/night-light.md")),
+    ("theme", include_str!("../docs/user/theme.md")),
     ("performance", include_str!("../docs/user/performance.md")),
     ("tour", include_str!("../docs/user/tour.md")),
     ("library", include_str!("../docs/user/library.md")),
@@ -1185,18 +1186,10 @@ pub fn paint(laid: &Laid, text: &mut Text, c: &mut Canvas, x: i32, top: i32, scr
                 text.draw(c, *face, *px, x + ix, y + oy, *color, t);
             }
             Item::Chip { x: ix, y, w, h, px, label } => {
-                c.round_rect(x + ix, y + oy, *w, *h, h / 2, crate::palette::pal().chip);
+                // As the hint bars show the key (`kit::key_cap`, Button symbols).
                 let small = (*px as f32 * 0.8) as u32;
-                let tw = text.width(Face::Body, small, label);
-                text.draw(
-                    c,
-                    Face::Body,
-                    small,
-                    x + ix + (w - tw) / 2,
-                    y + oy + h / 2 + (sz(small) * 0.35) as i32,
-                    crate::palette::pal().pill,
-                    label,
-                );
+                let p = crate::palette::pal();
+                crate::kit::key_cap(c, text, (x + ix, y + oy, *w, *h), label, small, y + oy + h / 2 + (sz(small) * 0.35) as i32, (p.chip, p.pill));
             }
             Item::Controls { x: ix, y, w, k, .. } => controls_picture(c, text, x + ix, y + oy, *w, *k),
             Item::Rect { x: ix, y, w, h, color, radius } => {
@@ -1274,9 +1267,7 @@ fn slant(c: &mut Canvas, a: (i32, i32), b: (i32, i32), color: u32) {
 fn chip(c: &mut Canvas, text: &mut Text, x: i32, cy: i32, label: &str) -> i32 {
     let (w, h, small) = (chip_w(text, label), line_height(SMALL) - 6, (SMALL as f32 * 0.8) as u32);
     let p = crate::palette::pal();
-    c.round_rect(x, cy - h / 2, w, h, h / 2, p.chip);
-    let tw = text.width(Face::Body, small, label);
-    text.draw(c, Face::Body, small, x + (w - tw) / 2, cy + (sz(small) * 0.35) as i32, p.pill, label);
+    crate::kit::key_cap(c, text, (x, cy - h / 2, w, h), label, small, cy + (sz(small) * 0.35) as i32, (p.chip, p.pill));
     w
 }
 
@@ -1346,8 +1337,12 @@ fn controls_picture(c: &mut Canvas, text: &mut Text, x: i32, y: i32, w: i32, k: 
         };
         let (px, py) = at(anchor);
         let px_size = (4 * k + 6).clamp(14, 24) as u32;
+        // In the Button symbols in use (`button_prompts`): the letter in its Xbox colour, lightened to read on the
+        // dark button, or the PlayStation shape.
+        let ink = crate::button_prompts::colours(letter).map_or(0xe9e6de, |(cap, _)| crate::gfx::mix(cap, 0xffffff, 90));
+        let letter = crate::button_prompts::shown(letter);
         let lw = text.width(Face::Title, px_size, letter);
-        text.draw(c, Face::Title, px_size, px - lw / 2, py + (sz(px_size) * 0.36) as i32, 0xe9e6de, letter);
+        text.draw(c, Face::Title, px_size, px - lw / 2, py + (sz(px_size) * 0.36) as i32, ink, letter);
     }
 }
 

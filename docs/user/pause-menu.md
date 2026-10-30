@@ -333,16 +333,11 @@ With Save selected, press **Left/Right** to choose the slot (the number appears 
 On the right you see:
 
 - the preview of the entry (the picture at the moment it was saved), or "Empty" for an empty slot
-- under it, what the game saved to back then, and its blocks beside it the way that console's own memory-card
-  screen showed them: a disc game's **memory card** (the PlayStation's or the PS2's card, the GameCube's, the
-  Dreamcast's VMU, the Xbox's memory unit, the PSP's Memory Stick Duo, a cartridge game's
-  own **cartridge** (NES, SNES, Game Boy, Mega Drive, DS…) beside its paper save label; other games (computers,
-  ports, the Wii and other disc consoles) just the blocks. A block with a save shows the game's cover and its number (the console's picture until the
-  cover is there, or without one), an empty one its number. The ring marks the slot Save or Load is on (no ring
-  while Load is on Auto or Before load). Blocks stay readable in narrow previews.
-  Cartridge labels follow the current cover.
-  The cards are pixel art made from photos of the real ones (or from a description
-  where no free photo exists), without a maker's name
+- under it, a slim row of eight small blocks in the plastic of what the game saved to back then (the PlayStation's
+  grey card, the PS2's black one, the Dreamcast's white VMU, the GameCube's, a cartridge's own colour): a block with a
+  save shows the game's cover, the ring marks the slot Save or Load is on (no ring while Load is on Auto or Before
+  load). With Settings → Look & feel → Cozy extras → **Memory card in the pause menu** on (it is off at first), the
+  memory card or cartridge itself stands there beside its numbered blocks, as on the game's info page
 - above the keys: "Slot 3 · replaces the save from today 14:02" (on Save), "Slot 3 · saved
   yesterday 21:10" (on Load), "Slot 3 · empty", "Auto · saved when you quit · today 14:02" or
   "Before load · today 14:05" (real times)

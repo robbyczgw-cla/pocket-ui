@@ -125,6 +125,11 @@ pub(crate) fn rediscover_input(catalog: &Catalog, player: &Player, gamelist: &po
 }
 
 fn fill_connections(data: &mut CardData, path: &std::path::Path, ix: &connections::Index) {
+    // Cozy extras → Game connections off: the facts stay, none leads anywhere.
+    if !pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::Connections) {
+        data.links.clear();
+        return;
+    }
     if !data.facts.iter().any(|(k, _)| *k == "Series") {
         if let Some(s) = ix.derived_series(path) {
             data.facts.push(("Series", s.to_string()));

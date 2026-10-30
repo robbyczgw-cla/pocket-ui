@@ -12,6 +12,7 @@ info:split:snes:chrono
 info:split:snes:chrono:saves
 slot-save:psx
 slot-load:snes
+slot-save:psx:card
 box:gba:advance:saves:end
 cabinet:ddrra
 setup:first:device=mini
@@ -54,3 +55,4 @@ menu:pocket-core
 pixel-path:n64:1:about
 gallery:delete
 gallery:full-delete
+setup:look:Tr

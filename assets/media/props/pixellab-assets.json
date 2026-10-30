@@ -80,6 +80,226 @@
     "negative_description": "text, letters, logo, words, background, floor, table, shadow, people"
    },
    "generated": "2026-10-27T13:05:34"
+  },
+  "plant_sprout": {
+   "endpoint": "create-image-pixflux",
+   "seed": 101,
+   "request": {
+    "description": "a tiny seedling with just two small green leaves sprouting from a warm terracotta clay pot, cozy, calm, muted warm colours, soft light, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 32,
+     "height": 32
+    },
+    "no_background": true,
+    "seed": 101,
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people"
+   },
+   "generated": "2026-10-30T11:00:13"
+  },
+  "plant_small": {
+   "endpoint": "create-image-pixflux",
+   "seed": 111,
+   "request": {
+    "description": "a small young house plant with a few green leaves in a warm terracotta clay pot, cozy, calm, muted warm colours, soft light, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 48,
+     "height": 48
+    },
+    "no_background": true,
+    "seed": 111,
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people"
+   },
+   "generated": "2026-10-30T11:04:13"
+  },
+  "plant_big": {
+   "endpoint": "create-image-pixflux",
+   "seed": 101,
+   "request": {
+    "description": "a big lush house plant with many green leaves and a couple of small pink flowers in a warm terracotta clay pot, cozy, calm, muted warm colours, soft light, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 56,
+     "height": 72
+    },
+    "no_background": true,
+    "seed": 101,
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people"
+   },
+   "generated": "2026-10-30T11:00:15"
+  },
+  "trophy": {
+   "endpoint": "create-image-pixflux",
+   "seed": 501,
+   "request": {
+    "description": "a small golden trophy cup with two handles on a little dark wooden base, plain, no engraving, cozy, calm, muted warm colours, soft light, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 32,
+     "height": 40
+    },
+    "no_background": true,
+    "seed": 501,
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people"
+   },
+   "generated": "2026-10-30T11:00:24"
+  },
+  "frame_100": {
+   "endpoint": "create-image-pixflux",
+   "seed": 601,
+   "request": {
+    "description": "a small standing wooden picture frame with a plain flat blank cream off-white paper inside, empty, cozy, calm, muted warm colours, soft light, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 40,
+     "height": 32
+    },
+    "no_background": true,
+    "seed": 601,
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people"
+   },
+   "generated": "2026-10-30T11:00:13"
+  },
+  "figure_robot": {
+   "endpoint": "create-image-pixflux",
+   "seed": 701,
+   "request": {
+    "description": "a small collectible vinyl toy figurine of a friendly little robot with a boxy head and antenna, cozy, calm, muted warm colours, soft light, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 32,
+     "height": 40
+    },
+    "no_background": true,
+    "seed": 701,
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people"
+   },
+   "generated": "2026-10-30T11:01:36"
+  },
+  "figure_knight": {
+   "endpoint": "create-image-pixflux",
+   "seed": 714,
+   "request": {
+    "description": "a small collectible vinyl toy figurine of a little knight in silver armor with a plain shield without emblem, cozy, calm, muted warm colours, soft light, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 32,
+     "height": 32
+    },
+    "no_background": true,
+    "seed": 714,
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people"
+   },
+   "generated": "2026-10-30T11:04:21"
+  },
+  "figure_dragon": {
+   "endpoint": "create-image-pixflux",
+   "seed": 726,
+   "request": {
+    "description": "a small collectible vinyl toy figurine of a small cute green dragon with little wings, cozy, calm, muted warm colours, soft light, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 32,
+     "height": 32
+    },
+    "no_background": true,
+    "seed": 726,
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people"
+   },
+   "generated": "2026-10-30T11:04:55"
+  },
+  "figure_cat": {
+   "endpoint": "create-image-pixflux",
+   "seed": 732,
+   "request": {
+    "description": "a small collectible vinyl toy figurine of a sitting cat, orange tabby, cozy, calm, muted warm colours, soft light, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 32,
+     "height": 40
+    },
+    "no_background": true,
+    "seed": 732,
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people"
+   },
+   "generated": "2026-10-30T11:02:21"
+  },
+  "figure_rocket": {
+   "endpoint": "create-image-pixflux",
+   "seed": 746,
+   "request": {
+    "description": "a toy rocket figurine, red and cream, with fins, cozy, calm, muted warm colours, soft light, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 32,
+     "height": 32
+    },
+    "no_background": true,
+    "seed": 746,
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people"
+   },
+   "generated": "2026-10-30T11:04:44"
+  },
+  "figure_owl": {
+   "endpoint": "create-image-pixflux",
+   "seed": 752,
+   "request": {
+    "description": "a small collectible vinyl toy figurine of an owl, brown feathers, cozy, calm, muted warm colours, soft light, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 32,
+     "height": 40
+    },
+    "no_background": true,
+    "seed": 752,
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people"
+   },
+   "generated": "2026-10-30T11:01:50"
   }
  }
 }

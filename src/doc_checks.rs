@@ -280,6 +280,23 @@ fn the_settings_table_lists_every_settings_row_in_order() {
 }
 
 #[test]
+fn every_cozy_extra_is_described_with_its_start() {
+    let rows = first_table(&section(&read("docs/user/settings.md"), "Cozy extras"));
+    let doc: Vec<String> = rows.iter().map(|r| bold(&r[0])).collect();
+    let code: Vec<&str> = pocket_ui::cozy_extras::Extra::shown().iter().map(|e| e.label()).collect();
+    assert_eq!(doc, code, "docs/user/settings.md, \"Cozy extras\": one row per extra on the page, in its order");
+    for (r, e) in rows.iter().zip(pocket_ui::cozy_extras::Extra::shown()) {
+        // Playful animations starts as Animations is (`Extra::default_on`).
+        let start = match e {
+            pocket_ui::cozy_extras::Extra::Playful => "On with Cozy, Off with Quick",
+            e if e.default_on() => "On",
+            _ => "Off",
+        };
+        assert_eq!(r[2], start, "docs/user/settings.md, \"Cozy extras\": {}'s start", e.label());
+    }
+}
+
+#[test]
 fn settings_curator_rows_and_their_start_settings_are_described() {
     let md = read("docs/user/settings.md");
     let rows = first_table(&section(&md, "Curator"));

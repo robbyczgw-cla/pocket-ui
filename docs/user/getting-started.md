@@ -90,7 +90,7 @@ The first time pocket-ui runs, it walks you through a short setup. **START skips
 open every step again later from **Settings** (press START on the Home screen).
 Each step says "Step n of 7" at the top right.
 
-1. **Welcome.** Under a small picture of your handheld, press A to begin. Left/Right choose the language, **English** or **Deutsch** (German): the screen
+1. **Welcome.** Under the cartridge and your handheld, press A to begin. Left/Right choose the language, **English** or **Deutsch** (German): the screen
    changes at once, and the choice is kept ([Language](language.md)). It starts on the system language
    ROCKNIX was set to. SELECT opens the manual, this guide, on the device (in English); B comes back.
 2. **Choose a look.** A small picture of the shelf in each look, the one shown in the middle and its

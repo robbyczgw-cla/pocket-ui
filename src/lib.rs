@@ -31,6 +31,8 @@ pub mod splash;
 /// The first frame after the Pocket starts fades in from black (docs/BOOT-SPLASH.md).
 pub mod boot_fade;
 pub mod crt_on;
+pub mod cozy_extras;
+pub mod playful;
 pub mod text_fallback;
 pub mod type_scale;
 /// The interface in German: the table the text painter looks every string up in (Settings → Language).
@@ -49,6 +51,7 @@ pub mod palette;
 pub mod kit;
 pub mod appearance;
 pub mod setup;
+pub mod theme_page;
 // The feature registry, its cards and their previews (first start, Settings → Tour, "New in this version").
 pub mod features;
 pub mod feature_previews;
@@ -56,6 +59,7 @@ pub mod covers;
 pub mod auto_covers;
 pub mod game_pictures;
 pub mod picture_cycle;
+pub mod slideshow;
 pub mod picture_loader;
 pub mod ports;
 pub mod port_files;
@@ -130,6 +134,8 @@ pub mod favorites;
 pub mod marquee;
 pub mod motion;
 pub mod button_layout;
+pub mod button_prompts;
+pub mod font_style;
 pub mod switcher;
 /// The status corner at the top right: the time, a Wi-Fi symbol while connected, the battery.
 pub mod status_corner;
@@ -160,6 +166,8 @@ pub mod device;
 #[cfg(target_os = "linux")]
 pub mod gamma;
 pub mod night_light;
+pub mod room_light;
+pub mod room_deco;
 pub mod osd;
 pub mod fn_keys;
 pub mod mako_osd;

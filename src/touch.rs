@@ -556,6 +556,8 @@ pub fn hint_button(key: &str) -> Option<Button> {
         "START" => Button::Start,
         "L1" => Button::L1,
         "R1" => Button::R1,
+        // "R2 Theme" on Settings → Look & feel → Look.
+        "R2" => Button::R2,
         // The cabinet's "UP Search" on its top shelf.
         "UP" => Button::Up,
         // "RIGHT Another" on a card of Surprise me.

@@ -46,15 +46,24 @@ pub(crate) fn paint_dialog(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, d
     c.shade_rect(0, 0, c.w, c.h, pal().void, 215);
     // For the snapshot checks of Settings → Text size: the page under the dialog is dimmed, not read.
     pocket_ui::text::boxes::covered();
-    let (w, row, font, small) = (980, pocket_ui::type_scale::row(66, 36), 36u32, NU_SMALL);
+    let (row, font, small) = (pocket_ui::type_scale::row(66, 36), 36u32, NU_SMALL);
+    let line_h = pocket_ui::type_scale::line(small, 12);
+    let choices = d.choices();
+    // Lay out first, to centre the sheet: 980 wide, or as wide as the screen when its words need more lines than the
+    // room above the hints takes (640x480 with Large text in a wider font).
+    let layout = |text: &mut Text, w: i32| {
+        let paragraphs: Vec<Vec<String>> = d.body().iter().map(|p| text.wrap(Face::Body, small, p, w - 2 * 48 - 28)).collect();
+        let body_h: i32 = paragraphs.iter().map(|p| p.len() as i32 * line_h + 14).sum();
+        (paragraphs, 48 + 58 + 26 + body_h + 16 + choices.len() as i32 * row + 36)
+    };
+    let mut w = 980.min(c.w - 2 * NU_PAD);
+    let (mut paragraphs, mut h) = layout(text, w);
+    if h > c.h - NU_PILL - 2 * NU_PAD && c.w - 2 * NU_PAD > w {
+        w = c.w - 2 * NU_PAD;
+        (paragraphs, h) = layout(text, w);
+    }
     let x = (c.w - w) / 2;
     let inner = w - 2 * 48;
-    // Lay out first, to centre the sheet.
-    let paragraphs: Vec<Vec<String>> = d.body().iter().map(|p| text.wrap(Face::Body, small, p, inner - 28)).collect();
-    let line_h = pocket_ui::type_scale::line(small, 12);
-    let body_h: i32 = paragraphs.iter().map(|p| p.len() as i32 * line_h + 14).sum();
-    let choices = d.choices();
-    let h = 48 + 58 + 26 + body_h + 16 + choices.len() as i32 * row + 36;
     let y = ((c.h - NU_PILL - NU_PAD - h) / 2).max(NU_PAD);
     // A sheet like Curator's and the game card's pickers (`kit::sheet`).
     pocket_ui::kit::sheet(c, x, y, w, h);

@@ -243,6 +243,16 @@ impl Device {
         }
     }
 
+    /// Settings → Look & feel → Look → Theme → Button symbols when unset (`button_prompts`): Xbox-style caps on
+    /// Retroid's and AYN's handhelds, plain letters on Anbernic's and anything unknown. A saved choice wins.
+    pub fn prompt_style(&self) -> crate::button_prompts::PromptStyle {
+        use crate::button_prompts::PromptStyle;
+        match self.model {
+            Some(Model::H700(_)) | None => PromptStyle::Nintendo,
+            Some(_) => PromptStyle::Xbox,
+        }
+    }
+
     /// Touch ranges if evdev has none. The kernel already applies DT axis inversions.
     pub fn panel_size(&self) -> (u32, u32) {
         match self.model {
@@ -462,6 +472,7 @@ mod tests {
             assert_eq!(d.model, Some(want));
             assert_eq!(identify(model, b"").model, Some(want));
             assert_eq!(d.menu_layout(), layout);
+            assert_eq!(d.prompt_style(), crate::button_prompts::PromptStyle::Xbox, "AYN: Xbox-style caps whatever is printed");
             assert!(!want.has_lid());
         }
     }
@@ -476,6 +487,16 @@ mod tests {
         assert_eq!(Model::Flip2.screen(), (1920, 1080));
         assert_eq!(Model::MiniV1.screen(), (1280, 960));
         assert_eq!(Model::MiniV2.screen(), (1240, 1080));
+    }
+
+    #[test]
+    fn retroids_get_xbox_style_caps_and_an_unknown_device_plain_letters() {
+        use crate::button_prompts::PromptStyle;
+        for m in [Model::MiniV2, Model::MiniV1, Model::Pocket5, Model::Flip2, Model::Pocket6, Model::Nova] {
+            let d = Device { model: Some(m), panel: Panel::Original, reported: String::new() };
+            assert_eq!(d.prompt_style(), PromptStyle::Xbox, "{m:?}");
+        }
+        assert_eq!(Device::unknown("Some Handheld").prompt_style(), PromptStyle::Nintendo);
     }
 
     #[test]
@@ -578,6 +599,7 @@ mod tests {
             assert_eq!(d.has_wifi(), wifi, "{key}");
             assert_eq!(d.has_sticks(), sticks, "{key}");
             assert!(!d.has_fan() && !d.has_touch());
+            assert_eq!(d.prompt_style(), crate::button_prompts::PromptStyle::Nintendo, "{key}: Anbernic, plain letters");
             assert_eq!(d.ram_mb(), Some(1024));
             assert_eq!(d.menu_layout(), crate::button_layout::ButtonLayout::Nintendo);
             assert_eq!(d.about_line(), Some(format!("{} (experimental)", m.name())));

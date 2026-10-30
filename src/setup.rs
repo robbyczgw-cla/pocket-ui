@@ -162,6 +162,10 @@ enum Step {
     ShelfSystems {
         sel: usize,
     },
+    /// Settings > Look only: colours, type and button symbols (`theme_page`), R2 on the look step.
+    Theme {
+        sel: usize,
+    },
     Wifi,
     /// `hidden`: a network typed by name (Other network), connected to without seeing it first.
     Password { ssid: String, kb: Keyboard, hidden: bool },
@@ -806,6 +810,7 @@ impl Setup {
         } else {
             ("File sharing is off".to_string(), pal().chalk)
         };
+        let status = text.fit(Face::Title, 37, &status, w);
         text.draw(c, Face::Title, 37, x, top + 50, color, &status);
         let Some(addrs) = share_addresses(self.ip.as_deref(), self.sharing) else {
             // No address to show: what the switch is for, not an address with "(not connected)" in it, and not one
@@ -876,7 +881,7 @@ pub(crate) fn tick(c: &mut Canvas, x: i32, y: i32, s: i32, color: u32) {
 /// Which top-level step a (sub)screen belongs to.
 fn stage(step: &Step) -> Option<Only> {
     match step {
-        Step::Look | Step::ShelfSystems { .. } => Some(Only::Look),
+        Step::Look | Step::ShelfSystems { .. } | Step::Theme { .. } => Some(Only::Look),
         Step::Wifi | Step::Portal(_) | Step::Password { .. } | Step::Connecting { .. } | Step::HiddenName { .. } | Step::Country { .. } => Some(Only::Wifi),
         Step::Extras { .. } | Step::Ports | Step::PortFiles(_) => Some(Only::Extras),
         Step::Games => Some(Only::Games),
@@ -919,7 +924,7 @@ fn resume_name(step: &Step) -> Option<&'static str> {
         Step::Zone(_) => Some("zone"),
         Step::Extras { .. } | Step::Ports | Step::PortFiles(_) => Some("extras"),
         Step::Games => Some("games"),
-        Step::Welcome | Step::ShelfSystems { .. } | Step::Remote | Step::Done => None,
+        Step::Welcome | Step::ShelfSystems { .. } | Step::Theme { .. } | Step::Remote | Step::Done => None,
     }
 }
 
@@ -1203,6 +1208,7 @@ impl Setup {
                     | Step::Play { .. }
                     | Step::Cards(_)
                     | Step::ShelfSystems { .. }
+                    | Step::Theme { .. }
                     | Step::Wifi
                     | Step::Portal(_)
                     | Step::Password { .. }
@@ -1337,7 +1343,7 @@ impl Setup {
 
     /// The theme to preview while the look step is open; the app draws the shelf in it.
     pub fn previewing(&self) -> Option<usize> {
-        matches!(self.step, Step::Look).then_some(self.theme)
+        matches!(self.step, Step::Look | Step::Theme { .. }).then_some(self.theme)
     }
 
     /// The network being brought up has been "Connecting…" for longer than `CONNECT_STUCK`.
@@ -2074,6 +2080,7 @@ impl Setup {
             Step::Remote => 8u8.hash(&mut h),
             Step::Done => 9u8.hash(&mut h),
             Step::ShelfSystems { sel } => (11u8, sel, &self.hidden, self.streaming).hash(&mut h),
+            Step::Theme { sel } => (18u8, sel, crate::theme_page::mark()).hash(&mut h),
             Step::Zone(z) => match &z.view {
                 ZoneView::Card => (10u8, 0u8).hash(&mut h),
                 ZoneView::Regions { sel } => (10u8, 1u8, sel).hash(&mut h),
@@ -2113,6 +2120,7 @@ impl Setup {
             Step::Remote => "remote",
             Step::Done => "done",
             Step::ShelfSystems { .. } => "shelf systems",
+            Step::Theme { .. } => "theme",
             Step::Zone(z) => {
                 return match &z.view {
                     ZoneView::Card => "zone".into(),
@@ -2449,6 +2457,8 @@ impl Setup {
                 Button::South => self.step = Step::Welcome,
                 // Settings > Look only: the first start has no such step.
                 Button::North if self.only == Some(Only::Look) && !self.shelf.is_empty() => self.step = Step::ShelfSystems { sel: 0 },
+                // Settings > Look only: the Theme page (`theme_page`).
+                Button::R2 if self.only == Some(Only::Look) => self.step = Step::Theme { sel: 0 },
                 // Settings > Look only, to keep the first start short: Motion, Full / Reduced / Off.
                 Button::R1 if self.only == Some(Only::Look) => self.motion = self.motion.next(),
                 // The first start: the text size instead (in Settings it has its own row under Look & feel), in use
@@ -2498,6 +2508,11 @@ impl Setup {
                 }
             }
             Step::ShelfSystems { .. } => self.press_shelf(b),
+            Step::Theme { sel } => {
+                if crate::theme_page::press(sel, b) {
+                    self.step = Step::Look;
+                }
+            }
             Step::Wifi => self.press_wifi(b),
             Step::Password { ssid, kb, hidden } => match kb.press(b) {
                 Outcome::Editing => {}
@@ -2656,9 +2671,11 @@ impl Setup {
         let dots = ".".repeat(1 + (self.started.elapsed().as_millis() / 400 % 3) as usize);
         match &self.step {
             Step::Welcome => {
-                // The handheld it runs on above the welcome (`ui_art`; the Mini V2 where the device isn't known).
+                // pocket-ui's mark beside the handheld it runs on, above the welcome (`ui_art`; the Mini V2 where the
+                // device isn't known).
                 let model = crate::device::current().model.unwrap_or(crate::device::Model::MiniV2);
-                let dy = crate::ui_art::above_words(c, crate::ui_art::Art::Device(model), MARGIN, false, 60, 300, 67);
+                let row = [crate::ui_art::Art::Logo, crate::ui_art::Art::Device(model)];
+                let dy = crate::ui_art::above_words_row(c, &row, MARGIN, false, 60, 300, 67);
                 text.draw(c, Face::Title, 67, MARGIN, 300 + dy, pal().chalk, "Welcome to your Pocket");
                 let lines = [
                     "A few short steps: a look you like, how you like to play, Wi-Fi, your time zone, your games.",
@@ -2688,6 +2705,7 @@ impl Setup {
                 features::paint_profiles(c, text, *sel);
             }
             Step::ShelfSystems { sel } => self.paint_shelf_systems(c, text, *sel),
+            Step::Theme { sel } => crate::theme_page::paint(c, text, *sel, None),
             Step::Wifi => {
                 text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Wi-Fi");
                 let (line, color) = self.wifi_status(&dots);
@@ -3111,6 +3129,11 @@ impl Setup {
     /// made by the app), the one shown in the middle and its neighbours at the sides; then its name, one line
     /// about it, and how to switch. `sample`: the previews use the built-in sample games.
     pub fn paint_look(&mut self, c: &mut Canvas, text: &mut Text, previews: &[Image], sample: bool) {
+        // The Theme page under it: the shelf in the look in use as its preview.
+        if let Step::Theme { sel } = self.step {
+            crate::theme_page::paint(c, text, sel, previews.get(self.theme));
+            return;
+        }
         c.clear(pal().void);
         text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Choose a look");
         let sub = if sample { "How the shelf looks, with sample games until yours are on the SD card." } else { "Your shelf, in each look." };
@@ -3432,7 +3455,7 @@ fn look_hints(settings: bool, has_systems: bool) -> Vec<(&'static str, &'static 
     // The first start's bar is full with the Animations key: Left/Right says what it does by being there.
     let mut h = vec![("Left/Right", if settings { "Change" } else { "" }), ("Y", "Appearance")];
     if settings {
-        h.extend([("R1", "Motion"), ("A", "Keep this look")]);
+        h.extend([("R1", "Motion"), ("A", "Keep this look"), ("R2", "Theme")]);
         if has_systems {
             h.push(("X", "Systems on the shelf"));
         }
@@ -5035,8 +5058,8 @@ mod hint_bars {
     #[test]
     fn the_first_starts_look_step_names_b() {
         assert_eq!(keys(&look_hints(false, true)), ["Left/Right", "Y", "R1", "A", "B", "L1"], "B goes back to the welcome");
-        assert_eq!(keys(&look_hints(true, true)), ["Left/Right", "Y", "R1", "A", "X", "L1"]);
-        assert_eq!(keys(&look_hints(true, false)), ["Left/Right", "Y", "R1", "A", "L1"], "no systems: no X");
+        assert_eq!(keys(&look_hints(true, true)), ["Left/Right", "Y", "R1", "A", "R2", "X", "L1"]);
+        assert_eq!(keys(&look_hints(true, false)), ["Left/Right", "Y", "R1", "A", "R2", "L1"], "no systems: no X");
         assert_eq!(look_hints(false, false).last(), Some(&("L1", "Animations")));
         assert_eq!(look_hints(false, false)[2], ("R1", "Text size"));
     }

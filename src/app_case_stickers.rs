@@ -38,9 +38,10 @@ fn seed(rom: &Path) -> u64 {
 }
 
 impl App {
-    /// The stickers on a game's case (none for what is not a game: a system, Curator's boxes).
+    /// The stickers on a game's case (none for what is not a game: a system, Curator's boxes), none on the pictures
+    /// with Cozy extras → Stickers on cases off; the card's Stickers sheet still has them (`library.case`).
     pub(crate) fn case_stickers_of(&self, rom: &Path) -> CaseStickers {
-        if rom.as_os_str().is_empty() {
+        if rom.as_os_str().is_empty() || !pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::Stickers) {
             return CaseStickers::default();
         }
         self.library.case(rom)

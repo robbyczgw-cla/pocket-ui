@@ -6,6 +6,7 @@ these files. Run it again after a change to the screens.
 
 | Picture | Screen |
 |---|---|
+| ![Logo](logo-on-light.png) | The README's header: the cartridge and the wordmark, `logo-on-dark.png` for GitHub's dark theme (from the logo pack, not rendered by `readme-shots.sh`) |
 | ![Home](home.png) | Home in the Shelf look, dark: the last game, favourites, Curator, smart shelves and systems |
 | ![Home, light](home-light.png) | The same in the light appearance |
 | ![Home, Split](home-split.png) | Home in the Split look |

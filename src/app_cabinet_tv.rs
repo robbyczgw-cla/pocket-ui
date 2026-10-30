@@ -89,8 +89,8 @@ impl App {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn paint_cabinet_tv(&mut self, c: &mut Canvas, system: &str, rom: &Path, cover: Option<PathBuf>, board_y: i32, room: i32, now: Instant) {
         self.cabinet.tv.left = None;
-        // The look step's sample cabinet has no TV: it shows how the cases look.
-        if self.sample_cover.is_some() {
+        // The look step's sample cabinet has no TV: it shows how the cases look. Nor with its Cozy extra off.
+        if self.sample_cover.is_some() || !pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::CabinetTv) {
             return;
         }
         let Some(f) = tv_scale(c.w, c.h, room) else { return };

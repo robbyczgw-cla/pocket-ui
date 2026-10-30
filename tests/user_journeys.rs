@@ -1033,6 +1033,102 @@ true
         let command = log.find("PowerOff: running").unwrap();
         assert!(disarm < command, "verified before issuing poweroff: {log}");
     }
+
+    // ---- The idle slideshow (`app_slideshow`): the shelf left alone, then any button ----
+
+    /// A small PNG (a picture of 200 x 280 pixels, no game's art).
+    fn picture(path: &Path) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut enc = png::Encoder::new(std::fs::File::create(path).unwrap(), 200, 280);
+        enc.set_color(png::ColorType::Rgb);
+        enc.set_depth(png::BitDepth::Eight);
+        let px: Vec<u8> = (0..200 * 280).flat_map(|i| [(i % 200) as u8, (i / 200 % 256) as u8, 90]).collect();
+        enc.write_header().unwrap().write_image_data(&px).unwrap();
+    }
+
+    /// The driver on the throwaway card: a cover for the Game Boy game unless `covers` is false, the show after
+    /// `after_ms`, and `settings` as the settings.json (Motion Off: plain fades, so frames are steady).
+    fn quiet_shelf(name: &str, covers: bool, after_ms: u32, settings: &'static str) -> Driver {
+        Driver::start(name, true, move |tmp, cmd| {
+            std::fs::write(tmp.join("data/settings.json"), settings).unwrap();
+            if covers {
+                picture(&tmp.join("data/covers/gb/Tobu Tobu Girl (World).png"));
+            }
+            cmd.env("POCKETUI_SLIDESHOW_AFTER_MS", after_ms.to_string()).env("POCKETUI_SCREENSHOTS", tmp.join("screenshots"));
+        })
+    }
+
+    #[test]
+    fn the_idle_slideshow_plays_the_games_pictures_and_a_button_only_takes_you_back() {
+        let mut ui = quiet_shelf("slideshow-back", true, 4000, r#"{"onboarded":true,"motion":"off","extras":{"idle_slideshow":true}}"#);
+        let clockless = |t: String| t.lines().filter(|l| !(l.len() == 5 && l.as_bytes()[2] == b':')).collect::<Vec<_>>().join("\n");
+        let shelf = clockless(ui.sees("Settings"));
+        // After the quiet time: the game's name and its system, none of the shelf's hints.
+        let mut show = String::new();
+        ui.wait(|d| {
+            show = d.frame();
+            !show.contains("Settings") && show.contains("Tobu Tobu Girl")
+        });
+        assert!(show.contains("Game Boy"), "the system under the title: {show}");
+        assert!(!show.contains("START") && !show.contains("Open"), "no hint bar over the show: {show}");
+        // START would open Settings, A the game's card: either only ends the show.
+        for button in ["start", "a", "x", "r2axis"] {
+            ui.send(button);
+            let back = clockless(ui.frame());
+            assert_eq!(back, shelf, "after {button}: the shelf as it was, nothing opened");
+            // The next quiet spell plays it again.
+            ui.wait(|d| {
+                show = d.frame();
+                !show.contains("Settings")
+            });
+        }
+        assert!(!ui.card.tmp.join("run-game.started").exists(), "no game was started by a press on the show: {}", ui.log());
+    }
+
+    #[test]
+    fn an_analog_trigger_wakes_the_screen_without_moving_the_shelf() {
+        let mut ui = Driver::start("trigger-wake", true, |tmp, cmd| {
+            std::fs::write(tmp.join("data/sleep.json"), r#"{"screen_off_secs":0,"sleep_after_min":0,"short_press":"screen_off"}"#).unwrap();
+            // No real backlight or suspend backend: only the application input/sleep state is exercised.
+            cmd.env("POCKETUI_POWER_KEY", "1").env("POCKETUI_BACKLIGHT", tmp.join("no-backlight"));
+        });
+        let clockless = |t: String| t.lines().filter(|l| !(l.len() == 5 && l.as_bytes()[2] == b':')).collect::<Vec<_>>().join("\n");
+        let shelf = clockless(ui.sees("Settings"));
+        ui.send("power");
+        ui.wait(|d| d.log().contains("sleep: power key, screen off"));
+        // Extra travel after the waking edge belongs to that same pull, including inside the wake guard.
+        ui.send("r2axis");
+        ui.wait(|d| d.log().contains("sleep: awake"));
+        assert_eq!(clockless(ui.frame()), shelf, "the entire wake pull is swallowed: {}", ui.log());
+        assert!(!ui.card.tmp.join("run-game.started").exists());
+    }
+
+    #[test]
+    fn the_idle_slideshow_leaves_a_shelf_without_a_single_picture_alone() {
+        let mut ui = quiet_shelf("slideshow-none", false, 800, r#"{"onboarded":true,"motion":"off","extras":{"idle_slideshow":true}}"#);
+        ui.wait(|d| d.log().contains("slideshow: no pictures"));
+        let text = ui.frame();
+        assert!(text.contains("Settings") && text.contains("Game Boy"), "the shelf is still there: {text}");
+    }
+
+    #[test]
+    fn the_idle_slideshow_is_off_in_every_look_until_the_page_switches_it_on() {
+        // As it starts (the Shelf, then a plain look with pictures all the same): the shelf stays a shelf, however long it
+        // is left alone.
+        for (name, settings) in [
+            ("slideshow-default-shelf", r#"{"onboarded":true,"motion":"off"}"#),
+            ("slideshow-default-split", r#"{"onboarded":true,"motion":"off","theme":"split"}"#),
+        ] {
+            let mut ui = quiet_shelf(name, true, 600, settings);
+            std::thread::sleep(Duration::from_millis(2500));
+            let text = ui.frame();
+            assert!(text.contains("Settings"), "{name}: still the shelf: {text}");
+            assert!(!ui.log().contains("slideshow:"), "{name}: {}", ui.log());
+        }
+        // Switched on in the page (kept as extras.idle_slideshow): a plain look plays it too.
+        let mut ui = quiet_shelf("slideshow-split-on", true, 600, r#"{"onboarded":true,"motion":"off","theme":"split","extras":{"idle_slideshow":true}}"#);
+        ui.wait(|d| d.log().contains("slideshow: 1 pictures"));
+    }
 }
 
 #[test]
@@ -1077,13 +1173,13 @@ fn between<'a>(text: &'a str, from: &str, to: &str) -> Vec<&'a str> {
 }
 
 #[test]
-fn save_and_load_show_the_blocks_beside_the_memory_card_and_the_cartridge() {
+fn save_and_load_show_the_slim_row_and_with_the_setting_the_memory_card() {
     let card = Card::new("save-media");
-    // A PlayStation game at Large text: the card beside its eight numbered blocks (slots 1, 3 and 6 show the cover
-    // with their number); Save is on slot 3 and says what it replaces.
+    // A PlayStation game at Large text: under the picture the slim row of blocks (no words, nothing but the note);
+    // Save is on slot 3 and says what it replaces.
     let eight = ["1", "2", "3", "4", "5", "6", "7", "8"];
     let text = card.shot("slot-save:psx", "large");
-    assert_eq!(between(&text, "No preview", "Slot 3"), eight, "{text}");
+    assert!(between(&text, "No preview", "Slot 3").is_empty(), "the slim row draws no text: {text}");
     // The save's real time ("today 14:02", "yesterday 23:50"), not "just now"; at Large text the clock may wrap to a line of its own.
     let note = text.replace('\n', " ");
     let when = note.split("Slot 3 · replaces the save from ").nth(1).unwrap_or_default();
@@ -1093,10 +1189,16 @@ fn save_and_load_show_the_blocks_beside_the_memory_card_and_the_cartridge() {
     assert!(clock.len() == 5 && clock.as_bytes()[2] == b':' && clock.bytes().filter(u8::is_ascii_digit).count() == 4, "{text}");
     assert!(!text.contains("min ago") && !text.contains("just now"), "{text}");
     let boxes = std::fs::read_to_string(card.tmp.join("slot-save-psx.boxes")).unwrap();
-    assert!(boxes.is_empty(), "the memory card leaves its room or runs into text: {boxes}");
-    // A SNES game's Load: the cartridge beside its save label; an empty slot on a game without a cover.
-    let text = card.shot("slot-load:snes", "normal");
+    assert!(boxes.is_empty(), "the slim row leaves its room or runs into text: {boxes}");
+    // With Memory card in the pause menu: the card beside its eight numbered blocks (slots 1, 3 and 6 show the cover
+    // with their number), the same note; a SNES game's Load the cartridge beside its save label.
+    let text = card.shot("slot-save:psx:card", "large");
     assert_eq!(between(&text, "No preview", "Slot 3"), eight, "{text}");
+    let boxes = std::fs::read_to_string(card.tmp.join("slot-save-psx-card.boxes")).unwrap();
+    assert!(boxes.is_empty(), "the memory card leaves its room or runs into text: {boxes}");
+    let text = card.shot("slot-load:snes:card", "normal");
+    assert_eq!(between(&text, "No preview", "Slot 3"), eight, "{text}");
+    // An empty slot on a game without a cover.
     let text = card.shot("slot-empty:gba:nocover", "large");
     assert!(text.contains("Slot 4 · empty"), "{text}");
 }

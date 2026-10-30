@@ -73,6 +73,12 @@ pub enum Sound {
     CrtOn,
 }
 
+/// The sounds of the cases and what goes into the console, which Settings → Look & feel → Cozy extras → Case sounds
+/// switches apart from the menu sounds (`cozy_extras`).
+pub fn is_case_sound(sound: Sound) -> bool {
+    matches!(sound, Sound::Insert | Sound::CaseOpen | Sound::BoxOpen | Sound::CartIn | Sound::DiscIn | Sound::CardIn | Sound::CrtOn)
+}
+
 /// How much quieter than the other UI sounds the Quick launch's click plays, in dB.
 pub const QUICK_DB: f32 = -6.0;
 
@@ -670,7 +676,7 @@ pub fn play(sound: Sound, ctx: &Ctx) -> bool {
 /// [`play`], `after` from now (at most `MAX_AFTER`) and `db` louder (below 0: quieter) than the UI volume: queued at
 /// once, the mixer thread starts it on time (to a chunk, 2.7 ms) and keeps the output open for it.
 pub fn play_after(sound: Sound, ctx: &Ctx, after: Duration, db: f32) -> bool {
-    if !allowed(ctx) {
+    if !allowed(ctx) || (is_case_sound(sound) && !crate::cozy_extras::on(crate::cozy_extras::Extra::CaseSounds)) {
         return false;
     }
     if matches!(sound, Sound::Nav | Sound::Volume) {

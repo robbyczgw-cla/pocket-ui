@@ -14,14 +14,28 @@ use std::sync::{mpsc, Arc};
 use fontdue::{Font, FontSettings, Metrics};
 
 use crate::gfx::Canvas;
+use crate::font_style::{self, FontStyle};
 use crate::text_fallback::{Fallback, Fit};
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Face {
     /// Barlow Condensed SemiBold: titles on spines and labels.
     Title,
     /// Barlow Medium: meta text and hints.
     Body,
+    /// Barlow Condensed SemiBold (or a store theme's title face) whatever Theme → Font says: a spine's last try in a
+    /// wider font before its title is cut (`media::spine_fit`).
+    Narrow,
+}
+
+impl Face {
+    /// Which of the two fitted faces' slots (`Text::scale`, the fallback's fits) a face goes by: Narrow is a title.
+    fn slot(self) -> usize {
+        match self {
+            Face::Body => 1,
+            Face::Title | Face::Narrow => 0,
+        }
+    }
 }
 
 type Glyph = (Metrics, Vec<u8>);
@@ -30,6 +44,20 @@ type Key = (Face, u32, char);
 pub struct Text {
     title: Arc<Font>,
     body: Arc<Font>,
+    /// How much larger each face is painted than the size asked for (`font_style`: an alternative face fitted to
+    /// Barlow's capitals); 1.0 for Barlow and a theme's own faces.
+    scale: [f32; 2],
+    /// The faces of Barlow, or of the store theme that replaced them (`new`): what a style that leaves a face alone
+    /// (Pixel's body) or the Barlow style itself uses, and `themed`: which of the two came from the store, which no
+    /// style replaces.
+    base: [Arc<Font>; 2],
+    themed: [bool; 2],
+    /// The style `title` and `body` are in now, and the one this Text is held to whatever the setting says
+    /// (`pinned`: safe mode, the tests), else `font_style::get()` is followed (`sync`).
+    style: FontStyle,
+    pinned: Option<FontStyle>,
+    /// `prewarm` has been asked for: asked again when the style changes.
+    prewarmed: bool,
     cache: HashMap<Key, Glyph>,
     /// Which glyphs of `cache` came from the fallback font (`text_fallback`): a library of Japanese names can ask for
     /// thousands, so they are dropped once they pass `FALLBACK_BYTES` (and drawn again as they are needed).
@@ -51,6 +79,9 @@ pub struct Text {
     tr: crate::i18n::Cache,
     /// Off while the manual's English pages are painted (`set_translate`).
     raw: bool,
+    /// For the snapshot checks only (`i18n::recording`): the first pieces of words `wrap` broke inside, so that one that
+    /// is painted is noted (`i18n::note_broken`); a wrap only measured to try a size is not.
+    broken: std::collections::HashSet<String>,
 }
 
 impl Default for Text {
@@ -85,27 +116,30 @@ pub fn fonts_dir() -> std::path::PathBuf {
 /// Spiel", first-run test 2026-10-24, finding #9): a letter or digit (a Japanese title) is painted as "?" so that the
 /// name still shows something, anything else (a tick, a star, an emoji, a zero-width mark) is left out. Decided once
 /// per character and size, when the glyph enters the cache: nothing per frame.
-fn raster(font: &Font, ch: char, px: u32) -> Glyph {
+fn raster(font: &Font, scale: f32, ch: char, px: u32) -> Glyph {
+    // `scale` fits an alternative face to Barlow's capitals (1.0 for Barlow: the size as it was).
+    let px = if scale == 1.0 { px as f32 } else { px as f32 * scale };
     if font.lookup_glyph_index(ch) != 0 || ch == '?' {
-        return font.rasterize(ch, px as f32);
+        return font.rasterize(ch, px);
     }
     if ch.is_alphanumeric() {
-        return font.rasterize('?', px as f32);
+        return font.rasterize('?', px);
     }
     (Metrics::default(), Vec::new())
 }
 
 /// `ch` from the fallback font in `path`, fitted to `face`; opens the font the first time (`text_fallback::open`, the
 /// state in `fallback`). `None` when there is none or it lacks `ch` too: then the face's "?" or nothing (`raster`).
-fn fallback_glyph(fallback: &mut Option<Option<(Arc<Fallback>, [Fit; 2])>>, path: Option<&std::path::Path>, title: &Font, body: &Font, face: Face, px: u32, ch: char) -> Option<Glyph> {
+#[allow(clippy::too_many_arguments)]
+fn fallback_glyph(fallback: &mut Option<Option<(Arc<Fallback>, [Fit; 2])>>, path: Option<&std::path::Path>, title: &Font, body: &Font, scale: [f32; 2], face: Face, px: u32, ch: char) -> Option<Glyph> {
     let (font, fits) = fallback
         .get_or_insert_with(|| {
             let font = path.and_then(crate::text_fallback::open)?;
-            let fits = fits(&font, title, body);
+            let fits = fits(&font, title, body, scale);
             Some((font, fits))
         })
         .as_ref()?;
-    font.raster(ch, px, fits[face as usize])
+    font.raster(ch, px, fits[face.slot()])
 }
 
 /// The memory a fallback glyph takes in the cache (`Text::more_bytes`).
@@ -115,12 +149,13 @@ fn glyph_bytes(glyph: &Glyph) -> usize {
 
 /// The fit of the fallback font to the title face and the body face (`Fit::to`): its ideographs as high as their
 /// capitals and a little more, centred on them, as bold as they are.
-fn fits(fallback: &Fallback, title: &Font, body: &Font) -> [Fit; 2] {
-    let fit = |font: &Font, bold: f32| {
+fn fits(fallback: &Fallback, title: &Font, body: &Font, scale: [f32; 2]) -> [Fit; 2] {
+    // The capitals as painted: an alternative face is scaled to Barlow's (`font_style`).
+    let fit = |font: &Font, scale: f32, bold: f32| {
         let b = font.metrics('H', 1000.0).bounds;
-        Fit::to(fallback, b.height / 1000.0, b.ymin / 1000.0, bold)
+        Fit::to(fallback, b.height / 1000.0 * scale, b.ymin / 1000.0 * scale, bold)
     };
-    [fit(title, FALLBACK_BOLD[0]), fit(body, FALLBACK_BOLD[1])]
+    [fit(title, scale[0], FALLBACK_BOLD[0]), fit(body, scale[1], FALLBACK_BOLD[1])]
 }
 
 /// The letters of `names` that a face lacks (a Japanese name's), the most frequent first, at most `max`.
@@ -145,10 +180,17 @@ fn letters_for_fallback<'a>(title: &Font, body: &Font, names: impl Iterator<Item
 }
 
 impl Text {
-    fn with_faces(title: Font, body: Font, fallback_path: Option<PathBuf>) -> Self {
+    fn with_faces(title: Font, body: Font, themed: [bool; 2], fallback_path: Option<PathBuf>) -> Self {
+        let (title, body) = (Arc::new(title), Arc::new(body));
         Self {
-            title: Arc::new(title),
-            body: Arc::new(body),
+            base: [title.clone(), body.clone()],
+            title,
+            body,
+            scale: [1.0; 2],
+            themed,
+            style: FontStyle::Barlow,
+            pinned: None,
+            prewarmed: false,
             cache: HashMap::new(),
             more: Vec::new(),
             more_bytes: 0,
@@ -159,13 +201,55 @@ impl Text {
             drawn: 0,
             tr: Default::default(),
             raw: false,
+            broken: Default::default(),
         }
     }
 
     /// The embedded Barlow faces only, never a theme's nor the system's CJK font (safe mode, `rescue`).
     pub fn builtin() -> Self {
         let load = |bytes: &[u8]| Font::from_bytes(bytes, FontSettings::default()).expect("embedded font");
-        Self::with_faces(load(include_bytes!("../assets/fonts/BarlowCondensed-SemiBold.ttf")), load(include_bytes!("../assets/fonts/Barlow-Medium.ttf")), None)
+        Self::with_faces(load(font_style::BARLOW_TITLE), load(font_style::BARLOW_BODY), [false; 2], None).pinned_to(FontStyle::Barlow)
+    }
+
+    /// Held to `style` whatever Settings → Look & feel → Look → Theme → Font says: the tests, and safe mode (`builtin`).
+    pub fn pinned_to(mut self, style: FontStyle) -> Self {
+        self.pinned = Some(style);
+        self.sync();
+        self
+    }
+
+    /// The style this Text paints in now.
+    pub fn style(&self) -> FontStyle {
+        self.style
+    }
+
+    /// Follows the style in use (`font_style::get`; Settings → Look & feel → Look → Theme → Font): one atomic read, and only when it
+    /// changed the faces are swapped and everything drawn with the old ones dropped. The faces of a style are parsed
+    /// the first time it is used (`FontStyle::fitted`), not here per frame. A store theme's faces stay.
+    fn sync(&mut self) {
+        let want = self.pinned.unwrap_or_else(font_style::get);
+        if want == self.style {
+            return;
+        }
+        self.style = want;
+        let alt = want.fitted();
+        let pick = |i: usize, alt: Option<&font_style::Alt>| match alt {
+            Some(a) if !self.themed[i] => (a.font.clone(), a.scale),
+            _ => (self.base[i].clone(), 1.0),
+        };
+        let (title, body) = (pick(0, alt.and_then(|a| a.title.as_ref())), pick(1, alt.and_then(|a| a.body.as_ref())));
+        (self.title, self.scale[0]) = title;
+        (self.body, self.scale[1]) = body;
+        // Glyphs, the fallback's fit to the capitals and what the threads were drawing ahead are of the old faces.
+        self.cache.clear();
+        self.more.clear();
+        self.more_bytes = 0;
+        self.fallback = None;
+        self.warm = None;
+        self.warm_names = None;
+        if self.prewarmed {
+            self.prewarm();
+        }
     }
 
     /// The embedded Barlow faces, each replaced by an installed one from `fonts_dir()` if it loads; the system's CJK
@@ -176,11 +260,16 @@ impl Text {
             let bytes = std::fs::read(fonts_dir().join(name)).ok()?;
             Font::from_bytes(bytes, FontSettings::default()).map_err(|e| eprintln!("fonts/{name}: {e}, using the built-in one")).ok()
         };
-        Self::with_faces(
-            installed("title.ttf").unwrap_or_else(|| load(include_bytes!("../assets/fonts/BarlowCondensed-SemiBold.ttf"))),
-            installed("body.ttf").unwrap_or_else(|| load(include_bytes!("../assets/fonts/Barlow-Medium.ttf"))),
+        let (title, body) = (installed("title.ttf"), installed("body.ttf"));
+        let themed = [title.is_some(), body.is_some()];
+        let mut text = Self::with_faces(
+            title.unwrap_or_else(|| load(font_style::BARLOW_TITLE)),
+            body.unwrap_or_else(|| load(font_style::BARLOW_BODY)),
+            themed,
             crate::text_fallback::path(),
-        )
+        );
+        text.sync();
+        text
     }
 
     /// The same faces with `path` as the fallback font instead (`None`: none): for the tests.
@@ -194,6 +283,7 @@ impl Text {
     }
 
     fn glyph(&mut self, face: Face, px: u32, ch: char) -> &Glyph {
+        self.sync();
         let key = (face, px, ch);
         // The fallback glyphs passed their share (with the one drawn last): they go, and are drawn again as needed.
         if self.more_bytes > FALLBACK_BYTES {
@@ -204,19 +294,27 @@ impl Text {
             self.take_warm();
         }
         // One lookup for a glyph in the cache, as before the fallback font; the fields apart for the one that isn't.
-        let Text { cache, title, body, fallback_path, fallback, more, more_bytes, drawn, .. } = self;
+        let Text { cache, title, body, scale, base, fallback_path, fallback, more, more_bytes, drawn, .. } = self;
         cache.entry(key).or_insert_with(|| {
             *drawn += 1;
-            let font = if face == Face::Title { &**title } else { &**body };
+            let (font, k) = match face {
+                Face::Title => (&**title, scale[0]),
+                Face::Body => (&**body, scale[1]),
+                Face::Narrow => (&*base[0], 1.0),
+            };
+            // The PlayStation-style shapes of the hints (`button_prompts`): drawn, at the face's cap height.
+            if let Some(glyph) = crate::button_prompts::raster(ch, px, font.metrics('H', px as f32 * k).height as f32) {
+                return glyph;
+            }
             // A letter the face lacks: the fallback font's, if it has one.
             if font.lookup_glyph_index(ch) == 0 && ch != '?' {
-                if let Some(glyph) = fallback_glyph(fallback, fallback_path.as_deref(), title, body, face, px, ch) {
+                if let Some(glyph) = fallback_glyph(fallback, fallback_path.as_deref(), title, body, *scale, face, px, ch) {
                     *more_bytes += glyph_bytes(&glyph);
                     more.push(key);
                     return glyph;
                 }
             }
-            raster(font, ch, px)
+            raster(font, k, ch, px)
         })
     }
 
@@ -224,6 +322,7 @@ impl Text {
         match face {
             Face::Title => &self.title,
             Face::Body => &self.body,
+            Face::Narrow => &self.base[0],
         }
     }
 
@@ -325,7 +424,8 @@ impl Text {
         if names.is_empty() {
             return;
         }
-        let (title, body) = (self.title.clone(), self.body.clone());
+        self.sync();
+        let (title, body, scale) = (self.title.clone(), self.body.clone(), self.scale);
         // At the sizes they are painted at (`type_scale` is per thread: read here).
         let sizes: Vec<(Face, u32)> = PREWARM_NAMES.iter().flat_map(|(face, sizes)| sizes.iter().map(|px| (*face, crate::type_scale::px(*px)))).collect();
         let (tx, rx) = mpsc::channel();
@@ -335,7 +435,7 @@ impl Text {
                 return;
             }
             let Some(font) = crate::text_fallback::open(&path) else { return };
-            let fits = fits(&font, &title, &body);
+            let fits = fits(&font, &title, &body, scale);
             let mut out = Vec::with_capacity(letters.len() * sizes.len());
             for &(face, px) in &sizes {
                 let main = if face == Face::Title { &title } else { &body };
@@ -357,6 +457,8 @@ impl Text {
     /// its letters in the cache instead of drawing them in its frame. The glyphs come out as `glyph` would draw
     /// them; one needed before the thread is done is drawn on the spot as ever.
     pub fn prewarm(&mut self) {
+        self.sync();
+        self.prewarmed = true;
         if self.warm.is_some() {
             return;
         }
@@ -365,7 +467,7 @@ impl Text {
             self.tr.is_german(key);
         }
         let (tx, rx) = mpsc::channel();
-        let (title, body) = (self.title.clone(), self.body.clone());
+        let (title, body, scale) = (self.title.clone(), self.body.clone(), self.scale);
         // At the sizes they are painted at (Settings → Text size, `type_scale`); a change of size draws them anew.
         let sizes: Vec<(Face, u32)> = PREWARM.iter().flat_map(|(face, sizes)| sizes.iter().map(|px| (*face, crate::type_scale::px(*px)))).collect();
         let spawned = std::thread::Builder::new().name("glyph-prewarm".into()).spawn(move || {
@@ -373,7 +475,7 @@ impl Text {
             for (face, px) in sizes {
                 let font = if face == Face::Title { &title } else { &body };
                 for ch in (' '..='~').chain(PREWARM_MORE.chars()) {
-                    out.push(((face, px, ch), raster(font, ch, px)));
+                    out.push(((face, px, ch), raster(font, scale[face as usize], ch, px)));
                 }
             }
             let _ = tx.send(out);
@@ -440,6 +542,9 @@ impl Text {
 
     #[allow(clippy::too_many_arguments)]
     fn draw_raw(&mut self, c: &mut Canvas, face: Face, px: u32, x: i32, baseline: i32, color: u32, s: &str) -> i32 {
+        if !self.broken.is_empty() && self.broken.contains(s) {
+            crate::i18n::note_broken(s);
+        }
         let mut pen = x as f32;
         let mut ink = boxes::Ink::new(boxes::on());
         for ch in s.chars() {
@@ -567,6 +672,9 @@ impl Text {
             }
             // Cut after the last break mark in the piece, or here when it has none.
             let cut = piece.rfind(['/', '.', '-', '_']).map(|i| i + 1).filter(|i| *i < piece.len()).unwrap_or(piece.len());
+            if cut == piece.len() && word.chars().all(char::is_alphanumeric) && crate::i18n::recording() && self.broken.len() < 512 {
+                self.broken.insert(piece.clone());
+            }
             let rest = piece.split_off(cut);
             out.push(std::mem::replace(&mut piece, rest));
             piece.push(ch);
@@ -628,6 +736,25 @@ impl Text {
             Some(last) => self.fit(face, px, last, max),
             None => whole,
         }
+    }
+
+    /// The size for `title` from `px` down to `least` (in steps of 2) at which every word of it fits into `max` pixels
+    /// on its own, so that `wrap` breaks it between words, never inside one ("PlayStatio / n Portable" in the wider
+    /// Pixel font at Large text); `least` when none does.
+    pub fn title_px(&mut self, face: Face, px: u32, title: &str, max: i32, least: u32) -> u32 {
+        let mut size = px;
+        while size > least && !self.words_fit(face, size, title, max) {
+            size = size.saturating_sub(2).max(least);
+        }
+        size
+    }
+
+    /// Whether every word of `s` (as the interface's language has it) fits into `max` pixels at `px` on its own, so that
+    /// `wrap` breaks it only between words.
+    pub fn words_fit(&mut self, face: Face, px: u32, s: &str, max: i32) -> bool {
+        let scaled = crate::type_scale::px(px);
+        let s = self.translated(s).to_string();
+        s.split_whitespace().all(|w| self.width_raw(face, scaled, w) <= max)
     }
 
     /// A title in at most two lines of `max` pixels (a long one's second line ends with "…"), for a card whose name
@@ -874,13 +1001,19 @@ pub mod boxes {
                 let (first, second) = if sa <= sb { (sa, sb) } else { (sb, sa) };
                 if ox > 2 && oy > 2 {
                     out += &format!("{}\t{first}\t{second}\n", 'O');
-                } else if ox > -3 && oy * 2 > (a.3 - a.1).min(b.3 - b.1) {
+                } else if ox > -3 && oy * 2 > (a.3 - a.1).min(b.3 - b.1) && !punctuation(sa) && !punctuation(sb) {
                     // Side by side on one line with less than a space between them: they read as one word.
                     out += &format!("{}\t{first}\t{second}\n", 'T');
                 }
             }
         }
         let _ = std::fs::write(path, out);
+        // A full stop or comma painted on its own after a bold word or a link (the manual's "Manual."): it belongs to the
+        // word before it, close by design (Nunito's letters stand closer to it than Barlow's).
+        fn punctuation(s: &str) -> bool {
+            let t = s.trim();
+            !t.is_empty() && t.chars().all(|c| matches!(c, '.' | ',' | ';' | ':' | '!' | '?' | ')' | '…'))
+        }
     }
 }
 

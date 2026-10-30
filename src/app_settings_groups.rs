@@ -441,11 +441,11 @@ mod tests {
                 assert_eq!(group_of(row), g);
             }
         }
-        // Short lists: the point of the categories. Nine at most (Look & feel since Launch animation): a list is never
-        // longer than one page, also with Large text, whose taller rows leave room for ten (1080 - 268 px at 76 px a row).
-        assert!(SETTINGS_GROUPS.iter().all(|c| (3..=9).contains(&c.2.len())), "every category holds 3 to 9 rows");
+        // Short lists: the point of the categories. Ten at most (Look & feel since Cozy extras): a list is never longer
+        // than one page, also with Large text, whose taller rows leave room for ten (1080 - 268 px at 76 px a row).
+        assert!(SETTINGS_GROUPS.iter().all(|c| (3..=10).contains(&c.2.len())), "every category holds 3 to 10 rows");
         let large_row = pocket_ui::type_scale::grown_in(pocket_ui::type_scale::TextSize::Large, 36) as i32 - 36;
-        assert!(9 * (66 + large_row * 6 / 5) <= 1080 - 268, "nine Large rows fit on the page");
+        assert!(10 * (66 + large_row * 6 / 5) <= 1080 - 268, "ten Large rows fit on the page");
         let mut seen = std::collections::BTreeSet::new();
         assert!(SETTINGS.iter().all(|r| seen.insert(r.0)), "no row twice: settings_row finds rows by name");
     }

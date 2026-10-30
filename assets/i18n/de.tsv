@@ -1036,6 +1036,12 @@ Auto	Auto
 Frame skip	Bilder überspringen
 Dolphin's VBI skip: when the game runs slow, it skips frames to keep the sound smooth.	VBI-Skip von Dolphin: Läuft das Spiel langsam, überspringt es Bilder, damit der Ton flüssig bleibt.
 
+# --- Theme → Font (font_style.rs)
+Rounded	Rund
+Clean and narrow, the look pocket-ui started with.	Schlank und schmal, so wie pocket-ui angefangen hat.
+Pixel letters for titles and labels; the small text stays plain.	Pixelbuchstaben für Titel und Beschriftungen; der kleine Text bleibt schlicht.
+Soft, round letters everywhere.	Weiche, runde Buchstaben überall.
+
 # --- Options: GameCube, Wii, 3DS
 Hacks	Hacks
 When slow	Wenn langsam
@@ -2926,7 +2932,7 @@ An estimate from how pocket-core is built, not a camera measurement: {t}, ≈ {s
 Look & feel	Aussehen
 Playing	Spielen
 Connections	Verbindungen
-Look, language, text, night light, frames, sounds, haptics, LEDs, animations.	Ansicht, Sprache, Schrift, Nachtlicht, Rahmen, Töne, Haptik, LEDs, Animationen.
+Look, language, text, night light, frames, sounds, LEDs, animations, extras.	Ansicht, Sprache, Schrift, Nachtlicht, Rahmen, Töne, LEDs, Animation, Extras.
 On start, quit, buttons, over the game, performance, battery, achievements, Curator.	Start, Beenden, Tasten, Anzeige im Spiel, Leistung, Akku, Erfolge, Curator.
 Add games, starter pack, extras, screenshots, the Store, tools, PC streaming.	Spiele hinzufügen, Startpaket, Extras, Screenshots, Store, Tools, PC-Streaming.
 Add games, starter pack, extras, screenshots, tools, PC streaming.	Spiele hinzufügen, Startpaket, Extras, Screenshots, Tools, PC-Streaming.
@@ -3851,3 +3857,51 @@ The file is empty (0 bytes). Copy the game to the card again.	Die Datei ist leer
 Step {n} of {m}	Schritt {n} von {m}
 Connected to {s}. Press START for the next step.	Verbunden mit {s}. Mit START geht es weiter.
 Connected to {s}. Press B to go back.	Verbunden mit {s}. Mit B geht es zurück.
+Cozy extras	Gemütliche Extras
+Case sounds, the old TV, stickers, printed discs: each on or off.	Hüllen-Geräusche, alter Fernseher, Sticker, bedruckte Discs: jedes einzeln an oder aus.
+Case sounds	Hüllen-Geräusche
+Old-TV switch-on	Alter-Fernseher-Effekt
+TV on the cabinet	Fernseher auf der Vitrine
+Stickers on cases	Sticker auf den Hüllen
+Memory card in the pause menu	Speicherkarte im Pausenmenü
+Printed discs	Bedruckte Discs
+Game connections	Spiel-Verbindungen
+Light by time of day	Licht nach Tageszeit
+Decorations	Dekoration
+Idle slideshow	Diashow im Leerlauf
+Playful animations	Verspielte Animationen
+Cases click open, cartridges and discs go in with a sound. Menu sounds stay as they are.	Hüllen klicken auf, Module und Discs rasten hörbar ein. Die Menü-Töne bleiben, wie sie sind.
+The game's picture comes on like an old TV when it starts.	Das Bild des Spiels geht beim Start an wie bei einem alten Fernseher.
+A small old TV on top of the cabinet shows the selected game.	Ein kleiner alter Fernseher oben auf der Vitrine zeigt das gewählte Spiel.
+Show your stickers on the cases. Off hides them; they stay on the game's card.	Zeigt deine Sticker auf den Hüllen. Aus blendet sie aus; auf der Spielkarte bleiben sie.
+The game's memory card or cartridge with its blocks under Save and Load, instead of the slim row.	Die Speicherkarte oder das Modul des Spiels mit seinen Blöcken unter Speichern und Laden statt der schmalen Reihe.
+Discs printed with their cover's art and title. Off: a plain disc in its console's colour.	Discs mit dem Bild und Titel ihres Covers bedruckt. Aus: eine schlichte Disc in der Farbe ihrer Konsole.
+Same developer, series or genre on the info page and the box's back lead to your other games.	Gleicher Entwickler, gleiche Reihe oder gleiches Genre auf der Infoseite und der Rückseite der Hülle führen zu deinen anderen Spielen.
+Games you haven't played for a long time, as a row in Curator.	Spiele, die du lange nicht gespielt hast, als Zeile im Curator.
+The room's light follows the time of day: morning sun, evening lamp.	Das Licht im Raum folgt der Tageszeit: Morgensonne, Abendlampe.
+Little things appear on your shelf the more you play.	Je mehr du spielst, desto mehr kleine Dinge tauchen in deinem Regal auf.
+When you put the Pocket down for a while, your games show one after another.	Legst du den Pocket eine Weile weg, erscheinen deine Spiele nacheinander.
+Cases spring and wiggle, discs drop into trays, cartridges click in, spines lean as you scroll.	Hüllen federn und wackeln, Discs fallen in die Lade, Module rasten ein, Rücken neigen sich beim Blättern.
+Shelf and Cabinet looks only.	Nur in den Ansichten Regal und Vitrine.
+Cabinet look only.	Nur in der Ansicht Vitrine.
+Silent now: Sounds is off (Look & feel › Sounds).	Gerade stumm: Töne sind aus (Aussehen › Töne).
+Not shown now: it needs Animations on Cozy and Motion on Full (Look & feel › Look).	Gerade nicht zu sehen: Dafür müssen Animationen auf Gemütlich und Bewegung auf Voll stehen (Aussehen › Ansicht).
+Not shown now: needs Motion on Full (Look & feel › Look).	Gerade nicht zu sehen: braucht Bewegung auf Voll (Aussehen › Ansicht).
+Soft clicks in menus, not in games. Case sounds need them on.	Klicks nur in Menüs. Hüllen-Geräusche brauchen sie.
+
+# Settings → Look & feel → Look → Theme (src/theme_page.rs, src/button_prompts.rs)
+Theme	Design
+How every screen looks: colours, type and the buttons in the hints.	Wie jede Seite aussieht: Farben, Schrift und die Tasten in den Hinweisen.
+Button symbols	Tastensymbole
+The hints show A, B, X and Y as plain letters.	Die Hinweise zeigen A, B, X und Y als schlichte Buchstaben.
+The hints show A, B, X and Y on green, red, blue and yellow.	Die Hinweise zeigen A, B, X und Y auf Grün, Rot, Blau und Gelb.
+The hints show cross, circle, square and triangle.	Die Hinweise zeigen Kreuz, Kreis, Quadrat und Dreieck.
+Colours	Farben
+Paper and walnut, the shelf's own colours.	Papier und Nussbaum, die eigenen Farben des Regals.
+Deep indigo with lilac, like a little cube of a console.	Tiefes Indigo mit Flieder, wie eine kleine Würfel-Konsole.
+Grey handheld plastic with its dark green.	Graues Handheld-Plastik mit dunklem Grün.
+Bright green on black.	Helles Grün auf Schwarz.
+Grey plastic with a deep blue.	Graues Plastik mit tiefem Blau.
+Your screenshot	Dein Screenshot
+From your save	Aus deinem Spielstand
+Font	Schrift

@@ -129,6 +129,14 @@ PlayStation
 PlayStation 2
 PlayStation Portable
 Xbox
+# Settings → Look → Theme → Colours: names of the colour sets
+Indigo Cube
+Grey Brick
+Green X
+Blue Station
+‹ Warm ›
+Barlow
+Pixel
 GBA
 GBC
 SNES

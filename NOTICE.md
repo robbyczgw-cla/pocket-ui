@@ -192,13 +192,17 @@ described file by file in [assets/ui-art/SOURCES.md](assets/ui-art/SOURCES.md). 
   distribute it for any purpose.
 - **Drawn for this project:** the handhelds (`tools/draw_devices.py`, from their published proportions, no photo
   traced, no logos) and the Settings icons (`tools/draw_icons.py`).
-- **Licence of the result:** GPL-2.0-or-later, like pocket-ui. No logo, brand name or lettering is in any of them.
+- **pocket-ui's mark** (`logo.png`, the cartridge): PixelLab `create-image-pixflux` from a text prompt alone, then
+  finished by hand (warm greys, the label's stripes and "p", the gold contacts).
+- **Licence of the result:** GPL-2.0-or-later, like pocket-ui. No logo, brand name or lettering of anyone else is in any
+  of them; the only letter is the "p" on pocket-ui's own mark.
 
 ## Fonts
 
 | Font | Where | Licence | Notes |
 |---|---|---|---|
-| Barlow Medium, Barlow Condensed SemiBold (version 1.408) | `assets/fonts/`; compiled into the binaries (`src/text.rs`) | SIL Open Font License 1.1 | Copyright 2017 The Barlow Project Authors ([source](https://github.com/jpt/barlow)), designer Jeremy Tribby. Licence text: `assets/fonts/OFL.txt` |
+| Barlow Medium, Barlow Condensed SemiBold (version 1.408) | `assets/fonts/`; compiled into the binaries (`src/text.rs`, `src/font_style.rs`) | SIL Open Font License 1.1 | Copyright 2017 The Barlow Project Authors ([source](https://github.com/jpt/barlow)), designer Jeremy Tribby. Licence text: `assets/fonts/OFL.txt` |
+| Pixelify Sans SemiBold, Nunito ExtraBold and SemiBold | `assets/fonts/`; compiled into the binaries (`src/font_style.rs`), used by Settings → Theme → Font (Pixel, Rounded) | SIL Open Font License 1.1 | Copyright 2021 The Pixelify Sans Project Authors ([source](https://github.com/eifetx/Pixelify-Sans)); Copyright 2014 The Nunito Project Authors ([source](https://github.com/googlefonts/nunito)). Static Latin instances of the official variable fonts. Licence texts: `assets/fonts/OFL.txt` |
 | Titillium Web Regular, Bold | `store/test-catalog/src/fonts/`; packed into the test store's `type-titillium` package only, not compiled in | SIL Open Font License 1.1 | Copyright (c) 2009-2011 Accademia di Belle Arti di Urbino and students of MA course of Visual design. Licence text: `store/test-catalog/src/fonts/OFL.txt` (also inside the package as `Titillium-OFL.txt`) |
 | Noto Sans CJK SC Regular | Not shipped: pocket-ui uses the system's copy if present (ROCKNIX installs it at `/usr/share/fonts/truetype/noto-cjk/`), for Japanese, Chinese and Korean letters (`src/text_fallback.rs`) | SIL Open Font License 1.1 (ROCKNIX's package) | Nothing of it is in this repository or our binaries |
 | 8x8 bitmap glyphs (crate `font8x8` 0.3.1) | linked as a Rust crate | MIT | The crate says the glyph data comes from public-domain IBM VGA fonts |

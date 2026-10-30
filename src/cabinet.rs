@@ -406,6 +406,12 @@ impl Tween {
         self.from != self.to && progress(self.at, now, self.dur) < 1.0
     }
 
+    /// The glide under way: from, to, when it started and how long it takes as designed (the Shelf's spines lean
+    /// by it, `playful::Lean`).
+    pub fn segment(&self) -> (f32, f32, Instant, Duration) {
+        (self.from, self.to, self.at, self.dur)
+    }
+
     /// As if it had been sent `by` earlier (for snapshots in the middle of a move).
     pub fn age(&mut self, by: Duration) {
         self.at = self.at.checked_sub(by).unwrap_or(self.at);
@@ -439,6 +445,22 @@ impl Pull {
             (_, Some((p, start, at))) if p == item => start * (1.0 - ease_out(progress(at, now, PUSH))),
             _ => 0.0,
         }
+    }
+
+    /// The selected case.
+    pub fn selected(&self) -> Option<Item> {
+        self.sel.map(|(s, _, _)| s)
+    }
+
+    /// How long ago `item` was selected, while it is the selection (the playful spring and wiggle run from then).
+    pub fn since(&self, item: Item, now: Instant) -> Option<Duration> {
+        self.sel.filter(|(s, start, _)| *s == item && *start < 1.0).map(|(_, _, at)| now.saturating_duration_since(at))
+    }
+
+    /// Where `item`'s slide out is, 0-1 straight through `PULL` (no easing), while it is the selection; with the
+    /// part it was already out when it started.
+    pub fn linear(&self, item: Item, now: Instant) -> Option<(f32, f32)> {
+        self.sel.filter(|(s, _, _)| *s == item).map(|(_, start, at)| (start, progress(at, now, PULL)))
     }
 
     /// The case going back, while it is on its way.

@@ -183,6 +183,14 @@ pub struct BoxView {
     flip_at: Option<Instant>,
     /// When the box came up: the game slides out of its case from then (`OPEN`).
     opened_at: Option<Instant>,
+    /// Playful animations: the disc beside its case turns from then (the box came up or turned back to its front),
+    /// for `playful::SPIN_FOR`; and whether the last paint showed a disc that turns.
+    spin_at: Option<Instant>,
+    spins: bool,
+    /// When the box was painted last and how long that took: the turning disc gets a frame per refresh, or every
+    /// other one where the box costs more than half a refresh (the H700's 17 ms, `spin_wake`).
+    painted: Option<Instant>,
+    cost: Duration,
     pub scroll: i32,
     max_scroll: i32,
     /// The frame as made last: (hull, front?, w, h, tint) and the picture.
@@ -264,6 +272,7 @@ impl BoxView {
         let dur = crate::motion::span(crate::motion::Kind::Move, OPEN);
         BoxView {
             opened_at: (!dur.is_zero()).then(Instant::now),
+            spin_at: Some(Instant::now()),
             ..BoxView::default()
         }
     }
@@ -288,12 +297,17 @@ impl BoxView {
         };
         self.back = !self.back;
         self.link = None;
+        if !self.back {
+            self.spin_at = Some(now);
+        }
         self.flip_at = (!dur.is_zero()).then_some(start);
     }
 
     /// For a snapshot: the last turn done, or `POCKETUI_SNAPSHOT_FLIP_MS` into it; the game out of its case, or
     /// `POCKETUI_SNAPSHOT_OPEN_MS` into its slide.
     pub fn snapshot_settle(&mut self) {
+        let spin: Option<u64> = std::env::var("POCKETUI_SNAPSHOT_SPIN_MS").ok().and_then(|v| v.parse().ok());
+        self.spin_at = Instant::now().checked_sub(Duration::from_millis(spin.unwrap_or(0)));
         let open: Option<u64> = std::env::var("POCKETUI_SNAPSHOT_OPEN_MS").ok().and_then(|v| v.parse().ok());
         self.opened_at = open.and_then(|ms| Instant::now().checked_sub(Duration::from_millis(ms)));
         let ms: Option<u64> = std::env::var("POCKETUI_SNAPSHOT_FLIP_MS").ok().and_then(|v| v.parse().ok());
@@ -301,6 +315,23 @@ impl BoxView {
             (Some(_), Some(ms)) => Instant::now().checked_sub(Duration::from_millis(ms)),
             _ => None,
         };
+    }
+
+    /// The disc's turn as if the box had come up `by` ago (benches).
+    pub fn age_spin(&mut self, by: Duration) {
+        self.spin_at = Instant::now().checked_sub(by);
+    }
+
+    /// The next frame for the turning disc (Playful animations), while it turns: not through `animating`, so a slow
+    /// box doesn't ask for a frame at every refresh it can't keep.
+    pub fn spin_wake(&self, now: Instant) -> Option<Instant> {
+        let turning = self.spins && !self.back && crate::playful::on() && self.spin_at.is_some_and(|at| now.saturating_duration_since(at) < crate::playful::span(crate::playful::SPIN_FOR));
+        if !turning {
+            return None;
+        }
+        let refresh = Duration::from_micros(16_667);
+        let every = if self.cost > refresh / 2 { refresh * 2 } else { refresh };
+        Some(self.painted.map_or(now, |t| t + every - Duration::from_millis(2)))
     }
 
     pub fn animating(&self, now: Instant) -> bool {
@@ -348,6 +379,12 @@ impl BoxView {
 
     /// Paints the box, front or back (or turning) under the card's top line.
     pub fn paint(&mut self, c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[CardPicture], inp: &Inputs) {
+        let t0 = Instant::now();
+        self.paint_box(c, text, d, pictures, inp);
+        (self.painted, self.cost) = (Some(t0), t0.elapsed());
+    }
+
+    fn paint_box(&mut self, c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[CardPicture], inp: &Inputs) {
         let now = Instant::now();
         let dur = crate::motion::span(crate::motion::Kind::Move, FLIP);
         let t = match self.flip_at {
@@ -435,9 +472,15 @@ impl BoxView {
         // Inside, its right edge at the case's; open, `out` past it.
         let gx = x + cw - gw + (out as f32 * open) as i32;
         let gy = y + (ch - gh) / 2;
+        // Playful animations: a disc out of its case turns slowly for a while (`playful::spin`); a UMD stays in its shell.
+        self.spins = off.is_none() && matches!(inp.medium.game(), crate::media::Game::Disc | crate::media::Game::MiniDisc) && crate::playful::on();
         if open > 0.0 {
             art::soft_shadow(c, gx + gw / 2 + 8, gy + 10, gw / 2, gh, 20, 0.4, (0, c.h));
             match inp.game {
+                Some(pic) if self.spins && open >= 1.0 => {
+                    let turn = self.spin_at.map_or(0.0, |at| crate::playful::spin(crate::playful::secs(at, Instant::now())));
+                    art::blit_spun(c, pic, gx as f32 + pic.w as f32 / 2.0, gy as f32 + pic.h as f32 / 2.0, turn, (0, c.h));
+                }
                 Some(pic) => art::blit(c, pic, gx, gy, 256, (0, c.h)),
                 None if inp.medium.game() == crate::media::Game::Umd => art::umd(c, gx + gw / 2, gy + gh / 2, gh / 2, inp.look.color, c.h),
                 None => art::disc(c, gx + gw / 2, gy + gh / 2, gh / 2, inp.look.color, c.h),
@@ -655,6 +698,9 @@ fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[Ca
     facts.extend(d.facts.iter().map(|(k, v)| (*k, v.clone())));
     facts.extend(d.players.clone().map(|p| ("Players", p)));
     facts.extend(d.scores.clone().map(|s| ("Reviews", s)));
+    // The label column holds the widest label: a face wider than Barlow (Settings → Look & feel → Look → Theme → Font) or a longer German word.
+    let gap = text.width(Face::Body, 28, "  ");
+    let key_w = facts.iter().map(|(k, _)| text.width(Face::Body, 28, k) + gap).fold(key_w, i32::max).min(col_w / 2);
     if facts.is_empty() {
         for l in text.wrap(Face::Body, 28, "Not in the offline game list, so there are no facts to show.", col_w) {
             text.draw(c, Face::Body, 28, inner_x, ly, soft, &l);

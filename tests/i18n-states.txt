@@ -34,6 +34,9 @@ setup:first:aR
 setup:first:aL
 setup:look
 setup:look:L
+setup:look:T
+setup:look:Tr
+setup:look:Td
 setup:play
 setup:play:d
 setup:wifi
@@ -231,6 +234,15 @@ night:off:0
 night:on:1
 night:scheduled:1
 night:scheduled:3:5
+cozy:0
+cozy:1
+cozy:4
+cozy:7
+cozy:8
+cozy:9
+cozy:10
+cozy:11
+cozy:0:case_sounds,cabinet_tv,pause_memory_card
 perf
 perf:3
 perf:0:waiting
@@ -429,6 +441,9 @@ slot-earlier:damaged
 # the info page's and the box's read-only slots.
 slot-save:psx
 slot-load:snes
+slot-save:psx:card
+slot-load:snes:card
+slot-save:dreamcast:card
 slot-save:ports
 slot-empty:gba:nocover
 slot-undo:ps2
