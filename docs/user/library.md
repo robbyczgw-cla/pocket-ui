@@ -117,7 +117,8 @@ card then shows **Series** Burnout. It takes two different games, never one game
 
 A value only leads somewhere when you have another game with it. One you don't (the only game of a studio on your
 card) is plain text without an arrow, and a game without any facts has nothing to pick: Down scrolls, A plays.
-If the library is still getting ready when you open a card, its connections appear there as soon as they are ready.
+If the library is still getting ready when you open a card, its connections appear there as soon as they are ready. Settings → Look & feel → [Cozy extras](settings.md#cozy-extras) → **Game connections** switches
+them off; the values are then only shown.
 
 ## What the card shows
 

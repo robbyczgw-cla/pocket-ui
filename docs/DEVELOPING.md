@@ -579,9 +579,8 @@ After measurements (lower shared load, around 8; these are not controlled idle-m
 
 At the measured 601 states and 39 risk states, layout coverage uses 718 renders instead of 2,404. The 1,686 omitted
 renders repeat the three non-anchor combinations for states outside the risk list. No snapshot state is removed.
-Cargo's test phase took 73s versus nextest's 106s including doctests, so Cargo stays the default. The shell phases
-were 105s and 91s respectively, illustrating the host-load variation. Nextest is an optional diagnostic/runner choice,
-not an automatic speedup. The large library harness dominates compilation; merging small integration executables
+Cargo's test phase took 73s versus nextest's 106s including doctests on the lightly loaded build machine (2026-10-29). On the shared build server under load, with a retry and 12 threads, nextest was the faster one, see "The full gate runs the tests with `cargo nextest`" below; the gate now defaults to it. The shell phases
+were 105s and 91s respectively, illustrating the host-load variation. The large library harness dominates compilation; merging small integration executables
 was therefore not justified by these measurements.
 
 The runtime reductions preserve behaviours:
@@ -628,12 +627,20 @@ case also exercises the ordinary five-second SIGTERM fallback and verifies both 
 `/tmp/suite-ui-review/`; they have no layout collisions. Device follow-up: toggle the real radio off/on and compare
 the page, verify one real shutdown cancels the RTC wake alarm, and launch/quit with real video/audio and a card.
 
-The full gate can use `GATE_RUNNER=nextest scripts/gate.sh` when `cargo-nextest` is installed
-(`cargo install cargo-nextest --locked`). It still runs doctests through Cargo and all five shell suites.
-`.config/nextest.toml` limits execution to four test processes and retries only the named, known load-sensitive
-render benchmarks and Azahar header-read test once. Ordinary correctness tests have no retry. Cargo remains the
-default runner; use measured runtime, not availability, to choose nextest. Its JUnit report is under
-`target/nextest/default/junit.xml`.
+The full gate runs the tests with `cargo nextest` whenever it is installed and `.config/nextest.toml` exists (2026-10-30; on
+the build server it lives in its tool folder; `GATE_RUNNER=cargo` opts out, `GATE_RUNNER=nextest` insists). It runs every test in
+its own process and all test binaries side by side (`GATE_TEST_THREADS`, default the cores, at most 8; remote-gate.sh gives
+the build server 12), then the doctests through Cargo. Measured on the shared build server for the same one-comment change, three runs each, shared
+load 10-30: tests 163 / 164 / 169 s with `cargo test`, 115 / 114 / 112 s with nextest (the gate 188-192 s against 139-140 s).
+**One automatic retry** for every test (`retries = 1`): a test that fails once and passes on the retry is listed in the
+gate log as `gate:   flaky: <test>` and the gate stays green; a test that fails twice makes it red. The result lines are
+unchanged (`GATE: ok (N passed)`; N is now every test, about 2,900, not only the first Cargo binary's count). Tests that
+assert a time budget (thread CPU time per frame, the Curator's and the search's 5,000 games) are in an override that runs
+them alone (`threads-required = "num-test-threads"`), so a busy gate cannot fail them and their thresholds stay as they
+are; a new budget test belongs in that filter. Compile speed was measured too: a small change rebuilds in about 20 s, so
+the test run, not the compile, is the gate's time; `mold` as the linker and `opt-level = 1` for the gate profile gained
+nothing measurable (and `opt-level = 1` made the frame benchmarks fail), so `[profile.gate]` is unchanged. The JUnit
+report is under `target/nextest/default/junit.xml`.
 
 To measure without nightly Rust, build with `nice -n 10 env CARGO_BUILD_JOBS=4 cargo test --profile gate --no-run
 --message-format=json > /tmp/test-build.json`, timing that command separately, then run
@@ -642,6 +649,12 @@ The report separates binary durations from individual test durations and prints 
 include process startup and are diagnostic measurements, not performance assertions. Keep the machine load with the
 report. Do not compare a clean build with an incremental build as evidence of a profile improvement.
 
+
+**The merge train and artifacts (maintainers).** Branches are merged through a queue (`tools/merge-queue.sh <worktree>:<branch>`
+in the maintainer's checkout, not part of this repository): it runs one combined gate for up to four branches, halves a red
+batch down to the branch that broke it, and fast-forwards `main` only on green. The gate uses `cargo nextest` (see
+below). After each merge the queue builds one ARM release package per `main` commit; `scripts/dev.sh deploy --artifact
+<sha|latest-main>` puts such a package on a device without compiling.
 
 `scripts/gate.sh [worktree]` is what has to be green before a branch is merged: the whole `cargo test` at release level
 (all unit tests, integration tests that run the binaries, and the doc-drift checks) and `deploy/test-run-pocket-ui.sh`
@@ -819,6 +832,7 @@ These are meant for development and tests; normal use needs none of them. On a d
 | `POCKETUI_SNAPSHOT_NATIVE=1` | Snapshots only: bypass the logical canvas for raw small-panel layout comparisons |
 | `POCKETUI_FRAME_BENCH=1` | Snapshots (`home`, `settings`, `main`): report settled paint and paint-plus-reduction thread CPU medians and p95, excluding startup, PNG and presentation ([H700-SCALED-LAYOUT.md](H700-SCALED-LAYOUT.md)) |
 | `POCKETUI_SNAPSHOT_WIFI=1\|0` | `--snapshot`: the status corner as if Wi-Fi were connected (`1`) or not (`0`) (the `--snapshot` table above) |
+| `POCKETUI_SNAPSHOT_GAME=<system>\|<name>\|<file>` | `--snapshot`: the game behind the pause menu and the slot pages (default `gbc\|uCity\|uCity.gbc`); `scripts/readme-shots.sh` sets it |
 | `POCKETUI_SNAPSHOT_FLIP_MS=<ms>` | `--snapshot box:…`: the box's last turn that long after it began, instead of done (`game_box::BoxView::snapshot_settle`) |
 | `POCKETUI_SNAPSHOT_OPEN_MS=<ms>` | `--snapshot box:…`: the game that long into sliding out of its case, instead of out (`game_box::BoxView::snapshot_settle`) |
 | `POCKETUI_SNAPSHOT_SPIN_MS=<ms>` | `--snapshot box:…`: the disc beside its case that long into its slow turn (Playful animations, `game_box::BoxView::snapshot_settle`) |
@@ -985,7 +999,7 @@ Cabinet's CRT TV with its own picture thread, `assets/media/tv`), the look step'
 | `src/trace.rs`, `startup.rs`, `scripts/latency.{sh,py}` | The speed guard: latency trace and benchmark ([LATENCY.md](LATENCY.md)); where the start time goes |
 | `src/crash.rs`, `frame.rs`, `fsutil.rs`, `save_writer.rs`, `save_trouble.rs`, `logs.rs`, `net_log.rs` (`net.log`: the network daemons' journal and the saved networks' names, secrets blanked), `shutdown_log.rs`, `report.rs` | Panic log, error values instead of panics, atomic file writes, crash-safe saves (the battery save and the cartridge clock, `.rtc`, written off the game thread, each write's outcome kept), saves that don't reach the card (the kinds, their words, the note pocket-core leaves for pocket-ui), the logs on the card (`shutdown_log.rs`: pocket-ui's own `shutdown.log` for every power off and restart, fsynced per entry), Settings → System → About → Report a problem (the zip of versions, logs, settings and emulators for a bug report, every file cleaned of private details first: `Redactor`, its tests on `testdata/report/private-log.txt`; `app_report.rs` is the App's side) |
 | `src/rescue.rs`, `system_cfg.rs` | The rescue path: the launcher's exit codes, safe mode's rescue page, the dialog before EmulationStation ([ARCHITECTURE.md](ARCHITECTURE.md#rescue-path)); ROCKNIX's `system.cfg`, every write under its lock ([ARCHITECTURE.md](ARCHITECTURE.md#rocknixs-systemcfg)) |
-| `src/doc_checks.rs`, `src/testutil.rs`, `src/fixtures/`, `src/testdata/` | Tests only: the documentation checks; helpers shared by the unit tests (`write_executable`, the scratch folder `TestDir`); recorded tool output (bluetoothctl, Dolphin profiles, Syncthing, Tailscale) and data (the Curator golden set, ROM file names in the shapes found on real cards) the unit tests read |
+| `src/doc_checks.rs`, `src/testutil.rs`, `src/fixtures/`, `src/testdata/` | Tests only: the documentation checks; helpers shared by the unit tests (`write_executable`, the scratch folder `TestDir`); recorded tool output (bluetoothctl, Dolphin profiles, Syncthing, Tailscale) and data (the Curator golden set, real ROM names) the unit tests read |
 | `deploy/` | Files that go onto the device: the launcher `run-pocket-ui.sh`, the `essway` drop-in, the boot screen's unit (`pocket-splash.service`), SD boot config (`sd-efi/grub.cfg`) and the quiet start for a card set up before (`grub-quiet.sh`, its test `test-grub-quiet.sh`), the SD image's initramfs hooks and notes (`image/`), the install package's scripts and README (`package/`), RetroArch defaults, benchmark and PINE tools |
 | `scripts/` | Dev loop (`dev.sh`, `vdev.sh`, `devlock.sh`), tests (`test-linux.sh`), release (`release-app.sh`, `release-rustflags.sh`, `check-binary-paths.sh`), the SD card image (`make-image.sh`, `check-image.sh`, `image/`), the install package for an existing ROCKNIX card (`make-install-zip.sh`) and the two files for an official one (`make-fat-install.sh`), the Xbox core's files (`hakux-files.sh`, both packages), boot files (`make-sd-efi.sh`, `make-test-bootimg.py`), the quiet start on an existing card (`boot-quiet.sh`), `autostart.sh`, `flash-sd.sh`, `android/` helper scripts for the Android side of the install, translations (`i18n-extract.py`, `i18n-shots.sh`), other screen sizes (`size-sweep.sh`), `wayland-stub.py` (snapshots on Linux without a compositor) |
 | `docker/` | The virtual device: image build, boot scripts, virtual pad and touch screen |

@@ -3,6 +3,12 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a minor version may change anything).
 
+## [Unreleased]
+
+### Changed
+
+- Documentation: a new device list in the README and [docs/DEVICES.md](docs/DEVICES.md), grouped by chip with what each plays, the README's feature list brings 0.1.4 to 0.1.6, and the manual and screenshots match 0.1.6.
+
 ## [0.1.6] - 2026-10-30
 
 ### Added

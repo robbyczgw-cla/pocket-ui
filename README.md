@@ -13,15 +13,19 @@ PlayStation 2, gets the same small pause menu with save slots, pictures and a st
 box art, their own card and facts, and a Curator that knows what you own and what you have not touched yet.
 
 Version **0.1.6** is out as a public alpha: [download it](../../releases/tag/v0.1.6),
-watch the [trailer](https://pocketui.xyz), and read more at **[pocketui.xyz](https://pocketui.xyz)**.
+[watch the trailer](https://pocketui.xyz) and see more at **[pocketui.xyz](https://pocketui.xyz)**.
 
 <p align="center">
-  <img src="docs/media/home.png" width="49%" alt="Home: the last game, favourites, Curator and the systems">
-  <img src="docs/media/home-split.png" width="49%" alt="Home in the Split look">
+  <img src="docs/media/home.png" width="49%" alt="Home on the Shelf: the last game, favourites, Curator and the systems">
+  <img src="docs/media/home-cabinet.png" width="49%" alt="The Cabinet: games on a bookcase with an old TV, a plant and a trophy that grew with your play time">
 </p>
 <p align="center">
+  <img src="docs/media/cases.png" width="49%" alt="Games as discs, cartridge boxes and cases">
   <img src="docs/media/game-card.png" width="49%" alt="A game's card with facts, play time and notes">
-  <img src="docs/media/home-cabinet.png" width="49%" alt="The Cabinet look: Curator's shelves as a bookcase">
+</p>
+<p align="center">
+  <img src="docs/media/cozy-extras.png" width="49%" alt="Cozy extras: every little touch has its own switch">
+  <img src="docs/media/theme.png" width="49%" alt="Theme: colour sets, fonts and button symbols">
 </p>
 
 The pictures are rendered from the code with made-up data (`pocket-ui --snapshot`, see
@@ -30,13 +34,21 @@ The pictures are rendered from the code with made-up data (`pocket-ui --snapshot
 ## What it feels like
 
 - **Instant.** The shelf appears within tens of milliseconds, and a game starts from the picture of where you left it.
-- **One shelf, five looks.** Shelf, Minimal, Split, Cards and Cabinet, in dark or light, with real box art, system
-  pictures, favourites and ratings.
-- **One pause menu everywhere.** HOME opens Continue, Save and Load with 8 slots and previews, Earlier (step back a few
-  minutes), screen frames and effects (scanlines, CRT, LCD grid), shortcuts, rewind, run-ahead and cheats.
-- **Curator and Surprise me.** Browse by feel, find games like this one, or let it pick.
-- **Your own player.** pocket-core plays Game Boy to PSP, Dreamcast and DS; PlayStation 2, GameCube and Wii run on
-  their own emulators behind the same menu.
+- **Every game in its case.** Real cases, cartridge boxes and printed discs on the Shelf and the Cabinet: a PlayStation
+  jewel case, a Game Boy Advance cartridge, a GameCube mini disc with your game's cover on it. Stickers you put on
+  them (Completed, 100 %, Favourite, Game of the year), and on the Cabinet a little old TV that shows the selected game.
+- **Cozy or Quick.** Cozy opens the case, slides the cartridge in with a click and switches on an old TV; Quick just
+  starts. Playful animations, sounds of the cases, light that follows the time of day, a plant that grows with your
+  hours and a trophy for your first finished game. Each touch has its own switch (Settings → Look & feel → Cozy extras).
+- **Make it yours.** Five looks (Shelf, Minimal, Split, Cards, Cabinet), five colour sets in dark and light, three
+  fonts, and button symbols in Nintendo, Xbox or PlayStation style. An idle slideshow of your games' pictures if you want one.
+- **One pause menu everywhere.** HOME opens Continue, Save and Load with 8 slots and previews (on the memory card of the
+  game's own console, if you like), Earlier (step back a few minutes), screen frames and effects (scanlines, CRT, LCD
+  grid), shortcuts, rewind, run-ahead and cheats.
+- **Curator, Connections and Rediscover.** Browse by feel, find games like this one, follow a developer, series or
+  genre to your other games, or pick up what you played a year ago today.
+- **Your own player, and the big consoles.** pocket-core plays Game Boy to PSP, Dreamcast and DS; PlayStation 2,
+  GameCube, Wii and 3DS run on their own emulators behind the same menu. PortMaster games install from the Extras page and start from pocket-ui.
 - **Web companion** on your own tailnet: library, what is playing, favourites, ratings, uploads.
 - **Looks after itself.** Wi-Fi (even hotel sign-in pages), Bluetooth pads and headphones, sleep and power, signed
   updates with a way back. English and German.
@@ -60,17 +72,20 @@ is not touched. More: [docs/INSTALL-DUAL-BOOT.md](docs/INSTALL-DUAL-BOOT.md).
 You bring your own games and, for a few systems, BIOS files; pocket-ui includes neither. On an empty card it can
 download a [starter pack](docs/STARTER-PACK.md) of nine free homebrew games, each from its author's page.
 
-## Devices
+## Runs on
 
-| | |
-|---|---|
-| Made for | Retroid Pocket Mini V2 (Snapdragon 865 / SM8250), ROCKNIX SM8250 build 20261001 (newer builds are accepted when pocket-ui's compatibility check passes), 1240 x 1080 screen |
-| Tested on | Retroid Pocket Mini V2 (main device), AYN Odin 2 Mini, Anbernic RG35XX Plus |
-| Should run on | **Same ROCKNIX SM8250 image as the Mini V2:** Retroid Pocket 5, Flip 2, first Mini. **SM8550 image:** AYN Odin 2, Odin 2 Portal, Retroid Pocket 6, Nova. **ROCKNIX H700 image:** Anbernic RG28XX, RG35XX 2024/H/Pro/SP, RG40XX H/V, RG34XX, RG34XX-SP, RG-SP. Profiles are in place; not tried on the hardware yet |
+pocket-ui runs on three ROCKNIX images. 🎮 means the project has played on it, ✅ means the same chip, the same
+ROCKNIX image and a pocket-ui profile. Screens, sticks and sources are in [docs/DEVICES.md](docs/DEVICES.md).
 
-Alpha: it is made on the Mini V2; the "should run on" devices are best-effort. If something is off,
-**Settings → System → About → Report a problem** makes a file for a report, or [open an issue](../../issues).
-[docs/STATUS.md](docs/STATUS.md) lists every feature and how far it has been checked.
+| Chip and ROCKNIX image | Handhelds | Plays, by console release |
+|---|---|---|
+| **Snapdragon 865** (SM8250) | 🎮 **Retroid Pocket Mini V2**<br>✅ Retroid Pocket Mini, Pocket 5, Pocket Flip 2 | NES, Master System, PC Engine, Mega Drive, Game Boy, SNES, Saturn, PlayStation, Nintendo 64, Game Boy Color, Dreamcast, PlayStation 2, Game Boy Advance, GameCube, Xbox, Nintendo DS, PSP, Wii, 3DS |
+| **Snapdragon 8 Gen 2** (SM8550) | 🎮 **AYN Odin 2 Mini**<br>✅ AYN Odin 2, Odin 2 Portal, Retroid Pocket 6, Pocket Nova | NES, Master System, PC Engine, Mega Drive, Game Boy, SNES, Saturn, PlayStation, Nintendo 64, Game Boy Color, Dreamcast, PlayStation 2, Game Boy Advance, GameCube, Xbox, Nintendo DS, PSP, PS3, Wii, 3DS, PS Vita, Wii U (PS3, PS Vita and Wii U: selected games) |
+| **Allwinner H700** | 🎮 **Anbernic RG35XX Plus**<br>✅ RG35XX H, Pro, 2024 and SP, RG28XX, RG40XX H and V, RG34XX, RG34XX-SP, RG-SP | NES, Master System, PC Engine, Mega Drive, Game Boy, SNES, PlayStation, Nintendo 64, Game Boy Color, Dreamcast, Game Boy Advance, Nintendo DS, PSP (Nintendo 64, Dreamcast, PSP and DS with ROCKNIX's own emulators) |
+
+It is an alpha, made on the Mini V2. If something is off, **Settings → System → About → Report a problem** makes a
+file for a report, or [open an issue](../../issues). [docs/STATUS.md](docs/STATUS.md) lists every feature and how far
+it has been checked.
 
 ## How far it is proven
 
@@ -83,24 +98,11 @@ The details behind the alpha label, from [docs/STATUS.md](docs/STATUS.md):
 - Built and tested in the virtual device or in tests, still waiting for more real-device time: touch, Bluetooth pads,
   Wii and 3DS, the newest picture effects and frames, the night light, RetroAchievements, Syncthing between two
   devices, the Store and the starter pack. Battery drain of a long sleep is not measured yet.
-- The Retroid Pocket 5, Flip 2 and first Mini run the same ROCKNIX SM8250 build, so pocket-ui recognises them and lays
-  out for their screens; Pocket 6, Nova and the AYN Odin 2 family use the SM8550 image (screen off instead of
-  suspend, ROCKNIX-controlled cooling, see [docs/DEVICES.md](docs/DEVICES.md)). Nobody on the project has most of
-  these yet; the Odin 2 Mini has been tried once. The Anbernic H700 models are only tested on a computer, not on a handheld. Other devices are not supported.
-
-## Supported devices
-
-| | |
-|---|---|
-| Device | Retroid Pocket Mini V2 (Snapdragon 865 / SM8250) |
-| System | ROCKNIX, SM8250 build, version 20261001 (the version pocket-ui is tested with) |
-| Screen | 1240 x 1080 landscape (the panel is portrait and rotated by the compositor) |
-
-**Experimental, untested on real hardware:** the Retroid Pocket 5 and Retroid Pocket Flip 2 (1920 x 1080; the Flip 2's
-lid puts it to sleep) and the first Retroid Pocket Mini (1280 x 960), on the same ROCKNIX SM8250 build. pocket-ui says
-so once at the first start and in Settings › System › About. Install ROCKNIX for the device as ROCKNIX describes, then
-pocket-ui's install package; the SD card image is for the Mini V2 only. If something doesn't work, Settings › System ›
-About › Report a problem makes a file for a report. Details: [docs/DEVICES.md](docs/DEVICES.md).
+- The Retroid Pocket 5, Flip 2 and first Mini run the same ROCKNIX SM8250 build as the Mini V2, so pocket-ui
+  recognises them and lays out for their screens; Pocket 6, Nova and the AYN Odin 2 family use the SM8550 image
+  (screen off instead of suspend, ROCKNIX-controlled cooling, see [docs/DEVICES.md](docs/DEVICES.md)). The Odin 2 Mini
+  and the Anbernic RG35XX Plus have been played on; the other devices are covered by computer tests and the virtual
+  device. Devices that are not listed are not supported.
 
 ## What it does
 
@@ -238,23 +240,3 @@ libretro cores, the system pictures (public-domain photos by Evan Amos, converte
 - Barlow, by Jeremy Tribby, for the interface font, and Titillium Web for the test store's font package.
 - [Evan Amos](https://commons.wikimedia.org/wiki/User:Evan-Amos), whose public-domain console photographs on Wikimedia
   Commons are the base of the system pictures ([assets/systems/SOURCES.md](assets/systems/SOURCES.md)).
-
-
-### Experimental SM8550 handhelds
-
-The **Retroid Pocket 6** (including TOP-DPAD), **Retroid Pocket Nova**, **AYN Odin 2 Mini**,
-**AYN Odin 2** and **AYN Odin 2 Portal** are experimental. Only the Odin 2 Mini has been tried on a real device
-(2026-10-27: the install package, the first-start screens, the shelf, a GBA game with the pause menu, screen off and
-wake, driven over the command pipe; no button or touch pressed, no Bluetooth, no sleep); the other four are computer
-tests only, with no hardware verification. Use ROCKNIX's own **SM8550 aarch64 image**
-(20261001), set up following ROCKNIX's guide for your device, boot it once, then add pocket-ui
-with the install package. The Mini V2 SD image must not be used on these devices.
-
-Pocket 6 and the Odin 2 family use 1920×1080; Nova uses 1280×960. First start says once that the device is untested;
-About marks it experimental. **Stock ROCKNIX still disables sleep on these devices (checked 2026-10-27):** the power button
-turns the screen off, and idle turns it off with the game paused. Any button brings it back.
-Settings → System → Sleep & power offers **Switch off after** (Off by default) to save and power
-off after a longer dark spell on battery. Screen off still uses battery. ROCKNIX controls the fan;
-pocket-ui's fan choices have no effect here. Touch, LEDs, vibration, battery drain, 120 Hz pacing
-and Zink on the real GPU still need a tester. Mini and Portal menus start with Xbox buttons
-(A bottom); the original Odin 2 uses Nintendo buttons (A right). Saved layout choices win. See [device notes](docs/DEVICES.md).

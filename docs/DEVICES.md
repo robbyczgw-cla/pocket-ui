@@ -1,14 +1,63 @@
-# Devices: Mini V2 and experimental handhelds
+# Devices: which handhelds pocket-ui runs on
 
-> **Status (2026-10-26; ledger: [STATUS.md](STATUS.md)):** pocket-ui is made and tested on the **Retroid Pocket
-> Mini V2**. The **Retroid Pocket 5**, **Retroid Pocket Flip 2** (the Snapdragon 865 one) and the first **Retroid
-> Pocket Mini** ("Mini V1") run the same ROCKNIX SM8250 image and are offered as **experimental**: built and tested
-> on a computer only (unit tests, snapshots at their screen sizes, a first day in the virtual device for each). Nobody
-> on the project has one; nothing here has run on their hardware. Reports are welcome: Settings › System › About ›
-> Report a problem.
+## Which handhelds pocket-ui runs on
 
-Research behind this: `RESEARCH-NOVA-RP6-2026-10-26.md` (outside the repository) and
-[NOVA-FEASIBILITY.md](NOVA-FEASIBILITY.md). The SM8550 devices (Pocket 6, Nova and the AYN Odin 2 family) are experimental too; their different platform restrictions are below.
+pocket-ui runs on ROCKNIX, on the three ROCKNIX images it ships for: **SM8250**, **SM8550** and **H700**. Each device
+below has a ROCKNIX device tree on that image (its path is given under the table) and a pocket-ui profile that knows its
+screen, sticks, fan, Wi-Fi and lid. The installers accept exactly these devices. 🎮 means the project has played on it;
+✅ means the same chip, the same ROCKNIX image and a pocket-ui profile. Reports are welcome (Settings › System ›
+About › Report a problem). How far each feature is proven: [STATUS.md](STATUS.md).
+
+The "Plays" line of each chip comes from what pocket-ui starts there (`hostsys`, `standalone.rs`, `hakux.rs`) and from the
+runs in [STATUS.md](STATUS.md) and [BIG-EMULATORS.md](BIG-EMULATORS.md), in order of the consoles' years.
+
+### Snapdragon 865: ROCKNIX SM8250 image
+
+**Plays, by console release:** NES, Master System, PC Engine, Mega Drive, Game Boy, SNES, Saturn, PlayStation, Nintendo 64, Game Boy Color, Dreamcast, PlayStation 2, Game Boy Advance, GameCube, Xbox, Nintendo DS, PSP, Wii, 3DS. Has a fan.
+
+| | Device | Screen | Sticks | Notes |
+|---|---|---|---|---|
+| 🎮 | **Retroid Pocket Mini V2** | 1240 × 1080 | 2 | The main device; everything is measured here |
+| ✅ | Retroid Pocket Mini | 1280 × 960 | 2 | Layouts adjusted for the 4:3 panel |
+| ✅ | Retroid Pocket 5 | 1920 × 1080 | 2 | Pages sit in a centred column on the wide screen |
+| ✅ | Retroid Pocket Flip 2 | 1920 × 1080 | 2 | Closing the lid is the power button's short press |
+
+ROCKNIX: `projects/ROCKNIX/devices/SM8250/linux/dts/qcom/sm8250-retroidpocket-{rpminiv2,rpmini,rp5,rp5-visionox,flip2,flip2-visionox}.dts`.
+
+### Snapdragon 8 Gen 2: ROCKNIX SM8550 image
+
+**Plays, by console release:** NES, Master System, PC Engine, Mega Drive, Game Boy, SNES, Saturn, PlayStation, Nintendo 64, Game Boy Color, Dreamcast, PlayStation 2, Game Boy Advance, GameCube, Xbox, Nintendo DS, PSP, PS3, Wii, 3DS, PS Vita, Wii U. PS3, PS Vita and Wii U are selected games and guests of the pause menu (Continue and Quit; no save slots, the games save themselves). ROCKNIX runs the fan on these devices, and pocket-ui follows it.
+
+| | Device | Screen | Sticks | Notes |
+|---|---|---|---|---|
+| 🎮 | **AYN Odin 2 Mini** | 1920 × 1080 | 2 | Xbox measured here |
+| ✅ | AYN Odin 2 | 1920 × 1080 | 2 | Menus start with Nintendo buttons (A right) |
+| ✅ | AYN Odin 2 Portal | 1920 × 1080 | 2 | Menus start with Xbox buttons (A bottom) |
+| ✅ | Retroid Pocket 6 (also the TOP-DPAD version) | 1920 × 1080 | 2 | |
+| ✅ | Retroid Pocket Nova | 1280 × 960 | 2 | 4:3 panel |
+
+ROCKNIX: `projects/ROCKNIX/devices/SM8550/linux/dts/qcom/qcs8550-{ayn-odin2mini,ayn-odin2,ayn-odin2portal,retroidpocket-rp6,retroidpocket-rp6-top-dpad,retroidpocket-rpnova}.dts`.
+
+### Allwinner H700: ROCKNIX H700 image
+
+**Plays, by console release:** NES, Master System, PC Engine, Mega Drive, Game Boy, SNES, PlayStation, Nintendo 64, Game Boy Color, Dreamcast, Game Boy Advance, Nintendo DS, PSP. Nintendo 64, Dreamcast, PSP and Nintendo DS start with ROCKNIX's own emulators here. The RG35XX Plus plays Game Boy to PlayStation games smoothly. Four small cores, 1 GB of memory, no fan, Nintendo button labels.
+
+| | Device | Screen | Sticks | Wi-Fi |
+|---|---|---|---|---|
+| 🎮 | **Anbernic RG35XX Plus** | 640 × 480 | no | yes |
+| ✅ | Anbernic RG35XX H | 640 × 480 | 2 | yes |
+| ✅ | Anbernic RG35XX Pro | 640 × 480 | 2 | yes |
+| ✅ | Anbernic RG35XX 2024 | 640 × 480 | no | no |
+| ✅ | Anbernic RG35XX SP (clamshell) | 640 × 480 | no | yes |
+| ✅ | Anbernic RG28XX | 640 × 480 (portrait panel, turned) | no | no |
+| ✅ | Anbernic RG40XX H and V | 640 × 480 | 2 | yes |
+| ✅ | Anbernic RG34XX | 720 × 480 | no | yes |
+| ✅ | Anbernic RG34XX-SP (clamshell) | 720 × 480 | 2 | yes |
+| ✅ | Anbernic RG-SP (clamshell) | 720 × 480 | no | yes |
+
+ROCKNIX: `projects/ROCKNIX/devices/H700/linux/dts/allwinner/sun50i-h700-anbernic-*.dts`. The RG CubeXX is on the same image;
+its square 720 × 720 screen is too heavy for pocket-ui for now, so the installers say no. Devices on these images that are
+not listed here have no pocket-ui profile, and the installers refuse them.
 
 ## The four devices
 

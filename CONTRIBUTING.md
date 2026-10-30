@@ -15,6 +15,8 @@ version, how you installed it).
 - For anything larger than a fix, open an issue first, so we can agree on the approach before you spend the time.
 - Build and test as [docs/DEVELOPING.md](docs/DEVELOPING.md) describes. At least `cargo test --release` must pass;
   the documentation checks in it also cover the manual (`docs/user/`) and the links.
+- Maintainers merge only after the full gate (`scripts/gate.sh`: tests at release level, the launcher and package checks,
+  the documentation and leak checks) is green; a pull request gets the same run.
 - If your change makes a feature work better or worse on the device, update its row in
   [docs/STATUS.md](docs/STATUS.md) in the same pull request, and say what you ran it on.
 - A change people see goes into the manual (`docs/user/`) in the same pull request. New interface text needs its
