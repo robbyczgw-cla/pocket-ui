@@ -9,6 +9,10 @@ shelf:psx:split
 shelf:snes:minimal
 info:minimal:gba:golden
 info:split:snes:chrono
+info:split:snes:chrono:saves
+slot-save:psx
+slot-load:snes
+box:gba:advance:saves:end
 cabinet:ddrra
 setup:first:device=mini
 setup:first:device=rp5

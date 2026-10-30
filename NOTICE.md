@@ -144,6 +144,14 @@ itself is not restricted by them, since it does not contain them, but an image o
 cannot be sold, and anyone who redistributes such an image must keep to those terms. A release image meant for
 anything beyond private and non-commercial use has to be built without them.
 
+## Save media pictures
+
+The memory cards in `assets/save_media/` (the pause menu's Save and Load, `src/save_media.rs`) are described file by
+file in [assets/save_media/SOURCES.md](assets/save_media/SOURCES.md): the PlayStation, PS2 and Dreamcast VMU pictures
+were converted with PixelLab from three **public-domain** photographs by Evan Amos on Wikimedia Commons, the GameCube
+memory card, Xbox memory unit and Memory Stick Duo generated with PixelLab from text alone. No logo or lettering is on
+them.
+
 ## System pictures
 
 The pixel-art console pictures in `assets/systems/` (compiled into pocket-ui by `src/system_art.rs`) are
@@ -200,8 +208,9 @@ that means shipping `assets/fonts/OFL.txt` with it.
 
 ## Sounds, shaders and test files
 
-- **UI sounds:** eight short sample files (`assets/ui-sounds/`) generated with ElevenLabs sound effects under a paid
-  plan, which allows commercial use and redistribution; edited by us. Details in `docs/LICENCES.md`.
+- **UI sounds:** short sample files (`assets/ui-sounds/`, the menu sounds and the sounds of the cases, cartridges,
+  discs, cards and the CRT) generated with ElevenLabs sound effects under a paid plan, which allows commercial use and
+  redistribution; edited by us. Details in `docs/LICENCES.md`.
 - **Shaders** (`src/shaders/`): written for the project; they carry no third-party notice.
 - **Test ROMs:** `scripts/testroms.py` writes small original test ROMs (colour bars and a tone) for systems with
   no free game. They are generated, not stored, and are ours.

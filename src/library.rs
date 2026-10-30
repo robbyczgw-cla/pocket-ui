@@ -32,6 +32,15 @@ pub fn load(es_systems: &Path) -> Result<Vec<System>, String> {
     load_with(es_systems, None)
 }
 
+/// Whether the checksum cache may be read for cartridge names (`names_ready`).
+static NAMES_READY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The app has read its games' checksums once: lists made from now on show a cartridge by the name its checksum gave
+/// ("Supar Mario Land 2" is "Super Mario Land 2"). Before, a list shows file names, as it did before the checksums.
+pub fn names_ready(on: bool) {
+    NAMES_READY.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Where the EmulationStation gamelists are read from and cached while the list is made (`gamelist`).
 pub struct Gamelists<'a> {
     pub data_dir: &'a Path,
@@ -81,14 +90,23 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
                     }
                 }
             }
-            // A PlayStation disc shows the name its serial gave (`disc_serial`, read by `rom_id`): "SLES_556.73.Something"
-            // is "Final Fantasy VII". A gamelist's name comes first; the disc's is read from the card only (no image,
-            // nothing downloaded), so the scan stays quick.
-            if let Some(g) = gamelists.filter(|_| crate::disc_serial::dat(&name).is_some()) {
-                let discs: Vec<(String, PathBuf)> = games.iter().filter(|g| !from_list.contains(&g.path)).map(|g| (name.clone(), g.path.clone())).collect();
-                for (path, title) in crate::rom_id::known(g.data_dir, &discs) {
+            // A game the checksum (cartridges, `rom_id`) or the serial (PlayStation discs, `disc_serial`) named shows that
+            // name: "SLES_556.73.Something" is "Final Fantasy VII", "Supar Mario Land 2" is "Super Mario Land 2" and
+            // "Metroid - Fusoin" that is really Advance Wars says so (new-user test 2026-10-30: the cover said one
+            // game, the title another). A gamelist's name comes first; the name is read from the card only (no image,
+            // nothing downloaded), so the scan stays quick. A file name that only differs in case, tags and
+            // punctuation keeps its own spelling.
+            // A cartridge's name waits until the app has had its checksums read once (`names_ready`): the first list of a
+            // start stays as quick as ever and never waits for the checksum file.
+            let identifiable = crate::disc_serial::dat(&name).is_some() || (crate::rom_id::dat_name(&name).is_some() && NAMES_READY.load(std::sync::atomic::Ordering::Relaxed));
+            if let Some(g) = gamelists.filter(|_| identifiable) {
+                let identifiable: Vec<(String, PathBuf)> = games.iter().filter(|g| !from_list.contains(&g.path)).map(|g| (name.clone(), g.path.clone())).collect();
+                for (path, title) in crate::rom_id::known(g.data_dir, &identifiable) {
                     if let Some(game) = games.iter_mut().find(|g| g.path == path) {
-                        game.name = crate::disc_serial::shelf_name(&title);
+                        let proper = crate::disc_serial::shelf_name(&title);
+                        if crate::covers::normalize(&proper) != crate::covers::normalize(&game.name) {
+                            game.name = proper;
+                        }
                     }
                 }
             }
@@ -547,6 +565,9 @@ pub(crate) fn sheet_references(kind: &str, text: &str) -> Vec<String> {
 /// article moved to the front ("Legend of Zelda, The - Link's Awakening" → "The Legend of Zelda - …").
 pub fn display_name(stem: &str) -> String {
     let stem = strip_inner_ext(stem);
+    // "Legend of Zelda,The-Oracle of Ages": the article after a comma with no space, and a dash with none either.
+    let glued = fix_glued_article(stem);
+    let stem = glued.as_str();
     let mut out = String::new();
     let mut depth = 0;
     for ch in stem.chars() {
@@ -571,6 +592,26 @@ pub fn display_name(stem: &str) -> String {
         }
     }
     if name.is_empty() { stem.to_string() } else { name }
+}
+
+/// "Zelda,The-Oracle" → "Zelda, The - Oracle": a trailing article written without the spaces around it. Names that
+/// don't have one are returned as they are (the hyphen of "Spider-Man" stays).
+fn fix_glued_article(stem: &str) -> String {
+    for article in ["The", "A", "An"] {
+        for sep in [",", ", "] {
+            let Some(at) = stem.find(&format!("{sep}{article}")).filter(|&at| at > 0) else { continue };
+            let after = &stem[at + sep.len() + article.len()..];
+            let glued_dash = after.starts_with('-');
+            let ends_there = after.is_empty() || after.starts_with(" -") || after.starts_with(" (") || after.starts_with(" [");
+            // Something must be glued, or the name is fine as it is; and the article must really end there ("Anna").
+            if !(sep == "," || glued_dash) || !(glued_dash || ends_there) {
+                continue;
+            }
+            let rest = if glued_dash { format!(" - {}", after[1..].trim_start()) } else { after.to_string() };
+            return format!("{}, {article}{rest}", &stem[..at]);
+        }
+    }
+    stem.to_string()
 }
 
 /// Small words that stay lower case in a title made by [`title_case`], unless they are its first word or the first
@@ -875,6 +916,60 @@ mod tests {
         // left to its names (`disc_serial::dat`).
         assert_eq!(crate::disc_serial::dat("ps2"), Some("Sony - PlayStation 2"));
         assert_eq!(crate::disc_serial::dat("gba"), None);
+    }
+
+    /// New-user test 2026-10-30: "Supar Mario Land 2" got the right cover (by checksum) but kept the typo as its title,
+    /// and a file called "Metroid - Fusoin" that is Advance Wars showed Metroid's name over Advance Wars' box.
+    #[test]
+    fn a_cartridge_the_checksum_names_shows_its_proper_title_not_the_typo() {
+        use super::{load_with, Gamelists};
+        super::names_ready(true);
+        let dir = TestDir::new("cart-names");
+        let roms = dir.join("gba");
+        std::fs::create_dir_all(&roms).unwrap();
+        let files: [(&str, &[u8]); 4] = [
+            ("Supar Mario Land 2.gba", b"mario-land-two"),
+            ("Metroid - Fusoin (Europe).gba", b"advance-wars-content"),
+            ("Tetris (World).gba", b"tetris-bytes"),
+            ("Homebrew Thing.gba", b"nobody knows this"),
+        ];
+        for (name, bytes) in &files {
+            std::fs::write(roms.join(name), bytes).unwrap();
+        }
+        let cfg = dir.join("es_systems.cfg");
+        std::fs::write(&cfg, format!("<systemList><system><name>gba</name><fullname>Game Boy Advance</fullname><path>{}</path><extension>.gba</extension></system></systemList>", roms.display())).unwrap();
+        let data = dir.join("data");
+        let games: Vec<(String, std::path::PathBuf)> = files.iter().map(|(name, _)| ("gba".to_string(), roms.join(name))).collect();
+        let crc = |name: &str| format!("{:08X}", crate::rom_id::checksums("gba", &roms.join(name)).unwrap().unwrap().crc);
+        let dat = format!(
+            "clrmamepro (\n\tname \"Nintendo - Game Boy Advance\"\n)\n\
+             game (\n\tname \"Super Mario Land 2 (USA)\"\n\trom ( name \"a.gba\" size 1 crc {} )\n)\n\
+             game (\n\tname \"Advance Wars (USA)\"\n\trom ( name \"b.gba\" size 1 crc {} )\n)\n\
+             game (\n\tname \"Tetris (World)\"\n\trom ( name \"c.gba\" size 1 crc {} )\n)\n",
+            crc("Supar Mario Land 2.gba"),
+            crc("Metroid - Fusoin (Europe).gba"),
+            crc("Tetris (World).gba"),
+        );
+        let run = crate::rom_id::run_until(&data, &games, &|_| Some(dat.clone()), true, || false);
+        assert_eq!(run.names.len(), 3);
+        let names = |l: Vec<super::System>| l[0].games.iter().map(|g| g.name.clone()).collect::<Vec<_>>();
+        let places = crate::gamelist::Locations::none();
+        let with = load_with(&cfg, Some(&Gamelists { data_dir: &data, places: &places })).unwrap();
+        assert_eq!(names(with), ["Advance Wars", "Homebrew Thing", "Super Mario Land 2", "Tetris"]);
+        // Before the checksum is worked out, the file names show.
+        let fresh = dir.join("fresh-data");
+        let plain = load_with(&cfg, Some(&Gamelists { data_dir: &fresh, places: &places })).unwrap();
+        assert_eq!(names(plain), ["Homebrew Thing", "Metroid - Fusoin", "Supar Mario Land 2", "Tetris"]);
+    }
+
+    #[test]
+    fn an_article_glued_to_its_title_by_missing_spaces_is_still_moved_to_the_front() {
+        assert_eq!(display_name("Legend of Zelda,The-Oracle of Ages"), "The Legend of Zelda - Oracle of Ages");
+        assert_eq!(display_name("Legend of Zelda,The-Oracle of Ages (USA)"), "The Legend of Zelda - Oracle of Ages");
+        assert_eq!(display_name("Legend of Zelda, The-Oracle of Seasons"), "The Legend of Zelda - Oracle of Seasons");
+        assert_eq!(display_name("Legend of Zelda,The"), "The Legend of Zelda");
+        assert_eq!(display_name("Spider-Man"), "Spider-Man");
+        assert_eq!(display_name("Hunter,Anna-X"), "Hunter,Anna-X", "an article must end where it ends");
     }
 
     #[test]

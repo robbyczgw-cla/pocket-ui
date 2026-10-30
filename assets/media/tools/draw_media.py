@@ -3,10 +3,14 @@ table `src/media.rs` keeps (label and band rectangles, the spine's caps for 9-sl
 
 Usage: python3 -I draw_media.py <out dir>   (needs Pillow)
 
-One template pixel is two screen pixels on the Cabinet's shelf. Cartridges are drawn in a neutral grey (GREY) and
-take their system's plastic colour at run time; cases are drawn in their own colours. The label of a spine and the
-cover of a front are left as a plain rectangle: pocket-ui paints the cover's colour, the title and the cover into
-them. Everything here is plain shapes: no logo, no brand name, no lettering."""
+One template pixel is 2.5 screen pixels on the Cabinet's shelf. Every game stands as a case: the cartridge systems'
+cardboard boxes are drawn in a neutral grey (GREY) and take the cover's colour at run time (printed cardboard); cases
+are drawn in their own colours. The label of a spine and the cover of a front are left as a plain rectangle:
+pocket-ui paints the cover's colour, the title and the cover into them.
+
+What is inside a box (assets/media/game/<kind>.png): the cartridge or game card, drawn in GREY too and coloured with
+the system's plastic; its label takes the cover. Discs and UMDs are painted by pocket-ui itself.
+Everything here is plain shapes: no logo, no brand name, no lettering."""
 import sys
 from PIL import Image, ImageDraw
 
@@ -14,13 +18,27 @@ OUT = sys.argv[1]
 GREY = (156, 156, 156)
 PAPER = (236, 233, 225, 255)
 # kind: (spine, front, height) in template pixels (half the shelf size).
+# Real sizes at one scale: 0.63 template px per mm (a DVD case's 190 mm is 120 px); docs/DESIGN.md "Media" has the
+# table in mm. Spines are thicker than life so a title fits, in the real order. In the order of `Medium::ALL`.
+# kind: (spine, front, height) in template pixels.
 SIZES = {
-    "snes": (22, 88, 78), "n64": (21, 88, 74), "nes": (22, 75, 88), "gb": (18, 58, 66), "gba": (18, 75, 56),
-    "cart": (22, 85, 80), "md": (20, 83, 118), "sms": (20, 83, 118), "ps1": (13, 98, 88), "segadisc": (16, 93, 100),
-    "disc": (15, 98, 88), "ps2": (19, 84, 120), "gc": (18, 81, 111), "wii": (19, 84, 120), "keep": (19, 84, 120), "xbox": (19, 84, 120),
-    "umd": (15, 66, 103), "ds": (16, 85, 95), "3ds": (15, 85, 93), "vita": (14, 70, 92),
+    "snes": (24, 116, 84), "n64": (24, 116, 82), "nes": (24, 84, 116), "gb": (20, 76, 81), "gba": (20, 74, 74),
+    "generic-cart": (22, 82, 113), "md": (20, 85, 120), "sms": (20, 85, 120), "ps1": (13, 90, 79), "segadisc": (16, 90, 80),
+    "generic-disc": (19, 85, 120), "ps2": (19, 85, 120), "gc": (18, 85, 116), "wii": (19, 85, 120), "keep": (19, 85, 120),
+    "umd": (15, 66, 110), "ds": (16, 79, 86), "3ds": (15, 79, 86), "xbox": (19, 85, 120), "vita": (14, 66, 86),
+    "generic-digital": (14, 66, 86),
 }
-CARTS = ("snes", "n64", "nes", "gb", "gba", "cart")
+# The boxes that lie wide stand on their short side on a shelf, as collectors keep them: the spine is as long as the box
+# is wide (184 mm), the title runs along it.
+SPINE_H = {"snes": 116, "n64": 116}
+BOXES = ("snes", "n64", "nes", "gb", "gba")
+GENERIC = ("generic-cart", "generic-disc", "generic-digital")
+# What is inside, (width, height): the cartridges as they were on the shelf until 0.1.4, the Mega Drive's cartridge,
+# a game card (DS, 3DS, Vita).
+# In their real proportions, at the size their details need (`Game::DRAWN`'s order); pocket-ui scales each to its real
+# size beside its case (`Game::mm`).
+GAMES = {"snes": (88, 78), "n64": (88, 57), "nes": (75, 88), "gb": (58, 66), "gba": (75, 46), "cart": (85, 80),
+         "md": (72, 88), "card": (32, 30), "memory": (24, 32)}
 
 
 def c3(v):
@@ -107,42 +125,96 @@ def cart_front(kind, W, H):
         d.polygon([(W // 2 - 5, 3), (W // 2 + 4, 3), (W // 2, 7)], fill=k(c, 0.78))
         lab = (6, 12, W - 12, int(H * 0.6))
         grooves(d, 6, W - 7, lab[1] + lab[3] + 4, 3, 3, c)
+    elif kind == "md":
+        # Square shoulders, a grooved grip along the top, the label taking most of the front.
+        d.rectangle([0, 0, W - 1, H - 1], fill=c, outline=o)
+        bevel(d, 1, 1, W - 2, H - 2, c)
+        grooves(d, 4, W - 5, 3, 3, 3, c)
+        d.rectangle([2, 12, 4, H - 4], fill=k(c, 0.8))
+        d.rectangle([W - 5, 12, W - 3, H - 4], fill=k(c, 0.8))
+        lab = (7, 13, W - 14, H - 22)
+        grooves(d, 9, W - 10, H - 7, 2, 2, c)
+    elif kind == "card":
+        # A small game card: the notched corner at the top left, the contacts' ridge at the bottom.
+        d.polygon([(0, 3), (3, 0), (W - 1, 0), (W - 1, H - 1), (0, H - 1)], fill=c, outline=o)
+        bevel(d, 1, 3, W - 2, H - 2, c)
+        d.line([4, 1, W - 2, 1], fill=k(c, 1.16))
+        lab = (3, 5, W - 6, H - 11)
+        for x in range(4, W - 4, 3):
+            d.line([x, H - 4, x + 1, H - 4], fill=k(c, 0.6))
+    elif kind == "memory":
+        # A memory card: the cut corner at the top right, the contacts' ridges along the top.
+        d.polygon([(0, 0), (W - 6, 0), (W - 1, 5), (W - 1, H - 1), (0, H - 1)], fill=c, outline=o)
+        bevel(d, 1, 6, W - 2, H - 2, c)
+        for x in range(3, W - 7, 3):
+            d.line([x, 1, x, 4], fill=k(c, 0.66))
+        lab = (3, 8, W - 6, H - 11)
     else:  # gba: wide, a notch at the top
         d.rounded_rectangle([0, 0, W - 1, H - 1], radius=3, fill=c, outline=o)
         bevel(d, 1, 1, W - 2, H - 2, c)
         d.rectangle([W // 2 - 10, 0, W // 2 + 10, 2], fill=k(c, 0.62))
-        lab = (7, 7, W - 14, int(H * 0.66))
+        lab = (7, 7, W - 14, int(H * 0.6))
         grooves(d, 7, W - 8, lab[1] + lab[3] + 3, 3, 3, c)
     recess(d, lab, c)
-    sides(im, 1, W - 2, 12, H - 2, n=3)
+    sides(im, 1, W - 2, min(12, H // 3), H - 2, n=3 if W > 40 else 1)
     return im, lab
 
 
-def cart_spine(kind, W, H):
+# ---- cardboard boxes ------------------------------------------------------------------------------------------
+
+def worn(px, W, H):
+    """Rubbed corners: the card shows lighter where a box has been taken off the shelf a hundred times."""
+    for (x, y) in ((1, 1), (2, 1), (1, 2), (W - 2, 1), (W - 3, 1), (W - 2, 2), (1, H - 2), (2, H - 2), (1, H - 3),
+                   (W - 2, H - 2), (W - 3, H - 2), (W - 2, H - 3)):
+        r, g, b, a = px[x, y]
+        px[x, y] = (min(255, int(r * 1.3)), min(255, int(g * 1.3)), min(255, int(b * 1.3)), a)
+
+
+def box_front(kind, W, H):
+    """A game box's front is its printed cover, edge to edge: one pixel of card all round (pocket-ui paints it the same
+    warm grey on every box, media::card_edge); the tuck flap's fold and the rubbed corners are drawn over the cover at
+    run time (media::box_wear)."""
     im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
     c = GREY + (255,)
-    d.rounded_rectangle([0, 0, W - 1, H - 1], radius=3 if kind != "gba" else 2, fill=c, outline=k(c, 0.42))
-    bevel(d, 1, 1, W - 2, H - 2, c)
-    n, top, bottom = {"snes": (5, 21, 5), "cart": (5, 21, 5), "n64": (4, 17, 5), "nes": (5, 21, 6), "gb": (2, 11, 5), "gba": (2, 10, 4)}[kind]
-    grooves(d, 3, W - 4, 4, n, 3, c)
-    lab = (3, top, W - 6, H - top - bottom)
-    recess(d, lab, c)
-    # A little foot under the label: the edge where the two shell halves meet.
-    d.line([3, H - bottom + 1, W - 4, H - bottom + 1], fill=k(c, 0.8))
-    sides(im, 1, W - 2, 1, H - 2)
-    # The top end (grooves) and the bottom end stay as they are when the spine is stretched.
-    return im, lab, (top - 1, bottom - 1)
+    d.rectangle([0, 0, W - 1, H - 1], fill=c)
+    lab = (1, 1, W - 2, H - 2)
+    x, y, w, h = lab
+    d.rectangle([x, y, x + w - 1, y + h - 1], fill=PAPER)
+    return im, lab
+
+
+def box_spine(kind, W, H):
+    im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    c = GREY + (255,)
+    d.rectangle([0, 0, W - 1, H - 1], fill=c, outline=k(c, 0.45))
+    # The folds of the flaps at both ends, the card rounding off at the sides.
+    for y, f in ((1, 1.22), (2, 1.08), (3, 0.72), (H - 4, 0.72), (H - 3, 1.08)):
+        d.line([1, y, W - 2, y], fill=k(c, f))
+    d.line([1, 4, 1, H - 5], fill=k(c, 1.12))
+    d.line([W - 2, 4, W - 2, H - 5], fill=k(c, 0.8))
+    worn(im.load(), W, H)
+    # A printed band at the top (the cover's accent), the title's label under it.
+    bh = max(8, H // 9)
+    band = (2, 5, W - 4, bh)
+    lab = (2, 5 + bh + 2, W - 4, H - (5 + bh + 2) - 6)
+    d.rectangle([band[0], band[1], band[0] + band[2] - 1, band[1] + band[3] - 1], fill=(200, 200, 200, 255))
+    d.line([2, 5 + bh, W - 3, 5 + bh], fill=k(c, 0.8))
+    d.rectangle([lab[0], lab[1], lab[0] + lab[2] - 1, lab[1] + lab[3] - 1], fill=PAPER)
+    return im, lab, band, (5 + bh + 2, 6)
 
 
 # ---- cases ----------------------------------------------------------------------------------------------------
 
-RIM = {"md": 0x151517, "sms": 0x151517, "ps1": 0x1c1d22, "segadisc": 0xd9d9dc, "disc": 0x1c1d22, "ps2": 0x0e0f11,
-       "gc": 0x1b1b20, "wii": 0xeaeaeb, "keep": 0x16171a, "xbox": 0x0f1411, "umd": 0x111113, "ds": 0xbfc2c7, "3ds": 0xe6e6e8, "vita": 0xcfd3da}
+RIM = {"md": 0x151517, "sms": 0x151517, "ps1": 0x1c1d22, "segadisc": 0xd9d9dc, "ps2": 0x0e0f11,
+       "gc": 0x1b1b20, "wii": 0xeaeaeb, "keep": 0x16171a, "xbox": 0x0f1411, "umd": 0x111113, "ds": 0xbfc2c7, "3ds": 0xe6e6e8, "vita": 0xcfd3da,
+       "generic-cart": 0x2b2724, "generic-disc": 0x2b2724, "generic-digital": 0x2b2724}
 # The band at the top of the spine: (height, colour or None for the cover's accent colour).
-BAND = {"md": (13, None), "sms": (12, 0xf2f2f0), "ps1": (11, 0x0e0e10), "segadisc": (11, None), "disc": (10, None),
+BAND = {"md": (13, None), "sms": (12, 0xf2f2f0), "ps1": (11, 0x0e0e10), "segadisc": (11, None),
         "ps2": (16, 0x0e0f11), "gc": (12, 0x2a2a31), "wii": (14, 0xf4f4f4), "keep": (14, None), "xbox": (16, 0x2a8a1f), "umd": (12, 0x111113),
-        "ds": (11, 0xf6f6f6), "3ds": (11, 0xf6f6f6), "vita": (13, 0x1a55b8)}
+        "ds": (11, 0xf6f6f6), "3ds": (11, 0xf6f6f6), "vita": (13, 0x1a55b8),
+        "generic-cart": (14, None), "generic-disc": (14, None), "generic-digital": (12, None)}
 
 
 def case_front(kind, W, H):
@@ -152,7 +224,8 @@ def case_front(kind, W, H):
     light = RIM[kind] > 0x808080
     r = {"umd": 7, "wii": 3, "ds": 3, "3ds": 3, "vita": 3, "gc": 2}.get(kind, 2)
     d.rounded_rectangle([0, 0, W - 1, H - 1], radius=r, fill=rc, outline=k(rc, 0.6) if light else (5, 5, 7, 255))
-    if kind in ("ps1", "segadisc", "disc"):
+    front_band = None
+    if kind in ("ps1", "segadisc"):
         # A jewel case: the ribbed hinge at the left.
         hw = 6
         d.rectangle([1, 1, hw, H - 2], fill=k(rc, 1.35 if not light else 0.92))
@@ -179,6 +252,14 @@ def case_front(kind, W, H):
         if kind == "ds":
             # The DS box's clear case: a light inner rim.
             d.rectangle([2, 2, W - 3, H - 3], outline=k(rc, 1.12))
+        if kind in GENERIC:
+            # pocket-ui's own case for every other system: warm dark plastic, a band at the top that pocket-ui paints in
+            # the system's colour with its console and name, the cover under it.
+            bh = BAND[kind][0] + 4
+            front_band = (3, 3, W - 6, bh)
+            d.rectangle([3, 3, W - 4, 3 + bh - 1], fill=(200, 200, 200, 255))
+            d.line([3, 3 + bh, W - 4, 3 + bh], fill=(14, 12, 11, 255))
+            lab = (3, 4 + bh, W - 6, H - 7 - bh)
     if kind == "xbox":
         # The green top band of the original Xbox case; the cover sits below it.
         lab = (3, 17, W - 6, H - 20)
@@ -198,7 +279,7 @@ def case_front(kind, W, H):
     d.line([1, H - 2, W - 2, H - 2], fill=k(rc, 0.7))
     d.line([W - 2, 1, W - 2, H - 2], fill=k(rc, 0.75))
     d.rectangle([x, y, x + w - 1, y + h - 1], fill=(220, 218, 212, 255))
-    return im, lab
+    return im, lab, front_band
 
 
 def case_spine(kind, W, H):
@@ -209,7 +290,7 @@ def case_spine(kind, W, H):
     d.rounded_rectangle([0, 0, W - 1, H - 1], radius=2, fill=rc, outline=k(rc, 0.6) if light else (5, 5, 7, 255))
     r = 1 if W < 16 else 2
     band_h, band_c = BAND[kind]
-    hinge = kind in ("ps1", "segadisc", "disc")
+    hinge = kind in ("ps1", "segadisc")
     top = r + (3 if hinge else 0)
     bot = H - 1 - r - (3 if hinge else 0)
     d.rectangle([r, top, W - 1 - r, bot], fill=PAPER)
@@ -237,20 +318,36 @@ def case_spine(kind, W, H):
     return im, lab, band if band_c is None else None, (top + band_h + 1, H - bot)
 
 
+import os
+os.makedirs(f"{OUT}/game", exist_ok=True)
+games = []
+for kind, (w, h) in GAMES.items():
+    g, glab = cart_front(kind, w, h)
+    assert g.size == (w, h)
+    g.save(f"{OUT}/game/{kind}.png", optimize=True)
+    games.append((kind, w, h, glab))
+
 rows = []
 for kind, (sw, fw, h) in SIZES.items():
-    if kind in CARTS:
-        f, flab = cart_front(kind, fw, h)
-        s, slab, caps = cart_spine(kind, sw, h)
-        band = None
+    if kind in BOXES:
+        f, flab = box_front(kind, fw, h)
+        fband = None
+        s, slab, band, caps = box_spine(kind, sw, SPINE_H.get(kind, h))
     else:
-        f, flab = case_front(kind, fw, h)
+        f, flab, fband = case_front(kind, fw, h)
         s, slab, band, caps = case_spine(kind, sw, h)
-    assert f.size == (fw, h) and s.size == (sw, h)
+    assert f.size == (fw, h) and s.size == (sw, SPINE_H.get(kind, h))
     f.save(f"{OUT}/{kind}-front.png", optimize=True)
     s.save(f"{OUT}/{kind}-spine.png", optimize=True)
-    rows.append((kind, sw, fw, h, slab, flab, band, caps))
+    rows.append((kind, sw, fw, h, SPINE_H.get(kind, h), slab, flab, band, fband, caps))
 
-for kind, sw, fw, h, slab, flab, band, caps in rows:
-    b = f"Some(({band[0]}, {band[1]}, {band[2]}, {band[3]}))" if band else "None"
-    print(f'    // {kind}\n    Template {{ spine: ({sw}, {h}), front: ({fw}, {h}), spine_label: {slab}, front_label: {flab}, band: {b}, caps: {caps}, tint: {str(kind in CARTS).lower()} }},')
+
+def opt(r):
+    return f"Some(({r[0]}, {r[1]}, {r[2]}, {r[3]}))" if r else "None"
+
+
+for kind, sw, fw, h, sh, slab, flab, band, fband, caps in rows:
+    print(f'    // {kind}\n    Template {{ spine: ({sw}, {sh}), front: ({fw}, {h}), spine_label: {slab}, front_label: {flab}, band: {opt(band)}, front_band: {opt(fband)}, caps: {caps}, tint: {str(kind in BOXES).lower()} }},')
+print()
+for kind, w, h, lab in games:
+    print(f'    // {kind}\n    GameTemplate {{ size: ({w}, {h}), label: {lab} }},')

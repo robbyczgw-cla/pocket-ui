@@ -26,6 +26,7 @@ Failed to pair: org.bluez.Error.AuthenticationFailed
 
 # src/app_cabinet.rs
 big spine
+box game
 plain front
 standing spine
 shown front
@@ -737,6 +738,7 @@ nothing recorded
 sleep: wake timeline, ms after the system was back: {s}
 sleep: volume set
 sleep: suspending
+{s} --check-inhibitors=yes
 sleep: resumed
 sleep: wake hooks done
 no EGL devices: {s}
@@ -971,3 +973,10 @@ LOAD_STATE_SLOT {s}
 hakuX has no settings pocket-ui reads (Pixel Path)
 [pid={s}] kill
 Sony - PlayStation Vita
+racing driving
+role playing
+role playing rpg
+shoot em up
+shootem up
+beat em up
+puzzle game

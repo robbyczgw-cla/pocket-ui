@@ -29,6 +29,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::case_stickers::CaseStickers;
 use crate::curator::prefs::{Prefs as CuratorPrefs, SmartShelf};
 use crate::favorites::Favorites;
 use crate::library_meta::{GameMeta, LibraryMeta, Status, Sticker, RATING_MAX};
@@ -136,7 +137,7 @@ pub struct State {
     /// The device folder that wrote it.
     #[serde(default)]
     pub device: String,
-    /// Games by [`game_key`]: `favorite`, `status`, `note`, `rating`, `hidden`, `sticker:<name>`.
+    /// Games by [`game_key`]: `favorite`, `status`, `note`, `rating`, `hidden`, `case`, `sticker:<name>`.
     #[serde(default)]
     pub games: BTreeMap<String, Rec>,
     /// The player's stickers by name in lower case: `name`, `pinned`.
@@ -226,7 +227,7 @@ pub struct Local {
     pub ambiguous: BTreeSet<String>,
 }
 
-const GAME_FIELDS: [&str; 5] = ["favorite", "status", "note", "rating", "hidden"];
+const GAME_FIELDS: [&str; 6] = ["favorite", "status", "note", "rating", "hidden", "case"];
 const STICKER_PREFIX: &str = "sticker:";
 
 /// Whether this version knows a field: the others (a newer pocket-ui's) are carried along, never changed here.
@@ -265,12 +266,24 @@ pub fn game_fields(g: &GameMeta, favorite: bool, stickers: &[Sticker]) -> Fields
     if g.hidden {
         f.insert("hidden".into(), Value::Bool(true));
     }
+    if !g.case.is_empty() {
+        f.insert("case".into(), case_value(&g.case));
+    }
     for id in &g.stickers {
         if let Some(s) = stickers.iter().find(|s| s.id == *id) {
             f.insert(format!("{STICKER_PREFIX}{}", name_key(&s.name)), Value::Bool(true));
         }
     }
     f
+}
+
+/// The stickers on a game's case as the sync file holds them (`case_stickers`): `{"completed": true, "goty": 1998}`.
+fn case_value(c: &CaseStickers) -> Value {
+    if c.is_empty() {
+        Value::Null
+    } else {
+        serde_json::to_value(c).unwrap_or(Value::Null)
+    }
 }
 
 fn sticker_fields(s: &Sticker) -> Fields {
@@ -365,6 +378,7 @@ fn normalize(space: Space, field: &str, v: &Value) -> Option<Value> {
                 Value::String(s.chars().take(crate::library_meta::NOTE_MAX).collect())
             }
         }),
+        (Space::Game, "case") => serde_json::from_value::<CaseStickers>(v.clone()).ok().map(|c| case_value(&c)),
         (Space::Game, "rating") => v.as_u64().map(|r| if r == 0 { Value::Null } else { Value::from(r.min(RATING_MAX as u64)) }),
         (Space::Sticker, "name") => v.as_str().filter(|s| !s.trim().is_empty()).map(|s| Value::String(s.to_string())),
         (Space::Shelf, "lens") => serde_json::from_value::<crate::curator::lens::Lens>(v.clone())
@@ -725,6 +739,10 @@ fn apply_game(c: &Change, meta: &mut LibraryMeta, favs: &mut Favorites, done: &m
         }
         "rating" => {
             meta.game_mut(&c.path).rating = to.as_u64().unwrap_or(0).min(RATING_MAX as u64) as u8;
+            done.library = true;
+        }
+        "case" => {
+            meta.game_mut(&c.path).case = serde_json::from_value::<CaseStickers>(to.clone()).unwrap_or_default();
             done.library = true;
         }
         "hidden" => {

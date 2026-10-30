@@ -1,0 +1,24 @@
+{
+ "res": 2,
+ "front_label": [
+  19,
+  5,
+  156,
+  148
+ ],
+ "spine_label": [
+  4,
+  8,
+  18,
+  142
+ ],
+ "band": null,
+ "tint": false,
+ "source_front": "https://commons.wikimedia.org/wiki/File:CD_Jewel_Case_(Front).jpg",
+ "source_spine": "https://commons.wikimedia.org/wiki/File:CD_Jewel_Case_(Front).jpg",
+ "licence": "CC0",
+ "author": "DiscoA340",
+ "pixellab": "image-to-pixelart v2, output at the final size; front: front-3.png (init_image_strength 250 + fixer), spine: spine-3.png (init_image_strength 250 + fixer)",
+ "logos_removed": "the Compact Disc logo moulded into the tray and the maker's mark at the top right lie under the insert (painted label grey); no lettering on the hinge",
+ "note": "a plain CD jewel case with a black tray, as PlayStation games came in; the spine is the case's ribbed black hinge from the same photo, stretched to the template width"
+}

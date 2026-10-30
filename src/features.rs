@@ -165,7 +165,7 @@ pub static FEATURES: &[Feature] = &[
     Feature {
         id: "lens",
         title: "Lens & smart shelves",
-        plain: "filter games by mood and length",
+        plain: "pick games by mood and length",
         line: "A Curator row on Home: combine filters, and keep one as a shelf that updates itself.",
         place: "Settings › Playing › Curator",
         guide: "curator.md#lens",
@@ -1063,6 +1063,17 @@ pub fn row_back(c: &mut Canvas, (x, y, w, h): (i32, i32, i32, i32), stripe: u32,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_plain_words_on_a_card_are_ordinary_words() {
+        // A new player reads these first (finding 15 of the new-user test): no tool words, and the Lens one says what it does.
+        let lens = FEATURES.iter().find(|f| f.id == "lens").unwrap();
+        assert_eq!(lens.plain, "pick games by mood and length");
+        for f in FEATURES {
+            let p = f.plain.to_lowercase();
+            assert!(!p.contains("filter") && !p.contains("signal"), "{}: {}", f.id, f.plain);
+        }
+    }
 
     #[test]
     fn ids_are_unique_and_every_entry_is_complete() {

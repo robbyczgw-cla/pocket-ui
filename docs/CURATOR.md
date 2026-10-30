@@ -856,3 +856,69 @@ field" where a game shows its box art, and Favorites should show the games' pict
 - **Snapshots**: `curator:home[:<look>[:<row>]]` (above); `curator:cabinet:ddr` is the Surprise me box. In
   `tests/i18n-states.txt` (German and Large).
 
+## Connections and Rediscover (`feat/connections`, 2026-10-30)
+
+What a game's credits say leads to the player's own games with the same name: the developer, publisher, series and
+genre on the info page (`game_info`, Minimal, Cards, Split) and on the box's back (`game_box`, Shelf, Cabinet) become
+selectable, and A opens "More from Criterion Games", "More published by Electronic Arts", "Burnout series, in release
+order" or "More racing games" as a shelf of the player's games (`Screen::Connection`, every look; in the Cabinet a
+shelf of its own with the title on its plate). The user's side is [library.md](user/library.md#connections) and
+[curator.md](user/curator.md#rediscover).
+
+- **Data** (`app_connections::entries`): the catalog's games with Wikidata's developers, publishers, series and
+  genres (`Features::publishers`, `genres` were added for it) and what the EmulationStation gamelist adds (developer,
+  publisher, genre, year): both, so "Criterion" from a scraper meets "Criterion Games" from Wikidata.
+- **Matching** (`connections::key`): lower case, letters and digits, "&" as "and"; a company's trailing words
+  ("Games", "Studios", "Inc.", "Ltd.", "Entertainment", "Digital"…) dropped, so "Criterion", "Criterion Games" and
+  "Criterion Studios" are one; a value that is only such a word ("Ltd." from "Square Co., Ltd.") matches nothing; a
+  genre's "video game" dropped and a few spellings joined ("Platformer"/"platform game", "Race"/"Driving"/"racing").
+  Values are split at "," "/" ";" (the card joins two, a gamelist writes "Racing, Driving").
+- **Series from titles** (`connections::title_stem`, `derive_series`), only where the data has none, conservatively:
+  the words before a number (arabic, or a roman II–XV) or a subtitle (":", " - ") are a stem; a stem is a series when
+  two *different* titles share it ("Burnout 2 - Point of Impact", "Burnout 3 - Takedown"; the same title on two
+  systems is one). A title that is the stem itself ("Burnout") also takes the titles that start with it and a word
+  ("Burnout Revenge"). Stems shorter than three letters and a few plain words ("Super", "Final", "Dark"…) never are.
+  The card then shows **Series** with it (`card_connections`).
+- **Never an empty list**: `Index::link` returns a list only when another of the player's games has the value (for a
+  series another title); otherwise the fact is plain text, no arrow, not selectable. A game without facts has
+  nothing to pick: Down scrolls, A plays. A list whose games went while it was open says "No games here".
+- **Order**: series and developer/publisher by year (unknown last), then name; genre by name. A series lists this game
+  too; the others leave it out. Mixed systems merge as Curator's other lists (`curator_merge`, Settings → Curator →
+  Merge versions).
+- **Input**: the info page's Down steps through the linked facts (`InfoView::link_step`) before the description
+  scrolls, Up scrolls back first and leaves the first fact to none (A plays again). On the box's back Down picks a
+  linked fact in view, as the card's Curator rows are picked (`BoxView::link_step`; turning over lets go). A on one is
+  `Out::Connection(i)`; `open_connection` closes the card, remembers screen, selection and card (`ConnectionsUi::back`,
+  eight deep), and B on the list (`connection_back`, also the Cabinet's B) restores them and opens the card again.
+  The return screen uses the system name and the card uses its system and ROM path, so a rescan can reorder both.
+  Open and nested lists follow the new library by path; a removed originating game returns to Home without a card.
+- **Looks**: `kit::link_value`, the value with a small drawn arrow, the selected one on a pill (the label's paper and
+  ink on the page; ink and the back's paper on the box), cut with "…" to stay in its column.
+- **Cost**: nothing at menu open; a card's open looks each fact up (`Index::link`: a hash lookup and the list's sort).
+  5,000 games: the index in 11 ms, four lookups 0.9 ms on the build computer while other builds ran
+  (`speed_of_the_index_for_5000_games`; the series from titles are one pass over the titles' word boundaries; the
+  first version compared every base title with every title, 73 ms for 335 games on the Mini V2). The index is built on
+  Curator's catalog thread with each new catalog (the library read again) from data the catalog already resolved, and
+  again on the same catalog when the gamelists change (`ConnectionsUi::stale`: a few milliseconds, not a new catalog;
+  at the start the gamelists usually arrive while the first catalog is being made).
+
+**Rediscover** (`Item::Rediscover`, `Screen::Rediscover`): in the Curator list after the smart shelves while it has a
+game. `connections::rediscover` on the index thread with every index: the games played a year ago today (local date,
+the 28th for 29 February; a play-history session that day, or the last time played), sorted by time played, then the
+games last played more than 365 days ago, longest played first. "Last played" is the newest of the recent games, the
+play history and an EmulationStation gamelist's `<lastplayed>` (`gamelist::Entry::last_played`, read as UTC; the
+gamelist cache's `VERSION` went to 2 so the field is read once). The shelf's line says why ("played a year ago today",
+"last played 412 days ago").
+Synced `history.json` session starts and durations are u64 values: Rediscover saturates both session ends and total
+play time, so damaged records cannot wrap into old dates or reverse the play-time ranking. Future last-played
+values are skipped before signed calendar arithmetic; session-day candidates already come only from the narrow
+year-ago window in `rediscover_input`.
+
+**Tests**: `connections::tests` (matching, stems, series, order, Rediscover's dates), `game_card` (the info page's and
+the box's picking), `tests/connections.rs` (journeys with the real binary: the developer's list without the game itself
+and with one game on two systems once, the series in release order, B back to the card, the box's back, every look at
+1280x720 and 640x480 in English Normal and German Large with no text cut or overlapping, a homebrew game with nothing
+to pick, Rediscover only with data and a year ago today first). Snapshots: `info:<look>:ps2:revenge:dddd` (the series
+picked), `…:dddda` (its list), `info:shelf:ps2:revenge:rd` (the box's back), `curator:rediscover[:<look>]` with
+`POCKETUI_REDISCOVER=1 scripts/curator-fake-library.py`.
+

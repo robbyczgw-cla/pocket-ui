@@ -9,6 +9,7 @@ re:.* · \d$
 # The game card's row of the screenshots, "Screenshots (5)": the German word is the same (src/app_gallery.rs)
 re:^Screenshots \(\d\)$
 re:^/
+re:^…/
 re:^v\d
 re:^pocket-ui \d
 re:^http://
@@ -159,6 +160,12 @@ QXGZDMM-FZWI3DP-BONSGYY-LTMRWAD
 uCity
 Okage: Shadow King
 Jade Empire
+Patapon
+Vagrant Story
+Pikmin
+Jet Set Radio
+Streets of Rage 2
+Professor Layton
 Final Fantasy VII
 Beneath a Steel Sky
 Town planner

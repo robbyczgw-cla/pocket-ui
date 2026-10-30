@@ -3,6 +3,78 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a minor version may change anything).
 
+## [0.1.4] - 2026-10-30
+
+### Added
+
+- **Stickers on your cases** (Shelf and Cabinet): Completed, 100 %, Favourite, Playing now and Game of the year with
+  the year you pick. Put them on from the game's Stickers row; they sit a little crooked on the case's front and the
+  game box, and one small one tops the spine on the shelf. Synced and backed up with your other game notes.
+- **A TV on the cabinet** (Cabinet look): a small old CRT on the top board shows the selected game's screenshot (or
+  your latest picture of it, or its cover), with scanlines and a warm glow, and crossfades as you move.
+- **Connections**: the developer, publisher, series and genre on the info page and on the box's back lead to your other
+  games with the same one ("More from Criterion Games", "Burnout series, in release order", "More racing games"). A small
+  arrow marks a value that leads somewhere; Down picks it, A opens the list, B comes back. A value no other game of yours
+  shares stays plain text. Where the data names no series, two different titles with the same name start can make one.
+- **Rediscover** in Curator: games you played a year ago today, then those you have not played for a year, longest played
+  first, each with the reason ("played a year ago today"). It also counts the "last played" of an EmulationStation
+  gamelist; the row is only there while it has a game.
+- **Old-TV power-on** at the end of Cozy's launch animation: the game comes on dark, with a bright line in the middle that
+  opens into the picture and a glow that settles (a third of a second; Cozy with Motion on Full only).
+- **Sounds of the cases** (Shelf and Cabinet, with menu sounds on): X opens a game's case with its own sound, a plastic
+  case snapping open or a cartridge's cardboard box. A Cozy start plays the whole thing: the case opens, the cartridge
+  slides in and clicks into place (a disc drops in and spins up, a game card clicks into its slot), then the old TV
+  comes on with a thunk and a crackle of static. Quick keeps just a quiet click. At the level of the other menu sounds.
+- **Saves on the save media of their era**: in the pause menu, Save and Load show what the game saved to back then,
+  with its blocks beside it as that console's memory-card screen showed them: the PlayStation's or PS2's memory card,
+  the GameCube's, the Dreamcast's VMU, the Xbox's memory unit, the PSP's Memory Stick Duo, or the game's own cartridge
+  with its save label. A block with a save shows the game's cover. The same pictures, slots and buttons as before.
+  The info page and the game box's back show the slots too ("Save slots: 3 of 8").
+
+### Changed
+
+- **Every game stands in its case** on the Shelf and in the Cabinet: the cartridge systems' games as their cardboard
+  boxes (Super Nintendo, Nintendo 64, NES, Game Boy, Game Boy Advance), the rest in their cases as before. The cartridge,
+  game card or disc is inside: X opens the box and it slides half out beside it; at the start (Cozy) the case opens and
+  the game slides out of it into the console, the same way for every system.
+- **Real sizes:** cases, boxes and what is inside them are drawn from the real things' millimetres at one scale (a Game
+  Boy cartridge small beside a SNES one, a DS card tiny, a PS2 case tall, a jewel case wider than tall).
+- Every system without a case of its own gets pocket-ui's own case: the cover under a band in the system's colour with
+  its console and name, one size each for cartridge, disc and digital systems (Ports, PICO-8, TIC-80…).
+- Long titles on spines are no longer cut while there is room: a little smaller, on two lines across a thick box (the
+  subtitle on a line of its own), without the subtitle, and only then with "…".
+- The cartridge systems' boxes (and the cartridges, cards and discs) come from photos of the real things, turned into
+  pixel art; one system's boxes are all one size, and the front of a box is the cover edge to edge.
+- The first start says "Step n of 7" (German: "Schritt n von 7") and, after a restart or a flat battery, opens again at
+  the step it had reached. In the Wi-Fi step, A on the network you are connected to answers with a tick and the way on, and
+  a network one search missed stays listed until three searches in a row miss it. The time zone a fresh image ships with
+  does not count as "already set".
+- Save slots say the real time of the save ("today 14:02", "yesterday 21:10", "23 Oct 2026, 14:02") instead of "just now".
+- Menu sounds start at once: while pocket-ui is in front with the screen on and menu sounds on, the sound output stays
+  open (on the RG35XX Plus the first sound after a quiet spell came 105 to 183 ms late; now 3 to 13 ms).
+- The media sounds (cases, boxes, cartridges, discs, cards, the old TV) are recorded foley chosen by measurement, at the
+  level of the other menu sounds.
+- Add games shows the `smb://` address only while file sharing is on, and otherwise says how to turn it on.
+- With only a few games on a shelf, the Shelf look stands them in from the end and the Cabinet shows a lone case in its
+  middle. Settings categories get a scroll bar when larger text or German push some off the page. In the search keyboard,
+  Up and Down land on the key right above or below.
+
+### Fixed
+
+- Quitting a PortMaster port closes only that launch and its helpers (also helpers in another process group), so a port
+  started next keeps its controls.
+- Port pictures and update notes are read in the background after a port is installed, updated or removed, so the shelf
+  stays responsive while the card is read.
+- An empty game file cannot start any more by accident: the card, the info page and the box say **Problem** with what to
+  copy again, no cover is looked up for it, and the start message is clear.
+- A sleep block (an app asking the system to stay awake) is respected by automatic sleep, the Sleep menu and lid sleep, not
+  only by the power key; the screen stays dark and a button press wakes it.
+- The shelf shows the proper title from a game's checksum (typos, glued articles) and a misspelled name no longer gets a
+  wrong cover; the first list no longer waits for the checksum file. A name recognised during an interrupted background check
+  reaches the shelf when the check resumes.
+- Bluetooth headphones connected or disconnected in the menus adjust the sound output within two seconds; muted menu audio
+  stops running in the background.
+
 ## [0.1.3] - 2026-10-29
 
 ### Added

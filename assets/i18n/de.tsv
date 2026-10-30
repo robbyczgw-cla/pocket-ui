@@ -663,6 +663,8 @@ just now	gerade eben
 {n} min ago	vor {n} min
 {n} h ago	vor {n} h
 yesterday	gestern
+today {s}	heute {s}
+yesterday {s}	gestern {s}
 {n} days ago	vor {n} Tagen
 under a minute	unter einer Minute
 Last played {t}, {t2} in total	Zuletzt gespielt {t}, {t2} insgesamt
@@ -769,6 +771,8 @@ On this Pocket	Auf diesem Pocket
 Your games	Deine Spiele
 {s}, last {t}	{s}, zuletzt {t}
 Played	Gespielt
+Save slots	Spielstände
+All empty	Alle leer
 BIOS	BIOS
 Family	Familie
 Preceded by	Vorgänger
@@ -1241,7 +1245,7 @@ A starting point for the extras. Every switch stays in Settings.	Ein Anfang für
 START skips the rest; what you haven't chosen stays as it is.	START überspringt den Rest; was du nicht gewählt hast, bleibt, wie es ist.
 On: {t}.	An: {t}.
 Off: {t}.	Aus: {t}.
-filter games by mood and length	Spiele nach Stimmung und Länge filtern
+pick games by mood and length	Spiele nach Stimmung und Länge auswählen
 suggestions for similar games	Vorschläge für ähnliche Spiele
 a next game to try after you quit	ein nächstes Spiel nach dem Beenden
 suggestions from games you don't own yet	Vorschläge auch aus Spielen, die du noch nicht hast
@@ -1288,6 +1292,15 @@ No description from Wikipedia: {s}	Keine Beschreibung von Wikipedia: {s}
 Description	Beschreibung
 More by {s}	Mehr von {s}
 Other games in {s}	Andere Spiele aus {s}
+More from {s}	Mehr von {s}
+More published by {s}	Mehr vom Publisher {s}
+{s} series, in release order	Reihe „{s}“, nach Erscheinen
+More {t} games	Mehr aus dem Genre {t}
+Rediscover	Wiederentdecken
+played a year ago today	heute vor einem Jahr gespielt
+Not played for a year	Seit einem Jahr nicht gespielt
+{n} played a year ago today	{n} heute vor einem Jahr gespielt
+These games aren't on this Pocket any more.	Diese Spiele sind nicht mehr auf diesem Pocket.
 {s}, in your library	{s}, in deiner Bibliothek
 Facts: Wikidata, CC0	Fakten: Wikidata, CC0
 Wrong game? Choose another	Falsches Spiel? Wähl ein anderes
@@ -2143,6 +2156,10 @@ Go to your games	Zu deinen Spielen
 Optional. You can get these any time later.	Freiwillig. Du kannst sie jederzeit später holen.
 Connect to Wi-Fi first to use these.	Verbinde dich zuerst mit dem WLAN, um sie zu nutzen.
 Looking up {n} of {m}{s}	Suche {n} von {m}{s}
+Looking up {n} of {m} pictures{s}	Suche {n} von {m} Bildern{s}
+Looking up {n} of {m} covers{s}	Suche {n} von {m} Covern{s}
+Looking up {n} of {m} pictures	Suche {n} von {m} Bildern
+Looking up {n} of {m} covers	Suche {n} von {m} Covern
 Looking up {n} of {m}	Suche {n} von {m}
 Found {n} new covers	{n} neue Cover gefunden
 Found 1 new cover	1 neues Cover gefunden
@@ -2240,7 +2257,7 @@ File sharing is off	Dateifreigabe ist aus
 smb://(not connected)/games-roms	smb://(nicht verbunden)/games-roms
 \\(not connected)\games-roms	\\(nicht verbunden)\games-roms
 ssh root@(not connected)	ssh root@(nicht verbunden)
-On until you turn it off or restart. Ports, BIOS and save states stay hidden.	An, bis du sie ausschaltest oder neu startest. Ports, BIOS und Spielstände bleiben verborgen.
+Press X to turn it on. Then a computer on the same network can copy games into these folders. It stays on until you turn it off or restart.	Mit X einschalten. Dann kann ein Computer im selben Netzwerk Spiele in diese Ordner kopieren. Bleibt an, bis du sie ausschaltest oder neu startest.
 Then a computer on the same network can copy games straight into these folders.	Dann kann ein Computer im selben Netzwerk Spiele direkt in diese Ordner kopieren.
 Automatic ({s})	Automatisch ({s})
 Connected to {s}	Verbunden mit {s}
@@ -2990,7 +3007,7 @@ Measured the last time it ran: one thread at {n}% of a core while the rest of th
 under 1% an hour	unter 1 % pro Stunde
 {n}% an hour	{n} % pro Stunde
 About {n}% an hour	Etwa {n} % pro Stunde
-Battery: measuring this game…	Akku: Dieses Spiel wird gemessen …
+Battery: not enough play to tell yet	Akku: noch zu wenig gespielt
 Measuring this game…	Wird gemessen …
 {t} in this game	{t} in diesem Spiel
 
@@ -3822,3 +3839,15 @@ Very quiet (default)	Sehr leise (Standard)
 Quiet (default)	Leise (Standard)
 Cool (default)	Kühl (Standard)
 Favourite	Favorit
+Game of the year	Spiel des Jahres
+Game of the year {n}	Spiel des Jahres {n}
+100 %	100 %
+Sticker on: {t}	Sticker aufgeklebt: {t}
+Sticker off: {t}	Sticker abgezogen: {t}
+{s} didn't start. The file may be damaged: copy the game to the card again.	{s} wurde nicht gestartet. Die Datei ist vielleicht beschädigt: Kopiere das Spiel noch einmal auf die Karte.
+Problem	Problem
+{s} can't start: its file is empty (0 bytes), so the copy didn't finish. Copy the game to the card again.	{s} kann nicht starten: Seine Datei ist leer (0 Byte), das Kopieren wurde nicht fertig. Kopiere das Spiel noch einmal auf die Karte.
+The file is empty (0 bytes). Copy the game to the card again.	Die Datei ist leer (0 Byte). Kopiere das Spiel noch einmal auf die Karte.
+Step {n} of {m}	Schritt {n} von {m}
+Connected to {s}. Press START for the next step.	Verbunden mit {s}. Mit START geht es weiter.
+Connected to {s}. Press B to go back.	Verbunden mit {s}. Mit B geht es zurück.

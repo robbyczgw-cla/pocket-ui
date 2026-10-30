@@ -300,6 +300,10 @@ pub struct Setup {
     radio_watch: Option<Arc<()>>,
     radio_every: std::time::Duration,
     nets: Vec<Network>,
+    /// A on the connected network was pressed and nothing since: the status line says so, with a tick drawn before it (`confirming`).
+    confirm: bool,
+    /// How many scans in a row each network of `nets` has been missing from (`keep_seen`).
+    missed: HashMap<String, u8>,
     /// Saved networks, the Wi-Fi country, the address (`wifi::saving`), and the page's rows made of both.
     saving: Saving,
     /// zoneinfo's `iso3166.tab`: country names for the Wi-Fi country (read on the scan's thread).
@@ -711,7 +715,7 @@ impl Setup {
                         tick(c, x + tile_w - 16 - cw - 26, y + 127, 22, if selected { pal().ink } else { pal().chalk });
                         room -= cw + 34;
                     }
-                    let folder = text.fit(Face::Body, 21, &sys.folder, room);
+                    let folder = text.fit_path(Face::Body, 21, &sys.folder, room);
                     text.draw(c, Face::Body, 21, x + 16, y + 145, dim, &folder);
                 }
                 Tile::More => {
@@ -803,39 +807,38 @@ impl Setup {
             ("File sharing is off".to_string(), pal().chalk)
         };
         text.draw(c, Face::Title, 37, x, top + 50, color, &status);
-        let Some(addrs) = share_addresses(self.ip.as_deref()) else {
-            // No address to show yet: what the switch is for, not an address with "(not connected)" in it.
-            for (i, l) in text.wrap(Face::Body, 24, SHARE_OFFLINE, w).iter().take(3).enumerate() {
+        let Some(addrs) = share_addresses(self.ip.as_deref(), self.sharing) else {
+            // No address to show: what the switch is for, not an address with "(not connected)" in it, and not one
+            // that leads nowhere while sharing is off (the new-user test, 2026-10-30).
+            let about = if self.ip.is_some() { SHARE_OFF } else { SHARE_OFFLINE };
+            for (i, l) in text.wrap(Face::Body, 24, about, w).iter().take(4).enumerate() {
                 text.draw(c, Face::Body, 24, x, top + 92 + i as i32 * 32, pal().dust, l);
             }
             return;
         };
         for (i, addr) in addrs.iter().enumerate() {
             let addr = text.fit(Face::Title, 30, addr, w);
-            text.draw(c, Face::Title, 30, x, top + 88 + i as i32 * 36, if self.sharing { pal().chalk } else { pal().dust }, &addr);
+            text.draw(c, Face::Title, 30, x, top + 88 + i as i32 * 36, pal().chalk, &addr);
         }
-        if self.sharing {
-            let label_w = text.width(Face::Body, 24, "Password") + 20;
-            text.draw(c, Face::Body, 24, x, top + 168, pal().dust, "User");
-            text.draw(c, Face::Title, 30, x + label_w, top + 168, pal().chalk, wifi::SHARE_LOGIN);
-            text.draw(c, Face::Body, 24, x, top + 204, pal().dust, "Password");
-            text.draw(c, Face::Title, 30, x + label_w, top + 204, pal().chalk, self.share_password.as_deref().unwrap_or("(not set yet)"));
-        } else {
-            let about = "On until you turn it off or restart. Ports, BIOS and save states stay hidden.";
-            for (i, l) in text.wrap(Face::Body, 24, about, w).iter().take(2).enumerate() {
-                text.draw(c, Face::Body, 24, x, top + 168 + i as i32 * 32, pal().dust, l);
-            }
-        }
+        let label_w = text.width(Face::Body, 24, "Password") + 20;
+        text.draw(c, Face::Body, 24, x, top + 168, pal().dust, "User");
+        text.draw(c, Face::Title, 30, x + label_w, top + 168, pal().chalk, wifi::SHARE_LOGIN);
+        text.draw(c, Face::Body, 24, x, top + 204, pal().dust, "Password");
+        text.draw(c, Face::Title, 30, x + label_w, top + 204, pal().chalk, self.share_password.as_deref().unwrap_or("(not set yet)"));
     }
 }
 
 /// Add games without Wi-Fi, under "Connect to Wi-Fi first": what file sharing will do once there is an address.
 const SHARE_OFFLINE: &str = "Then a computer on the same network can copy games straight into these folders.";
 
+/// Add games with Wi-Fi but file sharing off: how to start it, and how long it stays on.
+const SHARE_OFF: &str = "Press X to turn it on. Then a computer on the same network can copy games into these folders. It stays on until you turn it off or restart.";
+
 /// File sharing's two addresses (macOS and Linux, Windows) for the Pocket's address; None without one, where the
-/// first-day run (2026-10-26) found "smb://(not connected)/games-roms" shown as if it were an address.
-fn share_addresses(ip: Option<&str>) -> Option<[String; 2]> {
-    let ip = ip?;
+/// first-day run (2026-10-26) found "smb://(not connected)/games-roms" shown as if it were an address, and None while
+/// sharing is off: the address would lead nowhere (new-user test, 2026-10-30).
+fn share_addresses(ip: Option<&str>, sharing: bool) -> Option<[String; 2]> {
+    let ip = ip.filter(|_| sharing)?;
     Some([format!("smb://{ip}/games-roms"), format!("\\\\{ip}\\games-roms")])
 }
 
@@ -884,6 +887,42 @@ fn stage(step: &Step) -> Option<Only> {
     }
 }
 
+/// The steps the first start counts: Welcome, Look, How you like to play, Wi-Fi, Time zone, Extras, Add your games (the
+/// last page, "You're all set", is the end, not a step).
+const FIRST_STEPS: usize = 7;
+
+/// A first-start step's number for "Step n of 7"; `None` for the pages inside a step (keyboards, lists) and after the
+/// last one, which would only crowd their titles.
+fn step_number(step: &Step) -> Option<usize> {
+    match step {
+        Step::Welcome => Some(1),
+        Step::Look => Some(2),
+        Step::Play { .. } => Some(3),
+        Step::Wifi => Some(4),
+        Step::Zone(z) if matches!(z.view, ZoneView::Card) => Some(5),
+        Step::Extras { .. } => Some(6),
+        Step::Games => Some(7),
+        _ => None,
+    }
+}
+
+/// The first start's progress, in the data folder.
+const RESUME_FILE: &str = "setup-step";
+
+/// The name `remember_step` writes for a step, `None` where nothing is written (the welcome, which has no choice to
+/// lose, and the steps that only exist in Settings or after the last page).
+fn resume_name(step: &Step) -> Option<&'static str> {
+    match step {
+        Step::Look => Some("look"),
+        Step::Play { .. } | Step::Cards(_) => Some("play"),
+        Step::Wifi | Step::Portal(_) | Step::Password { .. } | Step::Connecting { .. } | Step::HiddenName { .. } | Step::Country { .. } => Some("wifi"),
+        Step::Zone(_) => Some("zone"),
+        Step::Extras { .. } | Step::Ports | Step::PortFiles(_) => Some("extras"),
+        Step::Games => Some("games"),
+        Step::Welcome | Step::ShelfSystems { .. } | Step::Remote | Step::Done => None,
+    }
+}
+
 /// The offsets from UTC of `zones` now: a file each.
 fn zone_offsets(hw: &dyn crate::system_ctl::Hw, zones: Vec<String>) -> Vec<(String, Option<i32>)> {
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
@@ -895,7 +934,9 @@ fn zone_offsets(hw: &dyn crate::system_ctl::Hw, zones: Vec<String>) -> Vec<(Stri
 fn look_zone(hw: &dyn crate::system_ctl::Hw) -> ZoneStep {
     let all = hw.zones();
     let zone_tab = hw.zoneinfo_file("zone.tab");
-    let guess = timezone::guess(hw.timezone().as_deref(), hw.regdomain().as_deref(), zone_tab.as_deref(), &all);
+    // A zone nobody chose (the image's New York) is no answer: the Wi-Fi region guesses, or the user picks.
+    let system_zone = hw.timezone().filter(|_| hw.timezone_chosen());
+    let guess = timezone::guess(system_zone.as_deref(), hw.regdomain().as_deref(), zone_tab.as_deref(), &all);
     let country = match &guess {
         Guess::Country { code, .. } | Guess::Several { code, .. } => {
             Some(hw.zoneinfo_file("iso3166.tab").and_then(|t| timezone::country_name(&t, code)).unwrap_or_else(|| code.clone()))
@@ -908,6 +949,22 @@ fn look_zone(hw: &dyn crate::system_ctl::Hw) -> ZoneStep {
     z.asked.extend(wanted.iter().cloned());
     z.offsets.extend(zone_offsets(hw, wanted));
     z
+}
+
+/// The right-hand line of the Extras step's cover row. While it runs the count names what it counts: with pictures on a
+/// game has up to three (box art, screenshot, title screen), so "2 of 12" beside "6 games" read as a contradiction
+/// (new-user test 2026-10-30).
+fn extras_status(covers: Option<(usize, usize, usize)>, running: bool, pictures: bool, games: usize, dots: &str) -> String {
+    match (covers, running) {
+        (Some((d, t, _)), true) if pictures => format!("Looking up {d} of {t} pictures{dots}"),
+        (Some((d, t, _)), true) => format!("Looking up {d} of {t} covers{dots}"),
+        (Some((_, _, 1)), false) if pictures => "Found 1 new picture".into(),
+        (Some((_, _, f)), false) if f > 0 && pictures => format!("Found {f} new pictures"),
+        (Some((_, _, f)), false) if f > 0 => format!("Found {f} new covers"),
+        (Some(_), false) if pictures => "No new pictures found".into(),
+        (Some(_), false) => "No new covers found".into(),
+        (None, _) => format!("{games} games"),
+    }
 }
 
 /// What the games step's thread found in the ROM folders.
@@ -1013,6 +1070,8 @@ impl Setup {
             radio_watch: None,
             radio_every: RADIO_LOOK_EVERY,
             nets: Vec::new(),
+            confirm: false,
+            missed: HashMap::new(),
             saving: Saving::default(),
             iso_tab: String::new(),
             entries: Vec::new(),
@@ -1584,13 +1643,16 @@ impl Setup {
             self.scan_rev = snap.scan_rev;
             self.scan_err = None;
             match &snap.scan {
-                Scan::Found(nets) => self.nets = nets.clone(),
+                Scan::Found(nets) => self.nets = keep_seen(&self.nets, nets, &mut self.missed),
                 // A list from before the failure would offer networks nobody has seen just now.
                 Scan::Failed(e) => {
                     self.nets.clear();
                     self.scan_err = Some(e.clone());
                 }
                 Scan::NotYet => self.nets.clear(),
+            }
+            if !matches!(snap.scan, Scan::Found(_)) {
+                self.missed.clear();
             }
             // A new list answers the old "Connected to …" and "Already connected …"; a failure stays until it is dealt with.
             if matches!(self.note, Some((_, false))) && self.forget.is_none() {
@@ -2248,6 +2310,8 @@ impl Setup {
         if self.radio == Radio::Absent && !matches!(b, Button::Start | Button::South) {
             return;
         }
+        // The tick for A on the connected network stays until the next press.
+        self.confirm = false;
         // Anything but a second Y keeps the network; B then only takes the question back.
         if b != Button::West && self.forget.take().is_some() {
             self.note = None;
@@ -2281,7 +2345,11 @@ impl Setup {
             Button::East if row == Some(self.entries.len()) => self.step = Step::HiddenName { kb: Keyboard::default() },
             Button::East if row == Some(self.entries.len() + 1) => self.open_country(),
             Button::East => match entry {
-                Some(e) if e.active => self.note = Some((format!("Already connected to {}", e.ssid), false)),
+                // Nothing to connect: said with a tick and what comes next, not a changed subtitle.
+                Some(e) if e.active => {
+                    self.note = None;
+                    self.confirm = true;
+                }
                 Some(e) if connecting(&e) && !self.stuck() => self.note = Some((format!("Still connecting to {}. One moment.", e.ssid), false)),
                 // Not answering: a secured network most likely refuses the stored password, so it is typed again.
                 Some(e) if connecting(&e) && e.secure => self.step = Step::Password { ssid: e.ssid, kb: Keyboard::default(), hidden: false },
@@ -2296,6 +2364,7 @@ impl Setup {
 
     pub fn press(&mut self, b: Button) -> bool {
         let done = self.press_step(b);
+        self.remember_step(done);
         self.keep_watch();
         // "Sign in…" was left: its session (and cookie jar) goes with it.
         if !matches!(&self.step, Step::Portal(p) if p.signin.is_some()) {
@@ -2305,6 +2374,46 @@ impl Setup {
             Some(only) => done || stage(&self.step) != Some(only),
             None => done,
         }
+    }
+
+    /// First start only: the step reached goes to `setup-step` in the data folder (a few bytes, on a button press), so a
+    /// restart or a crash resumes there (`resume`); finishing deletes the file. Only the steps `resume` can open again
+    /// are written; the others (Done, the keyboards inside Wi-Fi) leave the last line as it is.
+    fn remember_step(&mut self, done: bool) {
+        if self.only.is_some() {
+            return;
+        }
+        let file = self.data_dir.join(RESUME_FILE);
+        if done {
+            let _ = std::fs::remove_file(file);
+        } else if let Some(name) = resume_name(&self.step) {
+            if std::fs::read_to_string(&file).ok().as_deref() != Some(name) {
+                let _ = std::fs::create_dir_all(&self.data_dir);
+                let _ = crate::fsutil::write_atomic(&file, name.as_bytes());
+            }
+        }
+    }
+
+    /// The first start after a restart: opens at the step the last run reached (`remember_step`). A missing, unreadable
+    /// or unknown line means the beginning; Wi-Fi, the zone and the games are looked at afresh, as when stepping in.
+    pub fn resume(mut self) -> Self {
+        let Ok(name) = std::fs::read_to_string(self.data_dir.join(RESUME_FILE)) else { return self };
+        match name.trim() {
+            "look" => {
+                self.step = Step::Look;
+                self.scan();
+            }
+            "play" => self.step = Step::Play { sel: 0 },
+            "wifi" => {
+                self.step = Step::Wifi;
+                self.scan();
+            }
+            "zone" => self.enter_zone(),
+            "extras" => self.step = Step::Extras { sel: 0 },
+            "games" => self.go_to_games(),
+            _ => {}
+        }
+        self
     }
 
     fn press_step(&mut self, b: Button) -> bool {
@@ -2582,8 +2691,18 @@ impl Setup {
             Step::Wifi => {
                 text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Wi-Fi");
                 let (line, color) = self.wifi_status(&dots);
-                let line = text.fit(Face::Body, 28, &line, c.w - 2 * MARGIN);
-                text.draw(c, Face::Body, 28, MARGIN, 192, color, &line);
+                // A on the connected network: a drawn tick before the line (the font has none).
+                let tick = if self.confirming().is_some() { 48 } else { 0 };
+                let line = text.fit(Face::Body, 28, &line, c.w - 2 * MARGIN - tick);
+                if tick > 0 {
+                    for i in 0..7 {
+                        c.rect(MARGIN + i * 2, 178 + i * 2, 4, 4, color);
+                    }
+                    for i in 0..14 {
+                        c.rect(MARGIN + 12 + i * 2, 190 - i * 2, 4, 4, color);
+                    }
+                }
+                text.draw(c, Face::Body, 28, MARGIN + tick, 192, color, &line);
                 self.paint_networks(c, text);
                 let row = self.sel.checked_sub(self.lead());
                 let saved = row.and_then(|r| self.entries.get(r)).is_some_and(|e| e.saved.is_some());
@@ -2680,6 +2799,15 @@ impl Setup {
                 hints(c, text, &[("A", "Go to your games"), ("SELECT", "Manual")]);
             }
         }
+        self.paint_step_count(c, text);
+    }
+
+    /// First start only: "Step 3 of 7" at the top right, so a new player knows how long the setup is. The Look step is
+    /// painted by the app (`paint_look`, which calls this too); the cards have their own "n of m".
+    fn paint_step_count(&self, c: &mut Canvas, text: &mut Text) {
+        if let Some(n) = self.only.is_none().then(|| step_number(&self.step)).flatten() {
+            text.draw_right(c, Face::Body, 28, c.w - MARGIN, 72, pal().dust, &format!("Step {n} of {FIRST_STEPS}"));
+        }
     }
 
     fn paint_extras(&mut self, c: &mut Canvas, text: &mut Text, sel: usize, dots: &str) {
@@ -2688,15 +2816,7 @@ impl Setup {
         let sub = if online { "Optional. You can get these any time later." } else { "Connect to Wi-Fi first to use these." };
         text.draw(c, Face::Body, 28, MARGIN, 192, pal().dust, sub);
         let pictures = self.art == Art::Pictures;
-        let covers = match (self.covers, self.covers_running) {
-            (Some((d, t, _)), true) => format!("Looking up {d} of {t}{dots}"),
-            (Some((_, _, 1)), false) if pictures => "Found 1 new picture".into(),
-            (Some((_, _, f)), false) if f > 0 && pictures => format!("Found {f} new pictures"),
-            (Some((_, _, f)), false) if f > 0 => format!("Found {f} new covers"),
-            (Some(_), false) if pictures => "No new pictures found".into(),
-            (Some(_), false) => "No new covers found".into(),
-            (None, _) => format!("{} games", self.games.len()),
-        };
+        let covers = extras_status(self.covers, self.covers_running, pictures, self.games.len(), dots);
         let ports = if self.ports.is_empty() { "Browse".to_string() } else { format!("{} ready to play", self.tab_count(PortTab::Ready)) };
         let rows = [
             ("Cover art", "Box art for your games, from the free libretro collection.", covers),
@@ -2995,6 +3115,7 @@ impl Setup {
         text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Choose a look");
         let sub = if sample { "How the shelf looks, with sample games until yours are on the SD card." } else { "Your shelf, in each look." };
         text.draw(c, Face::Body, 28, MARGIN, 192, pal().dust, sub);
+        self.paint_step_count(c, text);
         let (pw, ph) = look_preview((c.w, c.h));
         let (x, y) = ((c.w - pw) / 2, 226);
         let n = self.themes.len();
@@ -3084,6 +3205,16 @@ impl Setup {
     /// or one that failed, an error, a radio that is off, are said before anything the page remembers; "No networks
     /// found" only for a scan that worked and saw nobody, "Couldn't search" for one that did not work. `dots`: the
     /// moving ellipsis.
+    /// The connected network while its A-press is being answered (`confirm`) and nothing more urgent is on the line.
+    fn confirming(&self) -> Option<&Entry> {
+        let urgent = self.radio == Radio::Absent
+            || self.switch_failed.is_some()
+            || self.switching.is_some()
+            || matches!(self.note, Some((_, true)))
+            || self.radio.is_off();
+        self.confirm.then(|| self.entries.iter().find(|e| e.active)).flatten().filter(|_| !urgent)
+    }
+
     pub(crate) fn wifi_status(&self, dots: &str) -> (String, u32) {
         let active = self.entries.iter().find(|e| e.active);
         match (&self.note, self.scanning) {
@@ -3093,6 +3224,15 @@ impl Setup {
             _ if self.switching == Some(false) => (format!("Turning Wi-Fi off{dots}"), pal().dust),
             (Some((msg, true)), _) => (msg.clone(), pal().alert),
             _ if self.radio.is_off() => ("Wi-Fi is off. Press A to turn it on.".into(), pal().dust),
+            _ if self.confirming().is_some() => {
+                let e = self.confirming().unwrap();
+                let line = if self.only.is_none() {
+                    format!("Connected to {}. Press START for the next step.", e.ssid)
+                } else {
+                    format!("Connected to {}. Press B to go back.", e.ssid)
+                };
+                (line, pal().chalk)
+            }
             (Some((msg, _)), _) => (msg.clone(), pal().dust),
             (None, false) if self.scan_err.is_some() => ("Couldn't search for networks. Try again (X).".into(), pal().alert),
             (None, _) if active.is_some() => (connected_line(active.unwrap(), self.ip.as_deref()), pal().chalk),
@@ -3229,6 +3369,27 @@ fn letter_jump(list: &[(String, String)], sel: usize, forward: bool) -> usize {
 }
 
 /// "Connected to Home · signal 78 % · 192.0.2.23": the network in use, how strong it is here, the address.
+/// The networks of a new scan, with the ones the last scan had and this one missed kept for two more scans: a radio
+/// that hears three networks, then five, then three, would make the page flip between lists. A network missing from
+/// three scans in a row is gone. `missed` counts that.
+fn keep_seen(old: &[Network], new: &[Network], missed: &mut HashMap<String, u8>) -> Vec<Network> {
+    let mut out = new.to_vec();
+    missed.retain(|ssid, _| old.iter().any(|n| n.ssid == *ssid));
+    for n in new {
+        missed.remove(&n.ssid);
+    }
+    for n in old.iter().filter(|n| !new.iter().any(|m| m.ssid == n.ssid)) {
+        let count = missed.entry(n.ssid.clone()).or_insert(0);
+        *count += 1;
+        if *count < 3 {
+            out.push(n.clone());
+        } else {
+            missed.remove(&n.ssid);
+        }
+    }
+    out
+}
+
 fn connected_line(e: &Entry, ip: Option<&str>) -> String {
     let mut line = format!("Connected to {}", e.ssid);
     if let Some(s) = e.signal {
@@ -3491,6 +3652,35 @@ mod tests {
         (setup_on(hw.clone(), name), hw)
     }
 
+    #[test]
+    fn the_extras_counter_says_what_it_counts() {
+        assert_eq!(extras_status(None, false, true, 6, ""), "6 games");
+        assert_eq!(extras_status(Some((2, 12, 0)), true, true, 6, "…"), "Looking up 2 of 12 pictures…", "pictures: up to three a game, so not '6 games'");
+        assert_eq!(extras_status(Some((2, 6, 0)), true, false, 6, ""), "Looking up 2 of 6 covers");
+        assert_eq!(extras_status(Some((6, 6, 4)), false, false, 6, ""), "Found 4 new covers");
+    }
+
+    /// The image's default zone nobody chose (New York), and the Wi-Fi region says Austria.
+    #[test]
+    fn an_unchosen_default_zone_is_never_called_already_set() {
+        let hw = MockHw::new(MockState {
+            zone: "America/New_York".into(),
+            zone_unchosen: true,
+            regdomain: Some("global\ncountry AT: DFS-ETSI\n".into()),
+            ..MockState::default()
+        })
+        .with_zoneinfo(zoneinfo());
+        let z = look_zone(&hw);
+        assert!(!matches!(z.guess, Guess::System(_)), "New York is the default, not a choice: {:?}", z.guess);
+        assert_eq!(z.guess.zone(), Some("Europe/Vienna"), "the Wi-Fi region decides");
+        // Without a region either, nothing is claimed: no zone is pre-picked from the default.
+        let hw = MockHw::new(MockState { zone: "America/New_York".into(), zone_unchosen: true, ..MockState::default() }).with_zoneinfo(zoneinfo());
+        assert!(matches!(look_zone(&hw).guess, Guess::Utc));
+        // A zone somebody chose stays "already set".
+        let hw = MockHw::new(MockState { zone: "Europe/Berlin".into(), ..MockState::default() }).with_zoneinfo(zoneinfo());
+        assert!(matches!(look_zone(&hw).guess, Guess::System(_)));
+    }
+
     fn mock(_name: &str, zone: &str, reg: Option<&str>) -> MockHw {
         MockHw::new(MockState { zone: zone.into(), regdomain: reg.map(String::from), ..MockState::default() }).with_zoneinfo(zoneinfo())
     }
@@ -3540,6 +3730,106 @@ mod tests {
         let de = crate::i18n::german();
         assert_eq!(de.translate(&done_line(16)).as_deref(), Some("Deine 16 Spiele sind im Regal."));
         assert_eq!(de.translate(&done_line(1)).as_deref(), Some("Dein Spiel ist im Regal."));
+    }
+
+    /// "Step n of 7" counts the first start's pages in order, and only there (Settings pages have no counter).
+    fn net(ssid: &str) -> Network {
+        Network { ssid: ssid.into(), signal: 50, secure: true, active: false }
+    }
+
+    /// A radio that hears three networks, then five, then three must not make the list jump between 3 and 5.
+    #[test]
+    fn the_network_list_keeps_what_one_scan_missed() {
+        let mut missed = HashMap::new();
+        let five = vec![net("a"), net("b"), net("c"), net("d"), net("e")];
+        let three = vec![net("a"), net("b"), net("c")];
+        let names = |l: &[Network]| l.iter().map(|n| n.ssid.clone()).collect::<Vec<_>>().join("");
+        let l = keep_seen(&[], &five, &mut missed);
+        assert_eq!(names(&l), "abcde");
+        let l = keep_seen(&l, &three, &mut missed);
+        assert_eq!(names(&l), "abcde", "d and e missed once: still listed");
+        let l = keep_seen(&l, &three, &mut missed);
+        assert_eq!(names(&l), "abcde", "missed twice");
+        let l = keep_seen(&l, &three, &mut missed);
+        assert_eq!(names(&l), "abc", "missed three scans in a row: gone");
+        // Heard again in between: the count starts over.
+        let l = keep_seen(&five, &three, &mut missed);
+        let l = keep_seen(&l, &five, &mut missed);
+        let l = keep_seen(&l, &three, &mut missed);
+        let l = keep_seen(&l, &three, &mut missed);
+        assert_eq!(names(&l), "abcde");
+    }
+
+    #[test]
+    fn a_on_the_connected_network_says_so_on_the_status_line() {
+        let mut s = wifi_setup("wifi-confirm");
+        let first = s.entries.iter().position(|e| e.active).expect("a connected network in the demo");
+        s.sel = s.lead() + first;
+        press(&mut s, &[Button::East]);
+        let (line, color) = s.wifi_status("");
+        assert!(line.starts_with("Connected to "), "{line}");
+        assert_eq!(color, pal().chalk);
+        // Any other press takes it back.
+        press(&mut s, &[Button::Down]);
+        assert!(!s.wifi_status("").0.starts_with("Connected to Home. Press"));
+        // Opened from Settings, the way on is B.
+        let mut s = wifi_setup("wifi-confirm-settings").only(Only::Wifi);
+        s.sel = s.lead() + s.entries.iter().position(|e| e.active).unwrap();
+        press(&mut s, &[Button::East]);
+        assert!(s.wifi_status("").0.ends_with("Press B to go back."));
+    }
+
+    #[test]
+    fn the_first_start_counts_its_steps() {
+        let (mut s, _hw) = setup("count", "UTC", Some(IW_AT));
+        let mut seen = vec![(s.at(), step_number(&s.step))];
+        press(&mut s, &[Button::East, Button::East]);
+        seen.push((s.at(), step_number(&s.step)));
+        press(&mut s, &[Button::Start, Button::Start, Button::Start]);
+        seen.push((s.at(), step_number(&s.step)));
+        press(&mut s, &[Button::Start]);
+        seen.push((s.at(), step_number(&s.step)));
+        let want = [("welcome", Some(1)), ("how you like to play", Some(3)), ("extras", Some(6)), ("games", Some(7))];
+        assert_eq!(seen, want.map(|(a, n)| (a.to_string(), n)));
+        assert_eq!(step_number(&Step::Look), Some(2));
+        assert_eq!(step_number(&Step::Wifi), Some(4));
+        assert_eq!(step_number(&Step::Done), None, "the end is not a step");
+        assert!(FIRST_STEPS == 7);
+        assert_eq!(shelf_setup("count-settings").only(Only::Wifi).only, Some(Only::Wifi));
+    }
+
+    #[test]
+    fn the_first_start_resumes_where_a_restart_found_it() {
+        let name = "resume";
+        let dir = std::env::temp_dir().join(format!("pocketui-setup-data-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (mut s, hw) = setup(name, "UTC", Some(IW_AT));
+        // The welcome step has nothing to lose; a fresh start begins there.
+        assert_eq!(s.at(), "welcome");
+        assert!(!dir.join(RESUME_FILE).exists());
+        at_wifi(&mut s);
+        assert_eq!(std::fs::read_to_string(dir.join(RESUME_FILE)).unwrap(), "wifi");
+        // The restart: a new setup on the same data folder opens on Wi-Fi, not the welcome.
+        let s2 = setup_on(hw.clone(), name).resume();
+        assert_eq!(s2.at(), "wifi");
+        // Further on: the zone step, then the games step.
+        press(&mut s, &[Button::Start]);
+        assert_eq!(setup_on(hw.clone(), name).resume().at(), "zone");
+        press(&mut s, &[Button::Start, Button::Start]);
+        assert_eq!(s.at(), "games");
+        assert_eq!(setup_on(hw.clone(), name).resume().at(), "games");
+        // Settings pages leave the first start's line alone; a line nobody knows means the beginning.
+        let _ = shelf_setup("resume-settings").only(Only::Extras);
+        std::fs::write(dir.join(RESUME_FILE), "nonsense").unwrap();
+        assert_eq!(setup_on(hw.clone(), name).resume().at(), "welcome");
+        std::fs::write(dir.join(RESUME_FILE), "games").unwrap();
+        // Finishing deletes it: the next first start (a reset) begins at the welcome.
+        press(&mut s, &[Button::Start]);
+        assert_eq!(s.at(), "done");
+        assert!(s.press(Button::East), "the last page ends the setup");
+        assert!(!dir.join(RESUME_FILE).exists());
+        assert_eq!(setup_on(hw, name).resume().at(), "welcome");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -3842,8 +4132,9 @@ mod tests {
         press(&mut s, &[Button::Up]);
         assert_eq!(s.sel, 1, "the connected network");
         press(&mut s, &[Button::East]);
-        assert_eq!(s.at(), "wifi", "A on the connected network only says so");
-        assert!(s.note.as_ref().is_some_and(|(m, _)| m.starts_with("Already connected")));
+        assert_eq!(s.at(), "wifi", "A on the connected network stays on the page");
+        let (line, _) = s.wifi_status("");
+        assert!(line.starts_with("Connected to "), "{line}");
         press(&mut s, &[Button::Up, Button::East]);
         assert_eq!(s.at(), "wifi: sign-in");
         let Step::Portal(page) = &s.step else { unreachable!() };
@@ -4752,9 +5043,11 @@ mod hint_bars {
 
     #[test]
     fn file_sharing_shows_no_address_without_one() {
-        assert_eq!(share_addresses(None), None, "offline: the page says what sharing is for instead");
+        assert_eq!(share_addresses(None, true), None, "offline: the page says what sharing is for instead");
+        assert_eq!(share_addresses(Some("192.0.2.23"), false), None, "sharing off: no address that leads nowhere");
+        assert!(crate::i18n::german().translate(SHARE_OFF).is_some(), "SHARE_OFF has a German line");
         assert_eq!(
-            share_addresses(Some("192.0.2.23")),
+            share_addresses(Some("192.0.2.23"), true),
             Some(["smb://192.0.2.23/games-roms".to_string(), "\\\\192.0.2.23\\games-roms".to_string()])
         );
         assert!(crate::i18n::german().translate(SHARE_OFFLINE).is_some(), "SHARE_OFFLINE has a German line");

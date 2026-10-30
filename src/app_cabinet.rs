@@ -13,10 +13,14 @@ use std::rc::Rc;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-use pocket_ui::cabinet::{self, Cabinet, Case, FormFactor, Media, Pull, ShelfKey, Tween};
+use pocket_ui::cabinet::{self, Cabinet, Case, FormFactor, Pull, ShelfKey, Tween};
 use pocket_ui::media::{self, Medium, Prop};
+use pocket_ui::case_stickers::CaseStickers;
 use pocket_ui::cabinet_art::{self as art, Look, Pic, Turn};
 use pocket_ui::gfx::{mix, Canvas};
+
+/// How much earlier than the moment it stands for a launch sound is queued: what the output holds ahead of it.
+const SOUND_LEAD: Duration = Duration::from_millis(10);
 use pocket_ui::image::{self, Image};
 use pocket_ui::palette::*;
 use pocket_ui::text::Face;
@@ -25,7 +29,7 @@ use pocket_ui::touch::Area;
 use super::{stripe, App, Button, Item, Screen, CANCEL, CONFIRM, REPEAT_DELAY};
 
 /// The cabinet's sides on screen.
-const CAB_X: i32 = 16;
+pub(crate) const CAB_X: i32 = 16;
 /// Where the rows of the cabinet start and end; above is the title, below the hints. The bottom and the floor below
 /// are measured from the screen's bottom edge, where the hints are: 992 and 800 on the Mini V2's 1080 lines, 872 and
 /// 680 on the Mini V1's 960 (docs/DEVICES.md).
@@ -43,11 +47,22 @@ const PLINTH_H: i32 = 56;
 const SHOW_W: f32 = 400.0;
 const SHOW_H: f32 = 354.0;
 
+/// The least a case is shown at, against the scale it would get by itself: a small box (GBA) is never shown so small that
+/// its cover is hard to see.
+const SHOW_LEAST: f32 = 0.6;
+
 /// How much bigger a case of this kind is shown when it is out, with `room` lines for it: never taller than that, so
-/// its cover is never cut (the Mini V1's 960 lines, a 720-line TV).
+/// its cover is never cut (the Mini V1's 960 lines, a 720-line TV). One scale for every case (the one the largest
+/// needs), so they keep their real sizes to each other (a PS2 case taller than a GBA box), but never under `SHOW_LEAST`
+/// of the case's own.
 fn show_scale(m: Medium, room: i32) -> f32 {
+    let own = |m: Medium| {
+        let s = m.size();
+        (SHOW_W / s.front as f32).min(SHOW_H / s.front_h as f32)
+    };
+    let common = Medium::ALL.into_iter().map(own).fold(f32::MAX, f32::min);
     let s = m.size();
-    (SHOW_W / s.front as f32).min(SHOW_H / s.h as f32).clamp(1.2, 2.1).min(room.max(40) as f32 / s.h as f32)
+    common.max(own(m) * SHOW_LEAST).clamp(1.2, 2.1).min(room.max(40) as f32 / s.front_h as f32)
 }
 
 /// The showcase over the selected shelf (Alex's photo, 2026-10-28: a case held up in front of the shelf above hid
@@ -57,7 +72,7 @@ fn show_scale(m: Medium, room: i32) -> f32 {
 fn showcase(h: i32, m: Medium, pitch: i32) -> (i32, i32) {
     let room = scene_bottom(h) - pitch - TOP_H - SCENE_TOP - 24;
     let k = show_scale(m, room);
-    let need = (m.size().h as f32 * k).round() as i32;
+    let need = (m.size().front_h as f32 * k).round() as i32;
     (room, SCENE_TOP + 12 + need + 12 + TOP_H)
 }
 
@@ -160,10 +175,16 @@ struct CaseKey {
     rom: PathBuf,
     medium: Medium,
     look: Look,
+    /// The stickers on the case (`app_case_stickers`): putting one on makes its pictures again.
+    case: CaseStickers,
 }
 
-/// A case's big spine and front, whether the front has its cover yet, and the frame it was last used in.
+/// A case's big spine and front, whether the front has its cover yet, and its last-use stamp.
 type Shown = (Rc<Pic>, Rc<Pic>, bool, u64);
+
+/// Large fronts shared by Shelf, the game box and its idle warmer. Bound entries independently of rendered frames:
+/// Cabinet uses these for box warming too, and never paints the Shelf that used to be their only cleanup path.
+const FRONT_KEEP: usize = 12;
 
 /// The case going into the console while the game starts (the launch animation, `App::launch_animation`).
 struct Inserting {
@@ -172,10 +193,18 @@ struct Inserting {
     item: Item,
     system: String,
     ff: FormFactor,
-    media: Media,
+    medium: Medium,
+    look: Look,
+    title: String,
+    /// What comes out of the case (`media::Game::of`: the system's own cartridge).
+    kind: media::Game,
+    /// The case's front has the game's box art (not a title card): the label gets it.
+    has_cover: bool,
     front: Rc<Pic>,
     from: (i32, i32, i32, i32),
-    tint: u32,
+    /// The cartridge or card that comes out of the case, made on the first frame of the animation (after the game's
+    /// process is started, so nothing is added before it) from the cover on the case's front; None for a disc.
+    game: Option<Rc<Pic>>,
     /// Cozy or Quick when it started (`App::cozy`): its length and when the cartridge is in.
     cozy: bool,
 }
@@ -213,8 +242,9 @@ pub(crate) struct CabinetUi {
     /// The Shelf look's spines standing on the shelf, per case and (scale, title size), with the frame last used in.
     stand: HashMap<(CaseKey, i32), (Rc<Pic>, u64)>,
     /// The Shelf look's selected case shown above the shelf: its big spine and front per case and size, whether that
-    /// front is final (has its cover, or there is none to wait for).
+    /// front is final (has its cover, or there is none to wait for), and its last use on `front_use`'s clock.
     shelf_shown: HashMap<(CaseKey, i32), Shown>,
+    front_use: u64,
     /// The Shelf look's row as laid out last, how far it is scrolled, its board, and the front as painted last
     /// (it stays lit through the launch fade).
     shelf_row: Option<ShelfRow>,
@@ -229,6 +259,8 @@ pub(crate) struct CabinetUi {
     shelf_props: HashMap<(Prop, i32), Rc<Pic>>,
     /// Counts the covers' colours that came in: a spine or tile kept by the Shelf look is made again after one.
     colors_gen: u64,
+    /// The library's case artwork last seen by the Shelf's row/tile caches (also changes after sync or a reload).
+    case_generation: Option<u64>,
     /// The room for the case out of its shelf (`showcase`), and where the selected shelf's top is, gliding with the
     /// cabinet when the room changes.
     show_room: i32,
@@ -240,6 +272,12 @@ pub(crate) struct CabinetUi {
     /// Where each case was painted, for taps: (rectangle, shelf, case); the pulled-out one last.
     drawn: Vec<(i32, i32, i32, i32, usize, usize)>,
     insert: Option<Inserting>,
+    /// The game box's cartridge or card, made for the case front it came out of (`box_game`).
+    box_game: Option<(Rc<Pic>, Rc<Pic>)>,
+    /// Fronts with case stickers and the same without (`app_case_stickers`).
+    pub(crate) bare_fronts: super::app_case_stickers::BareFronts,
+    /// The TV on the top board (`app_cabinet_tv`).
+    pub(crate) tv: super::app_cabinet_tv::TvState,
     /// The front of the selected case as last painted: where an insert starts from.
     last_out: Option<(Item, (i32, i32, i32, i32))>,
     consoles: HashMap<String, Option<Rc<pocket_ui::system_art::Sprite>>>,
@@ -271,6 +309,7 @@ impl Default for CabinetUi {
             labels: HashMap::new(),
             stand: HashMap::new(),
             shelf_shown: HashMap::new(),
+            front_use: 0,
             shelf_row: None,
             shelf_scroll: Tween::new(0.0, cabinet::SCROLL),
             shelf_board: None,
@@ -282,11 +321,15 @@ impl Default for CabinetUi {
             show_room: 360,
             show_top: Tween::new(0.0, cabinet::SCROLL),
             colors_gen: 0,
+            case_generation: None,
             reader: None,
             pending: 0,
             inline: false,
             drawn: Vec::new(),
             insert: None,
+            box_game: None,
+            bare_fronts: Default::default(),
+            tv: Default::default(),
             last_out: None,
             consoles: HashMap::new(),
             frame: 0,
@@ -299,12 +342,49 @@ impl Default for CabinetUi {
 }
 
 impl CabinetUi {
+    fn cached_front(&mut self, key: &(CaseKey, i32), reading: bool) -> Option<(Rc<Pic>, Rc<Pic>)> {
+        let (spine, front, done, used) = self.shelf_shown.get_mut(key)?;
+        if !*done && !reading {
+            return None;
+        }
+        self.front_use += 1;
+        *used = self.front_use;
+        Some((spine.clone(), front.clone()))
+    }
+
+    fn cache_front(&mut self, key: (CaseKey, i32), spine: Rc<Pic>, front: Rc<Pic>, done: bool) {
+        self.front_use += 1;
+        self.shelf_shown.insert(key, (spine, front, done, self.front_use));
+        self.prune_fronts();
+    }
+
+    fn prune_fronts(&mut self) {
+        while self.shelf_shown.len() > FRONT_KEEP {
+            let key = self.shelf_shown.iter().min_by_key(|(_, (_, _, _, used))| *used).map(|(key, _)| key.clone()).unwrap();
+            self.shelf_shown.remove(&key);
+        }
+        // Dropping a cache owner must not lose the bare label of a still-active box or launch. BareFronts keeps
+        // those by Rc ownership, and releases evicted inactive fronts even when no new sticker is painted.
+        self.bare_fronts.prune();
+    }
+
     /// New box art arrived: look again for games that had none.
     pub(crate) fn covers_changed(&mut self) {
         self.colors_gen += 1;
         self.cover_files.retain(|_, f| f.is_some());
         self.colors.retain(|_, c| !matches!(c, Slot::Missing));
         self.labels.retain(|_, c| !matches!(c, Slot::Missing));
+    }
+
+    /// Port metadata may replace a fallback picture with its real cover. Rebuild those cases after publication.
+    pub(crate) fn port_art_changed(&mut self) {
+        let port = |rom: &Path| rom.starts_with(pocket_ui::ports::PORTS_DIR);
+        self.cover_files.retain(|rom, _| !port(rom));
+        self.spines.retain(|key, _| !port(&key.rom));
+        self.shown.retain(|key, _| !port(&key.rom));
+        self.stand.retain(|(key, _), _| !port(&key.rom));
+        self.shelf_shown.retain(|(key, _), _| !port(&key.rom));
+        self.covers_changed();
     }
 
     /// Every glide as if it had started `by` earlier.
@@ -323,6 +403,7 @@ impl CabinetUi {
             || self.scroll_x.values().any(|t| t.moving(now))
             || self.pending > 0
             || self.insert_playing(now)
+            || self.tv.busy(now)
     }
 
     /// The launch animation is still moving (the game is loading behind it).
@@ -434,7 +515,7 @@ impl App {
             },
             // Curator's boxes on its shelf (the Lens, smart shelves, stickers), coloured as Curator's rows are.
             // Their "ROM" only tells their pictures apart (and a renamed one from its old name); they have no box art.
-            Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) => {
+            Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => {
                 let title = self.curator_describe(item).0;
                 // Surprise me's box shows the day's pick on its front (`surprise_front`): a new pick, a new front.
                 let pick = if item == Item::Surprise { self.surprise_front().map(|(_, rom)| rom.to_string_lossy().into_owned()).unwrap_or_default() } else { String::new() };
@@ -456,14 +537,14 @@ impl App {
     /// The case a game (or one of Curator's boxes) stands in on the shelf (`media`).
     pub(crate) fn medium(&self, item: Item) -> Medium {
         match item {
-            Item::Streaming | Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) => Medium::Keep,
+            Item::Streaming | Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => Medium::Keep,
             _ => Medium::of(&self.case_info(item).system),
         }
     }
 
     fn form_factor(&self, item: Item) -> FormFactor {
         match item {
-            Item::Streaming | Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) => FormFactor::DvdCase,
+            Item::Streaming | Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => FormFactor::DvdCase,
             _ => FormFactor::of(&self.case_info(item).system),
         }
     }
@@ -515,7 +596,7 @@ impl App {
             let key = match (self.screen, item) {
                 _ if curator.is_some() => curator.unwrap_or(ShelfKey::Curator),
                 // Home's Curator rows: the shelf they stand for.
-                (_, Item::Curator | Item::History | Item::Review(_)) => ShelfKey::Curator,
+                (_, Item::Curator | Item::History | Item::Review(_) | Item::Rediscover) => ShelfKey::Curator,
                 (_, Item::SmartShelf(i)) => ShelfKey::SmartShelf(i),
                 (_, Item::Sticker(id)) => ShelfKey::Sticker(id),
                 (_, Item::Recent(_) | Item::Streaming | Item::Search | Item::Lens | Item::Surprise) => ShelfKey::Continue,
@@ -601,7 +682,10 @@ impl App {
             // There is no level above the cabinet to go back to, but a Curator list opened from the Curator shelf
             // or the Lens goes back there (`app_curator`).
             b if b == CANCEL => {
-                self.curator_back();
+                // A card's list of games goes back to the card (`app_connections`).
+                if !self.connection_back() {
+                    self.curator_back();
+                }
                 true
             }
             // A starts the game at once, as in every look; its case goes into the console while it loads
@@ -674,32 +758,71 @@ impl App {
         if !self.begin_insert(item) {
             return None;
         }
-        // The click as it goes in (`cabinet::IN_AT`): queued now, the sound thread plays it on time and then
-        // leaves the device to the game (`ui_sound::close_when_done`).
+        // The sounds, all queued now with their waits: the sound thread plays them on time and then leaves the device
+        // to the game (`ui_sound::close_when_done`). Quick: a quiet click as it goes in (`cabinet::IN_AT`). Cozy: the
+        // case opens, and the game goes into the console with its own sound, seated as it is in (`IN_AT_COZY`). The
+        // CRT's sound is pocket-core's, with its picture (`crt_on`).
+        use pocket_ui::ui_sound::{self, Sound};
         let cozy = self.cozy();
-        self.play_sound(if cozy { pocket_ui::ui_sound::Sound::InsertCozy } else { pocket_ui::ui_sound::Sound::Insert });
-        pocket_ui::ui_sound::close_when_done(!hosted);
+        let in_at = cabinet::fade_delay(cozy).saturating_sub(SOUND_LEAD);
+        if cozy {
+            let medium = self.medium(item);
+            let inside = ui_sound::going_in(medium);
+            self.play_sound(ui_sound::opening(medium));
+            self.play_sound_after(inside, in_at.saturating_sub(ui_sound::hit_at(inside)), 0.0);
+        } else {
+            self.play_sound_after(Sound::Insert, in_at.saturating_sub(ui_sound::hit_at(Sound::Insert)), ui_sound::QUICK_DB);
+        }
+        ui_sound::played();
+        ui_sound::close_when_done(!hosted);
         (cozy && hosted).then(|| cabinet::fade_delay(true) + super::FADE)
     }
 
-    /// The game box's look and its case's front `h` pixels tall (None for a cartridge, whose box is cardboard with the
-    /// cover: `game_box`), made as the Shelf look makes its fronts.
+    /// The game box's look and its case's front `h` pixels tall, made as the Shelf look makes its fronts.
     pub(crate) fn box_front(&mut self, item: Item, h: i32) -> (Medium, Look, Option<Rc<Pic>>) {
         let m = self.medium(item);
         let info = self.case_info(item);
         let look = self.case_look(&info, m);
-        if pocket_ui::game_box::Hull::of(m) == pocket_ui::game_box::Hull::CartBox {
-            return (m, look, None);
-        }
-        let k = h as f32 / m.size().h.max(1) as f32;
+        let k = h as f32 / m.size().front_h.max(1) as f32;
         let (_, front) = self.stand_front(item, m, k, false);
         (m, look, front)
+    }
+
+    /// The cartridge or card out of the game box's case `front` (`box_front`), at its real size beside it, with the
+    /// cover taken off the case's front; made once per case and size. None for a disc (painted round).
+    pub(crate) fn box_game(&mut self, item: Item, front: &Rc<Pic>) -> Option<Rc<Pic>> {
+        let m = self.medium(item);
+        let info = self.case_info(item);
+        let game = media::Game::of(&info.system, &info.rom.to_string_lossy());
+        if game.is_round() {
+            return None;
+        }
+        if let Some((f, pic)) = &self.cabinet.box_game {
+            if Rc::ptr_eq(f, front) {
+                return Some(pic.clone());
+            }
+        }
+        let look = self.case_look(&info, m);
+        let k = front.h as f32 / m.size().front_h.max(1) as f32;
+        // The label from the case's front without its stickers (`app_case_stickers`).
+        let cover = media::cover_of(&self.bare_front(front), m, k);
+        let console = self.console_sprite(&info.system);
+        let h = game.size_beside(m, front.h).1;
+        let t0 = Instant::now();
+        // Without box art the front shows a title card: the label gets the title written to fit it instead.
+        let has_cover = self.cover_file(&info.system, &info.rom).is_some();
+        let pic = Rc::new(media::game_pic(&mut self.text, game, h, look, &info.title, has_cover.then_some(&cover), console.as_deref())?);
+        self.cabinet.made("box game", t0);
+        self.cabinet.box_game = Some((front.clone(), pic.clone()));
+        Some(pic)
     }
 
     /// The game ended (or never came up): the case is back on the shelf. The Shelf look paints the insert only while
     /// `launch_at` is set, so nothing else would clear it, and the played game's case stayed blank in its own list.
     pub(crate) fn end_insert(&mut self) {
         self.cabinet.insert = None;
+        // The just-played game's resume preview or kept frame may have replaced the file at the same path.
+        self.cabinet.tv.pictures_changed();
     }
 
     /// The launch animation's case is on its way or in its console (until the game ends).
@@ -717,7 +840,7 @@ impl App {
         let look = self.case_look(&info, medium);
         let (front, from) = if self.theme == super::Theme::Cabinet {
             let Some(from) = self.cabinet.last_out.filter(|(i, _)| *i == item).map(|(_, r)| r) else { return false };
-            let key = CaseKey { rom: info.rom.clone(), medium, look };
+            let key = CaseKey { rom: info.rom.clone(), medium, look, case: self.case_stickers_of(&info.rom) };
             let Some((_, front, _, _)) = self.cabinet.shown.get(&key).cloned() else { return false };
             (front, from)
         } else {
@@ -725,15 +848,21 @@ impl App {
             let rect = (x, y, front.w, front.h);
             (front, rect)
         };
+        let kind = media::Game::of(&info.system, &info.rom.to_string_lossy());
+        let has_cover = self.cover_file(&info.system, &info.rom).is_some();
         self.cabinet.insert = Some(Inserting {
             at: Instant::now(),
             item,
             system: info.system,
             ff,
-            media: ff.media(),
+            medium,
+            look,
+            kind,
+            has_cover,
+            title: info.title,
             front,
             from,
-            tint: look.color,
+            game: None,
             cozy: self.cozy(),
         });
         true
@@ -806,6 +935,7 @@ impl App {
     }
 
     pub(crate) fn cabinet_poll(&mut self) {
+        self.cabinet.prune_fronts();
         let Some(reader) = self.cabinet.reader.clone() else { return };
         for (file, kind, got) in reader.take() {
             self.cabinet.pending = self.cabinet.pending.saturating_sub(1);
@@ -830,10 +960,12 @@ impl App {
             }
             None => fallback,
         };
-        let plastic = if m.is_cart() { art::plastic(&info.system) } else { 0x141416 };
+        // The plastic of the cartridge or card inside the case (a cardboard box itself takes the cover's colour).
+        let plastic = if m.game().is_round() { 0x141416 } else { art::plastic(&info.system) };
         Look {
             color,
-            band: media::apart(accent, color),
+            // pocket-ui's own case wears the system's colour in its band, whatever the cover.
+            band: if m.is_generic() { stripe_c } else { media::apart(accent, color) },
             plastic,
         }
     }
@@ -842,6 +974,7 @@ impl App {
         let info = self.case_info(item);
         let look = self.case_look(&info, m);
         let key = CaseKey {
+            case: self.case_stickers_of(&info.rom),
             rom: info.rom.clone(),
             medium: m,
             look,
@@ -854,7 +987,8 @@ impl App {
         let t0 = Instant::now();
         // As large as the label takes (37 px at most): readable at arm's length on the Mini V2 (Alex's photo,
         // 2026-10-28: "Legend of…" at 21 px was not).
-        let pic = Rc::new(media::spine_with(&mut self.text, m, 1.0, look, &info.title, 37.0));
+        let pic = media::spine_with(&mut self.text, m, 1.0, look, &info.title, 37.0);
+        let pic = Rc::new(self.stuck_spine(pic, m, 1.0, &info.rom, key.case));
         self.cabinet.made("spine", t0);
         self.cabinet.spines.insert(key, (pic.clone(), frame));
         pic
@@ -893,12 +1027,13 @@ impl App {
         let k = show_scale(m, self.cabinet.show_room);
         let label = file.and_then(|f| self.cover_label(&f, m, (m.size().h as f32 * k).round() as i32));
         let key = CaseKey {
+            case: self.case_stickers_of(&info.rom),
             rom: info.rom.clone(),
             medium: m,
             look,
         };
         let frame = self.cabinet.frame;
-        let fh = (m.size().h as f32 * k).round() as i32;
+        let fh = media::front_size(m, k).1;
         if let Some((spine, front, has, used)) = self.cabinet.shown.get_mut(&key) {
             // Made for this room (another screen size or a taller shelf makes it again).
             if (*has || label.is_none()) && front.h == fh {
@@ -908,10 +1043,13 @@ impl App {
         }
         let sprite = pocket_ui::system_art::get(&info.system).or_else(|| emblem(item));
         let t0 = Instant::now();
-        let spine = Rc::new(media::spine(&mut self.text, m, k, look, &info.title));
+        let spine = media::spine(&mut self.text, m, k, look, &info.title);
+        let spine = Rc::new(self.stuck_spine(spine, m, k, &info.rom, key.case));
         self.cabinet.made("big spine", t0);
         let t0 = Instant::now();
-        let front = Rc::new(media::front(&mut self.text, m, k, look, &info.title, label.as_deref(), sprite));
+        let name = super::system_short(&self.systems, &info.system);
+        let front = media::front(&mut self.text, m, k, look, &info.title, label.as_deref(), sprite, &name);
+        let front = self.stuck_front(front, m, k, &info.rom, key.case);
         self.cabinet.made(if label.is_some() { "front" } else { "plain front" }, t0);
         self.cabinet.shown.insert(key, (spine.clone(), front.clone(), label.is_some(), frame));
         (spine, front)
@@ -1082,6 +1220,11 @@ impl App {
             art::fade_band_to(c, lowest - 34, lowest, pal().void);
         }
 
+        // The TV on the top board, showing the selected game (`app_cabinet_tv`); the cases out of the shelf keep clear of it.
+        let info = self.case_info(item);
+        let cover = self.cover_file(&info.system, &info.rom);
+        self.paint_cabinet_tv(c, &info.system, &info.rom, cover, show_bottom - TOP_H - 12, room, now);
+
         // The cases out of the shelf, up in the showcase: the one going back first, the selected one over it.
         out.sort_by_key(|&(s, i)| (s, i) == (cs, ci));
         for (s, i) in out {
@@ -1145,6 +1288,8 @@ impl App {
             ShelfKey::Lens => 4,
             ShelfKey::SmartShelf(i) => 100 + i as u32,
             ShelfKey::Sticker(id) => 1000 + id,
+            ShelfKey::Connection => 5,
+            ShelfKey::Rediscover => 6,
         };
         let room = shelf.height - cabinet::HEADROOM / 2;
         let games_end = inner_x + shelf.width - cabinet::INSET;
@@ -1223,9 +1368,11 @@ impl App {
         let floor = (self.cabinet.cab.y(s) - sy + self.cabinet.cab.shelves[s].height + 3) as f32;
         let slot_cx = inner_x as f32 + self.cabinet.cab.shelves[s].x(i) as f32 - scroll + size.spine as f32 / 2.0;
         let k = show_scale(case.medium, self.cabinet.show_room);
-        let (fw, fh) = (size.front as f32 * k, size.h as f32 * k);
+        // Out, it shows its front (a SNES box lies down from its short side to it as it turns: `draw_turning`).
+        let (fw, fh) = (size.front as f32 * k, size.front_h as f32 * k);
         let margin = 40.0;
-        let show_cx = slot_cx.clamp(margin + fw / 2.0, c.w as f32 - margin - fw / 2.0);
+        let right = self.cabinet.tv.left.map_or(c.w as f32, |x| x as f32 + 12.0);
+        let show_cx = show_centre(slot_cx, fw, right, margin, self.cabinet.cab.shelves[s].width, c.w - 2 * CAB_X - 2 * art::WALL);
         // Up in the showcase over its shelf, standing on the cabinet's top board: nothing of the shelves under it.
         let show_cy = (show_bottom - TOP_H - 12) as f32 - fh / 2.0;
         let smooth = |t: f32| t * t * (3.0 - 2.0 * t);
@@ -1236,7 +1383,8 @@ impl App {
         let cy = (floor - size.h as f32 / 2.0) + (show_cy - (floor - size.h as f32 / 2.0)) * mv;
         let (spine, front) = self.shown_pics(case.item, case.medium);
         // Its shadow on what is behind and under it.
-        let (w_now, h_now) = ((size.spine as f32 + (size.front - size.spine) as f32 * turned) * scale, size.h as f32 * scale);
+        let h_case = size.h as f32 + (size.front_h - size.h) as f32 * turned;
+        let (w_now, h_now) = ((size.spine as f32 + (size.front - size.spine) as f32 * turned) * scale, h_case * scale);
         art::soft_shadow(
             c,
             (cx - w_now / 2.0) as i32 + 14,
@@ -1307,14 +1455,33 @@ impl App {
         self.text.draw(c, Face::Body, 28, MARGIN, 192, pal().dust, &meta);
     }
 
-    /// Starting a game: the console comes up, the case goes to it, the cartridge or disc goes in.
+    /// Starting a game: the console comes up, the case opens and the cartridge, card or disc slides out of it, the case
+    /// fades and the game goes into the console (every system the same way, 0.1.4).
     pub(crate) fn paint_insert(&mut self, c: &mut Canvas, now: Instant) {
         // Back from the game (or it never came up): the cabinet as it was.
         if self.launch_at.is_none() {
             self.cabinet.insert = None;
         }
         let Some(ins) = self.cabinet.insert.as_ref() else { return };
-        let (system, ff, media, front, from, tint) = (ins.system.clone(), ins.ff, ins.media, ins.front.clone(), ins.from, ins.tint);
+        let (system, ff, medium, front, from) = (ins.system.clone(), ins.ff, ins.medium, ins.front.clone(), ins.from);
+        let tint = ins.look.color;
+        let game = ins.kind;
+        // The cartridge or card, once: the game's process is already starting, this frame is the first of the animation.
+        if ins.game.is_none() && !game.is_round() {
+            let (look, title, has_cover) = (ins.look, ins.title.clone(), ins.has_cover);
+            let k = from.3 as f32 / medium.size().front_h.max(1) as f32;
+            let cover = media::cover_of(&self.bare_front(&front), medium, k);
+            let console = self.console_sprite(&system);
+            let t0 = Instant::now();
+            let cover = has_cover.then_some(&cover);
+            let pic = media::game_pic(&mut self.text, game, game.size_beside(medium, from.3).1, look, &title, cover, console.as_deref());
+            self.cabinet.made("game", t0);
+            if let Some(ins) = self.cabinet.insert.as_mut() {
+                ins.game = pic.map(Rc::new);
+            }
+        }
+        let Some(ins) = self.cabinet.insert.as_ref() else { return };
+        let game_pic = ins.game.clone();
         let st = cabinet::insert_at(now.saturating_duration_since(ins.at), ins.cozy);
         art::dim(c, 0, c.h, 256 - (st.dim * 256.0) as u32);
         // The Shelf look has no scene of its own: the console stands on the screen's floor.
@@ -1341,60 +1508,62 @@ impl App {
         let slot_cx = c.w / 2;
         let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
         let (fx, fy, fw, fh) = (from.0 as f32, from.1 as f32, from.2 as f32, from.3 as f32);
-        match media {
-            Media::Cart | Media::Card => {
-                // The cartridge itself shrinks onto the slot and sinks in.
-                let end_w = (sw as f32 * if media == Media::Card { 0.2 } else { 0.36 }).clamp(90.0, 230.0);
-                let end_h = end_w * fh / fw.max(1.0);
-                let w = lerp(fw, end_w, st.carry);
-                let h = lerp(fh, end_h, st.carry);
-                let x = lerp(fx, slot_cx as f32 - end_w / 2.0, st.carry);
-                // A cartridge stays partly out of its slot, as it does in the real console.
-                let depth = match ff {
-                    FormFactor::ConsoleCart => 0.55,
-                    FormFactor::HandheldCart => 0.65,
-                    _ => 0.85,
-                };
-                let y = lerp(fy, slot_y as f32 - end_h, st.carry) + st.sink * end_h * depth;
-                if st.rise > 0.4 {
-                    c.round_rect(slot_cx - end_w as i32 / 2 - 8, slot_y - 4, end_w as i32 + 16, 9, 4, 0x0c0c0d);
-                }
-                let pic = front.scaled(w as i32, h as i32);
-                art::blit(c, &pic, x as i32, y as i32, 256, (0, slot_y));
+        // The game slides out of its case (from behind it, to its right), the case fades, the game goes to the console
+        // and in.
+        let case_fade = 256 - (((st.carry - 0.3) / 0.4).clamp(0.0, 1.0) * 256.0) as u32;
+        let out = (st.carry / 0.35).min(1.0);
+        let fly = ((st.carry - 0.35) / 0.65).clamp(0.0, 1.0);
+        let clip_bottom = if fly > 0.5 { slot_y } else { c.h };
+        let draw_game: Box<dyn Fn(&mut Canvas)> = if game.is_round() {
+            // As large as the real disc beside its case.
+            let r0 = game.size_beside(medium, from.3).1 as f32 / 2.0;
+            let r1 = (sw as f32 * 0.16).clamp(46.0, 90.0);
+            let start = (fx + fw / 2.0 + out * fw * 0.55, fy + fh / 2.0);
+            let end = (slot_cx as f32, slot_y as f32 - r1);
+            let r = lerp(r0, r1, fly);
+            let (x, y) = (lerp(start.0, end.0, fly), lerp(start.1, end.1, fly) + st.sink * 2.0 * r1);
+            if st.rise > 0.4 {
+                c.round_rect(slot_cx - r1 as i32 - 10, slot_y - 4, 2 * r1 as i32 + 20, 9, 4, 0x0c0c0d);
             }
-            Media::Disc | Media::Umd => {
-                // The disc slides out from behind its case, then the case fades and the disc goes to the console and in.
-                let case_fade = 256 - (((st.carry - 0.3) / 0.4).clamp(0.0, 1.0) * 256.0) as u32;
-                let r0 = fw.min(fh) * 0.42;
-                let r1 = (sw as f32 * 0.16).clamp(46.0, 90.0);
-                let out = (st.carry / 0.35).min(1.0);
-                let fly = ((st.carry - 0.35) / 0.65).clamp(0.0, 1.0);
-                let start = (fx + fw / 2.0 + out * fw * 0.55, fy + fh / 2.0);
-                let end = (slot_cx as f32, slot_y as f32 - r1);
-                let r = lerp(r0, r1, fly);
-                let (x, y) = (lerp(start.0, end.0, fly), lerp(start.1, end.1, fly) + st.sink * 2.0 * r1);
-                if st.rise > 0.4 {
-                    c.round_rect(slot_cx - r1 as i32 - 10, slot_y - 4, 2 * r1 as i32 + 20, 9, 4, 0x0c0c0d);
+            Box::new(move |c: &mut Canvas| {
+                if game == media::Game::Umd {
+                    art::umd(c, x as i32, y as i32, r as i32, tint, clip_bottom);
+                } else {
+                    art::disc(c, x as i32, y as i32, r as i32, tint, clip_bottom);
                 }
-                let clip_bottom = if fly > 0.5 { slot_y } else { c.h };
-                let draw_disc = |c: &mut Canvas| {
-                    if media == Media::Umd {
-                        art::umd(c, x as i32, y as i32, r as i32, tint, clip_bottom);
-                    } else {
-                        art::disc(c, x as i32, y as i32, r as i32, tint, clip_bottom);
-                    }
-                };
-                // Behind the case while it comes out, in front once it is on its way.
-                if fly == 0.0 {
-                    draw_disc(c);
-                }
-                if case_fade > 0 {
-                    art::blit(c, &front, from.0, from.1, case_fade, (0, c.h));
-                }
-                if fly > 0.0 {
-                    draw_disc(c);
-                }
+            })
+        } else {
+            let Some(pic) = game_pic else { return };
+            let (gw, gh) = (pic.w as f32, pic.h as f32);
+            // The cartridge shrinks onto the slot and sinks in, partly: it stays out of its slot as it does in the real
+            // console. A game card goes in all the way.
+            let end_w = (sw as f32 * if game == media::Game::Card { 0.2 } else { 0.36 }).clamp(if game == media::Game::Card { 60.0 } else { 90.0 }, 230.0);
+            let end_h = end_w * gh / gw.max(1.0);
+            let depth = match (game, ff) {
+                (media::Game::Card, _) => 1.0,
+                (_, FormFactor::ConsoleCart) => 0.55,
+                (_, FormFactor::HandheldCart) => 0.65,
+                _ => 0.85,
+            };
+            let start = (fx + fw / 2.0 + out * (fw / 2.0 + gw * 0.45), fy + fh / 2.0);
+            let end = (slot_cx as f32, slot_y as f32 - end_h / 2.0);
+            let (w, h) = (lerp(gw, end_w, fly), lerp(gh, end_h, fly));
+            let (cx, cy) = (lerp(start.0, end.0, fly), lerp(start.1, end.1, fly) + st.sink * end_h * depth);
+            if st.rise > 0.4 {
+                c.round_rect(slot_cx - end_w as i32 / 2 - 8, slot_y - 4, end_w as i32 + 16, 9, 4, 0x0c0c0d);
             }
+            let shown = if fly > 0.0 { Rc::new(pic.scaled(w as i32, h as i32)) } else { pic };
+            Box::new(move |c: &mut Canvas| art::blit(c, &shown, (cx - w / 2.0) as i32, (cy - h / 2.0) as i32, 256, (0, clip_bottom)))
+        };
+        // Behind the case while it comes out, in front once it is on its way.
+        if fly == 0.0 {
+            draw_game(c);
+        }
+        if case_fade > 0 {
+            art::blit(c, &front, from.0, from.1, case_fade, (0, c.h));
+        }
+        if fly > 0.0 {
+            draw_game(c);
         }
         // It is in: the slot lights up for a moment, in the label's colour lifted towards white.
         if st.glow > 0.0 {
@@ -1543,19 +1712,24 @@ fn emblem(item: Item) -> Option<&'static pocket_ui::system_art::Sprite> {
         Item::Favorites => Art::NoFavorites,
         Item::Search | Item::Lens => Art::Search,
         Item::SmartShelf(_) => Art::Sticker(Sticker::TenGames),
-        Item::History | Item::Review(_) => Art::History,
+        Item::History | Item::Review(_) | Item::Rediscover => Art::History,
         Item::Recent(_) | Item::Game(..) | Item::System(_) => return None,
     })
 }
 
-/// The `k` (`media::front`) of a case of `m` shown above the shelf: as large as the room lets it, at most 45 % of the
-/// room's width and `SHOW_MAX` template pixels a pixel, in half steps; below one (a tiny screen) as large as fits.
+/// The `k` (`media::front`) of a case of `m` shown above the shelf: as large as the room lets the largest case (at most
+/// 45 % of the room's width and `SHOW_MAX` template pixels a pixel), in half steps, the same for every case; below one
+/// (a tiny screen) as large as fits.
 pub(crate) fn show_k(lay: &ShelfLayout, m: Medium) -> f32 {
-    let (fw, fh) = {
+    // One scale for every case, the one the largest needs to fit the room, so they keep their real sizes to each other;
+    // never under `SHOW_LEAST` of a case's own. A taller spine (a SNES box standing on its short side) is laid down to
+    // the front's height as it turns (`cabinet_art::draw_turning`).
+    let own = |m: Medium| {
         let t = m.template_size();
-        (t.front, t.h)
+        (lay.show.3 as f32 / t.front_h as f32).min(lay.show.2 as f32 * 0.45 / t.front as f32)
     };
-    let s = (lay.show.3 as f32 / fh as f32).min(lay.show.2 as f32 * 0.45 / fw as f32);
+    let common = Medium::ALL.into_iter().map(own).fold(f32::MAX, f32::min);
+    let s = common.max(own(m) * SHOW_LEAST);
     let s = if s >= 1.0 { ((s * 2.0).floor() / 2.0).min(SHOW_MAX) } else { s.max(0.2) };
     s / media::SHELF_SCALE
 }
@@ -1564,6 +1738,25 @@ pub(crate) fn show_k(lay: &ShelfLayout, m: Medium) -> f32 {
 /// on the Mini V2 in Normal, 37 in Large.
 fn spine_want(f: f32) -> f32 {
     pocket_ui::type_scale::px(24) as f32 * f / 2.4
+}
+
+/// How far in from the shelf's left end a row of `len` pixels stands on a shelf `view` wide: a row of only a few games
+/// (a single one, under half the shelf) starts a third of the free room in, so the shelf is not one thin spine at the wall and
+/// black everywhere else (the new-user test, 2026-10-30); a fuller row starts at the end.
+fn shelf_lead(len: i32, view: i32) -> i32 {
+    if len * 2 < view {
+        (view - len) / 3
+    } else {
+        0
+    }
+}
+
+/// Where the centre of a case shown out of its shelf stands: over its slot, unless the shelf holds only a few cases
+/// (their row under a third of the cabinet's width): then in the middle of the cabinet, so a lone game is not tucked in
+/// its corner above an empty shelf. Kept `margin` clear of the screen's edges (`screen_w`: the room up to the TV, when one stands there).
+fn show_centre(slot_cx: f32, fw: f32, screen_w: f32, margin: f32, shelf_w: i32, view: i32) -> f32 {
+    let cx = if shelf_w * 3 < view { screen_w / 2.0 } else { slot_cx };
+    cx.clamp(margin + fw / 2.0, (screen_w - margin - fw / 2.0).max(margin + fw / 2.0))
 }
 
 /// Which group of Home an entry belongs to: the shelf leaves a wider gap where one ends (Curator and Search, the recent
@@ -1583,6 +1776,9 @@ fn shelf_group(item: Item) -> u8 {
 pub(crate) struct ShelfRow {
     items: Vec<Item>,
     f: f32,
+    /// The shelf's width it was laid out for, and how far in from its left end the first spine stands (`shelf_lead`).
+    view: i32,
+    lead: i32,
     /// The spines' title size (`media::spine_px`'s `want`): Settings → Text size.
     want: f32,
     /// Each entry's spine as painted last, with the colours' generation it was made in (`CabinetUi::colors_gen`): a
@@ -1618,10 +1814,12 @@ impl App {
     /// Covers read on the thread since the last frame, and pictures made for entries long gone.
     pub(crate) fn shelf_media_poll(&mut self) {
         self.cabinet_poll();
-        let frame = self.cabinet.frame;
-        if self.cabinet.shelf_shown.len() > 12 {
-            self.cabinet.shelf_shown.retain(|_, (_, _, _, used)| frame - *used < 4);
+        let generation = self.library.case_generation();
+        if self.cabinet.case_generation.replace(generation) != Some(generation) {
+            // Both row.pics and row.tiles use this generation; changing only CaseKey leaves those outer caches old.
+            self.cabinet.colors_gen += 1;
         }
+        let frame = self.cabinet.frame;
         if self.cabinet.stand.len() > 400 {
             self.cabinet.stand.retain(|_, (_, used)| frame - *used < 60);
         }
@@ -1639,6 +1837,7 @@ impl App {
             info.rom = PathBuf::from(format!("shelf/{item:?}"));
         }
         let key = CaseKey {
+            case: self.case_stickers_of(&info.rom),
             rom: info.rom.clone(),
             medium: m,
             look,
@@ -1662,7 +1861,8 @@ impl App {
             _ => info.title.clone(),
         };
         let t0 = Instant::now();
-        let pic = Rc::new(media::spine_with(&mut self.text, m, f / media::SHELF_SCALE, key.0.look, &title, want));
+        let pic = media::spine_with(&mut self.text, m, f / media::SHELF_SCALE, key.0.look, &title, want);
+        let pic = Rc::new(self.stuck_spine(pic, m, f / media::SHELF_SCALE, &info.rom, key.0.case));
         self.cabinet.made("standing spine", t0);
         self.cabinet.stand.insert(key, (pic.clone(), frame));
         pic
@@ -1687,12 +1887,8 @@ impl App {
                 .as_ref()
                 .is_some_and(|f| matches!(self.cabinet.labels.get(&(f.clone(), m, fh)), Some(Slot::Pending)));
         let key = (key, (k * 1000.0) as i32);
-        let frame = self.cabinet.frame;
-        if let Some((spine, front, done, used)) = self.cabinet.shelf_shown.get_mut(&key) {
-            if *done || reading {
-                *used = frame;
-                return (spine.clone(), Some(front.clone()));
-            }
+        if let Some((spine, front)) = self.cabinet.cached_front(&key, reading) {
+            return (spine, Some(front));
         }
         if later {
             if let Some((k2, spine)) = &self.cabinet.shelf_spine_only {
@@ -1707,8 +1903,9 @@ impl App {
         let sprite = pocket_ui::system_art::get(&info.system).or_else(|| emblem(item));
         let title = if reading { "" } else { info.title.as_str() };
         let t0 = Instant::now();
-        let spine = Rc::new(media::spine(&mut self.text, m, k, key.0.look, ""));
-        let front = Rc::new(media::front(
+        let spine = media::spine(&mut self.text, m, k, key.0.look, "");
+        let spine = Rc::new(self.stuck_spine(spine, m, k, &info.rom, key.0.case));
+        let front = media::front(
             &mut self.text,
             m,
             k,
@@ -1716,27 +1913,48 @@ impl App {
             title,
             label.as_deref(),
             if reading { None } else { sprite },
-        ));
+            &super::system_short(&self.systems, &info.system),
+        );
+        let front = self.stuck_front(front, m, k, &info.rom, key.0.case);
         self.cabinet.made("shown front", t0);
-        self.cabinet.shelf_shown.insert(key, (spine.clone(), front.clone(), !reading, frame));
+        self.cabinet.cache_front(key, spine.clone(), front.clone(), !reading);
         (spine, Some(front))
     }
 
     /// The row laid out again when the entries or the scale changed; the shelf then jumps to the selection.
-    fn shelf_row(&mut self, f: f32) -> bool {
+    fn shelf_row(&mut self, f: f32, view: i32) -> bool {
         let want = spine_want(f);
         if self
             .cabinet
             .shelf_row
             .as_ref()
-            .is_some_and(|r| r.f == f && r.want == want && r.items == self.items)
+            .is_some_and(|r| r.f == f && r.view == view && r.want == want && r.items == self.items)
         {
             return false;
         }
+        // Every spine starts on a multiple of four pixels: a small screen's picture is laid out larger and scaled down
+        // (`scaled_layout`: 2:1 on 640x480, 4:3 on 1280x720), and a spine starting between two of its pixels came out a
+        // pixel wider than the one beside it (the owner, 2026-10-29: "same platform, different sizes?").
+        let up4 = |v: i32| (v + 3) / 4 * 4;
         let gap = (2.0 * f).round() as i32;
-        let group_gap = (12.0 * f).round() as i32;
+        let group_gap = up4((12.0 * f).round() as i32);
         let mut spines = Vec::with_capacity(self.items.len());
-        let (mut x, mut tallest) = (0, 0.0f32);
+        // A few games: the row stands a little in from the shelf's end, not squeezed against it.
+        let natural: i32 = {
+            let mut end = 0;
+            for (i, &item) in self.items.iter().enumerate() {
+                if i > 0 && shelf_group(item) != shelf_group(self.items[i - 1]) {
+                    end += group_gap;
+                }
+                let w = (self.shelf_medium(item).template_size().spine as f32 * f).round() as i32;
+                end = up4(end + w + gap);
+            }
+            end - gap
+        };
+        // Only a lone game: a few are read from the shelf's end (Curator's seven in tests/shelf_end.rs, two games in
+        // tests/user_journeys.rs' sticker journey), one alone on a wide shelf is not a spine pressed against the wall.
+        let lead = up4(if self.items.len() == 1 { shelf_lead(natural, view) } else { 0 });
+        let (mut x, mut tallest) = (lead, 0.0f32);
         for (i, &item) in self.items.iter().enumerate() {
             if i > 0 && shelf_group(item) != shelf_group(self.items[i - 1]) {
                 x += group_gap;
@@ -1745,16 +1963,19 @@ impl App {
             let w = (m.template_size().spine as f32 * f).round() as i32;
             tallest = tallest.max(m.template_size().h as f32);
             spines.push((x, w, m));
-            x += w + gap;
+            x += up4(w + gap);
         }
+        let spines_end = spines.last().map_or(0, |&(x, w, _)| x + w);
         self.cabinet.shelf_row = Some(ShelfRow {
             items: self.items.clone(),
             f,
+            view,
+            lead,
             want,
             pics: vec![None; spines.len()],
             tiles: HashMap::new(),
             spines,
-            len: (x - gap).max(0),
+            len: spines_end,
             tallest,
         });
         true
@@ -1785,7 +2006,7 @@ impl App {
         // The spines' scale is the screen's; the room above them follows the row's tallest case.
         let f = shelf_layout(c.w, c.h, TALLEST).f;
         let now = Instant::now();
-        let new_row = self.shelf_row(f);
+        let new_row = self.shelf_row(f, c.w - 2 * MARGIN);
         let Some(mut row) = self.cabinet.shelf_row.take() else { return };
         let lay = shelf_layout(c.w, c.h, row.tallest);
         let sel = self.sel.min(n - 1);
@@ -1865,7 +2086,7 @@ impl App {
         if (scroll as f32) < max_scroll {
             fade_cols(c, lay.right - 48, lay.right, lay.floor - (TALLEST * lay.f) as i32 - lay.lift, lay.floor);
         }
-        let pitch = row.len as f32 / n as f32;
+        let pitch = (row.len - row.lead) as f32 / n as f32;
         self.cabinet.shelf_row = Some(row);
 
         // The selected case, large, turned to its front.
@@ -2110,6 +2331,68 @@ fn fade_cols(c: &mut Canvas, x0: i32, x1: i32, y0: i32, y1: i32) {
 mod shelf_tests {
     use super::*;
 
+    #[test]
+    fn warming_many_box_fronts_without_a_shelf_painter_releases_old_pixels_but_keeps_active_sources() {
+        let mut cabinet = CabinetUi::default();
+        let look = Look { color: 0x777777, band: 0x555555, plastic: 0x333333 };
+        let key = |i| (CaseKey {
+            rom: PathBuf::from(format!("/roms/gb/{i}.gb")), medium: Medium::Gb, look,
+            case: CaseStickers { completed: true, ..Default::default() },
+        }, 3000);
+        let mut probes = Vec::new();
+        for i in 0..100 {
+            // The productive stand_front/box_front path caches these same owned Pic/Rc pairs. No paint_shelf or
+            // frame advancement is needed for cache lifetime; the idle warmer may be the only thing making fronts.
+            let spine = Rc::new(Pic::new(24, 200, 0xff10_0000 + i));
+            let front = Rc::new(Pic::new(140, 200, 0xffa0_0000 + i));
+            cabinet.bare_fronts.remember(&front, Pic::new(140, 200, 0xffb0_0000 + i));
+            let bare = cabinet.bare_fronts.bare(&front);
+            probes.push((Rc::downgrade(&spine), Rc::downgrade(&front), Rc::downgrade(&bare)));
+            if i == 0 {
+                cabinet.box_game = Some((front.clone(), Rc::new(Pic::new(80, 90, 0xff00_ff00))));
+            } else if i == 1 {
+                cabinet.insert = Some(Inserting {
+                    at: Instant::now(), item: Item::Game(0, 1), system: "gb".into(), ff: FormFactor::of("gb"),
+                    medium: Medium::Gb, look, title: "Active launch".into(), kind: media::Game::of("gb", "1.gb"),
+                    has_cover: true, front: front.clone(), from: (0, 0, 140, 200), game: None, cozy: false,
+                });
+            }
+            cabinet.cache_front(key(i), spine, front, true);
+            assert!(cabinet.shelf_shown.len() <= 12, "actual cache entries remain bounded during 100 warm misses");
+            if i >= 2 {
+                let (_, held) = cabinet.cached_front(&key(2), false).expect("a repeatedly used front stays hot");
+                assert!(Rc::ptr_eq(&held, &probes[2].1.upgrade().unwrap()));
+            }
+        }
+        assert_eq!(cabinet.frame, 0, "the bound does not depend on either look's frame counter");
+        assert!(probes[0].0.upgrade().is_none(), "evicted spine pixels have no other owner");
+        for i in [0, 1] {
+            let front = probes[i].1.upgrade().expect("box and launch retain their own decorated front");
+            let bare = cabinet.bare_fronts.bare(&front);
+            assert_eq!(bare.px[0], 0xffb0_0000 + i as u32, "the cartridge still has the correct bare label after eviction");
+            assert!(Rc::ptr_eq(&bare, &probes[i].2.upgrade().unwrap()));
+        }
+        for (_, front, bare) in &probes[3..80] {
+            assert!(front.upgrade().is_none() && bare.upgrade().is_none(), "old front and bare pixel buffers are released together");
+        }
+        cabinet.box_game = None;
+        cabinet.insert = None;
+        cabinet.prune_fronts();
+        for i in [0, 1] {
+            assert!(probes[i].1.upgrade().is_none() && probes[i].2.upgrade().is_none(), "finished box/launch sources are released too");
+        }
+        // The same owner-cache is also used while the box's sticker sheet changes GOTY years, with neither look
+        // painting underneath it. CaseKey changes at a fixed ROM must obey the same lifetime bound.
+        let old = probes[2].1.clone();
+        for year in 1970..2070 {
+            let mut changed = key(0);
+            changed.0.case.goty = Some(year);
+            cabinet.cache_front(changed, Rc::new(Pic::new(24, 200, 0xff11_1111)), Rc::new(Pic::new(140, 200, 0xff22_2222)), true);
+        }
+        assert!(old.upgrade().is_none(), "the formerly hot entry is released when sheet edits replace it");
+        assert!(cabinet.shelf_shown.len() <= 12);
+    }
+
     /// At every screen size pocket-ui runs on, the shelf, the lifted spine and the shown front stay inside the screen,
     /// between the top line and the hints, and the front never runs into the shelf.
     #[test]
@@ -2137,13 +2420,36 @@ mod shelf_tests {
         let carts = shelf_layout(1240, 1080, Medium::Snes.template_size().h as f32);
         assert!(
             carts.show.3 > big.show.3 && carts.f == big.f,
-            "a shelf of cartridges: the same spines, more room for the front"
+            "a shelf of cartridge boxes: the same spines, more room for the front"
         );
         assert_eq!(big.f, 3.0, "the Mini V2: three screen pixels a template pixel");
-        assert!(
-            show_k(&big, Medium::Snes) * media::SHELF_SCALE >= 4.5,
-            "a SNES front is shown large on the Mini V2"
-        );
+        // The SNES box (0.1.4) lies wide when shown (on the shelf it stands on its short side): its real size, wider
+        // than a GBA box's.
+        let (snes_w, _) = media::front_size(Medium::Snes, show_k(&big, Medium::Snes));
+        let (gba_w, gba_h) = media::front_size(Medium::Gba, show_k(&big, Medium::Gba));
+        assert!(snes_w as f32 >= big.show.2 as f32 * 0.3, "a SNES box is shown large on the Mini V2: {snes_w} of {}", big.show.2);
+        // One scale for all (the owner, 2026-10-29): a SNES box half as wide again as a GBA box (184 to 118 mm), a PS2
+        // case taller than both.
+        assert!(snes_w as f32 >= gba_w as f32 * 1.4, "SNES {snes_w}, GBA {gba_w}");
+        let (_, ps2_h) = media::front_size(Medium::Ps2, show_k(&big, Medium::Ps2));
+        assert!(ps2_h as f32 >= gba_h as f32 * 1.5, "PS2 {ps2_h}, GBA {gba_h}");
+    }
+
+    #[test]
+    fn a_row_of_few_games_stands_in_from_the_shelf_end_and_a_full_one_does_not() {
+        assert_eq!(shelf_lead(60, 600), 180, "one spine: a third of the free room in");
+        assert_eq!(shelf_lead(299, 600), (600 - 299) / 3);
+        assert_eq!(shelf_lead(300, 600), 0, "half the shelf or more: from the end");
+        assert_eq!(shelf_lead(2000, 600), 0, "a long row scrolls from the end");
+    }
+
+    #[test]
+    fn a_lone_case_is_shown_in_the_middle_of_the_cabinet_not_in_its_corner() {
+        // A slot at the far left of a 608 px cabinet on a 640 px screen: a one-game shelf (60 px) shows it centred...
+        assert_eq!(show_centre(70.0, 100.0, 640.0, 40.0, 60, 608), 320.0);
+        // ...a full shelf keeps the case over its own slot, clamped to the screen.
+        assert_eq!(show_centre(70.0, 100.0, 640.0, 40.0, 900, 608), 90.0);
+        assert_eq!(show_centre(300.0, 100.0, 640.0, 40.0, 900, 608), 300.0);
     }
 
     #[test]

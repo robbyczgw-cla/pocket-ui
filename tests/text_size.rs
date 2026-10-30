@@ -172,6 +172,105 @@ fn in_medium_and_large_text_no_string_runs_into_another_or_off_its_room() {
     );
 }
 
+/// Native 1024x768 outputs do not use the H700's larger logical canvas. A two-line save note must still clear the keys.
+#[test]
+fn save_preview_notes_stay_above_the_hints_on_native_and_small_outputs() {
+    let tmp = tempfile::tempdir().unwrap();
+    fake_library(tmp.path());
+    let stub = wayland(tmp.path());
+    // Quiet fake data only; no backend or quantum changes are needed for a layout regression.
+    std::fs::write(tmp.path().join("data/sounds.json"), r#"{"on":false,"volume":0}"#).unwrap();
+    for dimensions in ["1024x768", "640x480"] {
+        for size in ["normal", "large"] {
+            for lang in ["en", "de"] {
+                for state in ["slot-save:psx", "slot-load:snes", "slot-auto", "slot-undo"] {
+                    let boxes = tmp.path().join("preview.box");
+                    let png = tmp.path().join("preview.png");
+                    let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+                    cmd.args(["--snapshot", state, png.to_str().unwrap()])
+                        .env("POCKETUI_MOCK", "1").env("POCKETUI_SOUND_QUANTUM", "0")
+                        .env("POCKETUI_ES_SYSTEMS", tmp.path().join("es_systems.cfg"))
+                        .env("POCKETUI_DATA", tmp.path().join("data"))
+                        .env("POCKETUI_SNAPSHOT_SIZE", dimensions).env("POCKETUI_TEXT_SIZE", size)
+                        .env("POCKETUI_LANG", lang).env("POCKETUI_TEXT_BOXES", &boxes);
+                    if let Some(s) = &stub { cmd.env("WAYLAND_DISPLAY", &s.path); }
+                    let out = cmd.output().unwrap();
+                    assert!(out.status.success(), "{state} {dimensions} {size} {lang}: {}", String::from_utf8_lossy(&out.stderr));
+                    let problems = std::fs::read_to_string(&boxes).unwrap();
+                    assert!(problems.trim().is_empty(), "{state} {dimensions} {size} {lang}: {problems}");
+                }
+            }
+        }
+    }
+}
+
+/// Hiding a label keeps its key and the space between keys: the final START must remain inside the output.
+#[test]
+fn shelf_hint_keys_stay_on_screen_when_the_last_labels_are_hidden() {
+    let tmp = tempfile::tempdir().unwrap();
+    fake_library(tmp.path());
+    let stub = wayland(tmp.path());
+    std::fs::write(tmp.path().join("data/sounds.json"), r#"{"on":false,"volume":0}"#).unwrap();
+    for dimensions in ["1024x768", "640x480"] {
+        for size in ["normal", "large"] {
+            for lang in ["en", "de"] {
+                for appearance in ["dark", "light"] {
+                    let settings_file = tmp.path().join("data/settings.json");
+                    let mut settings: serde_json::Value = serde_json::from_slice(&std::fs::read(&settings_file).unwrap()).unwrap();
+                    settings["appearance"] = appearance.into();
+                    std::fs::write(settings_file, serde_json::to_vec(&settings).unwrap()).unwrap();
+                    let boxes = tmp.path().join("hints.box");
+                    let png = tmp.path().join("hints.png");
+                    let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+                    cmd.args(["--snapshot", "shelf:snes:shelf:games:0", png.to_str().unwrap()])
+                        .env("POCKETUI_MOCK", "1").env("POCKETUI_SOUND_QUANTUM", "0")
+                        .env("POCKETUI_ES_SYSTEMS", tmp.path().join("es_systems.cfg"))
+                        .env("POCKETUI_DATA", tmp.path().join("data"))
+                        .env("POCKETUI_SNAPSHOT_SIZE", dimensions).env("POCKETUI_TEXT_SIZE", size)
+                        .env("POCKETUI_LANG", lang).env("POCKETUI_TEXT_BOXES", &boxes);
+                    if let Some(s) = &stub { cmd.env("WAYLAND_DISPLAY", &s.path); }
+                    let out = cmd.output().unwrap();
+                    assert!(out.status.success(), "{dimensions} {size} {lang} {appearance}: {}", String::from_utf8_lossy(&out.stderr));
+                    let problems = std::fs::read_to_string(&boxes).unwrap();
+                    assert!(problems.trim().is_empty(), "{dimensions} {size} {lang} {appearance}: {problems}");
+                }
+            }
+        }
+    }
+}
+
+/// Five built-in stickers plus the player's own: both ends of the scrolling sheet clear the hint bar.
+#[test]
+fn sticker_sheets_fit_short_outputs_and_scroll_to_the_last_choice() {
+    let tmp = tempfile::tempdir().unwrap();
+    fake_library(tmp.path());
+    let stub = wayland(tmp.path());
+    std::fs::write(tmp.path().join("data/sounds.json"), r#"{"on":false,"volume":0}"#).unwrap();
+    for dimensions in ["1280x720", "1024x768", "640x480"] {
+        for size in ["normal", "large"] {
+            for lang in ["en", "de"] {
+                for keys in ["", "dddddddd"] {
+                    let state = format!("curator:stickers:snes:chrono:{keys}");
+                    let boxes = tmp.path().join("stickers.box");
+                    let png = tmp.path().join("stickers.png");
+                    let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+                    cmd.args(["--snapshot", &state, png.to_str().unwrap()])
+                        .env("POCKETUI_MOCK", "1").env("POCKETUI_SOUND_QUANTUM", "0")
+                        .env("POCKETUI_ES_SYSTEMS", tmp.path().join("es_systems.cfg"))
+                        .env("POCKETUI_DATA", tmp.path().join("data"))
+                        .env("POCKETUI_SNAPSHOT_SIZE", dimensions).env("POCKETUI_TEXT_SIZE", size)
+                        .env("POCKETUI_LANG", lang).env("POCKETUI_TEXT_BOXES", &boxes);
+                    if let Some(s) = &stub { cmd.env("WAYLAND_DISPLAY", &s.path); }
+                    let out = cmd.output().unwrap();
+                    assert!(out.status.success(), "{state} {dimensions} {size} {lang}: {}", String::from_utf8_lossy(&out.stderr));
+                    let problems = std::fs::read_to_string(&boxes).unwrap();
+                    assert!(problems.trim().is_empty(), "{state} {dimensions} {size} {lang}: {problems}");
+                }
+            }
+        }
+    }
+}
+
 /// The choice in settings.json is what a start uses (no override here), and the Settings row says it.
 #[test]
 fn the_text_size_in_settings_json_is_used_and_shown_on_its_row() {
@@ -205,6 +304,40 @@ fn the_text_size_in_settings_json_is_used_and_shown_on_its_row() {
     assert!(medium.contains("O\tSchriftgröße") && medium.contains("Mittel ›") && !medium.contains("Groß"), "Medium chosen:\n{medium}");
     let normal = shot(r#"{"onboarded": true}"#, "normal");
     assert!(normal.contains("O\tSchriftgröße") && !normal.contains("Groß"), "nothing chosen: Normal\n{normal}");
+    drop(stub);
+}
+
+/// New-user test 2026-10-30: in German with Large text only three of the five Settings categories fit and nothing said
+/// there were more. A scroll bar at the right edge says so; with the five fitting (Normal) there is none.
+#[test]
+fn settings_categories_that_do_not_fit_show_a_scroll_bar() {
+    let _tmp_guard = tempfile::tempdir().unwrap();
+    let tmp = _tmp_guard.path().to_path_buf();
+    let stub = wayland(&tmp);
+    let edge_ink = |size: &str| -> usize {
+        let data = tmp.join(format!("data-{size}"));
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(data.join("settings.json"), format!(r#"{{"onboarded": true, "text_size": "{size}"}}"#)).unwrap();
+        let png = tmp.join(format!("groups-{size}.png"));
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+        cmd.args(["--snapshot", "settings", png.to_str().unwrap()])
+            .env("POCKETUI_MOCK", "1")
+            .env("POCKETUI_LANG", "de")
+            .env_remove("POCKETUI_TEXT_SIZE")
+            .env("POCKETUI_ES_SYSTEMS", tmp.join("none.cfg"))
+            .env("POCKETUI_DATA", &data);
+        if let Some(s) = &stub {
+            cmd.env("WAYLAND_DISPLAY", &s.path);
+        }
+        let out = cmd.output().expect("run pocket-ui");
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        let img = pocket_ui::image::load_png(&png).expect("snapshot written");
+        // The 4 px track starts 12 px from the edge, below the status pill and above the hint bar.
+        let (x0, rows) = (img.w as usize - 12, 120..(img.h as usize / 2));
+        rows.map(|y| (x0..x0 + 4).filter(|&x| img.px[y * img.w as usize + x] & 0xffffff != 0).count()).sum()
+    };
+    assert!(edge_ink("large") > 100, "Large text in German: a bar tells there are more categories");
+    assert_eq!(edge_ink("normal"), 0, "Normal text: all five fit, no bar");
     drop(stub);
 }
 

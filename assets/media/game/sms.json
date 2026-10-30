@@ -1,0 +1,5 @@
+{"label": [3, 0, 146, 22], "mm": [108, 69],
+ "mm_note": "108 x 69 x 16 mm: ConsoleMods 'Dimensions for Game Cartridges' (community measurement); the photo, straightened, gives the same proportions.",
+ "source": "https://commons.wikimedia.org/wiki/File:Sega-Master-System-Game-Cartridge-1.jpg", "licence": "Public domain", "author": "Evan Amos",
+ "pixellab": "raw-1.png: image-to-pixelart, input 1280x844 (persp.py, paint.py, prep.py), output 160x105, init_image_strength 150, text_guidance_scale 8",
+ "logos_removed": "the red grid label strip with Space Harrier and SEGA (flat grey, same outline); the photo was taken at an angle and straightened with tools/persp.py"}

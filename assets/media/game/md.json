@@ -1,0 +1,5 @@
+{"label": [27, 43, 99, 48], "mm": [112, 84],
+ "mm_note": "Estimated: the photo shows a Codemasters J-Cart (Mega Drive cartridge with two pad ports, ports painted out); width assumed 112 mm, height from the photo's proportions (575:428 px). No public-domain photo of a standard Mega Drive/Genesis cartridge exists on Commons.",
+ "source": "https://commons.wikimedia.org/wiki/File:Mega_drive_j-cart.jpg", "licence": "Public domain (PD-self; cover PD-ineligible)", "author": "32X (Wikimedia Commons user), not Evan Amos",
+ "pixellab": "raw-2.png: image-to-pixelart, input 1280x969 (prep.py), output 160x118, init_image_strength 150, text_guidance_scale 8",
+ "logos_removed": "J-CART embossing, the two controller ports with their CONTROLLER lettering (row-wise fill from the plastic either side), the whole Micro Machines 2 label (flat grey)"}

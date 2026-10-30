@@ -85,12 +85,14 @@ impl Keyboard {
         let rows = self.rows();
         match b {
             Button::Up => {
+                let from = self.row;
                 self.row = (self.row + rows.len() - 1) % rows.len();
-                self.clamp(&rows);
+                self.land(&rows, from);
             }
             Button::Down => {
+                let from = self.row;
                 self.row = (self.row + 1) % rows.len();
-                self.clamp(&rows);
+                self.land(&rows, from);
             }
             Button::Left => self.col = (self.col + rows[self.row].len() - 1) % rows[self.row].len(),
             Button::Right => self.col = (self.col + 1) % rows[self.row].len(),
@@ -134,9 +136,43 @@ impl Keyboard {
         Outcome::Editing
     }
 
+    /// After Up or Down from row `from`: the search keyboard keeps the column the way it is drawn (the key nearest to
+    /// where the cursor was, by x: rows differ in length and the last has wide keys, `search_centres`); the other
+    /// layout clamps.
+    fn land(&mut self, rows: &[Vec<Key>], from: usize) {
+        if !self.search {
+            return self.clamp(rows);
+        }
+        let x = search_centres(&rows[from])[self.col.min(rows[from].len() - 1)];
+        let to = search_centres(&rows[self.row]);
+        self.col = (0..to.len()).min_by(|&a, &b| (to[a] - x).abs().total_cmp(&(to[b] - x).abs())).unwrap_or(0);
+    }
+
     fn clamp(&mut self, rows: &[Vec<Key>]) {
         self.col = self.col.min(rows[self.row].len() - 1);
     }
+}
+
+/// The x of every key's middle in a search keyboard row, in key pitches from the row's middle: the rows are drawn
+/// centred (`app_search::paint_search_keys`), a letter is 1 wide, Delete and Done 2, Space 4.
+fn search_centres(row: &[Key]) -> Vec<f32> {
+    let widths: Vec<f32> = row
+        .iter()
+        .map(|k| match k {
+            Key::Special(Special::Space) => 4.0,
+            Key::Special(_) => 2.0,
+            Key::Char(_) => 1.0,
+        })
+        .collect();
+    let mut x = -widths.iter().sum::<f32>() / 2.0;
+    widths
+        .iter()
+        .map(|w| {
+            let c = x + w / 2.0;
+            x += w;
+            c
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -180,12 +216,42 @@ mod tests {
         assert!(!kb.shift && !kb.symbols);
         kb.press(Button::East);
         assert_eq!(kb.text, "q", "never upper case");
-        // Row 1 (10 keys) to row 2 (9 keys) from the last column: clamped.
+        // Row 1 (10 keys) to row 2 (9 keys) from the last column: the nearest key, the last one.
         kb.col = 9;
         kb.press(Button::Down);
         assert_eq!((kb.row, kb.col), (2, 8));
         kb.row = 4;
         kb.col = 2;
         assert_eq!(kb.press(Button::East), Outcome::Done("q".into()), "the last special is Done");
+    }
+
+    #[test]
+    fn up_and_down_on_the_search_keyboard_keep_the_column_as_drawn() {
+        let mut kb = Keyboard::for_search();
+        // Rows of 9 and 10 keys are both centred: "g", the middle of its row, is between "t" and "y" (a tie goes left).
+        let at = |kb: &Keyboard| match kb.rows()[kb.row][kb.col] {
+            Key::Char(c) => c.to_string(),
+            Key::Special(s) => format!("{s:?}"),
+        };
+        kb.row = 2;
+        kb.col = 4; // g, the middle of its row
+        kb.press(Button::Up);
+        assert_eq!(at(&kb), "t");
+        // Down to the bottom letters and on to the special row: Space is at 4 wide, Delete and Done 2 each.
+        kb.row = 3;
+        kb.col = 6; // m, the right end of the row
+        kb.press(Button::Down);
+        assert_eq!(at(&kb), "Done", "m is the row's right end, above Done, not column 6 clamped to the last of three");
+        kb.row = 3;
+        kb.col = 0; // z, far left
+        kb.press(Button::Down);
+        assert_eq!(at(&kb), "Space");
+        // Wrapping from the digits to the specials and back keeps the side.
+        kb.row = 0;
+        kb.col = 9;
+        kb.press(Button::Up);
+        assert_eq!(at(&kb), "Done");
+        kb.press(Button::Up);
+        assert_eq!(at(&kb), "m", "Done is at the right: the letter above it is m, not the third key of the row");
     }
 }

@@ -135,6 +135,33 @@ pub fn ago_from(then: u64, now: u64) -> String {
     }
 }
 
+/// The real time of a moment in the device's zone, for a save that must still be told apart next week: "today 14:02",
+/// "yesterday 21:10", "23 Oct 2026, 14:02". (`ago` goes stale: "just now" on a screenshot means nothing later.)
+pub fn when(then: u64) -> String {
+    let now = now_secs();
+    // The zone's offset east of UTC at that moment, from the C library (the device's own zone).
+    let t = then as libc::time_t;
+    // SAFETY: localtime_r only writes into the struct handed in.
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    let tz = if unsafe { libc::localtime_r(&t, &mut tm) }.is_null() { 0 } else { tm.tm_gmtoff as i32 };
+    when_at(then, now, tz)
+}
+
+/// `when` for a given `now` and zone (`tz` seconds east of UTC).
+pub fn when_at(then: u64, now: u64, tz: i32) -> String {
+    use crate::play_history::{civil, local_day};
+    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    let clock = crate::timezone::clock_at(then as i64, tz);
+    match local_day(now, tz) - local_day(then, tz) {
+        ..=0 => format!("today {clock}"),
+        1 => format!("yesterday {clock}"),
+        _ => {
+            let (y, m, d) = civil(local_day(then, tz));
+            format!("{d} {} {y}, {clock}", MONTHS[(m as usize).saturating_sub(1).min(11)])
+        }
+    }
+}
+
 /// "under a minute", "12 min", "1 h 05 min".
 pub fn duration(secs: u64) -> String {
     let m = secs / 60;
@@ -250,5 +277,20 @@ mod tests {
         r.follow_library(&systems);
         assert_eq!(names(&r), ["Disc1", "Tetris"], "a game the library does not have keeps its plain name");
         assert_eq!(r.list.len(), 2);
+    }
+
+    #[test]
+    fn a_save_is_told_by_its_real_time_not_by_how_long_ago() {
+        use super::when_at;
+        // 2026-10-30 14:00 UTC; the zone is UTC+2.
+        let now = 1_793_368_800;
+        let tz = 7200;
+        assert_eq!(when_at(now - 30, now, tz), "today 15:59");
+        assert_eq!(when_at(now - 3 * 3600, now, tz), "today 13:00");
+        assert_eq!(when_at(now - 20 * 3600, now, tz), "yesterday 20:00");
+        assert_eq!(when_at(now - 7 * 86_400, now, tz), "23 Oct 2026, 16:00");
+        // Just after midnight in the zone, 23:30 the evening before is yesterday, though under an hour ago.
+        let night = 1_793_313_000; // 2026-10-30 00:30 local
+        assert_eq!(when_at(night - 3600, night, tz), "yesterday 23:30");
     }
 }

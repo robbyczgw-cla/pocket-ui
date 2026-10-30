@@ -44,6 +44,8 @@ pub(crate) struct Identify {
     looking: Option<PathBuf>,
     /// The games (system id, ROM path) the last run was given: another list is a reason to run.
     last_games: Vec<(String, PathBuf)>,
+    /// A changed (or removed) recognized name still needs to reach the shelf, even across a stopped run.
+    names_rescan_due: bool,
 }
 
 impl Identify {
@@ -121,13 +123,17 @@ impl App {
                 let changed = *i.names != run.names;
                 // A PlayStation disc's name is the shelf's name too (`disc_serial`): a new one reads the list again,
                 // off the UI thread, so the shelf shows it (the scan finds the serial in `<data>/identify/`).
-                let discs_named = changed
-                    && run.names.keys().any(|p| {
-                        self.systems.iter().any(|s| pocket_ui::disc_serial::dat(&s.name).is_some() && s.games.iter().any(|g| &g.path == p))
+                // A cartridge's too (`library::names_ready`): "Supar Mario Land 2" shows as the game its checksum says.
+                pocket_ui::library::names_ready(true);
+                i.names_rescan_due |= changed
+                    && self.systems.iter().any(|s| {
+                        (pocket_ui::disc_serial::dat(&s.name).is_some() || pocket_ui::rom_id::dat_name(&s.name).is_some())
+                            && s.games.iter().any(|g| i.names.contains_key(&g.path) || run.names.contains_key(&g.path))
                     });
                 i.names = Arc::new(run.names);
                 if changed {
                     self.names_changed();
+                    println!("identify: changed names kept for the shelf");
                 }
                 if std::mem::take(&mut self.identify.again) {
                     self.identify.due = true;
@@ -135,9 +141,7 @@ impl App {
                 // The covers and descriptions waited for the names (or this runs once more first). Not after a run
                 // a game stopped: the game runs.
                 if !run.stopped {
-                    if discs_named {
-                        self.library_rescan("games recognised");
-                    }
+                    self.identify_names_rescan();
                     self.auto_covers("games recognised");
                 }
             }
@@ -148,10 +152,11 @@ impl App {
                     Some(n) => names.insert(path.clone(), n.clone()).as_ref() != Some(n),
                     None => names.remove(&path).is_some(),
                 };
-                // A disc's name is the shelf's name too (`disc_serial`): the list is read again for it.
-                let disc_renamed = changed
-                    && name.is_some()
-                    && self.systems.iter().any(|s| pocket_ui::disc_serial::dat(&s.name).is_some() && s.games.iter().any(|g| g.path == path));
+                // A manual lookup read the cache too. A new or removed cartridge/disc name must reach the shelf,
+                // including a replaced ROM that no DAT recognizes any more.
+                pocket_ui::library::names_ready(true);
+                self.identify.names_rescan_due |= changed
+                    && self.systems.iter().any(|s| (pocket_ui::disc_serial::dat(&s.name).is_some() || pocket_ui::rom_id::dat_name(&s.name).is_some()) && s.games.iter().any(|g| g.path == path));
                 self.identify.names = Arc::new(names);
                 if changed {
                     self.names_changed();
@@ -173,10 +178,19 @@ impl App {
                     self.identify.due = true;
                     self.auto_covers("after look up again");
                 }
-                if disc_renamed && self.running.is_none() {
-                    self.library_rescan("after look up again");
-                }
+                self.identify_names_rescan();
             }
+        }
+    }
+
+    /// Retry a shelf-name refresh after a stopped run or a scan that was already in flight. The normal idle path is
+    /// one flag check; the actual library read stays on the existing scan worker.
+    pub(crate) fn identify_names_rescan(&mut self) {
+        let i = &self.identify;
+        if i.names_rescan_due && !i.running && i.looking.is_none() && self.running.is_none()
+            && self.library_rescan("games recognised")
+        {
+            self.identify.names_rescan_due = false;
         }
     }
 

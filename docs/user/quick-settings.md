@@ -85,6 +85,8 @@ Sleep works in two steps, each with its own time in Settings → System → **Sl
 - **Low battery.** At 5% (on battery) a note says so, on the shelf and over a game on pocket-ui's own host. At 2% the Pocket saves the
   running game and switches itself off, as Power off does, so the game is not lost when the battery runs out, even
   when it lies dark in light sleep. On the charger, none of this happens.
+- A system sleep block also keeps automatic sleep, the Sleep menu and lid sleep from suspending. The screen
+  stays dark; press a button to wake it. The physical power button can still put it to sleep.
 - If the system does not manage to suspend, the screen stays dark and it tries again after 4, 8, 16 and then every
   30 minutes.
 
@@ -103,7 +105,7 @@ heading **Power button**.
 | Row | Choices (default in bold) |
 |---|---|
 | **Screen off after** | Never, 30 s, 1 min, **2 min**, 5 min without a button press before the screen goes dark (light sleep). In a game the game pauses. Never: the screen stays on until you press the power button |
-| **Sleep after** | Never, 1 min, **2 min**, 5 min, 15 min with the screen off by itself before the Pocket goes to sleep (deep sleep, the game saved first). Never: it stays awake with the screen dark until you press a button, which uses the battery; at 2% it still saves and switches off |
+| **Sleep after** | Never, 1 min, **2 min**, 5 min, 15 min with the screen off by itself before the Pocket goes to sleep (deep sleep, the game saved first); a system sleep block keeps it in light sleep. Never: it stays awake with the screen dark until you press a button, which uses the battery; at 2% it still saves and switches off |
 | **Switch off after sleeping** | **Off**, 1 h, 3 h, 8 h asleep on battery before the Pocket saves the game and switches off (above) |
 | **Short press** | **Sleep**, Screen off: what a short press of the power button does |
 | **Hold** | **Power menu**, Sleep: what holding the power button for about a second does |

@@ -8,7 +8,9 @@
 
 ## Concept
 Every list is a shelf of **spines**. In the Shelf look (the default) every game stands on one shelf as its
-system's real case, seen from the spine: a SNES cartridge, a PlayStation jewel case, a PS2 DVD case. The selected
+system's real case, seen from the spine: a SNES game's cardboard box, a PlayStation jewel case, a PS2 DVD case. The
+game itself (the cartridge, card or disc) is inside: it comes out when the box is opened and goes into the console when
+the game starts. The selected
 one is **pulled out**: it rises out of the row and is shown large above the shelf, turned to its front with the
 cover. This is the one memorable element; everything around it stays quiet. (The other looks keep the older idea,
 a list of spines with an edge stripe.)
@@ -25,7 +27,8 @@ brackets show each rule (`pocket-ui --snapshot <state>`, docs/DEVELOPING.md).
 - **Where they meet:** the selection is the same paper on both (the pulled-out label's `#ECE9E1`, `select` =
   `label`; the pause menu's title pill too), the neutrals lean warm like paper and walnut (never blue-grey), and the
   sheet borrows the shelf's pixel art only for things: an empty page's vignette, the handheld, the category icons,
-  the emblem on a box that is not a game. Text is never pixel art; a physical thing is never a flat drawing.
+  the emblem on a box that is not a game, the memory card or cartridge the save slots stand on (`slot-save:psx`,
+  `slot-load:snes`, `src/save_media.rs`). Text is never pixel art; a physical thing is never a flat drawing.
 
 **Type.** Barlow Condensed SemiBold (Title) for names and headings, Barlow Medium (Body) for everything read. Shelf:
 Title 67 / 50 / 37, Body 28, hints 21. Sheet: page title Title 50, the pause menu's items Body 46, rows Body 36,
@@ -89,7 +92,10 @@ down 20 px in 150 ms, hints crossfade in 120 ms. Motion Off: everything at once.
 **Sound** (`src/ui_sound.rs`, the sample set in `assets/ui-sounds`): one sound per kind of feedback, the same on
 both surfaces. Selection or value moved: Nav. Chosen, switched, the box turned: Confirm. Up a level or closed: Back.
 Pause menu or quick settings opened: Menu. Switcher: Switcher. Refused: Error. Vol+/Vol-: Volume. Screenshot:
-Shutter. The launch's cartridge going in: Insert (the click lands with the motion, at 180 ms). Never during play.
+Shutter. X on a game in the Shelf or Cabinet: CaseOpen (plastic) or BoxOpen (a cartridge's cardboard box), instead of
+Confirm. The launch, Quick: Insert, a quiet click (-6 dB) that lands with the motion at 180 ms. Cozy: the case opens at
+A, the game goes in with its medium's sound (CartIn, DiscIn, CardIn), its click on `IN_AT_COZY`, and CrtOn with the
+old-TV power-on (pocket-core plays it into the game's sound). Never during play.
 
 **Voice.** Plain gamer words, short, sentence case; say what happens, then what to do ("No screenshots yet" / "Hold
 HOME and press A while you play to take one."). No hi-fi or engineering jargon, no exclamation marks, "…" for
@@ -173,7 +179,9 @@ and its neighbours, the list scrolling with a bar at the right edge) and keeps n
 explanation shows free below; with the 7 rows of a GBA game it would otherwise be a strip about 40 px high. Normal
 shows every row, as before. Where there is no room, text is cut with "…" or wrapped (`Text::fit`,
 `Text::wrap`, `Text::paragraph`, which ends the last line it has room for with "…"), never in the middle of a word without
-it, and a hint bar lets the last labels go and keeps their keys. A Settings list's description of the selected row
+it, and a hint bar lets the last labels go and keeps their keys. The loose Shelf-family bar keeps the gaps between
+keys when labels go; its width budget includes those gaps, so the last key stays inside native 1024×768 at Large too.
+A Settings list's description of the selected row
 sits beside the hint bar on its line; when it does not fit there (German, Large) it takes up to two lines above the
 bar, and the category keeps that room for all its rows, so the list does not move as the selection does. Fixed pictures keep the design's sizes
 (`type_scale::unscaled`/`fixed`): the titles on the Cabinet's case spines and its shelf cards (as thick as the case),
@@ -527,13 +535,62 @@ The physical idea taken literally: a dark walnut cabinet, one shelf per system (
 then Favourites), every game standing in its real case.
 
 ### Media (`src/media.rs`, `assets/media`)
-Nineteen kinds of media, one pixel-art template each (spine and front, `assets/media/<kind>-spine.png`, `-front.png`),
-shared by the Cabinet and the Shelf look: Super Nintendo / Super Famicom cartridge (grips at the top corners), Nintendo
-64 cartridge (wide, a ribbed slope), NES / Famicom cartridge (tall, a grooved end), Game Boy / Color cartridge (the cut
-corner), Game Boy Advance cartridge (wide, the notch), a generic console cartridge, the Mega Drive's clamshell case,
-the Master System's and Game Gear's case with the white grid, the thin PlayStation jewel case, the light Saturn /
-Dreamcast / Mega-CD case, a generic jewel case, the tall black PS2 case, the GameCube's, the white Wii case, a plain DVD
-case (other DVD systems and Curator's boxes), the PSP's UMD case, the DS and the 3DS card boxes, the original Xbox's black case with its green band (`Medium::of`).
+**Shelf and Cabinet always show cases** (0.1.4, the owner's rule): never a bare cartridge. Twenty-one kinds of case, one
+pixel-art template each (spine and front, `assets/media/<kind>-spine.png`, `-front.png`), shared by the Cabinet and the
+Shelf look (`Medium::of`):
+- **Own cases for the popular systems:** the cardboard boxes of the Super Nintendo / Super Famicom, the Nintendo 64 (both
+  lie wide and stand on their short side on the shelf, as collectors keep them: the spine is 184 mm long), the NES /
+  Famicom (standing), the Game Boy / Color and the Game Boy Advance; the Mega Drive's clamshell, the thin PlayStation
+  jewel case, the light Dreamcast case (also Saturn and Mega-CD), the tall black PS2 case, the GameCube's, the white Wii
+  case, the PSP's UMD case, the DS case, the original Xbox's black case with its green band. Kept because they already
+  look right: the Master System's and Game Gear's case with the white grid, the 3DS case, the Vita case with its blue
+  band; a plain DVD case stays for Curator's boxes.
+- **One generic pocket-ui case for every other system** (`Medium::is_generic`, the owner, 2026-10-29): warm dark plastic, the
+  cover in a clear sleeve, a band at the top of the front in the system's colour with its console picture and short name
+  (`media::system_band`; the band alone on the spine). One size per kind of medium: a cartridge system's
+  (`GenericCart`, 130 × 180 mm, a generic cartridge inside), a disc system's (`GenericDisc`, DVD size, a disc inside),
+  and one for what comes on no medium (`GenericDigital`, 105 × 136 mm, a memory card inside: Ports, PICO-8, TIC-80,
+  ScummVM, OpenBOR, WiiWare, PSP minis…, `media::is_digital`).
+- **The plastic cases from photos** (0.1.4, `assets/media/case/SOURCES.md`): the PS1 jewel case, the PS2, GameCube,
+  Wii, Xbox, DS, 3DS and PSP cases, the Dreamcast / Saturn case and pocket-ui's own generic cases are PixelLab conversions
+  of public-domain / CC0 photos (a CD jewel case, a DVD case, Evan Amos's Wii case; Commons has none of a GameCube,
+  Xbox, PSP, DS or 3DS case, so those are the DVD and Wii case fitted to their own size and plastic), at twice the
+  template size (`Template::res`), the cover's and title's places one flat grey (`case/<kind>.json`). A cover of
+  another shape (a DS cover, a European Saturn cover) is fitted whole, never cut. The cardboard boxes, the Mega Drive's
+  and the Master System's cases are still drawn (`draw_media.py`). The table is printed by
+  `assets/media/case/tools/table.py`.
+- **What is inside** (`media::Game`, `assets/media/game/<kind>.png`): every cartridge and game card is made from a
+  photo of the real thing (Evan Amos and other public-domain / CC0 photos on Wikimedia Commons, listed with their URLs
+  in `assets/media/game/SOURCES.md`), logos and lettering painted out, converted with PixelLab `image-to-pixelart`
+  (2–3 variants each, the closest to the photo kept; the owner's decision of 2026-10-29: drawn cartridges did not read
+  like the originals): the Super Famicom / PAL and the US SNES cartridge (`Game::of` picks the US one for a game whose
+  file says USA or Canada), N64, NES, Game Boy, Game Boy Color, GBA, the DS card, Mega Drive, Master System, Game Gear,
+  the PC Engine HuCard, and a neutral cartridge for every other cartridge system (grey, taking the system's plastic).
+  No public-domain photo exists of a 3DS card, a Neo Geo Pocket, WonderSwan or Lynx cartridge: those use the DS card and
+  the neutral cartridge. The label area of each picture is one flat grey (its rectangle in `<kind>.json`); the cover is
+  put there at run time edge to edge without the box's printed side strip (`media::trim_system_band`: the Game Boy's and GBA's at the left, the US SNES box's black band at the right, the Genesis strip at the left or top; cut at its edge, or at its usual width where the strip runs into dark art) or the even margin round it (`trim_bands`), or the title written to fit
+  (`label_title`: smaller, up to three lines, without the subtitle, only then "…"). Discs and UMDs are painted round
+  (`cabinet_art::disc`, `umd`); the memory card of the digital systems is still drawn. The table in `src/media.rs` is
+  printed by `assets/media/game/tools/table.py`.
+- **Real sizes, one scale** (the owner, 2026-10-29): every case is drawn from the real thing's millimetres at 0.63 template
+  pixels a millimetre (a DVD case's 190 mm is 120 px; `Medium::mm`, `Game::mm`), so a GBA box stands lower than a Game
+  Boy box, a jewel case is wider than tall, a PS2 case tall. What is inside keeps its real size to its case
+  (`Game::size_beside`): a SNES cartridge nearly fills its box, a DS card is small in its case, never under 48 screen
+  pixels high (`media::GAME_MIN`) so its label still shows on 640 × 480. Spines alone are thicker than life, so a title
+  fits. The case out of the shelf is shown at one scale for all, the one the largest case needs to fit the room
+  (`show_k`, `show_scale`), never under 0.6 of a case's own (`SHOW_LEAST`): a GBA box comes out smaller than a PS2 case.
+
+| Case (W × H mm) | template px | Inside (W × H mm) |
+|---|---|---|
+| SNES box 184 × 133, N64 box 184 × 130 (spines 184 long) | 116 × 84 / 82 | Super Famicom / PAL cartridge 130 × 86, US SNES 130 × 84, N64 cartridge 116 × 75 |
+| NES box 133 × 184 | 84 × 116 | NES cartridge 120 × 133 |
+| Game Boy box 120 × 128, GBA box 118 × 118 | 76 × 81, 74 × 74 | GB cartridge 57 × 65, GBA cartridge 57 × 35 |
+| Mega Drive / Master System case 135 × 190 | 85 × 120 | MD cartridge 112 × 84, Master System 108 × 69, Game Gear 68 × 68, HuCard 54 × 85, neutral cartridge 80 × 100 |
+| PS1 jewel case 142 × 125, Dreamcast case 142 × 127 | 90 × 79 / 80 | disc Ø 120 |
+| PS2 / Wii / Xbox / generic disc case 135 × 190, GameCube 135 × 184 | 85 × 120 / 116 | disc Ø 120 |
+| PSP UMD case 104 × 175 | 66 × 110 | UMD 64 × 65 |
+| DS / 3DS case 125 × 137, Vita / generic digital case 105 × 136 | 79 × 86, 66 × 86 | game card 35 × 33, memory card 24 × 32 |
+| generic cartridge box 130 × 180 | 82 × 113 | neutral cartridge 80 × 100 |
 - **Drawn, not generated.** The templates come from `assets/media/tools/draw_media.py` (plain shapes, no logo or
   lettering; it prints the table of label rectangles that `media.rs` keeps). PixelLab was tried for them first (bitforge
   and pixflux with the drawn shape as init image, the console pictures as style): it either returned the drawing
@@ -541,16 +598,24 @@ case (other DVD systems and Curator's boxes), the PSP's UMD case, the DS and the
 - **One template pixel is 2.5 screen pixels** on the Cabinet's shelf (`media::SHELF_SCALE`; it was two until
   2026-10-28, when a cabinet of a few games looked empty), the Shelf look's own scale on its shelf; scaled by nearest
   pixel, so they stay pixel art.
-  Cartridges are drawn in a neutral grey and take their system's plastic (`cabinet_art::plastic`: Game Boy grey, GBA
-  indigo-grey, N64 charcoal…); cases are drawn in their own colours. Every template pixel is solid or empty (the decoder
-  reads half-transparent as empty).
-- **Sizes** keep the real order (in the Cabinet: GBA 140 px high, Game Boy 165, SNES 195, NES 220, PS1 220, DS 238,
-  UMD 258, GameCube 278, Mega Drive 295, PS2 and Wii 300); thicknesses are exaggerated so a title fits (33 px for the
-  thin jewel case, 55 for a SNES cartridge). Each case stands at its own size, all on the board (one baseline); a shelf
+  A cardboard box's front is its printed cover edge to edge: one pixel of card round it (`card_edge`), the tuck flap's
+  fold and rubbed corners over the cover (`box_wear`). Its spine is its system's printed spine, the same on every box of
+  the system (`spine_print`: the US Super Nintendo's grey with a dark band, the Nintendo 64's black with the red band, the
+  NES's black box, the Game Boy's and the Game Boy Advance's white with their band); the
+  cartridges inside take their system's plastic (`cabinet_art::plastic`: Game Boy grey, GBA indigo-grey, N64
+  charcoal…); cases are drawn in their own colours. Every template pixel is solid or empty (the decoder reads
+  half-transparent as empty).
+- **Sizes** are the real ones (above; in the Cabinet: GBA box 185 px high, PS1 198, Game Boy 203, DS 215, UMD 275,
+  NES / SNES / N64 290, GameCube 290, Mega Drive, PS2 and Wii 300); thicknesses are exaggerated so a title fits (33 px for
+  the thin jewel case, 60 for a SNES box). Each case stands at its own size, all on the board (one baseline); a shelf
   is as tall as its tallest case.
 - **Spines** (`media::spine`): the template, the label in the cover's main colour with a thin printed edge, the title
   read top to bottom in ink or chalk by the colour's brightness, as large as the label takes up to 37 px (28 on a Game
-  Boy Advance cartridge, 24 on the thin jewel case; it was 21 to 24, too small at arm's length); cases with a
+  Boy Advance box, 24 on the thin jewel case; it was 21 to 24, too small at arm's length). A long title is never cut
+  while there is another way (`media::spine_fit`, trailer frames of 2026-10-29: "Advance…", "Donkey Kon…"): a little
+  smaller (seven tenths of its size); on two lines across a thick spine, a subtitle on a line of its own without its
+  dash ("Prince of Persia" over "The Sands of Time"); smaller still, down to 21 px; the same without the subtitle after
+  " - " or ": "; only then with "…" (tests/spine_titles.rs: long official titles at 640 × 480 and 1280 × 720). Cases with a
   band at the top (Mega Drive, the light Sega case, the generic ones) paint it in the cover's **accent**
   (`media::cover_colors`: a clear colour of the cover far from the main one, at least 1.5 % of it; the main one again when
   there is none). Without a cover: the system's stripe, darkened. The colours are read on the `cabinet-art` thread
@@ -580,19 +645,24 @@ than the shelf's room. Never over a game. The Shelf look uses the same props at 
   than the showcase (`show_scale`). Simple perspective: each face is a run of columns whose height
   follows its distance; at rest the front is copied as it is, sharp.
 - **Starting** a game (Settings → Look & feel → Animations, Cabinet and Shelf looks; `app_cabinet::launch_animation`). The
-  numbers below are Quick; Cozy plays the same shape over `cabinet::INSERT_COZY` (1330 ms, in at `IN_AT_COZY` 800 ms, click
-  `Sound::InsertCozy`), slows every timed animation by `motion::COZY_SLOWER` (1.4) and holds a pocket-core game's window
+  numbers below are Quick; Cozy plays the same shape over `cabinet::INSERT_COZY` (1330 ms, in at `IN_AT_COZY` 800 ms; sounds:
+  the case opening at A, `ui_sound::going_in` seated at 800 ms, `Sound::CrtOn` from pocket-core with the old-TV power-on), slows every timed animation by `motion::COZY_SLOWER` (1.4) and holds a pocket-core game's window
   until the fade has run (`startup::HOLD_UNTIL`; pocket-core draws nothing and is silent meanwhile, a button ends it):
-  the game is started at A, and while it loads the console's pixel-art picture comes up, the cartridge goes into
-  its slot, a disc slides out of its case first; in at 180 ms (`cabinet::IN_AT`) with a click (`Sound::Insert`, the
-  shutter's second click, queued at A with 170 ms of silence before it) and a glow in the label's colour, done at
+  the game is started at A, and while it loads the console's pixel-art picture comes up, the case opens and the game
+  slides out of it (the cartridge, card or disc, at its real size beside the case), the case fades and the game goes
+  into the console, the same way for every system (0.1.4; the cartridge is made in the first frame of the animation,
+  after the game's process has started, from the cover on the case's front); in at 180 ms (`cabinet::IN_AT`) with a click (`Sound::Insert`, a
+  short latch click, 6 dB under the other sounds, queued at A so that it lands at 170 ms, `ui_sound::play_after`) and a glow in the label's colour, done at
   300 ms (`cabinet::INSERT`). The launch fade waits for the click. Nothing waits for the animation: a game whose
   window comes up first covers it, and any button skips it. Until 2026-10-28 the game was started only when the
   cartridge reached the slot (260 ms after A), which added that to every start in these looks. Cartridges stay
   half out of the console, as they do.
 - **The game box** (X on a game; SELECT switches to the page and back, `game_box.rs`): the card as the game's box in its case's style, front and
   back, turned over with Left/Right in 280 ms (Motion Off: at once) by narrowing one face to its edge and widening
-  the other. The frames of the backs and of the cartridges' cardboard box are PixelLab pixel art
+  the other. The front is the case as it stands on the shelf, opened: its game slides out of it to its right in
+  300 ms (`game_box::OPEN`, Motion Off at once) and comes all the way out beside it, a little apart, at its real size, so its label shows whole
+  (`case_height` makes the case smaller where both would not fit across the screen, a SNES box on 640 × 480). The
+  frames of the backs (and, while the case's front is not made yet, the cardboard box's front) are PixelLab pixel art
   (`assets/media/back`, `tools/` there), nine-slice at a whole number of screen pixels a template pixel; the back's
   paper is the cover's colour, deep, with white type; missing pictures and text get their own plain places.
 - Names of the shelves are on small paper cards in brass holders on the board edges, Body 20 px; a sticker's
@@ -605,6 +675,52 @@ than the shelf's room. Never over a game. The Shelf look uses the same props at 
   included.
 - Everything around stays as in the other looks: black around the cabinet, the shelf's name and the battery
   in Dust, the game's title in Title 50 Chalk with its meta line under it, the hint pills at the bottom.
+
+### Case stickers (`src/case_stickers.rs`)
+The collector's marks on a case (0.1.4): **Completed** (a green round sticker with a white tick), **100 %** (a gold
+seal with a scalloped edge), **Favourite** (an amber star), **Playing now** (an orange-red round one with a pad) and
+**Game of the year** (a gold banner with a laurel wreath and the player's year). Printed stickers with a white die-cut
+edge, PixelLab pixel art in our style (`assets/media/stickers`, prompts and seeds in `pixellab-assets.json`; the Game of
+the year banner's frame drawn around a generated wreath, the two generated banners were unusable); no lettering in the
+pictures: "100 %", "Game of the year" and the year are Barlow (Title for the numbers, Body for the words), in a dark
+gold ink, centred on the sticker's plain print, as large as it takes. Too small for the words (a case out of a 640 x 480
+shelf), Game of the year shows only its year.
+
+- **On the front** (the case out of the shelf, the Shelf look's front, the game box): a round sticker is 15 % of the
+  front's width (a 20 mm sticker on a 135 mm case), scaled by nearest pixel; the round ones stand in a row from the
+  cover's top right corner leftwards, a second row under it when the cover is narrow; Game of the year at the cover's
+  bottom left. Each is turned 3-9 degrees, alternately left and right, and stays a little off the line, the same for a
+  game every time (from its file), with a one-pixel shadow under its lower edge. Never off the cover.
+- **On the spine**: one small sticker in the spine's top above the title (where its band is), without words, as large
+  as the spine's width lets it: the first of Game of the year (as the gold seal), 100 %, Completed, Playing now,
+  Favourite. The title keeps all its room.
+- The cartridge, card or disc inside has none: they are on the case (`app_case_stickers::bare_front`).
+- Set on the card's Stickers row (its sheet's first five rows, before the player's own Curator stickers; Left/Right
+  on Game of the year change its year, from the game's release year or this year).
+  The sheet's row window fits the available height and text size, including its title and padding above the hints;
+  more rows scroll through it (at most eight visible).
+
+### The TV on the cabinet (`src/cabinet_tv.rs`)
+A small 1990s portable CRT in warm beige stands on the right end of the top board, in the showcase, and shows the
+selected game (`cabinet_tv` module doc). PixelLab pixel art generated from text (Wikimedia Commons had no clean
+public-domain photo of a 90s portable; `assets/media/tv/SOURCES.md`), its glass one flat magenta that the code finds.
+
+- **Size**: a fifth of the screen's height, a whole number of screen pixels a template pixel from two on (three on the
+  Mini V2: 243 x 213 px), at most a quarter of the screen's width and the showcase's height; left out when its glass
+  would be under 60 px high. It is not sized by the case, so it stays put as the selection moves between shelves.
+- **The picture**: the downloaded screenshot, else the resume state's preview or the frame kept at Quit, else the
+  cover, else the console's picture on the dark tube; cut to fill the glass from its middle. The CRT look: the corners
+  pulled in a little (a curved tube), every second line darker (scanlines at the picture's scale), darker towards the
+  rim, a little warmer, and a soft glow from each pixel's neighbours. Never animated: no flicker, no noise.
+- **Changing**: the next game's picture crossfades in over 220 ms once it is made (Motion Off: at once); until then
+  the last one stays. The case out of the shelf keeps left of the TV.
+- **Freshness**: picture downloads/library changes and returning from a game discard the TV loader's cache,
+  including its pending replies. Jobs and replies carry a generation; invalidation keeps the same single decoder
+  thread, and an old reply cannot clear a new request for the same picture. The current picture stays until its
+  replacement arrives, even when a resume preview
+  or screenshot was replaced at the same path.
+- **Waiting**: the common event loop drains completed TV jobs even while Settings, a card or another look hides
+  the Cabinet. A hidden TV stops requesting frames once its job ends; returning to the Cabinet uses the ready screen.
 
 ## Shelf look (`app_cabinet.rs`, "the Shelf look")
 The default look; its layout is under [Layout](#layout-12401080-left-aligned-72-px-margin).

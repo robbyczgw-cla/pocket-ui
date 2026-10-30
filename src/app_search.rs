@@ -64,23 +64,25 @@ enum Slot {
 /// Reads covers on its own thread, newest request first; shrunk to the size asked for.
 #[derive(Clone)]
 struct Reader {
-    queue: Arc<(Mutex<VecDeque<Job>>, Condvar)>,
+    queue: JobQueue,
+    generation: Arc<std::sync::atomic::AtomicU64>,
     done: Arc<Mutex<Vec<Read>>>,
 }
 
 /// A cover by ROM and size; a job (the cover's possible files); what was read.
 type ThumbKey = (PathBuf, i32);
 type Job = (ThumbKey, Vec<PathBuf>);
+type JobQueue = Arc<(Mutex<VecDeque<(u64, Job)>>, Condvar)>;
 type Read = (ThumbKey, Option<Image>);
 
 impl Reader {
     fn start() -> Option<Reader> {
-        let r = Reader { queue: Default::default(), done: Default::default() };
+        let r = Reader { queue: Default::default(), done: Default::default(), generation: Default::default() };
         let worker = r.clone();
         std::thread::Builder::new()
             .name("search-covers".into())
             .spawn(move || loop {
-                let (key, candidates) = {
+                let (generation, (key, candidates)) = {
                     let (lock, cv) = &*worker.queue;
                     let mut q = lock.lock().unwrap();
                     loop {
@@ -91,7 +93,10 @@ impl Reader {
                     }
                 };
                 let img = read_thumb(&candidates, key.1);
-                worker.done.lock().unwrap().push((key, img));
+                let mut done = worker.done.lock().unwrap();
+                if generation == worker.generation.load(std::sync::atomic::Ordering::Acquire) {
+                    done.push((key, img));
+                }
             })
             .ok()?;
         Some(r)
@@ -99,12 +104,15 @@ impl Reader {
 
     fn ask(&self, job: Job) {
         let (lock, cv) = &*self.queue;
-        lock.lock().unwrap().push_front(job);
+        let generation = self.generation.load(std::sync::atomic::Ordering::Acquire);
+        lock.lock().unwrap().push_front((generation, job));
         cv.notify_one();
     }
 
     fn forget(&self) {
+        self.generation.fetch_add(1, std::sync::atomic::Ordering::Release);
         self.queue.0.lock().unwrap().clear();
+        self.done.lock().unwrap().clear();
     }
 
     fn take(&self) -> Vec<Read> {
@@ -321,6 +329,10 @@ impl App {
 
     pub(crate) fn close_search(&mut self) {
         self.find.page = None;
+        self.search_covers_changed();
+    }
+
+    pub(crate) fn search_covers_changed(&mut self) {
         self.find.thumbs.clear();
         self.find.keys.clear();
         self.find.rows.clear();

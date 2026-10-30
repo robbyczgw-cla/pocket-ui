@@ -70,6 +70,10 @@ impl App {
     /// The gamelists were read and differ from what the App has.
     pub(crate) fn gamelist_event(&mut self, index: Arc<Index>) {
         self.gamelist.index = index;
+        // Their developers, publishers, genres and "last played" go into Connections and Rediscover: both are made again
+        // with the next index, on the catalog there is (`app_connections`).
+        self.curator.connections.stale = true;
+        self.curator.touch();
         self.gamelist.covers.borrow_mut().clear();
         self.gamelist.to_add.set(None);
         // Games that had no cover may have one now.

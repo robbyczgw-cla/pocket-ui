@@ -1,0 +1,13 @@
+{
+ "screen": [
+  8,
+  8,
+  45,
+  38
+ ],
+ "size": [
+  81,
+  71
+ ],
+ "notes": "screen = bounding rect of the #FF00FF pixels; the magenta shape is the curved glass (rounded corners), so the corners of the rect are not magenta. Front view slightly from above, beige body, knobs + grille on the right, speaker grille bottom-left; no antenna, no logo."
+}

@@ -128,6 +128,43 @@ fn default_command(action: PowerAction) -> String {
     format!("systemctl {}", action.argv().join(" "))
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SuspendOrigin {
+    PowerKey,
+    Other,
+}
+
+fn suspend_command(command: &str, origin: SuspendOrigin) -> String {
+    if origin == SuspendOrigin::Other && command == default_command(PowerAction::Sleep) {
+        // systemctl's default `auto` skips inhibitor checks without a TTY, including our root system service.
+        format!("{command} --check-inhibitors=yes")
+    } else {
+        command.into()
+    }
+}
+
+fn run_suspend(command: &str) -> bool {
+    match Command::new("sh").arg("-c").arg(command).env("LC_ALL", "C").output() {
+        Ok(output) => {
+            print!("{}", String::from_utf8_lossy(&output.stdout));
+            let error = String::from_utf8_lossy(&output.stderr);
+            eprint!("{error}");
+            if !output.status.success() && error.to_ascii_lowercase().contains("inhibit") {
+                eprintln!("sleep: suspend blocked by a logind sleep inhibitor; staying in light sleep");
+            }
+            output.status.success()
+        }
+        Err(error) => {
+            eprintln!("sleep: couldn't run suspend: {error}");
+            false
+        }
+    }
+}
+
+fn no_autosuspend(data_dir: &Path, default_dir: &Path) -> bool {
+    data_dir.join("no-autosuspend").exists() || default_dir.join("no-autosuspend").exists()
+}
+
 /// What the screen says while the device shuts down for `action` (after the game was saved).
 fn shutdown_text(action: PowerAction) -> &'static str {
     match action {
@@ -521,9 +558,6 @@ impl System {
         }
     }
 
-    fn run(cmd: &str) -> bool {
-        Command::new("sh").arg("-c").arg(cmd).status().is_ok_and(|s| s.success())
-    }
 }
 
 /// Seconds the system has spent suspended since boot (CLOCK_BOOTTIME runs on in suspend, MONOTONIC doesn't).
@@ -884,7 +918,7 @@ trait DeepSteps {
     /// `set_volume`; `kick`: one step off and back, so PipeWire writes the codec again.
     fn set_volume(&mut self, volume: (u32, bool), kick: bool);
     /// Asks for the suspend; true once the system has slept and is back.
-    fn suspend(&mut self) -> bool;
+    fn suspend(&mut self, origin: SuspendOrigin) -> bool;
     /// The system is back: the UI turns the screen on and the game continues, now.
     fn resumed(&mut self);
     /// Waits until ROCKNIX's wake hooks are done.
@@ -922,7 +956,7 @@ const SWITCH_OFF_GAP: Duration = Duration::from_secs(2);
 ///
 /// `plan`: switch off after sleeping (`auto_off`). The RTC alarm goes off when its time is up; a wake before that costs
 /// one clock read on its way to the screen, and the alarm is cleared only after the screen and the game are on.
-fn deep_sequence(s: &mut impl DeepSteps, mut plan: Option<crate::auto_off::Plan>) {
+fn deep_sequence(s: &mut impl DeepSteps, mut plan: Option<crate::auto_off::Plan>, mut origin: SuspendOrigin) {
     use crate::auto_off::Verdict;
     s.save();
     // The volume PipeWire has now, also as ROCKNIX's `audio.volume`, which its wake hook reads.
@@ -943,7 +977,9 @@ fn deep_sequence(s: &mut impl DeepSteps, mut plan: Option<crate::auto_off::Plan>
         }
         let presses = s.power_presses();
         let offset = s.wall_offset();
-        let slept = s.suspend();
+        let slept = s.suspend(origin);
+        // The press authorises this first suspend only, never an unattended RTC/clock-step re-suspend.
+        origin = SuspendOrigin::Other;
         let Some(p) = plan.filter(|_| slept) else { break slept };
         if !p.due(s.clock()) {
             // The wall clock was set or stepped (by hand, NTP) since the alarm was armed: the RTC alarm, a time on that
@@ -1061,13 +1097,14 @@ impl DeepSteps for DeepWorker {
         }
     }
 
-    fn suspend(&mut self) -> bool {
+    fn suspend(&mut self, origin: SuspendOrigin) -> bool {
         sync_filesystems();
         let before = SuspendProbe::now();
-        println!("sleep: suspending ({}) after {:?}", self.sys.suspend_cmd, self.t0.elapsed());
+        let command = suspend_command(&self.sys.suspend_cmd, origin);
+        println!("sleep: suspending ({command}, {origin:?}) after {:?}", self.t0.elapsed());
         crate::trace::step("sleep: suspending");
         let asked = Instant::now();
-        let ran = System::run(&self.sys.suspend_cmd);
+        let ran = run_suspend(&command);
         // `systemctl suspend` returns before the system sleeps; a test command blocks instead.
         let mut outcome = suspend_outcome(before, SuspendProbe::now(), asked.elapsed());
         while ran && outcome.is_none() && asked.elapsed() < SUSPEND_TIMEOUT {
@@ -1376,7 +1413,9 @@ impl Sleep {
     /// Whether idle goes on from light sleep to a suspend. Failed suspends no longer stop it (they are retried with
     /// longer waits, `Timers::deep_wait`); the low-battery guard covers a device that stays dark anyway.
     fn auto_suspend(&self) -> bool {
-        !self.screen_only && std::env::var_os("POCKETUI_NO_AUTOSUSPEND").is_none() && !self.data_dir.join("no-autosuspend").exists()
+        !self.screen_only
+            && std::env::var_os("POCKETUI_NO_AUTOSUSPEND").is_none()
+            && !no_autosuspend(&self.data_dir, Path::new("/storage/.config/pocket-ui"))
     }
 
     /// pocket-ui handles the power key: logind's handling is inhibited (or forced for tests).
@@ -1461,7 +1500,10 @@ impl Sleep {
             (State::Awake, true) => {
                 println!("sleep: lid closed");
                 self.power_key.cancel();
-                self.power_step(Step::Short, true, ctx);
+                match self.config.short_press {
+                    ShortPress::Sleep => self.sleep_now(ctx),
+                    ShortPress::ScreenOff => self.screen_off_now(ctx),
+                }
             }
             (State::Awake, false) => self.timers.last_input = Instant::now(),
             // Dark already (a while without input, or Screen off with the game on): Sleep goes on into deep sleep.
@@ -1485,7 +1527,7 @@ impl Sleep {
             (Step::Swallow, ..) => true,
             (Step::Short, ShortPress::Sleep, _) => {
                 println!("sleep: power key");
-                self.sleep_now(ctx);
+                self.sleep_for(ctx, SuspendOrigin::PowerKey);
                 true
             }
             (Step::Short, ShortPress::ScreenOff, _) => {
@@ -1503,7 +1545,7 @@ impl Sleep {
             (Step::Long, _, Hold::Sleep) if !released => true,
             (Step::Long | Step::LongEnd, _, Hold::Sleep) => {
                 println!("sleep: power key held");
-                self.sleep_now(ctx);
+                self.sleep_for(ctx, SuspendOrigin::PowerKey);
                 true
             }
         }
@@ -1632,7 +1674,7 @@ impl Sleep {
                 }
             }
             Some(Due::Deep) => {
-                self.deep(ctx);
+                self.deep(ctx, SuspendOrigin::Other);
                 None
             }
             None => match (next, light_off) {
@@ -1703,6 +1745,10 @@ impl Sleep {
 
     /// Deep sleep right away (power key, the quick settings' Sleep).
     pub fn sleep_now(&mut self, ctx: Ctx) {
+        self.sleep_for(ctx, SuspendOrigin::Other);
+    }
+
+    fn sleep_for(&mut self, ctx: Ctx, origin: SuspendOrigin) {
         if self.screen_only {
             self.screen_off_now(ctx);
             return;
@@ -1710,11 +1756,11 @@ impl Sleep {
         match self.state {
             State::Awake => {
                 self.light(ctx);
-                self.deep(ctx);
+                self.deep(ctx, origin);
             }
             State::Light => {
                 self.pause_dark_game();
-                self.deep(ctx);
+                self.deep(ctx, origin);
             }
             State::Deep | State::PoweringOff => {}
         }
@@ -1776,7 +1822,7 @@ impl Sleep {
         crate::play_log::paused();
     }
     /// Saves, then suspends, in a worker thread; `tick` sees it come back.
-    fn deep(&mut self, _ctx: Ctx) {
+    fn deep(&mut self, _ctx: Ctx, origin: SuspendOrigin) {
         // Final barrier: no worker, suspend command or RTC alarm on this platform.
         if self.screen_only {
             return;
@@ -1817,7 +1863,7 @@ impl Sleep {
             }
             worker.own.store(true, Ordering::SeqCst);
             worker.t0 = Instant::now();
-            deep_sequence(&mut worker, plan);
+            deep_sequence(&mut worker, plan, origin);
             // Ended by a power off without `done`: the next sleep is not "ours" any more.
             worker.own.store(false, Ordering::SeqCst);
         };
@@ -2141,6 +2187,27 @@ mod tests {
     }
 
     #[test]
+    fn only_the_power_key_can_ignore_sleep_inhibitors() {
+        let command = default_command(PowerAction::Sleep);
+        assert_eq!(suspend_command(&command, SuspendOrigin::Other), "systemctl suspend --check-inhibitors=yes");
+        assert_eq!(suspend_command(&command, SuspendOrigin::PowerKey), "systemctl suspend");
+        // Explicit virtual-device commands must remain runnable without systemd.
+        assert_eq!(suspend_command("sleep 4", SuspendOrigin::Other), "sleep 4");
+    }
+
+    #[test]
+    fn the_default_no_autosuspend_marker_also_protects_another_data_directory() {
+        let data = TestDir::new("sleep-test-data");
+        let default = TestDir::new("sleep-default-data");
+        assert!(!no_autosuspend(&data, &default));
+        std::fs::write(default.join("no-autosuspend"), "").unwrap();
+        assert!(no_autosuspend(&data, &default));
+        std::fs::remove_file(default.join("no-autosuspend")).unwrap();
+        std::fs::write(data.join("no-autosuspend"), "").unwrap();
+        assert!(no_autosuspend(&data, &default));
+    }
+
+    #[test]
     fn the_screen_says_what_is_happening() {
         assert_eq!(shutdown_text(PowerAction::PowerOff), "Switching off\u{2026}");
         assert_eq!(shutdown_text(PowerAction::Reboot), "Restarting\u{2026}");
@@ -2205,6 +2272,7 @@ mod tests {
     /// power supply.
     struct FakeDeep {
         log: Vec<&'static str>,
+        origins: Vec<SuspendOrigin>,
         volume: Option<(u32, bool)>,
         slept: bool,
         /// How the suspends end, in turn (`slept` alone when empty and there is no plan).
@@ -2231,6 +2299,7 @@ mod tests {
     fn fake(volume: Option<(u32, bool)>, slept: bool) -> FakeDeep {
         FakeDeep {
             log: Vec::new(),
+            origins: Vec::new(),
             volume,
             slept,
             script: Default::default(),
@@ -2259,7 +2328,8 @@ mod tests {
         fn set_volume(&mut self, _: (u32, bool), kick: bool) {
             self.log.push(if kick { "volume again" } else { "store volume" });
         }
-        fn suspend(&mut self) -> bool {
+        fn suspend(&mut self, origin: SuspendOrigin) -> bool {
+            self.origins.push(origin);
             self.log.push("suspend");
             let Some(ends) = self.script.pop_front() else { return self.slept };
             let alarm = |f: &mut FakeDeep| {
@@ -2337,7 +2407,7 @@ mod tests {
 
     fn run_deep(volume: Option<(u32, bool)>, slept: bool) -> Vec<&'static str> {
         let mut f = fake(volume, slept);
-        deep_sequence(&mut f, None);
+        deep_sequence(&mut f, None, SuspendOrigin::Other);
         f.log
     }
 
@@ -2357,9 +2427,28 @@ mod tests {
         f.script = script.iter().copied().collect();
         f.power = power.iter().copied().collect();
         let plan = crate::auto_off::Plan::new(f.clock, 3, HOUR);
-        deep_sequence(&mut f, Some(plan));
+        deep_sequence(&mut f, Some(plan), SuspendOrigin::Other);
         assert!(f.script.is_empty(), "every suspend of the script happened");
         f
+    }
+
+    #[test]
+    fn rtc_and_clock_step_re_suspends_do_not_inherit_a_power_keys_permission() {
+        let mut f = fake(None, true);
+        f.script = [Ends::RtcJump(60.0), Ends::Alarm, Ends::Key(1.0)].into();
+        f.power = [on_charger()].into();
+        let plan = crate::auto_off::Plan::new(f.clock, 3, HOUR);
+        deep_sequence(&mut f, Some(plan), SuspendOrigin::PowerKey);
+        assert!(f.script.is_empty());
+        assert_eq!(f.origins, [SuspendOrigin::PowerKey, SuspendOrigin::Other, SuspendOrigin::Other]);
+
+        let mut blocked = fake(None, false);
+        let plan = crate::auto_off::Plan::new(blocked.clock, 3, HOUR);
+        deep_sequence(&mut blocked, Some(plan), SuspendOrigin::Other);
+        assert_eq!(blocked.origins, [SuspendOrigin::Other]);
+        assert_eq!(blocked.rtc, None, "a refused suspend leaves no alarm armed");
+        assert_eq!(blocked.log.last(), Some(&"failed"));
+        assert!(!blocked.log.contains(&"screen and game on"));
     }
 
     #[test]
@@ -2449,7 +2538,7 @@ mod tests {
         g.script = [Ends::RtcJump(600.0)].into_iter().collect();
         g.press_at_settle = true;
         let plan = crate::auto_off::Plan::new(g.clock, 3, HOUR);
-        deep_sequence(&mut g, Some(plan));
+        deep_sequence(&mut g, Some(plan), SuspendOrigin::Other);
         assert_eq!(g.switched_off, None);
         assert_eq!(
             g.log,
@@ -2469,7 +2558,7 @@ mod tests {
         let mut f = fake(Some((60, false)), true);
         f.shutting = true;
         let plan = crate::auto_off::Plan::new(f.clock, 3, HOUR);
-        deep_sequence(&mut f, Some(plan));
+        deep_sequence(&mut f, Some(plan), SuspendOrigin::Other);
         assert!(!f.log.contains(&"alarm") && !f.log.contains(&"suspend") && !f.log.contains(&"done"), "{:?}", f.log);
         assert!(f.alarms.is_empty());
     }
@@ -2495,7 +2584,7 @@ mod tests {
         g.power = [on_battery()].into_iter().collect();
         g.press_at_pause = true;
         let plan = crate::auto_off::Plan::new(g.clock, 3, HOUR);
-        deep_sequence(&mut g, Some(plan));
+        deep_sequence(&mut g, Some(plan), SuspendOrigin::Other);
         assert_eq!(g.switched_off, None);
         assert!(g.log.contains(&"screen and game on"), "{:?}", g.log);
     }
@@ -2779,7 +2868,7 @@ mod tests {
         s.sleep_now(Ctx::default());
         assert_eq!((s.state(), level(&file).as_str()), (State::Light, "0"));
         assert!(s.auto_off.is_some(), "power-off counts from screen off, no suspend required");
-        s.deep(Ctx::default()); // final barrier even if a future caller bypasses sleep_now
+        s.deep(Ctx::default(), SuspendOrigin::Other); // final barrier even if a future caller bypasses sleep_now
         assert_eq!(s.state(), State::Light);
         s.timers.light_since = Some(Instant::now() - Duration::from_secs(3600));
         s.tick(Ctx::default());

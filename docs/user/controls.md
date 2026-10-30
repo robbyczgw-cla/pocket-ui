@@ -42,7 +42,7 @@ what it always does. It goes by itself after a few seconds, and then A is the sh
 
 | Button | What it does |
 |---|---|
-| D-pad | Move on the keyboard. |
+| D-pad | Move on the keyboard. Up and Down land on the key right above or below, even where the rows are shorter or have wide keys. |
 | A | Type the key. **Results** on the keyboard goes to the list, as START does. |
 | B | Delete the last letter. With nothing typed, close the search. |
 | START | Go to the list of games found (with nothing typed: the recent searches). |

@@ -16,6 +16,7 @@ translation and on GBA; Burnout Dominator on PS2 and PSP; Link's Awakening on GB
 Time on N64 and 3DS) and a PortMaster port without data (Celeste Classic).
 """
 
+import datetime
 import json
 import os
 import sys
@@ -187,6 +188,20 @@ def main():
                     rom.write("x")
                 extra += f"<game><path>./{filename}</path><name>{title}</name></game>"
             gamelist = gamelist.replace("</gameList>", extra + "</gameList>")
+        if os.environ.get("POCKETUI_REDISCOVER"):
+            # Curator's Rediscover (src/connections.rs): EmulationStation's "last played", as ES writes it (UTC, noon).
+            # Metroid Fusion a year ago today (this very time, so the date is the same in the device's zone), Golden Sun two
+            # years ago, Advance Wars 400 days ago.
+            today = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+            def es_date(d):
+                return d.strftime("%Y%m%dT%H%M%S")
+            def year_ago(d, years):
+                try:
+                    return d.replace(year=d.year - years)
+                except ValueError:
+                    return d.replace(year=d.year - years, day=28)
+            for name, when in [("Metroid Fusion (USA).gba", year_ago(today, 1)), ("Golden Sun (USA, Europe).gba", year_ago(today, 2)), ("Advance Wars (USA) (Rev 1).gba", today - datetime.timedelta(days=400))]:
+                gamelist = gamelist.replace(f"<path>./{name}</path>", f"<path>./{name}</path>\n    <lastplayed>{es_date(when)}</lastplayed>")
         fh.write(gamelist)
     cfg = ["<systemList>"]
     for sid, name, ext in SYSTEMS:

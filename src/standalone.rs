@@ -1717,9 +1717,11 @@ mod guest {
 
     /// Runs [`PLAN`] on the emulator's process, on a thread (the caller is the UI).
     pub fn quit(pgid: Option<i32>) {
-        let Some((_, g)) = current() else { return };
+        let Some((id, g)) = current() else { return };
         if g == Guest::Port {
-            std::thread::spawn(move || quit_port(pgid));
+            std::thread::spawn(move || {
+                if current() == Some((id, Guest::Port)) { quit_port(pgid); }
+            });
             return;
         }
         std::thread::spawn(move || {
@@ -1739,60 +1741,73 @@ const PORT_CLOSE_WAIT: Duration = Duration::from_millis(2500);
 const PORT_TERM_WAIT: Duration = Duration::from_millis(2500);
 /// The longest a port's Quit takes (the main loop's backstop, `GUEST_GRACE`, comes after it).
 pub(crate) const PORT_WORST: Duration = PORT_CLOSE_WAIT.saturating_add(PORT_TERM_WAIT).saturating_add(Duration::from_secs(1));
-/// What a port's launch script starts next to the game and may leave behind when it is killed from outside: the
-/// button-to-key translator and the helpers that wait for the engine.
-const PORT_HELPERS: &[&str] = &["gptokeyb", "oga_controls", "sdl2imgui"];
+/// A port owns a session as well as its initial process group. A helper may change its group (sudo, setpgid),
+/// but remains part of this launch's session; another port's helpers never enter it.
+#[cfg(target_os = "linux")]
+pub fn spawn_port(cmd: &mut std::process::Command) -> std::io::Result<std::process::Child> {
+    use std::os::unix::process::CommandExt;
+    // SAFETY: setsid is async-signal-safe; no allocation or locks between fork and exec.
+    unsafe { cmd.pre_exec(|| if libc::setsid() < 0 { Err(std::io::Error::last_os_error()) } else { Ok(()) }); }
+    cmd.spawn()
+}
 
-/// Members of the process group `pgid` that still run (zombies are gone for our purposes).
-fn group_members(pgid: i32) -> Vec<i32> {
+/// PID plus kernel start time: a delayed cleanup must never signal a reused PID.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PortProcess {
+    pid: i32,
+    start: u64,
+    session: i32,
+}
+
+fn port_process(pid: i32) -> Option<PortProcess> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let fields: Vec<_> = stat.get(stat.rfind(')')? + 2..)?.split_whitespace().collect();
+    if *fields.first()? == "Z" { return None; }
+    Some(PortProcess { pid, session: fields.get(3)?.parse().ok()?, start: fields.get(19)?.parse().ok()? })
+}
+
+fn port_members(session: i32) -> Vec<PortProcess> {
     let Ok(dir) = std::fs::read_dir("/proc") else { return Vec::new() };
-    dir.flatten()
-        .filter_map(|e| {
-            let pid: i32 = e.file_name().to_str()?.parse().ok()?;
-            let stat = std::fs::read_to_string(e.path().join("stat")).ok()?;
-            let rest = stat.get(stat.rfind(')')? + 2..)?;
-            let mut f = rest.split(' ');
-            let (state, _ppid, group) = (f.next()?, f.next()?, f.next()?.parse::<i32>().ok()?);
-            (group == pgid && state != "Z").then_some(pid)
-        })
-        .collect()
+    dir.flatten().filter_map(|e| {
+        let pid = e.file_name().to_str()?.parse().ok()?;
+        port_process(pid).filter(|p| p.session == session)
+    }).collect()
+}
+
+fn signal_port(processes: &[PortProcess], sig: i32) {
+    for p in processes {
+        if port_process(p.pid) == Some(*p) {
+            // SAFETY: this PID still identifies the process recorded in this port's private session.
+            unsafe { libc::kill(p.pid, sig); }
+        }
+    }
 }
 
 /// Quit for a PortMaster port: the window is brought in front and asked to close (SDL ports save on it), then SIGTERM
-/// to the whole group, then SIGKILL to the group and to the helpers that left it. Done when no process of the group is
-/// left, in a few seconds at most.
+/// to this launch's session, then SIGKILL. Helpers that changed group are included; unrelated processes are not.
+/// Done when no process of the session is left, in a few seconds at most.
 fn quit_port(pgid: Option<i32>) {
     let started = Instant::now();
     println!("standalone: quitting a port, at most {PORT_WORST:?}");
     let Some(g) = pgid.filter(|g| *g > 1) else { return };
     let gone = |within: Duration| {
         let end = Instant::now() + within;
-        while Instant::now() < end && !group_members(g).is_empty() {
+        while Instant::now() < end && !port_members(g).is_empty() {
             std::thread::sleep(Duration::from_millis(100));
         }
-        group_members(g).is_empty()
+        port_members(g).is_empty()
     };
     // A window hidden behind our menu may ignore the close request: in front first.
     crate::control::show_game();
-    let members = group_members(g);
+    let members = port_members(g);
     if !members.is_empty() {
-        azahar::close_windows(&members);
+        azahar::close_windows(&members.iter().map(|p| p.pid).collect::<Vec<_>>());
     }
     if !gone(PORT_CLOSE_WAIT) {
-        // SAFETY: kill(2) on the process group pocket-ui started for this port.
-        unsafe {
-            libc::kill(-g, libc::SIGTERM);
-        }
+        signal_port(&port_members(g), libc::SIGTERM);
         if !gone(PORT_TERM_WAIT) {
-            // SAFETY: as above.
-            unsafe {
-                libc::kill(-g, libc::SIGKILL);
-            }
+            signal_port(&port_members(g), libc::SIGKILL);
         }
-    }
-    // gptokeyb and friends may have been started in a group of their own (sudo, setsid): by name.
-    for name in PORT_HELPERS {
-        kill_same(name, None);
     }
     println!("standalone: port closed after {:?}", started.elapsed());
 }
@@ -1900,27 +1915,47 @@ mod tests {
         assert!(PORT_WORST < GUEST_GRACE, "the main loop's backstop comes after the port's plan");
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
-    fn quit_ends_the_whole_port_a_script_and_the_children_it_left_behind() {
-        use std::os::unix::process::CommandExt;
-        // A launch script with a background child that ignores SIGTERM (an engine, gptokeyb) and a second one.
-        let mut script = std::process::Command::new("sh")
-            .args(["-c", "trap '' TERM; sleep 60 & sleep 60 & wait"])
-            .process_group(0)
-            .spawn()
-            .unwrap();
-        let g = script.id() as i32;
-        let waiter = std::thread::spawn(move || script.wait());
+    fn port_quit_leaves_an_overlapping_launch_and_its_same_named_helpers_alive() {
+        struct Port(std::process::Child);
+        impl Drop for Port {
+            fn drop(&mut self) {
+                signal_port(&port_members(self.0.id() as i32), libc::SIGKILL);
+                let _ = self.0.wait();
+            }
+        }
+        let spawn = || {
+            let mut cmd = std::process::Command::new("python3");
+            cmd.args(["-c", "import os,signal,ctypes,time; child=os.fork(); os.setpgid(0,0) if child == 0 else None; ctypes.CDLL(None).prctl(15,b'gptokeyb',0,0,0); signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(60)"]);
+            Port(spawn_port(&mut cmd).unwrap())
+        };
+        let (a, mut b) = (spawn(), spawn());
+        let (ga, gb) = (a.0.id() as i32, b.0.id() as i32);
         let end = Instant::now() + Duration::from_secs(5);
-        while group_members(g).len() < 3 && Instant::now() < end {
+        while (port_members(ga).len() < 2 || port_members(gb).len() < 2) && Instant::now() < end {
             std::thread::sleep(Duration::from_millis(20));
         }
-        assert!(group_members(g).len() >= 3, "script and two children are in the group");
+        assert_eq!(port_members(ga).len(), 2, "first script and helper in a separate group");
+        let before = port_members(gb);
+        assert_eq!(before.len(), 2, "overlapping launch and its helper");
         let started = Instant::now();
-        quit_port(Some(g));
-        assert!(group_members(g).is_empty(), "nothing of the port is left: {:?}", group_members(g));
-        assert!(started.elapsed() < PORT_WORST + Duration::from_secs(2), "took {:?}", started.elapsed());
-        let _ = waiter.join();
+        quit_port(Some(ga));
+        assert!(port_members(ga).is_empty(), "the first session, including its helper, ended");
+        assert!(started.elapsed() < PORT_WORST + Duration::from_secs(2));
+        assert!(b.0.try_wait().unwrap().is_none(), "the other launch survives");
+        for p in before {
+            assert_eq!(port_process(p.pid), Some(p), "the other launch's identically named helper survives");
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_reused_pid_is_not_signalled_by_port_cleanup() {
+        let me = port_process(std::process::id() as i32).unwrap();
+        let stale = PortProcess { start: me.start.wrapping_add(1), ..me };
+        signal_port(&[stale], libc::SIGKILL);
+        assert_eq!(port_process(me.pid), Some(me));
     }
 
     #[test]

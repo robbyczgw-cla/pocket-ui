@@ -673,6 +673,12 @@ impl Renderer {
     /// Draws exactly what `draw` would put on a `view_w`×`view_h` screen into an offscreen buffer
     /// and reads it back: RGBA, rows top to bottom. For the pause menu's preview.
     pub fn render_offscreen(&mut self, view_w: u32, view_h: u32, aspect: f32, settings: &VideoSettings) -> Vec<u8> {
+        self.render_offscreen_over(view_w, view_h, aspect, settings, &mut |_| {})
+    }
+
+    /// `render_offscreen` with `over` drawing into the buffer after the picture, before it is read back (the overlay's
+    /// pieces over the game, in tools and tests).
+    pub fn render_offscreen_over(&mut self, view_w: u32, view_h: u32, aspect: f32, settings: &VideoSettings, over: &mut dyn FnMut(&glow::Context)) -> Vec<u8> {
         let (w, h) = (view_w.max(1), view_h.max(1));
         let mut out = vec![0u8; (w * h * 4) as usize];
         if !self.draw_offscreen(w, h, aspect, settings) {
@@ -680,6 +686,9 @@ impl Renderer {
         }
         unsafe {
             let (fb, _, _) = self.offscreen.unwrap();
+            self.gl.bind_framebuffer(glow::FRAMEBUFFER, Some(fb));
+            self.gl.viewport(0, 0, w as i32, h as i32);
+            over(&self.gl);
             self.gl.bind_framebuffer(glow::FRAMEBUFFER, Some(fb));
             self.gl.pixel_store_i32(glow::PACK_ALIGNMENT, 4);
             self.gl.read_pixels(0, 0, w as i32, h as i32, glow::RGBA, glow::UNSIGNED_BYTE, glow::PixelPackData::Slice(&mut out));

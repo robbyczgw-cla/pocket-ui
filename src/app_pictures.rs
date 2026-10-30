@@ -75,6 +75,7 @@ fn placed(p: &Option<(Rc<Image>, i32, i32)>) -> Option<(&Image, i32, i32)> {
 impl App {
     /// Files came or went (a download ended, the library was read again): look again.
     pub(crate) fn pictures_changed(&mut self) {
+        self.cabinet.tv.pictures_changed();
         self.pictures.sizes.clear();
         self.pictures.loaded.clear();
         self.pictures.pending.clear();

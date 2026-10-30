@@ -441,6 +441,11 @@ class Run:
         if not size:
             return False  # a pocket-ui without paint lines: every frame counts, as before
         sizes = [e["size"] for e in self.trace.events if e["event"] == "paint" and e["pid"] == self.ui.pid and e.get("size")]
+        # The first paint is the window's default size, before sway's resize: on the RG35XX Plus it is 800x600 and every
+        # later frame 640x480, so it never counts as the full size.
+        sizes = sizes[1:]
+        if not sizes:
+            return False
         full = max(sizes, key=lambda s: s[0] * s[1])
         return size[0] * size[1] < full[0] * full[1]
 

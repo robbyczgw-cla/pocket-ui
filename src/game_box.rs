@@ -1,6 +1,7 @@
 //! The game card as a game box (X on a game; SELECT switches to the page and back, and it is kept): the game in a box in the style of its
 //! system's case, almost the whole screen. The front is the case as it stands on the shelf (`media::front`, the
-//! cover in it), or for a cartridge a cardboard box with the cover; LEFT or RIGHT turns it over. The back is laid
+//! cover in it), opened: the cartridge, card or disc slides out of it as the box comes up (0.1.4), as large beside
+//! it as it really is (`media::Game::size_beside`); LEFT or RIGHT turns it over. The back is laid
 //! out like a real box's: a band with the title, the screenshot and title screen beside the description, the facts,
 //! and the player's own line (status, play time, rating, achievements). It scrolls with up and down (L1/R1 a page).
 //! Whatever is missing gets a plain place of its own (a dark screen with the console, "No description yet"), never a
@@ -57,14 +58,24 @@ const GREY: u32 = 156;
 
 /// How long turning the box over takes (Settings → Look & feel → Motion: Off turns it at once).
 pub const FLIP: Duration = Duration::from_millis(280);
+/// How long the game takes to slide out of its case when the box comes up (Motion: Off at once).
+pub const OPEN: Duration = Duration::from_millis(300);
+
+/// How far a game `gw` wide is out of its case `cw` wide once it is open: all the way, a little apart from it, so its
+/// label (cover or title) shows whole.
+fn out_of(gw: f32, cw: f32) -> f32 {
+    gw + cw * 0.05
+}
 
 impl Hull {
     pub fn of(m: Medium) -> Hull {
         match m {
-            Medium::Snes | Medium::N64 | Medium::Nes | Medium::Gb | Medium::Gba | Medium::Cart => Hull::CartBox,
+            Medium::Snes | Medium::N64 | Medium::Nes | Medium::Gb | Medium::Gba => Hull::CartBox,
             Medium::MegaDrive | Medium::MasterSystem => Hull::Clamshell,
-            Medium::Ps1 | Medium::SegaDisc | Medium::Disc => Hull::Jewel,
+            Medium::Ps1 | Medium::SegaDisc => Hull::Jewel,
             Medium::Ps2 | Medium::GameCube | Medium::Wii | Medium::Keep | Medium::Xbox => Hull::Dvd,
+            // pocket-ui's own case is plastic, as a DVD case is.
+            Medium::GenericCart | Medium::GenericDisc | Medium::GenericDigital => Hull::Dvd,
             Medium::Umd => Hull::Umd,
             Medium::Ds | Medium::N3ds | Medium::Vita => Hull::Card,
         }
@@ -99,6 +110,7 @@ fn frame_tint(hull: Hull, m: Medium, look: Look) -> Option<u32> {
             Medium::Xbox => 0x1b1d1c,
             Medium::Ps2 => 0x1d1e24,
             Medium::GameCube => 0x24242a,
+            Medium::GenericCart | Medium::GenericDisc | Medium::GenericDigital => 0x2b2724,
             _ => look.plastic.max(0x30_30_36),
         }),
         _ => None,
@@ -149,12 +161,16 @@ fn nine(s: &Sprite, band: i32, k: i32, w: i32, h: i32, tint: Option<u32>) -> Pic
 }
 
 /// What the app gives the box to paint: the case's look and front (made with the shelf's machinery,
-/// `app_card::box_inputs`), the cover for a cardboard box, the console's picture.
+/// `app_card::paint_card`), the game inside, the cover, the console's picture.
 pub struct Inputs<'a> {
     pub medium: Medium,
     pub look: Look,
-    /// The case's front at the height asked for (`front_height`), with its cover; None for a cartridge's box.
+    /// The case's front at the height asked for (`case_height`), with its cover; None until it is made (a plain
+    /// cardboard box with the cover stands in).
     pub front: Option<&'a Pic>,
+    /// The cartridge or card out of the case, at its size beside it (`media::Game::size_beside`); None for a disc,
+    /// painted round here.
+    pub game: Option<&'a Pic>,
     pub cover: Option<&'a Image>,
     pub console: Option<&'a Sprite>,
 }
@@ -165,6 +181,8 @@ pub struct BoxView {
     /// The back is up (or turning to it).
     pub back: bool,
     flip_at: Option<Instant>,
+    /// When the box came up: the game slides out of its case from then (`OPEN`).
+    opened_at: Option<Instant>,
     pub scroll: i32,
     max_scroll: i32,
     /// The frame as made last: (hull, front?, w, h, tint) and the picture.
@@ -173,6 +191,12 @@ pub struct BoxView {
     cart_front: Option<((i32, i32, bool, u32), Pic)>,
     /// A canvas to paint a face on while the box turns.
     scratch: Vec<u32>,
+    /// The fact on the back the selection is on (an index into `CardData::links`, Connections); None: A plays.
+    pub link: Option<usize>,
+    /// Where those facts are in the back's scrolling part (top, height, unscrolled) and how tall its view is, from the
+    /// last paint: a fact is picked only while it is in view.
+    link_at: Vec<(i32, i32)>,
+    view_h: i32,
 }
 
 /// Where the box goes on a screen `w` x `h`: (top, bottom) of its room.
@@ -189,10 +213,31 @@ pub fn top_line(h: i32) -> i32 {
     (room(1, h).0 - 26).min(72)
 }
 
-/// How tall the box is on a screen `w` x `h`: the front of the case is made at this height.
+/// How tall the box is on a screen `w` x `h`: the back is this tall.
 pub fn front_height(w: i32, h: i32) -> i32 {
     let (top, bottom, _) = room(w, h);
     bottom - top
+}
+
+/// How tall the case of `m` is made on a screen `w` x `h`: the box's height, or less where the case and its game half
+/// out beside it would be wider than the screen (a SNES box lying wide on 640 x 480).
+pub fn case_height(w: i32, h: i32, m: Medium) -> i32 {
+    let (_, _, side) = room(w, h);
+    let hh = front_height(w, h);
+    let t = m.template_size();
+    let game = m.game();
+    let (case_w, case_h) = m.mm();
+    let per_h = t.front as f32 / t.front_h as f32 + out_of(game.mm().0, case_w) / case_h;
+    hh.min(((w - 2 * side) as f32 / per_h) as i32).max(1)
+}
+
+/// The game beside a case `case_h` tall: its size, and how far it is out of the case's right edge when open.
+fn game_beside(m: Medium, (case_w, case_h): (i32, i32), game: Option<&Pic>) -> (i32, i32, i32) {
+    let (gw, gh) = match game {
+        Some(p) => (p.w, p.h),
+        None => m.game().size_beside(m, case_h),
+    };
+    (gw, gh, out_of(gw as f32, case_w as f32) as i32)
 }
 
 /// The front's and the back's width.
@@ -216,7 +261,20 @@ fn cartbox_w(h: i32, cover: Option<&Image>) -> i32 {
 
 impl BoxView {
     pub fn new() -> BoxView {
-        BoxView::default()
+        let dur = crate::motion::span(crate::motion::Kind::Move, OPEN);
+        BoxView {
+            opened_at: (!dur.is_zero()).then(Instant::now),
+            ..BoxView::default()
+        }
+    }
+
+    /// How far the game is out of its case, 0 (inside) to 1 (half out, as it stays).
+    fn openness(&self, now: Instant) -> f32 {
+        let dur = crate::motion::span(crate::motion::Kind::Move, OPEN);
+        match self.opened_at {
+            Some(at) if !dur.is_zero() => crate::cabinet::ease_out(now.duration_since(at).as_secs_f32() / dur.as_secs_f32()),
+            _ => 1.0,
+        }
     }
 
     /// LEFT or RIGHT: turns the box over (from wherever a turn has got to).
@@ -229,11 +287,15 @@ impl BoxView {
             _ => now,
         };
         self.back = !self.back;
+        self.link = None;
         self.flip_at = (!dur.is_zero()).then_some(start);
     }
 
-    /// For a snapshot: the last turn done, or `POCKETUI_SNAPSHOT_FLIP_MS` into it.
+    /// For a snapshot: the last turn done, or `POCKETUI_SNAPSHOT_FLIP_MS` into it; the game out of its case, or
+    /// `POCKETUI_SNAPSHOT_OPEN_MS` into its slide.
     pub fn snapshot_settle(&mut self) {
+        let open: Option<u64> = std::env::var("POCKETUI_SNAPSHOT_OPEN_MS").ok().and_then(|v| v.parse().ok());
+        self.opened_at = open.and_then(|ms| Instant::now().checked_sub(Duration::from_millis(ms)));
         let ms: Option<u64> = std::env::var("POCKETUI_SNAPSHOT_FLIP_MS").ok().and_then(|v| v.parse().ok());
         self.flip_at = match (self.flip_at, ms) {
             (Some(_), Some(ms)) => Instant::now().checked_sub(Duration::from_millis(ms)),
@@ -243,6 +305,7 @@ impl BoxView {
 
     pub fn animating(&self, now: Instant) -> bool {
         self.flip_at.is_some_and(|at| now.duration_since(at) < crate::motion::span(crate::motion::Kind::Move, FLIP))
+            || self.opened_at.is_some_and(|at| now.duration_since(at) < crate::motion::span(crate::motion::Kind::Move, OPEN))
     }
 
     /// Up/Down/L1/R1 on the back: scrolls it; false when there was nothing to scroll (the front, the end).
@@ -258,6 +321,29 @@ impl BoxView {
 
     pub fn scrollable(&self) -> bool {
         self.back && self.max_scroll > 0
+    }
+
+    /// Whether fact `i` of the back's links is wholly in view; before the back was painted, as if it were (the paint
+    /// then scrolls to it, `paint_back`).
+    fn link_visible(&self, i: usize) -> bool {
+        self.view_h == 0 || self.link_at.get(i).is_some_and(|&(top, h)| top >= self.scroll && top + h <= self.scroll + self.view_h)
+    }
+
+    /// Up or Down on the back with `n` facts that lead somewhere: onto the next one in view, else a scroll of `step`
+    /// (and off a fact that went out of view), as the card's rows are picked.
+    pub fn link_step(&mut self, down: bool, n: usize, step: i32) {
+        match (down, self.link) {
+            (true, Some(i)) if i + 1 < n && self.link_visible(i + 1) => self.link = Some(i + 1),
+            (true, None) if (0..n).any(|j| self.link_visible(j)) => self.link = (0..n).find(|&j| self.link_visible(j)),
+            (false, Some(i)) if i > 0 && self.link_visible(i - 1) => self.link = Some(i - 1),
+            (false, Some(_)) => self.link = None,
+            (_, at) => {
+                self.scroll_by(if down { step } else { -step });
+                if at.is_some_and(|i| !self.link_visible(i)) {
+                    self.link = None;
+                }
+            }
+        }
     }
 
     /// Paints the box, front or back (or turning) under the card's top line.
@@ -313,9 +399,13 @@ impl BoxView {
         self.scratch = scratch;
     }
 
+    /// The front face's width: the case and its game half out beside it.
     fn front_w(&self, inp: &Inputs, h: i32) -> i32 {
         let hh = front_height(1, h).max(1);
-        inp.front.map_or(cartbox_w(hh, inp.cover), |f| f.w * hh / f.h.max(1))
+        match inp.front {
+            Some(f) => f.w + game_beside(inp.medium, (f.w, f.h), inp.game).2,
+            None => cartbox_w(hh, inp.cover),
+        }
     }
 
     /// Paints one face; returns its rectangle. `off`: painted off screen for the turn (no scroll bar).
@@ -325,14 +415,37 @@ impl BoxView {
         let (fw, bw) = widths(c.w, c.h, self.front_w(inp, c.h));
         let w = if back { bw } else { fw };
         let x = (c.w - w) / 2;
-        // A soft shadow under the box, as under a case out of its shelf.
-        art::soft_shadow(c, x + 12, top + 14, w, hh, 26, 0.5, (0, c.h));
         if back {
+            // A soft shadow under the box, as under a case out of its shelf.
+            art::soft_shadow(c, x + 12, top + 14, w, hh, 26, 0.5, (0, c.h));
             self.paint_back(c, text, d, pictures, inp, (x, top, w, hh), off.is_none());
-        } else {
-            self.paint_front(c, text, d, inp, (x, top, w, hh));
+            return (x, top, w, hh);
         }
-        (x, top, w, hh)
+        let Some(front) = inp.front else {
+            art::soft_shadow(c, x + 12, top + 14, w, hh, 26, 0.5, (0, c.h));
+            self.paint_front(c, text, d, inp, (x, top, w, hh));
+            return (x, top, w, hh);
+        };
+        // The case, opened: its game half out of it at its right, both in the middle of the room.
+        let (cw, ch) = (front.w, front.h);
+        let (gw, gh, out) = game_beside(inp.medium, (cw, ch), inp.game);
+        let x = (c.w - (cw + out)) / 2;
+        let y = top + (hh - ch) / 2;
+        let open = if off.is_some() { 1.0 } else { self.openness(Instant::now()) };
+        // Inside, its right edge at the case's; open, `out` past it.
+        let gx = x + cw - gw + (out as f32 * open) as i32;
+        let gy = y + (ch - gh) / 2;
+        if open > 0.0 {
+            art::soft_shadow(c, gx + gw / 2 + 8, gy + 10, gw / 2, gh, 20, 0.4, (0, c.h));
+            match inp.game {
+                Some(pic) => art::blit(c, pic, gx, gy, 256, (0, c.h)),
+                None if inp.medium.game() == crate::media::Game::Umd => art::umd(c, gx + gw / 2, gy + gh / 2, gh / 2, inp.look.color, c.h),
+                None => art::disc(c, gx + gw / 2, gy + gh / 2, gh / 2, inp.look.color, c.h),
+            }
+        }
+        art::soft_shadow(c, x + 12, y + 14, cw, ch, 26, 0.5, (0, c.h));
+        art::blit(c, front, x, y, 256, (0, c.h));
+        (x, top, cw + out, hh)
     }
 
     fn frame(&mut self, hull: Hull, front: bool, w: i32, h: i32, tint: Option<u32>) -> &Pic {
@@ -358,13 +471,9 @@ impl BoxView {
         hull.band() * k
     }
 
+    /// The front while the case's own is not made yet: a cardboard box with the cover in its printed frame, or a plain
+    /// label with the console (never an empty place).
     fn paint_front(&mut self, c: &mut Canvas, text: &mut Text, d: &CardData, inp: &Inputs, (x, y, w, h): (i32, i32, i32, i32)) {
-        if let Some(front) = inp.front {
-            let pic = if front.w == w && front.h == h { None } else { Some(front.scaled(w, h)) };
-            art::blit(c, pic.as_ref().unwrap_or(front), x, y, 256, (0, c.h));
-            return;
-        }
-        // A cartridge's cardboard box: the cover in the printed frame, or a plain label with the console.
         let key = (w, h, inp.cover.is_some(), inp.look.color);
         if self.cart_front.as_ref().is_none_or(|(k, _)| *k != key) {
             let hull = Hull::CartBox;
@@ -432,13 +541,22 @@ impl BoxView {
             return;
         }
         let full_w = c.w;
+        self.view_h = view_h;
+        self.link_at = vec![(-1, 0); d.links.len()];
         let height = {
             let mut body = c.rows(top, bot);
-            paint_back_body(&mut body, text, d, pictures, inp, (px - 0, pw, pad), -self.scroll, ink, soft, paper)
+            let links = (self.link, &mut self.link_at);
+            paint_back_body(&mut body, text, d, pictures, inp, (px - 0, pw, pad), -self.scroll, ink, soft, paper, links)
         };
         let _ = full_w;
         self.max_scroll = (height - view_h).max(0);
         self.scroll = self.scroll.min(self.max_scroll);
+        // A fact picked before the back was painted (or out of view): scrolled into view for the next frame.
+        if let Some(&(t, h)) = self.link.and_then(|l| self.link_at.get(l)).filter(|(t, _)| *t >= 0) {
+            if t < self.scroll || t + h > self.scroll + view_h {
+                self.scroll = (t + h - view_h / 2).clamp(0, self.max_scroll);
+            }
+        }
         // Text running under the band or the strip fades out there instead of being cut mid-line (as on the page).
         let fade = (view_h / 8).min(36);
         for k in 0..fade {
@@ -462,12 +580,15 @@ impl BoxView {
 /// The scrolling part of the back, `y0` the top (negative when scrolled), inside the paper from `x` `w` wide; returns
 /// its height.
 #[allow(clippy::too_many_arguments)]
-fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[CardPicture], inp: &Inputs, (x, w, pad): (i32, i32, i32), y0: i32, ink: u32, soft: u32, paper: u32) -> i32 {
+fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[CardPicture], inp: &Inputs, (x, w, pad): (i32, i32, i32), y0: i32, ink: u32, soft: u32, paper: u32, (link, link_at): (Option<usize>, &mut Vec<(i32, i32)>)) -> i32 {
     let inner_x = x + pad;
     let inner_w = w - 2 * pad - 10;
     let line = type_scale::line(28, 8);
     let row = type_scale::row(44, 28);
     let mut y = y0 + pad;
+    if let Some(why) = &d.broken {
+        y = crate::game_card::paint_problem(c, text, why, (inner_x, y + type_scale::grow(28) + 22, inner_w));
+    }
     // Two pictures: the screenshot and the title screen, or a plain screen in their place.
     let wide = inner_w >= 900;
     let shot_w = if wide { inner_w * 3 / 8 } else { (inner_w - pad) / 2 };
@@ -529,6 +650,8 @@ fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[Ca
     ly += row;
     let mut facts: Vec<(&str, String)> = Vec::new();
     facts.extend(d.year.map(|y| ("Year", y.to_string())));
+    // Where `d.facts` start among them, for the ones that lead to the player's other games (Connections).
+    let first_fact = facts.len();
     facts.extend(d.facts.iter().map(|(k, v)| (*k, v.clone())));
     facts.extend(d.players.clone().map(|p| ("Players", p)));
     facts.extend(d.scores.clone().map(|s| ("Reviews", s)));
@@ -538,8 +661,16 @@ fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[Ca
             ly += line;
         }
     }
-    for (k, v) in facts {
+    for (i, (k, v)) in facts.into_iter().enumerate() {
         text.draw(c, Face::Body, 28, inner_x, ly, soft, k);
+        // A developer, series or genre the player has other games of: one line, its arrow, a pill when selected.
+        if let Some(l) = i.checked_sub(first_fact).and_then(|f| d.links.iter().position(|(x, _)| *x == f)) {
+            crate::kit::link_value(c, text, (inner_x + key_w, ly, col_w - key_w), &v, link == Some(l), (ink, soft, ink, paper));
+            let h = type_scale::row(44, 28);
+            link_at[l] = (ly - type_scale::mid(28) - h / 2 - y0, h);
+            ly += row;
+            continue;
+        }
         let lines = text.wrap(Face::Body, 28, &v, col_w - key_w);
         for (i, l) in lines.iter().take(2).enumerate() {
             // A word longer than the column (a long name) is shortened, not cut by the paper's edge.
@@ -581,6 +712,27 @@ fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[Ca
         let fitted = text.fit(Face::Body, 28, &format!("{a} achievements"), rw);
         text.draw(c, Face::Body, 28, rx + rkey, ry, ink, &fitted);
         ry += row;
+    }
+    // Its save slots on their medium, read-only, as on the info page (`save_media`; pocket-core's games).
+    if let Some(saves) = &d.saves {
+        let n = saves.filled.iter().filter(|f| **f).count();
+        text.draw(c, Face::Body, 28, rx, ry, soft, "Save slots");
+        let (value, color) = if n > 0 { (format!("{n} of {}", saves.filled.len()), ink) } else { ("All empty".to_string(), soft) };
+        let fitted = text.fit(Face::Body, 28, &value, rw);
+        text.draw(c, Face::Body, 28, rx + rkey, ry, color, &fitted);
+        let kind = crate::save_media::Kind::of(&saves.system);
+        let l = crate::save_media::Layout::fitted(kind, saves.filled.len(), col_w, 2 * row - 12);
+        let slots = crate::save_media::Slots { filled: &saves.filled, ring: None, icon: crate::save_media::Icon::None, stripe: saves.stripe, numbers: l.block >= 20 };
+        let top = ry + row / 2 - 4;
+        crate::save_media::paint(c, text, kind, rx, top, &l, &slots);
+        // When the newest was saved, beside it (left out where there is no room).
+        if let Some(at) = saves.newest.filter(|_| n > 0) {
+            let ago = crate::recents::ago(at);
+            if text.width(Face::Body, 28, &ago) <= col_w - l.w - 24 {
+                text.draw(c, Face::Body, 28, rx + l.w + 24, top + l.h / 2 + type_scale::mid(28), soft, &ago);
+            }
+        }
+        ry += 3 * row;
     }
     // A PortMaster port: its performance and fan, the busy-core offer and the note of a newer version, as on the flat card.
     if let Some((speed, hint)) = &d.port {

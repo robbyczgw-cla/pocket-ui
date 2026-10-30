@@ -37,7 +37,7 @@ again (see below); a game it could not look up because the connection dropped is
 1. Select **Cover art** and press A ("Download"). If the automatic download is running, the page shows its
    progress instead of starting a second one.
 2. pocket-ui looks up every game that has no cover yet (and, with Pictures on Box art and screenshots, no screenshot
-   or title screen) and shows its progress, for example "Looking up 3 of 120". At the end it reports "Found 42 new covers"
+   or title screen) and shows its progress, for example "Looking up 3 of 120 covers" ("… pictures" with Pictures on, where a game can have up to three). At the end it reports "Found 42 new covers"
    or "No new covers found" ("pictures" instead of "covers" while Pictures is Box art and screenshots, since both are counted).
 
 Good to know:
@@ -144,7 +144,8 @@ processor type and are not marked experimental, in two lists:
    updates by itself.
 
 The shelf shows the game's cover from PortMaster (else its screenshot) as the box, and the colour of the spine comes from
-it. A game without any picture keeps the plain look.
+it. Pictures and update notes refresh in the background after a port is installed, updated or removed; the shelf stays
+responsive while the card is read. A game without any picture keeps the plain look.
 
 Installed games appear on Home under the **Ports** system and start like any other game. PortMaster
 itself is prepared automatically the first time you install something.

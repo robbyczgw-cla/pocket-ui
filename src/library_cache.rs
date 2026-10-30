@@ -225,11 +225,35 @@ pub fn missing_game(name: &str, path: &Path) -> Option<String> {
     Some(format!("{name} can't start: its file \"{file}\" is no longer there. The list of games is being read again."))
 }
 
+/// A game file with nothing in it (0 bytes): a copy that never finished, or a placeholder. No emulator can start it, and
+/// no picture belongs to it (new-user test 2026-10-30: an empty Tetris got a cover and a box like a healthy game).
+pub fn is_empty_file(path: &Path) -> bool {
+    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.len() == 0)
+}
+
+/// What the player is told about a game whose file is empty (the start, the game's card); None for any other game.
+pub fn empty_game(name: &str, path: &Path) -> Option<String> {
+    is_empty_file(path).then(|| format!("{name} can't start: its file is empty (0 bytes), so the copy didn't finish. Copy the game to the card again."))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::library::Game;
     use crate::testutil::TestDir;
+
+    #[test]
+    fn an_empty_game_file_is_named_as_such_and_a_healthy_or_missing_one_is_not() {
+        let dir = TestDir::new("libcache-empty");
+        let (empty, full, gone) = (dir.join("Tetris.gb"), dir.join("Mario.gb"), dir.join("Nothing.gb"));
+        std::fs::write(&empty, b"").unwrap();
+        std::fs::write(&full, b"x").unwrap();
+        let msg = empty_game("Tetris", &empty).unwrap();
+        assert!(msg.contains("Tetris") && msg.contains("empty") && !msg.contains("BIOS"), "{msg}");
+        assert_eq!(empty_game("Mario", &full), None);
+        assert_eq!(empty_game("Nothing", &gone), None, "a missing file has its own message (missing_game)");
+        assert_eq!(empty_game("Dir", &dir.join(".")), None, "a folder game is no empty file");
+    }
 
     struct Fixture {
         dir: crate::testutil::TestDir,

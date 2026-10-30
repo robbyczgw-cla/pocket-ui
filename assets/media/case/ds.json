@@ -1,0 +1,54 @@
+{
+ "res": 2,
+ "front_label": [
+  6,
+  6,
+  146,
+  160
+ ],
+ "spine_label": [
+  5,
+  32,
+  22,
+  135
+ ],
+ "band": null,
+ "front_band": null,
+ "fixed_spine": [
+  [
+   5,
+   5,
+   22,
+   24,
+   240,
+   240,
+   240
+  ],
+  [
+   12,
+   15,
+   8,
+   3,
+   90,
+   90,
+   96
+  ],
+  [
+   5,
+   28,
+   22,
+   2,
+   120,
+   120,
+   126
+  ]
+ ],
+ "tint": false,
+ "source_front": "https://commons.wikimedia.org/wiki/File:DVD_Jewel_Box.jpg",
+ "source_spine": "https://commons.wikimedia.org/wiki/File:DVD_Jewel_Box.jpg",
+ "licence": "CC0",
+ "author": "Gnnwikifikator",
+ "pixellab": "image-to-pixelart v2 at the final size, 3 variants per face; kept front-3/spine-3 (init_image_strength 250 + fixer)",
+ "logos_removed": "none on the plastic used (the Wii case's moulded logo is on the disc half, not used; the DVD logo of the tray photo lies under the label)",
+ "note": "DS: the small dark-grey see-through case, white block with a grey mark on the spine"
+}

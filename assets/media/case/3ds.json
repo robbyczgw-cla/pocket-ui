@@ -1,0 +1,54 @@
+{
+ "res": 2,
+ "front_label": [
+  6,
+  6,
+  146,
+  160
+ ],
+ "spine_label": [
+  5,
+  32,
+  20,
+  135
+ ],
+ "band": null,
+ "front_band": null,
+ "fixed_spine": [
+  [
+   5,
+   5,
+   20,
+   24,
+   244,
+   244,
+   244
+  ],
+  [
+   11,
+   15,
+   8,
+   3,
+   206,
+   40,
+   40
+  ],
+  [
+   5,
+   28,
+   20,
+   2,
+   120,
+   120,
+   126
+  ]
+ ],
+ "tint": false,
+ "source_front": "https://commons.wikimedia.org/wiki/File:Wii-optical-case.png",
+ "source_spine": "https://commons.wikimedia.org/wiki/File:Wii-optical-case.png",
+ "licence": "Public domain",
+ "author": "Evan Amos",
+ "pixellab": "image-to-pixelart v2 at the final size, 3 variants per face; kept front-3/spine-3 (init_image_strength 250 + fixer)",
+ "logos_removed": "none on the plastic used (the Wii case's moulded logo is on the disc half, not used; the DVD logo of the tray photo lies under the label)",
+ "note": "3DS: the small white case (white plastic from the Wii case photo), white block with a red mark on the spine"
+}

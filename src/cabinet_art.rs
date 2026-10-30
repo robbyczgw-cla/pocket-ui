@@ -5,7 +5,7 @@
 //! Spines and fronts are made once per game and kept (`app_cabinet.rs`); a frame copies them, so only the
 //! case being turned is drawn pixel by pixel.
 
-use crate::cabinet::{ink_on, luma, FormFactor, Size, BOARD};
+use crate::cabinet::{ink_on, luma, Size, BOARD};
 use crate::gfx::{mix, Canvas};
 use crate::image::Image;
 use crate::system_art::Sprite;
@@ -501,123 +501,9 @@ pub fn spine_title(text: &mut Text, p: &mut Pic, title: &str, px: u32, x0: i32, 
     }
 }
 
-/// A vertical light gradient over the solid part: a little lighter at the top, darker at the bottom.
-fn light(p: &mut Pic, top: f32, bottom: f32) {
-    for y in 0..p.h {
-        let k = top + (bottom - top) * y as f32 / (p.h - 1).max(1) as f32;
-        for x in 0..p.w {
-            let i = (y * p.w + x) as usize;
-            let d = p.px[i];
-            if d >> 24 != 0 {
-                p.px[i] = (d & 0xff00_0000) | scale_rgb(d & 0xffffff, k);
-            }
-        }
-    }
-}
 
-/// The spine of a case as it stands on the shelf, `k` times its shelf size.
-pub fn spine(text: &mut Text, ff: FormFactor, k: f32, look: Look, title: &str) -> Pic {
-    let size = ff.size();
-    let (w, h) = ((size.spine as f32 * k).round() as i32, (size.h as f32 * k).round() as i32);
-    let s = |v: f32| (v * k).round() as i32;
-    let ink = ink_on(look.color);
-    // A Game Boy cartridge's label is short: a size smaller gets more of the name on it.
-    let title_px = ((if ff == FormFactor::HandheldCart { 21.0 } else { 24.0 }) * k).round() as u32;
-    let mut p = Pic::new(w, h, 0);
-    match ff {
-        FormFactor::HandheldCart | FormFactor::ConsoleCart => {
-            let console = ff == FormFactor::ConsoleCart;
-            p.fill(0, 0, w, h, OPAQUE | look.plastic);
-            // Grip grooves at the top, then a paper label with the title.
-            let (g0, grooves, gap) = if console { (s(9.0), 6, s(6.0)) } else { (s(6.0), 2, s(5.0)) };
-            for g in 0..grooves {
-                let y = g0 + g * gap;
-                p.tint(s(3.0), y, w - s(6.0), s(2.0).max(1), 0x000000, 110);
-                p.tint(s(3.0), y + s(2.0).max(1), w - s(6.0), 1, 0xffffff, 40);
-            }
-            let inset = if console { s(5.0) } else { s(4.0) };
-            let (ly, lh) = (g0 + grooves * gap + s(6.0), h - (g0 + grooves * gap + s(6.0)) - s(10.0));
-            p.fill(inset, ly, w - 2 * inset, lh, OPAQUE | look.color);
-            p.tint(inset, ly, w - 2 * inset, 1, 0xffffff, 50);
-            p.tint(inset, ly + lh - 1, w - 2 * inset, 1, 0x000000, 70);
-            spine_title(text, &mut p, title, title_px, inset, w - 2 * inset, ly + s(6.0), lh - s(12.0), ink);
-            // The plastic's edges catch the light on the left and fall off on the right.
-            p.tint(0, 0, s(2.0).max(1), h, 0xffffff, 45);
-            p.tint(w - s(2.0).max(1), 0, s(2.0).max(1), h, 0x000000, 90);
-            light(&mut p, 1.06, 0.84);
-            let r = if console { 7.0 } else { 5.0 } * k;
-            p.round([r, r, 1.5 * k, 1.5 * k]);
-        }
-        FormFactor::JewelCase => {
-            // A paper spine behind clear plastic; the hinge's ridges at both ends.
-            p.fill(0, 0, w, h, OPAQUE | look.color);
-            let band = s(20.0);
-            p.fill(0, 0, w, band, OPAQUE | look.band);
-            let ridge = s(9.0);
-            for (y, hh) in [(0, ridge), (h - ridge, ridge)] {
-                p.tint(0, y, w, hh, 0xc8ccd2, 90);
-                for k2 in (0..hh).step_by(s(3.0).max(2) as usize) {
-                    p.tint(0, y + k2, w, 1, 0x000000, 60);
-                }
-            }
-            spine_title(text, &mut p, title, title_px, 0, w, band + s(8.0), h - band - ridge - s(16.0), ink);
-            p.tint(s(4.0), 0, s(2.0).max(1), h, 0xffffff, 55);
-            p.tint(0, 0, 1, h, 0xffffff, 70);
-            p.tint(w - 1, 0, 1, h, 0x000000, 90);
-            light(&mut p, 1.06, 0.86);
-            p.round([1.5 * k; 4]);
-        }
-        FormFactor::DvdCase | FormFactor::UmdCase | FormFactor::CardBox => {
-            // The plastic case's rim around the insert's spine, a band in the system's colour at the top.
-            let rim_color = if ff == FormFactor::CardBox { 0x6d6f74 } else { 0x141416 };
-            p.fill(0, 0, w, h, OPAQUE | rim_color);
-            let rim = s(2.5).max(2);
-            let band = match ff {
-                FormFactor::DvdCase => s(34.0),
-                FormFactor::UmdCase => s(28.0),
-                _ => s(24.0),
-            };
-            p.fill(rim, rim, w - 2 * rim, h - 2 * rim, OPAQUE | look.color);
-            p.fill(rim, rim, w - 2 * rim, band, OPAQUE | look.band);
-            p.tint(rim, rim + band, w - 2 * rim, 1, 0x000000, 60);
-            spine_title(
-                text,
-                &mut p,
-                title,
-                title_px,
-                rim,
-                w - 2 * rim,
-                rim + band + s(8.0),
-                h - 2 * rim - band - s(16.0),
-                ink,
-            );
-            // Gloss of the clear sleeve.
-            p.tint(rim + s(4.0), rim, s(2.0).max(1), h - 2 * rim, 0xffffff, 50);
-            p.tint(0, 0, 1, h, 0xffffff, 40);
-            light(&mut p, 1.05, 0.85);
-            p.round([3.0 * k; 4]);
-        }
-    }
-    p
-}
 
-/// Where the cover sits on a case's front, `w` x `h`: (x, y, width, height).
-pub fn label_rect(ff: FormFactor, w: i32, h: i32) -> (i32, i32, i32, i32) {
-    let f = |v: f32, of: i32| (v * of as f32).round() as i32;
-    match ff {
-        FormFactor::ConsoleCart => (f(0.1, w), f(0.25, h), w - 2 * f(0.1, w), h - f(0.25, h) - f(0.08, h)),
-        FormFactor::HandheldCart => (f(0.12, w), f(0.19, h), w - 2 * f(0.12, w), f(0.56, h)),
-        FormFactor::JewelCase => (f(0.07, w), 0, w - f(0.07, w), h),
-        FormFactor::DvdCase | FormFactor::UmdCase => (f(0.035, w), f(0.02, h), w - f(0.035, w) - f(0.02, w), h - 2 * f(0.02, h)),
-        FormFactor::CardBox => (f(0.04, w), f(0.03, h), w - f(0.04, w) - f(0.03, w), h - 2 * f(0.03, h)),
-    }
-}
 
-/// The size a case's front is made at for `k` times its shelf size.
-pub fn front_size(ff: FormFactor, k: f32) -> (i32, i32) {
-    let size = ff.size();
-    ((size.front as f32 * k).round() as i32, (size.h as f32 * k).round() as i32)
-}
 
 /// `img` cut to the shape `w` x `h` (centred) and box-filtered to that size: how a cover fills a label.
 pub fn cover_fill(img: &Image, w: i32, h: i32) -> Image {
@@ -795,91 +681,6 @@ fn balanced(text: &mut Text, px: u32, title: &str, max: i32) -> Option<Vec<Strin
     Some(text.wrap(Face::Title, px, title, hi))
 }
 
-/// The front of a case, `k` times its shelf size: the cover (`cover`, already `cover_fit` to the label's
-/// size) in the case's frame, or a plain label with the console (`art`) and the title.
-pub fn front(text: &mut Text, ff: FormFactor, k: f32, look: Look, title: &str, cover: Option<&Image>, art: Option<&Sprite>) -> Pic {
-    let (w, h) = front_size(ff, k);
-    let s = |v: f32| (v * k).round() as i32;
-    let mut p = Pic::new(w, h, 0);
-    let label = label_rect(ff, w, h);
-    let base = match ff {
-        FormFactor::HandheldCart | FormFactor::ConsoleCart => look.plastic,
-        FormFactor::CardBox => 0xbfc1c5,
-        FormFactor::JewelCase => look.color,
-        _ => 0x121214,
-    };
-    p.fill(0, 0, w, h, OPAQUE | base);
-    if ff.is_cart() {
-        // Grip grooves above the label.
-        let (g0, n, gap) = if ff == FormFactor::ConsoleCart {
-            (h / 18, 6, h / 34)
-        } else {
-            (h / 26, 4, h / 40)
-        };
-        for g in 0..n {
-            let y = g0 + g * gap.max(3);
-            p.tint(w / 8, y, w - w / 4, s(1.5).max(1), 0x000000, 100);
-            p.tint(w / 8, y + s(1.5).max(1), w - w / 4, 1, 0xffffff, 36);
-        }
-        // The label sits in a recess: dark above and left, light below and right.
-        let (lx, ly, lw, lh) = label;
-        let e = s(2.0).max(1);
-        p.tint(lx - e, ly - e, lw + 2 * e, e, 0x000000, 110);
-        p.tint(lx - e, ly, e, lh, 0x000000, 90);
-        p.tint(lx - e, ly + lh, lw + 2 * e, e, 0xffffff, 40);
-        p.tint(lx + lw, ly, e, lh, 0xffffff, 30);
-    }
-    match cover {
-        Some(img) => {
-            let (lx, ly, lw, lh) = label;
-            for y in 0..lh.min(img.h as i32) {
-                for x in 0..lw.min(img.w as i32) {
-                    p.px[((ly + y) * w + lx + x) as usize] = OPAQUE | img.px[(y as u32 * img.w + x as u32) as usize];
-                }
-            }
-        }
-        None => plain_label(text, &mut p, label, look, title, art),
-    }
-    match ff {
-        FormFactor::JewelCase => {
-            // The hinge strip at the left, clear plastic with ridges; a sheen across the lid.
-            let hw = label.0;
-            p.fill(0, 0, hw, h, OPAQUE | mix(look.color, 0x000000, 150));
-            for x in (0..hw).step_by(s(3.0).max(2) as usize) {
-                p.tint(x, 0, 1, h, 0xffffff, 40);
-            }
-            p.tint(hw, 0, 1, h, 0x000000, 120);
-            p.tint(hw + 1, 0, 1, h, 0xffffff, 60);
-            sheen(&mut p, 26);
-            p.tint(0, 0, w, 1, 0xffffff, 80);
-            p.tint(w - 1, 0, 1, h, 0xffffff, 50);
-            p.round([2.0 * k; 4]);
-        }
-        FormFactor::DvdCase | FormFactor::UmdCase | FormFactor::CardBox => {
-            sheen(&mut p, 18);
-            p.tint(0, 0, w, s(1.0).max(1), 0xffffff, 40);
-            let r = if ff == FormFactor::UmdCase { 9.0 } else { 4.0 } * k;
-            p.round([r, r, r, r]);
-        }
-        FormFactor::ConsoleCart | FormFactor::HandheldCart => {
-            light(&mut p, 1.05, 0.9);
-            p.tint(0, 0, w, s(1.5).max(1), 0xffffff, 50);
-            if ff == FormFactor::HandheldCart {
-                // The Game Boy cartridge's cut corner.
-                let cut = w / 7;
-                for y in 0..cut {
-                    for x in w - cut + y..w {
-                        p.px[(y * w + x) as usize] = 0;
-                    }
-                }
-                p.round([4.0 * k, 0.0, 3.0 * k, 3.0 * k]);
-            } else {
-                p.round([9.0 * k, 9.0 * k, 3.0 * k, 3.0 * k]);
-            }
-        }
-    }
-    p
-}
 
 /// A soft diagonal reflection of clear plastic over the front.
 pub fn sheen(p: &mut Pic, strength: u32) {
@@ -925,6 +726,10 @@ pub fn draw_turning(c: &mut Canvas, spine: &Pic, front: &Pic, size: Size, turn: 
     let th = turn.turned.clamp(0.0, 1.0) * std::f32::consts::FRAC_PI_2;
     let (sin, cos) = th.sin_cos();
     let (d, w, h) = (size.spine as f32 * turn.scale, size.front as f32 * turn.scale, size.h as f32 * turn.scale);
+    // A box standing on its short side (SNES, N64) has a spine taller than its front: the spine goes from its own height
+    // to the front's as it turns (the box is laid down as it comes round), never taller than the room it turns in.
+    let front_h = size.front_h as f32 * turn.scale;
+    let spine_h = (h + (front_h - h) * turn.turned.clamp(0.0, 1.0)).min(((clip.1 - clip.0) as f32).max(front_h));
     // Top view, box centre at the origin, z away from you: the spine is the near face, the front its right side.
     let rot = |x: f32, z: f32| (x * cos + z * sin, -x * sin + z * cos);
     let p1 = rot(-d / 2.0, -w / 2.0);
@@ -940,10 +745,10 @@ pub fn draw_turning(c: &mut Canvas, spine: &Pic, front: &Pic, size: Size, turn: 
     let mut covered = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
     // The spine faces you until the turn is a right angle; the front from the first degree on.
     if cos > 0.001 {
-        face(c, spine, a, b, turn.cy, h, shade_for(cos, turn.shade), clip, &mut covered);
+        face(c, spine, a, b, turn.cy, spine_h, shade_for(cos, turn.shade), clip, &mut covered);
     }
     if sin > 0.001 {
-        face(c, front, b, e, turn.cy, h, shade_for(sin, turn.shade), clip, &mut covered);
+        face(c, front, b, e, turn.cy, front_h, shade_for(sin, turn.shade), clip, &mut covered);
     }
     (covered.0, covered.1, covered.2 - covered.0, covered.3 - covered.1)
 }
@@ -1111,7 +916,7 @@ mod tests {
     fn a_case_facing_you_keeps_its_size_and_turned_shows_its_front_only() {
         let mut buf = vec![0u32; 800 * 600];
         let mut c = Canvas::new(&mut buf, 800, 600);
-        let ff = FormFactor::DvdCase;
+        let ff = crate::cabinet::FormFactor::DvdCase;
         let size = ff.size();
         let spine = Pic::new(size.spine, size.h, OPAQUE | 0xff0000);
         let front = Pic::new(size.front, size.h, OPAQUE | 0x00ff00);

@@ -98,3 +98,22 @@ fn minimal_cards_and_split_open_the_info_page_and_nothing_is_cut_off() {
         assert!(seen.contains("Turn over") && !seen.contains("Details"), "{look}: not the box\n{seen}");
     }
 }
+
+/// New-user test 2026-10-30: "Entwickler: Nintendo Research & De…" was cut short in German at Large. A long developer
+/// takes a second line instead, and nothing of it is lost.
+#[test]
+fn a_long_developer_takes_a_second_line_instead_of_ending_in_dots() {
+    let tmp = tempfile::tempdir().unwrap();
+    let status = Command::new("python3")
+        .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.path().to_str().unwrap(), "dark"])
+        .stdout(std::process::Stdio::null())
+        .status()
+        .expect("python3 for scripts/curator-fake-library.py");
+    assert!(status.success());
+    let stub = wayland(tmp.path());
+    for (lang, text_size) in [("de", "large"), ("en", "normal")] {
+        let (seen, problems) = shot(tmp.path(), stub.as_ref(), "info:minimal:gb:link", "640x480", lang, text_size);
+        assert!(seen.contains("Nintendo Entertainment") && seen.contains("Analysis & Development"), "{lang}: the whole developer is there\n{seen}");
+        assert!(problems.trim().is_empty(), "{lang}: {problems}");
+    }
+}

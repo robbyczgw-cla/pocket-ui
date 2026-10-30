@@ -1,0 +1,5 @@
+{"label": [3, 11, 76, 112], "label_note": "bounding box; label pixels are exactly (200,200,200), the corners are slightly rounded", "mm": [54, 85],
+ "mm_note": "HuCard: credit-card size 54 x 85 mm; the photo's card is 296 x 461 px (0.64), the same proportions",
+ "source": "https://commons.wikimedia.org/wiki/File:HU1.jpg", "licence": "Public domain (PD-self)", "author": "Kevin Ott, not Evan Amos",
+ "pixellab": "raw-3.png: image-to-pixelart, input 846x1280 (paint.py: black backdrop to white, white plastic to light grey with a 1 px grey edge; prep.py), output 88x133, init_image_strength 150, text_guidance_scale 8; finish.py --blob --label-near 205,207,208:14 --simple-cut 12",
+ "logos_removed": "none on the photo (it shows the card's contact side); the card face below the contacts was painted flat grey as the label, the moulded arrow at the bottom went under it"}

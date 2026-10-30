@@ -128,3 +128,30 @@ impl App {
         Image { w, h, px }
     }
 }
+
+/// What the previews were painted with: appearance, language, text size and the corner's clock ("14:02", None while the
+/// clock was never set).
+pub(crate) type PreviewKey<'a> = (bool, pocket_ui::i18n::Lang, pocket_ui::type_scale::TextSize, &'a Option<String>);
+
+/// Whether the previews must be painted again: any of those changed. The clock is in it so that the small clock in
+/// each preview is the real one, also minutes after the step opened or after the zone step.
+pub(crate) fn previews_stale(made: PreviewKey, now: PreviewKey) -> bool {
+    made != now
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pocket_ui::i18n::Lang;
+    use pocket_ui::type_scale::TextSize;
+
+    #[test]
+    fn the_previews_are_painted_again_when_the_minute_changes() {
+        let (a, b) = (Some("14:02".to_string()), Some("14:03".to_string()));
+        let made = (false, Lang::En, TextSize::Normal, &a);
+        assert!(!previews_stale(made, (false, Lang::En, TextSize::Normal, &a)));
+        assert!(previews_stale(made, (false, Lang::En, TextSize::Normal, &b)), "a new minute: the clock in the previews is the real one");
+        assert!(previews_stale(made, (false, Lang::En, TextSize::Normal, &None)));
+        assert!(previews_stale(made, (true, Lang::En, TextSize::Normal, &a)));
+    }
+}

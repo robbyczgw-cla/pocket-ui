@@ -280,6 +280,9 @@ impl App {
                 self.text.draw(&mut band, Face::Body, NU_SMALL, pad + NU_BTN_PAD, base, color, line);
             }
         }
+        // With larger text or in German not every category fits: the bar at the edge says there are more (new-user test
+        // 2026-10-30: three of five showed and nothing hinted at the other two).
+        pocket_ui::kit::scrollbar(c, top, visible as i32 * pitch, first, visible, n);
         self.hits.list(sel, n, 0.0, pitch as f32);
         self.nu_hints(c, &[("B", "Back"), ("A", "Open")]);
     }

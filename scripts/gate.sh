@@ -20,9 +20,10 @@
 #    0.1-0.6 s and failed under the load of the compile (2026-10-24); if any shell test fails beside cargo, all of them
 #    run again alone and that result counts. They take about 50 s on a quiet machine, about 3 min on the remote host.
 #  - paths changed against the merge base with main (GATE_BASE=<ref>; server2: the list comes from tools/remote-gate.sh)
-#    skip what cannot be affected, and say so ("gate: SKIPPED ..."): the shell tests unless deploy/, scripts/, Cargo.*,
-#    build.rs or a src/ file those scripts name changed; the integration tests (unit tests and doc checks still run) when
-#    only docs/ (not docs/user/, the on-device manual), root *.md, LICENSE or NOTICE* changed. No list, or GATE_FULL=1:
+#    skip what cannot be affected, and say so ("gate: SKIPPED ..."): shell tests may skip ordinary Markdown and Rust
+#    sources no shell script names. Licence files and every unknown path run them. The integration tests (unit tests and
+#    doc checks still run) skip when only docs/ Markdown (not docs/user/, the manual), root *.md or LICENSE changed.
+#    No list, or GATE_FULL=1:
 #    everything runs. GATE_LEAKS_DONE=1 (set by remote-gate.sh, which scans where .git is; the remote host has no .git) skips the scan.
 #  - GATE_PROFILE=release runs the tests with the production profile (thin LTO, one codegen unit, panic=abort for the
 #    binaries): slow, use it when you changed [profile.*] or want the production binaries under test.
@@ -83,6 +84,14 @@ if [ "$quick" -eq 1 ]; then
     exit 0
 fi
 
+# Run selection regressions even when this branch would skip the shell suites. Fixture trees omit this script,
+# preventing recursion; its cargo and shell commands are stand-ins and never build or access a device.
+if [ -f scripts/test-gate-paths.sh ]; then
+    paths_log=/tmp/gate-paths-$name.log
+    sh scripts/test-gate-paths.sh >"$paths_log" 2>&1 || {
+        echo "GATE: path-selection tests FAILED ($paths_log)"; tail -10 "$paths_log"; exit 1;
+    }
+fi
 unset POCKETUI_TEST_QUICK
 start=$(date +%s)
 
@@ -93,33 +102,40 @@ if [ -f .gate-changed ]; then changed=$(cat .gate-changed)
 elif base=$(git merge-base "${GATE_BASE:-main}" HEAD 2>/dev/null); then
     changed=$( { git diff --name-only "$base"; git ls-files -o --exclude-standard; } | sort -u )
 fi
-# Only conservative skips: every changed path has to prove it is harmless, one unknown path runs the full gate.
-# docs-only: documents that no build, test or the on-device manual reads (docs/user/ is embedded, so it counts as source).
-# no shell tests: nothing in deploy/, scripts/, Cargo.*, build.rs, nor in a src/ file those scripts mention.
+# Every skipped path must be known harmless. Source references include all shell scripts, not just the test entry
+# points: e.g. check-core-licences.sh reads src/hostsys.rs. Other assets, configuration and unknown paths run the suite.
+# The Rust-only sources are safe here because shell tests use stand-in binaries rather than compiling/running them.
 docs_only=0 shell_tests=1 why_shell=
 if [ -n "$changed" ] && [ -z "${GATE_FULL:-}" ]; then
-    srcrefs=$(grep -ho 'src/[a-z_0-9/]*\.rs' deploy/*.sh deploy/*/*.sh scripts/*.sh scripts/image/*.sh 2>/dev/null | sort -u)
+    srcrefs=$(find deploy scripts -type f -name '*.sh' -exec grep -hoE 'src/[a-zA-Z0-9_./-]+\.rs' {} + 2>/dev/null | sort -u)
     docs_only=1 shell_tests=0
-    for f in $changed; do
+    while IFS= read -r f; do
         case $f in
             docs/user/*) docs_only=0 ;;
-            docs/*|*.md|LICENSE|NOTICE*) ;;
+            docs/*.md|LICENSE) ;;
+            */*) docs_only=0 ;;
+            *.md) ;;
             *) docs_only=0 ;;
         esac
         case $f in
-            deploy/*|scripts/*|Cargo.toml|Cargo.lock|build.rs|rust-toolchain*) shell_tests=1; why_shell=$f ;;
-            src/*) case "
+            LICENSE|NOTICE.md|assets/fonts/OFL.txt) shell_tests=1; why_shell=$f ;;
+            docs/*.md) ;;
+            src/*.rs) case "
 $srcrefs
 " in *"
 $f
 "*) shell_tests=1; why_shell=$f ;; esac ;;
+            */*) shell_tests=1; why_shell=$f ;;
+            *.md) ;;
+            *) shell_tests=1; why_shell=$f ;;
         esac
-    done
-    [ "$docs_only" -eq 0 ] || shell_tests=0
+    done <<EOF
+$changed
+EOF
 fi
 
 # The shell tests: the launcher test and the small ones. Each has its own log and exit-code file in $RCD.
-RCD=$(mktemp -d "${TMPDIR:-/tmp}/gate-rc.XXXXXX")
+RCD=$(mktemp -d "${TMPDIR:-/tmp}/gate-rc.XXXXXX") || { echo "GATE: cannot create shell test result directory"; exit 1; }
 shell_launcher() { sh deploy/test-run-pocket-ui.sh >"$L" 2>&1; echo $? >"$RCD/l"; }
 shell_small() {
     # The device check's shell test (fake ssh and /proc, about 3 s): scripts/verify-device.sh, docs/DEVELOPING.md "Deploy".
@@ -136,7 +152,12 @@ shell_small() {
     sh deploy/fat/test-hook.sh >"$F" 2>&1; echo $? >"$RCD/f"
 }
 shell_tests_run() { shell_launcher & shell_small; wait; }   # two lanes: the launcher (the longest) and all the small ones
-shell_rc() { cat "$RCD/$1" 2>/dev/null || echo 0; }
+shell_rc() {
+    # A skipped suite has no result by design; a selected suite without a complete result never passed.
+    if [ "$shell_tests" -eq 0 ]; then echo 0; return; fi
+    result=$(cat "$RCD/$1" 2>/dev/null)
+    case $result in ''|*[!0-9]*) echo 125 ;; *) echo "$result" ;; esac
+}
 shell_failed() { for k in l v c p q g f; do [ "$(shell_rc $k)" = 0 ] || return 0; done; return 1; }
 
 # The shell tests build nothing and use no port or shared directory (mktemp, fakes), so they run beside cargo when the host has
@@ -169,10 +190,12 @@ case $runner in
 esac
 tdone=$(date +%s)
 sdone=$tdone
+shell_run_rc=0
 if [ "$parallel" -eq 1 ]; then
-    wait "$shell_pid"
+    wait "$shell_pid" || shell_run_rc=$?
     sdone=$(date +%s)
-    if shell_failed; then
+    # An interrupted coordinator can leave a lane alive. Fail this run; do not race a retry against it.
+    if [ "$shell_run_rc" -eq 0 ] && shell_failed; then
         echo "gate: shell tests failed beside cargo, running them again alone (first logs: $L.parallel ...)"
         cp "$L" "$L.parallel"
         shell_tests_run
@@ -196,13 +219,17 @@ else
     echo "gate: profile $profile; tests $((tdone - start)) s, total $((end - start)) s"
 fi
 if [ "$docs_only" -eq 1 ]; then
-    echo "gate: SKIPPED integration tests: only documents changed ($(echo "$changed" | wc -l) files, none read by the build or the manual); unit tests with the doc checks ran"
+    echo "gate: SKIPPED integration tests: only documents changed ($(echo "$changed" | wc -l) files, none read by the Rust build or the manual); unit tests with the doc checks ran"
 fi
 if [ "$shell_tests" -eq 0 ]; then
-    echo "gate: SKIPPED launcher and other shell tests: no change in deploy/, scripts/, Cargo.*, build.rs or a src/ file they read (GATE_FULL=1 runs everything)"
+    echo "gate: SKIPPED launcher and other shell tests: only Markdown or Rust sources not named by shell scripts changed (GATE_FULL=1 runs everything)"
 fi
 
 fail=0
+if [ "$shell_run_rc" -ne 0 ]; then
+  echo "GATE: shell test coordinator FAILED (exit $shell_run_rc; incomplete run)"
+  fail=1
+fi
 if [ $trc -ne 0 ]; then
   echo "GATE: tests FAILED ($T)"
   grep -E "FAILED|panicked|^error" "$T" | head -10

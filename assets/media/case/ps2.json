@@ -1,0 +1,54 @@
+{
+ "res": 2,
+ "front_label": [
+  6,
+  6,
+  158,
+  228
+ ],
+ "spine_label": [
+  5,
+  40,
+  28,
+  195
+ ],
+ "band": null,
+ "front_band": null,
+ "fixed_spine": [
+  [
+   5,
+   5,
+   28,
+   32,
+   14,
+   14,
+   16
+  ],
+  [
+   15,
+   19,
+   8,
+   3,
+   110,
+   110,
+   116
+  ],
+  [
+   5,
+   36,
+   28,
+   2,
+   120,
+   120,
+   126
+  ]
+ ],
+ "tint": false,
+ "source_front": "https://commons.wikimedia.org/wiki/File:DVD_Jewel_Box.jpg",
+ "source_spine": "https://commons.wikimedia.org/wiki/File:DVD_Jewel_Box.jpg",
+ "licence": "CC0",
+ "author": "Gnnwikifikator",
+ "pixellab": "image-to-pixelart v2 at the final size, 3 variants per face; kept front-3/spine-3 (init_image_strength 250 + fixer)",
+ "logos_removed": "none on the plastic used (the Wii case's moulded logo is on the disc half, not used; the DVD logo of the tray photo lies under the label)",
+ "note": "PS2: black DVD keep case, black block at the top of the spine"
+}

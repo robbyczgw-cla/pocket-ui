@@ -228,7 +228,7 @@ impl Left {
     pub fn line(&self, system: &str) -> String {
         match self {
             Left::Charging => "Charging".to_string(),
-            Left::Measuring => "Battery: measuring this game\u{2026}".to_string(),
+            Left::Measuring => "Battery: not enough play to tell yet".to_string(),
             Left::Time { secs, basis: Basis::Game } => format!("{} in this game", time_left(*secs)),
             // Not this game's own measurement: whose it is, in brackets.
             Left::Time { secs, basis } => format!("{}{}", time_left(*secs), whose(*basis, system)),
@@ -489,7 +489,7 @@ mod tests {
         assert_eq!(t(4 * 3600, Basis::System).line("PS2"), "About 4 h left (PS2 games)");
         assert_eq!(t(30 * 3600, Basis::AllGames).line("GBA"), "More than a day left (all games)");
         assert_eq!(t(25 * 60, Basis::Game).line("GBA"), "About 25 min left in this game");
-        assert_eq!(Left::Measuring.line("GBA"), "Battery: measuring this game\u{2026}");
+        assert_eq!(Left::Measuring.line("GBA"), "Battery: not enough play to tell yet");
         let r = Rate {
             per_hour: 12.2,
             basis: Basis::Game,

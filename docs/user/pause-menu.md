@@ -114,7 +114,7 @@ it found (even across restarts). It only says what it measured:
 | "About 3 h 20 min left in this game" | This game has been measured for at least 20 minutes on battery, and the charge dropped by 3% or more in that time |
 | "About 4 h left (PS2 games)" | This game hasn't been measured enough yet: the other games of its console stand in |
 | "About 5 h left (all games)" | No game of this console has been measured enough either: all the games you played stand in |
-| "Battery: measuring this game…" | Nothing has been measured enough yet |
+| "Battery: not enough play to tell yet" | Not played long enough on battery yet |
 | "Charging" | The Pocket is on the charger |
 
 Time asleep, time on the charger and the minute in which a game starts or ends are never counted, and neither is a
@@ -333,11 +333,19 @@ With Save selected, press **Left/Right** to choose the slot (the number appears 
 On the right you see:
 
 - the preview of the entry (the picture at the moment it was saved), or "Empty" for an empty slot
-- a row of dots, one per slot: a lit dot holds a save, the ring marks the slot Save or Load is on
-  (no ring while Load is on Auto or Before load)
-- a line such as "Slot 3 · replaces the save from 5 min ago" (on Save), "Slot 3 · saved 5 min
-  ago" (on Load), "Slot 3 · empty", "Auto · saved when you quit · 3 min ago" or "Before load ·
-  just now"
+- under it, what the game saved to back then, and its blocks beside it the way that console's own memory-card
+  screen showed them: a disc game's **memory card** (the PlayStation's or the PS2's card, the GameCube's, the
+  Dreamcast's VMU, the Xbox's memory unit, the PSP's Memory Stick Duo, a cartridge game's
+  own **cartridge** (NES, SNES, Game Boy, Mega Drive, DS…) beside its paper save label; other games (computers,
+  ports, the Wii and other disc consoles) just the blocks. A block with a save shows the game's cover and its number (the console's picture until the
+  cover is there, or without one), an empty one its number. The ring marks the slot Save or Load is on (no ring
+  while Load is on Auto or Before load). Blocks stay readable in narrow previews.
+  Cartridge labels follow the current cover.
+  The cards are pixel art made from photos of the real ones (or from a description
+  where no free photo exists), without a maker's name
+- above the keys: "Slot 3 · replaces the save from today 14:02" (on Save), "Slot 3 · saved
+  yesterday 21:10" (on Load), "Slot 3 · empty", "Auto · saved when you quit · today 14:02" or
+  "Before load · today 14:05" (real times)
 
 On pocket-ui's own host the slot you used last is remembered for each game, and the
 [shortcuts](options.md#shortcuts) use the same slot.
@@ -403,7 +411,7 @@ written. [Storage](storage.md) shows what they take, and its clean-up of old aut
 ## Saving with RetroArch
 
 RetroArch has one save per game in the menu. On the right you see its preview and when it was made,
-for example "Replaces the save from 5 min ago" or "Saved 5 min ago". With no save yet, the preview
+for example "Replaces the save from today 14:02" or "Saved today 14:02". With no save yet, the preview
 area says "Empty slot".
 
 On PlayStation 2, GameCube, Wii and 3DS, Save and Load close the menu and let the game run, then the
@@ -424,6 +432,8 @@ Save, Load or Earlier: the core cannot save states yet. The Xbox's own saves in 
 appear by themselves when a later core can save states. More in [Systems](systems.md#xbox).
 
 ## PortMaster ports
+
+Quit closes only this launch and its helpers, including helpers in another process group. A port started next keeps its controls.
 
 HOME opens the menu over a running port, and **Continue** gives the port its buttons back. A port saves by itself, so
 there is no Save or Load: the menu says "This game saves by itself. Save in the game before you quit."

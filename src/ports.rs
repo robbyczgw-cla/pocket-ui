@@ -299,26 +299,127 @@ pub fn scan_installed(ports_dir: &Path) -> std::collections::HashMap<String, Ins
 
 type Index = std::sync::Arc<std::collections::HashMap<String, Installed>>;
 
-/// The scan of the ports folder, kept until the folder changes (a launcher added or removed) or [`forget`] is called:
-/// the shelf asks for art on every paint, and must not read a hundred files for it.
-static INDEX: std::sync::Mutex<Option<(Option<SystemTime>, Index)>> = std::sync::Mutex::new(None);
-
-fn installed_index() -> Index {
-    let stamp = std::fs::metadata(PORTS_DIR).and_then(|m| m.modified()).ok();
-    let mut cur = INDEX.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some((at, index)) = cur.as_ref().filter(|(at, _)| *at == stamp) {
-        let _ = at;
-        return index.clone();
-    }
-    let index: Index = std::sync::Arc::new(scan_installed(Path::new(PORTS_DIR)));
-    *cur = Some((stamp, index.clone()));
-    index
+#[derive(Clone, Default)]
+struct IndexSnapshot {
+    index: Index,
+    revision: u64,
 }
 
-/// The ports folder is read again at the next question: after an install, an update or a removal, which change files
-/// inside the ports' folders without always touching the folder that the stamp is taken from.
+#[derive(Default)]
+struct IndexState {
+    published: std::sync::Mutex<IndexSnapshot>,
+    invalidated: std::sync::atomic::AtomicU64,
+}
+
+struct IndexCache {
+    state: std::sync::Arc<IndexState>,
+    wake: std::sync::mpsc::SyncSender<()>,
+}
+
+impl IndexCache {
+    /// Both the directory stat and the full scan belong to this worker. It holds the publication lock only to
+    /// exchange finished snapshots; dropping the old map also happens outside that lock.
+    fn start(
+        mut stamp: impl FnMut() -> Option<SystemTime> + Send + 'static,
+        mut scan: impl FnMut() -> std::collections::HashMap<String, Installed> + Send + 'static,
+        mut notify: impl FnMut() + Send + 'static,
+    ) -> Self {
+        use std::sync::atomic::Ordering;
+        let state = std::sync::Arc::new(IndexState::default());
+        let worker = state.clone();
+        let (wake, rx) = std::sync::mpsc::sync_channel(1);
+        std::thread::spawn(move || {
+            let mut seen = None;
+            let mut revision = 0;
+            loop {
+                let generation = worker.invalidated.load(Ordering::Acquire);
+                let before = stamp();
+                if seen != Some((generation, before)) {
+                    let index = std::sync::Arc::new(scan());
+                    // An install or directory change during the scan makes that pass obsolete. Keep the last
+                    // finished snapshot visible and immediately scan again, even if the wake channel was full.
+                    if generation != worker.invalidated.load(Ordering::Acquire) || before != stamp() {
+                        continue;
+                    }
+                    revision += 1;
+                    let old = {
+                        let mut published = worker.published.lock().unwrap_or_else(|e| e.into_inner());
+                        std::mem::replace(&mut *published, IndexSnapshot { index, revision })
+                    };
+                    drop(old);
+                    seen = Some((generation, before));
+                    notify();
+                }
+                match rx.recv_timeout(Duration::from_secs(1)) {
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                    Ok(()) | Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                }
+            }
+        });
+        Self { state, wake }
+    }
+
+    fn read(&self, last: &mut IndexSnapshot) -> IndexSnapshot {
+        match self.state.published.try_lock() {
+            Ok(published) => *last = published.clone(),
+            Err(std::sync::TryLockError::Poisoned(e)) => *last = e.into_inner().clone(),
+            Err(std::sync::TryLockError::WouldBlock) => {}
+        }
+        last.clone()
+    }
+
+    fn invalidate(&self) {
+        self.state.invalidated.fetch_add(1, std::sync::atomic::Ordering::Release);
+        let _ = self.wake.try_send(());
+    }
+}
+
+static INDEX: std::sync::OnceLock<IndexCache> = std::sync::OnceLock::new();
+static INDEX_NOTIFY: std::sync::OnceLock<std::sync::Arc<dyn Fn() + Send + Sync>> = std::sync::OnceLock::new();
+
+thread_local! {
+    // Even the brief publication exchange must not hold up a paint: keep this thread's last finished Arc.
+    static LAST_INDEX: std::cell::RefCell<IndexSnapshot> = std::cell::RefCell::new(IndexSnapshot::default());
+}
+
+fn index_cache() -> &'static IndexCache {
+    INDEX.get_or_init(|| IndexCache::start(
+        || std::fs::metadata(PORTS_DIR).and_then(|m| m.modified()).ok(),
+        || scan_installed(Path::new(PORTS_DIR)),
+        || { if let Some(notify) = INDEX_NOTIFY.get() { notify(); } },
+    ))
+}
+
+/// Register the event-loop wake before starting the index worker. Called once during UI startup; each completed
+/// refresh asks the UI to discard its port-art caches and repaint. The callback runs without any index lock.
+pub fn start_index(notify: impl Fn() + Send + Sync + 'static) {
+    let _ = INDEX_NOTIFY.set(std::sync::Arc::new(notify));
+    let _ = index_cache();
+    // A caller may have looked up port art before startup registered its callback.
+    if let Some(notify) = INDEX_NOTIFY.get() { notify(); }
+}
+
+fn index_snapshot() -> IndexSnapshot {
+    let cache = index_cache();
+    LAST_INDEX.with(|last| cache.read(&mut last.borrow_mut()))
+}
+
+fn installed_index() -> Index {
+    index_snapshot().index
+}
+
+/// The last finished index's revision, zero until the first scan finishes. Art caches can discard results from an
+/// earlier revision; reading this never waits for a scan or touches the card.
+pub fn installed_revision() -> u64 {
+    index_snapshot().revision
+}
+
+/// Ask the worker to refresh after an install, update or removal. Keep the previous snapshot while it reads files
+/// inside the ports' folders (these changes do not always touch the parent directory's modification time).
 pub fn forget() {
-    *INDEX.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    if let Some(cache) = INDEX.get() {
+        cache.invalidate();
+    }
 }
 
 /// The installed port that `launcher` ("Animal Kart.sh") starts.
@@ -416,8 +517,9 @@ fn harbourmaster(args: &[&str]) -> Result<(), String> {
 
 pub fn install(port: &Port) -> Result<(), String> {
     forget();
-    harbourmaster(&["install", &port.name])?;
+    let result = harbourmaster(&["install", &port.name]);
     forget();
+    result?;
     if installed(port) { Ok(()) } else { Err("PortMaster finished, but the game is missing.".into()) }
 }
 
@@ -446,6 +548,72 @@ pub fn size_label(bytes: u64) -> String {
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    #[test]
+    fn a_blocked_port_scan_keeps_the_last_snapshot_and_repeats_after_invalidation() {
+        use std::sync::{mpsc, Arc};
+        let (blocked, scanning) = mpsc::channel();
+        let (release, released) = mpsc::channel();
+        let (published, publications) = mpsc::channel();
+        let mut pass = 0;
+        let cache = Arc::new(IndexCache::start(
+            || None,
+            move || {
+                pass += 1;
+                if pass == 2 {
+                    blocked.send(()).unwrap();
+                    let _ = released.recv();
+                }
+                [("Game.sh".to_string(), Installed { md5: Some(pass.to_string()), ..Installed::default() })].into_iter().collect()
+            },
+            move || { let _ = published.send(()); },
+        ));
+        publications.recv_timeout(Duration::from_secs(5)).unwrap();
+        let mut last = IndexSnapshot::default();
+        assert_eq!(cache.read(&mut last).index["Game.sh"].md5.as_deref(), Some("1"));
+        cache.invalidate();
+        scanning.recv_timeout(Duration::from_secs(5)).unwrap();
+
+        // A UI reader must finish while the scan is blocked, even during the brief publication exchange.
+        let held = cache.state.published.lock().unwrap();
+        let reader = cache.clone();
+        let (read, result) = mpsc::channel();
+        let thread = std::thread::spawn(move || { let _ = read.send(reader.read(&mut last)); });
+        let snapshot = result.recv_timeout(Duration::from_secs(2)).expect("index reads must never wait for the scan or publisher");
+        assert_eq!(snapshot.index["Game.sh"].md5.as_deref(), Some("1"));
+        drop(held);
+        thread.join().unwrap();
+
+        // Updating a port while an older pass reads it must cause another pass even when the root stamp stays the same.
+        cache.invalidate();
+        release.send(()).unwrap();
+        publications.recv_timeout(Duration::from_secs(5)).unwrap();
+        let mut last = snapshot;
+        let refreshed = cache.read(&mut last);
+        assert_eq!(refreshed.index["Game.sh"].md5.as_deref(), Some("3"));
+        assert_eq!(refreshed.revision, 2, "the obsolete second scan was never published");
+    }
+
+    #[test]
+    fn directory_changes_refresh_the_port_index_without_an_install() {
+        use std::sync::{atomic::{AtomicU64, Ordering}, mpsc, Arc};
+        let directory_version = Arc::new(AtomicU64::new(0));
+        let stamp = directory_version.clone();
+        let (published, publications) = mpsc::channel();
+        let mut pass = 0;
+        let cache = IndexCache::start(
+            move || Some(SystemTime::UNIX_EPOCH + Duration::from_secs(stamp.load(Ordering::Relaxed))),
+            move || {
+                pass += 1;
+                [("Game.sh".to_string(), Installed { md5: Some(pass.to_string()), ..Installed::default() })].into_iter().collect()
+            },
+            move || { let _ = published.send(()); },
+        );
+        publications.recv_timeout(Duration::from_secs(5)).unwrap();
+        directory_version.store(1, Ordering::Relaxed);
+        publications.recv_timeout(Duration::from_secs(5)).expect("the worker must notice directory changes without forget");
+        assert_eq!(cache.read(&mut IndexSnapshot::default()).index["Game.sh"].md5.as_deref(), Some("2"));
+    }
 
     #[test]
     fn uninstall_names_the_port_as_harbourmaster_knows_it() {

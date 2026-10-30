@@ -28,23 +28,16 @@ pub enum FormFactor {
     CardBox,
 }
 
-/// What goes into the console when a game starts.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Media {
-    Cart,
-    Disc,
-    Umd,
-    Card,
-}
-
 /// A case's size on the shelf, in screen pixels: the spine (what faces you on the shelf), the front (the
 /// cover side, shown when the case is turned) and the height. Thicknesses are exaggerated so a 24 px title
-/// fits on every spine.
+/// fits on every spine. A box that lies wide (SNES, N64) stands on its short side on the shelf, as collectors keep
+/// them: its spine is as tall as the box is wide, its front `front_h` high.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Size {
     pub spine: i32,
     pub front: i32,
     pub h: i32,
+    pub front_h: i32,
 }
 
 impl FormFactor {
@@ -65,7 +58,9 @@ impl FormFactor {
             | "virtualboy" | "pokemini" | "supervision" | "gamate" | "gameandwatch" | "arduboy" | "pico-8" | "pico8" | "tic-80" | "tic80" => HandheldCart,
             "nes" | "nesh" | "famicom" | "fds" | "snes" | "snesh" | "sfc" | "satellaview" | "sufami" | "n64" | "megadrive" | "megadriveh"
             | "megadrive-japan" | "genesis" | "genh" | "sega32x" | "mastersystem" | "sg-1000" | "sg1000" | "atari2600" | "atari5200" | "atari7800"
-            | "colecovision" | "intellivision" | "vectrex" | "odyssey2" | "videopac" | "channelf" | "neogeo" | "msx" | "msx2" => ConsoleCart,
+            | "colecovision" | "intellivision" | "vectrex" | "odyssey2" | "videopac" | "channelf" | "neogeo" | "msx" | "msx2"
+            // The PC Engine's HuCard goes in like a cartridge.
+            | "pcengine" | "tg16" | "supergrafx" => ConsoleCart,
             "ps2" | "gamecube" | "wii" | "wiiware" | "wiiu" | "xbox" | "ps3" => DvdCase,
             "psp" | "pspockets" => UmdCase,
             "nds" | "3ds" | "n3ds" | "psvita" | "switch" => CardBox,
@@ -92,15 +87,6 @@ impl FormFactor {
 
     pub fn is_cart(self) -> bool {
         matches!(self, FormFactor::HandheldCart | FormFactor::ConsoleCart)
-    }
-
-    pub fn media(self) -> Media {
-        match self {
-            FormFactor::HandheldCart | FormFactor::ConsoleCart => Media::Cart,
-            FormFactor::JewelCase | FormFactor::DvdCase => Media::Disc,
-            FormFactor::UmdCase => Media::Umd,
-            FormFactor::CardBox => Media::Card,
-        }
     }
 
     /// Smallest first: the order favourites are grouped in.
@@ -132,6 +118,10 @@ pub enum ShelfKey {
     SmartShelf(usize),
     /// A sticker's games (its id): pinned to Home, or open from the Curator shelf.
     Sticker(u32),
+    /// The games a card's developer, series or genre leads to, while they are open (`app_connections`).
+    Connection,
+    /// Curator's Rediscover, while it is open.
+    Rediscover,
     /// Index into the library's systems.
     System(usize),
 }
@@ -615,11 +605,6 @@ mod tests {
             assert!(f.size().front > f.size().spine * 3, "{f:?}");
         }
         assert!(HandheldCart.is_cart() && ConsoleCart.is_cart() && !JewelCase.is_cart() && !CardBox.is_cart());
-        assert_eq!(JewelCase.media(), Media::Disc);
-        assert_eq!(DvdCase.media(), Media::Disc);
-        assert_eq!(UmdCase.media(), Media::Umd);
-        assert_eq!(CardBox.media(), Media::Card);
-        assert_eq!(ConsoleCart.media(), Media::Cart);
     }
 
     #[test]
@@ -731,7 +716,8 @@ mod tests {
         assert_eq!(cab.pitch(0), DvdCase.size().h + HEADROOM + BOARD);
         assert_eq!(cab.y(1), cab.pitch(0));
         assert_eq!(cab.y(2), cab.pitch(0) + cab.pitch(1));
-        assert!(cab.pitch(1) < cab.pitch(2) && cab.pitch(2) < cab.pitch(0));
+        // A Game Boy box (128 mm) is a little taller than a jewel case (125 mm), both far under a DVD case.
+        assert!(cab.pitch(2) < cab.pitch(1) && cab.pitch(1) < cab.pitch(0));
         assert_eq!(cab.find(ShelfKey::System(1), Item::Game(1, 0)), Some((1, 0)));
         assert_eq!(cab.find(ShelfKey::System(1), Item::Game(2, 0)), None);
         assert_eq!(cab.find(ShelfKey::Favorites, Item::Game(1, 0)), None);

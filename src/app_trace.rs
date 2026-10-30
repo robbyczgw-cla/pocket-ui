@@ -40,7 +40,8 @@ impl App {
                 Screen::Home => "shelf",
                 Screen::Games(_) => "games",
                 Screen::Favorites => "favorites",
-                Screen::Curator | Screen::Shelf(_) | Screen::Sticker(_) | Screen::LensResults => "curator",
+                Screen::Curator | Screen::Shelf(_) | Screen::Sticker(_) | Screen::LensResults | Screen::Rediscover => "curator",
+                Screen::Connection => "connection",
             }
         };
         let file = |p: &std::path::Path| p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -56,7 +57,7 @@ impl App {
             Some(Item::Favorites) => "favorites".into(),
             Some(Item::Streaming) => "streaming".into(),
             Some(Item::Search) => "search".into(),
-            Some(Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_)) => "curator".into(),
+            Some(Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover) => "curator".into(),
             None => "-".into(),
         };
         // Spaces in a file name would split the line; the harness reads `sel=` up to the end.

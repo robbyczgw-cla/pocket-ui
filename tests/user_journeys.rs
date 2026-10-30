@@ -56,7 +56,8 @@ fn library(dir: &Path) {
             let body = if f.ends_with(".cue") {
                 "FILE \"Pocket CD Demo (USA).bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n"
             } else {
-                ""
+                // Not empty: pocket-ui refuses to start a game file with nothing in it (`library_cache::empty_game`).
+                "x"
             };
             std::fs::write(folder.join(f), body).unwrap();
         }
@@ -280,6 +281,22 @@ while :; do sleep 0.05; done
             });
             text
         }
+        fn sticker_sheet(&mut self) {
+            self.send("x");
+            self.sees("Stickers");
+            // With Echoes switched off and one version, the full card page's first row is Stickers.
+            let mut focused = false;
+            for _ in 0..30 {
+                self.send("down");
+                if self.frame().contains("Open") {
+                    focused = true;
+                    break;
+                }
+            }
+            assert!(focused, "the card's Stickers row must be focusable");
+            self.send("a");
+            self.sees("Playing now");
+        }
     }
     impl Drop for Driver {
         fn drop(&mut self) {
@@ -298,6 +315,83 @@ while :; do sleep 0.05; done
             let _ = self.child.kill();
             let _ = self.child.wait();
         }
+    }
+
+    #[test]
+    fn changing_case_stickers_refreshes_the_standing_shelf_spine_in_the_same_list() {
+        let mut ui = Driver::start("live-case-stickers", true, |tmp, cmd| {
+            let data = tmp.join("data");
+            std::fs::write(tmp.join("gb/Zeta (World).gb"), b"").unwrap();
+            std::fs::write(data.join("settings.json"), r#"{"onboarded":true,"motion":"off","art":"off","theme":"shelf","details_page":true}"#).unwrap();
+            std::fs::write(data.join("curator.json"), r#"{"lens":false,"echoes":false,"stickers":false,"history":false}"#).unwrap();
+            cmd.env("POCKETUI_SNAPSHOT_SIZE", "1240x1080");
+        });
+        // Keep the first game standing rather than lifted: select the second game before comparing its neighbour.
+        ui.sees("Game Boy");
+        ui.send("a\ndown");
+        ui.sees("Zeta");
+        let spine_pixels = |ui: &mut Driver| {
+            let mut decoded = None;
+            ui.wait(|d| {
+                // frame() observes creation of the output file; compression may still be writing it. Wait only
+                // for a complete PNG, never for particular colours (which would hide a stale-cache failure).
+                decoded = (|| {
+                    let mut reader = png::Decoder::new(std::fs::File::open(d.card.tmp.join("frame.png")).ok()?).read_info().ok()?;
+                    let mut pixels = vec![0; reader.output_buffer_size()];
+                    let info = reader.next_frame(&mut pixels).ok()?;
+                    reader.finish().ok()?;
+                    Some((info, pixels))
+                })();
+                decoded.is_some()
+            });
+            let (info, pixels) = decoded.unwrap();
+            assert_eq!(info.color_type, png::ColorType::Rgb);
+            assert_eq!((info.width, info.height), (1240, 1080));
+            let x = pocket_ui::palette::MARGIN as usize;
+            // The first GB spine occupies x=72..132 at this canvas size; neither the selected second spine nor
+            // the large front/title above the row enters this rectangle. Compare actual rendered row/tile pixels.
+            (540..968).flat_map(|y| pixels[(y * 1240 + x) * 3..(y * 1240 + x + 60) * 3].iter().copied()).collect::<Vec<_>>()
+        };
+        let before = spine_pixels(&mut ui);
+        for on in [true, false] {
+            ui.send("up");
+            ui.sticker_sheet();
+            ui.send("a"); // Completed on/off; no restart and no navigation out of the system's list.
+            ui.wait(|d| {
+                let value: serde_json::Value = std::fs::read_to_string(d.card.tmp.join("data/library.json"))
+                    .ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+                value["games"].as_object().is_some_and(|games| {
+                    games.iter().find(|(path, _)| path.ends_with("Tobu Tobu Girl (World).gb"))
+                        .is_some_and(|(_, g)| g["case"]["completed"].as_bool().unwrap_or(false)) == on
+                })
+            });
+            ui.send("b\nb\ndown");
+            ui.sees("Details");
+            let after = spine_pixels(&mut ui);
+            if on {
+                assert!(after != before, "adding a sticker must change the already-cached standing spine");
+            } else {
+                assert!(after == before, "removing it must restore that same spine without leaving the list");
+            }
+        }
+    }
+
+    #[test]
+    fn sticker_save_errors_reach_the_shelf_after_the_sheet_is_closed() {
+        let mut ui = Driver::start("case-sticker-save-error", true, |tmp, _| {
+            let data = tmp.join("data");
+            std::fs::write(data.join("settings.json"), r#"{"onboarded":true,"motion":"off","art":"off","theme":"shelf","details_page":true}"#).unwrap();
+            std::fs::write(data.join("curator.json"), r#"{"lens":false,"echoes":false,"stickers":false,"history":false}"#).unwrap();
+            // Atomic replacement cannot rename a file over this directory: deterministic SD-write failure.
+            std::fs::create_dir(data.join("library.json")).unwrap();
+        });
+        ui.sees("Game Boy");
+        ui.send("a");
+        ui.sees("Details");
+        ui.sticker_sheet();
+        ui.send("a\nb\nb");
+        let text = ui.sees("Could not save: is the SD card full?");
+        assert!(text.contains("Details"), "the error must remain visible after returning to the shelf: {text}");
     }
 
     #[test]
@@ -509,12 +603,12 @@ true
         assert!(!log.contains("connection up"), "nothing connected a saved profile by itself: {log}");
     }
 
-    /// The Game Boy and Sega CD card plus one more system, its files empty.
+    /// The Game Boy and Sega CD card plus one more system, its files a byte long (an empty one is a broken game).
     fn add_system(tmp: &Path, id: &str, name: &str, exts: &str, files: &[&str]) {
         let folder = tmp.join(id);
         std::fs::create_dir_all(&folder).unwrap();
         for f in files {
-            std::fs::write(folder.join(f), "").unwrap();
+            std::fs::write(folder.join(f), "x").unwrap();
         }
         let cfg = tmp.join("es_systems.cfg");
         let text = std::fs::read_to_string(&cfg).unwrap().replace(
@@ -586,21 +680,73 @@ true
         assert!(text.contains("Broken Demo"), "the notice names the game: {text}");
     }
 
+    /// New-user test 2026-10-30: an empty file (a copy that never finished) is told as that, not as a missing BIOS.
+    #[test]
+    fn a_game_file_with_nothing_in_it_says_so_and_does_not_start() {
+        let mut ui = Driver::start("empty-file", true, |tmp, _| {
+            add_system(tmp, "xbox", "Xbox", ".iso .xbe", &["Empty Demo (USA).iso"]);
+            std::fs::write(tmp.join("xbox/Empty Demo (USA).iso"), "").unwrap();
+            executable(&tmp.join("run-game"), "#!/bin/sh\nexit 1\n");
+        });
+        ui.sees("Game Boy");
+        ui.send("down\ndown\na");
+        ui.sees("Empty Demo");
+        ui.send("a");
+        let text = ui.sees("is empty");
+        assert!(text.contains("Empty Demo") && !text.contains("BIOS"), "the notice names the game and the real reason: {text}");
+    }
+
     /// A card with no games is not an empty screen: it says so, offers the starter pack, and says what is missing when
     /// the Pocket is offline.
     #[test]
     fn an_empty_card_offers_the_starter_pack_and_says_when_it_is_offline() {
-        let mut ui = Driver::start("starter", true, |tmp, _| {
+        let mut ui = Driver::start("starter", true, |tmp, cmd| {
             for f in ["gb/Tobu Tobu Girl (World).gb", "segacd/Pocket CD Demo (USA).cue", "segacd/Pocket CD Demo (USA).bin"] {
                 std::fs::remove_file(tmp.join(f)).unwrap();
             }
+            // POCKETUI_MOCK mocks hardware, not wifi::ip_now. Keep this child's offline condition independent of
+            // the build host's interfaces, helpers and inherited POCKETUI_WIFI_IFACE; no process-global env changes.
+            let bin = tmp.join("offline-bin");
+            std::fs::create_dir(&bin).unwrap();
+            executable(&bin.join("ip"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$0.calls\"\nexit 0\n");
+            executable(&bin.join("nmcli"), "#!/bin/sh\nexit 1\n");
+            executable(&bin.join("curl"), "#!/bin/sh\nprintf 'called\\n' >> \"$0.calls\"\nexit 7\n");
+            cmd.env("PATH", format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default()));
         });
         let home = ui.sees("No games yet");
         assert!(home.contains("Get the starter pack") && home.contains("/storage/roms/<system>"), "{home}");
+
+        // Hold the real starter-scan at its config read. The headless driver has completed startup and skips the
+        // device startup jobs, so opening this FIFO belongs to that scan. This forces the slow-worker interleaving
+        // which made waiting for the page's header lose the second A press on busy build machines.
+        let config = ui.card.tmp.join("es_systems.cfg");
+        let xml = std::fs::read(&config).unwrap();
+        std::fs::remove_file(&config).unwrap();
+        let fifo = std::ffi::CString::new(config.to_str().unwrap()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
         ui.send("a");
-        ui.sees("Starter pack");
+        let loading = ui.sees("Looking at your SD card…");
+        assert!(loading.contains("Starter pack"), "the header alone is visible before Confirm is accepted: {loading}");
+        let mut fd = -1;
+        ui.wait(|_| {
+            fd = unsafe { libc::open(fifo.as_ptr(), libc::O_WRONLY | libc::O_NONBLOCK | libc::O_CLOEXEC) };
+            fd >= 0
+        });
+        let mut scan = unsafe { std::fs::File::from_raw_fd(fd) };
+        // The reader now owns the FIFO inode. Restore the path for future reads before releasing its current read.
+        std::fs::remove_file(&config).unwrap();
+        std::fs::write(&config, &xml).unwrap();
+        scan.write_all(&xml).unwrap();
+        drop(scan);
+
+        let offered = pocket_ui::starter::games().iter().filter(|g| matches!(g.system.as_str(), "gb" | "segacd")).count();
+        assert!(offered > 0);
+        let ready = ui.sees(&format!("Get all {offered} games"));
+        assert!(!ready.contains("Looking at your SD card"), "Confirm must follow the scan's result: {ready}");
         ui.send("a");
         ui.sees("The Pocket isn't online");
+        assert!(ui.card.tmp.join("offline-bin/ip.calls").is_file(), "the real network check used the child fixture");
+        assert!(!ui.card.tmp.join("offline-bin/curl.calls").exists(), "offline refuses before trying a download");
     }
 
     /// Delete from the SD card: the card's last row, the sheet, two A presses; the file is gone and the screen says so.
@@ -626,8 +772,171 @@ true
         assert!(!rom.exists());
     }
 
+    /// Two real ROM files and one cached checksum/DAT hit. B is deliberately absent from the DAT: resuming its
+    /// hash must not create a new name-map change that accidentally repairs A's lost shelf refresh.
+    fn named_cartridge_fixture(tmp: &Path, cmd: &mut Command) {
+        let games = tmp.join("identified-games");
+        std::fs::create_dir_all(&games).unwrap();
+        let known = games.join("Supar Mario Land 2.gb");
+        std::fs::write(&known, b"recognized A").unwrap();
+        std::fs::write(games.join("Unknown Homebrew.gb"), b"unknown B").unwrap();
+        std::fs::write(tmp.join("es_systems.cfg"), format!(
+            "<systemList><system><name>gb</name><fullname>Game Boy</fullname><path>{}</path><extension>.gb</extension><command>true</command></system></systemList>", games.display()
+        )).unwrap();
+        std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"theme":"minimal","motion":"off","art":"off"}"#).unwrap();
+        std::fs::write(tmp.join("data/curator.json"), r#"{"lens":false,"stickers":false,"history":false}"#).unwrap();
+        let crc = pocket_ui::rom_id::checksums("gb", &known).unwrap().unwrap().crc;
+        let dat = format!("game (\n name \"Super Mario Land 2 (USA)\"\n rom ( name \"a.gb\" size 12 crc {crc:08X} )\n)\n");
+        let seeded = pocket_ui::rom_id::run_until(&tmp.join("data"), &[("gb".into(), known)], &|_| Some(dat.clone()), false, || false);
+        assert_eq!(seeded.names.len(), 1);
+        // Only this child's helpers are mocked. No external service or process-wide test environment is used.
+        let bin = tmp.join("identify-bin");
+        std::fs::create_dir(&bin).unwrap();
+        executable(&bin.join("ip"), "#!/bin/sh\nexit 0\n");
+        executable(&bin.join("nmcli"), "#!/bin/sh\nexit 1\n");
+        executable(&bin.join("curl"), "#!/bin/sh\nexit 7\n");
+        cmd.env("PATH", format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default()));
+    }
+
+    #[test]
+    fn a_stopped_identification_keeps_its_shelf_name_refresh_until_the_same_names_resume() {
+        let mut ui = Driver::start("identify-stop-resume", true, named_cartridge_fixture);
+        ui.sees("Game Boy");
+        ui.wait(|d| d.log().contains("curator: 2 games"));
+        ui.send("a");
+        ui.sees("Supar Mario Land 2");
+        ui.send("a");
+        ui.wait(|d| d.card.tmp.join("run-game.started").exists());
+        // The first game exit starts the real identify worker. Hold its cache read until another game starts.
+        let cache = ui.card.tmp.join("data/identify/checksums.tsv");
+        let bytes = std::fs::read(&cache).unwrap();
+        std::fs::remove_file(&cache).unwrap();
+        let fifo = std::ffi::CString::new(cache.to_str().unwrap()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+        ui.send("home");
+        ui.sees("Quit");
+        ui.send("up\na");
+        let mut fd = -1;
+        ui.wait(|_| {
+            fd = unsafe { libc::open(fifo.as_ptr(), libc::O_WRONLY | libc::O_NONBLOCK | libc::O_CLOEXEC) };
+            fd >= 0
+        });
+        let mut held = unsafe { std::fs::File::from_raw_fd(fd) };
+        ui.wait(|d| d.card.tmp.join("run-game.quit").exists());
+        ui.sees("Supar Mario Land 2");
+        std::fs::remove_file(ui.card.tmp.join("run-game.started")).unwrap();
+        ui.send("a");
+        ui.wait(|d| d.card.tmp.join("run-game.started").exists());
+        // Restore a normal pathname for later readers, then release only the old worker's open FIFO inode.
+        std::fs::remove_file(&cache).unwrap();
+        std::fs::write(&cache, &bytes).unwrap();
+        held.write_all(&bytes).unwrap();
+        drop(held);
+        ui.wait(|d| d.log().contains("stopped for a game") && d.log().contains("identify: changed names kept for the shelf"));
+        ui.send("home");
+        ui.sees("Quit");
+        ui.send("up\na");
+        // Do not flood the headless event loop with frame requests while its timed Quit escalation runs.
+        ui.wait(|d| d.log().lines().filter(|l| l.starts_with("game exited after ")).count() == 2);
+        let seen = ui.sees("Super Mario Land 2");
+        assert!(!seen.contains("Supar Mario Land 2") && seen.contains("Unknown Homebrew"), "actual library names after resumed identify and rescan: {seen}");
+        assert!(ui.log().contains("library: read again (games recognised)"), "{}", ui.log());
+    }
+
+    #[test]
+    fn manual_cartridge_lookup_changes_and_removes_the_actual_shelf_title() {
+        let mut ui = Driver::start("identify-lookup", true, |tmp, cmd| {
+            named_cartridge_fixture(tmp, cmd);
+            executable(&tmp.join("identify-bin/ip"), "#!/bin/sh\nprintf '2: wlan0 inet 203.0.113.42/24 scope global wlan0\\n'\n");
+        });
+        ui.sees("Game Boy");
+        // Extras paints the actual cached IP state on every frame. Wait for online readiness before using a
+        // network-dependent card action; curl is a child-local failing stub, so no request leaves the fixture.
+        ui.send("start\ndown\ndown\na\ndown\ndown\ndown\na");
+        ui.sees("Optional. You can get these any time later.");
+        ui.send("b\nb\nb\nb");
+        ui.sees("Game Boy");
+        ui.send("a");
+        ui.sees("Mario Land 2");
+        ui.send("a");
+        ui.wait(|d| d.card.tmp.join("run-game.started").exists());
+        ui.send("home");
+        ui.sees("Quit");
+        ui.send("up\na");
+        ui.wait(|d| d.log().contains("game exited after "));
+        ui.sees("Super Mario Land 2");
+        let rom = ui.card.tmp.join("identified-games/Supar Mario Land 2.gb");
+        std::fs::write(&rom, b"recognized replacement").unwrap();
+        let crc = pocket_ui::rom_id::checksums("gb", &rom).unwrap().unwrap().crc;
+        let table = ui.card.tmp.join("data/identify/Nintendo - Game Boy.tsv");
+        std::fs::write(&table, format!("{crc:08X}\tTetris (World)\n")).unwrap();
+        let lookup = |ui: &mut Driver, prior_results: usize, expected: Option<&str>| {
+            ui.send("x");
+            ui.sees("Details");
+            ui.send("y");
+            ui.sees("Wrong pictures? Look up again");
+            ui.send(&"down\n".repeat(8));
+            ui.send("a");
+            ui.wait(|d| d.log().lines().filter(|l| l.starts_with("look up again:") && l.contains(" -> ")).count() > prior_results);
+            let path = ui.card.tmp.join("identified-games/Supar Mario Land 2.gb");
+            let names = pocket_ui::rom_id::known(&ui.card.tmp.join("data"), &[("gb".into(), path.clone())]);
+            assert_eq!(names.get(&path).map(String::as_str), expected, "the real lookup cache must contain the expected new mapping");
+            ui.send("b");
+        };
+        lookup(&mut ui, 0, Some("Tetris (World)"));
+        let renamed = ui.sees("Tetris");
+        assert!(!renamed.contains("Super Mario Land 2") && !renamed.contains("Supar Mario Land 2"), "manual lookup changes the library title: {renamed}");
+        // The same path now has no DAT match. A removed mapping must undo its old checksum title too.
+        std::fs::write(&rom, b"unknown replacement").unwrap();
+        lookup(&mut ui, 1, None);
+        let removed = ui.sees("Supar Mario Land 2");
+        assert!(!removed.contains("Tetris") && removed.contains("Unknown Homebrew"), "removed lookup name restores the file-name fallback: {removed}");
+    }
+
     /// The Minimal look: X on a game opens its info page (everything on one screen, `game_info`), B goes back to the
     /// shelf; SELECT shows the card's full page and back.
+    #[test]
+    fn a_card_opened_before_the_catalog_can_open_connections_when_its_built_event_arrives() {
+        let mut ui = Driver::start("connections-before-catalog", true, |tmp, _| {
+            let games = tmp.join("connection-games");
+            std::fs::create_dir_all(&games).unwrap();
+            for n in [2, 3] {
+                std::fs::write(games.join(format!("Pocket Review Racer {n}.gb")), "x").unwrap();
+            }
+            std::fs::write(tmp.join("es_systems.cfg"), format!(
+                "<systemList><system><name>gb</name><fullname>Game Boy</fullname><path>{}</path><extension>.gb</extension><command>true</command></system></systemList>", games.display()
+            )).unwrap();
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"theme":"minimal","motion":"off","art":"off"}"#).unwrap();
+            std::fs::write(tmp.join("data/curator.json"), r#"{"lens":false,"stickers":false,"history":false}"#).unwrap();
+            // The real catalog worker reads its checksum cache. A FIFO holds that read until the card is open;
+            // releasing EOF lets the normal worker send its real Built event, with no synchronous snapshot build.
+            let identify = tmp.join("data/identify");
+            std::fs::create_dir_all(&identify).unwrap();
+            assert!(Command::new("mkfifo").arg(identify.join("checksums.tsv")).status().unwrap().success());
+        });
+        let path = std::ffi::CString::new(ui.card.tmp.join("data/identify/checksums.tsv").to_str().unwrap()).unwrap();
+        let mut fd = -1;
+        ui.wait(|_| {
+            fd = unsafe { libc::open(path.as_ptr(), libc::O_WRONLY | libc::O_NONBLOCK | libc::O_CLOEXEC) };
+            fd >= 0
+        });
+        let catalog_read = unsafe { std::fs::File::from_raw_fd(fd) };
+        ui.sees("Game Boy");
+        ui.send("a\nx");
+        let initial = ui.sees("No description yet");
+        assert!(initial.contains("Pocket Review Racer 2"), "{initial}");
+        ui.send("down");
+        let initial = ui.frame();
+        assert!(!initial.contains("Series") && !initial.contains("Open"), "no links before the worker finishes: {initial}");
+        drop(catalog_read);
+        ui.wait(|d| d.log().contains("curator: 2 games"));
+        let updated = ui.sees("Series");
+        assert!(updated.contains("Pocket Review Racer 2"), "still the same open card: {updated}");
+        ui.send("down\na");
+        let list = ui.sees("Pocket Review Racer series");
+        assert!(list.contains("Pocket Review Racer 3"), "the updated link is usable without closing the card: {list}");
+    }
+
     #[test]
     fn x_in_minimal_opens_the_info_page_and_b_returns() {
         let mut ui = Driver::start("info-page", true, |tmp, _| {
@@ -650,6 +959,33 @@ true
             shelf = d.frame();
             shelf.contains("Tobu Tobu Girl") && !shelf.contains("None. Press Y")
         });
+    }
+
+    /// The Shelf look, a cartridge game (0.1.4: the shelf shows its box): X opens the box with the cartridge out of it,
+    /// LEFT turns it to the back and back again, B closes it, A starts the game from the shelf.
+    #[test]
+    fn x_opens_a_cartridge_games_box_left_turns_it_b_closes_a_starts() {
+        let mut ui = Driver::start("box-journey", true, |tmp, _| {
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"motion":"off","theme":"shelf"}"#).unwrap();
+        });
+        ui.sees("Game Boy");
+        ui.send("a");
+        ui.sees("Tobu Tobu Girl");
+        ui.send("x");
+        let front = ui.sees("Turn over");
+        assert!(front.contains("Tobu Tobu Girl"), "the box's front with the title: {front}");
+        ui.send("left");
+        let back = ui.sees("No description yet.");
+        assert!(back.contains("Game Boy"), "the back names its system at the foot: {back}");
+        ui.send("left");
+        ui.wait(|d| !d.frame().contains("No description yet."));
+        ui.send("b");
+        ui.wait(|d| {
+            let f = d.frame();
+            f.contains("Tobu Tobu Girl") && !f.contains("Turn over")
+        });
+        ui.send("a");
+        ui.wait(|d| matches!(std::fs::read_to_string(d.card.tmp.join("run-game.started")).as_deref(), Ok("started\n")));
     }
 
     /// Bluetooth page with a speaker/headphone-class device (the mock's JBL Flip 5): search, pair, trust, connect,
@@ -733,4 +1069,43 @@ fn performance_readout_stays_above_the_hints_at_large_text_on_960_lines() {
     assert!(out.status.success() && png.exists(), "{}", String::from_utf8_lossy(&out.stderr));
     let found = std::fs::read_to_string(boxes).unwrap_or_default();
     assert!(found.trim().is_empty(), "text runs into other text or the hints:\n{found}");
+}
+
+/// The visible lines between `from` and `to` (the free slots' numbers between the picture and the note).
+fn between<'a>(text: &'a str, from: &str, to: &str) -> Vec<&'a str> {
+    text.lines().skip_while(|l| !l.starts_with(from)).skip(1).take_while(|l| !l.starts_with(to)).collect()
+}
+
+#[test]
+fn save_and_load_show_the_blocks_beside_the_memory_card_and_the_cartridge() {
+    let card = Card::new("save-media");
+    // A PlayStation game at Large text: the card beside its eight numbered blocks (slots 1, 3 and 6 show the cover
+    // with their number); Save is on slot 3 and says what it replaces.
+    let eight = ["1", "2", "3", "4", "5", "6", "7", "8"];
+    let text = card.shot("slot-save:psx", "large");
+    assert_eq!(between(&text, "No preview", "Slot 3"), eight, "{text}");
+    // The save's real time ("today 14:02", "yesterday 23:50"), not "just now"; at Large text the clock may wrap to a line of its own.
+    let note = text.replace('\n', " ");
+    let when = note.split("Slot 3 · replaces the save from ").nth(1).unwrap_or_default();
+    let (day, clock) = when.split_once(' ').unwrap_or_default();
+    let clock = clock.split(' ').next().unwrap_or_default();
+    assert!(matches!(day, "today" | "yesterday"), "a real time, not \"just now\": {text}");
+    assert!(clock.len() == 5 && clock.as_bytes()[2] == b':' && clock.bytes().filter(u8::is_ascii_digit).count() == 4, "{text}");
+    assert!(!text.contains("min ago") && !text.contains("just now"), "{text}");
+    let boxes = std::fs::read_to_string(card.tmp.join("slot-save-psx.boxes")).unwrap();
+    assert!(boxes.is_empty(), "the memory card leaves its room or runs into text: {boxes}");
+    // A SNES game's Load: the cartridge beside its save label; an empty slot on a game without a cover.
+    let text = card.shot("slot-load:snes", "normal");
+    assert_eq!(between(&text, "No preview", "Slot 3"), eight, "{text}");
+    let text = card.shot("slot-empty:gba:nocover", "large");
+    assert!(text.contains("Slot 4 · empty"), "{text}");
+}
+
+#[test]
+fn the_info_page_says_how_many_slots_hold_a_save_and_says_so_when_none_do() {
+    let card = Card::new("card-saves");
+    let text = card.shot("info:split:gb:tobu:saves", "large");
+    assert!(text.contains("Save slots") && text.contains("3 of 8") && text.contains("2 days ago"), "{text}");
+    let text = card.shot("info:split:gb:tobu:saves=none", "normal");
+    assert!(text.contains("Save slots") && text.contains("All empty"), "an empty medium says so: {text}");
 }

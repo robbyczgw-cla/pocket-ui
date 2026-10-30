@@ -81,13 +81,15 @@ and pressing again in the middle of a movement takes it straight to the new plac
 
 Under the appearance is **Animations** (**L1**; also Settings → Look & feel → Animations), the first start asks it on the same page.
 
-- **Cozy**: when you start a game in the Shelf or the Cabinet look, you watch its cartridge or disc slide into the console
+- **Cozy**: when you start a game in the Shelf or the Cabinet look, you watch its case open and the cartridge or disc slide into the console
   (about a second, with a click). Pages, the game's box and the menus take about a third longer and ease in more softly.
 - **Quick**: straight into the game; the animations as short as they get.
 
 Until you choose, the look decides: Cozy for Shelf and Cabinet, Quick for Minimal, Card and Split. Once you choose, it stays
 yours, whatever look you pick later. With Cozy, a game of pocket-core's is shown once the animation is over, so it starts
 about a second later than with Quick (a game that needs longer to load is not held at all); any button skips the rest.
+The picture then comes on like an old TV, in a third of a second: dark, a bright line in the middle, and the picture opens out of it
+(with Motion on Full; Quick and Reduced skip it, and a button press cuts it short).
 **Motion** (Reduced, Off) still overrides it: nothing slides where Motion says so.
 
 #### Systems on the shelf
@@ -125,7 +127,7 @@ Left back to the one before, and the screen shows the new size at once; the choi
 
 With Medium and Large the rows are taller, so a page shows fewer of them and scrolls a little sooner. A name or value that is
 too long for its row ends with "…" and a long text is wrapped, never cut in the middle of a word; where a hint bar has no
-room for every label, the last labels give way and their buttons stay. A few things keep their size because they
+room for every label, the last labels give way and all their buttons, including START, stay on screen. A few things keep their size because they
 belong to a picture of a fixed size: the titles on the cases' spines and the shelf cards in the Cabinet look, the
 pictures on the Tour's cards and the look previews' shrunken screens, and what is drawn over a running game by
 pocket-core (the in-game messages and Pixel Path's line over the game).

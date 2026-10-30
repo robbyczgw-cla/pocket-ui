@@ -37,6 +37,19 @@ const LOOK_UP_ROW: usize = CHOOSE_ROW + 1;
 /// One press of up/down scrolls this far.
 const STEP: i32 = 2 * LINE;
 
+/// A persistent card problem, outside the facts so Connections keeps its fact indices and selection. `base` is the
+/// heading's baseline; the return value is the next free baseline after the complete cause and remedy.
+pub(crate) fn paint_problem(c: &mut Canvas, text: &mut Text, why: &str, (x, base, w): (i32, i32, i32)) -> i32 {
+    let step = type_scale::line(28, 8);
+    text.draw(c, Face::Body, 28, x, base, pal().alert, "Problem");
+    let mut y = base + step;
+    for line in text.wrap(Face::Body, 28, why, w) {
+        text.draw(c, Face::Body, 28, x, y, pal().alert, &line);
+        y += step;
+    }
+    y + 12
+}
+
 /// The step from one fact to the next: 44 px at Body 28, more with Settings → Text size (`type_scale`).
 fn row() -> i32 {
     type_scale::row(44, 28)
@@ -88,6 +101,14 @@ pub struct RelatedGame {
     pub system: String,
     pub stripe: u32,
     pub year: Option<u16>,
+}
+
+/// Where a fact of the card leads (Connections, `crate::connections`): the list's title and the player's games in it,
+/// ((system, game) when it was made, file).
+#[derive(Clone, Debug, PartialEq)]
+pub struct CardLink {
+    pub title: String,
+    pub games: Vec<((usize, usize), std::path::PathBuf)>,
 }
 
 /// Everything the card shows; filled in by the app from the library, `gamedb`, `library_meta` and the
@@ -143,8 +164,42 @@ pub struct CardData {
     pub from_gamelist: bool,
     /// The patch next to the game that pocket-core applies when it starts it ("Game (USA).ips", `softpatch`).
     pub patch: Option<String>,
+    /// Why the game can't be played, in a sentence ("its file is empty"); every card surface shows the cause and
+    /// remedy in the alert colour, separately from its facts and Connections (`app_card`).
+    pub broken: Option<String>,
     /// The game is one of the player's Favourites (the info page says so, `game_info`).
     pub favorite: bool,
+    /// Its save slots in pocket-core, shown on their save medium (`save_media`); None where pocket-core doesn't keep
+    /// its states (another emulator's game, a system without states).
+    pub saves: Option<CardSaves>,
+    /// The facts that lead to the player's other games: (index into `facts`, where it leads), in the facts' order.
+    /// A fact without one is plain text, never a way into an empty list (`app_connections`).
+    pub links: Vec<(usize, CardLink)>,
+}
+
+/// A game's save slots as the card shows them, read-only.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CardSaves {
+    /// The system, for its save medium, and its stripe (the card's label).
+    pub system: String,
+    pub stripe: u32,
+    /// One per slot: it holds a save.
+    pub filled: Vec<bool>,
+    /// When the newest slot was saved (Unix seconds).
+    pub newest: Option<u64>,
+}
+
+impl CardSaves {
+    /// The slots of a game pocket-core runs with save states (`hostsys`): a few file checks, no reading, like the
+    /// patch's. None for every other game.
+    pub fn of(system: &str, rom: &std::path::Path, stripe: u32) -> Option<CardSaves> {
+        crate::hostsys::find(system).filter(|h| h.no_states.is_none())?;
+        let stem = rom.file_stem()?.to_str()?;
+        let base = crate::slots::base(system, stem);
+        let times: Vec<Option<std::time::SystemTime>> = (0..crate::slots::SLOTS).map(|i| crate::slots::saved_at(&base, i)).collect();
+        let newest = times.iter().flatten().max().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs());
+        Some(CardSaves { system: system.to_string(), stripe, filled: times.iter().map(Option::is_some).collect(), newest })
+    }
 }
 
 /// Which Curator row it is.
@@ -261,6 +316,8 @@ pub enum Out {
     Delete { with_saves: bool },
     /// SELECT switched between the box and the page: kept for the next card (`App::game_box`).
     Details { boxed: bool },
+    /// A on a fact that leads to the player's other games: the list of `CardData::links[i]` (`app_connections`).
+    Connection(usize),
 }
 
 pub struct Card {
@@ -468,8 +525,12 @@ impl Card {
 
     pub fn press(&mut self, b: Button) -> Out {
         // The info page: up and down scroll its description, SELECT shows the full page; the rest as on the page.
+        let links = self.data.links.len();
         if let (Mode::View, Some(info)) = (&self.mode, self.info.as_mut()) {
             match b {
+                // Onto the facts that lead to the player's other games first (Connections), then the description.
+                Button::Up | Button::Down if info.link_step(b == Button::Down, links) => return Out::None,
+                Button::East if info.link.is_some_and(|l| l < links) => return Out::Connection(info.link.unwrap_or(0)),
                 Button::Up | Button::Down | Button::L1 | Button::R1 => {
                     let step = if matches!(b, Button::L1 | Button::R1) { 4 * STEP } else { STEP };
                     info.scroll_by(if matches!(b, Button::Up | Button::L1) { -step } else { step });
@@ -493,8 +554,18 @@ impl Card {
                     bx.flip();
                     return Out::None;
                 }
+                // On the back, the facts that lead to the player's other games are picked as the card's rows are.
+                Button::Up | Button::Down if bx.back && links > 0 => {
+                    bx.link_step(b == Button::Down, links, STEP);
+                    return Out::None;
+                }
+                Button::East if bx.back && bx.link.is_some_and(|l| l < links) => return Out::Connection(bx.link.unwrap_or(0)),
                 Button::Up | Button::Down | Button::L1 | Button::R1 => {
                     let step = if matches!(b, Button::L1 | Button::R1) { 4 * STEP } else { STEP };
+                    if matches!(b, Button::L1 | Button::R1) {
+                        // Page past the facts: paint_back must not reveal the old selection again.
+                        bx.link = None;
+                    }
                     bx.scroll_by(if matches!(b, Button::Up | Button::L1) { -step } else { step });
                     return Out::None;
                 }
@@ -708,7 +779,8 @@ impl Card {
             Mode::View if self.boxed.is_some() => {
                 // Y (the status) and X (the note) work as on the page; their hints make room for the box's own, so the
                 // bar fits a 640 px screen.
-                let mut h = vec![("A", "Play"), ("B", "Back"), ("LEFT RIGHT", "Turn over"), ("SELECT", "Page")];
+                let a = if self.boxed.as_ref().is_some_and(|b| b.back && b.link.is_some()) { "Open" } else { "Play" };
+                let mut h = vec![("A", a), ("B", "Back"), ("LEFT RIGHT", "Turn over"), ("SELECT", "Page")];
                 // START as on the page: the game's settings, a port's performance and fan.
                 if self.data.surprise.is_none() {
                     h.push(("START", if self.data.port.is_some() { "Performance" } else { "This game" }));
@@ -724,7 +796,8 @@ impl Card {
             }
             Mode::View if self.info.is_some() => {
                 let start = if self.data.port.is_some() { "Performance & fan" } else { "This game" };
-                let mut h = vec![("A", "Play"), ("B", "Back"), ("Y", "Status"), ("START", start), ("SELECT", "Details")];
+                let a = if self.info.as_ref().is_some_and(|i| i.link.is_some()) { "Open" } else { "Play" };
+                let mut h = vec![("A", a), ("B", "Back"), ("Y", "Status"), ("START", start), ("SELECT", "Details")];
                 if self.data.surprise.is_some() {
                     h.retain(|(k, _)| *k != "START");
                     h.insert(2, ("RIGHT", "Another"));
@@ -763,7 +836,7 @@ impl Card {
     }
 
     /// Paints the card; `cover` is the box art fitted into [`cover_box`], `corner` the status corner at the top right.
-    pub fn paint(&mut self, c: &mut Canvas, text: &mut Text, cover: Option<&Image>, corner: Option<&crate::status_corner::Corner>) {
+    pub fn paint(&mut self, c: &mut Canvas, text: &mut Text, cover: Option<&std::rc::Rc<Image>>, corner: Option<&crate::status_corner::Corner>) {
         if let Mode::Note(kb) = &self.mode {
             c.clear(pal().void);
             let title = text.fit(Face::Title, 50, &format!("Note for {}", self.data.title), c.w - 2 * MARGIN);
@@ -781,7 +854,7 @@ impl Card {
         let left = corner.map_or(c.w - MARGIN, |k| k.paint(c, text, c.w - MARGIN, 72, pal().dust));
         let system = text.fit(Face::Body, 28, &self.data.system, crate::status_corner::room_left_of(left, c.w - MARGIN) - MARGIN);
         text.draw(c, Face::Body, 28, MARGIN, 72, pal().dust, &system);
-        self.paint_label(c, text, cover);
+        self.paint_label(c, text, cover.map(std::rc::Rc::as_ref));
         // The body scrolls inside its own strip of the screen; whatever falls outside is cut off there. On a screen
         // too short for the label and the hints (640x480: 440 px top, 380 px bottom) the strip is empty rather than
         // upside down; the card's top still paints, the body simply has no room.
@@ -829,7 +902,7 @@ impl Card {
 
     /// Paints the card as the info page (`game_info`): the status corner on the top line, the page, the hints and
     /// whatever is open over it.
-    pub fn paint_info(&mut self, c: &mut Canvas, text: &mut Text, cover: Option<&Image>, console: Option<&crate::system_art::Sprite>, corner: Option<&crate::status_corner::Corner>) {
+    pub fn paint_info(&mut self, c: &mut Canvas, text: &mut Text, cover: Option<&std::rc::Rc<Image>>, console: Option<&crate::system_art::Sprite>, corner: Option<&crate::status_corner::Corner>) {
         if matches!(self.mode, Mode::Note(_)) {
             return self.paint(c, text, cover, corner);
         }
@@ -865,6 +938,20 @@ impl Card {
         text.draw(c, Face::Body, 28, MARGIN, top_y, pal().dust, &line);
         if let Some(bx) = self.boxed.as_mut() {
             bx.paint(c, text, &self.data, &self.pictures, inputs);
+            if !bx.back {
+                if let Some(why) = &self.data.broken {
+                    // The unopened front has no text body: put the problem on a label over its upper edge. The
+                    // back carries the same explanation in its scrollable body (`game_box::paint_back_body`).
+                    let (top, _, side) = crate::game_box::room(c.w, c.h);
+                    let (x, y, w) = (side, top + 12, c.w - 2 * side);
+                    let step = type_scale::line(28, 8);
+                    let h = 40 + (1 + text.wrap(Face::Body, 28, why, w - 48).len() as i32) * step;
+                    crate::text::boxes::painted_over(c, (x, y, w, h));
+                    c.round_rect(x, y, w, h, 12, pal().void);
+                    c.rect(x, y + 12, 4, h - 24, pal().alert);
+                    paint_problem(c, text, why, (x + 24, y + 20 + type_scale::px(28) as i32, w - 48));
+                }
+            }
         }
         crate::setup::hints(c, text, &self.hints());
         match &self.mode {
@@ -1051,6 +1138,17 @@ impl Card {
                 text.draw(c, Face::Body, 28, rx + rkey, ry - 6, pal().dust, &note);
                 ry += row();
             }
+        }
+        // A file that can't be played: the reason, in the alert colour, before anything else about the game.
+        if let Some(why) = &d.broken {
+            text.draw(c, Face::Body, 28, rx, ry, pal().alert, "Problem");
+            let lines = text.wrap(Face::Body, 28, why, rw - rkey);
+            // The title can take the first three lines by itself at Large. This body scrolls: keep the cause and
+            // the remedy, and include every line in its measured height so they can actually be reached.
+            for (i, line) in lines.iter().enumerate() {
+                text.draw(c, Face::Body, 28, rx + rkey, ry + i as i32 * tight(), pal().alert, line);
+            }
+            ry += row() + (lines.len() as i32 - 1).max(0) * tight();
         }
         // A translation or hack applied at the start: the player's copy is not the plain game (`softpatch`).
         if let Some(p) = &d.patch {
@@ -1555,8 +1653,27 @@ mod tests {
             look_up: false,
             from_gamelist: false,
             patch: None,
+            broken: None,
             favorite: false,
+            saves: None,
+            links: Vec::new(),
         }
+    }
+
+    /// New-user test 2026-10-30: an empty file's card looked like any healthy game's.
+    #[test]
+    fn the_card_of_a_game_that_cant_be_played_says_so_in_the_alert_colour() {
+        let (w, h) = (1240, 1080);
+        let alert = crate::palette::pal().alert;
+        let count = |broken: Option<String>| {
+            let mut px = vec![0u32; (w * h) as usize];
+            let mut card = Card::new(CardData { broken, ..data() });
+            card.paint(&mut Canvas::new(&mut px, w as u32, h as u32), &mut Text::new(), None, None);
+            px.iter().filter(|&&p| p & 0xffffff == alert & 0xffffff).count()
+        };
+        let fine = count(None);
+        let broken = count(Some("Tetris can't start: its file is empty (0 bytes).".into()));
+        assert!(broken > fine + 200, "the problem line is painted in the alert colour ({fine} vs {broken} pixels)");
     }
 
     #[test]
@@ -1619,6 +1736,101 @@ mod tests {
         assert_eq!(card.press(Button::East), Out::Row(RowKind::Manage));
         card.press(Button::Up);
         assert_eq!(card.focus, None, "up from it scrolls back into the text");
+    }
+
+    /// A card whose Developer and Series lead to other games, and whose Genre doesn't.
+    fn linked() -> CardData {
+        let mut d = data();
+        d.facts = vec![("Developer", "Criterion Games".into()), ("Genre", "Racing".into()), ("Series", "Burnout".into())];
+        let link = |t: &str| CardLink { title: t.into(), games: vec![((0, 1), "/roms/ps2/Burnout.iso".into())] };
+        d.links = vec![(0, link("More from Criterion Games")), (2, link("Burnout series, in release order"))];
+        d.summary = Summary::Wikipedia { text: "A long description. ".repeat(80), title: "Burnout".into() };
+        d
+    }
+
+    #[test]
+    fn on_the_info_page_down_picks_the_facts_that_lead_somewhere_then_scrolls_and_a_opens_the_list() {
+        let (w, h) = (1280, 960);
+        let mut px = vec![0u32; (w * h) as usize];
+        let mut text = Text::new();
+        let mut card = Card::new(linked());
+        card.show_info();
+        card.paint_info(&mut Canvas::new(&mut px, w as u32, h as u32), &mut text, None, None, None);
+        assert_eq!(card.hints()[0], ("A", "Play"), "nothing picked: A plays");
+        assert_eq!(card.press(Button::Down), Out::None);
+        assert_eq!(card.info.as_ref().and_then(|i| i.link), Some(0), "the developer first");
+        assert_eq!(card.hints()[0], ("A", "Open"));
+        assert_eq!(card.press(Button::Down), Out::None);
+        assert_eq!(card.info.as_ref().and_then(|i| i.link), Some(1), "the genre leads nowhere: on to the series");
+        assert_eq!(card.press(Button::East), Out::Connection(1));
+        assert_eq!(card.press(Button::Down), Out::None);
+        assert!(card.info.as_ref().is_some_and(|i| i.link == Some(1) && i.scroll > 0), "past the last fact the text scrolls");
+        assert_eq!(card.press(Button::Up), Out::None);
+        assert!(card.info.as_ref().is_some_and(|i| i.link == Some(1) && i.scroll == 0), "up scrolls back first");
+        card.press(Button::Up);
+        card.press(Button::Up);
+        assert_eq!(card.info.as_ref().and_then(|i| i.link), None, "off the first fact: none, A plays again");
+        assert_eq!(card.press(Button::East), Out::Play);
+        // A card without links: down scrolls at once, as before.
+        let mut plain = linked();
+        plain.links.clear();
+        let mut card = Card::new(plain);
+        card.show_info();
+        card.paint_info(&mut Canvas::new(&mut px, w as u32, h as u32), &mut text, None, None, None);
+        card.press(Button::Down);
+        assert!(card.info.as_ref().is_some_and(|i| i.link.is_none() && i.scroll > 0));
+    }
+
+    #[test]
+    fn on_the_box_back_down_picks_a_fact_in_view_and_turning_over_lets_go() {
+        let mut card = Card::new(linked());
+        card.boxed = Some(crate::game_box::BoxView::new());
+        assert_eq!(card.press(Button::Down), Out::None);
+        assert_eq!(card.boxed.as_ref().and_then(|b| b.link), None, "the front has no facts");
+        card.press(Button::Right);
+        card.press(Button::Down);
+        assert_eq!(card.boxed.as_ref().and_then(|b| b.link), Some(0), "picked before the back was painted: it scrolls there");
+        assert_eq!(card.hints()[0], ("A", "Open"));
+        assert_eq!(card.press(Button::East), Out::Connection(0));
+        card.press(Button::Left);
+        assert_eq!(card.boxed.as_ref().and_then(|b| b.link), None);
+        assert_eq!(card.press(Button::East), Out::Play);
+    }
+
+    #[test]
+    fn paging_the_box_back_leaves_its_link_and_the_painted_page_stays_put() {
+        crate::motion::set_level(crate::settings::Motion::Off);
+        let (w, h) = (1280, 960); // H700's logical canvas.
+        let mut px = vec![0u32; (w * h) as usize];
+        let mut text = Text::new();
+        let inputs = crate::game_box::Inputs {
+            medium: crate::media::Medium::Keep,
+            look: crate::cabinet_art::Look { color: 0x777777, band: 0x555555, plastic: 0x333333 },
+            front: None, game: None, cover: None, console: None,
+        };
+        let paint = |card: &mut Card, px: &mut [u32], text: &mut Text| {
+            card.paint_box(&mut Canvas::new(px, w as u32, h as u32), text, &inputs, None);
+        };
+        for button in [Button::L1, Button::R1] {
+            let mut card = Card::new(linked());
+            card.boxed = Some(crate::game_box::BoxView::new());
+            card.press(Button::Right);
+            // Measure the actual fact positions, then reach one by ordinary scrolling.
+            paint(&mut card, &mut px, &mut text);
+            for _ in 0..100 {
+                card.press(Button::Down);
+                paint(&mut card, &mut px, &mut text);
+                if card.boxed.as_ref().is_some_and(|b| b.link.is_some()) { break; }
+            }
+            assert!(matches!(card.press(Button::East), Out::Connection(_)));
+            let before = card.boxed.as_ref().unwrap().scroll;
+            card.press(button);
+            let paged = card.boxed.as_ref().unwrap().scroll;
+            assert_ne!(paged, before, "there is room to page on either side of the first fact");
+            paint(&mut card, &mut px, &mut text);
+            assert_eq!(card.boxed.as_ref().unwrap().scroll, paged, "painting must not pull the page back to the fact");
+            assert_eq!(card.press(Button::East), Out::Play, "paging releases the fact");
+        }
     }
 
     #[test]

@@ -425,6 +425,20 @@ slot-earlier
 slot-earlier:start
 slot-earlier:none
 slot-earlier:damaged
+# The slots on the game's save medium (`save_media`): a memory card, a cartridge, a plain row, a game without cover;
+# the info page's and the box's read-only slots.
+slot-save:psx
+slot-load:snes
+slot-save:ports
+slot-empty:gba:nocover
+slot-undo:ps2
+slot-save:dreamcast
+slot-load:xbox
+slot-save:psp
+slot-save:gamecube
+info:split:snes:chrono:saves
+info:minimal:gba:golden:saves=none
+box:gba:advance:saves:end
 options
 picture
 picture:0
@@ -693,3 +707,16 @@ box:gba:advance
 box:gba:advance:r
 box:ps2:revenge:r
 box:ps2:revenge:rdddd
+# 0.1.4: every game in its case, the game beside the opened case; pocket-ui's own case (Ports, Wii U)
+box:snes:chrono
+box:nds:mario
+box:ports:celeste
+box:wiiu:mario:r
+shelf:snes:shelf
+shelf:wiiu:shelf
+info:minimal:ps2:revenge:dddd
+info:minimal:ps2:revenge:da
+info:cards:ps2:revenge:dda
+info:split:ps2:revenge:ddda
+info:minimal:ps2:revenge:dddda
+info:shelf:ps2:revenge:rd

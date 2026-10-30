@@ -1,0 +1,9 @@
+# The media sounds: ElevenLabs sound-effects API (generated 2026-10-29, Creator plan, prompt influence 0.6, pcm_48000; the raw files are kept outside the repo),
+# cut by prep_media_sounds.py. file  requested_s  cut_from_ms  cut_to_ms  prompt
+seat	0.5	28	300	close-mic foley: one short solid plastic latch click, small and tight, dry room, isolated
+card-in	0.7	220	700	close-mic foley: a small Nintendo DS game card pushed into its slot with a light spring click, dry studio recording
+cart-in	1.2	370	1150	close-mic foley: a Game Boy cartridge pushed into the handheld's slot, a short plastic slide and a crisp click, dry studio recording, no background noise
+case-open	1.0	0	800	plastic DVD case snapping open, close-mic foley, the latch releasing with a snap and the lid swinging open, dry room, no music
+box-open	1.0	0	1000	close-mic foley: a small cardboard retro video game box opened, flap unfolding, soft paper friction and a light thump, dry, isolated
+disc-in	2.4	80	1250	foley: a DVD placed into a disc drive tray, tray closing with a soft clunk, drive spinning up with a smooth whirring sound, close microphone
+crt-on	1.8	680	1430	close-mic foley: switching on a vintage tube TV, chunky push-button click and a crackle of static electricity on the glass screen, faint whine, dry, isolated, no music

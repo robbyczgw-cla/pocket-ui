@@ -6,8 +6,8 @@ where the facts come from are on [the first page](library.md).
 ## Curator
 
 Curator helps you find your way around a larger collection, with facts that come with pocket-ui and work without a
-network. It has seven parts. Each can be switched off in Settings → Playing → [Curator](settings.md#curator), and none takes
-up space until it has something to show.
+network. It has seven parts; each can be switched off in Settings → Playing → [Curator](settings.md#curator), and none takes
+up space until it has something to show. [Rediscover](#rediscover) has no switch: it is only there when it has a game.
 
 When pocket-ui starts, Curator reads your library in the background, after the shelf is up and never while a game
 runs. Until it is done (with a large library, a second or two), its rows say **Getting ready…**; nothing waits for it.
@@ -103,7 +103,8 @@ after its name and on its row ("Smart shelf, on Home. It updates itself · most 
 ### Stickers
 
 Stickers are your own labels for games, such as "Couch co-op" or "Before bed". On a game's card, move down to the
-**Stickers** row and press A: a short list of your stickers, each with a tick box. A puts a sticker on the game or
+**Stickers** row and press A: a short list of your stickers, each with a tick box (after the five
+[stickers on the case](library.md#stickers-on-the-case), which the Shelf and Cabinet looks show on the game's case). A puts a sticker on the game or
 takes it off; the last entry, **New sticker…**, makes one (a name is suggested). B closes the list.
 
 Stickers show in the Curator list and as a facet of the Lens. Pin one with **Y** in the Curator list to have it as a
@@ -164,6 +165,15 @@ A remake is a game of its own, not a version: Ocarina of Time 3D is not the Nint
 you own both, each card has a Versions row, and the page lists the other game at the end, marked **Related: remake**.
 A plays it; it can't be the preferred version, and it is not listed under Echoes, since its Versions page already
 names it.
+
+### Rediscover
+
+**Rediscover** in the Curator list (and on the Curator shelf in the Cabinet look) brings back games you have been
+away from: first the ones you played **a year ago today**, then the ones you haven't played **for a year**, those you
+played longest first. Each says why it is there ("played a year ago today", "last played 412 days ago"). It counts
+pocket-ui's play history, the recent games and, when you came from EmulationStation, the "last played" in your
+gamelists, so a card that moved over from ROCKNIX's menu has a past from the first day. The row is only there while
+it has a game in it.
 
 ### Play history
 

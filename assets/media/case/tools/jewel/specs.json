@@ -1,0 +1,747 @@
+{
+ "ps1": {
+  "front": {
+   "photo": "photos/CD_Jewel_Case__Front_.jpg",
+   "quad": [
+    320,
+    125,
+    4220,
+    93,
+    4390,
+    3545,
+    139,
+    3572
+   ],
+   "size": [
+    180,
+    158
+   ],
+   "radius": 1,
+   "label": [
+    19,
+    5,
+    156,
+    148
+   ]
+  },
+  "spine": {
+   "photo": "photos/CD_Jewel_Case__Front_.jpg",
+   "quad": [
+    320,
+    125,
+    660,
+    122,
+    513,
+    3572,
+    139,
+    3572
+   ],
+   "size": [
+    26,
+    158
+   ],
+   "radius": 1,
+   "label": [
+    4,
+    8,
+    18,
+    142
+   ]
+  },
+  "meta": {
+   "source_front": "https://commons.wikimedia.org/wiki/File:CD_Jewel_Case_(Front).jpg",
+   "licence": "CC0",
+   "author": "DiscoA340",
+   "logos_removed": "the Compact Disc logo moulded into the tray and the maker's mark at the top right lie under the insert (painted label grey); no lettering on the hinge",
+   "note": "a plain CD jewel case with a black tray, as PlayStation games came in; the spine is the case's ribbed black hinge from the same photo, stretched to the template width"
+  }
+ },
+ "ps2": {
+  "front": {
+   "photo": "photos/Amaray-case.jpg",
+   "quad": [
+    19,
+    163,
+    390,
+    18,
+    386,
+    371,
+    138,
+    517
+   ],
+   "flip": true,
+   "size": [
+    170,
+    240
+   ],
+   "radius": 4,
+   "paint": [
+    {
+     "rect": [
+      122,
+      6,
+      48,
+      26
+     ],
+     "from": [
+      100,
+      50
+     ]
+    },
+    {
+     "rect": [
+      122,
+      200,
+      48,
+      26
+     ],
+     "from": [
+      100,
+      190
+     ]
+    }
+   ],
+   "label": [
+    5,
+    6,
+    159,
+    228
+   ]
+  },
+  "spine": {
+   "photo": "photos/Amaray-case.jpg",
+   "quad": [
+    390,
+    18,
+    428,
+    18,
+    410,
+    371,
+    387,
+    371
+   ],
+   "size": [
+    38,
+    240
+   ],
+   "radius": 3,
+   "band": [
+    5,
+    6,
+    28,
+    32
+   ],
+   "label": [
+    5,
+    41,
+    28,
+    193
+   ]
+  },
+  "meta": {
+   "source_front": "https://commons.wikimedia.org/wiki/File:Amaray-case.jpg",
+   "licence": "Public domain",
+   "author": "Asim18 (English Wikipedia)",
+   "logos_removed": "no lettering on the case; the two booklet clips inside the cover were painted with the plastic around them",
+   "note": "a plain black DVD keep case (Amaray), the case PlayStation 2 games came in; the photo shows it open from inside, the cover panel was straightened and mirrored to read as the front, the hinge strip is the spine"
+  }
+ },
+ "wii": {
+  "front": {
+   "photo": "photos/Wii-optical-case.png",
+   "quad": [
+    24,
+    22,
+    576,
+    22,
+    576,
+    778,
+    24,
+    778
+   ],
+   "flip": true,
+   "size": [
+    170,
+    240
+   ],
+   "radius": 4,
+   "label": [
+    6,
+    6,
+    158,
+    229
+   ]
+  },
+  "spine": {
+   "photo": "photos/Wii-optical-case.png",
+   "quad": [
+    578,
+    22,
+    625,
+    22,
+    625,
+    778,
+    578,
+    778
+   ],
+   "size": [
+    38,
+    240
+   ],
+   "radius": 3,
+   "label": [
+    5,
+    8,
+    28,
+    224
+   ]
+  },
+  "meta": {
+   "source_front": "https://commons.wikimedia.org/wiki/File:Wii-optical-case.png",
+   "licence": "Public domain",
+   "author": "Evan Amos",
+   "logos_removed": "none on the cover half (the moulded Wii lettering is on the disc half, which was not used); the booklet and its two clips lie under the label",
+   "note": "Evan Amos's photo of an open Wii case; the cover half was mirrored to read as the front, the hinge is the spine"
+  }
+ },
+ "3ds": {
+  "front": {
+   "photo": "photos/Wii-optical-case.png",
+   "quad": [
+    24,
+    22,
+    576,
+    22,
+    576,
+    778,
+    24,
+    778
+   ],
+   "flip": true,
+   "size": [
+    158,
+    172
+   ],
+   "radius": 4,
+   "label": [
+    6,
+    6,
+    146,
+    162
+   ]
+  },
+  "spine": {
+   "photo": "photos/Wii-optical-case.png",
+   "quad": [
+    578,
+    22,
+    625,
+    22,
+    625,
+    778,
+    578,
+    778
+   ],
+   "size": [
+    30,
+    172
+   ],
+   "radius": 3,
+   "label": [
+    5,
+    8,
+    20,
+    156
+   ]
+  },
+  "meta": {
+   "source_front": "https://commons.wikimedia.org/wiki/File:Wii-optical-case.png",
+   "licence": "Public domain",
+   "author": "Evan Amos",
+   "logos_removed": "none on the cover half (the moulded Wii lettering is on the disc half, which was not used); the booklet and its two clips lie under the label",
+   "note": "no public-domain photo of a 3DS case: the white Wii case (Evan Amos), its cover half fitted to the 3DS case's proportions"
+  }
+ },
+ "gc": {
+  "front": {
+   "photo": "photos/Amaray-case.jpg",
+   "quad": [
+    19,
+    163,
+    390,
+    18,
+    386,
+    371,
+    138,
+    517
+   ],
+   "flip": true,
+   "size": [
+    170,
+    232
+   ],
+   "radius": 4,
+   "paint": [
+    {
+     "rect": [
+      122,
+      6,
+      48,
+      25
+     ],
+     "from": [
+      100,
+      48
+     ]
+    },
+    {
+     "rect": [
+      122,
+      193,
+      48,
+      25
+     ],
+     "from": [
+      100,
+      184
+     ]
+    }
+   ],
+   "label": [
+    5,
+    6,
+    159,
+    220
+   ],
+   "tone": [
+    1.0,
+    6
+   ]
+  },
+  "spine": {
+   "photo": "photos/Amaray-case.jpg",
+   "quad": [
+    390,
+    18,
+    428,
+    18,
+    410,
+    371,
+    387,
+    371
+   ],
+   "size": [
+    36,
+    232
+   ],
+   "radius": 3,
+   "label": [
+    5,
+    8,
+    26,
+    216
+   ],
+   "tone": [
+    1.0,
+    6
+   ]
+  },
+  "meta": {
+   "source_front": "https://commons.wikimedia.org/wiki/File:Amaray-case.jpg",
+   "licence": "Public domain",
+   "author": "Asim18 (English Wikipedia)",
+   "logos_removed": "no lettering on the case; the two booklet clips inside the cover were painted with the plastic around them",
+   "note": "no public-domain photo of a GameCube case: a plain dark DVD keep case (Amaray) photo, fitted to the GameCube case's size"
+  }
+ },
+ "xbox": {
+  "front": {
+   "photo": "photos/Amaray-case.jpg",
+   "quad": [
+    19,
+    163,
+    390,
+    18,
+    386,
+    371,
+    138,
+    517
+   ],
+   "flip": true,
+   "size": [
+    170,
+    240
+   ],
+   "radius": 4,
+   "paint": [
+    {
+     "rect": [
+      122,
+      6,
+      48,
+      26
+     ],
+     "from": [
+      100,
+      50
+     ]
+    },
+    {
+     "rect": [
+      122,
+      200,
+      48,
+      26
+     ],
+     "from": [
+      100,
+      190
+     ]
+    }
+   ],
+   "label": [
+    5,
+    6,
+    159,
+    228
+   ]
+  },
+  "spine": {
+   "photo": "photos/Amaray-case.jpg",
+   "quad": [
+    390,
+    18,
+    428,
+    18,
+    410,
+    371,
+    387,
+    371
+   ],
+   "size": [
+    38,
+    240
+   ],
+   "radius": 3,
+   "label": [
+    5,
+    40,
+    28,
+    192
+   ],
+   "paint": [
+    {
+     "rect": [
+      4,
+      6,
+      30,
+      30
+     ],
+     "colour": [
+      70,
+      150,
+      40
+     ]
+    }
+   ],
+   "fixed": [
+    {
+     "rect": [
+      5,
+      7,
+      28,
+      28
+     ],
+     "colour": [
+      70,
+      150,
+      40
+     ]
+    }
+   ]
+  },
+  "meta": {
+   "source_front": "https://commons.wikimedia.org/wiki/File:Amaray-case.jpg",
+   "licence": "Public domain",
+   "author": "Asim18 (English Wikipedia)",
+   "logos_removed": "no lettering on the case; the two booklet clips inside the cover were painted with the plastic around them",
+   "note": "no public-domain photo of an original Xbox case: a plain black DVD keep case (Amaray) photo; the green band at the top of the spine is the Xbox case's own colour (painted, no lettering)"
+  }
+ },
+ "umd": {
+  "front": {
+   "photo": "photos/Amaray-case.jpg",
+   "quad": [
+    19,
+    163,
+    390,
+    18,
+    386,
+    371,
+    138,
+    517
+   ],
+   "flip": true,
+   "size": [
+    132,
+    220
+   ],
+   "radius": 4,
+   "paint": [
+    {
+     "rect": [
+      95,
+      6,
+      37,
+      24
+     ],
+     "from": [
+      78,
+      46
+     ]
+    },
+    {
+     "rect": [
+      95,
+      183,
+      37,
+      24
+     ],
+     "from": [
+      78,
+      174
+     ]
+    }
+   ],
+   "label": [
+    5,
+    6,
+    121,
+    208
+   ],
+   "tone": [
+    0.9,
+    0
+   ]
+  },
+  "spine": {
+   "photo": "photos/Amaray-case.jpg",
+   "quad": [
+    390,
+    18,
+    428,
+    18,
+    410,
+    371,
+    387,
+    371
+   ],
+   "size": [
+    30,
+    220
+   ],
+   "radius": 3,
+   "label": [
+    5,
+    8,
+    20,
+    204
+   ],
+   "tone": [
+    0.9,
+    0
+   ]
+  },
+  "meta": {
+   "source_front": "https://commons.wikimedia.org/wiki/File:Amaray-case.jpg",
+   "licence": "Public domain",
+   "author": "Asim18 (English Wikipedia)",
+   "logos_removed": "no lettering on the case; the two booklet clips inside the cover were painted with the plastic around them",
+   "note": "no public-domain photo of a PSP UMD case: a plain dark DVD keep case (Amaray) photo, fitted to the smaller PSP case"
+  }
+ },
+ "md": {
+  "front": {
+   "photo": "photos/Amaray-case.jpg",
+   "quad": [
+    19,
+    163,
+    390,
+    18,
+    386,
+    371,
+    138,
+    517
+   ],
+   "flip": true,
+   "size": [
+    170,
+    240
+   ],
+   "radius": 4,
+   "paint": [
+    {
+     "rect": [
+      122,
+      6,
+      48,
+      26
+     ],
+     "from": [
+      100,
+      50
+     ]
+    },
+    {
+     "rect": [
+      122,
+      200,
+      48,
+      26
+     ],
+     "from": [
+      100,
+      190
+     ]
+    }
+   ],
+   "label": [
+    5,
+    6,
+    159,
+    228
+   ],
+   "tone": [
+    0.8,
+    0
+   ]
+  },
+  "spine": {
+   "photo": "photos/Amaray-case.jpg",
+   "quad": [
+    390,
+    18,
+    428,
+    18,
+    410,
+    371,
+    387,
+    371
+   ],
+   "size": [
+    40,
+    240
+   ],
+   "radius": 3,
+   "label": [
+    5,
+    8,
+    30,
+    224
+   ],
+   "tone": [
+    0.8,
+    0
+   ]
+  },
+  "meta": {
+   "source_front": "https://commons.wikimedia.org/wiki/File:Amaray-case.jpg",
+   "licence": "Public domain",
+   "author": "Asim18 (English Wikipedia)",
+   "logos_removed": "no lettering on the case; the two booklet clips inside the cover were painted with the plastic around them",
+   "note": "no public-domain photo of a Mega Drive clamshell case: a plain black DVD keep case (Amaray) photo, fitted to the clamshell's size"
+  }
+ },
+ "ds": {
+  "front": {
+   "photo": "photos/Amaray-case.jpg",
+   "quad": [
+    19,
+    163,
+    390,
+    18,
+    386,
+    371,
+    138,
+    517
+   ],
+   "flip": true,
+   "size": [
+    158,
+    172
+   ],
+   "radius": 4,
+   "paint": [
+    {
+     "rect": [
+      113,
+      4,
+      45,
+      19
+     ],
+     "from": [
+      93,
+      36
+     ]
+    },
+    {
+     "rect": [
+      113,
+      143,
+      45,
+      19
+     ],
+     "from": [
+      93,
+      136
+     ]
+    }
+   ],
+   "label": [
+    5,
+    6,
+    147,
+    160
+   ],
+   "tone": [
+    1.0,
+    28
+   ]
+  },
+  "spine": {
+   "photo": "photos/Amaray-case.jpg",
+   "quad": [
+    390,
+    18,
+    428,
+    18,
+    410,
+    371,
+    387,
+    371
+   ],
+   "size": [
+    32,
+    172
+   ],
+   "radius": 3,
+   "label": [
+    5,
+    8,
+    22,
+    156
+   ],
+   "tone": [
+    1.0,
+    28
+   ]
+  },
+  "meta": {
+   "source_front": "https://commons.wikimedia.org/wiki/File:Amaray-case.jpg",
+   "licence": "Public domain",
+   "author": "Asim18 (English Wikipedia)",
+   "logos_removed": "no lettering on the case; the two booklet clips inside the cover were painted with the plastic around them",
+   "note": "no public-domain photo of a DS case: a plain dark DVD keep case (Amaray) photo, lightened to the DS case's dark grey and fitted to its size"
+  }
+ }
+}

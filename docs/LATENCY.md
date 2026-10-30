@@ -867,3 +867,16 @@ number (one short pass, about 40 s).
 - `scripts/verify-device.sh`, `scripts/test-verify-device.sh`: the check that a device is back in its normal state, and its test
 - `docs/latency/vdev.json`, `docs/latency/device.json`: the baselines
 - `scripts/rocknix-compare.sh`, `scripts/rocknix-compare-device.sh`, `scripts/rocknix-compare.py`, `scripts/rocknix-compare-plan.json`, `scripts/rocknix-compare-video.py`, `scripts/test-rocknix-compare.sh`: pocket-ui against ROCKNIX, from outside ([COMPARE-ROCKNIX.md](COMPARE-ROCKNIX.md))
+
+### First box in the Shelf and Cabinet looks (2026-10-30)
+
+With the 0.1.4 art, the first X on a game cost ~50 ms more on the RG35XX Plus (H700, 2,000 games): the case front and the
+cartridge (~25 ms each) were built on the UI thread, again when the cover arrived. `App::box_warm_tick` now builds them,
+and asks for the cover, while the player rests on a game (0.3, 0.7 and 1.2 s after the last input; Shelf and Cabinet only;
+nothing else open). First X, medians, before / after: Shelf 166 → 85 ms, Cabinet 144 → 82 ms; Split is unchanged (58-64 ms),
+later opens stay at 47 / 40 / 23 ms. Cost: about 9 MB more RSS in the Shelf look after the first rest on a game. Also
+`latency.py` no longer takes the window's first paint (800×600 on the H700, then 640×480) as its full size.
+
+The box-front cache shared by Shelf, Cabinet and the idle warmer keeps at most 12 entries, evicting the least recently
+used when inserting. This bound does not depend on drawing the Shelf look or advancing its frame counter. An active
+box or launch retains its own front and undecorated cartridge-label source until that owner releases it.

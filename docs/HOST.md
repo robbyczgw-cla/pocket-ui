@@ -1626,7 +1626,13 @@ What changes is the quantum (`src/audio_route.rs`):
   starts at the target instead of 1.5 times it, the Bluetooth stream is opened before the queue fills, and after the
   pause menu the control starts afresh the same way (the queue comes back up to a core frame off where it was). Unit test: `audio::tests::the_rate_control_holds_the_pitch_steady`
   (a simulated graph at 256, 1024 and 2048, clocks ±0.3 %, a start 30 % low).
-- **The shelf** (`ui_sound`) skips its 256 on Bluetooth the same way, asked on its quantum thread.
+- **The shelf** (`ui_sound`) skips its 256 on Bluetooth the same way, asked on its quantum thread. It follows the
+  route every 2 s while on the shelf, including while its warm stream plays silence: connecting headphones restores
+  ROCKNIX's quantum with the longer buffer announced first; disconnecting sets the speaker's small quantum again.
+  `stop_for` revokes periodic changes before preparing a game's launch; a poll checks that revocation again after
+  its route query and raise lead, so a late poll leaves the quantum to the game's own audio keeper.
+  Every `keep_warm` tick reconciles this request with the current UI context, including an aborted next-game launch,
+  sleep and Sounds Off, even when no new Warm message is needed.
 - **Pixel Path** shows "· Bluetooth" instead of the output's milliseconds and says the codec and the radio add a delay
   pocket-core can't measure, often 100-250 ms (a typical range for A2DP codecs, not measured here).
 
@@ -1833,19 +1839,68 @@ the Pocket's motor at the same time, and the Players page (A on each controller)
 
 ## UI sounds (`src/ui_sound.rs`)
 - **Sounds**: navigation tick, confirm, back, menu open (pause menu and quick settings), game switcher, error /
-  refused, and a tick on Vol+/Vol-. 90 to 450 ms each, 48 kHz mono, played on both channels.
+  refused, and a tick on Vol+/Vol-. 90 to 450 ms each, 48 kHz mono, played on both channels. And the media sounds
+  (below): a case opening on X, and the launch's.
 - **Where they come from**: sample files in `assets/ui-sounds/` (mono 16-bit 48 kHz WAV, 140 KB in all), generated
   with ElevenLabs sound effects (paid Creator plan, commercial use; `docs/LICENCES.md`), prompts for "warm, tactile retro
   hardware": a soft wooden tick (Nav), a cartridge click (Confirm), a low wooden knock (Back), a drawer sliding open
   with a click (Menu), cartridges flipping past (Switcher), a muted button that does not engage (Error), a knob detent
-  (Volume), an old shutter (Shutter; its second click, cut out of it at 85 %, is Insert: the launch animation's
-  cartridge going in, `app_cabinet::launch_animation`). Each file is trimmed, faded in over 2 ms and out over up to 30 ms, and normalised to a
+  (Volume), an old shutter (Shutter). Each file is trimmed, faded in over 2 ms and out over up to 30 ms, and normalised to a
   peak of -1.5 dBFS (Nav -3), 90 to 450 ms long. `ui_sound::synth` decodes them; `synth_at` resamples for pocket-core's
   shutter. The loudness of the set is `Config::gain` alone. The earlier synthesised sine tones peaked at -6 to -10 dBFS
   in the file and then took the default gain of -17.5 dB, so they reached the output at -23 to -28 dBFS, about 20 dB
   under a game; at that level the 16-bit rounding of the gain stage (no dither) is audible on a 28 ms tick. The default
   is now step 7 (-7.5 dB), which puts the samples at about -9 dBFS.
   The mixer thread decodes all of them once when it starts (`ui_sound::start` at launch), so a sound is a buffer lookup.
+- **Media sounds** (0.1.4): ElevenLabs sound effects (2026-10-29, the prompts in `scripts/ui-sounds/media-sounds.tsv`),
+  four variants per sound, one chosen by measurement (all four were fine by ear; a first set synthesised with numpy
+  sounded "like the same video-game drum" and went): a clean onset (the transient within the first 15 ms after
+  the cut, except the cartridge's slide before its click), a decay to -60 dB inside the cut, 65-85 % of the energy in
+  300 Hz-6 kHz and at most 13 % above 8 kHz (a small speaker), and the band spectrum least like the other media sounds
+  (correlation of 24 log bands with the closest others 0.3-0.5, the synthesised set 0.6-0.9). CaseOpen (a DVD case's
+  latch snaps, the lid knocks at 483 ms, 711 ms), BoxOpen (a cardboard flap unfolding, 1000 ms), CartIn (a short slide,
+  seated at 604 ms, 764 ms), DiscIn (the tray's clunk at 34 ms, the drive spinning up, 1164 ms), CardIn (a game card's
+  spring click at 33 ms, 333 ms), Insert (one plastic latch click at 30 ms, Quick's, 272 ms), CrtOn (a push-button
+  thunk and the crackle of static on the glass, 667 ms; ElevenLabs' whines sat at 10-16 kHz and its hums under 300 Hz,
+  both lost or shrill on the speaker). `scripts/ui-sounds/prep_media_sounds.py` cuts each at its real onset (the cut in
+  the table), high-passes at 30 Hz, low-passes gently at 10 kHz, takes out DC, fades in over 2 ms and out (40 ms, the
+  disc 250, the CRT 120) to exactly zero and levels it so that neither the M max (the loudest 400 ms, BS.1770
+  K-weighting) is above -24.5 LUFS nor what a small speaker plays of it (`loudness.py`'s 400 Hz high-pass) above its
+  target, -26 to -27.5 LUFS: -24.5 to -28.9 LUFS, true peak -1.55 to -5.6 dBTP. The ElevenLabs set measures -22 to -31 LUFS M max (median -27), -0.9 to -3 dBTP:
+  `python3 scripts/ui-sounds/loudness.py assets/ui-sounds/*.wav` prints both. Which plays: `ui_sound::opening` (the
+  hull: cardboard for a cartridge's box, plastic for every other case) and `going_in` (cartridge, disc or UMD, card).
+  X on a game whose card opens as the box (`app_card::show_card`) plays the opening and marks the input as having
+  played (`ui_sound::played`), so `sound_after` adds no Confirm. The launch (`app_cabinet::launch_animation`) queues all
+  of its sounds at A with how long each waits (`ui_sound::play_after`: the voice carries its wait in frames, at most
+  3 s, and keeps the output open for it): Cozy the opening at once, the medium's sound `hit_at` before `IN_AT_COZY`
+  (less 10 ms, `SOUND_LEAD`, what the output holds ahead); CrtOn is pocket-core's, played through its chime into the
+  game's own sound at the UI sounds' gain the moment the old-TV power-on starts (`crt_on::start`, the hook `crt-on`), so
+  it is on the frame with the picture whenever the game comes up, and goes to Bluetooth with the game; Quick only Insert, 6 dB under the
+  rest (`QUICK_DB`), at 170 ms. Mute, the UI volume and Bluetooth are the mixer's as for every other sound.
+- **Measured on the Mini V2** (2026-10-29, `scripts/ui-sounds/device-capture.sh` and `device-ui.sh`, a null sink as the
+  default with the speaker muted; the monitor is before the DAC). Through the mixer at UI volume 10: every sound
+  bit for bit the file (D+N under -213 dB), M max -24.5 to -27.3 LUFS, true peak -1.55 to -4.6 dBTP (disc and CRT
+  overlapping: -5.4), no gap, nothing clipped; the Quick click at -6 dB -74 dB D+N (the gain's 16-bit rounding).
+  Sounds queued with a wait land 1 to 15 ms after it is up. From the button in a pocket-ui of their own at the default
+  volume (step 7), three runs: D+N -67 to -72 dB (rounding again), no gap; X to the case's sound 35 to 61 ms with the
+  output closed (the Back after it, output open, 12 to 16 ms: the opening costs the same 16 to 23 ms as for any first
+  sound); the cartridge's click 18 to 31 ms after its moment counted from the button (the launch's own work before
+  `launch_animation`; counted from there it is on time, as is the animation); Quick's click -4 to +30 ms. The CRT from
+  pocket-core (with `CORE_BIN`, the GBA test ROM, which is silent): 51 ms after pocket-core's `crt-on` (the game's audio
+  buffer; the picture's own frame comes 17 to 33 ms after the event too), its level as the file (-52.0 against -51.5 dBFS
+  over 0.2-0.5 s, -64.9 against -64.1 over 0.5-0.8 s) and 7.8 cents high: pocket-core plays a game's sound 0.45 % fast to
+  keep a 59.73 fps core at 60 Hz, and the chime mixed into it with it (the shutter too). D+N against the stretched
+  file -31 dB, the core's rate twice and its rate control: the thunk -32 to -37 dB, the faint whine under it around
+  -65 dBFS.
+- **The ElevenLabs set on the RG35XX Plus** (H700, 2026-10-29, the same scripts, a null sink: the speaker at 0). Through
+  the mixer at UI volume 10: every sound bit for bit the file (D+N under -211 dB), no gap, nothing clipped, waits on time
+  (1 to 16 ms). From the buttons: the right sound for each (X: the box or the case, no Confirm; Cozy: the box, the
+  cartridge, pocket-core's CRT 52 to 63 ms after `crt-on`, +7.8 cents as on the Mini V2; Quick: the click), no gap,
+  nothing clipped. Opening the output takes 100 to 220 ms there (the Mini V2: 16 to 43), so the first sound after
+  2 s of quiet comes late on that handheld, any UI sound: X to the case 113 to 177 ms (the Back after it, output open:
+  0 to 16 ms), the Cozy cartridge's click 55 ms after its moment (its wait was over before the output was open), Quick's
+  click 99 ms. The Cozy box (1 s) and the CRT overlap there; the analysis takes pocket-core's stretched CRT out of
+  neither, so their D+N (-13 to -34 dB) says nothing.
 - **Which sound**: `main.rs` takes a `View` before and after every pad event (what covers the screen: pause menu,
   switcher, quick settings; and a hash of everything that moves: shelf, Settings, pause menu pages and values,
   setup, store, quick settings, switcher) and asks `ui_sound::sound_for`. An overlay that opens gives Menu or
@@ -1858,13 +1913,29 @@ the Pocket's motor at the same time, and the Players page (A on each controller)
   ever plays over gameplay. Muted or at 0 (`ui_sound::audible`) is asked with `pactl` (two processes) on a thread
   of its own, started as the output opens (trusted for 1.5 s; a muted sink closes the output again, the sound
   having played into a muted sink). Not from sleep's 15 s reading: on the device that kept the sounds off for up to
-  15 s after unmuting. While the output is open, a mute in between is PipeWire's to honour.
+  15 s after unmuting. A warm shelf refreshes this check every 1.5 s even while the output is open: a mute releases
+  the warm stream too, so PipeWire can suspend its sink. While closed and warm, a timer consumes the answer and
+  retries after an unmute or stream failure without requiring another UI event (failed opens still back off 5 s).
+  Outside the shelf, a mute in between is PipeWire's to honour.
 - **Playing**: `ui_sound::play` checks the gate, keeps Nav and Volume ticks 40 ms apart (a held direction repeats
   every 70 ms) and posts to the mixer thread over a bounded channel (`try_send`): the UI thread never waits. The
   mixer owns an `audio::Sink`, the same native PipeWire stream through ALSA's `pipewire` device that pocket-core uses
   (10 ms ALSA buffer; `POCKET_CORE_AUDIO=pulse` applies here too). It opens it for the first sound, mixes up to four
-  voices in 128-frame chunks (2.7 ms), writes silence between sounds and closes the stream 2 s after the last one, so
-  an idle shelf keeps no stream or PipeWire graph running. `ui_sound::stop` closes it at once when a game starts.
+  voices in 128-frame chunks (2.7 ms), writes silence between sounds and closes the stream 2 s after the last one,
+  except while pocket-ui is in front, awake with the screen on and its sounds on (`ui_sound::keep_warm`, asked after
+  every sleep tick): then the stream opens at once and stays open, so the first sound after a quiet spell starts within
+  a chunk. Screen off, a game, sounds off or a muted sink close it as before, so a dark Pocket keeps no stream and its
+  sink suspends. `ui_sound::stop` closes it at once when a game starts, unless it is kept warm and open: then it closes
+  once the launch's own sounds have played (`close_when_done`), instead of opening again for them while the game starts.
+- **Why warm** (2026-10-29, `examples/ui_open_bench`, the RG35XX Plus): opening the stream costs about 50 ms there alone
+  (`snd_pcm_open` 10-17 ms, `snd_pcm_set_params` 39-44 ms) and 100-220 ms in pocket-ui while the shelf draws, and a
+  speaker sink suspended after 5 s of quiet blocks the first writes another 0.84 s while the codec wakes. From the button
+  (`scripts/ui-sounds/device-ui.sh`, the speaker at 15 %) before / after: X to the case's sound 105-183 / 3-13 ms (the
+  first press of the run, which wakes the screen, 47), the Cozy box 231 / 2 ms, the Cozy cartridge's click 45 / 2 ms
+  after its moment. Cost over 10 minutes idle on the shelf (2 of them with the screen on): pocket-ui 1.0 % of a core
+  against 0.3 %, the system 2.7 % busy against 2.2 %, PipeWire unchanged; the battery's current reads the same (on USB
+  there). The Mini V2 with its speaker muted (as it was) keeps no warm stream and measured the same as before (281 /
+  279 mA, 1.5 % busy).
   `POCKETUI_SOUND_DEBUG=1` logs, per sound, how long the mixer thread took to pick it up, the open time and what is
   already queued ahead of it.
 - **Latency** (2026-10-22, virtual device, PipeWire at ROCKNIX's quantum of 1024; the device measured 27-41 ms to open

@@ -88,6 +88,7 @@ itself if pocket-ui cannot start at all.
 
 The first time pocket-ui runs, it walks you through a short setup. **START skips any step.** You can
 open every step again later from **Settings** (press START on the Home screen).
+Each step says "Step n of 7" at the top right.
 
 1. **Welcome.** Under a small picture of your handheld, press A to begin. Left/Right choose the language, **English** or **Deutsch** (German): the screen
    changes at once, and the choice is kept ([Language](language.md)). It starts on the system language
@@ -113,6 +114,8 @@ open every step again later from **Settings** (press START on the Home screen).
 8. **You're all set.** It counts the games already on the SD card ("Your 16 games are on the shelf."). Press A ("Go to
    your games") to reach Home.
 
+After a restart or a flat battery in the middle, the setup opens again at the step it had reached.
+
 In most steps, B goes back one step. The hint bar at the bottom lists only what works right now: without Wi-Fi the Extras
 step leaves out A ("Download", "Browse"), and Add your games leaves out X (file sharing), because both need a connection.
 
@@ -121,7 +124,7 @@ step leaves out A ("Download", "Browse"), and Add your games leaves out X (file 
 pocket-ui has more than it shows at first: Curator's Lens and Echoes, Pixel Path, screen frames, going straight back
 into your game, and more. This step sets them in one go. Up/Down choose, A takes it; under the three rows the page
 says what the selected one switches on and off, in everyday words ("On: suggestions for similar games, gentle
-animations. Off: filter games by mood and length, ..."). The names of the features are on their cards in
+animations. Off: pick games by mood and length, ..."). The names of the features are on their cards in
 [Settings → System → Tour](tour.md).
 
 - **Simple**: "As pocket-ui ships, the same as skipping this step." This is the start
@@ -143,7 +146,7 @@ and the stick lights are left as they are by both.
 The step comes right after Wi-Fi and shows a city with the time it is there now. pocket-ui guesses it without
 asking any web service, so nothing about you leaves the device. It looks, in this order, at:
 
-1. **The zone the system already has**, if it is not UTC. The note says "Already set on this Pocket."
+1. **The zone the system already has**, if it is not UTC and somebody chose it. The note says "Already set on this Pocket." The zone a fresh image ships with (New York) does not count: nobody chose it, so the next two steps decide.
 2. **The country of your Wi-Fi region.** The Wi-Fi chip knows the country it is allowed to transmit in (the same
    setting that decides which channels it may use). For a country with one time zone, such as Austria or Germany,
    that zone is shown, with the note "A guess from your Wi-Fi region". For a country with several time zones
@@ -176,6 +179,8 @@ Settings → Connections → **Wi-Fi**, or the Wi-Fi step of the first start.
    If the first row says **This network wants a sign-in**, the network (a hotel, a train) wants its page done
    first: see [Hotel and train Wi-Fi](hotel-wifi.md).
 2. Choose a network and press A ("Connect").
+   A on the network you are connected to gets a tick and "Connected to Home. Press START for the next step." under the
+   title. A network one search missed stays listed until three searches in a row miss it.
 3. For a network with a password, type it on the on-screen keyboard:
    - D-pad: move between keys
    - A: type the selected key
@@ -190,12 +195,9 @@ Settings → Connections → **Wi-Fi**, or the Wi-Fi step of the first start.
    refuses the password, the keyboard opens again, empty, with "Wrong password. Try again." above the keys; the refused
    password isn't kept, so the next one you type is the one tried. B goes back to the list.
 
-If the Pocket is already connecting to the network you chose, it waits for that connection instead of starting
-again (up to 50 seconds). A connection already made is kept. When you choose a different network, it leaves the
-previous one first. A newly typed password replaces an old connection attempt. If a saved password no longer
-works, the password keyboard opens again. "Wi-Fi isn’t ready yet" means the Pocket’s radio or network service is
-still starting; try again in a moment. After starting or waking, automatic reconnects wait for Wi-Fi to settle and leave a connection
-in progress alone.
+If the Pocket is already connecting to the network you chose, it waits for that connection (up to 50 seconds) instead of
+starting again. Choosing a different network leaves the previous one first; a newly typed password replaces an old
+attempt. "Wi-Fi isn’t ready yet" means the radio or network service is still starting; try again in a moment.
 
 Press X ("Scan again") to refresh the list. The line under the title is always true to what happened:
 
@@ -290,9 +292,10 @@ many.
 ### Over Wi-Fi (file sharing)
 
 1. Open Settings → Games → **Add games** (or the "Add your games" step of the first start). Without Wi-Fi, the right
-   side says "Connect to Wi-Fi first" and shows no address yet.
-2. Press X ("Turn on file sharing"). The right side under the grid now shows a user (`pocket`) and a password made
-   for this Pocket.
+   side says "Connect to Wi-Fi first" and shows no address yet. With Wi-Fi but sharing off, it says "File sharing is
+   off" and how to turn it on, again without an address.
+2. Press X ("Turn on file sharing"). The right side under the grid now shows the address, a user (`pocket`) and a
+   password made for this Pocket.
 3. On your computer, open the address shown on the screen and log in with that user and password:
    - macOS: Finder → Go → Connect to Server, `smb://<address>/games-roms`, "Registered User".
    - Windows: `\\<address>\games-roms` in Explorer's address bar.

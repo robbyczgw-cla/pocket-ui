@@ -74,6 +74,10 @@ mod app_library_sync;
 mod app_appearance;
 /// The Cabinet look: cases on wooden shelves, pulled out and put into the console.
 mod app_cabinet;
+// The case stickers on the Cabinet's, the Shelf look's and the game box's fronts and spines.
+mod app_case_stickers;
+// The CRT TV on the Cabinet's top board with the selected game's screenshot.
+mod app_cabinet_tv;
 /// Settings > LEDs, and the game's colour on the sticks (`leds.rs`).
 mod app_leds;
 /// Settings > Night light, and its steps on the UI thread (`night_light.rs`).
@@ -100,6 +104,8 @@ mod app_port_perf;
 mod app_curator;
 /// Play history (docs/HISTORY.md): the log's writer and migration, the History and Year in review pages.
 mod app_history;
+/// Connections and Rediscover (docs/CURATOR.md): a card's facts lead to the player's games with the same one.
+mod app_connections;
 /// RetroAchievements: Settings > RetroAchievements, the card's and console page's tallies, the pause menu's list.
 mod app_achievements;
 /// Finding games fast: the search (the Search row on Home) and the letter jump of the lists (L2/R2).
@@ -113,6 +119,7 @@ mod app_players;
 /// The pause menu's Disc row: changing discs of multi-disc games on pocket-ui's own host.
 mod app_disc;
 mod app_earlier;
+mod app_save_media;
 /// Game saves that don't reach the card: the pause menu's line and its question before Quit.
 mod app_save_trouble;
 /// Which emulator plays a game (system.cfg's choices, as EmulationStation keeps them) and the "Runs on" page.
@@ -216,6 +223,8 @@ enum UserEvent {
     Starter(app_starter::Event),
     /// The automatic cover download (`pocket_ui::auto_covers`).
     Covers(CoversEvent),
+    /// The installed ports metadata worker published another complete snapshot.
+    PortIndex,
     /// The game card's descriptions loaded ahead (`pocket_ui::auto_texts`, `app_card`).
     Texts(pocket_ui::auto_texts::Event),
     /// Games recognised by their checksum, and "Look up again" (`app_identify`).
@@ -571,6 +580,9 @@ enum Screen {
     Shelf(usize),
     Sticker(u32),
     LensResults,
+    /// The games a fact of a card leads to ("More from Criterion Games") and Curator's Rediscover (`app_connections`).
+    Connection,
+    Rediscover,
 }
 
 struct Running {
@@ -1088,12 +1100,17 @@ struct App {
     appearance_pending: bool,
     /// The last button press or touch, so Automatic never switches under the player's hands.
     last_input: Instant,
+    /// The game whose box front and cartridge are being built ahead, and how many tries it had (`app_card::box_warm_tick`).
+    box_warm: Option<(Item, u8)>,
     /// The look previews were painted light.
     look_previews_light: bool,
     /// The language the look previews were painted in.
     look_previews_lang: pocket_ui::i18n::Lang,
     /// And at which text size (R1 on the first start's look step changes it).
     look_previews_size: pocket_ui::type_scale::TextSize,
+    /// The clock the previews were painted with: a new minute (or a zone chosen meanwhile) paints them again, so the
+    /// small clock in each is the real one (new-user test 2026-10-30), not the time the step opened.
+    look_previews_clock: Option<String>,
     /// The column a page of rows and text is painted into on a wide screen, kept between frames (`app_column`).
     column_buf: Vec<u32>,
     /// Settings → Language as chosen; `None` follows the system's (`i18n::Lang::system_default`).
@@ -1233,7 +1250,7 @@ impl App {
                 }
             }
             b if b == CANCEL => {
-                if self.curator_back() {
+                if self.connection_back() || self.curator_back() {
                     return;
                 }
                 if self.screen != Screen::Home {
@@ -1271,7 +1288,7 @@ impl App {
                 self.rebuild();
             }
             Some(Item::Streaming) => self.start_streaming(),
-            Some(item @ (Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_))) => self.curator_activate(item),
+            Some(item @ (Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover)) => self.curator_activate(item),
             Some(Item::Search) => self.open_search(),
             None => {}
         }
@@ -1348,6 +1365,12 @@ impl App {
             self.library_rescan("a game's file was missing");
             return;
         }
+        // A file with nothing in it: say so, instead of an emulator failing and a guess about a BIOS.
+        if let Some(msg) = pocket_ui::library_cache::empty_game(&name, &path) {
+            println!("launch: {} is empty", path.display());
+            self.notice = Some(Notice::new(msg));
+            return;
+        }
         // Started from the search: it closes, and the shelf goes to the game (`app_search`).
         self.search_launching(&path);
         let Some(sys) = self.systems.iter().find(|s| s.name == system) else { return };
@@ -1386,6 +1409,10 @@ impl App {
         pocket_ui::motion::set_cozy(self.cozy());
         if let Some(hold) = self.launch_animation(&path, emulator == "pocket-core") {
             env.push((pocket_ui::startup::HOLD_UNTIL, format!("{:.1}", asked + hold.as_secs_f64() * 1000.0)));
+            // Cozy's ending: the old-TV power-on over the game's first moments, only with Motion on Full (`crt_on`).
+            if pocket_ui::motion::level() == pocket_ui::motion::Motion::Full {
+                env.push((pocket_ui::crt_on::ENV, "1".into()));
+            }
         }
         // Smooth fan: a pocket-core game tells pocket-ui its fan choice instead of changing the trips (`app_perf_fan`).
         env.extend(self.perf_fan_game_env().filter(|_| emulator == "pocket-core"));
@@ -1478,7 +1505,7 @@ impl App {
         } else if never_started && !run.hosted() {
             // A system whose BIOS pocket-ui knows: the files missing are named, not guessed at (`hostsys::missing_bios`).
             let bios = pocket_ui::hostsys::find(&run.system).and_then(|s| s.missing_bios(std::path::Path::new(pocket_ui::hostsys::BIOS_DIR)));
-            self.notice = Some(Notice::new(pocket_ui::fallback::not_started_notice(&run.name, bios.as_deref())));
+            self.notice = Some(Notice::new(pocket_ui::fallback::not_started_notice_on(&run.system, &run.name, bios.as_deref())));
         }
         // pocket-core couldn't start this game: remember it and start it with the system's default emulator instead.
         let failed = run.hosted() && pocket_ui::fallback::should_retry(ok, secs, quit_requested, self.notice.as_ref().map(|n| n.text()));
@@ -2361,7 +2388,7 @@ impl App {
         let title = self.running.as_ref().map(|r| r.name.clone()).unwrap_or_default();
         let saved = menu.saved.as_ref().map(|(img, t)| {
             let secs = t.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-            (img.is_some(), recents::ago(secs))
+            (img.is_some(), recents::when(secs))
         });
         let (sel, quitting, discarding, without_saving, items) = (menu.sel, menu.quitting, menu.discarding, menu.without_saving, menu.items());
         let item = items.get(sel).copied().unwrap_or(MainItem::Continue);
@@ -2457,7 +2484,17 @@ impl App {
             // A little lower with larger text (Settings → Text size), so the note under it keeps clear of the hints.
             let (hw, hh) = (c.w / 2, c.h / 2 - 5 * pocket_ui::type_scale::grow(NU_SMALL));
             let r = 12;
-            let (ox, oy) = (c.w - pad - hw - 2 * r, (c.h - hh - 2 * r) / 2);
+            // The strip borrows its height from the picture. Together they still need room for two note lines
+            // before the hint pill (native 1024x768 with German/Large otherwise hides the save's age).
+            let note_tail = 48 + 34 + pocket_ui::type_scale::line(NU_SMALL, 8) + pocket_ui::type_scale::px(NU_SMALL) as i32 / 3 + 12;
+            let (top, bottom) = (pad + NU_PILL + 16, c.h - pad - NU_PILL);
+            let hh = hh.min((bottom - top - 2 * r - note_tail).max(1));
+            // Under the picture the slots on the game's save medium (`app_save_media`): the picture gives up the
+            // strip's height but the dots' 28 px, so the note and everything around stay where they were.
+            let strip = self.save_strip(hw + 2 * r).1;
+            let ox = c.w - pad - hw - 2 * r;
+            let oy = ((c.h - hh - 2 * r) / 2).min(bottom - hh - 2 * r - note_tail).max(top);
+            let hh = hh + 28 - strip.h;
             c.round_rect(ox, oy, hw + 2 * r, hh + 2 * r, r * 2, 0x262626);
             c.rect(ox + r, oy + r, hw, hh, 0x000000);
             let img = self.menu.as_ref().and_then(|m| m.saved.as_ref()).and_then(|(i, _)| i.as_ref());
@@ -2478,22 +2515,12 @@ impl App {
                 (MainItem::Load, _) => None,
                 _ => Some(slot),
             };
-            // Earlier has no slots: no dots under its picture.
+            // Earlier has no slots: nothing under its picture.
             if slotted && filled.len() > 1 && item != MainItem::Earlier {
-                // One dot per slot: filled ones are lit, the one the row is on has a ring.
-                let (dot, gap) = (18, 16);
-                let count = filled.len() as i32;
-                let x0 = ox + (hw + 2 * r - (count * dot + (count - 1) * gap)) / 2;
-                for (n, full) in filled.iter().enumerate() {
-                    let cx = x0 + n as i32 * (dot + gap) + dot / 2;
-                    let cy = oy + hh + 2 * r + 34;
-                    c.disc(cx, cy, dot / 2, if *full { 0xffffff } else { 0x4a4a4a });
-                    if Some(n) == on_slot {
-                        c.ring(cx, cy, dot / 2 + 8, 3, 0xffffff);
-                    }
-                }
-                note_y += 34;
+                self.paint_save_strip(c, ox, oy + hh + 2 * r + 14, hw + 2 * r, &filled, on_slot);
             }
+            // The note where it was under the dots, with a strip or without (Earlier, RetroArch's one save).
+            note_y += strip.h + 6;
             let ago = saved.as_ref().map(|(_, ago)| ago.as_str());
             let shown = if item == MainItem::Load { load_target } else { Some(save_target) };
             let note = match (slotted, shown, ago, item == MainItem::Save) {
@@ -2756,7 +2783,7 @@ impl App {
         match item {
             Item::Recent(i) => self.recents.list.get(i).map(|r| (r.system.clone(), r.path.clone())),
             Item::Game(s, g) => Some((self.systems[s].name.clone(), self.systems[s].games[g].path.clone())),
-            Item::System(_) | Item::Favorites | Item::Streaming | Item::Search | Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) => None,
+            Item::System(_) | Item::Favorites | Item::Streaming | Item::Search | Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => None,
         }
     }
 
@@ -3847,7 +3874,13 @@ impl App {
             let light = self.fader.light();
             // And in the interface's language (the welcome step before it can change it).
             let size = pocket_ui::type_scale::get();
-            if self.look_previews.is_none() || self.look_previews_light != light || self.look_previews_lang != pocket_ui::i18n::current() || self.look_previews_size != size {
+            if self.look_previews.is_none()
+                || app_look::previews_stale(
+                    (self.look_previews_light, self.look_previews_lang, self.look_previews_size, &self.look_previews_clock),
+                    (light, pocket_ui::i18n::current(), size, &pocket_ui::status_corner::clock()),
+                )
+            {
+                self.look_previews_clock = pocket_ui::status_corner::clock();
                 self.look_previews = Some(pocket_ui::palette::scoped(if light { 255 } else { 0 }, || self.render_look_previews()));
                 self.look_previews_light = light;
                 self.look_previews_lang = pocket_ui::i18n::current();
@@ -4243,8 +4276,12 @@ impl App {
                 let short = self.text.fit(Face::Body, 21, &short, w - 48);
                 self.text.draw(c, Face::Body, 21, x + 24, y + 44, 0xffffff, &short);
             }
-            let t = self.text.fit(Face::Title, 37, &t, w - 48);
-            self.text.draw(c, Face::Title, 37, x + 24, y + h - 32, 0xffffff, &t);
+            // A name too wide for the card takes a second line rather than ending in "…" ("Game Boy Advance").
+            let lines = self.text.title_lines(Face::Title, 37, &t, w - 48);
+            let last = lines.len() as i32 - 1;
+            for (k, line) in lines.iter().enumerate() {
+                self.text.draw(c, Face::Title, 37, x + 24, y + h - 32 - (last - k as i32) * 44, 0xffffff, line);
+            }
         }
         // For the snapshot checks of Settings → Text size: the neighbours are cut by the screen's edges on purpose.
         pocket_ui::text::boxes::cut_on_purpose(peek);
@@ -4268,7 +4305,7 @@ impl App {
     fn describe(&self, item: Item) -> (String, String, String, String) {
         match item {
             Item::Streaming => ("PC streaming".into(), "streaming".into(), "Moonlight".into(), "Play your PC's games over Wi-Fi with Moonlight".into()),
-            Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) => self.curator_describe(item),
+            Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => self.curator_describe(item),
             Item::Search => ("Search".into(), "search".into(), "All games".into(), "Find any game by its name, typos and all".into()),
             Item::Favorites => {
                 let n = self.favorite_items().len();
@@ -4297,7 +4334,9 @@ impl App {
                 };
                 // The Favorites shelf mixes systems, and one title can be on several (Blockamok Remix is on the 3DS and the
                 // Wii): name the system on the spine and on the label, like the recent games on Home do.
-                if matches!(self.screen, Screen::Favorites | Screen::Shelf(_) | Screen::Sticker(_) | Screen::LensResults) {
+                // Rediscover says why a game is there ("played a year ago today", "last played 412 days ago").
+                let meta = self.rediscover_why(&game.path).unwrap_or(meta);
+                if matches!(self.screen, Screen::Favorites | Screen::Shelf(_) | Screen::Sticker(_) | Screen::LensResults | Screen::Connection | Screen::Rediscover) {
                     return (game.name.clone(), sys.name.clone(), system_short(&self.systems, &sys.name), format!("{}, {}", sys.fullname, meta.to_lowercase()));
                 }
                 (game.name.clone(), sys.name.clone(), String::new(), meta)
@@ -4669,6 +4708,8 @@ fn snapshot(app: &mut App, args: &[String]) {
         app.look_up_snapshot(rest);
         // ":patch" on a card: a patch next to its game (`App::patch_snapshot`).
         app.patch_snapshot(rest);
+        // ":saves[=none]" on a card: its save slots on their medium (`App::card_saves_snapshot`).
+        app.card_saves_snapshot(rest);
         let mut buf = vec![0u32; (w * h) as usize];
         app.paint(&mut Canvas::new(&mut buf, w, h));
         app.curator_snapshot_after(rest);
@@ -4699,6 +4740,14 @@ fn snapshot(app: &mut App, args: &[String]) {
         app.paint(&mut Canvas::new(&mut buf, w, h));
         app.gallery_snapshot_after(state);
         app.paint(&mut Canvas::new(&mut buf, w, h));
+        write_png(&buf, w, h, out);
+        return;
+    }
+    // "save-card:<ps1|ps2|gamecube|vmu|xbox|stick|<cartridge system>>": a memory card (or a cartridge) alone, large and at the pause menu's size,
+    // on grey, to hold beside a photo of the real one (`app_save_media`).
+    if let Some(card) = state.strip_prefix("save-card:") {
+        let mut buf = vec![0u32; (w * h) as usize];
+        app_save_media::save_card_snapshot(&mut Canvas::new(&mut buf, w, h), &mut app.text, card);
         write_png(&buf, w, h, out);
         return;
     }
@@ -4830,6 +4879,16 @@ fn snapshot(app: &mut App, args: &[String]) {
         "ps2-options" | "gc-options" | "wii-options" | "3ds-options" | "gc-more" | "wii-more" => Page::Standalone { sel: n(0) },
         _ => Page::Main,
     };
+    // "slot-<save|load|auto|undo|empty>:<system>[:nocover]": the same slot page for a game of that system, on its save
+    // medium (`app_save_media`), with a made-up cover (`:nocover` without, the console's picture in the slots).
+    let (slot_state, slot_system) = match state.split_once(':').filter(|(n, _)| matches!(*n, "slot-save" | "slot-load" | "slot-auto" | "slot-undo" | "slot-empty")) {
+        Some((n, rest)) => (n.to_string(), Some((rest.split(':').next().unwrap_or("gbc").to_string(), !rest.ends_with(":nocover")))),
+        None => (state.clone(), None),
+    };
+    let state = &slot_state;
+    if let Some((system, cover)) = &slot_system {
+        app.save_media_snapshot(system, *cover);
+    }
     // Slot pages: the third slot of eight, with slots 1, 3 and 6 filled; "slot-empty" is slot 4. "slot-auto" and
     // "slot-undo" are Load on its first two entries (the auto state, "Before load"); "slot-one" is Azahar's single slot.
     let demo_dir = tmp.join("states");
@@ -5263,7 +5322,7 @@ fn spawn_game(proxy: EventLoopProxy<UserEvent>, system: &str, emulator: &str, co
     // pocket-core announces its exit save on a pipe, so a switch needn't wait for the process to end (`fast_switch`).
     let handoff = (emulator == "pocket-core").then(|| pocket_ui::fast_switch::Handoff::attach(&mut cmd)).flatten();
     // Own process group, so pause and quit reach every process the game starts.
-    let child = cmd.process_group(0).spawn();
+    let child = if system == "ports" { standalone::spawn_port(&mut cmd) } else { cmd.process_group(0).spawn() };
     let pgid = child.as_ref().ok().map(|c| c.id() as i32);
     if test_driver_dir().is_some() {
         if let Some(pid) = pgid { println!("test game pid {pid}"); }
@@ -5503,6 +5562,10 @@ impl App {
     fn sound_after(&mut self, input: pocket_ui::ui_sound::Input, before: pocket_ui::ui_sound::View) {
         use pocket_ui::ui_sound;
         let refused = ui_sound::take_refused();
+        // The input played its own sound (X opening a case, A starting the launch's): not a second one.
+        if ui_sound::take_played() {
+            return;
+        }
         if let Some(sound) = ui_sound::sound_for(input, before, self.sound_view(), refused) {
             self.play_sound(sound);
         }
@@ -5607,6 +5670,16 @@ impl App {
             UserEvent::Store(e) => self.store_event(e),
             UserEvent::Starter(e) => self.starter_event(e),
             UserEvent::Covers(e) => self.covers_event(e),
+            UserEvent::PortIndex => {
+                self.cabinet.port_art_changed();
+                self.search_covers_changed();
+                self.covers.clear();
+                self.pictures_changed();
+                self.look_previews = None;
+                if let Some(open) = self.card.as_mut().filter(|o| o.system == "ports") {
+                    open.card.data.port_update = open.path.file_name().and_then(|n| n.to_str()).is_some_and(pocket_ui::ports::update_waiting);
+                }
+            }
             UserEvent::Texts(e) => self.texts_event(e),
             UserEvent::Identify(e) => self.identify_event(e),
             UserEvent::Picture(key, img) => self.picture_arrived(key, img),
@@ -5887,6 +5960,8 @@ impl ApplicationHandler<UserEvent> for App {
             _ => None,
         };
         let sound_from = sound_input.map(|_| self.sound_view());
+        // A sound played by hand for an input that never reached `sound_after` doesn't silence this one.
+        pocket_ui::ui_sound::take_played();
         self.volume_step = false;
         self.user_event_inner(el, ev);
         if moved_from.is_some_and(|before| before != self.ui_position()) {
@@ -5949,6 +6024,11 @@ impl ApplicationHandler<UserEvent> for App {
         }
         // A game list read again after the start, swapped in once nothing holds a game by its place (`app_library`).
         self.library_apply_pending();
+        // The Cabinet's TV may have finished behind Settings, a card or another look. Drain its answers here too,
+        // so a completed request cannot keep an invisible Cabinet animating forever.
+        if self.cabinet.tv.poll() {
+            self.request_redraw();
+        }
         // "New in this version", once, when the shelf is free (`app_tour`).
         self.tour_tick();
         let now = Instant::now();
@@ -6015,6 +6095,11 @@ impl ApplicationHandler<UserEvent> for App {
         if self.sleep.take_woke() {
             self.request_redraw();
         }
+        // The UI sounds' output stays open while pocket-ui is in front and awake with its sounds on (`ui_sound::keep_warm`):
+        // after the sleep tick, which may have just turned the screen off (no further turn of the loop may come then).
+        pocket_ui::ui_sound::keep_warm(
+            self.running.is_none() && self.sleep.state() == pocket_ui::sleep::State::Awake && self.sound.on && self.sound.volume > 0,
+        );
         // The fan outside games follows games, sleep and the Settings page.
         self.perf_fan_sync();
         // The night light looks at the clock again after a sleep (`app_night_light`).
@@ -6058,6 +6143,10 @@ impl ApplicationHandler<UserEvent> for App {
         }
         // The status corner's clock: one wake-up as the minute turns, only while it is on screen (`app_status_corner`).
         if let Some(t) = self.status_corner_tick(now) {
+            wake = Some(wake.map_or(t, |w| w.min(t)));
+        }
+        // The selected game's box front and cartridge, built while the player rests on it (`app_card::box_warm_tick`).
+        if let Some(t) = self.box_warm_tick(now) {
             wake = Some(wake.map_or(t, |w| w.min(t)));
         }
         if let Some(t) = self.sys.next_wake() {
@@ -6148,6 +6237,17 @@ impl App {
             asleep: self.sleep.state() != pocket_ui::sleep::State::Awake,
         };
         pocket_ui::ui_sound::play(sound, &ctx);
+    }
+
+    /// [`play_sound`](Self::play_sound) `after` from now, `db` quieter or louder (`ui_sound::play_after`).
+    fn play_sound_after(&self, sound: pocket_ui::ui_sound::Sound, after: Duration, db: f32) {
+        let ctx = pocket_ui::ui_sound::Ctx {
+            config: self.sound,
+            in_game: self.running.is_some(),
+            pause_menu: self.menu.is_some(),
+            asleep: self.sleep.state() != pocket_ui::sleep::State::Awake,
+        };
+        pocket_ui::ui_sound::play_after(sound, &ctx, after, db);
     }
 
     /// What the system controls need to know about the screen.
@@ -6444,6 +6544,10 @@ fn main() {
     let port_perf_ui = app_port_perf::PortPerfUi::new(&data_dir);
     // The catalogue's versions, for the update note on a port's card (read from the cached ports.json, on a thread).
     pocket_ui::ports::load_versions(&data_dir);
+    {
+        let proxy = proxy.clone();
+        pocket_ui::ports::start_index(move || { let _ = proxy.send_event(UserEvent::PortIndex); });
+    }
     let mut curator_ui = app_curator::CuratorUi::load(&data_dir);
     // Curator's "Pixel Path over every game" became Settings → Playing → Over the game (2026-10-25): moved once.
     pocket_ui::over_game::adopt_curator(&data_dir, &mut settings, &mut curator_ui.prefs);
@@ -6514,9 +6618,11 @@ fn main() {
         appearance_checked: Instant::now(),
         appearance_pending: false,
         last_input: Instant::now(),
+        box_warm: None,
         look_previews_light: false,
         look_previews_lang: pocket_ui::i18n::current(),
         look_previews_size: pocket_ui::type_scale::get(),
+        look_previews_clock: None,
         column_buf: Vec::new(),
         language: settings.language,
         hidden: settings.hidden_systems.clone(),
@@ -6631,7 +6737,8 @@ fn main() {
     }
     pocket_ui::startup::mark("app");
     if !app.onboarded {
-        app.setup = Some(app.new_setup());
+        // Back at the step the last start reached (a restart or a crash in the first-start setup).
+        app.setup = Some(app.new_setup().resume());
     }
     app.rebuild();
     pocket_ui::startup::mark("rebuild");
@@ -6649,12 +6756,15 @@ fn main() {
         app.drew_first = true;
         app.after_first_done = true;
         event_loop.run_app(&mut app).expect("run test driver");
+        pocket_ui::fsutil::settle();
         return;
     }
     if let Some(i) = std::env::args().position(|a| a == "--snapshot") {
         let args: Vec<String> = std::env::args().skip(i + 1).collect();
         app_status_corner::snapshot_knobs();
         snapshot(&mut app, &args);
+        // Snapshot actions can enqueue sticker edits too: keep their files complete before this process exits.
+        pocket_ui::fsutil::settle();
         return;
     }
     // Wi-Fi and the battery for the status corner, read on a thread while the corner is on screen.
@@ -6786,6 +6896,7 @@ fn split_big_is_side(item: Item) -> bool {
             | Item::Sticker(_)
             | Item::History
             | Item::Review(_)
+            | Item::Rediscover
     )
 }
 

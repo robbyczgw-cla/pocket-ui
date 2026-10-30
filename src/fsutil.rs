@@ -150,23 +150,75 @@ pub fn write_json_soon<T: serde::Serialize + ?Sized>(path: &Path, value: &T) {
         Err(e) => return eprintln!("fsutil: {} not saved: {e}", path.display()),
     };
     let mut q = lock_queue();
-    match q.waiting.iter_mut().find(|(p, _)| p == path) {
-        Some(w) => w.1 = bytes,
-        None => q.waiting.push_back((path.to_path_buf(), bytes)),
-    }
+    let _ = q.put(PendingWrite { path: path.to_path_buf(), bytes, done: None });
     if !q.writer {
         q.writer = std::thread::Builder::new().name("card-writer".into()).spawn(card_writer).is_ok();
         if !q.writer {
             // No thread to be had: write here, as before.
-            let (p, b) = q.waiting.pop_back().expect("just queued");
+            let write = q.waiting.pop_back().expect("just queued");
             drop(q);
-            if let Err(e) = write_json_bytes(&p, &b) {
-                eprintln!("fsutil: {} not saved: {e}", p.display());
-            }
+            finish_write(write);
             return;
         }
     }
     QUEUE_CHANGED.notify_all();
+}
+
+/// A checked queued write either reached the card, or a newer checked value replaced it before it started.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WriteStatus {
+    Saved,
+    Superseded,
+}
+
+type WriteCompletion = Box<dyn FnOnce(io::Result<WriteStatus>) + Send>;
+
+/// Queues a write without waiting for SD I/O; `done` receives its actual I/O result on the card writer. When a
+/// newer checked value replaces a waiting one, the old callback receives `Ok(Superseded)` (not a save receipt),
+/// possibly on this thread. Only the newest callback stays queued, so key repeat cannot accumulate callbacks.
+/// An unchecked replacement retains that callback and reports the final file write. Callbacks must not block.
+/// Serialization or worker-start failure returns Err now, without calling `done` or writing on this thread.
+pub fn write_json_checked_soon<T: serde::Serialize + ?Sized>(path: &Path, value: &T, done: impl FnOnce(io::Result<WriteStatus>) + Send + 'static) -> io::Result<()> {
+    let bytes = serde_json::to_vec_pretty(value).map_err(io::Error::other)?;
+    let mut q = lock_queue();
+    let replaced = q.put(PendingWrite { path: path.to_path_buf(), bytes, done: Some(Box::new(done)) });
+    if !q.writer {
+        match std::thread::Builder::new().name("card-writer".into()).spawn(card_writer) {
+            Ok(_) => q.writer = true,
+            Err(e) => {
+                let _ = q.waiting.pop_back();
+                drop(q);
+                superseded(replaced);
+                return Err(e);
+            }
+        }
+    }
+    QUEUE_CHANGED.notify_all();
+    drop(q);
+    superseded(replaced);
+    Ok(())
+}
+
+fn superseded(done: Option<WriteCompletion>) {
+    if let Some(done) = done {
+        done(Ok(WriteStatus::Superseded));
+    }
+}
+
+struct PendingWrite {
+    path: PathBuf,
+    bytes: Vec<u8>,
+    done: Option<WriteCompletion>,
+}
+
+fn finish_write(write: PendingWrite) {
+    let saved = write_json_bytes(&write.path, &write.bytes);
+    if let Err(e) = &saved {
+        eprintln!("fsutil: {} not saved: {e}", write.path.display());
+    }
+    if let Some(done) = write.done {
+        done(saved.map(|()| WriteStatus::Saved));
+    }
 }
 
 /// Waits until everything handed to [`write_json_soon`] is on the card. Returns at once when nothing is waiting.
@@ -178,11 +230,22 @@ pub fn settle() {
 }
 
 struct Queue {
-    waiting: std::collections::VecDeque<(PathBuf, Vec<u8>)>,
+    waiting: std::collections::VecDeque<PendingWrite>,
     /// The writer has taken a write and not finished it.
     busy: bool,
     /// The writer thread runs.
     writer: bool,
+}
+
+impl Queue {
+    fn put(&mut self, write: PendingWrite) -> Option<WriteCompletion> {
+        if let Some(old) = self.waiting.iter_mut().find(|old| old.path == write.path) {
+            old.bytes = write.bytes;
+            return write.done.and_then(|done| old.done.replace(done));
+        }
+        self.waiting.push_back(write);
+        None
+    }
 }
 
 static QUEUE: std::sync::Mutex<Queue> = std::sync::Mutex::new(Queue { waiting: std::collections::VecDeque::new(), busy: false, writer: false });
@@ -196,14 +259,13 @@ fn card_writer() {
     let mut q = lock_queue();
     loop {
         match q.waiting.pop_front() {
-            Some((path, bytes)) => {
+            Some(write) => {
                 q.busy = true;
                 drop(q);
-                if let Err(e) = write_json_bytes(&path, &bytes) {
-                    eprintln!("fsutil: {} not saved: {e}", path.display());
-                }
                 // Latency trace: what the card took for it (the shelf no longer waits for this).
-                if crate::trace::on() {
+                let path = crate::trace::on().then(|| write.path.clone());
+                finish_write(write);
+                if let Some(path) = path {
                     crate::trace::step(&format!("card writer: {} on the SD card", path.file_name().unwrap_or_default().to_string_lossy()));
                 }
                 q = lock_queue();
@@ -384,6 +446,46 @@ mod tests {
     use super::*;
     use crate::testutil::TestDir;
     use std::time::Duration;
+
+    #[test]
+    fn checked_writes_report_durable_success_and_io_failure_from_the_writer() {
+        let d = dir("checked-soon");
+        let path = d.join("library.json");
+        let caller = std::thread::current().id();
+        let (tx, rx) = std::sync::mpsc::channel();
+        write_json_checked_soon(&path, &vec![7], move |result| {
+            let _ = tx.send((std::thread::current().id(), result));
+        }).unwrap();
+        let (writer, result) = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_ne!(writer, caller, "the checked API never writes on its caller's thread");
+        assert_eq!(result.unwrap(), WriteStatus::Saved);
+        assert_eq!(fs::read(&path).unwrap(), fs::read(backup_path(&path)).unwrap(), "receipt follows the backup too");
+        // A file where the parent directory needs to be: deterministic failure even when tests run as root.
+        let blocked = d.join("blocked");
+        fs::write(&blocked, b"keep").unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        write_json_checked_soon(&blocked.join("library.json"), &vec![8], move |result| { let _ = tx.send(result); }).unwrap();
+        assert!(rx.recv_timeout(Duration::from_secs(5)).unwrap().is_err(), "an accepted request must still report SD I/O errors");
+        assert_eq!(fs::read(blocked).unwrap(), b"keep");
+    }
+
+    #[test]
+    fn coalescing_resolves_old_checked_callbacks_and_keeps_only_the_latest() {
+        let d = dir("checked-coalesced");
+        let path = d.join("library.json");
+        let mut q = Queue { waiting: Default::default(), busy: false, writer: false };
+        let (old_tx, old_rx) = std::sync::mpsc::channel();
+        let (new_tx, new_rx) = std::sync::mpsc::channel();
+        assert!(q.put(PendingWrite { path: path.clone(), bytes: b"[1]".to_vec(), done: Some(Box::new(move |result| { let _ = old_tx.send(result); })) }).is_none());
+        superseded(q.put(PendingWrite { path: path.clone(), bytes: b"[2]".to_vec(), done: Some(Box::new(move |result| { let _ = new_tx.send(result); })) }));
+        assert_eq!(old_rx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap(), WriteStatus::Superseded);
+        // Unchecked work on the same file must not discard the remaining error notification.
+        assert!(q.put(PendingWrite { path: path.clone(), bytes: b"[3]".to_vec(), done: None }).is_none());
+        assert_eq!(q.waiting.len(), 1);
+        finish_write(q.waiting.pop_front().unwrap());
+        assert_eq!(new_rx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap(), WriteStatus::Saved);
+        assert_eq!(fs::read(path).unwrap(), b"[3]");
+    }
 
     #[test]
     fn writes_handed_to_the_card_writer_land_in_order_and_are_never_overtaken() {

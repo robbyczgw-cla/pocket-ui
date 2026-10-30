@@ -359,6 +359,9 @@ pub struct Features {
     pub year: Option<u16>,
     pub series: Vec<String>,
     pub developers: Vec<String>,
+    /// Wikidata's publishers and genres as written ("racing video game"), for Connections (`crate::connections`).
+    pub publishers: Vec<String>,
+    pub genres: Vec<String>,
     pub sitelinks: u32,
     /// Remakes and remasters of this game, or the game this one remakes (QIDs): "Related: remake".
     pub remakes: Vec<String>,
@@ -458,6 +461,8 @@ pub fn features_for(game: GameRef, info: Option<&GameInfo>, feel: &[FeelTag]) ->
         f.year = info.year;
         f.series = info.series.clone();
         f.developers = info.developers.clone();
+        f.publishers = info.publishers.clone();
+        f.genres = info.genres.clone();
         f.sitelinks = info.sitelinks;
         f.remakes = info.related.iter().filter(|(r, _)| matches!(r, Relation::RemakeOf | Relation::RemadeAs)).map(|(_, q)| q.clone()).collect();
         // The genre map: a family (and sometimes a sub-genre or setting) for every Wikidata genre.

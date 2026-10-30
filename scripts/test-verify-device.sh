@@ -123,6 +123,31 @@ want "POCKETUI_NO_HISTORY=0 is fine (it disables the switch)" 0 "^VERIFY: ok$"
 healthy; rm -rf "$T/proc/100" "$T/pids/pocket-ui"; proc ui 100 pocket-ui "0::/system.slice/essway.service" "POCKETUI_TRACE_OTHER=1 POCKETUI_NO_HISTORYX=1"; run root@fake
 want "variables that only start with the names do not count" 0 "^VERIFY: ok$"
 
+healthy; touch "$T/storage/pocket-ui/dev.env"; run root@fake
+want "even an empty dev.env fails with cleanup instructions" 1 "^FAIL /storage/pocket-ui/dev.env exists" "restart essway after the game ends" "^VERIFY: FAILED (env)"
+
+healthy; rm -rf "$T/proc/100" "$T/pids/pocket-ui"
+proc ui 100 pocket-ui "0::/system.slice/essway.service" "POCKETUI_DATA=/storage/test-data POCKETUI_ES_SYSTEMS=/storage/test-library.cfg"
+run root@fake
+want "stale process overrides fail after dev.env has been removed" 1 "POCKETUI_DATA=/storage/test-data" "POCKETUI_ES_SYSTEMS=/storage/test-library.cfg" "restore/remove dev.env" "^VERIFY: FAILED (env)"
+
+healthy; rm -rf "$T/proc/100" "$T/pids/pocket-ui"
+proc ui 100 pocket-ui "0::/system.slice/essway.service" "POCKETUI_DATA=/storage/.config/pocket-ui POCKETUI_ES_SYSTEMS=/storage/.config/emulationstation/es_systems.cfg POCKETUI_FRAME_FILE=/tmp/pocket-ui.frame POCKETUI_SLEEP_MINUTE_SECS=60 POCKETUI_RTC_ALARM=/sys/class/rtc/rtc0/wakealarm POCKETUI_WIFI_IFACE=wlan0"
+run root@fake
+want "explicit normal defaults and the launcher's frame file pass" 0 "^VERIFY: ok$"
+
+for override in POCKETUI_SLEEP_MINUTE_SECS=1 POCKETUI_SUSPEND_CMD=true POCKETUI_POWEROFF_CMD=true \
+  POCKETUI_RTC_ALARM=/tmp/alarm POCKETUI_MOCK=1 POCKETUI_POWER_KEY=1 POCKETUI_BACKLIGHT=/tmp/backlight \
+  POCKETUI_SAFE=1 POCKETUI_NO_AUTOSUSPEND=1 POCKETUI_SNAPSHOT_SIZE=640x480 POCKETUI_FRAME_FILE=/tmp/test-frame; do
+  healthy; rm -rf "$T/proc/100" "$T/pids/pocket-ui"
+  proc ui 100 pocket-ui "0::/system.slice/essway.service" "$override"
+  run root@fake
+  want "$override fails" 1 "$override" "^VERIFY: FAILED (env)"
+done
+
+healthy; proc core 300 pocket-core "0::/system.slice/essway.service" "POCKETUI_DATA=/storage/test-data"; run root@fake
+want "a game's stale data override also fails" 1 "^FAIL pocket-core 300 has test overrides: POCKETUI_DATA=/storage/test-data" "^VERIFY: FAILED (env)"
+
 healthy; echo "an older build" >"$T/proc/100/exe"; run root@fake
 want "a running binary that is not the deployed one fails (text busy)" 1 "^FAIL pocket-ui 100 runs md5 '[0-9a-f]*' but the deployed" "^VERIFY: FAILED (md5)"
 healthy; rm "$T/proc/100/exe"; run root@fake

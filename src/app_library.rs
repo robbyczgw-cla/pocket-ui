@@ -132,7 +132,9 @@ impl App {
             // A game started at once (On start, a resume after power off): its start has the card to itself; the
             // folders are read when it has ended (`library_apply_pending`).
             AfterStart::Rescan if self.running.is_some() => self.library_ui.after_start = AfterStart::Rescan,
-            AfterStart::Rescan => self.library_rescan("after the start"),
+            AfterStart::Rescan => {
+                self.library_rescan("after the start");
+            }
             AfterStart::Store(key) => {
                 let (data_dir, systems) = (self.data_dir.clone(), self.systems.clone());
                 self.library_ui.key = Some(key.clone());
@@ -148,10 +150,10 @@ impl App {
     }
 
     /// Reads the folders again on a thread; a different list comes back as `UserEvent::LibraryRescanned`. One at a
-    /// time; nothing while the cache is off.
-    pub(crate) fn library_rescan(&mut self, why: &'static str) {
+    /// time; nothing while the cache is off. Returns whether the worker started, so a deferred request can retry.
+    pub(crate) fn library_rescan(&mut self, why: &'static str) -> bool {
         if !library_cache::enabled() || self.library_ui.rescanning.swap(true, Ordering::SeqCst) {
-            return;
+            return false;
         }
         // A gamelist may have come with the games that were added.
         self.gamelist_refresh(why);
@@ -176,6 +178,7 @@ impl App {
         if spawned.is_err() {
             self.library_ui.rescanning.store(false, Ordering::SeqCst);
         }
+        spawned.is_ok()
     }
 
     /// A list that waits to be swapped in (`library_rescanned`), if any.
@@ -211,6 +214,7 @@ impl App {
 
     /// Swaps a waiting list in when it may (called after each event, `about_to_wait`). Cheap when nothing waits.
     pub(crate) fn library_apply_pending(&mut self) {
+        self.identify_names_rescan();
         if matches!(self.library_ui.after_start, AfterStart::Rescan) && self.after_first_done && self.running.is_none() {
             self.library_ui.after_start = AfterStart::Nothing;
             self.library_rescan("after the game the start began");
@@ -225,6 +229,7 @@ impl App {
             Screen::Games(s) => Some(self.systems.get(s).map(|s| s.name.clone())),
             _ => None,
         };
+        self.connections_follow_library(&fresh);
         self.systems = fresh;
         if let Some(name) = screen_system {
             match name.and_then(|n| self.systems.iter().position(|s| s.name == n)) {

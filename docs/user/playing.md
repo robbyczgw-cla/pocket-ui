@@ -116,26 +116,30 @@ screen, when you have them ([Pictures](extras.md#pictures)); with Motion Off it 
 ("70 games · 22 filters"); in Split, Curator, Favourites and the pinned rows show their covers in the panel, as on the
 Shelf look (below).
 
-In the Cabinet, every game stands in the case it came in, each system its own: the grey Super Nintendo
-cartridge with its grips, the wide Nintendo 64 one, the tall NES one, the small Game Boy and Game Boy Advance ones,
-the Mega Drive's clamshell case, the Master System's and Game Gear's case with the white grid, the thin PlayStation
-jewel case, the light Saturn and Dreamcast case, the tall black PS2 case, the GameCube's, the white Wii case, the
-slim PSP case, the DS and 3DS card boxes, and a plain cartridge or disc case for any other system. Each spine takes
-its colours from the game's cover and has its name on it; a game without a cover has its system's colour. Tall
-cases stand taller, cartridges lower, all on the shelf's board. Where a shelf has room, a bookend holds its games up
+In the Cabinet, every game stands in the case it came in, each system its own: the cardboard boxes of the Super
+Nintendo, Nintendo 64, NES, Game Boy and Game Boy Advance, the Mega Drive's clamshell case, the Master System's and Game
+Gear's case with the white grid, the thin PlayStation jewel case, the light Dreamcast and Saturn case, the tall black PS2
+case, the GameCube's, the white Wii case, the slim PSP case, the DS and 3DS cases, the Xbox and Vita cases; every other
+system has pocket-ui's own case with its name and colour at the top. The cartridge or disc is inside. Each spine takes
+its colours from the game's cover and has its name on it (a long name gets smaller or a second line before anything is
+left off); a game without a cover has its system's colour. Every case has its real size: a PS2 case stands tall, a Game
+Boy Advance box low, all on the shelf's board. Where a shelf has room, a bookend holds its games up
 and a plant, a lamp or a cactus stands beside them, never in front of one. The case you pick comes out of the shelf
 and stands on top of the cabinet, right over its shelf, turned to its cover; the whole cover shows, never cut. Under
 the picked shelf you see the next ones, as many as fit whole. The top shelf holds the recent games, the next one your Favourites, then
-come Curator's shelves, then one shelf per system. A starts the game: the cartridge or disc goes into the console.
+come Curator's shelves, then one shelf per system. A starts the game: its cartridge or disc goes into the console.
 
 ### Starting a game
 
-In the Cabinet and the Shelf looks, A on a game starts it at once, and while the emulator loads its case goes into
-the console's pixel picture: a cartridge goes into the slot, a disc slides out of its case and in, a short click
-(with menu sounds on) and a glow as it is in. The game does not wait for any of it: when it is ready first, it simply
+In the Cabinet and the Shelf looks, A on a game starts it at once, and while the emulator loads the console's pixel
+picture comes up: the case opens, the cartridge or disc slides out of it and goes into the console, a short, quiet
+click (with menu sounds on) and a glow as it is in. The game does not wait for any of it: when it is ready first, it simply
 comes up over the rest. Any button skips it. With **Animations: Cozy** (Settings → Look & feel → Animations, on until you
 choose in the Shelf and Cabinet looks) the animation is slower, about a second, and a game of pocket-core's waits to show itself until it
-is over; **Quick** keeps the short one. The other looks never have it.
+is over, then switches on like an old TV (a bright line, the picture opening out of it, a third of a second). With menu
+sounds on you hear all of it: the case opening, the cartridge sliding in and clicking into place (a disc drops in and
+spins up, a game card clicks into its slot), then the TV's soft thunk as it comes on. **Quick** keeps the short one. The
+other looks never have it.
 
 In the **Shelf** look, the one pocket-ui starts with, everything stands on one shelf, seen from the spine: each game
 in its system's real case (the same cases as in the Cabinet below), its spine in its cover's colour with its name
@@ -154,6 +158,16 @@ shelf; a sticker's shelf has the sticker itself on the board's edge. START in th
 way. A list with no games stays closed and says so. The **Surprise me** box has today's pick on its front, and the
 line over the cabinet says why. Your Favourites are real cases on their own shelf, with their covers, as in every
 system's shelf.
+
+### The TV on the cabinet
+
+In the Cabinet look a small old TV stands on the cabinet's top board, at the right, and shows the selected game: its
+screenshot when pocket-ui has downloaded one (Settings → Games → Extras → Cover art), else the latest picture of your
+own play (the one Continue starts from), else its cover; a game with none of these shows its console. The picture
+changes with a short crossfade as you move (at once with Motion off). On a small screen the TV is smaller; where it
+would be too small to see it is left out.
+Newly downloaded pictures and the picture kept after playing appear on the TV when you return, without restarting pocket-ui.
+Opening a card or Settings while its picture loads lets the work finish in the background.
 
 ## Console pages
 
@@ -370,12 +384,16 @@ format RetroArch uses, so they work with both.
 pocket-ui's menus make quiet clicks: a soft tick as the selection moves, a short rising sound when you
 choose something with A, a falling one when you go back with B, and their own sounds when the pause
 menu, the quick settings or the game switcher open. A low double sound means something can't be done,
-for example Load on an empty save slot. Vol+ and Vol- give a short tick.
+for example Load on an empty save slot. Vol+ and Vol- give a short tick. In the Shelf and Cabinet looks, X opens the
+game's case with the sound it makes: a plastic case snaps open, a cartridge's cardboard box opens with a soft flap.
 
 The sounds never play while you are playing a game, with one exception: the camera click of a
 [screenshot](#screenshots). In a game only the pause menu (and the game
 switcher opened from it) makes the other sounds, and starting a game or going back into it is silent. There are no
 sounds while the console is asleep or the volume is muted or at 0.
+
+Connecting or disconnecting Bluetooth headphones in the menus adjusts the sound output's buffering within two seconds.
+Muted menu audio also stops running in the background.
 
 Settings → Look & feel → **Sounds** controls them:
 

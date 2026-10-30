@@ -150,6 +150,12 @@ pub trait Hw: Send + Sync {
     fn set_bluetooth(&self, on: bool);
     fn battery(&self) -> Option<Battery>;
     fn timezone(&self) -> Option<String>;
+    /// Whether the system's zone was chosen by someone (ROCKNIX stores `system.timezone` in system.cfg when it is). A
+    /// zone nobody chose is the image's default (New York), no sign of where the player is: the first-run wizard
+    /// must not call it "already set".
+    fn timezone_chosen(&self) -> bool {
+        true
+    }
     fn set_timezone(&self, zone: &str) -> Result<(), String>;
     fn zones(&self) -> Vec<String>;
     /// The offset of `zone` from UTC in seconds at the Unix time `at`.
@@ -570,6 +576,11 @@ impl Hw for RealHw {
         Some(rel.to_string_lossy().into_owned())
     }
 
+    fn timezone_chosen(&self) -> bool {
+        // Only ROCKNIX images keep the choice in system.cfg; elsewhere (SteamOS, a container) the zone is the owner's.
+        !self.has_rocknix_timezone() || self.system_cfg().get("system.timezone").is_some_and(|v| !v.trim().is_empty())
+    }
+
     fn set_timezone(&self, zone: &str) -> Result<(), String> {
         if !timezone::is_valid(zone) || !self.root.join("usr/share/zoneinfo").join(zone).is_file() {
             return Err(format!("Unknown time zone {zone}."));
@@ -661,12 +672,19 @@ fn power_via(action: PowerAction, rtc: &crate::auto_off::Rtc, data: &Path, runne
         crate::auto_off::disarm_before_power_off(rtc, data, &who);
         crate::shutdown_log::event(data, &format!("{who}: running `systemctl {}`", action.argv().join(" ")));
     }
-    if runner("systemctl", action.argv()) {
+    let args = if action == PowerAction::Sleep { &["suspend", "--check-inhibitors=yes"][..] } else { action.argv() };
+    if action == PowerAction::Sleep {
+        println!("sleep: quick settings suspend respects logind sleep inhibitors");
+    }
+    if runner("systemctl", args) {
         if terminal {
             crate::shutdown_log::event(data, &format!("{who}: systemctl ended: exit 0"));
         }
         Ok(())
     } else {
+        if action == PowerAction::Sleep {
+            eprintln!("sleep: quick settings suspend refused; check logind sleep inhibitors and systemctl diagnostics");
+        }
         if terminal {
             crate::shutdown_log::event(data, &format!("{who}: systemctl failed"));
             rtc.reopen();
@@ -691,6 +709,8 @@ pub struct MockState {
     pub bluetooth: bool,
     pub battery: Battery,
     pub zone: String,
+    /// The zone is the image's default, nobody chose it (`timezone_chosen` answers false).
+    pub zone_unchosen: bool,
     /// What `regdomain` answers (the text of `iw reg get`).
     pub regdomain: Option<String>,
     pub ntp: NtpState,
@@ -721,6 +741,7 @@ impl Default for MockState {
                 charge: Charge::Discharging,
             },
             zone: "America/New_York".into(),
+            zone_unchosen: false,
             regdomain: None,
             ntp: NtpState::Synced,
             clock_log: Vec::new(),
@@ -839,11 +860,17 @@ impl Hw for MockHw {
     fn timezone(&self) -> Option<String> {
         Some(self.with(|s| s.zone.clone()))
     }
+    fn timezone_chosen(&self) -> bool {
+        self.with(|s| !s.zone_unchosen)
+    }
     fn set_timezone(&self, zone: &str) -> Result<(), String> {
         if !timezone::is_valid(zone) {
             return Err(format!("Unknown time zone {zone}."));
         }
-        self.with(|s| s.zone = zone.to_string());
+        self.with(|s| {
+            s.zone = zone.to_string();
+            s.zone_unchosen = false;
+        });
         if self.apply_tz {
             apply_process_zone(zone);
         }
@@ -1120,6 +1147,13 @@ impl Hw for AutoHw {
             self.mock.timezone()
         }
     }
+    fn timezone_chosen(&self) -> bool {
+        if self.caps.time {
+            self.real.timezone_chosen()
+        } else {
+            self.mock.timezone_chosen()
+        }
+    }
     fn set_timezone(&self, zone: &str) -> Result<(), String> {
         if self.caps.time {
             self.real.set_timezone(zone)
@@ -1392,6 +1426,21 @@ mod tests {
         assert!(hw.has_time());
     }
 
+    /// New-user test 2026-10-30: ROCKNIX's default zone (New York) was shown as "already set" to someone in Austria.
+    /// On ROCKNIX only a `system.timezone` line in system.cfg means somebody chose the zone.
+    #[test]
+    fn a_rocknix_default_zone_is_not_a_chosen_one() {
+        let root = fake_root("tz-chosen");
+        let hw = RealHw::with_root(&root);
+        assert!(hw.timezone_chosen(), "no ROCKNIX: the zone is the owner's");
+        put(&root, "etc/profile.d/001-functions", "set_setting() { :; }\n");
+        assert!(!hw.timezone_chosen(), "ROCKNIX without system.timezone: the image default");
+        put(&root, "storage/.config/system/configs/system.cfg", "system.timezone=\n");
+        assert!(!hw.timezone_chosen(), "an empty value is no choice");
+        put(&root, "storage/.config/system/configs/system.cfg", "system.timezone=Europe/Vienna\n");
+        assert!(hw.timezone_chosen());
+    }
+
     #[test]
     fn zone_tables_come_from_the_zoneinfo_folder() {
         let root = fake_root("tz-tables");
@@ -1476,7 +1525,7 @@ mod tests {
         assert_eq!(power_via(PowerAction::PowerOff, &rtc, &dir, &ok), Ok(()));
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "0");
         assert!(rtc.shut());
-        assert_eq!(*ran.lock().unwrap(), ["systemctl suspend", "systemctl poweroff"]);
+        assert_eq!(*ran.lock().unwrap(), ["systemctl suspend --check-inhibitors=yes", "systemctl poweroff"]);
         let log = std::fs::read_to_string(dir.join("logs/shutdown.log")).unwrap();
         assert!(log.contains("RTC alarm disarm verified") && log.contains("systemctl ended: exit 0"), "{log}");
         // A restart that fails opens the gate again.

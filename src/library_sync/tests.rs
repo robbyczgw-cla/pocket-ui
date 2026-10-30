@@ -262,6 +262,24 @@ fn hidden_games_and_ratings_follow_and_say_the_lists_need_reading() {
 }
 
 #[test]
+fn case_stickers_follow_and_come_off_again() {
+    use crate::case_stickers::{CaseStickers, Kind};
+    let (_r, a, b) = pair("case");
+    let mut on = CaseStickers::default();
+    on.set(Kind::Completed, true, 0);
+    on.set(Kind::Goty, true, 1993);
+    a.edit_meta(T0, |m| m.set_case_stickers(Path::new(ZELDA), on).unwrap());
+    a.sync();
+    let (_, applied) = b.sync();
+    assert!(applied.library);
+    assert_eq!(b.get(ZELDA).case, on);
+    b.edit_meta(T0 + H, |m| m.set_case_stickers(Path::new(ZELDA), CaseStickers::default()).unwrap());
+    b.sync();
+    a.sync();
+    assert!(a.get(ZELDA).case.is_empty());
+}
+
+#[test]
 fn play_history_is_the_union_of_sessions_each_once() {
     let (_r, mut a, mut b) = pair("history");
     let session = |game: usize, start: u64, secs: u64| Session {

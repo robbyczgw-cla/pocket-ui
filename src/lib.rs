@@ -4,6 +4,8 @@ pub mod control;
 pub mod proc;
 pub mod frame;
 pub mod scaled_layout;
+/// Save slots drawn on the save medium of their era: memory card, cartridge, a plain row (`save_media`).
+pub mod save_media;
 pub mod crash;
 pub mod logs;
 pub mod net_log;
@@ -28,6 +30,7 @@ pub mod this_game_page;
 pub mod splash;
 /// The first frame after the Pocket starts fades in from black (docs/BOOT-SPLASH.md).
 pub mod boot_fade;
+pub mod crt_on;
 pub mod text_fallback;
 pub mod type_scale;
 /// The interface in German: the table the text painter looks every string up in (Settings → Language).
@@ -169,6 +172,10 @@ pub mod settings_values;
 pub mod shelf;
 pub mod cabinet;
 pub mod cabinet_art;
+// Stickers on a game's case (Completed, 100 %, Favourite, Playing now, Game of the year): kept, painted on fronts and spines.
+pub mod case_stickers;
+// The CRT TV on the Cabinet showing the selected game's screenshot (its own thread, cached, crossfaded).
+pub mod cabinet_tv;
 pub mod media;
 pub mod quit;
 pub mod fast_switch;
@@ -196,6 +203,8 @@ pub mod consoles;
 pub mod console_page;
 // Credits & links on the console pages (X there): the data and its page.
 pub mod console_credits;
+/// Connections: a game's developer, publisher, series and genre lead to the player's other games (docs/CURATOR.md).
+pub mod connections;
 pub mod credits_page;
 pub mod wiki_text;
 pub mod sync;

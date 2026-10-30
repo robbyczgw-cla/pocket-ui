@@ -346,6 +346,8 @@ pub struct Overlay {
     tint_set: [f32; 3],
     /// 1x1 black, for the veil over the frame at the start; made with the first veil.
     veil_tex: Option<glow::Texture>,
+    /// 1x1 white, for the power-on effect's line and glow (`draw_solid`); made with the first one.
+    white_tex: Option<glow::Texture>,
 }
 
 pub(crate) const VS: &str = "#version 300 es
@@ -423,6 +425,7 @@ impl Overlay {
                 tint_tex,
                 tint_set: [0.0; 3],
                 veil_tex: None,
+                white_tex: None,
             })
         }
     }
@@ -561,6 +564,54 @@ impl Overlay {
                 gl.uniform_4_f32(self.rect.as_ref(), ndc(x, vw), -ndc(y + h, vh), ndc(x + w, vw), -ndc(y, vh));
                 gl.draw_arrays(glow::TRIANGLE_STRIP, 0, 4);
             }
+            gl.disable(glow::BLEND);
+        }
+    }
+
+    /// Solid black or white rectangles over the screen (`crt_on::plan`): the old-TV power-on over a game's first
+    /// moments. Plain quads through the overlay's own program, nothing else is touched.
+    pub fn draw_solid(&mut self, gl: &glow::Context, view_w: u32, view_h: u32, quads: &[crate::crt_on::Quad]) {
+        if quads.is_empty() {
+            return;
+        }
+        let (vw, vh) = (view_w.max(1) as f32, view_h.max(1) as f32);
+        unsafe {
+            if self.white_tex.is_none() {
+                let Ok(t) = gl.create_texture() else { return };
+                gl.bind_texture(glow::TEXTURE_2D, Some(t));
+                for p in [glow::TEXTURE_MIN_FILTER, glow::TEXTURE_MAG_FILTER] {
+                    gl.tex_parameter_i32(glow::TEXTURE_2D, p, glow::NEAREST as i32);
+                }
+                gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
+                gl.pixel_store_i32(glow::UNPACK_ALIGNMENT, 4);
+                gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::RGBA8 as i32, 1, 1, 0, glow::RGBA, glow::UNSIGNED_BYTE, Some(&[255, 255, 255, 255]));
+                self.white_tex = Some(t);
+            }
+            if self.veil_tex.is_none() {
+                let Ok(t) = gl.create_texture() else { return };
+                gl.bind_texture(glow::TEXTURE_2D, Some(t));
+                for p in [glow::TEXTURE_MIN_FILTER, glow::TEXTURE_MAG_FILTER] {
+                    gl.tex_parameter_i32(glow::TEXTURE_2D, p, glow::NEAREST as i32);
+                }
+                gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
+                gl.pixel_store_i32(glow::UNPACK_ALIGNMENT, 4);
+                gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::RGBA8 as i32, 1, 1, 0, glow::RGBA, glow::UNSIGNED_BYTE, Some(&[0, 0, 0, 255]));
+                self.veil_tex = Some(t);
+            }
+            gl.enable(glow::BLEND);
+            gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
+            gl.use_program(Some(self.program));
+            gl.active_texture(glow::TEXTURE0);
+            gl.uniform_1_i32(self.tex.as_ref(), 0);
+            let ndc = |px: f32, total: f32| px / total * 2.0 - 1.0;
+            for q in quads {
+                gl.bind_texture(glow::TEXTURE_2D, if q.white { self.white_tex } else { self.veil_tex });
+                gl.uniform_1_f32(self.alpha.as_ref(), q.alpha.clamp(0.0, 1.0));
+                let (x, y, w, h) = q.rect;
+                gl.uniform_4_f32(self.rect.as_ref(), ndc(x, vw), -ndc(y + h, vh), ndc(x + w, vw), -ndc(y, vh));
+                gl.draw_arrays(glow::TRIANGLE_STRIP, 0, 4);
+            }
+            gl.uniform_1_f32(self.alpha.as_ref(), ALPHA);
             gl.disable(glow::BLEND);
         }
     }

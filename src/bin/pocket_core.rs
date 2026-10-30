@@ -213,6 +213,10 @@ struct App {
     /// Cozy's launch animation still plays over pocket-ui's shelf: nothing is drawn, so the window stays unmapped
     /// until it is over (`startup::held`), a button cuts it short. The game itself runs, silently.
     hold: bool,
+    /// The old-TV power-on over the game's first 300 ms (`crt_on`): wanted by pocket-ui (Cozy, Motion Full) and not yet
+    /// cut short by a button; `crt_started` once its hook was written.
+    crt_on: bool,
+    crt_started: bool,
     /// Woken from sleep and running: the next frame swapped is the first after the wake (`core-frame wake` in the
     /// trace, for `latency.py measure --wake`).
     woke_frame: bool,
@@ -337,6 +341,32 @@ impl App {
                 let hole = gfx.video.placement(w, h, aspect, &self.video).map(|(r, _)| (r.x as f32, r.y as f32, r.w as f32, r.h as f32));
                 overlay.draw_veil(gfx.video.gl(), w, h, hole, pocket_ui::overlay::veil_alpha(since));
             }
+            // Cozy's power-on: dark, a line, the picture opening out of it (`crt_on`), over the game's first 300 ms.
+            if self.crt_on && self.bench.is_none() {
+                if let Some(t) = self.shown_at {
+                    if !self.crt_started {
+                        self.crt_started = true;
+                        pocket_ui::crt_on::start();
+                        // Its sound, a thunk and a faint whine, into the game's own: the chime, at the UI sounds' volume.
+                        let rate = self.core.av.timing.sample_rate;
+                        if self.chime_gain > 0.0 && rate > 0.0 {
+                            self.chime.start_samples(pocket_ui::ui_sound::synth_at(pocket_ui::ui_sound::Sound::CrtOn, rate as u32), self.chime_gain);
+                        }
+                    }
+                    // Over the game's picture only, the frame around it keeps its own fade-in (the veil).
+                    let area = gfx.video.placement(w, h, aspect, &self.video).map_or((0.0, 0.0, w as f32, h as f32), |(r, _)| (r.x as f32, r.y as f32, r.w as f32, r.h as f32));
+                    let quads = pocket_ui::crt_on::plan(t.elapsed(), area);
+                    if quads.is_empty() {
+                        self.crt_on = false;
+                    } else {
+                        overlay.draw_solid(gfx.video.gl(), w, h, &quads);
+                    }
+                } else {
+                    // The game's first picture isn't there yet: it stays dark.
+                    let area = gfx.video.placement(w, h, aspect, &self.video).map_or((0.0, 0.0, w as f32, h as f32), |(r, _)| (r.x as f32, r.y as f32, r.w as f32, r.h as f32));
+                    overlay.draw_solid(gfx.video.gl(), w, h, &[pocket_ui::crt_on::Quad { rect: area, white: false, alpha: 1.0 }]);
+                }
+            }
             overlay.draw(gfx.video.gl(), &mut self.hud, w, h);
         }
         // Bench runs measure what drawing costs (frame styles, effects); waiting for the GPU here
@@ -438,6 +468,13 @@ impl App {
         // Over when the deadline passed or any button is pressed (pocket-ui skips its animation on the same press).
         if self.hold && (!pocket_ui::startup::held() || players.iter().any(|p| *p != 0)) {
             self.hold = false;
+            // A press that ends the hold is someone who wants the game now: no effect.
+            if players.iter().any(|p| *p != 0) {
+                self.crt_on = false;
+            }
+        }
+        if self.crt_on && players.iter().any(|p| *p != 0) {
+            self.crt_on = false;
         }
         for note in self.input.take_notes() {
             self.hud.toast(note);
@@ -2030,6 +2067,8 @@ fn main() {
         sleeping: false,
         dark: false,
         hold: pocket_ui::startup::held(),
+        crt_on: pocket_ui::startup::held() && pocket_ui::crt_on::wanted(),
+        crt_started: false,
         woke_frame: false,
         held_mask: [0; players::MAX],
         view: (0, 0),

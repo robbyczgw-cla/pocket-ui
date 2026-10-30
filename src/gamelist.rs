@@ -31,7 +31,7 @@ pub const FILE: &str = "gamelist-cache.json";
 /// The cache's format; another one is read as missing. Raise it when `parse` or `Entry` gives other results for the same
 /// file. (pocket-ui's own version is not in the key: an update must not make the first start parse every gamelist again
 /// before its first frame.)
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 /// A gamelist larger than this is not read (a real one with 10 000 scraped games is about 8 MB).
 pub const MAX_BYTES: u64 = 32 * 1024 * 1024;
 /// Games taken from one file.
@@ -74,6 +74,10 @@ pub struct Entry {
     pub rating: u8,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub favorite: bool,
+    /// When EmulationStation last started it (`<lastplayed>`, read as UTC), unix seconds; 0 when never. Curator's
+    /// Rediscover counts it beside pocket-ui's own play history (`connections::rediscover`).
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub last_played: u64,
     /// Picture files, best cover first, as the XML names them (not checked to be there: they may still be copying).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub images: Vec<PathBuf>,
@@ -287,6 +291,23 @@ fn resolve(text: &str, rom_dir: &Path) -> Option<PathBuf> {
 }
 
 /// "19910623T000000", "1991-06-23", "1991": the year, when it is a plausible one.
+fn is_zero_u64(n: &u64) -> bool {
+    *n == 0
+}
+
+/// "20240101T120000" (ES's dates) -> unix seconds, as UTC; 0 for anything else.
+fn when(s: &str) -> u64 {
+    let s = s.trim();
+    let num = |a: usize, b: usize| s.get(a..b).and_then(|v| v.parse::<u32>().ok());
+    let (Some(y), Some(m), Some(d)) = (num(0, 4), num(4, 6), num(6, 8)) else { return 0 };
+    if !(1970..=2100).contains(&y) || !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return 0;
+    }
+    let (h, mi, sec) = if s.get(8..9) == Some("T") { (num(9, 11).unwrap_or(0), num(11, 13).unwrap_or(0), num(13, 15).unwrap_or(0)) } else { (0, 0, 0) };
+    let day = crate::play_history::day_of(y as i32, m, d);
+    (day * 86_400 + i64::from(h.min(23) * 3600 + mi.min(59) * 60 + sec.min(59))).max(0) as u64
+}
+
 fn year(s: &str) -> u16 {
     s.trim().get(..4).and_then(|y| y.parse::<u16>().ok()).filter(|y| (1950..=2100).contains(y)).unwrap_or(0)
 }
@@ -347,6 +368,7 @@ fn entry(block: &str, rom_dir: &Path) -> Option<Entry> {
         year: field(block, "releasedate").map_or(0, |d| year(&d)),
         rating: field(block, "rating").map_or(0, |r| rating(&r)),
         favorite: field(block, "favorite").is_some_and(|f| matches!(f.trim().to_ascii_lowercase().as_str(), "true" | "1" | "yes")),
+        last_played: field(block, "lastplayed").map_or(0, |d| when(&d)),
         images,
     })
 }
@@ -807,6 +829,9 @@ mod tests {
         assert_eq!(one("<releasedate>1991-06-23</releasedate>").year, 1991);
         assert_eq!(one("<releasedate>00000000T000000</releasedate>").year, 0);
         assert_eq!(one("<releasedate>x</releasedate>").year, 0);
+        assert_eq!(one("<lastplayed>20240101T120000</lastplayed>").last_played, 1_704_110_400);
+        assert_eq!(one("<lastplayed>not-a-date</lastplayed>").last_played, 0);
+        assert_eq!(one("").last_played, 0);
         assert!(one("<favorite>True</favorite>").favorite && one("<favorite>1</favorite>").favorite);
         assert!(!one("<favorite>false</favorite>").favorite && !one("<favorite></favorite>").favorite);
     }

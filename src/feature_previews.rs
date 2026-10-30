@@ -324,7 +324,10 @@ fn card(c: &mut Canvas, text: &mut Text, focus: usize) {
         look_up: true,
         from_gamelist: false,
         patch: None,
+        broken: None,
         favorite: false,
+        saves: None,
+        links: Vec::new(),
         rows: vec![
             CuratorRow {
                 kind: RowKind::Echoes,

@@ -288,7 +288,8 @@ pub fn scrape(data_dir: &Path, games: &[(String, PathBuf)], progress: impl Fn(us
 
 /// The games `scrape_until` would look up: a known system, no cover on the card.
 pub fn todo<'a>(data_dir: &Path, games: &'a [(String, PathBuf)]) -> Vec<&'a (String, PathBuf)> {
-    games.iter().filter(|(sys, rom)| playlist(sys).is_some() && !cover_path(data_dir, sys, rom).exists()).collect()
+    // An empty file gets no picture (a cover would claim the game is fine, `library_cache::is_empty_file`).
+    games.iter().filter(|(sys, rom)| playlist(sys).is_some() && !cover_path(data_dir, sys, rom).exists() && !crate::library_cache::is_empty_file(rom)).collect()
 }
 
 /// `scrape`, checking `stop` before each game (a game was started): it ends after the cover it is on.
@@ -376,6 +377,27 @@ mod tests {
         assert_eq!(best_match("Donkey Kong Country 3", &index(&["Donkey Kong Country (USA)"])), None);
         assert_eq!(best_match("Crash Bandicoot 2", &index(&["Crash Bandicoot (USA)"])), None);
         assert_eq!(best_match("Donkey Kong Country Returns Deluxe", &idx), None);
+    }
+
+    /// New-user test 2026-10-30: a misspelled file name must never end up with another game's box. No cover (and a
+    /// clean title card) is better than a wrong one.
+    #[test]
+    fn an_empty_file_is_not_looked_up_for_a_cover() {
+        let dir = crate::testutil::TestDir::new("covers-empty");
+        let (empty, full) = (dir.join("Tetris (World).gb"), dir.join("Pokemon Red.gb"));
+        std::fs::write(&empty, b"").unwrap();
+        std::fs::write(&full, b"x").unwrap();
+        let games = vec![("gb".to_string(), empty), ("gb".to_string(), full.clone())];
+        let todo: Vec<_> = todo(&dir.join("data"), &games).into_iter().map(|g| g.1.clone()).collect();
+        assert_eq!(todo, [full]);
+    }
+
+    #[test]
+    fn a_misspelled_name_gets_no_cover_rather_than_another_games() {
+        let idx = index(&["Advance Wars (USA)", "Metroid Fusion (USA)", "Super Mario Land 2 - 6 Golden Coins (World)", "Mario Land (World)"]);
+        assert_eq!(best_match("Metroid - Fusoin (Europe)", &idx), None);
+        assert_eq!(best_match("Supar Mario Land 2", &idx), None);
+        assert_eq!(best_match("Totally Unknown Game", &idx), None);
     }
 
     #[test]

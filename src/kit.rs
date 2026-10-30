@@ -50,7 +50,9 @@ pub fn page_hints(c: &mut Canvas, text: &mut Text, hints: &[(&str, &str)]) -> Ve
     let key_top = base - 9 - key_h / 2 - type_scale::grow(21) / 3;
     // One letter in a round key, a word in a key as wide as it.
     let widths: Vec<(i32, i32)> = hints.iter().map(|(k, l)| (text.width(Face::Body, 21, k), text.width(Face::Body, 21, l))).collect();
-    let shown = type_scale::hint_labels_that_fit(&widths.iter().map(|(kw, lw)| ((kw + 24).max(key_h) + 10, lw + 36)).collect::<Vec<_>>(), c.w - MARGIN - 24 + 36);
+    // The 36 px between hints remains even when a label goes. Count it with every key, not with labels that
+    // may be hidden; otherwise each hidden label leaves an unbudgeted gap and can push START off the edge.
+    let shown = type_scale::hint_labels_that_fit(&widths.iter().map(|(kw, lw)| ((kw + 24).max(key_h) + 10 + 36, *lw)).collect::<Vec<_>>(), c.w - MARGIN - 24 + 36);
     for (k, (key, label)) in hints.iter().enumerate() {
         let kw = widths[k].0;
         let key_w = (kw + 24).max(key_h);
@@ -278,6 +280,34 @@ pub fn sheet(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32) {
         crate::game_card::lift_shadow(c, x, y + h, w, pal().t);
     } else {
         c.frame(x, y, w, h, 1, pal().pill);
+    }
+}
+
+/// A fact's value that leads to a list of games (Connections: the game's developer, series, genre on the info page and
+/// the box's back): the value, then a small drawn arrow in `quiet`; the selected one, both on a pill of `pill` with
+/// `on_pill`, the way a shelf list's selection is paper with ink. `base` is the text's baseline; the value is cut with
+/// "…" to stay inside `w` with its arrow and the pill's ends. Returns the width it took from `x`.
+pub fn link_value(c: &mut Canvas, text: &mut Text, (x, base, w): (i32, i32, i32), value: &str, selected: bool, (fg, quiet, pill, on_pill): (u32, u32, u32, u32)) -> i32 {
+    const FONT: u32 = 28;
+    let (gap, end) = (12, 14);
+    let a = type_scale::wide(10, FONT);
+    let v = text.fit(Face::Body, FONT, value, w - gap - a - end);
+    let vw = text.width(Face::Body, FONT, &v);
+    let mid = base - type_scale::mid(FONT);
+    if selected {
+        let h = type_scale::row(44, FONT) - 6;
+        c.round_rect(x - end, mid - h / 2, vw + gap + a + 2 * end, h, h / 2, pill);
+    }
+    text.draw(c, Face::Body, FONT, x, base, if selected { on_pill } else { fg }, &v);
+    arrow(c, x + vw + gap, mid, a, if selected { on_pill } else { quiet });
+    vw + gap + a
+}
+
+/// A small arrow pointing right, `w` wide, its point on `mid`.
+fn arrow(c: &mut Canvas, x: i32, mid: i32, w: i32, color: u32) {
+    let s = (w * 7 / 10).max(3);
+    for dy in -s..=s {
+        c.rect(x, mid + dy, (w * (s - dy.abs()) / s).max(1), 1, color);
     }
 }
 

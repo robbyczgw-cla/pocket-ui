@@ -7,7 +7,14 @@
 //!   the switcher over it, make sounds), not asleep, not when switched off. Not muted either ([`audible`]),
 //!   which the mixer thread asks the system itself, right before it opens the output.
 //! - The sounds are sample files (`assets/ui-sounds/`, [`synth`] decodes them): warm, tactile hardware sounds
-//!   made with ElevenLabs sound effects. The mixer thread decodes all of them once when it starts.
+//!   made with ElevenLabs sound effects; the sounds of the cases and what goes into the console ([`Sound::CaseOpen`]
+//!   on) are ElevenLabs sound effects too, cut and levelled by `scripts/ui-sounds/prep_media_sounds.py`
+//!   (`media-sounds.tsv`: prompt and cut of each). The mixer thread decodes all of them
+//!   once when it starts.
+//! - The cases ([`opening`], [`going_in`]): X opens a game's case with its own sound, and the Cozy launch plays the
+//!   case opening and the game going into the console as it goes in ([`hit_at`]), and pocket-core a CRT switching on
+//!   with the picture's ([`Sound::CrtOn`]); Quick only a quiet click. They are queued at once with how long to wait ([`play_after`]), so
+//!   nothing waits on the UI thread.
 //! - Playing never blocks the UI thread: [`play`] only posts to the mixer thread, which owns the output.
 //!   That is a native PipeWire stream through ALSA's `pipewire` device (`audio::Sink`, the same path as
 //!   pocket-core), opened for the first sound and closed again after `KEEP_OPEN` of quiet, so an idle
@@ -49,11 +56,56 @@ pub enum Sound {
     Volume,
     /// A screenshot was saved (HOME + A in a game, `screenshot`): two quick, quiet clicks.
     Shutter,
-    /// A game's cartridge or disc goes into its console (the launch animation, `app_cabinet`): the shutter's second
-    /// click, played `INSERT_DELAY` after it is asked for, as it goes in.
+    /// The Quick launch (`app_cabinet`): the cartridge or disc seated, a short click, played quietly ([`QUICK_DB`]).
     Insert,
-    /// The same click in Cozy: played `INSERT_DELAY_COZY` after it is asked for, when the slower cartridge is in.
-    InsertCozy,
+    /// X on a game in a plastic case (keep case, jewel case, clamshell): the latch snaps, the lid knocks.
+    CaseOpen,
+    /// X on a game in a cardboard box (the cartridge systems): the tuck flap pulled open.
+    BoxOpen,
+    /// The Cozy launch: a cartridge slides into the slot and seats with a solid click.
+    CartIn,
+    /// The Cozy launch: a disc (or UMD) drops onto the spindle and the motor spins it up.
+    DiscIn,
+    /// The Cozy launch: a game card or memory card clicks into its port.
+    CardIn,
+    /// The Cozy launch's end: a CRT switched on, a thunk and a faint whine. pocket-core plays it into the game's sound
+    /// as the picture's old-TV power-on starts (`crt_on`, its hook `crt-on`).
+    CrtOn,
+}
+
+/// How much quieter than the other UI sounds the Quick launch's click plays, in dB.
+pub const QUICK_DB: f32 = -6.0;
+
+/// The sound of opening the case `m` stands in: cardboard for a cartridge's box, plastic for every other case.
+pub fn opening(m: crate::media::Medium) -> Sound {
+    match crate::game_box::Hull::of(m) {
+        crate::game_box::Hull::CartBox => Sound::BoxOpen,
+        _ => Sound::CaseOpen,
+    }
+}
+
+/// The sound of the game inside the case `m` (`Medium::game`) going into its console. Every kind named, so a new one
+/// gets a choice.
+pub fn going_in(m: crate::media::Medium) -> Sound {
+    use crate::media::Game as G;
+    match m.game() {
+        G::Snes | G::SnesUs | G::N64 | G::Nes | G::Gb | G::Gbc | G::Gba | G::Cart | G::MegaDrive | G::MasterSystem | G::GameGear | G::HuCard
+        | G::NeoGeoPocket | G::WonderSwan | G::Lynx => Sound::CartIn,
+        G::Disc | G::Umd => Sound::DiscIn,
+        G::Card | G::Card3ds | G::Memory => Sound::CardIn,
+    }
+}
+
+/// How far into `sound` what it stands for happens: the cartridge seats, the disc drops, the card or the Quick click
+/// clicks (the file's loudest moment). The launch queues it that much before the animation's moment.
+pub fn hit_at(sound: Sound) -> Duration {
+    Duration::from_millis(match sound {
+        Sound::CartIn => 604,
+        Sound::DiscIn => 34,
+        Sound::CardIn => 33,
+        Sound::Insert => 30,
+        _ => 0,
+    })
 }
 
 /// What covers the shelf or the game, as far as the sounds care.
@@ -220,7 +272,9 @@ impl Config {
 pub const RATE: u32 = crate::audio::OUT_RATE;
 
 /// The sample files, mono 16-bit 48 kHz WAV (`assets/ui-sounds/`, made with ElevenLabs sound effects, docs/LICENCES.md).
-/// Each is trimmed, faded in and out, and normalised to a peak of -1.5 dBFS (the nav tick -3 dBFS), so the
+/// The menu ones are trimmed, faded in and out, and normalised to a peak of -1.5 dBFS (the nav tick -3 dBFS); the media
+/// sounds are levelled to the same loudness (`prep_media_sounds.py`: -24.5 to -29 LUFS at their loudest, true peak at
+/// most -1.5 dBTP). So the
 /// loudness of the whole set is decided by [`Config::gain`] alone.
 fn wav(sound: Sound) -> &'static [u8] {
     match sound {
@@ -232,7 +286,13 @@ fn wav(sound: Sound) -> &'static [u8] {
         Sound::Error => include_bytes!("../assets/ui-sounds/error.wav"),
         Sound::Volume => include_bytes!("../assets/ui-sounds/volume.wav"),
         Sound::Shutter => include_bytes!("../assets/ui-sounds/shutter.wav"),
-        Sound::Insert | Sound::InsertCozy => include_bytes!("../assets/ui-sounds/insert.wav"),
+        Sound::Insert => include_bytes!("../assets/ui-sounds/seat.wav"),
+        Sound::CaseOpen => include_bytes!("../assets/ui-sounds/case-open.wav"),
+        Sound::BoxOpen => include_bytes!("../assets/ui-sounds/box-open.wav"),
+        Sound::CartIn => include_bytes!("../assets/ui-sounds/cart-in.wav"),
+        Sound::DiscIn => include_bytes!("../assets/ui-sounds/disc-in.wav"),
+        Sound::CardIn => include_bytes!("../assets/ui-sounds/card-in.wav"),
+        Sound::CrtOn => include_bytes!("../assets/ui-sounds/crt-on.wav"),
     }
 }
 
@@ -268,12 +328,25 @@ pub fn synth_at(sound: Sound, rate: u32) -> Vec<i16> {
 
 // ---- playing ----------------------------------------------------------------------------------------------
 
-const ALL: [Sound; 10] = [Sound::Nav, Sound::Confirm, Sound::Back, Sound::Menu, Sound::Switcher, Sound::Error, Sound::Volume, Sound::Shutter, Sound::Insert, Sound::InsertCozy];
-/// How long after it is asked for the insert click sounds: when the cartridge or disc is in (`cabinet::IN_AT`), less
-/// the few milliseconds the output holds ahead.
-const INSERT_DELAY: Duration = Duration::from_millis(170);
-/// The same in Cozy: `cabinet::IN_AT_COZY` less the 10 ms the click's own attack takes.
-const INSERT_DELAY_COZY: Duration = Duration::from_millis(790);
+const ALL: [Sound; 15] = [
+    Sound::Nav,
+    Sound::Confirm,
+    Sound::Back,
+    Sound::Menu,
+    Sound::Switcher,
+    Sound::Error,
+    Sound::Volume,
+    Sound::Shutter,
+    Sound::Insert,
+    Sound::CaseOpen,
+    Sound::BoxOpen,
+    Sound::CartIn,
+    Sound::DiscIn,
+    Sound::CardIn,
+    Sound::CrtOn,
+];
+/// The longest a sound may be asked to wait ([`play_after`]): a launch's whole sequence fits.
+const MAX_AFTER: Duration = Duration::from_secs(3);
 /// How long the output stays open after the last sound, writing silence: moving through a list then
 /// costs no reopening, and an idle shelf keeps no stream (and no PipeWire graph) running.
 const KEEP_OPEN: Duration = Duration::from_secs(2);
@@ -290,17 +363,21 @@ const TICK_GAP_MS: u64 = 40;
 const MUTE_FRESH: Duration = Duration::from_millis(1500);
 /// After the output couldn't be opened, the next try.
 const RETRY_OPEN: Duration = Duration::from_secs(5);
+/// A closed warm stream polls a pending mute answer without waiting for another UI event.
+const MUTE_PENDING: Duration = Duration::from_millis(100);
 
 enum Msg {
-    /// Which sound, how loud, whether a game runs, and when the UI thread asked (for the numbers
-    /// `POCKETUI_SOUND_DEBUG` prints).
-    Play(Sound, f32, bool, Instant),
+    /// Which sound, how loud, whether a game runs, when the UI thread asked (for the numbers `POCKETUI_SOUND_DEBUG`
+    /// prints), and how long after that it starts.
+    Play(Sound, f32, bool, Instant, Duration),
     /// Cut, close, and leave the shelf: true gives ROCKNIX's quantum back (`stop_for`).
     Stop(bool),
     /// A game is starting: what plays ends, then the output closes; true to give PipeWire's quantum back then.
     CloseWhenDone(bool),
     /// A game ended and its quantum goes back (`game_ended`): through the quantum thread, in order with the shelf's.
     GameEnded,
+    /// pocket-ui is in front with the screen on and sounds on (`keep_warm`): the output opens now and stays open.
+    Warm(bool),
 }
 
 /// The quantum to lower PipeWire to while the output is open, if at all: on the shelf only (in a game
@@ -347,7 +424,20 @@ fn quantum_worker() -> SyncSender<Q> {
 }
 
 fn quantum_worker_with<S: crate::audio_route::System>(sys: S, raising: &'static AtomicBool) -> SyncSender<Q> {
-    quantum_worker_flags(sys, raising, &CHANGING, &FORCED_QUANTUM, &VOICES)
+    quantum_worker_flags(
+        sys,
+        raising,
+        &CHANGING,
+        &FORCED_QUANTUM,
+        &VOICES,
+        RouteWatch { bluetooth: &ON_BLUETOOTH, shelf_requested: &SHELF_REQUESTED, every: crate::audio_route::CHECK_EVERY },
+    )
+}
+
+struct RouteWatch {
+    bluetooth: &'static AtomicBool,
+    shelf_requested: &'static AtomicBool,
+    every: Duration,
 }
 
 /// [`quantum_worker_with`] with the flags it sets and reads given (the tests' own).
@@ -357,6 +447,7 @@ fn quantum_worker_flags<S: crate::audio_route::System>(
     changing: &'static AtomicBool,
     seen: &'static AtomicU32,
     voices: &'static AtomicBool,
+    route: RouteWatch,
 ) -> SyncSender<Q> {
     let (tx, rx) = sync_channel::<Q>(32);
     let _ = std::thread::Builder::new().name("ui-sound-quantum".into()).spawn(move || {
@@ -368,18 +459,22 @@ fn quantum_worker_flags<S: crate::audio_route::System>(
         // Once at the start, so the first sound already gets the right buffer (`ui_ring`).
         let speaker = |sys: &S| {
             let speaker = crate::audio_route::current(sys) == crate::audio_route::Output::Speaker;
-            ON_BLUETOOTH.store(!speaker, Ordering::Relaxed);
+            route.bluetooth.store(!speaker, Ordering::Relaxed);
             speaker
         };
         speaker(&sys);
-        let raise = |sys: &S| {
+        let raise = |sys: &S, shelf_only: bool| {
             raising.store(true, Ordering::Relaxed);
             std::thread::sleep(RAISE_LEAD);
-            sys.restore();
+            // stop_for revokes periodic work before the launch prepares or spawns the game's own keeper. Check
+            // again after the lead/wait: a route query can have begun while the UI was still on the shelf.
+            let apply = !shelf_only || route.shelf_requested.load(Ordering::SeqCst);
+            if apply { sys.restore(); }
             raising.store(false, Ordering::Relaxed);
+            apply
         };
-        let lower = |sys: &S, frames: u32, forced: &mut bool| {
-            if speaker(sys) {
+        let lower = |sys: &S, frames: u32, forced: &mut bool, shelf_only: bool| {
+            if speaker(sys) && (!shelf_only || route.shelf_requested.load(Ordering::SeqCst)) {
                 *forced |= sys.force(frames);
             }
         };
@@ -398,43 +493,53 @@ fn quantum_worker_flags<S: crate::audio_route::System>(
             }
             changing.store(false, Ordering::Relaxed);
         };
-        for cmd in rx {
-            let asked = !matches!(cmd, Q::Seen(_));
-            match cmd {
-                Q::Shelf(frames) => {
-                    if shelf != Some(frames) {
-                        shelf = Some(frames);
-                        change(Some(frames), &mut || lower(&sys, frames, &mut forced));
-                    }
-                }
-                Q::Leave(restore) => {
-                    shelf = None;
-                    if std::mem::take(&mut forced) && restore {
-                        raise(&sys);
-                    }
-                }
-                // The shelf's quantum already runs (a pocket-core game's 256, which pocket-ui puts back, not
-                // pocket-core: `POCKET_CORE_QUANTUM_OWNER`): nothing to change, so nothing changes under a sound.
-                Q::GameEnded(Some(f)) if seen.load(Ordering::Relaxed) == f && speaker(&sys) => {
-                    shelf = Some(f);
-                    forced = true;
-                }
-                Q::GameEnded(frames) => {
-                    shelf = frames;
-                    change(frames, &mut || {
-                        raise(&sys);
-                        forced = false;
-                        if let Some(f) = frames {
-                            lower(&sys, f, &mut forced);
+        let mut route_due = Instant::now() + route.every;
+        loop {
+            // A warm stream may stay open for hours: a new default sink need not change the graph's quantum or
+            // send a mixer command. Follow the route here, on the worker, even when nobody touches the shelf.
+            let cmd = match rx.recv_timeout(route_due.saturating_duration_since(Instant::now())) {
+                Ok(cmd) => Some(cmd),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => None,
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            };
+            let asked = cmd.is_some_and(|q| !matches!(q, Q::Seen(_)));
+            if let Some(cmd) = cmd {
+                match cmd {
+                    Q::Shelf(frames) => {
+                        if shelf != Some(frames) {
+                            shelf = Some(frames);
+                            change(Some(frames), &mut || lower(&sys, frames, &mut forced, false));
                         }
-                    });
-                }
-                Q::Seen(q) => {
-                    let off = shelf.is_some_and(|f| f != q) && !raising.load(Ordering::Relaxed);
-                    if off && last_reassert.is_none_or(|t| t.elapsed() > REASSERT_EVERY) {
-                        last_reassert = Some(Instant::now());
-                        if let Some(f) = shelf {
-                            change(Some(f), &mut || lower(&sys, f, &mut forced));
+                    }
+                    Q::Leave(restore) => {
+                        shelf = None;
+                        if std::mem::take(&mut forced) && restore {
+                            raise(&sys, false);
+                        }
+                    }
+                    // The shelf's quantum already runs (a pocket-core game's 256, which pocket-ui puts back, not
+                    // pocket-core: `POCKET_CORE_QUANTUM_OWNER`): nothing to change, so nothing changes under a sound.
+                    Q::GameEnded(Some(f)) if seen.load(Ordering::Relaxed) == f && speaker(&sys) => {
+                        shelf = Some(f);
+                        forced = true;
+                    }
+                    Q::GameEnded(frames) => {
+                        shelf = frames;
+                        change(frames, &mut || {
+                            raise(&sys, false);
+                            forced = false;
+                            if let Some(f) = frames {
+                                lower(&sys, f, &mut forced, false);
+                            }
+                        });
+                    }
+                    Q::Seen(q) => {
+                        let off = shelf.is_some_and(|f| f != q) && !raising.load(Ordering::Relaxed);
+                        if off && last_reassert.is_none_or(|t| t.elapsed() > REASSERT_EVERY) {
+                            last_reassert = Some(Instant::now());
+                            if let Some(f) = shelf {
+                                change(Some(f), &mut || lower(&sys, f, &mut forced, false));
+                            }
                         }
                     }
                 }
@@ -442,6 +547,19 @@ fn quantum_worker_flags<S: crate::audio_route::System>(
             // The mixer marked the request as a change when it sent it (its `ask`): done now, whatever was done.
             if asked {
                 changing.store(false, Ordering::Relaxed);
+            }
+            if Instant::now() >= route_due {
+                route_due = Instant::now() + route.every;
+                if let Some(frames) = shelf.filter(|_| route.shelf_requested.load(Ordering::SeqCst)) {
+                    let on_speaker = speaker(&sys);
+                    if on_speaker && !forced {
+                        change(Some(frames), &mut || lower(&sys, frames, &mut forced, true));
+                    } else if !on_speaker && forced {
+                        change(None, &mut || {
+                            if raise(&sys, true) { forced = false; }
+                        });
+                    }
+                }
             }
         }
     });
@@ -515,6 +633,8 @@ fn check_audible() -> Receiver<bool> {
 static TX: OnceLock<SyncSender<Msg>> = OnceLock::new();
 /// The sound went to Bluetooth when the quantum thread last asked (at the start and with every opening outside a game).
 static ON_BLUETOOTH: AtomicBool = AtomicBool::new(false);
+/// Revoked synchronously before a game starts; delayed route polls must not restore over its audio keeper.
+static SHELF_REQUESTED: AtomicBool = AtomicBool::new(true);
 
 /// The ALSA buffer for the shelf's stream (`audio::Ring`): short only while the graph is seen forced to a quantum of
 /// 256 or less (`FORCED_QUANTUM`) and isn't about to go up (`raising`). A short buffer under a 1024-frame cycle leaves
@@ -544,6 +664,12 @@ pub fn start() {
 
 /// Plays `sound` if [`allowed`] in `ctx`, at its UI volume. Returns at once.
 pub fn play(sound: Sound, ctx: &Ctx) -> bool {
+    play_after(sound, ctx, Duration::ZERO, 0.0)
+}
+
+/// [`play`], `after` from now (at most `MAX_AFTER`) and `db` louder (below 0: quieter) than the UI volume: queued at
+/// once, the mixer thread starts it on time (to a chunk, 2.7 ms) and keeps the output open for it.
+pub fn play_after(sound: Sound, ctx: &Ctx, after: Duration, db: f32) -> bool {
     if !allowed(ctx) {
         return false;
     }
@@ -557,7 +683,21 @@ pub fn play(sound: Sound, ctx: &Ctx) -> bool {
         LAST_TICK_MS.store(now, Ordering::Relaxed);
     }
     start();
-    TX.get().is_some_and(|tx| tx.try_send(Msg::Play(sound, ctx.config.gain(), ctx.in_game, Instant::now())).is_ok())
+    let gain = ctx.config.gain() * 10f32.powf(db.min(0.0) / 20.0);
+    TX.get().is_some_and(|tx| tx.try_send(Msg::Play(sound, gain, ctx.in_game, Instant::now(), after.min(MAX_AFTER))).is_ok())
+}
+
+static PLAYED: AtomicBool = AtomicBool::new(false);
+
+/// The input being handled played its own sound already (X opening a case, A starting the launch's sounds): the
+/// generic one for it ([`sound_for`]) stays out.
+pub fn played() {
+    PLAYED.store(true, Ordering::Relaxed);
+}
+
+/// Whether [`played`] was called since the last time; clears it.
+pub fn take_played() -> bool {
+    PLAYED.swap(false, Ordering::Relaxed)
 }
 
 /// Plays `sound` over a game that runs: [`play`] refuses sounds there (in a game only the pause menu makes them), but
@@ -575,6 +715,27 @@ pub fn close_when_done(restore_quantum: bool) {
     }
 }
 
+/// Whether pocket-ui is in front (no game or app running), awake with the screen on, and its sounds on: then the output
+/// stays open, writing silence, so the first sound after a quiet spell starts at once. Opening it costs 20 to 60 ms on a
+/// Mini V2 and 100 to 220 ms on an H700 (PipeWire's stream setup), and a speaker sink suspended after 5 s of quiet takes
+/// up to 0.8 s more to wake there (scripts/ui-sounds `ui_open_bench`). Called every turn of the event loop; only a
+/// change is sent.
+pub fn keep_warm(warm: bool) {
+    // Reconcile the route fence every turn, even without a Warm transition: a next game's missing ROM may have
+    // returned to the shelf without game_ended, while sleep or Sounds Off must revoke periodic route work.
+    SHELF_REQUESTED.store(warm, Ordering::SeqCst);
+    static WARM: AtomicBool = AtomicBool::new(false);
+    if WARM.swap(warm, Ordering::Relaxed) != warm {
+        start();
+        if let Some(tx) = TX.get() {
+            if tx.try_send(Msg::Warm(warm)).is_err() {
+                // Full queue: asked again next turn.
+                WARM.store(!warm, Ordering::Relaxed);
+            }
+        }
+    }
+}
+
 /// Cuts what is playing and closes the output now (a game or an app is starting and wants the device), and gives
 /// ROCKNIX's quantum back.
 pub fn stop() {
@@ -584,6 +745,7 @@ pub fn stop() {
 /// [`stop`] for a game: `restore` false for pocket-core, which sets the shelf's 256 itself, so nothing changes under
 /// the launch animation's click (pocket-ui gives it back when the game ends, `game_ended`).
 pub fn stop_for(restore: bool) {
+    SHELF_REQUESTED.store(false, Ordering::SeqCst);
     if let Some(tx) = TX.get() {
         // Never waits on the UI thread; the queue holds 16 and the mixer empties it every chunk.
         let _ = tx.try_send(Msg::Stop(restore));
@@ -593,6 +755,7 @@ pub fn stop_for(restore: bool) {
 /// A game ended: ROCKNIX's quantum back (pocket-core sets it back itself, but may have died first). Through the
 /// quantum thread, so the shelf's own quantum, asked for by the next sound, comes after it and not before.
 pub fn game_ended() {
+    SHELF_REQUESTED.store(true, Ordering::SeqCst);
     start();
     match TX.get() {
         // Never waits on the UI thread: a full queue (a stuck mixer) falls back to the restore alone.
@@ -603,18 +766,22 @@ pub fn game_ended() {
     }
 }
 
-/// A sound being played: which one, how far, how loud.
+/// A sound being played: which one, how far, how loud, and how many frames of silence before it starts.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Voice {
     sound: usize,
     pos: usize,
     gain: f32,
+    wait: usize,
 }
 
 /// Fills `chunk` (interleaved stereo) with the voices and moves them on; finished ones are dropped.
 fn mix(chunk: &mut [i16], voices: &mut Vec<Voice>, bank: &[Vec<i16>]) {
     for (i, frame) in chunk.chunks_exact_mut(2).enumerate() {
-        let sum: f32 = voices.iter().filter_map(|v| bank[v.sound].get(v.pos + i).map(|s| *s as f32 * v.gain)).sum();
+        let sum: f32 = voices
+            .iter()
+            .filter_map(|v| (v.pos + i).checked_sub(v.wait).and_then(|at| bank[v.sound].get(at)).map(|s| *s as f32 * v.gain))
+            .sum();
         let s = sum.round().clamp(i16::MIN as f32, i16::MAX as f32) as i16;
         frame[0] = s;
         frame[1] = s;
@@ -623,7 +790,7 @@ fn mix(chunk: &mut [i16], voices: &mut Vec<Voice>, bank: &[Vec<i16>]) {
     for v in voices.iter_mut() {
         v.pos += frames;
     }
-    voices.retain(|v| v.pos < bank[v.sound].len());
+    voices.retain(|v| v.pos < v.wait + bank[v.sound].len());
 }
 
 /// Gives the calling thread a better share of the CPU than the UI thread that draws the shelf: at a quantum of
@@ -647,29 +814,41 @@ fn favour_this_thread() -> bool {
 #[cfg(target_os = "linux")]
 const MIXER_NICE: libc::c_int = -10;
 
+/// The mixer's stream operations, kept small so its real lifecycle can be tested with a silent in-memory sink.
+trait MixerOutput {
+    fn ring(&self) -> Option<crate::audio::Ring>;
+    fn write(&mut self, samples: &[i16]) -> bool;
+    fn name(&self) -> &'static str;
+    fn latency_us(&mut self) -> u64;
+}
+
+impl MixerOutput for crate::audio::Sink {
+    fn ring(&self) -> Option<crate::audio::Ring> { self.ring() }
+    fn write(&mut self, samples: &[i16]) -> bool { self.write(samples) }
+    fn name(&self) -> &'static str { self.name() }
+    fn latency_us(&mut self) -> u64 { self.latency_us() }
+}
+
 fn mixer(rx: Receiver<Msg>) {
-    let bank: Vec<Vec<i16>> = ALL
-        .iter()
-        .map(|s| {
-            let pcm = synth(*s);
-            let delay = match s {
-                Sound::Insert => INSERT_DELAY,
-                Sound::InsertCozy => INSERT_DELAY_COZY,
-                _ => return pcm,
-            };
-            // Silence first: the click comes as the cartridge goes in.
-            let mut delayed = vec![0; (RATE as u128 * delay.as_millis() / 1000) as usize];
-            delayed.extend(pcm);
-            delayed
-        })
-        .collect();
     if !favour_this_thread() {
         eprintln!("ui-sound: couldn't raise the mixer thread's priority");
     }
-    let debug = std::env::var_os("POCKETUI_SOUND_DEBUG").is_some();
     let configured_quantum = std::env::var("POCKETUI_SOUND_QUANTUM").ok().and_then(|v| v.parse().ok());
     let quantum = quantum_worker();
     watch_quantum(quantum.clone());
+    mixer_with(rx, crate::audio::Sink::open, check_audible, quantum, configured_quantum, MUTE_FRESH);
+}
+
+fn mixer_with<O: MixerOutput>(
+    rx: Receiver<Msg>,
+    open: impl Fn(crate::audio::Ring) -> Option<O>,
+    check_audible: impl Fn() -> Receiver<bool>,
+    quantum: SyncSender<Q>,
+    configured_quantum: Option<u32>,
+    mute_fresh: Duration,
+) {
+    let bank: Vec<Vec<i16>> = ALL.iter().map(|s| synth(*s)).collect();
+    let debug = std::env::var_os("POCKETUI_SOUND_DEBUG").is_some();
     // Asks the quantum thread for a change. New sounds wait from this moment (`CHANGING`), not from when the thread
     // takes it up: a sound let in meanwhile played through the change, or was lost when the output reopened for it.
     // The thread clears it when it is done, also when there was nothing to change.
@@ -682,7 +861,7 @@ fn mixer(rx: Receiver<Msg>) {
         sent
     };
     let ring_now = || ui_ring(ON_BLUETOOTH.load(Ordering::Relaxed), FORCED_QUANTUM.load(Ordering::Relaxed), RAISING.load(Ordering::Relaxed));
-    let mut out: Option<crate::audio::Sink> = None;
+    let mut out: Option<O> = None;
     // Sounds held back while the quantum changes (`CHANGING`), and since when.
     let mut waiting: Vec<Voice> = Vec::new();
     let mut waiting_since: Option<Instant> = None;
@@ -700,11 +879,18 @@ fn mixer(rx: Receiver<Msg>) {
     // A game is starting: close once the voices have ended, giving the quantum back or not (`close_when_done`).
     let mut closing: Option<bool> = None;
     // Closes the output; the shelf's quantum stays (`Q::Shelf`).
-    let close = |out: &mut Option<crate::audio::Sink>| *out = None;
+    let close = |out: &mut Option<O>| *out = None;
+    // The output is kept open (`keep_warm`): no closing after `KEEP_OPEN`.
+    let mut warm = false;
     loop {
+        // A warm stream outlives any individual sound. Recheck mute while it is open too, so muting an idle shelf
+        // releases the stream and lets the sink suspend. A closed warm stream keeps checking for an unmute.
+        if warm && checking.is_none() && !matches!(mute, Some((at, _)) if at.elapsed() < mute_fresh) {
+            checking = Some(check_audible());
+        }
         // Closed: sleep until there is something to play. Open: take what came in since the last chunk.
         let first = if out.is_none() {
-            match rx.recv() {
+            match closed_message(&rx, warm, checking.is_some(), mute_fresh) {
                 Ok(m) => Some(m),
                 Err(_) => return,
             }
@@ -712,10 +898,17 @@ fn mixer(rx: Receiver<Msg>) {
             None
         };
         for msg in first.into_iter().chain(std::iter::from_fn(|| rx.try_recv().ok())) {
-            let (sound, gain, in_game, asked) = match msg {
+            let (sound, gain, in_game, asked, after) = match msg {
                 Msg::Stop(restore) => {
                     voices.clear();
                     waiting.clear();
+                    // Kept warm and open: closed (and the quantum left) once the launch's own sounds, queued right
+                    // after this, have played, as `close_when_done` does; closing now and opening again for them cost
+                    // 100 to 300 ms on an H700 while the game starts.
+                    if std::mem::take(&mut warm) && out.is_some() {
+                        closing = Some(restore);
+                        continue;
+                    }
                     closing = None;
                     close(&mut out);
                     // A game or an app starts: ROCKNIX's quantum for it, or pocket-core's (the same as the shelf's).
@@ -730,10 +923,37 @@ fn mixer(rx: Receiver<Msg>) {
                     continue;
                 }
                 Msg::CloseWhenDone(restore) => {
+                    warm = false;
                     closing = Some(restore);
                     continue;
                 }
-                Msg::Play(sound, gain, in_game, asked) => (sound, gain, in_game, asked),
+                Msg::Warm(w) => {
+                    warm = w;
+                    take_answer(&mut checking, &mut mute);
+                    // A stale muted answer still waits for its fresh replacement before opening speculatively.
+                    let muted = mute.is_some_and(|(_, muted)| muted);
+                    if w && out.is_none() && closing.is_none() && !muted && !open_failed.is_some_and(|t| t.elapsed() < RETRY_OPEN) {
+                        // Opened ahead of the first sound, with the mute check beside it as for a sound.
+                        if checking.is_none() {
+                            checking = Some(check_audible());
+                        }
+                        let t = Instant::now();
+                        out = open(ring_now());
+                        match &out {
+                            Some(s) if debug => println!("ui-sound: kept warm, opened {} in {} ms", s.name(), t.elapsed().as_millis()),
+                            Some(_) => {}
+                            None => open_failed = Some(Instant::now()),
+                        }
+                        if out.is_some() && !on_shelf {
+                            if let Some(frames) = shelf_quantum(false, configured_quantum) {
+                                on_shelf = ask(Q::Shelf(frames));
+                            }
+                        }
+                        last_sound = Instant::now();
+                    }
+                    continue;
+                }
+                Msg::Play(sound, gain, in_game, asked, after) => (sound, gain, in_game, asked, after),
             };
             let picked = asked.elapsed();
             let was_open = out.is_some();
@@ -744,15 +964,15 @@ fn mixer(rx: Receiver<Msg>) {
                 // after a mute, or none for a while after Vol+ brought the volume back), and waiting for pactl
                 // (two processes) before the first sound cost more than the stream does. A sound that starts and
                 // finds the sink muted plays into a muted sink: silence.
-                let muted_before = matches!(mute, Some((at, true)) if at.elapsed() < MUTE_FRESH);
+                let muted_before = matches!(mute, Some((at, true)) if at.elapsed() < mute_fresh);
                 if muted_before || open_failed.is_some_and(|t| t.elapsed() < RETRY_OPEN) {
                     continue;
                 }
-                if !matches!(mute, Some((at, _)) if at.elapsed() < MUTE_FRESH) && checking.is_none() {
+                if !matches!(mute, Some((at, _)) if at.elapsed() < mute_fresh) && checking.is_none() {
                     checking = Some(check_audible());
                 }
                 let t = Instant::now();
-                out = crate::audio::Sink::open(ring_now());
+                out = open(ring_now());
                 open_ms = t.elapsed().as_millis();
                 match &out {
                     Some(s) if debug => println!("ui-sound: opened {} in {} ms", s.name(), open_ms),
@@ -771,7 +991,9 @@ fn mixer(rx: Receiver<Msg>) {
                     on_shelf = ask(Q::Shelf(frames));
                 }
             }
-            let voice = Voice { sound: ALL.iter().position(|s| *s == sound).unwrap_or(0), pos: 0, gain };
+            // The wait counts from when it was asked: the time it took to get here (opening the output) is part of it.
+            let wait = (RATE as u128 * after.saturating_sub(asked.elapsed()).as_micros() / 1_000_000) as usize;
+            let voice = Voice { sound: ALL.iter().position(|s| *s == sound).unwrap_or(0), pos: 0, gain, wait };
             // The quantum is changing (right after a game): the sound waits for it rather than play through it.
             if CHANGING.load(Ordering::Relaxed) {
                 waiting.push(voice);
@@ -795,8 +1017,10 @@ fn mixer(rx: Receiver<Msg>) {
             }
         }
         // The mute check came back: muted, so the output closes again.
-        if take_answer(&mut checking, &mut mute) && mute.is_some_and(|(_, m)| m) && out.is_some() {
+        take_answer(&mut checking, &mut mute);
+        if mute.is_some_and(|(_, m)| m) && out.is_some() {
             voices.clear();
+            waiting.clear();
             close(&mut out);
         }
         VOICES.store(!voices.is_empty(), Ordering::Relaxed);
@@ -818,7 +1042,7 @@ fn mixer(rx: Receiver<Msg>) {
             .and_then(|o| o.ring())
             .is_some_and(|r| r != want && (want == crate::audio::Ring::Cycle || voices.is_empty()))
         {
-            if let Some(new) = crate::audio::Sink::open(want) {
+            if let Some(new) = open(want) {
                 out = Some(new);
             }
         }
@@ -844,10 +1068,23 @@ fn mixer(rx: Receiver<Msg>) {
             on_shelf = false;
             continue;
         }
-        if voices.is_empty() && last_sound.elapsed() > KEEP_OPEN {
+        if voices.is_empty() && last_sound.elapsed() > KEEP_OPEN && !warm {
             close(&mut out);
             mute = None;
         }
+    }
+}
+
+/// Closed outputs sleep indefinitely outside the shelf. A warm one wakes to finish a mute query, notice an unmute
+/// or retry after a stream failure; `keep_warm` sends only transitions, so waiting for another UI event loses warmth.
+fn closed_message(rx: &Receiver<Msg>, warm: bool, checking: bool, retry: Duration) -> Result<Msg, std::sync::mpsc::RecvError> {
+    if !warm {
+        return rx.recv();
+    }
+    match rx.recv_timeout(if checking { MUTE_PENDING.min(retry) } else { retry }) {
+        Ok(msg) => Ok(msg),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Ok(Msg::Warm(true)),
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(std::sync::mpsc::RecvError),
     }
 }
 
@@ -946,7 +1183,16 @@ mod tests {
         static CHANGING_T: AtomicBool = AtomicBool::new(false);
         static SEEN_T: AtomicU32 = AtomicU32::new(u32::MAX);
         static VOICES_T: AtomicBool = AtomicBool::new(false);
-        let tx = quantum_worker_flags(g.clone(), &TEST_RAISING, &CHANGING_T, &SEEN_T, &VOICES_T);
+        static BLUETOOTH_T: AtomicBool = AtomicBool::new(false);
+        static SHELF_T: AtomicBool = AtomicBool::new(true);
+        let tx = quantum_worker_flags(
+            g.clone(),
+            &TEST_RAISING,
+            &CHANGING_T,
+            &SEEN_T,
+            &VOICES_T,
+            RouteWatch { bluetooth: &BLUETOOTH_T, shelf_requested: &SHELF_T, every: crate::audio_route::CHECK_EVERY },
+        );
         let steps = [
             Q::Shelf(256),
             Q::Shelf(256),
@@ -978,6 +1224,81 @@ mod tests {
     }
 
     #[test]
+    fn the_idle_shelf_follows_bluetooth_without_a_sound_or_a_quantum_event() {
+        use std::sync::{Arc, Mutex};
+        static RAISING_T: AtomicBool = AtomicBool::new(false);
+        static CHANGING_T: AtomicBool = AtomicBool::new(false);
+        static SEEN_T: AtomicU32 = AtomicU32::new(256);
+        static VOICES_T: AtomicBool = AtomicBool::new(false);
+        static BLUETOOTH_T: AtomicBool = AtomicBool::new(false);
+        static SHELF_T: AtomicBool = AtomicBool::new(true);
+        #[derive(Clone, Default)]
+        struct RouteGraph {
+            connected: Arc<AtomicBool>,
+            events: Arc<Mutex<Vec<&'static str>>>,
+        }
+        impl crate::audio_route::System for RouteGraph {
+            fn connections(&self) -> Option<Vec<String>> {
+                Some(if self.connected.load(Ordering::Relaxed) {
+                    vec!["hci0:1".into()]
+                } else {
+                    Vec::new()
+                })
+            }
+            fn default_sink(&self) -> Option<String> {
+                Some("bluez_output.AA_BB.1".into())
+            }
+            fn force(&self, _: u32) -> bool {
+                self.events.lock().unwrap().push("force");
+                true
+            }
+            fn restore(&self) {
+                self.events
+                    .lock()
+                    .unwrap()
+                    .push(if RAISING_T.load(Ordering::Relaxed) { "restore" } else { "UNANNOUNCED" });
+            }
+        }
+        let graph = RouteGraph::default();
+        let tx = quantum_worker_flags(
+            graph.clone(),
+            &RAISING_T,
+            &CHANGING_T,
+            &SEEN_T,
+            &VOICES_T,
+            RouteWatch { bluetooth: &BLUETOOTH_T, shelf_requested: &SHELF_T, every: Duration::from_millis(20) },
+        );
+        let wait_for = |events: usize| {
+            let start = Instant::now();
+            while graph.events.lock().unwrap().len() < events && start.elapsed() < Duration::from_secs(2) {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert_eq!(graph.events.lock().unwrap().len(), events);
+        };
+        tx.send(Q::Shelf(256)).unwrap();
+        wait_for(1);
+        graph.connected.store(true, Ordering::Relaxed);
+        wait_for(2);
+        assert!(BLUETOOTH_T.load(Ordering::Relaxed), "the mixer must use the long Bluetooth buffer");
+        graph.connected.store(false, Ordering::Relaxed);
+        wait_for(3);
+        assert!(!BLUETOOTH_T.load(Ordering::Relaxed));
+        assert_eq!(*graph.events.lock().unwrap(), ["force", "restore", "force"]);
+        // The route changes again just as a game starts. stop_for revokes periodic work synchronously, even if
+        // the quantum worker has already started its 25 ms raise lead and has not read Leave yet.
+        graph.connected.store(true, Ordering::Relaxed);
+        let start = Instant::now();
+        while !RAISING_T.load(Ordering::Relaxed) && start.elapsed() < Duration::from_secs(2) {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert!(RAISING_T.load(Ordering::Relaxed));
+        SHELF_T.store(false, Ordering::SeqCst);
+        tx.send(Q::Leave(false)).unwrap();
+        std::thread::sleep(Duration::from_millis(80));
+        assert_eq!(graph.events.lock().unwrap().len(), 3, "a running game owns route changes now");
+    }
+
+    #[test]
     fn a_write_is_short_enough_to_start_a_sound_within_three_milliseconds() {
         assert!(CHUNK_FRAMES as u32 * 1000 / RATE <= 3, "{CHUNK_FRAMES} frames");
     }
@@ -991,6 +1312,89 @@ mod tests {
         assert!(take_answer(&mut checking, &mut mute));
         assert!(checking.is_none() && mute.is_some_and(|(_, muted)| muted), "not audible = muted");
         assert!(!take_answer(&mut checking, &mut mute), "nothing pending any more");
+    }
+
+    #[test]
+    fn a_closed_warm_stream_retries_without_another_ui_event() {
+        let (tx, rx) = sync_channel(16);
+        // Initial mute, a failed open or a failed write: the UI still considers the shelf warm and sends no new
+        // Warm(true). The mixer must wake itself to consume the pending answer and open after an unmute/recovery.
+        assert!(matches!(closed_message(&rx, true, true, MUTE_FRESH), Ok(Msg::Warm(true))));
+        tx.send(Msg::Stop(false)).unwrap();
+        assert!(matches!(closed_message(&rx, true, true, MUTE_FRESH), Ok(Msg::Stop(false))), "a stop wins over the retry timer");
+        tx.send(Msg::Warm(false)).unwrap();
+        assert!(matches!(closed_message(&rx, false, false, MUTE_FRESH), Ok(Msg::Warm(false))));
+        drop(tx);
+        assert!(closed_message(&rx, true, false, MUTE_FRESH).is_err(), "no retry after the sender has gone");
+    }
+
+    #[test]
+    fn the_mixer_releases_muted_warm_streams_and_recovers_without_ui_input() {
+        use std::sync::Arc;
+        use std::sync::atomic::AtomicUsize;
+        #[derive(Default)]
+        struct State {
+            audible: AtomicBool,
+            active: AtomicUsize,
+            opens: AtomicUsize,
+            fail_write: AtomicBool,
+        }
+        struct SilentSink(Arc<State>);
+        impl MixerOutput for SilentSink {
+            fn ring(&self) -> Option<crate::audio::Ring> { None }
+            fn name(&self) -> &'static str { "silent test stream" }
+            fn latency_us(&mut self) -> u64 { 0 }
+            fn write(&mut self, _: &[i16]) -> bool {
+                std::thread::sleep(Duration::from_millis(1));
+                !self.0.fail_write.swap(false, Ordering::SeqCst)
+            }
+        }
+        impl Drop for SilentSink {
+            fn drop(&mut self) {
+                self.0.active.fetch_sub(1, Ordering::SeqCst);
+            }
+        }
+        let state = Arc::new(State::default());
+        let (tx, rx) = sync_channel(16);
+        let (quantum, _quantum_rx) = sync_channel(32);
+        let s = state.clone();
+        let mixer = std::thread::spawn(move || {
+            let checking = s.clone();
+            mixer_with(rx, move |_| {
+                s.active.fetch_add(1, Ordering::SeqCst);
+                s.opens.fetch_add(1, Ordering::SeqCst);
+                Some(SilentSink(s.clone()))
+            }, move || {
+                let (tx, rx) = sync_channel(1);
+                tx.send(checking.audible.load(Ordering::SeqCst)).unwrap();
+                rx
+            }, quantum, Some(0), Duration::from_millis(20));
+        });
+        let wait_for = |predicate: &dyn Fn() -> bool| {
+            let start = Instant::now();
+            while !predicate() && start.elapsed() < Duration::from_secs(2) {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(predicate());
+        };
+        // Start already muted: the initial speculative stream closes once its mute answer arrives.
+        tx.send(Msg::Warm(true)).unwrap();
+        wait_for(&|| state.opens.load(Ordering::SeqCst) > 0 && state.active.load(Ordering::SeqCst) == 0);
+        state.audible.store(true, Ordering::SeqCst);
+        wait_for(&|| state.active.load(Ordering::SeqCst) == 1);
+        // Now mute an existing warm stream, with no further Warm or Play messages.
+        state.audible.store(false, Ordering::SeqCst);
+        wait_for(&|| state.active.load(Ordering::SeqCst) == 0);
+        state.audible.store(true, Ordering::SeqCst);
+        wait_for(&|| state.active.load(Ordering::SeqCst) == 1);
+        let opened = state.opens.load(Ordering::SeqCst);
+        state.fail_write.store(true, Ordering::SeqCst);
+        wait_for(&|| state.opens.load(Ordering::SeqCst) > opened && state.active.load(Ordering::SeqCst) == 1);
+        // End while closed: disconnecting the sender must let the mixer finish, rather than retain its test stream.
+        state.audible.store(false, Ordering::SeqCst);
+        wait_for(&|| state.active.load(Ordering::SeqCst) == 0);
+        drop(tx);
+        mixer.join().unwrap();
     }
 
     #[test]
@@ -1126,7 +1530,10 @@ mod tests {
         for s in ALL {
             let pcm = synth(s);
             let ms = pcm.len() as u32 * 1000 / RATE;
-            assert!(ms > 10 && ms <= 450, "{s:?}: {ms} ms");
+            // A disc spinning up and a CRT coming on take longer than a click; still under a second.
+            // The media sounds (a slide before the click, a disc spinning up) take longer than a menu tick.
+            let longest = if matches!(s, Sound::CaseOpen | Sound::BoxOpen | Sound::CartIn | Sound::DiscIn | Sound::CardIn | Sound::CrtOn) { 1200 } else { 450 };
+            assert!(ms > 10 && ms <= longest, "{s:?}: {ms} ms");
             // No click: the files fade in over 2 ms and out over up to 30 ms, from and to exactly zero.
             let edge = RATE as usize / 1000;
             assert!(pcm[0].unsigned_abs() < 100, "{s:?} first {}", pcm[0]);
@@ -1151,10 +1558,6 @@ mod tests {
     fn the_sounds_differ_from_each_other() {
         for (i, a) in ALL.iter().enumerate() {
             for b in &ALL[i + 1..] {
-                // The insert click in Cozy is the same click, delayed longer (`INSERT_DELAY_COZY`).
-                if (*a, *b) == (Sound::Insert, Sound::InsertCozy) {
-                    continue;
-                }
                 assert_ne!(synth(*a), synth(*b), "{a:?} = {b:?}");
             }
         }
@@ -1173,16 +1576,71 @@ mod tests {
     #[test]
     fn the_mixer_adds_voices_clamps_and_drops_finished_ones() {
         let bank = vec![vec![1000i16; CHUNK_FRAMES + 44], vec![20000i16; 100]];
-        let mut voices = vec![Voice { sound: 0, pos: 0, gain: 1.0 }, Voice { sound: 1, pos: 0, gain: 1.0 }, Voice { sound: 1, pos: 0, gain: 1.0 }];
+        let v = |sound| Voice { sound, pos: 0, gain: 1.0, wait: 0 };
+        let mut voices = vec![v(0), v(1), v(1)];
         let mut chunk = vec![0i16; CHUNK_FRAMES * 2];
         mix(&mut chunk, &mut voices, &bank);
         assert_eq!(&chunk[..2], &[i16::MAX, i16::MAX], "41000 is clamped, both channels");
         assert_eq!(chunk[110 * 2], 1000, "the short ones have ended");
-        assert_eq!(voices, vec![Voice { sound: 0, pos: CHUNK_FRAMES, gain: 1.0 }]);
+        assert_eq!(voices, vec![Voice { sound: 0, pos: CHUNK_FRAMES, gain: 1.0, wait: 0 }]);
         mix(&mut chunk, &mut voices, &bank);
         assert_eq!(chunk[43 * 2 + 1], 1000);
         assert_eq!(chunk[44 * 2], 0, "then silence");
         assert!(voices.is_empty());
+    }
+
+    #[test]
+    fn a_voice_asked_to_wait_starts_that_many_frames_later_and_then_plays_whole() {
+        let bank = vec![vec![500i16; 100]];
+        let mut voices = vec![Voice { sound: 0, pos: 0, gain: 1.0, wait: CHUNK_FRAMES + 10 }];
+        let mut chunk = vec![0i16; CHUNK_FRAMES * 2];
+        mix(&mut chunk, &mut voices, &bank);
+        assert!(chunk.iter().all(|s| *s == 0), "still waiting");
+        assert_eq!(voices.len(), 1, "a waiting voice is kept");
+        mix(&mut chunk, &mut voices, &bank);
+        assert_eq!((chunk[9 * 2], chunk[10 * 2], chunk[109 * 2], chunk[110 * 2]), (0, 500, 500, 0), "frames 10 to 109");
+        assert!(voices.is_empty());
+    }
+
+    #[test]
+    fn every_case_has_an_opening_and_every_game_a_way_in() {
+        use crate::media::Medium as M;
+        assert_eq!(opening(M::Snes), Sound::BoxOpen, "the cartridge systems' cardboard box");
+        assert_eq!(opening(M::Gba), Sound::BoxOpen);
+        for m in [M::MegaDrive, M::Ps1, M::Ps2, M::Umd, M::Ds, M::Xbox] {
+            assert_eq!(opening(m), Sound::CaseOpen, "{m:?}: plastic");
+        }
+        assert_eq!(going_in(M::N64), Sound::CartIn);
+        assert_eq!(going_in(M::MegaDrive), Sound::CartIn, "a cartridge in a plastic case");
+        assert_eq!(going_in(M::GameCube), Sound::DiscIn);
+        assert_eq!(going_in(M::Umd), Sound::DiscIn);
+        assert_eq!(going_in(M::Vita), Sound::CardIn);
+    }
+
+    /// The launch queues the sound `hit_at` before the moment the animation shows: the loudest moment of the file is
+    /// right there (the click), not before it (the slide) or long after.
+    #[test]
+    fn the_hit_is_where_hit_at_says() {
+        for s in [Sound::CartIn, Sound::DiscIn, Sound::CardIn, Sound::Insert] {
+            let pcm = synth(s);
+            let loudest = pcm.iter().enumerate().max_by_key(|(_, v)| v.unsigned_abs()).unwrap().0;
+            let ms = loudest as f32 * 1000.0 / RATE as f32;
+            let hit = hit_at(s).as_secs_f32() * 1000.0;
+            assert!(ms >= hit && ms < hit + 12.0, "{s:?}: loudest at {ms:.1} ms, hit_at {hit} ms");
+        }
+    }
+
+    #[test]
+    fn the_quick_click_is_quieter_and_a_wait_is_bounded() {
+        assert!(10f32.powf(QUICK_DB / 20.0) < 0.6);
+        assert!(MAX_AFTER >= Duration::from_secs(2) && MAX_AFTER <= Duration::from_secs(5));
+    }
+
+    #[test]
+    fn a_sound_played_by_hand_keeps_the_generic_one_out_once() {
+        played();
+        assert!(take_played());
+        assert!(!take_played());
     }
 
     #[test]

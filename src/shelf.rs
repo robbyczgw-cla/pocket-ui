@@ -32,6 +32,9 @@ pub enum Item {
     History,
     /// A year's review: in the Curator list only (it never shows up by itself).
     Review(i32),
+    /// Curator → Rediscover (`app_connections`): the games played a year ago today and those not played for a year; in
+    /// the Curator list while there are any.
+    Rediscover,
     /// "Search", the first row of Home in the list looks (`with_search`): opens the game search (`search_page`).
     Search,
 }
@@ -66,7 +69,7 @@ impl Item {
 
     /// One of Curator's rows (they open a list or the Lens, they don't start anything).
     pub fn is_curator(self) -> bool {
-        matches!(self, Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_))
+        matches!(self, Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover)
     }
 
     /// Puts "Search" above everything else on Home but a Curator row on top, when there are games to search
@@ -136,7 +139,7 @@ pub fn toggle_hidden(hidden: &mut Vec<String>, id: &str, with_games: &[&str]) ->
 /// For a smart shelf or sticker, `starred` says whether it is pinned to Home.
 pub fn hints(selected: Option<Item>, home: bool, starred: bool, system_page: bool) -> Vec<(&'static str, &'static str)> {
     let action = match selected {
-        Some(Item::System(_) | Item::Favorites | Item::Search | Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_)) => "Open",
+        Some(Item::System(_) | Item::Favorites | Item::Search | Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover) => "Open",
         Some(Item::Surprise) => "Pick",
         Some(Item::Streaming) => "Start",
         _ => "Play",

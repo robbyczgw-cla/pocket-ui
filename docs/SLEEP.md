@@ -54,6 +54,13 @@ then does what ROCKNIX's wake hook did). Deep sleep and its wake were then measu
 | Screen off, the game on | Power, short press, with "Short press: Screen off" (`Sleep::screen_off_now`) | backlight 0; the game goes on with its sound: pocket-core gets `screen off` (it draws nothing and gives the game no buttons), other emulators keep drawing; no deep sleep by the timers; any button but Vol± wakes it ([below](#screen-off-with-the-game-running-2026-10-26)) |
 | Switch off after sleeping | Settings → System → Sleep & power "Switch off after sleeping" (**Off by default** since 2026-10-26, 1, 3, 8 h) in deep sleep, on battery | the RTC alarm wakes it with the screen dark, then the Power off path (`src/auto_off.rs`, [below](#l3-switch-off-after-sleeping-2026-10-25)) |
 
+- Idle, menu and lid suspends, and every RTC/clock-step re-suspend, use `systemctl suspend --check-inhibitors=yes`.
+  A logind sleep block leaves the Pocket in light sleep, logs the refusal and uses the usual retry delay. Only the
+  first suspend requested by the physical power key keeps the ordinary `systemctl suspend` behaviour. Explicit
+  `POCKETUI_SUSPEND_CMD` test commands are left intact (the virtual device has no systemd); the device verifier
+  rejects custom command overrides in normal use.
+- `no-autosuspend` in either the active data directory or `/storage/.config/pocket-ui` blocks the idle transition
+  into deep sleep, even when a test redirects `POCKETUI_DATA`. Manual sleep and low-battery power-off keep working.
 - The power key is ours only while a logind `handle-power-key` inhibitor is held (`systemd-inhibit … cat`);
   otherwise logind suspends as before and pocket-ui only repairs volume and quantum afterwards (it notices
   the suspend from CLOCK_BOOTTIME − CLOCK_MONOTONIC).

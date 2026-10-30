@@ -193,7 +193,7 @@ impl AutoCovers {
         games
             .iter()
             .filter(|(sys, rom)| {
-                if covers::playlist(sys).is_none() || self.run.tried(rom) || covers::cover_path(data_dir, sys, rom).exists() {
+                if covers::playlist(sys).is_none() || self.run.tried(rom) || covers::cover_path(data_dir, sys, rom).exists() || crate::library_cache::is_empty_file(rom) {
                     return false;
                 }
                 let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default();

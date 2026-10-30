@@ -609,6 +609,33 @@ impl Text {
         y
     }
 
+    /// A folder's path in `max` pixels with its distinguishing end kept: whole when it fits, else the front dropped
+    /// part by part ("/storage/user/roms/gb" becomes "…/roms/gb", then "…/gb"), and only a last part wider than the
+    /// room is cut with "…" like `fit` does. (A path cut at its end read "/storage/newu…" for every system.)
+    pub fn fit_path(&mut self, face: Face, px: u32, path: &str, max: i32) -> String {
+        let whole = self.fit(face, px, path, max);
+        if !whole.ends_with('…') {
+            return whole;
+        }
+        let parts: Vec<&str> = path.split('/').filter(|p| !p.is_empty()).collect();
+        for from in 1..parts.len() {
+            let shown = format!("…/{}", parts[from..].join("/"));
+            if self.fit(face, px, &shown, max) == shown {
+                return shown;
+            }
+        }
+        match parts.last() {
+            Some(last) => self.fit(face, px, last, max),
+            None => whole,
+        }
+    }
+
+    /// A title in at most two lines of `max` pixels (a long one's second line ends with "…"), for a card whose name
+    /// is cut on one line ("Game Boy Adv…").
+    pub fn title_lines(&mut self, face: Face, px: u32, title: &str, max: i32) -> Vec<String> {
+        self.wrap_at_most(face, px, title, max, 2)
+    }
+
     /// Shortens `s` with an ellipsis until it fits into `max` pixels.
     pub fn fit(&mut self, face: Face, px: u32, english: &str, max: i32) -> String {
         let px = crate::type_scale::px(px);
@@ -860,6 +887,22 @@ pub mod boxes {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_long_path_keeps_its_end_and_a_long_title_takes_two_lines() {
+        let mut t = Text::builtin();
+        let path = "/storage/newuser-test/roms/gba";
+        let room = t.width(Face::Body, 21, "…/roms/gba") + 4;
+        assert!(t.width(Face::Body, 21, path) > room);
+        assert_eq!(t.fit_path(Face::Body, 21, path, room), "…/roms/gba");
+        let tight = t.width(Face::Body, 21, "…/gba") + 4;
+        assert_eq!(t.fit_path(Face::Body, 21, path, tight), "…/gba");
+        assert_eq!(t.fit_path(Face::Body, 21, path, 4000), path, "whole when it fits");
+        assert!(t.fit_path(Face::Body, 21, "/storage/roms/a-very-long-folder-name", 60).ends_with('…'), "a last part wider than the room is cut");
+        let room = t.width(Face::Title, 37, "Game Boy Adv") + 4;
+        assert_eq!(t.title_lines(Face::Title, 37, "Game Boy Advance", room), ["Game Boy", "Advance"]);
+        assert_eq!(t.title_lines(Face::Title, 37, "Game Boy", 4000), ["Game Boy"]);
+    }
 
     /// `draw` as it was before the inside-the-picture path: one `blend` (with its bounds test) per pixel.
     #[allow(clippy::too_many_arguments)]

@@ -1,0 +1,5 @@
+{"label": [11, 21, 111, 76], "label_note": "bounding box; the label's top corners are rounded: label pixels are exactly (200,200,200)", "mm": [68, 68],
+ "mm_note": "approximate: the straight-on photo is square; width taken as 68 mm",
+ "source": "https://commons.wikimedia.org/wiki/File:Game_gear_cartridge.jpg", "licence": "CC0 1.0 (public domain dedication)", "author": "AOMAF2024 (Wikimedia Commons user), not Evan Amos",
+ "pixellab": "raw-4.png: image-to-pixelart, input 1280x1272 (paint.py with grey, persp.py, prep.py), output 140x139, init_image_strength 250, text_guidance_scale 8",
+ "logos_removed": "the embossed SEGA in its oval (filled row by row from the plastic), the label (already blurred by the uploader) painted flat grey; the photo's lilac colour cast removed (grey)"}

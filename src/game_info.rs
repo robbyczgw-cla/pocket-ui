@@ -9,7 +9,7 @@
 //! back, Y sets the status and rating, X the note, START "This game"; SELECT shows the card's full page (Curator's rows,
 //! screenshots, Hide or delete) and back (`game_card`).
 
-use crate::game_card::{lift_shadow, paint_mark, paint_stars, CardData};
+use crate::game_card::{lift_shadow, paint_mark, paint_stars, CardData, CardSaves};
 use crate::gfx::{mix, Canvas};
 use crate::image::Image;
 use crate::library_meta::Status;
@@ -17,12 +17,16 @@ use crate::palette::*;
 use crate::system_art::Sprite;
 use crate::text::{Face, Text};
 use crate::type_scale;
+use std::rc::Rc;
 
 /// The scroll of the description; the rest of the page stands still.
 #[derive(Default, Debug)]
 pub struct InfoView {
     pub scroll: i32,
     max_scroll: i32,
+    /// The fact the selection is on (an index into `CardData::links`): A opens its list of games (Connections). None:
+    /// A plays.
+    pub link: Option<usize>,
 }
 
 /// A value in the player's lines under the cover.
@@ -32,6 +36,25 @@ enum Val {
     Quiet(&'static str),
     Status(Status),
     Stars(u8),
+    /// The save slots on their medium (`save_media`), two lines high.
+    Medium(CardSaves),
+}
+
+impl Val {
+    /// Lines it takes.
+    fn lines(&self) -> i32 {
+        if matches!(self, Val::Medium(_)) {
+            2
+        } else {
+            1
+        }
+    }
+}
+
+/// The save medium as wide as `w` allows and two of the player's lines high.
+fn medium_layout(s: &CardSaves, w: i32) -> (crate::save_media::Kind, crate::save_media::Layout) {
+    let kind = crate::save_media::Kind::of(&s.system);
+    (kind, crate::save_media::Layout::fitted(kind, s.filled.len(), w, 2 * type_scale::row(44, 28) - 12))
 }
 
 /// From the top of the page to the hints: (top, bottom, side margin) of the page's room on a screen `w` x `h`.
@@ -74,6 +97,12 @@ fn your_rows(d: &CardData) -> Vec<(&'static str, Val)> {
             rows.push(("", Val::Quiet("Update available, in Extras")));
         }
     }
+    // The save slots (pocket-core's games): how many hold a save, and the slots on the game's save medium.
+    if let Some(saves) = &d.saves {
+        let n = saves.filled.iter().filter(|f| **f).count();
+        rows.push(("Save slots", if n > 0 { Val::Text(format!("{n} of {}", saves.filled.len())) } else { Val::Quiet("All empty") }));
+        rows.push(("", Val::Medium(saves.clone())));
+    }
     if !d.note.is_empty() {
         rows.push(("Note", Val::Text(format!("“{}”", d.note))));
     }
@@ -94,13 +123,25 @@ pub fn cover_room(w: i32, h: i32, d: &CardData) -> (i32, i32) {
     if narrow(w) {
         return (w - 2 * side, (bottom - top) * 3 / 10);
     }
-    let rows = your_rows(d).len() as i32;
+    let rows: i32 = your_rows(d).iter().map(|(_, v)| v.lines()).sum();
     let under = rows * type_scale::row(44, 28) + 24;
     let cw = left_w(w, side);
     (cw, (bottom - top - under).clamp(120, cw * 3 / 2))
 }
 
 impl InfoView {
+    /// Down on the page: onto the next fact that leads somewhere (of `n`), then the description scrolls; Up back
+    /// (the description to its top first), off the first fact to none. False: not a move between facts.
+    pub fn link_step(&mut self, down: bool, n: usize) -> bool {
+        match (down, self.link) {
+            (true, None) if n > 0 => self.link = Some(0),
+            (true, Some(i)) if i + 1 < n => self.link = Some(i + 1),
+            (false, Some(i)) if self.scroll == 0 => self.link = i.checked_sub(1),
+            _ => return false,
+        }
+        true
+    }
+
     pub fn scroll_by(&mut self, d: i32) {
         self.scroll = (self.scroll + d).clamp(0, self.max_scroll);
     }
@@ -111,7 +152,7 @@ impl InfoView {
 
     /// Paints the page under the top line (the status corner is the card's); `cover` is fitted into [`cover_room`],
     /// `console` the system's picture for a game without one.
-    pub fn paint(&mut self, c: &mut Canvas, text: &mut Text, d: &CardData, cover: Option<&Image>, console: Option<&Sprite>) {
+    pub fn paint(&mut self, c: &mut Canvas, text: &mut Text, d: &CardData, cover: Option<&Rc<Image>>, console: Option<&Sprite>) {
         let (top, bottom, side) = room(c.w, c.h);
         let (cw, ch) = cover_room(c.w, c.h, d);
         let row = type_scale::row(44, 28);
@@ -159,6 +200,9 @@ impl InfoView {
             text.draw(c, Face::Body, 28, tx + mw + 24, ty, pal().amber, "Favourite");
         }
         ty += row;
+        if let Some(why) = &d.broken {
+            ty = crate::game_card::paint_problem(c, text, why, (tx, ty, tw));
+        }
         // The facts, one line each, the key in Dust.
         let facts = facts(d);
         if facts.is_empty() {
@@ -169,19 +213,43 @@ impl InfoView {
             ty += row - type_scale::line(28, 8);
         } else {
             let key_w = keys_w(text, facts.iter().map(|(k, _)| *k), tw / 2);
-            for (k, v) in &facts {
+            for (i, (k, v)) in facts.iter().enumerate() {
                 // A key wider than its column (German at Large) is shortened, never run into its value.
                 let k = text.fit(Face::Body, 28, k, key_w - 24);
                 text.draw(c, Face::Body, 28, tx, ty, pal().dust, &k);
-                let v = text.fit(Face::Body, 28, v, tw - key_w);
-                text.draw(c, Face::Body, 28, tx + key_w, ty, pal().chalk, &v);
+                // A developer, series or genre the player has other games of: an arrow after it, a pill when selected.
+                match d.links.iter().position(|(f, _)| *f == i) {
+                    Some(l) => {
+                        let colors = (pal().chalk, pal().dust, pal().select, pal().ink);
+                        // As a plain value: one that doesn't fit goes on a second line (the arrow and the pill on the last).
+                        let room = tw - key_w - type_scale::wide(10, 28) - 26;
+                        let lines = text.wrap_at_most(Face::Body, 28, v, room, 2);
+                        if let [first, last] = lines.as_slice() {
+                            let step = type_scale::line(28, 8);
+                            text.draw(c, Face::Body, 28, tx + key_w, ty, pal().chalk, first);
+                            ty += step;
+                            crate::kit::link_value(c, text, (tx + key_w, ty, tw - key_w), last, self.link == Some(l), colors);
+                        } else {
+                            crate::kit::link_value(c, text, (tx + key_w, ty, tw - key_w), v, self.link == Some(l), colors);
+                        }
+                    }
+                    None => {
+                        // A long value ("Nintendo Research & Development 1, Intelligent Systems") takes a second line
+                        // rather than ending in "…" (new-user test 2026-10-30); only the second may be cut.
+                        let lines = text.wrap_at_most(Face::Body, 28, v, tw - key_w, 2);
+                        for (n, line) in lines.iter().enumerate() {
+                            text.draw(c, Face::Body, 28, tx + key_w, ty + n as i32 * type_scale::line(28, 8), pal().chalk, line);
+                        }
+                        ty += (lines.len().max(1) as i32 - 1) * type_scale::line(28, 8);
+                    }
+                }
                 ty += row;
             }
         }
         if narrow(c.w) {
-            ty = paint_your(c, text, &your, (yx, yw), ty);
+            ty = paint_your(c, text, &your, cover, (yx, yw), ty);
         } else {
-            paint_your(c, text, &your, (yx, yw), top + fh + 24 + 30 + type_scale::grow(28));
+            paint_your(c, text, &your, cover, (yx, yw), top + fh + 24 + 30 + type_scale::grow(28));
         }
         // The description in the room that is left, scrolling there.
         let dtop = (ty - row + 30).clamp(0, c.h);
@@ -232,6 +300,8 @@ fn your_w(text: &mut Text, rows: &[(&'static str, Val)]) -> i32 {
                 Val::Quiet(s) => text.width(Face::Body, 28, s),
                 Val::Status(s) => 32 + text.width(Face::Body, 28, s.label()),
                 Val::Stars(_) => type_scale::wide(13, 28) * 10,
+                // As wide as it comes out in a column of the room's width (never wider than that).
+                Val::Medium(s) => medium_layout(s, 430).1.w,
             }
         })
         .max()
@@ -239,7 +309,7 @@ fn your_w(text: &mut Text, rows: &[(&'static str, Val)]) -> i32 {
 }
 
 /// The player's lines from baseline `y` in the column (x, w); returns the baseline after them.
-fn paint_your(c: &mut Canvas, text: &mut Text, rows: &[(&'static str, Val)], (x, w): (i32, i32), mut y: i32) -> i32 {
+fn paint_your(c: &mut Canvas, text: &mut Text, rows: &[(&'static str, Val)], cover: Option<&Rc<Image>>, (x, w): (i32, i32), mut y: i32) -> i32 {
     let row = type_scale::row(44, 28);
     let key_w = keys_w(text, rows.iter().map(|(k, _)| *k), w / 2);
     for (k, v) in rows {
@@ -271,8 +341,24 @@ fn paint_your(c: &mut Canvas, text: &mut Text, rows: &[(&'static str, Val)], (x,
                 let r = type_scale::wide(13, 28);
                 paint_stars(c, vx + r, y - type_scale::mid(28), r, *n, pal().chalk, mix(pal().dust, pal().void, 150));
             }
+            // Read-only: no slot ringed; the cover in the slots that hold a save (the system's colour without one).
+            Val::Medium(s) => {
+                let (kind, l) = medium_layout(s, vw);
+                let icon = cover.map_or(crate::save_media::Icon::None, crate::save_media::Icon::Cover);
+                let slots = crate::save_media::Slots { filled: &s.filled, ring: None, icon, stripe: s.stripe, numbers: l.block >= 20 };
+                let top = y - type_scale::mid(28) - row / 2 + 6;
+                crate::save_media::paint(c, text, kind, vx, top, &l, &slots);
+                // When the newest was saved, beside it (left out where there is no room).
+                if let Some(at) = s.newest.filter(|_| s.filled.contains(&true)) {
+                    let ago = crate::recents::ago(at);
+                    let room = vw - l.w - 24;
+                    if text.width(Face::Body, 28, &ago) <= room {
+                        text.draw(c, Face::Body, 28, vx + l.w + 24, top + l.h / 2 + type_scale::mid(28), pal().dust, &ago);
+                    }
+                }
+            }
         }
-        y += row;
+        y += row * v.lines();
     }
     y
 }

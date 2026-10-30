@@ -9,6 +9,10 @@ what else you own by the same people.
 Select a game on the shelf, in a system's list or in Favourites and press **X** (the top face button).
 The hint bar shows "X Details" whenever a game is selected.
 
+An empty game file cannot start: **Problem** on the info page, the box's front and back, and the full card explains
+why and what to copy again. On the full card page the whole explanation scrolls with the page, including with larger
+text or a long game title.
+
 | Button | On the card |
 |---|---|
 | A | Play the game. On one of the rows under "Your game" (a save with two versions, Echoes, Versions, Stickers, Screenshots) or on Hide or delete: open it. |
@@ -24,37 +28,47 @@ The hint bar shows "X Details" whenever a game is selected.
 
 In the Minimal, Cards and Split [looks](settings.md) X opens the game's **info page**: everything on one screen, nothing
 to turn over. The box art at the left (a title card with the console when there is none), under it your game: status,
-time played, when you last played, your rating, achievements, a PortMaster port's speed and "Update available, in
-Extras" when there is a newer version. At the right the title, the system and year ("Favourite" when it is one of
+time played, when you last played, your rating, achievements, **Save slots** ("3 of 8", or "All empty") with the
+slots on the game's memory card or cartridge and when the newest was saved, as in the
+[pause menu](pause-menu.md#save-slots-auto-and-before-load) (games on pocket-ui's own host), a PortMaster port's speed
+and "Update available, in Extras" when there is a newer version. At the right the title, the system and year ("Favourite" when it is one of
 yours), the facts (developer, publisher, genre, series, players, reviews) and the description from Wikipedia or your
 gamelist, with its source under it. A long description scrolls in its place; without one the page says "No
 description yet."
 
 | Button | On the info page |
 |---|---|
-| A | Play the game. |
+| A | Play the game; on a picked developer, publisher, series or genre, show your games with it ([Connections](#connections)). |
 | B | Back to the list, at the same game. |
 | Y | Set the play status or your rating. |
 | X | Write or change your note. |
 | START | [This game](options.md#this-game); on a PortMaster port its Performance & fan. |
-| D-pad Up / Down, L1 / R1 | Scroll the description when it is longer than its place. |
+| D-pad Up / Down | Pick the developer, publisher, genre or series (the ones with an arrow), then scroll the description when it is longer than its place. |
+| L1 / R1 | Scroll the description a page. |
 | SELECT | Details: the card's full page with its rows (Echoes, Screenshots, Hide or delete…). SELECT there comes back to the info page. |
 
 The Shelf and Cabinet looks open the game box instead.
 
 ## The game box
 
-In the Shelf and Cabinet looks the card opens as the game's box, almost the whole screen, in the style of its case: a cardboard box for cartridges (as wide as the cover: a Super Nintendo box lies
-on its side), the jewel case of a PlayStation or Saturn disc, the DVD case of a PS2, GameCube, Wii or Xbox game in
-its colour, the Mega Drive's clamshell, the UMD case, the DS case. The front is the cover. A picture that has not been loaded yet appears when it is ready; you can keep moving through the list or opening the box while it loads.
+In the Shelf and Cabinet looks the card opens as the game's box, almost the whole screen, the same case as on the
+shelf: a cardboard box for cartridges (a Super Nintendo box lies on its side), the jewel case of a PlayStation or
+Saturn disc, the DVD case of a PS2, GameCube, Wii or Xbox game in its colour, the Mega Drive's clamshell, the UMD case,
+the DS case, pocket-ui's own case for other systems. The front is the cover. The box opens as it comes up: the
+cartridge, card or disc slides half out of it, at its real size. A picture that has not been loaded yet appears when it is ready; you can keep moving through the list or opening the box while it loads.
+Without cover art, the cartridge's label shows the game's name; if its subtitle is too long, the shortened name
+keeps its original language, including with the German interface.
 
 | Button | On the box |
 |---|---|
 | D-pad Left / Right | Turn the box over. (On a card of [Surprise me](curator.md#surprise-me), Right picks another game and Left turns it.) |
-| D-pad Up / Down, L1 / R1 | On the back: scroll it. |
-| A, B, Y, X | As on the card below: play, back, status and rating, note. |
+| D-pad Up / Down, L1 / R1 | On the back: scroll it. Down also picks the developer, publisher, genre or series once it is in view. |
+| A | Play the game; on a picked fact of the back, show your games with it ([Connections](#connections)). |
+| B, Y, X | As on the card below: back, status and rating, note. |
 | START | [This game](options.md#this-game), as on the card. |
 | SELECT | Show the card as a page, with its rows (Echoes, Screenshots, Hide or delete…). SELECT on the page brings the box back. pocket-ui keeps your choice: the next card opens the same way. |
+
+L1 and R1 leave a picked fact and page through the back; A then plays the game again.
 
 The back is laid out like a real box's: the title on a band at the top, the screenshot and the title screen beside the
 description, then the facts (year, developer, publisher, genre, players, reviews) and your game (status, play time,
@@ -62,6 +76,48 @@ rating, achievements), the system's name at the foot. Without a description from
 English card shows a sentence made of the facts; in German the back leaves it out, since the facts under it say the same. What isn't there yet gets a plain place of its own: a dark
 screen with the console and "No picture yet", "No description yet", or the line that the game isn't in the offline
 list.
+
+## Stickers on the case
+
+Collectors mark their cases, and you can too: five stickers that go on the game's case, slightly crooked as if you put
+them on yourself. **Completed** (a green tick), **100 %** (a gold seal), **Favourite** (a star), **Playing now** and
+**Game of the year** with a year you choose. On the card (or the box, or the info page, then SELECT for the page),
+move down to the **Stickers** row and press A: they are the first five entries of the list, before your own
+[Curator stickers](curator.md#stickers). The list scrolls to fit your screen and text size. A puts one on or takes it off. On Game of the year, Left and Right change its
+year first (it starts at the game's release year, or this year when that isn't known); with the sticker on, the new
+year is kept at once. B closes the list.
+
+The Shelf and Cabinet looks show them: on the case's front when it is out of the shelf, on the game box, and one small
+sticker at the top of the case's spine on the shelf (Game of the year, 100 %, Completed, Playing now or Favourite,
+the first of these the game has). The other looks show no cases, so no stickers either. They are kept in
+`library.json` with your other notes about the game, follow [Sync](sync.md) to your other Pockets and are in your
+backups.
+
+## Connections
+
+The developer, publisher, series and genre on the info page and on the box's back lead to **your other games** with
+the same one. A small arrow after a value says it leads somewhere; Down picks it
+(a paper pill), A opens the list:
+
+- **Developer**: "More from Criterion Games", in release order.
+- **Publisher**: "More published by Electronic Arts", in release order.
+- **Series**: "Burnout series, in release order", this game among them, so you see where it stands.
+- **Genre**: "More racing games", by name.
+
+The list is a shelf of your games in your look: A plays one, X opens its card (where its own facts lead on), B goes
+back to the card you came from. If the library changes while the list is open, B still finds that game; if it has
+been removed, B goes to Home. A game you have on two systems is there once, the version you prefer, as in the other
+lists that mix systems ([Versions](curator.md#versions)).
+
+The facts are the ones on the card: the offline game list's, or your EmulationStation gamelist's where it has them.
+Spellings don't have to match: "Criterion", "Criterion Games" and "Criterion Studios" are one developer, "Racing" and
+"racing video game" one genre. Where the data names no series, the titles can: "Burnout 2 - Point of Impact" and
+"Burnout 3 - Takedown" are the Burnout series, and with "Burnout" itself on your card "Burnout Revenge" is too; the
+card then shows **Series** Burnout. It takes two different games, never one game on two systems.
+
+A value only leads somewhere when you have another game with it. One you don't (the only game of a studio on your
+card) is plain text without an arrow, and a game without any facts has nothing to pick: Down scrolls, A plays.
+If the library is still getting ready when you open a card, its connections appear there as soon as they are ready.
 
 ## What the card shows
 
@@ -74,7 +130,8 @@ list.
   A score reads, for example, "Metacritic 92 · via Wikidata". When the offline game list spells the game
   differently from your file, "Listed as" shows its name, so you can see what the card is about.
 - **Your game**: status, your rating (five stars, or "None. Press Y" before you give one), time played and number
-  of sessions, when you last played, your note, and how many of
+  of sessions, when you last played, your note, **Save slots** on the game's memory card or cartridge (games on
+  pocket-ui's own host, as in the [pause menu](pause-menu.md#save-slots-auto-and-before-load)), and how many of
   the game's achievements you unlocked when it has some on RetroAchievements ([Achievements](achievements.md)).
   **Battery** says how long the charge you have now lasts in this game and how much of it the game uses an hour
   ("About 3 h 20 min left, 18% an hour"), from the same measurements as the pause menu (see
@@ -152,6 +209,9 @@ anyway goes back to the automatic match. The box art stays as it was: covers are
 or its file name in the libretro thumbnail collection, not through these facts; for a wrong cover, see the next
 section.
 
+A name recognised while a background check is interrupted by play reaches the shelf when the check resumes,
+even if the resumed check finds the same games.
+
 The facts are matched the way the covers are: by the usual name of the release when pocket-ui recognised the game
 by its checksum or, for a PlayStation 1 or 2 disc, by the serial on the disc ([below](#playstation-1-and-2-discs)),
 else by the file name. A choice made here comes before both.
@@ -165,6 +225,8 @@ the disc, [below](#playstation-1-and-2-discs)), and looks it up once more, by th
 file name after it. The card says how it went, for example "Found 3 pictures for
 Mega Man & Bass (USA)" or "No pictures found for this game"; when it found the game's usual name, the facts follow
 it too.
+If the lookup changes the recognised name, the shelf follows when you leave the card. If a replacement file is no
+longer recognised, its file name (or its EmulationStation name) returns instead of keeping the old game's title.
 
 - It needs Wi-Fi. Offline the card says "Connect to Wi-Fi first to look up pictures." and nothing is changed.
 - While the automatic download runs, the card asks you to try again in a moment.

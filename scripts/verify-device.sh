@@ -12,7 +12,8 @@
 #   pocket-ui  exactly one pocket-ui runs (pidof; never pgrep -f), and for how long
 #   cgroup     /proc/<pid>/cgroup of it names the unit: not an orphan started from a shell or a script
 #   env        no pocket-ui (or pocket-core) has POCKETUI_TRACE set, or POCKETUI_NO_HISTORY with a value other than
-#              empty or 0 (those two do not hold recording off, src/play_log.rs)
+#              empty or 0 (those two do not hold recording off, src/play_log.rs); no redirected data/library or test
+#              hardware, clock, sleep, power or snapshot overrides; no dev.env left behind
 #   md5        what runs (/proc/<pid>/exe) is the deployed binary (/storage/pocket-ui/pocket-ui, which follows
 #              current/); and the deployed one is the one built here (target/aarch64-unknown-linux-gnu/release),
 #              unless --no-local (latency.sh: it measures whatever is installed, not necessarily this build)
@@ -55,6 +56,7 @@ while :; do
   sleep 0.2; i=$((i + 1))
 done
 echo "unit_state=$st"
+if [ -e "$S/pocket-ui/dev.env" ] || [ -L "$S/pocket-ui/dev.env" ]; then echo dev_env=yes; else echo dev_env=no; fi
 [ -e "$TMP/pocket-ui.es-only" ] && echo es_mark=yes || echo es_mark=no
 cores=$(pidof pocket-core)
 echo "ui_pids=$(echo $uis)"
@@ -69,6 +71,33 @@ facts() { # kind pid
       line=$(printf '%s\n' "$env" | grep "^$v=" | head -1)
       if [ -n "$line" ]; then echo "$k.$p.$v=set:${line#*=}"; else echo "$k.$p.$v=unset"; fi
     done
+    # Only report recognised test controls, never dump unrelated environment values or credentials.
+    overrides=$(printf '%s\n' "$env" | while IFS= read -r line; do
+      key=${line%%=*}; value=${line#*=}
+      case "$key" in
+        POCKETUI_DATA) [ "$value" = /storage/.config/pocket-ui ] && continue ;;
+        POCKETUI_ES_SYSTEMS) [ "$value" = /storage/.config/emulationstation/es_systems.cfg ] && continue ;;
+        POCKETUI_ES_HOME) [ "$value" = /storage ] && continue ;;
+        POCKETUI_WIFI_IFACE) [ "$value" = wlan0 ] && continue ;;
+        POCKETUI_BATTERY) [ "$value" = /sys/class/power_supply/battery ] && continue ;;
+        POCKETUI_LOG) [ "$value" = /var/log/pocket-ui.log ] && continue ;;
+        POCKETUI_FRAME_FILE) [ "$value" = /tmp/pocket-ui.frame ] && continue ;;
+        POCKETUI_SLEEP_MINUTE_SECS) [ "$value" = 60 ] && continue ;;
+        POCKETUI_RTC_ALARM) [ "$value" = /sys/class/rtc/rtc0/wakealarm ] && continue ;;
+        POCKETUI_RTC_PROC) [ "$value" = /proc/driver/rtc ] && continue ;;
+        POCKETUI_SUSPEND_CMD) [ "$value" = 'systemctl suspend' ] && continue ;;
+        POCKETUI_POWEROFF_CMD) [ "$value" = 'systemctl poweroff' ] && continue ;;
+        POCKETUI_REBOOT_CMD) [ "$value" = 'systemctl reboot' ] && continue ;;
+        POCKETUI_BOOTLOADER_CMD) [ "$value" = 'systemctl reboot --reboot-argument=bootloader' ] && continue ;;
+        POCKETUI_MOCK*|POCKETUI_SLEEP_*|POCKETUI_POWER_KEY|POCKETUI_BACKLIGHT|POCKETUI_SAFE*|POCKETUI_DEVICE|\
+        POCKETUI_NO_AUTOSUSPEND|POCKETUI_NO_BOOT_MENU|POCKETUI_MOONLIGHT|POCKETUI_TV_OUTPUT|\
+        POCKETUI_CLOCK_SHIFT|POCKETUI_SNAPSHOT_*|POCKETUI_FRAME_BENCH|POCKETUI_FRAME_LOG|POCKETUI_VISIBLE_TEXT|\
+        POCKETUI_TEXT_BOXES|POCKETUI_MOTION_SCALE) ;;
+        *) continue ;;
+      esac
+      printf '%s; ' "$line"
+    done)
+    echo "$k.$p.test_overrides=$overrides"
   else
     echo "$k.$p.POCKETUI_TRACE=unreadable"; echo "$k.$p.POCKETUI_NO_HISTORY=unreadable"
   fi
@@ -111,6 +140,9 @@ if [ "$(fact end)" != 1 ]; then
 else
   unit=$(fact unit)
   state=$(fact unit_state)
+  if [ "$(fact dev_env)" = yes ]; then
+    bad env "/storage/pocket-ui/dev.env exists; restore/remove the test file, restart $unit after the game ends, then run verify-device.sh again"
+  fi
   mark=
   [ "$(fact es_mark)" = yes ] && mark=" (/tmp/pocket-ui.es-only is set: scripts/dev.sh stop left EmulationStation in charge)"
   if [ "$state" = active ]; then ok "$unit.service is active"; else bad service "$unit.service is '$state', not active$mark"; fi
@@ -152,8 +184,10 @@ else
         unreadable) ;;
         *) problem="${problem:+$problem, }POCKETUI_NO_HISTORY=${h#set:}" ;;
       esac
+      overrides=$(fact "$kind.$p.test_overrides")
+      [ -z "$overrides" ] || problem="${problem:+$problem, }test overrides: $overrides"
       if [ -n "$problem" ]; then
-        bad env "$name $p has $problem (a harness or demo started it; real play would not be recorded)"
+        bad env "$name $p has $problem; restore/remove dev.env and test overrides, restart $unit after the game ends, then run verify-device.sh again"
       else
         ok "$name $p environment is clean (POCKETUI_TRACE ${t:+$t}, POCKETUI_NO_HISTORY $h)"
       fi

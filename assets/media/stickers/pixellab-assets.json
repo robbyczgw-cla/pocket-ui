@@ -1,0 +1,312 @@
+{
+ "requests": [
+  {
+   "out": "completed_a.png",
+   "endpoint": "create-image-pixflux",
+   "seed": 11,
+   "size": {
+    "width": 32,
+    "height": 32
+   },
+   "prompt": "a round printed vinyl sticker, deep green circle with a white tick mark in the centre, thin white die-cut border, flat print, tiny highlight, single object, front view, pixel art",
+   "outline": "single color black outline",
+   "shading": "flat shading",
+   "detail": "medium detail",
+   "view": "side",
+   "negative": null,
+   "usage": {
+    "type": "generations",
+    "generations": 1.0
+   }
+  },
+  {
+   "out": "completed_a.png",
+   "endpoint": "create-image-pixflux",
+   "seed": 11,
+   "size": {
+    "width": 32,
+    "height": 32
+   },
+   "prompt": "a round printed vinyl sticker, deep green circle with a white tick mark in the centre, thin white die-cut border, flat print, tiny highlight, single object, front view, pixel art",
+   "outline": "single color black outline",
+   "shading": "flat shading",
+   "detail": "medium detail",
+   "view": "side",
+   "negative": "text, letters, numbers, logo, words, background, floor, shadow, table, hand, people, brand",
+   "usage": {
+    "type": "generations",
+    "generations": 1.0
+   }
+  },
+  {
+   "out": "completed_b.png",
+   "endpoint": "create-image-pixflux",
+   "seed": 12,
+   "size": {
+    "width": 32,
+    "height": 32
+   },
+   "prompt": "a round printed vinyl sticker, deep green circle with a white tick mark in the centre, thin white die-cut border, flat print, tiny highlight, single object, front view, pixel art",
+   "outline": "single color black outline",
+   "shading": "flat shading",
+   "detail": "medium detail",
+   "view": "side",
+   "negative": "text, letters, numbers, logo, words, background, floor, shadow, table, hand, people, brand",
+   "usage": {
+    "type": "generations",
+    "generations": 1.0
+   }
+  },
+  {
+   "out": "hundred_a.png",
+   "endpoint": "create-image-pixflux",
+   "seed": 21,
+   "size": {
+    "width": 48,
+    "height": 48
+   },
+   "prompt": "a round gold award seal rosette with a scalloped wavy edge and a plain flat gold centre disc, glossy foil sticker, single object, front view, pixel art",
+   "outline": "single color black outline",
+   "shading": "flat shading",
+   "detail": "medium detail",
+   "view": "side",
+   "negative": "text, letters, numbers, logo, words, background, floor, shadow, table, hand, people, brand",
+   "usage": {
+    "type": "generations",
+    "generations": 1.0
+   }
+  },
+  {
+   "out": "hundred_b.png",
+   "endpoint": "create-image-pixflux",
+   "seed": 22,
+   "size": {
+    "width": 48,
+    "height": 48
+   },
+   "prompt": "a round gold award seal rosette with a scalloped wavy edge and a plain flat gold centre disc, glossy foil sticker, single object, front view, pixel art",
+   "outline": "single color black outline",
+   "shading": "flat shading",
+   "detail": "medium detail",
+   "view": "side",
+   "negative": "text, letters, numbers, logo, words, background, floor, shadow, table, hand, people, brand",
+   "usage": {
+    "type": "generations",
+    "generations": 1.0
+   }
+  },
+  {
+   "out": "favourite_a.png",
+   "endpoint": "create-image-pixflux",
+   "seed": 31,
+   "size": {
+    "width": 32,
+    "height": 32
+   },
+   "prompt": "a star shaped printed sticker, warm yellow amber five-pointed star with a thick white die-cut paper border, flat print, tiny highlight, single object, front view, pixel art",
+   "outline": "single color black outline",
+   "shading": "flat shading",
+   "detail": "medium detail",
+   "view": "side",
+   "negative": "text, letters, numbers, logo, words, background, floor, shadow, table, hand, people, brand",
+   "usage": {
+    "type": "generations",
+    "generations": 1.0
+   }
+  },
+  {
+   "out": "favourite_b.png",
+   "endpoint": "create-image-pixflux",
+   "seed": 32,
+   "size": {
+    "width": 32,
+    "height": 32
+   },
+   "prompt": "a star shaped printed sticker, warm yellow amber five-pointed star with a thick white die-cut paper border, flat print, tiny highlight, single object, front view, pixel art",
+   "outline": "single color black outline",
+   "shading": "flat shading",
+   "detail": "medium detail",
+   "view": "side",
+   "negative": "text, letters, numbers, logo, words, background, floor, shadow, table, hand, people, brand",
+   "usage": {
+    "type": "generations",
+    "generations": 1.0
+   }
+  },
+  {
+   "out": "playing_a.png",
+   "endpoint": "create-image-pixflux",
+   "seed": 41,
+   "size": {
+    "width": 32,
+    "height": 32
+   },
+   "prompt": "a round printed vinyl sticker, warm orange-red circle with a small white game controller silhouette in the centre, thin white die-cut border, flat print, tiny highlight, single object, front view, pixel art",
+   "outline": "single color black outline",
+   "shading": "flat shading",
+   "detail": "medium detail",
+   "view": "side",
+   "negative": "text, letters, numbers, logo, words, background, floor, shadow, table, hand, people, brand",
+   "usage": {
+    "type": "generations",
+    "generations": 1.0
+   }
+  },
+  {
+   "out": "playing_b.png",
+   "endpoint": "create-image-pixflux",
+   "seed": 42,
+   "size": {
+    "width": 32,
+    "height": 32
+   },
+   "prompt": "a round printed vinyl sticker, warm orange-red circle with a small white play triangle in the centre, thin white die-cut border, flat print, tiny highlight, single object, front view, pixel art",
+   "outline": "single color black outline",
+   "shading": "flat shading",
+   "detail": "medium detail",
+   "view": "side",
+   "negative": "text, letters, numbers, logo, words, background, floor, shadow, table, hand, people, brand",
+   "usage": {
+    "type": "generations",
+    "generations": 1.0
+   }
+  },
+  {
+   "out": "goty_a.png",
+   "endpoint": "create-image-pixflux",
+   "seed": 51,
+   "size": {
+    "width": 64,
+    "height": 32
+   },
+   "prompt": "a wide rectangular gold foil sticker banner with a small green laurel wreath on the left side and a plain empty flat gold area on the right, thin white die-cut border, single object, front view, pixel art",
+   "outline": "single color black outline",
+   "shading": "flat shading",
+   "detail": "medium detail",
+   "view": "side",
+   "negative": "text, letters, numbers, logo, words, background, floor, shadow, table, hand, people, brand",
+   "usage": {
+    "type": "generations",
+    "generations": 1.0
+   }
+  },
+  {
+   "out": "goty_b.png",
+   "endpoint": "create-image-pixflux",
+   "seed": 52,
+   "size": {
+    "width": 64,
+    "height": 32
+   },
+   "prompt": "a wide rectangular gold foil sticker banner with a small green laurel wreath on the left side and a plain empty flat gold area on the right, thin white die-cut border, single object, front view, pixel art",
+   "outline": "single color black outline",
+   "shading": "flat shading",
+   "detail": "medium detail",
+   "view": "side",
+   "negative": "text, letters, numbers, logo, words, background, floor, shadow, table, hand, people, brand",
+   "usage": {
+    "type": "generations",
+    "generations": 1.0
+   }
+  },
+  {
+   "out": "tv_62.png",
+   "endpoint": "create-image-pixflux",
+   "seed": 62,
+   "size": {
+    "width": 112,
+    "height": 96
+   },
+   "prompt": "a small 1990s portable CRT television set, front view slightly from above, warm beige plastic body, large curved glass screen on the left, a speaker grille and two round knobs on the right side, small feet, no antenna, no logo, cozy retro, single object, centered, pixel art",
+   "outline": "single color black outline",
+   "shading": "flat shading",
+   "detail": "highly detailed",
+   "view": "high top-down",
+   "negative": "text, letters, numbers, logo, words, background, floor, shadow, table, hand, people, brand",
+   "usage": {
+    "type": "generations",
+    "generations": 1.0
+   }
+  },
+  {
+   "out": "tv_63.png",
+   "endpoint": "create-image-pixflux",
+   "seed": 63,
+   "size": {
+    "width": 112,
+    "height": 96
+   },
+   "prompt": "a small 1990s portable CRT television set, front view slightly from above, warm beige plastic body, large curved glass screen on the left, a speaker grille and two round knobs on the right side, small feet, no antenna, no logo, cozy retro, single object, centered, pixel art",
+   "outline": "single color black outline",
+   "shading": "flat shading",
+   "detail": "highly detailed",
+   "view": "high top-down",
+   "negative": "text, letters, numbers, logo, words, background, floor, shadow, table, hand, people, brand",
+   "usage": {
+    "type": "generations",
+    "generations": 1.0
+   }
+  },
+  {
+   "out": "tv_61.png",
+   "endpoint": "create-image-pixflux",
+   "seed": 61,
+   "size": {
+    "width": 112,
+    "height": 96
+   },
+   "prompt": "a small 1990s portable CRT television set, front view slightly from above, warm beige plastic body, large curved glass screen on the left, a speaker grille and two round knobs on the right side, small feet, no antenna, no logo, cozy retro, single object, centered, pixel art",
+   "outline": "single color black outline",
+   "shading": "flat shading",
+   "detail": "highly detailed",
+   "view": "high top-down",
+   "negative": "text, letters, numbers, logo, words, background, floor, shadow, table, hand, people, brand",
+   "usage": {
+    "type": "generations",
+    "generations": 1.0
+   }
+  }
+ ],
+ "picked": {
+  "completed": "completed_a",
+  "hundred": "hundred_a (ribbons cut off, circle mask, 1px outline, flat centre painted)",
+  "favourite": "favourite_b",
+  "playing": "playing_a",
+  "goty": "composed: frame drawn in code, laurel from goty_a (left wreath + mirrored copy)",
+  "tv": "tv_62 (63/61 discarded)"
+ },
+ "sticker_meta": {
+  "hundred": {
+   "size": [
+    37,
+    37
+   ],
+   "plain_rect": [
+    10,
+    13,
+    16,
+    10
+   ],
+   "flat_colour": "#EEBE3C"
+  },
+  "goty": {
+   "size": [
+    56,
+    28
+   ],
+   "plain_rect": [
+    26,
+    6,
+    26,
+    16
+   ],
+   "flat_colour": "#E9BE69",
+   "wreath_rect": [
+    4,
+    5,
+    10,
+    18
+   ]
+  }
+ }
+}

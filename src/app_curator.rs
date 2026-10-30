@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
+use pocket_ui::case_stickers::{self, CaseStickers, Kind as CaseKind};
 use pocket_ui::cabinet::ShelfKey;
 use pocket_ui::curator::prefs::Prefs;
 use pocket_ui::curator::sort::Order;
@@ -52,11 +53,23 @@ pub(crate) enum Event {
     /// A new index; `gen` is the library generation its catalog was made from. `up_next`: the suggestion after the
     /// game that just ended (its catalog number and reason), worked out on the thread with the index. `today`: what
     /// Home's Curator row offers (the day's pick, the games waiting), also from the thread.
-    Built { gen: u64, index: Arc<Index>, catalog_ms: u128, index_ms: u128, up_next: Option<(usize, String)>, today: Today },
+    /// `connections`: Connections' index, made with a new catalog (`app_connections`); `rediscover`: Rediscover's games.
+    Built {
+        gen: u64,
+        index: Arc<Index>,
+        catalog_ms: u128,
+        index_ms: u128,
+        up_next: Option<(usize, String)>,
+        today: Today,
+        connections: Option<Arc<pocket_ui::connections::Index>>,
+        rediscover: Vec<super::app_connections::Rediscovered>,
+    },
     /// Games not on this device for the Echoes page of `seed` (catalog number).
     Elsewhere { seed: usize, names: Vec<String> },
     /// Play history: a period counted on its thread for History or the review (`app_history`).
     History(super::app_history::Counted),
+    /// A case-sticker edit could not reach the SD card (also delivered after its sheet is closed).
+    StickerSaveFailed(std::io::Error),
 }
 
 impl std::fmt::Debug for Event {
@@ -65,6 +78,7 @@ impl std::fmt::Debug for Event {
             Event::Built { gen, index, .. } => write!(f, "Built {{ gen: {gen}, games: {} }}", index.len()),
             Event::Elsewhere { seed, names } => write!(f, "Elsewhere {{ seed: {seed}, names: {} }}", names.len()),
             Event::History(_) => write!(f, "History"),
+            Event::StickerSaveFailed(e) => write!(f, "StickerSaveFailed({e})"),
         }
     }
 }
@@ -101,8 +115,9 @@ pub(crate) enum Page {
     Lens(LensPage),
     Echoes(EchoesPage),
     Versions(VersionsPage),
-    /// The stickers of a game, over its card; `ids` line up with the sheet's rows, "New sticker…" last.
-    Stickers { sheet: Sheet, path: PathBuf, ids: Vec<u32> },
+    /// The stickers of a game, over its card: the case stickers first (`case_stickers::Kind::ALL`, as `case` has them,
+    /// Game of the year with `year`), then the player's own (`ids` line up with those rows), "New sticker…" last.
+    Stickers { sheet: Sheet, path: PathBuf, ids: Vec<u32>, case: CaseStickers, year: u16 },
     /// A smart shelf's or sticker's options, over the Curator list.
     Options { sheet: Sheet, item: Item, acts: Vec<Act> },
     /// The order of the games: over the Lens (`back`, which takes the choice), or over the Curator list for smart shelf
@@ -158,6 +173,8 @@ pub(crate) struct CuratorUi {
     pub up_next: Option<UpNext>,
     /// Play history's pages and rows (`app_history`).
     pub history: super::app_history::HistoryUi,
+    /// Connections' index and open list, and Rediscover's games (`app_connections`).
+    pub connections: super::app_connections::ConnectionsUi,
 }
 
 /// "Up next: <game> — <reason>" on the shelf after a game (Roon Radio's continuation).
@@ -266,8 +283,13 @@ impl App {
         // Up next for the game that just ended: one Echoes list on the thread, with the index that knows the session.
         let seed = self.curator.up_next_seed.take();
         let data_dir = self.data_dir.clone();
+        // Connections and Rediscover take what the EmulationStation gamelists and the play history add (`app_connections`).
+        let (gamelist, log) = (self.gamelist.index.clone(), pocket_ui::play_log::view());
+        let connections_stale = std::mem::take(&mut self.curator.connections.stale);
+        let tz = pocket_ui::appearance::utc_offset_now(player.now as i64);
         let job = move || {
             let t = Instant::now();
+            let make_connections = old.is_none() || connections_stale;
             let catalog = match old {
                 Some(c) => c,
                 None => {
@@ -283,15 +305,18 @@ impl App {
                     Arc::new(curator::build_catalog(&games, systems, &mut db, feel_source().as_ref()))
                 }
             };
+            // Connections' index with a new catalog or new gamelists: the same games, their developers, publishers, series, genres.
+            let connections = make_connections.then(|| Arc::new(pocket_ui::connections::Index::build(super::app_connections::entries(&catalog, &gamelist))));
             let catalog_ms = t.elapsed().as_millis();
             let t = Instant::now();
+            let rediscover = super::app_connections::rediscover_input(&catalog, &player, &gamelist, log.as_deref(), player.now, tz);
             let user = curator::user_state(&catalog, &player);
             let index = Arc::new(Index::build(catalog, user));
             let index_ms = t.elapsed().as_millis();
             let up_next = seed.and_then(|p| index.find(&p)).and_then(|g| index.up_next(g)).map(|e| (e.game, e.reason));
             // Home's Curator row: one draw and one pass over the works, well under a millisecond (`curator::today`).
             let today = index.today();
-            Event::Built { gen, index, catalog_ms, index_ms, up_next, today }
+            Event::Built { gen, index, catalog_ms, index_ms, up_next, today, connections, rediscover }
         };
         if now {
             let e = job();
@@ -313,7 +338,7 @@ impl App {
 
     pub(crate) fn curator_event(&mut self, e: Event) {
         match e {
-            Event::Built { gen, index, catalog_ms, index_ms, up_next, today } => {
+            Event::Built { gen, index, catalog_ms, index_ms, up_next, today, connections, rediscover } => {
                 self.curator.building = false;
                 println!("curator: {} games, catalog {catalog_ms} ms, index {index_ms} ms (library {gen})", index.len());
                 let new_catalog = self.curator.index.as_ref().is_none_or(|old| !Arc::ptr_eq(&old.catalog, &index.catalog));
@@ -331,6 +356,11 @@ impl App {
                 }
                 self.curator.built_gen = Some(gen);
                 self.curator.index = Some(index);
+                if let Some(c) = connections {
+                    self.curator.connections.index = c;
+                    self.refresh_card_connections();
+                }
+                self.curator.connections.rediscover = rediscover;
                 // A new day's pick (or another library's) is shown first again.
                 if today.pick.as_ref().map(|p| p.game) != self.curator.today.pick.as_ref().map(|p| p.game) {
                     self.curator.today_shown = false;
@@ -360,6 +390,7 @@ impl App {
                 }
             }
             Event::History(c) => self.history_counted(c),
+            Event::StickerSaveFailed(e) => self.curator_saved::<()>(Err(e), ""),
             Event::Elsewhere { seed, names } => {
                 if let Some(Page::Echoes(p)) = self.curator.page.as_mut() {
                     if p.seed == seed {
@@ -392,7 +423,9 @@ impl App {
 
     /// Favorites (and other lists the player made) with each game once, when Settings → Curator says so.
     pub(crate) fn curator_merge(&self, items: Vec<Item>) -> Vec<Item> {
-        let Some(ix) = self.curator.index.as_ref().filter(|_| self.curator.prefs.merge_versions) else { return items };
+        let Some(ix) = self.curator.index.as_ref().filter(|_| {
+            self.curator.prefs.merge_versions && self.curator.built_gen == Some(self.curator.library_gen)
+        }) else { return items };
         let games: Vec<usize> = items.iter().filter_map(|it| self.item_rom(*it)).filter_map(|(_, p)| ix.find(&p)).collect();
         if games.len() != items.len() {
             return items;
@@ -434,6 +467,8 @@ impl App {
             ShelfKey::Lens => self.curator_items(Screen::LensResults),
             ShelfKey::SmartShelf(i) => self.curator_items(Screen::Shelf(i)),
             ShelfKey::Sticker(id) => self.curator_items(Screen::Sticker(id)),
+            ShelfKey::Connection => self.curator_items(Screen::Connection),
+            ShelfKey::Rediscover => self.curator_items(Screen::Rediscover),
             _ => Vec::new(),
         }
     }
@@ -445,13 +480,15 @@ impl App {
             ShelfKey::Lens => Some((self.curator_screen_title(Screen::LensResults)?, false)),
             ShelfKey::SmartShelf(i) => Some((self.curator.prefs.shelves.get(i)?.name.clone(), false)),
             ShelfKey::Sticker(id) => Some((self.library.stickers().iter().find(|s| s.id == id)?.name.clone(), true)),
+            ShelfKey::Connection | ShelfKey::Rediscover => Some((self.connection_title(shelf_screen(key)?)?, false)),
             _ => None,
         }
     }
 
     /// Whether B on this screen goes back along the way it came (the Lens for its games, the Curator list).
     pub(crate) fn curator_has_back(&self) -> bool {
-        self.screen == Screen::LensResults || (screen_shelf(self.screen).is_some() && !self.curator.back.is_empty())
+        // A card's list of games goes back to the card (`app_connections`).
+        matches!(self.screen, Screen::LensResults | Screen::Connection) || (screen_shelf(self.screen).is_some() && !self.curator.back.is_empty())
     }
 
     /// The cursor moved to another shelf in the cabinet: B no longer goes back along the way it came.
@@ -646,6 +683,10 @@ impl App {
             items.extend([Item::Lens, Item::Surprise]);
             items.extend((0..self.curator.prefs.shelves.len()).map(Item::SmartShelf));
         }
+        // Rediscover while there is something in it: a year ago today, or not played for a year.
+        if self.rediscover_counts().0 > 0 {
+            items.push(Item::Rediscover);
+        }
         if self.history_shown() {
             items.extend([Item::History, Item::Review(self.review_year())]);
         }
@@ -659,6 +700,9 @@ impl App {
     pub(crate) fn curator_items(&self, screen: Screen) -> Vec<Item> {
         if screen == Screen::Curator {
             return self.curator_hub_items();
+        }
+        if matches!(screen, Screen::Connection | Screen::Rediscover) {
+            return self.connection_items(screen);
         }
         let Some(ix) = self.curator.index.as_ref() else { return Vec::new() };
         let lens = match screen {
@@ -679,6 +723,7 @@ impl App {
                 (s.name.clone(), s.order)
             }
             Screen::Sticker(id) => (self.library.stickers().iter().find(|s| s.id == id)?.name.clone(), Order::Name),
+            Screen::Connection | Screen::Rediscover => return self.connection_title(screen),
             Screen::LensResults => match self.curator.index.as_ref() {
                 Some(ix) if !self.curator.lens.is_empty() => (format!("Lens: {}", ix.suggest_name(&self.curator.lens)), self.curator.order),
                 _ => ("Lens: all games".to_string(), self.curator.order),
@@ -694,8 +739,12 @@ impl App {
 
     /// What a Curator screen with nothing on it says.
     pub(crate) fn curator_empty_text(&self) -> Option<(&'static str, &'static str)> {
-        if !matches!(self.screen, Screen::Curator | Screen::Shelf(_) | Screen::Sticker(_) | Screen::LensResults) {
+        if !matches!(self.screen, Screen::Curator | Screen::Shelf(_) | Screen::Sticker(_) | Screen::LensResults | Screen::Connection | Screen::Rediscover) {
             return None;
+        }
+        // The games went (deleted, the card taken out) while the list was open.
+        if matches!(self.screen, Screen::Connection | Screen::Rediscover) {
+            return Some(("No games here", "These games aren't on this Pocket any more."));
         }
         Some(match self.curator.index {
             None => ("Getting ready…", "Curator is reading your library. This takes a moment once."),
@@ -778,6 +827,16 @@ impl App {
                 (s.name.clone(), STICKER_STRIPE.into(), side, meta.into())
             }
             Item::History | Item::Review(_) => self.history_describe(item),
+            Item::Rediscover => {
+                let (all, today) = self.rediscover_counts();
+                let side = if all == 1 { "1 game".to_string() } else { format!("{all} games") };
+                // Short: Split's panel and the Cards look show it on one line.
+                let meta = match today {
+                    0 => "Not played for a year".to_string(),
+                    n => format!("{n} played a year ago today"),
+                };
+                ("Rediscover".into(), CURATOR_STRIPE.into(), side, meta)
+            }
             _ => Default::default(),
         }
     }
@@ -794,6 +853,7 @@ impl App {
             Item::History | Item::Review(_) => return self.history_activate(item),
             Item::SmartShelf(i) => Screen::Shelf(i),
             Item::Sticker(id) => Screen::Sticker(id),
+            Item::Rediscover => Screen::Rediscover,
             _ => return,
         };
         if self.cabinet_refuses_empty(screen) {
@@ -820,7 +880,7 @@ impl App {
             self.open_lens(lens, None);
             return true;
         }
-        if !matches!(self.screen, Screen::Shelf(_) | Screen::Sticker(_) | Screen::Curator) {
+        if !matches!(self.screen, Screen::Shelf(_) | Screen::Sticker(_) | Screen::Curator | Screen::Rediscover) {
             return false;
         }
         self.back_to_curator_parent()
@@ -893,7 +953,7 @@ impl App {
             })
             .collect();
         let title = self.curator_describe(item).0;
-        self.curator.page = Some(Page::Options { sheet: Sheet { title, rows, sel: 0, single: false }, item, acts });
+        self.curator.page = Some(Page::Options { sheet: Sheet { title, rows, sel: 0, single: false, adjust: None }, item, acts });
         true
     }
 
@@ -941,6 +1001,16 @@ impl App {
             }
         };
         self.toast = Some((msg, Instant::now()));
+    }
+
+    /// No SD flush on a sticker key press or repeat; only failures need a reply on the UI thread.
+    fn save_case_stickers(&mut self, path: &Path, case: CaseStickers) -> std::io::Result<()> {
+        let proxy = self.proxy.clone();
+        self.library.set_case_stickers_soon(path, case, move |saved| {
+            if let Err(e) = saved {
+                let _ = proxy.send_event(UserEvent::Curator(Event::StickerSaveFailed(e)));
+            }
+        })
     }
 
     // ---- pages ----------------------------------------------------------------------------------------------
@@ -1027,34 +1097,58 @@ impl App {
                     Some(Page::Versions(p))
                 }
             },
-            Page::Stickers { mut sheet, path, ids } => match sheet.press(b) {
-                SheetOut::None => Some(Page::Stickers { sheet, path, ids }),
+            Page::Stickers { mut sheet, path, ids, mut case, mut year } => match sheet.press(b) {
+                SheetOut::None => Some(Page::Stickers { sheet, path, ids, case, year }),
                 SheetOut::Back => {
                     self.curator_card_refresh();
                     None
                 }
-                SheetOut::Pick(i) if i < ids.len() => {
-                    let saved = self.library.toggle_sticker(&path, ids[i]);
+                // A case sticker: on or off at once, the case on the shelf follows (`case_stickers`).
+                SheetOut::Pick(i) if i < CaseKind::ALL.len() => {
+                    let k = CaseKind::ALL[i];
+                    case.set(k, !case.has(k), year);
+                    let saved = self.save_case_stickers(&path, case);
+                    sheet.rows[i].1 = Some(case.has(k));
+                    let msg = if case.has(k) { format!("Sticker on: {}", case.name(k)) } else { format!("Sticker off: {}", case.name(k)) };
+                    self.curator_saved(saved, &msg);
+                    Some(Page::Stickers { sheet, path, ids, case, year })
+                }
+                // Left/Right on Game of the year: another year (kept at once when the sticker is on).
+                SheetOut::Adjust(i, d) => {
+                    year = (i32::from(year) + d).clamp(i32::from(case_stickers::YEAR_FIRST), i32::from(case_stickers::YEAR_LAST)) as u16;
+                    sheet.rows[i].0 = format!("Game of the year {year}");
+                    if case.goty.is_some() {
+                        case.goty = Some(year);
+                        let saved = self.save_case_stickers(&path, case);
+                        if let Err(e) = saved {
+                            self.curator_saved::<()>(Err(e), "");
+                        }
+                    }
+                    Some(Page::Stickers { sheet, path, ids, case, year })
+                }
+                SheetOut::Pick(i) if i - CaseKind::ALL.len() < ids.len() => {
+                    let at = i - CaseKind::ALL.len();
+                    let saved = self.library.toggle_sticker(&path, ids[at]);
                     if let Ok(on) = saved {
                         sheet.rows[i].1 = Some(on);
                     }
                     self.curator_saved(saved.map(|_| ()), &format!("Sticker: {}", sheet.rows[i].0));
                     self.curator.touch();
-                    Some(Page::Stickers { sheet, path, ids })
+                    Some(Page::Stickers { sheet, path, ids, case, year })
                 }
                 SheetOut::Pick(_) => {
-                    let back = Page::Stickers { sheet, path: path.clone(), ids };
+                    let back = Page::Stickers { sheet, path: path.clone(), ids, case, year };
                     let name = self.suggest_sticker_name(&path);
                     Some(name_page("New sticker", &name, Purpose::NewSticker(path), Some(back)))
                 }
             },
             Page::Options { mut sheet, item, acts } => match sheet.press(b) {
-                SheetOut::None => Some(Page::Options { sheet, item, acts }),
+                SheetOut::None | SheetOut::Adjust(..) => Some(Page::Options { sheet, item, acts }),
                 SheetOut::Back => None,
                 SheetOut::Pick(i) => self.curator_option(item, acts[i]),
             },
             Page::Order { mut sheet, back, shelf } => match sheet.press(b) {
-                SheetOut::None => Some(Page::Order { sheet, back, shelf }),
+                SheetOut::None | SheetOut::Adjust(..) => Some(Page::Order { sheet, back, shelf }),
                 SheetOut::Back => back.map(|b| *b),
                 SheetOut::Pick(i) => {
                     let order = Order::ALL.get(i).copied().unwrap_or_default();
@@ -1129,7 +1223,7 @@ impl App {
                     // The sheet shows the new sticker, ticked, above "New sticker…".
                     if let Some(Page::Stickers { sheet, ids, .. }) = back.as_mut() {
                         if !ids.contains(&id) {
-                            let at = ids.len();
+                            let at = CaseKind::ALL.len() + ids.len();
                             ids.push(id);
                             let label = self.library.stickers().iter().find(|s| s.id == id).map(|s| s.name.clone()).unwrap_or_default();
                             sheet.rows.insert(at, (label, Some(on)));
@@ -1316,11 +1410,15 @@ impl App {
                 rows.push(CuratorRow { kind: RowKind::Versions, title: "Versions".into(), line: format!("Related: remake, {}", related(&remakes)) });
             }
         }
+        // Always there: the case stickers (Completed, 100 %, …) are on this row too, Curator's own ones with them.
+        let meta = self.library.get(path);
+        let mut on = meta.case.names();
         if p.stickers {
-            let on: Vec<String> = self.library.get(path).stickers.iter().filter_map(|id| self.library.stickers().iter().find(|s| s.id == *id)).map(|s| s.name.clone()).collect();
-            let line = if on.is_empty() { "None yet. Press A to add one".to_string() } else { on.join(", ") };
-            rows.push(CuratorRow { kind: RowKind::Stickers, title: "Stickers".into(), line });
+            on.extend(meta.stickers.iter().filter_map(|id| self.library.stickers().iter().find(|s| s.id == *id)).map(|s| s.name.clone()));
         }
+        // A line of parts, so each sticker's name is translated on its own.
+        let line = if on.is_empty() { "None yet. Press A to add one".to_string() } else { on.join(" · ") };
+        rows.push(CuratorRow { kind: RowKind::Stickers, title: "Stickers".into(), line });
         rows
     }
 
@@ -1471,12 +1569,26 @@ impl App {
         runs
     }
 
+    /// The card's Stickers sheet: the five case stickers, then (with Curator's stickers on) the player's own and
+    /// "New sticker…".
     fn open_sticker_sheet(&mut self, path: &Path) {
-        let on = self.library.get(path).stickers;
-        let mut rows: Vec<(String, Option<bool>)> = self.library.stickers().iter().map(|s| (s.name.clone(), Some(on.contains(&s.id)))).collect();
-        let ids = self.library.stickers().iter().map(|s| s.id).collect();
-        rows.push(("New sticker…".into(), None));
-        self.curator.page = Some(Page::Stickers { sheet: Sheet { title: "Stickers".into(), rows, sel: 0, single: false }, path: path.to_path_buf(), ids });
+        let meta = self.library.get(path);
+        let case = meta.case;
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+        let this_year = pocket_ui::play_history::civil(now / 86_400).0.clamp(0, i32::from(u16::MAX)) as u16;
+        let release = self.card.as_ref().and_then(|o| o.card.data.year);
+        let year = case.goty.unwrap_or_else(|| case_stickers::default_year(release, this_year));
+        let shown = CaseStickers { goty: Some(year), ..case };
+        let mut rows: Vec<(String, Option<bool>)> = CaseKind::ALL.iter().map(|k| (shown.name(*k), Some(case.has(*k)))).collect();
+        let mut ids = Vec::new();
+        if self.curator.prefs.stickers {
+            rows.extend(self.library.stickers().iter().map(|s| (s.name.clone(), Some(meta.stickers.contains(&s.id)))));
+            ids = self.library.stickers().iter().map(|s| s.id).collect();
+            rows.push(("New sticker…".into(), None));
+        }
+        let goty = CaseKind::ALL.iter().position(|k| *k == CaseKind::Goty);
+        let sheet = Sheet { title: "Stickers".into(), rows, sel: 0, single: false, adjust: goty };
+        self.curator.page = Some(Page::Stickers { sheet, path: path.to_path_buf(), ids, case, year });
     }
 
     // ---- painting -----------------------------------------------------------------------------------------------
@@ -1800,10 +1912,13 @@ impl App {
         pocket_ui::text::boxes::covered();
         let (w, row, gap) = (pocket_ui::type_scale::wide(640, 37), pocket_ui::type_scale::row(76, 37), 8);
         let x = (c.w - w) / 2;
-        let shown = sheet.rows.len().min(8);
+        // The whole sheet (title, rows and bottom padding) stays above the hints. In Large, eight rows no longer
+        // fit on a native 768-line output; the window must shrink with the available height as well as grow in type.
+        let room = (c.h - 100 - 32 - 168).max(row);
+        let shown = sheet.rows.len().min(8).min(((room + gap) / (row + gap)).max(1) as usize);
         let first = super::window_start(sheet.sel, shown, sheet.rows.len());
         let total = shown as i32 * (row + gap) - gap;
-        let top = (c.h - 100 - total) / 2 + 60;
+        let top = (c.h - 100 - total - 168) / 2 + 120;
         let (sx, sy, sw, sh) = (x - 48, top - 120, w + 96, total + 168);
         c.rect(sx, sy, sw, sh, pal().void);
         if pal().t > 0 {
@@ -1840,6 +1955,13 @@ impl App {
                 }
             }
             self.hits.row(Area::new(x, y, w, row), k);
+        }
+        // Longer than its window (the case stickers, then the player's own): a scroll bar at the sheet's right edge.
+        if sheet.rows.len() > shown {
+            let n = sheet.rows.len() as i32;
+            let (bar_h, bar_y) = (total * shown as i32 / n, total * first as i32 / n);
+            c.rect(sx + sw - 24, top, 4, total, pal().pill);
+            c.rect(sx + sw - 24, top + bar_y, 4, bar_h.max(12), pal().chip);
         }
         self.hits.list(sheet.sel, sheet.rows.len(), 0.0, (row + gap) as f32);
         c.rect(0, c.h - 100, c.w, 100, pal().void);
@@ -1936,7 +2058,7 @@ impl App {
             }
             Some(Page::Echoes(p)) => (2, p.sel, p.elsewhere.len(), 0, 0),
             Some(Page::Versions(p)) => (3, p.sel, p.rows.iter().position(|r| r.preferred).unwrap_or(0), 0, 0),
-            Some(Page::Stickers { sheet, .. }) => (4, sheet.sel, sheet.rows.iter().filter(|r| r.1 == Some(true)).count(), sheet.rows.len(), 0),
+            Some(Page::Stickers { sheet, year, .. }) => (4, sheet.sel, sheet.rows.iter().filter(|r| r.1 == Some(true)).count(), sheet.rows.len(), usize::from(*year)),
             Some(Page::Options { sheet, .. }) => (5, sheet.sel, 0, 0, 0),
             Some(Page::Order { sheet, .. }) => (9, sheet.sel, 0, 0, 0),
             Some(Page::Name(n)) => (6, n.kb.row * 16 + n.kb.col, n.kb.text.len(), n.kb.shift as usize, n.kb.symbols as usize),
@@ -2077,7 +2199,11 @@ impl App {
                         }
                     }
                     "versions" => self.open_versions(&path),
-                    "stickers" => self.open_sticker_sheet(&path),
+                    // The keys after the game's name press on the sheet: `stickers:snes:chrono:a` puts Completed on.
+                    "stickers" => {
+                        self.open_sticker_sheet(&path);
+                        keys(self, parts.get(3).copied().unwrap_or(""));
+                    }
                     _ => {}
                 }
             }
@@ -2143,12 +2269,30 @@ impl App {
                 }
             }
             "history" | "history-empty" | "history-cutoff" | "history-mixed" | "history-hub" | "history-home" | "review" => self.history_snapshot(what, &parts),
+            // Actual library replacement while a connection is open, then B (tests/connections.rs).
+            "connection-rescan" => self.connection_rescan_snapshot(parts.get(1).copied().unwrap_or("ps2"), parts.get(2).copied().unwrap_or("revenge")),
+            // "rediscover[:<look>]": Curator's Rediscover in a look, opened from the Curator list (`app_connections`).
+            "rediscover" => {
+                if let Some(look) = parts.get(1) {
+                    self.theme = look_named(look);
+                }
+                self.curator_activate(Item::Curator);
+                if let Some(i) = self.items.iter().position(|i| *i == Item::Rediscover) {
+                    self.sel = i;
+                    self.prev_sel = i;
+                    self.curator_activate(Item::Rediscover);
+                }
+                if self.theme == pocket_ui::settings::Theme::Cabinet {
+                    self.cabinet_snapshot("");
+                }
+            }
             _ => eprintln!("curator:{rest}: unknown"),
         }
     }
 
     /// After the first paint of a snapshot (which measures the card): `<downs>` presses of Down on the card, or keys
-    /// (`y` Y, `d` Down, `r` Right, `l` Left: `card:ps2:revenge:yddddrr` is the status picker on the rating, two stars;
+    /// (`y` Y, `d` Down, `u` Up, `r` Right, `l` Left, `a` A, `b` B: `card:ps2:revenge:yddddrr` is the status picker on the
+    /// rating, two stars, `info:minimal:ps2:revenge:da` the list of the developer's games;
     /// `f` makes the open card's rows again as a new Curator index does, `c` as the sync conflicts' scan does).
     pub(crate) fn curator_snapshot_after(&mut self, rest: &str) {
         let parts: Vec<&str> = rest.split(':').collect();
@@ -2157,7 +2301,7 @@ impl App {
             let keys: Vec<char> = match arg.parse::<usize>() {
                 Ok(downs) => vec!['d'; downs],
                 // Only a word of these keys ("battery=game" is the Battery line's, `battery_snapshot`).
-                Err(_) if !arg.chars().all(|k| "ydrlfc".contains(k)) => Vec::new(),
+                Err(_) if !arg.chars().all(|k| "ydrlfcuab".contains(k)) => Vec::new(),
                 Err(_) => arg.chars().collect(),
             };
             for k in keys {
@@ -2166,6 +2310,18 @@ impl App {
                     'd' => Button::Down,
                     'r' => Button::Right,
                     'l' => Button::Left,
+                    'u' => Button::Up,
+                    // A and B as the app takes them: A on a fact opens its list of games (Connections), B on that
+                    // list comes back to the card.
+                    'a' | 'b' => {
+                        let b = if k == 'a' { CONFIRM } else { CANCEL };
+                        if self.card.is_some() {
+                            self.card_input(b);
+                        } else {
+                            self.press(b);
+                        }
+                        continue;
+                    }
                     'f' => {
                         self.curator_card_refresh();
                         continue;
@@ -2190,6 +2346,8 @@ pub(crate) fn screen_shelf(screen: Screen) -> Option<ShelfKey> {
         Screen::LensResults => ShelfKey::Lens,
         Screen::Shelf(i) => ShelfKey::SmartShelf(i),
         Screen::Sticker(id) => ShelfKey::Sticker(id),
+        Screen::Connection => ShelfKey::Connection,
+        Screen::Rediscover => ShelfKey::Rediscover,
         _ => return None,
     })
 }
@@ -2201,6 +2359,8 @@ pub(crate) fn shelf_screen(key: ShelfKey) -> Option<Screen> {
         ShelfKey::Lens => Screen::LensResults,
         ShelfKey::SmartShelf(i) => Screen::Shelf(i),
         ShelfKey::Sticker(id) => Screen::Sticker(id),
+        ShelfKey::Connection => Screen::Connection,
+        ShelfKey::Rediscover => Screen::Rediscover,
         _ => return None,
     })
 }

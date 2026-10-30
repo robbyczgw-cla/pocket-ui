@@ -244,6 +244,8 @@ pub enum SheetOut {
     Back,
     /// A on entry `i`.
     Pick(usize),
+    /// Left (-1) or Right (+1) on the sheet's adjustable row ([`Sheet::adjust`]): the Game of the year sticker's year.
+    Adjust(usize, i32),
 }
 
 /// A short list over the dimmed page (the stickers of a game, a shelf's options), as the status picker is.
@@ -255,19 +257,22 @@ pub struct Sheet {
     pub sel: usize,
     /// One choice of several (the order of a list): the tick marks the one chosen, A chooses another.
     pub single: bool,
+    /// A row whose value Left and Right change (its label says the value), while Up and Down still move.
+    pub adjust: Option<usize>,
 }
 
 impl Sheet {
     /// A sheet of one choice among `labels`, the `chosen` one ticked and selected.
     pub fn choice(title: &str, labels: &[&str], chosen: usize) -> Sheet {
         let rows = labels.iter().enumerate().map(|(i, l)| (l.to_string(), Some(i == chosen))).collect();
-        Sheet { title: title.to_string(), rows, sel: chosen.min(labels.len().saturating_sub(1)), single: true }
+        Sheet { title: title.to_string(), rows, sel: chosen.min(labels.len().saturating_sub(1)), single: true, adjust: None }
     }
 
     pub fn press(&mut self, b: Button) -> SheetOut {
         match b {
             b if b == CANCEL => SheetOut::Back,
             b if b == CONFIRM && !self.rows.is_empty() => SheetOut::Pick(self.sel),
+            Button::Left | Button::Right if self.adjust == Some(self.sel) => SheetOut::Adjust(self.sel, if b == Button::Left { -1 } else { 1 }),
             Button::Up | Button::Left => {
                 self.sel = self.sel.saturating_sub(1);
                 SheetOut::None
@@ -287,6 +292,9 @@ impl Sheet {
             Some((_, Some(false))) => "Put on",
             _ => "Choose",
         };
+        if self.adjust == Some(self.sel) {
+            return vec![("A", a), ("< >", "Year"), ("B", "Done")];
+        }
         vec![("A", a), ("B", "Done")]
     }
 }
@@ -388,13 +396,22 @@ mod tests {
         v.press(Button::Down);
         assert_eq!(v.press(Button::West), ListOut::None, "a remake is not a version to prefer");
         assert_eq!(v.hints(), [("A", "Play"), ("B", "Back")]);
-        let mut s = Sheet { title: "Stickers".into(), rows: vec![("Couch co-op".into(), Some(true)), ("New sticker…".into(), None)], sel: 0, single: false };
+        let mut s = Sheet { title: "Stickers".into(), rows: vec![("Couch co-op".into(), Some(true)), ("New sticker…".into(), None)], sel: 0, single: false, adjust: None };
         assert_eq!(s.hints()[0], ("A", "Take off"));
         s.press(Button::Down);
         s.press(Button::Down);
         assert_eq!(s.press(CONFIRM), SheetOut::Pick(1));
         assert_eq!(s.hints()[0], ("A", "Choose"));
         assert_eq!(s.press(CANCEL), SheetOut::Back);
+        // The Game of the year sticker's row: Left and Right change its year, Up and Down still move.
+        let mut g = Sheet { rows: vec![("Completed".into(), Some(false)), ("Game of the year 1998".into(), Some(true))], adjust: Some(1), ..Default::default() };
+        assert_eq!(g.press(Button::Right), SheetOut::None, "elsewhere Right moves");
+        assert_eq!(g.sel, 1);
+        assert_eq!(g.hints()[1], ("< >", "Year"));
+        assert_eq!(g.press(Button::Left), SheetOut::Adjust(1, -1));
+        assert_eq!(g.press(Button::Right), SheetOut::Adjust(1, 1));
+        assert_eq!(g.press(Button::Up), SheetOut::None);
+        assert_eq!(g.sel, 0);
         // The order of a list: one choice, the current one ticked and selected.
         let labels: Vec<&str> = Order::ALL.iter().map(|o| o.label()).collect();
         let mut o = Sheet::choice("Order", &labels, 1);

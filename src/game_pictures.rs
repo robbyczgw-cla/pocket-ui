@@ -80,7 +80,7 @@ pub fn missing(data_dir: &Path, games: &[(String, PathBuf)], tried: &HashSet<Pat
     games
         .iter()
         .filter(|(sys, rom)| {
-            if covers::playlist(sys).is_none() || tried.contains(rom) {
+            if covers::playlist(sys).is_none() || tried.contains(rom) || crate::library_cache::is_empty_file(rom) {
                 return false;
             }
             let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default();

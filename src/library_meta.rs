@@ -80,6 +80,10 @@ pub struct GameMeta {
     /// Settings → System → Storage → Hidden games brings it back. An older pocket-ui skips the field.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hidden: bool,
+    /// The stickers on the game's case ("Completed", "100 %", …, `case_stickers`), shown on the Shelf, the Cabinet
+    /// and the game box. An older pocket-ui skips the field.
+    #[serde(default, skip_serializing_if = "crate::case_stickers::CaseStickers::is_empty")]
+    pub case: crate::case_stickers::CaseStickers,
 }
 
 fn is_zero(n: &u8) -> bool {
@@ -118,6 +122,13 @@ pub struct LibraryMeta {
     games: BTreeMap<String, GameMeta>,
     stickers: Vec<Sticker>,
     preferred: BTreeMap<String, String>,
+    /// In-memory artwork revision. A fresh load gets a fresh token too, even if the previous instance had edits.
+    case_generation: u64,
+}
+
+fn next_case_generation() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 fn key(path: &Path) -> String {
@@ -128,7 +139,7 @@ impl LibraryMeta {
     pub fn load(data_dir: &Path) -> Self {
         let file = data_dir.join("library.json");
         let f = crate::fsutil::read_json_or_backup::<File>(&file).unwrap_or_default();
-        Self { file, games: f.games, stickers: f.stickers, preferred: f.preferred }
+        Self { file, games: f.games, stickers: f.stickers, preferred: f.preferred, case_generation: next_case_generation() }
     }
 
     /// What is known about the game (all defaults for a game never touched).
@@ -307,6 +318,36 @@ impl LibraryMeta {
         self.save().map(|()| on)
     }
 
+    /// The stickers on the game's case, without copying the rest of its entry (the shelves ask for every case).
+    pub fn case(&self, path: &Path) -> crate::case_stickers::CaseStickers {
+        self.games.get(&key(path)).map(|g| g.case).unwrap_or_default()
+    }
+
+    /// Changes when case artwork may have changed, including a fresh load or a sync batch's mutable access.
+    pub fn case_generation(&self) -> u64 {
+        self.case_generation
+    }
+
+    /// Puts the game's case stickers as they are now and saves.
+    pub fn set_case_stickers(&mut self, path: &Path, case: crate::case_stickers::CaseStickers) -> io::Result<()> {
+        self.put_case_stickers(path, case);
+        self.save()
+    }
+
+    /// Updates the case now and queues its durable save; SD errors are delivered to `done` by the card writer.
+    pub fn set_case_stickers_soon(&mut self, path: &Path, case: crate::case_stickers::CaseStickers, done: impl FnOnce(io::Result<crate::fsutil::WriteStatus>) + Send + 'static) -> io::Result<()> {
+        self.put_case_stickers(path, case);
+        crate::fsutil::write_json_checked_soon(&self.file, &self.contents(), done)
+    }
+
+    fn put_case_stickers(&mut self, path: &Path, case: crate::case_stickers::CaseStickers) {
+        let g = self.games.entry(key(path)).or_default();
+        if g.case != case {
+            g.case = case;
+            self.case_generation = next_case_generation();
+        }
+    }
+
     /// The preferred version of a work, as the path the player chose.
     pub fn preferred(&self) -> &BTreeMap<String, String> {
         &self.preferred
@@ -325,11 +366,13 @@ impl LibraryMeta {
     /// A game's entry to change in place, made when there is none: for `library_sync`, which applies what came from
     /// the player's other devices in one batch and then saves once ([`save_now`](Self::save_now)).
     pub fn game_mut(&mut self, path: &Path) -> &mut GameMeta {
+        self.case_generation = next_case_generation();
         self.games.entry(key(path)).or_default()
     }
 
     /// Every game's entry, for `library_sync`'s batch (taking a sticker off every game).
     pub fn games_mut(&mut self) -> impl Iterator<Item = &mut GameMeta> {
+        self.case_generation = next_case_generation();
         self.games.values_mut()
     }
 
@@ -400,6 +443,24 @@ mod tests {
     }
 
     const ZELDA: &str = "/storage/roms/gb/Legend of Zelda, The - Link's Awakening (USA, Europe) (Rev 2).gb";
+
+    #[test]
+    fn case_artwork_generation_tracks_edits_sync_access_and_a_fresh_load() {
+        let d = dir("case-generation");
+        let path = Path::new(ZELDA);
+        let mut m = LibraryMeta::load(&d);
+        let original = m.case_generation();
+        m.set_case_stickers(path, crate::case_stickers::CaseStickers { completed: true, ..Default::default() }).unwrap();
+        let edited = m.case_generation();
+        assert_ne!(edited, original);
+        m.game_mut(path).case = Default::default();
+        let synced = m.case_generation();
+        assert_ne!(synced, edited, "sync edits through game_mut must invalidate artwork too");
+        m.save_now().unwrap();
+        let loaded = LibraryMeta::load(&d);
+        assert_ne!(loaded.case_generation(), synced, "reloaded metadata cannot alias an earlier revision");
+        assert!(loaded.case(path).is_empty());
+    }
     const TETRIS: &str = "/storage/roms/gb/Tetris (World) (Rev 1).gb";
 
     #[test]

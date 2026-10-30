@@ -74,8 +74,21 @@ pub fn port_not_started_notice(name: &str) -> String {
 /// `missing_bios`: what `hostsys::HostSystem::missing_bios` says for the game's system. Then the files are known and
 /// named, as Add games names them, instead of a guess between a damaged file and a BIOS.
 pub fn not_started_notice(name: &str, missing_bios: Option<&str>) -> String {
+    not_started_notice_on("", name, missing_bios)
+}
+
+/// Systems whose games never need a BIOS file: for them "damaged file" is the whole hint (new-user test 2026-10-30: a
+/// Game Boy game was told to look for a BIOS file).
+const NO_BIOS: &[&str] = &[
+    "gb", "gbc", "gba", "nes", "famicom", "snes", "sfc", "megadrive", "genesis", "mastersystem", "gamegear", "sg-1000", "sg1000", "pcengine", "tg16", "atarilynx",
+    "atari2600", "ngp", "ngpc", "wonderswan", "wonderswancolor", "virtualboy", "n64", "nds",
+];
+
+/// [`not_started_notice`] knowing the game's system: a system that needs no BIOS doesn't mention one.
+pub fn not_started_notice_on(system: &str, name: &str, missing_bios: Option<&str>) -> String {
     match missing_bios {
         Some(bios) => format!("{name} didn't start. {bios}."),
+        None if NO_BIOS.contains(&system) => format!("{name} didn't start. The file may be damaged: copy the game to the card again."),
         None => format!("{name} didn't start. The file may be damaged, or the system needs a BIOS file (Settings › Games › Add games)."),
     }
 }
@@ -102,6 +115,14 @@ pub fn notice(emulator: &str) -> String {
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    #[test]
+    fn a_system_without_a_bios_never_sends_the_player_looking_for_one() {
+        let gb = not_started_notice_on("gb", "Tetris", None);
+        assert!(!gb.contains("BIOS") && gb.contains("damaged"), "{gb}");
+        assert!(not_started_notice_on("psx", "Crash", None).contains("BIOS"), "a system that may need one keeps the hint");
+        assert!(not_started_notice_on("gb", "X", Some("Sega CD needs a BIOS file in roms/bios: a")).contains("needs a BIOS"));
+    }
 
     #[test]
     fn retries_only_early_unrequested_failures() {
