@@ -120,6 +120,38 @@ impl Pic {
     }
 }
 
+impl Pic {
+    /// A copy `w` x `h` sampled between pixels (bilinear, alpha-weighted): for a smooth picture, a printed disc, that
+    /// must stay smooth on its way into the console.
+    pub fn scaled_smooth(&self, w: i32, h: i32) -> Pic {
+        let (w, h) = (w.max(1), h.max(1));
+        let mut out = Pic::new(w, h, 0);
+        let (kx, ky) = (self.w as f32 / w as f32, self.h as f32 / h as f32);
+        for y in 0..h {
+            let v = (y as f32 + 0.5) * ky - 0.5;
+            let (v0, dv) = (v.floor() as i32, v - v.floor());
+            for x in 0..w {
+                let u = (x as f32 + 0.5) * kx - 0.5;
+                let (u0, du) = (u.floor() as i32, u - u.floor());
+                let (mut c, mut a) = ([0f32; 3], 0f32);
+                for (ox, oy, wt) in [(0, 0, (1.0 - du) * (1.0 - dv)), (1, 0, du * (1.0 - dv)), (0, 1, (1.0 - du) * dv), (1, 1, du * dv)] {
+                    let q = self.get(u0 + ox, v0 + oy);
+                    let qa = (q >> 24) as f32 * wt;
+                    a += qa;
+                    for (ch, sh) in c.iter_mut().zip([16, 8, 0]) {
+                        *ch += qa * (q >> sh & 0xff) as f32;
+                    }
+                }
+                if a > 0.0 {
+                    let ch = |i: usize| ((c[i] / a).round() as u32).min(255);
+                    out.px[(y * w + x) as usize] = (a.round() as u32).min(255) << 24 | ch(0) << 16 | ch(1) << 8 | ch(2);
+                }
+            }
+        }
+        out
+    }
+}
+
 /// Multiplies the three channels of `p` by `shade`/256 (`shade` up to 256).
 #[inline]
 fn shaded(p: u32, shade: u32) -> u32 {

@@ -1,0 +1,6 @@
+{"src": "gba-rect.png", "out": "gba-prep.png",
+ "outline": [[80,68,1186,215,36,[true,true,false,false]], [100,150,1164,776,14,[false,false,true,true]]],
+ "label": [218,222,1062,690,20],
+ "paint": [[380,138,905,197]],
+ "plastic_luma": 78, "tint": [0,0,3], "gamma": 1.0,
+ "margin": 30, "out_size": [1141, 700]}

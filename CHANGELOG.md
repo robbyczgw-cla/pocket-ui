@@ -3,6 +3,17 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a minor version may change anything).
 
+## [0.1.5] - 2026-10-30
+
+### Changed
+
+- **Printed discs:** every disc and UMD shows its game's cover art and title in its system's look (PS1, PS2 with its blue
+  rim and clear hub, GameCube mini disc, Wii, Dreamcast, Saturn, Xbox, a plain CD for the rest, the UMD with its window
+  ring); a game without a cover gets a plain print with the title.
+- **New cartridges:** the Game Boy Advance cartridge in dark grey and the Nintendo 64 one in light grey, redrawn from
+  public-domain photos. The N64 box's spine takes its cover's colour, with the red block.
+- README: a table of the devices pocket-ui was tested on and those it should run on.
+
 ## [0.1.4] - 2026-10-30
 
 ### Added

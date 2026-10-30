@@ -567,11 +567,28 @@ Shelf look (`Medium::of`):
   file says USA or Canada), N64, NES, Game Boy, Game Boy Color, GBA, the DS card, Mega Drive, Master System, Game Gear,
   the PC Engine HuCard, and a neutral cartridge for every other cartridge system (grey, taking the system's plastic).
   No public-domain photo exists of a 3DS card, a Neo Geo Pocket, WonderSwan or Lynx cartridge: those use the DS card and
-  the neutral cartridge. The label area of each picture is one flat grey (its rectangle in `<kind>.json`); the cover is
-  put there at run time edge to edge without the box's printed side strip (`media::trim_system_band`: the Game Boy's and GBA's at the left, the US SNES box's black band at the right, the Genesis strip at the left or top; cut at its edge, or at its usual width where the strip runs into dark art) or the even margin round it (`trim_bands`), or the title written to fit
-  (`label_title`: smaller, up to three lines, without the subtitle, only then "…"). Discs and UMDs are painted round
-  (`cabinet_art::disc`, `umd`); the memory card of the digital systems is still drawn. The table in `src/media.rs` is
-  printed by `assets/media/game/tools/table.py`.
+  the neutral cartridge. The label area of each picture is one flat grey (its bounding rectangle in `<kind>.json`; only
+  that grey is printed on, so a label's rounded corners stay plastic); the cover is
+  put there at run time edge to edge without the box's printed side strip (`media::trim_system_band`: the Game Boy's and GBA's at the left, the US SNES box's black band and the US N64 box's red strip at the right, the Genesis strip at the left or top; cut at its edge, or at its usual width where the strip runs into dark art) or the even margin round it (`trim_bands`); a GBA label, much wider than its box art, shows the art's top where the title is (`label_part`), or the title written to fit
+  (`label_title`: smaller, up to three lines, without the subtitle, only then "…"). Discs and UMDs are printed (below);
+  the memory card of the digital systems is still drawn. The table in `src/media.rs` is printed by
+  `assets/media/game/tools/table.py`.
+- **Printed discs** (0.1.5, `media::DiscKind`, `media::disc_pic`, `assets/media/disc/<kind>.png`): a disc or a UMD shows
+  its label side printed like a real one. Each system has its own disc template, a PixelLab `image-to-pixelart`
+  conversion of a public-domain photo of a disc (`assets/media/disc/SOURCES.md`; the libretro collection has no disc
+  art, ScreenScraper needs an account), every logo and the publisher's print painted out, its hub and rim kept: the
+  PlayStation, PS2, GameCube (the 8 cm mini disc, `Game::MiniDisc`), Wii, Dreamcast, Saturn, Xbox, a plain CD for every
+  other disc system, and the UMD's shell. Its print is one flat magenta (`#FF00FF`) that the code finds. The cover's art
+  fills it (centred, cut round by the disc, without the cover's printed system strip: `DiscKind::band_zones`, the
+  PlayStation's at the left, the band at the top of a PS2, GameCube, Wii, Xbox and PSP cover), and a clean ring at the
+  rim carries the title along its lower arc, upright (`ring_title`; only from 12 px type, smaller the ring stays plain).
+  The ring is the system's own where it has one: the PlayStation's black disc showing past its label, the PS2's blue, the Dreamcast's
+  silver GD-ROM area with its line, the Wii's white disc, the dark rims of Saturn and Xbox labels; the others take the
+  cover's colour darkened. No cover: the print in the cover's colour with the title above the hole (a UMD: on its
+  label), none where it would be under 14 px. The disc is composed at the size it is shown, not scaled up from the template's pixels: a disc's hub rings and rim come from the template's colours by distance from its middle (`DiscTemplate::profile`), a UMD's shell is sampled between its pixels, and the rim, the hole, the print's edges and the ring are anti-aliased circles, so it is as smooth as the case beside it; the launch scales it smoothly (`Pic::scaled_smooth`). It is made once per case and size (`App::box_game`, warmed with the
+  box; the launch's first frame) from the cover already on the case's front, so nothing is decoded on the UI thread;
+  the templates are decoded on the cabinet's reader thread (`media::warm`). The launch scales the made disc on its way
+  to the drive, as a cartridge's picture; over the drive a GameCube disc and a UMD keep their size to a 12 cm one.
 - **Real sizes, one scale** (the owner, 2026-10-29): every case is drawn from the real thing's millimetres at 0.63 template
   pixels a millimetre (a DVD case's 190 mm is 120 px; `Medium::mm`, `Game::mm`), so a GBA box stands lower than a Game
   Boy box, a jewel case is wider than tall, a PS2 case tall. What is inside keeps its real size to its case
@@ -587,7 +604,7 @@ Shelf look (`Medium::of`):
 | Game Boy box 120 × 128, GBA box 118 × 118 | 76 × 81, 74 × 74 | GB cartridge 57 × 65, GBA cartridge 57 × 35 |
 | Mega Drive / Master System case 135 × 190 | 85 × 120 | MD cartridge 112 × 84, Master System 108 × 69, Game Gear 68 × 68, HuCard 54 × 85, neutral cartridge 80 × 100 |
 | PS1 jewel case 142 × 125, Dreamcast case 142 × 127 | 90 × 79 / 80 | disc Ø 120 |
-| PS2 / Wii / Xbox / generic disc case 135 × 190, GameCube 135 × 184 | 85 × 120 / 116 | disc Ø 120 |
+| PS2 / Wii / Xbox / generic disc case 135 × 190, GameCube 135 × 184 | 85 × 120 / 116 | disc Ø 120, GameCube disc Ø 80 |
 | PSP UMD case 104 × 175 | 66 × 110 | UMD 64 × 65 |
 | DS / 3DS case 125 × 137, Vita / generic digital case 105 × 136 | 79 × 86, 66 × 86 | game card 35 × 33, memory card 24 × 32 |
 | generic cartridge box 130 × 180 | 82 × 113 | neutral cartridge 80 × 100 |
@@ -600,8 +617,10 @@ Shelf look (`Medium::of`):
   pixel, so they stay pixel art.
   A cardboard box's front is its printed cover edge to edge: one pixel of card round it (`card_edge`), the tuck flap's
   fold and rubbed corners over the cover (`box_wear`). Its spine is its system's printed spine, the same on every box of
-  the system (`spine_print`: the US Super Nintendo's grey with a dark band, the Nintendo 64's black with the red band, the
-  NES's black box, the Game Boy's and the Game Boy Advance's white with their band); the
+  the system (`spine_print`: the US Super Nintendo's grey with a dark band, the NES's black box, the Game Boy's and the
+  Game Boy Advance's white with their band); a US Nintendo 64 box's spine is its own art, so it is printed in its cover's
+  colour (taken without the cover's red strip) with the red block and its white logo square at the top (`n64_badge`,
+  no logo; the owner, 2026-10-30, after the real boxes); the
   cartridges inside take their system's plastic (`cabinet_art::plastic`: Game Boy grey, GBA indigo-grey, N64
   charcoal…); cases are drawn in their own colours. Every template pixel is solid or empty (the decoder reads
   half-transparent as empty).

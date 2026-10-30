@@ -120,7 +120,10 @@ In the Cabinet, every game stands in the case it came in, each system its own: t
 Nintendo, Nintendo 64, NES, Game Boy and Game Boy Advance, the Mega Drive's clamshell case, the Master System's and Game
 Gear's case with the white grid, the thin PlayStation jewel case, the light Dreamcast and Saturn case, the tall black PS2
 case, the GameCube's, the white Wii case, the slim PSP case, the DS and 3DS cases, the Xbox and Vita cases; every other
-system has pocket-ui's own case with its name and colour at the top. The cartridge or disc is inside. Each spine takes
+system has pocket-ui's own case with its name and colour at the top. The cartridge or disc is inside, and a disc is
+printed like the real one: the cover's art on its label and the game's name round its rim, in its system's look (the
+PlayStation's black disc, the GameCube's small disc, the Dreamcast's silver ring, the white Wii disc, the UMD in its
+shell); a game without a cover gets a plain print with its name. Each spine takes
 its colours from the game's cover and has its name on it (a long name gets smaller or a second line before anything is
 left off); a game without a cover has its system's colour. Every case has its real size: a PS2 case stands tall, a Game
 Boy Advance box low, all on the shelf's board. Where a shelf has room, a bookend holds its games up
@@ -143,7 +146,7 @@ other looks never have it.
 
 In the **Shelf** look, the one pocket-ui starts with, everything stands on one shelf, seen from the spine: each game
 in its system's real case (the same cases as in the Cabinet below), its spine in its cover's colour with its name
-on it; a long name ends in "…". Your systems, Curator, Favourites and Search stand there as plain boxes in their
+on it; a long name gets a little smaller or a second line before anything is left off ("…" is the last resort). Your systems, Curator, Favourites and Search stand there as plain boxes in their
 colours, a system with its short name ("SNES"). Left and Right (or Up and Down) move along the shelf, L1 and R1 five at a
 time. The one you pick rises out of the row and is shown large above the shelf, turned to its front with the cover
 (at once with Motion Off); beside it are its name and what is known about it: when you last played it, a system's facts,

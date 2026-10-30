@@ -9,6 +9,9 @@ new feature (add its row), a device run (move the row up and write what was done
 note in any other document that makes a claim about the device (change it to match, or link here). When a note and
 this table disagree, the table is wrong or the note is stale; settle it before you merge.
 
+The homepage no longer has a status or numbers page (2026-10-30): pocketui.xyz/status.html points here, and
+pocketui.xyz/measured.html points to [MEASURED.md](MEASURED.md). Devices and how far each is tested: [DEVICES.md](DEVICES.md).
+
 ## Statuses
 
 Each row has exactly one of these, the weakest that is true for everything the row names. If half a feature is proven,

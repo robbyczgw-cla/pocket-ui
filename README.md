@@ -7,7 +7,7 @@ pocket-ui is a controller-first home screen and game player for the **Retroid Po
 PlayStation 2, gets the same small pause menu with save slots, pictures and a step back in time. Games show up with
 box art, their own card and facts, and a Curator that knows what you own and what you have not touched yet.
 
-Version **0.1.4** is out as a public alpha: [download it](../../releases/tag/v0.1.4),
+Version **0.1.5** is out as a public alpha: [download it](../../releases/tag/v0.1.5),
 watch the [trailer](https://pocketui.xyz), and read more at **[pocketui.xyz](https://pocketui.xyz)**.
 
 <p align="center">
@@ -39,14 +39,14 @@ The pictures are rendered from the code with made-up data (`pocket-ui --snapshot
 
 ## Get it
 
-Download from the [v0.1.4 release](../../releases/tag/v0.1.4) and pick one way.
+Download from the [v0.1.5 release](../../releases/tag/v0.1.5) and pick one way.
 Checksums are in `SHA256SUMS`.
 
 | Way | When | What to do |
 |---|---|---|
-| **Ports installer** | ROCKNIX is already on your card | Unzip [pocket-ui-0.1.4-ports-installer.zip](../../releases/download/v0.1.4/pocket-ui-0.1.4-ports-installer.zip) into `roms/ports` (the games share of ROCKNIX's file sharing: switch on Samba in ROCKNIX's Network Settings, then open `\\<device name or IP>` on Windows or `smb://<device name or IP>` on a Mac; [ROCKNIX explains it](https://rocknix.org/play/add-games/)), then in EmulationStation open **Ports → Install pocket-ui**. To go back: **Ports → Uninstall pocket-ui** |
-| **Fresh card** | New card, nothing on it yet | New to ROCKNIX on the Mini V2? Set it up once with [ROCKNIX's own guide](https://rocknix.org/devices/retroid/retroid-pocket-mini/) (flashing the card plus its one-time bootloader step), then come back. With ROCKNIX 20261001 or newer on the card, copy the two files from [pocket-ui-0.1.4-rocknix-card.zip](../../releases/download/v0.1.4/pocket-ui-0.1.4-rocknix-card.zip) onto the card's `ROCKNIX` partition and boot. It installs on the second start |
-| **Over SSH** | You like a terminal | Unzip [pocket-ui-0.1.4-rocknix-install.zip](../../releases/download/v0.1.4/pocket-ui-0.1.4-rocknix-install.zip) in `/storage`, run `sh install.sh --check`, then `sh install.sh` |
+| **Ports installer** | ROCKNIX is already on your card | Unzip [pocket-ui-0.1.5-ports-installer.zip](../../releases/download/v0.1.5/pocket-ui-0.1.5-ports-installer.zip) into `roms/ports` (the games share of ROCKNIX's file sharing: switch on Samba in ROCKNIX's Network Settings, then open `\\<device name or IP>` on Windows or `smb://<device name or IP>` on a Mac; [ROCKNIX explains it](https://rocknix.org/play/add-games/)), then in EmulationStation open **Ports → Install pocket-ui**. To go back: **Ports → Uninstall pocket-ui** |
+| **Fresh card** | New card, nothing on it yet | New to ROCKNIX on the Mini V2? Set it up once with [ROCKNIX's own guide](https://rocknix.org/devices/retroid/retroid-pocket-mini/) (flashing the card plus its one-time bootloader step), then come back. With ROCKNIX 20261001 or newer on the card, copy the two files from [pocket-ui-0.1.5-rocknix-card.zip](../../releases/download/v0.1.5/pocket-ui-0.1.5-rocknix-card.zip) onto the card's `ROCKNIX` partition and boot. It installs on the second start |
+| **Over SSH** | You like a terminal | Unzip [pocket-ui-0.1.5-rocknix-install.zip](../../releases/download/v0.1.5/pocket-ui-0.1.5-rocknix-install.zip) in `/storage`, run `sh install.sh --check`, then `sh install.sh` |
 
 pocket-ui replaces exactly one thing: the program ROCKNIX's `essway` service starts. Remove it and stock ROCKNIX with
 EmulationStation is back; your games, saves and ROCKNIX settings stay where they are. Android on the internal storage
@@ -60,9 +60,10 @@ download a [starter pack](docs/STARTER-PACK.md) of nine free homebrew games, eac
 | | |
 |---|---|
 | Made for | Retroid Pocket Mini V2 (Snapdragon 865 / SM8250), ROCKNIX SM8250 build 20261001 (newer builds are accepted when pocket-ui's compatibility check passes), 1240 x 1080 screen |
-| Experimental | Retroid Pocket 5, Flip 2, the first Mini, Pocket 6, Nova, the AYN Odin 2 family and Anbernic H700 handhelds (RG28XX, RG35XX, RG40XX, RG34XX, RG-SP; computer tests only) (Pocket 5, Flip 2 and the first Mini use the same ROCKNIX SM8250 build; Pocket 6, Nova and Odin 2 the SM8550 image; the Anbernics ROCKNIX's H700 image) |
+| Tested on | Retroid Pocket Mini V2 (main device), AYN Odin 2 Mini, Anbernic RG35XX Plus |
+| Should run on | **Same ROCKNIX SM8250 image as the Mini V2:** Retroid Pocket 5, Flip 2, first Mini. **SM8550 image:** AYN Odin 2, Odin 2 Portal, Retroid Pocket 6, Nova. **ROCKNIX H700 image:** Anbernic RG28XX, RG35XX 2024/H/Pro/SP, RG40XX H/V, RG34XX, RG34XX-SP, RG-SP. Profiles are in place; not tried on the hardware yet |
 
-Alpha: it is developed and tested on a Mini V2, and the experimental devices are best-effort. If something is off,
+Alpha: it is made on the Mini V2; the "should run on" devices are best-effort. If something is off,
 **Settings → System → About → Report a problem** makes a file for a report, or [open an issue](../../issues).
 [docs/STATUS.md](docs/STATUS.md) lists every feature and how far it has been checked.
 

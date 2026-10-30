@@ -1,0 +1,18 @@
+{
+ "mm": [
+  120,
+  120
+ ],
+ "hole": 10,
+ "print": {
+  "shape": "annulus",
+  "r_in": 25,
+  "r_out": 77.5,
+  "colour": "#FF00FF"
+ },
+ "source": "https://commons.wikimedia.org/wiki/File:RVT-R_disc_label_side_(white_background).png",
+ "licence": "Public domain",
+ "author": "Nintendo",
+ "pixellab": "image-to-pixelart v2, 160x160 out, conversion b (init image strength 250 with fixer)",
+ "logos_removed": "Wii logo, Nintendo logo, RVT-R / DATE / TITLE / Ver. print, blue rules and legal text"
+}

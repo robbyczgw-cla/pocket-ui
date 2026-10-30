@@ -294,7 +294,8 @@ impl Medium {
             Medium::Gba => Game::Gba,
             Medium::GenericCart | Medium::MasterSystem => Game::Cart,
             Medium::MegaDrive => Game::MegaDrive,
-            Medium::Ps1 | Medium::SegaDisc | Medium::GenericDisc | Medium::Ps2 | Medium::GameCube | Medium::Wii | Medium::Keep | Medium::Xbox => Game::Disc,
+            Medium::Ps1 | Medium::SegaDisc | Medium::GenericDisc | Medium::Ps2 | Medium::Wii | Medium::Keep | Medium::Xbox => Game::Disc,
+            Medium::GameCube => Game::MiniDisc,
             Medium::Umd => Game::Umd,
             Medium::Ds | Medium::N3ds | Medium::Vita => Game::Card,
             Medium::GenericDigital => Game::Memory,
@@ -332,6 +333,9 @@ pub fn warm() {
     }
     for g in Game::DRAWN {
         g.pic();
+    }
+    for d in DiscKind::ALL {
+        d.template();
     }
 }
 
@@ -444,7 +448,7 @@ pub fn spine_px(w: i32, want: f32) -> u32 {
 /// `spine` with the title at `want` pixels or the nearest size below it that fits the label (`spine_px`): the Shelf
 /// look's spines, whose title follows Settings → Text size.
 pub fn spine_with(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, want: f32) -> Pic {
-    let look = spine_print(m).map_or(look, |(paper, band)| Look { color: paper, band, ..look });
+    let look = spine_print(m).map_or(look, |(paper, band)| Look { color: paper.unwrap_or(look.color), band, ..look });
     let t = m.template();
     let f = SHELF_SCALE * k;
     let (spine, _) = m.pics();
@@ -453,6 +457,9 @@ pub fn spine_with(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, w
     if let Some(band) = t.band {
         let (x, y, w, h) = t.at(band, f);
         paper(&mut p, (x, y, w, h), look.band);
+        if m == Medium::N64 {
+            n64_badge(&mut p, (x, y, w, h));
+        }
     }
     let (x, y, w, h) = t.at(t.spine_label, f);
     paper(&mut p, (x, y, w, h), look.color);
@@ -491,21 +498,33 @@ fn card_edge(p: &mut Pic, m: Medium, f: f32) {
     }
 }
 
-/// The printed spine a system's cases share, whatever the game (paper, band): every box of the system reads the
-/// same on the shelf, as real ones do. The US Super Nintendo's grey with its dark band, the Nintendo 64's black with the
-/// red band, the NES's black box, the Game Boy's and the Game Boy Advance's white with their band; and the PS2 case's
-/// black insert spine.
-fn spine_print(m: Medium) -> Option<(u32, u32)> {
+/// The printed spine a system's cases share, whatever the game (paper, band; no paper = the cover's own colour): every
+/// box of the system reads the same on the shelf, as real ones do. The US Super Nintendo's grey with its dark band, the
+/// NES's black box, the Game Boy's and the Game Boy Advance's white with their band; the Nintendo 64's art in the
+/// cover's colour with the red block at its top that carries the white logo square (US boxes; `n64_badge`); and the PS2
+/// case's black insert spine.
+fn spine_print(m: Medium) -> Option<(Option<u32>, u32)> {
     match m {
-        Medium::Snes => Some((0xc9c9cd, 0x3a3a40)),
-        Medium::N64 => Some((0x141416, 0xc0262c)),
-        Medium::Nes => Some((0x101012, 0xb3141c)),
-        Medium::Gb => Some((0xeeeeea, 0x2d2f6e)),
-        Medium::Gba => Some((0xf1f1ef, 0x463f96)),
+        Medium::Snes => Some((Some(0xc9c9cd), 0x3a3a40)),
+        Medium::N64 => Some((None, 0xd0101a)),
+        Medium::Nes => Some((Some(0x101012), 0xb3141c)),
+        Medium::Gb => Some((Some(0xeeeeea), 0x2d2f6e)),
+        Medium::Gba => Some((Some(0xf1f1ef), 0x463f96)),
         // The PS2's insert: a black spine whatever the cover, a neutral block at its top (no logo).
-        Medium::Ps2 => Some((0x111114, 0x2a2a2e)),
+        Medium::Ps2 => Some((Some(0x111114), 0x2a2a2e)),
         _ => None,
     }
+}
+
+/// The white square in the red block of an N64 box's spine (where the logo is printed; plain here), `band` its block.
+fn n64_badge(p: &mut Pic, (x, y, w, h): (i32, i32, i32, i32)) {
+    let side = (h * 3 / 4).min(w - 2).max(2);
+    let (sx, sy) = (x + (w - side) / 2, y + (h - side) / 2);
+    p.fill(sx, sy, side, side, 0xfff4f4f0);
+    // The logo's colours as two blocks (green and blue), no lettering.
+    let q = (side / 3).max(1);
+    p.fill(sx + q / 2, sy + side - q - q / 2, q, q, 0xff1f9a3a);
+    p.fill(sx + side - q - q / 2, sy + side - q - q / 2, q, q, 0xff2742b0);
 }
 
 /// A cardboard box's front over its cover: the tuck flap's fold a little in from the top edge and the corners rubbed
@@ -722,6 +741,8 @@ pub enum Game {
     Memory,
     /// A CD or DVD, painted round (`cabinet_art::disc`).
     Disc,
+    /// The GameCube's 8 cm disc.
+    MiniDisc,
     /// The PSP's UMD, painted round (`cabinet_art::umd`).
     Umd,
 }
@@ -743,7 +764,7 @@ const GAME_TEMPLATES: [GameTemplate; 14] = [
     // snes-us
     GameTemplate { size: (152, 100), label: (33, 4, 87, 30), tint: false },
     // n64
-    GameTemplate { size: (150, 94), label: (39, 10, 72, 75), tint: false },
+    GameTemplate { size: (152, 98), label: (40, 6, 72, 70), tint: false },
     // nes
     GameTemplate { size: (136, 152), label: (54, 2, 63, 101), tint: false },
     // gb
@@ -751,7 +772,7 @@ const GAME_TEMPLATES: [GameTemplate; 14] = [
     // gbc
     GameTemplate { size: (132, 150), label: (18, 48, 97, 87), tint: false },
     // gba
-    GameTemplate { size: (150, 91), label: (19, 21, 107, 60), tint: false },
+    GameTemplate { size: (152, 92), label: (19, 20, 116, 61), tint: false },
     // cart
     GameTemplate { size: (108, 135), label: (8, 10, 90, 54), tint: true },
     // md
@@ -823,7 +844,7 @@ impl Game {
 
     /// A disc or a UMD: painted round, not from a template.
     pub fn is_round(self) -> bool {
-        matches!(self, Game::Disc | Game::Umd)
+        matches!(self, Game::Disc | Game::MiniDisc | Game::Umd)
     }
 
     /// The real thing, width x height in millimetres (a disc's diameter).
@@ -846,6 +867,7 @@ impl Game {
             Game::Card | Game::Card3ds => (35.0, 33.0),
             Game::Memory => (24.0, 32.0),
             Game::Disc => (120.0, 120.0),
+            Game::MiniDisc => (80.0, 80.0),
             Game::Umd => (64.0, 65.0),
         }
     }
@@ -877,12 +899,19 @@ pub fn game_pic(text: &mut Text, g: Game, h: i32, look: Look, title: &str, cover
     let mut p = scaled(sprite, f, GAME_TEMPLATES[i].tint.then_some(look.plastic));
     let (lx, ly, lw, lh) = scale_rect(GAME_TEMPLATES[i].label, f);
     let (lw, lh) = (lw.min(p.w - lx), lh.min(p.h - ly));
+    // Only the label's own flat grey is printed on: its rounded corners (a GBA's, the top of an N64's) stay plastic.
+    let flat = p.px[((ly + lh / 2) * p.w + lx + lw / 2) as usize];
+    let shell: Vec<(usize, u32)> = (ly..ly + lh)
+        .flat_map(|y| (lx..lx + lw).map(move |x| (y * p.w + x) as usize))
+        .filter(|&i| p.px[i] != flat)
+        .map(|i| (i, p.px[i]))
+        .collect();
     match cover {
         Some(img) if img.w > 0 && img.h > 0 => {
             // A label shows the artwork, not the box's printed side strip (a SNES box's black band, a GBA box's
-            // silver one) or the margin a case's front left round it.
+            // silver one, a US N64 box's red one) or the margin a case's front left round it.
             // A cartridge's label is printed edge to edge: the artwork fills it, cut at its sides or top and bottom.
-            let art = trim_system_band(&trim_bands(img), g);
+            let art = label_part(&trim_system_band(&trim_bands(img), g), g, lw, lh);
             let fitted = art::cover_fill(&art, lw, lh);
             for y in 0..lh.min(fitted.h as i32) {
                 for x in 0..lw.min(fitted.w as i32) {
@@ -897,6 +926,9 @@ pub fn game_pic(text: &mut Text, g: Game, h: i32, look: Look, title: &str, cover
             label_title(text, &mut p, (lx, ly, lw, lh), look, title);
         }
     }
+    for (i, c) in shell {
+        p.px[i] = c;
+    }
     Some(p)
 }
 
@@ -910,6 +942,12 @@ fn label_title(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i32),
         let c = mix(look.color, 0x000000, 20 + (row as u32 * 90 / h.max(1) as u32));
         p.fill(x, y + row, w, 1, 0xff00_0000 | c);
     }
+    write_title(text, p, (x, y, w, h), look, title, 4);
+}
+
+/// The title written into `(x, y, w, h)` of `p` as `label_title` does, over what is painted there, at most a
+/// `per_h`th of the height in size.
+fn write_title(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i32), look: Look, title: &str, per_h: i32) {
     let _fixed = crate::type_scale::fixed();
     // A shortened title is still a game's name, even when only its full name was learned by i18n. Keep every
     // measurement and wrap untranslated too: otherwise the fallback can turn "Black: ..." into "Schwarz".
@@ -920,7 +958,7 @@ fn label_title(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i32),
     let step = |s: u32| s as i32 * 11 / 10;
     let mut tries = vec![title];
     tries.extend(main_title(title).map(|(main, _)| main));
-    let sizes: Vec<u32> = LABEL_PX.into_iter().rev().filter(|&s| s as i32 * 4 <= h.max(56)).collect();
+    let sizes: Vec<u32> = LABEL_PX.into_iter().rev().filter(|&s| s as i32 * per_h <= h.max(56)).collect();
     let fits = |text: &mut Text, t: &str, s: u32| {
         let lines = text.wrap(face, s, t, max_w);
         let whole = lines.join(" ") == t.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -953,6 +991,350 @@ fn label_title(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i32),
     text.set_translate(translating);
 }
 
+/// The printed side of a system's disc, or the PSP's UMD: a pixel-art template from a photo of the real one
+/// (`assets/media/disc/SOURCES.md`), every logo painted out, its print one flat magenta (`PRINT`) that `disc_pic`
+/// fills with the game's cover and title.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum DiscKind {
+    /// The PlayStation's black disc.
+    Ps1,
+    Ps2,
+    /// The 8 cm mini disc.
+    GameCube,
+    Wii,
+    /// The GD-ROM with its ring.
+    Dreamcast,
+    Saturn,
+    Xbox,
+    /// A plain silver CD: every other disc system.
+    Cd,
+    /// The UMD's shell, its label on the front.
+    Umd,
+}
+
+/// The colour of a disc template's print (`DiscKind`).
+const PRINT: u32 = 0xff00ff;
+
+const DISC_PNGS: [&[u8]; 9] = [
+    include_bytes!("../assets/media/disc/ps1.png"),
+    include_bytes!("../assets/media/disc/ps2.png"),
+    include_bytes!("../assets/media/disc/gamecube.png"),
+    include_bytes!("../assets/media/disc/wii.png"),
+    include_bytes!("../assets/media/disc/dreamcast.png"),
+    include_bytes!("../assets/media/disc/saturn.png"),
+    include_bytes!("../assets/media/disc/xbox.png"),
+    include_bytes!("../assets/media/disc/cd.png"),
+    include_bytes!("../assets/media/disc/umd.png"),
+];
+
+/// A decoded disc template and where its print is, in template pixels: the rectangle round it, and for a disc its
+/// inner and outer radius from the middle.
+struct DiscTemplate {
+    sprite: Sprite,
+    print: (i32, i32, i32, i32),
+    /// The print's middle and its inner and outer edge (a UMD's label has no hole: inner 0).
+    centre: (f32, f32),
+    radii: (f32, f32),
+    /// A disc's centre hole and outer edge, from the middle of the picture.
+    hole: f32,
+    edge: f32,
+    /// A disc's colours outside its print by distance from its middle, in steps of `PROFILE_STEP` template pixels:
+    /// its hub rings and rim drawn as true circles at any size.
+    profile: Vec<u32>,
+}
+
+/// The step of `DiscTemplate::profile`, in template pixels.
+const PROFILE_STEP: f32 = 0.25;
+
+impl DiscKind {
+    pub const ALL: [DiscKind; 9] = [DiscKind::Ps1, DiscKind::Ps2, DiscKind::GameCube, DiscKind::Wii, DiscKind::Dreamcast, DiscKind::Saturn, DiscKind::Xbox, DiscKind::Cd, DiscKind::Umd];
+
+    /// The disc a game of `system` comes on.
+    pub fn of(system: &str) -> DiscKind {
+        match system {
+            "psx" | "ps1" | "playstation" => DiscKind::Ps1,
+            "ps2" => DiscKind::Ps2,
+            "gamecube" | "gc" => DiscKind::GameCube,
+            "wii" => DiscKind::Wii,
+            "dreamcast" => DiscKind::Dreamcast,
+            "saturn" => DiscKind::Saturn,
+            "xbox" => DiscKind::Xbox,
+            "psp" => DiscKind::Umd,
+            _ => DiscKind::Cd,
+        }
+    }
+
+    /// Decoded once (`warm`, on the cabinet's reader thread), its print found.
+    fn template(self) -> &'static DiscTemplate {
+        static DECODED: [std::sync::OnceLock<DiscTemplate>; 9] = [const { std::sync::OnceLock::new() }; 9];
+        let i = DiscKind::ALL.iter().position(|k| *k == self).unwrap_or(0);
+        DECODED[i].get_or_init(|| {
+            let sprite = crate::system_art::decode(DISC_PNGS[i]).unwrap_or(Sprite { w: 1, h: 1, px: vec![0] });
+            let (w, h) = (sprite.w as i32, sprite.h as i32);
+            let (cx, cy) = (w as f32 / 2.0, h as f32 / 2.0);
+            let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0, 0);
+            let (mut sx, mut sy, mut n) = (0f32, 0f32, 0f32);
+            let (mut hole, mut edge) = (f32::MAX, 0f32);
+            let dist = |x: i32, y: i32, (cx, cy): (f32, f32)| ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
+            for y in 0..h {
+                for x in 0..w {
+                    let px = sprite.px[(y * w + x) as usize];
+                    if px >> 24 == 0 {
+                        continue;
+                    }
+                    let d = dist(x, y, (cx, cy));
+                    (hole, edge) = (hole.min(d), edge.max(d));
+                    if px & 0xffffff == PRINT {
+                        (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x + 1), y1.max(y + 1));
+                        (sx, sy, n) = (sx + x as f32 + 0.5, sy + y as f32 + 0.5, n + 1.0);
+                    }
+                }
+            }
+            // A round print's middle is the disc's; a label's (the UMD's) where its pixels are.
+            let centre = if self.is_round() || n == 0.0 { (cx, cy) } else { (sx / n, sy / n) };
+            let (mut r0, mut r1) = (f32::MAX, 0f32);
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    if sprite.px[(y * w + x) as usize] == 0xff00_0000 | PRINT {
+                        let d = dist(x, y, centre);
+                        (r0, r1) = (r0.min(d), r1.max(d));
+                    }
+                }
+            }
+            let print = if x1 > x0 { (x0, y0, x1 - x0, y1 - y0) } else { (0, 0, 0, 0) };
+            // Edges half a pixel past the outermost pixel centres; a print reaching its middle has no inner edge.
+            let r0 = if r0 < 1.5 { 0.0 } else { r0 - 0.5 };
+            // The colours by distance: every solid pixel outside the print in the step its centre falls in; a step
+            // no pixel falls in takes its nearest neighbour's.
+            let steps = (edge / PROFILE_STEP) as usize + 2;
+            let mut sum = vec![[0u32; 4]; steps];
+            for y in 0..h {
+                for x in 0..w {
+                    let px = sprite.px[(y * w + x) as usize];
+                    if px >> 24 != 0 && px & 0xffffff != PRINT {
+                        let b = &mut sum[((dist(x, y, (cx, cy)) / PROFILE_STEP) as usize).min(steps - 1)];
+                        (b[0], b[1], b[2], b[3]) = (b[0] + (px >> 16 & 0xff), b[1] + (px >> 8 & 0xff), b[2] + (px & 0xff), b[3] + 1);
+                    }
+                }
+            }
+            let filled: Vec<usize> = (0..steps).filter(|&i| sum[i][3] > 0).collect();
+            let profile = (0..steps)
+                .map(|i| {
+                    let Some(&j) = filled.iter().min_by_key(|&&j| j.abs_diff(i)) else { return 0 };
+                    let b = sum[j];
+                    (b[0] / b[3]) << 16 | (b[1] / b[3]) << 8 | b[2] / b[3]
+                })
+                .collect();
+            DiscTemplate { sprite, print, centre, radii: (r0.min(r1), r1 + 0.5), hole: (hole - 0.5).max(0.0), edge: edge + 0.5, profile }
+        })
+    }
+
+    fn is_round(self) -> bool {
+        self != DiscKind::Umd
+    }
+
+    /// The ring at the rim where it is the system's own: the PlayStation's black disc showing past its label, the
+    /// PS2's blue, the Dreamcast's silver GD-ROM area, the Wii's white disc, the dark rims of the Saturn's and the
+    /// Xbox's labels; the rest take the cover's colour.
+    fn ring(self) -> Option<u32> {
+        match self {
+            DiscKind::Ps1 => Some(0x0e0e10),
+            DiscKind::Ps2 => Some(0x26408c),
+            DiscKind::Dreamcast => Some(0xc8ccd2),
+            DiscKind::Wii => Some(0xf0f0ee),
+            DiscKind::Saturn => Some(0x1c1c22),
+            DiscKind::Xbox => Some(0x16201a),
+            _ => None,
+        }
+    }
+
+    /// Where the system's covers carry its printed strip with the console's name and logo (as `band_zones`), which a
+    /// disc does not: the PlayStation's black strip at the left, the band at the top of a PS2, GameCube, Wii, Xbox
+    /// and PSP cover, a Saturn's strip at the left or top, a Dreamcast's band at the top, a Sega CD's at the left.
+    fn band_zones(self) -> &'static [(u8, f32, f32, Option<f32>)] {
+        match self {
+            DiscKind::Ps1 => &[(0, 0.06, 0.25, Some(0.13))],
+            DiscKind::Ps2 | DiscKind::GameCube | DiscKind::Umd => &[(2, 0.05, 0.2, Some(0.11))],
+            DiscKind::Wii | DiscKind::Xbox => &[(2, 0.05, 0.2, Some(0.12))],
+            DiscKind::Saturn => &[(0, 0.05, 0.22, None), (2, 0.05, 0.2, None)],
+            DiscKind::Dreamcast => &[(2, 0.05, 0.2, None)],
+            // A Sega CD's strip at the left (cut where it shows, other CD systems' covers have none).
+            DiscKind::Cd => &[(0, 0.05, 0.2, None)],
+        }
+    }
+}
+
+/// The game's disc (or UMD) `h` pixels high, printed as a real one is: the cover's art fills the print, cut round by
+/// the disc's own shape, and a clean ring at its rim carries the title along its lower arc where the disc is large
+/// enough to read it. Without a cover the print is the cover's colour with the title above the hole. Made once per
+/// case and size (`App::box_game`, the launch's first frame), never per frame.
+pub fn disc_pic(text: &mut Text, kind: DiscKind, h: i32, look: Look, title: &str, cover: Option<&Image>) -> Pic {
+    // Made at the size it is shown: the template's colours sampled smoothly between its pixels, every edge (the rim,
+    // the hole, the print, the ring) worked out as a circle and anti-aliased, the cover and the title at full
+    // resolution. A pixel-art template scaled by whole pixels looked blocky beside the smooth case and cover.
+    let t = kind.template();
+    let s = &t.sprite;
+    let f = h as f32 / s.h.max(1) as f32;
+    let w = ((s.w as f32 * f).round() as i32).max(1);
+    let mut p = Pic::new(w, h, 0);
+    let (bx, by, bw, bh) = scale_rect(t.print, f);
+    let (bx, by) = (bx.clamp(0, p.w), by.clamp(0, p.h));
+    let (bw, bh) = (bw.min(p.w - bx).max(0), bh.min(p.h - by).max(0));
+    let (cx, cy) = (s.w as f32 * f / 2.0, s.h as f32 * f / 2.0);
+    let (pcx, pcy) = (t.centre.0 * f, t.centre.1 * f);
+    let (r_in, r_out) = (t.radii.0 * f, t.radii.1 * f);
+    let (r_hole, r_edge) = (t.hole * f, t.edge * f);
+    // How much of a pixel `d` from a centre lies inside a circle of radius `r`.
+    let inside = |d: f32, r: f32| (r - d + 0.5).clamp(0.0, 1.0);
+    let cover = cover.filter(|c| c.w > 0 && c.h > 0);
+    // The ring at the rim, in the cover's colour darkened: an eighth of the disc's radius, never more than a third of
+    // the print (the GameCube's hub is large).
+    let ring = kind.is_round().then(|| r_out - (r_out * 0.13).min((r_out - r_in) / 3.0)).filter(|r| r_out - r > 3.0);
+    let ring_c = kind.ring().unwrap_or(mix(look.color, 0x000000, 110));
+    let fitted = cover.map(|img| art::cover_fill(&trim_zones(&trim_bands(img), kind.band_zones()), bw.max(1), bh.max(1)));
+    let (sw, sh) = (s.w as i32, s.h as i32);
+    let k = |v: f32| (v.clamp(0.0, 1.0) * 255.0) as u32;
+    for y in 0..h {
+        for x in 0..w {
+            let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+            // The template's colour here: the solid pixels round the spot that are not print, weighted by nearness.
+            let (u, v) = (fx / f - 0.5, fy / f - 0.5);
+            let (u0, v0) = (u.floor() as i32, v.floor() as i32);
+            let (du, dv) = (u - u0 as f32, v - v0 as f32);
+            let (mut acc, mut wsum, mut alpha) = ([0f32; 3], 0f32, 0f32);
+            for (ox, oy, wt) in [(0, 0, (1.0 - du) * (1.0 - dv)), (1, 0, du * (1.0 - dv)), (0, 1, (1.0 - du) * dv), (1, 1, du * dv)] {
+                let (sx, sy) = ((u0 + ox).clamp(0, sw - 1), (v0 + oy).clamp(0, sh - 1));
+                let q = s.px[(sy * sw + sx) as usize];
+                if q >> 24 == 0 {
+                    continue;
+                }
+                alpha += wt;
+                if q & 0xffffff != PRINT {
+                    for (c, sh) in acc.iter_mut().zip([16, 8, 0]) {
+                        *c += wt * (q >> sh & 0xff) as f32;
+                    }
+                    wsum += wt;
+                }
+            }
+            let d = ((fx - cx).powi(2) + (fy - cy).powi(2)).sqrt();
+            let a = if kind.is_round() { inside(d, r_edge) * (1.0 - inside(d, r_hole)) } else { alpha };
+            if a <= 0.0 {
+                continue;
+            }
+            // How much of it is print, and what is printed there.
+            let dp = ((fx - pcx).powi(2) + (fy - pcy).powi(2)).sqrt();
+            let pc = inside(dp, r_out) * if r_in > 0.0 { 1.0 - inside(dp, r_in) } else { 1.0 };
+            let printed = (pc > 0.0).then(|| {
+                let (ax, ay) = ((x - bx).clamp(0, bw.max(1) - 1), (y - by).clamp(0, bh.max(1) - 1));
+                let mut c = match &fitted {
+                    Some(f) => f.px[(ay.min(f.h as i32 - 1) as u32 * f.w + ax.min(f.w as i32 - 1) as u32) as usize] & 0xffffff,
+                    // Without a cover: the cover's colour, darker down the disc.
+                    None => mix(look.color, 0x000000, 20 + (ay as u32 * 90 / bh.max(1) as u32)),
+                };
+                if let Some(r) = ring {
+                    c = mix(c, ring_c, k(dp - r + 0.5));
+                    // A darker line where the ring begins; the GD-ROM's line between its two areas, halfway out.
+                    c = mix(c, mix(ring_c, 0x000000, 90), k(1.0 - (dp - r - 0.5).abs()));
+                    if kind == DiscKind::Dreamcast {
+                        c = mix(c, 0x8a8e96, k(1.25 - (dp - (r + r_out) / 2.0).abs()));
+                    }
+                }
+                c
+            });
+            let base = if kind.is_round() {
+                // A disc: its colour at this distance (`DiscTemplate::profile`), between two steps.
+                let at = (d / f / PROFILE_STEP - 0.5).max(0.0);
+                let i = (at as usize).min(t.profile.len() - 1);
+                let j = (i + 1).min(t.profile.len() - 1);
+                mix(t.profile[i], t.profile[j], k(at - i as f32))
+            } else if wsum > 0.0 {
+                let ch = |i: usize| ((acc[i] / wsum).round() as u32).min(255);
+                ch(0) << 16 | ch(1) << 8 | ch(2)
+            } else {
+                printed.unwrap_or(0)
+            };
+            let rgb = match printed {
+                Some(c) => mix(base, c, k(pc)),
+                None => base,
+            };
+            p.px[(y * w + x) as usize] = k(a) << 24 | rgb;
+        }
+    }
+    match (cover, ring) {
+        (Some(_), Some(r)) => ring_title(text, &mut p, (cx, cy), (r + 1.0, r_out), ink_on(ring_c), title),
+        (Some(_), None) => {}
+        // No cover: the title above the hole, where the print is wide enough for it; on a UMD's label.
+        (None, Some(r)) => {
+            let top = cy - r * 0.8;
+            let half = (r * r - (cy - top).powi(2)).max(0.0).sqrt() * 0.95;
+            let room = ((cx - half) as i32, top as i32, (2.0 * half) as i32, (cy - r_in - 3.0 - top) as i32);
+            if room.3 >= 24 && room.2 >= 40 {
+                write_title(text, &mut p, room, look, title, 2);
+            }
+        }
+        (None, None) if !kind.is_round() => write_title(text, &mut p, (bx, by, bw, bh), look, title, 4),
+        (None, None) => {}
+    }
+    p
+}
+
+/// The smallest a title is written along a disc's ring (screen pixels): smaller, the ring stays plain.
+const RING_PX: u32 = 12;
+
+/// `title` along the lower arc of the ring from radius `r0` to `r1` round `c`, upright, in the middle of it; as large
+/// as the ring allows, without its subtitle when it is too long for the arc, only then cut with "…".
+fn ring_title(text: &mut Text, p: &mut Pic, (cx, cy): (f32, f32), (r0, r1): (f32, f32), ink: u32, title: &str) {
+    let px = ((r1 - r0) * 0.78) as u32;
+    if px < RING_PX {
+        return;
+    }
+    let _fixed = crate::type_scale::fixed();
+    let translating = text.translating();
+    text.set_translate(false);
+    let face = crate::text::Face::Title;
+    let mid = (r0 + r1) / 2.0;
+    // Up to 70 degrees either side of the bottom.
+    let max_w = (mid * 2.0 * 70f32.to_radians()) as i32;
+    let line = std::iter::once(title)
+        .chain(main_title(title).map(|(main, _)| main))
+        .find(|t| text.width(face, px, t) <= max_w)
+        .map(str::to_string)
+        .unwrap_or_else(|| text.fit(face, px, main_title(title).map_or(title, |(m, _)| m), max_w));
+    let tw = text.width(face, px, &line).max(1);
+    let bh = px as i32 * 3 / 2;
+    let mut buf = vec![0u32; (tw * bh) as usize];
+    {
+        let mut c = crate::gfx::Canvas::new(&mut buf, tw as u32, bh as u32);
+        text.draw(&mut c, face, px, 0, px as i32, 0xffffff, &line);
+    }
+    text.set_translate(translating);
+    // The text's middle (its capitals' middle) on the ring's middle; its top towards the disc's middle.
+    let top = mid - px as f32 * 0.62;
+    let alpha = |x: f32, y: f32| {
+        let (x0, y0) = (x.floor() as i32, y.floor() as i32);
+        let (fx, fy) = (x - x0 as f32, y - y0 as f32);
+        let at = |x: i32, y: i32| if x < 0 || y < 0 || x >= tw || y >= bh { 0.0 } else { (buf[(y * tw + x) as usize] & 0xff) as f32 };
+        at(x0, y0) * (1.0 - fx) * (1.0 - fy) + at(x0 + 1, y0) * fx * (1.0 - fy) + at(x0, y0 + 1) * (1.0 - fx) * fy + at(x0 + 1, y0 + 1) * fx * fy
+    };
+    let (y_from, y_to) = ((cy + r0 * 0.3) as i32, ((cy + r1).ceil() as i32).min(p.h));
+    let (x_from, x_to) = (((cx - r1).floor() as i32).max(0), ((cx + r1).ceil() as i32).min(p.w));
+    for y in y_from.max(0)..y_to {
+        for x in x_from..x_to {
+            let (dx, dy) = (x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
+            let d = (dx * dx + dy * dy).sqrt();
+            if d < r0 || d > r1 {
+                continue;
+            }
+            // Along the arc from left to right; at the bottom the angle is 0.
+            let s = (-dx).atan2(dy) * -mid + tw as f32 / 2.0;
+            let a = alpha(s - 0.5, d - top - 0.5);
+            if a >= 1.0 {
+                p.blend(x, y, ink, a as u32);
+            }
+        }
+    }
+}
+
 /// Where a system's box art has its printed side strip, as a part of the picture's width or height to look in: the
 /// left edge of a Game Boy (Color) or GBA box ("GAME BOY ADVANCE" up its side), the right one of an American SNES box (the
 /// black band), the left one or the top of a Genesis box (the red "GENESIS" strip, or the black band over the art).
@@ -961,17 +1343,35 @@ fn label_title(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i32),
 fn band_zones(g: Game) -> &'static [(u8, f32, f32, Option<f32>)] {
     match g {
         Game::Gb | Game::Gbc => &[(0, 0.06, 0.30, Some(0.20))],
-        Game::Gba => &[(0, 0.06, 0.30, Some(0.13))],
+        // The strip is a fifth of the box's width; its GAME BOY ADVANCE lettering's straight edge (an eighth in) is not it.
+        Game::Gba => &[(0, 0.16, 0.30, Some(0.22))],
         Game::SnesUs => &[(1, 0.06, 0.30, Some(0.20))],
         Game::Snes => &[(1, 0.06, 0.30, None)],
+        // An American N64 box's red strip with the logo down its right side (a box without it keeps its art).
+        Game::N64 => &[(1, 0.06, 0.30, None)],
         Game::MegaDrive => &[(0, 0.05, 0.25, None), (2, 0.05, 0.22, None)],
         _ => &[],
     }
 }
 
+/// The part of the box art a label `w` x `h` shows: a GBA cartridge's wide label the top of the art, where its title
+/// is (as on the real labels), not a band through the middle; every other label the middle (`cabinet_art::cover_fill`).
+fn label_part(img: &Image, g: Game, w: i32, h: i32) -> Image {
+    let rows = (img.w as i64 * h.max(1) as i64 / w.max(1) as i64) as u32;
+    if g != Game::Gba || rows == 0 || rows >= img.h {
+        return img.clone();
+    }
+    Image { w: img.w, h: rows, px: img.px[..(img.w * rows) as usize].to_vec() }
+}
+
 /// `img` without its system's printed side strip (`band_zones`): cut at the straightest edge across the picture in the
 /// strip's zone, when there is one (a European or Japanese box without the strip keeps its art whole).
 pub fn trim_system_band(img: &Image, g: Game) -> Image {
+    trim_zones(img, band_zones(g))
+}
+
+/// `img` cut at the straightest edge in each of `zones` (`band_zones`).
+fn trim_zones(img: &Image, zones: &[(u8, f32, f32, Option<f32>)]) -> Image {
     let (w, h) = (img.w as i32, img.h as i32);
     if w < 24 || h < 24 {
         return img.clone();
@@ -986,7 +1386,7 @@ pub fn trim_system_band(img: &Image, g: Game) -> Image {
     let col = |x: i32| (0..h).filter(|&y| d(px(x - 2, y), px(x, y)) > 70).count() as f32 / h as f32;
     let row = |y: i32| (0..w).filter(|&x| d(px(x, y - 2), px(x, y)) > 70).count() as f32 / w as f32;
     let (mut left, mut right, mut top) = (0, w, 0);
-    for &(side, from, to, usual) in band_zones(g) {
+    for &(side, from, to, usual) in zones {
         let len = if side == 2 { h } else { w };
         let (a, b) = (((len as f32 * from) as i32).max(2), (len as f32 * to) as i32);
         let best = (a..b)
@@ -1323,6 +1723,156 @@ mod tests {
         assert!(game_pic(&mut text, Game::Disc, 200, look, "x", None, None).is_none());
     }
 
+    /// Every disc template has its print in one flat colour, inside it, round about its middle for a disc; nothing
+    /// is half transparent (pixel art).
+    #[test]
+    fn every_disc_template_has_a_print() {
+        for k in DiscKind::ALL {
+            let t = k.template();
+            let (x, y, w, h) = t.print;
+            assert!(w > t.sprite.w as i32 / 3 && h > t.sprite.h as i32 / 4, "{k:?}: print {:?}", t.print);
+            assert!(x + w <= t.sprite.w as i32 && y + h <= t.sprite.h as i32, "{k:?}");
+            assert!(t.sprite.px.iter().all(|p| matches!(p >> 24, 0 | 255)), "{k:?}: half transparent pixels");
+            if k.is_round() {
+                assert_eq!(t.sprite.w, t.sprite.h, "{k:?}: a disc is square");
+                assert!(t.radii.0 > 4.0 && t.radii.1 <= t.sprite.w as f32 / 2.0 + 0.5, "{k:?}: {:?}", t.radii);
+                // The hole is clear.
+                let c = t.sprite.w / 2;
+                assert_eq!(t.sprite.px[(c * t.sprite.w + c) as usize] >> 24, 0, "{k:?}: the hole");
+            }
+        }
+    }
+
+    /// The disc of each system: a GameCube's is the 8 cm one, the rest 12 cm, a UMD smaller still; Saturn, Dreamcast
+    /// and Mega-CD keep their own (one case, three discs).
+    #[test]
+    fn each_system_has_its_disc() {
+        assert_eq!(Game::of("gamecube", "F-Zero GX (USA).rvz"), Game::MiniDisc);
+        assert_eq!(Game::of("ps2", "x.iso"), Game::Disc);
+        let beside = |s: &str| Game::of(s, "x").size_beside(Medium::of(s), 300).1;
+        assert!(beside("gamecube") < beside("ps2") && beside("psp") < beside("gamecube"), "UMD < 8 cm < 12 cm");
+        assert_eq!((DiscKind::of("saturn"), DiscKind::of("dreamcast"), DiscKind::of("segacd")), (DiscKind::Saturn, DiscKind::Dreamcast, DiscKind::Cd));
+        assert_eq!((DiscKind::of("psx"), DiscKind::of("psp"), DiscKind::of("3do")), (DiscKind::Ps1, DiscKind::Umd, DiscKind::Cd));
+        for k in DiscKind::ALL {
+            assert!(DiscKind::ALL.iter().filter(|o| o.template().sprite.px == k.template().sprite.px).count() == 1, "{k:?}: its own picture");
+        }
+    }
+
+    /// A printed disc shows the cover in its print and the title on its ring when large enough; no cover, the title
+    /// on the cover's colour; nothing of the template's print colour is left, and the hole stays clear.
+    #[test]
+    fn a_disc_is_printed_with_its_cover_or_its_title() {
+        let mut text = Text::new();
+        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x141416 };
+        // Red art with some texture (a flat colour would be trimmed as a margin, `trim_bands`).
+        let (cw, ch) = (140u32, 200u32);
+        let cover = Image { w: cw, h: ch, px: (0..cw * ch).map(|i| 0xd00000 | ((i % cw * 37 + i / cw * 11) % 64) << 8 | (i % cw * 5 % 48)).collect() };
+        let is_red = |p: u32| p >> 24 == 255 && p >> 16 & 0xff == 0xd0 && p >> 8 & 0xff < 64 && p & 0xff < 48;
+        for k in DiscKind::ALL {
+            for h in [80, 160, 300] {
+                let with = disc_pic(&mut text, k, h, look, "Castlevania: Symphony of the Night", Some(&cover));
+                assert_eq!(with.h, h, "{k:?}");
+                assert!(with.px.iter().all(|p| p >> 24 == 0 || p & 0xffffff != PRINT), "{k:?} {h}: print colour left");
+                let red = with.px.iter().filter(|p| is_red(**p)).count();
+                assert!(red > (h * h) as usize / 20, "{k:?} {h}: the cover's art shows ({red})");
+                let plain = disc_pic(&mut text, k, h, look, "Castlevania: Symphony of the Night", None);
+                assert!(plain.px.iter().all(|p| p >> 24 == 0 || p & 0xffffff != PRINT), "{k:?} {h}: print colour left");
+                if k.is_round() {
+                    assert_eq!(with.get(with.w / 2, with.h / 2) >> 24, 0, "{k:?}: the hole");
+                }
+                if h == 300 {
+                    // The title: light pixels on the ring (with a cover) or above the hole (without).
+                    let light = |p: &Pic, y0: i32, y1: i32| (y0..y1).flat_map(|y| (0..p.w).map(move |x| (x, y))).filter(|&(x, y)| luma(p.get(x, y) & 0xffffff) > 180 && p.get(x, y) >> 24 == 255).count();
+                    if k.is_round() {
+                        assert!(light(&with, h * 3 / 4, h) > 40, "{k:?}: the title on the ring");
+                    }
+                    assert!(light(&plain, 0, h) > 40, "{k:?}: the title without a cover");
+                }
+            }
+        }
+    }
+
+    /// Every disc and the UMD, with a cover from `DISC_COVERS` (`<kind>.png`) and without, to look at
+    /// (`cargo test --release disc_prints_to_look_at -- --ignored`, PNGs in `DISC_OUT`).
+    #[test]
+    #[ignore]
+    fn disc_prints_to_look_at() {
+        let (Some(covers), Some(out)) = (std::env::var_os("DISC_COVERS"), std::env::var_os("DISC_OUT")) else { return };
+        let (covers, out) = (std::path::PathBuf::from(covers), std::path::PathBuf::from(out));
+        let mut text = Text::new();
+        for k in DiscKind::ALL {
+            let name = format!("{k:?}").to_lowercase();
+            let cover = crate::image::load_image(&covers.join(format!("{name}.png")));
+            let look = cover.as_ref().and_then(|c| cover_colors(&c.px)).map_or(Look { color: 0x2a3a6a, band: 0x7a6cb0, plastic: 0x141416 }, |(c, a)| Look { color: c, band: a, plastic: 0x141416 });
+            let title = std::fs::read_to_string(covers.join(format!("{name}.txt"))).unwrap_or_else(|_| "Game Title".into());
+            for (tag, h) in [("big", 300), ("small", 126)] {
+                for (with, c) in [("cover", cover.as_ref()), ("plain", None)] {
+                    let p = disc_pic(&mut text, k, h, look, title.trim(), c);
+                    let rgba: Vec<u8> = p.px.iter().flat_map(|q| [(q >> 16) as u8, (q >> 8) as u8, *q as u8, (q >> 24) as u8]).collect();
+                    let f = std::fs::File::create(out.join(format!("{name}-{tag}-{with}.png"))).unwrap();
+                    let mut e = png::Encoder::new(f, p.w as u32, p.h as u32);
+                    e.set_color(png::ColorType::Rgba);
+                    e.set_depth(png::BitDepth::Eight);
+                    e.write_header().unwrap().write_image_data(&rgba).unwrap();
+                }
+            }
+        }
+    }
+
+    /// A GBA cartridge's label keeps its rounded corners (plastic there, cover or not), and shows the top of the box art,
+    /// where its title is; an N64 label keeps the rounded top of its recess.
+    #[test]
+    fn cartridge_labels_keep_their_shape_and_show_the_title_end() {
+        let mut text = Text::new();
+        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2 };
+        // Square box art: a red top half (the title), a blue bottom half, both with some texture (a flat area at an
+        // edge would be taken for a case's margin, `trim_bands`).
+        let (w, h) = (100u32, 100u32);
+        let px = (0..w * h).map(|i| (((i % w) * 7 + (i / w) * 3) % 32) | if i / w < h / 2 { 0xd02000 } else { 0x2020c0 }).collect();
+        let cover = Image { w, h, px };
+        for g in [Game::Gba, Game::N64] {
+            let i = g.drawn().unwrap();
+            let f = 300.0 / GAME_TEMPLATES[i].size.1 as f32;
+            let (x, y, lw, lh) = scale_rect(GAME_TEMPLATES[i].label, f);
+            for cover in [Some(&cover), None] {
+                let pic = game_pic(&mut text, g, 300, look, "Golden Sun", cover, None).unwrap();
+                // The label's top left corner is the shell's plastic: a neutral grey, not art or paper.
+                let c = pic.get(x, y) & 0xffffff;
+                let (r, gg, b) = (c >> 16 & 0xff, c >> 8 & 0xff, c & 0xff);
+                assert!(r.abs_diff(gg) < 12 && gg.abs_diff(b) < 12, "{g:?}: the label's corner stays plastic ({c:06x})");
+            }
+            let pic = game_pic(&mut text, g, 300, look, "Golden Sun", Some(&cover), None).unwrap();
+            let red = (y..y + lh).flat_map(|r| (x..x + lw).map(move |c| (c, r))).filter(|&(c, r)| pic.get(c, r) >> 16 & 0xff > 0xb0).count();
+            let share = red as f32 / (lw * lh) as f32;
+            if g == Game::Gba {
+                assert!(share > 0.85, "GBA: the label is the top of the art ({share:.2} red)");
+            } else {
+                assert!((0.3..0.7).contains(&share), "N64: the label is the art's middle ({share:.2} red)");
+            }
+        }
+    }
+
+    /// An N64 box's spine is printed in its cover's colour with the red block at its top (US boxes), not black.
+    #[test]
+    fn an_n64_spine_is_its_cover_with_the_red_block() {
+        let mut text = Text::new();
+        let look = Look { color: 0x2a6ab0, band: 0x7a6cb0, plastic: 0x9c99a2 };
+        let s = spine(&mut text, Medium::N64, 1.0, look, "Super Mario 64");
+        let t = Medium::N64.template();
+        let (bx, by, bw, bh) = t.at(t.band.unwrap(), SHELF_SCALE);
+        let reds = (by..by + bh).flat_map(|r| (bx..bx + bw).map(move |c| (c, r))).filter(|&(c, r)| {
+            let p = s.get(c, r);
+            (p >> 16 & 0xff) > 150 && (p >> 8 & 0xff) < 60
+        });
+        assert!(reds.count() > (bw * bh / 4) as usize, "the red block");
+        let (lx, ly, lw, lh) = t.at(t.spine_label, SHELF_SCALE);
+        let blue = (ly..ly + lh).flat_map(|r| (lx..lx + lw).map(move |c| (c, r))).filter(|&(c, r)| {
+            let p = s.get(c, r);
+            (p & 0xff) > (p >> 16 & 0xff) + 40
+        });
+        assert!(blue.count() > (lw * lh / 2) as usize, "the spine in the cover's colour");
+    }
+
     /// A SNES box's black side strip (and a case front's margin) is not put on a cartridge's label.
     #[test]
     fn a_box_side_strip_is_trimmed_off_the_label() {
@@ -1347,20 +1897,27 @@ mod tests {
     fn a_systems_side_strip_is_cut_off_the_label() {
         let (w, h) = (100u32, 100u32);
         let art = |x: u32, y: u32| 0x3070c0 ^ ((x * 13 + y * 7) % 32) << 8;
-        let strip: Vec<u32> = (0..w * h).map(|i| if i % w < 18 { 0xd8d8d8 - (i / w % 8) } else { art(i % w, i / w) }).collect();
+        // The strip with its lettering: a dark column with a straight edge, an eighth in.
+        let strip: Vec<u32> = (0..w * h)
+            .map(|i| match i % w {
+                9..=12 => 0x202020,
+                x if x < 18 => 0xd8d8d8 - (i / w % 8),
+                x => art(x, i / w),
+            })
+            .collect();
         let t = trim_system_band(&Image { w, h, px: strip }, Game::Gba);
         assert!((80..=83).contains(&t.w) && t.h == h, "{}x{}", t.w, t.h);
         assert!(t.px.iter().all(|p| p & 0xff > 0x80), "no silver left");
         let plain = Image { w, h, px: (0..w * h).map(|i| art(i % w, i / w)).collect() };
         // A GBA box always has its strip: where none shows, the usual part goes.
-        assert_eq!(trim_system_band(&plain, Game::Gba).w, w - 13, "the usual strip");
+        assert_eq!(trim_system_band(&plain, Game::Gba).w, w - 22, "the usual strip");
         // A Super Famicom / PAL box has none unless it shows; an N64 box has none.
         assert_eq!(trim_system_band(&plain, Game::Snes).w, w, "no strip, nothing cut");
         assert_eq!(trim_system_band(&plain, Game::N64).w, w);
     }
 
-    /// With real box art (`POCKETUI_TEST_COVERS=<dir>` holding gba/, gb/ and snes/ box art PNGs, e.g. the libretro
-    /// thumbnails of a library; not in the repository): the strip is gone from every GBA and US SNES label, and no label
+    /// With real box art (`POCKETUI_TEST_COVERS=<dir>` holding gba/, gb/, snes/ and n64/ box art PNGs, e.g. the libretro
+    /// thumbnails of a library; not in the repository): the strip is gone from every GBA, US SNES and US N64 label, and no label
     /// loses more than the strip's part of its picture.
     #[test]
     fn real_covers_lose_their_side_strip() {
@@ -1370,7 +1927,7 @@ mod tests {
         };
         let dir = std::path::PathBuf::from(dir);
         let mut seen = 0;
-        for (system, g, side) in [("gba", Game::Gba, 0), ("snes", Game::SnesUs, 1), ("gb", Game::Gb, 0)] {
+        for (system, g, side) in [("gba", Game::Gba, 0), ("snes", Game::SnesUs, 1), ("gb", Game::Gb, 0), ("n64", Game::N64, 1)] {
             let Ok(files) = std::fs::read_dir(dir.join(system)) else { continue };
             for f in files.flatten() {
                 let Some(img) = crate::image::load_image(&f.path()) else { continue };
@@ -1435,7 +1992,7 @@ mod tests {
         for m in Medium::ALL {
             let spine = spine(&mut text, m, 1.0, look, "Chrono Trigger");
             let (x, y, w, h) = m.template().at(m.template().spine_label, SHELF_SCALE);
-            let ink = ink_on(spine_print(m).map_or(look.color, |(paper, _)| paper));
+            let ink = ink_on(spine_print(m).and_then(|(paper, _)| paper).unwrap_or(look.color));
             let inked = (y..y + h).flat_map(|r| (x..x + w).map(move |c| (c, r))).filter(|&(c, r)| spine.get(c, r) & 0xffffff == ink).count();
             assert!(inked > 20, "{m:?}: the title on the spine ({inked} pixels)");
             let front = front(&mut text, m, 1.0, look, "Chrono Trigger", None, None, "Atari 2600");

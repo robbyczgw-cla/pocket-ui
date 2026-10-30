@@ -91,7 +91,7 @@ pub fn going_in(m: crate::media::Medium) -> Sound {
     match m.game() {
         G::Snes | G::SnesUs | G::N64 | G::Nes | G::Gb | G::Gbc | G::Gba | G::Cart | G::MegaDrive | G::MasterSystem | G::GameGear | G::HuCard
         | G::NeoGeoPocket | G::WonderSwan | G::Lynx => Sound::CartIn,
-        G::Disc | G::Umd => Sound::DiscIn,
+        G::Disc | G::MiniDisc | G::Umd => Sound::DiscIn,
         G::Card | G::Card3ds | G::Memory => Sound::CardIn,
     }
 }

@@ -78,7 +78,9 @@ fn showcase(h: i32, m: Medium, pitch: i32) -> (i32, i32) {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 enum Kind {
-    Color,
+    /// The cover's colours for a case of that medium (taken without its system's printed strip, `media::trim_system_band`:
+    /// a US N64 box's red one would make every N64 spine red).
+    Color(Medium),
     /// The cover cut for a front of that medium this many pixels high.
     Cover(Medium, i32),
 }
@@ -140,7 +142,7 @@ impl Reader {
         let mut q = lock.lock().unwrap();
         match kind {
             Kind::Cover(..) => q.push_front((path, kind)),
-            Kind::Color => q.push_back((path, kind)),
+            Kind::Color(_) => q.push_back((path, kind)),
         }
         cv.notify_one();
     }
@@ -161,7 +163,7 @@ fn read(path: &Path, kind: Kind, loaded: Option<&Image>) -> Got {
         }
     };
     match kind {
-        Kind::Color => Got::Color(img.and_then(|i| media::cover_colors(&i.px))),
+        Kind::Color(m) => Got::Color(img.and_then(|i| media::cover_colors(&media::trim_system_band(i, m.game()).px))),
         Kind::Cover(m, h) => Got::Cover(img.map(|i| {
             let (_, _, lw, lh) = media::label_rect(m, h as f32 / m.size().h as f32);
             art::cover_fit(i, lw, lh)
@@ -788,15 +790,12 @@ impl App {
         (m, look, front)
     }
 
-    /// The cartridge or card out of the game box's case `front` (`box_front`), at its real size beside it, with the
-    /// cover taken off the case's front; made once per case and size. None for a disc (painted round).
+    /// The cartridge, card or printed disc out of the game box's case `front` (`box_front`), at its real size beside it,
+    /// with the cover taken off the case's front; made once per case and size.
     pub(crate) fn box_game(&mut self, item: Item, front: &Rc<Pic>) -> Option<Rc<Pic>> {
         let m = self.medium(item);
         let info = self.case_info(item);
         let game = media::Game::of(&info.system, &info.rom.to_string_lossy());
-        if game.is_round() {
-            return None;
-        }
         if let Some((f, pic)) = &self.cabinet.box_game {
             if Rc::ptr_eq(f, front) {
                 return Some(pic.clone());
@@ -811,7 +810,12 @@ impl App {
         let t0 = Instant::now();
         // Without box art the front shows a title card: the label gets the title written to fit it instead.
         let has_cover = self.cover_file(&info.system, &info.rom).is_some();
-        let pic = Rc::new(media::game_pic(&mut self.text, game, h, look, &info.title, has_cover.then_some(&cover), console.as_deref())?);
+        let pic = Rc::new(if game.is_round() {
+            // A disc or a UMD, printed with the cover's art and the title (`media::disc_pic`).
+            media::disc_pic(&mut self.text, media::DiscKind::of(&info.system), h, look, &info.title, has_cover.then_some(&cover))
+        } else {
+            media::game_pic(&mut self.text, game, h, look, &info.title, has_cover.then_some(&cover), console.as_deref())?
+        });
         self.cabinet.made("box game", t0);
         self.cabinet.box_game = Some((front.clone(), pic.clone()));
         Some(pic)
@@ -910,7 +914,7 @@ impl App {
             return;
         }
         match kind {
-            Kind::Color => {
+            Kind::Color(_) => {
                 self.cabinet.colors.insert(file.to_path_buf(), Slot::Pending);
             }
             Kind::Cover(m, h) => {
@@ -923,7 +927,7 @@ impl App {
 
     fn cabinet_got(&mut self, file: PathBuf, kind: Kind, got: Got) {
         match (kind, got) {
-            (Kind::Color, Got::Color(c)) => {
+            (Kind::Color(_), Got::Color(c)) => {
                 self.cabinet.colors_gen += 1;
                 self.cabinet.colors.insert(file, c.map_or(Slot::Missing, Slot::Ready));
             }
@@ -951,7 +955,7 @@ impl App {
         let (color, accent) = match self.cover_file(&info.system, &info.rom) {
             Some(file) => {
                 if !self.cabinet.colors.contains_key(&file) {
-                    self.want(&file, Kind::Color);
+                    self.want(&file, Kind::Color(m));
                 }
                 match self.cabinet.colors.get(&file) {
                     Some(Slot::Ready(c)) => *c,
@@ -1466,15 +1470,23 @@ impl App {
         let (system, ff, medium, front, from) = (ins.system.clone(), ins.ff, ins.medium, ins.front.clone(), ins.from);
         let tint = ins.look.color;
         let game = ins.kind;
-        // The cartridge or card, once: the game's process is already starting, this frame is the first of the animation.
-        if ins.game.is_none() && !game.is_round() {
+        // The cartridge, card or disc, once: the game's process is already starting, this frame is the first of the
+        // animation.
+        if ins.game.is_none() {
             let (look, title, has_cover) = (ins.look, ins.title.clone(), ins.has_cover);
             let k = from.3 as f32 / medium.size().front_h.max(1) as f32;
             let cover = media::cover_of(&self.bare_front(&front), medium, k);
             let console = self.console_sprite(&system);
             let t0 = Instant::now();
             let cover = has_cover.then_some(&cover);
-            let pic = media::game_pic(&mut self.text, game, game.size_beside(medium, from.3).1, look, &title, cover, console.as_deref());
+            let pic = if game.is_round() {
+                // Printed at the larger of its two sizes, out of the case and over the drive (`draw_game`).
+                let sw = self.console_sprite(&system).map_or(360, |s| s.w as i32) as f32;
+                let h = game.size_beside(medium, from.3).1.max(2 * over_drive(game, sw) as i32);
+                Some(media::disc_pic(&mut self.text, media::DiscKind::of(&system), h, look, &title, cover))
+            } else {
+                media::game_pic(&mut self.text, game, game.size_beside(medium, from.3).1, look, &title, cover, console.as_deref())
+            };
             self.cabinet.made("game", t0);
             if let Some(ins) = self.cabinet.insert.as_mut() {
                 ins.game = pic.map(Rc::new);
@@ -1517,7 +1529,7 @@ impl App {
         let draw_game: Box<dyn Fn(&mut Canvas)> = if game.is_round() {
             // As large as the real disc beside its case.
             let r0 = game.size_beside(medium, from.3).1 as f32 / 2.0;
-            let r1 = (sw as f32 * 0.16).clamp(46.0, 90.0);
+            let r1 = over_drive(game, sw as f32);
             let start = (fx + fw / 2.0 + out * fw * 0.55, fy + fh / 2.0);
             let end = (slot_cx as f32, slot_y as f32 - r1);
             let r = lerp(r0, r1, fly);
@@ -1525,13 +1537,20 @@ impl App {
             if st.rise > 0.4 {
                 c.round_rect(slot_cx - r1 as i32 - 10, slot_y - 4, 2 * r1 as i32 + 20, 9, 4, 0x0c0c0d);
             }
-            Box::new(move |c: &mut Canvas| {
-                if game == media::Game::Umd {
-                    art::umd(c, x as i32, y as i32, r as i32, tint, clip_bottom);
-                } else {
-                    art::disc(c, x as i32, y as i32, r as i32, tint, clip_bottom);
-                }
-            })
+            if let Some(pic) = game_pic {
+                // The printed disc, scaled to its size on the way (a UMD keeps its shell's shape).
+                let (h, w) = (2.0 * r, 2.0 * r * pic.w as f32 / pic.h.max(1) as f32);
+                let shown = if (h as i32, w as i32) == (pic.h, pic.w) { pic } else { Rc::new(pic.scaled_smooth(w as i32, h as i32)) };
+                Box::new(move |c: &mut Canvas| art::blit(c, &shown, (x - w / 2.0) as i32, (y - h / 2.0) as i32, 256, (0, clip_bottom)))
+            } else {
+                Box::new(move |c: &mut Canvas| {
+                    if game == media::Game::Umd {
+                        art::umd(c, x as i32, y as i32, r as i32, tint, clip_bottom);
+                    } else {
+                        art::disc(c, x as i32, y as i32, r as i32, tint, clip_bottom);
+                    }
+                })
+            }
         } else {
             let Some(pic) = game_pic else { return };
             let (gw, gh) = (pic.w as f32, pic.h as f32);
@@ -1572,6 +1591,12 @@ impl App {
             art::glow(c, slot_cx, slot_y, (sw / 8).max(36), (sh / 14).max(14), 0xffffff, st.glow * 0.7);
         }
     }
+}
+
+/// A disc's radius over the drive of a console `sw` pixels wide: a 12 cm disc a sixth of the console, the GameCube's
+/// 8 cm one and a UMD smaller by their real size.
+fn over_drive(game: media::Game, sw: f32) -> f32 {
+    (sw * 0.16).clamp(46.0, 90.0) * game.mm().1 / 120.0
 }
 
 impl App {

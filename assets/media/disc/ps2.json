@@ -1,0 +1,18 @@
+{
+ "mm": [
+  120,
+  120
+ ],
+ "hole": 10,
+ "print": {
+  "shape": "annulus",
+  "r_in": 32,
+  "r_out": 77.8,
+  "colour": "#FF00FF"
+ },
+ "source": "https://commons.wikimedia.org/wiki/File:Sony_PlayStation_2_HDD_Utility_Disc_20071206.jpg",
+ "licence": "Public domain",
+ "author": "Taurolyon at English Wikipedia",
+ "pixellab": "image-to-pixelart v2, 160x160 out, conversion c (default strength)",
+ "logos_removed": "PlayStation logo, Sony logo, Compact Disc logo, HDD / PlayStation 2 wordmarks, region box, legal text, product codes"
+}

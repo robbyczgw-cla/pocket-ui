@@ -65,7 +65,8 @@ Good to know:
   pictures? Look up again** ([the game card](library.md#wrong-pictures-look-up-again)).
 - Covers are kept on the SD card, in `/storage/.config/pocket-ui/covers/<system>/<game file name>.png`.
   You can put your own PNG image there under the same name.
-- Covers appear in the Shelf, Split, Cards and Cabinet looks, not in Minimal.
+- Covers appear in the Shelf, Split, Cards and Cabinet looks, not in Minimal. In the Shelf and Cabinet looks they are
+  also printed on the game's cartridge label and on its disc.
 
 ### Pictures
 

@@ -17,8 +17,8 @@ original files were used.
 |---|---|---|---|---|---|
 | `snes.png` (Super Famicom / PAL) | https://commons.wikimedia.org/wiki/File:SFC_Super_Mario_World_cassette_20090828.jpg | Y katsu 810 | Public domain | 2026-10-29 | the label (already pixelated on Commons) |
 | `snes-us.png` (US SNES) | https://commons.wikimedia.org/wiki/File:Nintendo-Super-Game-Boy.jpg | Evan Amos | Public domain | 2026-10-29 | the Super Game Boy's Game Boy slot housing, label, Nintendo seal and upper screws (the shell's top rebuilt as a game cartridge's, see below) |
-| `n64.png` | https://commons.wikimedia.org/wiki/File:N64-Game-Cartridge.jpg | Evan Amos | Public domain | 2026-10-29 | the label recess; the contacts seen through the connector opening |
-| `gba.png` | https://commons.wikimedia.org/wiki/File:Nintendo-Game-Boy-Advance-Cartridge.jpg | Evan Amos | Public domain | 2026-10-29 | the embossed GAME BOY ADVANCE lettering; the blank label |
+| `n64.png` | https://commons.wikimedia.org/wiki/File:N64-Game-Cartridge.jpg | Evan Amos | Public domain | 2026-10-29 | the upper part of the label recess (the label); the right outer panel replaced by the left one mirrored (2026-10-30, see below) |
+| `gba.png` | https://commons.wikimedia.org/wiki/File:Nintendo-Game-Boy-Advance-Cartridge.jpg | Evan Amos | Public domain | 2026-10-29 | the embossed GAME BOY ADVANCE lettering; the blank label (redone 2026-10-30, see below) |
 | `nes.png` | https://commons.wikimedia.org/wiki/File:NES-Cartridge.jpg | Evan Amos | Public domain | 2026-10-29 | the label recess (no lettering on the plastic) |
 | `gb.png` | https://commons.wikimedia.org/wiki/File:Nintendo-Game-Boy-Cartridge.jpg | Evan Amos | Public domain | 2026-10-29 | the embossed Nintendo GAME BOY TM lettering; the blank label |
 | `gbc.png` (the clear Game Boy Color-only cartridge) | https://commons.wikimedia.org/wiki/File:Nintendo-Game-Boy-Color-Cartridge.jpg | Evan Amos | Public domain | 2026-10-29 | the embossed GAME BOY COLOR lettering; the part number printed on the circuit board; the blank label |
@@ -122,3 +122,30 @@ The licence was read from the Commons API (`extmetadata.LicenseShortName`) and t
 - No public-domain or CC0 photo of a Neo Geo Pocket, WonderSwan or Atari Lynx cartridge was found on Commons
   (2026-10-29: Evan Amos's uploads, the cartridge categories and searches in English, German and Japanese); those
   kinds have no photo picture yet.
+
+## GBA and N64 redone (2026-10-30)
+
+The owner did not recognise the first GBA and N64 cartridges (GBA too light, N64 label edge to edge and too light).
+Both were made again from the same public-domain photos, checked against further photos used only as references
+(straight-on GBA cartridges: Commons `Grand Theft Auto Advance Cartridge.jpg` and `Simcity2000 advance cartridge by
+zeartul.jpg`, public domain; N64 cartridges with labels: `Used Nintendo 64 and Gamecube games.JPG`, CC BY-SA 4.0, not
+used as a source). 28 PixelLab credits (budget line `carts-redo`), 5 to 8 variants each, compared on a sheet (photo |
+variant | variant with Advance Wars, Pokémon Emerald and Golden Sun, or Super Mario 64, GoldenEye 007 and Mario Kart 64
+on the label):
+
+1. Straightened with `rectify.py` (GBA: corners 872,484 2723,1030 2290,2050 482,1451 onto 1140 x 700; N64: corners
+   2424,108 3791,1216 2764,1698 1907,938 onto 1160 x 750, then the two grooves made parallel with a second
+   `rectify.py` (750,430 1425,455 1585,1210 520,1200 onto 700 x 780) and symmetric with `hwarp.py 190 1405 400 1105`;
+   the N64's left outer panel mirrored onto the right, whose shoulder the photo shows at an angle).
+2. `prep_cart.py <kind>-prep.json`: the outline (GBA: the wider top part and the body; N64: the curved top with its
+   rounded shoulders), the label painted flat (GBA: the whole recessed label, rounded corners; N64: the upper part of the
+   recess with its rounded top, the rim above it and the recess below it kept as plastic), the embossed lettering
+   painted out, the plastic set to the real colour's brightness (GBA dark grey, N64 light grey), scaled to the real
+   proportions (57 x 35 and 116 x 75 mm).
+3. `pixellab_redo.py`: GBA kept `create-image-pixflux` with the prepared photo as `init_image` (strength 500, seed 7,
+   described as a GBA cartridge from the front); N64 kept `image-to-pixelart` (strength 250, fixer). Not kept: the other
+   image-to-pixelart settings (GBA a light rim along the bottom), `image-to-pixelart-pro-flash` (GBA too narrow, N64 with
+   square shoulders), a pixflux GBA that wrote lettering on the ridge.
+4. `finish_cart.py raw.png <kind>.png <plastic> [--mask prep_mask.png]`: background off, the label grown from its middle
+   and painted (214, 214, 214), the plastic set to #4b4c50 (GBA) or #9a9a9a (N64), every pixel solid or empty.
+   `sheet_cart.py` makes the comparison sheet.

@@ -93,6 +93,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [VIRTUAL-DEVICE.md](VIRTUAL-DEVICE.md) | Reference | The Docker-based virtual Mini V2 |
 | [WIFI-BENCH.md](WIFI-BENCH.md) | Reference | The Wi-Fi bench: ROCKNIX's NetworkManager + iwd and the real pocket-ui against simulated radios and access points (mac80211_hwsim + hostapd), its scenarios and the first results |
 | [LATENCY.md](LATENCY.md) | Reference | The speed guard: latency benchmark, baselines, comparing in CI |
+| [MEASURED.md](MEASURED.md) | Reference | The homepage's former numbers page: speed guard of 25 Oct, waking, sleep, CPU, pocket-ui against EmulationStation |
 | [COMPARE-ROCKNIX.md](COMPARE-ROCKNIX.md) | Reference | pocket-ui against stock ROCKNIX (EmulationStation + RetroArch) on a Mini V2, measured from outside the same way for both: method, limits, the plan of presses, how to run it |
 | [DESIGN.md](DESIGN.md) | Reference | Visual design of the shelf: colours, type, layout, motion |
 | [CURATOR.md](CURATOR.md) | Design notes and reference | Curator (Lens, smart shelves, stickers, Echoes, Versions) and Pixel Path: the design, then what was built ("Developer notes", "Pixel Path as built") |

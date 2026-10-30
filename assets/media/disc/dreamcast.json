@@ -1,0 +1,18 @@
+{
+ "mm": [
+  120,
+  120
+ ],
+ "hole": 10,
+ "print": {
+  "shape": "annulus",
+  "r_in": 35,
+  "r_out": 77.5,
+  "colour": "#FF00FF"
+ },
+ "source": "https://commons.wikimedia.org/wiki/File:Audio_Compact_Disc.png",
+ "licence": "Public domain",
+ "author": "Liamz2r",
+ "pixellab": "image-to-pixelart v2, 160x160 out, conversion c (default strength)",
+ "logos_removed": "none on the base photo (plain silver CD data side); GD-ROM ring design added"
+}

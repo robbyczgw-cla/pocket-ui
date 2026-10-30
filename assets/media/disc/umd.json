@@ -1,0 +1,19 @@
+{
+ "mm": [
+  64,
+  65
+ ],
+ "hole": 0,
+ "print": {
+  "shape": "circle",
+  "cx": 78.4,
+  "cy": 78.1,
+  "r": 66.6,
+  "colour": "#FF00FF"
+ },
+ "source": "https://commons.wikimedia.org/wiki/File:Pursuit_Force_UMD_(front).jpg",
+ "licence": "Public domain",
+ "author": "Znupi",
+ "pixellab": "image-to-pixelart v2, 156x160 out, conversion b (init image strength 250 with fixer)",
+ "logos_removed": "PSP lettering and controller symbol on the shell, the whole printed label (UMD wordmark, Sony / PlayStation / publisher logos, title, legal text)"
+}
