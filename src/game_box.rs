@@ -242,7 +242,7 @@ pub fn case_height(w: i32, h: i32, m: Medium) -> i32 {
 }
 
 /// The game beside a case `case_h` tall: its size, and how far it is out of the case's right edge when open.
-fn game_beside(m: Medium, (case_w, case_h): (i32, i32), game: Option<&Pic>) -> (i32, i32, i32) {
+pub fn game_beside(m: Medium, (case_w, case_h): (i32, i32), game: Option<&Pic>) -> (i32, i32, i32) {
     let (gw, gh) = match game {
         Some(p) => (p.w, p.h),
         None => m.game().size_beside(m, case_h),

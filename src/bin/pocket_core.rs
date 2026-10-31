@@ -213,6 +213,8 @@ struct App {
     /// Cozy's launch animation still plays over pocket-ui's shelf: nothing is drawn, so the window stays unmapped
     /// until it is over (`startup::held`), a button cuts it short. The game itself runs, silently.
     hold: bool,
+    /// The buttons down when the hold was last looked at (`startup::new_press`).
+    hold_down: Option<[u16; players::MAX]>,
     /// The old-TV power-on over the game's first 300 ms (`crt_on`): wanted by pocket-ui (Cozy, Motion Full) and not yet
     /// cut short by a button; `crt_started` once its hook was written.
     crt_on: bool,
@@ -466,14 +468,19 @@ impl App {
         let (players, sticks) = self.read_players();
         let (mapped, analog) = (players[0], sticks[0]);
         // Over when the deadline passed or any button is pressed (pocket-ui skips its animation on the same press).
-        if self.hold && (!pocket_ui::startup::held() || players.iter().any(|p| *p != 0)) {
-            self.hold = false;
-            // A press that ends the hold is someone who wants the game now: no effect.
-            if players.iter().any(|p| *p != 0) {
-                self.crt_on = false;
+        // The finger still on the A that started the game ends nothing; a new press does.
+        let pressed = (self.hold || self.crt_on) && pocket_ui::startup::new_press(&players, &mut self.hold_down);
+        if self.hold {
+            let skipped = pressed || pocket_ui::startup::hold_skipped();
+            if skipped || !pocket_ui::startup::held() {
+                self.hold = false;
+                // A press that ends the hold is someone who wants the game now: no effect.
+                if skipped {
+                    self.crt_on = false;
+                }
             }
         }
-        if self.crt_on && players.iter().any(|p| *p != 0) {
+        if self.crt_on && pressed {
             self.crt_on = false;
         }
         for note in self.input.take_notes() {
@@ -952,6 +959,17 @@ impl App {
         // "Before load" of a session that didn't end with a Quit (a crash) is gone with it.
         slots::clear_undo(&self.states);
         let path = slots::auto_path(&self.states);
+        // A line from the shelf about this start (`frozen::at_launch`); the state of another file stays for Load, under
+        // the name a state given up on has (`slots::retry_auto_path`).
+        if let Some(note) = std::env::var(pocket_ui::frozen::NOTE_ENV).ok().filter(|n| !n.is_empty()) {
+            self.hud.note(&note);
+        }
+        if std::env::var_os(pocket_ui::frozen::SKIP_RESUME_ENV).is_some() {
+            let from = if path.exists() { path.clone() } else { slots::taken_auto_path(&path) };
+            let _ = std::fs::rename(&from, slots::retry_auto_path(&path));
+            println!("not resumed: {} is not for this file", path.display());
+            return;
+        }
         let resumed = self.core.resume(&path);
         if matches!(resumed, Resume::Resumed | Resume::ResumedAgain) {
             if let Some(a) = self.cheevos.as_mut() {
@@ -972,7 +990,10 @@ impl App {
         match resumed {
             Resume::Resumed => println!("loaded {}\nresumed", path.display()),
             Resume::ResumedAgain => println!("loaded {}\nresumed (once more: the last session ended without an exit save)", path.display()),
-            Resume::Failed => println!("couldn't resume from {}", path.display()),
+            Resume::Failed => {
+                println!("couldn't resume from {}", path.display());
+                self.hud.note(pocket_ui::frozen::REFUSED);
+            }
             Resume::SaveIsNewer => {
                 println!("not resumed: the battery save is newer than the resume state of {}", path.display());
                 self.hud.toast("In-game save is newer: not resumed");
@@ -2067,6 +2088,7 @@ fn main() {
         sleeping: false,
         dark: false,
         hold: pocket_ui::startup::held(),
+        hold_down: None,
         crt_on: pocket_ui::startup::held() && pocket_ui::crt_on::wanted(),
         crt_started: false,
         woke_frame: false,

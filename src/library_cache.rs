@@ -207,6 +207,12 @@ pub fn rescan(data_dir: &Path, es_systems: &Path, shown: &[System], cached_key: 
     }
 }
 
+/// How many games of `new` were not in `old`, by file (Settings › Games › Game check offers to look at them).
+pub fn games_added(old: &[System], new: &[System]) -> usize {
+    let had: std::collections::HashSet<&std::path::Path> = old.iter().flat_map(|s| s.games.iter().map(|g| g.path.as_path())).collect();
+    new.iter().flat_map(|s| s.games.iter()).filter(|g| !had.contains(g.path.as_path())).count()
+}
+
 /// "3 games added, 1 removed" between two lists, for the log.
 pub fn difference(old: &[System], new: &[System]) -> String {
     use std::collections::HashSet;

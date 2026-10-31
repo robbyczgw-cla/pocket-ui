@@ -265,6 +265,7 @@ impl App {
     /// Games arrived: read the folders again (on a thread); the list that comes back is swapped in at the next moment
     /// nothing on screen holds a game by its place (`library_apply_pending`), which is when the page is left.
     fn starter_library_changed(&mut self) {
+        self.game_check_no_offer();
         if pocket_ui::library_cache::enabled() {
             self.library_rescan("starter pack");
         } else if let Ok(systems) = pocket_ui::library::load_shown(&self.es_systems, &self.data_dir) {

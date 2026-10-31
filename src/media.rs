@@ -944,6 +944,28 @@ impl Game {
 /// The game itself, `h` pixels high: the cartridge or card in its system's plastic with the cover on its label
 /// (`cover` is fitted to it here), or the title and the console on a plain label. None for a disc or a UMD, which are
 /// painted round (`cabinet_art::disc`).
+/// The top `h` pixels of a game's own picture, `w` wide: what shows of it over the top of its case on the shelf (a frozen
+/// game, `app_cabinet::ajar_spine`). A cartridge or card fits the width; a disc's rim is cut from the middle of a disc
+/// far larger than the case's spine, as a disc's edge looks in its case. None when the game has no picture.
+pub fn game_top(text: &mut Text, system: &str, rom: &str, w: i32, h: i32, look: Look) -> Option<Pic> {
+    let g = Game::of(system, rom);
+    let whole = if g.is_round() {
+        disc_pic(text, DiscKind::of(system), w * 8, look, "", None)
+    } else {
+        let sprite = g.pic()?;
+        scaled(sprite, (w as f32 / sprite.w.max(1) as f32).max(h as f32 / sprite.h.max(1) as f32), GAME_TEMPLATES[g.drawn()?].tint.then_some(look.plastic))
+    };
+    let x0 = (whole.w - w).max(0) / 2;
+    let first = (0..whole.h).find(|y| (x0..(x0 + w).min(whole.w)).any(|x| whole.px[(y * whole.w + x) as usize] >> 24 != 0)).unwrap_or(0);
+    let mut top = Pic::new(w, h, 0);
+    for y in 0..h.min(whole.h - first) {
+        for x in 0..w.min(whole.w - x0) {
+            top.px[(y * w + x) as usize] = whole.px[((y + first) * whole.w + x + x0) as usize];
+        }
+    }
+    Some(top)
+}
+
 pub fn game_pic(text: &mut Text, g: Game, h: i32, look: Look, title: &str, cover: Option<&Image>, console: Option<&Sprite>) -> Option<Pic> {
     let i = g.drawn()?;
     let sprite = g.pic()?;
@@ -1661,6 +1683,19 @@ impl Prop {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn what_shows_of_a_frozen_game_is_its_own_picture_for_every_system_and_as_wide_as_asked() {
+        let mut text = Text::new();
+        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2 };
+        for system in ["gb", "gbc", "gba", "snes", "nes", "n64", "megadrive", "nds", "3ds", "psx", "ps2", "gamecube", "wii", "psp", "dreamcast", "xbox"] {
+            let top = game_top(&mut text, system, "/roms/Game (USA).rom", 30, 12, look).unwrap_or_else(|| panic!("{system}: no picture"));
+            assert_eq!((top.w, top.h), (30, 12), "{system}");
+            let solid = top.px.iter().filter(|p| **p >> 24 != 0).count();
+            assert!(solid * 2 >= top.px.len(), "{system}: only {solid} of {} pixels show", top.px.len());
+            assert!(!top.px.iter().any(|p| p & 0xffffff == 0xff00ff), "{system}: a template's magenta showed");
+        }
+    }
+
     use super::*;
 
     #[test]

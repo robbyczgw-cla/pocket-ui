@@ -771,6 +771,30 @@ So the animation costs the start about a millisecond (the frames pocket-ui paint
 emulator doesn't use), and the Cabinet's starts are 265 ms faster than before. In the virtual device a GBC game is up
 after 65 ms, before the cartridge is in (180 ms): there the game covers the animation, as it should.
 
+### Launch rigs (feat/insert-animations, 2026-10-31)
+
+Cozy + Playful, main (eeb9917) against the branch, interleaved, on the RG35XX Plus (H700, laid out at 1280x960, `bench-playful`, thread CPU of `paint`, two rounds):
+
+| Frames | main p50 / p95 | rigs p50 / p95 |
+|---|---|---|
+| PS1 (lid) | 23.0 / 25.5 ms | 24.3 / 26.8 ms |
+| PS2 (tray) | 23.2 / 26.1 ms | 24.9 / 27.4 ms |
+| SNES (cartridge, `over`) | 23.1 / 25.9 ms | 25.5 / 28.0 ms |
+| DS (behind the shell) | 22.5 / 25.5 ms | 23.6 / 26.1 ms |
+| Wii (slot, `over`) | 24.3 / 27.2 ms | 26.4 / 28.9 ms |
+
+A to the game's first frame, real starts (`launch.gbc`, uCity on a fixture, twelve each, pocket-core of the same build):
+
+| | RG35XX Plus main → branch | Mini V2 main → branch |
+|---|---|---|
+| Cozy | 1065 → 1617 ms | 1072 → 1615 ms |
+| Cozy, a button 200 ms after A | 1065 → 355 ms | 1070 → 212 ms |
+| Quick | 410 → 412 ms | 77 → 78 ms |
+
+Main's skip left the game's window waiting whenever pocket-core hadn't opened its pads yet (`startup::HOLD_SKIP` now tells it). First frame of the animation: 10 ms more (the rig's pictures are decoded then; the game's process is already started). Peak memory 2 to 2.5 MB more, gone with the animation.
+
+`latency.py` puts back what a real start writes outside its fixture, `system.cfg` and `savestates/<system>/` (`Preserve`, also on a failure, Ctrl-C and SIGTERM; `python3 scripts/latency.py selftest`), and starts the pocket-core of the build it measures.
+
 ### Playful animations (feat/playful, 2026-10-30)
 
 What a frame of each playful animation costs on the RG35XX Plus (H700, 640x480, laid out at 1280x960), the extra on and

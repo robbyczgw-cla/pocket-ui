@@ -25,7 +25,7 @@ archive alongside an APK. Lockfiles and source revisions are pinned; build times
 The release keystore defaults to `~/.local/share/pocket-ui/android-signing/release.jks`, with its private password file
 beside it (override `ANDROID_SIGNING_DIR`). Both stay outside the repository, permissions 0600, directory 0700.
 The initial debug-signed spike must be uninstalled once; later versions signed with this release key update in place.
-Do not delete this identity. The APK is non-debuggable, version 0.1.6-android.8 / 10608.
+Do not delete this identity. The APK is non-debuggable, version 0.1.7-android.1 / 10701.
 
 Only isolated emulator serials with `ro.kernel.qemu=1` are accepted by smoke scripts. AVD name, port, display width,
 height and density can be set through `ANDROID_AVD_NAME`, `ANDROID_EMULATOR_PORT`, `ANDROID_DISPLAY_WIDTH`,

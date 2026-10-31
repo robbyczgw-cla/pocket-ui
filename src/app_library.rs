@@ -78,6 +78,7 @@ pub(crate) fn settings_page_holds_games(page: &SettingsPage) -> bool {
         | SettingsPage::PerfFan
         | SettingsPage::Achievements
         | SettingsPage::Tools
+        | SettingsPage::GameCheck
         | SettingsPage::PcStreaming
         | SettingsPage::Backup
         | SettingsPage::Storage
@@ -191,7 +192,10 @@ impl App {
     /// A rescan found another list: it goes in now or at the next moment it can (`library_apply_pending`).
     pub(crate) fn library_rescanned(&mut self, fresh: Vec<System>, key: Option<Key>) {
         self.library_ui.key = key;
+        let added = pocket_ui::library_cache::games_added(self.library_ui.pending.as_deref().unwrap_or(&self.systems), &fresh);
+        self.game_check_games_added(added);
         self.library_ui.pending = Some(fresh);
+        self.game_check_list_changed();
         self.library_apply_pending();
     }
 

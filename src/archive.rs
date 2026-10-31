@@ -125,7 +125,7 @@ fn is_junk(path: &str) -> bool {
 }
 
 /// Files in a zip that are not the game unless the core's list names their extension: texts, pictures, checksums.
-fn is_clutter(ext: &str) -> bool {
+pub(crate) fn is_clutter(ext: &str) -> bool {
     [
         "txt", "nfo", "diz", "doc", "rtf", "pdf", "jpg", "jpeg", "png", "gif", "bmp", "url", "htm", "html", "xml", "ini", "sfv", "md5", "sha1", "crc", "log", "lnk",
     ]
@@ -162,29 +162,63 @@ const MAX_DIRECTORY: usize = 4 << 20;
 /// of the file: nothing is unpacked, so a 30 MB zip costs one or two small reads (`rom_id`). The game is the entry
 /// `extract_rom` would take; None when it would refuse (several games, no game) or the file is no zip it can read.
 pub fn rom_crc(zip_path: &Path, wanted: &[&str]) -> Option<(u32, u64)> {
-    use std::io::{Read, Seek, SeekFrom};
-    let mut f = std::fs::File::open(zip_path).ok()?;
-    let len = f.metadata().ok()?.len();
-    let tail_len = len.min(22 + 65535);
-    let mut tail = vec![0; tail_len as usize];
-    f.seek(SeekFrom::Start(len - tail_len)).ok()?;
-    f.read_exact(&mut tail).ok()?;
-    let (count, at, size) = end_record(&tail).ok()?;
-    let tail_at = (len - tail_len) as usize;
-    let cd = if at >= tail_at {
-        tail.get(at - tail_at..)?.to_vec()
-    } else {
-        if size > MAX_DIRECTORY {
-            return None;
-        }
-        let mut cd = vec![0; size];
-        f.seek(SeekFrom::Start(at as u64)).ok()?;
-        f.read_exact(&mut cd).ok()?;
-        cd
-    };
-    let list = directory(&cd, count).ok()?;
+    let list = directory_of(zip_path).ok()??;
     let e = pick(&list, wanted, "").ok()?;
     Some((e.crc, e.usize as u64))
+}
+
+/// The entries of the zip at `zip_path`, read from the end of the file. Outer None: no end record, so the file was cut
+/// off or is no zip. An error: it could not be read, or its directory doesn't read as one.
+fn directory_of(zip_path: &Path) -> Result<Option<Vec<Entry>>, String> {
+    use std::io::{Read, Seek, SeekFrom};
+    let bad = |e: std::io::Error| e.to_string();
+    let mut f = std::fs::File::open(zip_path).map_err(bad)?;
+    let len = f.metadata().map_err(bad)?.len();
+    let tail_len = len.min(22 + 65535);
+    let mut tail = vec![0; tail_len as usize];
+    f.seek(SeekFrom::Start(len - tail_len)).map_err(bad)?;
+    f.read_exact(&mut tail).map_err(bad)?;
+    if find_end(&tail).is_none() {
+        return Ok(None);
+    }
+    let (count, at, size) = end_record(&tail)?;
+    let tail_at = (len - tail_len) as usize;
+    let cd = if at >= tail_at {
+        tail.get(at - tail_at..).ok_or("not a valid zip file")?.to_vec()
+    } else {
+        if size > MAX_DIRECTORY {
+            return Err("the zip's directory is too big".into());
+        }
+        let mut cd = vec![0; size];
+        f.seek(SeekFrom::Start(at as u64)).map_err(bad)?;
+        f.read_exact(&mut cd).map_err(bad)?;
+        cd
+    };
+    directory(&cd, count).map(Some)
+}
+
+/// The sentence a zip would be refused with, from its directory alone (Settings → Games → Game check, `game_check`):
+/// `extract_rom`'s refusals without unpacking anything, so the checksum of the game inside is not looked at. With
+/// `only_cut_off` just a zip cut off on the way counts: an arcade set is many files by design. None: nothing against it,
+/// or a rare kind of zip that is not this reader's to judge (RetroArch still tries those).
+pub fn refusal_of(zip_path: &Path, wanted: &[&str], only_cut_off: bool) -> Option<String> {
+    let zip_name = zip_path.file_name().and_then(|n| n.to_str()).unwrap_or("The zip file");
+    let list = match directory_of(zip_path) {
+        Ok(Some(list)) => list,
+        Ok(None) => return Some(message("incomplete", zip_name)),
+        Err(_) => return None,
+    };
+    if only_cut_off {
+        return None;
+    }
+    let e = match pick(&list, wanted, zip_name) {
+        Ok(e) => e,
+        Err(why) => return Some(why),
+    };
+    if e.flags & 1 != 0 || e.method == 99 {
+        return Some(message("password", zip_name));
+    }
+    (!matches!(e.method, 0 | 8)).then(|| message("packing", zip_name))
 }
 
 /// The ROM inside `zip_path`: the one file whose extension is in `wanted` (lower case, no dot), else the one file
@@ -231,9 +265,14 @@ pub fn extract_rom(zip_path: &Path, wanted: &[&str]) -> Result<(String, Vec<u8>)
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    /// A zip of stored files, for other modules' tests.
+    pub(crate) fn zip_of(files: &[(&'static str, &[u8])]) -> Vec<u8> {
+        zip(&files.iter().map(|(n, d)| stored(n, d)).collect::<Vec<_>>())
+    }
 
     /// One entry of a test zip: its stored bytes, original size and CRC-32 as the archive claims them.
     struct F {
@@ -298,6 +337,24 @@ mod tests {
 
     fn rom() -> Vec<u8> {
         (0..5000u32).map(|i| (i * 7 % 251) as u8).collect()
+    }
+
+    #[test]
+    fn refusals_are_read_from_the_directory_alone() {
+        let dir = TestDir::new("zip-refusal-of");
+        let put = |name: &str, bytes: &[u8]| {
+            let p = dir.join(name);
+            std::fs::write(&p, bytes).unwrap();
+            p
+        };
+        assert_eq!(refusal_of(&put("Good.zip", &zip(&[stored("Good.gba", b"ROM")])), &["gba"], false), None);
+        let readme = put("Readme only.zip", &zip(&[stored("readme.txt", b"hi")]));
+        assert_eq!(refusal_of(&readme, &["gba"], false).as_deref(), Some(message("none", "Readme only.zip").as_str()));
+        assert_eq!(refusal_of(&readme, &["gba"], true), None, "an arcade set is many files by design");
+        let cut = zip(&[stored("Cut.gba", &[7; 100])]);
+        let cut = put("Cut.zip", &cut[..40]);
+        assert_eq!(refusal_of(&cut, &["gba"], true).as_deref(), Some(message("incomplete", "Cut.zip").as_str()));
+        assert!(refusal_of(&put("Two.zip", &zip(&[stored("A.gba", b"A"), stored("B.gba", b"B")])), &["gba"], false).unwrap().contains("holds 2 game files"));
     }
 
     #[test]

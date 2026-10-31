@@ -806,6 +806,44 @@ true
         assert!(text.contains("Empty Demo") && !text.contains("BIOS"), "the notice names the game and the real reason: {text}");
     }
 
+    /// Settings → Games → Game check on a card with the usual slips: a copy of a game and no BIOS for Sega CD. It runs,
+    /// names them, A hides the copy (the file stays). After Add games with a new game on the card, it is offered.
+    #[test]
+    fn the_game_check_names_what_is_wrong_hides_a_copy_and_is_offered_after_adding_games() {
+        let mut ui = Driver::start("game-check", true, |tmp, _| {
+            std::fs::copy(tmp.join("gb/Tobu Tobu Girl (World).gb"), tmp.join("gb/Tobu Tobu Girl (World) (1).gb")).unwrap();
+        });
+        ui.sees("Game Boy");
+        ui.send("start");
+        ui.sees("Sound & feel");
+        ui.send("down\ndown\ndown\na");
+        ui.sees("Add games");
+        ui.send("down\na");
+        let groups = ui.sees("Same game twice");
+        assert!(groups.contains("BIOS files") && groups.contains("games ready"), "{groups}");
+        ui.send("down\na");
+        ui.sees("Tobu Tobu Girl (World) (1).gb");
+        ui.send("a");
+        let detail = ui.sees("Hide this copy");
+        assert!(detail.contains("Same game twice:"), "{detail}");
+        ui.send("a");
+        ui.wait(|d| std::fs::read_to_string(d.card.tmp.join("data/library.json")).is_ok_and(|j| j.contains("(1).gb")));
+        assert!(ui.card.tmp.join("gb/Tobu Tobu Girl (World) (1).gb").exists(), "hidden, never deleted");
+        let left = ui.sees("BIOS files");
+        assert!(!left.contains("Same game twice"), "{left}");
+
+        ui.send("b");
+        ui.sees("Starter pack");
+        std::fs::write(ui.card.tmp.join("gb/Pokemon Blau.gb"), b"game").unwrap();
+        ui.send("up\na");
+        ui.sees("Game Boy");
+        ui.send("b");
+        let offer = ui.sees("1 new game");
+        assert!(offer.contains("Check"), "{offer}");
+        ui.send("b");
+        ui.sees("Starter pack");
+    }
+
     /// A card with no games is not an empty screen: it says so, offers the starter pack, and says what is missing when
     /// the Pocket is offline.
     #[test]
@@ -962,7 +1000,7 @@ true
         ui.sees("Game Boy");
         // Extras paints the actual cached IP state on every frame. Wait for online readiness before using a
         // network-dependent card action; curl is a child-local failing stub, so no request leaves the fixture.
-        ui.send("start\ndown\ndown\ndown\na\ndown\ndown\na");
+        ui.send("start\ndown\ndown\ndown\na\ndown\ndown\ndown\na");
         ui.sees("Optional. You can get these any time later.");
         ui.send("b\nb\nb\nb");
         ui.sees("Game Boy");

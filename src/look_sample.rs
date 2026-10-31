@@ -43,7 +43,7 @@ pub fn pick(systems: &[System], hidden: &[String], recents: &[Recent], has_cover
     let in_library = |system: &str, path: &Path| shown.iter().any(|s| s.name == system && s.games.iter().any(|g| g.path == path));
     let played: Vec<&Recent> = recents.iter().filter(|r| in_library(&r.system, &r.path)).collect();
     let all: Vec<(&System, &Game)> = shown.iter().flat_map(|s| s.games.iter().map(move |g| (s, g))).collect();
-    let as_recent = |s: &System, g: &Game| Recent { system: s.name.clone(), name: g.name.clone(), path: g.path.clone(), last_played: 0, play_secs: 0 };
+    let as_recent = |s: &System, g: &Game| Recent { system: s.name.clone(), name: g.name.clone(), path: g.path.clone(), last_played: 0, play_secs: 0, frozen: None };
     // A played game with box art, any game with box art, the last played, the first one.
     let (game, cover) = played
         .iter()
@@ -82,6 +82,7 @@ fn demo() -> Sample {
         path: first.path.clone(),
         last_played: crate::recents::now_secs().saturating_sub(2 * 3600),
         play_secs: 40 * 60,
+        frozen: None,
     };
     Sample { systems, game, cover: Cover::Drawn, demo: true, played: true }
 }
@@ -106,7 +107,7 @@ mod tests {
     }
 
     fn recent(system: &str, name: &str) -> Recent {
-        Recent { system: system.into(), name: name.into(), path: format!("/storage/roms/{system}/{name}.rom").into(), last_played: 1, play_secs: 60 }
+        Recent { system: system.into(), name: name.into(), path: format!("/storage/roms/{system}/{name}.rom").into(), last_played: 1, play_secs: 60, frozen: None }
     }
 
     fn no_covers(_: &str, _: &Path) -> Option<PathBuf> {

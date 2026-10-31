@@ -57,6 +57,7 @@ Only these folder names use the own host; games in other folders start with ROCK
 packed as `.zip` work (with one game inside: see [a zip file that won't start](troubleshooting.md#a-zip-game-says-it-holds-several-games-is-damaged-or-cant-be-opened)); games packed as `.7z` start with RetroArch. The folders ending in `h` (`nesh`, `snesh`, `gbh`,
 `gbch`, `gbah`) are ROCKNIX's folders for hacks and translations, `gbav` is for Game Boy Advance Video cartridges.
 
+[Game check](game-check.md) (Settings → Games) says which BIOS files are missing, misplaced or wrong for the systems you have games for.
 Apart from the Saturn and the Famicom Disk System, none of these systems needs a BIOS file. Dreamcast uses
 `roms/bios/dc/dc_boot.bin` when it is there, as RetroArch does, and starts without it too.
 

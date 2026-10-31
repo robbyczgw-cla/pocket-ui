@@ -743,8 +743,8 @@ Two rows of Settings → Look → Cozy extras, both on from the start, Shelf loo
   than the showcase (`show_scale`). Simple perspective: each face is a run of columns whose height
   follows its distance; at rest the front is copied as it is, sharp.
 - **Starting** a game (Settings → Sound & feel → Animations, Cabinet and Shelf looks; `app_cabinet::launch_animation`). The
-  numbers below are Quick; Cozy plays the same shape over `cabinet::INSERT_COZY` (1330 ms, in at `IN_AT_COZY` 800 ms; sounds:
-  the case opening at A, `ui_sound::going_in` seated at 800 ms, `Sound::CrtOn` from pocket-core with the old-TV power-on), slows every timed animation by `motion::COZY_SLOWER` (1.4) and holds a pocket-core game's window
+  numbers below are Quick; Cozy plays the same shape over `cabinet::INSERT_COZY` (2000 ms, in at `IN_AT_COZY` 1200 ms, the fade from `FADE_AT_COZY` 1350 ms; sounds:
+  the case opening at A, `ui_sound::going_in` seated at 1200 ms, `Sound::CrtOn` from pocket-core with the old-TV power-on), slows every timed animation by `motion::COZY_SLOWER` (1.4) and holds a pocket-core game's window
   until the fade has run (`startup::HOLD_UNTIL`; pocket-core draws nothing and is silent meanwhile, a button ends it):
   the game is started at A, and while it loads the console's pixel-art picture comes up, the case opens and the game
   slides out of it (the cartridge, card or disc, at its real size beside the case), the case fades and the game goes
@@ -755,6 +755,18 @@ Two rows of Settings → Look → Cozy extras, both on from the start, Shelf loo
   window comes up first covers it, and any button skips it. Until 2026-10-28 the game was started only when the
   cartridge reached the slot (260 ms after A), which added that to every start in these looks. Cartridges stay
   half out of the console, as they do.
+- **A console's real mechanism** (Cozy + Playful cases, `src/insert_rig.rs`, `app_cabinet::paint_rig`): PS1, GameCube,
+  Dreamcast, Saturn (lid); PS2, Xbox (tray, the disc comes from the front lying flat); SNES (US and PAL/JP rigs by the cartridge's
+  region), N64, Mega Drive, Game Boy, GBA (cartridge); DS (the card goes in behind the upper screen, where its slot is); Wii (the disc goes into its slot on the front, along the console's depth). The console alone is shown larger than its system picture (2 screen pixels an art pixel). One timeline,
+  `insert_rig::pose`, a pure function of the time since A: in at `IN_AT_COZY` with the sound's hit (`Sound::DiscDrop`), a disc rests on its
+  spindle for 110 ms, the lid or tray shut 280 ms after it is down with the clunk (`Sound::DiscShut`; the two are `disc-in.wav`
+  cut in two at its quiet point, `scripts/ui-sounds/split_disc_in.py`, the other systems keep the whole sound); a cartridge clicks at
+  `IN_AT_COZY` and stays in view; the launch fade keeps its end and runs after the clunk; the game's window comes up at
+  1600 ms (`FADE_AT_COZY` + the fade). Any button ends all that at once: the hold, the fade and the sounds still waiting. A lid is one picture turned in 3D about its hinge (`Lid::map`, `cabinet_art::blit_affine`),
+  a printed disc lies down along the seat's two axes, parts in front of the medium are `over.png`. Art from public-domain photos
+  through PixelLab (`assets/media/rig/SOURCES.md`), read on the first frame, gone with the animation (at most 6 MB).
+  `POCKETUI_RIG_ASSETS=<dir>` reads rigs from disk for working on them. 3DS, Vita, PSP and all others: the
+  plain animation below; Quick, a frozen game, and Motion Reduced or Off: no rig and no hold (`cabinet::starts_cozy`).
 - **The game box** (X on a game; SELECT switches to the page and back, `game_box.rs`): the card as the game's box in its case's style, front and
   back, turned over with Left/Right in 280 ms (Motion Off: at once) by narrowing one face to its edge and widening
   the other. The front is the case as it stands on the shelf, opened: its game slides out of it to its right in

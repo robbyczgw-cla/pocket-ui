@@ -313,8 +313,10 @@ pub const INSERT: Duration = Duration::from_millis(300);
 /// When the cartridge or disc is in: the click (`ui_sound::Sound::Insert`) and the glow come here.
 pub const IN_AT: Duration = Duration::from_millis(180);
 /// The same in Cozy (Settings > Sound & feel > Animations): long enough to read, the same shape (IN_AT at 0.6).
-pub const INSERT_COZY: Duration = Duration::from_millis(1330);
-pub const IN_AT_COZY: Duration = Duration::from_millis(800);
+pub const INSERT_COZY: Duration = Duration::from_millis(2000);
+pub const IN_AT_COZY: Duration = Duration::from_millis(1200);
+/// When Cozy's launch fade starts: a moment after the medium is in, for the lid or tray to shut and to see it.
+pub const FADE_AT_COZY: Duration = Duration::from_millis(1350);
 
 /// The launch animation's length in this mode.
 pub fn insert_len(cozy: bool) -> Duration {
@@ -327,6 +329,21 @@ pub fn insert_len(cozy: bool) -> Duration {
 
 /// How long the launch fade waits after A while the launch animation plays: until the cartridge or disc is in.
 pub fn fade_delay(cozy: bool) -> Duration {
+    if cozy {
+        FADE_AT_COZY
+    } else {
+        IN_AT
+    }
+}
+
+/// Whether a start is Cozy's: the look's or player's Animations, Motion on Full (Reduced and Off start straight away, the
+/// game's window isn't held for what they don't show), and not a frozen game, which goes straight back.
+pub fn starts_cozy(cozy: bool, motion: crate::motion::Motion, frozen: bool) -> bool {
+    cozy && motion == crate::motion::Motion::Full && !frozen
+}
+
+/// When the medium is in, for its sound and its seat.
+pub fn in_at(cozy: bool) -> Duration {
     if cozy {
         IN_AT_COZY
     } else {
@@ -947,14 +964,23 @@ mod tests {
     }
 
     #[test]
-    fn cozy_is_the_same_animation_over_about_a_second_with_the_fade_waiting_for_the_cartridge() {
-        assert!(INSERT_COZY >= Duration::from_millis(1000) && INSERT_COZY <= Duration::from_millis(1500), "{INSERT_COZY:?}");
+    fn only_cozy_with_motion_on_full_and_not_frozen_holds_a_start() {
+        use crate::motion::Motion::{Full, Off, Reduced};
+        assert!(starts_cozy(true, Full, false));
+        for (cozy, motion, frozen) in [(false, Full, false), (true, Reduced, false), (true, Off, false), (true, Full, true)] {
+            assert!(!starts_cozy(cozy, motion, frozen), "{cozy} {motion:?} {frozen}");
+        }
+    }
+
+    #[test]
+    fn cozy_is_the_same_animation_over_two_seconds_with_the_fade_waiting_for_the_cartridge() {
+        assert!(INSERT_COZY >= Duration::from_millis(1500) && INSERT_COZY <= Duration::from_millis(2100), "{INSERT_COZY:?}");
         // The game's window is held until the fade has run (`launch_hold`): that is what a cozy start costs at most.
-        assert!(fade_delay(true) + Duration::from_millis(250) <= Duration::from_millis(1100));
+        assert!(fade_delay(true) >= IN_AT_COZY && fade_delay(true) + Duration::from_millis(250) <= Duration::from_millis(1700));
         assert!((IN_AT_COZY.as_secs_f32() / INSERT_COZY.as_secs_f32() - 0.6).abs() < 0.01, "the cartridge is in at 0.6 of the way, as in Quick");
         let at = insert_at(IN_AT_COZY, true);
         assert!(at.carry == 1.0 && at.sink > 0.98 && at.glow > 0.8, "in at IN_AT_COZY: {at:?}");
-        assert!(insert_at(IN_AT_COZY - Duration::from_millis(150), true).glow == 0.0, "no glow before it is in");
+        assert!(insert_at(IN_AT_COZY - Duration::from_millis(225), true).glow == 0.0, "no glow before it is in");
         let mid = insert_at(INSERT_COZY / 4, true);
         assert!(mid.rise > 0.9 && mid.carry < 1.0, "slow enough to see the case travel: {mid:?}");
         let end = insert_at(INSERT_COZY, true);

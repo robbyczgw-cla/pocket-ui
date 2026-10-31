@@ -123,6 +123,13 @@ What the table shows:
 Every other emulator ROCKNIX ships (and pocket-ui can start through `runemu.sh`) keeps its own licence; see
 ROCKNIX.
 
+**DraStic (Nintendo DS) by Exophase, closed source.** Not part of pocket-ui and not in this repository. The pocket-ui OS
+images for the Allwinner H700 handhelds carry it unchanged inside ROCKNIX's SYSTEM (`usr/config/drastic`), exactly as
+ROCKNIX does. The basis is the author's 2017 forum statement that there is no real harm in keeping it distributed
+(`LICENSE.pdf` in that folder; ROCKNIX's `licenses/DRASTIC.pdf`): a tolerance, not a formal licence. There is no source
+code to offer. We remove it from the images on the author's request. Its BIOS replacement is BSD-licensed (Gilead
+Kutnick, `usr/config/drastic/system/drastic_bios_readme.txt`).
+
 **Xbox: hakuX by rfandango (GPL-3.0), Linux/libretro port by portare-ch (PortareOS), PR #9 commit
 `2de4e9cd86a47e9ffaf928c36e240a995a279713`** (includes our audio relaunch fix, accepted into the PR) pocket-ui ships the built core (`hakux_libretro.so`, built from that
 commit, unpatched, with the PR's own build scripts) in its own folder, `/storage/pocket-ui/hakux`; it is loaded by ROCKNIX's RetroArch,
@@ -151,6 +158,12 @@ file in [assets/save_media/SOURCES.md](assets/save_media/SOURCES.md): the PlaySt
 were converted with PixelLab from three **public-domain** photographs by Evan Amos on Wikimedia Commons, the GameCube
 memory card, Xbox memory unit and Memory Stick Duo generated with PixelLab from text alone. No logo or lettering is on
 them.
+
+## Consoles at a game's start
+
+The consoles with their lids and trays that take a game in Cozy's launch (`assets/media/rig/`) are PixelLab conversions of
+public-domain photos (Evan Amos, Wikimedia Commons) and one CC0 photo of a disc tray, all logos and lettering painted out:
+file by file in [assets/media/rig/SOURCES.md](assets/media/rig/SOURCES.md).
 
 ## System pictures
 

@@ -117,3 +117,30 @@ Where pocket-ui is slower, it is by design or a known fault: the list slides for
 pocket-ui and pocket-core write a trace when asked to, one line per event with a monotonic time stamp in microseconds; without it, each trace point costs one atomic load. A script running on the device starts pocket-ui with the trace on, presses buttons by writing to pocket-ui's command pipe, and reads the time just before each write from the same clock. A “frame” is the moment the frame is handed to the compositor. No screenshots are compared: the trace says which screen showed which input.
 
 What that leaves out: the panel's next refresh (up to 16.7 ms, the same in every run), and the time from a real button's switch to the kernel, which no software change affects. Nobody has filmed button to picture with a camera yet. The measuring run never counts as play: nothing of it goes into the play history.
+
+## Frozen games (2026-10-31)
+
+A on a recent game on the shelf until the moment is back, device on the bench, muted, on links under names of their own
+(`docs/user/playing.md`). Same build, three rounds a game: Frozen games on, Animations on Cozy (the setting by default), against
+Frozen games off with Cozy (the start waits for the animation) and with Quick. Hardware cores (N64, PSP) resume some frames after
+their first picture: the number is the resume.
+
+| Device, game | Frozen, ms | Off, Cozy, ms | Off, Quick, ms |
+|---|---|---|---|
+| Mini V2, GBA Advance Wars | 115, 157, 140 | 1060, 1059 | 153, 141 |
+| Mini V2, SNES Top Gear | 123, 133, 148 | 1067, 1060 | 129, 103 |
+| Mini V2, GB Super Mario Land 2 | 104, 130, 145 | 1062, 1073 | 137, 144 |
+| Mini V2, PS1 Crash Bandicoot 2 | 187, 250, 178 | 1074, 1074 | 203, 193 |
+| Mini V2, DS Contra 4 | 333, 334, 404 | 1079, 1073 | 361, 375 |
+| Mini V2, PSP Bomberman | 651, 677, 685 | 1113, 1068 | 664, 707 |
+| Mini V2, N64 Super Mario 64 | 773, 832, 900 | 1079, 1073 | 820, 804 |
+| RG35XX Plus, GB Super Mario Land 2 | 406, 347, 336 | 1068, 1065 | 337, 338 |
+| RG35XX Plus, GBA F-Zero | 406, 400 | 1076, 1074 | 448, 405 |
+| RG35XX Plus, SNES Axelay | 417, 434, 413 | 1074, 1077 | 433, 468 |
+| RG35XX Plus, PS1 Crash Bandicoot 2 | 607, 669, 669 | 1078, 1073 | 750, 970 |
+
+Big emulators on the Mini V2, Frozen games on: PS2 Ico, A until `standalone: load Auto: sent` 3339 and 2087 ms (the load itself
+after that wasn't timed); GameCube Super Mario Sunshine, A until the resume thread was done 17676 and 17657 ms, which includes its
+wait for Dolphin's window and a timed wait for its message. 3DS: not measured, the device has only a homebrew game and the bench
+couldn't open its pause menu. The fan came on (pwm 41, 43) by the second start of each of the two.
+

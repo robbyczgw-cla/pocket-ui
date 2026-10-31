@@ -15,6 +15,9 @@ pub struct Recent {
     /// Unix seconds of the last session's end.
     pub last_played: u64,
     pub play_secs: u64,
+    /// What its resume state was written with (`frozen::Mark`); kept when the state stays.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frozen: Option<crate::frozen::Mark>,
 }
 
 pub struct Recents {
@@ -74,12 +77,14 @@ impl Recents {
     /// the next game has started (`save`).
     pub fn note(&mut self, system: &str, name: &str, path: &Path, session_secs: u64) {
         let previous = self.list.iter().position(|r| r.path == path).map(|i| self.list.remove(i));
+        let frozen = previous.as_ref().and_then(|r| r.frozen.clone());
         self.list.insert(0, Recent {
             system: system.to_string(),
             name: name.to_string(),
             path: path.to_path_buf(),
             last_played: now_secs(),
             play_secs: previous.map_or(0, |r| r.play_secs) + session_secs,
+            frozen,
         });
         self.list.truncate(KEEP);
     }

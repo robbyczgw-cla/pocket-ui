@@ -97,11 +97,9 @@ rg28xx sun50i-h700-anbernic-rg28xx a3618905df1a397b3a4192437ee90c77 Anbernic_RG2
 "
 # SYSTEM on an H700 card: ROCKNIX's, repacked without the files below (same reasons as the SM8250 list above; the
 # AYN/Mangmi firmware and rocknix_abl do not exist in the H700 SYSTEM). Everything else is unchanged.
-#   - usr/config/drastic: the DraStic Nintendo DS emulator (closed-source binary by Exophase, ROCKNIX's drastic-sa) with
-#     its cheat and game databases and a BSD-licensed replacement BIOS. The only permission ROCKNIX points to is a 2017
-#     forum thread (LICENSE.pdf in that folder) in which Exophase says he asked people NOT to distribute the Raspberry Pi
-#     beta and that free use there is "up to my discretion": no licence to pass it on. Gone with it: the two
-#     drastic_bios_*.bin (the open replacement BIOS), so the card holds no BIOS files at all.
+# usr/config/drastic (the DraStic Nintendo DS emulator by Exophase, closed source, ROCKNIX's drastic-sa) is NOT removed:
+# it stays unchanged, as in ROCKNIX (decision 2026-10-31). The only basis is Exophase's 2017 forum statement (LICENSE.pdf
+# in that folder, ROCKNIX's licenses/DRASTIC.pdf): tolerance, not a formal licence. It goes on request. See docs/SD-IMAGE.md.
 H700_SYSTEM_REMOVE="
 usr/config/amiberry/whdboot/save-data/Kickstarts/kick33180.A500.RTB
 usr/config/amiberry/whdboot/save-data/Kickstarts/kick33192.A500.RTB
@@ -110,11 +108,10 @@ usr/config/amiberry/whdboot/save-data/Kickstarts/kick40063.A600.RTB
 usr/config/amiberry/whdboot/save-data/Kickstarts/kick40068.A1200.RTB
 usr/config/amiberry/whdboot/save-data/Kickstarts/kick40068.A4000.RTB
 usr/share/idtech/doom.tar.gz
-usr/config/drastic
 "
 H700_SYSTEM_ZIP_REMOVE="
 usr/config/amiberry/whdboot/boot-data.zip Devs/Kickstarts/*.RTB
 "
 # md5 of the repacked H700 SYSTEM (same mksquashfs settings); "unset" for one build prints it. Two independent strip
-# runs (2026-10-31, side by side) gave this md5; a build that does not reproduce it is refused.
-H700_POCKET_SYSTEM_MD5=d03073318997fedcd5f3593672680254
+# runs (2026-10-31, side by side; the same md5 as on 2026-10-30) gave this md5; a build that does not reproduce it is refused.
+H700_POCKET_SYSTEM_MD5=81d174ea53cca597f909ca109547b149

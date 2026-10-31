@@ -1003,3 +1003,8 @@ diagnosticAudio
 # Android native audio diagnostics; logcat only, never drawn in the interface.
 AAudio write failed: {s}
 {s} frames={s} p50_us={s} p95_us={s} max_us={s} over_16ms={s}
+game check
+the zip's directory is too big
+{s} Put {s} into roms/bios.
+{s}. BIOS files come from your own console. Copy them with the SD card in a computer or the Web companion.
+{s}: {s}

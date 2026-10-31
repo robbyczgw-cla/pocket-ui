@@ -7,7 +7,7 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ### Added
 
-- SD card image: Settings → Help & tools → About names the system, "pocket-ui OS 0.1.7 · built on ROCKNIX 20261001
+- SD card image: Settings → Help & tools → About names the system, "pocket-ui OS 0.1.8 · built on ROCKNIX 20261001
   (SM8250)" (on a ROCKNIX card with pocket-ui added, the ROCKNIX version). The device is called "pocket-ui" on the
   network, in Bluetooth and Tailscale, and EmulationStation's ROCKNIX update check is off.
 
@@ -23,6 +23,33 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 - Tour and first-start cards on the Steam Deck: none for Haptics, Sync, Tailscale, Tools or Performance & fan.
 - Steam Deck: no idle timers, suspend, power-key hold or low-battery power-off of ours any more; SteamOS owns sleep and the
   power button (the Settings rows were hidden, but the timers still ran and would have suspended after 4 minutes).
+
+## [0.1.8] - 2026-10-31
+
+### Added
+
+- **Game check:** Settings → Games → Game check answers "will my games start?" after you copied games. It says in plain
+  words what is wrong and what to do: a missing, misplaced or wrong BIOS (by checksum), a disc without its track file,
+  empty files, zips without a game, the same game twice (A hides the copy), a game in the wrong folder or with the wrong
+  file type, a system this handheld can't play. "All good: 214 games ready" when there's nothing. Adding games offers it.
+  Works offline; never deletes a game, downloads anything or touches saves.
+- **Frozen games:** your last five games with a saved moment stand a little open on the shelf, and A goes straight back to
+  that moment, with no question and no waiting. It uses the moment Quit and sleep already keep: nothing keeps running,
+  and nothing extra goes on the card. Games that can't go back stand closed and say why when started. On at the start;
+  Settings → System → Frozen games switches it off.
+- **Consoles that really take their game (Cozy, Playful cases):** the PlayStation's, GameCube's, Dreamcast's and Saturn's lid
+  opens, the disc comes down onto the spindle and the lid shuts; the PS2's and Xbox's tray slides out and takes the disc in; a
+  SNES, N64 or Mega Drive cartridge is pushed down behind the slot's lip and clicks; Game Boy, GBA and DS games go in at the back;
+  the Wii pulls its disc in through the slot. Other systems keep their animation.
+
+### Changed
+
+- Cozy's start is slower, so you can see it: about 1.6 s until the game (it was about 1.1 s). Any button skips it at once, now
+  also before the game's window is ready; Quick is unchanged, and Motion Reduced or Off start straight away.
+
+### Fixed
+
+- A game stuck in an error loop can't fill the memory with its log any more: a core writes at most 2 MB per game.
 
 ## [0.1.7] - 2026-10-31
 
@@ -51,6 +78,8 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 - Documentation: a new device list in the README and [docs/DEVICES.md](docs/DEVICES.md), grouped by chip with what each plays, the README's feature list brings 0.1.4 to 0.1.6, and the manual and screenshots match 0.1.6.
 
 ### Fixed
+
+- A `.cue` written in Latin-1 with an umlaut in a file name (Windows tools) no longer hides its game from the shelf.
 
 - Settings → Connections shows a connected Wi-Fi's name as it is: a network called "Off" or "Unknown" was shown as "Aus" or
   "Unbekannt" in German.

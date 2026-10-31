@@ -9,16 +9,22 @@ export PATH="$HOME/.cargo/bin:$JAVA_HOME/bin:$PATH"
 BT="$ANDROID_HOME/build-tools/${ANDROID_BUILD_TOOLS:-35.0.0}"
 JAR="$ANDROID_HOME/platforms/android-35/android.jar"
 OUT="$PWD/android/build"
-# Fail before expensive compilation if the APK identity drifted from the shared release.
+# The APK identity follows the shared release: a new Cargo version restarts the build counter at 1 and rewrites the manifest
+# (a bump can't break the build); the same version keeps its counter. versionCode is derived from both.
 python3 - <<'PYVERSION'
-import re,xml.etree.ElementTree as ET
+import re
 from pathlib import Path
 version=re.search(r'^version = "([^" ]+)"',Path('Cargo.toml').read_text(),re.M).group(1)
-manifest=ET.parse('android/AndroidManifest.xml').getroot();ns='{http://schemas.android.com/apk/res/android}'
-name=manifest.attrib[ns+'versionName'];code=int(manifest.attrib[ns+'versionCode'])
-assert name.startswith(version+'-android.'),'APK version must follow the shared pocket-ui version'
-build=int(name.rsplit('.',1)[1]);major,minor,patch=map(int,version.split('.'))
-assert 0<build<100 and code==major*1_000_000+minor*10_000+patch*100+build,'APK versionCode must increase with the release'
+path=Path('android/AndroidManifest.xml');text=path.read_text()
+name=re.search(r'android:versionName="([^"]*)"',text).group(1)
+build=int(name.rsplit('.',1)[1]) if name.startswith(version+'-android.') else 1
+major,minor,patch=map(int,version.split('.'))
+assert 0<build<100,'APK build counter out of range'
+code=major*1_000_000+minor*10_000+patch*100+build
+new=re.sub(r'android:versionCode="\d+"','android:versionCode="%d"'%code,text,1)
+new=re.sub(r'android:versionName="[^"]*"','android:versionName="%s-android.%d"'%(version,build),new,1)
+if new!=text:
+    path.write_text(new);print('android manifest set to %s-android.%d (%d)'%(version,build,code))
 PYVERSION
 # Dedicated release identity, kept outside every checkout. Password never appears in argv or logs.
 PRIVATE="${ANDROID_SIGNING_DIR:-$HOME/.local/share/pocket-ui/android-signing}"

@@ -1,7 +1,7 @@
 # pocket-store
 
 > **Status:** the Store page and all four package kinds work end to end against a local test catalog. There is
-> no public catalog yet (see "Hosting" and "Status" below), so **the Store is hidden**: no Settings → Games → Store
+> no public catalog yet (see "Hosting" and "Status" below), so **the Store is hidden**: no Settings → Help & tools → Store
 > row until a catalog address is configured (see "When the Store is offered").
 
 The OS stays small with good defaults; everything optional comes from the store, in the spirit of
@@ -18,7 +18,7 @@ The Store page is the only way into the Store, and it needs a catalog. `store::c
 the address: settings.json `"store_url"` when it is set and not blank, otherwise the built-in `store::DEFAULT_URL`.
 That constant is **empty** until a catalog is hosted. With no address:
 
-- Settings → Games has no **Store** row (and its line reads "Add games, extras, tools, PC streaming."); the cursor,
+- Settings → Help & tools has no **Store** row (and its line leaves the Store out); the cursor,
   the hint bar and the touch rows count only the rows that are shown (`app_settings_groups::rows`). Nothing else links
   to the page (not Extras, not the web companion, not first-start Extras).
 - `store::fetch_catalog("")` answers "There is no store yet." without touching the network, so a snapshot of the

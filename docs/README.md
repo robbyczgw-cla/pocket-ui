@@ -19,6 +19,7 @@ Start at [user/index.md](user/index.md).
 |---|---|
 | [user/index.md](user/index.md) | The first page: what pocket-ui is and does, what it leaves alone, the list of pages |
 | [user/getting-started.md](user/getting-started.md) | Preparing the card, first start, Wi-Fi, adding games |
+| [user/game-check.md](user/game-check.md) | Settings → Games → Game check: will your games start? |
 | [user/coming-from.md](user/coming-from.md) | Coming from ROCKNIX or Android: what happens to saves, states, favourites and settings, what needs a copy, what does not come over |
 | [user/playing.md](user/playing.md) | Home, finding a game, the looks, console pages, starting a game, the game switcher, continuing, menu sounds |
 | [user/pause-menu.md](user/pause-menu.md) | The pause menu of each emulator, Quit and Settings → Playing → Remember where I quit, Pixel Path, save slots, Auto and Before load |
@@ -30,6 +31,7 @@ Start at [user/index.md](user/index.md).
 | [user/settings-system.md](user/settings-system.md) | The entries of Connections and System: Wi-Fi, Tailscale, remote access, time, sleep, backup, the manual |
 | [user/storage.md](user/storage.md) | Settings → System → Storage: what takes the room on the card, the clean-ups, the low-space notice, hidden games |
 | [user/bluetooth.md](user/bluetooth.md) | Settings → Connections → Bluetooth: pairing controllers, headphones and speakers, reconnecting, forgetting |
+| [user/frozen-games.md](user/frozen-games.md) | Frozen games: your last five games stand a little open and A goes straight back; how long each system takes, what can't be frozen |
 | [user/quick-settings.md](user/quick-settings.md) | Quick settings (HOME), the power menu, sleep, power off and low battery |
 | [user/language.md](user/language.md) | Settings → System → Language: English or German, what stays English |
 | [user/night-light.md](user/night-light.md) | Settings → Look → Night light: warmer, less blue colours in the evening, the schedule, the strength, how it fades and where it reaches |

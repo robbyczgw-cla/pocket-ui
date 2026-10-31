@@ -34,6 +34,7 @@ impl App {
             Needs::Sounds => self.sound.on,
             Needs::CozyFull => self.animations_in_use() == Animations::Cozy && pocket_ui::motion::level() == pocket_ui::motion::Motion::Full,
             Needs::MotionFull => pocket_ui::motion::level() == pocket_ui::motion::Motion::Full,
+            Needs::RememberQuit => self.remember_quit,
         }
     }
 
@@ -75,6 +76,9 @@ impl App {
     fn cozy_extras_changed(&mut self, e: Extra) {
         if matches!(e, Extra::Stickers | Extra::PrintedDiscs) {
             self.cases_look_changed();
+        }
+        if e == Extra::FrozenGames {
+            self.frozen_refresh();
         }
     }
 

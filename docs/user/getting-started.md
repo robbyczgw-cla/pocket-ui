@@ -264,8 +264,7 @@ Advance or `roms/snes` for Super Nintendo. The folder names are the ones ROCKNIX
 - A disc game (`.cue` or `.gdi`) whose track file is missing is not on the shelf: it could not start. Add games
   names it (see below); once the file is there, the game appears. The track files of a disc (`.bin` next to its
   `.cue`) are part of that game, not games of their own.
-- BIOS files, for the systems that need them, go into `roms/bios`. You have to provide them
-  yourself.
+- BIOS files, for the systems that need them, go into `roms/bios`: your own. [Game check](game-check.md) says what's missing.
 
 ### The systems grid
 

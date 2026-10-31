@@ -148,7 +148,12 @@ sounds on you hear all of it: the case opening, the cartridge sliding in and cli
 spins up, a game card clicks into its slot), then the TV's soft thunk as it comes on. **Quick** keeps the short one. The
 other looks never have it.
 
-With **Playful cases** (Settings → Sound & feel, on with Cozy) each game goes in its own way: a
+With **Cozy** and **Playful cases** the big consoles really take their game: the PlayStation's, GameCube's, Dreamcast's
+and Saturn's lid opens, the disc comes down onto the spindle and the lid shuts; the PS2's and Xbox's tray slides out and
+takes the disc in; a SNES, N64 or Mega Drive cartridge is pushed down behind the slot's lip and clicks; a Game Boy or GBA
+cartridge goes in behind the top edge, a DS card behind the upper screen, and the Wii pulls its disc in through the slot. It takes about 1.6 seconds, and any button skips it at once.
+
+On the other systems each game still goes in its own way (Settings → Sound & feel, on with Cozy): a
 cartridge is pushed into its slot and seats with a little squash as it clicks; a game card clicks all the way in; a disc
 console's tray slides out, the disc drops in and the tray shuts with the sound's clunk; the GameCube, PlayStation,
 Dreamcast and Mega-CD open their lid instead; the Wii and the PSP take the disc or UMD in through the slot. A case you
@@ -391,9 +396,7 @@ hub without it shows nothing.
   its own; on 3DS about three seconds after the game's title appears.
 - **Other emulators** start fresh. Use the game's own save feature.
 
-In-game saves (the kind a cartridge keeps, "battery saves") on pocket-ui's own host are written
-every 10 seconds when they change and again when you quit. They are stored in the same place and
-format RetroArch uses, so they work with both.
+Your last five games with a saved moment also stand a little open on the shelf, and A goes straight back: [Frozen games](frozen-games.md#frozen-games).
 
 ## Menu sounds
 

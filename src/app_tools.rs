@@ -146,6 +146,7 @@ impl App {
             name: tool.name,
             path: tool.script,
             emulator: tools::EMULATOR.into(),
+            core: String::new(),
             started: Instant::now(),
             pgid,
             options: Default::default(),

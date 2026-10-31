@@ -120,6 +120,7 @@ fn device_key(opens: Opens) -> Option<&'static str> {
         Opens::Time => "time",
         Opens::Updates => "updates",
         Opens::Store => "store",
+        Opens::Extra(pocket_ui::cozy_extras::Extra::FrozenGames) => "frozen_games",
         _ => return None,
     })
 }
@@ -306,6 +307,7 @@ impl App {
             Opens::Motion if i == sel => format!("‹ {} ›", pocket_ui::motion::level().name()),
             Opens::Motion => pocket_ui::motion::level().name().to_string(),
             Opens::Setup(Only::Games) => page(&values::games(self.systems.iter().map(|s| s.games.len()).sum())),
+            Opens::GameCheck => page(&self.game_check_value()),
             Opens::Setup(Only::Wifi) => page(&facts.wifi.map(|w| w.label()).unwrap_or_default()),
             Opens::Setup(Only::Remote) => page(facts.ssh.map(values::on_off).unwrap_or_default()),
             Opens::Time => page(&facts.zone.as_deref().map(values::zone).unwrap_or_default()),
@@ -550,7 +552,7 @@ mod tests {
             lines.push(row.2.to_string());
             lines.push(de(row.2));
         }
-        for note in [Needs::Sounds, Needs::CozyFull, Needs::MotionFull].map(Needs::note) {
+        for note in [Needs::Sounds, Needs::CozyFull, Needs::MotionFull, Needs::RememberQuit].map(Needs::note) {
             lines.push(note.to_string());
             lines.push(de(note));
         }
@@ -677,7 +679,7 @@ mod tests {
         }
         // The Store comes back by what it opens, not by name.
         let store = SETTINGS.iter().position(|s| matches!(s.1, Opens::Store)).unwrap();
-        assert_eq!(group_of(store), category("Games"));
+        assert_eq!(group_of(store), category("Help & tools"));
     }
 
     /// Settings in seven categories (2026-10-30): every choice has a row, none only on a button (Y, R1, L1, X, R2 on the look
@@ -793,26 +795,26 @@ mod tests {
         assert_eq!(groups_input(SettingsPage::Groups(2), Button::Right), Some(SettingsPage::Groups(2)));
     }
 
-    /// No public catalog: the Store row is not there, nothing in the Games list points at it, and the rows around it
+    /// No public catalog: the Store row is not there, nothing in the Help & tools list points at it, and the rows around it
     /// close up (moving, going round, touch all count in `rows_with`). With a catalog it is back where it was.
     #[test]
     fn the_store_row_is_there_only_with_a_catalog() {
-        let games = category("Games");
+        let help = category("Help & tools");
         let store = SETTINGS.iter().position(|s| matches!(s.1, Opens::Store)).unwrap();
-        let (without, with) = (rows_with(games, false), rows_with(games, true));
+        let (without, with) = (rows_with(help, false), rows_with(help, true));
         assert!(!without.contains(&store), "no catalog: no Store row");
         assert!(with.contains(&store), "a catalog: the Store row");
         assert_eq!(with.len(), without.len() + 1);
         assert!(without.iter().all(|i| !matches!(SETTINGS[*i].1, Opens::Store)));
         // Other categories are untouched.
-        for g in (0..SETTINGS_GROUPS.len()).filter(|g| *g != games) {
+        for g in (0..SETTINGS_GROUPS.len()).filter(|g| *g != help) {
             assert_eq!(rows_with(g, false), rows_with(g, true));
         }
         // The neighbours of the hidden row are neighbours now, in both directions.
         let before = SettingsPage::List(store - 1);
         let after = groups_input_with(before, Button::Down, false);
         // The row after the Store, or the category's first when the Store is its last (it goes round).
-        let next = if store + 1 < span(games).end { store + 1 } else { without[0] };
+        let next = if store + 1 < span(help).end { store + 1 } else { without[0] };
         assert_eq!(after, Some(SettingsPage::List(next)), "Down skips the hidden row");
         assert_eq!(groups_input_with(after.unwrap(), Button::Up, false), Some(before), "Up skips it too");
         assert_eq!(groups_input_with(before, Button::Down, true), Some(SettingsPage::List(store)), "with a catalog Down lands on it");
@@ -832,15 +834,15 @@ mod tests {
         assert_eq!(deck("Playing"), "On start, quit, buttons, over the game, frames, battery, achievements.");
     }
 
-    /// The Games line names the Store only while the row is there. (The device default in a test run is "no
+    /// The Help & tools line names the Store only while the row is there. (The device default in a test run is "no
     /// catalog": nothing here sets `STORE_OFFERED`.)
     #[test]
-    fn the_games_line_leaves_out_the_store_while_it_is_hidden() {
-        let games = category("Games");
+    fn the_help_line_leaves_out_the_store_while_it_is_hidden() {
+        let help = category("Help & tools");
         let id = |s: &str| s.to_string();
-        assert!(blurb_with(games, true, true, false, id).contains("Store"));
-        assert!(!blurb_with(games, false, true, false, id).contains("Store"));
-        assert!(!blurb(games, id).contains("Store"), "no catalog in a test run");
+        assert!(blurb_with(help, true, true, false, id).contains("Store"));
+        assert!(!blurb_with(help, false, true, false, id).contains("Store"));
+        assert!(!blurb(help, id).contains("Store"), "no catalog in a test run");
         assert_eq!(blurb(category("Playing"), id), SETTINGS_GROUPS[category("Playing")].1);
     }
 }

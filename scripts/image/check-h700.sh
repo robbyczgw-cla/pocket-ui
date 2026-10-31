@@ -135,7 +135,11 @@ done
 check "no SSH keys or host keys in SYSTEM (usr/config/ssh/authorized_keys, ssh_host_*)" \
   '! grep -Eq "(^usr/config/ssh/authorized_keys|ssh_host_.*key)" "$W/lists/system"'
 check "the kernel command line does not turn SSH on (no ssh word)" '! grep -Eq "^ *APPEND .* ssh( |$)" "$W/fat/extlinux/extlinux.conf"'
-check "no BIOS file in SYSTEM (the H700 SYSTEM has none once DraStic is out)" '! grep -qi "bios.*\\.bin$" "$W/lists/system"'
+check "the only BIOS files in SYSTEM are DraStic's open replacement pair (BSD, drastic_bios_arm7/arm9.bin)" \
+  '[ "$(grep -i "bios.*\\.bin$" "$W/lists/system" | sort | tr "\n" " ")" = "usr/config/drastic/system/drastic_bios_arm7.bin usr/config/drastic/system/drastic_bios_arm9.bin " ]'
+check "DraStic is there unchanged with its permission texts (usr/config/drastic: drastic, LICENSE.pdf)" \
+  'grep -qx "usr/config/drastic/drastic" "$W/lists/system" && grep -qx "usr/config/drastic/LICENSE.pdf" "$W/lists/system"'
+check "ROCKNIX's licenses/DRASTIC.pdf is on the card" '[ -n "$(mdir -b -i "$FAT" ::/pocket-ui-info/rocknix-licenses/licenses 2>/dev/null | grep DRASTIC.pdf)" ]'
 FW=usr/lib/kernel-overlays/base/lib/firmware
 unsquashfs -lln "$W/SYSTEM" "$FW" 2>/dev/null | grep '^-' | sed -n "s#^.* squashfs-root/$FW/##p" | sort >"$W/lists/firmware"
 check "every firmware file in SYSTEM ($(wc -l <"$W/lists/firmware")) is listed with its terms in firmware-licences-h700/README.txt" \
@@ -163,13 +167,14 @@ check "pocket-ui-info/pocket-ui-os.txt: $POCKET_OS_NAME $VERSION, for Settings >
 echo "== notes on the card (pocket-ui-info/README.txt)"
 R=$W/fat/pocket-ui-info/README.txt
 check "names the model: $DT_MODEL, DDR4, dtb.img from device_trees/$DTB_NAME.dtb" 'grep -q "for the $DT_MODEL: SD card image" "$R" && grep -q "DDR4" "$R" && grep -q "device_trees/$DTB_NAME.dtb" "$R"'
+check "DraStic: closed source, unchanged like ROCKNIX, 2017 statement, not a formal licence, credit Exophase, removed on request" 'grep -q "DraStic by Exophase" "$R" && grep -q "closed-source" "$R" && grep -q "not a formal licence" "$R" && grep -q "on request" "$R"'
 check "names version $VERSION" 'grep -q "pocket-ui $VERSION" "$R"'
 check "$POCKET_OS_NAME, built on ROCKNIX, not made or endorsed by its team, with link" 'grep -q "$POCKET_OS_NAME $VERSION" "$R" && grep -q "built on ROCKNIX" "$R" && grep -q "not made or" "$R" && grep -q "https://github.com/ROCKNIX/distribution" "$R"'
 check "source offer: ROCKNIX tag $ROCKNIX_TAG and commit" 'grep -q "tag $ROCKNIX_TAG" "$R" && grep -q "$ROCKNIX_COMMIT" "$R"'
 check "artwork under CC BY-NC-SA 4.0" 'grep -q "CC BY-NC-SA 4.0" "$R"'
 check "free, non-commercial distribution only" 'grep -qi "non-commercial" "$R"'
-check "says: no BIOS files, no games" 'grep -q "no BIOS files" "$R"'
-check "says what was removed from SYSTEM and why (SKick, DOOM shareware, DraStic)" 'grep -q "skick346.lha" "$R" && grep -q "DOOM shareware" "$R" && grep -q "DraStic" "$R"'
+check "says: no games, no console maker's BIOS files" 'grep -q "no games and no console maker" "$R"'
+check "says what was removed from SYSTEM and why (SKick, DOOM shareware)" 'grep -q "skick346.lha" "$R" && grep -q "DOOM shareware" "$R"'
 check "says remote access is off, and that pocket-ui makes the password" 'grep -q "Remote access (SSH), file sharing and Syncthing are off" "$R"'
 check "points to the source next to the image and to SOURCE-OFFER.txt" 'grep -q "pocket-ui-info/SOURCE-OFFER.txt" "$R"'
 warn "names a clean pocket-ui source (no -dirty commit)" '! grep -q -- "-dirty" "$R"'

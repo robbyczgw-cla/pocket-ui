@@ -10,3 +10,9 @@ store/test-catalog/packages/testpattern_libretro.so   # own code, store test cat
 # A 96-byte stand-in for a GameCube disc, written for the Pixel Path test (src/pixel_standalone.rs): only the header
 # fields Dolphin reads (6-byte game ID, the disc magic, the title), zeros otherwise. No game data, nothing copied.
 testdata/pixel-path/dolphin/roms/*.iso   # own test data: a disc header with no content
+
+# DraStic inside an unpacked ROCKNIX H700 SYSTEM (the pocket-ui OS image for the H700, decision 2026-10-31): the open BSD-licensed
+# replacement BIOS pair by Gilead Kutnick (usr/config/drastic/system/drastic_bios_readme.txt), named like a BIOS but not one.
+# The closed-source DraStic binary next to it is passed on unchanged as ROCKNIX does (NOTICE.md); this tree is a SYSTEM, not the repository.
+usr/config/drastic/system/drastic_bios_arm7.bin   # open BSD replacement BIOS, not a console maker's
+usr/config/drastic/system/drastic_bios_arm9.bin   # open BSD replacement BIOS, not a console maker's

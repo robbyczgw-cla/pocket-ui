@@ -17,10 +17,10 @@ Screen frames and the like change with A or Left/Right, right in the list.
 | **Look** | Look, Appearance, Colours, Font, Text size, Night light, Systems on the shelf, Cozy extras. See [Look](#look) |
 | **Sound & feel** | Animations, Playful cases, Old-TV switch-on, Motion, Sounds, Case sounds, Haptics, LEDs. See [Sound & feel](#sound--feel) |
 | **Playing** | On start, Remember where I quit, Buttons, Over the game, Screen frames, Performance & fan, Battery, RetroAchievements. See [Playing](#playing) |
-| **Games** | Add games, Starter pack, Pictures & extras, From EmulationStation, Screenshots, Curator, PC streaming, Store (only on a device with a store set up). See [Games](#games) |
+| **Games** | Add games, Game check, Starter pack, Pictures & extras, From EmulationStation, Screenshots, Curator, PC streaming. See [Games](#games) |
 | **Connections** | Wi-Fi, Bluetooth, Tailscale, Sync, Remote access (SSH), Web companion. See [Connections](settings-system.md#connections) |
-| **System** | Language, Time, Sleep & power, Updates, Storage, Backup & reset. See [System](settings-system.md#system) |
-| **Help & tools** | Tour, Manual, Tools, Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
+| **System** | Language, Time, Sleep & power, Frozen games, Updates, Storage, Backup & reset. See [System](settings-system.md#system) |
+| **Help & tools** | Tour, Manual, Tools, Store (only on a device with a store set up), Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
 
 The second half of Settings, [Connections, System and Help & tools](settings-system.md), has its own page.
 
@@ -186,7 +186,8 @@ not others. Up/Down move, A (or Left/Right) switches the selected one **On** or 
 kept across restarts. The line under the list says what the selected one does and in which looks you see it. Reset
 settings (System → Backup & reset) puts them back as they start. The extras you hear or that move are entries of
 [Sound & feel](#sound--feel) (Playful cases, Old-TV switch-on, Case sounds); the slideshow before the screen goes off
-is in System → [Sleep & power](quick-settings.md#sleep--power-settings).
+is in System → [Sleep & power](quick-settings.md#sleep--power-settings), and [Frozen games](#frozen-games) has its own row in
+System.
 
 | Extra | What it does | Start |
 |---|---|---|
@@ -258,6 +259,16 @@ switches it.
 
 This is how NextUI and MinUI quit: their in-game menu has one Quit that writes the game's own saves, and they keep a
 moment to resume only when the device sleeps or switches off. With the switch off, the Pocket does the same.
+
+### Frozen games
+
+Settings → System → **Frozen games** (on at the start; A switches it) lets your last five games with a saved moment stand
+a little open on the shelf, and A on one goes straight back to that moment. It takes nothing new: only the moment that
+[Remember where I quit](#remember-where-i-quit) and sleep already keep. How it looks and what it can't do:
+[Frozen games](frozen-games.md#frozen-games).
+
+With Remember where I quit off, a Quit freezes nothing new, and this row says so. Moments from before and from sleep still
+show, and A goes back to those.
 
 The switch applies to pocket-ui's own host and to PlayStation 2, GameCube, Wii and 3DS. **RetroArch games still save
 the moment on Quit** with the switch off: ROCKNIX sets RetroArch to save on every exit, and RetroArch has no way to
@@ -333,13 +344,13 @@ Settings → **Games**. Getting games and what runs them onto the Pocket, and th
 | Entry | What it holds |
 |---|---|
 | **Add games** | A tile per system with its folder, file types and BIOS needs, file sharing, and folders or disc games it can't read. See [Getting started](getting-started.md#the-systems-grid) |
+| **Game check** | "Will my games start?": goes through your card and says, in plain words, what is missing and what to do. Only looks; it can hide a duplicate from the shelf when you press A. See [Getting started](game-check.md) |
 | **Starter pack** | A handful of free games to download when the SD card has none: pick one or take them all. Also offered on Home while the SD card is empty. See [Getting started](getting-started.md#nothing-on-the-sd-card-yet-the-starter-pack) |
 | **Pictures & extras** | Cover art, the Pictures choice (Box art, Box art and screenshots or Off) and PortMaster games. See [Pictures and extras](extras.md) |
 | **From EmulationStation** | The favourites and ratings in your EmulationStation `gamelist.xml` files: A adds the favourites to Favourites or uses the ratings as My rating, without changing a thing in EmulationStation. Says "No gamelist" when there is none. See [Your EmulationStation gamelists](library.md#your-emulationstation-gamelists) |
 | **Screenshots** | The pictures you took with HOME + A, newest first, in groups by day, with a small picture each. A opens one full screen, X deletes it. The value at the right is how many there are; with none the page says how to take one. See [Looking at your screenshots](playing.md#looking-at-your-screenshots) |
 | **Curator** | The Lens and smart shelves, stickers, Echoes, Up next, versions and play history, each on or off. See [Curator](#curator) |
 | **PC streaming** | Pair a gaming PC for Moonlight on the Pocket itself, see the paired PCs, stream one of their games. See [PC streaming](pc-streaming.md) |
-| **Store** | Emulators, frames, themes and tools. Shown only on a device that has a store set up; there is no public store yet, so you will not see this row. See [Store](extras.md#store) |
 
 ### Curator
 

@@ -206,7 +206,7 @@ empty the folder you copied into afterwards; that is normal.
 ## Store
 
 The Store is a page for optional extras, so the system itself can stay small. **It is not open yet:** there is no
-public store, so Settings → Games has no Store row and nothing else leads to the page. The row appears by itself
+public store, so Settings → Help & tools has no Store row and nothing else leads to the page. The row appears by itself
 on a device that has a store set up (a `store_url` in settings.json, see [STORE.md](../STORE.md)). What the page
 will hold:
 

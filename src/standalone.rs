@@ -216,9 +216,32 @@ impl Session {
     }
 }
 
+/// The auto state's names for a game that isn't running (`frozen`), the first that exists; None for an emulator
+/// without states here. ARMSX2 names its states after what it reads once the game runs: empty, `frozen::Mark` has it.
+pub fn auto_states(system: &str, emulator: &str, core: &str, rom: &Path) -> Option<Vec<PathBuf>> {
+    let emu = Emu::detect(system, emulator, core).filter(|e| e.handles(rom))?;
+    let session = Session { emu, system: system.to_string(), rom: rom.to_path_buf(), base: state_base(emu, rom), id: 0 };
+    Some(session.states().map_or(Vec::new(), |s| s.auto))
+}
+
+/// The next `launch` leaves the auto state alone (`frozen::AtLaunch::Fresh`): it stays, for Load.
+pub fn skip_next_resume() {
+    SKIP_RESUME.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+static SKIP_RESUME: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static RESUMING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The thread that loads the moment into the emulator is still at it (`resume`).
+pub fn resuming() -> bool {
+    RESUMING.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Called before the game is started: writes what the integration needs (and, once, the tuned defaults) into
 /// the emulator's config, and starts the thread that resumes from the Quit state. False for other emulators.
 pub fn launch(system: &str, emulator: &str, core: &str, rom: &Path, data_dir: &Path) -> bool {
+    // Consumed by this start whatever happens to it: an early return must not leave it for the next game's resume.
+    let skip = SKIP_RESUME.swap(false, std::sync::atomic::Ordering::Relaxed);
     let Some(emu) = Emu::detect(system, emulator, core).filter(|e| e.handles(rom)) else {
         exited();
         guest::launch(system, emulator, rom);
@@ -247,7 +270,11 @@ pub fn launch(system: &str, emulator: &str, core: &str, rom: &Path, data_dir: &P
     if let Ok(mut s) = SESSION.lock() {
         *s = Some(session.clone());
     }
-    std::thread::spawn(move || resume(session));
+    RESUMING.store(true, std::sync::atomic::Ordering::Relaxed);
+    std::thread::spawn(move || {
+        resume(session, skip);
+        RESUMING.store(false, std::sync::atomic::Ordering::Relaxed);
+    });
     true
 }
 
@@ -603,8 +630,9 @@ fn migrate_dolphin_in(dir: &Path, base: &str, marker: &Path) {
 }
 
 /// Waits for the game to run, learns the state names, and loads the state written on the last Quit.
-fn resume(mut s: Session) {
-    let deadline = Instant::now() + Duration::from_secs(120);
+fn resume(mut s: Session, skip_load: bool) {
+    let asked = Instant::now();
+    let deadline = asked + Duration::from_secs(120);
     let wait_for = |ready: &dyn Fn() -> bool| {
         while !ready() {
             if Instant::now() > deadline || !still(s.id) {
@@ -658,7 +686,10 @@ fn resume(mut s: Session) {
     if let Some(_turn) = turn(&s) {
         // The emulator runs, so runemu.sh has set ROCKNIX's governor already: ours goes on top of it.
         set_performance(chosen_performance(&s.system, &s.rom));
-        load_target(&s, Target::Auto);
+        if !skip_load {
+            load_target(&s, Target::Auto);
+            println!("standalone: resume done {:?} after the start", asked.elapsed());
+        }
     }
 }
 
@@ -1904,6 +1935,16 @@ mod tests {
     use super::defaults::ini_set;
     use super::*;
     use crate::testutil::TestDir;
+
+    #[test]
+    fn a_skipped_resume_is_used_up_by_the_start_it_was_for_even_when_that_start_is_no_standalone_one() {
+        let d = TestDir::new("skip-resume");
+        let rom = d.join("Game.gba");
+        std::fs::write(&rom, b"x").unwrap();
+        skip_next_resume();
+        assert!(!launch("gba", "pocket-core", "mgba", &rom, &d), "not an emulator of ours: returns early");
+        assert!(!SKIP_RESUME.load(std::sync::atomic::Ordering::Relaxed), "the next game's resume isn't skipped");
+    }
 
     const INI: &str =
         "[UI]\nConfirmShutdown = true\n\n\n[EmuCore]\nEnablePINE = false\nPINESlot = 28011\n\n[Pad1]\nCross = SDL-0/FaceSouth\nAnalog = SDL-0/Guide\n";

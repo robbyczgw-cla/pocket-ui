@@ -112,7 +112,7 @@ Touch was seen on the real panel once, with a DS game, and was wrong (taps mirro
 - [ ] NDS: right stick moves the touch pointer, R2 taps. Does a tap register in a game menu? R3 changes
   the screen layout.
 - [ ] Cheats: Contra III or any game with cheats, Options > Cheats, switch one on, does it work?
-- [ ] Store: Settings > Games has no Store row (no catalog yet; Tools, PC streaming and the cursor moving through the list are fine). With `"store_url"` in settings.json the row is back and opens.
+- [ ] Store: Settings > Help & tools has no Store row (no catalog yet; Tools, PC streaming and the cursor moving through the list are fine). With `"store_url"` in settings.json the row is back and opens.
 
 ## DOS, ScummVM, PICO-8, TIC-80 (docs/HOST.md, checked on the virtual device only)
 Muted (`wpctl set-mute @DEFAULT_AUDIO_SINK@ 1`, old state back afterwards); games quit with

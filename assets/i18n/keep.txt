@@ -518,3 +518,14 @@ WonderSwan Color
 Neo Geo Pocket
 Neo Geo Pocket Color
 Atari Lynx
+Wii
+Pokémon Blau
+Chrono Trigger.gba
+Super Mario World
+Metroid Fusion (1).gba
+Sega Genesis
+roms/psx/Final Fantasy VII.cue
+roms/gb/Pokémon Blau.gb
+roms/gba/Metroid Fusion (1).gba
+roms/snes/Chrono Trigger.gba
+roms/Sega Genesis

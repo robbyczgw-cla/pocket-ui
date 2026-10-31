@@ -342,7 +342,7 @@ impl App {
 
     /// A game left the list (hidden or deleted): the list on screen without it goes in at once (or as soon as nothing
     /// holds a game by its place, `library_apply_pending`), the cache follows, the web companion reads its list again.
-    fn game_left_the_list(&mut self, path: &Path) {
+    pub(crate) fn game_left_the_list(&mut self, path: &Path) {
         let mut fresh = self.library_ui_pending_or_shown();
         pocket_ui::library::without_hidden(&mut fresh, &std::iter::once(path.to_path_buf()).collect());
         pocket_ui::library_cache::store_soon(&self.data_dir, &self.es_systems, fresh.clone());

@@ -148,7 +148,7 @@ so main stays buildable for Android. See [android/README.md](../android/README.m
 The dedicated release keystore is outside every checkout, in `~/.local/share/pocket-ui/android-signing/release.jks`;
 its password is a separate private file. Neither is committed. The first debug-signed preview must be uninstalled
 once before installing this identity. Further APKs with this key update normally. Current Android version is
-`0.1.6-android.8`, versionCode 10608; the source version is 0.1.7.
+`0.1.7-android.1`, versionCode 10701 (the build script derives both from Cargo.toml); the source version is 0.1.8.
 
 `player-smoke.py` uses real SAF, a hash-checked starter homebrew, live UI node bounds, in-app pause/slots/options,
 screenshot, Quit/auto-resume and an original GB audio diagnostic. It does not install a mock emulator receiver.

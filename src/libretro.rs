@@ -4,6 +4,7 @@
 //! libretro callbacks carry no user pointer, so their state lives in a global (`SHARED`). The core
 //! runs on the thread that calls `run()`; threaded cores call back from their own threads too.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::ffi::{c_char, c_uint, c_void, CStr, CString};
 use std::path::{Path, PathBuf};
@@ -285,11 +286,86 @@ impl Global {
 
 static SHARED: Global = Global(OnceLock::new());
 
+/// The most a core writes to the log in one game's run: a game stuck in an error loop wrote 2.3 GB in ten minutes (mGBA's
+/// "Illegal opcode", 2026-10-31). The first lines say what went wrong; POCKET_CORE_TRACE=1 has no limit.
+const CORE_LOG_MOST: usize = 2 * 1024 * 1024;
+
+/// What a core has written so far.
+static CORE_LOG_WRITTEN: AtomicUsize = AtomicUsize::new(0);
+
+/// What becomes of the next line of a core's log.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum CoreLog {
+    Write,
+    /// It would pass the limit: it goes, and one line says the rest does.
+    LimitReached,
+    Drop,
+}
+
+/// Counts `len` bytes against `written`.
+fn core_log_turn(written: &AtomicUsize, len: usize, most: usize) -> CoreLog {
+    let before = written.fetch_add(len, Ordering::Relaxed);
+    match (before >= most, before.saturating_add(len) >= most) {
+        (true, _) => CoreLog::Drop,
+        (false, true) => CoreLog::LimitReached,
+        (false, false) => CoreLog::Write,
+    }
+}
+
+/// What gets through the limit all the same: a few kilobytes of warnings, more of errors, never a line like one of the last
+/// few. So a crash after the limit still has the core's last words in the report (2026-10-31 review).
+const CORE_LOG_EXTRA_WARN: usize = 256 * 1024;
+const CORE_LOG_EXTRA_ERROR: usize = 1024 * 1024;
+/// How many of the latest lines a repeat is compared with.
+const CORE_LOG_RECENT: usize = 16;
+
+#[derive(Default)]
+struct CoreLogTail {
+    recent: std::collections::VecDeque<String>,
+    extra: usize,
+}
+
+impl CoreLogTail {
+    /// Whether a line past the limit is written: it is new (not one of the latest) and within the budget of its kind.
+    fn lets_through(&mut self, text: &str, error: bool) -> bool {
+        let seen = self.recent.iter().any(|r| r == text);
+        if !seen {
+            if self.recent.len() >= CORE_LOG_RECENT {
+                self.recent.pop_front();
+            }
+            self.recent.push_back(text.to_string());
+        }
+        let most = if error { CORE_LOG_EXTRA_ERROR } else { CORE_LOG_EXTRA_WARN };
+        let pass = !seen && self.extra + text.len() <= most;
+        if pass {
+            self.extra += text.len();
+        }
+        pass
+    }
+}
+
+static CORE_LOG_TAIL: Mutex<Option<CoreLogTail>> = Mutex::new(None);
+
+/// A line of a core for the log, within the limit; `error`: an error or fatal message, which has more room past it.
+fn core_log(text: &str, error: bool) {
+    let trace = crate::vfs::TRACE.load(Ordering::Relaxed);
+    match core_log_turn(&CORE_LOG_WRITTEN, text.len(), if trace { usize::MAX } else { CORE_LOG_MOST }) {
+        CoreLog::Write => eprint!("[core] {text}"),
+        CoreLog::LimitReached => eprintln!("[core] {}\n[core] the core's log is full: more of its messages are left out, but new ones and errors still come", text.trim_end()),
+        CoreLog::Drop => {
+            let pass = CORE_LOG_TAIL.lock().map(|mut t| t.get_or_insert_with(Default::default).lets_through(text, error)).unwrap_or(false);
+            if pass {
+                eprint!("[core] {text}");
+            }
+        }
+    }
+}
+
 /// A core's log line, formatted by `pocket_log_printf`: only warnings and errors come here (everything with
 /// POCKET_CORE_TRACE). The last warning or error is kept to explain a failed load.
 unsafe extern "C" fn log_line(level: c_uint, text: *const c_char) {
     let text = CStr::from_ptr(text).to_string_lossy().into_owned();
-    eprint!("[core] {text}");
+    core_log(&text, level >= 3);
     if level >= 2 {
         SHARED.with_borrow_mut(|s| s.last_error = text.trim().to_string());
     }
@@ -465,7 +541,7 @@ unsafe extern "C" fn environment(cmd: c_uint, data: *mut c_void) -> bool {
         ENV_SET_MESSAGE => {
             let m = &*(data as *const Message);
             if !m.msg.is_null() {
-                eprintln!("[core] {}", CStr::from_ptr(m.msg).to_string_lossy());
+                core_log(&format!("{}\n", CStr::from_ptr(m.msg).to_string_lossy()), false);
             }
             true
         }
@@ -1567,7 +1643,43 @@ impl Frame {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_core_stuck_in_an_error_loop_writes_at_most_its_limit() {
+        let written = AtomicUsize::new(0);
+        let line = "GBA: Illegal opcode: 0000ea00\n".len();
+        let mut logged = 0;
+        let mut told = 0;
+        // 2.3 GB of it, as Boktai wrote: counted, not written.
+        for _ in 0..(2_300_000_000usize / line) {
+            match core_log_turn(&written, line, CORE_LOG_MOST) {
+                CoreLog::Write => logged += line,
+                CoreLog::LimitReached => {
+                    logged += line;
+                    told += 1;
+                }
+                CoreLog::Drop => {}
+            }
+        }
+        assert!((CORE_LOG_MOST..CORE_LOG_MOST + line).contains(&logged), "the limit, and at most the line that reached it: {logged}");
+        assert_eq!(told, 1, "said once");
+        assert_eq!(core_log_turn(&AtomicUsize::new(0), line, usize::MAX), CoreLog::Write, "POCKET_CORE_TRACE: no limit");
+    }
+
     use super::*;
+
+    #[test]
+    fn past_the_limit_new_lines_and_errors_still_come_but_repeats_and_floods_do_not() {
+        let mut t = CoreLogTail::default();
+        assert!(t.lets_through("GBA: Illegal opcode\n", true));
+        assert!(!t.lets_through("GBA: Illegal opcode\n", true), "a repeat");
+        assert!(t.lets_through("FATAL: bus error at 0x1234\n", true), "the last words of a crash");
+        let mut passed = 0;
+        for i in 0..1_000_000 {
+            passed += t.lets_through(&format!("warn {i}\n"), false) as usize;
+        }
+        assert!(passed > 0 && passed * 8 < CORE_LOG_EXTRA_WARN + 8, "a flood of different warnings stays within its budget: {passed}");
+        assert!(t.lets_through("FATAL: after the flood\n", true), "errors have their own room");
+    }
 
     /// What a core reads of the touch screen as a pointer, a light gun and a mouse (port 0 only).
     #[test]

@@ -16,9 +16,9 @@ const TREE: [(&str, &[&str]); 7] = [
     ("Look", &["Look", "Appearance", "Colours", "Font", "Text size", "Night light", "Systems on the shelf", "Cozy extras"]),
     ("Sound & feel", &["Animations", "Playful cases", "Old-TV switch-on", "Motion", "Sounds", "Case sounds", "Haptics", "LEDs"]),
     ("Playing", &["On start", "Remember where I quit", "Buttons", "Over the game", "Screen frames", "Performance & fan", "Battery", "RetroAchievements"]),
-    ("Games", &["Add games", "Starter pack", "Pictures & extras", "From EmulationStation", "Screenshots", "Curator", "PC streaming"]),
+    ("Games", &["Add games", "Game check", "Starter pack", "Pictures & extras", "From EmulationStation", "Screenshots", "Curator", "PC streaming"]),
     ("Connections", &["Wi-Fi", "Bluetooth", "Tailscale", "Sync", "Remote access (SSH)", "Web companion"]),
-    ("System", &["Language", "Time", "Sleep & power", "Updates", "Storage", "Backup & reset"]),
+    ("System", &["Language", "Time", "Sleep & power", "Frozen games", "Updates", "Storage", "Backup & reset"]),
     ("Help & tools", &["Tour", "Manual", "Tools", "Report a problem", "About"]),
 ];
 
@@ -67,11 +67,11 @@ const LINES: [&str; 7] = [
     "Look, appearance, colours, font, text size, night light, systems, cozy extras.",
     "Animations, playful cases, old-TV switch-on, motion, sounds, case sounds, haptics, LEDs.",
     "On start, quit, buttons, over the game, frames, performance, battery, achievements.",
-    // With the Store, as the German table has it; a test run has no catalog, so its last part is left out (below).
-    "Games, starter pack, pictures, EmulationStation, screenshots, Curator, PC, Store.",
+    "Games, game check, starter pack, pictures, EmulationStation, screenshots, Curator, PC.",
     "Wi-Fi, Bluetooth, Tailscale, Sync, remote access, web companion.",
-    "Language, time, sleep & power, updates, storage, backup & reset.",
-    "Tour, manual, tools, report a problem, about.",
+    "Language, time, sleep & power, frozen games, updates, storage, backup & reset.",
+    // With the Store, as the German table has it; a test run has no catalog, so its part is left out (below).
+    "Tour, manual, tools, Store, report a problem, about.",
 ];
 
 /// What one snapshot painted: the visible strings and the text-box faults (`E` cut, `O` overlapping).
@@ -135,10 +135,7 @@ fn every_choice_is_a_row_and_shows_whole() {
                     failed.push(format!("{lang} {size} {text}: the categories don't show {cat:?}: {:?}", page.visible));
                 }
             }
-            let mut line = tr(LINES[g]);
-            if LINES[g].ends_with(", Store.") {
-                line = format!("{}.", line.rsplit_once(", ").unwrap().0);
-            }
+            let line = tr(LINES[g]).replace(", Store,", ",");
             // Wrapped at spaces: the painted lines one after another are the whole line.
             if !page.visible.join(" ").contains(&line) || page.visible.iter().any(|v| v.ends_with('…')) {
                 failed.push(format!("{lang} {size} {text} category {g}: its line {line:?} isn't shown whole: {:?}", page.visible));

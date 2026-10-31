@@ -76,6 +76,7 @@ mod app_library_sync;
 mod app_appearance;
 /// The Cabinet look: cases on wooden shelves, pulled out and put into the console.
 mod app_cabinet;
+mod app_frozen;
 // The case stickers on the Cabinet's, the Shelf look's and the game box's fronts and spines.
 mod app_case_stickers;
 // The CRT TV on the Cabinet's top board with the selected game's screenshot.
@@ -134,6 +135,8 @@ mod app_this_game;
 mod app_trace;
 /// Settings > Sound & feel > Motion: page transitions, list glides, the hint bar's crossfade, the frame log.
 mod app_motion;
+/// Settings > Games > Game check: "will my games start?", on a thread of its own.
+mod app_game_check;
 /// Settings > Tools: ROCKNIX's tools and the Store's, started like an app (feat/tools-wifi).
 mod app_tools;
 /// Settings > PC streaming: pairing Moonlight with the PIN on screen, the paired PCs, their games (feat/tools-wifi).
@@ -219,6 +222,9 @@ enum UserEvent {
     MenuShot { seq: u32, image: Option<pocket_ui::preview::Pixels> },
     /// The picture of where the game was left, read and scaled for the launch (`pocket_ui::launch_picture`).
     LaunchPicture(Option<pocket_ui::launch_picture::Prepared>),
+    /// The recent games that stand open now (`frozen::scan`).
+    /// The generation of the read (`frozen_refresh`), what stands open.
+    Frozen(u64, Vec<PathBuf>),
     /// Applying PS2, GameCube, Wii or 3DS options by a restart: the resume state was written (or not).
     OptionsSaved(bool),
     Setup(SetupEvent),
@@ -278,6 +284,9 @@ enum UserEvent {
     Web(app_web::Event),
     /// Settings > Tools: the tools were found, a Store tool ran (`app_tools.rs`).
     Tools(pocket_ui::tools_page::Event),
+    /// Settings > Games > Game check: how far it is, what it found (`app_game_check.rs`).
+    /// The generation of the check that sent it (`game_check_start`).
+    GameCheck(u64, pocket_ui::game_check_page::Event),
     /// Settings > PC streaming: pairing, the PCs, their games (`app_moonlight.rs`).
     Moonlight(pocket_ui::moonlight_page::Event),
     /// Settings > Backup & reset: the backups were listed, a job finished (`app_backup.rs`).
@@ -330,6 +339,8 @@ enum Opens {
     Store,
     /// Free games to download (`app_starter`).
     Starter,
+    /// "Will my games start?" (`app_game_check`).
+    GameCheck,
     /// Time zone and network time (src/quick.rs).
     Time,
     Updates,
@@ -457,15 +468,15 @@ const SETTINGS_GROUPS: [(&str, &str, &[SettingsRow]); 7] = [
         ("Battery", Opens::Battery, "Battery history, time left, what each game uses."),
         (app_achievements::SETTINGS_NAME, Opens::Achievements, "Earn achievements in your games."),
     ]),
-    ("Games", "Games, starter pack, pictures, EmulationStation, screenshots, Curator, PC, Store.", &[
+    ("Games", "Games, game check, starter pack, pictures, EmulationStation, screenshots, Curator, PC.", &[
         ("Add games", Opens::Setup(Only::Games), "Where each system's games go, and file sharing."),
+        (app_game_check::SETTINGS_NAME, Opens::GameCheck, "Will your games start? What's missing, in plain words."),
         (app_starter::SETTINGS_NAME, Opens::Starter, "A few free games to start with, downloaded to your SD card."),
         ("Pictures & extras", Opens::Setup(Only::Extras), "Cover art, game pictures and PortMaster games."),
         (app_gamelist::SETTINGS_NAME, Opens::Gamelist, "Favourites and ratings from your EmulationStation gamelists."),
         (app_gallery::SETTINGS_NAME, Opens::Screenshots, "The pictures you took with HOME + A, newest first."),
         (app_curator::SETTINGS_NAME, Opens::Curator, "Lens, smart shelves, stickers, Echoes, versions and play history."),
         (app_moonlight::SETTINGS_NAME, Opens::PcStreaming, "Pair a gaming PC for Moonlight, and stream its games."),
-        ("Store", Opens::Store, "Emulators, frames, themes, tools."),
     ]),
     ("Connections", "Wi-Fi, Bluetooth, Tailscale, Sync, remote access, web companion.", &[
         ("Wi-Fi", Opens::Setup(Only::Wifi), "Connect to a network."),
@@ -475,18 +486,21 @@ const SETTINGS_GROUPS: [(&str, &str, &[SettingsRow]); 7] = [
         ("Remote access (SSH)", Opens::Setup(Only::Remote), "Log in from a computer. Turns itself off after 30 minutes."),
         (app_web::SETTINGS_NAME, Opens::Web, "Your games, play time and uploads in a browser."),
     ]),
-    ("System", "Language, time, sleep & power, updates, storage, backup & reset.", &[
+    ("System", "Language, time, sleep & power, frozen games, updates, storage, backup & reset.", &[
         ("Language", Opens::Language, "Menus and messages in English or German."),
         ("Time", Opens::Time, "Time zone, date and network time."),
         (app_sleep_power::SETTINGS_NAME, Opens::SleepPower, "When the screen goes off and the device sleeps, and the power button."),
+        (Extra::FrozenGames.label(), Opens::Extra(Extra::FrozenGames), Extra::FrozenGames.blurb()),
         ("Updates", Opens::Updates, "New versions of pocket-ui and the system."),
         (app_storage::SETTINGS_NAME, Opens::Storage, "What takes up space on the SD card, and what can go."),
         (app_backup::SETTINGS_NAME, Opens::Backup, "Save pocket-ui's settings to the SD card, restore them, or start afresh."),
     ]),
-    ("Help & tools", "Tour, manual, tools, report a problem, about.", &[
+    ("Help & tools", "Tour, manual, tools, Store, report a problem, about.", &[
         ("Tour", Opens::Tour, "Every feature on a card, with a picture: switch it on or off."),
         ("Manual", Opens::Manual, "The user guide, on the device."),
         (app_tools::SETTINGS_NAME, Opens::Tools, "Emulator menus, RetroArch, gamepad test and calibration, terminal."),
+        // Hidden until a catalog is set up (`store::catalog_url`). Next to Tools so that Games stays within its eight rows.
+        ("Store", Opens::Store, "Emulators, frames, themes, tools."),
         (pocket_ui::report::ROW, Opens::Report, "Saves a file for a bug report, to attach on GitHub."),
         ("About", Opens::About, "Version, storage and network."),
     ]),
@@ -583,6 +597,8 @@ enum SettingsPage {
     Store,
     /// The starter pack's games (`app_starter`).
     Starter,
+    /// Will the games start (`app_game_check`).
+    GameCheck,
     Updates,
     /// Index into `battery::RANGES` for the graph.
     Battery(usize),
@@ -634,6 +650,7 @@ struct Running {
     name: String,
     path: PathBuf,
     emulator: String,
+    core: String,
     started: Instant,
     /// Process group of the launched game (runemu.sh and everything it starts).
     pgid: Option<i32>,
@@ -1114,6 +1131,8 @@ struct App {
     perf: app_perf_fan::PerfFanUi,
     /// Settings > Tools (`app_tools.rs`).
     tools: app_tools::ToolsUi,
+    /// Settings > Games > Game check (`app_game_check.rs`).
+    game_check: app_game_check::GameCheckUi,
     /// Settings > PC streaming (`app_moonlight.rs`).
     moonlight: app_moonlight::MoonlightUi,
     /// Settings > Backup & reset (`app_backup.rs`).
@@ -1189,6 +1208,12 @@ struct App {
     pixel_path: bool,
     /// The picture of where the starting game was left (`pocket_ui::launch_picture`), until the game ends.
     launch_picture: Option<pocket_ui::launch_picture::Prepared>,
+    /// The games that stand open (`app_frozen`), newest first.
+    frozen: Vec<PathBuf>,
+    /// The running game's auto state as it was before its session closed (`App::frozen_note_session`).
+    frozen_auto: Option<PathBuf>,
+    /// A big emulator is loading the moment of a frozen game, since then: the spinner.
+    frozen_wait: Option<Instant>,
     /// The game search and the letter jump (`app_search`).
     find: app_search::FindUi,
     /// Page transitions, list glides and the hint bar's crossfade (`app_motion`).
@@ -1366,7 +1391,7 @@ impl App {
         let pgid = spawn_app(self.proxy.clone(), cmd);
         control::note_game(pgid);
         let emulator = pocket_ui::moonlight::EMULATOR.to_string();
-        self.running = Some(Running { system: emulator.clone(), name, path: PathBuf::new(), emulator, started: Instant::now(), pgid, options: Default::default() });
+        self.running = Some(Running { system: emulator.clone(), name, path: PathBuf::new(), emulator, core: String::new(), started: Instant::now(), pgid, options: Default::default() });
         self.launch_at = Some(Instant::now());
         self.held = None;
     }
@@ -1448,6 +1473,9 @@ impl App {
         // GameCube and Dolphin defaults in system.cfg are in place (put off at start until the first frame).
         #[cfg(target_os = "linux")]
         emu_settings::apply_start_defaults_once();
+        // A moment that can't be used is left out and said so (`frozen::at_launch`); else the normal start, which loads it.
+        let mut frozen_env = Vec::new();
+        self.frozen_at_launch(&system, &path, &emulator, &core, &mut frozen_env);
         standalone::launch(&system, &emulator, &core, &path, &self.data_dir);
         emu_settings::launch(standalone::session().map(|s| s.emu), &system, &path);
         // Pixel Path's first reading of the emulator's settings, on a thread once the start script is done.
@@ -1458,11 +1486,14 @@ impl App {
         self.sync_game_started(&system);
         let mut env = emu_settings::launch_env(&system, &path);
         env.push((pocket_ui::startup::LAUNCHED_AT, format!("{asked:.1}")));
+        env.extend(frozen_env);
         // The case goes into its console while the game loads (Cabinet and Shelf looks, `app_cabinet`). In Cozy a
         // pocket-core game keeps its window back until the animation has been seen.
         pocket_ui::motion::set_cozy(self.cozy());
         if let Some(hold) = self.launch_animation(&path, emulator == "pocket-core") {
             env.push((pocket_ui::startup::HOLD_UNTIL, format!("{:.1}", asked + hold.as_secs_f64() * 1000.0)));
+            pocket_ui::startup::prepare_skip();
+            env.push((pocket_ui::startup::HOLD_SKIP, pocket_ui::startup::skip_path().to_string_lossy().into_owned()));
             // Cozy's ending: the old-TV power-on over the game's first moments, only with Motion on Full (`crt_on`) and
             // its Cozy extra on; its sound goes with Case sounds (`cozy_extras`).
             if pocket_ui::motion::level() == pocket_ui::motion::Motion::Full && extra(Extra::CrtOn) {
@@ -1502,7 +1533,7 @@ impl App {
         pocket_ui::battery_history::set_activity(Some(&system));
         // The battery per game: this game's stretches on battery go to its ledger (`battery_games`).
         pocket_ui::battery_history::set_game(Some(pocket_ui::battery_games::Key::new(&system, &path, &emulator)));
-        self.running = Some(Running { system, name, path, emulator, started: Instant::now(), pgid, options: Default::default() });
+        self.running = Some(Running { system, name, path, emulator, core, started: Instant::now(), pgid, options: Default::default() });
         self.launch_at = Some(Instant::now());
         self.held = None;
     }
@@ -1547,6 +1578,7 @@ impl App {
             pocket_ui::ui_sound::game_ended();
         }
         println!("game exited after {secs} s (measured {:?})", run.started.elapsed());
+        self.frozen_note_session(&run);
         // An error nobody asked for: Settings > On start doesn't start this game by itself next time.
         pocket_ui::on_start::note_ended(&self.data_dir, &run.path, !ok && !quit_requested);
         // pocket-core's reason for not starting, else a save that didn't reach the card at the end (`save_trouble`).
@@ -1595,6 +1627,7 @@ impl App {
         // Not for a game that never started: it would be "Continue" on the shelf and the first card of the switcher.
         if !never_started {
             self.recents.note(&run.system, &run.name, &run.path, secs);
+            self.frozen_session_ended(&run);
             // Play history: the session's end, as the recent games count it; written off this thread (`play_log`).
             pocket_ui::play_log::ended(&run.system, &run.name, &run.path, secs);
         } else {
@@ -2970,6 +3003,7 @@ impl App {
                 }
                 Opens::Store => self.open_store(),
                 Opens::Starter => self.open_starter(false),
+                Opens::GameCheck => self.open_game_check(),
                 Opens::Sync => self.open_sync(),
                 Opens::Leds => self.open_leds(),
                 Opens::NightLight => self.open_night_light(),
@@ -3125,6 +3159,7 @@ impl App {
             (Some(SettingsPage::Curator), b) => self.curator_settings_input(b),
             (Some(SettingsPage::Achievements), b) => self.achievements_input(b),
             (Some(SettingsPage::Tools), b) => self.tools_input(b),
+            (Some(SettingsPage::GameCheck), b) => self.game_check_input(b),
             (Some(SettingsPage::PcStreaming), b) => self.pc_streaming_input(b),
             (Some(SettingsPage::Backup), b) => self.backup_input(b),
             (Some(SettingsPage::Storage), b) => self.storage_input(b),
@@ -3213,6 +3248,9 @@ impl App {
         }
         if self.settings_page == Some(SettingsPage::Tools) {
             return self.paint_tools(c);
+        }
+        if self.settings_page == Some(SettingsPage::GameCheck) {
+            return self.paint_game_check(c);
         }
         if self.settings_page == Some(SettingsPage::PcStreaming) {
             return self.paint_pc_streaming(c);
@@ -3373,7 +3411,7 @@ impl App {
                 // Report a problem, and ROCKNIX's own menu behind the warning (`app_report`, `app_rescue`).
                 self.paint_about_rows(c, top + (lines.len() as i32 + 1) * row, row_h, font);
             }
-            Some(SettingsPage::Groups(_) | SettingsPage::Store | SettingsPage::Starter | SettingsPage::Sync | SettingsPage::Leds(_) | SettingsPage::NightLight(_) | SettingsPage::CozyExtras(_) | SettingsPage::Buttons(_) | SettingsPage::Tailscale | SettingsPage::Web | SettingsPage::Bluetooth | SettingsPage::PerfFan | SettingsPage::Curator | SettingsPage::Achievements | SettingsPage::Tools | SettingsPage::PcStreaming | SettingsPage::Backup | SettingsPage::Storage | SettingsPage::Gamelist | SettingsPage::Screenshots | SettingsPage::SleepPower) | None => {}
+            Some(SettingsPage::Groups(_) | SettingsPage::Store | SettingsPage::Starter | SettingsPage::Sync | SettingsPage::Leds(_) | SettingsPage::NightLight(_) | SettingsPage::CozyExtras(_) | SettingsPage::Buttons(_) | SettingsPage::Tailscale | SettingsPage::Web | SettingsPage::Bluetooth | SettingsPage::PerfFan | SettingsPage::Curator | SettingsPage::Achievements | SettingsPage::Tools | SettingsPage::GameCheck | SettingsPage::PcStreaming | SettingsPage::Backup | SettingsPage::Storage | SettingsPage::Gamelist | SettingsPage::Screenshots | SettingsPage::SleepPower) | None => {}
         }
     }
 
@@ -3753,7 +3791,9 @@ impl App {
         self.onboarded = true;
         self.save_settings();
         // Games may have been copied during setup.
+        let mut added = 0;
         if let Ok(systems) = library::load_shown(&self.es_systems, &self.data_dir) {
+            added = pocket_ui::library_cache::games_added(&self.systems, &systems);
             // The next start shows them from the cache (`library_cache`), written on a thread.
             pocket_ui::library_cache::store_soon(&self.data_dir, &self.es_systems, systems.clone());
             self.systems = systems;
@@ -3778,6 +3818,7 @@ impl App {
         }
         // New games, or Wi-Fi just connected: their box art comes by itself.
         self.auto_covers("library read again");
+        self.game_check_games_added(added);
     }
 
     /// Settings > Games > Extras > Pictures as it is now.
@@ -3872,7 +3913,7 @@ impl App {
             return false;
         }
         self.setup.as_ref().is_some_and(|s| s.animating()) || (self.marquee.animating() && (self.running.is_none() || self.switcher.is_some())) || self.switcher.as_ref().is_some_and(|s| s.animating()) ||
-        self.pull_moving(Instant::now()) || self.motion_animating(Instant::now()) || self.toast.as_ref().is_some_and(|(_, t)| t.elapsed() < TOAST) || self.sync_note_active() || self.tailscale_animating() || self.bluetooth_animating() || self.tools_animating() || self.pc_streaming_animating() || self.backup_animating() || (self.updates.restart_at.is_some() && self.running.is_none()) || self.notice.as_ref().is_some_and(Notice::active) || self.launch_at.is_some_and(|t| t.elapsed() < FADE + self.cabinet.launch_delay() + LAST_FADE_FRAME) || (self.theme == Theme::Cabinet && self.running.is_none() && self.cabinet.animating(Instant::now())) || (self.theme == Theme::Shelf && self.running.is_none() && self.shelf_media_animating(Instant::now())) || self.stream_message_due() || self.exit_since.is_some() || self.sys.animating(Instant::now()) || (self.manual.moving() && self.settings_page == Some(SettingsPage::Manual)) || self.appearance_animating() || self.card.as_ref().is_some_and(|o| o.card.boxed.as_ref().is_some_and(|b| b.animating(Instant::now()))) || self.find_animating() || self.boot_fade.active()
+        self.pull_moving(Instant::now()) || self.motion_animating(Instant::now()) || self.toast.as_ref().is_some_and(|(_, t)| t.elapsed() < TOAST) || self.sync_note_active() || self.tailscale_animating() || self.bluetooth_animating() || self.tools_animating() || self.game_check_animating() || self.pc_streaming_animating() || self.backup_animating() || (self.updates.restart_at.is_some() && self.running.is_none()) || self.notice.as_ref().is_some_and(Notice::active) || self.launch_at.is_some_and(|t| t.elapsed() < FADE + self.cabinet.launch_delay() + LAST_FADE_FRAME) || (self.theme == Theme::Cabinet && self.running.is_none() && self.cabinet.animating(Instant::now())) || (self.theme == Theme::Shelf && self.running.is_none() && self.shelf_media_animating(Instant::now())) || self.stream_message_due() || self.exit_since.is_some() || self.sys.animating(Instant::now()) || (self.manual.moving() && self.settings_page == Some(SettingsPage::Manual)) || self.appearance_animating() || self.card.as_ref().is_some_and(|o| o.card.boxed.as_ref().is_some_and(|b| b.animating(Instant::now()))) || self.find_animating() || self.boot_fade.active()
     }
 
     fn openness(&self, i: usize) -> f32 {
@@ -4012,6 +4053,7 @@ impl App {
             println!("first frame after {:?} ({} ms)", self.started.elapsed(), pocket_ui::startup::report(self.started));
             // What the start put off until the first frame is on screen (docs/ARCHITECTURE.md, Start).
             self.after_first_frame();
+            self.frozen_refresh();
         }
     }
 
@@ -4226,6 +4268,7 @@ impl App {
             if self.theme == Theme::Shelf {
                 self.paint_insert(c, Instant::now());
             }
+            let p = self.cabinet.launch_fade_at(p);
             c.fade((p * 255.0) as u8);
             // On the shelf the selected case's front stays lit while everything else goes dark (no animation).
             if self.theme == Theme::Shelf && !self.cabinet_inserting() {
@@ -4236,6 +4279,7 @@ impl App {
             if let Some(pic) = self.launch_picture.as_ref().filter(|_| !self.sys.is_open()) {
                 pocket_ui::launch_picture::paint(c, pic, (p * 255.0) as u8);
             }
+            self.paint_frozen_wait(c);
         }
 
         // A save with two versions found since the last time: told once (`app_sync_conflicts`).
@@ -4298,8 +4342,12 @@ impl App {
                 self.motion.row(48, top + y, max_w + 48, row);
             }
             let (title, _, _, _) = self.describe(self.items[i]);
-            let (max, fav) = (max_w, self.is_favorite(self.items[i]));
+            let (mut max, fav) = (max_w, self.is_favorite(self.items[i]));
             let fg = mix(pal().text, pal().void, (app_motion::under(i, hl) * 255.0) as u32);
+            if self.is_frozen_item(self.items[i]) {
+                max -= self.frozen_word_width() + 20;
+                self.paint_frozen_word(&mut band, 72 + max_w, y + 41, fg);
+            }
             self.draw_title(&mut band, Face::Body, 36, 72, y + 43, max, fg, &title, i == self.sel, fav);
         }
         self.hits.list(self.sel, self.items.len(), 0.0, row as f32);
@@ -4330,7 +4378,12 @@ impl App {
             let (title, _, _, _) = self.describe(self.items[i]);
             let fav = self.is_favorite(self.items[i]);
             let fg = mix(pal().split_dim, 0xffffff, (app_motion::under(i, hl) * 255.0) as u32);
-            self.draw_title(&mut band, Face::Body, 28, 68, y + 38, list_w - 40, fg, &title, i == self.sel, fav);
+            let mut max = list_w - 40;
+            if self.is_frozen_item(self.items[i]) {
+                max -= self.frozen_word_width() + 16;
+                self.paint_frozen_word(&mut band, 68 + list_w - 40, y + 36, fg);
+            }
+            self.draw_title(&mut band, Face::Body, 28, 68, y + 38, max, fg, &title, i == self.sel, fav);
         }
         self.hits.list(self.sel, self.items.len(), 0.0, row as f32);
         let Some(item) = self.items.get(self.sel).copied() else { return };
@@ -4477,6 +4530,10 @@ impl App {
         let meta = self.text.fit(Face::Body, 28, &meta, c.w - 2 * MARGIN);
         let mw = self.text.width(Face::Body, 28, &meta);
         self.text.draw(c, Face::Body, 28, center - mw / 2, 770, pal().chalk, &meta);
+        if self.is_frozen_item(item) {
+            // The word in the top corner of the card in the middle.
+            self.paint_frozen_word(c, center + 165, 150 + 34, 0xffffff);
+        }
         // A system with a fact sheet: one more line, its headline ("Sega · 1998 · sixth generation").
         if let Some(headline) = self.console_headline(item) {
             let headline = self.text.fit(Face::Body, 28, &headline, c.w - 2 * MARGIN);
@@ -4536,6 +4593,10 @@ impl App {
         let details = self.has_console_page(selected);
         let home = self.screen == Screen::Home || (self.theme == Theme::Cabinet && !self.curator_has_back());
         let mut hints = shelf::hints(selected, home, starred, details);
+        // A frozen game goes on where it was (`app_frozen`).
+        if selected.is_some_and(|i| self.is_frozen_item(i)) {
+            hints.iter_mut().filter(|h| h.1 == "Play").for_each(|h| h.1 = "Resume");
+        }
         // The cabinet's top shelf: Up opens the search (`app_search`).
         hints.extend(self.search_hint());
         self.paint_hint_row(c, &hints);
@@ -4864,6 +4925,7 @@ fn snapshot(app: &mut App, args: &[String]) {
     }
     if let Some(rest) = state.strip_prefix("shelf:") {
         app.shelf_snapshot(rest);
+        app.frozen_snapshot();
         let mut buf = vec![0u32; (w * h) as usize];
         app.paint(&mut Canvas::new(&mut buf, w, h));
         // Playful animations in the Shelf look (`app_cabinet::shelf_playful_snapshot`): POCKETUI_SNAPSHOT_HELD=<steps>:<ms>
@@ -5027,6 +5089,7 @@ fn snapshot(app: &mut App, args: &[String]) {
         name: g_name,
         path: PathBuf::from(format!("/storage/roms/{g_system}/{g_file}")),
         emulator: "pocket-core".into(),
+        core: String::new(),
         started: Instant::now(),
         pgid: None,
         options: Default::default(),
@@ -5069,7 +5132,7 @@ fn snapshot(app: &mut App, args: &[String]) {
         app.paint_manual(&mut Canvas::new(&mut buf, w, h));
         app.manual.scroll_by(at.get(1).copied().unwrap_or(0));
     }
-    if manual_at.is_some() || app.store_snapshot(state) || app.starter_snapshot(state) || app.sync_snapshot(state) || app.leds_snapshot(state) || app.night_light_snapshot(state) || app.cozy_extras_snapshot(state) || app.buttons_snapshot(state) || app.tailscale_snapshot(state) || app.web_snapshot(state) || app.bluetooth_snapshot(state) || app.perf_fan_snapshot(state) || app.sleep_power_snapshot(state) || app.report_snapshot(state) || app.port_perf_snapshot(state) || app.achievements_snapshot(state) || app.tools_snapshot(state) || app.pc_streaming_snapshot(state) || app.backup_snapshot(state) || app.storage_snapshot(state) || app.gamelist_snapshot(state) {
+    if manual_at.is_some() || app.store_snapshot(state) || app.starter_snapshot(state) || app.sync_snapshot(state) || app.leds_snapshot(state) || app.night_light_snapshot(state) || app.cozy_extras_snapshot(state) || app.buttons_snapshot(state) || app.tailscale_snapshot(state) || app.web_snapshot(state) || app.bluetooth_snapshot(state) || app.perf_fan_snapshot(state) || app.sleep_power_snapshot(state) || app.report_snapshot(state) || app.port_perf_snapshot(state) || app.achievements_snapshot(state) || app.tools_snapshot(state) || app.game_check_snapshot(state) || app.pc_streaming_snapshot(state) || app.backup_snapshot(state) || app.storage_snapshot(state) || app.gamelist_snapshot(state) {
     } else if let Some(kind) = state.strip_prefix("updates") {
         // The Updates page after "Get system" with a made-up list: "updates:note" staged with a note of what the new
         // system lacks, "updates:refused" refused because pocket-ui would break (`os_compat`).
@@ -5192,7 +5255,7 @@ fn snapshot(app: &mut App, args: &[String]) {
         _ => None,
     };
     if let Some((system, name, path, emulator)) = guest {
-        app.running = Some(Running { system: system.into(), name: name.into(), path: PathBuf::from(path), emulator: emulator.into(), started: Instant::now(), pgid: None, options: Default::default() });
+        app.running = Some(Running { system: system.into(), name: name.into(), path: PathBuf::from(path), emulator: emulator.into(), core: String::new(), started: Instant::now(), pgid: None, options: Default::default() });
     }
     if game_standalone {
         let xbox = menu_kind == Some("xbox");
@@ -5201,6 +5264,7 @@ fn snapshot(app: &mut App, args: &[String]) {
             name: if xbox { "Jade Empire" } else { "Okage: Shadow King" }.into(),
             path: PathBuf::from(if xbox { "/storage/roms/xbox/Jade Empire (USA, Europe).iso" } else { "/storage/roms/ps2/Okage - Shadow King (USA).chd" }),
             emulator: if xbox { "hakux" } else { "armsx2" }.into(),
+            core: String::new(),
             started: Instant::now(),
             pgid: None,
             options: Default::default(),
@@ -5410,6 +5474,7 @@ fn snapshot(app: &mut App, args: &[String]) {
         app.menu = None;
         app.running = None;
     }
+    app.frozen_snapshot();
     let mut buf = vec![0u32; (w * h) as usize];
     let mut c = Canvas::new(&mut buf, w, h);
     app.paint(&mut c);
@@ -5771,7 +5836,7 @@ impl App {
             self.achievements_row(),
             self.find_mark(),
             // feat/tools-wifi's pages together: a tuple compares at most twelve fields.
-            (self.tools_row(), self.pc_streaming_row(), self.backup_row(), self.emu_choice_mark(), self.tour_mark(), self.web_row(), self.night_light_row(), self.storage_row(), self.gamelist_row(), self.gallery_row(), self.this_game_mark(), self.cozy_extras_mark()),
+            (self.tools_row(), self.pc_streaming_row(), self.backup_row(), self.emu_choice_mark(), self.tour_mark(), self.web_row(), self.night_light_row(), self.storage_row(), self.gamelist_row(), self.gallery_row(), self.this_game_mark(), (self.cozy_extras_mark(), self.game_check_mark())),
         )
     }
 
@@ -5782,7 +5847,7 @@ impl App {
         let mut h = std::collections::hash_map::DefaultHasher::new();
         (self.screen, self.sel, self.settings_page, self.updates.sel, self.theme, self.sync_row(), self.tailscale_row(), self.bluetooth_row(), self.perf_fan_row(), self.achievements_row(), self.find_mark(), self.curator_mark()).hash(&mut h);
         // The pages of feat/tools-wifi, apart: a tuple hashes at most twelve fields.
-        (self.tools_row(), self.pc_streaming_row(), self.backup_row(), self.web_row(), self.night_light_row(), self.starter.mark(), self.storage_row(), self.gamelist_row(), self.gallery_row()).hash(&mut h);
+        (self.tools_row(), self.pc_streaming_row(), self.backup_row(), self.web_row(), self.night_light_row(), self.starter.mark(), self.storage_row(), self.gamelist_row(), self.gallery_row(), self.game_check_mark()).hash(&mut h);
         if let Some(m) = &self.menu {
             (m.page, m.sel, m.slot, m.quitting, m.settings.as_ref().map(|s| &s.values), m.cheats.as_ref().map(|c| c.enabled()), m.pixel.as_ref().map(|p| p.mark())).hash(&mut h);
             m.players.as_ref().map(|p| p.mark()).hash(&mut h);
@@ -5944,6 +6009,7 @@ impl App {
             UserEvent::Update(e) => self.update_event(e),
             UserEvent::Store(e) => self.store_event(e),
             UserEvent::Starter(e) => self.starter_event(e),
+            UserEvent::GameCheck(gen, e) => self.game_check_event(gen, e),
             UserEvent::Covers(e) => self.covers_event(e),
             UserEvent::PortIndex => {
                 self.cabinet.port_art_changed();
@@ -5976,6 +6042,12 @@ impl App {
                 }
             }
             // Only for the game still starting: a picture that comes after the game ended or another one started is dropped.
+            UserEvent::Frozen(gen, list) => {
+                if gen == self.frozen_generation() {
+                    self.frozen_got(list);
+                }
+                self.request_redraw();
+            }
             UserEvent::LaunchPicture(p) => {
                 let wanted = self.launch_at.is_some() && self.running.as_ref().is_some_and(|r| p.as_ref().is_some_and(|p| p.rom == r.path));
                 if wanted {
@@ -6123,6 +6195,7 @@ impl App {
             UserEvent::Pad(pe) if self.running.is_some() => {
                 // Any button skips the launch animation (the game, started already, gets the press as well).
                 if matches!(pe, PadEvent::Button { pressed: true, .. }) && self.cabinet.skip_insert(Instant::now()) {
+                    pocket_ui::startup::skip_hold();
                     self.launch_at = self.launch_at.map(|t| t.min(Instant::now() - FADE));
                     self.request_redraw();
                 }
@@ -6460,6 +6533,13 @@ impl ApplicationHandler<UserEvent> for App {
         }
         // Up next: frames while it slides in, then a wake-up when it goes by itself (`app_curator`).
         if let Some(t) = self.curator_up_next_wake(now) {
+            wake = Some(wake.map_or(t, |w| w.min(t)));
+        }
+        // The spinner while a big emulator loads a frozen game's moment (`app_frozen`).
+        if let Some(t) = self.frozen_wait_wake(now) {
+            if t.saturating_duration_since(now) <= FRAME {
+                self.request_redraw();
+            }
             wake = Some(wake.map_or(t, |w| w.min(t)));
         }
         // The open box's disc turning (Playful animations, `game_box::BoxView::spin_wake`).
@@ -7017,6 +7097,7 @@ fn main() {
         web: web_ui,
         perf: perf_ui,
         tools: Default::default(),
+        game_check: Default::default(),
         moonlight: Default::default(),
         backup: Default::default(),
         storage: Default::default(),
@@ -7042,6 +7123,9 @@ fn main() {
         game_box: !settings.details_page,
         button_layout: settings.button_layout,
         launch_picture: None,
+        frozen: Vec::new(),
+        frozen_auto: None,
+        frozen_wait: None,
         find: Default::default(),
         motion: Default::default(),
         frames: settings.frames,

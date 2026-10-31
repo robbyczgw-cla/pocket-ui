@@ -76,9 +76,9 @@ today and say clearly where something is still being built or has not been confi
 
 ## Pages
 
-1. [Getting started](getting-started.md): installing, first start, Wi-Fi, adding games.
+1. [Getting started](getting-started.md): installing, first start, Wi-Fi, adding games; [Game check](game-check.md): will your games start?
 2. [Coming from ROCKNIX or Android](coming-from.md): what happens to your saves, states, favourites and settings.
-3. [Playing](playing.md): Home, finding a game, the looks, console pages, the game switcher.
+3. [Playing](playing.md): Home, finding a game, the looks, console pages, the game switcher. [Frozen games](frozen-games.md): your last five games stand a little open, and A goes straight back.
 4. [The pause menu](pause-menu.md): save slots, Auto and Before load, quitting, Pixel Path.
 5. [Options](options.md): picture, screen frames, controls, shortcuts, extras and run-ahead in a game; [their shorter list](options-big.md) for PlayStation 2, GameCube, Wii and 3DS.
 6. [Controls](controls.md): every button, screen by screen; [in Settings, setup and on the touch screen](controls-settings.md), with the power and volume keys.

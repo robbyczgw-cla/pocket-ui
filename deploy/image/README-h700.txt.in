@@ -26,7 +26,7 @@ there is nothing to copy. If the screen stays black or shows a broken picture, s
 10 seconds) and report it with the model and the screen's look; some units have another screen revision.
 To go back to the handheld's own system, take the card out.
 
-This card contains no BIOS files and no games. Add only games and BIOS files you own.
+This card contains no games and no console maker's BIOS files (the one BIOS in it is DraStic's open replacement). Add only games and BIOS files you own.
 Remote access (SSH), file sharing and Syncthing are off. When you turn on Remote access or file
 sharing in pocket-ui's Settings, it makes a password for this device and shows it on the screen.
 (EmulationStation, ROCKNIX's menu, can also turn SSH on; it then uses ROCKNIX's standard root password
@@ -73,9 +73,6 @@ Removed from SYSTEM:
     copy the .RTB files from that archive to /storage/.config/amiberry/whdboot/save-data/Kickstarts.
   - the DOOM shareware game data (usr/share/idtech/doom.tar.gz), so the card holds no games; its
     shareware terms also ask for the complete, unchanged shareware package.
-  - the DraStic Nintendo DS emulator (usr/config/drastic) with its databases and BIOS replacement: DraStic is
-    closed source and its author never gave a licence to pass it on (ROCKNIX relies on a 2017 forum post).
-    Nintendo DS games run with the open cores that stay in SYSTEM.
 The partition table, KERNEL and the U-Boot are unchanged. ROCKNIX's own interface, EmulationStation, stays on
 the card and takes over if pocket-ui cannot start.
 
@@ -108,6 +105,14 @@ Linux kernel (KERNEL): GNU GPL version 2. The device tree (dtb.img) is ROCKNIX's
 
 U-Boot (on the card before the first partition, and usr/share/bootloader in SYSTEM): GNU GPL version 2 or later,
   with Arm Trusted Firmware (BSD 3-clause); built by ROCKNIX, source in the archives next to the image.
+
+DraStic (usr/config/drastic in SYSTEM): the Nintendo DS emulator DraStic by Exophase (https://www.drastic-ds.com/) is
+  closed-source software. It is passed on unchanged, as ROCKNIX does, on the basis of the author's 2017 forum
+  statement that there is "no real harm" in distributing it (usr/config/drastic/LICENSE.pdf, and ROCKNIX's
+  pocket-ui-info/rocknix-licenses/licenses/DRASTIC.pdf). That is a tolerance, not a formal licence, and no source
+  code for it exists next to the image. Credit: Exophase. We remove it from the image on request of the author.
+  Its BIOS replacement (drastic_bios_arm7.bin, drastic_bios_arm9.bin) is open: Gilead Kutnick, BSD licence, text in
+  usr/config/drastic/system/drastic_bios_readme.txt.
 
 pocket-ui and pocket-core
   GNU GPL version 2 or later (pocket-ui-info/LICENSE).

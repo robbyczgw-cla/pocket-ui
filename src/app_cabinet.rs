@@ -76,6 +76,31 @@ fn showcase(h: i32, m: Medium, pitch: i32) -> (i32, i32) {
     (room, SCENE_TOP + 12 + need + 12 + TOP_H)
 }
 
+/// How far a frozen game's front shows its game: this part of how far the open box has it out, at most these pixels, in
+/// this time.
+const AJAR: f32 = 0.22;
+const AJAR_MOST: i32 = 40;
+const AJAR_IN: Duration = Duration::from_millis(240);
+
+/// How much of a frozen game shows over its spine at `f` screen pixels a template pixel.
+fn ajar_peek(f: f32) -> i32 {
+    (5.0 * f).round() as i32
+}
+
+/// A frozen game's spine on the shelf: the game out of the case by a little, over its top. Nothing is drawn for it: the
+/// top of the game's own picture (`media::game_top`) over the spine's own, which keeps its width and its place.
+fn ajar_spine(text: &mut pocket_ui::text::Text, spine: Pic, system: &str, rom: &Path, f: f32, look: Look) -> Pic {
+    let peek = ajar_peek(f);
+    let Some(top) = media::game_top(text, system, &rom.to_string_lossy(), spine.w - 4, peek, look) else { return spine };
+    let mut pic = Pic::new(spine.w, spine.h + peek, 0);
+    for y in 0..top.h {
+        let row = (y * top.w) as usize;
+        pic.px[(y * pic.w + 2) as usize..][..top.w as usize].copy_from_slice(&top.px[row..row + top.w as usize]);
+    }
+    pic.px[(peek * pic.w) as usize..].copy_from_slice(&spine.px);
+    pic
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 enum Kind {
     /// The cover's colours for a case of that medium (taken without its system's printed strip, `media::trim_system_band`:
@@ -179,6 +204,8 @@ struct CaseKey {
     look: Look,
     /// The stickers on the case (`app_case_stickers`): putting one on makes its pictures again.
     case: CaseStickers,
+    /// A frozen game: its spine has its game a little out at the top (`ajar_spine`).
+    ajar: bool,
 }
 
 /// A case's big spine and front, whether the front has its cover yet, and its last-use stamp.
@@ -211,6 +238,10 @@ struct Inserting {
     cozy: bool,
     /// Playful animations: the disc at its size over the drive, made once (each frame only scales it a little).
     at_drive: Option<Rc<Pic>>,
+    /// Cozy + Playful, a console with its own mechanism (`insert_rig`): its pictures, decoded on the first frame and gone with the animation.
+    rig: Option<Rc<Rigged>>,
+    /// It has a rig: asked once, on the first frame.
+    rig_asked: bool,
 }
 
 #[derive(Default)]
@@ -438,6 +469,14 @@ impl CabinetUi {
         self.insert.as_ref().is_some_and(|i| now.saturating_duration_since(i.at) < cabinet::insert_len(i.cozy))
     }
 
+    /// A rig's lid or tray shuts after the medium is in: the launch fade keeps its end and runs after the clunk.
+    pub(crate) fn launch_fade_at(&self, p: f32) -> f32 {
+        match self.insert.as_ref() {
+            Some(i) if i.rig.is_some() => ((p - 0.55) / 0.45).clamp(0.0, 1.0),
+            _ => p,
+        }
+    }
+
     /// The pause before the launch fade: the cartridge or disc going into the console.
     pub(crate) fn launch_delay(&self) -> Duration {
         match self.insert.as_ref() {
@@ -452,6 +491,7 @@ impl CabinetUi {
             return false;
         }
         self.insert = None;
+        pocket_ui::ui_sound::forget_waiting();
         true
     }
 
@@ -821,19 +861,53 @@ impl App {
         // case opens, and the game goes into the console with its own sound, seated as it is in (`IN_AT_COZY`). The
         // CRT's sound is pocket-core's, with its picture (`crt_on`).
         use pocket_ui::ui_sound::{self, Sound};
-        let cozy = self.cozy();
-        let in_at = cabinet::fade_delay(cozy).saturating_sub(SOUND_LEAD);
+        // A frozen game goes straight back, and Motion Reduced or Off starts straight away: the quick way, whatever
+        // Animations says (`app_frozen`, `cabinet::starts_cozy`).
+        let cozy = cabinet::starts_cozy(self.cozy(), pocket_ui::motion::level(), self.is_frozen_path(path));
+        if let Some(i) = self.cabinet.insert.as_mut() {
+            i.cozy = cozy;
+        }
+        let in_at = cabinet::in_at(cozy).saturating_sub(SOUND_LEAD);
         if cozy {
             let medium = self.medium(item);
             let inside = ui_sound::going_in(medium);
             self.play_sound(ui_sound::opening(medium));
-            self.play_sound_after(inside, in_at.saturating_sub(ui_sound::hit_at(inside)), 0.0);
+            // A rig's disc: down on its spindle, a pause, and the lid or tray shuts with the rest of the sound.
+            let info = self.case_info(item);
+            let kind = media::Game::of(&info.system, &info.rom.to_string_lossy());
+            if pocket_ui::playful::on() && pocket_ui::insert_rig::takes_disc(&info.system, kind) {
+                self.play_sound_after(Sound::DiscDrop, in_at.saturating_sub(ui_sound::hit_at(Sound::DiscDrop)), 0.0);
+                let shut = in_at + pocket_ui::insert_rig::SHUT_AFTER;
+                self.play_sound_after(Sound::DiscShut, shut.saturating_sub(ui_sound::hit_at(Sound::DiscShut)), 0.0);
+            } else {
+                self.play_sound_after(inside, in_at.saturating_sub(ui_sound::hit_at(inside)), 0.0);
+            }
         } else {
             self.play_sound_after(Sound::Insert, in_at.saturating_sub(ui_sound::hit_at(Sound::Insert)), ui_sound::QUICK_DB);
         }
         ui_sound::played();
         ui_sound::close_when_done(!hosted);
         (cozy && hosted).then(|| cabinet::fade_delay(true) + super::FADE)
+    }
+
+    /// The set of frozen games changed: the spines are made again.
+    pub(crate) fn cabinet_frozen_changed(&mut self) {
+        self.cabinet.colors_gen += 1;
+        self.cabinet.shelf_row = None;
+        self.cabinet.dirty = true;
+    }
+
+    /// A frozen game's front, shown large: the game inside (the open box's own picture, `box_game`) a little out at its
+    /// side, painted before the front. Slides out with the case's turn; with Motion off it is simply there.
+    fn paint_ajar_game(&mut self, c: &mut Canvas, item: Item, m: Medium, front: &Rc<Pic>, (x, y): (i32, i32), clip: (i32, i32)) {
+        if !self.is_frozen_item(item) {
+            return;
+        }
+        let Some(game) = self.box_game(item, front) else { return };
+        let (gw, gh, out) = pocket_ui::game_box::game_beside(m, (front.w, front.h), Some(&game));
+        let at = pocket_ui::motion::progress(pocket_ui::motion::Kind::Move, self.moved_at, Instant::now(), AJAR_IN);
+        let gx = x + front.w - gw + ((out as f32 * AJAR).min(AJAR_MOST as f32) * at) as i32;
+        art::blit(c, &game, gx, y + (front.h - gh) / 2, 256, clip);
     }
 
     /// The game box's look and its case's front `h` pixels tall, made as the Shelf look makes its fronts.
@@ -900,7 +974,7 @@ impl App {
         let look = self.case_look(&info, medium);
         let (front, from) = if self.theme == super::Theme::Cabinet {
             let Some(from) = self.cabinet.last_out.filter(|(i, _)| *i == item).map(|(_, r)| r) else { return false };
-            let key = CaseKey { rom: info.rom.clone(), medium, look, case: self.case_stickers_of(&info.rom) };
+            let key = CaseKey { rom: info.rom.clone(), medium, look, case: self.case_stickers_of(&info.rom), ajar: self.is_frozen_item(item) };
             let Some((_, front, _, _)) = self.cabinet.shown.get(&key).cloned() else { return false };
             (front, from)
         } else {
@@ -923,8 +997,11 @@ impl App {
             front,
             from,
             game: None,
-            cozy: self.cozy(),
+            // A frozen game or Motion below Full: no hold and no rig (`launch_animation`).
+            cozy: cabinet::starts_cozy(self.cozy(), pocket_ui::motion::level(), self.is_frozen_item(item)),
             at_drive: None,
+            rig: None,
+            rig_asked: false,
         });
         true
     }
@@ -1039,6 +1116,7 @@ impl App {
             rom: info.rom.clone(),
             medium: m,
             look,
+            ajar: self.is_frozen_item(item),
         };
         let frame = self.cabinet.frame;
         if let Some((pic, used)) = self.cabinet.spines.get_mut(&key) {
@@ -1049,7 +1127,8 @@ impl App {
         // As large as the label takes (37 px at most): readable at arm's length on the Mini V2 (Alex's photo,
         // 2026-10-28: "Legend of…" at 21 px was not).
         let pic = media::spine_with(&mut self.text, m, 1.0, look, &info.title, 37.0);
-        let pic = Rc::new(self.stuck_spine(pic, m, 1.0, &info.rom, key.case));
+        let pic = self.stuck_spine(pic, m, 1.0, &info.rom, key.case);
+        let pic = Rc::new(if key.ajar { ajar_spine(&mut self.text, pic, &info.system, &info.rom, media::SHELF_SCALE, look) } else { pic });
         self.cabinet.made("spine", t0);
         self.cabinet.spines.insert(key, (pic.clone(), frame));
         pic
@@ -1092,6 +1171,7 @@ impl App {
             rom: info.rom.clone(),
             medium: m,
             look,
+            ajar: self.is_frozen_item(item),
         };
         let frame = self.cabinet.frame;
         let fh = media::front_size(m, k).1;
@@ -1572,6 +1652,7 @@ impl App {
         // All the way out it faces you square: the picture as it is, sharp.
         let r = if turned >= 1.0 && (scale - k).abs() < 0.001 {
             let (x, y) = ((cx - front.w as f32 / 2.0).round() as i32, (cy - front.h as f32 / 2.0).round() as i32);
+            self.paint_ajar_game(c, case.item, case.medium, &front, (x, y), (0, scene_bottom(c.h)));
             art::blit_sheared(c, &front, x, y, rock * front.h as f32, 256, (0, scene_bottom(c.h)));
             (x, y, front.w, front.h)
         } else {
@@ -1617,6 +1698,9 @@ impl App {
         self.draw_title(c, Face::Title, 50, MARGIN, 150, c.w - 2 * MARGIN, pal().chalk, &title, true, fav);
         let meta = self.text.fit(Face::Body, 28, &meta, c.w - 2 * MARGIN);
         self.text.draw(c, Face::Body, 28, MARGIN, 192, pal().dust, &meta);
+        if self.is_frozen_item(item) {
+            self.paint_frozen_word(c, c.w - MARGIN, 192, pal().chalk);
+        }
     }
 
     /// Starting a game: the console comes up, the case opens and the cartridge, card or disc slides out of it, the case
@@ -1630,9 +1714,21 @@ impl App {
         let (system, ff, medium, front, from) = (ins.system.clone(), ins.ff, ins.medium, ins.front.clone(), ins.from);
         let tint = ins.look.color;
         let game = ins.kind;
+        // Its console's real mechanism where we have it (`insert_rig`): Cozy only, today's animation everywhere else.
+        if !ins.rig_asked {
+            let t0 = Instant::now();
+            let rig = (ins.cozy && pocket_ui::playful::on()).then(|| Rigged::load(&system, game)).flatten();
+            if let Some(ins) = self.cabinet.insert.as_mut() {
+                ins.rig = rig.map(Rc::new);
+                ins.rig_asked = true;
+            }
+            self.cabinet.made("rig", t0);
+        }
+        let Some(ins) = self.cabinet.insert.as_ref() else { return };
         // The cartridge, card or disc, once: the game's process is already starting, this frame is the first of the
         // animation.
         if ins.game.is_none() {
+            let seated = ins.rig.as_ref().map_or(0, |r| r.rig.seated_h());
             let (look, title, has_cover) = (ins.look, ins.title.clone(), ins.has_cover);
             let k = from.3 as f32 / medium.size().front_h.max(1) as f32;
             let cover = media::cover_of(&self.bare_front(&front), medium, k);
@@ -1642,7 +1738,8 @@ impl App {
             let pic = if game.is_round() {
                 // Printed at the larger of its two sizes, out of the case and over the drive (`draw_game`).
                 let sw = self.console_sprite(&system).map_or(360, |s| s.w as i32) as f32;
-                let h = game.size_beside(medium, from.3).1.max(2 * over_drive(game, sw) as i32);
+                let seated = seated;
+                let h = game.size_beside(medium, from.3).1.max(2 * over_drive(game, sw) as i32).max(seated);
                 Some(printed_disc(&mut self.text, &system, h, look, &title, cover))
             } else {
                 media::game_pic(&mut self.text, game, game.size_beside(medium, from.3).1, look, &title, cover, console.as_deref())
@@ -1658,10 +1755,13 @@ impl App {
         let st = cabinet::insert_at(elapsed, ins.cozy);
         // Playful animations: each medium goes in its own way (`playful::Loader`), timed to its sound.
         let playful = pocket_ui::playful::on();
+        if ins.rig.is_some() {
+            return self.paint_rig(c, elapsed);
+        }
         let loader = pocket_ui::playful::Loader::of(&system, game);
         let keys = if playful {
             let t = (elapsed.as_secs_f32() / cabinet::insert_len(ins.cozy).as_secs_f32()).min(1.0);
-            let since_in = elapsed.as_secs_f32() - cabinet::fade_delay(ins.cozy).as_secs_f32();
+            let since_in = elapsed.as_secs_f32() - cabinet::in_at(ins.cozy).as_secs_f32();
             pocket_ui::playful::keys(loader, t, since_in, if ins.cozy { pocket_ui::motion::COZY_SLOWER } else { 1.0 })
         } else {
             pocket_ui::playful::Keys::default()
@@ -1801,6 +1901,150 @@ impl App {
             art::glow(c, slot_cx, slot_y, (sw / 8).max(36), (sh / 14).max(14), 0xffffff, st.glow * 0.7);
         }
     }
+}
+
+/// A rig's pictures, ready to paint: the console's at screen size, what moves at its own (drawn through a map).
+struct Rigged {
+    rig: pocket_ui::insert_rig::Rig,
+    base: Pic,
+    over: Option<Pic>,
+    top: Option<Pic>,
+    under: Option<Pic>,
+}
+
+impl Rigged {
+    fn load(system: &str, game: media::Game) -> Option<Rigged> {
+        let f = pocket_ui::insert_rig::files(system, game)?;
+        let pic = |data: &[u8]| {
+            let s = pocket_ui::system_art::decode(data)?;
+            Some(Pic { w: s.w as i32, h: s.h as i32, px: s.px })
+        };
+        let (mut base, over) = (doubled(pic(&f.base)?), f.over.and_then(|d| pic(&d)).map(doubled));
+        // What `over` covers whole is never seen on the base: each frame only copies a console's pixels once.
+        if let Some(o) = over.as_ref().filter(|o| (o.w, o.h) == (base.w, base.h)) {
+            for (b, t) in base.px.iter_mut().zip(&o.px) {
+                if t >> 24 == 255 {
+                    *b = 0;
+                }
+            }
+        }
+        Some(Rigged { rig: f.rig, base, over, top: f.top.and_then(|d| pic(&d)), under: f.under.and_then(|d| pic(&d)) })
+    }
+}
+
+/// `p` twice as large, each pixel a block (a rig's art is drawn at two screen pixels a pixel).
+fn doubled(p: Pic) -> Pic {
+    let (w, h) = (p.w * 2, p.h * 2);
+    let mut px = Vec::with_capacity((w * h) as usize);
+    for y in 0..h {
+        let row = &p.px[((y / 2) * p.w) as usize..][..p.w as usize];
+        for x in 0..w {
+            px.push(row[(x / 2) as usize]);
+        }
+    }
+    Pic { w, h, px }
+}
+
+impl App {
+    /// A game going into its console's real mechanism (`insert_rig`, docs/DESIGN.md): the console comes up, the lid or
+    /// tray opens, the game leaves its case and goes in behind the right parts, the lid shuts with the sound's clunk.
+    fn paint_rig(&mut self, c: &mut Canvas, elapsed: Duration) {
+        use pocket_ui::insert_rig::{self as ir, Mech};
+        let Some(ins) = self.cabinet.insert.as_ref() else { return };
+        let Some(pics) = ins.rig.clone() else { return };
+        let (front, from, kind, medium) = (ins.front.clone(), ins.from, ins.kind, ins.medium);
+        let Some(pic) = ins.game.clone() else { return };
+        let rig = pics.rig;
+        let st = cabinet::insert_at(elapsed, true);
+        let pose = ir::pose(rig.kind(), elapsed);
+        art::dim(c, 0, c.h, 256 - (st.dim * 256.0) as u32);
+        let floor = if self.theme == super::Theme::Cabinet { scene_bottom(c.h) } else { c.h - 110 };
+        let (bw, bh) = (pics.base.w, pics.base.h);
+        let ox = ((c.w - bw) / 2) as f32;
+        let oy = (floor - 10 - bh) as f32 + (1.0 - st.rise) * (bh + 160) as f32 + pose.dip * ir::SCALE;
+        let shade = 256 - ((1.0 - st.rise) * 200.0) as u32;
+        let screen = |p: (f32, f32)| (ox + p.0 * ir::SCALE, oy + p.1 * ir::SCALE);
+        let all = (0, c.h);
+
+        // The medium on its way: face-on at its size beside the case, down to lying in its seat.
+        let (fx, fy, fw, fh) = (from.0 as f32, from.1 as f32, from.2 as f32, from.3 as f32);
+        let beside = kind.size_beside(medium, from.3);
+        let near_h = beside.1 as f32;
+        let near_w = if kind.is_round() { near_h * pic.w as f32 / pic.h.max(1) as f32 } else { beside.0 as f32 };
+        let start = (fx + fw / 2.0 + pose.out * (fw / 2.0 + near_w * 0.45), fy + fh / 2.0);
+        let m = rig.medium_at(start, screen, (near_w, near_h), &pose);
+        let draw_medium = |c: &mut Canvas| {
+            let (sx, sy) = (pic.w as f32 / 2.0, pic.h as f32 / 2.0);
+            let o = (m.at.0 - m.u.0 - m.v.0, m.at.1 - m.u.1 - m.v.1);
+            art::blit_affine(c, &pic, o, (m.u.0 / sx, m.u.1 / sx), (m.v.0 / sy, m.v.1 / sy), 256, all);
+        };
+
+        // Behind the case while it comes out, in front once it is on its way.
+        let case_fade = 256 - (((st.carry - 0.3) / 0.4).clamp(0.0, 1.0) * 256.0) as u32;
+        let flying = pose.fly > 0.0;
+        if rig.behind && flying {
+            draw_medium(c);
+        }
+        art::blit(c, &pics.base, ox.round() as i32, oy.round() as i32, shade, all);
+        // The lid stands behind the disc coming down, and shuts over it; the tray is under it always.
+        let lid_later = pose.landed >= 1.0;
+        match rig.mech() {
+            Mech::Lid(l) if !lid_later => draw_lid(c, l, &pics, (ox, oy), pose.open, shade),
+            Mech::Tray(t) => {
+                if let Some(tray) = &pics.top {
+                    art::blit_affine(c, tray, screen(rig.tray_at(t, pose.open)), (ir::SCALE, 0.0), (0.0, ir::SCALE), shade, all);
+                }
+            }
+            _ => {}
+        }
+        if !flying {
+            draw_medium(c);
+        }
+        if case_fade > 0 {
+            art::blit(c, &front, from.0, from.1, case_fade, all);
+        }
+        // A disc coming down is in front of everything; once it is down the parts in front of it hide it.
+        let coming_down = rig.kind() != ir::Kind::Cart && pose.landed < 1.0;
+        if flying && !rig.behind {
+            // A shadow on the console under it: darker as it gets close.
+            if coming_down && pose.fly >= 1.0 {
+                let at = screen(rig.seat.at);
+                let (rx, ry) = (rig.seat.u.0.hypot(rig.seat.u.1) * ir::SCALE, rig.seat.v.0.hypot(rig.seat.v.1) * ir::SCALE);
+                art::glow(c, at.0 as i32, at.1 as i32, (rx * 1.08) as i32, (ry * 1.08) as i32, 0x000000, 0.45 * pose.drop);
+            }
+            if !coming_down && !pose.shut_in {
+                draw_medium(c);
+            }
+        }
+        if let Some(over) = &pics.over {
+            art::blit(c, over, ox.round() as i32, oy.round() as i32, shade, all);
+        }
+        if flying && !rig.behind && coming_down {
+            draw_medium(c);
+        }
+        if let Mech::Lid(l) = rig.mech() {
+            if lid_later {
+                draw_lid(c, l, &pics, (ox, oy), pose.open, shade);
+            }
+        }
+        // The console takes it: its power light comes on.
+        if let (Some(led), true) = (rig.led, pose.led > 0.0) {
+            let at = screen(led.at);
+            art::glow(c, at.0 as i32, at.1 as i32, 16, 16, led.color, 0.9 * pose.led);
+            art::glow(c, at.0 as i32, at.1 as i32, 5, 5, 0xffffff, 0.8 * pose.led);
+        }
+    }
+}
+
+fn draw_lid(c: &mut Canvas, l: pocket_ui::insert_rig::Lid, pics: &Rigged, o: (f32, f32), open: f32, shade: u32) {
+    use pocket_ui::insert_rig as ir;
+    let m = l.map(open);
+    let Some(p) = (if m.under { pics.under.as_ref() } else { pics.top.as_ref() }) else { return };
+    let at = (o.0 + m.o.0 * ir::SCALE, o.1 + m.o.1 * ir::SCALE);
+    let (u, v) = ((m.u.0 * ir::SCALE, m.u.1 * ir::SCALE), (m.v.0 * ir::SCALE, m.v.1 * ir::SCALE));
+    // Turned away from the light above it, a little darker.
+    let shade = shade * (256 - (m.turned * 50.0) as u32) / 256;
+    art::blit_affine(c, p, at, u, v, shade, (0, c.h));
 }
 
 impl App {
@@ -2260,6 +2504,7 @@ impl App {
             rom: info.rom.clone(),
             medium: m,
             look,
+            ajar: self.is_frozen_item(item),
         };
         (info, key)
     }
@@ -2281,7 +2526,8 @@ impl App {
         };
         let t0 = Instant::now();
         let pic = media::spine_with(&mut self.text, m, f / media::SHELF_SCALE, key.0.look, &title, want);
-        let pic = Rc::new(self.stuck_spine(pic, m, f / media::SHELF_SCALE, &info.rom, key.0.case));
+        let pic = self.stuck_spine(pic, m, f / media::SHELF_SCALE, &info.rom, key.0.case);
+        let pic = Rc::new(if key.0.ajar { ajar_spine(&mut self.text, pic, &info.system, &info.rom, f, key.0.look) } else { pic });
         self.cabinet.made("standing spine", t0);
         self.cabinet.stand.insert(key, (pic.clone(), frame));
         pic
@@ -2458,7 +2704,8 @@ impl App {
         if new_row || !playful {
             self.cabinet.lean.reset();
         }
-        let room = (row.tallest * lay.f).round() as i32;
+        // Frozen games: their game stands a little out of the case's top (`ajar_spine`).
+        let room = (row.tallest * lay.f).round() as i32 + if self.frozen.is_empty() { 0 } else { ajar_peek(lay.f) };
         let lean_px = if playful { self.cabinet.lean.at(self.cabinet.shelf_scroll.segment(), lay.f, now) * room as f32 * 0.035 } else { 0.0 };
 
         // The board, and the spines standing on it.
@@ -2510,9 +2757,9 @@ impl App {
                 let pic = self.row_pic(&mut row, i, lay.f);
                 let (hx, hw) = (x.max(lay.left), (x + w).min(lay.right) - x.max(lay.left));
                 if lean_px == 0.0 {
-                    c.rect(hx, lay.floor - h, hw, h, pal().void);
+                    c.rect(hx, lay.floor - pic.h, hw, pic.h, pal().void);
                 } else {
-                    for y in (lay.floor - h).max(strip)..lay.floor {
+                    for y in (lay.floor - pic.h).max(strip)..lay.floor {
                         let d = shift(y - strip);
                         let (l, r) = ((hx + d).max(lay.left), (hx + hw + d).min(lay.right));
                         c.rect(l, y, r - l, 1, pal().void);
@@ -2559,6 +2806,7 @@ impl App {
                 if !self.cabinet.insert.as_ref().is_some_and(|i| i.item == item) {
                     // Playful animations: turned to you, it rocks once on its bottom edge.
                     let rock = if playful { pocket_ui::playful::wiggle(pocket_ui::playful::secs(self.moved_at, now) - SHELF_TURN.as_secs_f32()) } else { 0.0 };
+                    self.paint_ajar_game(c, item, sm, &front, (fx, fy), show_clip);
                     art::blit_sheared(c, &front, fx, fy, rock * front.h as f32, 256, show_clip);
                 }
                 self.cabinet.shelf_lit = Some((front, fx, fy));
@@ -2597,6 +2845,8 @@ impl App {
         let mut panel = self.home_panel(item);
         let kicker = if self.screen == Screen::Home && item == Item::Recent(0) {
             Some("Continue")
+        } else if self.is_frozen_item(item) {
+            Some(super::app_frozen::FROZEN)
         } else {
             panel.as_ref().and_then(|p| p.kicker)
         };
@@ -2807,6 +3057,7 @@ mod shelf_tests {
         let key = |i| (CaseKey {
             rom: PathBuf::from(format!("/roms/gb/{i}.gb")), medium: Medium::Gb, look,
             case: CaseStickers { completed: true, ..Default::default() },
+            ajar: false,
         }, 3000);
         let mut probes = Vec::new();
         for i in 0..100 {
@@ -2821,6 +3072,8 @@ mod shelf_tests {
                 cabinet.box_game = Some((front.clone(), Rc::new(Pic::new(80, 90, 0xff00_ff00))));
             } else if i == 1 {
                 cabinet.insert = Some(Inserting {
+                    rig: None,
+                    rig_asked: false,
                     at: Instant::now(), item: Item::Game(0, 1), system: "gb".into(), ff: FormFactor::of("gb"),
                     medium: Medium::Gb, look, title: "Active launch".into(), kind: media::Game::of("gb", "1.gb"),
                     has_cover: true, front: front.clone(), from: (0, 0, 140, 200), game: None, cozy: false, at_drive: None,
@@ -2910,6 +3163,21 @@ mod shelf_tests {
         assert_eq!(shelf_lead(299, 600), (600 - 299) / 3);
         assert_eq!(shelf_lead(300, 600), 0, "half the shelf or more: from the end");
         assert_eq!(shelf_lead(2000, 600), 0, "a long row scrolls from the end");
+    }
+
+    #[test]
+    fn a_frozen_games_spine_keeps_its_width_and_its_place_on_the_board() {
+        let mut text = pocket_ui::text::Text::new();
+        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2 };
+        for (system, f) in [("gba", 3.0), ("ps2", 3.5), ("nds", 2.0), ("snes", 1.5)] {
+            let spine = Pic::new(40, 200, 0xff11_2233);
+            let bottom: Vec<u32> = spine.px.clone();
+            let ajar = ajar_spine(&mut text, spine, system, Path::new("/roms/Game (USA).rom"), f, look);
+            assert_eq!(ajar.w, 40, "{system}: the same width, so the row's sizes stay equal");
+            assert_eq!(ajar.h, 200 + ajar_peek(f), "{system}");
+            assert_eq!(&ajar.px[(ajar_peek(f) * 40) as usize..], &bottom[..], "{system}: the case itself as it was");
+            assert!(ajar.px[..(ajar_peek(f) * 40) as usize].iter().any(|p| p >> 24 != 0), "{system}: the game shows");
+        }
     }
 
     #[test]

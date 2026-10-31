@@ -312,6 +312,10 @@ class Ui:
         env.setdefault("WAYLAND_DISPLAY", "wayland-1")
         env.setdefault("SWAYSOCK", "/var/run/0-runtime-dir/sway-ipc.0.sock")
         env.update(dev_env(os.path.join(self.a.root, "dev.env")))
+        # The pocket-core of the build being measured, not the installed one a copy of pocket-ui would start.
+        core = os.path.join(self.a.root, "pocket-core")
+        if os.path.exists(core):
+            env["POCKETUI_HOST_BIN"] = core
         env["POCKETUI_TRACE"] = self.a.trace
         # The games this measurement starts are no play: nothing goes into the player's history (docs/HISTORY.md).
         env["POCKETUI_NO_HISTORY"] = "1"
@@ -1038,6 +1042,110 @@ def with_unmeasured(metrics, unmeasured):
     return metrics
 
 
+
+# --- what a run must leave as it found it ---------------------------------------------------------------------
+
+SYSTEM_CFG = "/storage/.config/system/configs/system.cfg"
+STATES_ROOT = "/storage/roms/savestates"
+
+
+class Preserve:
+    """Puts back what the games and pocket-ui of a run write on the device, however the run ends.
+
+    Cause: a real game start writes ROCKNIX's system.cfg (`emu_settings::apply_start_defaults_once`, called before every
+    game; the path is the const `SYSTEM_CFG`, src/emu_settings.rs) and pocket-core writes its auto state into
+    `/storage/roms/savestates/<system>/<game>.pstate.*` (src/bin/pocket_core.rs, `states`). Both paths are fixed in the
+    binaries: POCKETUI_DATA and POCKETUI_ES_SYSTEMS do not move them, so the harness saves and restores:
+    - system.cfg byte for byte (and its time stamps); a system.cfg that did not exist is removed again;
+    - for each measured system, `savestates/<system>/` as listed before: what is new is deleted, what changed or went
+      is restored from a copy made first, a folder that did not exist is removed when it is empty again."""
+
+    def __init__(self, systems, system_cfg=SYSTEM_CFG, states_root=STATES_ROOT):
+        self.cfg = system_cfg
+        self.root = states_root
+        self.systems = sorted({s.partition(":")[0] for s in systems if s})
+        self.cfg_before = None  # (bytes, mode, atime_ns, mtime_ns) or None when there was no file
+        self.states_before = {}  # system -> None (no folder) or {file name: (bytes, atime_ns, mtime_ns)}
+
+    @staticmethod
+    def _read(path):
+        try:
+            st = os.stat(path)
+            with open(path, "rb") as f:
+                return f.read(), st
+        except OSError:
+            return None
+
+    def __enter__(self):
+        got = self._read(self.cfg)
+        self.cfg_before = (got[0], got[1].st_mode, got[1].st_atime_ns, got[1].st_mtime_ns) if got else None
+        for system in self.systems:
+            d = os.path.join(self.root, system)
+            if not os.path.isdir(d):
+                self.states_before[system] = None
+                continue
+            files = {}
+            for name in os.listdir(d):
+                r = self._read(os.path.join(d, name))
+                if r and os.path.isfile(os.path.join(d, name)):
+                    files[name] = (r[0], r[1].st_atime_ns, r[1].st_mtime_ns)
+            self.states_before[system] = files
+        return self
+
+    def __exit__(self, *_):
+        self.restore()
+        return False
+
+    def restore(self):
+        """Every step on its own, so one failure leaves the others done; returns what was put back (for the log)."""
+        done = []
+        try:
+            now = self._read(self.cfg)
+            if self.cfg_before is None:
+                if now is not None:
+                    os.remove(self.cfg)
+                    done.append("system.cfg removed (there was none)")
+            elif now is None or now[0] != self.cfg_before[0]:
+                data, mode, at, mt = self.cfg_before
+                tmp = self.cfg + ".latency-restore"
+                with open(tmp, "wb") as f:
+                    f.write(data)
+                os.chmod(tmp, mode & 0o7777)
+                os.replace(tmp, self.cfg)
+                os.utime(self.cfg, ns=(at, mt))
+                done.append("system.cfg restored")
+        except OSError as e:
+            log(f"could not restore {self.cfg}: {e}")
+        for system, before in self.states_before.items():
+            d = os.path.join(self.root, system)
+            try:
+                if before is None:
+                    if os.path.isdir(d):
+                        for name in os.listdir(d):
+                            os.remove(os.path.join(d, name))
+                            done.append(f"{system}/{name} removed")
+                        os.rmdir(d)
+                    continue
+                os.makedirs(d, exist_ok=True)
+                for name in os.listdir(d):
+                    if name not in before and os.path.isfile(os.path.join(d, name)):
+                        os.remove(os.path.join(d, name))
+                        done.append(f"{system}/{name} removed")
+                for name, (data, at, mt) in before.items():
+                    path = os.path.join(d, name)
+                    cur = self._read(path)
+                    if cur is None or cur[0] != data:
+                        with open(path, "wb") as f:
+                            f.write(data)
+                        os.utime(path, ns=(at, mt))
+                        done.append(f"{system}/{name} restored")
+            except OSError as e:
+                log(f"could not restore {d}: {e}")
+        if done:
+            log("put back: " + ", ".join(done))
+        return done
+
+
 def _terminate(signum, _frame):
     # SIGTERM and SIGHUP (the SSH connection went away) would end Python without running any `finally`: turn them into
     # an exit that does, so Ui.stop ends the pocket-ui this run started.
@@ -1047,10 +1155,13 @@ def _terminate(signum, _frame):
 def cmd_measure(a):
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, _terminate)
-    try:
-        return _measure(a)
-    finally:
-        Ui.stop_all()
+    systems = [x for x in (a.systems or "").split(",") if x]
+    # The restore comes after the last process of the run is gone: pocket-core writes its exit save while it ends.
+    with Preserve(systems, a.system_cfg, a.states_root):
+        try:
+            return _measure(a)
+        finally:
+            Ui.stop_all()
 
 
 def _measure(a):
@@ -1466,8 +1577,71 @@ def selftest_cpu(doc):
         assert merged["cpu.shelf_idle"]["unmeasured"] and merged["cpu.behind_game"]["value"] == 0.15 and merged["nav.p50"]["value"] == 21.0
 
 
+
+def selftest_preserve():
+    """A fake /storage under a temp dir: a run that rewrites system.cfg and the states leaves both as they were,
+    when it ends well, with an error and with Ctrl-C."""
+    import shutil
+    import tempfile
+
+    tmp = tempfile.mkdtemp(prefix="latency-preserve.")
+    try:
+        cfg = os.path.join(tmp, "configs", "system.cfg")
+        states = os.path.join(tmp, "savestates")
+        os.makedirs(os.path.dirname(cfg))
+        os.makedirs(os.path.join(states, "gbc"))
+        os.makedirs(os.path.join(states, "snes"))  # not a measured system: left alone
+        cfg_bytes = b"system.hostname=SM8250\r\nglobal.x=\xff\xfe\n"  # odd bytes and line ends survive
+        write = lambda path, data: open(path, "wb").write(data)
+        write(cfg, cfg_bytes)
+        os.utime(cfg, ns=(1_000_000_000_000_000_000, 1_100_000_000_000_000_000))
+        write(os.path.join(states, "gbc", "Game.pstate.auto"), b"old auto")
+        write(os.path.join(states, "gbc", "Game.pstate"), b"slot 0")
+        write(os.path.join(states, "gbc", "Gone.pstate"), b"will be deleted")
+        write(os.path.join(states, "snes", "Other.pstate"), b"other")
+
+        def snapshot():
+            out = {"cfg": open(cfg, "rb").read(), "mtime": os.stat(cfg).st_mtime_ns}
+            for root, _dirs, files in os.walk(states):
+                for f in files:
+                    out[os.path.relpath(os.path.join(root, f), states)] = open(os.path.join(root, f), "rb").read()
+            return out
+
+        def a_run(fail=None):
+            write(cfg, cfg_bytes + b"global.cooling=3\n")                      # the start defaults
+            write(os.path.join(states, "gbc", "Game.pstate.auto"), b"new auto")  # changed
+            write(os.path.join(states, "gbc", "Game.pstate.auto.png"), b"png")   # new
+            os.remove(os.path.join(states, "gbc", "Gone.pstate"))                # deleted
+            os.makedirs(os.path.join(states, "gba"), exist_ok=True)              # a system folder that did not exist
+            write(os.path.join(states, "gba", "Fresh.pstate.auto"), b"fresh")
+            write(os.path.join(states, "snes", "Other.pstate"), b"changed but not measured")
+            if fail:
+                raise fail
+
+        before = snapshot()
+        for fail in (None, RuntimeError("the game did not start"), KeyboardInterrupt(), SystemExit(143)):
+            try:
+                with Preserve(["gbc:Game", "gba", ""], cfg, states):
+                    a_run(fail)
+            except (RuntimeError, KeyboardInterrupt, SystemExit):
+                pass
+            after = snapshot()
+            after["snes/Other.pstate"] = before["snes/Other.pstate"]  # not ours to restore
+            assert after == before, f"run ending with {fail!r}: not as before: {after} vs {before}"
+            assert not os.path.exists(os.path.join(states, "gba")), "a system folder the run made is removed again"
+            write(os.path.join(states, "snes", "Other.pstate"), b"other")
+        # No system.cfg before: none after.
+        os.remove(cfg)
+        with Preserve(["gbc"], cfg, states):
+            write(cfg, b"x\n")
+        assert not os.path.exists(cfg)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def cmd_selftest(_a):
     selftest_ui_stop()
+    selftest_preserve()
 
     def doc(values):
         return {"schema": SCHEMA, "meta": {}, "config": {"runs": 1}, "metrics": {k: {"value": v, "unit": unit_of(k), "runs": [v], "spread": 0} for k, v in values.items()}}
@@ -1575,6 +1749,8 @@ def main():
     m.add_argument("--opens", type=int, default=5, help="Settings and switcher opens per run")
     m.add_argument("--cycles", type=int, default=2, help="game cycles per run (launch, pause menu, quit, switch)")
     m.add_argument("--systems", default="gbc,gba,snes", help="games to start: system[:part of the file name], comma separated; empty: no games")
+    m.add_argument("--system-cfg", dest="system_cfg", default=SYSTEM_CFG, help="ROCKNIX's system.cfg, saved before the run and put back after it (games and pocket-ui write it)")
+    m.add_argument("--states-root", dest="states_root", default=STATES_ROOT, help="the savestates folder; each --systems folder in it is put back as listed before the run")
     m.add_argument("--gap", type=float, default=150, help="ms between shelf moves")
     m.add_argument("--settle", type=float, default=2.0, help="s to let a game run before the next step")
     m.add_argument("--cpu-secs", dest="cpu_secs", type=float, default=10)

@@ -1243,3 +1243,59 @@ mod tests {
         assert_eq!(c.buf[1], 0x101010, "transparent pixel left alone");
     }
 }
+
+/// `p` drawn through an affine map, nearest pixel: its pixel (s, t) lands on the screen at `o + s·u + t·v`. A row walks
+/// the picture in 16.16 fixed point and only over the columns the picture covers, so it costs little more than a
+/// plain blit of the same pixels (a lid swinging, a disc lying down: `insert_rig`). Nothing is made.
+pub fn blit_affine(c: &mut Canvas, p: &Pic, o: (f32, f32), u: (f32, f32), v: (f32, f32), shade: u32, clip: (i32, i32)) {
+    let det = u.0 * v.1 - u.1 * v.0;
+    if det.abs() < 1e-3 || p.w <= 0 || p.h <= 0 {
+        return;
+    }
+    // Screen to picture: s = (dx·v.y - dy·v.x) / det, t = (dy·u.x - dx·u.y) / det.
+    let (ds_dx, ds_dy, dt_dx, dt_dy) = (v.1 / det, -v.0 / det, -u.1 / det, u.0 / det);
+    let (pw, ph) = (p.w as f32, p.h as f32);
+    let corners = [o, (o.0 + u.0 * pw, o.1 + u.1 * pw), (o.0 + v.0 * ph, o.1 + v.1 * ph), (o.0 + u.0 * pw + v.0 * ph, o.1 + u.1 * pw + v.1 * ph)];
+    let (mut lo_y, mut hi_y) = (f32::MAX, f32::MIN);
+    for k in corners {
+        lo_y = lo_y.min(k.1);
+        hi_y = hi_y.max(k.1);
+    }
+    let (y0, y1) = ((lo_y.floor() as i32).max(clip.0).max(0), (hi_y.ceil() as i32).min(clip.1).min(c.h));
+    const ONE: f32 = 65536.0;
+    let (step_s, step_t) = ((ds_dx * ONE) as i64, (dt_dx * ONE) as i64);
+    let (max_s, max_t) = ((p.w as i64) << 16, (p.h as i64) << 16);
+    for row in y0..y1 {
+        let dy = row as f32 + 0.5 - o.1;
+        // At the row's first column (x = 0.5).
+        let s0 = (0.5 - o.0) * ds_dx + dy * ds_dy;
+        let t0 = (0.5 - o.0) * dt_dx + dy * dt_dy;
+        // The columns where s stays in 0..w and t in 0..h.
+        let (mut a, mut b) = (0.0f32, c.w as f32);
+        for (v0, d, max) in [(s0, ds_dx, pw), (t0, dt_dx, ph)] {
+            if d.abs() < 1e-6 {
+                if v0 < 0.0 || v0 >= max {
+                    b = a;
+                }
+            } else {
+                let (e0, e1) = (-v0 / d, (max - v0) / d);
+                a = a.max(e0.min(e1));
+                b = b.min(e0.max(e1));
+            }
+        }
+        let (x0, x1) = ((a.ceil() as i32).max(0), (b.floor() as i32 + 1).min(c.w));
+        if x0 >= x1 {
+            continue;
+        }
+        let mut s = ((s0 + x0 as f32 * ds_dx) * ONE) as i64;
+        let mut t = ((t0 + x0 as f32 * dt_dx) * ONE) as i64;
+        let dst = &mut c.buf[(row * c.w + x0) as usize..(row * c.w + x1) as usize];
+        for d in dst {
+            if s >= 0 && t >= 0 && s < max_s && t < max_t {
+                put(d, p.px[((t >> 16) * p.w as i64 + (s >> 16)) as usize], shade);
+            }
+            s += step_s;
+            t += step_t;
+        }
+    }
+}

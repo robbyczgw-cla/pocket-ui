@@ -22,7 +22,8 @@ Next to this image, on @RELEASE_URL@ :
       Every source archive and source checkout that ROCKNIX's H700 build fetches (Linux 7.2,
       BusyBox, glibc, systemd, RetroArch, the emulators and the rest), as ROCKNIX's own scripts/get
       downloads them. Join the parts with "cat rocknix-*-sources.tar.xz.part-* > sources.tar.xz".
-      packages.txt lists the packages.
+      packages.txt lists the packages. There is no source for DraStic (closed source, passed on unchanged as
+      ROCKNIX does; see the README's Licences section).
   SOURCE-SHA256SUMS
       Checksums of all of the above.
 

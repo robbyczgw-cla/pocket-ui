@@ -292,6 +292,17 @@ achievements:confirm
 store
 store:list
 store:detail
+game-check
+game-check:1
+game-check:running
+game-check:offer
+game-check:green
+game-check:none
+game-check:failed
+game-check:group:5
+game-check:detail:0
+game-check:detail:4
+game-check:detail:6
 starter-home
 starter-home:busy
 starter

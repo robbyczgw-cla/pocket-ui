@@ -64,6 +64,10 @@ pub enum Sound {
     BoxOpen,
     /// The Cozy launch: a cartridge slides into the slot and seats with a solid click.
     CartIn,
+    /// `DiscIn`'s first part: a disc coming down on a rig's spindle or tray (`insert_rig`).
+    DiscDrop,
+    /// `DiscIn`'s rest: the rig's lid or tray shutting, the drive spinning up.
+    DiscShut,
     /// The Cozy launch: a disc (or UMD) drops onto the spindle and the motor spins it up.
     DiscIn,
     /// The Cozy launch: a game card or memory card clicks into its port.
@@ -76,7 +80,7 @@ pub enum Sound {
 /// The sounds of the cases and what goes into the console, which Settings → Sound & feel → Case sounds
 /// switches apart from the menu sounds (`cozy_extras`).
 pub fn is_case_sound(sound: Sound) -> bool {
-    matches!(sound, Sound::Insert | Sound::CaseOpen | Sound::BoxOpen | Sound::CartIn | Sound::DiscIn | Sound::CardIn | Sound::CrtOn)
+    matches!(sound, Sound::Insert | Sound::CaseOpen | Sound::BoxOpen | Sound::CartIn | Sound::DiscIn | Sound::DiscDrop | Sound::DiscShut | Sound::CardIn | Sound::CrtOn)
 }
 
 /// How much quieter than the other UI sounds the Quick launch's click plays, in dB.
@@ -107,7 +111,8 @@ pub fn going_in(m: crate::media::Medium) -> Sound {
 pub fn hit_at(sound: Sound) -> Duration {
     Duration::from_millis(match sound {
         Sound::CartIn => 604,
-        Sound::DiscIn => 34,
+        Sound::DiscIn | Sound::DiscDrop => 34,
+        Sound::DiscShut => 14,
         Sound::CardIn => 33,
         Sound::Insert => 30,
         _ => 0,
@@ -297,6 +302,8 @@ fn wav(sound: Sound) -> &'static [u8] {
         Sound::BoxOpen => include_bytes!("../assets/ui-sounds/box-open.wav"),
         Sound::CartIn => include_bytes!("../assets/ui-sounds/cart-in.wav"),
         Sound::DiscIn => include_bytes!("../assets/ui-sounds/disc-in.wav"),
+        Sound::DiscDrop => include_bytes!("../assets/ui-sounds/disc-drop.wav"),
+        Sound::DiscShut => include_bytes!("../assets/ui-sounds/disc-shut.wav"),
         Sound::CardIn => include_bytes!("../assets/ui-sounds/card-in.wav"),
         Sound::CrtOn => include_bytes!("../assets/ui-sounds/crt-on.wav"),
     }
@@ -334,7 +341,7 @@ pub fn synth_at(sound: Sound, rate: u32) -> Vec<i16> {
 
 // ---- playing ----------------------------------------------------------------------------------------------
 
-const ALL: [Sound; 15] = [
+const ALL: [Sound; 17] = [
     Sound::Nav,
     Sound::Confirm,
     Sound::Back,
@@ -348,6 +355,8 @@ const ALL: [Sound; 15] = [
     Sound::BoxOpen,
     Sound::CartIn,
     Sound::DiscIn,
+    Sound::DiscDrop,
+    Sound::DiscShut,
     Sound::CardIn,
     Sound::CrtOn,
 ];
@@ -378,6 +387,8 @@ enum Msg {
     Play(Sound, f32, bool, Instant, Duration),
     /// Cut, close, and leave the shelf: true gives ROCKNIX's quantum back (`stop_for`).
     Stop(bool),
+    /// What waits for its moment won't be played: the launch animation was skipped (`forget_waiting`).
+    ForgetWaiting,
     /// A game is starting: what plays ends, then the output closes; true to give PipeWire's quantum back then.
     CloseWhenDone(bool),
     /// A game ended and its quantum goes back (`game_ended`): through the quantum thread, in order with the shelf's.
@@ -758,6 +769,13 @@ pub fn stop_for(restore: bool) {
     }
 }
 
+/// The launch animation was skipped: its sounds still waiting aren't played over the game. Never waits.
+pub fn forget_waiting() {
+    if let Some(tx) = TX.get() {
+        let _ = tx.try_send(Msg::ForgetWaiting);
+    }
+}
+
 /// A game ended: ROCKNIX's quantum back (pocket-core sets it back itself, but may have died first). Through the
 /// quantum thread, so the shelf's own quantum, asked for by the next sound, comes after it and not before.
 pub fn game_ended() {
@@ -779,6 +797,11 @@ struct Voice {
     pos: usize,
     gain: f32,
     wait: usize,
+}
+
+/// The voices still waiting for their moment go; what has started plays out.
+fn forget_unstarted(voices: &mut Vec<Voice>) {
+    voices.retain(|v| v.pos >= v.wait);
 }
 
 /// Fills `chunk` (interleaved stereo) with the voices and moves them on; finished ones are dropped.
@@ -920,6 +943,11 @@ fn mixer_with<O: MixerOutput>(
                     // A game or an app starts: ROCKNIX's quantum for it, or pocket-core's (the same as the shelf's).
                     ask(Q::Leave(restore));
                     on_shelf = false;
+                    continue;
+                }
+                Msg::ForgetWaiting => {
+                    waiting.clear();
+                    forget_unstarted(&mut voices);
                     continue;
                 }
                 Msg::GameEnded => {
@@ -1538,7 +1566,7 @@ mod tests {
             let ms = pcm.len() as u32 * 1000 / RATE;
             // A disc spinning up and a CRT coming on take longer than a click; still under a second.
             // The media sounds (a slide before the click, a disc spinning up) take longer than a menu tick.
-            let longest = if matches!(s, Sound::CaseOpen | Sound::BoxOpen | Sound::CartIn | Sound::DiscIn | Sound::CardIn | Sound::CrtOn) { 1200 } else { 450 };
+            let longest = if matches!(s, Sound::CaseOpen | Sound::BoxOpen | Sound::CartIn | Sound::DiscIn | Sound::DiscShut | Sound::CardIn | Sound::CrtOn) { 1200 } else { 450 };
             assert!(ms > 10 && ms <= longest, "{s:?}: {ms} ms");
             // No click: the files fade in over 2 ms and out over up to 30 ms, from and to exactly zero.
             let edge = RATE as usize / 1000;
@@ -1547,7 +1575,9 @@ mod tests {
                 assert!(v.unsigned_abs() < 2000, "{s:?} edge {v}");
             }
             let peak = pcm.iter().map(|v| v.unsigned_abs()).max().unwrap();
-            assert!(peak > 16000 && peak <= 28500, "{s:?}: peak {peak} (-1 dBFS is 29204)");
+            // `DiscIn`'s second part keeps its level: the clunk under the disc's hit.
+            let least = if s == Sound::DiscShut { 6000 } else { 16000 };
+            assert!(peak > least && peak <= 28500, "{s:?}: peak {peak} (-1 dBFS is 29204)");
         }
     }
 
@@ -1627,13 +1657,27 @@ mod tests {
     /// right there (the click), not before it (the slide) or long after.
     #[test]
     fn the_hit_is_where_hit_at_says() {
-        for s in [Sound::CartIn, Sound::DiscIn, Sound::CardIn, Sound::Insert] {
+        for s in [Sound::CartIn, Sound::DiscIn, Sound::DiscDrop, Sound::DiscShut, Sound::CardIn, Sound::Insert] {
             let pcm = synth(s);
             let loudest = pcm.iter().enumerate().max_by_key(|(_, v)| v.unsigned_abs()).unwrap().0;
             let ms = loudest as f32 * 1000.0 / RATE as f32;
             let hit = hit_at(s).as_secs_f32() * 1000.0;
             assert!(ms >= hit && ms < hit + 12.0, "{s:?}: loudest at {ms:.1} ms, hit_at {hit} ms");
         }
+    }
+
+    #[test]
+    fn a_skip_drops_the_sounds_still_waiting_and_lets_a_started_one_finish() {
+        let bank = vec![vec![1000i16; 480]];
+        let mut voices = vec![Voice { sound: 0, pos: 100, gain: 1.0, wait: 0 }, Voice { sound: 0, pos: 100, gain: 1.0, wait: 4800 }, Voice { sound: 0, pos: 0, gain: 1.0, wait: 1 }];
+        forget_unstarted(&mut voices);
+        assert_eq!(voices.len(), 1);
+        assert_eq!(voices[0].wait, 0);
+        // Long after, nothing comes of the ones dropped.
+        let mut chunk = vec![0i16; 2 * 2000];
+        mix(&mut chunk, &mut voices, &bank);
+        assert!(voices.is_empty(), "the started one ended");
+        assert!(chunk[2 * 1000..].iter().all(|v| *v == 0));
     }
 
     #[test]

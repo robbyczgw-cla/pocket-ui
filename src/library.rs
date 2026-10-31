@@ -485,12 +485,25 @@ fn scan_flat_into(dir: &Path, exts: &[String], broken: &mut Vec<BrokenDisc>) -> 
     } else {
         files.iter().filter_map(|p| p.file_name().and_then(|n| n.to_str())).map(str::to_lowercase).collect()
     };
+    let kind_of = |sheet: &Path| sheet.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
+    let mut lost: std::collections::HashSet<String> = Default::default();
     for (sheet, names) in &sheets {
-        let kind = sheet.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
-        if !matches!(kind.as_str(), "cue" | "gdi") {
+        if !matches!(kind_of(sheet).as_str(), "cue" | "gdi") {
             continue;
         }
         if let Some(missing) = names.iter().find(|n| !here.contains(&n.to_lowercase())) {
+            games.retain(|g| g.path != *sheet);
+            lost.insert(sheet.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_lowercase());
+            broken.push(BrokenDisc { sheet: sheet.clone(), missing: missing.clone() });
+        }
+    }
+    // A playlist none of whose discs can start (a file missing, or a sheet just found broken) can't start either.
+    for (sheet, names) in &sheets {
+        if kind_of(sheet) != "m3u" {
+            continue;
+        }
+        let usable = |n: &String| here.contains(&n.to_lowercase()) && !lost.contains(&n.to_lowercase());
+        if let Some(missing) = names.iter().find(|n| !usable(n)).filter(|_| !names.iter().any(usable)) {
             games.retain(|g| g.path != *sheet);
             broken.push(BrokenDisc { sheet: sheet.clone(), missing: missing.clone() });
         }
@@ -514,7 +527,7 @@ fn read_sheets(games: &[Game]) -> Vec<(PathBuf, Vec<String>)> {
             continue;
         }
         let Ok(bytes) = fs::read(&g.path) else { continue };
-        let text = String::from_utf8_lossy(&bytes);
+        let text = sheet_text(bytes);
         let names: Vec<String> = sheet_references(&kind, &text)
             .into_iter()
             // Only files next to the sheet are in this folder's list.
@@ -524,6 +537,12 @@ fn read_sheets(games: &[Game]) -> Vec<(PathBuf, Vec<String>)> {
         out.push((g.path.clone(), names));
     }
     out
+}
+
+/// A sheet's text: UTF-8, else Latin-1, as Windows tools write a cue with umlauts ("Müller.bin"): the lossy reading would
+/// report its file as missing.
+fn sheet_text(bytes: Vec<u8>) -> String {
+    String::from_utf8(bytes).unwrap_or_else(|e| e.into_bytes().iter().map(|b| *b as char).collect())
 }
 
 /// The files a disc sheet names: `FILE "x.bin" BINARY` lines of a cue sheet, the lines of an m3u playlist, the
@@ -1111,6 +1130,15 @@ mod tests {
 
     /// First-run test 2026-10-24, finding #11: a .cue whose .bin is missing was listed as a game and failed to start.
     #[test]
+    fn a_cue_written_in_latin1_finds_its_file_with_an_umlaut() {
+        let dir = TestDir::new("cue-latin1");
+        std::fs::write(dir.join("Müller.cue"), b"FILE \"M\xfcller.bin\" BINARY\n  TRACK 01 MODE2/2352\n").unwrap();
+        std::fs::write(dir.join("Müller.bin"), b"x").unwrap();
+        let (n, broken) = super::look_at_folder("psx", &dir, &["cue".to_string(), "bin".to_string()]);
+        assert_eq!((n, broken), (1, Vec::new()), "the sheet is the one game, nothing missing");
+    }
+
+    #[test]
     fn a_disc_whose_track_file_is_missing_is_left_out_and_reported() {
         let dir = disc_dir(
             "lost",
@@ -1140,6 +1168,28 @@ mod tests {
         // The track arrives (still copying): the game is there at the next look.
         std::fs::write(dir.join("Lost Bin (Europe).bin"), "x").unwrap();
         assert!(names(&super::scan(&dir, &types)).contains(&"Lost Bin (Europe).cue".to_string()));
+    }
+
+    #[test]
+    fn a_playlist_with_no_disc_that_can_start_is_left_out_and_reported() {
+        let dir = disc_dir(
+            "m3u-lost",
+            &[
+                ("Gone.m3u", "Gone (Disc 1).cue\nGone (Disc 2).cue\n"),
+                ("Broken.m3u", "Broken.cue\n"),
+                ("Broken.cue", "FILE \"Broken.bin\" BINARY\n"),
+                ("Fine.m3u", "Fine (Disc 1).cue\nFine (Disc 2).cue\n"),
+                ("Fine (Disc 1).cue", "FILE \"Fine (Disc 1).bin\" BINARY\n"),
+                ("Fine (Disc 1).bin", "x"),
+            ],
+        );
+        let types = exts(&["m3u", "cue", "bin"]);
+        assert_eq!(names(&super::scan(&dir, &types)), ["Fine.m3u"], "one disc is enough to start");
+        let (n, broken) = super::look_at_folder("psx", &dir, &types);
+        assert_eq!(n, 1);
+        let mut report: Vec<String> = broken.iter().map(|b| b.sheet.file_name().unwrap().to_str().unwrap().to_string()).collect();
+        report.sort();
+        assert_eq!(report, ["Broken.cue", "Broken.m3u", "Gone.m3u"]);
     }
 
     /// First-run test 2026-10-24, finding #10: a "Sega Genesis" folder next to megadrive was ignored without a word.

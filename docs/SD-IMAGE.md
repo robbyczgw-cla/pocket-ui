@@ -84,7 +84,7 @@ Proprietary or NC packages that stay, as in ROCKNIX: `aethersx2-sa` (CC BY-NC-ND
 source its authors offer by e-mail; `AETHERSX2.pdf` in `rocknix-licenses/licenses/`), `bigpemu` (free, non-commercial,
 "may not distribute … without the inclusion of this document in unmodified form": `usr/share/bigpemu/ReadMe.txt` is in
 SYSTEM unchanged), `duckstation-sa` (CC BY-NC-ND 4.0, passed on unchanged), the NC libretro cores (LICENCES.md §8). All
-fit "free, non-commercial, unchanged, credited". DraStic, whose author asked people not to redistribute it, is **not**
+fit "free, non-commercial, unchanged, credited". DraStic is **not**
 in the SM8250 SYSTEM (only two sleep scripts of the Anbernic RG DS name it).
 
 ### What changes on the card
@@ -199,13 +199,16 @@ hashes (`ROCKNIX-H700...-DDR3.img.gz.sha256`) and its own `H700_` pins.
 
 **SYSTEM without a few files** (`H700_SYSTEM_REMOVE`; read again for this family on 2026-10-30 with
 `scripts/check-release-tree.py` on the unpacked SYSTEM): the six SKick tables loose and in Amiberry's `boot-data.zip`
-and the DOOM shareware data, as on the Mini V2, and **the DraStic emulator** (`usr/config/drastic`: a closed-source
-binary by Exophase with its databases and the two `drastic_bios_*.bin`; `check-release-tree.py` flagged the BIOS names,
-reading the folder showed the rest). ROCKNIX's only permission is a 2017 forum thread, kept as `LICENSE.pdf` in that
-folder, in which Exophase says he asked people not to distribute the Raspberry Pi beta and that free use there is up to
-his discretion: that is no licence to pass it on, so it is out (the BIOS files were a BSD-licensed open replacement and
-would have been fine alone). ES still lists DraStic as a DS emulator; the entry points at a missing program. The H700
-SYSTEM has no `rocknix_abl`, no AYN/Mangmi firmware and no GBA BIOS (so no ReGBA source in its bundle; with DraStic out it holds no BIOS file at all). The rest of the finds are the libretro cores ROCKNIX ships (not ours to remove) and glmark2 `.3ds` models (3D models, not
+and the DOOM shareware data, as on the Mini V2. **DraStic stays** (`usr/config/drastic`, decision 2026-10-31): the closed-source Nintendo DS emulator by Exophase, passed on
+unchanged exactly as ROCKNIX does, with its `LICENSE.pdf` in that folder and ROCKNIX's `licenses/DRASTIC.pdf` on the card.
+The basis is a 2017 forum thread: Exophase first asked people not to distribute the Raspberry Pi beta; after RetroPie took
+it out of its setup script he answered (24 May 2017) that "at this point there's no real harm keeping it in there, if
+you don't have any misgivings doing so". That is a tolerance, not a formal licence, and it is about RetroPie. The card's
+notes, `NOTICE.md` and the note to the ROCKNIX team say so plainly, credit Exophase, and promise to remove it on request.
+There is no source to offer for it (the source bundle says so). `check-release-tree.py` flags its two
+`drastic_bios_*.bin` by name: they are an open BSD replacement BIOS (Gilead Kutnick), so they have a reasoned entry in
+`scripts/release-tree-allowlist.txt`; the check on the image expects exactly those two BIOS files. The H700
+SYSTEM has no `rocknix_abl`, no AYN/Mangmi firmware and no GBA BIOS (so no ReGBA source in its bundle; the only BIOS files are DraStic's open pair). The rest of the finds are the libretro cores ROCKNIX ships (not ours to remove) and glmark2 `.3ds` models (3D models, not
 ROMs). Firmware in this SYSTEM is 15 files: three Realtek Wi-Fi/Bluetooth files and the regulatory database (all
 identical to linux-firmware 20260309 / wireless-regdb 2026.05.30, "Redistributable"), and ten display panel files
 (`panels/*.panel`, 387 to 557 bytes) that are ROCKNIX's own, committed in the distribution repository (so they are in

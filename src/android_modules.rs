@@ -92,4 +92,5 @@ pub mod room_deco;
 pub mod room_props;
 pub mod button_prompts;
 pub mod cozy_extras;
+pub mod insert_rig;
 pub mod playful;

@@ -24,6 +24,7 @@ pub mod pad;
 pub mod players;
 pub mod players_page;
 pub mod touch;
+pub mod frozen;
 pub mod recents;
 pub mod text;
 pub mod this_game_page;
@@ -33,6 +34,7 @@ pub mod splash;
 pub mod boot_fade;
 pub mod crt_on;
 pub mod cozy_extras;
+pub mod insert_rig;
 pub mod playful;
 pub mod text_fallback;
 pub mod type_scale;
@@ -260,6 +262,8 @@ pub mod letters;
 // Settings → Tools (ROCKNIX's tools and the Store's, without EmulationStation) and its page state.
 pub mod timeline;
 pub mod tools;
+pub mod game_check;
+pub mod game_check_page;
 pub mod tools_page;
 // Settings → PC streaming: pairing Moonlight on the device, the paired PCs, their games.
 pub mod moonlight_page;

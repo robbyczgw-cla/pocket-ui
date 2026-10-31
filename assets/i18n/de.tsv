@@ -3967,10 +3967,8 @@ Look, appearance, colours, font, text size, night light, systems, cozy extras.	A
 Sound & feel	Klang & Gefühl
 Animations, playful cases, old-TV switch-on, motion, sounds, case sounds, haptics, LEDs.	Animationen, verspielte Hüllen, Alter-Fernseher-Effekt, Bewegung, Töne, Hüllen-Geräusche, Haptik, LEDs.
 On start, quit, buttons, over the game, frames, performance, battery, achievements.	Start, Beenden, Tasten, im Spiel, Rahmen, Leistung, Akku, RetroAchievements.
-Games, starter pack, pictures, EmulationStation, screenshots, Curator, PC, Store.	Spiele, Startpaket, Bilder & Extras, EmulationStation, Screens, Curator, PC, Store.
-Language, time, sleep & power, updates, storage, backup & reset.	Sprache, Uhrzeit, Ruhezustand, Updates, Speicher, Sichern & Zurücksetzen.
 Help & tools	Hilfe & Werkzeuge
-Tour, manual, tools, report a problem, about.	Tour, Handbuch, Werkzeuge, Problem melden, Info.
+Tour, manual, tools, Store, report a problem, about.	Tour, Handbuch, Werkzeuge, Store, Problem melden, Info.
 Shelf, Cabinet, Minimal, Cards or Split, with a live preview.	Regal, Schrank, Minimal, Karten oder Geteilt, mit Live-Vorschau.
 Dark, Light, or Automatic by the time of day.	Dunkel, Hell oder automatisch nach Tageszeit.
 The colours of every page. Left/right: the next set.	Die Farben jeder Seite. Links/rechts: die nächsten.
@@ -3995,3 +3993,89 @@ Where each system's games go.	Wohin die Spiele jedes Systems kommen.
 Cover art and game pictures.	Cover und Spielbilder.
 Nothing to rediscover yet	Noch nichts wiederzuentdecken
 Games you haven't played for a year, or played a year ago today, show up here.	Spiele, die du seit einem Jahr nicht gespielt hast oder vor genau einem Jahr gespielt hast, erscheinen hier.
+Language, time, sleep & power, frozen games, updates, storage, backup & reset.	Sprache, Uhrzeit, Ruhezustand, eingefrorene Spiele, Updates, Speicher, Sichern & Zurücksetzen.
+Frozen games	Eingefrorene Spiele
+Frozen	Eingefroren
+Your last five games stand a little open. A goes straight back to the moment you left.	Deine letzten fünf Spiele stehen einen Spalt offen. A führt direkt zurück in den Moment.
+Remember where I quit is off: a Quit freezes nothing new. Moments from before and from sleep stay.	Stelle beim Beenden merken ist aus: Beenden friert nichts Neues ein. Momente von vorher und aus dem Ruhezustand bleiben.
+Going back to your moment…	Zurück in deinen Moment…
+Couldn't go back to that moment: started fresh	Zurück in den Moment ging nicht: neu gestartet
+Its saved moment is gone: started fresh	Sein gespeicherter Moment ist weg: neu gestartet
+Started fresh: its saved moment belongs to its other emulator	Neu gestartet: Sein Moment gehört zum anderen Emulator
+The game's file changed: started fresh. The moment is still under Load	Die Spieldatei hat sich geändert: neu gestartet. Der Moment liegt noch unter Laden
+
+# --- Settings → Games → Game check
+Game check	Spiele-Check
+Will your games start? What's missing, in plain words.	Starten deine Spiele? Was fehlt, in klaren Worten.
+Games, game check, starter pack, pictures, EmulationStation, screenshots, Curator, PC.	Spiele, Spiele-Check, Startpaket, Bilder, EmulationStation, Screens, Curator, PC.
+Hidden. Settings › System › Storage brings it back.	Ausgeblendet. Einstellungen › System › Speicherplatz holt es zurück.
+1 new game. Settings › Games › Game check looks it over.	1 neues Spiel. Einstellungen › Spiele › Spiele-Check schaut es sich an.
+{n} new games. Settings › Games › Game check looks them over.	{n} neue Spiele. Einstellungen › Spiele › Spiele-Check schaut sie sich an.
+1 new game	1 neues Spiel
+{n} new games	{n} neue Spiele
+Want to see if they will start? This takes a moment and changes nothing.	Willst du sehen, ob sie starten? Das dauert einen Moment und ändert nichts.
+Check	Prüfen
+Looking at your games{s}	Deine Spiele werden geprüft{s}
+{n} of {n2} games · {s}	{n} von {n2} Spielen · {s}
+{n} of {n2} games	{n} von {n2} Spielen
+Can't read the list of systems	Die Systemliste lässt sich nicht lesen
+The games are safe. Restart the Pocket and try again.	Deine Spiele sind sicher. Starte den Pocket neu und versuch es noch mal.
+Copy games into their system's folder (Settings › Games › Add games) or get the starter pack.	Kopiere Spiele in den Ordner ihres Systems (Einstellungen › Spiele › Spiele hinzufügen) oder hol dir das Startpaket.
+1 game ready	1 Spiel startklar
+{n} games ready	{n} Spiele startklar
+All good	Alles gut
+{n} of {n2} games ready	{n} von {n2} Spielen startklar
+And {n} more. Fix these first, then check again.	Und {n} weitere. Behebe erst diese und prüfe dann erneut.
+Hide this copy	Diese Kopie ausblenden
+1 thing to fix	1 Sache zu beheben
+{n} things to fix	{n} Sachen zu beheben
+PlayStation games start without a BIOS, and a few run better with one.	PlayStation-Spiele starten ohne BIOS, einige laufen mit BIOS aber besser.
+Saturn games start without a BIOS, and play in pocket-ui's own player with one.	Saturn-Spiele starten ohne BIOS, mit BIOS laufen sie in pocket-uis eigenem Player.
+Put {s} into roms/bios.	Leg {s} in roms/bios.
+This BIOS file is empty.	Diese BIOS-Datei ist leer.
+Copy {s} into roms/bios again.	Kopiere {s} noch einmal nach roms/bios.
+Wrong BIOS: its checksum differs from the file with this name.	Falsches BIOS: Die Prüfsumme weicht von der Datei mit diesem Namen ab.
+Games may not start or may crash. Copy your own console's {s} again.	Spiele starten vielleicht nicht oder stürzen ab. Kopiere {s} von deiner eigenen Konsole noch einmal.
+{s}: the BIOS file's name is not quite right.	{s}: Der Name der BIOS-Datei stimmt nicht ganz.
+{s}: the BIOS file is in the wrong folder.	{s}: Die BIOS-Datei liegt im falschen Ordner.
+Rename {s} to {s2}.	Benenne {s} in {s2} um.
+Move {s} to {s2}.	Verschiebe {s} nach {s2}.
+{s}: no BIOS.	{s}: kein BIOS.
+{s}: BIOS missing.	{s}: BIOS fehlt.
+BIOS files come from your own console.	BIOS-Dateien stammen von deiner eigenen Konsole.
+Copy them with the SD card in a computer or the Web companion.	Kopiere sie mit der SD-Karte im Computer oder mit dem Web-Begleiter.
+Discs missing a file	Discs, denen eine Datei fehlt
+Empty files	Leere Dateien
+Zips that won't start	Zips, die nicht starten
+Same game twice	Dasselbe Spiel doppelt
+Wrong folder or file type	Falscher Ordner oder Dateityp
+Needs a stronger handheld	Braucht einen stärkeren Handheld
+Tips	Tipps
+This file is empty.	Diese Datei ist leer.
+A copy or a download stopped early. Copy the game to the SD card again.	Ein Kopiervorgang oder Download brach zu früh ab. Kopiere das Spiel noch einmal auf die SD-Karte.
+Same game twice: {s} is the same game.	Dasselbe Spiel doppelt: {s} ist dasselbe Spiel.
+Hide this copy from the shelf. The file stays on the card.	Blende diese Kopie im Regal aus. Die Datei bleibt auf der Karte.
+Disc: {s} is there, its {s2} is missing.	Disc: {s} ist da, {s2} fehlt.
+Put {s} next to it, with exactly this name.	Leg {s} direkt daneben, genau mit diesem Namen.
+Move it to {s}.	Verschiebe sie nach {s}.
+Games go into the folder of their system, for example roms/snes.	Spiele kommen in den Ordner ihres Systems, zum Beispiel roms/snes.
+This game is not in a system's folder, so nothing reads it.	Dieses Spiel liegt in keinem Systemordner, darum liest es nichts.
+This game is too deep in its folders: only one level of subfolders is read.	Dieses Spiel liegt zu tief: Nur eine Ebene Unterordner wird gelesen.
+Move it up, to {s} or a folder right in it.	Verschiebe es nach oben, nach {s} oder in einen Ordner direkt darin.
+{s} needs a stronger handheld.	{s} braucht einen stärkeren Handheld.
+This handheld has no emulator for it, so these games don't show on the shelf. They are safe on the card.	Dieser Handheld hat keinen Emulator dafür, darum stehen diese Spiele nicht im Regal. Auf der Karte sind sie sicher.
+Folder without a system: {s}.	Ordner ohne System: {s}.
+Its games go in roms/{s}. Rename the folder or move them.	Seine Spiele gehören nach roms/{s}. Benenne den Ordner um oder verschiebe sie.
+Nothing reads this folder. Add games shows the name each system's folder has.	Diesen Ordner liest nichts. Unter „Spiele hinzufügen“ steht, wie der Ordner jedes Systems heißt.
+This file was not copied to the end.	Diese Datei wurde nicht zu Ende kopiert.
+Copy the game to the SD card again.	Kopiere das Spiel noch einmal auf die SD-Karte.
+{s} has two file types, so it isn't read.	{s} hat zwei Dateitypen und wird deshalb nicht gelesen.
+Rename it to {s}.	Benenne sie in {s} um.
+{s} can't open .{s2} files.	{s} kann keine .{s2}-Dateien öffnen.
+Unpack it on a computer and copy the game file.	Entpacke sie am Computer und kopiere die Spieldatei.
+{s} has no file type, so it isn't read.	{s} hat keinen Dateityp und wird deshalb nicht gelesen.
+{s} takes {s2}.	{s} nimmt {s2}.
+This is a {s} file, in the {s2} folder.	Das ist eine {s}-Datei im {s2}-Ordner.
+Typo in the file type: .{s} isn't read.	Tippfehler im Dateityp: .{s} wird nicht gelesen.
+{s} doesn't take .{s2} files, so this one isn't read.	{s} nimmt keine .{s2}-Dateien, diese wird deshalb nicht gelesen.
+It takes {s}.	Es nimmt {s}.

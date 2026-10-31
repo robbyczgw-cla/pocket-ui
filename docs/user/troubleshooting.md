@@ -276,6 +276,12 @@ run have no mark that it ended properly. `crash.log` then has a line with the ti
 last messages of the system; the logs have the rest (see below). Nothing in your games or settings is lost by this
 message.
 
+## Will my games start?
+
+Settings → Games → **Game check** looks at the whole card and says what stands in the way: a missing or wrong BIOS, a
+disc without its track file, empty files, zips without a game, duplicates, files in the wrong folder. See
+[Game check](game-check.md).
+
 ## A zip game says it holds several games, is damaged or can't be opened
 
 pocket-core opens a `.zip` itself for most 8-bit and 16-bit systems and checks it first. It then says why it did not

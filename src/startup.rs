@@ -61,7 +61,43 @@ pub fn held() -> bool {
 }
 
 /// The longest hold pocket-ui asks for (Cozy's fade has run by then).
-pub const MAX_HOLD_MS: f64 = 1500.0;
+pub const MAX_HOLD_MS: f64 = 2000.0;
+
+/// Environment variable with a path: once it exists the launch animation was skipped and the window stops waiting. A
+/// button pressed before pocket-core has its pads open is seen by pocket-ui alone.
+pub const HOLD_SKIP: &str = "POCKET_LAUNCH_HOLD_SKIP";
+
+/// Where [`HOLD_SKIP`] points, on the runtime's tmpfs: nothing from an earlier start is left there ([`prepare_skip`]).
+pub fn skip_path() -> std::path::PathBuf {
+    std::env::temp_dir().join("pocket-launch-skip")
+}
+
+/// Before a game with a hold starts.
+pub fn prepare_skip() {
+    let _ = std::fs::remove_file(skip_path());
+}
+
+/// pocket-ui: the player skipped the launch animation, the window needn't wait.
+pub fn skip_hold() {
+    let _ = std::fs::File::create(skip_path());
+}
+
+/// pocket-core: whether the player skipped it. One `stat` a frame, while it holds.
+pub fn hold_skipped() -> bool {
+    std::env::var_os(HOLD_SKIP).is_some_and(|p| std::path::Path::new(&p).exists())
+}
+
+/// Whether a button went down since the last call. Buttons already down at the first call don't count: the finger still
+/// on the A that started the game. A button let go and pressed again does.
+pub fn new_press<const N: usize>(now: &[u16; N], before: &mut Option<[u16; N]>) -> bool {
+    let Some(b) = before else {
+        *before = Some(*now);
+        return false;
+    };
+    let pressed = now.iter().zip(b.iter()).any(|(n, b)| n & !b != 0);
+    *b = *now;
+    pressed
+}
 
 /// Milliseconds since `LAUNCHED_AT`, if pocket-ui set it.
 pub fn since_launch_ms() -> Option<f64> {
@@ -233,6 +269,19 @@ impl<T: Send + 'static> std::ops::DerefMut for Later<T> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_finger_on_the_start_button_is_no_new_press() {
+        let mut before = None;
+        assert!(!new_press(&[0b01u16, 0], &mut before), "A still down from the start");
+        assert!(!new_press(&[0b01, 0], &mut before));
+        assert!(new_press(&[0b11, 0], &mut before), "another button");
+        assert!(!new_press(&[0b10, 0], &mut before), "letting go is no press");
+        assert!(new_press(&[0b11, 0], &mut before), "A again");
+        let mut before = None;
+        assert!(!new_press(&[0u16, 0], &mut before));
+        assert!(new_press(&[0, 1], &mut before), "the second player's too");
+    }
+
     use super::*;
 
     #[test]
