@@ -6,14 +6,14 @@ and the power and volume keys. The Mini V2's picture, the shelf, games, the paus
 
 ## In Settings
 
-Settings opens on five categories (Look & feel, Playing, Games, Connections, System); each holds a short list
+Settings opens on seven categories (Look, Sound & feel, Playing, Games, Connections, System, Help & tools); each holds a short list
 ([Open Settings](settings.md#open-settings)).
 
 | Button | What it does |
 |---|---|
 | D-pad Up / Down | Move. The list wraps around at the ends. |
-| A | On a category: open its list. In the list: open. On Language, Haptics, Sounds, Animations, On start, Remember where I quit, Button layout and Screen frames: switch. |
-| D-pad Left / Right | On Sounds: how loud. On Language, Animations, On start, Button layout and Screen frames: switch. |
+| A | On a category: open its list. In the list: open. On Appearance, Colours, Font, Text size, Motion, Animations, Sounds, Haptics, On start, Remember where I quit, Over the game, Screen frames and Language: switch. On Buttons: open its page. |
+| D-pad Left / Right | On Sounds: how loud. On Appearance, Colours, Font, Text size, Motion, Animations, On start, Over the game, Screen frames and Language: switch. On the Buttons page: A or Left / Right switch the selected row, Button layout or Button symbols. |
 | B | In a category's list: back to the categories, the one you came from selected. On the categories: back to where you came from (the shelf, or a system's game list). |
 
 A page of Settings (Wi-Fi, Tools, Battery and the others below) goes back with B to its category's list, even when
@@ -44,7 +44,7 @@ The keyboard is described in [Getting started](getting-started.md#4-connect-to-w
 
 | Button | What it does |
 |---|---|
-| HOME, held for a second, then let go | Stop the tool and come back to Settings → Games → Tools. |
+| HOME, held for a second, then let go | Stop the tool and come back to Settings → Help & tools → Tools. |
 | L1 held + SELECT + START | ROCKNIX's way to close a tool, for the tools that support it (the page says which). |
 
 Everything else belongs to the tool. There is no pause menu.
@@ -119,7 +119,7 @@ START on a PortMaster port's card ([Performance & fan](performance.md#portmaster
 | Welcome | Left / Right: the language, English or Deutsch, used at once ([Language](language.md)). A: start. |
 | Choose a look | Left / Right: change. Y: appearance (Dark, Light, Automatic). A: keep this look. In the first start R1: text size (Normal, Medium, Large), B: back to Welcome. Opened from Settings instead R1: motion (Full, Reduced, Off), and X: Systems on the shelf. |
 | How do you like to play? | Up / Down: Simple, Enthusiast, Choose for yourself. A: take it. B: back to the look. START: skip, everything stays as it is. |
-| Feature cards (Choose for yourself, Settings → System → Tour, New in this version) | Up / Down: On, Off, Later. A: take the choice, next card. L1 / R1 or Left / Right: previous / next card without choosing. B: back a card (first start) or close (Tour, new cards). START: skip the rest. |
+| Feature cards (Choose for yourself, Settings → Help & tools → Tour, New in this version) | Up / Down: On, Off, Later. A: take the choice, next card. L1 / R1 or Left / Right: previous / next card without choosing. B: back a card (first start) or close (Tour, new cards). START: skip the rest. |
 | Wi-Fi | Up / Down: choose a network. A: connect. X: scan again. |
 | On-screen keyboard | D-pad: move. A: type. B: delete (back to the list when empty). X: Shift. Y: symbols. START: connect. |
 | Extras | Up / Down: choose. A: download (cover art) or browse (PortMaster). On Pictures, A or Left / Right: the next choice (Box art, Box art and screenshots, Off). |
@@ -159,7 +159,7 @@ If the touch screen does not answer: pocket-ui looks for it until it is there, a
 (after a restart of the touch driver, say), so it comes back by itself. Touches are also dropped on purpose while a game
 or app runs, while the screen is off or the Pocket sleeps (only a button wakes it), on the pause menu and the first-start
 setup, and while the picture is on a TV. Which one it was is in the log (`/var/log/pocket-ui.log`, lines starting
-`touch:`); Settings → System → About → Report a problem includes it.
+`touch:`); Settings → Help & tools → About → Report a problem includes it.
 
 ## Power and volume
 
@@ -192,7 +192,7 @@ RetroArch, PlayStation 2, GameCube and PortMaster games only when the screen sup
 
 ### The power menu
 
-At the top right: the battery level and the time left, as on Settings → Playing → [Battery](settings.md#battery).
+At the top right: the battery level and the time left, as on Settings → Playing → [Battery](settings-system.md#battery).
 Under each entry, a line says what it does.
 
 | Entry | What it does |

@@ -65,7 +65,7 @@ started once where the system's own control started it twice, and was off far le
 hardware are not checked yet. If the fan behaves oddly, switch Settings → Playing → Performance & fan →
 **Smooth fan** off: the system's own fan control is back at once.
 
-**Settings → Games → Tools, the Wi-Fi country and Backup & reset are new and not yet confirmed on a Mini V2.** They work in
+**Settings → Help & tools → Tools, the Wi-Fi country and Backup & reset are new and not yet confirmed on a Mini V2.** They work in
 the virtual device (which has no Wi-Fi chip and none of the big standalone emulators).
 
 ## Questions
@@ -92,8 +92,8 @@ try (within 10 seconds) writes the save and the line goes away. An SD card that 
 read-only, usually after an SD card error: quitting and restarting the Pocket often clears that; if it comes back, copy
 your saves off and replace the SD card.
 
-**A tool from Settings → Games → Tools doesn't let me out.**
-Hold HOME for a second and let go: pocket-ui stops the tool and Settings → Games → Tools comes back. Tools that support it
+**A tool from Settings → Help & tools → Tools doesn't let me out.**
+Hold HOME for a second and let go: pocket-ui stops the tool and Settings → Help & tools → Tools comes back. Tools that support it
 also close with L1 held and SELECT + START.
 
 **A tool I installed from the Store was gone after a restart.**
@@ -200,7 +200,7 @@ EmulationStation set to "custom", and for ten minutes when the system kept chang
 way rather than fight over it). `pocket-ui.log` says which, in lines starting with `fan curve:`.
 
 **The menus make no sound.**
-Settings → Look & feel → Sounds must be on, and the console's volume must be above 0 and not muted. The clicks never play while
+Settings → Sound & feel → Sounds must be on, and the console's volume must be above 0 and not muted. The clicks never play while
 a game runs, and not while the device sleeps (see [Playing](playing.md#menu-sounds)).
 
 **Wi-Fi says "Wrong password. Try again."**
@@ -300,7 +300,7 @@ always go to RetroArch.
 
 ## Report a problem
 
-When something goes wrong, Settings → System → **Report a problem** (also in About, and in the question of
+When something goes wrong, Settings → Help & tools → **Report a problem** (also in About, and in the question of
 SELECT + START held on the shelf) puts what we need to find it into one
 file. Press A once. When a game doesn't start, the message on the shelf says how to get there. A few seconds later the Pocket shows the file's name, for example `report-2026-10-26-164007.zip`
 (the date and time on the Pocket's clock, as for screenshots).
@@ -338,7 +338,7 @@ screenshots, for example) and try again.
 ## What to send when something crashes
 
 pocket-ui keeps its logs on the SD card, so they are still there after a freeze or a restart. (The system's own log
-lives in memory and is gone after a restart.) They are in `/storage/.config/pocket-ui/logs/`, and Settings → System → About
+lives in memory and is gone after a restart.) They are in `/storage/.config/pocket-ui/logs/`, and Settings → Help & tools → About
 shows the folder.
 
 | File | What is in it |
@@ -379,7 +379,7 @@ Both are shown on screen: Settings → Games → Add games, and Settings → Con
 password; it does not change.
 
 **How do I get to ROCKNIX's standard menu (EmulationStation)?**
-On the shelf, hold SELECT + START for one second and choose **Open EmulationStation**, or Settings → System → About → **Open
+On the shelf, hold SELECT + START for one second and choose **Open EmulationStation**, or Settings → Help & tools → About → **Open
 EmulationStation…**. Read the warning first: do not use Updates or Factory reset there. Restart the Pocket to come back
 ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)).
 
@@ -399,7 +399,7 @@ In `/storage/.config/pocket-ui/` on the SD card:
 | `curator.json` | Curator's switches and your smart shelves |
 | `wikipedia/` | Game descriptions loaded from Wikipedia |
 | `retroachievements.json`, `achievements/` | The RetroAchievements sign-in key and what the Pocket keeps for offline play ([Achievements](achievements.md#good-to-know)) |
-| `battery-history.bin` | The last 48 hours of battery readings ([Battery](settings.md#battery)) |
+| `battery-history.bin` | The last 48 hours of battery readings ([Battery](settings-system.md#battery)) |
 | `battery-games.json` | What each game used of the battery while you played it ([Battery in this game](pause-menu.md#battery-in-this-game)) |
 | `port-cpu.json` | Which PortMaster ports keep a processor core busy ([PortMaster ports](performance.md#portmaster-ports)) |
 | `play-log.bin` | Your play history: when each game started and ended ([Play history](curator.md#play-history)). Not part of a backup |
@@ -418,7 +418,7 @@ slots are `<game>.pstate` and `<game>.pstate1` to `<game>.pstate7`, the moment y
 `<game>.pstate.auto`, and each has a `.png` preview next to it.
 
 **How do I run the first-start setup again?**
-Each step is in Settings: Look (under Look & feel), Wi-Fi (Connections), Extras and Add games (both under Games).
+Each step is in Settings: Look (Look), Wi-Fi (Connections), Pictures & extras and Add games (both under Games).
 <!-- TODO: if a full reset of the first start is wanted, document it (today: set "onboarded" to
      false in settings.json). -->
 

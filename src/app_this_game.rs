@@ -24,7 +24,7 @@ impl App {
     fn this_game_subject(&self, system: &str, name: &str, path: &Path) -> Option<Subject> {
         let sys = self.systems.iter().find(|s| s.name == system)?;
         let hosted = self.emu_hostable(sys, path);
-        let runner = self.resolve_runner(sys, Some(path), std::path::Path::new(super::HOST_BIN).exists()).runner;
+        let runner = self.resolve_runner(sys, Some(path), std::path::Path::new(super::host_bin()).exists()).runner;
         Some(Subject {
             system: sys.name.clone(),
             system_name: sys.fullname.clone(),

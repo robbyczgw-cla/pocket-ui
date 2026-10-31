@@ -27,6 +27,7 @@ used included, with its seed: `pixellab-assets.json`.
 | `empty-search.png` | a magnifying glass next to a small empty open cardboard box | 72 | 160x120 |
 | `empty-store.png` | a small closed shop stall with an awning and empty shelves | 81 | 160x120 |
 | `empty-nothing-played.png` | a retro handheld game console resting on a cushion with a small blanket, sleeping | 91 | 160x120 |
+| `logo.png` | pocket-ui's mark (2026-10-30): "app icon: one retro video game cartridge seen straight from the front, warm grey plastic shell, rounded beveled top shoulders, vertical grip ridges along both sides, a large recessed cream paper label with rounded corners in the upper middle, the bottom edge is narrower and stepped with a row of shiny gold contact pins peeking out, small embossed arrow pointing down below the label, simple bold shapes, centered" (no common ending; 64x64, then cut to 50x52; the request is logged with the logo pack, not in `pixellab-assets.json`); finished by hand: greys turned warm, the label's four stripes and a lowercase "p" painted in, gold contacts in the three windows | 31 | 50x52 |
 | `sticker-completed.png` | a small golden trophy cup with a star | 201 | 96x96 |
 | `sticker-hundred-hours.png` | a golden hourglass with sparkles | 211 | 96x96 |
 | `sticker-ten-games.png` | a small row of game cartridges standing on a shelf with a ribbon | 222 | 96x96 |
@@ -56,7 +57,7 @@ it be used and distributed for any purpose. The pictures ship with pocket-ui und
 | `device-rp6.png` | Retroid Pocket 6 | the same |
 | `device-nova.png` | Retroid Pocket Nova | the same |
 | `anchors.json` | Where each control of the Mini V2 picture is, for the Controls page's labels (copied into `src/ui_art.rs`, a test keeps them equal) | the same |
-| `icon-*.png` | The Settings categories: a half-dark circle (Look & feel), a game pad (Playing), a cartridge (Games), a Wi-Fi fan (Connections), a cog (System); 16 x 16, white on clear, painted in the row's colour | `tools/draw_icons.py` |
+| `icon-*.png` | The Settings categories: a half-dark circle (Look & feel), a game pad (Playing), a cartridge (Games), a Wi-Fi fan (Connections), a cog (System); the phone tabs add a star (Favourites), a magnifying glass (Search) and a crate of cartridges (Curator); 16 x 16, white on clear, painted in the row's colour | `tools/draw_icons.py` |
 
 The handhelds are drawn in pixels from their published proportions (body size, screen size and aspect ratio, where
 the D-pad, face buttons, sticks and small buttons sit), in the style of `assets/systems`: one dark outline pixel,

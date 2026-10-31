@@ -225,11 +225,7 @@ pub fn missing_game(name: &str, path: &Path) -> Option<String> {
     Some(format!("{name} can't start: its file \"{file}\" is no longer there. The list of games is being read again."))
 }
 
-/// A game file with nothing in it (0 bytes): a copy that never finished, or a placeholder. No emulator can start it, and
-/// no picture belongs to it (new-user test 2026-10-30: an empty Tetris got a cover and a box like a healthy game).
-pub fn is_empty_file(path: &Path) -> bool {
-    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.len() == 0)
-}
+pub use crate::fsutil::is_empty_file;
 
 /// What the player is told about a game whose file is empty (the start, the game's card); None for any other game.
 pub fn empty_game(name: &str, path: &Path) -> Option<String> {

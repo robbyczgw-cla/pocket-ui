@@ -75,7 +75,7 @@ mode: Android**, then **Start**. The SD card can stay in.
 **If the screen stays black** with Boot mode: Loader, switch back to Android as above and see "If something goes
 wrong" in the [install guide](../INSTALL-DUAL-BOOT.md). The guide also has the way for a ROCKNIX card you
 already use, with no computer commands: copy the one file **Install pocket-ui.sh** into the `roms/ports` folder of the
-card (switch on Samba in ROCKNIX's Network Settings, then open `\\<device name or IP>` on Windows or `smb://<device name or IP>` on a Mac and use the games share; [ROCKNIX explains it](https://rocknix.org/play/add-games/)), open **Ports** in EmulationStation (restart its list once: Start → Game Settings → Update Gamelists) and start
+card (switch on Samba in ROCKNIX's Network Settings, then open `\\<device name or IP>` on Windows or `smb://<device name or IP>` on a Mac and use the games share; [ROCKNIX explains it](https://rocknix.org/play/add-games/)), open **Ports** in EmulationStation (restart its list once: Start, Game Settings, Update Gamelists) and start
 **Install pocket-ui**. The screen shows what it checks and installs; if something does not fit, it says what, changes
 nothing and **Close** takes you back to EmulationStation. To remove pocket-ui again, start **Uninstall pocket-ui** in
 Ports (the installer leaves it there).
@@ -125,7 +125,7 @@ pocket-ui has more than it shows at first: Curator's Lens and Echoes, Pixel Path
 into your game, and more. This step sets them in one go. Up/Down choose, A takes it; under the three rows the page
 says what the selected one switches on and off, in everyday words ("On: suggestions for similar games, gentle
 animations. Off: pick games by mood and length, ..."). The names of the features are on their cards in
-[Settings → System → Tour](tour.md).
+[Settings → Help & tools → Tour](tour.md).
 
 - **Simple**: "As pocket-ui ships, the same as skipping this step." This is the start
   setting of a new Pocket, nothing more: Lens & smart shelves, Stickers, Echoes, Versions and Motion are on; Up next,
@@ -134,10 +134,10 @@ animations. Off: pick games by mood and length, ..."). The names of the features
   console, and On start set to your last game.
 - **Choose for yourself**: one card per feature, each with a small picture of what it does and three rows, **On**, **Off**
   and **Later**. Up/Down choose, A takes the choice and shows the next card, B goes back a card, START skips the rest.
-  Later leaves the feature as it is and keeps the card for [Settings → System → Tour](tour.md).
+  Later leaves the feature as it is and keeps the card for [Settings → Help & tools → Tour](tour.md).
 
 START skips the step and leaves everything as it is, which is the same as Simple. A profile only sets switches that Settings has too, nothing of
-its own: each one stays in its Settings page afterwards, and [Settings → System → Tour](tour.md) shows the cards again
+its own: each one stays in its Settings page afterwards, and [Settings → Help & tools → Tour](tour.md) shows the cards again
 whenever you like. The table there lists every card and what Simple and Enthusiast do with it. Menu sounds, haptics
 and the stick lights are left as they are by both.
 
@@ -352,11 +352,11 @@ work, but nobody has tried pocket-ui on one yet.
   says, start it once, then add pocket-ui with the install package for an existing ROCKNIX card (the
   [install guide](../INSTALL-DUAL-BOOT.md#install-on-a-rocknix-card-you-already-use) has the steps). It recognises
   these devices and says they are experimental.
-- **What you see.** The first start says once that pocket-ui hasn't been tested on your device; Settings → System →
+- **What you see.** The first start says once that pocket-ui hasn't been tested on your device; Settings → Help & tools →
   About shows the device with "(experimental)". Everything else is the same as on the Mini V2. On the Pocket 5's and
   Flip 2's wider screen, Settings and the Shelf look sit in a column in the middle; on the Flip 2, closing the lid
   puts it to sleep.
-- **If something doesn't work**, Settings → System → About → Report a problem saves a file to attach to a report.
+- **If something doesn't work**, Settings → Help & tools → About → Report a problem saves a file to attach to a report.
 
 
 
@@ -383,7 +383,7 @@ and Zink on the real GPU still need a tester. Mini and Portal menus start with X
 
 pocket-ui runs on the Anbernic handhelds that ROCKNIX's **H700 image** supports. All of them are **experimental**:
 pocket-ui knows each model (screen, buttons, what it has), but it has only been tested on a computer, not on a real
-handheld yet. If something doesn't work, Settings → System → About → Report a problem saves a file to attach to a
+handheld yet. If something doesn't work, Settings → Help & tools → About → Report a problem saves a file to attach to a
 report. The **RG CubeXX** (square 720×720 screen) is **not supported yet**: pocket-ui draws that screen too slowly on
 this processor for now, and the installers say so and change nothing.
 
@@ -454,7 +454,7 @@ doesn't change them.
   states and shortcuts. **N64, PSP, Dreamcast and Nintendo DS stay on ROCKNIX's own emulators** (they ask more than
   these processors give). PS2, GameCube, Wii and 3DS are not in ROCKNIX's H700 image, so those systems don't appear.
 - **Screen.** pocket-ui draws its normal layout and reduces it to the small screen, so it looks like on the Mini V2,
-  only smaller. Small hint text can be hard to read on the 640×480 handhelds; Settings → Look & feel → Text size
+  only smaller. Small hint text can be hard to read on the 640×480 handhelds; Settings → Look → Text size
   makes it larger.
 - **Hidden or reduced.** Fan settings say "No fan"; there is no touch setup. The RG28XX and RG35XX 2024 say
   "This device has no Wi-Fi" on the Wi-Fi page and offer nothing to switch on there: everything else works offline,

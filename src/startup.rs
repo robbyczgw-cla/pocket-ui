@@ -49,7 +49,7 @@ pub fn clock_ms() -> f64 {
 pub const LAUNCHED_AT: &str = "POCKET_LAUNCHED_AT";
 
 /// Environment variable with the `clock_ms` until which pocket-core keeps its window back: Cozy's launch animation
-/// (Settings > Look & feel > Animations) plays over the shelf meanwhile. Unset in Quick.
+/// (Settings > Sound & feel > Animations) plays over the shelf meanwhile. Unset in Quick.
 pub const HOLD_UNTIL: &str = "POCKET_LAUNCH_HOLD_UNTIL";
 
 /// pocket-core's window is still to be held back (`HOLD_UNTIL`). A deadline further away than the longest hold pocket-ui

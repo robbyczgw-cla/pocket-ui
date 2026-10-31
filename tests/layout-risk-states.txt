@@ -28,10 +28,12 @@ setup:wifi-save-failed
 setup:wifi-portal-signin=hotel
 setup:wifi-portal-signin=email:ddddd
 settings
-settings:0:2
-settings:1:7
-settings:2:4
-settings:4:5
+settings:0:4
+settings:2:7
+settings:3:4
+settings:5:5
+settings:6:4
+buttons:1
 about:device=flip2
 sys:quick
 sys:quick-bluetooth-long
@@ -40,7 +42,7 @@ sys:quick-wifi-save-failed
 sys:power-game
 sys:time-set-wrong:3
 sys:zones
-sleep:4:screen
+sleep:5:screen
 tailscale:connected
 tailscale:login
 achievements:password
@@ -55,4 +57,4 @@ menu:pocket-core
 pixel-path:n64:1:about
 gallery:delete
 gallery:full-delete
-setup:look:Tr
+setup:look-systems

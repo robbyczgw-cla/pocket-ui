@@ -16,10 +16,10 @@ bottom):
 4. **Favourites**, the games you starred with Y, by name. The row appears once you star a game and
    goes away when you unstar the last one.
 5. The **smart shelves and stickers you pinned to Home**, each as a row of its own. Each part of Curator can be
-   switched off in [Settings → Playing → Curator](settings.md#curator); without the Lens there is no Curator row on
+   switched off in [Settings → Games → Curator](settings.md#curator); without the Lens there is no Curator row on
    top. In the Cabinet look they are shelves (see below).
-6. **PC streaming**, only when Moonlight is installed (it is on ROCKNIX) and you ticked it in Settings → Look & feel → Look →
-   X (Systems on the shelf). It starts Moonlight, an app that has no pause menu and does not count as a game. See
+6. **PC streaming**, only when Moonlight is installed (it is on ROCKNIX) and you ticked it in Settings → Look →
+   Systems on the shelf. It starts Moonlight, an app that has no pause menu and does not count as a game. See
    [PC streaming](pc-streaming.md).
 7. **Your systems**, in alphabetical order. Only systems with at least one game are shown, and not the ones you
    hid in [Systems on the shelf](settings.md#systems-on-the-shelf). A system opens its own list of games.
@@ -90,12 +90,12 @@ list: **A** plays the game, **Y** stars it, **X** opens its card, **B** goes bac
 game from the search, the search closes and the game's system list is where you come back to.
 
 With nothing typed, the list shows your last five searches; A on one searches it again. A search counts once you
-go to its list or start a game from it. Systems you hid (Settings → Look & feel → Look → Systems on the shelf) are not
+go to its list or start a game from it. Systems you hid (Settings → Look → Systems on the shelf) are not
 searched. On the touch screen, tap the keys to type, tap a game to select it and tap it again to play it.
 
 ## Looks
 
-The shelf has five looks. Choose one in Settings → Look & feel → **Look**, with a live preview. The look you
+The shelf has five looks. Choose one in Settings → Look → **Look**, with a live preview. The look you
 choose is remembered. Each look comes dark or light: **Y** on the same page ([Appearance](settings.md#appearance));
 **R1** there sets how much the menus move ([Motion](settings.md#motion)).
 
@@ -131,7 +131,7 @@ and a plant, a lamp or a cactus stands beside them, never in front of one. The s
 plant starts as a sprout and grows with the hours you play, a trophy appears after your first completed game, a
 framed "100 %" after your first 100 % sticker, and a system you have played for 10 hours gets a small figurine on its
 shelf. The room follows the clock too: cool and bright in the morning, warm in the evening with the lamp on, dim at
-night. Both can be switched off in Settings → Look & feel → Cozy extras. The case you pick comes out of the shelf
+night. Both can be switched off in Settings → Look → Cozy extras. The case you pick comes out of the shelf
 and stands on top of the cabinet, right over its shelf, turned to its cover; the whole cover shows, never cut. Under
 the picked shelf you see the next ones, as many as fit whole. The top shelf holds the recent games, the next one your Favourites, then
 come Curator's shelves, then one shelf per system. A starts the game: its cartridge or disc goes into the console.
@@ -141,14 +141,14 @@ come Curator's shelves, then one shelf per system. A starts the game: its cartri
 In the Cabinet and the Shelf looks, A on a game starts it at once, and while the emulator loads the console's pixel
 picture comes up: the case opens, the cartridge or disc slides out of it and goes into the console, a short, quiet
 click (with menu sounds on) and a glow as it is in. The game does not wait for any of it: when it is ready first, it simply
-comes up over the rest. Any button skips it. With **Animations: Cozy** (Settings → Look & feel → Animations, on until you
+comes up over the rest. Any button skips it. With **Animations: Cozy** (Settings → Sound & feel → Animations, on until you
 choose in the Shelf and Cabinet looks) the animation is slower, about a second, and a game of pocket-core's waits to show itself until it
 is over, then switches on like an old TV (a bright line, the picture opening out of it, a third of a second). With menu
 sounds on you hear all of it: the case opening, the cartridge sliding in and clicking into place (a disc drops in and
 spins up, a game card clicks into its slot), then the TV's soft thunk as it comes on. **Quick** keeps the short one. The
 other looks never have it.
 
-With **Playful animations** (Settings → Look & feel → Cozy extras, on with Cozy) each game goes in its own way: a
+With **Playful cases** (Settings → Sound & feel, on with Cozy) each game goes in its own way: a
 cartridge is pushed into its slot and seats with a little squash as it clicks; a game card clicks all the way in; a disc
 console's tray slides out, the disc drops in and the tray shuts with the sound's clunk; the GameCube, PlayStation,
 Dreamcast and Mega-CD open their lid instead; the Wii and the PSP take the disc or UMD in through the slot. A case you
@@ -178,7 +178,7 @@ system's shelf.
 ### The TV on the cabinet
 
 In the Cabinet look a small old TV stands on the cabinet's top board, at the right, and shows the selected game: its
-screenshot when pocket-ui has downloaded one (Settings → Games → Extras → Cover art), else the latest picture of your
+screenshot when pocket-ui has downloaded one (Settings → Games → Pictures & extras → Cover art), else the latest picture of your
 own play (the one Continue starts from), else its cover; a game with none of these shows its console. The picture
 changes with a short crossfade as you move (at once with Motion off). On a small screen the TV is smaller; where it
 would be too small to see it is left out.
@@ -302,7 +302,7 @@ first has saved, so the switch takes about as long as starting a game.
 ## Screenshots
 
 **Hold HOME and press A** while you play. The picture is saved as a PNG and "Screenshot saved" shows for a moment;
-with Settings → Look & feel → [Sounds](#menu-sounds) on there is also a quiet camera click. The game does not pause
+with Settings → Sound & feel → [Sounds](#menu-sounds) on there is also a quiet camera click. The game does not pause
 and the pause menu does not open.
 
 - **Where:** `roms/screenshots/<system>/<game> <date> <time>.png` on the SD card, for example
@@ -411,7 +411,7 @@ sounds while the console is asleep or the volume is muted or at 0.
 Connecting or disconnecting Bluetooth headphones in the menus adjusts the sound output's buffering within two seconds.
 Muted menu audio also stops running in the background.
 
-Settings → Look & feel → **Sounds** controls them:
+Settings → Sound & feel → **Sounds** controls them:
 
 - **A** switches the sounds on or off. They start on, and quiet.
 - **Left** and **Right** set how loud they are, in ten steps (30% by default). This is separate from

@@ -504,3 +504,17 @@ Anbernic RG CubeXX
 PlayStation Vita
 PS Vita
 Tearaway
+Steam Deck
+
+# Android provider system names (console brands).
+GameCube / Wii
+Nintendo Switch
+Sega Saturn
+Mega CD
+Neo Geo / Arcade
+
+WonderSwan Color
+
+Neo Geo Pocket
+Neo Geo Pocket Color
+Atari Lynx

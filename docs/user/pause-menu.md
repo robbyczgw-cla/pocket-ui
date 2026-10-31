@@ -22,7 +22,7 @@ later. What the menu offers depends on the emulator the system uses (see
 At the right of the title the menu says how long the battery lasts **in this game**, for example "About 3 h 20 min
 left in this game". See [Battery in this game](#battery-in-this-game).
 
-With **Pixel Path in the pause menu** switched on in [Settings → Playing → Curator](settings.md#curator), the menu of
+With **Pixel Path in the pause menu** switched on in [Settings → Games → Curator](settings.md#curator), the menu of
 pocket-ui's own host also has **Pixel Path**, right before Quick settings, and so do PS2, GameCube, Wii and 3DS games
 whose emulator settings can be read ([below](#pixel-path-for-ps2-gamecube-wii-and-3ds)). With two or more controllers connected (the Pocket counts as one), the
 menu of pocket-ui's own host also has **Players**, after Options and Achievements. A game with more than one disc on pocket-ui's
@@ -53,7 +53,7 @@ and Quit, where saving is: for example "This emulator keeps its own saves. Save 
   unlocked, with your progress. See [Achievements](achievements.md#the-pause-menu).
 - **Players** (pocket-ui's own host, a second controller connected) shows which controller is which player and changes
   it. See [Players](#players).
-- **Pixel Path** (switched on in Settings → Playing → Curator) shows how the game's picture and sound reach you, stage by stage. See
+- **Pixel Path** (switched on in Settings → Games → Curator) shows how the game's picture and sound reach you, stage by stage. See
   [Pixel Path](#pixel-path).
 - **Quick settings** opens the panel that HOME opens on the shelf (brightness, volume, Wi-Fi, Bluetooth,
   performance, fan, power) over the paused game, which stays visible behind it, so you can see a brightness change on
@@ -121,11 +121,11 @@ Time asleep, time on the charger and the minute in which a game starts or ends a
 sudden jump of the battery's reading. The longer you play a game, the more its newest play counts: after a change (another
 [Performance](performance.md) setting, an older battery) the time follows within a few hours of play. The game's own
 time left and rate also show on its [card](library.md#what-the-card-shows), and the whole Pocket's in
-[Settings → Playing → Battery](settings.md#battery). Without a battery reading of the last minutes the line is left out.
+[Settings → Playing → Battery](settings-system.md#battery). Without a battery reading of the last minutes the line is left out.
 
 ## Players
 
-On pocket-ui's own host you can play together, up to four players. Connect a controller (Settings →
+On pocket-ui's own host you can play together, up to four players. Connect a controller (Settings → Connections →
 [Bluetooth](bluetooth.md)) and it is the next player: the Pocket's own buttons are Player 1, the first
 controller Player 2, and so on. When one connects or goes away during a game, a short message says so, for example
 "DualSense connected — Player 2".
@@ -151,7 +151,7 @@ that controller; the Pocket's own buttons become Player 2. Select Player 1 and p
 
 ## Pixel Path
 
-Settings → Playing → Curator → **Pixel Path in the pause menu** adds it to the pause menu (it is off by default). It shows the path a game's picture and
+Settings → Games → Curator → **Pixel Path in the pause menu** adds it to the pause menu (it is off by default). It shows the path a game's picture and
 sound take, from the emulator to the screen and the speaker, one stage per line. Each stage has a coloured dot:
 
 | Colour | Grade | Means |
@@ -238,8 +238,8 @@ With **Off** nothing is drawn and nothing is measured for it. Over the game work
 emulators that run on their own (PS2, GameCube, Wii, 3DS) draw their own picture and have their own Show FPS in their
 [Options](options-big.md); pocket-ui puts nothing over them.
 
-If you used the older settings: Show FPS **On** is now **FPS**, **Sensors** is **FPS + sensors**, and Settings →
-Curator → **Pixel Path over every game** is now Settings → Playing → Over the game on **Pixel Path**. Your choices
+If you used the older settings: Show FPS **On** is now **FPS**, **Sensors** is **FPS + sensors**, and the Curator's **Pixel Path over every game**
+is now Settings → Playing → Over the game on **Pixel Path**. Your choices
 were carried over.
 
 ### The FPS line and sensors
@@ -336,7 +336,7 @@ On the right you see:
 - under it, a slim row of eight small blocks in the plastic of what the game saved to back then (the PlayStation's
   grey card, the PS2's black one, the Dreamcast's white VMU, the GameCube's, a cartridge's own colour): a block with a
   save shows the game's cover, the ring marks the slot Save or Load is on (no ring while Load is on Auto or Before
-  load). With Settings → Look & feel → Cozy extras → **Memory card in the pause menu** on (it is off at first), the
+  load). With Settings → Look → Cozy extras → **Memory card in the pause menu** on (it is off at first), the
   memory card or cartridge itself stands there beside its numbered blocks, as on the game's info page
 - above the keys: "Slot 3 · replaces the save from today 14:02" (on Save), "Slot 3 · saved
   yesterday 21:10" (on Load), "Slot 3 · empty", "Auto · saved when you quit · today 14:02" or

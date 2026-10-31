@@ -85,7 +85,7 @@ Pocket then.
     most played games, the systems, your longest run of days in a row, games you came back to after a long break,
     games you marked completed, and the last twenty sessions. A session without time is one that did not end normally
     (the game crashed or the battery ran out). A period from before the history began says **Not recorded**; if part
-    of the history file could not be read, the page says so. With Play history switched off (Settings → Playing → Curator), or
+    of the history file could not be read, the page says so. With Play history switched off (Settings → Games → Curator), or
     before anything was recorded, the page says that instead.
   - **All time, by game**: time played in all, sessions, games played, time per system and the most played games,
     as the library keeps them for every game (including from before the play history began).
@@ -124,7 +124,7 @@ Who on your tailnet may reach the Pocket at all is set in the Tailscale admin co
 |---|---|
 | The browser can't connect | Check that Tailscale is on and connected on both devices, and that Web companion says On. Try the `100.x.y.z` address |
 | **Not listening** on the Pocket | The line below it says why; the companion tries again every 30 seconds |
-| **Play history is off, or nothing has been recorded yet** on Stats | Switch on Settings → Playing → Curator → Play history, and play a game; the library's totals show in the meantime |
+| **Play history is off, or nothing has been recorded yet** on Stats | Switch on Settings → Games → Curator → Play history, and play a game; the library's totals show in the meantime |
 | **Open the companion with the Pocket's own name or address** | Open it with the address the Pocket shows, not another name |
 | **Pair this browser first** | Pair it (above), or set Your Tailscale devices to Open for your own devices |
 | **That code is not right, or no code is showing** | Check the digits on the Pocket, and that its code page is still open; after five wrong tries make a new code |

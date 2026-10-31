@@ -86,8 +86,12 @@ opens the SYSTEM squashfs with `unsquashfs` and refuses the update if
 - `HW_DEVICE`/`HW_ARCH` in its os-release differ from the running system, or its version
   doesn't match the signed list.
 
-Only then is the tar renamed into `/storage/.update`. Every upstream ROCKNIX update is refused
-by design: OS updates come from our own image build, which drops updateabl.
+Only then is the tar renamed into `/storage/.update`, with `/storage/.update/.pocket-ui-approved` (`<sha256>  <tar
+name>`, `update::OS_APPROVAL`) written just before it; "Remove the waiting system update" takes both away. On our SD
+image the boot hook installs nothing else: any other update in `/storage/.update` (EmulationStation's updater, the
+Samba share, a copy) is moved to `/storage/.update-refused` before ROCKNIX's `check_update` sees it
+([SD-IMAGE.md](SD-IMAGE.md), `deploy/image/mount-storage.sh`). Every upstream ROCKNIX update is refused by design: OS
+updates come from our own image build, which drops updateabl.
 
 Not tested on the device yet (no image of our own exists). The kernel does not come from the SYSTEM that an OS
 update replaces:

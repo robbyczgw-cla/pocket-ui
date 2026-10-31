@@ -137,8 +137,10 @@ fn default_net(_hw: &SharedHw) -> Arc<NetState> {
     NetState::inline(crate::net_state::fake::FakeNet::new(Radio::On))
 }
 
-/// Rows of the Extras page: Cover art, Game pictures, PortMaster games.
-const EXTRAS_ROWS: usize = 3;
+/// Rows of the Extras page: Cover art, Game pictures, PortMaster games. A Steam Deck has no PortMaster: two.
+fn extras_rows() -> usize {
+    if crate::device::current().host_owned() { 2 } else { 3 }
+}
 
 /// Setup steps that Settings can open on their own.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -151,6 +153,12 @@ pub enum Only {
     Remote,
 }
 
+/// The step after the play style: Wi-Fi and the time zone, except where the system owns both (the Steam Deck,
+/// docs/STEAMDECK.md): there the first start goes on to the extras.
+fn network_step() -> Step {
+    if crate::device::current().host_owned() { Step::Extras { sel: 0 } } else { Step::Wifi }
+}
+
 enum Step {
     Welcome,
     Look,
@@ -160,10 +168,6 @@ enum Step {
     Cards(Box<Cards>),
     /// Settings > Look only: which systems the shelf shows.
     ShelfSystems {
-        sel: usize,
-    },
-    /// Settings > Look only: colours, type and button symbols (`theme_page`), R2 on the look step.
-    Theme {
         sel: usize,
     },
     Wifi,
@@ -281,6 +285,9 @@ impl ZoneStep {
 
 pub struct Setup {
     step: Step,
+    /// Opened straight at Systems on the shelf (`at_shelf_systems`): B there closes the setup, back to the row, instead
+    /// of going to the Look step.
+    direct: bool,
     notify: Notify,
     /// The Wi-Fi as quick settings see it too (`net_state`): the page shows what it finds there and asks it to scan,
     /// switch, connect.
@@ -355,7 +362,7 @@ pub struct Setup {
     theme: usize,
     /// Settings > Look > Appearance, changed with Y on the look step.
     appearance: Appearance,
-    /// Settings > Look > Motion, changed with R1 on the look step (Settings > Look only).
+    /// Settings > Sound & feel > Motion, changed with R1 on the look step (Settings > Look only).
     motion: Motion,
     /// The language chosen on the welcome step (Left/Right), until the app has kept it (`take_language`).
     language_chosen: Option<crate::i18n::Lang>,
@@ -509,7 +516,7 @@ impl Setup {
         self.text_size_chosen.take()
     }
 
-    /// The animations after L1 on the look step changed them, once; the app keeps them (Settings → Look & feel →
+    /// The animations after L1 on the look step changed them, once; the app keeps them (Settings → Sound & feel →
     /// Animations).
     pub fn take_animations(&mut self) -> Option<Animations> {
         std::mem::take(&mut self.animations_changed).then(|| self.animations_shown())
@@ -559,7 +566,7 @@ impl Setup {
                     _ => self.hidden_changed = true,
                 }
             }
-            Button::South | Button::Start => self.step = Step::Look,
+            Button::South | Button::Start => self.step = self.back_to_look(),
             _ => {}
         }
     }
@@ -570,8 +577,11 @@ impl Setup {
             Some(note) => (note.clone(), pal().alert),
             None => ("Untick a system to leave it off the shelf. Its games stay, starred ones in Favourites.".to_string(), pal().dust),
         };
-        let line = text.fit(Face::Body, 28, &line, c.w - 2 * MARGIN);
-        text.draw(c, Face::Body, 28, MARGIN, 192, color, &line);
+        // Without systems there is nothing to untick: the line under the list below says why.
+        if self.shelf_rows() > 0 {
+            let line = text.fit(Face::Body, 28, &line, c.w - 2 * MARGIN);
+            text.draw(c, Face::Body, 28, MARGIN, 192, color, &line);
+        }
         let (top, row) = (232, 76);
         let visible = ((c.h - 130 - top) / row).max(1) as usize;
         let first = sel.saturating_sub(visible / 2).min(self.shelf_rows().saturating_sub(visible));
@@ -608,6 +618,16 @@ impl Setup {
             let name = text.fit(Face::Title, 37, &sys.name, MARGIN + width - 28 - cw - 40 - x);
             text.draw(c, Face::Title, 37, x, y + 47, fg, &name);
             text.draw_right(c, Face::Body, 24, MARGIN + width - 28, y + 44, dim, &count);
+        }
+        // No games on the card yet: nothing to tick, and the page says so instead of staying blank.
+        if self.shelf_rows() == 0 {
+            let mut y = top + 40;
+            for line in text.wrap_at_most(Face::Body, 28, "No systems with games yet. Once games are on the SD card, their systems show up here.", width, 3) {
+                text.draw(c, Face::Body, 28, MARGIN, y, pal().chalk, &line);
+                y += crate::type_scale::line(28, 10);
+            }
+            hints(c, text, &[("B", "Back")]);
+            return;
         }
         let on = match self.shelf.get(sel) {
             Some(s) => !self.hidden.contains(&s.id),
@@ -646,7 +666,7 @@ impl Setup {
         match unread.as_slice() {
             [] => {
                 text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Add your games");
-                let line = text.fit(Face::Body, 28, "One folder per system in roms. Copy games over Wi-Fi with file sharing.", width);
+                let line = text.fit(Face::Body, 28, if crate::device::current().host_owned() { "One folder per system in Emulation/roms. Copy games there from Desktop Mode." } else { "One folder per system in roms. Copy games over Wi-Fi with file sharing." }, width);
                 text.draw(c, Face::Body, 28, MARGIN, 192, pal().dust, &line);
             }
             [one] => {
@@ -680,7 +700,7 @@ impl Setup {
             Some(Tile::More) => Some(self.grid.as_ref().is_some_and(|g| g.expanded)),
             _ => None,
         };
-        hints(c, text, &games_hints(more, self.sharing, self.ip.is_some()));
+        hints(c, text, &games_hints(more, self.sharing, self.ip.is_some() && !crate::device::current().host_owned()));
     }
 
     fn paint_grid(&self, c: &mut Canvas, text: &mut Text, grid: &Grid, top: i32, width: i32, rows_shown: usize) {
@@ -799,6 +819,14 @@ impl Setup {
 
     /// Under the grid on the right: file sharing, its address and login.
     fn paint_share(&self, c: &mut Canvas, text: &mut Text, x: i32, top: i32, w: i32, dots: &str) {
+        if crate::device::current().host_owned() {
+            let status = text.fit(Face::Title, 37, "Where games go", w);
+            text.draw(c, Face::Title, 37, x, top + 50, pal().chalk, &status);
+            for (i, l) in text.wrap(Face::Body, 24, DECK_GAMES_NOTE, w).iter().take(4).enumerate() {
+                text.draw(c, Face::Body, 24, x, top + 92 + i as i32 * 32, pal().dust, l);
+            }
+            return;
+        }
         let (status, color) = if self.sharing_busy {
             (format!("Switching file sharing{dots}"), pal().dust)
         } else if self.share_looking {
@@ -832,6 +860,9 @@ impl Setup {
         text.draw(c, Face::Title, 30, x + label_w, top + 204, pal().chalk, self.share_password.as_deref().unwrap_or("(not set yet)"));
     }
 }
+
+/// Add games on a Steam Deck, where the file sharing is on the right on the handhelds.
+const DECK_GAMES_NOTE: &str = "Put games in the folders on the left (EmuDeck's Emulation/roms) or on the SD card. New ones show up the next time pocket-ui starts.";
 
 /// Add games without Wi-Fi, under "Connect to Wi-Fi first": what file sharing will do once there is an address.
 const SHARE_OFFLINE: &str = "Then a computer on the same network can copy games straight into these folders.";
@@ -881,7 +912,7 @@ pub(crate) fn tick(c: &mut Canvas, x: i32, y: i32, s: i32, color: u32) {
 /// Which top-level step a (sub)screen belongs to.
 fn stage(step: &Step) -> Option<Only> {
     match step {
-        Step::Look | Step::ShelfSystems { .. } | Step::Theme { .. } => Some(Only::Look),
+        Step::Look | Step::ShelfSystems { .. } => Some(Only::Look),
         Step::Wifi | Step::Portal(_) | Step::Password { .. } | Step::Connecting { .. } | Step::HiddenName { .. } | Step::Country { .. } => Some(Only::Wifi),
         Step::Extras { .. } | Step::Ports | Step::PortFiles(_) => Some(Only::Extras),
         Step::Games => Some(Only::Games),
@@ -893,20 +924,23 @@ fn stage(step: &Step) -> Option<Only> {
 }
 
 /// The steps the first start counts: Welcome, Look, How you like to play, Wi-Fi, Time zone, Extras, Add your games (the
-/// last page, "You're all set", is the end, not a step).
-const FIRST_STEPS: usize = 7;
+/// last page, "You're all set", is the end, not a step). A Steam Deck skips Wi-Fi and the time zone: five.
+fn first_steps() -> usize {
+    if crate::device::current().host_owned() { 5 } else { 7 }
+}
 
 /// A first-start step's number for "Step n of 7"; `None` for the pages inside a step (keyboards, lists) and after the
 /// last one, which would only crowd their titles.
 fn step_number(step: &Step) -> Option<usize> {
+    let skipped = if crate::device::current().host_owned() { 2 } else { 0 };
     match step {
         Step::Welcome => Some(1),
         Step::Look => Some(2),
         Step::Play { .. } => Some(3),
         Step::Wifi => Some(4),
         Step::Zone(z) if matches!(z.view, ZoneView::Card) => Some(5),
-        Step::Extras { .. } => Some(6),
-        Step::Games => Some(7),
+        Step::Extras { .. } => Some(6 - skipped),
+        Step::Games => Some(7 - skipped),
         _ => None,
     }
 }
@@ -924,7 +958,7 @@ fn resume_name(step: &Step) -> Option<&'static str> {
         Step::Zone(_) => Some("zone"),
         Step::Extras { .. } | Step::Ports | Step::PortFiles(_) => Some("extras"),
         Step::Games => Some("games"),
-        Step::Welcome | Step::ShelfSystems { .. } | Step::Theme { .. } | Step::Remote | Step::Done => None,
+        Step::Welcome | Step::ShelfSystems { .. } | Step::Remote | Step::Done => None,
     }
 }
 
@@ -1126,6 +1160,7 @@ impl Setup {
             port_note: None,
             previews: HashMap::new(),
             only: None,
+            direct: false,
             hw,
             shelf: Vec::new(),
             hidden: Vec::new(),
@@ -1176,6 +1211,24 @@ impl Setup {
         self
     }
 
+    /// Opens Systems on the shelf straight, as its own row of Settings → Look does: B there goes back to Settings.
+    /// After `only(Only::Look)`.
+    pub fn at_shelf_systems(mut self) -> Self {
+        self.direct = true;
+        self.step = Step::ShelfSystems { sel: 0 };
+        self
+    }
+
+    /// Where B on Systems on the shelf goes: the Look step, or out of the setup when the page was opened straight
+    /// (`at_shelf_systems`).
+    fn back_to_look(&self) -> Step {
+        if self.direct {
+            Step::Done
+        } else {
+            Step::Look
+        }
+    }
+
     /// Runs just one step, as opened from Settings.
     pub fn only(mut self, step: Only) -> Self {
         self.only = Some(step);
@@ -1208,7 +1261,6 @@ impl Setup {
                     | Step::Play { .. }
                     | Step::Cards(_)
                     | Step::ShelfSystems { .. }
-                    | Step::Theme { .. }
                     | Step::Wifi
                     | Step::Portal(_)
                     | Step::Password { .. }
@@ -1224,6 +1276,13 @@ impl Setup {
     /// The Wi-Fi page with a made-up neighbourhood and saved networks, for `--snapshot setup:wifi`: no scan runs.
     pub fn with_wifi_demo(self) -> Self {
         let nets = wifi::parse_scan("Home:78:WPA2:*\nCafe guest:41::\nNeighbour\\:5G:30:WPA2: \n");
+        self.with_net_demo(Snapshot { wanted: Some(true), radio: Radio::On, scan: Scan::Found(nets), scan_rev: 1, ..Snapshot::default() })
+    }
+
+    /// The Wi-Fi page with one network in reach called `ssid`, for `--snapshot setup:wifi-named=<ssid>`: a name is
+    /// painted as it is, never translated.
+    pub fn with_named_network_demo(self, ssid: &str) -> Self {
+        let nets = wifi::parse_scan(&format!("{}:60:WPA2:\n", ssid.replace(':', "\\:")));
         self.with_net_demo(Snapshot { wanted: Some(true), radio: Radio::On, scan: Scan::Found(nets), scan_rev: 1, ..Snapshot::default() })
     }
 
@@ -1343,7 +1402,7 @@ impl Setup {
 
     /// The theme to preview while the look step is open; the app draws the shelf in it.
     pub fn previewing(&self) -> Option<usize> {
-        matches!(self.step, Step::Look | Step::Theme { .. }).then_some(self.theme)
+        matches!(self.step, Step::Look).then_some(self.theme)
     }
 
     /// The network being brought up has been "Connecting…" for longer than `CONNECT_STUCK`.
@@ -1970,7 +2029,8 @@ impl Setup {
 
     /// X on the games step and on "Copy your game files": file sharing on or off, on a thread.
     fn switch_sharing(&mut self) {
-        if self.sharing_busy || self.share_looking || !(self.sharing || self.ip.is_some()) {
+        // SteamOS has no file sharing of ours (no smbd service): the Deck's games go into its Emulation folder.
+        if crate::device::current().host_owned() || self.sharing_busy || self.share_looking || !(self.sharing || self.ip.is_some()) {
             return;
         }
         self.sharing_busy = true;
@@ -2080,7 +2140,6 @@ impl Setup {
             Step::Remote => 8u8.hash(&mut h),
             Step::Done => 9u8.hash(&mut h),
             Step::ShelfSystems { sel } => (11u8, sel, &self.hidden, self.streaming).hash(&mut h),
-            Step::Theme { sel } => (18u8, sel, crate::theme_page::mark()).hash(&mut h),
             Step::Zone(z) => match &z.view {
                 ZoneView::Card => (10u8, 0u8).hash(&mut h),
                 ZoneView::Regions { sel } => (10u8, 1u8, sel).hash(&mut h),
@@ -2120,7 +2179,6 @@ impl Setup {
             Step::Remote => "remote",
             Step::Done => "done",
             Step::ShelfSystems { .. } => "shelf systems",
-            Step::Theme { .. } => "theme",
             Step::Zone(z) => {
                 return match &z.view {
                     ZoneView::Card => "zone".into(),
@@ -2457,11 +2515,9 @@ impl Setup {
                 Button::South => self.step = Step::Welcome,
                 // Settings > Look only: the first start has no such step.
                 Button::North if self.only == Some(Only::Look) && !self.shelf.is_empty() => self.step = Step::ShelfSystems { sel: 0 },
-                // Settings > Look only: the Theme page (`theme_page`).
-                Button::R2 if self.only == Some(Only::Look) => self.step = Step::Theme { sel: 0 },
                 // Settings > Look only, to keep the first start short: Motion, Full / Reduced / Off.
                 Button::R1 if self.only == Some(Only::Look) => self.motion = self.motion.next(),
-                // The first start: the text size instead (in Settings it has its own row under Look & feel), in use
+                // The first start: the text size instead (in Settings it has its own row under Look), in use
                 // from the next frame on (`type_scale`).
                 Button::R1 => {
                     let size = crate::type_scale::get().next();
@@ -2482,7 +2538,7 @@ impl Setup {
                         features::apply(p, &mut self.switches);
                         self.motion = self.switches.motion;
                         self.tour_changed = true;
-                        self.step = Step::Wifi;
+                        self.step = network_step();
                     }
                 },
                 // Skipped: every switch stays as it is.
@@ -2502,17 +2558,12 @@ impl Setup {
                     self.tour_changed = true;
                 }
                 match out {
-                    features::Out::Done => self.step = Step::Wifi,
+                    features::Out::Done => self.step = network_step(),
                     features::Out::Back => self.step = Step::Play { sel: 2 },
                     features::Out::Stay | features::Out::Changed => {}
                 }
             }
             Step::ShelfSystems { .. } => self.press_shelf(b),
-            Step::Theme { sel } => {
-                if crate::theme_page::press(sel, b) {
-                    self.step = Step::Look;
-                }
-            }
             Step::Wifi => self.press_wifi(b),
             Step::Password { ssid, kb, hidden } => match kb.press(b) {
                 Outcome::Editing => {}
@@ -2563,8 +2614,8 @@ impl Setup {
                 self.zone_offsets_wanted();
             }
             Step::Extras { sel } => match b {
-                Button::Up => *sel = (*sel + EXTRAS_ROWS - 1) % EXTRAS_ROWS,
-                Button::Down => *sel = (*sel + 1) % EXTRAS_ROWS,
+                Button::Up => *sel = (*sel + extras_rows() - 1) % extras_rows(),
+                Button::Down => *sel = (*sel + 1) % extras_rows(),
                 // The Pictures choice needs no Wi-Fi: it only says what the downloads bring.
                 Button::East | Button::Right if *sel == 1 => {
                     self.art = self.art.next();
@@ -2583,6 +2634,7 @@ impl Setup {
                     }
                 }
                 Button::Start => self.go_to_games(),
+                Button::South if crate::device::current().host_owned() => self.step = Step::Play { sel: 0 },
                 Button::South => self.enter_zone(),
                 _ => {}
             },
@@ -2678,7 +2730,11 @@ impl Setup {
                 let dy = crate::ui_art::above_words_row(c, &row, MARGIN, false, 60, 300, 67);
                 text.draw(c, Face::Title, 67, MARGIN, 300 + dy, pal().chalk, "Welcome to your Pocket");
                 let lines = [
-                    "A few short steps: a look you like, how you like to play, Wi-Fi, your time zone, your games.",
+                    if crate::device::current().host_owned() {
+                        "A few short steps: a look you like, how you like to play, your games."
+                    } else {
+                        "A few short steps: a look you like, how you like to play, Wi-Fi, your time zone, your games."
+                    },
                     "You can skip any of them and come back later.",
                 ];
                 let mut below = paragraphs(c, text, &lines, 360 + dy);
@@ -2687,9 +2743,9 @@ impl Setup {
                 if let Some(m) = crate::device::current().model.filter(|m| m.experimental()) {
                     let name = m.name();
                     let line = if name.starts_with(['A', 'E', 'I', 'O', 'U']) {
-                        format!("pocket-ui hasn't been tested on an {} yet. Most things should work; if something doesn't, Settings › System › About › Report a problem.", name)
+                        format!("pocket-ui hasn't been tested on an {} yet. Most things should work; if something doesn't, Settings › Help & tools › Report a problem.", name)
                     } else {
-                        format!("pocket-ui hasn't been tested on a {} yet. Most things should work; if something doesn't, Settings › System › About › Report a problem.", name)
+                        format!("pocket-ui hasn't been tested on a {} yet. Most things should work; if something doesn't, Settings › Help & tools › Report a problem.", name)
                     };
                     below = paragraphs(c, text, &[line.as_str()], below + 56);
                 }
@@ -2705,7 +2761,6 @@ impl Setup {
                 features::paint_profiles(c, text, *sel);
             }
             Step::ShelfSystems { sel } => self.paint_shelf_systems(c, text, *sel),
-            Step::Theme { sel } => crate::theme_page::paint(c, text, *sel, None),
             Step::Wifi => {
                 text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Wi-Fi");
                 let (line, color) = self.wifi_status(&dots);
@@ -2779,11 +2834,17 @@ impl Setup {
                     "Log in to this Pocket from a computer on the same Wi-Fi, with SSH.",
                     "It turns itself off after 30 minutes without a connection, and when the Pocket restarts.",
                 ];
-                for (i, l) in lines.iter().enumerate() {
-                    text.draw(c, Face::Body, 28, MARGIN, 210 + i as i32 * 44, pal().dust, l);
+                // Wrapped: at Large text the second line ran off the right edge
+                // (Mini V2 1240x1080, English; monkey run 2026-10-31, seed 102).
+                let mut y = 210;
+                for l in lines {
+                    for line in text.wrap(Face::Body, 28, l, c.w - 2 * MARGIN) {
+                        text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &line);
+                        y += 44;
+                    }
                 }
                 let ip = self.ip.clone().unwrap_or_else(|| "(not connected)".into());
-                text.draw(c, Face::Title, 37, MARGIN, 366, pal().chalk, &format!("ssh root@{ip}"));
+                text.draw(c, Face::Title, 37, MARGIN, if y > 322 { y + 24 } else { 366 }, pal().chalk, &format!("ssh root@{ip}"));
                 let on = matches!(self.remote, remote::Mode::On | remote::Mode::Dev | remote::Mode::External);
                 if on {
                     // Dev or external SSH: pocket-ui never set a password, root's own one applies.
@@ -2813,7 +2874,7 @@ impl Setup {
             Step::Done => {
                 text.draw(c, Face::Title, 67, MARGIN, 300, pal().chalk, "You're all set");
                 let games = done_line(self.games.len());
-                paragraphs(c, text, &[games.as_str(), "Settings › System › Tour shows every feature again, one card each."], 360);
+                paragraphs(c, text, &[games.as_str(), "Settings › Help & tools › Tour shows every feature again, one card each."], 360);
                 hints(c, text, &[("A", "Go to your games"), ("SELECT", "Manual")]);
             }
         }
@@ -2824,14 +2885,20 @@ impl Setup {
     /// painted by the app (`paint_look`, which calls this too); the cards have their own "n of m".
     fn paint_step_count(&self, c: &mut Canvas, text: &mut Text) {
         if let Some(n) = self.only.is_none().then(|| step_number(&self.step)).flatten() {
-            text.draw_right(c, Face::Body, 28, c.w - MARGIN, 72, pal().dust, &format!("Step {n} of {FIRST_STEPS}"));
+            text.draw_right(c, Face::Body, 28, c.w - MARGIN, 72, pal().dust, &format!("Step {n} of {}", first_steps()));
         }
     }
 
     fn paint_extras(&mut self, c: &mut Canvas, text: &mut Text, sel: usize, dots: &str) {
         text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Extras");
         let online = wifi::ip().is_some();
-        let sub = if online { "Optional. You can get these any time later." } else { "Connect to Wi-Fi first to use these." };
+        let sub = if online {
+            "Optional. You can get these any time later."
+        } else if crate::device::current().host_owned() {
+            "Connect to the internet first to use these."
+        } else {
+            "Connect to Wi-Fi first to use these."
+        };
         text.draw(c, Face::Body, 28, MARGIN, 192, pal().dust, sub);
         let pictures = self.art == Art::Pictures;
         let covers = extras_status(self.covers, self.covers_running, pictures, self.games.len(), dots);
@@ -2846,7 +2913,7 @@ impl Setup {
         // A title and a line under it: taller by their growth with Settings → Text size.
         let (g1, g2) = (crate::type_scale::grow(50), crate::type_scale::grow(24));
         let h = 132 + g1 + g2;
-        for (i, (title, about, status)) in rows.iter().enumerate() {
+        for (i, (title, about, status)) in rows.iter().take(extras_rows()).enumerate() {
             let y = 240 + i as i32 * (h + 18);
             let selected = i == sel;
             crate::kit::shelf_row(c, MARGIN, y, width, h, selected);
@@ -2867,7 +2934,7 @@ impl Setup {
             text.draw_right(c, Face::Body, 24, MARGIN + width - 28, y + 58 + g1, dim, status);
         }
         // What the downloads are and where from, whatever is chosen: this step is where it is decided.
-        let mut y = 240 + EXTRAS_ROWS as i32 * (h + 18) + 26;
+        let mut y = 240 + extras_rows() as i32 * (h + 18) + 26;
         for l in text.wrap(Face::Body, 24, PICTURES_NOTE, width) {
             text.draw(c, Face::Body, 24, MARGIN, y, pal().dust, &l);
             y += crate::type_scale::line(24, 10);
@@ -3129,11 +3196,6 @@ impl Setup {
     /// made by the app), the one shown in the middle and its neighbours at the sides; then its name, one line
     /// about it, and how to switch. `sample`: the previews use the built-in sample games.
     pub fn paint_look(&mut self, c: &mut Canvas, text: &mut Text, previews: &[Image], sample: bool) {
-        // The Theme page under it: the shelf in the look in use as its preview.
-        if let Step::Theme { sel } = self.step {
-            crate::theme_page::paint(c, text, sel, previews.get(self.theme));
-            return;
-        }
         c.clear(pal().void);
         text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Choose a look");
         let sub = if sample { "How the shelf looks, with sample games until yours are on the SD card." } else { "Your shelf, in each look." };
@@ -3333,8 +3395,12 @@ impl Setup {
                 None => ("Wi-Fi country".to_string(), self.country_value(), None),
             };
             let side_w = text.width(Face::Body, 24, &side);
+            // A network's name is its own (a hidden one typed by the player): painted as it is, never translated.
+            let ssid = i < self.entries.len();
+            text.set_translate(!ssid);
             let name = text.fit(Face::Title, 37, &name, width - side_w - 180);
             text.draw(c, Face::Title, 37, MARGIN + 28, y + (row - 8) / 2 + crate::type_scale::base(13, 37), fg, &name);
+            text.set_translate(true);
             match signal {
                 Some(s) => {
                     text.draw_right(c, Face::Body, 24, MARGIN + width - 100, y + (row - 8) / 2 + crate::type_scale::base(10, 24), quiet, &side);
@@ -3455,7 +3521,7 @@ fn look_hints(settings: bool, has_systems: bool) -> Vec<(&'static str, &'static 
     // The first start's bar is full with the Animations key: Left/Right says what it does by being there.
     let mut h = vec![("Left/Right", if settings { "Change" } else { "" }), ("Y", "Appearance")];
     if settings {
-        h.extend([("R1", "Motion"), ("A", "Keep this look"), ("R2", "Theme")]);
+        h.extend([("R1", "Motion"), ("A", "Keep this look")]);
         if has_systems {
             h.push(("X", "Systems on the shelf"));
         }
@@ -3817,7 +3883,7 @@ mod tests {
         assert_eq!(step_number(&Step::Look), Some(2));
         assert_eq!(step_number(&Step::Wifi), Some(4));
         assert_eq!(step_number(&Step::Done), None, "the end is not a step");
-        assert!(FIRST_STEPS == 7);
+        assert_eq!(first_steps(), 7, "a handheld counts seven steps (the Steam Deck five)");
         assert_eq!(shelf_setup("count-settings").only(Only::Wifi).only, Some(Only::Wifi));
     }
 
@@ -5058,8 +5124,8 @@ mod hint_bars {
     #[test]
     fn the_first_starts_look_step_names_b() {
         assert_eq!(keys(&look_hints(false, true)), ["Left/Right", "Y", "R1", "A", "B", "L1"], "B goes back to the welcome");
-        assert_eq!(keys(&look_hints(true, true)), ["Left/Right", "Y", "R1", "A", "R2", "X", "L1"]);
-        assert_eq!(keys(&look_hints(true, false)), ["Left/Right", "Y", "R1", "A", "R2", "L1"], "no systems: no X");
+        assert_eq!(keys(&look_hints(true, true)), ["Left/Right", "Y", "R1", "A", "X", "L1"], "every one also a row of Settings → Look and Sound & feel");
+        assert_eq!(keys(&look_hints(true, false)), ["Left/Right", "Y", "R1", "A", "L1"], "no systems: no X");
         assert_eq!(look_hints(false, false).last(), Some(&("L1", "Animations")));
         assert_eq!(look_hints(false, false)[2], ("R1", "Text size"));
     }

@@ -12,7 +12,7 @@ pocket-ui is a controller-first home screen and game player for the **Retroid Po
 PlayStation 2, gets the same small pause menu with save slots, pictures and a step back in time. Games show up with
 box art, their own card and facts, and a Curator that knows what you own and what you have not touched yet.
 
-Version **0.1.6** is out as a public alpha: [download it](../../releases/tag/v0.1.6),
+Version **0.1.7** is out as a public alpha: [download it](../../releases/tag/v0.1.7),
 [watch the trailer](https://pocketui.xyz) and see more at **[pocketui.xyz](https://pocketui.xyz)**.
 
 <p align="center">
@@ -25,7 +25,7 @@ Version **0.1.6** is out as a public alpha: [download it](../../releases/tag/v0.
 </p>
 <p align="center">
   <img src="docs/media/cozy-extras.png" width="49%" alt="Cozy extras: every little touch has its own switch">
-  <img src="docs/media/theme.png" width="49%" alt="Theme: colour sets, fonts and button symbols">
+  <img src="docs/media/theme.png" width="49%" alt="Look: colours, font and more, as rows">
 </p>
 
 The pictures are rendered from the code with made-up data (`pocket-ui --snapshot`, see
@@ -39,7 +39,7 @@ The pictures are rendered from the code with made-up data (`pocket-ui --snapshot
   them (Completed, 100 %, Favourite, Game of the year), and on the Cabinet a little old TV that shows the selected game.
 - **Cozy or Quick.** Cozy opens the case, slides the cartridge in with a click and switches on an old TV; Quick just
   starts. Playful animations, sounds of the cases, light that follows the time of day, a plant that grows with your
-  hours and a trophy for your first finished game. Each touch has its own switch (Settings → Look & feel → Cozy extras).
+  hours and a trophy for your first finished game. Each touch has its own switch (Settings → Look → Cozy extras, and Sound & feel).
 - **Make it yours.** Five looks (Shelf, Minimal, Split, Cards, Cabinet), five colour sets in dark and light, three
   fonts, and button symbols in Nintendo, Xbox or PlayStation style. An idle slideshow of your games' pictures if you want one.
 - **One pause menu everywhere.** HOME opens Continue, Save and Load with 8 slots and previews (on the memory card of the
@@ -56,14 +56,14 @@ The pictures are rendered from the code with made-up data (`pocket-ui --snapshot
 
 ## Get it
 
-Download from the [v0.1.6 release](../../releases/tag/v0.1.6) and pick one way.
+Download from the [v0.1.7 release](../../releases/tag/v0.1.7) and pick one way.
 Checksums are in `SHA256SUMS`.
 
 | Way | When | What to do |
 |---|---|---|
-| **Ports installer** | ROCKNIX is already on your card | Unzip [pocket-ui-0.1.6-ports-installer.zip](../../releases/download/v0.1.6/pocket-ui-0.1.6-ports-installer.zip) into `roms/ports` (the games share of ROCKNIX's file sharing: switch on Samba in ROCKNIX's Network Settings, then open `\\<device name or IP>` on Windows or `smb://<device name or IP>` on a Mac; [ROCKNIX explains it](https://rocknix.org/play/add-games/)), then in EmulationStation open **Ports → Install pocket-ui**. To go back: **Ports → Uninstall pocket-ui** |
-| **Fresh card** | New card, nothing on it yet | New to ROCKNIX on the Mini V2? Set it up once with [ROCKNIX's own guide](https://rocknix.org/devices/retroid/retroid-pocket-mini/) (flashing the card plus its one-time bootloader step), then come back. With ROCKNIX 20261001 or newer on the card, copy the two files from [pocket-ui-0.1.6-rocknix-card.zip](../../releases/download/v0.1.6/pocket-ui-0.1.6-rocknix-card.zip) onto the card's `ROCKNIX` partition and boot. It installs on the second start |
-| **Over SSH** | You like a terminal | Unzip [pocket-ui-0.1.6-rocknix-install.zip](../../releases/download/v0.1.6/pocket-ui-0.1.6-rocknix-install.zip) in `/storage`, run `sh install.sh --check`, then `sh install.sh` |
+| **Ports installer** | ROCKNIX is already on your card | Unzip [pocket-ui-0.1.7-ports-installer.zip](../../releases/download/v0.1.7/pocket-ui-0.1.7-ports-installer.zip) into `roms/ports` (the games share of ROCKNIX's file sharing: switch on Samba in ROCKNIX's Network Settings, then open `\\<device name or IP>` on Windows or `smb://<device name or IP>` on a Mac; [ROCKNIX explains it](https://rocknix.org/play/add-games/)), then in EmulationStation open **Ports → Install pocket-ui**. To go back: **Ports → Uninstall pocket-ui** |
+| **Fresh card** | New card, nothing on it yet | New to ROCKNIX on the Mini V2? Set it up once with [ROCKNIX's own guide](https://rocknix.org/devices/retroid/retroid-pocket-mini/) (flashing the card plus its one-time bootloader step), then come back. With ROCKNIX 20261001 or newer on the card, copy the two files from [pocket-ui-0.1.7-rocknix-card.zip](../../releases/download/v0.1.7/pocket-ui-0.1.7-rocknix-card.zip) onto the card's `ROCKNIX` partition and boot. It installs on the second start |
+| **Over SSH** | You like a terminal | Unzip [pocket-ui-0.1.7-rocknix-install.zip](../../releases/download/v0.1.7/pocket-ui-0.1.7-rocknix-install.zip) in `/storage`, run `sh install.sh --check`, then `sh install.sh` |
 
 pocket-ui replaces exactly one thing: the program ROCKNIX's `essway` service starts. Remove it and stock ROCKNIX with
 EmulationStation is back; your games, saves and ROCKNIX settings stay where they are. Android on the internal storage
@@ -83,7 +83,7 @@ ROCKNIX image and a pocket-ui profile. Screens, sticks and sources are in [docs/
 | **Snapdragon 8 Gen 2** (SM8550) | 🎮 **AYN Odin 2 Mini**<br>✅ AYN Odin 2, Odin 2 Portal, Retroid Pocket 6, Pocket Nova | NES, Master System, PC Engine, Mega Drive, Game Boy, SNES, Saturn, PlayStation, Nintendo 64, Game Boy Color, Dreamcast, PlayStation 2, Game Boy Advance, GameCube, Xbox, Nintendo DS, PSP, PS3, Wii, 3DS, PS Vita, Wii U (PS3, PS Vita and Wii U: selected games) |
 | **Allwinner H700** | 🎮 **Anbernic RG35XX Plus**<br>✅ RG35XX H, Pro, 2024 and SP, RG28XX, RG40XX H and V, RG34XX, RG34XX-SP, RG-SP | NES, Master System, PC Engine, Mega Drive, Game Boy, SNES, PlayStation, Nintendo 64, Game Boy Color, Dreamcast, Game Boy Advance, Nintendo DS, PSP (Nintendo 64, Dreamcast, PSP and DS with ROCKNIX's own emulators) |
 
-It is an alpha, made on the Mini V2. If something is off, **Settings → System → About → Report a problem** makes a
+It is an alpha, made on the Mini V2. If something is off, **Settings → Help & tools → About → Report a problem** makes a
 file for a report, or [open an issue](../../issues). [docs/STATUS.md](docs/STATUS.md) lists every feature and how far
 it has been checked.
 
@@ -130,7 +130,7 @@ feature has been proven is in [docs/STATUS.md](docs/STATUS.md).
   Load, Options and Quit ([docs/BIG-EMULATORS.md](docs/BIG-EMULATORS.md)). Other systems start with ROCKNIX's
   default emulator.
 - **Fast:** the shelf's first frame comes tens of milliseconds after start, a game starts from the picture of where
-  you left it, Settings → On start can go straight back into the last game, and the switcher hands over between two
+  you left it, Settings → Playing → On start can go straight back into the last game, and the switcher hands over between two
   pocket-core games as soon as the first has saved. A speed guard measures it ([docs/LATENCY.md](docs/LATENCY.md)).
 - **Safety net:** a game that pocket-core cannot start runs through RetroArch from then on. Saves are written
   through temporary files, settings are replaced atomically, the launcher restarts a crashed UI, and a nearly empty
@@ -139,7 +139,7 @@ feature has been proven is in [docs/STATUS.md](docs/STATUS.md).
 - **Touch screen** on the shelf, lists, Settings, the search and the game switcher; the bottom screen in Nintendo DS
   games.
 - **System:** menu sounds (their own volume), optional menu haptics, quick settings, sleep, a battery page with time
-  left, stick LEDs, Settings → Performance & fan, time zone, Bluetooth controllers, and Wi-Fi that reconnects by
+  left, stick LEDs, Settings → Playing → Performance & fan, time zone, Bluetooth controllers, and Wi-Fi that reconnects by
   itself.
 - **Sync and network:** saves and states kept in step with Syncthing (paused while a game runs), Tailscale with a QR
   sign-in, PC streaming with Moonlight. File sharing (Samba) shares only the games folder, with a per-device

@@ -59,7 +59,7 @@ pub const PAGES: [(&str, &str); 34] = [
 ];
 
 /// Pages of `docs/user/` that are not in the manual on the device, because they only make sense on a computer.
-pub const DESKTOP_ONLY: &[&str] = &[];
+pub const DESKTOP_ONLY: &[&str] = &["android-spike", "android-mvp"];
 
 /// The text of the page called `name` (a file of `docs/user/` without `.md`).
 pub fn page(name: &str) -> Option<&'static str> {

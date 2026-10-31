@@ -1,6 +1,6 @@
 # Extras
 
-Settings → Games → **Extras** (also a step of the first start). The extras are optional and need Wi-Fi;
+Settings → Games → **Pictures & extras** (also a step of the first start). The extras are optional and need Wi-Fi;
 without a connection the page says "Connect to Wi-Fi first to use these." The page has three rows: **Cover art**,
 **Pictures** (a choice of three, which works without Wi-Fi) and **PortMaster games**. Under the rows a line says where the
 pictures come from and how much space they take.
@@ -87,7 +87,7 @@ Left/Right) moves to the next:
   download again.
 
 On the first start the choice is part of the Extras step, and the downloads wait until you leave it. The same row is in
-Settings → Games → Extras.
+Settings → Games → Pictures & extras.
 
 Where they show:
 
@@ -217,18 +217,18 @@ will hold:
 
 The page has three levels: categories, the packages in a category, and one package with its description, size
 and version. It installs, updates, runs (tools) and removes packages. Installed tools are also listed under
-Settings → Games → [Tools](#tools), next to ROCKNIX's own. It has the same protections as
+Settings → Help & tools → [Tools](#tools), next to ROCKNIX's own. It has the same protections as
 [Updates](updates.md): the list of packages is signed, every download is checked before anything is unpacked,
 and removing a package deletes exactly the files it added. The Store does **not** offer BIOS files.
 
 The page is built and tested against a local test catalogue only. Tools you installed from a store earlier stay
-under Settings → Games → [Tools](#tools), whether the Store row is there or not.
+under Settings → Help & tools → [Tools](#tools), whether the Store row is there or not.
 
 For the format of packages and how a catalogue is signed, see [STORE.md](../STORE.md).
 
 ## Tools
 
-Settings → Games → **Tools** starts ROCKNIX's own tools, which used to need ROCKNIX's old menu (EmulationStation), and the
+Settings → Help & tools → **Tools** starts ROCKNIX's own tools, which used to need ROCKNIX's old menu (EmulationStation), and the
 tools you installed from the [Store](extras.md#store). The right end of each row says what it is:
 
 - **Emulator**: an emulator's own menus, for settings pocket-ui has no page for: **RetroArch** (cores, shaders, input),

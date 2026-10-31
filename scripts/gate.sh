@@ -1,5 +1,5 @@
 #!/bin/sh
-# Merge gate: the tests at release level (exit code, not grep), then the launcher tests, the verify-device test, the
+# Merge gate: the tests at release level (exit code, not grep), the Steam Deck and Android compile checks (scripts/check-platforms.sh), then the launcher tests, the verify-device test, the
 # core-licence check's test, the install package's test and the quiet start script's test.
 # Usage: scripts/gate.sh [--quick] [worktree]      (default: the repository this script is in)
 #   GATE: ok (N passed)  exit 0     everything passed
@@ -19,7 +19,7 @@
 #    (GATE_PARALLEL=0 or fewer cores: after it). Several launcher tests (Smooth fan's watchdog) time real intervals of
 #    0.1-0.6 s and failed under the load of the compile (2026-10-24); if any shell test fails beside cargo, all of them
 #    run again alone and that result counts. They take about 50 s on a quiet machine, about 3 min on the remote host.
-#  - paths changed against the merge base with main (GATE_BASE=<ref>; server2: the list comes from tools/remote-gate.sh)
+#  - paths changed against the merge base with main (GATE_BASE=<ref>; a remote gate: the list comes from tools/remote-gate.sh)
 #    skip what cannot be affected, and say so ("gate: SKIPPED ..."): shell tests may skip ordinary Markdown and Rust
 #    sources no shell script names. Licence files and every unknown path run them. The integration tests (unit tests and
 #    doc checks still run) skip when only docs/ Markdown (not docs/user/, the manual), root *.md or LICENSE changed.
@@ -95,7 +95,7 @@ fi
 unset POCKETUI_TEST_QUICK
 start=$(date +%s)
 
-# What did the branch change? Against the merge base with main (committed, uncommitted and new files). Server2 has no .git:
+# What did the branch change? Against the merge base with main (committed, uncommitted and new files). A remote gate has no .git:
 # tools/remote-gate.sh writes the list to .gate-changed there. Nothing known or an empty list: run everything.
 changed=
 if [ -f .gate-changed ]; then changed=$(cat .gate-changed)
@@ -147,9 +147,11 @@ shell_small() {
     # The quiet start's script against a fake /flash (about 1 s): deploy/grub-quiet.sh.
     sh deploy/test-grub-quiet.sh >"$Q" 2>&1; echo $? >"$RCD/q"
     # The SD image check's reading of grub.cfg (about 1 s): scripts/image/grub-checks.sh against deploy/sd-efi/grub.cfg.
-    sh scripts/image/test-grub-checks.sh >"$G" 2>&1; echo $? >"$RCD/g"
-    # The FAT-card install hook against a fake /flash and /storage (about 2 s): deploy/fat/mount-storage.sh.in.
-    sh deploy/fat/test-hook.sh >"$F" 2>&1; echo $? >"$RCD/f"
+    # Plus the family parameter of scripts/image/rocknix-source.sh (--dry-run, nothing fetched).
+    { sh scripts/image/test-grub-checks.sh && sh scripts/image/test-rocknix-source.sh && sh scripts/image/test-h700-pins.sh; } >"$G" 2>&1; echo $? >"$RCD/g"
+    # The FAT-card install hook against a fake /flash and /storage (about 2 s): deploy/fat/mount-storage.sh.in; then the
+    # SD image's boot hook with its update guard (about 1 s): deploy/image/mount-storage.sh.
+    { sh deploy/fat/test-hook.sh && sh deploy/image/test-mount-storage.sh; } >"$F" 2>&1; echo $? >"$RCD/f"
 }
 shell_tests_run() { shell_launcher & shell_small; wait; }   # two lanes: the launcher (the longest) and all the small ones
 shell_rc() {
@@ -169,7 +171,11 @@ parallel=0
 if [ "$parallel" -eq 1 ]; then shell_tests_run & shell_pid=$!; fi   # the launcher and the small tests are independent of each other too
 
 # shellcheck disable=SC2086  # pflag is one or two words
-runner=${GATE_RUNNER:-cargo}
+runner=${GATE_RUNNER:-auto}
+# auto: nextest when it is installed (one process per test, all test binaries side by side, one retry), else cargo test.
+if [ "$runner" = auto ]; then
+    if cargo nextest --version >/dev/null 2>&1 && [ -f .config/nextest.toml ]; then runner=nextest; else runner=cargo; fi
+fi
 case $runner in
     cargo)
         if [ "$docs_only" -eq 1 ]; then
@@ -181,13 +187,25 @@ case $runner in
         trc=$?
         ;;
     nextest)
-        nice -n "$nice_increment" cargo nextest run --cargo-profile "$profile" >"$T" 2>&1
+        # .config/nextest.toml: exactly ONE retry. A test that passes on the retry is "flaky": listed below, the gate stays
+        # green. A test that fails twice makes the gate red. The test threads come from GATE_TEST_THREADS (default: the cores, at most 8).
+        nthreads=$cores; [ "$nthreads" -le 8 ] || nthreads=8   # a shared computer: remote-gate.sh passes GATE_TEST_THREADS
+        export NEXTEST_TEST_THREADS=${GATE_TEST_THREADS:-${NEXTEST_TEST_THREADS:-$nthreads}}
+        if [ "$docs_only" -eq 1 ]; then ntargets="--lib --bins"; else ntargets=; fi
+        nice -n "$nice_increment" cargo nextest run --cargo-profile "$profile" $ntargets --no-fail-fast \
+            --status-level retry --final-status-level flaky >"$T" 2>&1
         trc=$?
         # nextest doesn't execute Rust documentation examples. Keep the complete gate's doctest protection.
-        nice -n "$nice_increment" cargo test $pflag --doc -q >>"$T" 2>&1 || trc=1
+        if [ "$docs_only" -eq 0 ]; then nice -n "$nice_increment" cargo test $pflag --doc -q >>"$T" 2>&1 || trc=1; fi
         ;;
-    *) echo "GATE: unknown GATE_RUNNER (use cargo or nextest)"; exit 2 ;;
+    *) echo "GATE: unknown GATE_RUNNER (use auto, cargo or nextest)"; exit 2 ;;
 esac
+# The Steam Deck's and Android's own code (scripts/check-platforms.sh): checks, not builds; after the tests. Android is
+# skipped where no NDK is installed; GATE_ANDROID_TARGET_DIR (set by the remote gate) keeps its files out of the host target dir.
+prc_platforms=0 platforms_log=/tmp/gate-platforms-$name.log
+if [ "$docs_only" -eq 0 ] && [ -f scripts/check-platforms.sh ]; then
+    nice -n "$nice_increment" sh scripts/check-platforms.sh >"$platforms_log" 2>&1 || prc_platforms=1
+fi
 tdone=$(date +%s)
 sdone=$tdone
 shell_run_rc=0
@@ -232,8 +250,15 @@ if [ "$shell_run_rc" -ne 0 ]; then
 fi
 if [ $trc -ne 0 ]; then
   echo "GATE: tests FAILED ($T)"
-  grep -E "FAILED|panicked|^error" "$T" | head -10
+  grep -E "FAILED|panicked|^error|^ *(TRY 2 )?FAIL " "$T" | head -10
   fail=1
+fi
+if [ $prc_platforms -ne 0 ]; then
+  echo "GATE: platform check FAILED ($platforms_log)"
+  head -20 "$platforms_log"
+  fail=1
+elif [ -s "$platforms_log" ] && [ "$docs_only" -eq 0 ]; then
+  sed 's/^check-platforms:/gate:/' "$platforms_log"
 fi
 if [ $lrc -ne 0 ]; then
   echo "GATE: launcher tests FAILED ($L)"
@@ -266,9 +291,15 @@ if [ $grc -ne 0 ]; then
   fail=1
 fi
 if [ $frc -ne 0 ]; then
-  echo "GATE: FAT install hook tests FAILED ($F)"
+  echo "GATE: FAT install / SD image boot hook tests FAILED ($F)"
   grep FAIL "$F" | head -5
   fail=1
+fi
+# Tests that failed once and passed on the retry (nextest runner): green, but listed, so they get fixed.
+flaky=$(grep -E '^ *FLAKY ' "$T" 2>/dev/null | sed 's/^ *FLAKY *[0-9]*\/[0-9]* *\[[^]]*\] *([^)]*) *//' | sort -u)
+if [ -n "$flaky" ]; then
+  echo "gate: flaky (failed once, passed on the one retry): $(echo "$flaky" | wc -l)"
+  echo "$flaky" | sed 's/^/gate:   flaky: /'
 fi
 [ $fail -eq 0 ] || exit 1
 if [ "$runner" = nextest ]; then

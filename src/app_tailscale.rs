@@ -252,7 +252,7 @@ impl App {
                 self.text.draw(c, Face::Title, 50, MARGIN, 110, pal().chalk, heading);
                 pocket_ui::setup::paint_keyboard_with(c, &mut self.text, kb, "Done");
                 let note = match typing {
-                    pocket_ui::tailscale_page::Typing::AuthKey => "A key made in the Tailscale admin console (Settings › Keys). It is not kept on the Pocket.",
+                    pocket_ui::tailscale_page::Typing::AuthKey => "A key made in the Tailscale admin console (under Keys). It is not kept on the Pocket.",
                     pocket_ui::tailscale_page::Typing::Hostname => "Letters, digits and hyphens. The Pocket will answer to this name on your other devices.",
                 };
                 let note = self.text.fit(Face::Body, 24, note, c.w - 2 * MARGIN);

@@ -133,10 +133,12 @@ GRUB_SOURCE_URL="https://snapshot.debian.org/package/${GRUB_SRC% *}/${GRUB_SRC#*
 for f in README SOURCE-OFFER; do
   sed -e "s|@VERSION@|$VERSION|g" -e "s|@ROCKNIX_TAG@|$ROCKNIX_TAG|g" -e "s|@ROCKNIX_COMMIT@|$ROCKNIX_COMMIT|g" \
     -e "s|@POCKET_UI_SOURCE@|$SOURCE|g" -e "s|@RELEASE_URL@|$RELEASE_URL|g" -e "s|@ISSUES_URL@|$ISSUES|g" -e "s|@GRUB_VERSION@|$GRUB_VERSION|g" \
-    -e "s|@GRUB_DEB_VERSION@|${GRUB_SRC#* }|g" -e "s|@GRUB_SOURCE_URL@|$GRUB_SOURCE_URL|g" \
+    -e "s|@GRUB_DEB_VERSION@|${GRUB_SRC#* }|g" -e "s|@GRUB_SOURCE_URL@|$GRUB_SOURCE_URL|g" -e "s|@OS_NAME@|$POCKET_OS_NAME|g" \
     "$ROOT/deploy/image/$f.txt.in" >"$W/info/$f.txt"
   ! grep -n '@[A-Z_]*@' "$W/info/$f.txt" || die "placeholder left in $f.txt"
 done
+# The system's name and version for Settings > About (src/update.rs os_brand_line).
+printf 'NAME=%s\nVERSION=%s\n' "$POCKET_OS_NAME" "$VERSION" >"$W/info/pocket-ui-os.txt"
 # ROCKNIX's LICENSE.md and licenses folder at the pinned tag (they are not inside SYSTEM), checked against the commit.
 RL=$ROCKNIX_CACHE/licenses-$ROCKNIX_COMMIT
 if [ ! -f "$RL/LICENSE.md" ]; then

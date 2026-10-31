@@ -72,7 +72,7 @@ impl App {
         }
         // The cabinet: a tap pulls out the case under it (and plays the one already out), a swipe moves along
         // the shelf sideways and between the shelves up and down.
-        if self.theme == pocket_ui::settings::Theme::Cabinet {
+        if self.cabinet_in_front() {
             match gesture {
                 Some(Gesture::Tap { x, y }) => match self.cabinet_tap(x, y) {
                     Some(true) => return self.tap_button(el, CONFIRM),

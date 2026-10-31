@@ -12,7 +12,8 @@ test are at the end. Players install it as in [INSTALL-DUAL-BOOT.md](INSTALL-DUA
 ```sh
 scripts/make-image.sh                 # build/image/pocket-ui-<version>-rp-mini-v2.img.xz, .txt, SHA256SUMS
 scripts/check-image.sh build/image/pocket-ui-<version>-rp-mini-v2.img.xz
-sh deploy/image/test-hooks.sh         # tests of the two initramfs hooks
+sh deploy/image/test-mount-storage.sh # tests of the boot hook: seed and update guard (part of the gate)
+sh deploy/image/test-hooks.sh         # tests of post-flash.sh (Docker, the virtual device's base image)
 ```
 
 `make-image.sh` takes `--version` (default: Cargo.toml), `--bin-dir` (prebuilt binaries instead of `cargo zigbuild`),
@@ -125,21 +126,101 @@ own mount of `/storage` (`mount_flash`, `mount_sysroot`, `mount_storage`). [V]
 
 - `deploy/image/mount-storage.sh` mounts `/storage` exactly as `init` would (`mount_part "$disk" /storage
   rw,noatime`). While `.please_resize_me` exists it does nothing else. At the second boot it copies
-  `/storage/.pocket-seed/.` into `/storage` (`cp -a`), removes the seed, and deletes itself from `/flash`. This
-  happens in the initramfs, before systemd starts, so the drop-in is there when systemd reads its units, and
-  pocket-ui comes up at the very first normal start. From the third boot on, ROCKNIX mounts `/storage` itself.
+  `/storage/.pocket-seed/.` into `/storage` (`cp -a`) and removes the seed. This happens in the initramfs, before
+  systemd starts, so the drop-in is there when systemd reads its units, and pocket-ui comes up at the very first
+  normal start. The seed also holds `.config/autostart/pocket-ui-image-defaults` (`deploy/image/image-defaults.sh`):
+  ROCKNIX's autostart runs it once, after `001-setup` has put `system.cfg` in place and before the UI starts; it sets
+  `updates.enabled=0` and `system.hostname=pocket-ui` with ROCKNIX's `set_setting` and deletes itself. (A seeded
+  `system.cfg` would not survive: `chksysconfig verify` copies all of `/usr/config` over `.config` while
+  `retroarch.cfg` is missing.)
+- **The hook stays on the card and guards every start against foreign system updates** (since 0.1.7). It runs before
+  `init`'s `check_update`, which installs any `*.tar`, `*.img`, `*.img.gz` or `KERNEL`+`SYSTEM` in `/storage/.update`
+  (from EmulationStation's updater, the Samba share `update`, a copy by hand) and would replace the system without
+  GRUB's `boot/pocket/Image` and flash the ABL. pocket-ui's own `update::stage_os` writes
+  `/storage/.update/.pocket-ui-approved` (`<sha256>  <tar name>`) before it moves a checked tar there. The hook leaves
+  a tar only when that line names it and `sha256sum` agrees; everything else (no or another approval, a changed file,
+  disk images, a loose KERNEL/SYSTEM) is moved, never deleted, to `/storage/.update-refused/` with a line in its
+  `refused.log`, and the start goes on as usual; a name already there gets `.1`, `.2` ..., nothing is ever replaced. If
+  that move fails, the file is renamed in place to `<name>.refused` (again a free name), which `check_update`'s
+  patterns don't match. If even that fails (a read-only or damaged STORAGE), the hook, which `init` sources in its own
+  shell, redefines `check_update` as a no-op for this start: the foreign file stays untouched and the start goes on
+  normally. Every doubt ends in "refuse and boot normally". ROCKNIX's cleanup after an
+  install removes the approval with the tar.
 - `deploy/image/post-flash.sh` replaces `init`'s `load_splash` with the same function minus the call to
   `/usr/bin/rocknix-splash`, which draws the ROCKNIX logo. It prints "pocket-ui, based on ROCKNIX" and ROCKNIX's
   version line instead. It stays on the card and runs at every boot.
-- Both run in the initramfs's BusyBox (1.36.1: `cp -a`, `rm`, `mount`, `sync` are there; checked against the
-  initramfs binary). `deploy/image/test-hooks.sh` runs them in the virtual device's base image with fake
-  `mount_part`/`mount`: first boot, second boot, later boots, a hook that could not delete itself, existing files
-  in `.config`, and the splash. [V] Without the hooks 10 of its 21 checks fail.
+- Both run in the initramfs's BusyBox (1.36.1; its `busybox-init.conf` has `cp`, `mv`, `sha256sum`, `basename`, `ls`,
+  `cut`, no `date` and no `test` applet). `deploy/image/test-mount-storage.sh` (in the gate, about 1 s) runs
+  `mount-storage.sh` under BusyBox with a PATH of only those applets and fake `mount_part`/`mount`/`progress`:
+  first, second and later boots, existing files in `.config`, and the guard: an approved tar stays, a tar without
+  approval (ES), a second tar dropped next to an approved one (Samba), the approved name with other contents, empty
+  or broken approvals, disk images and KERNEL/SYSTEM, repeated refusals, other files in `.update`, a refusal folder
+  that can't be made (twice: the second never replaces the first), and a STORAGE where nothing can be moved (the
+  update check is skipped; an approved update still installs). The fake init calls `mount_storage` and then
+  `check_update` by name, as the real one does. [V] With the hook of 0.1.6, 24 of the first 42 checks fail; the
+  first 0.1.7 hook fails the 3 checks of Sol's review findings 2 and 3. `deploy/image/test-hooks.sh` runs
+  `post-flash.sh` in the virtual device's base image (Docker).
 
 So a new card goes: **boot 1** grows STORAGE and restarts; **boot 2** puts the drop-in and the boot screen's unit in
 place (`cp -a` keeps its link), the boot screen shows "Getting ready for the first start…", ROCKNIX fills
 `/storage/.config`, and the essway unit starts pocket-ui, which finds no `settings.json` and opens its first-start
 setup. [I] for the whole sequence on a device; each part is [V] as above.
+
+## H700: RG35XX Plus, RG35XX SP, RG28XX (prepared, never booted)
+
+Status 2026-10-30: the builder and the offline check exist and pass; **no image has been started on a handheld.**
+Built on an x86_64 Linux machine (3.6 GB of images and 7.5 GB of source are too much to move around). Nothing is published.
+
+```sh
+scripts/make-image-h700.sh --version V           # build/image-h700/pocket-ui-V-{rg35xx-plus,rg35xx-sp,rg28xx}.img.xz, .txt, SHA256SUMS
+scripts/check-image-h700.sh build/image-h700/pocket-ui-V-rg35xx-sp.img.xz
+scripts/image/rocknix-source.sh OUT --device H700   # the source bundle of the H700 build (source-bundle.sh --device H700)
+sh scripts/image/test-h700-pins.sh                   # pins, notes and model list (part of the gate)
+```
+
+**What differs from the Mini V2 image.** ROCKNIX's H700 image boots through its own U-Boot (written 8 KiB into the card,
+before the first partition) and `extlinux/extlinux.conf` (`LINUX /KERNEL`, `FDT /dtb.img`). So there is no GRUB, no
+unpacked kernel and no edited device tree: the image is the official ROCKNIX H700 DDR4 image, SYSTEM repacked without
+the removed files, our two initramfs hooks (`post-flash.sh`, `mount-storage.sh`: the same files as for the Mini V2; the
+H700 initramfs has the same hook points and the same `load_splash`, checked in the unpacked KERNEL), the notes, and
+pocket-ui on STORAGE. The partition table is MBR (the Mini V2's is GPT) with the same offsets.
+
+**One image per model, one file apart.** ROCKNIX's install page has the player copy the model's tree from
+`device_trees/` to the FAT root as `dtb.img`. We do it at build time (`pins.sh` `H700_MODELS`: RG35XX Plus
+`sun50i-h700-anbernic-rg35xx-plus.dtb`, RG35XX SP `...-rg35xx-sp.dtb`, RG28XX `...-rg28xx.dtb`, each with its md5).
+The three images differ in `dtb.img` and in the model name in the notes, nothing else. The newer screen revisions
+(`rg35xx-plus-rev6-panel`, `rg35xx-sp-v2-panel`) have their own trees and are not built; a unit with a broken picture
+on the plain one needs that variant (one more entry in `H700_MODELS`).
+
+**RAM type.** The base is the DDR4 image: U-Boot for LPDDR4 units. The RG35XX Plus reads `vdd-dram` 1.1 V (DDR4). The
+RG35XX SP and the RG28XX are **expected** to be DDR4 (ROCKNIX's device pages), not confirmed on the units; a DDR3 unit
+would not start (the card is not harmed). If the SP or the RG28XX turns out to be DDR3, the DDR3 image has other
+hashes (`ROCKNIX-H700...-DDR3.img.gz.sha256`) and its own `H700_` pins.
+
+**SYSTEM without a few files** (`H700_SYSTEM_REMOVE`; read again for this family on 2026-10-30 with
+`scripts/check-release-tree.py` on the unpacked SYSTEM): the six SKick tables loose and in Amiberry's `boot-data.zip`
+and the DOOM shareware data, as on the Mini V2, and **the DraStic emulator** (`usr/config/drastic`: a closed-source
+binary by Exophase with its databases and the two `drastic_bios_*.bin`; `check-release-tree.py` flagged the BIOS names,
+reading the folder showed the rest). ROCKNIX's only permission is a 2017 forum thread, kept as `LICENSE.pdf` in that
+folder, in which Exophase says he asked people not to distribute the Raspberry Pi beta and that free use there is up to
+his discretion: that is no licence to pass it on, so it is out (the BIOS files were a BSD-licensed open replacement and
+would have been fine alone). ES still lists DraStic as a DS emulator; the entry points at a missing program. The H700
+SYSTEM has no `rocknix_abl`, no AYN/Mangmi firmware and no GBA BIOS (so no ReGBA source in its bundle; with DraStic out it holds no BIOS file at all). The rest of the finds are the libretro cores ROCKNIX ships (not ours to remove) and glmark2 `.3ds` models (3D models, not
+ROMs). Firmware in this SYSTEM is 15 files: three Realtek Wi-Fi/Bluetooth files and the regulatory database (all
+identical to linux-firmware 20260309 / wireless-regdb 2026.05.30, "Redistributable"), and ten display panel files
+(`panels/*.panel`, 387 to 557 bytes) that are ROCKNIX's own, committed in the distribution repository (so they are in
+its source archive); the repository gives them no separate licence and we could not trace where the screen command
+values first came from. `deploy/image/firmware-licences-h700/README.txt` says this next to every file's md5. The card
+also carries U-Boot and TF-A binaries (GPL, BSD) whose source is in the bundle.
+
+**Pins.** The `H700_` block of `pins.sh` holds the image hashes, KERNEL and SYSTEM md5, the model list and
+`H700_POCKET_SYSTEM_MD5` (reproduced by two strip runs before it was pinned).
+
+**What a card does that nobody has seen yet:** U-Boot reads `extlinux.conf`, starts KERNEL with `dtb.img`; ROCKNIX's
+initramfs sources our two hooks; the first start grows STORAGE and moves the seed in (`.please_resize_me` is in the
+base, as on the Mini V2). Updates: ROCKNIX's `bootloader/update.sh` on the H700 rewrites `dtb.img` and the card's
+U-Boot; the guard in `mount-storage.sh` keeps foreign updates out, and our own OS update is stage 2 of
+`DISTRO-PLAN.md` (not built).
 
 ## Offline check (`scripts/check-image.sh`)
 
@@ -280,7 +361,10 @@ which card is in it.
 6. Run through the setup: a look, Wi-Fi with the on-screen keyboard, extras.
 7. Then, with SSH switched on in Settings → Connections → Remote access (read only):
    - `df -h /storage` shows the card's full size.
-   - `ls /flash`: no `mount-storage.sh` any more; `post-flash.sh` still there. `cat /flash/fs-resize.log`.
+   - `ls /flash`: `mount-storage.sh` and `post-flash.sh` still there (both run at every start). `cat /flash/fs-resize.log`.
+   - `grep -E "^(updates.enabled|system.hostname)=" /storage/.config/system/configs/system.cfg` says `0` and
+     `pocket-ui`; `hostname` says `pocket-ui`; `/storage/.config/autostart/pocket-ui-image-defaults` is gone.
+   - Settings → Help & tools → About, System row: "pocket-ui OS <version> · built on ROCKNIX 20261001 (SM8250)".
    - `ls -la /storage/.config/system.d/essway.service.d/` holds `10-pocket-ui.conf`; `/storage/.config/system.d/`
      holds `pocket-splash.service` and `sysinit.target.wants/pocket-splash.service`; `/storage/.pocket-seed` is gone.
    - `journalctl -b -u pocket-splash`: its last line says it ended because sway started.

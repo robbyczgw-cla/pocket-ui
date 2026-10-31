@@ -1,0 +1,8 @@
+<resources>
+    <style name="PocketTheme" parent="android:style/Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">#000000</item>
+        <item name="android:windowSplashScreenBackground">#3A2A1F</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="android:colorAccent">#ECE9E1</item>
+    </style>
+</resources>

@@ -1,6 +1,7 @@
 //! Part of the pocket-ui binary: Settings → System → Sleep & power (`pocket_ui::sleep_settings`). Screen off after,
-//! Sleep after, Switch off after sleeping, and the power button's short press and hold, on one page; a change is kept
-//! in `sleep.json` and the sleep module counts with it at once (`Sleep::set_config`). Up/Down choose a row,
+//! the slideshow before it, Sleep after, Switch off after sleeping, and the power button's short press and hold, on
+//! one page; a change is kept in `sleep.json` and the sleep module counts with it at once (`Sleep::set_config`), the
+//! slideshow is a cozy extra kept in settings.json (`App::switch_extra`). A Steam Deck has the slideshow alone. Up/Down choose a row,
 //! Left/Right change it (stopping at the ends), A goes on to the next choice; the selected row is explained below.
 
 use pocket_ui::gfx::Canvas;
@@ -31,17 +32,20 @@ impl App {
             Action::Nothing => {}
             Action::Close => return Some(SettingsPage::List(super::settings_row(SETTINGS_NAME))),
             Action::Save(config) => self.sleep.set_config(config),
+            Action::Slideshow => self.switch_extra(pocket_ui::cozy_extras::Extra::IdleSlideshow),
         }
         Some(SettingsPage::SleepPower)
     }
 
-    /// The Settings row's value: the screen-off time ("2 min", "Never").
+    /// The Settings row's value: the screen-off time ("2 min", "Never"); the slideshow's On or Off where it is the
+    /// page's only row (a Steam Deck).
     pub(crate) fn sleep_power_value(&self) -> String {
-        self.sleep.config.value(Row::ScreenOff)
+        self.sleep.config.value(rows()[0])
     }
 
-    /// `--snapshot sleep[:<row>][:screen][:never]`: the page with that row selected; `screen` with the short press on
-    /// Screen off and the hold on Sleep, `never` with both times on Never, `old` with a file of before the page (3 min).
+    /// `--snapshot sleep[:<row>][:screen][:never][:keys=<presses>]`: the page with that row selected; `screen` with the
+    /// short press on Screen off and the hold on Sleep, `never` with both times on Never, `old` with a file of before the
+    /// page (3 min); then the presses `u`, `d`, `l`, `r`, `a` handled as on the device (the slideshow's switch is saved).
     pub(crate) fn sleep_power_snapshot(&mut self, state: &str) -> bool {
         let Some(rest) = state.strip_prefix("sleep") else { return false };
         if !(rest.is_empty() || rest.starts_with(':')) {
@@ -70,6 +74,17 @@ impl App {
         self.sleep.config = config;
         self.sleep_page = page;
         self.settings_page = Some(SettingsPage::SleepPower);
+        for key in parts.iter().filter_map(|p| p.strip_prefix("keys=")).flat_map(str::chars) {
+            let b = match key {
+                'u' => Button::Up,
+                'd' => Button::Down,
+                'l' => Button::Left,
+                'r' => Button::Right,
+                'a' => CONFIRM,
+                _ => continue,
+            };
+            self.settings_page = self.sleep_power_input(b);
+        }
         true
     }
 
@@ -121,7 +136,8 @@ impl App {
 
         // What the selected row does with its value now.
         let (left, width) = (pad + NU_BTN_PAD, c.w - 2 * (pad + NU_BTN_PAD));
-        let mut ly = y + 44 + pocket_ui::type_scale::px(NU_SMALL) as i32 / 2;
+        // Close under the rows: with the slideshow's row a German line needs its third line at Large text on 640x480.
+        let mut ly = y + 24 + pocket_ui::type_scale::px(NU_SMALL) as i32 / 2;
         let step = pocket_ui::type_scale::line(NU_SMALL, 12);
         let hints_top = c.h - pad - NU_PILL - 8;
         if pocket_ui::device::current().screen_off_only() {

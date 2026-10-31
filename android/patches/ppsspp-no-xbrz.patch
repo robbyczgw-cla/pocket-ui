@@ -1,0 +1,133 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 910f32214..34357cc6a 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -960,7 +960,11 @@ if(IOS)
+ 	target_compile_definitions(Common PUBLIC GLES_SILENCE_DEPRECATION)
+ endif()
+ 
+-target_link_libraries(Common Ext::Snappy cpu_features)
++if(ANDROID AND ANDROID_ABI STREQUAL "arm64-v8a" AND LIBRETRO)
++ target_link_libraries(Common Ext::Snappy)
++else()
++ target_link_libraries(Common Ext::Snappy cpu_features)
++endif()
+ 
+ if(NOT LIBRETRO)
+     target_link_libraries(Common imgui)
+@@ -1772,12 +1776,6 @@ add_library(sfmt19937 STATIC
+ target_compile_definitions(sfmt19937 PRIVATE SFMT_MEXP=19937)
+ target_include_directories(sfmt19937 PRIVATE ext/sfmt19937)
+ 
+-add_library(xbrz STATIC
+-	ext/xbrz/xbrz.cpp
+-	ext/xbrz/xbrz.h
+-)
+-target_include_directories(xbrz PRIVATE ext/xbrz)
+-
+ add_library(xxhash STATIC
+ 	ext/xxhash.c
+ 	ext/xxhash.h
+@@ -2629,7 +2627,7 @@ else()
+ 	include_directories(ext/libchdr/include)
+ endif()
+ 
+-target_link_libraries(${CoreLibName} Common native chdr kirk cityhash sfmt19937 xbrz xxhash rcheevos minimp3 at3_standalone lua ${GlslangLibs}
++target_link_libraries(${CoreLibName} Common native chdr kirk cityhash sfmt19937 xxhash rcheevos minimp3 at3_standalone lua ${GlslangLibs}
+ 	${CoreExtraLibs} ${OPENGL_LIBRARIES} ${X11_LIBRARIES} ${CMAKE_DL_LIBS})
+ 
+ # Winsock
+diff --git a/Common/ArmCPUDetect.cpp b/Common/ArmCPUDetect.cpp
+index 49c284bb4..11d4de255 100644
+--- a/Common/ArmCPUDetect.cpp
++++ b/Common/ArmCPUDetect.cpp
+@@ -33,12 +33,17 @@
+ #define USE_CPU_FEATURES 1
+ #endif
+ #elif PPSSPP_ARCH(ARM64)
++#if PPSSPP_PLATFORM(ANDROID)
++// Original Android probe: avoid linking Apache-2.0 cpu_features into this GPLv2 core.
++#include <sys/auxv.h>
++#include <asm/hwcap.h>
++#else
+ #include "ext/cpu_features/include/cpuinfo_aarch64.h"
+-
+ #if defined(CPU_FEATURES_OS_LINUX) || defined(CPU_FEATURES_OS_ANDROID) || defined(CPU_FEATURES_OS_WINDOWS)
+ #define USE_CPU_FEATURES 1
+ #endif
+ #endif
++#endif
+ 
+ #include <cstring>
+ #include <ctype.h>
+@@ -369,7 +374,15 @@ void CPUInfo::Detect()
+ 	bIDIVa = info.features.idiva;
+ 	bIDIVt = info.features.idivt;
+ #endif
+-#if PPSSPP_ARCH(ARM64) && defined(USE_CPU_FEATURES)
++#if PPSSPP_ARCH(ARM64) && PPSSPP_PLATFORM(ANDROID)
++ const auto hwcap = getauxval(AT_HWCAP);
++ const auto hwcap2 = getauxval(AT_HWCAP2);
++ bFP = (hwcap & HWCAP_FP) != 0;
++ bASIMD = (hwcap & HWCAP_ASIMD) != 0;
++ bSVE = (hwcap & HWCAP_SVE) != 0;
++ bSVE2 = (hwcap2 & HWCAP2_SVE2) != 0;
++ bFRINT = (hwcap2 & HWCAP2_FRINT) != 0;
++#elif PPSSPP_ARCH(ARM64) && defined(USE_CPU_FEATURES)
+ 	cpu_features::Aarch64Info info = cpu_features::GetAarch64Info();
+ 	bFP = info.features.fp;
+ 	bASIMD = info.features.asimd;
+diff --git a/GPU/Common/TextureScalerCommon.cpp b/GPU/Common/TextureScalerCommon.cpp
+index 43363c688..96d18b86a 100644
+--- a/GPU/Common/TextureScalerCommon.cpp
++++ b/GPU/Common/TextureScalerCommon.cpp
+@@ -27,7 +27,7 @@
+ #include "Common/Log.h"
+ #include "Common/Math/SIMDHeaders.h"
+ #include "Common/Thread/ParallelLoop.h"
+-#include "ext/xbrz/xbrz.h"
++// xBRZ is excluded from this GPLv2-compatible Android build.
+ 
+ // Report the time and throughput for each larger scaling operation in the log
+ //#define SCALING_MEASURE_TIME
+@@ -649,8 +649,10 @@ bool TextureScalerCommon::Scale(u32* &data, int width, int height, int *scaledWi
+ const int MIN_LINES_PER_THREAD = 4;
+ 
+ void TextureScalerCommon::ScaleXBRZ(int factor, u32* source, u32* dest, int width, int height) {
+-	xbrz::ScalerCfg cfg;
+-	ParallelRangeLoop(&g_threadManager, std::bind(&xbrz::scale, factor, source, dest, width, height, xbrz::ColorFormat::ARGB, cfg, std::placeholders::_1, std::placeholders::_2), 0, height, MIN_LINES_PER_THREAD);
++	// Old stored xBRZ choices use an original nearest-neighbour fallback.
++	for (int y=0; y<height*factor; ++y)
++		for (int x=0; x<width*factor; ++x)
++			dest[y*width*factor+x]=source[(y/factor)*width+x/factor];
+ }
+ 
+ void TextureScalerCommon::ScaleBilinear(int factor, u32* source, u32* dest, int width, int height) {
+diff --git a/libretro/libretro_core_options.h b/libretro/libretro_core_options.h
+index a8a1bd370..268d80626 100644
+--- a/libretro/libretro_core_options.h
++++ b/libretro/libretro_core_options.h
+@@ -616,13 +616,10 @@ struct retro_core_option_v2_definition option_defs_us[] = {
+       NULL,
+       "video",
+       {
+-         { "xbrz",           "xBRZ" },
+-         { "hybrid",         "Hybrid" },
+          { "bicubic",        "Bicubic" },
+-         { "hybrid_bicubic", "Hybrid + Bicubic" },
+          { NULL, NULL },
+       },
+-      "xbrz"
++      "bicubic"
+    },
+    {
+       "ppsspp_texture_scaling_level",
+@@ -660,8 +657,6 @@ struct retro_core_option_v2_definition option_defs_us[] = {
+       "video",
+       {
+          { "disabled", NULL },
+-         { "2xBRZ",    "Tex2xBRZ" },
+-         { "4xBRZ",    "Tex4xBRZ" },
+          { "MMPX",     "TexMMPX" },
+          { NULL, NULL },
+       },

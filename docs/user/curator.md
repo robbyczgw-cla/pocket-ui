@@ -6,8 +6,8 @@ where the facts come from are on [the first page](library.md).
 ## Curator
 
 Curator helps you find your way around a larger collection, with facts that come with pocket-ui and work without a
-network. It has seven parts; each can be switched off in Settings → Playing → [Curator](settings.md#curator), and none takes
-up space until it has something to show. [Rediscover](#rediscover) has its own switch under Settings → Look & feel → [Cozy extras](settings.md#cozy-extras) and is only there when it has a game.
+network. It has seven parts; each can be switched off in Settings → Games → [Curator](settings.md#curator), and none takes
+up space until it has something to show. [Rediscover](#rediscover) has its own switch under Settings → Look → [Cozy extras](settings.md#cozy-extras) and is only there when it has a game.
 
 When pocket-ui starts, Curator reads your library in the background, after the shelf is up and never while a game
 runs. Until it is done (with a large library, a second or two), its rows say **Getting ready…**; nothing waits for it.
@@ -84,7 +84,7 @@ among your unplayed games and says "Never played". Right never shows a game agai
 you last opened Surprise me.
 
 Its first pick is **today's pick**, the game the Curator row on top of Home names ([Home](playing.md#home)). The
-entry sits in the Curator list: from Home, Up twice (Curator), A, Down, A. It is there while Settings → Playing → Curator → **Lens & smart shelves** is on. In its row,
+entry sits in the Curator list: from Home, Up twice (Curator), A, Down, A. It is there while Settings → Games → Curator → **Lens & smart shelves** is on. In its row,
 "From 332 games" says what it picks from; "Getting ready…" until Curator has read your library (A then says so too),
 and with no games, "No games yet".
 
@@ -132,7 +132,7 @@ are never suggested. One series fills at most three places, so the list stays va
 When your taste changed the order of the list, the line under the title says so and names the games behind it:
 "Why these? You finished Burnout 3 - Takedown". When it changed nothing, the line just counts the games.
 
-On the Echoes page, A plays the selected game, X opens its card, B goes back. With Settings → Playing → Curator → **Games not
+On the Echoes page, A plays the selected game, X opens its card, B goes back. With Settings → Games → Curator → **Games not
 on this device in Echoes** on, the page also names a few games of the same series or developer that you don't have,
 from the offline game list. Names only, no shop.
 
@@ -148,7 +148,7 @@ that you haven't finished or dropped, isn't another version of the same game, an
 - It goes by itself after a few seconds; after that A is the shelf's again.
 
 Up next never starts a game by itself and costs nothing while you play: Curator works it out
-after the game, once the shelf is back. It is off until you switch it on: Settings → Playing → Curator → **Up next after a game** (the first start's Enthusiast turns it on). A device that already had the setting keeps it.
+after the game, once the shelf is back. It is off until you switch it on: Settings → Games → Curator → **Up next after a game** (the first start's Enthusiast turns it on). A device that already had the setting keeps it.
 
 ### Versions
 
@@ -159,7 +159,7 @@ last played it and for how long.
 
 **Y** makes the selected version the **preferred** one; A plays it. Lists that mix systems (Favourites, smart
 shelves, Echoes) show such a game once and start the preferred version. Without a choice, the version you played
-longest is preferred. Settings → Playing → Curator → **Merge versions in mixed lists** switches this off.
+longest is preferred. Settings → Games → Curator → **Merge versions in mixed lists** switches this off.
 
 A remake is a game of its own, not a version: Ocarina of Time 3D is not the Nintendo 64 game on another system. When
 you own both, each card has a Versions row, and the page lists the other game at the end, marked **Related: remake**.
@@ -173,14 +173,14 @@ away from: first the ones you played **a year ago today**, then the ones you hav
 played longest first. Each says why it is there ("played a year ago today", "last played 412 days ago"). It counts
 pocket-ui's play history, the recent games and, when you came from EmulationStation, the "last played" in your
 gamelists, so a card that moved over from ROCKNIX's menu has a past from the first day. The row is only there while
-it has a game in it, and Settings → Look & feel → Cozy extras → **Rediscover** switches it off.
+it has a game in it, and Settings → Look → Cozy extras → **Rediscover** switches it off.
 
 ### Play history
 
 pocket-ui keeps a small diary of what you play: when a game started and ended, on which system and emulator, for how
 long. PortMaster ports and the big emulators (PS2, GameCube, Wii, 3DS) count like any other game; PC streaming and
 the tools don't. It stays on this Pocket, in `/storage/.config/pocket-ui/play-log.bin`, and nothing sends it anywhere
-unless you switch on [Library data](sync.md#library-data) in Settings → Sync, which shares it with your own other
+unless you switch on [Library data](sync.md#library-data) in Settings → Connections → Sync, which shares it with your own other
 devices; it is not part of a backup either.
 
 Once you have played something, the Curator list has a **History** row (with the Lens off, History is its own row
@@ -239,5 +239,5 @@ after, B goes back. From History, Y on a month opens the same cards for that mon
 It never opens by itself and never appears on Home: only you open it, from the Curator list or with Y on History.
 In January the Curator list's row opens the year that just ended.
 
-Settings → Playing → Curator → **Play history** switches all of this off: History and the reviews go, and nothing new is
+Settings → Games → Curator → **Play history** switches all of this off: History and the reviews go, and nothing new is
 recorded. What was recorded stays on the Pocket and comes back when you switch it on again.

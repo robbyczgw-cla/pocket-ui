@@ -118,6 +118,44 @@ fn an_empty_card_shows_the_starter_pack_and_the_page_speaks_plainly() {
     drop(stub);
 }
 
+/// The offline note under the starter-pack button wraps: as one line it ran off the right edge
+/// (German, Large text, 1280x800; monkey run 2026-10-30 seed 8, TEXT E).
+#[test]
+fn the_offline_note_on_an_empty_home_wraps_inside_the_screen() {
+    let tmp_guard = tempfile::tempdir().unwrap();
+    let tmp = tmp_guard.path();
+    let status = Command::new("python3")
+        .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.to_str().unwrap(), "dark"])
+        .stdout(std::process::Stdio::null())
+        .status()
+        .expect("python3 for scripts/curator-fake-library.py");
+    assert!(status.success());
+    let stub = wayland(tmp);
+    let (png, boxes, text) = (tmp.join("home-offline.png"), tmp.join("home-offline.box"), tmp.join("home-offline.txt"));
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+    if let Some(s) = &stub {
+        cmd.env("WAYLAND_DISPLAY", &s.path);
+    }
+    let out = cmd
+        .args(["--snapshot", "starter-home:offline", png.to_str().unwrap()])
+        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_LANG", "de")
+        .env("POCKETUI_TEXT_SIZE", "large")
+        .env("POCKETUI_SNAPSHOT_SIZE", "1280x800")
+        .env("POCKETUI_VISIBLE_TEXT", &text)
+        .env("POCKETUI_TEXT_BOXES", &boxes)
+        .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
+        .env("POCKETUI_DATA", tmp.join("data"))
+        .output()
+        .expect("run pocket-ui");
+    assert!(out.status.success() && png.exists(), "{}", String::from_utf8_lossy(&out.stderr));
+    let problems = std::fs::read_to_string(&boxes).unwrap();
+    assert!(problems.trim().is_empty(), "offline note clipped or overlapping: {problems}");
+    let seen = std::fs::read_to_string(&text).unwrap();
+    assert!(seen.contains("nicht online") && seen.contains("noch einmal"), "the whole note is painted: {seen}");
+    drop(stub);
+}
+
 /// House rule "never a blank where a figure goes": a store device whose catalog never loaded still paints words and
 /// art on the list and detail pages (they once painted only the two pills).
 #[test]

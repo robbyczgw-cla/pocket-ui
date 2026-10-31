@@ -1,0 +1,38 @@
+# Flatpak manifest for pocket-ui on the Steam Deck (docs/STEAMDECK.md). Built by build-flatpak.sh in a container.
+# The sources are the bundle directory next to this file (binaries built on our own machine).
+# Built by scripts only (build-flatpak.sh), never by CI. The id is a placeholder until the project picks a domain it owns.
+app-id: io.github.pocketui.PocketUI
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: /app/share/pocket-ui/pocket-ui-deck.sh
+finish-args:
+  # Display: Wayland (Gamescope exposes one in Game Mode with --expose-wayland) or XWayland.
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --share=network       # cover art, fetch-cores.sh
+  - --device=all            # /dev/input (Steam Input's virtual pad via evdev), /dev/dri for pocket-core's GL
+  - --socket=pulseaudio
+  # ROMs, BIOS and saves: EmuDeck's folder, ES-DE's, the SD card.
+  - --filesystem=~/Emulation
+  - --filesystem=~/ES-DE
+  - --filesystem=/run/media
+  # RetroArch's Flatpak cores, read only.
+  - --filesystem=~/.var/app/org.libretro.RetroArch:ro
+  - --filesystem=/var/lib/flatpak/app/org.libretro.RetroArch:ro
+  - --filesystem=~/.local/share/flatpak/app/org.libretro.RetroArch:ro
+  # Big emulators are other Flatpaks: started through the host (flatpak-spawn --host flatpak run ...).
+  - --talk-name=org.freedesktop.Flatpak
+  - --env=POCKETUI_DEVICE=steamdeck
+modules:
+  - name: pocket-ui
+    buildsystem: simple
+    build-commands:
+      - install -d /app/share/pocket-ui /app/bin
+      - cp -a pocket-ui pocket-core runemu.sh gen-es-systems.py pocket-ui-deck.sh fetch-cores.sh add-to-steam.py /app/share/pocket-ui/
+      - if [ -d cores ]; then cp -a cores /app/share/pocket-ui/; fi
+    sources:
+      # The bundle directory from build-bundle.sh (binaries built on our own machine, no network in the Flatpak build).
+      - type: dir
+        path: bundle

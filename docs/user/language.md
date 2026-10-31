@@ -1,6 +1,6 @@
 # Language
 
-Settings → Look & feel → **Language**: menus, hints, messages and the notes over a game are in **English** or
+Settings → System → **Language**: menus, hints, messages and the notes over a game are in **English** or
 **Deutsch** (German). A or Left/Right on the row switches between them; the screen changes at once,
 nothing restarts. The first start's Welcome page has the same choice (Left/Right).
 
@@ -10,7 +10,7 @@ Welcome page, pocket-ui keeps its own choice, even when the system language chan
 
 What stays in English in the German interface:
 
-- **This manual** (Settings → System → **Manual**). Its title line and buttons are German, its pages are not
+- **This manual** (Settings → Help & tools → **Manual**). Its title line and buttons are German, its pages are not
   translated yet.
 - **Names**: games, systems, emulators and cores, people and makers, and pocket-ui's own feature names such as
   Curator, Lens, Echoes and Pixel Path.

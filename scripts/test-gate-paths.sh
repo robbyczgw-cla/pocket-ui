@@ -19,7 +19,8 @@ chmod +x "$T/bin/cargo"
 printf '#!/bin/sh\necho 1\n' >"$T/bin/nproc"
 chmod +x "$T/bin/nproc"
 for suite in deploy/test-run-pocket-ui.sh scripts/test-verify-device.sh scripts/test-check-core-licences.sh \
-    deploy/package/test-package.sh deploy/test-grub-quiet.sh scripts/image/test-grub-checks.sh deploy/fat/test-hook.sh; do
+    deploy/package/test-package.sh deploy/test-grub-quiet.sh scripts/image/test-grub-checks.sh scripts/image/test-rocknix-source.sh scripts/image/test-h700-pins.sh deploy/fat/test-hook.sh \
+    deploy/image/test-mount-storage.sh; do
     mkdir -p "$T/tree/$(dirname "$suite")"
     cat >"$T/tree/$suite" <<'SUITE'
 #!/bin/sh
@@ -52,31 +53,31 @@ check() {
     pass=$((pass + 1))
     echo "ok $label"
 }
-check 'LICENSE still runs package tests' 7 1 LICENSE
-check 'NOTICE still runs package tests' 7 1 NOTICE.md
-check 'font licence runs package tests' 7 0 assets/fonts/OFL.txt
-check 'deleted or empty licence is rejected by required package suite' 7 1 LICENSE '' 1
+check 'LICENSE still runs package tests' 10 1 LICENSE
+check 'NOTICE still runs package tests' 10 1 NOTICE.md
+check 'font licence runs package tests' 10 0 assets/fonts/OFL.txt
+check 'deleted or empty licence is rejected by required package suite' 10 1 LICENSE '' 1
 check 'ordinary docs skip shell and integration tests' 0 1 docs/DEVELOPING.md
 check 'root Markdown skips shell and integration tests' 0 1 README.md
 check 'manual changes retain Rust integration tests' 0 0 docs/user/settings.md
-check 'Markdown outside docs is unknown' 7 0 assets/new-input.md
-check 'unknown doc configuration runs all tests' 7 0 docs/new-input.conf
+check 'Markdown outside docs is unknown' 10 0 assets/new-input.md
+check 'unknown doc configuration runs all tests' 10 0 docs/new-input.conf
 check 'unreferenced Rust source skips shell only' 0 0 src/unreferenced_feature.rs
-check 'transitive shell source input runs shell tests' 7 0 src/hostsys.rs
-check 'non-Rust source input is unknown' 7 0 src/new-input.c
-check 'unknown assets run shell tests' 7 0 assets/new-input.txt
-check 'unknown root files run shell tests' 7 0 new-input
-check 'deploy changes run shell tests' 7 0 deploy/run-pocket-ui.sh
-check 'script changes run shell tests' 7 0 scripts/test-gate-paths.sh
-check 'Cargo metadata changes run shell tests' 7 0 Cargo.toml
-check 'docs cannot cancel licence tests' 7 1 'LICENSE
+check 'transitive shell source input runs shell tests' 10 0 src/hostsys.rs
+check 'non-Rust source input is unknown' 10 0 src/new-input.c
+check 'unknown assets run shell tests' 10 0 assets/new-input.txt
+check 'unknown root files run shell tests' 10 0 new-input
+check 'deploy changes run shell tests' 10 0 deploy/run-pocket-ui.sh
+check 'script changes run shell tests' 10 0 scripts/test-gate-paths.sh
+check 'Cargo metadata changes run shell tests' 10 0 Cargo.toml
+check 'docs cannot cancel licence tests' 10 1 'LICENSE
 README.md'
-check 'docs cannot cancel unknown input tests' 7 0 'assets/new-input
+check 'docs cannot cancel unknown input tests' 10 0 'assets/new-input
 README.md'
-check 'path with spaces remains one unknown path' 7 0 'assets/new input.md'
+check 'path with spaces remains one unknown path' 10 0 'assets/new input.md'
 check 'Markdown path with spaces remains one document' 0 1 'docs/new document.md'
-check 'no change list runs everything' 7 0 ''
-check 'full override runs everything' 7 0 docs/DEVELOPING.md 1
+check 'no change list runs everything' 10 0 ''
+check 'full override runs everything' 10 0 docs/DEVELOPING.md 1
 # A killed parallel coordinator used to leave missing result files which the gate read as success. Only fixture
 # processes are signalled here; no cargo build or real suite runs.
 printf '#!/bin/sh\necho 8\n' >"$T/bin/nproc"

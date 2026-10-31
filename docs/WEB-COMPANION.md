@@ -115,14 +115,14 @@ owner's device; every `POST` also needs the CSRF token and passes the origin che
 | `GET /api/games?system=` \| `favorites=1` \| `sticker=<id>` \| `shelf=<index>` \| `q=<text>` [`&offset=`] | yes | no | A list (600 per answer; search: 80 characters, 200 hits) |
 | `GET /api/game?id=` | yes | no | One game: the list row, note, file name, gamedb facts, `shots` (the times of its screenshots), Curator's versions |
 | `GET /api/shot?id=&at=` | yes | no | One of the game's screenshots (HOME + A in a game, `src/screenshot.rs`) as PNG, read only: `at` is the time part of the file name (`YYYY-MM-DD HH-MM-SS`, optional ` (n)`) as `/api/game` lists it in `shots` (newest 60); anything else is `404`, so no path or other file can be asked for. 16 MB at most, PNG only. The folder is `Roots::screenshots` (`/storage/roms/screenshots/<system>/<game> <at>.png`) |
-| `GET /api/cover?id=[&kind=snap\|title]` | yes | no | The game's cover PNG from the covers folder (8 MB at most, PNG only); `kind=snap` or `title` the screenshot or title screen from the `snaps/` or `titles/` folder instead (404 for any other kind, and with Settings → Games → Extras → Game pictures on Box art only). `/api/game` lists the kinds the game has as `pictures` |
+| `GET /api/cover?id=[&kind=snap\|title]` | yes | no | The game's cover PNG from the covers folder (8 MB at most, PNG only); `kind=snap` or `title` the screenshot or title screen from the `snaps/` or `titles/` folder instead (404 for any other kind, and with Settings → Games → Pictures & extras → Game pictures on Box art only). `/api/game` lists the kinds the game has as `pictures` |
 | `GET /api/stats` | yes | no | Totals from `library.json` and `recents.json`: time, sessions, games played, per system, the top 30, and `history` (below), with every path removed |
 | `GET /api/battery` | yes | no | `battery_history`'s last 48 hours |
 | `GET /api/uploads` | yes | no | Where uploads may go: systems (with extensions), BIOS needs, ports waiting for files, free space, limits |
 | `POST /api/upload/check?kind=…&size=` | yes | no | The name and place an upload would get, whether it exists, or why not (a check may make the target's folder) |
 | `POST /api/upload?kind=rom&system=&name=` \| `kind=bios&name=[&sub=dc]` \| `kind=port&dir=&rel=&name=` [`&overwrite=1`] | yes | no (a running one pauses) | The body is the file (`Content-Length`) |
 | `POST /api/game/favorite` `{id,on}`, `/api/game/status` `{id,status}`, `/api/game/note` `{id,note}`, `/api/game/rating` `{id,rating}` (0–5, 0 takes it away), `/api/game/sticker` `{id,sticker,on}`, `/api/game/preferred` `{id}` | yes | no | An edit, applied by the App |
-| `POST /api/stickers/new` `{name[,id]}`, `/api/stickers/rename` `{sticker,name}`, `/api/stickers/delete` `{sticker}` | yes | no | Stickers, as Settings → Playing → Curator's sticker pages do them |
+| `POST /api/stickers/new` `{name[,id]}`, `/api/stickers/rename` `{sticker,name}`, `/api/stickers/delete` `{sticker}` | yes | no | Stickers, as Settings → Games → Curator's sticker pages do them |
 | `POST /api/shelves/rename` `{index,was,name}`, `/api/shelves/delete` `{index,was}` | yes | no | Smart shelves, by place and old name (a shelf changed on the Pocket meanwhile is refused) |
 
 Errors are `{"error": "<a sentence for the page>"}` with the status: `400` bad request, `401` not signed in, `403`

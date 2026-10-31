@@ -10,6 +10,7 @@
 //! ([`paint`]: a bilinear window, so a slow zoom does not shimmer). Nothing here touches the sleep timers: the show
 //! only reads how long the pad has been quiet and ends when the screen would go off.
 
+#[cfg(target_os = "linux")]
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -38,7 +39,7 @@ pub const ZOOM_MAX: f32 = 1.12;
 pub const MIN_SIDE: u32 = 64;
 /// The most pictures one show cycles through, and games looked at to find them.
 pub const MAX_SLIDES: usize = 36;
-const MAX_GAMES_LOOKED_AT: usize = 600;
+pub const MAX_GAMES_LOOKED_AT: usize = 600;
 
 /// When the show begins, after this long without input: a minute, but never later than half the screen-off time, so
 /// that it has time to be seen (Screen off after 30 s: it begins at 15 s). `None`: no room for it (the screen goes
@@ -87,6 +88,7 @@ pub struct Slide {
     pub source: Source,
 }
 
+#[cfg(target_os = "linux")]
 /// A game of the library, as the show needs it.
 #[derive(Clone, Debug)]
 pub struct GameRef {
@@ -98,6 +100,7 @@ pub struct GameRef {
     pub path: PathBuf,
 }
 
+#[cfg(target_os = "linux")]
 /// The folders pictures are looked for in.
 #[derive(Clone, Debug)]
 pub struct Dirs {
@@ -120,21 +123,23 @@ impl Rng {
         self.0
     }
 
-    fn below(&mut self, n: usize) -> usize {
+    pub fn below(&mut self, n: usize) -> usize {
         (self.next_u64() % n.max(1) as u64) as usize
     }
 
-    fn shuffle<T>(&mut self, v: &mut [T]) {
+    pub fn shuffle<T>(&mut self, v: &mut [T]) {
         for i in (1..v.len()).rev() {
             v.swap(i, self.below(i + 1));
         }
     }
 }
 
+#[cfg(target_os = "linux")]
 fn usable(file: &Path) -> bool {
     image::png_size(file).is_some_and(|(w, h)| w >= MIN_SIDE && h >= MIN_SIDE)
 }
 
+#[cfg(target_os = "linux")]
 /// The pictures the show cycles through: of a shuffle of the games, the first picture each has (box art, in-game
 /// screenshot or title screen, in an order that varies), and the player's own screenshots and save-state pictures,
 /// one in three. Files are looked at by their headers only. Empty when there is nothing real to show.
@@ -181,12 +186,14 @@ pub fn collect(games: &[GameRef], dirs: &Dirs, seed: u64) -> Vec<Slide> {
     out
 }
 
+#[cfg(target_os = "linux")]
 /// A screenshot file's game part: "Game Name 2026-10-24 18-05-09.png" gives "Game Name".
 pub fn screenshot_title(file_name: &str) -> Option<String> {
     let stem = file_name.strip_suffix(".png")?;
     stem.char_indices().filter(|(_, c)| *c == ' ').map(|(i, _)| i).rev().find_map(|i| crate::screenshot::valid_at(&stem[i + 1..]).then(|| stem[..i].to_string())).filter(|t| !t.is_empty())
 }
 
+#[cfg(target_os = "linux")]
 /// A save-state picture's game part: "Game.pstate2.png" and "Game.pstate.auto.png" give "Game"; the undo state's picture
 /// ("Before load") is no memory.
 pub fn state_title(file_name: &str) -> Option<String> {
@@ -200,6 +207,7 @@ pub fn state_title(file_name: &str) -> Option<String> {
     (slot_ok && at > 0).then(|| stem[..at].to_string())
 }
 
+#[cfg(target_os = "linux")]
 fn memories(games: &[GameRef], dirs: &Dirs, rng: &mut Rng) -> Vec<Slide> {
     let mut systems: Vec<(&str, &str)> = games.iter().map(|g| (g.system.as_str(), g.system_name.as_str())).collect();
     systems.sort_unstable();

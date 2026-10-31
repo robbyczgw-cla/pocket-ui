@@ -490,9 +490,14 @@ impl App {
             self.text.draw(c, Face::Title, 50, text_x + after_caret, FIELD_Y + 62, dim, "Any game, by its name");
             0
         } else {
-            // A long query shows its end, where the typing is.
+            // A long query shows its end, where the typing is. What was typed is the player's own: painted as it is,
+            // never through the translation table ("unknown" stayed "unknown", not "unbekannt"; review 2026-10-30).
+            let was = self.text.translating();
+            self.text.set_translate(false);
             let shown = tail_fit(&mut self.text, &page.kb.text, room);
-            self.text.draw(c, Face::Title, 50, text_x, FIELD_Y + 62, ink, &shown)
+            let w = self.text.draw(c, Face::Title, 50, text_x, FIELD_Y + 62, ink, &shown);
+            self.text.set_translate(was);
+            w
         };
         if typing {
             c.rect(text_x + w + 4, FIELD_Y + 16, 4, 52, ink);

@@ -313,7 +313,7 @@ does nothing else (`WAKE_GUARD`, `WAKE_QUIET`).
 
 ## Idle slideshow (2026-10-30, `src/slideshow.rs`, `src/app_slideshow.rs`)
 A quiet shelf is not left static: after a minute without input the games' pictures play, then the screen goes off as
-it always did. Settings → Look & feel → Cozy extras → **Idle slideshow**. **Off in every look** until the player switches it on (not
+it always did. Settings → System → Sleep & power → **Slideshow before screen off** (a cozy extra, `sleep_settings::Row::Slideshow`; on a Steam Deck the page's only row). **Off in every look** until the player switches it on (not
 everyone wants it; `idle_slideshow: true` under `extras` in `settings.json`, nothing is written while it is off). Read with
 `cozy_extras::on(Extra::IdleSlideshow)`.
 

@@ -86,7 +86,7 @@ impl Flash {
             return None;
         }
         let left = SHOW - age;
-        // Settings > Look > Motion: Off shows it whole until it goes.
+        // Settings > Sound & feel > Motion: Off shows it whole until it goes.
         if left >= FADE || !crate::motion::allowed(crate::motion::Kind::Fade) {
             return Some(255);
         }

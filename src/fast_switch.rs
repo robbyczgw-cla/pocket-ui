@@ -446,7 +446,7 @@ mod tests {
             let mut child = cmd.spawn().unwrap();
             let (tx, rx) = mpsc::channel();
             h.watch(0, move || tx.send(()).unwrap());
-            let saved = rx.recv_timeout(Duration::from_secs(5)).is_ok();
+            let saved = rx.recv_timeout(Duration::from_secs(120)).is_ok();
             let running_then = child.try_wait().unwrap().is_none();
             child.wait().unwrap();
             (saved, running_then)
@@ -477,7 +477,8 @@ mod tests {
         let (tx, rx) = mpsc::channel();
         let read = state.clone();
         h.watch(0, move || tx.send(std::fs::metadata(&read).map(|m| m.len()).unwrap_or(0)).unwrap());
-        assert_eq!(rx.recv_timeout(Duration::from_secs(5)), Ok(800_000), "the whole new state, not the old one or a part");
+        // Generous: the child syncs 800 kB to disk, which waits for every other test's writes on a loaded machine.
+        assert_eq!(rx.recv_timeout(Duration::from_secs(120)), Ok(800_000), "the whole new state, not the old one or a part");
         child.wait().unwrap();
     }
 

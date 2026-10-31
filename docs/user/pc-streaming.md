@@ -2,7 +2,7 @@
 
 **PC streaming** on Home plays the games of your own computer on the Pocket, over Wi-Fi, with
 [Moonlight](https://moonlight-stream.org). ROCKNIX already contains Moonlight, but the entry is **off until you turn it
-on**: Settings → Look & feel → Look → **X** (Systems on the shelf) → **PC streaming**, the last row → **A**. It is an app, not a game:
+on**: Settings → Look → **Systems on the shelf** → **PC streaming**, the last row → **A**. It is an app, not a game:
 **no pause menu**, no save slots, and it does not appear in your recent games.
 
 > **Status:** the entry, the lookup and the way back to Home were checked on a Mini V2 without a computer: it looks

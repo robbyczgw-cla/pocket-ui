@@ -16,6 +16,12 @@ use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+/// A game file with nothing in it (0 bytes): a copy that never finished, or a placeholder. No emulator can start it, and
+/// no picture belongs to it (new-user test 2026-10-30: an empty Tetris got a cover and a box like a healthy game).
+pub fn is_empty_file(path: &Path) -> bool {
+    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.len() == 0)
+}
+
 /// `path` with `suffix` appended to the file name (`favorites.json` -> `favorites.json.bak`).
 fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
     let mut name = path.file_name().map(|n| n.to_os_string()).unwrap_or_default();

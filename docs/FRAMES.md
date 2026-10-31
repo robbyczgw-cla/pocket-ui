@@ -27,7 +27,7 @@
 - Like every Picture setting they are kept per console and per game, and pocket-core applies them
   live (`set <key> <value>`, `VideoSettings::set`).
 - Defaults (the owner's choice, 2026-10-23): None on every console, and no screen effect either — a clean picture out of the box.
-  Settings → Look & feel → Screen frames (`settings::Frames`: Off, the start setting; Handhelds; Every console) puts Auto below the
+  Settings → Playing → Screen frames (`settings::Frames`: Off, the start setting; Handhelds; Every console) puts Auto below the
   console's and the game's own choice (`GameSettings::load` in `src/options.rs`; `options::HANDHELDS`).
 
 ## Integer, smaller

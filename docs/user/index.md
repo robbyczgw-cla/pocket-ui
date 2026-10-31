@@ -10,8 +10,8 @@ It runs on top of ROCKNIX, a Linux system for handhelds, and replaces ROCKNIX's 
 shelf of your games. You control it with the buttons; the touch screen works on the shelf and in the
 lists as well.
 
-This guide is on the device as well: Settings → System → **Manual**. It is in English; the menus themselves can be
-German ([Settings → Look & feel → Language](language.md)).
+This guide is on the device as well: Settings → Help & tools → **Manual**. It is in English; the menus themselves can be
+German ([Settings → System → Language](language.md)).
 
 pocket-ui is at an early stage and has been tested on one device. The pages below describe what works
 today and say clearly where something is still being built or has not been confirmed on a real device.
@@ -82,10 +82,10 @@ today and say clearly where something is still being built or has not been confi
 4. [The pause menu](pause-menu.md): save slots, Auto and Before load, quitting, Pixel Path.
 5. [Options](options.md): picture, screen frames, controls, shortcuts, extras and run-ahead in a game; [their shorter list](options-big.md) for PlayStation 2, GameCube, Wii and 3DS.
 6. [Controls](controls.md): every button, screen by screen; [in Settings, setup and on the touch screen](controls-settings.md), with the power and volume keys.
-7. [Settings](settings.md): the Settings categories and the entries of Look & feel, Playing and Games; [Connections and System](settings-system.md): Wi-Fi, Bluetooth, Tailscale, Sync, the clock, sleep, backups and this guide; [quick settings, sleep and power](quick-settings.md); [storage](storage.md): what takes up space on the SD card, clean-ups, hidden games; [Bluetooth](bluetooth.md): pairing controllers, headphones and speakers.
+7. [Settings](settings.md): the Settings categories and the entries of Look, Sound & feel, Playing and Games; [Connections, System and Help & tools](settings-system.md): Wi-Fi, Bluetooth, Tailscale, Sync, the clock, sleep, backups, the Tour and this guide; [quick settings, sleep and power](quick-settings.md); [storage](storage.md): what takes up space on the SD card, clean-ups, hidden games; [Bluetooth](bluetooth.md): pairing controllers, headphones and speakers.
 8. [Language](language.md): English or German menus, and what stays English.
 9. [Night light](night-light.md): warmer, less blue colours in the evening, on a schedule or all the time.
-10. [Theme](theme.md): colours, font and button symbols for every screen, with a live preview.
+10. [Colours and font](theme.md): the colour sets and fonts for every screen, switched in place.
 11. [Performance and fan](performance.md): what games start with, the fan in the menus, Smooth fan, the readout.
 12. [Features and the Tour](tour.md): every feature on a card, the first start's profiles, new in this version.
 13. [Your library](library.md): game cards, play status, ratings and notes; [Curator](curator.md): Lens, smart shelves, stickers, Echoes, Versions and play history.

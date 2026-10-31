@@ -26,16 +26,16 @@ Start at [user/index.md](user/index.md).
 | [user/options-big.md](user/options-big.md) | The Options of PS2, GameCube, Wii and 3DS games |
 | [user/controls.md](user/controls.md) | Every button, screen by screen |
 | [user/controls-settings.md](user/controls-settings.md) | The buttons in Settings, during setup, on the touch screen, and the power and volume keys |
-| [user/settings.md](user/settings.md) | How Settings opens, and the entries of Look & feel, Playing and Games |
+| [user/settings.md](user/settings.md) | How Settings opens, and the entries of Look, Sound & feel, Playing and Games |
 | [user/settings-system.md](user/settings-system.md) | The entries of Connections and System: Wi-Fi, Tailscale, remote access, time, sleep, backup, the manual |
 | [user/storage.md](user/storage.md) | Settings → System → Storage: what takes the room on the card, the clean-ups, the low-space notice, hidden games |
 | [user/bluetooth.md](user/bluetooth.md) | Settings → Connections → Bluetooth: pairing controllers, headphones and speakers, reconnecting, forgetting |
 | [user/quick-settings.md](user/quick-settings.md) | Quick settings (HOME), the power menu, sleep, power off and low battery |
-| [user/language.md](user/language.md) | Settings → Look & feel → Language: English or German, what stays English |
-| [user/night-light.md](user/night-light.md) | Settings → Look & feel → Night light: warmer, less blue colours in the evening, the schedule, the strength, how it fades and where it reaches |
-| [user/theme.md](user/theme.md) | Settings → Look & feel → Look → R2 Theme: the five colour sets, the three fonts and the button symbols in the hints, with the live preview |
+| [user/language.md](user/language.md) | Settings → System → Language: English or German, what stays English |
+| [user/night-light.md](user/night-light.md) | Settings → Look → Night light: warmer, less blue colours in the evening, the schedule, the strength, how it fades and where it reaches |
+| [user/theme.md](user/theme.md) | Settings → Look → Colours and Font: the five colour sets and the three fonts |
 | [user/performance.md](user/performance.md) | Settings → Playing → Performance & fan: game defaults, the fan in the menus, Smooth fan, the readout |
-| [user/tour.md](user/tour.md) | The feature cards: Settings → System → Tour, what the first start's profiles set, "New in this version" |
+| [user/tour.md](user/tour.md) | The feature cards: Settings → Help & tools → Tour, what the first start's profiles set, "New in this version" |
 | [user/library.md](user/library.md) | The game card, play status, ratings, notes, hiding games and matching your files |
 | [user/curator.md](user/curator.md) | Curator: Lens, smart shelves, stickers, Echoes, Versions, play history and the Year in review |
 | [user/achievements.md](user/achievements.md) | RetroAchievements: signing in, unlocks, the pause menu's list, offline play |
@@ -52,8 +52,9 @@ Start at [user/index.md](user/index.md).
 | [user/hotel-wifi.md](user/hotel-wifi.md) | Hotel and train Wi-Fi: networks that want a sign-in first, signing in on the Pocket, the other ways online |
 | [user/troubleshooting.md](user/troubleshooting.md) | Known limits, questions, where data is kept |
 
-Every page of `user/` is also the manual on the device (Settings → System → Manual, `src/manual.rs`), in the order of
-[user/index.md](user/index.md).
+The regular pages of `user/` are also the manual on the device (Settings → Help & tools → Manual, `src/manual.rs`), in the order of
+[user/index.md](user/index.md). The experimental branch note [user/android-spike.md](user/android-spike.md) describes the
+separate Android prototype and is excluded from the ROCKNIX on-device manual (`manual::DESKTOP_ONLY`).
 
 ## Installing
 
@@ -79,6 +80,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [SYSTEM-CONTROLS.md](SYSTEM-CONTROLS.md) | Reference | Volume, brightness, colour temperature, quick settings, time zone |
 | [SLEEP.md](SLEEP.md) | Reference and design notes | Sleep and power: research, what is built, a device test plan |
 | [DEVICES.md](DEVICES.md) | Design and reference | The Mini V2 and its experimental SM8250 siblings (Pocket 5, Flip 2, Mini V1): how pocket-ui tells them apart, what each gets, layouts at 1920x1080 and 1280x960, safety on untested hardware, installing |
+| [STEAMDECK.md](STEAMDECK.md) | Design and reference | pocket-ui on a Steam Deck (first preparation, run on a PC only): the Deck profile, EmuDeck library, emulators, bundle and Flatpak plan, Add to Steam, what needs real hardware |
 | [H700-SCALED-LAYOUT.md](H700-SCALED-LAYOUT.md) | Small-panel logical layouts, complete snapshot comparisons, JPEG readability and CPU measurement method |
 | [DISPLAY-OUT.md](DISPLAY-OUT.md) | Design and reference | Playing on a TV through USB-C: what ROCKNIX does, TV mode, what is built, the device test plan |
 | [FAN-CURVE.md](FAN-CURVE.md) | Design and reference | Smooth fan: why the mechanism, the curves, the safety net, the simulation, the device test |
@@ -87,7 +89,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [ROCKNIX-CONTRACT.md](ROCKNIX-CONTRACT.md) | Reference | Everything pocket-ui relies on in ROCKNIX (scripts, functions, settings, es_systems, cores, services) and how `scripts/rocknix-contract.sh` checks a system for it |
 | [STORE.md](STORE.md) | Reference | The Store page, package kinds, the signed catalog, publishing |
 | [STARTER-PACK.md](STARTER-PACK.md) | Reference | The starter pack: free games for an empty card, their licences and credits, how a download is checked and placed, how to add a game |
-| [SYSTEM-PAGES.md](SYSTEM-PAGES.md) | Reference | Settings → Games → Tools, Wi-Fi (saved networks, hidden network, country), PC streaming (pairing on the device), Backup & reset: what replaces EmulationStation's menus |
+| [SYSTEM-PAGES.md](SYSTEM-PAGES.md) | Reference | Settings → Help & tools → Tools, Wi-Fi (saved networks, hidden network, country), PC streaming (pairing on the device), Backup & reset: what replaces EmulationStation's menus |
 | [PORTAL-SIGNIN.md](PORTAL-SIGNIN.md) | Design and reference | Wi-Fi with a sign-in page: the row and sheet, the re-check, the sign-in helper, what it never does, limits, tests |
 | [SECURITY-HARDENING.md](SECURITY-HARDENING.md) | Reference | File sharing, SSH and other network services |
 | [WEB-COMPANION.md](WEB-COMPANION.md) | Reference | The web companion: threads and cost, where it listens, sign-in, CSRF, every endpoint, uploads, the threat model and its self-review |
@@ -102,7 +104,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [SYNC-CURATION.md](SYNC-CURATION.md) | Reference | Settings → Sync → Library data: one folder per device, values with times, the field-by-field merge with tombstones, the play history union, what is left out |
 | [CURATOR-DATA.md](CURATOR-DATA.md) | Reference | Curator's data: Wikidata facts and versions by work, the feel-tag vocabulary and labelling, ROM file-name facts, the reader APIs |
 | [STATUS.md](STATUS.md) | Reference | The feature status ledger: one row per feature with how it was verified (device-measured, device smoke-checked, virtual device only, host tests only, not built), the evidence and what is still open |
-| [LEDS.md](LEDS.md) | Reference | The lights around the sticks: ROCKNIX's scripts, what Settings → Look & feel → LEDs writes, a device checklist |
+| [LEDS.md](LEDS.md) | Reference | The lights around the sticks: ROCKNIX's scripts, what Settings → Sound & feel → LEDs writes, a device checklist |
 
 ## Design notes and history
 
@@ -126,3 +128,5 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | `latency/` | The speed guard's baselines ([LATENCY.md](LATENCY.md)) |
 | `bench/` | Raw benchmark data |
 | [THIRD-PARTY-CRATES.md](THIRD-PARTY-CRATES.md) | Generated list of the Rust crates and their licences (`scripts/third-party.sh`); the rest of the credits are in [../NOTICE.md](../NOTICE.md) |
+
+Android launcher foundation: [developer architecture and intent recipes](ANDROID-MVP.md), [preview controls](user/android-mvp.md).

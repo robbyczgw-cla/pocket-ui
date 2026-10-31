@@ -142,7 +142,7 @@ game with **SELECT + X** (ROCKNIX's RetroArch shortcut), then:
   mode** → Enabled, or Alternate for the other direction. The picture turns to fill the screen; hold the Pocket turned
   so that it stands upright for you.
 - **MAME 2003-Plus** (`roms/arcade`, `roms/mame`): Quick Menu → Core Options → **TATE Mode** → Enabled.
-- **Any core**: Settings → Video → Output → **Video Rotation** turns the picture in quarter turns.
+- **Any core**: RetroArch's own menu, under Video → Output → **Video Rotation**, turns the picture in quarter turns.
 
 These turn the picture, not the controls. So that up on the D-pad is up in the turned game, change the directions
 under Quick Menu → Controls → Port 1 Controls (with the D-pad on top, the D-pad's up becomes Right, right becomes Down, down

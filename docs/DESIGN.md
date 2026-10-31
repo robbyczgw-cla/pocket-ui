@@ -126,7 +126,7 @@ read rather than glanced at (a fact, an explanation, a note under a list); 21 is
 notes beside larger text. Section headings on a page are Title 37 (the console page, credits, the game card).
 
 ### Font styles (`src/font_style.rs`)
-Settings → Look & feel → Look → Theme → Font (settings.json `"font"`: `barlow`, `pixel`, `rounded`; Barlow when unset or wrong) swaps the
+Settings → Look → Font (settings.json `"font"`: `barlow`, `pixel`, `rounded`; Barlow when unset or wrong) swaps the
 two faces; everything above (the scale, Body 28 as the smallest read text) holds for each:
 
 | Style | Title (names, spines, labels) | Body (meta, hints) |
@@ -170,7 +170,7 @@ and never opens the font. The CJK glyphs have a cache of their own, at most 8 MB
 letters at those sizes); past that it is emptied and letters are drawn again as they come.
 
 ### Text size
-Settings → Look & feel → **Text size**: **Normal** (the scale above), **Medium** or **Large**, saved as `"text_size": "medium"` or `"large"`
+Settings → Look → **Text size**: **Normal** (the scale above), **Medium** or **Large**, saved as `"text_size": "medium"` or `"large"`
 in settings.json (Normal is not written; a file from before Medium reads as it did). One rule for every size, applied in one place (`src/type_scale.rs`): the painters
 keep asking for the design's sizes and `Text` paints, measures, fits and wraps each at `type_scale::px(size)`, so a
 width that a layout measures is the width it gets. Large is a quarter more, at most 10 px more and never past 64;
@@ -219,6 +219,16 @@ a space (`T`) and for text cut by the left or right edge of what it is painted i
 every state of `tests/i18n-states.txt` in Medium and in Large, English and German, and fails on any line. Pages mark what is covered
 (a dialog, a sheet), painted over (Up next's card), covered by an overlay of their own (the letter an L2/R2 jump shows
 over the list) or cut on purpose (the Cards look's neighbours).
+
+## Phones (Android)
+
+The same shelf and sheet, held in one hand and touched (`android/src/phone.rs`, docs/ANDROID-MVP.md). Sizes are in
+dp from the phone's density instead of handheld pixels: Body 16, sheet rows 56 dp, list rows 64, buttons 48-52 dp
+high and round at half their height, 16 dp margins in portrait and 24 in landscape. The tabs go to the bottom with
+the Settings icons' style (16 x 16, one colour: cartridge, star, glass, crate, cog); the current tab sits on a paper
+pill. The primary action of a page (Play, Continue, Show games, Choose your ROM folder) is paper with ink across
+the width; the others are pills in the sheet's colour, a favourite's in amber. Hint keys only show while a
+controller is the input. Portrait turns the shelf into stacked boards of fronts; landscape keeps the handheld shelf.
 
 ## Small-panel presentation
 
@@ -356,7 +366,7 @@ full beginning. Changing selection or available width resets it; fitting titles 
 | Split's preview | after 2.5 s on a game the box art fades to its screenshot, 3.5 s later to its title screen, and round again (`picture_cycle`); a fade is not movement, so Reduced keeps it, Off keeps the box art still | 400 ms |
 | Appearance | dark ↔ light crossfade as before; Off switches at once | 600 ms |
 
-**Settings → Look & feel → Look → Motion** (R1): **Full**; **Reduced**, only fades (pages fade in without sliding, glides and
+**Settings → Sound & feel → Motion** (R1): **Full**; **Reduced**, only fades (pages fade in without sliding, glides and
 the pull-out jump, toasts fade); **Off**, everything at once. Saved as `"motion"` in settings.json.
 
 **How a page transition is painted.** No second picture is kept: the old page is gone with the press and the new
@@ -399,7 +409,7 @@ and rare: they never add a frame, a row or a badge to a list.
   PNG header), so nothing moves when it arrives.
 - **Never an empty frame.** A game without a screenshot cycles nothing and shows its box art; without box art but
   with a screenshot it shows the screenshot; with nothing, the console and the count as before. "Box art"
-  or "Off" (Settings → Games → Extras → Pictures) hides them all.
+  or "Off" (Settings → Games → Pictures & extras → Pictures) hides them all.
 - **Cost.** PNGs are decoded and scaled on one loader thread into the box art's image cache (16 pictures at most),
   never on the UI thread; the files are stat'ed by their 24-byte header once.
 
@@ -412,7 +422,7 @@ gold after it for the player's own pictures) sit small and centred at the bottom
 battery stand in the top right corner as on Home. A picture the shape of the screen fills it, any other (a portrait box) is
 shown whole on a dark backdrop of its own colour. Motion Reduced and Off: no zoom or drift, only the cross-fades. 15 frames a
 second while something moves, none between slides when still. Any button or touch ends it and does nothing else; no
-pictures, no show. It is Off in every look until the player switches it on in Cozy extras ([SLEEP.md](SLEEP.md#idle-slideshow-2026-10-30-srcslideshowrs-srcapp_slideshowrs)).
+pictures, no show. It is Off in every look until the player switches it on in Sleep & power (Slideshow before screen off) ([SLEEP.md](SLEEP.md#idle-slideshow-2026-10-30-srcslideshowrs-srcapp_slideshowrs)).
 
 ## Home panels (`src/home_panel.rs`, `src/app_home_panel.rs`)
 Where a game's label has its box art, the rows that are not one game show games too, so no pulled-out label is an
@@ -514,7 +524,7 @@ row of the Minimal look: it reads over spines, labels and cases alike. It stays 
 fades over the last 220 ms; nothing else moves.
 
 ## Appearance: dark and light (`src/palette.rs`, `src/appearance.rs`)
-Settings → Look & feel → Look → **Y**: Dark (default; the AMOLED's black pixels are off, so it is the battery-friendly one),
+Settings → Look → Appearance (Y on the look page): Dark (default; the AMOLED's black pixels are off, so it is the battery-friendly one),
 Light, or Automatic. Light is warm paper, not white: the same restraint, the polarity turned around. The
 pulled-out label stays the brightest sheet; on the paper page it lifts off with a 6 px soft shadow (the label
 alone would be only 1.1:1 against the page), and pickers get a paper sheet with a hairline edge.
@@ -559,7 +569,7 @@ the power menu panel, the volume/brightness OSD, notices and toasts, the "Saving
 pocket-core draws (it never sets an appearance). The switcher's screen bezel stays dark too: it is the
 handheld's own screen.
 
-**Colours** (Settings → Look & feel → Look → R2 Theme, `palette::Colours`): the table above is **Warm**, the default.
+**Colours** (Settings → Look → Colours, `palette::Colours`): the table above is **Warm**, the default.
 Four more sets give every token a dark and a light value of their own, named after a feeling, not a product: **Indigo
 Cube** (indigo page and surfaces, lavender paper, a lilac accent), **Grey Brick** (a grey handheld's plastic, its dark
 green for the chips, the band and the accent), **Green X** (green on near-black: the label itself bright green with
@@ -699,7 +709,7 @@ name, so it is the same every time), at least 60 px from the games, so a shelf o
 than the shelf's room. Never over a game. The Shelf look uses the same props at its own scale.
 
 ### The room: light and decorations (`room_light`, `room_deco`, `app_room_extras.rs`)
-Two rows of Settings → Look & feel → Cozy extras, both on from the start, Shelf look and Cabinet only.
+Two rows of Settings → Look → Cozy extras, both on from the start, Shelf look and Cabinet only.
 - **Light by time of day** (`room_light::at`): the real clock lights the room. Morning (from 07:30) a little cooler and
   brighter, afternoon (13:00–16:30) as made, evening (18:30–21:00) warmer with the lamp glowing, night (22:30–05:00)
   dimmer with the lamp as the main light; between them it eases over one to two hours. It falls on the wood (the
@@ -732,7 +742,7 @@ Two rows of Settings → Look & feel → Cozy extras, both on from the start, Sh
   board, above its own slot as far as the screen lets it: nothing of the shelves is under it. It is never taller
   than the showcase (`show_scale`). Simple perspective: each face is a run of columns whose height
   follows its distance; at rest the front is copied as it is, sharp.
-- **Starting** a game (Settings → Look & feel → Animations, Cabinet and Shelf looks; `app_cabinet::launch_animation`). The
+- **Starting** a game (Settings → Sound & feel → Animations, Cabinet and Shelf looks; `app_cabinet::launch_animation`). The
   numbers below are Quick; Cozy plays the same shape over `cabinet::INSERT_COZY` (1330 ms, in at `IN_AT_COZY` 800 ms; sounds:
   the case opening at A, `ui_sound::going_in` seated at 800 ms, `Sound::CrtOn` from pocket-core with the old-TV power-on), slows every timed animation by `motion::COZY_SLOWER` (1.4) and holds a pocket-core game's window
   until the fade has run (`startup::HOLD_UNTIL`; pocket-core draws nothing and is silent meanwhile, a button ends it):
@@ -753,7 +763,7 @@ Two rows of Settings → Look & feel → Cozy extras, both on from the start, Sh
   frames of the backs (and, while the case's front is not made yet, the cardboard box's front) are PixelLab pixel art
   (`assets/media/back`, `tools/` there), nine-slice at a whole number of screen pixels a template pixel; the back's
   paper is the cover's colour, deep, with white type; missing pictures and text get their own plain places.
-- **Playful animations** (Settings → Look & feel → Cozy extras, `src/playful.rs`; on with Cozy, off with Quick until the
+- **Playful animations** (Settings → Sound & feel → Playful cases, `src/playful.rs`; on with Cozy, off with Quick until the
   player switches it, nothing with Motion Reduced or Off), after Socket's playful feel in our 2D pixel style. Every one is
   a transform of a picture already made (an offset, a row shear, a nearest-pixel scale, the box disc's turn), nothing
   is made or decoded per frame:

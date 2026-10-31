@@ -751,6 +751,26 @@ impl App {
 
     /// The case under a tap: Some(true) when it was the selected one (play it), Some(false) when it is
     /// selected now.
+    /// A new frame: the cases drawn in the last one are gone until the Cabinet paints them again, so a tap on a page
+    /// over it (Settings, the card, a dialog) never lands on a case that is no longer on screen.
+    pub(crate) fn cabinet_frame_begin(&mut self) {
+        self.cabinet.drawn.clear();
+    }
+
+    /// Whether the Cabinet's cases are on screen and nothing in front takes touches: the tap and swipe of
+    /// `app_touch` go to the shelf only then.
+    pub(crate) fn cabinet_in_front(&self) -> bool {
+        self.theme == pocket_ui::settings::Theme::Cabinet
+            && !self.cabinet.drawn.is_empty()
+            && self.settings_page.is_none()
+            && self.setup.is_none()
+            && !self.tour.is_open()
+            && self.card.is_none()
+            && self.console.is_none()
+            && self.switcher.is_none()
+            && self.running.is_none()
+    }
+
     pub(crate) fn cabinet_tap(&mut self, x: f32, y: f32) -> Option<bool> {
         let (x, y) = (x as i32, y as i32);
         let hit = self
@@ -767,7 +787,7 @@ impl App {
         Some(false)
     }
 
-    /// The launch animation (Settings → Look & feel → Animations), started by `launch` just before the game's process:
+    /// The launch animation (Settings → Sound & feel → Animations), started by `launch` just before the game's process:
     /// in the Cabinet and the Shelf look the case of the game being started goes into its console while the emulator
     /// loads, with a click (`Sound::Insert`, played by the sound thread) and a glow. Only when the case started from is
     /// on screen (A or a tap on it), not from the card, the switcher or the start.

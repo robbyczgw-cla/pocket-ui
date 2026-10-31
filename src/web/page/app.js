@@ -776,7 +776,7 @@ async function statsView() {
         historyBlock(hist),
         recentSessions(hist.recent),
       ]
-    : h("p", { class: "quiet" }, "Play history is off, or nothing has been recorded yet (Settings › Playing › Curator › Play history on the Pocket). The totals below are the ones the library keeps for every game.");
+    : h("p", { class: "quiet" }, "Play history is off, or nothing has been recorded yet (Settings › Games › Curator › Play history on the Pocket). The totals below are the ones the library keeps for every game.");
 
   view(
     h("h2", {}, "Play history"),

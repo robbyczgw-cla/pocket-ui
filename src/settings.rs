@@ -17,111 +17,9 @@ where
     Ok(serde_json::from_value(v).unwrap_or_default())
 }
 
-/// Looks the shelf can take; Settings > Look picks one.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum Theme {
-    #[default]
-    Shelf,
-    Minimal,
-    Split,
-    Cards,
-    Cabinet,
-}
+pub use crate::look_settings::{Appearance, Motion, Theme};
 
-impl Theme {
-    pub const ALL: [Theme; 5] = [Theme::Shelf, Theme::Minimal, Theme::Split, Theme::Cards, Theme::Cabinet];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Theme::Shelf => "Shelf",
-            Theme::Minimal => "Minimal",
-            Theme::Split => "Split",
-            Theme::Cards => "Cards",
-            Theme::Cabinet => "Cabinet",
-        }
-    }
-
-    /// One line for the theme choice in setup.
-    pub fn blurb(self) -> &'static str {
-        match self {
-            Theme::Shelf => "Your games standing on a shelf. The one you pick shows its cover.",
-            Theme::Minimal => "Just the names, nothing else.",
-            Theme::Split => "List on the left, details on the right.",
-            Theme::Cards => "Big cards you flip through sideways.",
-            Theme::Cabinet => "Your games in their cases on a wooden shelf. Pull one out to see its cover.",
-        }
-    }
-}
-
-/// Settings > Look > Appearance.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum Appearance {
-    #[default]
-    Dark,
-    Light,
-    Auto,
-}
-
-impl Appearance {
-    pub const ALL: [Appearance; 3] = [Appearance::Dark, Appearance::Light, Appearance::Auto];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Appearance::Dark => "Dark",
-            Appearance::Light => "Light",
-            Appearance::Auto => "Automatic",
-        }
-    }
-
-    /// One line about the choice, under the row in the look step.
-    pub fn blurb(self) -> &'static str {
-        match self {
-            Appearance::Dark => "Black pages. Uses the least battery.",
-            Appearance::Light => "Paper pages for daylight. Uses more battery.",
-            Appearance::Auto => "Light from 07:00, dark from 20:00, local time.",
-        }
-    }
-}
-
-/// Settings > Look > Motion: how much the menus move (`crate::motion`).
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum Motion {
-    #[default]
-    Full,
-    Reduced,
-    Off,
-}
-
-impl Motion {
-    pub const ALL: [Motion; 3] = [Motion::Full, Motion::Reduced, Motion::Off];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Motion::Full => "Full",
-            Motion::Reduced => "Reduced",
-            Motion::Off => "Off",
-        }
-    }
-
-    /// One line about the choice, after the row in the look step.
-    pub fn blurb(self) -> &'static str {
-        match self {
-            Motion::Full => "Selections glide, pages slide in.",
-            Motion::Reduced => "Only fades. Nothing slides or grows.",
-            Motion::Off => "No animation at all.",
-        }
-    }
-
-    /// The next choice (R1 on the look step).
-    pub fn next(self) -> Motion {
-        Motion::ALL[(Motion::ALL.iter().position(|m| *m == self).unwrap_or(0) + 1) % Motion::ALL.len()]
-    }
-}
-
-/// Settings > Look & feel > Animations: Cozy plays the game's launch animation so that it reads (about a second, the
+/// Settings > Sound & feel > Animations: Cozy plays the game's launch animation so that it reads (about a second, the
 /// pocket-core game's window waits for it) and slows the other transitions a little; Quick is the timings as designed,
 /// straight into the game. Unset follows the look (`Animations::default_for`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize)]
@@ -166,38 +64,8 @@ impl Animations {
     }
 }
 
-/// Settings → Look & feel → Text size: the type of every screen as designed, an eighth larger, or a quarter larger
-/// (`crate::type_scale`).
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum TextSize {
-    #[default]
-    Normal,
-    Medium,
-    Large,
-}
+pub use crate::text_size::TextSize;
 
-impl TextSize {
-    pub const ALL: [TextSize; 3] = [TextSize::Normal, TextSize::Medium, TextSize::Large];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            TextSize::Normal => "Normal",
-            TextSize::Medium => "Medium",
-            TextSize::Large => "Large",
-        }
-    }
-
-    /// The next size, Large going round to Normal (A, right, R1 on the first start).
-    pub fn next(self) -> TextSize {
-        TextSize::ALL[(TextSize::ALL.iter().position(|t| *t == self).unwrap_or(0) + 1) % TextSize::ALL.len()]
-    }
-
-    /// The size before, Normal going round to Large (left).
-    pub fn previous(self) -> TextSize {
-        TextSize::ALL[(TextSize::ALL.iter().position(|t| *t == self).unwrap_or(0) + TextSize::ALL.len() - 1) % TextSize::ALL.len()]
-    }
-}
 
 /// Settings → Screen frames: where a game's screen frame is Auto when neither its console nor the game has a frame
 /// of its own (Options → Picture → Screen frame). `options::GameSettings` reads it.
@@ -270,17 +138,17 @@ pub struct Settings {
     /// (A on the right) except Odin 2 Mini/Portal (Xbox) when unset. An explicit saved choice wins.
     #[serde(default, deserialize_with = "lenient")]
     pub button_layout: crate::button_layout::ButtonLayout,
-    /// Settings > Look & feel > Look > Theme > Button symbols: how the hints draw A, B, X and Y (`button_prompts`);
+    /// Settings > Playing → Buttons → Button symbols: how the hints draw A, B, X and Y (`button_prompts`);
     /// the device's (Xbox-style on Retroid and AYN, plain letters on Anbernic) when unset. A saved choice wins.
     #[serde(default, deserialize_with = "lenient")]
     pub prompts: crate::button_prompts::PromptStyle,
-    /// Settings > Look & feel > Look > Theme > Colours (`palette::Colours`); Warm when unset.
+    /// Settings > Look → Colours (`palette::Colours`); Warm when unset.
     #[serde(default, deserialize_with = "lenient")]
     pub colours: crate::palette::Colours,
-    /// Settings > Look & feel > Look > Theme > Font: Barlow, Pixel or Rounded type (`font_style`); Barlow when unset, wrong or from before it.
+    /// Settings > Look → Font: Barlow, Pixel or Rounded type (`font_style`); Barlow when unset, wrong or from before it.
     #[serde(default, deserialize_with = "lenient")]
     pub font: crate::font_style::FontStyle,
-    /// Settings > Look > Motion; Full when unset.
+    /// Settings > Sound & feel > Motion; Full when unset.
     #[serde(default, deserialize_with = "lenient")]
     pub motion: Motion,
     /// Settings > Screen frames; Off when unset (the start setting since 2026-10-23, also for a settings.json from before it).
@@ -306,7 +174,7 @@ pub struct Settings {
     /// art only). Written only with `box_art_only`, so a settings.json from before it downloads as it always did.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub art_off: bool,
-    /// Settings → Look & feel → Text size; Normal when unset (and not written then), so nothing changes for a
+    /// Settings → Look → Text size; Normal when unset (and not written then), so nothing changes for a
     /// settings.json from before it.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "is_normal")]
     pub text_size: TextSize,
@@ -314,7 +182,7 @@ pub struct Settings {
     /// Options (`over_game`). Off when unset (and not written then).
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "is_off")]
     pub over_game: crate::over_game::Level,
-    /// Settings → Look & feel → Animations, once chosen; unset follows the look (`Animations::default_for`).
+    /// Settings → Sound & feel → Animations, once chosen; unset follows the look (`Animations::default_for`).
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
     pub animations: Option<Animations>,
     /// The "Launch animation" switch of 0.1.2 and the first 0.1.3 builds, kept as its opposite; no longer written. Read
@@ -325,7 +193,7 @@ pub struct Settings {
     /// choice is kept here; unset is the box.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub details_page: bool,
-    /// Settings → Look & feel → Cozy extras: the switches changed from their start (`cozy_extras`); left out while none
+    /// The cozy extras (Settings → Look → Cozy extras and their rows elsewhere): the switches changed from their start (`cozy_extras`); left out while none
     /// is, and each at its start when unset, so a settings.json from before them keeps every extra as it was.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "crate::cozy_extras::Extras::is_default")]
     pub extras: crate::cozy_extras::Extras,
@@ -461,7 +329,7 @@ pub fn game_pictures(data_dir: &Path) -> bool {
     !std::fs::read(data_dir.join(FILE)).ok().and_then(|b| serde_json::from_slice::<Only>(&b).ok()).unwrap_or_default().box_art_only
 }
 
-/// Settings → Look & feel → Text size as saved, Normal when unset or unreadable; for safe mode, which reads only the
+/// Settings → Look → Text size as saved, Normal when unset or unreadable; for safe mode, which reads only the
 /// fields it needs.
 pub fn text_size(data_dir: &Path) -> TextSize {
     #[derive(serde::Deserialize, Default)]

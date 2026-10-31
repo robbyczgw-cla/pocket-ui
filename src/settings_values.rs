@@ -68,6 +68,19 @@ pub fn page(value: &str) -> String {
     }
 }
 
+/// A row's value as painted: whole on the selected row; on the others without the marks (`›`-style ">" of a page,
+/// ‹ › of a switch), so only the selected row says what A and Left/Right do (NextUI shows the value alone).
+pub fn quiet(value: &str, selected: bool) -> String {
+    if selected {
+        return value.to_string();
+    }
+    let value = value.strip_suffix(">").map_or(value, str::trim_end);
+    match value.strip_prefix("‹ ").and_then(|v| v.strip_suffix(" ›")) {
+        Some(v) => v.to_string(),
+        None => value.to_string(),
+    }
+}
+
 /// "On" or "Off".
 pub fn on_off(on: bool) -> &'static str {
     if on {
@@ -271,6 +284,16 @@ mod tests {
     use super::*;
     use crate::system_ctl::{MockHw, MockState};
     use crate::testutil::TestDir;
+
+    #[test]
+    fn only_the_selected_row_keeps_its_marks() {
+        assert_eq!(quiet("Home net >", true), "Home net >");
+        assert_eq!(quiet("Home net >", false), "Home net");
+        assert_eq!(quiet(">", false), "", "a page with no value yet: nothing");
+        assert_eq!(quiet(">", true), ">");
+        assert_eq!(quiet("‹ On ›", false), "On");
+        assert_eq!(quiet("Off", false), "Off");
+    }
 
     #[test]
     fn values_are_short_and_plain() {

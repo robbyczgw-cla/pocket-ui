@@ -1,6 +1,6 @@
 # LEDs: the lights around the sticks
 
-Settings > Look & feel > LEDs (`src/leds.rs` for the choice, the scripts and the first start; `src/app_leds.rs` for the page).
+Settings > Sound & feel > LEDs (`src/leds.rs` for the choice, the scripts and the first start; `src/app_leds.rs` for the page).
 Read from the ROCKNIX 20261001 image (`~/.cache/pocket-vdev/rootfs.tar`, `docs/VIRTUAL-DEVICE.md`); **nothing here
 was tried on the real Mini V2**. The checklist at the end is for a person at the device.
 

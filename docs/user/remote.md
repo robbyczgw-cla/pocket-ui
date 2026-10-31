@@ -15,7 +15,7 @@ shows its state.
 
 - It gives the Pocket an address on your tailnet (`100.x.y.z`) and a name (`pocket-mini` by default), reachable from
   every device of yours that has Tailscale, wherever they are.
-- It is **only the network path**. What you can do over it is decided by the other switches: SSH needs Settings →
+- It is **only the network path**. What you can do over it is decided by the other switches: SSH needs Settings → Connections →
   **Remote access (SSH)** to be on and uses its password; file sharing and Syncthing keep their own passwords.
   Tailscale's own SSH server is **not** used (pocket-ui always starts it with `--ssh=false`), so nothing answers on
   port 22 except the SSH of Remote access.
@@ -37,7 +37,7 @@ Tailscale is not tied to a timer: it stays on until you switch it off.
 
 ### With an auth key instead
 
-**Sign in with a key** is for when no phone is at hand. Make a key in the Tailscale admin console (Settings → Keys),
+**Sign in with a key** is for when no phone is at hand. Make a key in the Tailscale admin console (under Keys),
 type it with the on-screen keyboard (it is long: A types, Y switches to symbols, X is Shift, START is Done) and the
 Pocket signs in without a browser. The key is put in a file only root can read for the moment `tailscale up` needs it
 and removed afterwards; it is never kept and never on a command line. Use a key that expires, and a single-use one if you can.

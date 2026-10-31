@@ -4,10 +4,12 @@
 #   scripts/image/source-bundle.sh OUT --version V --rocknix-source DIR --pocket-ui GIT_DIR REF
 #     OUT               output directory (about 10 GB, most of it ROCKNIX's sources)
 #     --rocknix-source  the output of scripts/image/rocknix-source.sh (must have packed, with an empty failed.txt)
+#     --device          the ROCKNIX family the bundle was made for (default SM8250; H700), as for rocknix-source.sh
 #     --pocket-ui       the repository and the commit or tag whose tree is the image's pocket-ui source
 #                       (for a public image: the public repository and the release's commit)
 #
-# Writes into OUT: pocket-ui-V-source.tar.gz, rocknix-<tag>-distribution.tar.xz, rocknix-<tag>-SM8250-sources.tar.xz.part-*,
+# (--device H700: no GRUB on those cards and no GBA BIOS in their SYSTEM, so neither source.)
+# Writes into OUT: pocket-ui-V-source.tar.gz, rocknix-<tag>-distribution.tar.xz, rocknix-<tag>-<family>-sources.tar.xz.part-*,
 # packages.txt, regba-bios-source.tar.gz, grub2_<version>.dsc with its .orig and .debian tarballs, SOURCE-SHA256SUMS.
 # Every download is checked: Debian's files against the .dsc (sha256), ReGBA's BIOS against REGBA_BIOS_MD5.
 set -eu
@@ -24,10 +26,12 @@ VERSION=
 RS=
 PU_GIT=
 PU_REF=
+FAMILY=SM8250
 while [ $# -gt 0 ]; do
   case $1 in
     --version) VERSION=$2; shift ;;
     --rocknix-source) RS=$2; shift ;;
+    --device) FAMILY=$2; shift ;;
     --pocket-ui) PU_GIT=$2; PU_REF=$3; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -48,38 +52,44 @@ OUT=$(cd "$OUT" && pwd)
 
 echo "== ROCKNIX $ROCKNIX_TAG (from $RS)"
 (cd "$RS" && sha256sum -c --quiet SHA256SUMS) || die "$RS/SHA256SUMS does not match"
-for f in "$RS/rocknix-$ROCKNIX_TAG-distribution.tar.xz" "$RS/rocknix-$ROCKNIX_TAG-SM8250-sources.tar.xz.part-"* "$RS/packages.txt"; do
+for f in "$RS/rocknix-$ROCKNIX_TAG-distribution.tar.xz" "$RS/rocknix-$ROCKNIX_TAG-$FAMILY-sources.tar.xz.part-"* "$RS/packages.txt"; do
   ln -f "$f" "$OUT/" 2>/dev/null || cp "$f" "$OUT/"
 done
 
 echo "== pocket-ui ($PU_REF)"
-git -C "$PU_GIT" archive --format=tar.gz --prefix="pocket-ui-$VERSION/" "$PU_REF" >"$OUT/pocket-ui-$VERSION-source.tar.gz"
+"$(dirname "$0")/../source-archive.sh" "$OUT/pocket-ui-$VERSION-source.tar.gz" "$PU_GIT" "$PU_REF" "pocket-ui-$VERSION" || die "the pocket-ui source did not pass the scan"
 
-echo "== ReGBA's GBA BIOS ($REGBA_COMMIT)"
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
-git clone -q --filter=blob:none --no-checkout https://github.com/Nebuleon/ReGBA.git "$T/regba"
-git -C "$T/regba" checkout -q "$REGBA_COMMIT"
-[ "$(md5sum "$T/regba/bios/gba_bios.bin" | cut -d' ' -f1)" = "$REGBA_BIOS_MD5" ] || die "ReGBA's bios/gba_bios.bin is not the one in SYSTEM"
-git -C "$T/regba" archive --format=tar.gz --prefix=regba-bios/ "$REGBA_COMMIT" bios README.md >"$OUT/regba-bios-source.tar.gz"
+if [ "$FAMILY" = SM8250 ]; then
+  echo "== ReGBA's GBA BIOS ($REGBA_COMMIT)"
+  git clone -q --filter=blob:none --no-checkout https://github.com/Nebuleon/ReGBA.git "$T/regba"
+  git -C "$T/regba" checkout -q "$REGBA_COMMIT"
+  [ "$(md5sum "$T/regba/bios/gba_bios.bin" | cut -d' ' -f1)" = "$REGBA_BIOS_MD5" ] || die "ReGBA's bios/gba_bios.bin is not the one in SYSTEM"
+  git -C "$T/regba" archive --format=tar.gz --prefix=regba-bios/ "$REGBA_COMMIT" bios README.md >"$OUT/regba-bios-source.tar.gz"
 
-echo "== GRUB, Debian source package grub2 $GRUB_DEB"
-POOL=https://snapshot.debian.org/archive/debian/20260601T000000Z/pool/main/g/grub2
-DSC=grub2_$GRUB_DEB.dsc
-for base in https://deb.debian.org/debian/pool/main/g/grub2 "$POOL"; do
-  curl -sfL -o "$OUT/$DSC" "$base/$DSC" && break
-done
-[ -s "$OUT/$DSC" ] || die "could not download $DSC"
-# The .dsc's Checksums-Sha256 lines: sha256 size name.
-sed -n '/^Checksums-Sha256:/,/^[^ ]/p' "$OUT/$DSC" | sed -n 's/^ \([0-9a-f]\{64\}\) [0-9]* \(.*\)$/\1 \2/p' >"$T/grub.sums"
-[ -s "$T/grub.sums" ] || die "$DSC lists no files"
-while read -r sum name; do
+fi
+
+if [ "$FAMILY" = SM8250 ]; then
+  echo "== GRUB, Debian source package grub2 $GRUB_DEB"
+  POOL=https://snapshot.debian.org/archive/debian/20260601T000000Z/pool/main/g/grub2
+  DSC=grub2_$GRUB_DEB.dsc
   for base in https://deb.debian.org/debian/pool/main/g/grub2 "$POOL"; do
-    [ "$(sha256sum "$OUT/$name" 2>/dev/null | cut -d' ' -f1)" = "$sum" ] && break
-    curl -sfL -o "$OUT/$name" "$base/$name" || true
+    curl -sfL -o "$OUT/$DSC" "$base/$DSC" && break
   done
-  [ "$(sha256sum "$OUT/$name" | cut -d' ' -f1)" = "$sum" ] || die "$name does not match $DSC"
-done <"$T/grub.sums"
+  [ -s "$OUT/$DSC" ] || die "could not download $DSC"
+  # The .dsc's Checksums-Sha256 lines: sha256 size name.
+  sed -n '/^Checksums-Sha256:/,/^[^ ]/p' "$OUT/$DSC" | sed -n 's/^ \([0-9a-f]\{64\}\) [0-9]* \(.*\)$/\1 \2/p' >"$T/grub.sums"
+  [ -s "$T/grub.sums" ] || die "$DSC lists no files"
+  while read -r sum name; do
+    for base in https://deb.debian.org/debian/pool/main/g/grub2 "$POOL"; do
+      [ "$(sha256sum "$OUT/$name" 2>/dev/null | cut -d' ' -f1)" = "$sum" ] && break
+      curl -sfL -o "$OUT/$name" "$base/$name" || true
+    done
+    [ "$(sha256sum "$OUT/$name" | cut -d' ' -f1)" = "$sum" ] || die "$name does not match $DSC"
+  done <"$T/grub.sums"
+
+fi
 
 cd "$OUT"
 rm -f SOURCE-SHA256SUMS

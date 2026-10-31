@@ -1,6 +1,8 @@
-//! Settings → Look & feel → **Cozy extras** (docs/user/settings.md "Cozy extras"): the little touches that make the
-//! shelf feel like a real one, each switched on its own. Not everyone likes them, so each can go without the others;
-//! all are on until the player turns one off.
+//! The **Cozy extras** (docs/user/settings.md "Cozy extras"): the little touches that make the shelf feel like a real
+//! one, each switched on its own. Not everyone likes them, so each can go without the others; most are on until the
+//! player turns one off. Each has one home in Settings, where it is seen or heard ([`Extra::home`]): the ones you see
+//! on the page Settings → Look → Cozy extras ([`Extra::PAGE_ROWS`]), the case sounds, the playful cases and the
+//! old-TV switch-on as rows of Sound & feel beside Animations and Sounds, the slideshow in System → Sleep & power.
 //!
 //! - Kept in `settings.json` under `"extras"` ([`Extras`]), one `true`/`false` per [`Extra::key`]. A file from before
 //!   them, a key this version doesn't know or a value that isn't a bool leaves that extra on. Only extras that are off
@@ -9,8 +11,8 @@
 //!   switch ([`set`]). pocket-core doesn't read it: what it needs comes in the start's environment (the old-TV
 //!   switch-on and its sound, `crt_on::ENV`, `crt_on::SILENT_ENV`).
 //! - The existing switches stay where they are and are not repeated here: Animations (Cozy/Quick) and Motion decide
-//!   whether anything moves at all, Sounds whether anything is heard. An extra that needs one of them says so on the
-//!   page ([`Extra::needs`]).
+//!   whether anything moves at all, Sounds whether anything is heard. An extra that needs one of them says so under
+//!   its row ([`Extra::needs`]).
 //!
 //! A new extra: a variant in [`Extra`] (with `ALL`, `key`, `label`, `blurb`, `only`, `needs`), a field in [`Extras`],
 //! a row in docs/user/settings.md's "Cozy extras" table and its German lines in `assets/i18n/de.tsv`. While its
@@ -18,12 +20,27 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
+/// Where the page is, as the Tour card and the guide say it: the one place to change when the page moves
+/// (`doc_checks` holds it to Settings' categories and rows).
+pub const PAGE: &str = "Settings › Look › Cozy extras";
+
+/// Where an extra that is not on the page lives ([`Extra::home`]).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Home {
+    /// A row of the Cozy extras page ([`PAGE`]).
+    Page,
+    /// A row of Settings → Sound & feel, beside Animations and Sounds.
+    SoundAndFeel,
+    /// A row of Settings → System → Sleep & power, before Screen off after's effect.
+    SleepAndPower,
+}
+
 /// One switch of the page, in the page's order.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Extra {
     /// The sounds of the cases and what is in them: a case or box opening, the cartridge, disc or card going in, the
     /// old TV switching on (`ui_sound::Sound::CaseOpen` to `CrtOn`, and the Quick launch's click). Menu sounds are
-    /// Settings → Look & feel → Sounds.
+    /// Settings → Sound & feel → Sounds.
     CaseSounds,
     /// The old-TV switch-on over a game's first moments at the end of the Cozy launch (`crt_on`).
     CrtOn,
@@ -69,6 +86,28 @@ impl Extra {
         Extra::Playful,
     ];
 
+    /// The page's rows, in its order: the things you see on the shelf, the cabinet, the case, the disc and the game
+    /// card. (`ALL`'s order is the bits' and stays.)
+    pub const PAGE_ROWS: [Extra; 8] = [
+        Extra::CabinetTv,
+        Extra::Stickers,
+        Extra::PrintedDiscs,
+        Extra::PauseMemoryCard,
+        Extra::TimeOfDayLight,
+        Extra::Decorations,
+        Extra::Connections,
+        Extra::Rediscover,
+    ];
+
+    /// Where its switch is in Settings: one place each.
+    pub const fn home(self) -> Home {
+        match self {
+            Extra::CaseSounds | Extra::CrtOn | Extra::Playful => Home::SoundAndFeel,
+            Extra::IdleSlideshow => Home::SleepAndPower,
+            _ => Home::Page,
+        }
+    }
+
     /// Its key in `settings.json`'s `"extras"`.
     pub fn key(self) -> &'static str {
         match self {
@@ -88,7 +127,7 @@ impl Extra {
     }
 
     /// The row's name.
-    pub fn label(self) -> &'static str {
+    pub const fn label(self) -> &'static str {
         match self {
             Extra::CaseSounds => "Case sounds",
             Extra::CrtOn => "Old-TV switch-on",
@@ -100,13 +139,13 @@ impl Extra {
             Extra::Rediscover => "Rediscover",
             Extra::TimeOfDayLight => "Light by time of day",
             Extra::Decorations => "Decorations",
-            Extra::IdleSlideshow => "Idle slideshow",
-            Extra::Playful => "Playful animations",
+            Extra::IdleSlideshow => "Slideshow before screen off",
+            Extra::Playful => "Playful cases",
         }
     }
 
     /// What it does, in one plain line, under the list when its row is selected.
-    pub fn blurb(self) -> &'static str {
+    pub const fn blurb(self) -> &'static str {
         match self {
             Extra::CaseSounds => "Cases click open, cartridges and discs go in with a sound. Menu sounds stay as they are.",
             Extra::CrtOn => "The game's picture comes on like an old TV when it starts.",
@@ -164,7 +203,7 @@ impl Extra {
 
     /// The extras with a row on the page, in its order.
     pub fn shown() -> Vec<Extra> {
-        Extra::ALL.into_iter().filter(|e| e.built()).collect()
+        Extra::PAGE_ROWS.into_iter().filter(|e| e.built()).collect()
     }
 
     fn bit(self) -> u32 {
@@ -175,7 +214,7 @@ impl Extra {
 /// A switch elsewhere in Settings that an extra needs.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Needs {
-    /// Settings → Look & feel → Sounds on.
+    /// Settings → Sound & feel → Sounds on.
     Sounds,
     /// Animations on Cozy and Motion on Full.
     CozyFull,
@@ -187,9 +226,9 @@ impl Needs {
     /// What the page says while the other switch keeps the extra from showing.
     pub fn note(self) -> &'static str {
         match self {
-            Needs::Sounds => "Silent now: Sounds is off (Look & feel \u{203a} Sounds).",
-            Needs::CozyFull => "Not shown now: it needs Animations on Cozy and Motion on Full (Look & feel \u{203a} Look).",
-            Needs::MotionFull => "Not shown now: needs Motion on Full (Look & feel \u{203a} Look).",
+            Needs::Sounds => "Silent now: Sounds is off (Sound & feel \u{203a} Sounds).",
+            Needs::CozyFull => "Not shown now: it needs Animations on Cozy and Motion on Full (Sound & feel).",
+            Needs::MotionFull => "Not shown now: needs Motion on Full (Sound & feel).",
         }
     }
 }
@@ -400,6 +439,21 @@ mod tests {
         assert_eq!(Extras::from_bits(DEFAULT_BITS), Extras::default());
     }
 
+    /// Every extra has exactly one home: a row of the page, or one of Sound & feel or Sleep & power (2026-10-30), and the
+    /// page holds at most eight rows.
+    #[test]
+    fn every_extra_has_one_home() {
+        for e in Extra::ALL {
+            assert_eq!(Extra::PAGE_ROWS.contains(&e), e.home() == Home::Page, "{e:?}");
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        assert!(Extra::PAGE_ROWS.iter().all(|e| seen.insert(e.key())), "no row twice");
+        assert!(Extra::PAGE_ROWS.len() <= 8);
+        assert_eq!(Extra::ALL.iter().filter(|e| e.home() == Home::SleepAndPower).collect::<Vec<_>>(), [&Extra::IdleSlideshow]);
+        // What needs another switch lives beside it: none of the page's rows does.
+        assert!(Extra::PAGE_ROWS.iter().all(|e| e.needs().is_none()));
+    }
+
     #[test]
     fn the_idle_slideshow_is_off_until_switched_on_in_every_look() {
         let x: Extras = serde_json::from_str("{}").unwrap();
@@ -438,8 +492,8 @@ mod tests {
     #[test]
     fn the_placeholders_are_kept_off_the_page_until_built() {
         let shown = Extra::shown();
-        assert_eq!(shown.len(), Extra::ALL.len(), "all of them are built");
-        assert!(shown.contains(&Extra::IdleSlideshow), "its row is on the page");
+        assert_eq!(shown, Extra::PAGE_ROWS, "all of them are built");
+        assert!(!shown.contains(&Extra::IdleSlideshow), "its row is in Sleep & power");
         assert_eq!(Extra::IdleSlideshow.only(), None, "the slideshow works in every look");
         assert_eq!(Extra::CabinetTv.only(), Some("Cabinet look only."));
     }

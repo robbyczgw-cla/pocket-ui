@@ -27,6 +27,9 @@ pub struct InfoView {
     /// The fact the selection is on (an index into `CardData::links`): A opens its list of games (Connections). None:
     /// A plays.
     pub link: Option<usize>,
+    /// Where each of `CardData::links`' facts was painted last, (x, y, w, h) in the canvas it was painted on: for a
+    /// touch screen's taps (the Android app).
+    pub link_rects: Vec<(i32, i32, i32, i32)>,
 }
 
 /// A value in the player's lines under the cover.
@@ -84,7 +87,7 @@ fn your_rows(d: &CardData) -> Vec<(&'static str, Val)> {
     if let Some((last, _)) = d.played {
         rows.push(("Last", Val::Text(crate::recents::ago(last))));
     }
-    rows.push(("Rating", if d.rating > 0 { Val::Stars(d.rating) } else { Val::Quiet("None. Press Y") }));
+    rows.push(("Rating", if d.rating > 0 { Val::Stars(d.rating) } else { Val::Quiet(crate::game_card_model::no_rating()) }));
     if let Some(a) = &d.achievements {
         rows.push(("Unlocked", Val::Text(format!("{a} achievements"))));
     }
@@ -205,6 +208,7 @@ impl InfoView {
         }
         // The facts, one line each, the key in Dust.
         let facts = facts(d);
+        self.link_rects = vec![(0, 0, 0, 0); d.links.len()];
         if facts.is_empty() {
             for l in text.wrap_at_most(Face::Body, 28, "Not in the offline game list, so there are no facts to show.", tw, 2) {
                 text.draw(c, Face::Body, 28, tx, ty, pal().dust, &l);
@@ -228,8 +232,10 @@ impl InfoView {
                             let step = type_scale::line(28, 8);
                             text.draw(c, Face::Body, 28, tx + key_w, ty, pal().chalk, first);
                             ty += step;
+                            self.link_rects[l] = (tx + key_w - 14, ty - row * 3 / 4, tw - key_w + 14, row);
                             crate::kit::link_value(c, text, (tx + key_w, ty, tw - key_w), last, self.link == Some(l), colors);
                         } else {
+                            self.link_rects[l] = (tx + key_w - 14, ty - row * 3 / 4, tw - key_w + 14, row);
                             crate::kit::link_value(c, text, (tx + key_w, ty, tw - key_w), v, self.link == Some(l), colors);
                         }
                     }

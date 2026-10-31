@@ -2,9 +2,19 @@
 //! Large outputs keep their native canvas; output size wins over the profile (HDMI).
 
 /// The supported layouts start at 1280×960, with the panel's aspect ratio preserved.
-/// A square 720 panel therefore uses 1280×1280 rather than stretching a 4:3 page.
-pub fn logical_size((w, h): (u32, u32)) -> (u32, u32) {
-    if w < 64 || !(64..=720).contains(&h) || u64::from(w) > u64::from(h) * 4 || u64::from(h) > u64::from(w) * 2 {
+/// A square 720 panel therefore uses 1280×1280 rather than stretching a 4:3 page. The Steam Deck's 1280×800 (docs/STEAMDECK.md)
+/// is painted at 1536×960: the pages are made for more lines than 800 pixels hold (the first-start pages ran into their hints).
+/// Only there: a handheld's output of 721 to 800 lines (HDMI) keeps its native canvas as before.
+pub fn logical_size(panel: (u32, u32)) -> (u32, u32) {
+    #[cfg(target_os = "linux")]
+    let max_h = if crate::device::current().host_owned() { 800 } else { 720 };
+    #[cfg(not(target_os = "linux"))]
+    let max_h = 720;
+    logical_size_up_to(panel, max_h)
+}
+
+fn logical_size_up_to((w, h): (u32, u32), max_h: u32) -> (u32, u32) {
+    if w < 64 || !(64..=max_h).contains(&h) || u64::from(w) > u64::from(h) * 4 || u64::from(h) > u64::from(w) * 2 {
         return (w, h);
     }
     if u64::from(w) * 960 >= u64::from(h) * 1280 {
@@ -159,6 +169,10 @@ mod tests {
         ] {
             assert_eq!(logical_size(panel), logical);
         }
+        // The Steam Deck's 1280×800 is scaled up; the same output on a handheld (HDMI) keeps its canvas.
+        assert_eq!(logical_size_up_to((1280, 800), 800), (1536, 960));
+        assert_eq!(logical_size_up_to((1280, 800), 720), (1280, 800));
+        assert_eq!(logical_size((1024, 768)), (1024, 768));
     }
 
     #[test]
@@ -239,5 +253,28 @@ mod tests {
         let mut native = vec![0; 1240 * 1080];
         let native_pointer = native.as_ptr();
         frame.render(&mut native, (1240, 1080), &mut |p, _, _| assert_eq!(p.as_ptr(), native_pointer));
+    }
+}
+
+/// Android uses density-independent units for readable type, preserving the usable viewport's aspect.
+/// This leaves landscape room for a detail panel and portrait room for additional rows, without stretching.
+pub fn mobile_size((w, h): (u32, u32), density: f32) -> (u32, u32) {
+    if w == 0 || h == 0 { return (w.max(1), h.max(1)); }
+    let density = if density.is_finite() && density > 0.0 { density } else { 1.0 };
+    let short = ((w.min(h) as f32 / density * 2.2).round() as u32).clamp(800, 1280);
+    if w < h { (short, (u64::from(h) * u64::from(short) / u64::from(w)) as u32) }
+    else { ((u64::from(w) * u64::from(short) / u64::from(h)) as u32, short) }
+}
+
+#[cfg(test)]
+mod mobile_tests {
+    #[test]
+    fn phone_rotation_preserves_aspect_and_density_controls_readability() {
+        let portrait = super::mobile_size((1216, 2640), 3.0);
+        let landscape = super::mobile_size((2640, 1216), 3.0);
+        assert_eq!(portrait, (landscape.1, landscape.0));
+        assert!((800..=1000).contains(&portrait.0));
+        assert!((portrait.1 as f64 / portrait.0 as f64 - 2640.0 / 1216.0).abs() < 0.002);
+        assert!(super::mobile_size((1216,2640), 4.0).0 < portrait.0);
     }
 }

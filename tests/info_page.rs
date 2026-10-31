@@ -30,11 +30,15 @@ fn wayland(tmp: &Path) -> Option<Stub> {
         .args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), path.to_str().unwrap()])
         .spawn()
         .expect("python3 for scripts/wayland-stub.py");
-    let stub = Stub { path, child };
-    for _ in 0..200 {
+    let mut stub = Stub { path, child };
+    // The stub publishes its socket only once it listens. Python's start-up can take many seconds on a loaded
+    // machine (the gate runs the whole suite in parallel), so the limit is only there to end a stub that is dead.
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    while std::time::Instant::now() < until {
         if stub.path.exists() {
             return Some(stub);
         }
+        assert!(stub.child.try_wait().unwrap().is_none(), "scripts/wayland-stub.py exited at start-up");
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
     panic!("scripts/wayland-stub.py didn't start");
@@ -45,8 +49,18 @@ fn shot(tmp: &Path, stub: Option<&Stub>, state: &str, size: &str, lang: &str, te
     let png = tmp.join("shot.png");
     let (boxes, visible) = (tmp.join("text.box"), tmp.join("visible.txt"));
     let _ = std::fs::remove_file(&boxes);
+    // The card asks Wikipedia for a description through curl from a worker thread. With a real curl the page showed the
+    // placeholder, the "offline" note or the real article depending on the network and on whether the answer came
+    // before the render (or an earlier shot's cache); a curl that can't connect makes it the same every time.
+    let bin = tmp.join("offline-bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let curl = bin.join("curl");
+    std::fs::write(&curl, "#!/bin/sh\nexit 7\n").unwrap();
+    std::fs::set_permissions(&curl, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
     cmd.args(["--snapshot", state, png.to_str().unwrap()])
+        .env("PATH", path)
         .env("POCKETUI_MOCK", "1")
         .env("POCKETUI_LANG", lang)
         .env("POCKETUI_TEXT_SIZE", text_size)

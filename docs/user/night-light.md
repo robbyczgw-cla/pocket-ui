@@ -1,6 +1,6 @@
 # Night light
 
-Settings → Look & feel → **Night light** makes the screen warmer and less blue in the evening, in the menus and in
+Settings → Look → **Night light** makes the screen warmer and less blue in the evening, in the menus and in
 games, the way a phone's night mode does. Blue light is what keeps you awake; the screen turns the colour of a lamp
 instead. It is **off** unless you turn it on here. It was built and tested without a real screen in the loop; how the
 colours look on the Mini V2's panel has not been checked yet.

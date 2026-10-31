@@ -117,7 +117,7 @@ card then shows **Series** Burnout. It takes two different games, never one game
 
 A value only leads somewhere when you have another game with it. One you don't (the only game of a studio on your
 card) is plain text without an arrow, and a game without any facts has nothing to pick: Down scrolls, A plays.
-If the library is still getting ready when you open a card, its connections appear there as soon as they are ready. Settings → Look & feel → [Cozy extras](settings.md#cozy-extras) → **Game connections** switches
+If the library is still getting ready when you open a card, its connections appear there as soon as they are ready. Settings → Look → [Cozy extras](settings.md#cozy-extras) → **Game connections** switches
 them off; the values are then only shown.
 
 ## What the card shows
@@ -125,7 +125,7 @@ them off; the values are then only shown.
 - **The label at the top**: the box art (when cover art was downloaded, see [Extras](extras.md)), the
   name, system, year and number of players, and your status with the time played.
 - **Pictures**: under the facts, the game running and its title screen ("In the game", "Title screen"), when the
-  free collection has them and Settings → Games → Extras → **Pictures** is Box art and screenshots ([Extras](extras.md#pictures)).
+  free collection has them and Settings → Games → Pictures & extras → **Pictures** is Box art and screenshots ([Extras](extras.md#pictures)).
   A game without them has no such heading and no gap.
 - **About the game**: developer, publisher, genre, series and review scores where they are known.
   A score reads, for example, "Metacritic 92 · via Wikidata". When the offline game list spells the game
@@ -148,7 +148,7 @@ them off; the values are then only shown.
   "… of the memory card" for a PS2 or GameCube card, which every game of that console shares). A on it opens the
   [choice](sync.md#two-versions-of-a-save). Without Syncthing, or with nothing to choose, there is no such row.
 - **Echoes**, **Versions** and **Stickers**, three rows from [Curator](curator.md#curator) (each can be switched off in
-  Settings → Playing → Curator).
+  Settings → Games → Curator).
 - **Screenshots (3)**: only on a game you took screenshots of (HOME + A while you play). The row says how many, and when
   the newest was taken ("Newest: Today"). A opens a [gallery](playing.md#looking-at-your-screenshots) of this game's
   screenshots; B comes back to the card.

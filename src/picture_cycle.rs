@@ -17,7 +17,7 @@ pub const HOLD: Duration = Duration::from_millis(3500);
 /// How long one picture takes to fade into the next.
 pub const FADE: Duration = Duration::from_millis(400);
 
-/// Whether the preview may change by itself: Settings > Look & feel > Motion is not Off.
+/// Whether the preview may change by itself: Settings > Sound & feel > Motion is not Off.
 pub fn cycling() -> bool {
     motion::allowed(Kind::Fade)
 }

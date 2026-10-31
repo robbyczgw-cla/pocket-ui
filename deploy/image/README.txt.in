@@ -1,11 +1,12 @@
-pocket-ui @VERSION@ for the Retroid Pocket Mini V2: SD card image
+@OS_NAME@ @VERSION@ for the Retroid Pocket Mini V2: SD card image
 ================================================================
 
-pocket-ui is a game launcher with its own libretro frontend. This card starts it next to Android:
-Android and its partitions stay as they are, and nothing is flashed to the device.
+pocket-ui is a game launcher with its own libretro frontend. This card (pocket-ui @VERSION@) starts it next
+to Android: Android and its partitions stay as they are, and nothing is flashed to the device.
 
-The system underneath is based on ROCKNIX @ROCKNIX_TAG@ (https://rocknix.org). pocket-ui is not made or
-endorsed by the ROCKNIX team.
+@OS_NAME@ is built on ROCKNIX @ROCKNIX_TAG@ (https://rocknix.org): its kernel, system and emulators are
+ROCKNIX's. pocket-ui is not made or endorsed by the ROCKNIX team; please report problems with this card to
+pocket-ui (@ISSUES_URL@), not to ROCKNIX.
 
 
 Install
@@ -35,8 +36,10 @@ Remote access (SSH), file sharing and Syncthing are off. When you turn on Remote
 sharing in pocket-ui's Settings, it makes a password for this device and shows it on the screen.
 (EmulationStation, ROCKNIX's menu, can also turn SSH on; it then uses ROCKNIX's standard root password
 "rocknix" until you change it there.)
-Do not install ROCKNIX updates on this card: they replace the system but not the kernel in
-boot/pocket/, and the two must match.
+Updates come from pocket-ui (Settings, Updates). ROCKNIX's own updates would replace the system but not the
+kernel in boot/pocket/, and the two must match, so this card does not install them: the boot hook moves
+any update pocket-ui did not check (from EmulationStation's menu, the network share "update" or copied
+by hand) to /storage/.update-refused and starts as usual. Nothing there is deleted.
 
 
 What is on the card
@@ -53,8 +56,9 @@ FAT partition "ROCKNIX" (readable on any computer):
                              switched off, so the system never sees Android
   post-flash.sh              boot hook: starts without the ROCKNIX logo
   mount-storage.sh           boot hook: puts pocket-ui's start entry in place once the storage has
-                             grown, then deletes itself
-  pocket-ui-info/            this file; SOURCE-OFFER.txt; pocket-ui's LICENSE and NOTICE.md;
+                             grown; at every start, sets aside system updates pocket-ui did not check
+  pocket-ui-info/            this file; SOURCE-OFFER.txt; pocket-ui-os.txt (name and version, shown
+                             in Settings, About); pocket-ui's LICENSE and NOTICE.md;
                              licences/ (the Rust crates' licence texts and the fonts' OFL; also in
                              STORAGE as /storage/pocket-ui/licences); rocknix-licenses/ (ROCKNIX's
                              LICENSE.md and licenses folder at tag @ROCKNIX_TAG@); firmware-licences/
@@ -63,7 +67,8 @@ FAT partition "ROCKNIX" (readable on any computer):
 Partition "STORAGE" (grows to fill the card at the first start):
   pocket-ui/                 pocket-ui, pocket-core and pocket-splash (the boot screen) @VERSION@, the launcher
   .pocket-seed/              the start entry for pocket-ui and the boot screen's unit (moved to
-                             .config/system.d at the second start)
+                             .config/system.d at the second start), and a script ROCKNIX runs once
+                             at the first start: device name "pocket-ui", ROCKNIX's update check off
 
 Changes from the ROCKNIX image: the files above were added. The folder rocknix_abl/ (a replacement for
 Retroid's bootloader, not used here) was removed. Removed from SYSTEM:

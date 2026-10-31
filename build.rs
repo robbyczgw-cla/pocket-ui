@@ -10,6 +10,7 @@ fn main() {
     println!("cargo:rustc-env=POCKETUI_BUILD_UNIX={built}");
     println!("cargo:rerun-if-changed=src/log_shim.c");
     cc::Build::new().file("src/log_shim.c").warnings(true).compile("pocket_log_shim");
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android") { return; }
 
     // rcheevos: the client (rc_client), the server API (rapi), the achievement runtime, hashing (rhash) and the libretro
     // memory-map helpers. 3DS decryption is left out (RC_HASH_NO_ENCRYPTED): pocket-core hosts no 3DS.

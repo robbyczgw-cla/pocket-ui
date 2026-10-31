@@ -18,7 +18,6 @@ This game has no achievements yet.	Dieses Spiel hat noch keine Erfolge.
 {n} of {m} unlocked	{n} von {m} freigeschaltet
 RetroAchievements has no achievements for this version of the game.	RetroAchievements hat für diese Version des Spiels keine Erfolge.
 Couldn't reach RetroAchievements. Unlocks count once the Pocket is online at the start of a game.	RetroAchievements ist nicht erreichbar. Freischaltungen zählen, sobald der Pocket beim Start eines Spiels online ist.
-RetroAchievements didn't accept the sign-in. Sign in again under Settings › RetroAchievements.	RetroAchievements hat die Anmeldung abgelehnt. Melde dich unter Einstellungen › RetroAchievements neu an.
 RetroAchievements isn't available for this game.	RetroAchievements gibt es für dieses Spiel nicht.
 RetroAchievements: {s}	RetroAchievements: {s}
 {n} of {m} achievements in {s}	{n} von {m} Erfolgen in {s}
@@ -491,7 +490,6 @@ Turning Syncthing off	Syncthing wird ausgeschaltet
 Syncthing keeps your saves and save states the same on your computer, phone and other handhelds.	Syncthing hält deine Spielspeicher und Spielstände auf Computer, Handy und anderen Handhelds gleich.
 Turn it on, then add this Pocket in Syncthing on your other device: scan the QR code or type the device ID.	Schalte es ein und füge diesen Pocket dann in Syncthing auf deinem anderen Gerät hinzu: QR-Code scannen oder Geräte-ID eintippen.
 Nothing leaves the Pocket until you pair a device. BIOS stays home unless you share it.	Nichts verlässt den Pocket, bevor du ein Gerät koppelst. BIOS-Dateien bleiben hier, außer du gibst sie frei.
-Connect to Wi-Fi first (Settings › Wi-Fi).	Verbinde dich zuerst mit dem WLAN (Einstellungen › WLAN).
 Device ID	Geräte-ID
 Waiting for Syncthing	Warte auf Syncthing
 Web interface (to pair from a computer)	Weboberfläche (zum Koppeln vom Computer)
@@ -514,7 +512,7 @@ Turning Tailscale off	Tailscale wird ausgeschaltet
 Timed out	Zeit abgelaufen
 Auth key	Auth-Key
 Name on your tailnet	Name in deinem Tailnet
-A key made in the Tailscale admin console (Settings › Keys). It is not kept on the Pocket.	Schlüssel aus der Tailscale-Adminkonsole (Settings › Keys). Der Pocket speichert ihn nicht.
+A key made in the Tailscale admin console (under Keys). It is not kept on the Pocket.	Schlüssel aus der Tailscale-Adminkonsole (unter Keys). Der Pocket speichert ihn nicht.
 Letters, digits and hyphens. The Pocket will answer to this name on your other devices.	Buchstaben, Ziffern, Bindestriche. Unter diesem Namen ist der Pocket erreichbar.
 This system image has no Tailscale.	Dieses System-Image hat kein Tailscale.
 Select Sign in: a QR code appears. Scan it with your phone and approve this Pocket there.	Wähl Anmelden: Ein QR-Code erscheint. Scanne ihn mit dem Handy und bestätige dort diesen Pocket.
@@ -550,7 +548,7 @@ Running..	Läuft..
 Running...	Läuft...
 Running…	Läuft …
 Running	Läuft
-Tools	Tools
+Tools	Werkzeuge
 Start {t}?	{t} starten?
 Press A again to start it. B keeps it closed.	Noch einmal A startet es. B lässt es zu.
 It asks once more before it starts.	Vor dem Start wird noch einmal gefragt.
@@ -653,7 +651,6 @@ Samples are taken once a minute.	Gemessen wird einmal pro Minute.
 {t} use about {n}% an hour	{t}: etwa {n} % pro Stunde
 
 # --- pocket-core notes over the game
-Pixel Path is off under Settings › Curator	Pixel Path ist unter Einstellungen › Curator aus
 Cheats off	Cheats aus
 1 cheat on	1 Cheat an
 {n} cheats on	{n} Cheats an
@@ -700,7 +697,6 @@ Couldn't load {t}: {s}	{t} ließ sich nicht laden: {s}
 Slot {n}	Platz {n}
 Slot {n}{s}	Platz {n}{s}
 
-# --- Bluetooth
 not available	nicht verfügbar
 The device is out of range. Put it in pairing mode, search again, then pick it.	Das Gerät ist außer Reichweite. Versetz es in den Kopplungsmodus, such noch einmal und wähl es dann.
 No default controller	Kein Standard-Controller
@@ -755,6 +751,7 @@ related	verwandt
 a model	ein Modell
 {s} · designed by {s2}	{s} · entworfen von {s2}
 {s} · made by {s2}	{s} · hergestellt von {s2}
+{s} · built on {s2}	{s} · auf {s2}
 Games	Spiele
 Credits	Credits
 Sources	Quellen
@@ -1184,7 +1181,6 @@ This controller	Dieser Controller
 # --- Feature cards (first start, Settings → Tour, New in this version)
 One card per feature, with a preview: on, off, or later.	Eine Karte pro Funktion, mit Vorschau: an, aus oder später.
 A Curator row on Home: combine filters, and keep one as a shelf that updates itself.	Eine Curator-Zeile auf Home: Filter kombinieren und einen als Regal behalten, das sich selbst aktualisiert.
-Settings › Curator	Einstellungen › Curator
 More like this, on every game card: games you own that play alike, each with a reason.	Mehr davon, auf jeder Spielkarte: deine Spiele, die sich ähnlich spielen, jedes mit Begründung.
 When you quit a game, one line on the shelf suggests a game of yours like it. A plays it; nothing starts by itself.	Beendest du ein Spiel, schlägt eine Zeile im Regal ein ähnliches Spiel von dir vor. A spielt es, nichts startet von selbst.
 Echoes beyond this device	Echoes über das Gerät hinaus
@@ -1195,24 +1191,18 @@ One quiet line beside the picture: the emulator, the scale, the frame rate, the 
 Settings › Playing › Over the game	Einstellungen › Spielen › Anzeige im Spiel
 Screen frames on every console	Bildschirmrahmen auf jeder Konsole
 Auto frames the picture on the home consoles too, not only on the handhelds.	Auto rahmt das Bild auch auf den Heimkonsolen ein, nicht nur auf den Handhelds.
-Settings › Screen frames	Einstellungen › Bildschirmrahmen
 Straight back into your game	Direkt zurück in dein Spiel
 When the Pocket starts, the game you played last continues where you left off.	Beim Start des Pocket geht das zuletzt gespielte Spiel dort weiter, wo du es verlassen hast.
-Settings › On start	Einstellungen › Beim Start
 Remember where I quit	Stelle beim Beenden merken
 On: Quit keeps the moment and the next start continues there. Off: only the game's own saves stay.	An: Beenden behält den Moment und der nächste Start macht dort weiter. Aus: Nur die eigenen Spielspeicher bleiben.
-Settings › Remember where I quit	Einstellungen › Stelle beim Beenden merken
 Motion	Bewegung
 Selections glide and pages slide in. Off shows every press at once, without animation.	Auswahlen gleiten, Seiten schieben sich herein. Aus zeigt jeden Druck sofort, ohne Animation.
-Settings › Look › Motion (R1)	Einstellungen › Ansicht › Bewegung (R1)
+Settings › Sound & feel › Motion	Einstellungen › Klang & Gefühl › Bewegung
 Menu sounds	Menütöne
 Soft clicks as you move through the menus. Never in games.	Leise Klicks beim Bewegen durch die Menüs. Nie in Spielen.
-Settings › Sounds	Einstellungen › Töne
 A very short tick in your hands as the selection moves.	Ein sehr kurzes Tippen in deinen Händen, wenn die Auswahl wandert.
-Settings › Haptics	Einstellungen › Haptik
 Stick lights	Stick-Lichter
 The lights around the sticks glow in one calm colour. Colour and brightness in Settings.	Die Lichter um die Sticks leuchten in einer ruhigen Farbe. Farbe und Helligkeit in den Einstellungen.
-Settings › LEDs	Einstellungen › LEDs
 Search and the letter jump	Suche und Buchstabensprung
 Search is the row above Continue. L2 and R2 jump through any list by first letter.	Die Suche ist die Zeile über Fortsetzen. L2 und R2 springen in jeder Liste nach Anfangsbuchstaben.
 Home: one press up. L2 / R2 in any list	Home: einmal nach oben. L2 / R2 in jeder Liste
@@ -1226,19 +1216,14 @@ Pause menu › Options › Extras	Pausenmenü › Optionen › Extras
 Which emulator plays a console, or a single game, and RetroArch's own picture settings.	Welcher Emulator eine Konsole oder ein einzelnes Spiel spielt, und die Bildeinstellungen von RetroArch.
 START on a game card or a console page	START auf einer Spielkarte oder Konsolenseite
 Sign in once and earn achievements in the games on pocket-ui's own host.	Einmal anmelden und Erfolge in den Spielen auf dem eigenen Host von pocket-ui sammeln.
-Settings › RetroAchievements	Einstellungen › RetroAchievements
 Keeps saves and save states in step with your other devices, with Syncthing.	Hält Spielspeicher und Spielstände mit deinen anderen Geräten gleich, mit Syncthing.
-Settings › Sync	Einstellungen › Sync
 Reach the Pocket from your phone or computer, even away from home.	Erreich den Pocket von Handy oder Computer, auch unterwegs.
-Settings › Tailscale	Einstellungen › Tailscale
 The emulators' own menus, gamepad test and calibration, a file manager, a terminal.	Die eigenen Menüs der Emulatoren, Gamepad-Test und Kalibrierung, ein Dateimanager, ein Terminal.
-Settings › Tools	Einstellungen › Tools
+The little touches, each on its own: real cases, the memory card, stickers, printed discs and more.	Die kleinen Extras, jedes für sich: echte Hüllen, die Speicherkarte, Sticker, bedruckte Discs und mehr.
 How fast games run, and a fan that speeds up and slows down gently instead of switching on and off.	Wie schnell Spiele laufen, und ein Lüfter, der sanft schneller und langsamer wird, statt an- und auszugehen.
-Settings › Performance & fan	Einstellungen › Leistung & Lüfter
 Later	Später
 New in pocket-ui {s}	Neu in pocket-ui {s}
 Put off	Verschoben
-Asked again in Settings › Tour. Changed any time in	Wird in Einstellungen › Tour erneut gefragt. Jederzeit änderbar in
 Changed any time in	Jederzeit änderbar in
 Nothing to switch. Find it here:	Nichts zu schalten. Hier findest du es:
 Skip the rest	Rest überspringen
@@ -1273,7 +1258,6 @@ Suggestions, play statistics, picture details and frames, all on.	Vorschläge, S
 Take this	Übernehmen
 Skip	Überspringen
 
-# --- Game card
 Note	Notiz
 Set	Setzen
 This one	Dieses
@@ -1330,7 +1314,6 @@ No save states for TIC-80: games keep their own saves	Keine Spielstände für TI
 {s} needs a BIOS file in roms/bios: {s2} or {s3}	{s} braucht eine BIOS-Datei in roms/bios: {s2} oder {s3}
 {s} needs a BIOS file in roms/bios: {s2}	{s} braucht eine BIOS-Datei in roms/bios: {s2}
 
-# --- LEDs
 Warm	Warm
 Teal	Petrol
 Green	Grün
@@ -1433,10 +1416,10 @@ After this long asleep on battery, the Pocket saves the game and switches off.	N
 The Pocket stays asleep until you wake it.	Der Pocket bleibt im Ruhezustand, bis du ihn weckst.
 Switched off after {n} h asleep to save the battery.	Nach {n} h im Ruhezustand ausgeschaltet, um den Akku zu schonen.
 Sleep & power	Ruhezustand & Ein/Aus
-When the screen goes off and the Pocket sleeps, and the power button.	Wann der Bildschirm ausgeht und der Pocket in den Ruhezustand geht, und die Ein/Aus-Taste.
+When the screen goes off and the device sleeps, and the power button.	Wann der Bildschirm ausgeht und das Gerät in den Ruhezustand geht, und die Ein/Aus-Taste.
 Time, sleep & power, updates, storage, backup & reset, Tour, manual, about.	Zeit, Ruhezustand, Updates, Speicherplatz, Sichern, Tour, Handbuch, Über.
 Battery history, time left, what each game uses.	Akkuverlauf, Restzeit, was jedes Spiel verbraucht.
-When the screen goes off and the Pocket sleeps: Settings › System › Sleep & power.	Wann der Bildschirm ausgeht und der Pocket in den Ruhezustand geht: Einstellungen › System › Ruhezustand & Ein/Aus.
+When the screen goes off and the device sleeps: Settings › System › Sleep & power.	Wann der Bildschirm ausgeht und das Gerät in den Ruhezustand geht: Einstellungen › System › Ruhezustand & Ein/Aus.
 Screen off after	Bildschirm aus nach
 Power button	Ein/Aus-Taste
 Short press	Kurz drücken
@@ -1466,7 +1449,6 @@ Sleep, Restart, Power off and Restart pocket-ui.	Ruhezustand, Neu starten, Aussc
 
 # --- Settings → Manual
 {n} of {m}   {s}	{n} von {m}   {s}
-{n} of {m}	{n} von {m}
 Previous	Vorige
 
 # --- Settings list
@@ -1520,7 +1502,7 @@ Save pocket-ui's settings to the SD card, restore them, or start afresh.	Einstel
 Every feature on a card, with a picture: switch it on or off.	Jede Funktion als Karte mit Bild: an oder aus.
 Manual	Handbuch
 The user guide, on the device.	Die Anleitung auf dem Gerät, auf Englisch.
-About	Über
+About	Info
 Saves a file for a bug report, to attach on GitHub.	Speichert eine Datei für eine Fehlermeldung, die du bei GitHub anhängst.
 Version, storage and network.	Version, Speicher und Netzwerk.
 
@@ -1667,7 +1649,6 @@ High	Hoch
 Balanced leaves the system's own setting.	Ausgewogen lässt die Einstellung des Systems.
 Battery limits the CPU to half speed: enough for Game Boy and NES.	Akku begrenzt die CPU auf halbes Tempo: genug für Game Boy und NES.
 Performance keeps the CPU at full speed for demanding games.	Leistung hält die CPU für anspruchsvolle Spiele auf vollem Tempo.
-What games use unless you save one here: Settings › Performance & fan.	Was Spiele nutzen, wenn du hier nichts speicherst: Einstellungen › Leistung & Lüfter.
 Auto keeps the system's cooling profile.	Auto behält das Kühlprofil des Systems.
 Very quiet: fan only when it gets warm. Quiet starts it later, Cool earlier.	Sehr leise: Lüfter nur, wenn es warm wird. Leise startet ihn später, Kühl früher.
 The system's setting comes back when you quit.	Beim Beenden kommt die Einstellung des Systems zurück.
@@ -1774,7 +1755,6 @@ Muted	Stumm
 Achievement unlocked	Erfolg freigeschaltet
 Achievement unlocked · 1 point	Erfolg freigeschaltet · 1 Punkt
 
-# --- Performance & fan
 {n} rpm, {m}%	{n} U/min, {m} %
 {n} rpm	{n} U/min
 full speed, hot	volles Tempo, heiß
@@ -1798,7 +1778,6 @@ Very quiet: fan only when it gets warm ({n} °C); the Pocket feels a bit warmer.
 Quiet: the fan starts slowly at {n} °C and stays slow. The Pocket gets a little warmer.	Leise: Der Lüfter startet sacht bei {n} °C und bleibt langsam. Der Pocket wird etwas wärmer.
 Cool: the fan starts at {n} °C and turns faster. Cooler to hold, and you hear it more.	Kühl: Der Lüfter startet bei {n} °C und dreht schneller. Kühler in der Hand, und du hörst ihn mehr.
 Auto: follows the system's cooling profile, as a smooth curve.	Auto: folgt dem Kühlprofil des Systems, als sanfte Kurve.
-Very quiet: fan only when it gets warm ({n} °C); the Pocket feels a bit warmer.	Sehr leise: Lüfter nur, wenn es warm wird ({n} °C); der Pocket fühlt sich etwas wärmer an.
 Quiet: the fan starts at {n} °C. The Pocket gets warmer, the fan stays quiet longer.	Leise: Der Lüfter startet bei {n} °C. Der Pocket wird wärmer, der Lüfter bleibt länger leise.
 Cool: the fan starts at {n} °C and spins faster. Cooler to hold, and you hear it more.	Kühl: Der Lüfter startet bei {n} °C und dreht schneller. Kühler in der Hand, und du hörst ihn mehr.
 Auto: the system's own cooling.	Auto: die eigene Kühlung des Systems.
@@ -1914,7 +1893,6 @@ square pixels	quadratische Pixel
 Every pixel is square, as on the console's screen.	Jedes Pixel ist quadratisch, wie auf dem Bildschirm der Konsole.
 fills the screen	füllt den Bildschirm
 
-# --- Players
 {s} connected — Player {n}	{s} verbunden — Spieler {n}
 {s} connected — all four players are taken	{s} verbunden — alle vier Spieler sind vergeben
 {s} disconnected — Player {n}	{s} getrennt — Spieler {n}
@@ -2157,7 +2135,6 @@ You're all set	Alles bereit
 Games show up on the shelf once they're copied.	Spiele erscheinen im Regal, sobald sie kopiert sind.
 Your game is on the shelf.	Dein Spiel ist im Regal.
 Your {n} games are on the shelf.	Deine {n} Spiele sind im Regal.
-Settings › Tour shows every feature again, one card each.	Einstellungen › Tour zeigt jede Funktion wieder, eine Karte pro Funktion.
 Go to your games	Zu deinen Spielen
 Optional. You can get these any time later.	Freiwillig. Du kannst sie jederzeit später holen.
 Connect to Wi-Fi first to use these.	Verbinde dich zuerst mit dem WLAN, um sie zu nutzen.
@@ -2200,7 +2177,6 @@ Already set on this Pocket.	Auf diesem Pocket schon eingestellt.
 A guess from your Wi-Fi region: {s}.	Geschätzt aus deiner WLAN-Region: {s}.
 Couldn't tell where you are. Press X to choose.	Dein Ort ließ sich nicht erkennen. X zum Wählen.
 The clock sets itself from the internet while you're online.	Die Uhr stellt sich selbst über das Internet, solange du online bist.
-Settings › Time has the rest.	Den Rest findest du unter Einstellungen › Uhrzeit.
 Keep UTC	UTC behalten
 Looks right	Passt
 Choose your region, or search for your city.	Wähl deine Region oder such deine Stadt.
@@ -2383,7 +2359,6 @@ Resume	Fortsetzen
 Switch game	Spiel wechseln
 Recently played	Zuletzt gespielt
 No recent games on the shelf	Keine zuletzt gespielten Spiele im Regal
-Games from systems taken off the shelf stay out of this list (Settings › Look).	Spiele von Systemen, die nicht im Regal stehen, fehlen in dieser Liste (Einstellungen › Ansicht).
 Nothing played yet	Noch nichts gespielt
 The games you play show up here, ready to pick up where you left off.	Deine gespielten Spiele erscheinen hier, bereit zum Weitermachen.
 Saving {s}…	Speichere {s} …
@@ -2426,7 +2401,6 @@ Sync after playing	Nach dem Spielen synchronisieren
 Unknown time zone {s}.	Unbekannte Zeitzone {s}.
 The system didn't take the new time zone.	Das System hat die neue Zeitzone nicht übernommen.
 
-# --- Tailscale
 Not installed	Nicht installiert
 Logged out	Abgemeldet
 {s} failed	{s} fehlgeschlagen
@@ -2435,7 +2409,6 @@ tailscale did not answer	tailscale hat nicht geantwortet
 Cancelled	Abgebrochen
 Use letters, digits and hyphens	Nur Buchstaben, Ziffern und Bindestriche
 
-# --- Tailscale
 Stopped	Gestoppt
 A name needs letters or digits	Ein Name braucht Buchstaben oder Ziffern
 Setting the name	Name wird gesetzt
@@ -2457,7 +2430,6 @@ Atlantic	Atlantik
 Indian	Indischer Ozean
 Pacific	Pazifik
 
-# --- Tools
 RetroArch's own menu: cores, shaders, input and its settings, for the games RetroArch runs.	Das eigene Menü von RetroArch: Cores, Shader, Eingabe und Einstellungen, für die Spiele, die RetroArch ausführt.
 RetroArch (32-bit)	RetroArch (32 Bit)
 The 32-bit RetroArch's menu, for the few cores that only exist as 32-bit.	Das Menü des 32-Bit-RetroArch, für die wenigen Cores, die es nur in 32 Bit gibt.
@@ -2602,7 +2574,6 @@ played {t}, {t2} in total	gespielt {t}, {t2} insgesamt
 {t}, {n} sessions	{t}, {n} Sitzungen
 {t}, 1 session	{t}, 1 Sitzung
 
-# --- Echoes reasons
 like {s}, which you finished	wie {s} (durchgespielt)
 like {s}, which you're playing	wie {s}, das du gerade spielst
 like {s}, which you starred	wie {s}, das du mit Stern markiert hast
@@ -2948,10 +2919,10 @@ No PC paired	Kein PC gekoppelt
 1 PC	1 PC
 {n} PCs	{n} PCs
 Power…	Ein/Aus …
-Asked again in Settings › System › Tour. Changed any time in	Erneut gefragt unter Einstellungen › System › Tour. Jederzeit änderbar unter
+Asked again in Settings › Help & tools › Tour. Changed any time in	Erneut gefragt unter Einstellungen › Hilfe & Werkzeuge › Tour. Jederzeit änderbar unter
 Settings › System › Time has the rest.	Den Rest gibt es unter Einstellungen › System › Uhrzeit.
-Games from systems taken off the shelf stay out of this list (Settings › Look & feel › Look).	Spiele von Systemen, die nicht im Regal stehen, fehlen in dieser Liste (Einstellungen › Aussehen › Ansicht).
-{s} ended at once with an error. The log has the details (Settings › System › About shows where it is).	{s} endete sofort mit einem Fehler. Details stehen im Log (wo es liegt: Einstellungen › System › Info).
+Games from systems taken off the shelf stay out of this list (Settings › Look › Systems on the shelf).	Spiele von Systemen, die nicht im Regal stehen, fehlen in dieser Liste (Einstellungen › Aussehen › Systeme im Regal).
+{s} ended at once with an error. The log has the details (Settings › Help & tools › About shows where it is).	{s} endete sofort mit einem Fehler. Details stehen im Log (wo es liegt: Einstellungen › Hilfe & Werkzeuge › Info).
 File sharing is off. Turn it on in Settings › Games › Add games (X).	Die Dateifreigabe ist aus. Schalte sie unter Einstellungen › Spiele › Spiele hinzufügen ein (X).
 Connect to Wi-Fi first (Settings › Connections › Wi-Fi).	Verbinde dich zuerst mit dem WLAN (Einstellungen › Verbindungen › WLAN).
 RetroAchievements didn't accept the sign-in. Sign in again under Settings › Playing › RetroAchievements.	RetroAchievements hat die Anmeldung abgelehnt. Melde dich unter Einstellungen › Spielen › RetroAchievements neu an.
@@ -3287,7 +3258,6 @@ in March	im März
 {n} Apr	{n}. Apr.
 in April	im April
 {n} May	{n}. Mai
-{n} May	{n}. Mai
 in May	im Mai
 {n} June	{n}. Juni
 {n} Jun	{n}. Juni
@@ -3380,7 +3350,7 @@ Needs Smooth fan (Settings › Playing › Performance & fan). Without it, ports
 There: Games: performance {t}, Games: fan {t2}.	Dort: Spiele: Leistung {t}, Spiele: Lüfter {t2}.
 Battery: about half speed, enough for Game Boy and NES; the battery lasts longer.	Akku: etwa halbes Tempo, genug für Game Boy und NES; der Akku hält länger.
 Max: full speed all the time. Warmer, and uses more battery.	Max: immer volles Tempo. Wärmer, und mehr Akku.
-Settings › System › Tour shows every feature again, one card each.	Einstellungen › System › Tour zeigt jede Funktion noch einmal, eine Karte pro Funktion.
+Settings › Help & tools › Tour shows every feature again, one card each.	Einstellungen › Hilfe & Werkzeuge › Tour zeigt jede Funktion noch einmal, eine Karte pro Funktion.
 Most played	Am meisten gespielt
 {s} · time not recorded	{s} · Zeit nicht erfasst
 {t}, time not recorded	{t}, Zeit nicht erfasst
@@ -3790,8 +3760,8 @@ The SD card can't be written to right now. Restart the Pocket and try again.	Auf
 Something went wrong while writing it ({s}). Try again after a restart.	Beim Schreiben ging etwas schief ({s}). Versuch es nach einem Neustart noch einmal.
 Hide	Ausblenden
 {s} (experimental)	{s} (experimentell)
-pocket-ui hasn't been tested on a {s} yet. Most things should work; if something doesn't, Settings › System › About › Report a problem.	pocket-ui wurde auf einem {s} noch nicht getestet. Das meiste sollte laufen; wenn etwas nicht geht: Einstellungen › System › Über › Problem melden.
-pocket-ui hasn't been tested on an {s} yet. Most things should work; if something doesn't, Settings › System › About › Report a problem.	pocket-ui wurde auf einem {s} noch nicht getestet. Das meiste sollte laufen; wenn etwas nicht geht: Einstellungen › System › Über › Problem melden.
+pocket-ui hasn't been tested on a {s} yet. Most things should work; if something doesn't, Settings › Help & tools › Report a problem.	pocket-ui wurde auf einem {s} noch nicht getestet. Das meiste sollte laufen; wenn etwas nicht geht: Einstellungen › Hilfe & Werkzeuge › Problem melden.
+pocket-ui hasn't been tested on an {s} yet. Most things should work; if something doesn't, Settings › Help & tools › Report a problem.	pocket-ui wurde auf einem {s} noch nicht getestet. Das meiste sollte laufen; wenn etwas nicht geht: Einstellungen › Hilfe & Werkzeuge › Problem melden.
 
 # --- The boot screen (pocket-splash, src/splash.rs; docs/BOOT-SPLASH.md)
 Getting ready for the first start…	Der erste Start wird vorbereitet …
@@ -3845,6 +3815,12 @@ Very quiet (default)	Sehr leise (Standard)
 Quiet (default)	Leise (Standard)
 Cool (default)	Kühl (Standard)
 Favourite	Favorit
+{s} didn't start. {s2} isn't installed: install it from Discover (Flatpak).	{s} wurde nicht gestartet. {s2} ist nicht installiert: Installiere es über Discover (Flatpak).
+Quit to Steam	Zurück zu Steam
+Quit pocket-ui?	pocket-ui beenden?
+Back to Steam. Your games, saves and settings stay as they are.	Zurück zu Steam. Deine Spiele, Spielstände und Einstellungen bleiben, wie sie sind.
+A few short steps: a look you like, how you like to play, your games.	Ein paar kurze Schritte: ein Look, der dir gefällt, wie du gern spielst, deine Spiele.
+{s} didn't start. The {s2} core isn't installed: get it in RetroArch (Flatpak) > Online Updater > Core Downloader, or run fetch-cores.sh.	{s} wurde nicht gestartet. Der Core {s2} ist nicht installiert: Hol ihn in RetroArch (Flatpak) unter Online-Updater > Core-Downloader oder starte fetch-cores.sh.
 Game of the year	Spiel des Jahres
 Game of the year {n}	Spiel des Jahres {n}
 100 %	100 %
@@ -3857,8 +3833,90 @@ The file is empty (0 bytes). Copy the game to the card again.	Die Datei ist leer
 Step {n} of {m}	Schritt {n} von {m}
 Connected to {s}. Press START for the next step.	Verbunden mit {s}. Mit START geht es weiter.
 Connected to {s}. Press B to go back.	Verbunden mit {s}. Mit B geht es zurück.
+
+# Android launcher and in-app player
+Choose your ROM folder	ROM-Ordner auswählen
+Show games	Spiele anzeigen
+Clear filters	Filter zurücksetzen
+X Info	X Info
+A Play	A Spielen
+Save · Slot {n}	Speichern · Slot {n}
+Load · Slot {n}	Laden · Slot {n}
+A Choose · B Continue · L / R Slot	A Wählen · B Fortsetzen · L / R Slot
+
+A Choose	A Wählen
+START Done	START Fertig
+
+Library	Spiele
+UI sounds	UI-Töne
+No pictures yet. Take one from the game's pause menu.	Noch keine Bilder. Nimm eines im Pausenmenü des Spiels auf.
+Game Boy core	Game-Boy-Core
+Core framebuffer exceeds 4096 pixels	Das Spielbild des Cores ist größer als 4096 Pixel.
+Cannot find the Activity EGL config	Die EGL-Konfiguration der App ist nicht verfügbar.
+Cannot create the core GLES 3 context	Der GLES-3-Kontext für das Spiel konnte nicht erstellt werden.
+Cannot activate core EGL context	Der EGL-Kontext für das Spiel konnte nicht aktiviert werden.
+Incomplete core framebuffer	Der Bildpuffer des Cores ist unvollständig.
+Welcome to pocket-ui	Willkommen bei pocket-ui
+Where your games are	Wo deine Spiele sind
+Your look	Deine Ansicht
+Covers and pictures	Cover und Bilder
+Your controls	Deine Steuerung
+Your games, a shelf of your own, and a player built in. Let's make it yours.	Deine Spiele, dein eigenes Regal und ein eingebauter Player. Richte pocket-ui nach deinem Geschmack ein.
+Choose the language for menus and help. You can change it in Settings.	Wähle die Sprache für Menüs und Hilfe. Du kannst sie später in den Einstellungen ändern.
+Choose your ROM folders. Android remembers access; your game files stay where they are.	Wähle deine ROM-Ordner. Android merkt sich den Zugriff; deine Spiele bleiben an ihrem bisherigen Ort.
+Pick a look. Cozy takes time to open the case; Quick gets straight into the game.	Wähle eine Ansicht. Gemütlich lässt Zeit zum Öffnen der Hülle; Schnell bringt dich direkt ins Spiel.
+Covers and pictures download on unmetered Wi-Fi as you browse. Your choice stays in Settings.	Beim Stöbern werden Cover und Bilder über WLAN ohne Datenlimit geladen. Du kannst diese Wahl in den Einstellungen ändern.
+Tap a game to select it, tap again to play. Swipe along the shelf. Back goes one step back.	Tippe auf ein Spiel, um es auszuwählen, und noch einmal zum Spielen. Wische am Regal entlang. Zurück führt einen Schritt zurück.
+Everything is ready. You can change these choices in Settings and add more game folders later.	Alles ist bereit. Du kannst deine Auswahl in den Einstellungen ändern und später weitere Spieleordner hinzufügen.
+No games found. Choose another folder or skip for now.	Keine Spiele gefunden. Wähle einen anderen Ordner oder überspringe diesen Schritt vorerst.
+Found {n} games on {m} systems	{n} Spiele für {m} Systeme gefunden
+No folder chosen yet. You can add games later.	Noch kein Ordner gewählt. Du kannst später Spiele hinzufügen.
+Controller detected	Controller erkannt
+Controller: D-pad moves, A chooses, B goes back, X opens the case, START opens Settings.	Controller: Steuerkreuz zum Bewegen, A zum Auswählen, B für Zurück, X zum Öffnen der Hülle, START für die Einstellungen.
+Wi-Fi ready	WLAN bereit
+Downloads wait for unmetered Wi-Fi.	Downloads warten auf WLAN ohne Datenlimit.
+Download on Wi-Fi	Über WLAN herunterladen
+Choose another folder	Anderen Ordner wählen
+First start	Erste Einrichtung
+Reading library...	Bibliothek wird gelesen…
+Downloads are off or waiting for Wi-Fi	Downloads sind ausgeschaltet oder warten auf WLAN
+Could not read the game folders. Choose your folder again.	Die Spieleordner konnten nicht gelesen werden. Wähle deinen Ordner erneut.
+Folder unavailable	Ordner nicht verfügbar
+The folder did not grant read access	Der Ordner hat keinen Lesezugriff erlaubt
+Could not save the folder selection	Die Ordnerauswahl konnte nicht gespeichert werden
+Touch	Touch-Steuerung
+Search games	Spiele suchen
+Find a game	Ein Spiel finden
+Type a few letters of its name.	Tippe ein paar Buchstaben seines Namens.
+Try fewer letters.	Versuch es mit weniger Buchstaben.
+No favourites yet	Noch keine Favoriten
+Press Y on a game to add it.	Drück Y bei einem Spiel, um es hinzuzufügen.
+Open a game's card and tap Favourite.	Öffne die Karte eines Spiels und tippe auf „Favorit“.
+No games match	Keine passenden Spiele
+Clear a filter in Curator.	Nimm im Curator einen Filter heraus.
+No games found	Keine Spiele gefunden
+Choose another folder.	Wähle einen anderen Ordner.
+Choose the folder with your games. Android remembers access; your game files stay where they are.	Wähle den Ordner mit deinen Spielen. Android merkt sich den Zugriff; deine Spiele bleiben an ihrem bisherigen Ort.
+Info	Info
+Tabs	Reiter
+Show 1 game	1 Spiel anzeigen
+Show {n} games	{n} Spiele anzeigen
+All	Alle
+Loaded an earlier moment	Früherer Moment geladen
+Scaling	Skalierung
+Fit / aspect	Einpassen / Seitenverhältnis
+Stretch / fullscreen	Strecken / Vollbild
+Picture effect	Bildeffekt
+Save settings for	Einstellungen speichern für
+This system	Dieses System
+Smooth	Weich
+Console	Konsole
+CRT TV	Röhren-TV
+after a restart	nach einem Neustart
+A Choose · ‹ › Change · B Back	A Wählen · ‹ › Ändern · B Zurück
+Advanced (this emulator)	Erweitert (dieser Emulator)
 Cozy extras	Gemütliche Extras
-Case sounds, the old TV, stickers, printed discs: each on or off.	Hüllen-Geräusche, alter Fernseher, Sticker, bedruckte Discs: jedes einzeln an oder aus.
+The cabinet's TV, stickers, printed discs and more: each on or off.	Fernseher der Vitrine, Sticker, bedruckte Discs und mehr: jedes einzeln an oder aus.
 Case sounds	Hüllen-Geräusche
 Old-TV switch-on	Alter-Fernseher-Effekt
 TV on the cabinet	Fernseher auf der Vitrine
@@ -3868,8 +3926,8 @@ Printed discs	Bedruckte Discs
 Game connections	Spiel-Verbindungen
 Light by time of day	Licht nach Tageszeit
 Decorations	Dekoration
-Idle slideshow	Diashow im Leerlauf
-Playful animations	Verspielte Animationen
+Slideshow before screen off	Diashow vor dem Abschalten
+Playful cases	Verspielte Hüllen
 Cases click open, cartridges and discs go in with a sound. Menu sounds stay as they are.	Hüllen klicken auf, Module und Discs rasten hörbar ein. Die Menü-Töne bleiben, wie sie sind.
 The game's picture comes on like an old TV when it starts.	Das Bild des Spiels geht beim Start an wie bei einem alten Fernseher.
 A small old TV on top of the cabinet shows the selected game.	Ein kleiner alter Fernseher oben auf der Vitrine zeigt das gewählte Spiel.
@@ -3884,14 +3942,12 @@ When you put the Pocket down for a while, your games show one after another.	Leg
 Cases spring and wiggle, discs drop into trays, cartridges click in, spines lean as you scroll.	Hüllen federn und wackeln, Discs fallen in die Lade, Module rasten ein, Rücken neigen sich beim Blättern.
 Shelf and Cabinet looks only.	Nur in den Ansichten Regal und Vitrine.
 Cabinet look only.	Nur in der Ansicht Vitrine.
-Silent now: Sounds is off (Look & feel › Sounds).	Gerade stumm: Töne sind aus (Aussehen › Töne).
-Not shown now: it needs Animations on Cozy and Motion on Full (Look & feel › Look).	Gerade nicht zu sehen: Dafür müssen Animationen auf Gemütlich und Bewegung auf Voll stehen (Aussehen › Ansicht).
-Not shown now: needs Motion on Full (Look & feel › Look).	Gerade nicht zu sehen: braucht Bewegung auf Voll (Aussehen › Ansicht).
-Soft clicks in menus, not in games. Case sounds need them on.	Klicks nur in Menüs. Hüllen-Geräusche brauchen sie.
+Silent now: Sounds is off (Sound & feel › Sounds).	Gerade stumm: Töne sind aus (Klang & Gefühl › Töne).
+Not shown now: it needs Animations on Cozy and Motion on Full (Sound & feel).	Gerade nicht zu sehen: Dafür müssen Animationen auf Gemütlich und Bewegung auf Voll stehen (Klang & Gefühl).
+Not shown now: needs Motion on Full (Sound & feel).	Gerade nicht zu sehen: braucht Bewegung auf Voll (Klang & Gefühl).
+A slideshow of your games when the Deck sits idle.	Eine Diashow deiner Spiele, wenn das Deck ruht.
 
-# Settings → Look & feel → Look → Theme (src/theme_page.rs, src/button_prompts.rs)
-Theme	Design
-How every screen looks: colours, type and the buttons in the hints.	Wie jede Seite aussieht: Farben, Schrift und die Tasten in den Hinweisen.
+# Settings → Look → Colours, Font; Playing → Buttons (src/button_prompts.rs)
 Button symbols	Tastensymbole
 The hints show A, B, X and Y as plain letters.	Die Hinweise zeigen A, B, X und Y als schlichte Buchstaben.
 The hints show A, B, X and Y on green, red, blue and yellow.	Die Hinweise zeigen A, B, X und Y auf Grün, Rot, Blau und Gelb.
@@ -3905,3 +3961,37 @@ Grey plastic with a deep blue.	Graues Plastik mit tiefem Blau.
 Your screenshot	Dein Screenshot
 From your save	Aus deinem Spielstand
 Font	Schrift
+# Settings in seven categories (2026-10-30). The Look category's key ends with a zero-width mark.
+Look​	Aussehen
+Look, appearance, colours, font, text size, night light, systems, cozy extras.	Ansicht, Darstellung, Farben, Schrift, Schriftgröße, Nachtlicht, Systeme, gemütliche Extras.
+Sound & feel	Klang & Gefühl
+Animations, playful cases, old-TV switch-on, motion, sounds, case sounds, haptics, LEDs.	Animationen, verspielte Hüllen, Alter-Fernseher-Effekt, Bewegung, Töne, Hüllen-Geräusche, Haptik, LEDs.
+On start, quit, buttons, over the game, frames, performance, battery, achievements.	Start, Beenden, Tasten, im Spiel, Rahmen, Leistung, Akku, RetroAchievements.
+Games, starter pack, pictures, EmulationStation, screenshots, Curator, PC, Store.	Spiele, Startpaket, Bilder & Extras, EmulationStation, Screens, Curator, PC, Store.
+Language, time, sleep & power, updates, storage, backup & reset.	Sprache, Uhrzeit, Ruhezustand, Updates, Speicher, Sichern & Zurücksetzen.
+Help & tools	Hilfe & Werkzeuge
+Tour, manual, tools, report a problem, about.	Tour, Handbuch, Werkzeuge, Problem melden, Info.
+Shelf, Cabinet, Minimal, Cards or Split, with a live preview.	Regal, Schrank, Minimal, Karten oder Geteilt, mit Live-Vorschau.
+Dark, Light, or Automatic by the time of day.	Dunkel, Hell oder automatisch nach Tageszeit.
+The colours of every page. Left/right: the next set.	Die Farben jeder Seite. Links/rechts: die nächsten.
+The type of every screen: Barlow, Pixel or Rounded.	Die Schrift jeder Seite: Barlow, Pixel oder Rund.
+Which systems are on Home. Their games stay either way.	Welche Systeme auf Home stehen. Ihre Spiele bleiben so oder so.
+Full: selections glide. Reduced: only fades. Off: nothing moves.	Voll: Auswahl gleitet. Reduziert: nur Überblenden. Aus: nichts bewegt sich.
+Which button confirms, and how the buttons look in the hints.	Welche Taste bestätigt und wie die Tasten in den Hinweisen aussehen.
+Pictures & extras	Bilder & Extras
+Buttons	Tasten
+Confirm	Bestätigen
+Which button confirms in the menus. Games keep their own buttons.	Welche Taste in den Menüs bestätigt. Spiele behalten ihre eigenen Tasten.
+How the buttons look in the hints: letters, Xbox colours or PlayStation shapes.	Wie die Tasten in den Hinweisen aussehen: Buchstaben, Xbox-Farben oder PlayStation-Symbole.
+The right button confirms, the bottom one goes back.	Die rechte Taste bestätigt, die untere geht zurück.
+The bottom button confirms, the right one goes back.	Die untere Taste bestätigt, die rechte geht zurück.
+No systems with games yet. Once games are on the SD card, their systems show up here.	Noch keine Systeme mit Spielen. Sobald Spiele auf der SD-Karte sind, erscheinen ihre Systeme hier.
+# Steam Deck: the category lines without the rows SteamOS owns (app_settings_groups::DECK_LINES).
+Connect to the internet first to use these.	Verbinde dich zuerst mit dem Internet, um diese zu nutzen.
+Where games go	Wohin die Spiele kommen
+Put games in the folders on the left (EmuDeck's Emulation/roms) or on the SD card. New ones show up the next time pocket-ui starts.	Lege Spiele in die Ordner links (EmuDecks Emulation/roms) oder auf die SD-Karte. Neue erscheinen beim nächsten Start von pocket-ui.
+One folder per system in Emulation/roms. Copy games there from Desktop Mode.	Ein Ordner pro System in Emulation/roms. Kopiere die Spiele dorthin, zum Beispiel im Desktop-Modus.
+Where each system's games go.	Wohin die Spiele jedes Systems kommen.
+Cover art and game pictures.	Cover und Spielbilder.
+Nothing to rediscover yet	Noch nichts wiederzuentdecken
+Games you haven't played for a year, or played a year ago today, show up here.	Spiele, die du seit einem Jahr nicht gespielt hast oder vor genau einem Jahr gespielt hast, erscheinen hier.

@@ -9,7 +9,7 @@ visible behind the panel). Rows, top to bottom:
 |---|---|
 | **Brightness** | Left/Right change it |
 | **Volume** | Left/Right change it. Muted sound says so: "5%, muted". The small text beside it says where the sound goes: Speaker, Headphones, Bluetooth: and the device's name, USB audio or HDMI ([Where the sound goes](#where-the-sound-goes)) |
-| **Wi-Fi** | A switches it on or off, by what the radio is doing right now (not by what the row showed a moment ago). The row says **Off** when the radio is off, however that came about, and the same on Settings → Wi-Fi. If Wi-Fi is on in your settings but the system blocked the radio while starting, pocket-ui switches it on once by itself; a Wi-Fi you switched off stays off. If the switch does not work, a short line says "Couldn't turn Wi-Fi on. Try again." and the row keeps showing what the radio really does. Switching Wi-Fi off ends a remote login |
+| **Wi-Fi** | A switches it on or off, by what the radio is doing right now (not by what the row showed a moment ago). The row says **Off** when the radio is off, however that came about, and the same on Settings → Connections → Wi-Fi. If Wi-Fi is on in your settings but the system blocked the radio while starting, pocket-ui switches it on once by itself; a Wi-Fi you switched off stays off. If the switch does not work, a short line says "Couldn't turn Wi-Fi on. Try again." and the row keeps showing what the radio really does. Switching Wi-Fi off ends a remote login |
 | **Bluetooth** | A switches it on or off. It takes a few seconds. To pair a controller, see [Bluetooth](bluetooth.md) |
 | **Performance** | Left/Right: Battery, Auto, Max; A goes on to the next. What games run with |
 | **Fan** | Left/Right: Very quiet, Quiet, Auto, Cool; A goes on to the next. On the shelf the fan in the menus, over a game the fan in games |
@@ -105,6 +105,7 @@ heading **Power button**.
 | Row | Choices (default in bold) |
 |---|---|
 | **Screen off after** | Never, 30 s, 1 min, **2 min**, 5 min without a button press before the screen goes dark (light sleep). In a game the game pauses. Never: the screen stays on until you press the power button |
+| **Slideshow before screen off** | On, **Off**: your games' pictures play on the shelf before the screen goes dark (the idle slideshow below). Left/Right or A switches it |
 | **Sleep after** | Never, 1 min, **2 min**, 5 min, 15 min with the screen off by itself before the Pocket goes to sleep (deep sleep, the game saved first); a system sleep block keeps it in light sleep. Never: it stays awake with the screen dark until you press a button, which uses the battery; at 2% it still saves and switches off |
 | **Switch off after sleeping** | **Off**, 1 h, 3 h, 8 h asleep on battery before the Pocket saves the game and switches off (above) |
 | **Short press** | **Sleep**, Screen off: what a short press of the power button does |
@@ -130,4 +131,5 @@ the screenshots and save pictures you took yourself, slowly zooming, with the ga
 and battery in the corner. Press any button (or touch the screen) and you are back exactly where you were; that press
 does nothing else. It never keeps the Pocket awake: the screen still goes off after **Screen off after**, and the show
 is over with it (with Screen off after 30 s it starts at 15 s). With no pictures yet the shelf just stays. It is Off in every look until you switch it on
-under Settings → Look & feel → Cozy extras → **Idle slideshow**. Motion Reduced or Off keeps only the cross-fades.
+under Settings → System → Sleep & power → **Slideshow before screen off**. Motion Reduced or Off keeps only the cross-fades.
+On a Steam Deck, where SteamOS owns sleep and the power button, Sleep & power has this one row.

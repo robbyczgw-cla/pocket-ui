@@ -615,7 +615,7 @@ pub fn wait_for_fb<T>(deadline: Duration, poll: Duration, clock: &mut dyn Clock,
     }
 }
 
-/// Settings → Look & feel → Motion as saved (Full when unset or unreadable): Off shows a still picture without fades.
+/// Settings → Sound & feel → Motion as saved (Full when unset or unreadable): Off shows a still picture without fades.
 pub fn motion(data_dir: &std::path::Path) -> Motion {
     #[derive(serde::Deserialize, Default)]
     struct Only {

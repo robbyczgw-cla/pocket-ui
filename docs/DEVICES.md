@@ -346,7 +346,7 @@ What pocket-ui does about what is missing (`Device::has_fan`, `has_touch`, `has_
 - **Fan:** Settings › Playing › Performance & fan keeps the processor-speed row; the three fan rows read "No fan" and
   their help line says "This device has no fan." The fan curve thread, the trip profiles and every fan sysfs write are
   not started. Quick settings already hide the Fan row when the probe finds no fan.
-- **Stick lights:** the LEDs row is not in Settings (Look & feel) on models without sticks.
+- **Stick lights:** the LEDs row is not in Settings (Sound & feel) on models without sticks.
 - **Touch:** nothing to hide; no touch device means no touch events. The vdev has no touch panel for these.
 - **Tools:** the gamepad-calibration helper's `inputplumber` restart is skipped where the service file is absent (already
   so); the H700 image has no InputPlumber.

@@ -23,7 +23,7 @@ That constant is **empty** until a catalog is hosted. With no address:
   to the page (not Extras, not the web companion, not first-start Extras).
 - `store::fetch_catalog("")` answers "There is no store yet." without touching the network, so a snapshot of the
   page (`--snapshot store`) says that too.
-- Tools installed from a store earlier still show under Settings → Games → Tools; they never depended on the page.
+- Tools installed from a store earlier still show under Settings → Help & tools → Tools; they never depended on the page.
 
 Setting `store_url`, or filling `DEFAULT_URL` when the hosting is decided, brings the row back at the next start
 (`App` reads it once; `app_settings_groups::set_store_offered`). `file://` addresses count, which is how the local
@@ -73,7 +73,7 @@ verification, install and remove). The hooks in `src/main.rs` are the Settings r
 | `cores` | `file` | `/storage/cores` | see below |
 | `frames` | `tar` | `/storage/.config/pocket-ui/frames` | pocket-core reads the packs at every game start (docs/FRAMES.md) |
 | `themes` | `tar` | `/storage/.config/pocket-ui/fonts` | `title.ttf` and `body.ttf` replace Barlow; pocket-ui reloads its type right after install or remove |
-| `tools` | `file` | `<data>/tools` (whatever `dest` says) | Settings → Games → Tools lists it; the Store's Run starts it too |
+| `tools` | `file` | `<data>/tools` (whatever `dest` says) | Settings → Help & tools → Tools lists it; the Store's Run starts it too |
 
 ### Cores
 Verified in the ROCKNIX 20261001 image (SYSTEM squashfs, as unpacked for the virtual device):
@@ -117,17 +117,17 @@ A tool is a shell script. It goes to pocket-ui's own folder `<data>/tools` (`/st
 2026-10-23). A package of category `tools`, or one whose `dest` is `/storage/.config/modules` (catalogs before
 2026-10-23), is installed into `<data>/tools` whatever `dest` says (`Package::install_dir`).
 
-Tools installed by an older pocket-ui are moved over once, on a thread at start and again before Settings → Games → Tools
+Tools installed by an older pocket-ui are moved over once, on a thread at start and again before Settings → Help & tools → Tools
 lists the tools (`store::migrate_tools_in`): files still in ROCKNIX's folder move to `<data>/tools` and the inventory
 records the new places; a tool whose files ROCKNIX has deleted already is taken off `installed.json`, so the Store
 offers Install again instead of claiming it is there. The ownership check and the stage-then-swap of an update work
-on the new paths as before. `installed.json` also keeps each package's `name` and `run`, so Settings → Games → Tools can
+on the new paths as before. `installed.json` also keeps each package's `name` and `run`, so Settings → Help & tools → Tools can
 list installed tools without the catalog.
 
-With `"run": "<file>"` the Store offers Run, and Settings → Games → Tools lists the tool: pocket-ui starts
+With `"run": "<file>"` the Store offers Run, and Settings → Help & tools → Tools lists the tool: pocket-ui starts
 `sh <data>/tools/<file>` in `/tmp`, waits for it and shows the last line it printed (the last line of its errors if
 it fails). A tool has to finish by itself and can't ask anything; there is no terminal. ROCKNIX's own tools, with
-terminal and windows, are started from Settings → Games → Tools ([SYSTEM-PAGES.md](SYSTEM-PAGES.md#tools)).
+terminal and windows, are started from Settings → Help & tools → Tools ([SYSTEM-PAGES.md](SYSTEM-PAGES.md#tools)).
 
 ## Catalog format
 `catalog.json`, signed as a whole: `catalog.json.sig` next to it is the base64 Ed25519 signature of the exact
@@ -254,7 +254,7 @@ Checked on 2026-10-21 in the virtual device: install, progress, update 1.0 → 1
 the frame pack around a GBA game; Titillium switching in and out at once; the test core at 60 fps in pocket-core;
 all five error messages; nothing left after removing everything.
 Checked on 2026-10-23 in the virtual device: the tool installs into `<data>/tools` ("Goes to" says so), runs from the
-Store and from Settings → Games → Tools; an old install listed under `/storage/.config/modules` is moved over at start, one
+Store and from Settings → Help & tools → Tools; an old install listed under `/storage/.config/modules` is moved over at start, one
 whose file was gone is taken off the list.
 
 ## Status

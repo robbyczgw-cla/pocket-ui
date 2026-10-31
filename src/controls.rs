@@ -103,7 +103,7 @@ pub fn targets_from(described: &[Described]) -> Vec<Target> {
 /// `targets_from`, but a core that describes nothing gets its console's own pad where `hostsys` knows it
 /// (the Saturn's A B C X Y Z L R Start and the D-pad) instead of the standard set.
 pub fn targets_for(system: &str, described: &[Described]) -> Vec<Target> {
-    let pad = crate::hostsys::find(system).map_or(&[][..], |h| h.buttons);
+    let pad = crate::platform::console_buttons(system);
     if !described.is_empty() || pad.is_empty() {
         return targets_from(described);
     }

@@ -307,12 +307,12 @@ pub const PUSH: Duration = Duration::from_millis(160);
 /// Moving the view to another shelf or along one.
 pub const SCROLL: Duration = Duration::from_millis(220);
 /// From A to the cartridge or disc sitting in the console and its glow fading: the launch animation
-/// (Settings → Look & feel → Launch animation). The game is started at A, not at the end of it: the animation plays
+/// (Settings → Sound & feel → Launch animation). The game is started at A, not at the end of it: the animation plays
 /// while the emulator loads (150-300 ms on a Mini V2), and a game whose window comes up sooner simply covers it.
 pub const INSERT: Duration = Duration::from_millis(300);
 /// When the cartridge or disc is in: the click (`ui_sound::Sound::Insert`) and the glow come here.
 pub const IN_AT: Duration = Duration::from_millis(180);
-/// The same in Cozy (Settings > Look & feel > Animations): long enough to read, the same shape (IN_AT at 0.6).
+/// The same in Cozy (Settings > Sound & feel > Animations): long enough to read, the same shape (IN_AT at 0.6).
 pub const INSERT_COZY: Duration = Duration::from_millis(1330);
 pub const IN_AT_COZY: Duration = Duration::from_millis(800);
 
@@ -348,7 +348,7 @@ pub fn ease_in_out(t: f32) -> f32 {
     }
 }
 
-/// How far `now` is through `dur` from `at`, 0-1. Settings > Look > Motion: Reduced and Off make the cases
+/// How far `now` is through `dur` from `at`, 0-1. Settings > Sound & feel > Motion: Reduced and Off make the cases
 /// move at once (`motion::span`); the start of a game (`insert_at`) keeps its own clock.
 fn progress(at: Instant, now: Instant, dur: Duration) -> f32 {
     let dur = crate::motion::span(crate::motion::Kind::Move, dur);

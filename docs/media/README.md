@@ -18,6 +18,6 @@ these files. Run it again after a change to the screens.
 | ![Lens](lens.png) | Curator's Lens: filters with live counts |
 | ![Pause menu](pause-menu.png) | The pause menu on HOME (over a pocket-core game; a snapshot has no game picture behind it) |
 | ![Save slots](save-slots.png) | Save with the slot strip |
-| ![Settings](settings.png) | Settings, in five categories |
-| ![Cozy extras](cozy-extras.png) | Settings, Look & feel, Cozy extras: each little touch on or off |
-| ![Theme](theme.png) | The Theme page: colours, font and button symbols with a live preview |
+| ![Settings](settings.png) | Settings, in seven categories |
+| ![Cozy extras](cozy-extras.png) | Settings, Look, Cozy extras: each little touch on or off |
+| ![Look](theme.png) | Settings → Look: colours, font and more, as rows |

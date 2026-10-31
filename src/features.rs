@@ -167,7 +167,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Lens & smart shelves",
         plain: "pick games by mood and length",
         line: "A Curator row on Home: combine filters, and keep one as a shelf that updates itself.",
-        place: "Settings › Playing › Curator",
+        place: "Settings › Games › Curator",
         guide: "curator.md#lens",
         since: "0.1.0",
         switch: Some(Switch {
@@ -185,7 +185,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Echoes",
         plain: "suggestions for similar games",
         line: "More like this, on every game card: games you own that play alike, each with a reason.",
-        place: "Settings › Playing › Curator",
+        place: "Settings › Games › Curator",
         guide: "curator.md#echoes",
         since: "0.1.0",
         switch: Some(Switch {
@@ -202,7 +202,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Up next after a game",
         plain: "a next game to try after you quit",
         line: "When you quit a game, one line on the shelf suggests a game of yours like it. A plays it; nothing starts by itself.",
-        place: "Settings › Playing › Curator",
+        place: "Settings › Games › Curator",
         guide: "curator.md#up-next",
         since: "0.1.0",
         switch: Some(Switch {
@@ -220,7 +220,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Echoes beyond this device",
         plain: "suggestions from games you don't own yet",
         line: "Echoes also names a few games you don't have, from the offline game list. Names only.",
-        place: "Settings › Playing › Curator",
+        place: "Settings › Games › Curator",
         guide: "curator.md#echoes",
         since: "0.1.0",
         switch: Some(Switch {
@@ -237,7 +237,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Versions",
         plain: "other versions of a game",
         line: "A game you own on several systems shows once in mixed lists and starts the version you prefer.",
-        place: "Settings › Playing › Curator",
+        place: "Settings › Games › Curator",
         guide: "curator.md#versions",
         since: "0.1.0",
         switch: Some(Switch {
@@ -254,7 +254,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Stickers",
         plain: "your own labels for games",
         line: "Your own labels for games, such as Couch co-op. Pin one to see it on Home.",
-        place: "Settings › Playing › Curator",
+        place: "Settings › Games › Curator",
         guide: "curator.md#stickers",
         since: "0.1.0",
         switch: Some(Switch {
@@ -271,7 +271,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Play history",
         plain: "your play time by week and year",
         line: "Curator › History: what you played this week, month and year, and a calm Year in review.",
-        place: "Settings › Playing › Curator",
+        place: "Settings › Games › Curator",
         guide: "curator.md#play-history",
         since: "0.1.0",
         switch: Some(Switch {
@@ -289,7 +289,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Pixel Path",
         plain: "picture and sound details in the pause menu",
         line: "In the pause menu: how a game's picture and sound reach you, stage by stage, graded in colour.",
-        place: "Settings › Playing › Curator",
+        place: "Settings › Games › Curator",
         guide: "pause-menu.md#pixel-path",
         since: "0.1.0",
         switch: Some(Switch {
@@ -332,7 +332,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Screen frames on every console",
         plain: "frames around the picture on every console",
         line: "Auto frames the picture on the home consoles too, not only on the handhelds.",
-        place: "Settings › Look & feel › Screen frames",
+        place: "Settings › Playing › Screen frames",
         guide: "settings.md#screen-frames",
         since: "0.1.0",
         switch: Some(Switch {
@@ -381,7 +381,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Motion",
         plain: "gentle animations",
         line: "Selections glide and pages slide in. Off shows every press at once, without animation.",
-        place: "Settings › Look & feel › Look › Motion (R1)",
+        place: "Settings › Sound & feel › Motion",
         guide: "settings.md#motion",
         since: "0.1.0",
         // Off is Motion Off; Reduced counts as not Full, and a card left on Off keeps it.
@@ -399,7 +399,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Menu sounds",
         plain: "soft clicks in the menus",
         line: "Soft clicks as you move through the menus. Never in games.",
-        place: "Settings › Look & feel › Sounds",
+        place: "Settings › Sound & feel › Sounds",
         guide: "playing.md#menu-sounds",
         since: "0.1.0",
         switch: Some(Switch {
@@ -416,7 +416,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Haptics",
         plain: "a light tick as you move",
         line: "A very short tick in your hands as the selection moves.",
-        place: "Settings › Look & feel › Haptics",
+        place: "Settings › Sound & feel › Haptics",
         guide: "settings.md#open-settings",
         since: "0.1.0",
         switch: Some(Switch {
@@ -433,7 +433,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Stick lights",
         plain: "lights around the sticks",
         line: "The lights around the sticks glow in one calm colour. Colour and brightness in Settings.",
-        place: "Settings › Look & feel › LEDs",
+        place: "Settings › Sound & feel › LEDs",
         guide: "settings.md#leds",
         since: "0.1.0",
         switch: Some(Switch {
@@ -570,13 +570,27 @@ pub static FEATURES: &[Feature] = &[
         title: "Tools",
         plain: "Tools",
         line: "The emulators' own menus, gamepad test and calibration, a file manager, a terminal.",
-        place: "Settings › Games › Tools",
+        place: "Settings › Help & tools › Tools",
         guide: "extras.md#tools",
         since: "0.1.0",
         switch: None,
         simple: Pick::Keep,
         enthusiast: Pick::Keep,
         preview: pv::tools,
+        todo: None,
+    },
+    Feature {
+        id: "cozy_extras",
+        title: "Cozy extras",
+        plain: "Cozy extras",
+        line: "The little touches, each on its own: real cases, the memory card, stickers, printed discs and more.",
+        place: crate::cozy_extras::PAGE,
+        guide: "settings.md#cozy-extras",
+        since: "0.1.0",
+        switch: None,
+        simple: Pick::Keep,
+        enthusiast: Pick::Keep,
+        preview: pv::cozy_extras,
         todo: None,
     },
     Feature {
@@ -595,9 +609,15 @@ pub static FEATURES: &[Feature] = &[
     },
 ];
 
-/// The entries that are wired (not `todo`), with their index in `FEATURES`.
+/// The entries that are wired (not `todo`) and that this device has (the same list as Settings' rows,
+/// `device::hides`: no Stick lights without sticks, no Haptics, Sync, Tailscale, Tools or Performance & fan on a
+/// Steam Deck), with their index in `FEATURES`.
 pub fn available() -> impl Iterator<Item = (usize, &'static Feature)> {
-    FEATURES.iter().enumerate().filter(|(_, f)| f.todo.is_none())
+    available_on(crate::device::current().has_sticks(), crate::device::current().host_owned())
+}
+
+pub fn available_on(sticks: bool, host_owned: bool) -> impl Iterator<Item = (usize, &'static Feature)> {
+    FEATURES.iter().enumerate().filter(move |(_, f)| f.todo.is_none() && !crate::device::hides(f.id, sticks, host_owned))
 }
 
 pub fn by_id(id: &str) -> Option<usize> {
@@ -901,7 +921,7 @@ impl Cards {
             }
             y += 30;
             let later = if self.choice == LATER {
-                "Asked again in Settings › System › Tour. Changed any time in"
+                "Asked again in Settings › Help & tools › Tour. Changed any time in"
             } else {
                 "Changed any time in"
             };

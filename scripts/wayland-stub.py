@@ -72,13 +72,17 @@ def serve(conn):
 
 
 def main(path):
-    try:
-        os.unlink(path)
-    except FileNotFoundError:
-        pass
+    for stale in (path, path + ".bind"):
+        try:
+            os.unlink(stale)
+        except FileNotFoundError:
+            pass
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    srv.bind(path)
+    # Bind under a temporary name and rename once listening: the path appearing then means connect() works
+    # (a bound but not yet listening socket refuses connections, which made callers waiting for the path flaky).
+    srv.bind(path + ".bind")
     srv.listen(64)
+    os.rename(path + ".bind", path)
     while True:
         conn, _ = srv.accept()
         threading.Thread(target=serve, args=(conn,), daemon=True).start()

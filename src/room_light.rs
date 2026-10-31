@@ -1,4 +1,4 @@
-//! Light by time of day on the Shelf and the Cabinet (Settings → Look & feel → Extras): the real clock gives the
+//! Light by time of day on the Shelf and the Cabinet (Settings → Look → Cozy extras): the real clock gives the
 //! room its light. Morning cool and bright, afternoon neutral, evening warm with the lamp glowing, night dim with the
 //! lamp as the main light. Very subtle on purpose: it falls on the wood (boards, the cabinet's walls) and the page
 //! colour behind nothing else; cases get only half its dimming and no tint, covers in the showcase, titles and hints
@@ -106,6 +106,7 @@ pub fn at(minute: f32, light_page: bool) -> Light {
 
 /// The minute of the day now on this device's clock (its time zone, `POCKETUI_CLOCK_SHIFT` as Automatic appearance
 /// takes it); `POCKETUI_ROOM_TIME=HH:MM` sets it outright (snapshots, trying it without waiting).
+#[cfg(target_os = "linux")]
 pub fn minute_now() -> f32 {
     if let Some(m) = std::env::var("POCKETUI_ROOM_TIME").ok().as_deref().and_then(parse_hhmm) {
         return m;
@@ -116,6 +117,17 @@ pub fn minute_now() -> f32 {
         crate::appearance::utc_offset_now(unix)
     };
     (unix + off as i64).rem_euclid(86_400) as f32 / 60.0
+}
+
+/// The minute of the day now on the phone's clock, in the zone Android has set.
+#[cfg(target_os = "android")]
+pub fn minute_now() -> f32 {
+    let unix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+    let t = unix as libc::time_t;
+    // SAFETY: localtime_r only writes into the struct it is given.
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    let off = if unsafe { libc::localtime_r(&t, &mut tm) }.is_null() { 0 } else { tm.tm_gmtoff as i64 };
+    (unix + off).rem_euclid(86_400) as f32 / 60.0
 }
 
 /// "21:30" as minutes after midnight.

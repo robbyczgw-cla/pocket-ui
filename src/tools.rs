@@ -409,7 +409,7 @@ pub fn after_tool() {
 
 /// What to tell the user when a tool ended at once with an error.
 pub fn never_started(name: &str, secs: u64, ok: bool, stop_asked: bool) -> Option<String> {
-    (!ok && !stop_asked && secs < NEVER_STARTED_SECS).then(|| format!("{name} ended at once with an error. The log has the details (Settings › System › About shows where it is)."))
+    (!ok && !stop_asked && secs < NEVER_STARTED_SECS).then(|| format!("{name} ended at once with an error. The log has the details (Settings › Help & tools › About shows where it is)."))
 }
 
 /// A few tools with made-up paths, for `--snapshot tools` and the tests.

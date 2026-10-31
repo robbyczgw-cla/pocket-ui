@@ -1,4 +1,4 @@
-//! Settings → Look & feel → Text size: one scale for the whole type of pocket-ui's screens (docs/DESIGN.md, Type).
+//! Settings → Look → Text size: one scale for the whole type of pocket-ui's screens (docs/DESIGN.md, Type).
 //!
 //! The painters keep asking for the sizes of the design (Body 28, Title 37, ...); `Text` turns each into the size it
 //! paints, measures, fits and wraps at ([`px`]), so every string grows by the same rule and every width a layout

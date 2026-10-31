@@ -12,7 +12,7 @@ The spike that preceded this (PR #9 booted Jade Empire in RetroArch on the Mini 
   Empire's silence after its relaunch into the game, is part of the PR since `77a5871`), with the PR's own tools in an aarch64
   container (`scripts/build-hakux-core.sh`). Needs glibc 2.38 at most, Vulkan 1.3 (Turnip on the Mini V2).
 - **Attribution**: *Xbox: hakuX by rfandango (GPL-3.0), Linux/libretro port by portare-ch (PortareOS), PR #9 commit
-  2de4e9c (it includes an audio fix of ours).* In `NOTICE.md` (on the device in `/storage/pocket-ui/licences`, Settings → System → About), `docs/LICENCES.md`
+  2de4e9c (it includes an audio fix of ours).* In `NOTICE.md` (on the device in `/storage/pocket-ui/licences`, Settings → Help & tools → About), `docs/LICENCES.md`
   section 5.2, and the manual. The core is GPL-3.0-or-later and loaded by RetroArch, a separate GPL-3.0-or-later program;
   pocket-ui never loads it. Whoever ships the core ships `SOURCE.txt` (commit, link, checksums) and `licenses/`.
 

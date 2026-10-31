@@ -257,7 +257,7 @@ pub fn row_label(c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, 
 pub fn shelf_row(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, selected: bool) {
     c.rect(x, y, w, h, if selected { pal().label } else { pal().spine });
     if selected {
-        crate::game_card::lift_shadow(c, x, y + h, w, pal().t);
+        crate::game_card_model::lift_shadow(c, x, y + h, w, pal().t);
     }
 }
 
@@ -286,7 +286,7 @@ pub fn sheet(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32) {
     c.rect(x, y, w, h, pal().void);
     if pal().t > 0 {
         c.frame(x, y, w, h, 1, pal().pick(VOID, 0xd6d0c4));
-        crate::game_card::lift_shadow(c, x, y + h, w, pal().t);
+        crate::game_card_model::lift_shadow(c, x, y + h, w, pal().t);
     } else {
         c.frame(x, y, w, h, 1, pal().pill);
     }

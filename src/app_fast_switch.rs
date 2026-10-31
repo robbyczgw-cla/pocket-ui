@@ -9,7 +9,7 @@ use pocket_ui::control;
 use pocket_ui::fast_switch::{self, Game};
 use pocket_ui::quit::{self, Escalation, How};
 
-use super::{App, HOST_BIN};
+use super::{App, host_bin};
 
 /// A game that handed over and whose process is still ending.
 struct Draining {
@@ -51,7 +51,7 @@ impl App {
     pub(crate) fn quit_for_handoff(&mut self, target: &(String, String, PathBuf)) -> bool {
         let Some(run) = self.running.as_ref().filter(|_| fast_switch::enabled()) else { return false };
         let (Some(pgid), true) = (run.pgid, run.hosted()) else { return false };
-        let host = std::path::Path::new(HOST_BIN).exists();
+        let host = std::path::Path::new(host_bin()).exists();
         let route = |system: &str, path: &PathBuf| self.systems.iter().find(|s| s.name == system).map(|s| self.route(s, Some(path), host));
         let (Some((_, old_core)), Some((new_emu, new_core))) = (route(&run.system, &run.path), route(&target.0, &target.2)) else { return false };
         let old = Game { emulator: &run.emulator, core: &old_core, system: &run.system, rom: &run.path };
@@ -76,7 +76,7 @@ impl App {
     /// longer than the save. Any other core gets `quit` and is waited for, as before. False: pocket-core didn't
     /// take the command (the caller closes its window instead).
     pub(crate) fn quit_to_shelf(&mut self) -> bool {
-        let host = std::path::Path::new(HOST_BIN).exists();
+        let host = std::path::Path::new(host_bin()).exists();
         let hand_over = self.running.as_ref().filter(|r| fast_switch::enabled() && r.hosted()).and_then(|r| {
             let pgid = r.pgid?;
             let (_, core) = self.systems.iter().find(|s| s.name == r.system).map(|s| self.route(s, Some(&r.path), host))?;

@@ -109,7 +109,7 @@ impl Fader {
     pub fn value(&self, now: Instant) -> u8 {
         let to = if self.light { 255.0 } else { 0.0 };
         let Some(since) = self.since else { return to as u8 };
-        // Settings > Look > Motion: Off switches at once.
+        // Settings > Sound & feel > Motion: Off switches at once.
         let fade = crate::motion::span(crate::motion::Kind::Fade, FADE);
         if fade.is_zero() {
             return to as u8;

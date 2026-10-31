@@ -414,6 +414,8 @@ pub fn emulator_name(emulator: &str) -> String {
         "mupen64plus" => "Mupen64Plus".to_string(),
         "duckstation" => "DuckStation".to_string(),
         "scummvm" => "ScummVM".to_string(),
+        "hakux" => "hakuX".to_string(),
+        "portmaster" => "PortMaster".to_string(),
         "dosbox" | "dosbox-x" => "DOSBox".to_string(),
         "pico8" | "pico-8" => "PICO-8".to_string(),
         other => core_name(other),
@@ -776,6 +778,8 @@ mod tests {
         assert_eq!(runner_text("armsx2", "armsx2").as_deref(), Some("ARMSX2 (standalone)"));
         assert_eq!(runner_text("flycast-sa", "flycast-sa").as_deref(), Some("Flycast (standalone)"));
         assert_eq!(runner_text("vita3k", "vita3k-sa").as_deref(), Some("Vita3K (standalone)"));
+        assert_eq!(runner_text("hakux", "hakux").as_deref(), Some("hakuX (standalone)"));
+        assert_eq!(runner_text("portmaster", "portmaster").as_deref(), Some("PortMaster (standalone)"));
         assert_eq!(runner_text("", ""), None);
     }
 

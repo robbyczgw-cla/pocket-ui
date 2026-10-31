@@ -534,7 +534,6 @@ no text
 # src/app_history.rs
 review of {s} ({s} cards)
 
-# src/app_pixel_path.rs
 no sample settings
 
 # src/pixel_standalone.rs
@@ -973,6 +972,10 @@ LOAD_STATE_SLOT {s}
 hakuX has no settings pocket-ui reads (Pixel Path)
 [pid={s}] kill
 Sony - PlayStation Vita
+Valve
+Valve {s}
+pocket-ui in front
+game in front
 racing driving
 role playing
 role playing rpg
@@ -980,4 +983,23 @@ shoot em up
 shootem up
 beat em up
 puzzle game
+
+# src/platform/android.rs: JNI method names and startup diagnostics, never painted as interface labels.
+bridge initialization raced
+Activity not ready
+dataPath
+speakerState
+volumeState
+
+# src/platform/android_audio.rs: stream backend name, printed only in sound debugging.
+AAudio
+
+# src/platform/android_http.rs: Java bridge method name, not interface text.
+httpGet
+
+# JNI key for optional emulator-only PCM capture; never painted.
+diagnosticAudio
+
+# Android native audio diagnostics; logcat only, never drawn in the interface.
+AAudio write failed: {s}
 {s} frames={s} p50_us={s} p95_us={s} max_us={s} over_16ms={s}

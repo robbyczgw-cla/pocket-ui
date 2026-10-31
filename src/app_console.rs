@@ -18,7 +18,7 @@ use pocket_ui::palette::pal;
 use pocket_ui::settings::Theme;
 use pocket_ui::text::Face;
 
-use super::{stripe, system_short, App, Item, Screen, HOST_BIN};
+use super::{stripe, system_short, App, Item, Screen, host_bin};
 
 /// The open console page and the system (index into the library) it is about.
 pub(crate) struct OpenConsole {
@@ -35,7 +35,7 @@ const BACK_MAX: usize = 8;
 static ASSUME_POCKET_CORE: AtomicBool = AtomicBool::new(false);
 
 fn pocket_core_installed() -> bool {
-    ASSUME_POCKET_CORE.load(Ordering::Relaxed) || Path::new(HOST_BIN).exists()
+    ASSUME_POCKET_CORE.load(Ordering::Relaxed) || Path::new(host_bin()).exists()
 }
 
 impl App {

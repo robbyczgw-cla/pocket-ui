@@ -1,0 +1,362 @@
+{
+  "format": 1,
+  "abi": "arm64-v8a",
+  "api": 26,
+  "ndk": "27.2.12479018",
+  "cores": [
+    {
+      "id": "mgba",
+      "systems": [
+        "gb",
+        "gbc",
+        "gba"
+      ],
+      "source": "https://github.com/libretro/mgba",
+      "revision": "7a12d6d4b9acb14c0ae62c9166b6a2f3d08007f6",
+      "licence": "MPL-2.0",
+      "evidence": [
+        "LICENSE"
+      ],
+      "builder": "cmake",
+      "target": "mgba_libretro",
+      "binary": "mgba_libretro.so",
+      "options": [
+        "BUILD_LIBRETRO=ON",
+        "SKIP_LIBRARY=ON",
+        "BUILD_QT=OFF",
+        "BUILD_SDL=OFF",
+        "BUILD_GL=OFF",
+        "BUILD_GLES2=OFF",
+        "BUILD_GLES3=OFF",
+        "DISABLE_DEPS=ON",
+        "ENABLE_SCRIPTING=OFF",
+        "USE_DEBUGGERS=OFF"
+      ]
+    },
+    {
+      "id": "nestopia",
+      "systems": [
+        "nes"
+      ],
+      "source": "https://github.com/libretro/nestopia",
+      "revision": "2110d21b7174455ec98948bb474147dea0e3cad0",
+      "licence": "GPL-2.0-or-later",
+      "evidence": [
+        "COPYING",
+        "source/core/NstFds.hpp"
+      ],
+      "builder": "make",
+      "directory": "libretro",
+      "binary": "nestopia_libretro.so",
+      "options": []
+    },
+    {
+      "id": "bsnes",
+      "systems": [
+        "snes"
+      ],
+      "source": "https://github.com/libretro/bsnes",
+      "revision": "63ee22f7af8f5d1ada295c2c98fd7bf261fa62a7",
+      "licence": "GPL-3.0-only AND ISC AND MIT",
+      "evidence": [
+        "LICENSE.txt",
+        "bsnes/gb/LICENSE"
+      ],
+      "builder": "make",
+      "directory": ".",
+      "binary": "bsnes_libretro.so",
+      "options": [
+        "DEBUG=0"
+      ]
+    },
+    {
+      "id": "gearsystem",
+      "systems": [
+        "mastersystem",
+        "gamegear"
+      ],
+      "source": "https://github.com/drhelius/Gearsystem",
+      "revision": "6032d9d722707ce08ccac2462b021b77173ab1d4",
+      "licence": "GPL-3.0-or-later",
+      "evidence": [
+        "LICENSE",
+        "src/GearsystemCore.cpp"
+      ],
+      "builder": "make",
+      "directory": "platforms/libretro",
+      "binary": "gearsystem_libretro.so",
+      "options": []
+    },
+    {
+      "id": "mednafen_wswan",
+      "systems": [
+        "wonderswan",
+        "wonderswancolor"
+      ],
+      "source": "https://github.com/libretro/beetle-wswan-libretro",
+      "revision": "4b01295838ea89e3f1355bbe4cb5cf98aa6108cd",
+      "licence": "GPL-2.0-or-later",
+      "evidence": [
+        "COPYING",
+        "mednafen/state.c"
+      ],
+      "builder": "make",
+      "directory": ".",
+      "binary": "mednafen_wswan_libretro.so",
+      "options": []
+    },
+    {
+      "id": "stella",
+      "systems": [
+        "atari2600"
+      ],
+      "source": "https://github.com/libretro/stella",
+      "revision": "ba52c43b9eda950eb0c0eec69cda9b17dee8c39b",
+      "licence": "GPL-2.0-or-later",
+      "evidence": [
+        "Copyright.txt",
+        "License.txt"
+      ],
+      "builder": "make",
+      "directory": "src/os/libretro",
+      "binary": "stella2023_libretro.so",
+      "options": [
+        "PTHREAD_FLAGS=-pthread"
+      ]
+    },
+    {
+      "id": "clownmdemu",
+      "systems": [
+        "megadrive"
+      ],
+      "source": "https://github.com/Clownacy/clownmdemu-libretro",
+      "revision": "d43c2708b0a31c285ce16724b6c4a2e92af07346",
+      "licence": "AGPL-3.0-or-later",
+      "evidence": [
+        "LICENCE.txt",
+        "README.md"
+      ],
+      "builder": "cmake",
+      "target": "clownmdemu_libretro",
+      "binary": "clownmdemu_libretro.so",
+      "options": [
+        "BUILD_SHARED_LIBS=ON"
+      ]
+    },
+    {
+      "id": "gambatte",
+      "systems": [
+        "gb",
+        "gbc"
+      ],
+      "source": "https://github.com/libretro/gambatte-libretro",
+      "revision": "d9d6cd06382d1ced30de34d56d3609452323dab1",
+      "licence": "GPL-2.0-only",
+      "evidence": [
+        "COPYING",
+        "libgambatte/src/gambatte.cpp"
+      ],
+      "builder": "make",
+      "directory": ".",
+      "binary": "gambatte_libretro.so",
+      "options": []
+    },
+    {
+      "id": "mednafen_pce_fast",
+      "systems": [
+        "pcengine"
+      ],
+      "source": "https://github.com/libretro/beetle-pce-fast-libretro",
+      "revision": "4eee99c451f85ebe66d1591de88b892015b23059",
+      "licence": "GPL-2.0-or-later",
+      "evidence": [
+        "COPYING",
+        "mednafen/pce_fast/huc6280.c"
+      ],
+      "builder": "make",
+      "directory": ".",
+      "binary": "mednafen_pce_fast_libretro.so",
+      "options": [
+        "LDFLAGS=-fPIC -shared -Wl,--no-undefined -Wl,--version-script=link.T"
+      ]
+    },
+    {
+      "id": "mednafen_ngp",
+      "systems": [
+        "ngp",
+        "ngpc"
+      ],
+      "source": "https://github.com/libretro/beetle-ngp-libretro",
+      "revision": "a50d5ac288a81f2104ddf43195a4efdd15c72227",
+      "licence": "GPL-2.0-or-later",
+      "evidence": [
+        "COPYING",
+        "libretro.c"
+      ],
+      "builder": "make",
+      "directory": ".",
+      "binary": "mednafen_ngp_libretro.so",
+      "options": []
+    },
+    {
+      "id": "handy",
+      "systems": [
+        "atarilynx"
+      ],
+      "source": "https://github.com/libretro/libretro-handy",
+      "revision": "bc55d462f0b2d6b073ea93dc552ebd73cec60fd1",
+      "licence": "Zlib AND LGPL-2.1-or-later AND GPL-2.0-or-later",
+      "evidence": [
+        "lynx/ram.h",
+        "blip/Blip_Buffer.cpp",
+        "blip/Stereo_Buffer.cpp"
+      ],
+      "builder": "make",
+      "directory": ".",
+      "binary": "handy_libretro.so",
+      "options": []
+    },
+    {
+      "id": "ppsspp",
+      "systems": [
+        "psp"
+      ],
+      "source": "https://github.com/hrydgard/ppsspp",
+      "revision": "fa50bb1976065c4f8b1b47af227d367fe9771555",
+      "licence": "GPL-2.0-only",
+      "evidence": [
+        "LICENSE.TXT",
+        "Common/CPUDetect.cpp",
+        "Common/Arm64Emitter.cpp"
+      ],
+      "builder": "cmake",
+      "target": "ppsspp_libretro",
+      "binary": "ppsspp_libretro_android.so",
+      "patches": [
+        {
+          "path": "android/patches/ppsspp-no-xbrz.patch",
+          "sha256": "1d4645c8441dd36d90846d61a003d2cd163d2ae344c0e645c40a8d84ee5390b1"
+        }
+      ],
+      "options": [
+        "LIBRETRO=ON",
+        "USING_GLES2=ON",
+        "USE_FFMPEG=OFF",
+        "USE_DISCORD=OFF",
+        "UNITTEST=OFF",
+        "HEADLESS=OFF",
+        "USING_QT_UI=OFF"
+      ]
+    },
+    {
+      "id": "melondsds",
+      "systems": [
+        "nds"
+      ],
+      "source": "https://github.com/JesseTG/melonds-ds",
+      "revision": "bc4e4b67d2d470d7c682810a1e892cafd6f9082b",
+      "licence": "GPL-3.0-or-later",
+      "evidence": [
+        "LICENSE"
+      ],
+      "builder": "cmake",
+      "target": "melondsds_libretro",
+      "binary": "src/libretro/melondsds_libretro_android.so",
+      "fetch_dependencies": {
+        "date": {
+          "source": "https://github.com/HowardHinnant/date",
+          "revision": "1ead6715dec030d340a316c927c877a3c4e5a00c"
+        },
+        "embed-binaries": {
+          "source": "https://github.com/andoalon/embed-binaries",
+          "revision": "078b62beba97e8192c99bfb16d5e17220cfc7598"
+        },
+        "fmt": {
+          "source": "https://github.com/fmtlib/fmt",
+          "revision": "40626af88bd7df9a5fb80be7b25ac85b122d6c21"
+        },
+        "glm": {
+          "source": "https://github.com/g-truc/glm",
+          "revision": "e7970a8b26732f1b0df9690f7180546f8c30e48e"
+        },
+        "libretro-common": {
+          "source": "https://github.com/libretro/libretro-common",
+          "revision": "ad9124f1ecc5d0092fd285cbf9c4ffac317b1a65"
+        },
+        "libslirp": {
+          "source": "https://github.com/JesseTG/libslirp-mirror",
+          "revision": "e61dbd459c8c06607b3a84694489427e8ec60f17"
+        },
+        "melonds": {
+          "source": "https://github.com/melonDS-emu/melonDS",
+          "revision": "7117178c2dd56df32b6534ba6a54ad1f8547e693"
+        },
+        "pntr": {
+          "source": "https://github.com/robloach/pntr",
+          "revision": "922aed03c4c53803466100596211da7549945da7"
+        },
+        "span-lite": {
+          "source": "https://github.com/martinmoene/span-lite",
+          "revision": "00afc281a8c3c7657bb9c5b000d6e7082c1bbc7f"
+        },
+        "yamc": {
+          "source": "https://github.com/yohhoy/yamc",
+          "revision": "4e015a7e8eb0d61c34e6928676c8c78881a72d73"
+        },
+        "zlib": {
+          "source": "https://github.com/madler/zlib",
+          "revision": "51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf"
+        }
+      },
+      "options": [
+        "ENABLE_OPENGL=OFF",
+        "ENABLE_JIT=ON",
+        "ENABLE_LTO=OFF",
+        "ENABLE_LTO_RELEASE=OFF",
+        "BUILD_AS_SHARED_LIBRARY=ON",
+        "DATE_REPOSITORY_TAG=1ead6715dec030d340a316c927c877a3c4e5a00c",
+        "EMBED_BINARIES_REPOSITORY_TAG=078b62beba97e8192c99bfb16d5e17220cfc7598",
+        "FMT_REPOSITORY_TAG=40626af88bd7df9a5fb80be7b25ac85b122d6c21",
+        "GLM_REPOSITORY_TAG=e7970a8b26732f1b0df9690f7180546f8c30e48e",
+        "LIBRETRO_COMMON_REPOSITORY_TAG=ad9124f1ecc5d0092fd285cbf9c4ffac317b1a65",
+        "LIBSLIRP_REPOSITORY_TAG=e61dbd459c8c06607b3a84694489427e8ec60f17",
+        "MELONDS_REPOSITORY_TAG=7117178c2dd56df32b6534ba6a54ad1f8547e693",
+        "PNTR_REPOSITORY_TAG=922aed03c4c53803466100596211da7549945da7",
+        "SPAN_LITE_REPOSITORY_TAG=00afc281a8c3c7657bb9c5b000d6e7082c1bbc7f",
+        "YAMC_REPOSITORY_TAG=4e015a7e8eb0d61c34e6928676c8c78881a72d73",
+        "ZLIB_REPOSITORY_TAG=51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf"
+      ]
+    },
+    {
+      "id": "mupen64plus_next",
+      "systems": [
+        "n64"
+      ],
+      "source": "https://github.com/libretro/mupen64plus-libretro-nx",
+      "revision": "f275caf4b2bfa1e6d1c51636746ea793f3d80320",
+      "licence": "GPL-2.0-only",
+      "evidence": [
+        "LICENSE",
+        "GLideN64/LICENSE"
+      ],
+      "builder": "make",
+      "directory": ".",
+      "binary": "mupen64plus_next_libretro.so",
+      "patches": [
+        {
+          "path": "android/patches/mupen-no-xbrz.patch",
+          "sha256": "5c71db114e6d40a8395950a52803b1aa96e2b99fbd7e47fa90f1792d563fd245"
+        }
+      ],
+      "options": [
+        "platform=unix-android",
+        "ARCH=aarch64",
+        "WITH_DYNAREC=aarch64",
+        "FORCE_GLES3=1",
+        "HAVE_NEON=0",
+        "CPUFLAGS=-DANDROID -DEGL_EGLEXT_PROTOTYPES",
+        "LDFLAGS=-shared -fPIC -Wl,--no-undefined -Wl,--version-script=libretro/link.T -pthread -lGLESv3 -lEGL -llog -lm"
+      ]
+    }
+  ]
+}

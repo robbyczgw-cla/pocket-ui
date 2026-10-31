@@ -544,7 +544,7 @@ pub fn country_setting(system_cfg: &str) -> Option<String> {
 
 /// The content of `REGDOMAIN_CONF` for a country.
 pub fn regdomain_conf(code: &str) -> String {
-    format!("# Written by pocket-ui (Settings → Wi-Fi → Wi-Fi country); read at start by /usr/lib/iw/setregdomain.\nREGDOMAIN={code}\n")
+    format!("# Written by pocket-ui (Settings → Connections → Wi-Fi → Wi-Fi country); read at start by /usr/lib/iw/setregdomain.\nREGDOMAIN={code}\n")
 }
 
 /// Every country of zoneinfo's `iso3166.tab` as (code, name), by name.

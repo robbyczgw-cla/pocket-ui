@@ -28,7 +28,7 @@ fn states() -> Vec<(bool, String)> {
         })
         .filter(|(_, state)| {
             std::env::var_os("POCKETUI_TEST_QUICK").is_none()
-                || matches!(state.as_str(), "settings" | "settings:0:2" | "shelf:gb:split" | "sys:quick"
+                || matches!(state.as_str(), "settings" | "settings:0:4" | "shelf:gb:split" | "sys:quick"
                     | "sys:power" | "tailscale" | "achievements" | "search:results:mario" | "notice:bios"
                     | "setup:wifi" | "menu:pocket-core" | "storage")
                 || std::env::var("POCKETUI_TEST_STATES").is_ok_and(|extra| extra.lines().any(|s| s == state))

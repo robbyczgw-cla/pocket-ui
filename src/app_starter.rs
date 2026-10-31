@@ -357,7 +357,13 @@ impl App {
             self.text.draw(c, Face::Body, 24, MARGIN, y + h + 44, pal().dust, &note);
             if let Some((m, true)) = &self.starter.message {
                 let m = m.clone();
-                self.text.draw(c, Face::Body, 26, MARGIN, y + h + 90, pal().alert, &m);
+                // Wrapped like the lines above: one long line runs off the right edge
+                // (German, Large text, 1280x800; monkey run 2026-10-30, seed 8).
+                let mut my = y + h + 90;
+                for line in self.text.wrap(Face::Body, 26, &m, max_w) {
+                    self.text.draw(c, Face::Body, 26, MARGIN, my, pal().alert, &line);
+                    my += pocket_ui::type_scale::line(26, 10);
+                }
             }
         }
         if with_hints {
@@ -457,7 +463,7 @@ impl App {
 
     /// `pocket-ui --snapshot starter[:<row>[:<state>]]`: the page with the folders under `data_dir/starter-roms` (or the
     /// ones in es_systems), the row selected, and a state: `busy` (a download at 40 %), `there` (the first game
-    /// is on the card), `offline`, `failed`. `starter-home`: Home with no games.
+    /// is on the card), `offline`, `failed`. `starter-home[:busy|offline]`: Home with no games.
     pub(crate) fn starter_snapshot(&mut self, state: &str) -> bool {
         let mut parts = state.split(':');
         match parts.next() {
@@ -465,8 +471,10 @@ impl App {
                 self.systems.clear();
                 self.screen = Screen::Home;
                 self.rebuild();
-                if parts.next() == Some("busy") {
-                    self.starter_fake_busy();
+                match parts.next() {
+                    Some("busy") => self.starter_fake_busy(),
+                    Some("offline") => self.starter.message = Some((Failure::Offline.message(), true)),
+                    _ => {}
                 }
                 true
             }

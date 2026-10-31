@@ -7,7 +7,7 @@ Design from 2026-10-23; the sections up to "Build order" are the plan. What was 
 Roon is a music player that treats a record collection as a web of facts
 and relationships rather than a folder of files. Curator brings that idea to the games on the
 device. It is one family of features, and each one can be switched on or off under
-Settings → Playing → Curator.
+Settings → Games → Curator.
 
 | Name | What it is | Roon counterpart |
 |---|---|---|
@@ -247,7 +247,7 @@ Files: `src/pixel_path.rs` (the report, the live window, grading, the latency es
 `src/pixel_path_page.rs` (page state, the switch), `src/app_pixel_path.rs` (reader thread, painting),
 `App::write_pixel_path` in `src/bin/pocket_core.rs`.
 
-- **Switch.** Settings → Playing → Curator → **Pixel Path in the pause menu**, `Prefs::pixel_path` in `<data>/curator.json`
+- **Switch.** Settings → Games → Curator → **Pixel Path in the pause menu**, `Prefs::pixel_path` in `<data>/curator.json`
   (off by default). pocket-ui keeps it in memory (`App::pixel_path`, read with the other Curator prefs at start and
   set again whenever the Curator page changes its switches); the pause menu only looks at that flag.
 - **Data channel**, like the preview and the achievements list: the open page's thread writes `pixelpath <seq>` to
@@ -416,7 +416,7 @@ item, the page), `UserEvent::PixelSetup` in `src/main.rs`.
   (DEVELOPING.md, under the snapshot states). The pause menu is dark in both appearances, so dark and light snapshots
   are the same.
 - **Device checks.**
-  1. Settings → Playing → Curator → Pixel Path in the pause menu on. Burnout 3 (ARMSX2): HOME, the menu lists Pixel
+  1. Settings → Games → Curator → Pixel Path in the pause menu on. Burnout 3 (ARMSX2): HOME, the menu lists Pixel
      Path before Quick settings. Open it: Core "ARMSX2 · Vulkan", Source "2× internal" Enhanced (pocket-ui's default
      `ps2.internal_resolution=2`), Scale "4:3 · fit to 1240×1080 · …" Faithful, Display "1240×1080 @ 60 Hz · VSync off",
      Latency "Not measured", heading "Partly graded"; the bottom line "Read from PCSX2.ini." Compare with
@@ -461,9 +461,9 @@ item, the page), `UserEvent::PixelSetup` in `src/main.rs`.
 
 Play history (Curator → History, the Year in review) has its own document: [HISTORY.md](HISTORY.md).
 
-Lens, smart shelves, Stickers, Echoes and Versions are built, with Settings → Playing → Curator, on the shipped data of
+Lens, smart shelves, Stickers, Echoes and Versions are built, with Settings → Games → Curator, on the shipped data of
 [CURATOR-DATA.md](CURATOR-DATA.md): gamedb (layer A), curatordb (layer B) and romfacts (the file name). Pixel Path is
-built too (see "Pixel Path as built" above); its switch is the last row of Settings → Playing → Curator. The
+built too (see "Pixel Path as built" above); its switch is the last row of Settings → Games → Curator. The
 user guide is `docs/user/curator.md#curator`, `settings.md#curator`, `controls.md#in-the-lens`.
 
 ### Files
@@ -486,7 +486,7 @@ user guide is `docs/user/curator.md#curator`, `settings.md#curator`, `controls.m
 | `src/curator/fixture.rs` | Tests only: eight games of hand-made tags in vocabulary ids, for tests that should not move when curatordb is rebuilt |
 | `src/curator/tests.rs` | A 76-game real-name library with the real gamedb and curatordb: Echoes quality, Lens, Versions, editions, remakes, the speed budgets |
 | `src/curator_page.rs` | What a press does on the Lens, Echoes, Versions and the picker sheets (tested without drawing) |
-| `src/app_curator.rs` | The App's side: the index thread, Home rows, the Curator list, the pages and their painting, the card rows, Settings → Playing → Curator, `--snapshot curator:…` |
+| `src/app_curator.rs` | The App's side: the index thread, Home rows, the Curator list, the pages and their painting, the card rows, Settings → Games → Curator, `--snapshot curator:…` |
 | `src/library_meta.rs` | `library.json` version 2: `stickers` (list) and per game `stickers` (ids), `preferred` (work → path) |
 | `src/game_card.rs` | `CardData::rows`, focus on Curator rows, `Out::Row` |
 | `src/shelf.rs` | `Item::{Curator, Lens, SmartShelf, Sticker}`, `Item::with_curator` |
@@ -612,7 +612,7 @@ with `VDEV_ROMS=~/.cache/pocket-vdev/cur-fake/roms` and copy `data/*.json` into 
 
 ## Curator 2 as built (`feat/curator-2`, 2026-10-23)
 
-Four additions, each behind Settings → Playing → Curator like the rest. The user guide is `docs/user/curator.md` ("Lens",
+Four additions, each behind Settings → Games → Curator like the rest. The user guide is `docs/user/curator.md` ("Lens",
 "Echoes", "Up next"), `playing.md` (the Cabinet), `controls.md` and `settings.md#curator`.
 
 ### Lens: Story, Grinding, Reading and Length ranges
@@ -672,7 +672,7 @@ Roon Radio goes on after the album; Up next does the same for a game, but only s
   pressed as a game ends (the same hazard the 600 ms wake guard in `sleep.rs` exists for). So it is an opt-in: the
   first start's Enthusiast and the Tour's card turn it on. `Prefs::up_next` has `#[serde(default)]` = false, so a
   `curator.json` that has the key keeps its value and only a file from before the key existed gets Off. Settings →
-  Playing → Curator → Up next after a game (`SETTINGS_ROWS`, row 3).
+  Games → Curator → Up next after a game (`SETTINGS_ROWS`, row 3).
 - **main.rs hooks** (a few lines each, commented): `App::press` (input), `paint_home` (instead of the shelf's
   hints), `about_to_wait` (`curator_up_next_wake`: one frame per refresh while it slides in, then the wake-up when
   it goes). The Cabinet's "B Back" on a Curator list is one more condition in `paint_hints`.

@@ -362,7 +362,7 @@ pub const YEAR_SECS: u64 = 365 * 86_400;
 /// for the 29th), then the games not played for a year, the ones played longest first. Each game once; a game played
 /// since a year ago today is only in the first group if that day was one of its days.
 pub fn rediscover(played: &[(PathBuf, u64, u64)], days: &[(PathBuf, u64, i32)], now: u64, tz: i32) -> Vec<(PathBuf, Why)> {
-    use crate::play_history::{civil, day_of, local_day};
+    use crate::civil_date::{civil, day_of, local_day};
     let (y, m, d) = civil(local_day(now, tz));
     let leap = |y: i32| (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
     let target = day_of(y - 1, m, if m == 2 && d == 29 && !leap(y - 1) { 28 } else { d });

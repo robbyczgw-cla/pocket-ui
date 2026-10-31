@@ -447,7 +447,7 @@ mod tests {
         assert!(Page::SettingsList(0).depth() > Page::Settings.depth());
         assert!(Page::Sub(std::mem::discriminant(&SettingsPage::About)).depth() > Page::SettingsList(4).depth());
         assert!(Page::Manual.depth() > Page::SettingsList(4).depth());
-        assert!(Page::Setup(3).depth() > Page::SettingsList(0).depth(), "Settings › Look & feel › Look");
+        assert!(Page::Setup(3).depth() > Page::SettingsList(0).depth(), "Settings › Look › Look");
         assert_eq!(Page::Setup(0).depth(), 0, "the first start");
     }
 

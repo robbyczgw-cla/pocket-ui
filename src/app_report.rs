@@ -15,7 +15,11 @@ use pocket_ui::touch::Area;
 use super::{app_rescue, App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
 
 /// About's rows, in order.
-const ROWS: [&str; 2] = [report::ROW, "Open EmulationStation\u{2026}"];
+const ROW_LIST: [&str; 2] = [report::ROW, "Open EmulationStation\u{2026}"];
+/// The rows About has: no EmulationStation on the Steam Deck (docs/STEAMDECK.md).
+fn rows() -> &'static [&'static str] {
+    if pocket_ui::device::current().host_owned() { &ROW_LIST[..1] } else { &ROW_LIST }
+}
 /// Under "Open EmulationStation…" while it is selected.
 const ES_HELP: &str = "ROCKNIX's own menu, after a warning. Restart the Pocket to come back.";
 
@@ -33,6 +37,12 @@ pub(crate) struct AboutUi {
     sel: usize,
     sheet: Option<Sheet>,
     done: Arc<Mutex<Option<Result<Saved, Failure>>>>,
+    /// The Settings row B goes back to: About, or "Report a problem" when that row opened the page.
+    back_to: Option<&'static str>,
+}
+
+fn back_row(back_to: Option<&str>) -> usize {
+    super::settings_row(back_to.unwrap_or("About"))
 }
 
 impl App {
@@ -40,8 +50,22 @@ impl App {
     pub(crate) fn open_about(&mut self) -> Option<SettingsPage> {
         self.about.sel = 0;
         self.about.sheet = None;
+        self.about.back_to = None;
         self.about.done.lock().map(|mut d| d.take()).ok();
         Some(SettingsPage::About)
+    }
+
+    /// The "Report a problem" row: About carries the result, and B goes back to that row, not to About's.
+    pub(crate) fn open_report(&mut self) -> Option<SettingsPage> {
+        let page = self.open_about();
+        self.about.back_to = Some(report::ROW);
+        self.write_report();
+        page
+    }
+
+    /// The row of the Settings list B returns to from About.
+    fn about_back_row(&self) -> usize {
+        back_row(self.about.back_to)
     }
 
     pub(crate) fn about_input(&mut self, b: Button) -> Option<SettingsPage> {
@@ -53,12 +77,12 @@ impl App {
             return Some(SettingsPage::About);
         }
         match b {
-            Button::Up => self.about.sel = (self.about.sel + ROWS.len() - 1) % ROWS.len(),
-            Button::Down => self.about.sel = (self.about.sel + 1) % ROWS.len(),
+            Button::Up => self.about.sel = (self.about.sel + rows().len() - 1) % rows().len(),
+            Button::Down => self.about.sel = (self.about.sel + 1) % rows().len(),
             b if b == CONFIRM && self.about.sel == 0 => self.write_report(),
             // "Open EmulationStation…", behind the warning (`app_rescue`).
             b if b == CONFIRM => self.open_leave(pocket_ui::rescue::DialogKind::OpenEs),
-            b if b == CANCEL => return Some(SettingsPage::List(super::settings_row("About"))),
+            b if b == CANCEL => return Some(SettingsPage::List(self.about_back_row())),
             _ => {}
         }
         Some(SettingsPage::About)
@@ -69,7 +93,7 @@ impl App {
         // The library's names, for taking them out of the logs: a copy, made once per press.
         let mut games: Vec<GameName> = self.systems.iter().flat_map(|s| s.games.iter().map(|g| GameName { system: s.name.clone(), name: g.name.clone(), path: g.path.clone() })).collect();
         games.extend(self.recents.list.iter().map(|r| GameName { system: r.system.clone(), name: r.name.clone(), path: r.path.clone() }));
-        let src = report::Sources::system(&self.data_dir, std::path::Path::new(super::HOST_BIN));
+        let src = report::Sources::system(&self.data_dir, std::path::Path::new(super::host_bin()));
         let (done, proxy) = (self.about.done.clone(), self.proxy.clone());
         self.about.sheet = Some(Sheet::Writing);
         let spawned = std::thread::Builder::new().name("report".into()).spawn(move || {
@@ -100,16 +124,16 @@ impl App {
             });
         }
         let (pad, right) = (NU_PAD, c.w - NU_PAD);
-        for (i, label) in ROWS.iter().enumerate() {
+        for (i, label) in rows().iter().enumerate() {
             let ry = y + i as i32 * row;
             app_rescue::paint_row(c, &mut self.text, (pad, ry, right - pad, row), font, label, i == self.about.sel);
             self.hits.row(Area::new(pad, ry, right - pad, row), i);
         }
-        self.hits.list(self.about.sel, ROWS.len(), 0.0, row as f32);
+        self.hits.list(self.about.sel, rows().len(), 0.0, row as f32);
         // What the selected row does, in the room above the hints (cut with "…" when larger text needs more).
         let (left, width) = (pad + NU_BTN_PAD, c.w - 2 * (pad + NU_BTN_PAD));
         let step = pocket_ui::type_scale::line(NU_SMALL, 12);
-        let mut ly = y + ROWS.len() as i32 * row + 20 + pocket_ui::type_scale::px(NU_SMALL) as i32 / 2;
+        let mut ly = y + rows().len() as i32 * row + 20 + pocket_ui::type_scale::px(NU_SMALL) as i32 / 2;
         let hints_top = c.h - pad - NU_PILL - 8;
         // The last line's baseline may sit up to a line above the hints' top, as on Sleep & power.
         let room = ((hints_top - ly) / step + 1).max(1) as usize;
@@ -217,5 +241,18 @@ impl App {
             _ => None,
         };
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn b_goes_back_to_the_row_that_opened_the_page() {
+        let (about, report_row) = (back_row(None), back_row(Some(report::ROW)));
+        assert!(matches!(super::super::SETTINGS[about].1, super::super::Opens::About));
+        assert!(matches!(super::super::SETTINGS[report_row].1, super::super::Opens::Report), "Report a problem, not About");
+        assert_ne!(about, report_row);
     }
 }

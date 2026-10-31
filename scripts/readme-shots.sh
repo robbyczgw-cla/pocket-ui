@@ -1,6 +1,6 @@
 #!/bin/sh
 # The pictures of README.md and docs/media/: snapshots of pocket-ui with the made-up library of
-# scripts/curator-fake-library.py, scaled to 960 px and stored as compressed PNG (each under 300 KB).
+# scripts/curator-fake-library.py, scaled to 960 px and stored as compressed PNG (each aimed under 150 KB).
 #   scripts/readme-shots.sh [OUT]        (default: docs/media)
 # BIN=path/to/pocket-ui uses a binary you already built; otherwise `cargo build --release --bin pocket-ui` runs first.
 # Needs python3 and ImageMagick's `convert`. On Linux without a compositor, start scripts/wayland-stub.py first
@@ -23,23 +23,29 @@ shots() {
 home dark curator:home
 home-light light curator:home
 home-split dark curator:home:split
-home-cabinet dark curator:cabinet:dd
+home-cabinet dark curator:cabinet
+cases dark curator:shelf
 game-card dark curator:card:snes:chrono
+game-box dark box:snes:chrono
+stickers dark curator:stickers:snes:chrono
 lens dark curator:lens:dddddra
-echoes dark curator:echoes:snes:chrono
 pause-menu dark menu:pocket-core
-save-slots dark slot-save
+save-slots dark slot-save:snes
 settings dark settings
+cozy-extras dark cozy
+theme dark settings:0:2
 EOT
 }
 
+# The game behind the pause menu and the slots: an official one.
+export POCKETUI_SNAPSHOT_GAME='snes|Chrono Trigger|Chrono Trigger (USA).sfc'
 shots | while read -r name look state; do
   python3 -I "$ROOT/scripts/curator-fake-library.py" "$FAKE" "$look" >/dev/null
   POCKETUI_MOCK=1 POCKETUI_SNAPSHOT_WIFI=1 POCKETUI_ES_SYSTEMS="$FAKE/es_systems.cfg" POCKETUI_DATA="$FAKE/data" \
     "$BIN" --snapshot "$state" "$RAW/$name.png" >/dev/null
   convert "$RAW/$name.png" -strip -resize 960x -define png:compression-level=9 "$OUT/$name.png"
-  # Still too big (a picture with many gradients): 256 colours.
-  if [ "$(wc -c < "$OUT/$name.png")" -gt 300000 ]; then
+  # Still too big: 256 colours.
+  if [ "$(wc -c < "$OUT/$name.png")" -gt 150000 ]; then
     convert "$RAW/$name.png" -strip -resize 960x -dither FloydSteinberg -colors 256 "PNG8:$OUT/$name.png"
   fi
   printf '%-14s %s  %6s bytes\n' "$name" "$state" "$(wc -c < "$OUT/$name.png")"

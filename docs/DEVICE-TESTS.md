@@ -25,7 +25,7 @@ press. Detailed procedures: docs/SLEEP.md, docs/SYSTEM-CONTROLS.md, docs/HOST.md
 ## Buttons and display
 - [ ] Vol± on the shelf and in a game: volume changes, the bar shows it.
 - [ ] Start+Vol±: brightness. Select+Vol±: warmer/colder (works system-wide here: gamma ramps found).
-- [ ] Settings > Look & feel > Night light ([user/night-light.md](user/night-light.md)): `grep "display look" /var/log/pocket-ui.log`
+- [ ] Settings > Look > Night light ([user/night-light.md](user/night-light.md)): `grep "display look" /var/log/pocket-ui.log`
   says whether the screen takes gamma ramps (then everything is warmed) or the software tint (menus and pocket-core
   games only; the page says so). On: the colours turn warm over ~1.5 s, no jump; Off: back. Scheduled with From/Until a
   few minutes ahead (30-minute grid: set the clock with `POCKETUI_CLOCK_SHIFT` or wait for a half hour): it switches
@@ -41,11 +41,11 @@ press. Detailed procedures: docs/SLEEP.md, docs/SYSTEM-CONTROLS.md, docs/HOST.md
 ## Feel and sound
 - [ ] Rumble: a game that rumbles (PS1 with DualShock, GBA rumble carts); Extras > Rumble Low/Medium/High.
   Quick check over SSH: `/storage/pocket-ui/pocket-core --rumble-test 700`.
-- [ ] Settings > Look & feel > Haptics On: a short tick while moving in menus. Pleasant or annoying?
-- [x] Settings > Look & feel > Sounds (on by default, 70 %): clicks on the shelf, in Settings, switcher, quick settings.
+- [ ] Settings > Sound & feel > Haptics On: a short tick while moving in menus. Pleasant or annoying?
+- [x] Settings > Sound & feel > Sounds (on by default, 70 %): clicks on the shelf, in Settings, switcher, quick settings.
   2026-10-22 at 20 % system volume: loudness and sound right, slightly late (about 55 ms queued), not disturbing.
 - [ ] Sounds in the pause menu (Error on Load of an empty slot), Vol± tick; none while playing, none when muted.
-- [ ] Settings > Look & feel > LEDs (the stick lights; they are off after the first start of this version). Colour: both sticks
+- [ ] Settings > Sound & feel > LEDs (the stick lights; they are off after the first start of this version). Colour: both sticks
   glow, brightness steps are visibly different, "The game's" turns the sticks the system's colour in a game and back
   to warm after it. Battery: green at a good charge. Off: dark. After a restart the same state; after sleep and wake
   the same. What to read over SSH before and after: docs/LEDS.md.

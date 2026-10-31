@@ -37,18 +37,7 @@ const LOOK_UP_ROW: usize = CHOOSE_ROW + 1;
 /// One press of up/down scrolls this far.
 const STEP: i32 = 2 * LINE;
 
-/// A persistent card problem, outside the facts so Connections keeps its fact indices and selection. `base` is the
-/// heading's baseline; the return value is the next free baseline after the complete cause and remedy.
-pub(crate) fn paint_problem(c: &mut Canvas, text: &mut Text, why: &str, (x, base, w): (i32, i32, i32)) -> i32 {
-    let step = type_scale::line(28, 8);
-    text.draw(c, Face::Body, 28, x, base, pal().alert, "Problem");
-    let mut y = base + step;
-    for line in text.wrap(Face::Body, 28, why, w) {
-        text.draw(c, Face::Body, 28, x, y, pal().alert, &line);
-        y += step;
-    }
-    y + 12
-}
+pub(crate) use crate::game_card_model::paint_problem;
 
 /// The step from one fact to the next: 44 px at Body 28, more with Settings → Text size (`type_scale`).
 fn row() -> i32 {
@@ -75,154 +64,8 @@ fn spine_h() -> i32 {
     type_scale::row(72, 37)
 }
 
-/// The description under "About".
-#[derive(Clone, Debug, Default, PartialEq)]
-pub enum Summary {
-    /// No Wikipedia article is known for the game.
-    #[default]
-    None,
-    Loading,
-    /// Lead text of the English Wikipedia article `title` (CC BY-SA).
-    Wikipedia {
-        text: String,
-        title: String,
-    },
-    /// Could not be loaded (offline); the reason in a few words.
-    Unavailable(String),
-    /// The description in the player's EmulationStation gamelist (`gamelist::fill_card`): shown when there is no
-    /// Wikipedia text on hand, with its source named.
-    Gamelist(String),
-}
+pub use crate::game_card_model::{CardLink, CardSaves, Summary, RelatedGame, CardData, RowKind, CuratorRow, CardPicture, paint_mark, paint_stars};
 
-/// A game of the library shown under "More by" or "Other games in".
-#[derive(Clone, Debug, PartialEq)]
-pub struct RelatedGame {
-    pub name: String,
-    pub system: String,
-    pub stripe: u32,
-    pub year: Option<u16>,
-}
-
-/// Where a fact of the card leads (Connections, `crate::connections`): the list's title and the player's games in it,
-/// ((system, game) when it was made, file).
-#[derive(Clone, Debug, PartialEq)]
-pub struct CardLink {
-    pub title: String,
-    pub games: Vec<((usize, usize), std::path::PathBuf)>,
-}
-
-/// Everything the card shows; filled in by the app from the library, `gamedb`, `library_meta` and the
-/// EmulationStation gamelist (`gamelist::fill_card`).
-#[derive(Clone, Debug, Default)]
-pub struct CardData {
-    pub title: String,
-    /// "Game Boy".
-    pub system: String,
-    pub stripe: u32,
-    /// The game has an entry in the offline game list.
-    pub matched: bool,
-    /// Wikidata's name when it differs from the file's ("Listed as").
-    pub listed_as: Option<String>,
-    pub year: Option<u16>,
-    pub players: Option<String>,
-    /// (label, value): Developer, Publisher, Genre, Series.
-    pub facts: Vec<(&'static str, String)>,
-    /// "Metacritic 92 · via Wikidata".
-    pub scores: Option<String>,
-    /// One sentence made of the facts, shown when there is no Wikipedia text.
-    pub sentence: Option<String>,
-    pub summary: Summary,
-    /// Unix seconds of the last session and total seconds played, from the recent games.
-    pub played: Option<(u64, u64)>,
-    pub sessions: u32,
-    pub status: Status,
-    pub suggestion: Option<Status>,
-    /// The player's rating, 1 to 5; 0 while there is none.
-    pub rating: u8,
-    pub note: String,
-    pub more_by: Option<(String, Vec<RelatedGame>)>,
-    pub series: Option<(String, Vec<RelatedGame>)>,
-    /// RetroAchievements: "12 of 40" when the game has a set (`achievements::snapshot::Summary`).
-    pub achievements: Option<String>,
-    /// Curator's rows, in order (none when Curator has nothing to show for the game).
-    pub rows: Vec<CuratorRow>,
-    /// How long the charge lasts in this game: "About 3 h 20 min left, 18 % an hour", "Measuring this game…"
-    /// (`battery_games::card_line`); None on a device without a battery.
-    pub battery: Option<String>,
-    /// A PortMaster port: its performance and fan ("Battery, fan Quiet"; START changes them, `port_perf_page`), and
-    /// whether to show that it keeps a core busy (`port_perf::card_hint`).
-    pub port: Option<(String, bool)>,
-    /// PortMaster has a newer version of this port: a quiet note under the Speed line (A updates it in Extras).
-    pub port_update: bool,
-    /// Opened by "Surprise me": why this game ("Not played for 3 months · you like platformers"); Right picks again.
-    pub surprise: Option<String>,
-    /// The game's pictures come from the libretro collection: the status picker offers "Wrong pictures? Look up
-    /// again" (`Out::LookUpAgain`).
-    pub look_up: bool,
-    /// Some of the facts above (year, players, Developer, Publisher, Genre, the rating line) come from the player's
-    /// EmulationStation gamelist (`gamelist::fill_card`): the card says so under them.
-    pub from_gamelist: bool,
-    /// The patch next to the game that pocket-core applies when it starts it ("Game (USA).ips", `softpatch`).
-    pub patch: Option<String>,
-    /// Why the game can't be played, in a sentence ("its file is empty"); every card surface shows the cause and
-    /// remedy in the alert colour, separately from its facts and Connections (`app_card`).
-    pub broken: Option<String>,
-    /// The game is one of the player's Favourites (the info page says so, `game_info`).
-    pub favorite: bool,
-    /// Its save slots in pocket-core, shown on their save medium (`save_media`); None where pocket-core doesn't keep
-    /// its states (another emulator's game, a system without states).
-    pub saves: Option<CardSaves>,
-    /// The facts that lead to the player's other games: (index into `facts`, where it leads), in the facts' order.
-    /// A fact without one is plain text, never a way into an empty list (`app_connections`).
-    pub links: Vec<(usize, CardLink)>,
-}
-
-/// A game's save slots as the card shows them, read-only.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct CardSaves {
-    /// The system, for its save medium, and its stripe (the card's label).
-    pub system: String,
-    pub stripe: u32,
-    /// One per slot: it holds a save.
-    pub filled: Vec<bool>,
-    /// When the newest slot was saved (Unix seconds).
-    pub newest: Option<u64>,
-}
-
-impl CardSaves {
-    /// The slots of a game pocket-core runs with save states (`hostsys`): a few file checks, no reading, like the
-    /// patch's. None for every other game.
-    pub fn of(system: &str, rom: &std::path::Path, stripe: u32) -> Option<CardSaves> {
-        crate::hostsys::find(system).filter(|h| h.no_states.is_none())?;
-        let stem = rom.file_stem()?.to_str()?;
-        let base = crate::slots::base(system, stem);
-        let times: Vec<Option<std::time::SystemTime>> = (0..crate::slots::SLOTS).map(|i| crate::slots::saved_at(&base, i)).collect();
-        let newest = times.iter().flatten().max().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs());
-        Some(CardSaves { system: system.to_string(), stripe, filled: times.iter().map(Option::is_some).collect(), newest })
-    }
-}
-
-/// Which Curator row it is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum RowKind {
-    Echoes,
-    Versions,
-    Stickers,
-    /// Not Curator's: "Two versions of this game's save. Choose one…" (`sync_conflicts`), first of the rows.
-    SaveVersions,
-    /// "Screenshots (3)": the game's own, after Curator's rows (`app_gallery`).
-    Screenshots,
-    /// "Hide or delete": the last thing on the card, under everything else (`app_storage`).
-    Manage,
-}
-
-/// A Curator row on the card: "Echoes" and what it holds in one line ("Burnout 3 · Need for Speed · R4").
-#[derive(Clone, Debug, PartialEq)]
-pub struct CuratorRow {
-    pub kind: RowKind,
-    pub title: String,
-    pub line: String,
-}
 
 pub enum Mode {
     View,
@@ -341,17 +184,6 @@ pub struct Card {
     pub info: Option<crate::game_info::InfoView>,
     /// Opened as the info page: SELECT goes between it and the full page, and the box is never shown.
     pub info_look: bool,
-}
-
-/// A picture on the card besides the box art. The file is known to be there (its header was read), so the
-/// place is kept at once; the picture itself arrives from a thread (`picture_loader`) and until then the place shows
-/// a plain tile.
-#[derive(Clone)]
-pub struct CardPicture {
-    pub label: &'static str,
-    /// The size it is drawn at (`picture_loader::fitted` into [`picture_box`]).
-    pub size: (i32, i32),
-    pub image: Option<std::rc::Rc<Image>>,
 }
 
 /// The baseline of the body's first headings ("About the game", "Your game") below `top`: lower by what Large adds to
@@ -1048,7 +880,7 @@ impl Card {
             if let Some(l) = &d.listed_as {
                 rows.push(("Listed as", l.clone()));
             }
-            // A face wider than Barlow (Settings → Look & feel → Look → Theme → Font) or a longer German label: the column holds the widest one.
+            // A face wider than Barlow (Settings → Look → Font) or a longer German label: the column holds the widest one.
             let key_w = rows.iter().map(|(k, _)| text.width(Face::Body, 28, k)).max().map_or(key_w, |w| key_w.max(w + text.width(Face::Body, 28, "  ")));
             for (k, v) in rows {
                 text.draw(c, Face::Body, 28, lx, ly, pal().dust, k);
@@ -1082,7 +914,7 @@ impl Card {
         // The player's rating: five small stars, the given ones in the text colour; none yet says how to give one.
         text.draw(c, Face::Body, 28, rx, ry, pal().dust, "Rating");
         if d.rating == 0 {
-            text.draw(c, Face::Body, 28, rx + rkey, ry, pal().dust, "None. Press Y");
+            text.draw(c, Face::Body, 28, rx + rkey, ry, pal().dust, crate::game_card_model::no_rating());
         } else {
             // As large as the text beside them: 13 px stars at Body 28, more with Settings → Text size.
             let r = type_scale::wide(13, 28);
@@ -1122,6 +954,15 @@ impl Card {
                 text.draw(c, Face::Body, 28, rx + rkey, ry - 6, pal().dust, &rest);
                 ry += row();
             }
+        }
+        // Its save slots, as on the info page and the box's back (`game_info`, `game_box`): this full page is where X leads
+        // from a system's list, and it showed no save row there (pocket, 2026-10-31).
+        if let Some(saves) = &d.saves {
+            let (value, filled) = saves.summary();
+            text.draw(c, Face::Body, 28, rx, ry, pal().dust, "Save slots");
+            let value = text.fit(Face::Body, 28, &value, rw - rkey);
+            text.draw(c, Face::Body, 28, rx + rkey, ry, if filled { pal().chalk } else { pal().dust }, &value);
+            ry += row();
         }
         if let Some((speed, hint)) = &d.port {
             text.draw(c, Face::Body, 28, rx, ry, pal().dust, "Speed");
@@ -1544,45 +1385,7 @@ fn sheet(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32) {
 
 /// On the light page, a paper label lifts off the shelf: a soft shadow 6 px deep under its bottom edge (x, y, w).
 /// `strength` 0 draws nothing (the dark page, where the label stands out on its own), 255 the full shadow.
-pub fn lift_shadow(c: &mut Canvas, x: i32, y: i32, w: i32, strength: u8) {
-    if strength == 0 {
-        return;
-    }
-    for k in 0..6 {
-        c.shade_rect(x + 4, y + k, w - 4, 1, 0, ((6 - k) as u32 * 6 * strength as u32 / 255) as u8);
-    }
-}
-
-pub fn paint_mark(c: &mut Canvas, cx: i32, cy: i32, status: Status, color: u32) {
-    match status {
-        Status::NotStarted => c.ring(cx, cy, 9, 2, color),
-        Status::Playing => c.disc(cx, cy, 8, color),
-        Status::Paused => {
-            c.rect(cx - 7, cy - 9, 5, 18, color);
-            c.rect(cx + 2, cy - 9, 5, 18, color);
-        }
-        Status::Completed => {
-            let pts = [(cx - 9, cy), (cx - 3, cy + 7), (cx + 9, cy - 8)];
-            for seg in pts.windows(2) {
-                let ((x0, y0), (x1, y1)) = (seg[0], seg[1]);
-                let n = (x1 - x0).abs().max((y1 - y0).abs());
-                for k in 0..=n {
-                    c.disc(x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n, 2, color);
-                }
-            }
-        }
-        Status::Dropped => c.rect(cx - 9, cy - 2, 18, 5, color),
-    }
-}
-
-/// A rating as five stars of radius `r` in a row from the centre of the first (cx, cy), 8 px apart: the first `rating`
-/// in `on`, the rest in `off`.
-pub fn paint_stars(c: &mut Canvas, cx: i32, cy: i32, r: i32, rating: u8, on: u32, off: u32) {
-    for k in 0..RATING_MAX as i32 {
-        let colour = if k < rating as i32 { on } else { off };
-        crate::switcher::star(c, cx + k * (2 * r + 8), cy, r, colour);
-    }
-}
+pub use crate::game_card_model::lift_shadow;
 
 /// The sentence the card shows when no description could be loaded: "A 1992 platform game by Nintendo R&D1."
 pub fn sentence(info: &crate::gamedb::GameInfo) -> Option<String> {

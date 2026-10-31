@@ -59,8 +59,12 @@ pub fn tools_dir(data_dir: &Path) -> PathBuf {
 pub fn core_path(core: &str) -> PathBuf {
     let file = format!("{core}_libretro.so");
     let installed = Path::new(CORES_DIR).join(&file);
+    // The Steam Deck app: POCKETUI_CORES is a ':'-separated list of folders (bundled cores, RetroArch's flatpak) searched next.
+    let extra = || std::env::var("POCKETUI_CORES").ok().and_then(|d| d.split(':').map(|p| Path::new(p).join(&file)).find(|p| p.is_file()));
     if installed.is_file() {
         installed
+    } else if let Some(p) = extra() {
+        p
     } else {
         Path::new("/usr/lib/libretro").join(file)
     }

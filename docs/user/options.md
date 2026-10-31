@@ -179,7 +179,7 @@ Every console starts with the look that suits it on this screen:
 Out of the box no console has a screen effect or a frame: a clean picture. Pick an effect or a frame in the pause menu
 (Options → Picture, then Save changes) for one game or a whole console.
 
-With **Handhelds** or **Every console** in [Settings → Look & feel → Screen frames](settings.md#screen-frames), the handhelds or every
+With **Handhelds** or **Every console** in [Settings → Playing → Screen frames](settings.md#screen-frames), the handhelds or every
 console start with frame **Auto** instead of None. A frame saved for a console or a game stays.
 
 Only the systems listed under [On pocket-ui's own host](systems.md#on-pocket-uis-own-host) have the
@@ -215,7 +215,7 @@ Pause menu → Options → **Controls**.
 - **Reset controls** puts every button back to doing what it says.
 
 When you play together ([Players](pause-menu.md#players)), the layout is the same for every player: a connected
-controller's buttons do what these lines say, by where the button sits (the right face button is A). These lines name the buttons as printed on the Pocket, even when Settings → Playing → [Button layout](settings.md#button-layout) is Xbox: that setting changes pocket-ui's menus, not games.
+controller's buttons do what these lines say, by where the button sits (the right face button is A). These lines name the buttons as printed on the Pocket, even when Settings → Playing → Buttons → [**Button layout**](settings.md#button-layout) is Xbox: that setting changes pocket-ui's menus, not games.
 
 HOME, and SELECT + START held to quit, always work on the real buttons, whatever you change here.
 

@@ -94,7 +94,7 @@ impl Default for Text {
 /// pause menu 21) and of the titles (50), for ASCII and `PREWARM_MORE`.
 const PREWARM: [(Face, &[u32]); 2] = [(Face::Body, &[21, 28, 30, 36, 46]), (Face::Title, &[50])];
 /// The letters of German and the marks of Settings' values besides ASCII.
-const PREWARM_MORE: &str = "ÄÖÜäöüß…‹›·–×°→";
+const PREWARM_MORE: &str = "ÄÖÜäöüß…‹›·–×°→\u{200b}";
 /// The sizes games' names are painted at (the rows of a list and of search 37, the card's title 50 and 67, a cover's
 /// caption 44, the hints and meta lines 28 and 30), at which `prewarm_names` draws their CJK letters ahead.
 const PREWARM_NAMES: [(Face, &[u32]); 2] = [(Face::Title, &[37, 44, 50, 67]), (Face::Body, &[28, 30])];
@@ -211,7 +211,15 @@ impl Text {
         Self::with_faces(load(font_style::BARLOW_TITLE), load(font_style::BARLOW_BODY), [false; 2], None).pinned_to(FontStyle::Barlow)
     }
 
-    /// Held to `style` whatever Settings → Look & feel → Look → Theme → Font says: the tests, and safe mode (`builtin`).
+    /// Follows Settings → Look → Font again (`builtin` holds Barlow): the Android launcher and player, which have the
+    /// embedded faces only but a Font row of their own.
+    pub fn following_font(mut self) -> Self {
+        self.pinned = None;
+        self.sync();
+        self
+    }
+
+    /// Held to `style` whatever Settings → Look → Font says: the tests, and safe mode (`builtin`).
     pub fn pinned_to(mut self, style: FontStyle) -> Self {
         self.pinned = Some(style);
         self.sync();
@@ -223,7 +231,7 @@ impl Text {
         self.style
     }
 
-    /// Follows the style in use (`font_style::get`; Settings → Look & feel → Look → Theme → Font): one atomic read, and only when it
+    /// Follows the style in use (`font_style::get`; Settings → Look → Font): one atomic read, and only when it
     /// changed the faces are swapped and everything drawn with the old ones dropped. The faces of a style are parsed
     /// the first time it is used (`FontStyle::fitted`), not here per frame. A store theme's faces stay.
     fn sync(&mut self) {

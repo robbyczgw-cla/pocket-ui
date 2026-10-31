@@ -1,4 +1,4 @@
-//! Settings → Look & feel → Look → Theme → Font: the type pocket-ui paints with, one of three styles.
+//! Settings → Look → Font: the type pocket-ui paints with, one of three styles.
 //!
 //! | Style | Titles, spines, labels (`Face::Title`) | Meta text, hints (`Face::Body`) |
 //! |---|---|---|

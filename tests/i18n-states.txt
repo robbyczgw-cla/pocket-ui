@@ -34,9 +34,6 @@ setup:first:aR
 setup:first:aL
 setup:look
 setup:look:L
-setup:look:T
-setup:look:Tr
-setup:look:Td
 setup:play
 setup:play:d
 setup:wifi
@@ -93,6 +90,8 @@ settings:1
 settings:2
 settings:3
 settings:4
+settings:5
+settings:6
 settings:0:0
 settings:0:1
 settings:0:2
@@ -100,6 +99,7 @@ settings:0:3
 settings:0:4
 settings:0:5
 settings:0:6
+settings:0:7
 settings:1:0
 settings:1:1
 settings:1:2
@@ -114,18 +114,37 @@ settings:2:2
 settings:2:3
 settings:2:4
 settings:2:5
+settings:2:6
+settings:2:7
 settings:3:0
 settings:3:1
 settings:3:2
 settings:3:3
 settings:3:4
 settings:3:5
+settings:3:6
 settings:4:0
 settings:4:1
 settings:4:2
 settings:4:3
 settings:4:4
 settings:4:5
+settings:5:0
+settings:5:1
+settings:5:2
+settings:5:3
+settings:5:4
+settings:5:5
+settings:6:0
+settings:6:1
+settings:6:2
+settings:6:3
+settings:6:4
+buttons:0
+buttons:1
+buttons:0:r
+buttons:1:r
+setup:look-systems
 about
 battery
 battery:0
@@ -236,12 +255,12 @@ night:scheduled:1
 night:scheduled:3:5
 cozy:0
 cozy:1
+cozy:2
+cozy:3
 cozy:4
+cozy:5
+cozy:6
 cozy:7
-cozy:8
-cozy:9
-cozy:10
-cozy:11
 cozy:0:case_sounds,cabinet_tv,pause_memory_card
 perf
 perf:3
@@ -300,6 +319,7 @@ tour:achievements
 tour:sync
 tour:tailscale
 tour:tools
+tour:cozy_extras
 tour:perf_fan
 tour:echoes
 tour:up_next
@@ -311,9 +331,10 @@ tour-new:lens,echoes
 
 # Settings → System → Sleep & power
 sleep
-sleep:1:never
-sleep:3:screen
+sleep:1
+sleep:2:never
 sleep:4:screen
+sleep:5:screen
 sleep:0:old
 
 # Quick settings, power, time
@@ -703,7 +724,8 @@ gallery:full-shelf
 
 sleep:device=nova
 sleep:1:device=nova
-sleep:2:device=rp6
+sleep:2:device=nova
+sleep:3:device=rp6
 about:device=nova
 about:device=rp6
 setup:first:device=nova

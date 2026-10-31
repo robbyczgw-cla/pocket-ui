@@ -2,7 +2,7 @@
 
 One row per user-facing feature: how far it has been proven, on what, and what is still open. This is the one place
 that answers "does it work on the Mini V2?". Every "Status" note in the other documents (and the manual's notes for
-players) has to agree with it. State as of 2026-10-30, release 0.1.6; rows older than that keep the date of the run they describe.
+players) has to agree with it. State as of 2026-10-31, release 0.1.7; rows older than that keep the date of the run they describe.
 
 **The rule: whoever changes how well a feature has been verified updates its row in the same commit.** That means a
 new feature (add its row), a device run (move the row up and write what was done), a regression (move it down), and a

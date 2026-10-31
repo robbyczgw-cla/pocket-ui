@@ -1,0 +1,44 @@
+[
+  {
+    "system": "pce",
+    "name": "PceHello.pce",
+    "url": "https://raw.githubusercontent.com/PeterLemon/PCE/3fcf708899ce67f166a667f9bc2da0f18d54a743/VDC/HelloWorld/HelloWorld.pce",
+    "sha256": "71b6f2bb11b62982f34ef917242e10b010f45826517adc8d3b434de39930e13e",
+    "core": "Beetle PCE Fast"
+  },
+  {
+    "system": "ngp",
+    "name": "NgpAsteroids.ngp",
+    "url": "https://raw.githubusercontent.com/underscore42/ngpc-asteroids-neo/6a585bb7250d8b91ee7999f83176100049294bda/releases/asteroids.ngp",
+    "sha256": "a087695fddf7d7ecaba819cc607c2088af9364846c240b6ef2189c1f649401e5",
+    "core": "Beetle NeoPop"
+  },
+  {
+    "system": "lynx",
+    "name": "LynxPlasma.lnx",
+    "url": "https://raw.githubusercontent.com/42Bastian/lynx_hacking/3cda2827016cc2a96192ecb60d2f430a78fa7eab/128b/lynxPlasmosis/plasmosis.lnx",
+    "sha256": "3add3de6d0925907afd45ede18a5d3c3614139ccec748d6c658f850460fbd080",
+    "core": "Handy"
+  },
+  {
+    "system": "psp",
+    "name": "Psp2048.pbp",
+    "url": "https://raw.githubusercontent.com/ShadowinFlight/PSP2048/3df5ac8ad91f0c7ca749e0661e0efe8803840b2d/EBOOT.PBP",
+    "sha256": "a1ddc69c87b0f0ec1800aa5550081d7254c674347cccdcc6ec1310a8b7e26a8e",
+    "core": "PPSSPP"
+  },
+  {
+    "system": "nds",
+    "name": "Wolveslayer.nds",
+    "url": "https://github.com/AntonioND/wolveslayer/releases/download/v20240731/wolveslayer.nds",
+    "sha256": "0a4469ee79405141bac4b5b4e5d911cb25b5be0501bc0d9ebcccd8d85e44bbc2",
+    "core": "melonDS DS"
+  },
+  {
+    "system": "n64",
+    "name": "N64Hello.n64",
+    "url": "https://raw.githubusercontent.com/PeterLemon/N64/7085543e4a19d8c539fc9e0a4d2869e788b4ed4b/HelloWorld/16BPP/HelloWorldCPU320x240/HelloWorldCPU16BPP320X240.N64",
+    "sha256": "3635a9379d908fd8ed0bf5de80512b0a51dac73ff34c9f3931e7f89db88ab074",
+    "core": "Mupen64Plus-Next"
+  }
+]

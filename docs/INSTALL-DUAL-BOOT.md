@@ -155,7 +155,7 @@ flycast and scummvm cores, which that base image lacks (notes only). Not run on 
 - **Black screen with Boot mode: Loader.** The `loader` partition holds no working u-boot (an Android update can
   replace it, see phase 7). Switch back to Android as above; the fix is in phase 5 of the appendix, "Only if the
   `loader` holds no u-boot".
-- **EmulationStation appears instead of pocket-ui.** Someone chose it (SELECT + START held, Settings → System → About, safe
+- **EmulationStation appears instead of pocket-ui.** Someone chose it (SELECT + START held, Settings → Help & tools → About, safe
   mode), or pocket-ui could not start at all: it is missing or not executable, it could not run even in safe mode, or
   sway stopped answering. The next start of pocket-ui says which (`/storage/pocket-ui/es-fallback`). Restart the
   Pocket to try pocket-ui again. Its log is `/var/log/pocket-ui.log` (in RAM; a copy on the card survives a
@@ -204,7 +204,7 @@ On the FAT partition (label `ROCKNIX`, readable on any computer), besides ROCKNI
 | `EFI/BOOT/BOOTAA64.EFI` | GRUB, which Retroid's u-boot starts |
 | `boot/grub/grub.cfg` | `deploy/sd-efi/grub.cfg`: no menu, goes straight into pocket-ui, with a quiet start (no kernel text on the screen, [BOOT-SPLASH.md](BOOT-SPLASH.md#quiet-start)) |
 | `boot/pocket/Image`, `boot/pocket/miniv2-noufs.dtb` | The kernel from `KERNEL`, and the Mini V2 device tree with the internal UFS disabled |
-| `post-flash.sh`, `mount-storage.sh` | Hooks ROCKNIX's start-up runs: no ROCKNIX logo; pocket-ui's start entry put in place once, then deleted |
+| `post-flash.sh`, `mount-storage.sh` | Hooks ROCKNIX's start-up runs: no ROCKNIX logo; pocket-ui's start entry put in place once, and at every start system updates pocket-ui did not check set aside to `/storage/.update-refused` |
 | `pocket-ui-info/` | Notes and licences |
 
 On STORAGE: `pocket-ui/` (programs and launcher) and, until the second start, `.pocket-seed/` with the essway

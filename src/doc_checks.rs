@@ -252,12 +252,13 @@ fn names(text: &str, word: &str) -> bool {
 
 #[test]
 fn the_settings_table_lists_every_settings_row_in_order() {
-    // Settings is two pages (the manual's 30 000 px limit): Look & feel, Playing and Games, then Connections and System.
+    // Settings is two pages (the manual's 30 000 px limit): Look, Sound & feel, Playing and Games, then Connections, System and Help & tools.
     let md = format!("{}\n{}", read("docs/user/settings.md"), read("docs/user/settings-system.md"));
     // The categories, in their order, each naming its entries.
     let open = first_table(&section(&md, "Open Settings"));
     let doc: Vec<String> = open.iter().map(|r| bold(&r[0])).collect();
-    let code: Vec<&str> = super::SETTINGS_GROUPS.iter().map(|c| c.0).collect();
+    // The Look category carries a zero-width mark (so German can translate it apart from its row "Look").
+    let code: Vec<&str> = super::SETTINGS_GROUPS.iter().map(|c| c.0.trim_end_matches('\u{200b}')).collect();
     assert_eq!(
         doc, code,
         "docs/user/settings.md, \"Open Settings\": one row per category of main.rs SETTINGS_GROUPS, in its order"
@@ -270,6 +271,7 @@ fn the_settings_table_lists_every_settings_row_in_order() {
     // Under each category's own heading, one row per entry, in its order: together every row of SETTINGS.
     let mut all = Vec::new();
     for (name, _, entries) in super::SETTINGS_GROUPS.iter() {
+        let name = name.trim_end_matches('\u{200b}');
         let doc: Vec<String> = first_table(&section(&md, name)).iter().map(|r| bold(&r[0])).collect();
         let code: Vec<&str> = entries.iter().map(|s| s.0).collect();
         assert_eq!(doc, code, "docs/user/settings.md, \"{name}\": one row per entry of the category in main.rs SETTINGS_GROUPS, in its order");
@@ -286,12 +288,7 @@ fn every_cozy_extra_is_described_with_its_start() {
     let code: Vec<&str> = pocket_ui::cozy_extras::Extra::shown().iter().map(|e| e.label()).collect();
     assert_eq!(doc, code, "docs/user/settings.md, \"Cozy extras\": one row per extra on the page, in its order");
     for (r, e) in rows.iter().zip(pocket_ui::cozy_extras::Extra::shown()) {
-        // Playful animations starts as Animations is (`Extra::default_on`).
-        let start = match e {
-            pocket_ui::cozy_extras::Extra::Playful => "On with Cozy, Off with Quick",
-            e if e.default_on() => "On",
-            _ => "Off",
-        };
+        let start = if e.default_on() { "On" } else { "Off" };
         assert_eq!(r[2], start, "docs/user/settings.md, \"Cozy extras\": {}'s start", e.label());
     }
 }
@@ -338,6 +335,7 @@ fn sleep_and_power_rows_their_start_values_and_choices_are_described() {
                 Row::SwitchOff => pocket_ui::auto_off::CHOICES.iter().map(|c| pocket_ui::auto_off::label(*c)).collect(),
                 Row::ShortPress => ShortPress::ALL.iter().map(|p| p.label().to_string()).collect(),
                 Row::Hold => Hold::ALL.iter().map(|h| h.label().to_string()).collect(),
+                Row::Slideshow => vec!["On".into(), "Off".into()],
             };
             for c in choices {
                 assert!(cells[1].contains(&c), "{page}, {}: the choice {c:?}", row.label());
@@ -834,4 +832,171 @@ fn settings_paths_on_the_screen_use_the_glossarys_arrow() {
         }
     }
     assert!(bad.is_empty(), "write a Settings path with \"›\":\n{}", bad.join("\n"));
+}
+
+// ---- every path in Settings names a real category and row ------------------------------------------------------
+
+/// The problems in the Settings paths of one line: "Settings › A › B" (also written with an arrow, with `\u{203a}`
+/// in a Rust string, or with Markdown bold and links around the names). A must be a category, B a row of A; deeper
+/// parts (the rows of a page) are not checked. `next` is the following line, for a path that breaks after its arrow.
+fn settings_path_problems(line: &str, next: &str, word: &str, cats: &[(String, Vec<String>)]) -> Vec<String> {
+    fn norm(s: &str) -> String {
+        s.replace("\\u{203a}", "\u{203a}").replace('\u{2192}', "\u{203a}")
+    }
+    fn plain(s: &str) -> &str {
+        s.trim_start_matches(|c: char| c.is_whitespace() || "*[`_".contains(c))
+    }
+    /// The longest of `names` that `s` starts with (as whole words), and what follows it.
+    fn take<'a>(s: &'a str, names: impl Iterator<Item = &'a String>) -> Option<(&'a String, &'a str)> {
+        let mut best: Option<(&String, &str)> = None;
+        for n in names {
+            if let Some(rest) = s.strip_prefix(n.as_str()) {
+                let whole = rest.chars().next().is_none_or(|c| !c.is_alphanumeric());
+                if whole && best.is_none_or(|(b, _)| n.len() > b.len()) {
+                    best = Some((n, rest));
+                }
+            }
+        }
+        best
+    }
+    /// Past the Markdown that closes a name: `**`, `]`, a link target `(...)`, a backtick.
+    fn past_markup(mut s: &str) -> &str {
+        loop {
+            let t = s.trim_start_matches(|c: char| "*]`_".contains(c));
+            if let Some(r) = t.strip_prefix('(') {
+                if let Some(i) = r.find(')') {
+                    s = &r[i + 1..];
+                    continue;
+                }
+            }
+            if t.len() == s.len() {
+                return t;
+            }
+            s = t;
+        }
+    }
+    let (line, next) = (norm(line), norm(next));
+    let mut out = Vec::new();
+    let head = format!("{word} \u{203a}");
+    let mut from = 0;
+    while let Some(i) = line[from..].find(&head) {
+        let at = from + i;
+        from = at + head.len();
+        if line[..at].chars().next_back().is_some_and(|c| c.is_alphanumeric()) {
+            continue;
+        }
+        let mut rest = line[from..].trim_start().to_string();
+        if rest.is_empty() {
+            rest = next.trim_start().to_string();
+        }
+        let rest = plain(&rest);
+        let shown: String = rest.chars().take(28).collect();
+        let Some((cat, after)) = take(rest, cats.iter().map(|c| &c.0)) else {
+            out.push(format!("{word} \u{203a} {shown}: not a category"));
+            continue;
+        };
+        let after = past_markup(after).trim_start();
+        let after = if after.is_empty() { next.trim_start() } else { after };
+        let Some(row) = after.strip_prefix('\u{203a}') else {
+            // "the Tour row in Settings › System": the row named before must be one of that category's.
+            let before = line[..at].trim_end().trim_end_matches(" in").trim_end();
+            if let Some(named) = before.strip_suffix(" row") {
+                let named = named.trim_end_matches(|c: char| "*`\"\u{201d}_]".contains(c));
+                let all = cats.iter().flat_map(|c| &c.1);
+                if all.clone().any(|r| named.ends_with(r.as_str())) && !cats.iter().find(|c| &c.0 == cat).unwrap().1.iter().any(|r| named.ends_with(r.as_str())) {
+                    out.push(format!("\"{}\" row in {word} \u{203a} {cat}: not a row of {cat}", named.rsplit(' ').next().unwrap_or(named)));
+                }
+            }
+            continue;
+        };
+        let row = if row.trim().is_empty() { plain(&next) } else { plain(row) };
+        let rows = &cats.iter().find(|c| &c.0 == cat).unwrap().1;
+        if take(row, rows.iter()).is_none() {
+            let shown: String = row.chars().take(28).collect();
+            out.push(format!("{word} \u{203a} {cat} \u{203a} {shown}: not a row of {cat}"));
+        }
+    }
+    out
+}
+
+#[test]
+fn a_row_named_before_its_category_must_be_in_it() {
+    let en = settings_names(None);
+    let bad = settings_path_problems("the Tour row in Settings \u{2192} System then says", "", "Settings", &en);
+    assert_eq!(bad.len(), 1, "{bad:?}");
+    assert!(settings_path_problems("the Tour row in Settings \u{2192} Help & tools then says", "", "Settings", &en).is_empty());
+}
+
+/// The names of the categories and their rows, in English or (through de.tsv) in German.
+fn settings_names(german: Option<&std::collections::HashMap<String, String>>) -> Vec<(String, Vec<String>)> {
+    let tr = |s: &str| -> String {
+        let key = german.and_then(|m| m.get(s)).map(|g| g.as_str()).unwrap_or(s);
+        key.trim_end_matches('\u{200b}').to_string()
+    };
+    super::SETTINGS_GROUPS.iter().map(|(c, _, rows)| (tr(c), rows.iter().map(|r| tr(r.0)).collect())).collect()
+}
+
+/// A path in Settings in the user documents (docs/user, README.md), on the web page, in a string of `src/` and on
+/// both sides of de.tsv has to name a category of main.rs SETTINGS_GROUPS, and a row of that category.
+/// Left out: dated and developer documents, comments in `src/`, this file (it spells bad paths on purpose).
+#[test]
+fn every_path_in_settings_names_a_category_and_one_of_its_rows() {
+    let en = settings_names(None);
+    let tsv = read("assets/i18n/de.tsv");
+    let map: std::collections::HashMap<String, String> = tsv
+        .lines()
+        .filter(|l| !l.starts_with('#'))
+        .filter_map(|l| l.split_once('\t'))
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+    let de = settings_names(Some(&map));
+    let mut bad = Vec::new();
+    let mut scan = |name: String, text: &str, word: &str, cats: &[(String, Vec<String>)], skip_comments: bool| {
+        let lines: Vec<&str> = text.lines().collect();
+        for (n, line) in lines.iter().enumerate() {
+            let t = line.trim_start();
+            if skip_comments && (t.starts_with("//") || !t.contains('"')) || t.starts_with('#') && name.ends_with(".tsv") {
+                continue;
+            }
+            for p in settings_path_problems(line, lines.get(n + 1).copied().unwrap_or(""), word, cats) {
+                bad.push(format!("{name}:{}: {p}", n + 1));
+            }
+        }
+    };
+    let rel = |p: &Path| p.strip_prefix(root()).unwrap_or(p).display().to_string();
+    // The Android app's page describes that app's own Settings ("Settings → First start"), not these categories.
+    let mut docs: Vec<PathBuf> = markdown_files()
+        .into_iter()
+        .filter(|p| p.starts_with(root().join("docs/user")) && !p.ends_with("android-mvp.md"))
+        .collect();
+    docs.push(root().join("README.md"));
+    for f in docs {
+        scan(rel(&f), &std::fs::read_to_string(&f).unwrap(), "Settings", &en, false);
+    }
+    for e in std::fs::read_dir(root().join("src/web/page")).unwrap().flatten() {
+        let p = e.path();
+        if p.extension().is_some_and(|x| x == "js" || x == "html") {
+            scan(rel(&p), &std::fs::read_to_string(&p).unwrap(), "Settings", &en, false);
+        }
+    }
+    for f in rust_sources() {
+        if !f.ends_with("doc_checks.rs") {
+            scan(rel(&f), &std::fs::read_to_string(&f).unwrap(), "Settings", &en, true);
+        }
+    }
+    // Both sides of de.tsv: the English key as the code paints it, the German text with the German names.
+    for (n, line) in tsv.lines().enumerate().filter(|(_, l)| !l.starts_with('#')) {
+        let (k, v) = line.split_once('\t').unwrap_or((line, ""));
+        for p in settings_path_problems(k, "", "Settings", &en) {
+            bad.push(format!("assets/i18n/de.tsv:{} (English): {p}", n + 1));
+        }
+        for p in settings_path_problems(v, "", "Einstellungen", &de) {
+            bad.push(format!("assets/i18n/de.tsv:{} (German): {p}", n + 1));
+        }
+    }
+    assert!(
+        bad.is_empty(),
+        "a path \"Settings › A › B\" needs A = a category and B = a row of A (main.rs SETTINGS_GROUPS):\n{}",
+        bad.join("\n")
+    );
 }

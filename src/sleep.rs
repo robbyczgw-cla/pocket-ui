@@ -797,6 +797,14 @@ enum InhibitorSlot {
 }
 
 impl InhibitorSlot {
+    /// Nothing is taken where the host owns the power key (a Steam Deck): logind's handling stays.
+    fn take_soon_unless(host_owned: bool) -> InhibitorSlot {
+        if host_owned {
+            return InhibitorSlot::Have(None);
+        }
+        InhibitorSlot::take_soon()
+    }
+
     fn take_soon() -> InhibitorSlot {
         if !cfg!(target_os = "linux") {
             return InhibitorSlot::Have(None);
@@ -1208,6 +1216,8 @@ impl DeepSteps for DeepWorker {
 pub struct Sleep {
     pub config: Config,
     screen_only: bool,
+    /// SteamOS owns sleep: no idle timers, no suspend, no power-key inhibitor (`build_on`).
+    host_owned: bool,
     data_dir: PathBuf,
     sys: System,
     state: State,
@@ -1268,7 +1278,8 @@ pub struct Sleep {
 impl Sleep {
     /// `notify` wakes the app's event loop when a worker has news (then call `tick`).
     pub fn new(data_dir: PathBuf, notify: Arc<dyn Fn() + Send + Sync>) -> Sleep {
-        let mut sleep = Sleep::build(data_dir, System::from_env(), notify, InhibitorSlot::take_soon());
+        let host_owned = crate::device::current().host_owned();
+        let mut sleep = Sleep::build(data_dir, System::from_env(), notify, InhibitorSlot::take_soon_unless(host_owned));
         sleep.sys.recover();
         // Switched off after sleeping: the backlight was 0 then. One small file, and only that start finds one.
         sleep.switched_off = crate::auto_off::take_note(&sleep.data_dir);
@@ -1278,7 +1289,10 @@ impl Sleep {
         }
         #[cfg(target_os = "linux")]
         sleep.spawn_watcher();
-        sleep.spawn_battery_guard();
+        // A Steam Deck: SteamOS owns the battery, sleep and the power key (docs/STEAMDECK.md), so no critical-battery power-off.
+        if !host_owned {
+            sleep.spawn_battery_guard();
+        }
         sleep.spawn_rtc_check();
         sleep
     }
@@ -1292,15 +1306,30 @@ impl Sleep {
         });
     }
 
+    /// Screen off / Sleep after as timers; none on a host-owned device.
+    fn times(host_owned: bool, config: &Config) -> (Option<Duration>, Option<Duration>) {
+        if host_owned {
+            return (None, None);
+        }
+        (config.screen_off.map(scaled_secs), config.sleep_after.map(|m| minute() * m))
+    }
+
     /// The state alone: no threads, no inhibitor, nothing read but the settings (`new` adds those; the tests don't).
     fn build(data_dir: PathBuf, sys: System, notify: Arc<dyn Fn() + Send + Sync>, inhibitor: InhibitorSlot) -> Sleep {
+        Sleep::build_on(crate::device::current().host_owned(), data_dir, sys, notify, inhibitor)
+    }
+
+    /// `host_owned`: SteamOS (a Steam Deck) owns sleep, so none of the idle timers run, whatever sleep.json says.
+    fn build_on(host_owned: bool, data_dir: PathBuf, sys: System, notify: Arc<dyn Fn() + Send + Sync>, inhibitor: InhibitorSlot) -> Sleep {
         let config = Config::load(&data_dir);
         let (tx, rx) = channel();
+        let (light_after, deep_after) = Sleep::times(host_owned, &config);
         Sleep {
             screen_only: crate::device::current().screen_off_only(),
+            host_owned,
             timers: Timers {
-                light_after: config.screen_off.map(scaled_secs),
-                deep_after: config.sleep_after.map(|m| minute() * m),
+                light_after,
+                deep_after,
                 last_input: Instant::now(),
                 light_since: None,
                 failures: 0,
@@ -1391,8 +1420,7 @@ impl Sleep {
         let config = config.for_device(self.screen_only);
         self.config = config;
         self.config.save(&self.data_dir);
-        self.timers.light_after = config.screen_off.map(scaled_secs);
-        self.timers.deep_after = config.sleep_after.map(|m| minute() * m);
+        (self.timers.light_after, self.timers.deep_after) = Sleep::times(self.host_owned, &config);
         self.timers.last_input = Instant::now();
     }
 
@@ -1414,6 +1442,7 @@ impl Sleep {
     /// longer waits, `Timers::deep_wait`); the low-battery guard covers a device that stays dark anyway.
     fn auto_suspend(&self) -> bool {
         !self.screen_only
+            && !self.host_owned
             && std::env::var_os("POCKETUI_NO_AUTOSUSPEND").is_none()
             && !no_autosuspend(&self.data_dir, Path::new("/storage/.config/pocket-ui"))
     }
@@ -3191,6 +3220,32 @@ mod tests {
         assert_eq!(t.due(State::Light, t0 + Duration::from_secs(99_999), true), (None, None));
         t.failures = 1;
         assert_eq!(t.due(State::Light, t0, true).1, Some(t0 + RETRY_FIRST * 2));
+    }
+
+    fn sleep_on(host_owned: bool, name: &str) -> (SleepDir, Sleep) {
+        let dir = TestDir::new(&format!("sleep-{name}"));
+        let sys = System::new(None, "false".into(), false);
+        let sleep = Sleep::build_on(host_owned, dir.to_path_buf(), sys, Arc::new(|| {}), InhibitorSlot::Have(None));
+        (SleepDir(dir, sleep.own_suspend.clone()), sleep)
+    }
+
+    #[test]
+    fn a_steam_deck_runs_no_sleep_timers_and_takes_no_power_key() {
+        // The page is hidden there, so the defaults (screen off after 2 min, sleep after 2 more) would be unreachable.
+        let (_d, mut deck) = sleep_on(true, "deck-timers");
+        assert_eq!((deck.timers.light_after, deck.timers.deep_after), (None, None));
+        assert!(!deck.auto_suspend());
+        let t0 = deck.timers.last_input;
+        assert_eq!(deck.timers.due(State::Awake, t0 + Duration::from_secs(99_999), true), (None, None));
+        let mut c = deck.config;
+        c.screen_off = Some(30);
+        c.sleep_after = Some(1);
+        deck.set_config(c);
+        assert_eq!((deck.timers.light_after, deck.timers.deep_after), (None, None), "not even from a saved choice");
+        assert!(matches!(InhibitorSlot::take_soon_unless(true), InhibitorSlot::Have(None)), "no logind inhibitor taken");
+        // Handhelds: exactly the timers of the settings.
+        let (_d, hand) = sleep_on(false, "hand-timers");
+        assert_eq!((hand.timers.light_after, hand.timers.deep_after), (Some(scaled_secs(120)), Some(minute() * 2)));
     }
 
     #[test]

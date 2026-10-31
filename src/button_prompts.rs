@@ -1,4 +1,4 @@
-//! Settings → Look & feel → Look → Theme → **Button symbols**: how the hints show the four face buttons.
+//! Settings → Playing → Buttons → Button symbols: how the hints show the four face buttons.
 //!
 //! pocket-ui's hints speak in roles (A confirms, B goes back, X and Y are the two extra actions, `button_layout`);
 //! this only decides how those four keys look wherever a key is drawn (the hint bars of both families, dialogs, the
@@ -36,6 +36,10 @@ pub enum PromptStyle {
 
 impl Default for PromptStyle {
     fn default() -> Self {
+        // Android has no device table: plain letters, as the launcher always drew its controller hints.
+        #[cfg(target_os = "android")]
+        return PromptStyle::Nintendo;
+        #[cfg(not(target_os = "android"))]
         crate::device::current().prompt_style()
     }
 }

@@ -1,6 +1,6 @@
 //! Part of the pocket-ui binary: the App's side of `pocket_ui::room_light` (light by time of day) and
 //! `pocket_ui::room_deco` (decorations that grow with play) on the Shelf and the Cabinet, each switched by its row in
-//! Settings → Look & feel → Cozy extras (`cozy_extras::Extra::TimeOfDayLight`, `Extra::Decorations`).
+//! Settings → Look → Cozy extras (`cozy_extras::Extra::TimeOfDayLight`, `Extra::Decorations`).
 //!
 //! No work per frame: the light is read from the clock at most every [`LOOK_AGAIN`], the milestones from the library
 //! when its case stickers changed or every [`LOOK_AGAIN`]; when either changed, the wood and the Shelf look's tiles are
@@ -14,11 +14,10 @@ use std::time::{Duration, Instant};
 use pocket_ui::cabinet_art::Pic;
 use pocket_ui::cozy_extras::{self, Extra};
 use pocket_ui::gfx::Canvas;
-use pocket_ui::media::{self, Prop};
+use pocket_ui::media::Prop;
 use pocket_ui::palette::*;
 use pocket_ui::room_deco::Earned;
 use pocket_ui::room_light::{self, Light};
-use pocket_ui::text::Face;
 
 use super::{App, Screen, Theme};
 
@@ -142,67 +141,11 @@ impl App {
     /// The picture of `prop` at scale `f` (screen pixels a template pixel) with what was earned: the plant at its
     /// stage; the framed "100 %" with its words. Made once.
     pub(crate) fn room_prop_pic(&mut self, prop: Prop, earned: &Earned, f: f32) -> Rc<Pic> {
-        let prop = prop.grown(earned.plant);
-        let key = (prop, (f * 100.0) as i32);
-        if let Some(p) = self.cabinet.room.pics.get(&key) {
-            return p.clone();
-        }
-        let mut pic = if (f - media::SHELF_SCALE).abs() < 0.01 { prop.pic().clone() } else { media::rescaled(prop.pic(), f / media::SHELF_SCALE) };
-        if prop == Prop::Hundred {
-            self.hundred_words(&mut pic);
-        }
-        let pic = Rc::new(pic);
-        if self.cabinet.room.pics.len() > 40 {
-            self.cabinet.room.pics.clear();
-        }
-        self.cabinet.room.pics.insert(key, pic.clone());
-        pic
-    }
-
-    /// "100 %" painted on the framed paper's empty middle.
-    fn hundred_words(&mut self, pic: &mut Pic) {
-        let (px, py, pw, ph, png_w) = media::FRAME_PAPER;
-        let k = pic.w as f32 / png_w as f32;
-        let (x0, y0, w, h) = ((px as f32 * k) as i32, (py as f32 * k) as i32, (pw as f32 * k) as i32, (ph as f32 * k) as i32);
-        if w > 4 && h > 4 && x0 + w <= pic.w && y0 + h <= pic.h {
-            let paper = pic.px[((y0 + h / 2) * pic.w + x0 + w / 2) as usize] & 0xff_ffff;
-            let mut buf = vec![paper; (w * h) as usize];
-            {
-                let mut c = Canvas::new(&mut buf, w as u32, h as u32);
-                let _fixed = pocket_ui::type_scale::fixed();
-                let words = "100 %";
-                let mut size = (h as f32 * 0.8) as u32;
-                while size > 7 && self.text.width(Face::Title, size, words) > w - 2 {
-                    size -= 1;
-                }
-                let tw = self.text.width(Face::Title, size, words);
-                self.text.draw(&mut c, Face::Title, size, (w - tw) / 2, h / 2 + size as i32 * 7 / 20, 0x5a3a1e, words);
-            }
-            for y in 0..h {
-                for x in 0..w {
-                    pic.px[((y0 + y) * pic.w + x0 + x) as usize] = 0xff00_0000 | buf[(y * w + x) as usize];
-                }
-            }
-        }
+        pocket_ui::room_props::prop_pic(&mut self.cabinet.room.pics, &mut self.text, prop, earned, f)
     }
 }
 
-/// The decorations a shelf of `system` (None: not a system's shelf) shows after its bookend, most important first:
-/// its figurine, then the trophy and the framed "100 %" where `awards` (the Shelf look's single row; the Cabinet's
-/// first shelf with room for them).
-pub(crate) fn deco_for(earned: &Earned, system: Option<&str>, awards: bool) -> Vec<Prop> {
-    let mut out = Vec::new();
-    if let Some(f) = system.and_then(|s| earned.figure(s)) {
-        out.push(Prop::Figure(f));
-    }
-    if awards && earned.trophy {
-        out.push(Prop::Trophy);
-    }
-    if awards && earned.hundred {
-        out.push(Prop::Hundred);
-    }
-    out
-}
+pub(crate) use pocket_ui::room_props::deco_for;
 
 /// The lamp's glow behind it: a soft warm light round its shade, `strength` 0-255 (`Light::lamp`), inside `clip`
 /// (x0, y0, x1, y1: the shelf's compartment, so it never spills onto the board above). The light's shape is made once
@@ -271,7 +214,6 @@ fn glow_mask(w: i32, h: i32, strength: u8) -> Rc<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pocket_ui::room_deco::Figure;
 
     #[test]
     fn decorations_poll_once_a_minute_even_with_the_light_off() {
@@ -289,15 +231,6 @@ mod tests {
         // Rebuilding the light for a palette change also leaves the polling deadline alone.
         room.light = Some((next, Light::NEUTRAL));
         assert_eq!(room.poll(next + Duration::from_secs(1)), (false, next + Duration::from_secs(60)));
-    }
-
-    #[test]
-    fn awards_go_only_where_asked_and_the_figurine_first() {
-        let e = Earned { plant: 1, trophy: true, hundred: true, figures: vec!["snes".into()] };
-        assert_eq!(deco_for(&e, Some("snes"), true), vec![Prop::Figure(Figure::of("snes")), Prop::Trophy, Prop::Hundred]);
-        assert_eq!(deco_for(&e, Some("gba"), false), vec![]);
-        assert_eq!(deco_for(&e, None, true), vec![Prop::Trophy, Prop::Hundred]);
-        assert_eq!(deco_for(&classic(), Some("snes"), true), vec![]);
     }
 
     #[test]

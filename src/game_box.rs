@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 use crate::cabinet::{ink_on, luma};
 use crate::cabinet_art::{self as art, Look, Pic};
-use crate::game_card::{paint_mark, paint_stars, CardData, CardPicture, Summary};
+use crate::game_card_model::{paint_mark, paint_stars, CardData, CardPicture, Summary};
 use crate::gfx::{mix, Canvas};
 use crate::image::Image;
 use crate::library_meta::Status;
@@ -56,7 +56,7 @@ const CARTBOX_FRONT: &[u8] = include_bytes!("../assets/media/back/cartbox-front.
 /// The neutral grey the cardboard box and the DVD case are drawn in, coloured at run time (as `media`'s cartridges).
 const GREY: u32 = 156;
 
-/// How long turning the box over takes (Settings → Look & feel → Motion: Off turns it at once).
+/// How long turning the box over takes (Settings → Sound & feel → Motion: Off turns it at once).
 pub const FLIP: Duration = Duration::from_millis(280);
 /// How long the game takes to slide out of its case when the box comes up (Motion: Off at once).
 pub const OPEN: Duration = Duration::from_millis(300);
@@ -205,6 +205,8 @@ pub struct BoxView {
     /// last paint: a fact is picked only while it is in view.
     link_at: Vec<(i32, i32)>,
     view_h: i32,
+    /// The back's scrolling part on its canvas as painted last: (top, x, w).
+    body: (i32, i32, i32),
 }
 
 /// Where the box goes on a screen `w` x `h`: (top, bottom) of its room.
@@ -352,6 +354,15 @@ impl BoxView {
 
     pub fn scrollable(&self) -> bool {
         self.back && self.max_scroll > 0
+    }
+
+    /// Where fact `i` of the back's links is on the canvas the back was painted on, (x, y, w, h), while it is in view:
+    /// for a touch screen's taps (the Android app).
+    pub fn link_rect(&self, i: usize) -> Option<(i32, i32, i32, i32)> {
+        let (top, x, w) = self.body;
+        let &(at, h) = self.link_at.get(i).filter(|(t, _)| *t >= 0)?;
+        let y = top + at - self.scroll;
+        (self.back && y >= top && y + h <= top + self.view_h).then_some((x, y, w, h))
     }
 
     /// Whether fact `i` of the back's links is wholly in view; before the back was painted, as if it were (the paint
@@ -585,6 +596,7 @@ impl BoxView {
         }
         let full_w = c.w;
         self.view_h = view_h;
+        self.body = (top, px, pw);
         self.link_at = vec![(-1, 0); d.links.len()];
         let height = {
             let mut body = c.rows(top, bot);
@@ -646,7 +658,7 @@ fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[Ca
         // Neither picture exists: one screen with the console and what to do, not the same clip-art twice.
         let w = if wide { shot_w } else { inner_w };
         let h = if wide { shot_h } else { shot_h * 2 / 3 };
-        paint_shot(c, text, (inner_x, y, w, h), None, inp.console, paper, "No pictures yet. HOME + A in the game takes one.");
+        paint_shot(c, text, (inner_x, y, w, h), None, inp.console, paper, crate::platform::screenshot_hint());
         shots_bottom = y + h + caption;
     } else {
         for (i, (label, img)) in slots.iter().enumerate() {
@@ -698,7 +710,7 @@ fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[Ca
     facts.extend(d.facts.iter().map(|(k, v)| (*k, v.clone())));
     facts.extend(d.players.clone().map(|p| ("Players", p)));
     facts.extend(d.scores.clone().map(|s| ("Reviews", s)));
-    // The label column holds the widest label: a face wider than Barlow (Settings → Look & feel → Look → Theme → Font) or a longer German word.
+    // The label column holds the widest label: a face wider than Barlow (Settings → Look → Font) or a longer German word.
     let gap = text.width(Face::Body, 28, "  ");
     let key_w = facts.iter().map(|(k, _)| text.width(Face::Body, 28, k) + gap).fold(key_w, i32::max).min(col_w / 2);
     if facts.is_empty() {
@@ -741,7 +753,7 @@ fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[Ca
     text.draw(c, Face::Body, 28, sx, ry, ink, &fitted);
     ry += row;
     text.draw(c, Face::Body, 28, rx, ry, soft, "Played");
-    let played = d.played.map_or("Not yet".to_string(), |(_, secs)| crate::recents::duration(secs));
+    let played = d.played.map_or("Not yet".to_string(), |(_, secs)| crate::play_time::duration(secs));
     let fitted = text.fit(Face::Body, 28, &played, rw);
     text.draw(c, Face::Body, 28, rx + rkey, ry, ink, &fitted);
     ry += row;
@@ -749,7 +761,7 @@ fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[Ca
     if d.rating > 0 {
         paint_stars(c, rx + rkey + 12, ry - 10, 11, d.rating, ink, mix(paper, ink, 60));
     } else {
-        let fitted = text.fit(Face::Body, 28, "None. Press Y", rw);
+        let fitted = text.fit(Face::Body, 28, crate::game_card_model::no_rating(), rw);
         text.draw(c, Face::Body, 28, rx + rkey, ry, soft, &fitted);
     }
     ry += row;

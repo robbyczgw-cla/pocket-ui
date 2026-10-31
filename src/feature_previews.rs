@@ -460,14 +460,14 @@ pub fn last_game(c: &mut Canvas, text: &mut Text) {
 
 // ---- the menus' feel -------------------------------------------------------------------------------------------
 
-/// Settings → Look & feel, where these switches are (`SETTINGS_GROUPS` in main.rs).
-const SETTINGS_ROWS: [&str; 5] = ["Look", "Screen frames", "Sounds", "Haptics", "LEDs"];
-const SETTINGS_TITLE: &str = "Look & feel";
+/// Settings → Sound & feel, where these switches are (`SETTINGS_GROUPS` in main.rs).
+const SETTINGS_ROWS: [&str; 8] = ["Animations", "Playful cases", "Old-TV switch-on", "Motion", "Sounds", "Case sounds", "Haptics", "LEDs"];
+const SETTINGS_TITLE: &str = "Sound & feel";
 
 fn settings_rows(values: &[(&str, &str)]) -> Vec<(&'static str, String)> {
     SETTINGS_ROWS
         .iter()
-        .map(|n| (*n, values.iter().find(|(k, _)| k == n).map_or(">".to_string(), |(_, v)| v.to_string())))
+        .map(|n| (*n, values.iter().find(|(k, _)| k == n).map_or("On".to_string(), |(_, v)| v.to_string())))
         .collect()
 }
 
@@ -476,19 +476,19 @@ pub fn motion(c: &mut Canvas, text: &mut Text) {
     c.clear(pal().void);
     let (pad, row, top) = (30, 66, 132);
     let right = c.w - pad;
-    for (k, amount) in [(2.0f32, 40u32), (2.5, 70), (3.0, 105), (3.5, 145)] {
+    for (k, amount) in [(5.0f32, 40u32), (5.5, 70), (6.0, 105), (6.5, 145)] {
         let y = top + (k * row as f32) as i32;
         c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, mix(pal().void, pal().band, amount));
     }
-    let rows = settings_rows(&[("Screen frames", "Off"), ("Sounds", "30%"), ("Haptics", "Off"), ("LEDs", "Off >")]);
-    list_page(c, text, SETTINGS_TITLE, &rows, 4, top);
+    let rows = settings_rows(&[("Animations", "Cozy"), ("Motion", "Full"), ("Sounds", "30%"), ("Haptics", "Off"), ("LEDs", "Off >")]);
+    list_page(c, text, SETTINGS_TITLE, &rows, 7, top);
     hints(c, text, &[("B", "Back"), ("A", "Open")]);
 }
 
 pub fn sounds(c: &mut Canvas, text: &mut Text) {
     c.clear(pal().void);
-    let rows = settings_rows(&[("Screen frames", "Off"), ("Sounds", "‹ 30% ›"), ("Haptics", "Off"), ("LEDs", "Off >")]);
-    list_page(c, text, SETTINGS_TITLE, &rows, 2, 132);
+    let rows = settings_rows(&[("Animations", "Cozy"), ("Motion", "Full"), ("Sounds", "‹ 30% ›"), ("Haptics", "Off"), ("LEDs", "Off")]);
+    list_page(c, text, SETTINGS_TITLE, &rows, 4, 132);
     // A soft click: a short tone that dies away.
     let (x0, y0, w, amp) = (MARGIN + 40, 830, c.w - 2 * MARGIN - 80, 70.0f32);
     for x in 0..w {
@@ -502,8 +502,8 @@ pub fn sounds(c: &mut Canvas, text: &mut Text) {
 
 pub fn haptics(c: &mut Canvas, text: &mut Text) {
     c.clear(pal().void);
-    let rows = settings_rows(&[("Screen frames", "Off"), ("Sounds", "30%"), ("Haptics", "On"), ("LEDs", "Off >")]);
-    list_page(c, text, SETTINGS_TITLE, &rows, 3, 132);
+    let rows = settings_rows(&[("Animations", "Cozy"), ("Motion", "Full"), ("Sounds", "30%"), ("Haptics", "‹ On ›"), ("LEDs", "Off")]);
+    list_page(c, text, SETTINGS_TITLE, &rows, 6, 132);
     hints(c, text, &[("B", "Back"), ("A", "Switch")]);
 }
 
@@ -683,6 +683,14 @@ pub fn tools(c: &mut Canvas, text: &mut Text) {
         text.draw(c, Face::Body, 30, 66, 132 + rows.len() as i32 * 66 + 60, pal().text, &line);
     }
     hints(c, text, &[("B", "Back"), ("A", "Start")]);
+}
+
+pub fn cozy_extras(c: &mut Canvas, text: &mut Text) {
+    use crate::cozy_extras::Extra;
+    c.clear(pal().void);
+    let rows: Vec<(&str, String)> = Extra::shown().into_iter().take(9).map(|e| (e.label(), if e.default_on() { "On" } else { "Off" }.to_string())).collect();
+    list_page(c, text, "Cozy extras", &rows, 0, 132);
+    hints(c, text, &[("B", "Back"), ("A", "Switch")]);
 }
 
 pub fn perf_fan(c: &mut Canvas, text: &mut Text) {

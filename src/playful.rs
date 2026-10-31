@@ -1,4 +1,4 @@
-//! Playful animations (Settings → Look & feel → Cozy extras → **Playful animations**, docs/DESIGN.md "Playful
+//! Playful animations (Settings → Sound & feel → **Playful cases**, docs/DESIGN.md "Playful
 //! animations"): the Shelf and Cabinet looks' cases a little springy, in our 2D pixel style.
 //!
 //! - **Pulled out**, a case springs: it goes a touch past its place and settles (`back_out`).

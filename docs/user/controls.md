@@ -6,7 +6,7 @@ show the buttons that screen uses.
 
 ![The Mini V2's controls: the D-pad and the left stick on the left, A, B, X and Y and the right stick on the right, SELECT and START at the top corners, HOME and BACK at the bottom corners, L1, L2, R1 and R2 on the shoulders.](pocket-ui:controls)
 
-**Used to an Xbox controller?** Settings → Playing → [**Button layout**](settings.md#button-layout) set to **Xbox**
+**Used to an Xbox controller?** Settings → Playing → Buttons → [**Button layout**](settings.md#button-layout) set to **Xbox**
 puts A at the bottom and B on the right in every menu of pocket-ui; games keep their own ([Button layout](#button-layout)).
 
 <!-- TODO: confirm on the device that X is the top face button and Y the left one (Nintendo
@@ -96,7 +96,7 @@ part of the chart (of a review card) for the one before or after. A tap on Week,
 
 ## Button layout
 
-Settings → Playing → [**Button layout**](settings.md#button-layout) chooses which face button plays A, B, X and Y:
+Settings → Playing → Buttons → [**Button layout**](settings.md#button-layout) chooses which face button plays A, B, X and Y:
 
 | Layout | A (confirm) | B (back) | X | Y |
 |---|---|---|---|---|
@@ -145,7 +145,7 @@ making a controller Player 1 (see [Players](pause-menu.md#players)).
 - Rumble goes to each player's own controller; the Pocket's buttons have the Pocket's motor.
 
 RetroArch numbers the controllers itself: normally the Pocket is Player 1 and connected controllers follow in the order
-RetroArch finds them. Change it in RetroArch's own menu, under Settings → Input. The other emulators (PlayStation 2,
+RetroArch finds them. Change it in RetroArch's own menu, under Settings, then Input. The other emulators (PlayStation 2,
 GameCube, Wii, 3DS and the rest) have their own controller settings, which pocket-ui leaves as ROCKNIX set them up.
 
 ## In a game

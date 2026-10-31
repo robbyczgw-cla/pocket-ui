@@ -1,4 +1,4 @@
-//! Decorations that grow with your play, on the Shelf and the Cabinet (Settings → Look & feel → Extras): milestones
+//! Decorations that grow with your play, on the Shelf and the Cabinet (Settings → Look → Cozy extras): milestones
 //! from what the library knows (`library_meta`: time played a game, its status, its case stickers) turn into things on
 //! the shelves. The plant grows in four stages with the hours played in all; a trophy stands there after the first
 //! completed game (the "Completed" status or sticker); a framed "100 %" after the first "100 %" sticker; a small

@@ -1,0 +1,7 @@
+<resources>
+    <style name="PocketTheme" parent="android:style/Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">#000000</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:colorAccent">#ECE9E1</item>
+    </style>
+</resources>

@@ -129,6 +129,12 @@ impl App {
     }
 }
 
+/// The colours, font and button symbols in use (Settings → Look → Colours and Font, Playing → Buttons): the previews are
+/// painted again when one changes.
+pub(crate) fn style_mark() -> u32 {
+    pocket_ui::button_prompts::get() as u32 | (pocket_ui::palette::colours() as u32) << 4 | (pocket_ui::font_style::get() as u32) << 8
+}
+
 /// What the previews were painted with: appearance, language, text size and the corner's clock ("14:02", None while the
 /// clock was never set).
 pub(crate) type PreviewKey<'a> = (bool, pocket_ui::i18n::Lang, pocket_ui::type_scale::TextSize, &'a Option<String>);

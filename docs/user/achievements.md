@@ -30,7 +30,7 @@ removes the key from the Pocket. What you unlocked stays on the site.
   ("Achievements: 12 of 40"). A game that has no achievements on the site gets no note.
 - When you unlock one, a small card appears at the top of the screen for four seconds: the achievement's picture,
   "Achievement unlocked" with its points, and its title. Several unlocks come one after the other.
-- With **Sounds** on (Settings → Look & feel → Sounds), a short chime plays with the card, at the menu sounds' volume. With
+- With **Sounds** on (Settings → Sound & feel → Sounds), a short chime plays with the card, at the menu sounds' volume. With
   Sounds off, the card comes silently.
 - Saving and loading states, rewind, fast-forward and cheats all stay available. RetroAchievements calls this
   *softcore*. Hardcore mode, which forbids loading states, is not offered: pocket-ui's instant resume is a state

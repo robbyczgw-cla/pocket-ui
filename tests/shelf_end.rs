@@ -65,7 +65,7 @@ fn shot(tmp: &Path, stub: &Option<Stub>, look: &str, size: &str, state: &str) ->
     let name = format!("{look}-{size}-{}", state.replace(':', "_"));
     let data = tmp.join(format!("data-{name}"));
     copy_dir(&lib.join("data"), &data);
-    // Settings → Look & feel → Look: Shelf, whatever the made-up library chose.
+    // Settings → Look → Look: Shelf, whatever the made-up library chose.
     let settings = data.join("settings.json");
     let mut json: serde_json::Value = std::fs::read_to_string(&settings).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_else(|| serde_json::json!({}));
     json["theme"] = serde_json::json!("shelf");

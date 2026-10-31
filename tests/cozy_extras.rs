@@ -1,7 +1,7 @@
-//! Settings → Look & feel → Cozy extras as the player meets them (docs/user/settings.md "Cozy extras"), on the
-//! made-up library (scripts/curator-fake-library.py): a journey on the page (Down twice to TV on the cabinet, A; Down
-//! to Stickers on cases, A) lands in settings.json, the Cabinet then stands without its TV, and A again brings it
-//! back; a settings.json from before the page keeps every extra as it starts. Needs python3 (and, on Linux without
+//! Settings → Look → Cozy extras as the player meets them (docs/user/settings.md "Cozy extras"), on the made-up library
+//! (scripts/curator-fake-library.py): a journey on the page (A on TV on the cabinet; Down to Stickers on cases, A)
+//! lands in settings.json, the Cabinet then stands without its TV, and A again brings it back; a settings.json from
+//! before the page keeps every extra as it starts. The slideshow is switched in System → Sleep & power. Needs python3 (and, on Linux without
 //! a compositor, scripts/wayland-stub.py), as tests/stickers_tv.rs.
 
 use std::path::{Path, PathBuf};
@@ -121,33 +121,35 @@ fn switching_an_extra_on_the_page_is_saved_and_takes_the_tv_off_the_cabinet() {
     shot(&tmp, &lib, &data, &stub, "cozy:0", "en");
     assert!(extras(&data).is_null(), "the start writes no extras: {}", extras(&data));
     assert!(red_on_tv(&shot(&tmp, &lib, &data, &stub, "shelf:snes:cabinet:games:0", "en")) > 1500, "the TV as it starts");
-    // Down twice to TV on the cabinet, A; Down to Stickers on cases, A (in German: the keys are the same).
-    shot(&tmp, &lib, &data, &stub, "cozy:0::ddada", "de");
+    // A on TV on the cabinet, the first row; Down to Stickers on cases, A (in German: the keys are the same).
+    shot(&tmp, &lib, &data, &stub, "cozy:0::ada", "de");
     assert_eq!(extras(&data), serde_json::json!({"cabinet_tv": false, "case_stickers": false}));
     assert_eq!(red_on_tv(&shot(&tmp, &lib, &data, &stub, "shelf:snes:cabinet:games:0", "en")), 0, "no TV with it off");
     // Up to the TV again, Right switches it back; B leaves the page and changes nothing.
-    shot(&tmp, &lib, &data, &stub, "cozy:3::urb", "en");
+    shot(&tmp, &lib, &data, &stub, "cozy:1::urb", "en");
     assert_eq!(extras(&data), serde_json::json!({"case_stickers": false}));
     assert!(red_on_tv(&shot(&tmp, &lib, &data, &stub, "shelf:snes:cabinet:games:0", "en")) > 1500, "the TV is back");
 }
 
-/// The idle slideshow is off in every look until the page switches it on; the switch is kept, and switching it off again
-/// writes nothing. The row is the last of the page.
+/// The idle slideshow is off in every look until Sleep & power's row switches it on; the switch is kept, and switching it
+/// off again writes nothing. The row comes right after Screen off after.
 #[test]
 fn the_idle_slideshow_is_off_in_every_look_until_the_page_switches_it_on() {
     let _guard = tempfile::tempdir().unwrap();
     let tmp = _guard.path().to_path_buf();
     let stub = wayland(&tmp);
     let lib = library(&tmp);
-    let row = pocket_ui::cozy_extras::Extra::shown().iter().position(|e| *e == pocket_ui::cozy_extras::Extra::IdleSlideshow).unwrap();
+    let row = pocket_ui::sleep_settings::ROWS.iter().position(|r| *r == pocket_ui::sleep_settings::Row::Slideshow).unwrap();
+    assert_eq!(row, 1);
+    assert!(!pocket_ui::cozy_extras::Extra::shown().contains(&pocket_ui::cozy_extras::Extra::IdleSlideshow), "not on the Cozy extras page");
     for theme in ["shelf", "cabinet", "minimal", "cards", "split"] {
         let data = tmp.join(format!("data-{theme}"));
         std::fs::create_dir_all(&data).unwrap();
-        shot_in(&tmp, &lib, &data, &stub, &format!("cozy:{row}"), "en", theme);
+        shot_in(&tmp, &lib, &data, &stub, &format!("sleep:{row}"), "en", theme);
         assert_eq!(extras(&data), serde_json::Value::Null, "{theme}: nothing is written before a choice");
-        shot_in(&tmp, &lib, &data, &stub, &format!("cozy:{row}::a"), "en", theme);
+        shot_in(&tmp, &lib, &data, &stub, &format!("sleep:{row}:keys=a"), "en", theme);
         assert_eq!(extras(&data), serde_json::json!({ "idle_slideshow": true }), "{theme}: one press switches it on");
-        shot_in(&tmp, &lib, &data, &stub, &format!("cozy:{row}::a"), "en", theme);
+        shot_in(&tmp, &lib, &data, &stub, &format!("sleep:{row}:keys=r"), "en", theme);
         assert_eq!(extras(&data), serde_json::Value::Null, "{theme}: and the next one back off, written no more");
     }
 }

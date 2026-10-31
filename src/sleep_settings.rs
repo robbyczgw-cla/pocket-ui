@@ -1,7 +1,8 @@
 //! Settings → System → Sleep & power: when the screen goes off, when the Pocket sleeps and switches off, and what
 //! the power button does (docs/SLEEP.md, "Sleep & power settings"). One page in the manner of NextUI's System
 //! settings (Screen timeout, Suspend timeout): the times of the two sleep steps, the switch-off after sleeping, and
-//! the button's short press and hold.
+//! the button's short press and hold; and the cozy extra that comes before the screen goes off, the slideshow of your
+//! games (`cozy_extras::Extra::IdleSlideshow`, kept in settings.json, not sleep.json: the App switches it).
 //!
 //! The choices live in `<data>/sleep.json` with `sleep.rs`, which acts on them (`Sleep::set_config`). Files from
 //! before this page (2026-10-26) had only `light_after` (minutes: Off, 1, 3, 5) and `off_after`: `light_after` becomes
@@ -216,6 +217,8 @@ fn step_of<T: Copy + PartialEq>(choices: &[T], now: T, delta: i32, round: bool) 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Row {
     ScreenOff,
+    /// The idle slideshow before the screen goes off: On or Off (`Action::Slideshow`).
+    Slideshow,
     SleepAfter,
     SwitchOff,
     ShortPress,
@@ -224,22 +227,32 @@ pub enum Row {
 
 /// Kept short enough for the settings page in both languages.
 pub const NO_SLEEP: &str = "ROCKNIX sleep is unavailable here; the screen turns off instead.";
-const SCREEN_ONLY_ROWS: [Row; 3] = [Row::ScreenOff, Row::SwitchOff, Row::ShortPress];
+const SCREEN_ONLY_ROWS: [Row; 4] = [Row::ScreenOff, Row::Slideshow, Row::SwitchOff, Row::ShortPress];
+/// A Steam Deck: SteamOS owns sleep and the power button (docs/STEAMDECK.md); the slideshow is pocket-ui's own.
+const HOST_ROWS: [Row; 1] = [Row::Slideshow];
 
 pub fn rows() -> &'static [Row] {
-    if crate::device::current().screen_off_only() {
+    if crate::device::current().host_owned() {
+        &HOST_ROWS
+    } else if crate::device::current().screen_off_only() {
         &SCREEN_ONLY_ROWS
     } else {
         &ROWS
     }
 }
 
-pub const ROWS: [Row; 5] = [Row::ScreenOff, Row::SleepAfter, Row::SwitchOff, Row::ShortPress, Row::Hold];
+pub const ROWS: [Row; 6] = [Row::ScreenOff, Row::Slideshow, Row::SleepAfter, Row::SwitchOff, Row::ShortPress, Row::Hold];
+
+/// Whether the slideshow before the screen goes off is on (`cozy_extras`).
+fn slideshow() -> bool {
+    crate::cozy_extras::on(crate::cozy_extras::Extra::IdleSlideshow)
+}
 
 impl Row {
     pub fn label(self) -> &'static str {
         match self {
             Row::ScreenOff => "Screen off after",
+            Row::Slideshow => crate::cozy_extras::Extra::IdleSlideshow.label(),
             Row::SleepAfter => "Sleep after",
             Row::SwitchOff if crate::device::current().screen_off_only() => "Switch off after",
             Row::SwitchOff => "Switch off after sleeping",
@@ -270,6 +283,7 @@ impl Config {
     pub fn value(&self, row: Row) -> String {
         match row {
             Row::ScreenOff => screen_off_label(self.screen_off),
+            Row::Slideshow => if slideshow() { "On" } else { "Off" }.into(),
             Row::SleepAfter => sleep_after_label(self.sleep_after),
             Row::SwitchOff => crate::auto_off::label(self.off_after),
             Row::ShortPress => self.short_press.label().into(),
@@ -288,6 +302,8 @@ impl Config {
             Row::SwitchOff => self.off_after = step_time(&crate::auto_off::CHOICES, self.off_after, delta, round),
             Row::ShortPress => self.short_press = step_of(&ShortPress::ALL, self.short_press, delta, round),
             Row::Hold => self.hold = step_of(&Hold::ALL, self.hold, delta, round),
+            // Not in sleep.json: `Page::press` hands it to the App.
+            Row::Slideshow => {}
         }
     }
 
@@ -301,6 +317,7 @@ impl Config {
                 "The screen stays on. A short press of the power button still turns it off or puts the Pocket to sleep."
             }
             Row::ScreenOff => "How long without a button press before the screen goes dark. A game pauses then; any button brings it back.",
+            Row::Slideshow => crate::cozy_extras::Extra::IdleSlideshow.blurb(),
             Row::SleepAfter if self.sleep_after.is_none() => {
                 "When the screen turns off by itself, the Pocket stays awake until you press a button. That uses the battery."
             }
@@ -325,6 +342,8 @@ pub enum Action {
     Close,
     /// Keep and apply these choices.
     Save(Config),
+    /// Switch the slideshow before the screen goes off (a cozy extra, kept with the other settings).
+    Slideshow,
 }
 
 /// The page: the selected row and the choices as shown.
@@ -364,6 +383,9 @@ impl Page {
             b if b == confirm => (1, true),
             _ => return Action::Nothing,
         };
+        if self.row() == Row::Slideshow {
+            return Action::Slideshow;
+        }
         let before = self.config;
         self.config.step(self.row(), delta, round);
         if self.config == before {
@@ -504,6 +526,10 @@ mod tests {
         let Action::Save(c) = p.press(Button::Left, A, B) else { panic!("a change is saved") };
         assert_eq!(c.screen_off, Some(60));
         assert_eq!(p.press(Button::Down, A, B), Action::Nothing);
+        assert_eq!(p.row(), Row::Slideshow, "the slideshow comes right after the screen-off time");
+        assert_eq!(p.press(Button::Right, A, B), Action::Slideshow, "switched by the App, not in sleep.json");
+        assert_eq!(p.press(A, A, B), Action::Slideshow);
+        p.press(Button::Down, A, B);
         p.press(Button::Down, A, B);
         p.press(Button::Down, A, B);
         assert_eq!(p.row(), Row::ShortPress);

@@ -1557,7 +1557,7 @@ impl App {
     /// "Snes9x on pocket-core · performance Auto": how a file starts, as `launch` would start it.
     fn runs_on(&self, system: &str, path: &Path) -> String {
         let Some(sys) = self.systems.iter().find(|s| s.name == system) else { return String::new() };
-        let host = Path::new(super::HOST_BIN).exists() || std::env::var_os("POCKETUI_SNAPSHOT_POCKET_CORE").is_some();
+        let host = Path::new(super::host_bin()).exists() || std::env::var_os("POCKETUI_SNAPSHOT_POCKET_CORE").is_some();
         let (emulator, core) = self.route(sys, Some(path), host);
         let mut runs = pocket_ui::consoles::runner_text(&emulator, &core).unwrap_or_default();
         if emulator == "pocket-core" {

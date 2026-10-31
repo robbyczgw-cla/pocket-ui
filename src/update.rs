@@ -37,6 +37,9 @@ use crate::store;
 pub const APP_ROOT: &str = "/storage/pocket-ui";
 /// Where the initramfs looks for updates.
 pub const OS_UPDATE_DIR: &str = "/storage/.update";
+/// In OS_UPDATE_DIR: "<sha256>  <tar name>" of the update `stage_os` checked. The SD image's initramfs hook installs
+/// nothing else (deploy/image/mount-storage.sh); ROCKNIX's own cleanup removes it with the tar.
+pub const OS_APPROVAL: &str = ".pocket-ui-approved";
 /// Downloads and checks happen here, so a half-checked file is never where the initramfs looks.
 const OS_STAGING: &str = "/storage/.pocket-update";
 /// pocket-ui's exit code asking run-pocket-ui.sh to start it again.
@@ -498,6 +501,43 @@ pub fn os_version() -> Option<String> {
     os_release_field(&std::fs::read_to_string("/etc/os-release").ok()?, "OS_VERSION")
 }
 
+/// On our SD image only: the system's name and version (`NAME=`, `VERSION=`), written by scripts/make-image.sh from
+/// scripts/image/pins.sh POCKET_OS_NAME. A ROCKNIX card with pocket-ui added has no such file.
+pub const OS_BRAND_FILE: &str = "/flash/pocket-ui-info/pocket-ui-os.txt";
+
+/// Settings > About's System row. On our SD image "pocket-ui OS 0.1.7 · built on ROCKNIX 20261001 (SM8250)": the
+/// image's name and version, and the ROCKNIX underneath as /etc/os-release says (so it stays true after an OS update).
+/// On a ROCKNIX card with pocket-ui added "ROCKNIX 20261001 (SM8250)". None (no row) where os-release has no OS_NAME
+/// and there is no brand file: a desktop, the Steam Deck, the build computer's snapshots.
+pub fn os_brand_line(os_release: &str, brand: Option<&str>) -> Option<String> {
+    let field = |k: &str| os_release_field(os_release, k).filter(|v| !v.is_empty());
+    let base = field("OS_NAME").map(|name| {
+        let mut base = field("OS_VERSION").map_or(name.clone(), |v| format!("{name} {v}"));
+        if let Some(device) = field("HW_DEVICE") {
+            base = format!("{base} ({device})");
+        }
+        base
+    });
+    let ours = brand.and_then(|b| {
+        let name = os_release_field(b, "NAME").filter(|v| !v.is_empty())?;
+        Some(os_release_field(b, "VERSION").filter(|v| !v.is_empty()).map_or(name.clone(), |v| format!("{name} {v}")))
+    });
+    match (ours, base) {
+        (Some(ours), Some(base)) => Some(format!("{ours} · built on {base}")),
+        (ours, base) => ours.or(base),
+    }
+}
+
+/// `os_brand_line` for this device, read once (two small files) and kept: the About page's frames only look here.
+pub fn os_brand() -> Option<&'static str> {
+    static LINE: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    LINE.get_or_init(|| {
+        let os_release = std::fs::read_to_string("/etc/os-release").unwrap_or_default();
+        os_brand_line(&os_release, read_small(Path::new(OS_BRAND_FILE), 4096).as_deref())
+    })
+    .as_deref()
+}
+
 /// ROCKNIX started from a computer with `fastboot boot` (our test image adds `nodtbo`, see
 /// docs/FASTBOOT-TEST.md). Its kernel comes from that image, not from the SD card, so after an OS
 /// update the image has to be rebuilt from the new KERNEL.
@@ -683,6 +723,11 @@ fn stage_os_in(
     }
     cancel_os_in(update_dir);
     std::fs::create_dir_all(update_dir).map_err(|e| e.to_string())?;
+    // On our SD image the initramfs hook (deploy/image/mount-storage.sh) installs only a tar named here with the hash
+    // it was checked with; anything else in .update (ES's updater, the Samba share) it moves aside. Written first, so
+    // the tar is never there without it; a tar without it is refused, never installed.
+    let approved = format!("{}  {name}\n", rel.sha256.to_lowercase());
+    std::fs::write(update_dir.join(OS_APPROVAL), approved).map_err(|e| e.to_string())?;
     std::fs::rename(&tar, update_dir.join(name)).map_err(|e| e.to_string())?;
     Ok(checked.report.note())
 }
@@ -707,6 +752,7 @@ fn cancel_os_in(dir: &Path) {
             break;
         }
     }
+    let _ = std::fs::remove_file(dir.join(OS_APPROVAL));
 }
 
 /// Reads at most `limit` bytes of a small text file.
@@ -762,6 +808,21 @@ mod tests {
         let ours = "# no updateabl here, only boot files on the SD card\nmount -o remount,rw $BOOT_ROOT\nsync\nmount -o remount,ro $BOOT_ROOT\n";
         assert!(bootloader_check(Some(ours), None, false).is_ok(), "comments don't count");
         assert!(bootloader_check(None, None, false).is_ok());
+    }
+
+    #[test]
+    fn about_names_our_system_and_the_rocknix_underneath() {
+        let rocknix = "OS_NAME=\"ROCKNIX\"\nOS_VERSION=\"20261001\"\nHW_DEVICE=\"SM8250\"\n";
+        let brand = "NAME=pocket-ui OS\nVERSION=0.1.7\n";
+        let line = |os: &str, brand: Option<&str>| os_brand_line(os, brand);
+        assert_eq!(line(rocknix, Some(brand)).as_deref(), Some("pocket-ui OS 0.1.7 · built on ROCKNIX 20261001 (SM8250)"));
+        assert_eq!(line(rocknix, None).as_deref(), Some("ROCKNIX 20261001 (SM8250)"), "a ROCKNIX card with pocket-ui added");
+        assert_eq!(line(rocknix, Some("")).as_deref(), Some("ROCKNIX 20261001 (SM8250)"), "an empty file is no brand");
+        assert_eq!(line(rocknix, Some("NAME=pocket-ui OS\n")).as_deref(), Some("pocket-ui OS · built on ROCKNIX 20261001 (SM8250)"));
+        assert_eq!(line("OS_NAME=ROCKNIX\n", None).as_deref(), Some("ROCKNIX"));
+        assert_eq!(line("", Some(brand)).as_deref(), Some("pocket-ui OS 0.1.7"), "os-release unreadable on our card");
+        assert_eq!(line("NAME=\"Debian GNU/Linux\"\nVERSION_ID=\"13\"\n", None), None, "not ROCKNIX: no row");
+        assert_eq!(line("", None), None);
     }
 
     #[test]
@@ -1566,6 +1627,14 @@ esac"#;
         assert!(!update_dir.join("ROCKNIX-old.tar").exists(), "only one update waits");
         assert!(update_dir.join("notes.txt").exists(), "other files are not touched");
         assert!(!staging.join(&name).exists() && !staging.join("check").exists(), "nothing stays in staging");
+        // The SD image's initramfs hook installs only what this names (deploy/image/test-hooks.sh reads the same line).
+        let approval = std::fs::read_to_string(update_dir.join(OS_APPROVAL)).unwrap();
+        assert_eq!(approval, format!("{}  {name}\n", rel.sha256));
+        assert_eq!(approval, format!("{}  {name}\n", store::sha256_file(&update_dir.join(&name)).unwrap()), "the hash of the staged file itself");
+        cancel_os_in(&update_dir);
+        assert!(staged_os_in(&update_dir).is_none());
+        assert!(!update_dir.join(OS_APPROVAL).exists(), "taking the update back takes its approval with it");
+        assert!(update_dir.join("notes.txt").exists());
     }
 
     #[test]

@@ -1,0 +1,132 @@
+@OS_NAME@ @VERSION@ for the @MODEL_NAME@: SD card image
+================================================================
+
+pocket-ui is a game launcher with its own libretro frontend. This card (pocket-ui @VERSION@) starts it when the
+handheld boots from it. The handheld's own system stays as it is: it boots from this card only while the card is
+in the first card slot, and nothing is flashed to the handheld.
+
+@OS_NAME@ is built on ROCKNIX @ROCKNIX_TAG@ (https://rocknix.org): its kernel, system and emulators are
+ROCKNIX's. pocket-ui is not made or endorsed by the ROCKNIX team; please report problems with this card to
+pocket-ui (@ISSUES_URL@), not to ROCKNIX.
+
+
+Install
+-------
+
+1. Write @IMAGE_NAME@.img.xz to a microSD card with balenaEtcher or Raspberry Pi
+   Imager. Both read the .xz file directly. Everything on the card is erased. 8 GB or more.
+   Use a spare card, not the one the handheld came with.
+2. Put the card into the first card slot (TF1, the one the handheld boots from) of the switched-off handheld
+   and switch it on.
+3. The first start takes a few minutes and restarts once by itself while the card's storage is set up.
+   Then pocket-ui's first-start setup opens: look, Wi-Fi, extras.
+
+This image is for the @MODEL_NAME@ with DDR4 memory. It carries that model's device tree as dtb.img, so
+there is nothing to copy. If the screen stays black or shows a broken picture, switch off (hold Power for
+10 seconds) and report it with the model and the screen's look; some units have another screen revision.
+To go back to the handheld's own system, take the card out.
+
+This card contains no BIOS files and no games. Add only games and BIOS files you own.
+Remote access (SSH), file sharing and Syncthing are off. When you turn on Remote access or file
+sharing in pocket-ui's Settings, it makes a password for this device and shows it on the screen.
+(EmulationStation, ROCKNIX's menu, can also turn SSH on; it then uses ROCKNIX's standard root password
+"rocknix" until you change it there.)
+Updates come from pocket-ui (Settings, Updates). ROCKNIX's own updates would replace the system and the
+U-Boot on this card behind pocket-ui's back, so this card does not install them: the boot hook moves
+any update pocket-ui did not check (from EmulationStation's menu, the network share "update" or copied
+by hand) to /storage/.update-refused and starts as usual. Nothing there is deleted.
+
+
+What is on the card
+-------------------
+
+Before the first partition (8 KiB into the card): ROCKNIX's U-Boot for DDR4 units, unchanged.
+
+FAT partition "ROCKNIX" (readable on any computer):
+  KERNEL, KERNEL.md5         ROCKNIX @ROCKNIX_TAG@, unchanged (ROCKNIX-H700.aarch64-@ROCKNIX_TAG@-DDR4.img.gz)
+  SYSTEM, SYSTEM.md5         ROCKNIX @ROCKNIX_TAG@'s system, repacked without the files listed under
+                             "Changes" below; everything else in it is unchanged
+  device_trees/, overlays/, extlinux/   ROCKNIX's, unchanged
+  dtb.img                    the @MODEL_NAME@'s tree: a copy of device_trees/@DTB_NAME@.dtb
+  post-flash.sh              boot hook: starts without the ROCKNIX logo
+  mount-storage.sh           boot hook: puts pocket-ui's start entry in place once the storage has
+                             grown; at every start, sets aside system updates pocket-ui did not check
+  pocket-ui-info/            this file; SOURCE-OFFER.txt; pocket-ui-os.txt (name and version, shown
+                             in Settings, About); pocket-ui's LICENSE and NOTICE.md;
+                             licences/ (the Rust crates' licence texts and the fonts' OFL; also in
+                             STORAGE as /storage/pocket-ui/licences); rocknix-licenses/ (ROCKNIX's
+                             LICENSE.md and licenses folder at tag @ROCKNIX_TAG@); firmware-licences/
+                             (the terms of the firmware files inside SYSTEM)
+
+Partition "STORAGE" (grows to fill the card at the first start):
+  pocket-ui/                 pocket-ui, pocket-core and pocket-splash (the boot screen) @VERSION@, the launcher
+  .pocket-seed/              the start entry for pocket-ui and the boot screen's unit (moved to
+                             .config/system.d at the second start), and a script ROCKNIX runs once
+                             at the first start: device name "pocket-ui", ROCKNIX's update check off
+
+Changes from the ROCKNIX image: the files above were added (dtb.img, the hooks, pocket-ui-info/, pocket-ui/).
+Removed from SYSTEM:
+  - the Kickstart relocation tables (kick*.RTB) of Amiberry's WHDLoad booter, loose and inside its
+    boot-data.zip (the rest of that archive is unchanged). They come from SKick
+    (aminet.net, util/boot/skick346.lha), whose licence allows passing them on only inside that unchanged
+    archive. Amiga games run with the standard emulator as before; for WHDLoad games in Amiberry,
+    copy the .RTB files from that archive to /storage/.config/amiberry/whdboot/save-data/Kickstarts.
+  - the DOOM shareware game data (usr/share/idtech/doom.tar.gz), so the card holds no games; its
+    shareware terms also ask for the complete, unchanged shareware package.
+  - the DraStic Nintendo DS emulator (usr/config/drastic) with its databases and BIOS replacement: DraStic is
+    closed source and its author never gave a licence to pass it on (ROCKNIX relies on a 2017 forum post).
+    Nintendo DS games run with the open cores that stay in SYSTEM.
+The partition table, KERNEL and the U-Boot are unchanged. ROCKNIX's own interface, EmulationStation, stays on
+the card and takes over if pocket-ui cannot start.
+
+
+Licences
+--------
+
+This image may be shared free of charge, for non-commercial use only. Do not sell it, and do not
+bundle it with hardware you sell. Reasons: ROCKNIX includes components licensed for non-commercial use
+only (for example the libretro cores snes9x, genesis_plus_gx, picodrive and fbneo), and its artwork is
+licensed CC BY-NC-SA 4.0.
+
+ROCKNIX (KERNEL, SYSTEM)
+  Copyright ROCKNIX (https://github.com/ROCKNIX). ROCKNIX is a fork of JELOS
+  (https://github.com/JustEnoughLinuxOS/distribution); credit to the JELOS team.
+  The ROCKNIX team's own software and scripts: GNU GPL version 2. Every bundled component keeps its own
+  licence: see pocket-ui-info/rocknix-licenses/ (ROCKNIX's LICENSE.md and licenses folder) and each
+  package's PKG_LICENSE in ROCKNIX's source.
+  ROCKNIX branding and images (logos, splash artwork, EmulationStation themes inside SYSTEM):
+  CC BY-NC-SA 4.0, https://creativecommons.org/licenses/by-nc-sa/4.0/ . They are included unchanged
+  inside SYSTEM; this image does not use them as its own branding.
+
+Firmware inside SYSTEM (usr/lib/kernel-overlays/base/lib/firmware): Realtek Wi-Fi and Bluetooth firmware from
+  linux-firmware 20260309, the wireless regulatory database from wireless-regdb 2026.05.30 and ten small display
+  panel files from ROCKNIX's own repository, all unchanged. They may be passed on under the terms in
+  pocket-ui-info/firmware-licences/ (README.txt there lists every file, its terms and where the panel files
+  come from).
+
+Linux kernel (KERNEL): GNU GPL version 2. The device tree (dtb.img) is ROCKNIX's, unchanged.
+
+U-Boot (on the card before the first partition, and usr/share/bootloader in SYSTEM): GNU GPL version 2 or later,
+  with Arm Trusted Firmware (BSD 3-clause); built by ROCKNIX, source in the archives next to the image.
+
+pocket-ui and pocket-core
+  GNU GPL version 2 or later (pocket-ui-info/LICENSE).
+  Source: @POCKET_UI_SOURCE@.
+  Third-party credits (fonts, Rust crates and other parts, each under its own licence) are in
+  NOTICE.md: pocket-ui-info/NOTICE.md on this card, and in the repository. The licence texts of the Rust crates
+  and of the fonts (SIL Open Font License) are in pocket-ui-info/licences/.
+
+
+Source code
+-----------
+
+The complete source code of everything on this card that is under the GNU GPL or LGPL is offered next to
+this image: @RELEASE_URL@ (files ending in -source...). See pocket-ui-info/SOURCE-OFFER.txt for the list
+and for our written offer to send it to you.
+
+ROCKNIX @ROCKNIX_TAG@, including the kernel and its patches:
+  https://github.com/ROCKNIX/distribution/tree/@ROCKNIX_TAG@
+  tag @ROCKNIX_TAG@, commit @ROCKNIX_COMMIT@
+pocket-ui, pocket-core and the scripts that make this image: @POCKET_UI_SOURCE@
+  (scripts/make-image-h700.sh rebuilds this image from the ROCKNIX release above;
+  scripts/check-image-h700.sh checks it).

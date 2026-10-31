@@ -60,10 +60,18 @@ pub enum Emblem {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icon {
     Look,
+    /// Sound & feel: a speaker with its waves.
+    Sound,
     Playing,
     Games,
     Connections,
     System,
+    /// The phone's bottom tabs (Android): Favourites, Search and Curator beside Games and System.
+    Favourites,
+    Search,
+    Curator,
+    /// Help & tools: a question mark.
+    Help,
 }
 
 /// What a Year (or Month) in review card can be marked with.
@@ -103,6 +111,11 @@ const FILES: &[(Art, &[u8])] = &[
     (Art::Icon(Icon::Games), include_bytes!("../assets/ui-art/icon-games.png")),
     (Art::Icon(Icon::Connections), include_bytes!("../assets/ui-art/icon-connections.png")),
     (Art::Icon(Icon::System), include_bytes!("../assets/ui-art/icon-system.png")),
+    (Art::Icon(Icon::Favourites), include_bytes!("../assets/ui-art/icon-favourites.png")),
+    (Art::Icon(Icon::Search), include_bytes!("../assets/ui-art/icon-search.png")),
+    (Art::Icon(Icon::Curator), include_bytes!("../assets/ui-art/icon-curator.png")),
+    (Art::Icon(Icon::Sound), include_bytes!("../assets/ui-art/icon-sound.png")),
+    (Art::Icon(Icon::Help), include_bytes!("../assets/ui-art/icon-help.png")),
     (Art::Sticker(Sticker::Completed), include_bytes!("../assets/ui-art/sticker-completed.png")),
     (Art::Sticker(Sticker::HundredHours), include_bytes!("../assets/ui-art/sticker-hundred-hours.png")),
     (Art::Sticker(Sticker::TenGames), include_bytes!("../assets/ui-art/sticker-ten-games.png")),
@@ -287,7 +300,7 @@ mod tests {
         for m in [Model::MiniV2, Model::MiniV1, Model::Pocket5, Model::Flip2, Model::Pocket6, Model::Nova] {
             assert!(get(Art::Device(m)).is_some(), "{m:?}");
         }
-        for i in [Icon::Look, Icon::Playing, Icon::Games, Icon::Connections, Icon::System] {
+        for i in [Icon::Look, Icon::Playing, Icon::Games, Icon::Connections, Icon::System, Icon::Favourites, Icon::Search, Icon::Curator] {
             let s = get(Art::Icon(i)).unwrap();
             assert_eq!((s.w, s.h), (16, 16), "{i:?}");
             assert!(s.px.iter().all(|p| *p == 0 || *p == 0xffff_ffff), "{i:?}: white on clear, so it takes the row's colour");

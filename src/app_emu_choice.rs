@@ -21,7 +21,7 @@ use pocket_ui::palette::*;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, MainItem, Page, CANCEL, CONFIRM, HOST_BIN, HOST_CORES, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, MainItem, Page, CANCEL, CONFIRM, host_bin, HOST_CORES, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
 
 /// Where the page was opened from, so B goes back there.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -110,7 +110,7 @@ impl App {
     /// 50 ms a page may take to open; logged).
     pub(crate) fn open_emu_choice(&mut self, system: &str, game: Option<(&str, &Path)>, from: Opener) -> bool {
         let started = Instant::now();
-        let host_bin = Path::new(HOST_BIN).exists();
+        let host_bin = Path::new(host_bin()).exists();
         let Some(subject) = self.emu_subject(system, game, host_bin) else {
             return false;
         };
@@ -205,7 +205,7 @@ impl App {
     fn emu_choice_refresh_console(&mut self) {
         let Some(s) = self.console.as_ref().map(|o| o.system) else { return };
         let runs_on = self.systems.get(s).map(|sys| {
-            let r = self.resolve_runner(sys, None, Path::new(HOST_BIN).exists()).runner;
+            let r = self.resolve_runner(sys, None, Path::new(host_bin()).exists()).runner;
             pocket_ui::consoles::runner_text(&r.emulator, &r.core)
         });
         if let (Some(open), Some(runs_on)) = (self.console.as_mut(), runs_on) {

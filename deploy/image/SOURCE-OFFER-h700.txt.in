@@ -1,0 +1,42 @@
+Source code for the pocket-ui @VERSION@ SD card image (@MODEL_NAME@)
+===========================================================================
+
+Much of the software on this card is free software under the GNU General Public License (GPL) or the
+GNU Lesser General Public License (LGPL): the Linux kernel, U-Boot, BusyBox, the GNU C library, RetroArch,
+many emulators, pocket-ui itself and more. You may have their complete source code.
+
+
+Where it is
+-----------
+
+Next to this image, on @RELEASE_URL@ :
+
+  pocket-ui-@VERSION@-source.tar.gz
+      pocket-ui, pocket-core and pocket-splash, and the scripts that build this image
+      (scripts/make-image.sh, scripts/image/, deploy/).
+  rocknix-@ROCKNIX_TAG@-distribution.tar.xz
+      ROCKNIX's build system at tag @ROCKNIX_TAG@ (commit @ROCKNIX_COMMIT@): every package's
+      recipe, the kernel configuration and all patches, and the scripts that put SYSTEM and KERNEL
+      together ("make docker-H700" builds them).
+  rocknix-@ROCKNIX_TAG@-H700-sources.tar.xz.part-00, -01, ...
+      Every source archive and source checkout that ROCKNIX's H700 build fetches (Linux 7.2,
+      BusyBox, glibc, systemd, RetroArch, the emulators and the rest), as ROCKNIX's own scripts/get
+      downloads them. Join the parts with "cat rocknix-*-sources.tar.xz.part-* > sources.tar.xz".
+      packages.txt lists the packages.
+  SOURCE-SHA256SUMS
+      Checksums of all of the above.
+
+The same source is also public at:
+  ROCKNIX:    https://github.com/ROCKNIX/distribution/tree/@ROCKNIX_TAG@
+  pocket-ui:  @POCKET_UI_SOURCE@
+
+
+Written offer
+-------------
+
+For at least three years after we last distribute this image, we offer to give anyone who asks a
+complete machine-readable copy of the corresponding source code of every GPL- or LGPL-licensed program
+on this card, for no more than our cost of physically performing the distribution: as a download, or on
+a storage medium if you ask for one. To ask, open an issue titled "Source request" at
+@ISSUES_URL@ and name this image: pocket-ui @VERSION@, @IMAGE_NAME@.img.xz.
+This offer is valid for anyone who has this information.

@@ -1,10 +1,10 @@
-# Theme
+# Colours and font
 
-Settings → Look & feel → **Look**, then **R2** ("Theme"): the colours of every page, the font, and how the hints show the
-buttons. One row per choice; Up/Down pick a row, Left/Right (or A) switch its value, and every screen shows it at once.
-Under the rows is a live preview: your shelf in the look in use, and the hint keys as they look now. **B** goes back to
-the Look page. The choices are saved with the look, and [Reset settings](settings-system.md#backup--reset) puts them
-back.
+Settings → Look → **Colours** and **Font**: the colours of every page and the type of every screen. Both are rows that
+switch in place: Up/Down pick the row, A or Left/Right change the value, and the whole screen shows the change at once.
+The choices are saved with the look, and [Reset settings](settings-system.md#backup--reset) puts them back. How the hints
+draw the buttons (letters, Xbox colours, PlayStation shapes) is under
+[Settings → Playing → Buttons](settings.md#button-symbols).
 
 ## Colours
 
@@ -30,16 +30,3 @@ The type of every screen.
 - **Rounded**: soft, round letters everywhere (Nunito).
 
 Long names that don't fit get smaller or shortened as with Barlow; the wider fonts fit a little less on a line.
-## Button symbols
-
-How the hints show the four face buttons, everywhere a key is shown (the hint bars, dialogs, the pause menu, this
-manual's key chips and its controls picture).
-
-- **Nintendo**: plain letters A, B, X and Y.
-- **Xbox**: A, B, X and Y on green, red, blue and yellow.
-- **PlayStation**: cross, circle, square and triangle. Cross stands for A, circle for B, square for X and triangle
-  for Y.
-
-Retroid and AYN handhelds start with Xbox, Anbernic handhelds with Nintendo; your choice wins. It only changes the
-pictures of the keys: which button confirms is [Button layout](settings.md#button-layout)'s job, and the two can be
-combined freely. The explanations under a list still name the keys by their letter.

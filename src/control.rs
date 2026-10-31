@@ -47,6 +47,10 @@ pub fn restore_system(bin: &'static str) {
 /// `restore_system`, then `done` on the same thread once it has finished (or couldn't run): pocket-ui's fan outside
 /// games waits for it, so it notes the system's trips and not what a killed game left (`perf_fan`).
 pub fn restore_system_then(bin: &'static str, done: impl FnOnce() + Send + 'static) {
+    // The Steam Deck's system owns CPU and fan: pocket-core changed none of it (docs/STEAMDECK.md).
+    if crate::device::current().host_owned() {
+        return done();
+    }
     std::thread::spawn(move || {
         let _ = Command::new(bin).arg("--restore-system").status();
         done();
@@ -189,6 +193,9 @@ fn sway_ok(cmd: &mut Command, timeout: Duration) -> bool {
 /// Makes every other window (the games) open fullscreen and focused. Some emulators, Dolphin's
 /// nogui build among them, don't ask for fullscreen and would otherwise be tiled next to pocket-ui.
 pub fn games_open_fullscreen() -> bool {
+    if crate::desk::active() {
+        return true;
+    }
     swaymsg(&format!(r#"for_window [app_id="^(?!{OWN_APP_ID}$).*"] fullscreen enable, focus"#))
         && swaymsg(r#"for_window [class=".*"] fullscreen enable, focus"#)
 }
@@ -220,11 +227,17 @@ pub fn show_ui() -> bool {
 }
 
 pub fn show_ui_within(timeout: Duration) -> bool {
+    if crate::desk::active() {
+        return crate::desk::show_ui();
+    }
     swaymsg_within(&show_ui_cmd(), timeout)
 }
 
 /// Gives the screen and focus back to the game, which resumes by itself.
 pub fn show_game() -> bool {
+    if crate::desk::active() {
+        return crate::desk::show_game();
+    }
     swaymsg(&show_game_cmd())
 }
 
@@ -247,6 +260,9 @@ fn show_game_cmd() -> String {
 /// Sway container id of the focused window, if it is not pocket-ui (the running game during play).
 /// None as well when sway doesn't answer within `timeout`.
 pub fn focused_window(timeout: Duration) -> Option<i64> {
+    if crate::desk::active() {
+        return crate::desk::game_window();
+    }
     match ipc::request(ipc::GET_TREE, "", timeout) {
         Ok(tree) => focused_in(&tree),
         Err(e) if ipc::unreachable(&e) => focused_window_via(Command::new("swaymsg").args(["-t", "get_tree"]), timeout),
@@ -307,6 +323,19 @@ pub fn terminate_game(pgid: i32, hard: bool) -> bool {
     signal_group(pgid, sig)
 }
 
+/// Whether any live process of group `pgid` is left.
+pub fn group_alive(pgid: i32) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        !group_members(pgid).is_empty()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        // SAFETY: kill(2) with signal 0 only asks.
+        pgid > 1 && unsafe { libc::kill(-pgid, 0) } == 0
+    }
+}
+
 /// The live (not zombie) processes of process group `pgid`.
 #[cfg(target_os = "linux")]
 fn group_members(pgid: i32) -> Vec<i32> {
@@ -330,6 +359,10 @@ pub fn show_ui_over(con: i64) -> bool {
 }
 
 pub fn show_ui_over_within(con: i64, timeout: Duration) -> bool {
+    if crate::desk::active() {
+        let _ = con;
+        return crate::desk::show_ui();
+    }
     swaymsg_within(
         &format!(r#"[con_id={con}] fullscreen disable; [app_id="{OWN_APP_ID}"] focus; [app_id="{OWN_APP_ID}"] fullscreen enable"#),
         timeout,
@@ -338,6 +371,9 @@ pub fn show_ui_over_within(con: i64, timeout: Duration) -> bool {
 
 /// Gives the screen and focus back to the game window `con`.
 pub fn show_window(con: i64) -> bool {
+    if crate::desk::active() {
+        return crate::desk::show_window(con);
+    }
     swaymsg(&format!(r#"[app_id="{OWN_APP_ID}"] fullscreen disable; [con_id={con}] focus; [con_id={con}] fullscreen enable"#))
 }
 
@@ -345,6 +381,9 @@ pub fn show_window(con: i64) -> bool {
 /// It gets focus first (not fullscreen, the menu stays visible): paused clients like RetroArch only
 /// act on the request while focused.
 pub fn close_window(con: i64) -> bool {
+    if crate::desk::active() {
+        return crate::desk::close_window(con);
+    }
     swaymsg(&format!("[con_id={con}] focus; [con_id={con}] kill"))
 }
 

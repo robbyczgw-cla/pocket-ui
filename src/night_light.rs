@@ -1,4 +1,4 @@
-//! Night light: a warmer, less blue display in the evening, for the menus and for games (Settings → Look & feel →
+//! Night light: a warmer, less blue display in the evening, for the menus and for games (Settings → Look →
 //! Night light, `docs/user/night-light.md`).
 //!
 //! It is not a second colour path. The display look (`display.rs`) is the one place that works out the final colours:
@@ -186,7 +186,7 @@ impl Prefs {
             .min()
     }
 
-    /// The row's value on Settings → Look & feel: "Off", "On", "21:00–07:00".
+    /// The row's value on Settings → Look: "Off", "On", "21:00–07:00".
     pub fn summary(&self) -> String {
         match self.mode {
             Mode::Off => "Off".into(),

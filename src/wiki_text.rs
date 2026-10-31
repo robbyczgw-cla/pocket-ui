@@ -4,7 +4,6 @@
 //! Network calls use the system's curl, from a worker thread (see `app_card.rs`).
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// How pocket-ui introduces itself to Wikipedia (card and background loading alike); no contact data.
 pub const USER_AGENT: &str = "pocket-ui-wiki/0.1";
@@ -59,28 +58,8 @@ pub fn extract(json: &str) -> Option<String> {
 /// Loads the description of `title` from Wikipedia and caches it; an error is a few words for the card.
 pub fn fetch(data_dir: &Path, title: &str) -> Result<String, String> {
     let url = format!("{API}{}", percent_encode(title));
-    let ua = USER_AGENT;
-    let out = Command::new("curl")
-        .args([
-            "-fsSL",
-            "--max-time",
-            "10",
-            "-H",
-            &format!("User-Agent: {ua}"),
-            "-H",
-            "Accept: application/json",
-            &url,
-        ])
-        .output()
-        .map_err(|_| "no curl".to_string())?;
-    if !out.status.success() {
-        return Err(if out.status.code() == Some(22) {
-            "no article".into()
-        } else {
-            "offline".into()
-        });
-    }
-    let text = extract(&String::from_utf8_lossy(&out.stdout)).ok_or("no text")?;
+    let json = crate::platform::wiki_json(&url)?;
+    let text = extract(&String::from_utf8_lossy(&json)).ok_or("no text")?;
     let _ = crate::fsutil::write_atomic(&cache_path(data_dir, title), text.as_bytes());
     Ok(text)
 }

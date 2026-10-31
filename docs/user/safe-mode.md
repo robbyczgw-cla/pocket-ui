@@ -37,7 +37,7 @@ the start. Under it:
 | **Open EmulationStation…** | ROCKNIX's own menu, after the warning below. |
 | **Power off** | Switches the Pocket off. |
 
-Use the D-pad and A, or tap a row. B closes a question without doing anything. Safe mode follows the device’s printed buttons: A bottom and B right on Odin 2 Mini/Portal, A right and B bottom elsewhere, whatever Settings → Playing → [Button layout](settings.md#button-layout) says.
+Use the D-pad and A, or tap a row. B closes a question without doing anything. Safe mode follows the device’s printed buttons: A bottom and B right on Odin 2 Mini/Portal, A right and B bottom elsewhere, whatever Settings → Playing → Buttons → [**Button layout**](settings.md#button-layout) says.
 
 If safe mode comes back after a reset as well, send the files described in
 [What to send when something crashes](troubleshooting.md#what-to-send-when-something-crashes).
@@ -49,7 +49,7 @@ EmulationStation stays installed as an emergency exit. You open it on purpose:
 - On the shelf, hold **SELECT + START** for one second (or press Escape on a keyboard). A question opens:
   **Cancel**, **Restart pocket-ui**, **Report a problem** (saves the file for a bug report, see
   [Report a problem](troubleshooting.md#report-a-problem)) or **Open EmulationStation**.
-- Settings → System → **About** → **Open EmulationStation…**.
+- Settings → Help & tools → **About** → **Open EmulationStation…**.
 - In safe mode, **Open EmulationStation…**.
 
 Each time pocket-ui first says what to avoid there, and Cancel is selected, so A pressed by mistake does nothing.

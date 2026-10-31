@@ -94,13 +94,13 @@ pub fn start() -> Command {
     command(&bin(), host().as_deref())
 }
 
-/// The command for one of the PC's games (Settings → PC streaming), on `host`.
+/// The command for one of the PC's games (Settings → Games → PC streaming), on `host`.
 pub fn start_app(host: &str, app: &str) -> Command {
     command_for(&bin(), Some(host), Some(app))
 }
 
 // ---------------------------------------------------------------------------------------------------
-// Pairing and the PC's games (Settings → PC streaming).
+// Pairing and the PC's games (Settings → Games → PC streaming).
 
 /// Moonlight Embedded keeps no list of the PCs it is paired with (the pairing lives on the PC, the client keys in
 /// `/storage/.cache/moonlight`), so pocket-ui keeps one: `<data>/moonlight-pcs.json`.
@@ -197,7 +197,7 @@ pub fn game_file_name(title: &str) -> Option<String> {
 /// quoted for the shell.
 pub fn game_script(title: &str, host: &str, file: &str) -> String {
     format!(
-        "#!/bin/sh\n# Written by pocket-ui (Settings → PC streaming), as ROCKNIX's Moonlight menu does.\n/usr/bin/controller-layout moonlight {} /storage/.config/moonlight/gamecontrollerdb.txt\nmoonlight stream -app {} -platform sdl {}\n",
+        "#!/bin/sh\n# Written by pocket-ui (Settings → Games → PC streaming), as ROCKNIX's Moonlight menu does.\n/usr/bin/controller-layout moonlight {} /storage/.config/moonlight/gamecontrollerdb.txt\nmoonlight stream -app {} -platform sdl {}\n",
         shell_quote(file),
         shell_quote(title),
         shell_quote(host)

@@ -46,7 +46,7 @@ impl App {
     pub(crate) fn backup_input(&mut self, b: Button) -> Option<SettingsPage> {
         let back = Some(SettingsPage::List(super::settings_row(SETTINGS_NAME)));
         let Some(page) = self.backup.page.as_mut() else { return back };
-        let (proxy, data_dir, app) = (self.proxy.clone(), self.data_dir.clone(), env!("CARGO_PKG_VERSION").to_string());
+        let (proxy, data_dir, app) = (self.proxy.clone(), self.data_dir.clone(), pocket_ui::update::app_version().to_string());
         let root = PathBuf::from(backup::ROOT);
         let job: Option<Box<dyn FnOnce() -> Result<Done, String> + Send>> = match page.press(b, CONFIRM, CANCEL) {
             Action::Nothing => None,

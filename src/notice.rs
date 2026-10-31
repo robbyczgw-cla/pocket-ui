@@ -59,9 +59,10 @@ impl Notice {
     /// A card at the top of the screen, the OSD's surface and corners (`osd`), as wide as the text needs. It stays
     /// clear of the top line's ends (the place, the status corner) or, when it needs more room, spans the screen and
     /// covers them whole: never half a clock peeking out beside it.
-    pub fn paint(&self, c: &mut Canvas, text: &mut Text) {
+    /// Returns the card's bottom edge (0 when nothing was painted), so the toast can go below it.
+    pub fn paint(&self, c: &mut Canvas, text: &mut Text) -> i32 {
         if !self.active() {
-            return;
+            return 0;
         }
         // For the snapshot checks of Settings → Text size: a card over the top of the page while it is up.
         crate::text::boxes::covered();
@@ -93,5 +94,6 @@ impl Notice {
             let colour = if i < own { CHALK } else { DUST };
             text.draw(c, Face::Body, 30, x + 40, y + 46 + grow * 7 / 10 + i as i32 * step, colour, l);
         }
+        y + h
     }
 }

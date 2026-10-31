@@ -11,7 +11,7 @@ use std::time::Duration;
 
 /// Set by pocket-ui for a pocket-core game whose launch is Cozy with Motion Full; absent in Quick, Reduced and Off.
 pub const ENV: &str = "POCKET_LAUNCH_CRT";
-/// `1`: the effect without its sound (Settings → Look & feel → Cozy extras → Case sounds off, `cozy_extras`).
+/// `1`: the effect without its sound (Settings → Sound & feel → Case sounds off, `cozy_extras`).
 pub const SILENT_ENV: &str = "POCKET_LAUNCH_CRT_SILENT";
 
 /// The name the CRT sound hooks in on: [`start`] writes it as a trace event (`POCKETUI_TRACE`) and as the line

@@ -24,7 +24,7 @@ use pocket_ui::power::{Fan, Performance};
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, HOST_BIN, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, host_bin, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
 
 /// How often the open page reads the sensors.
 const READ_EVERY: Duration = Duration::from_secs(1);
@@ -246,7 +246,7 @@ impl App {
     pub(crate) fn restore_system_then_fan(&mut self) {
         self.perf.settling += 1;
         let proxy = self.proxy.clone();
-        control::restore_system_then(HOST_BIN, move || {
+        control::restore_system_then(host_bin(), move || {
             let _ = proxy.send_event(UserEvent::PerfFan(Event::Settled));
         });
     }

@@ -517,6 +517,49 @@ GameCube and Wii, More… and the button layout:
   Gamepad:Button:South`). Stop pocket-ui first or launch through it: an idle pocket-ui reads the same pad and
   will start games of its own.
 
+### PS2, GameCube, Wii and 3DS: does a game run at full speed? (`scripts/big-emu-bench.sh`, 2026-10-30; run on the Odin 2 Mini 2026-10-30/31)
+One command measures real games of the PS2 (ARMSX2), GameCube and Wii (Dolphin) and 3DS (Azahar) on the Mini V2 or the Odin 2 Mini and says per game *full speed*,
+*playable* or *too slow*:
+
+```sh
+scripts/big-emu-bench.sh [--minutes 3] [--rumble] /storage/roms/wii/<game>.rvz /storage/roms/3ds/<game>.3ds@30 /storage/roms/ps2/<game>.chd@30 /storage/roms/gamecube/<game>.rvz ...
+```
+- **Games** are paths on the device (the folder `ps2`, `gamecube`, `wii` or `3ds` tells the system); nothing is copied, no game is in the repo.
+  `@30` / `@50` after a path says the game runs at 30 / 50 fps (default 60). 3DS games are often 30.
+- **One session per game** under `flock /tmp/pocket-device.flock` (`BIGEMU_LOCK`), at most 10 minutes each: start (60 s at most),
+  warm-up (20 s: boot, shader compiles), `--minutes` measured (3, at most 5), quit. `POCKETUI_HOST` as for `dev.sh`.
+- **Started like pocket-ui:** `/usr/bin/runemu.sh <rom> -P<system> --core=<armsx2-sa|dolphin-sa-gc|dolphin-sa-wii|azahar-sa> --emulator=<armsx2|dolphin|azahar>
+  --controllers=` from `/tmp` (`spawn_game`, `src/main.rs`), with `deploy/frametime.c` preloaded (built with zig, cached in
+  `target/ft/`). pocket-ui itself is not involved: its data folder, recents, play log and resume state stay untouched and
+  no `POCKETUI_DATA` is set. Sink muted and screen dimmed (5 %) meanwhile, both put back.
+- **Measured** once a second: CPU share of the emulator, big/prime/GPU clocks, CPU/GPU temperature, fan `pwm1`, battery
+  (and watts on battery); every presented frame (average fps, 1 % low, long frames, freezes); PipeWire underruns (`pw-top`
+  ERR, warm-up end to end).
+- **Dark and quiet:** a screen that is dark when the run starts stays dark (no press is sent to pocket-ui's FIFO, which would
+  light it; a lit screen is put out again). Controller rumble is OFF during the run (ARMSX2 `LargeMotorScale`/`SmallMotorScale` 0,
+  Dolphin's `Rumble/Motor` unmapped in the pad profiles; `--rumble` keeps it); the config is in the backup and comes back. PS2
+  memory cards (`roms/ps2/Mcd*.ps2`) and the `savestates` folders are in the backup too. Works with BusyBox on the device
+  (no `comm`, `pidof -x`). If the SSH session ends, the device half runs on and puts everything back.
+- **Stops quietly** (clean quit, verdict "aborted" with the numbers so far) when the fan starts (`pwm1` > 0), a CPU/GPU zone
+  passes 75 °C, the battery is at 20 % or less and not charging, the emulator ends by itself, or no picture comes within 60 s.
+  It refuses to start without `/storage/.config/pocket-ui/no-autosuspend`, with a game running, or when a folder of the
+  emulators is over 2 GB. It never suspends, reboots or presses a button; against pocket-ui's idle timer (it does not know
+  about the game) a harmless `b` goes into `/tmp/pocket-ui.in` every 20 s.
+- **Saves:** the emulators' config, data and state folders (`.config/dolphin-emu`, `.local/share/dolphin-emu`,
+  `.config/azahar`, `.local/share/azahar-emu`, `roms/savestates/wii|3ds`; `BIG_SAVE_DIRS` to change) are tarred first and put
+  back after: files the run changed are restored, files and folders it created are removed. Changes outside `.config` are named
+  in the report. A backup left by a crashed run is restored before the next one. At the end `scripts/verify-device.sh`.
+- **Verdicts** (`python3 scripts/big-emu-bench.py thresholds`): *full speed* = average >= 95 % of the target, 1 % low >= 80 %,
+  long frames (> 1.5 frames) <= 0.5 %, no audio underruns; *playable* = average >= 80 % and 1 % low >= 50 %, the reason named;
+  below that *too slow*.
+- **Limit:** it presses nothing, so it measures what the game shows by itself (boot, title, intro, demo). Menus are lighter than
+  play: *full speed* here is necessary, not sufficient. For a heavy scene play the game by hand while it runs, or start
+  a long intro.
+- **Exit:** 0 measured, 2 setup/refused, 3 device not in its normal state afterwards or a game did not run, 4 aborted.
+  Raw runs and `report.txt` are in the `--out` folder; `--report DIR...` evaluates them again.
+- **Tests:** `scripts/test-big-emu-bench.sh` (about 1 min, no device): the statistics, then the device half against a fake
+  `/sys`, `runemu.sh` and emulator: smooth, slow, 30 fps, fan abort, dying emulator, underruns, low battery, missing game.
+
 ## Open
 - Resume shows the game booting for a moment (PS2 until the VM runs, GameCube ~3 s) before the state loads, plus
   Dolphin's OSD lines.

@@ -33,7 +33,7 @@ Now:
      in Dust at the bottom left, where the hints go.
    - After a minute without sway it says "Still starting…". It never just goes blank.
    - After about three minutes the bar holds still (nothing more to draw, no more CPU) until the end.
-   - Settings → Look & feel → Motion: Off shows the picture still, with no fades; Reduced keeps the fades (nothing on
+   - Settings → Sound & feel → Motion: Off shows the picture still, with no fades; Reduced keeps the fades (nothing on
      it moves anyway).
 4. When sway's unit starts, the picture fades to black (250 ms). sway comes up on black.
 5. pocket-ui's first frame fades in from black (300 ms), in the dark and the light look alike.

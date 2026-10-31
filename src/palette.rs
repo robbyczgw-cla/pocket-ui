@@ -217,7 +217,7 @@ pub fn scoped<R>(t: u8, f: impl FnOnce() -> R) -> R {
     out
 }
 
-/// Settings → Look & feel → Look → Theme → **Colours**: five sets of the tokens above, each a dark and a light
+/// Settings → Look → **Colours**: five sets of the tokens above, each a dark and a light
 /// palette, with the Cabinet's wood, plates and light to match. Warm is the design's own (`DARK`, `LIGHT`); the others
 /// lean on the colours of well-known consoles without their names. Every text pair of each is checked for WCAG AA in
 /// both appearances (the tests below).

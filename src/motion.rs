@@ -10,7 +10,7 @@
 //!   painted ([`LEAD`]), so the first frame after a press already shows a good part of the move.
 //! * **Nothing moves, nothing is drawn.** Each animation knows when it is done and reports it to [`busy`], which
 //!   the app's redraw scheduler asks; once everything has settled, no frame is drawn until the next input.
-//! * **The player decides.** Settings > Look > Motion: Full, Reduced (fades only, nothing moves) or Off
+//! * **The player decides.** Settings > Sound & feel > Motion: Full, Reduced (fades only, nothing moves) or Off
 //!   ([`set_level`]). `POCKETUI_MOTION_SCALE=<n>` slows everything down n times, for recording frame sequences.
 
 use std::cell::Cell;
@@ -38,7 +38,7 @@ thread_local! {
     static LEVEL: Cell<Motion> = const { Cell::new(Motion::Full) };
     /// `POCKETUI_MOTION_SCALE`, read on first use.
     static SCALE: Cell<Option<f32>> = const { Cell::new(None) };
-    /// Settings > Look & feel > Animations: Cozy (`set_cozy`).
+    /// Settings > Sound & feel > Animations: Cozy (`set_cozy`).
     static COZY: Cell<bool> = const { Cell::new(false) };
 }
 

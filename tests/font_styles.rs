@@ -1,4 +1,4 @@
-//! Settings → Look & feel → Look → Theme → Font (`src/font_style.rs`) against the snapshot suite: the layout-risk states
+//! Settings → Look → Font (`src/font_style.rs`) against the snapshot suite: the layout-risk states
 //! (`layout-risk-states.txt`: narrow columns, long metadata, hint bars, keyboards, bottom rows) are rendered at 640x480,
 //! Large text and German, the tightest corner, with each of the alternative fonts (Pixel: titles and labels, Rounded:
 //! everything), and the text painter's record of where each string went (`POCKETUI_TEXT_BOXES`) must show no string

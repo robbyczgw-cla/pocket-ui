@@ -44,6 +44,9 @@ const RA_EXIT_WAIT: Duration = Duration::from_secs(10);
 /// The longest an ARMSX2 Quit takes when every step runs out its time.
 pub const ARMSX2_QUIT_WORST: Duration = SAVE_WAIT.saturating_add(VM_SHUTDOWN_WAIT).saturating_add(EXIT_WAIT).saturating_add(KILL_WAIT);
 
+/// PCSX2's Flatpak id: the Steam Deck's PS2 emulator, played through PINE like ARMSX2.
+pub const PCSX2_FLATPAK: &str = "net.pcsx2.PCSX2";
+
 /// How long the main loop waits after a guest's Quit (`guest::WORST` plus slack) before it stops the process group.
 pub const GUEST_GRACE: Duration = Duration::from_secs(20);
 
@@ -64,6 +67,8 @@ impl Emu {
     pub fn detect(system: &str, emulator: &str, core: &str) -> Option<Emu> {
         match (system, emulator) {
             ("ps2", "armsx2") => Some(Emu::Armsx2),
+            // The Steam Deck: PCSX2's Flatpak speaks the same PINE (docs/STEAMDECK.md).
+            ("ps2", PCSX2_FLATPAK) => Some(Emu::Armsx2),
             ("gamecube" | "wii", "dolphin") if !core.contains("qt") => Some(Emu::Dolphin),
             ("3ds", "azahar") => Some(Emu::Azahar),
             ("xbox", "hakux") => Some(Emu::Hakux),
@@ -80,6 +85,7 @@ impl Emu {
     /// Start of the emulator's process name (`comm` is cut at 15 characters).
     fn process(self) -> &'static str {
         match self {
+            Emu::Armsx2 if crate::desk::active() => "pcsx2-qt",
             Emu::Armsx2 => "armsx2-qt",
             Emu::Dolphin => "dolphin-emu-nog",
             Emu::Azahar => "azahar",
@@ -729,6 +735,8 @@ fn find_pid(pgid: Option<i32>, name: &str) -> Option<i32> {
 /// Every process of `pgid` whose name starts with `name`.
 fn pids_of(pgid: Option<i32>, name: &str) -> Vec<i32> {
     let Ok(dir) = std::fs::read_dir("/proc") else { return Vec::new() };
+    // The Steam Deck's Flatpaks may leave the game's process group: the emulator's name is enough there.
+    let pgid = pgid.filter(|_| !crate::desk::active());
     dir.flatten().filter_map(|e| {
         let pid: i32 = e.file_name().to_str()?.parse().ok()?;
         let stat = std::fs::read_to_string(e.path().join("stat")).ok()?;
@@ -803,6 +811,10 @@ mod pine {
 
     fn socket() -> String {
         let dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
+        // PCSX2's Flatpak has its own runtime folder (the Steam Deck).
+        if crate::desk::active() {
+            return format!("{dir}/app/{}/pcsx2.sock", super::PCSX2_FLATPAK);
+        }
         format!("{dir}/pcsx2.sock")
     }
 
@@ -1295,7 +1307,17 @@ mod defaults {
     use super::Emu;
     use std::path::Path;
 
-    const PCSX2_INI: &str = "/storage/.config/ARMSX2/inis/PCSX2.ini";
+    const ARMSX2_INI: &str = "/storage/.config/ARMSX2/inis/PCSX2.ini";
+
+    /// The emulator's PCSX2.ini: ARMSX2's on the handhelds, the Flatpak's on the Steam Deck.
+    fn pcsx2_ini() -> String {
+        if crate::desk::active() {
+            let home = std::env::var("HOME").unwrap_or_default();
+            format!("{home}/.var/app/{}/config/PCSX2/inis/PCSX2.ini", super::PCSX2_FLATPAK)
+        } else {
+            ARMSX2_INI.to_string()
+        }
+    }
     /// start_dolphin_gc.sh copies one of these to GCPadNew.ini on every start (it only creates them when
     /// missing); start_dolphin_wii.sh always the `south.stacked` one, for the hotkeys.
     const DOLPHIN_PROFILES: &str = "/storage/.config/dolphin-emu/GamecubeControllerProfiles";
@@ -1341,7 +1363,7 @@ mod defaults {
         if let Some((name, system_kvs, ini)) = tuned {
             let marker = data_dir.join(name);
             if std::fs::read_to_string(&marker).ok().and_then(|v| v.trim().parse::<u32>().ok()) != Some(VERSION) {
-                let ok = set_system_defaults(system_kvs) && (ini.is_empty() || edit_ini(PCSX2_INI, ini));
+                let ok = (crate::desk::active() || set_system_defaults(system_kvs)) && (ini.is_empty() || edit_ini(&pcsx2_ini(), ini));
                 if ok {
                     let _ = crate::fsutil::write_atomic(&marker, format!("{VERSION}\n").as_bytes());
                 }
@@ -1354,7 +1376,13 @@ mod defaults {
             // DualShock's analog button. No vsync: with it, ARMSX2's GS thread waits for the compositor, which
             // shows nothing of the game while the pause menu is up, so the Quit save never finished.
             Emu::Armsx2 => {
-                edit_ini(PCSX2_INI, ARMSX2_ENFORCED);
+                let ini = pcsx2_ini();
+                // A Flatpak that has never run has no ini yet: PINE must be on at its first start.
+                if crate::desk::active() && !Path::new(&ini).exists() {
+                    let _ = std::fs::create_dir_all(Path::new(&ini).parent().unwrap_or(Path::new("/")));
+                    write_atomic(&ini, "");
+                }
+                edit_ini(&ini, ARMSX2_ENFORCED);
             }
             Emu::Dolphin => {
                 let hotkey = if super::hotkey_is_guide(system, rom) { "Guide" } else { "Back" };
@@ -1635,6 +1663,9 @@ mod guest {
         /// A PortMaster port: a launch script with children (gptokeyb, the engine, box86), found by its group, not a name.
         Port,
         Vita3k,
+        /// The Steam Deck: any emulator that is a Flatpak (its id is the es_systems.cfg emulator; docs/STEAMDECK.md). Found by the
+        /// game's process group, closed through its window, then `flatpak kill`, then the signals.
+        Flatpak,
     }
 
     impl Guest {
@@ -1644,6 +1675,7 @@ mod guest {
                 ("ps3", "rpcs3") => Some(Guest::Rpcs3),
                 ("ports", _) => Some(Guest::Port),
                 ("psvita", "vita3k") => Some(Guest::Vita3k),
+                _ if crate::desk::active() && is_flatpak_id(emulator) => Some(Guest::Flatpak),
                 _ => None,
             }
         }
@@ -1656,6 +1688,7 @@ mod guest {
                 // No process of one name: `quit_port` works on the whole group.
                 Guest::Port => "",
                 Guest::Vita3k => "vita3k-sa",
+                Guest::Flatpak => "",
             }
         }
     }
@@ -1676,7 +1709,14 @@ mod guest {
         Step::KillSame,
     ];
 
+    /// A reverse-DNS Flatpak id such as `org.DolphinEmu.dolphin-emu` (and not a bare emulator name).
+    pub fn is_flatpak_id(s: &str) -> bool {
+        s.split('.').count() >= 3 && s.split('.').all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+    }
+
     static GUEST: Mutex<Option<(u64, Guest)>> = Mutex::new(None);
+    /// The running Flatpak's id, for `flatpak kill`.
+    static APP_ID: Mutex<String> = Mutex::new(String::new());
 
     pub fn current() -> Option<(u64, Guest)> {
         *GUEST.lock().ok()?
@@ -1685,6 +1725,9 @@ mod guest {
     /// A game of a guest emulator starts: noted, and its performance profile set once the emulator's process runs.
     pub fn launch(system: &str, emulator: &str, rom: &Path) {
         let Some(g) = Guest::detect(system, emulator) else { return };
+        if let Ok(mut a) = APP_ID.lock() {
+            *a = emulator.to_string();
+        }
         let id = LAUNCHES.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
         if let Ok(mut cur) = GUEST.lock() {
             *cur = Some((id, g));
@@ -1696,14 +1739,15 @@ mod guest {
         let (system, rom) = (system.to_string(), rom.to_path_buf());
         std::thread::spawn(move || {
             let deadline = Instant::now() + Duration::from_secs(120);
-            while find_pid(None, g.process()).is_none() {
+            // A Flatpak guest's process has no name we know: the game's group is enough, and the profile is the system's own.
+            while g != Guest::Flatpak && find_pid(None, g.process()).is_none() {
                 if Instant::now() > deadline || current().is_none_or(|(i, _)| i != id) {
                     return;
                 }
                 std::thread::sleep(Duration::from_millis(250));
             }
             // runemu.sh has set ROCKNIX's governor before it started the emulator: ours goes on top of it.
-            if current().is_some_and(|(i, _)| i == id) {
+            if g != Guest::Flatpak && current().is_some_and(|(i, _)| i == id) {
                 set_performance(chosen_performance(&system, &rom));
             }
         });
@@ -1712,6 +1756,45 @@ mod guest {
     pub fn ended() {
         if let Ok(mut cur) = GUEST.lock() {
             *cur = None;
+        }
+    }
+
+    /// A Flatpak guest's Quit: the window's close request (the emulator saves its config), `flatpak kill`, SIGTERM, SIGKILL to the
+    /// game's group, each after its wait. Done as soon as no process of the group is left.
+    fn flatpak_quit(pgid: Option<i32>) {
+        let id = APP_ID.lock().map(|a| a.clone()).unwrap_or_default();
+        let host = |args: &[&str]| {
+            let mut c = if std::env::var_os("FLATPAK_ID").is_some() { let mut c = std::process::Command::new("flatpak-spawn"); c.args(["--host", "flatpak"]); c } else { std::process::Command::new("flatpak") };
+            crate::proc::run_with_timeout(c.args(args), Duration::from_secs(3))
+        };
+        // The group of `flatpak run`, or the instance `flatpak ps` still lists (the sandbox may leave the group).
+        let alive = || {
+            pgid.is_some_and(|g| crate::control::group_alive(g))
+                || host(&["ps", "--columns=application"]).is_ok_and(|o| String::from_utf8_lossy(&o.stdout).lines().any(|l| l.trim() == id))
+        };
+        let wait = |within: Duration| {
+            let end = Instant::now() + within;
+            while Instant::now() < end && alive() {
+                std::thread::sleep(Duration::from_millis(500));
+            }
+        };
+        if let Some(w) = crate::control::focused_window(crate::control::SWAY_TIMEOUT) {
+            crate::control::close_window(w);
+        }
+        wait(CLOSE_WAIT);
+        if alive() {
+            if is_flatpak_id(&id) {
+                // The host's flatpak ends the sandbox's processes.
+                let _ = host(&["kill", &id]);
+            }
+            wait(TERM_WAIT);
+        }
+        if let Some(g) = pgid.filter(|_| alive()) {
+            crate::control::terminate_game(g, false);
+            wait(TERM_WAIT);
+            if alive() {
+                crate::control::terminate_game(g, true);
+            }
         }
     }
 
@@ -1729,7 +1812,11 @@ mod guest {
             println!("standalone: quitting {g:?}, at most {WORST:?}");
             // A window hidden behind our menu may ignore the close request (the Xbox guest's lesson): in front first.
             crate::control::show_game();
-            run_plan(PLAN, g.process(), pgid);
+            if g == Guest::Flatpak {
+                flatpak_quit(pgid);
+            } else {
+                run_plan(PLAN, g.process(), pgid);
+            }
             println!("standalone: {g:?} closed after {:?}", started.elapsed());
         });
     }

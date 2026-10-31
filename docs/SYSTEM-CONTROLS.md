@@ -301,7 +301,7 @@ no channel is ever boosted).
 
 ### Night light
 
-Settings → Look & feel → Night light ([user guide](user/night-light.md)) is a second white point on top of the
+Settings → Look → Night light ([user guide](user/night-light.md)) is a second white point on top of the
 temperature, not a second colour path. `Look::night` (kelvin, 0 = off; `#[serde(skip)]`, so not in `display.json`:
 it follows the clock and each program works it out itself) is multiplied into `Look::gains`, the one function that
 `ramps` (Gamma), `tables`/`apply_soft` (Soft) and pocket-core's overlay tint all use. The product is normalised so the

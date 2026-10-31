@@ -1,4 +1,4 @@
-//! Settings → Look & feel → Text size (docs/DESIGN.md, Type; `src/type_scale.rs`) against the snapshot suite: every
+//! Settings → Look → Text size (docs/DESIGN.md, Type; `src/type_scale.rs`) against the snapshot suite: every
 //! state of `tests/i18n-states.txt` is rendered at Large/German, and `layout-risk-states.txt` at all four corners
 //! (Medium/Large × English/German), with scripts/curator-fake-library.py's
 //! made-up library, and the text painter's record of where each string went (`POCKETUI_TEXT_BOXES`, `text::boxes`)
@@ -31,7 +31,7 @@ fn states() -> Vec<(bool, String)> {
         })
         .filter(|(_, state)| {
             std::env::var_os("POCKETUI_TEST_QUICK").is_none()
-                || matches!(state.as_str(), "settings" | "settings:0:2" | "shelf:gb:split" | "sys:quick"
+                || matches!(state.as_str(), "settings" | "settings:0:4" | "shelf:gb:split" | "sys:quick"
                     | "sys:power" | "tailscale" | "achievements" | "search:results:mario" | "notice:bios"
                     | "setup:wifi" | "menu:pocket-core" | "storage")
                 || std::env::var("POCKETUI_TEST_STATES").is_ok_and(|extra| extra.lines().any(|s| s == state))
@@ -283,8 +283,8 @@ fn the_text_size_in_settings_json_is_used_and_shown_on_its_row() {
         std::fs::write(data.join("settings.json"), settings).unwrap();
         let record = tmp.join(format!("{name}.tsv"));
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
-        // Look & feel's third row, Text size, selected: its value shows as "‹ Groß ›" or "‹ Normal ›".
-        cmd.args(["--snapshot", "settings:0:2", tmp.join(format!("{name}.png")).to_str().unwrap()])
+        // Look's fifth row, Text size, selected: its value shows as "‹ Groß ›" or "‹ Normal ›".
+        cmd.args(["--snapshot", "settings:0:4", tmp.join(format!("{name}.png")).to_str().unwrap()])
             .env("POCKETUI_MOCK", "1")
             .env("POCKETUI_LANG", "de")
             .env_remove("POCKETUI_TEXT_SIZE")
@@ -307,10 +307,11 @@ fn the_text_size_in_settings_json_is_used_and_shown_on_its_row() {
     drop(stub);
 }
 
-/// New-user test 2026-10-30: in German with Large text only three of the five Settings categories fit and nothing said
-/// there were more. A scroll bar at the right edge says so; with the five fitting (Normal) there is none.
+/// New-user test 2026-10-30: in German with Large text only three of the Settings categories fit and nothing said
+/// there were more. Since the categories are bare one-line rows (NextUI's idea) all seven fit at every text size: no
+/// scroll bar at Large or Normal (`kit::scrollbar` would draw one the moment they did not).
 #[test]
-fn settings_categories_that_do_not_fit_show_a_scroll_bar() {
+fn settings_categories_all_fit_without_a_scroll_bar() {
     let _tmp_guard = tempfile::tempdir().unwrap();
     let tmp = _tmp_guard.path().to_path_buf();
     let stub = wayland(&tmp);
@@ -336,8 +337,8 @@ fn settings_categories_that_do_not_fit_show_a_scroll_bar() {
         let (x0, rows) = (img.w as usize - 12, 120..(img.h as usize / 2));
         rows.map(|y| (x0..x0 + 4).filter(|&x| img.px[y * img.w as usize + x] & 0xffffff != 0).count()).sum()
     };
-    assert!(edge_ink("large") > 100, "Large text in German: a bar tells there are more categories");
-    assert_eq!(edge_ink("normal"), 0, "Normal text: all five fit, no bar");
+    assert_eq!(edge_ink("large"), 0, "Large text in German: all seven fit, no bar");
+    assert_eq!(edge_ink("normal"), 0, "Normal text: all seven fit, no bar");
     drop(stub);
 }
 

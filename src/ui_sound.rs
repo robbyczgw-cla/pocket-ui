@@ -73,7 +73,7 @@ pub enum Sound {
     CrtOn,
 }
 
-/// The sounds of the cases and what goes into the console, which Settings → Look & feel → Cozy extras → Case sounds
+/// The sounds of the cases and what goes into the console, which Settings → Sound & feel → Case sounds
 /// switches apart from the menu sounds (`cozy_extras`).
 pub fn is_case_sound(sound: Sound) -> bool {
     matches!(sound, Sound::Insert | Sound::CaseOpen | Sound::BoxOpen | Sound::CartIn | Sound::DiscIn | Sound::CardIn | Sound::CrtOn)
@@ -631,7 +631,7 @@ fn watch_quantum(tell: SyncSender<Q>) {
 fn check_audible() -> Receiver<bool> {
     let (tx, rx) = sync_channel(1);
     let _ = std::thread::Builder::new().name("ui-sound-mute".into()).spawn(move || {
-        let _ = tx.send(audible(crate::sleep::sink_volume()));
+        let _ = tx.send(audible(crate::platform::sink_volume()));
     });
     rx
 }

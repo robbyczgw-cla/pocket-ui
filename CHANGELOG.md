@@ -5,9 +5,76 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ## [Unreleased]
 
+### Added
+
+- SD card image: Settings → Help & tools → About names the system, "pocket-ui OS 0.1.7 · built on ROCKNIX 20261001
+  (SM8250)" (on a ROCKNIX card with pocket-ui added, the ROCKNIX version). The device is called "pocket-ui" on the
+  network, in Bluetooth and Tailscale, and EmulationStation's ROCKNIX update check is off.
+
 ### Changed
 
+- SD card image: ROCKNIX updates are no longer installed on the card. At every start the boot hook moves any system
+  update pocket-ui did not check (from EmulationStation's menu, the network share or copied by hand) to
+  `/storage/.update-refused` and starts as usual; nothing there is deleted ([docs/SD-IMAGE.md](docs/SD-IMAGE.md)).
+
+### Fixed
+
+- On Android, back from Cozy extras lands on its row in Settings, no longer on the first.
+- Tour and first-start cards on the Steam Deck: none for Haptics, Sync, Tailscale, Tools or Performance & fan.
+- Steam Deck: no idle timers, suspend, power-key hold or low-battery power-off of ours any more; SteamOS owns sleep and the
+  power button (the Settings rows were hidden, but the timers still ran and would have suspended after 4 minutes).
+
+## [0.1.7] - 2026-10-31
+
+### Added
+
+- A **Cozy extras** card in the Tour (Settings → Help & tools → Tour) points to the page.
+
+### Changed
+
+- **Clear settings:** Settings has seven categories (Look, Sound & feel, Playing, Games, Connections, System, Help &
+  tools), one line each with an icon, all seven on one screen at any text size; the line at the bottom names what is in
+  the selected one. Every category is a short list of at most eight entries. What used to hide behind a shoulder button has an entry of its own: Appearance, Colours, Font, Motion,
+  Systems on the shelf. The Theme page behind R2 is gone; Colours and Font are entries in Look and change right in the
+  list. "Extras" is now **Pictures & extras**, and Tools and About moved to Help & tools. German names for all of it.
+- **Quieter lists:** only the selected entry shows its marks (**>** on a page, **‹ ›** on a switch); the others show just
+  their value.
+- **Cozy extras, each where you see or hear it:** the page moved to Look and holds the eight you see (TV on the cabinet,
+  stickers, printed discs, the memory card in the pause menu, light by time of day, decorations, game connections,
+  Rediscover). **Playful cases** (was Playful animations), **Old-TV switch-on** and **Case sounds** are entries of Sound &
+  feel, beside Animations, Motion and Sounds. The idle slideshow is **Slideshow before screen off** in System → Sleep &
+  power. Your settings stay as they were.
+- **Buttons page** (Settings → Playing → Buttons): button layout and button symbols in one place, with a picture of the
+  four buttons and which one confirms and which goes back.
+- **Systems on the shelf** says how systems appear when the list is empty.
+- Pictures in the README and the manual show official games.
 - Documentation: a new device list in the README and [docs/DEVICES.md](docs/DEVICES.md), grouped by chip with what each plays, the README's feature list brings 0.1.4 to 0.1.6, and the manual and screenshots match 0.1.6.
+
+### Fixed
+
+- Settings → Connections shows a connected Wi-Fi's name as it is: a network called "Off" or "Unknown" was shown as "Aus" or
+  "Unbekannt" in German.
+- Back from Report a problem lands on that row again (it landed on About).
+- Tour and the first start's cards show only what the device has, like Settings: no Stick lights on handhelds without sticks
+  (RG35XX Plus/2024, RG28XX).
+- Leaving the idle slideshow or waking from sleep with a trigger pull no longer moves the shelf.
+- The game's full page (X on a game in a system's list) shows the save slots row, "Save slots: 2 of 8" or "All empty", as the info page and the box's back do.
+- The info page shows the save slots on the cartridge for SNES, GBA, GB, GBC and NES (the row was missing because
+  these systems were not in the list of systems with saves).
+- Cabinet: a tap on a case only counts when the Cabinet is in front, no longer under Settings, a card or setup.
+- Colours and Font make the menu click when you change them, like the other Settings entries.
+- Search: the text you type and Wi-Fi network names are shown as typed, not translated.
+- Settings: each category's line names the entries this device has (no Store, no LEDs without sticks), in English and
+  German.
+- With light by time of day off, decorations are no longer re-scanned on every frame.
+- About and backups name the release version.
+- The shelf says hakuX and PortMaster, not their raw ids.
+- At Large text, the explanation on Remote access and the first start's offline note wrap instead of running off the screen.
+
+### Developer
+
+- The gate runs its tests with nextest (one retry, flaky tests listed); the time-budget and rendering benchmarks run alone.
+- The info page and hand-off tests no longer depend on the network.
 
 ## [0.1.6] - 2026-10-30
 

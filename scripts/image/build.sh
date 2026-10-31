@@ -6,8 +6,18 @@
 #   build.sh assemble VERSION EPOCH
 #       /w/image.img (a copy of base.img) gets the boot files from /w/sd-efi, the initramfs hooks, the notes from
 #       /w/info, and pocket-ui from /w/bin on STORAGE. EPOCH (seconds) is the time stamp of every added file.
+# FAMILY=H700 (scripts/make-image-h700.sh): the H700_ pins instead; strip-system works on the H700 SYSTEM, and
+# assemble takes MODEL (and no boot files from /w/sd-efi): the FAT root gets dtb.img, a copy of that model's tree
+# from device_trees/, and no GRUB.
 set -eu
 . /repo/scripts/image/pins.sh
+FAMILY=${FAMILY:-SM8250}
+if [ "$FAMILY" = H700 ]; then
+  SYSTEM_MD5=$H700_SYSTEM_MD5
+  SYSTEM_REMOVE=$H700_SYSTEM_REMOVE
+  SYSTEM_ZIP_REMOVE=$H700_SYSTEM_ZIP_REMOVE
+  POCKET_SYSTEM_MD5=$H700_POCKET_SYSTEM_MD5
+fi
 W=/w
 die() { echo "build.sh: $*" >&2; exit 1; }
 md5() { md5sum "$1" | cut -d' ' -f1; }
@@ -88,15 +98,30 @@ assemble() {
   IMG=$W/image.img
   FAT="$IMG@@$((P1_START * 512))"
   E=$W/sd-efi
-  [ "$(md5 "$E/boot/pocket/Image")" = "$IMAGE_MD5" ] || die "boot/pocket/Image is not the expected kernel"
+  if [ "$FAMILY" = H700 ]; then
+    [ -n "${MODEL:-}" ] || die "FAMILY=H700 needs MODEL"
+    set -- $(echo "$H700_MODELS" | awk -v m="$MODEL" '$1 == m { print $2, $3 }')
+    [ $# = 2 ] || die "$MODEL is not in H700_MODELS"
+    DTB_NAME=$1
+    DTB_MD5_WANT=$2
+  else
+    [ "$(md5 "$E/boot/pocket/Image")" = "$IMAGE_MD5" ] || die "boot/pocket/Image is not the expected kernel"
+  fi
 
   # Everything that goes in, staged here so owners (root), modes and times are exact.
   S=/tmp/stage
   rm -rf "$S"
-  mkdir -p "$S/fat/EFI/BOOT" "$S/fat/boot/grub" "$S/fat/boot/pocket" "$S/fat/pocket-ui-info" "$S/storage/licences"
-  cp "$E/EFI/BOOT/BOOTAA64.EFI" "$S/fat/EFI/BOOT/"
-  cp "$E/boot/grub/grub.cfg" "$E/boot/grub/grub-efi-arm64-bin.version" "$S/fat/boot/grub/"
-  cp "$E/boot/pocket/Image" "$E/boot/pocket/miniv2-noufs.dtb" "$E/boot/pocket/KERNEL.source.md5" "$S/fat/boot/pocket/"
+  mkdir -p "$S/fat/pocket-ui-info" "$S/storage/licences"
+  if [ "$FAMILY" = H700 ]; then
+    # The model's tree from ROCKNIX's own device_trees/, as ROCKNIX's install page has the player copy it by hand.
+    mcopy -n -i "$FAT" "::/device_trees/$DTB_NAME.dtb" "$S/fat/dtb.img"
+    [ "$(md5 "$S/fat/dtb.img")" = "$DTB_MD5_WANT" ] || die "device_trees/$DTB_NAME.dtb is not the expected tree (md5 $DTB_MD5_WANT)"
+  else
+    mkdir -p "$S/fat/EFI/BOOT" "$S/fat/boot/grub" "$S/fat/boot/pocket"
+    cp "$E/EFI/BOOT/BOOTAA64.EFI" "$S/fat/EFI/BOOT/"
+    cp "$E/boot/grub/grub.cfg" "$E/boot/grub/grub-efi-arm64-bin.version" "$S/fat/boot/grub/"
+    cp "$E/boot/pocket/Image" "$E/boot/pocket/miniv2-noufs.dtb" "$E/boot/pocket/KERNEL.source.md5" "$S/fat/boot/pocket/"
+  fi
   cp /repo/deploy/image/post-flash.sh /repo/deploy/image/mount-storage.sh "$S/fat/"
   # The notes, the source offer, pocket-ui's LICENSE and NOTICE.md, licences/ (crates, fonts), rocknix-licenses/
   # (ROCKNIX's LICENSE.md and licenses folder at the tag) and firmware-licences/ (the firmware's terms).
@@ -108,13 +133,14 @@ assemble() {
   install -m 755 /repo/deploy/run-pocket-ui.sh "$S/storage/run-pocket-ui.sh"
   install -m 644 /repo/deploy/essway-pocket-ui.conf "$S/storage/10-pocket-ui.conf"
   install -m 644 /repo/deploy/pocket-splash.service "$S/storage/pocket-splash.service"
+  install -m 755 /repo/deploy/image/image-defaults.sh "$S/storage/pocket-ui-image-defaults"
   chown -R 0:0 "$S"
   find "$S" -exec touch -h -d "@$EPOCH" {} +
 
   echo "== FAT partition"
   # rocknix_abl/ holds ROCKNIX's replacement for Retroid's bootloader (abl) and scripts that flash it. This boot
   # path never uses it, and flashing it is what this setup avoids, so it is not on the card.
-  mdeltree -i "$FAT" ::/rocknix_abl
+  [ "$FAMILY" = H700 ] || mdeltree -i "$FAT" ::/rocknix_abl
   # SYSTEM without the files in pins.sh SYSTEM_REMOVE (strip-system), and its .md5 in ROCKNIX's format.
   # A new SYSTEM_REMOVE (or a new mksquashfs) gives a new md5: then pins.sh is "unset" for one build, which prints it.
   sysmd5=$(md5 "$W/SYSTEM")
@@ -178,11 +204,15 @@ assemble() {
     echo "write $S/storage/pocket-splash.service /$UNITS/pocket-splash.service"
     echo "mkdir /$UNITS/sysinit.target.wants"
     echo "symlink /$UNITS/sysinit.target.wants/pocket-splash.service ../pocket-splash.service"
+    # ROCKNIX settings that differ on this card (updates off, hostname), run once by ROCKNIX's autostart.
+    echo "mkdir /.pocket-seed/.config/autostart"
+    echo "write $S/storage/pocket-ui-image-defaults /.pocket-seed/.config/autostart/pocket-ui-image-defaults"
     for p in / /pocket-ui /pocket-ui/releases "/$R" "/$R/pocket-ui" "/$R/pocket-core" "/$R/pocket-splash" "/$R/portmaster-setup.sh" \
       /pocket-ui/run-pocket-ui.sh /pocket-ui/current /pocket-ui/pocket-ui /pocket-ui/pocket-core \
       /pocket-ui/portmaster-setup.sh /pocket-ui/licences $(for f in $(ls "$S/storage/licences"); do echo "/pocket-ui/licences/$f"; done) /.pocket-seed /.pocket-seed/.config /.pocket-seed/.config/system.d "/$SEED" \
       "/$SEED/10-pocket-ui.conf" "/$UNITS/pocket-splash.service" "/$UNITS/sysinit.target.wants" \
-      "/$UNITS/sysinit.target.wants/pocket-splash.service"; do
+      "/$UNITS/sysinit.target.wants/pocket-splash.service" /.pocket-seed/.config/autostart \
+      /.pocket-seed/.config/autostart/pocket-ui-image-defaults; do
       for field in uid gid; do echo "set_inode_field $p $field 0"; done
       for field in atime mtime ctime crtime; do echo "set_inode_field $p $field @$EPOCH"; done
     done
@@ -196,7 +226,7 @@ assemble() {
   e2fsck -fn "$P2" >/dev/null || die "STORAGE file system not clean after writing"
   dd if="$P2" of="$IMG" bs=512 seek="$P2_START" conv=notrunc status=none
   rm -f "$P2"
-  echo "  pocket-ui/ ($R), .pocket-seed/.config/system.d/: essway.service.d/10-pocket-ui.conf, pocket-splash.service"
+  echo "  pocket-ui/ ($R), .pocket-seed/.config/: system.d/essway.service.d/10-pocket-ui.conf, system.d/pocket-splash.service, autostart/pocket-ui-image-defaults"
 }
 
 case ${1:-} in

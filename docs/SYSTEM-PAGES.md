@@ -14,7 +14,7 @@ Sources read for this (ROCKNIX 20261001, the image the Mini V2 runs, unpacked in
 
 ## Tools
 
-Settings → Games → **Tools** (`src/tools.rs`, `tools_page.rs`, `app_tools.rs`).
+Settings → Help & tools → **Tools** (`src/tools.rs`, `tools_page.rs`, `app_tools.rs`).
 
 **Why Settings and not Extras.** Extras is a first-start step about getting things (covers, PortMaster) and needs
 Wi-Fi; tools are part of the system, next to the Store that installs more of them, and ES had them as a list of its
@@ -170,7 +170,7 @@ Settings → System → **Backup & reset** (`src/backup.rs`, `backup_page.rs`, `
 
 | State | Screen |
 |---|---|
-| `tools[:<row>][:confirm\|:busy\|:done\|:empty\|:loading]` | Settings → Games → Tools with `tools::demo()` |
+| `tools[:<row>][:confirm\|:busy\|:done\|:empty\|:loading]` | Settings → Help & tools → Tools with `tools::demo()` |
 | `setup:wifi[:<keys>]` | Settings → Connections → Wi-Fi with a made-up neighbourhood and three saved networks (keys as for the other `setup:` states: `d` down, `a`, `y` forget, `x` scan) |
 | `setup:wifi-off`, `-switch-failed`, `-save-failed`, `-scan-failed`, `-empty`, `-switching` | The same page with the radio off (the boot hooks blocked it), with a switch that did not work, with a scan that failed, with one that found nobody, and with the radio on its way on (`net_state::demo`); the picture stays as it is |
 | `sys:quick-wifi-off`, `sys:quick-wifi-failed`, `sys:quick-wifi-save-failed` | Quick settings with the Wi-Fi row on Off, and with the line of a switch that did not work |
@@ -181,7 +181,7 @@ Settings → System → **Backup & reset** (`src/backup.rs`, `backup_page.rs`, `
 
 - **Tools:** the image's `/usr/config/modules` is there (no `/storage/.config/modules`: ROCKNIX's autostart doesn't
   run). Checked 2026-10-23: RetroArch's menu and Dolphin's own window open fullscreen, HOME held stops them and
-  Settings → Games → Tools comes back; a migrated Store tool runs quietly and shows its line. Emulators the virtual device
+  Settings → Help & tools → Tools comes back; a migrated Store tool runs quietly and shows its line. Emulators the virtual device
   dropped (those over its size limit) end at once with the notice.
 - **PC streaming:** `POCKETUI_MOONLIGHT=<script>` in `/storage/pocket-ui/dev.env` runs a stand-in that answers `pair`
   (prints the lines Moonlight Embedded prints), `list`, `unpair` and `stream`. Checked 2026-10-23 with one: search,

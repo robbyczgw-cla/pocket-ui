@@ -71,6 +71,7 @@ pub(crate) fn settings_page_holds_games(page: &SettingsPage) -> bool {
         | SettingsPage::Leds(_)
         | SettingsPage::NightLight(_)
         | SettingsPage::CozyExtras(_)
+        | SettingsPage::Buttons(_)
         | SettingsPage::Tailscale
         | SettingsPage::Bluetooth
         | SettingsPage::Web

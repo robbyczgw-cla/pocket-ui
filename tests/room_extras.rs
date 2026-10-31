@@ -3,7 +3,7 @@
 //! dark and light, at 640x480 and 1280x720:
 //!
 //! - the clock (`POCKETUI_ROOM_TIME`) changes the wood: night darker than afternoon, evening warmer, the lamp's glow;
-//!   the showcase's cover and the title stay exactly as they are; with Settings → Look & feel → Cozy extras → Light
+//!   the showcase's cover and the title stay exactly as they are; with Settings → Look → Cozy extras → Light
 //!   by time of day off the night looks like the afternoon;
 //! - a new player (twenty minutes played) has a sprout and nothing else; a long history (66 hours, a completed game,
 //!   a "100 %" sticker, 12 hours on the SNES) a big plant, the trophy, the framed "100 %" and the SNES's figurine;

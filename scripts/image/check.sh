@@ -70,6 +70,7 @@ mount-storage.sh
 pocket-ui-info/
 pocket-ui-info/README.txt
 pocket-ui-info/SOURCE-OFFER.txt
+pocket-ui-info/pocket-ui-os.txt
 post-flash.sh
 EOF
 # The firmware's terms, as in the repository.
@@ -88,7 +89,7 @@ check "rocknix-licenses/: ROCKNIX's LICENSE.md and its licenses folder ($ROCKNIX
   '[ "$(grep -c "^pocket-ui-info/rocknix-licenses/.*[^/]$" "$W/lists/fat")" = "$ROCKNIX_LICENSE_FILES" ] && grep -qx "pocket-ui-info/rocknix-licenses/LICENSE.md" "$W/lists/fat" && grep -qx "pocket-ui-info/rocknix-licenses/licenses/GPL-2.0-only.txt" "$W/lists/fat"'
 for f in KERNEL KERNEL.md5 SYSTEM.md5 EFI/BOOT/BOOTAA64.EFI boot/grub/grub.cfg boot/grub/grub-efi-arm64-bin.version \
   boot/pocket/Image boot/pocket/KERNEL.source.md5 boot/pocket/miniv2-noufs.dtb mount-storage.sh post-flash.sh \
-  pocket-ui-info/README.txt; do
+  pocket-ui-info/README.txt pocket-ui-info/pocket-ui-os.txt; do
   mkdir -p "$W/fat/$(dirname "$f")"
   mcopy -n -i "$FAT" "::/$f" "$W/fat/$f" 2>/dev/null
 done
@@ -170,11 +171,13 @@ check "dtb: internal UFS disabled (Android stays invisible)" \
 check "KERNEL.source.md5 names this KERNEL" '[ "$(cat "$W/fat/boot/pocket/KERNEL.source.md5")" = "$KERNEL_MD5" ]'
 check "initramfs hook mount-storage.sh is deploy/image/mount-storage.sh" 'same "$W/fat/mount-storage.sh" /repo/deploy/image/mount-storage.sh'
 check "initramfs hook post-flash.sh is deploy/image/post-flash.sh" 'same "$W/fat/post-flash.sh" /repo/deploy/image/post-flash.sh'
+check "pocket-ui-info/pocket-ui-os.txt: $POCKET_OS_NAME $VERSION, for Settings > About" \
+  '[ "$(cat "$W/fat/pocket-ui-info/pocket-ui-os.txt")" = "$(printf "NAME=%s\nVERSION=%s" "$POCKET_OS_NAME" "$VERSION")" ]'
 
 echo "== notes on the card (pocket-ui-info/README.txt)"
 R=$W/fat/pocket-ui-info/README.txt
 check "names version $VERSION" 'grep -q "pocket-ui $VERSION" "$R"'
-check "based on ROCKNIX, with link" 'grep -q "based on ROCKNIX" "$R" && grep -q "https://github.com/ROCKNIX/distribution" "$R"'
+check "$POCKET_OS_NAME, built on ROCKNIX, not made or endorsed by its team, with link" 'grep -q "$POCKET_OS_NAME $VERSION" "$R" && grep -q "built on ROCKNIX" "$R" && grep -q "not made or" "$R" && grep -q "https://github.com/ROCKNIX/distribution" "$R"'
 check "source offer: ROCKNIX tag $ROCKNIX_TAG and commit" 'grep -q "tag $ROCKNIX_TAG" "$R" && grep -q "$ROCKNIX_COMMIT" "$R"'
 check "artwork under CC BY-NC-SA 4.0" 'grep -q "CC BY-NC-SA 4.0" "$R"'
 check "free, non-commercial distribution only" 'grep -qi "non-commercial" "$R"'
@@ -228,6 +231,8 @@ sort >"$W/lists/storage.expected" <<EOF
 644 0:0 f ./.please_resize_me
 755 0:0 d ./.pocket-seed
 755 0:0 d ./.pocket-seed/.config
+755 0:0 d ./.pocket-seed/.config/autostart
+755 0:0 f ./.pocket-seed/.config/autostart/pocket-ui-image-defaults
 755 0:0 d ./.pocket-seed/.config/system.d
 755 0:0 d ./.pocket-seed/.config/system.d/essway.service.d
 644 0:0 f ./.pocket-seed/.config/system.d/essway.service.d/10-pocket-ui.conf
@@ -261,6 +266,8 @@ check "drop-in waiting in .pocket-seed is deploy/essway-pocket-ui.conf" \
   'same "$S/.pocket-seed/.config/system.d/essway.service.d/10-pocket-ui.conf" /repo/deploy/essway-pocket-ui.conf'
 check "boot screen unit waiting in .pocket-seed is deploy/pocket-splash.service" \
   'same "$S/.pocket-seed/.config/system.d/pocket-splash.service" /repo/deploy/pocket-splash.service'
+check "first-start settings waiting in .pocket-seed are deploy/image/image-defaults.sh" \
+  'same "$S/.pocket-seed/.config/autostart/pocket-ui-image-defaults" /repo/deploy/image/image-defaults.sh'
 check "licence texts in STORAGE: the repository's LICENSE and NOTICE.md, the fonts' OFL, the crates' texts (not empty)" \
   'same "$S/pocket-ui/licences/LICENSE" /repo/LICENSE && same "$S/pocket-ui/licences/NOTICE.md" /repo/NOTICE.md && same "$S/pocket-ui/licences/FONTS-OFL.txt" /repo/assets/fonts/OFL.txt && [ -s "$S/pocket-ui/licences/THIRD-PARTY-CRATES.md" ] && grep -q "^adler2 " "$S/pocket-ui/licences/THIRD-PARTY-LICENSES.txt"'
 check "launcher is deploy/run-pocket-ui.sh" 'same "$S/pocket-ui/run-pocket-ui.sh" /repo/deploy/run-pocket-ui.sh'

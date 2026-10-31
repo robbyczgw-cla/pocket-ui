@@ -72,7 +72,12 @@ impl Lang {
     /// The start value when settings.json has no language: the system's, as EmulationStation set it. The launcher
     /// passes `system.language` on as `LANG` (deploy/run-pocket-ui.sh), so system.cfg is read only without one.
     pub fn system_default() -> Lang {
-        Lang::from_system(std::env::var("LANG").ok().as_deref(), || crate::system_cfg::get("system.language"))
+        #[cfg(not(target_os = "android"))]
+        let system_language = || crate::system_cfg::get("system.language");
+        // Android has no ROCKNIX system.cfg. The Android entry sets the locale via JNI.
+        #[cfg(target_os = "android")]
+        let system_language = || None;
+        Lang::from_system(std::env::var("LANG").ok().as_deref(), system_language)
     }
 
     /// `system_default` without the device: `LANG` when it is set, else `system.language`, else English. A fresh

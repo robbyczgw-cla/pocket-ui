@@ -134,7 +134,7 @@ with more and copy the other game's save across from the backup folder in the em
 computer. Let the devices sync before you switch, and this does not happen.
 
 Wii, 3DS and GameCube `.gci` saves have no game name pocket-ui can match. They appear only in the list under
-Settings → Sync, with their file name.
+Settings → Connections → Sync, with their file name.
 
 With Syncthing off, or when nothing has two versions, there is no row on the card, no line on the shelf, and the
 Sync page says **Nothing waiting**.
@@ -156,7 +156,7 @@ same place, `/storage/.config/pocket-ui/library-sync`; a computer only passes it
   another folder on the other Pocket still gets its notes. Notes for a game that isn't on this Pocket wait until it
   is. If two of your games in one system have the same file name (in two subfolders), those two are left out.
 - **Play history** adds up: Curator → History and the Year in review count the time played on every Pocket, each session
-  once. The game card's time played still counts this Pocket only. With Play history off (Settings → Curator) no
+  once. The game card's time played still counts this Pocket only. With Play history off (Settings → Games → Curator) no
   history is shared.
 - **When it happens.** A little after the start, after every game, when you open this page, and whenever Syncthing
   brought something new (checked every minute). **Never while a game runs**: what comes in in the meantime waits until the

@@ -1,4 +1,4 @@
-//! Part of the pocket-ui binary: the App's side of `pocket_ui::night_light`. Settings → Look & feel → Night light, the
+//! Part of the pocket-ui binary: the App's side of `pocket_ui::night_light`. Settings → Look → Night light, the
 //! thread that fades the display warmer in the evening, and what its steps do on the UI thread (one event each, no
 //! work per frame). The choices, the schedule, the fade and the thread are in `src/night_light.rs`; how the white
 //! point becomes ramps or a tint is `display.rs` (`Look::night`), applied by `Sys::set_night`.

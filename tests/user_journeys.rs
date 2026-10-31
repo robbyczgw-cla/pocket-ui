@@ -130,6 +130,28 @@ fn a_typo_still_finds_the_game() {
     assert!(text.contains("Tobu Tobu Girl"), "{text}");
 }
 
+/// The Remote access page's second explanation line wraps at Large text: as one line it ran off
+/// the right edge (Mini V2, English; monkey run 2026-10-31 seed 102, TEXT E).
+#[test]
+fn remote_access_explains_itself_inside_the_screen_at_large_text() {
+    let card = Card::new("remote-large");
+    let text = card.shot("setup:remote", "large");
+    assert!(text.contains("turns itself off") && text.contains("Pocket restarts"), "{text}");
+    let boxes = std::fs::read_to_string(card.tmp.join("setup-remote.boxes")).unwrap();
+    assert!(boxes.is_empty(), "remote access text clipped or overlapping: {boxes}");
+}
+
+/// A notice card and the small toast at the same time: the toast goes below the card instead of
+/// garbling its first line (monkey run 2026-10-30, TEXT O on nearly every long run).
+#[test]
+fn a_toast_under_a_notice_does_not_overlap_it() {
+    let card = Card::new("notice-toast");
+    let text = card.shot("notice:empty:toast", "large");
+    assert!(text.contains("Added to Favourites"), "{text}");
+    let boxes = std::fs::read_to_string(card.tmp.join("notice-empty-toast.boxes")).unwrap();
+    assert!(boxes.is_empty(), "toast and notice overlap: {boxes}");
+}
+
 #[test]
 fn missing_bios_names_the_file() {
     let card = Card::new("bios");
@@ -207,7 +229,9 @@ mod fifo {
                 r#"#!/bin/sh
 printf 'started\n' > "$0.started"
 trap 'printf "quit\n" > "$0.quit"; exit 0' TERM INT
-while :; do sleep 0.05; done
+# Bounded (about 2 minutes): a stand-in can never outlive its test, whatever killed the test.
+i=0
+while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
 "#,
             );
             std::fs::write(card.tmp.join("wakealarm"), "+3600").unwrap();
@@ -232,6 +256,11 @@ while :; do sleep 0.05; done
                 cmd.env("WAYLAND_DISPLAY", &stub.path);
             }
             prepare(&card.tmp, &mut cmd);
+            // A test that dies (or is killed by the gate) takes the UI with it, and the UI takes its game (`die_with_parent`).
+            unsafe {
+                use std::os::unix::process::CommandExt;
+                cmd.pre_exec(|| if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) });
+            }
             let child = cmd.spawn().unwrap();
             let mut driver = Self { card, child };
             driver.wait(|d| d.card.tmp.join("ui.in").exists());
@@ -488,12 +517,93 @@ while :; do sleep 0.05; done
         ui.frame();
     }
 
+    /// The Cabinet look, then Settings over it: a tap on a category is the category's, never a case's that stood
+    /// there a frame before (the cases' tap areas caught it and confirmed the selected row; review 2026-10-30).
+    /// Taps come through the command FIFO ("tap x y", fractions of the screen) as the touch screen sends them.
+    #[test]
+    fn a_tap_on_settings_over_the_cabinet_is_settings() {
+        let mut ui = Driver::start("cabinet-tap", true, |tmp, _| {
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"motion":"off","art":"off","theme":"cabinet"}"#).unwrap();
+        });
+        ui.sees("Game Boy");
+        ui.send("start");
+        ui.sees("Sound & feel");
+        // The categories' rows on the driver's 1240x1080 window: their middles at 165 + 66 px each. Taps across the
+        // whole page, never twice in a row on the same category nor first on the selected one (that would open it), so wherever a case
+        // stood one of them lands on it; each only selects its category. A frame between taps, as on the device.
+        let row = |g: usize| (165.0 + 66.0 * g as f32) / 1080.0;
+        for x in [0.1, 0.3, 0.5, 0.7, 0.9] {
+            for g in [2, 4, 6, 1, 3, 5, 0] {
+                ui.send(&format!("tap {x} {:.4}", row(g)));
+                ui.frame();
+            }
+        }
+        // Then Playing, the third: the first tap selects it, the second opens it.
+        ui.send(&format!("tap 0.5 {:.4}", row(2)));
+        ui.frame();
+        ui.send(&format!("tap 0.5 {:.4}", row(2)));
+        let text = ui.sees("Remember where I quit");
+        assert!(!text.contains("Systems on the shelf"), "the Look list (the row that was selected) did not open: {text}");
+    }
+
+    /// The cozy extras where they live since 2026-10-30 answer a finger as every Settings row does: a tap selects a
+    /// row, the next one on it switches it. Sound & feel → Playful cases, Look → Cozy extras → Stickers on cases and
+    /// System → Sleep & power → Slideshow before screen off, each landing in settings.json's "extras".
+    #[test]
+    fn a_tap_switches_the_cozy_extras_where_they_live_now() {
+        let mut ui = Driver::new("extras-tap", true);
+        ui.send("start");
+        ui.sees("Sound & feel");
+        // On the driver's 1240x1080 window the rows' middles are at 165 + 66 px each, the categories' and the lists' alike.
+        let tap = |ui: &mut Driver, r: usize| {
+            ui.send(&format!("tap 0.5 {:.4}", (165.0 + 66.0 * r as f32) / 1080.0));
+            ui.frame();
+        };
+        let settings = ui.card.tmp.join("data/settings.json");
+        let extra = move |key: &str| -> serde_json::Value {
+            let s: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&settings).unwrap_or_default()).unwrap_or_default();
+            s["extras"][key].clone()
+        };
+        // Sound & feel, the second category: select, open; Playful cases, its second row: select, switch.
+        tap(&mut ui, 1);
+        tap(&mut ui, 1);
+        ui.sees("Playful cases");
+        tap(&mut ui, 1);
+        tap(&mut ui, 1);
+        ui.wait(|_| extra("playful_animations").is_boolean());
+        // Look, then its last row Cozy extras: the page; Stickers on cases, its second row.
+        ui.send("b");
+        ui.sees("Help & tools");
+        tap(&mut ui, 0);
+        tap(&mut ui, 0);
+        ui.sees("Systems on the shelf");
+        tap(&mut ui, 7);
+        tap(&mut ui, 7);
+        ui.sees("TV on the cabinet");
+        tap(&mut ui, 1);
+        tap(&mut ui, 1);
+        ui.wait(|_| extra("case_stickers") == serde_json::json!(false));
+        // System → Sleep & power: the slideshow is the page's second row, off until switched.
+        ui.send("b\nb");
+        ui.sees("Help & tools");
+        tap(&mut ui, 5);
+        tap(&mut ui, 5);
+        ui.sees("Sleep & power");
+        tap(&mut ui, 2);
+        tap(&mut ui, 2);
+        ui.sees("Slideshow before screen off");
+        assert!(extra("idle_slideshow").is_null(), "off until switched");
+        tap(&mut ui, 1);
+        tap(&mut ui, 1);
+        ui.wait(|_| extra("idle_slideshow") == serde_json::json!(true));
+    }
+
     #[test]
     fn quick_wifi_off_and_on_agrees_with_the_wifi_page() {
         let mut ui = Driver::new("wifi", true);
         ui.send("home\ndown\ndown\na");
         ui.sees("Wi-Fi\nOff");
-        ui.send("b\nstart\ndown\ndown\ndown\na\na");
+        ui.send("b\nstart\ndown\ndown\ndown\ndown\na\na");
         let off = ui.sees("Wi-Fi is off");
         assert!(
             !off.contains("Connected") && !off.contains("Connect\n"),
@@ -502,7 +612,7 @@ while :; do sleep 0.05; done
         // Back from Wi-Fi and Settings, switch the same radio on again, then reopen the Wi-Fi page.
         ui.send("b\nb\nb\nhome\ndown\ndown\na");
         ui.sees("Wi-Fi\nOn");
-        ui.send("b\nstart\ndown\ndown\ndown\na\na");
+        ui.send("b\nstart\ndown\ndown\ndown\ndown\na\na");
         let mut text = String::new();
         ui.wait(|d| {
             text = d.frame();
@@ -852,7 +962,7 @@ true
         ui.sees("Game Boy");
         // Extras paints the actual cached IP state on every frame. Wait for online readiness before using a
         // network-dependent card action; curl is a child-local failing stub, so no request leaves the fixture.
-        ui.send("start\ndown\ndown\na\ndown\ndown\ndown\na");
+        ui.send("start\ndown\ndown\ndown\na\ndown\ndown\na");
         ui.sees("Optional. You can get these any time later.");
         ui.send("b\nb\nb\nb");
         ui.sees("Game Boy");
@@ -994,7 +1104,7 @@ true
     fn bluetooth_page_connects_an_audio_device() {
         let mut ui = Driver::new("bluetooth", true);
         ui.sees("Game Boy");
-        ui.send("start\ndown\ndown\ndown\na\ndown\na");
+        ui.send("start\ndown\ndown\ndown\ndown\na\ndown\na");
         ui.sees("Search for devices");
         ui.send("down\na");
         ui.sees("JBL Flip 5");

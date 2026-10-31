@@ -2,7 +2,7 @@
 //! "Idle slideshow").
 //!
 //! * **When**: the shelf (no page, card, menu or game) has had no input for [`slideshow::start_after`] (a minute, or half
-//!   the screen-off time when that is shorter) and Settings → Look & feel → Cozy extras → Idle slideshow is on (`cozy_extras::on(Extra::IdleSlideshow)`; off in every look until the player switches it on). The show only
+//!   the screen-off time when that is shorter) and Settings → System → Sleep & power → Slideshow before screen off is on (`cozy_extras::on(Extra::IdleSlideshow)`; off in every look until the player switches it on). The show only
 //!   reads `Sleep::quiet_for`; it touches no sleep timer and holds no wake lock, so the screen goes off exactly when
 //!   it did before, and the show is over with it (`slideshow_tick` ends it as soon as the device is not awake).
 //! * **What**: the pictures are found on a thread (`slideshow::collect`), then each is read and scaled for the screen on a

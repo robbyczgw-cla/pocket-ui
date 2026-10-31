@@ -1720,7 +1720,7 @@ log says `audio: Cycle buffer (32 ms)` on headphones.
   end of the game stop it. A game that never rumbles never starts the thread or opens the device.
 - **Strength**: Options > Extras > Rumble Off / Low / Medium / High (default Medium; `rumble` in `options.rs`, scale 0 /
   0.4 / 0.7 / 1.0), per console or game like the other Extras.
-- **Menu haptics**: Settings > Look & feel > Haptics On / Off (default Off, stored in `<data>/haptics.json`). pocket-ui compares where
+- **Menu haptics**: Settings > Sound & feel > Haptics On / Off (default Off, stored in `<data>/haptics.json`). pocket-ui compares where
   the menus stand (shelf, Settings, pause menu pages, values) before and after Up / Down / Left / Right / L1 / R1 and
   sends one tick when it changed, at most one per 55 ms. A tick is 22 ms at 36000 of 65535; tune on the device with
   `POCKET_HAPTIC_TICK=<ms>,<strength>` in pocket-ui's environment.
@@ -1995,7 +1995,7 @@ the Pocket's motor at the same time, and the Players page (A on each controller)
     moves right after and 10 after the pause; the quantum went 256 on the shelf, 1024 (announced) at the game's start,
     and at its end 1024 then 256 within 31 ms, before the first sound on the shelf. One gap of exactly one cycle in
     the game's own sound as HOME paused RetroArch: its stream stops hard (not a menu sound).
-- **Volume**: Settings > Look & feel > Sounds, A switches, Left/Right 1 to 10 (default on, 7), stored in `<data>/sounds.json`
+- **Volume**: Settings > Sound & feel > Sounds, A switches, Left/Right 1 to 10 (default on, 7), stored in `<data>/sounds.json`
   through `fsutil::write_json`. Gain is 2.5 dB per step below 10: step 3 is -17.5 dB, so the loudest default sound
   (Confirm) peaks near -24 dBFS before the system volume.
 - **Tests**: `ui_sound::tests` (which event gives which sound, every suppression, settings, the synthesis: length,

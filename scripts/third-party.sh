@@ -6,6 +6,7 @@
 #   scripts/third-party.sh --check               print the compatibility verdict only; exit 1 on a problem
 #   scripts/third-party.sh --texts FILE          also write the licence / notice files of all crates into FILE
 #   scripts/third-party.sh --target TRIPLE       platform to resolve for (default aarch64-unknown-linux-gnu, the device)
+#   scripts/third-party.sh --manifest-path PATH   resolve another package (Android APK)
 #   scripts/third-party.sh --all-platforms       every target, e.g. to see what a macOS dev build would add
 #   scripts/third-party.sh --out FILE            list somewhere else (use - for stdout)
 #
@@ -26,6 +27,7 @@ target = "aarch64-unknown-linux-gnu"
 all_platforms = check_only = False
 out_path = "docs/THIRD-PARTY-CRATES.md"
 texts_path = None
+manifest = None
 i = 0
 while i < len(args):
     a = args[i]
@@ -33,11 +35,14 @@ while i < len(args):
     elif a == "--all-platforms": all_platforms = True
     elif a == "--target": i += 1; target = args[i]
     elif a == "--out": i += 1; out_path = args[i]
+    elif a == "--manifest-path": i += 1; manifest = args[i]
     elif a == "--texts": i += 1; texts_path = args[i]
     else: sys.exit(f"unknown argument {a} (see the comment at the top of scripts/third-party.sh)")
     i += 1
 
 cmd = ["cargo", "metadata", "--format-version", "1", "--locked"]
+if manifest:
+    cmd += ["--manifest-path", manifest]
 if not all_platforms:
     cmd += ["--filter-platform", target]
 r = subprocess.run(cmd + ["--offline"], capture_output=True, text=True)

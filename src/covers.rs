@@ -289,7 +289,7 @@ pub fn scrape(data_dir: &Path, games: &[(String, PathBuf)], progress: impl Fn(us
 /// The games `scrape_until` would look up: a known system, no cover on the card.
 pub fn todo<'a>(data_dir: &Path, games: &'a [(String, PathBuf)]) -> Vec<&'a (String, PathBuf)> {
     // An empty file gets no picture (a cover would claim the game is fine, `library_cache::is_empty_file`).
-    games.iter().filter(|(sys, rom)| playlist(sys).is_some() && !cover_path(data_dir, sys, rom).exists() && !crate::library_cache::is_empty_file(rom)).collect()
+    games.iter().filter(|(sys, rom)| playlist(sys).is_some() && !cover_path(data_dir, sys, rom).exists() && !crate::fsutil::is_empty_file(rom)).collect()
 }
 
 /// `scrape`, checking `stop` before each game (a game was started): it ends after the cover it is on.

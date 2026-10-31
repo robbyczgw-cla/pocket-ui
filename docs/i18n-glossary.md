@@ -47,7 +47,7 @@ They are names, not descriptions, and the manual (still English) uses them:
 | RetroAchievements, RetroArch, EmulationStation, ROCKNIX, PortMaster, Moonlight, Sunshine, Syncthing, Tailscale, Bluetooth, Store | products and services |
 | Home | the name of the screen; also on the hint bar |
 | Run-ahead, Grinding, Shader, Cheats, Core, Tools, Updates, Sync, Extras, Tour, Logs, Screenshot | established in German gaming and tech use |
-| English, Deutsch | a language is always shown in its own name (Settings → Look & feel → Language) |
+| English, Deutsch | a language is always shown in its own name (Settings → System → Language) |
 | Little, Big, Prime | the processor's core clusters (Settings → Playing → Performance & fan) |
 | Game, system, console, emulator and core names; the names of people, makers and places | names |
 
@@ -56,12 +56,12 @@ They are names, not descriptions, and the manual (still English) uses them:
 | English | German | Note |
 |---|---|---|
 | Settings | Einstellungen | |
-| Settings' categories: Look & feel, Playing, Games, Connections, System | Aussehen, Spielen, Spiele, Verbindungen, System | a path: "Einstellungen › Spielen › Akku" |
+| Settings' categories: Look, Sound & feel, Playing, Games, Connections, System, Help & tools | Aussehen, Klang & Gefühl, Spielen, Spiele, Verbindungen, System, Hilfe & Werkzeuge | a path: "Einstellungen › Spielen › Akku" |
 | Playing (the category, the game status) | Spielen | one word for both: the table has one line per English word |
 | Web companion | Web-Begleiter | the Pocket's Settings page is German, the pages in the browser stay English |
 | History, Play history, Year in review, Month in review | Verlauf, Spielverlauf, Jahresrückblick, Monatsrückblick | |
 | Session, streak | Sitzung, Serie | |
-| Look (Settings → Look & feel → Look), look | Ansicht | "Choose a look" → "Wähl eine Ansicht" |
+| Look (Settings → Look → Look), look | Ansicht | "Choose a look" → "Wähl eine Ansicht" |
 | Shelf, Minimal, Split, Cards, Cabinet (the looks) | Regal, Minimal, Geteilt, Karten, Vitrine | |
 | Appearance: Dark, Light, Automatic | Darstellung: Dunkel, Hell, Automatisch | |
 | Motion: Full, Reduced, Off | Bewegung: Voll, Reduziert, Aus | |
@@ -110,17 +110,18 @@ They are names, not descriptions, and the manual (still English) uses them:
 | Quiet, Cool (fan) | Leise, Kühl | |
 | Fast-forward, Rewind | Vorspulen, Zurückspulen | |
 | Cover art, box art | Cover | |
-| Pictures (Settings → Games → Extras); screenshot, title screen | Spielbilder; Screenshot, Titelbild | the collection's in-game picture and title screen beside the box art; "Box art" → "Cover", "Box art and screenshots" → "Cover und Screenshots" |
+| Pictures (Settings → Games → Pictures & extras); screenshot, title screen | Spielbilder; Screenshot, Titelbild | the collection's in-game picture and title screen beside the box art; "Box art" → "Cover", "Box art and screenshots" → "Cover und Screenshots" |
 | Safe mode | Abgesicherter Modus | |
 | Backup & reset | Sichern & zurücksetzen | |
 | Manual, user guide | Handbuch, Anleitung | |
-| About | Über | |
+| About | Info | the Help & tools row and its page |
+| Tools | Werkzeuge | as in "Hilfe & Werkzeuge" |
 | Back, Open, Switch (a toggle), Change, Close | Zurück, Öffnen, Umschalten, Ändern, Schließen | hint bar |
 | On, Off | An, Aus | |
 
 ## Left in English for now
 
-- **The manual** (Settings → System → Manual, the pages of `docs/user/`): its text stays English; its title, page line and
+- **The manual** (Settings → Help & tools → Manual, the pages of `docs/user/`): its text stays English; its title, page line and
   hints around it are German. The painter is switched off while its pages are drawn (`Text::set_translate`).
 - **Console fact sheets and credits** (`assets/data/consoles.json`, `console-credits.json`): the summaries, hardware
   values and notes are data written in English; the headings and labels around them are German.
@@ -138,7 +139,7 @@ They are names, not descriptions, and the manual (still English) uses them:
   "Select"; a network without a password says "No password" ("Ohne Passwort"), not the hint's "Open" ("Öffnen");
   the shelf's fact row is "Runs on" ("Läuft mit"), the console page's heading "On this Pocket". Left as it is:
   "Clear" is "Leeren" (Lens: clear the filters), also where it names a see-through shell colour.
-- **A language on its own** is shown in its own name: "English" and "Deutsch" in Settings → Look & feel → Language and on the
+- **A language on its own** is shown in its own name: "English" and "Deutsch" in Settings → System → Language and on the
   Welcome page (`i18n::Cache::get`). In a game's list of languages it is a part of a line and German: "USA ·
   Englisch, Französisch".
 - **Names inside a line**: a line of parts ("PlayStation 2 · 2005 · Rennspiel") translates the parts the table has

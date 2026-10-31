@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ui"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 authors = ["Robby Czesany"]
 license = "GPL-2.0-or-later"
@@ -46,13 +46,13 @@ libloading = "0.8"
 miniz_oxide = "0.8"
 # ZIP entry checksums (`archive`); already in the tree through png and flate2.
 crc32fast = "1"
-glutin = { version = "0.32", default-features = false, features = ["egl", "wayland"] }
-glutin-winit = { version = "0.5", default-features = false, features = ["egl", "wayland"] }
 glow = "0.14"
 raw-window-handle = "0.6"
-softbuffer = { version = "0.4", default-features = false, features = ["wayland", "wayland-dlopen"] }
-winit = { version = "0.30", default-features = false, features = ["rwh_06", "wayland", "wayland-dlopen"] }
 qrcode = { version = "0.14.1", default-features = false }
+
+[features]
+# Steam Deck / desktop Linux (docs/STEAMDECK.md): XWayland or X11 windows besides Wayland. Off for the handhelds.
+x11 = ["winit/x11", "glutin/x11", "glutin-winit/x11", "softbuffer/x11", "softbuffer/x11-dlopen", "dep:x11rb"]
 
 [build-dependencies]
 # Builds src/log_shim.c (see build.rs); already in the tree through other crates.
@@ -65,6 +65,12 @@ cc = "1"
 tempfile = "3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
+glutin = { version = "0.32", default-features = false, features = ["egl", "wayland"] }
+glutin-winit = { version = "0.5", default-features = false, features = ["egl", "wayland"] }
+softbuffer = { version = "0.4", default-features = false, features = ["wayland", "wayland-dlopen"] }
+winit = { version = "0.30", default-features = false, features = ["rwh_06", "wayland", "wayland-dlopen"] }
+# Steam Deck only (`--features x11`, src/desk.rs)
+x11rb = { version = "0.13", optional = true, default-features = false }
 evdev = "0.13"
 # wlr-gamma-control for the display look (src/gamma.rs); both are already in the tree through winit
 wayland-client = "0.31"
@@ -104,3 +110,7 @@ codegen-units = 256
 [profile.quick.package."*"]
 opt-level = 3
 codegen-units = 16
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+ndk = { version = "0.9", features = ["audio", "api-level-26"] }
