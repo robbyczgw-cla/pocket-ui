@@ -15,6 +15,22 @@ use std::path::Path;
 
 /// Largest ROM we unpack into memory.
 const MAX_ROM: usize = 64 << 20;
+/// Largest zip read into memory to unpack it: the ROM inside is at most [`MAX_ROM`]; this leaves room for a manual or
+/// pictures beside it. Checked by size before a byte is read (security review M5: a 9 GB "zip" was read whole first).
+pub const MAX_ZIP: u64 = 128 << 20;
+/// Largest game file a core that takes the game in memory gets (the largest cartridges, a Nintendo DS card, are 512 MB);
+/// also checked before reading. Cores that read the file themselves (`need_fullpath`: discs) are not bounded here.
+pub const MAX_IN_MEMORY: u64 = 512 << 20;
+
+/// The whole of `path`, refused before anything is read when it is larger than `max` bytes.
+pub fn read_bounded(path: &Path, max: u64) -> Result<Vec<u8>, String> {
+    let len = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?.len();
+    if len > max {
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        return Err(format!("{name} is too big to load ({} MB; at most {} MB)", len >> 20, max >> 20));
+    }
+    std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))
+}
 
 fn le16(b: &[u8], at: usize) -> Option<usize> {
     Some(u16::from_le_bytes(b.get(at..at + 2)?.try_into().ok()?) as usize)
@@ -235,7 +251,7 @@ pub fn refusal_in(zip: &mut (impl std::io::Read + std::io::Seek), zip_name: &str
 /// not match the entry's CRC-32 are refused with a message for the player (`is_refusal`). Returns its name inside the
 /// archive and its contents.
 pub fn extract_rom(zip_path: &Path, wanted: &[&str]) -> Result<(String, Vec<u8>), String> {
-    let z = std::fs::read(zip_path).map_err(|e| format!("{}: {e}", zip_path.display()))?;
+    let z = read_bounded(zip_path, MAX_ZIP)?;
     let zip_name = zip_path.file_name().and_then(|n| n.to_str()).unwrap_or("The zip file");
     // No end record: the file was cut off (a copy or a download that stopped). Nothing opens it, RetroArch neither (its
     // reader starts from that record too), and a fall back would keep the game on RetroArch after a good copy.
@@ -271,6 +287,26 @@ pub fn extract_rom(zip_path: &Path, wanted: &[&str]) -> Result<(String, Vec<u8>)
     }
     let name = Path::new(&e.name).file_name().and_then(|n| n.to_str()).unwrap_or(&e.name).to_string();
     Ok((name, data))
+}
+
+#[cfg(test)]
+mod bounded_tests {
+    use super::*;
+
+    /// Security review M5: a huge file is refused by its size, before it is read into memory.
+    #[test]
+    fn a_huge_zip_or_rom_is_refused_before_it_is_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let big = dir.path().join("Huge.zip");
+        std::fs::File::create(&big).unwrap().set_len(MAX_ZIP + 1).unwrap();
+        let e = extract_rom(&big, &["gba"]).unwrap_err();
+        assert!(e.contains("too big to load"), "{e}");
+        let rom = dir.path().join("Huge.gba");
+        std::fs::File::create(&rom).unwrap().set_len(MAX_IN_MEMORY + 1).unwrap();
+        assert!(read_bounded(&rom, MAX_IN_MEMORY).unwrap_err().contains("too big"));
+        std::fs::write(dir.path().join("Small.gba"), b"rom").unwrap();
+        assert_eq!(read_bounded(&dir.path().join("Small.gba"), MAX_IN_MEMORY).unwrap(), b"rom");
+    }
 }
 
 #[cfg(test)]

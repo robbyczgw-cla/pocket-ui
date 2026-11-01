@@ -167,8 +167,9 @@ impl App {
     /// SELECT + START held, Escape, Settings → About: the dialog instead of leaving at once.
     pub(crate) fn open_leave(&mut self, kind: DialogKind) {
         self.exit_since = None;
-        // Not behind a running game: the pause menu has the pad then (the FIFO's `leave` could ask at any time).
-        if self.running.is_some() {
+        // Not behind a running game: the pause menu has the pad then (the FIFO's `leave` could ask at any time). Never in
+        // Kids Mode: its way out is the PIN, and a keyboard's Escape comes here without passing `kids_pad`.
+        if self.running.is_some() || self.kids_live() {
             return;
         }
         self.select_alone = false;
@@ -181,6 +182,12 @@ impl App {
     pub(crate) fn leave_input(&mut self, el: &ActiveEventLoop, pe: &PadEvent) -> bool {
         // The volume keys and the power button keep their meaning.
         if matches!(pe, PadEvent::Button { button: Button::VolUp | Button::VolDown | Button::Power, .. }) {
+            return false;
+        }
+        // The power menu opened over it: the buttons are that menu's, and the dialog is over with.
+        if self.leave.is_some() && self.sys.power_menu_open() {
+            self.leave = None;
+            self.request_redraw();
             return false;
         }
         let Some(d) = self.leave.as_mut() else { return false };
@@ -237,8 +244,125 @@ impl App {
 
 // ---- safe mode --------------------------------------------------------------------------------------------------
 
+/// A crash loop under Kids Mode: the child sees a picture and "ask a grown-up", no words they can't use. A grown-up holds
+/// SELECT + START and enters the PIN, as on the child's shelf, for the rescue page. A forgotten PIN: the file on the card (`kids::reset_wanted`).
+/// The handheld with a plaster on it: it isn't the child's fault and it can be mended.
+pub(crate) fn paint_plaster(c: &mut Canvas, k: pocket_ui::kids::Colours, top: f32) {
+    let (w, h) = (c.w, c.h);
+    let u = h as f32 / 1080.0;
+    let (bw, bh) = ((460.0 * u) as i32, (290.0 * u) as i32);
+    let (x, y) = ((w - bw) / 2, (top * u) as i32);
+    c.round_rect(x, y, bw, bh, (46.0 * u) as i32, k.on_accent);
+    c.round_rect(x + bw / 5, y + (40.0 * u) as i32, bw * 3 / 5, bh - (80.0 * u) as i32, (12.0 * u) as i32, k.spark);
+    c.disc(x + bw / 10, y + bh / 2, (22.0 * u) as i32, k.accent);
+    c.disc(x + bw - bw / 10, y + bh / 2, (22.0 * u) as i32, k.accent);
+    // The plaster, across the screen.
+    let (pw, ph) = ((190.0 * u) as i32, (64.0 * u) as i32);
+    c.round_rect((w - pw) / 2, y + (bh - ph) / 2, pw, ph, ph / 2, 0xf2b98a);
+    c.rect((w - pw / 3) / 2, y + (bh - ph) / 2, pw / 3, ph, 0xe09a68);
+}
+
+struct KidsDoor {
+    theme: pocket_ui::kids::Theme,
+    pin: String,
+    select: bool,
+    start: bool,
+    hold_since: Option<std::time::Instant>,
+    gate: Option<pocket_ui::kids::Gate>,
+}
+
+impl KidsDoor {
+    fn for_data(data_dir: &std::path::Path) -> Option<KidsDoor> {
+        let cfg = pocket_ui::kids::Config::load(data_dir);
+        let forgotten = pocket_ui::kids::reset_wanted(&pocket_ui::kids::reset_places(), cfg.reset_seen).is_some();
+        (cfg.on && !forgotten).then_some(KidsDoor { theme: cfg.theme, pin: cfg.pin, select: false, start: false, hold_since: None, gate: None })
+    }
+
+    /// True when the door is open: the rescue page takes over.
+    fn button(&mut self, b: Button, pressed: bool) -> bool {
+        match b {
+            Button::Select => self.select = pressed,
+            Button::Start => self.start = pressed,
+            _ => {}
+        }
+        self.hold_since = if self.select && self.start && self.gate.is_none() { self.hold_since.or(Some(std::time::Instant::now())) } else { None };
+        let Some(gate) = self.gate.as_mut().filter(|_| pressed) else { return false };
+        match gate.press(b, &self.pin, std::time::Instant::now()) {
+            pocket_ui::kids::GateOut::Stay => false,
+            pocket_ui::kids::GateOut::Back => {
+                self.gate = None;
+                false
+            }
+            pocket_ui::kids::GateOut::Open => true,
+        }
+    }
+
+    /// The time of the hold is up: the PIN.
+    fn tick(&mut self) -> bool {
+        if self.hold_since.is_some_and(|t| t.elapsed() >= pocket_ui::kids::LEAVE_HOLD) {
+            self.hold_since = None;
+            self.gate = Some(Default::default());
+            return true;
+        }
+        false
+    }
+
+    fn paint(&self, c: &mut Canvas, text: &mut Text) {
+        let (w, h) = (c.w, c.h);
+        super::app_kids::paint_backdrop(c, 0, 0, w, h, self.theme);
+        let k = self.theme.colours();
+        let u = h as f32 / 1080.0;
+        let centre = |text: &mut Text, c: &mut Canvas, face, px: f32, y: f32, ink, s: &str| {
+            let px = (px * u).round() as u32;
+            let mut y = (y * u) as i32;
+            for l in text.wrap_at_most(face, px, s, w - (60.0 * u) as i32, 2) {
+                let tw = text.width(face, px, &l);
+                text.draw(c, face, px, (w - tw) / 2, y, ink, &l);
+                y += (px as f32 * 1.25) as i32;
+            }
+        };
+        if let Some(gate) = &self.gate {
+            centre(text, c, Face::Title, 72.0, 170.0, k.ink, "For grown-ups");
+            centre(text, c, Face::Body, 40.0, 240.0, k.ink, "Enter your PIN.");
+            let (bw, bh, gap) = ((170.0 * u) as i32, (240.0 * u) as i32, (34.0 * u) as i32);
+            let x0 = (w - 4 * bw - 3 * gap) / 2;
+            let top = (340.0 * u) as i32;
+            for (i, digit) in gate.dials.digits.iter().enumerate() {
+                let x = x0 + i as i32 * (bw + gap);
+                let at = i == gate.dials.at;
+                c.round_rect(x, top, bw, bh, (26.0 * u) as i32, if at { k.accent } else { k.top });
+                let s = if i < gate.dials.at { "•".to_string() } else { digit.to_string() };
+                let px = (150.0 * u).round() as u32;
+                let tw = text.width(Face::Title, px, &s);
+                text.draw(c, Face::Title, px, x + (bw - tw) / 2, top + bh / 2 + px as i32 * 36 / 100, if at { k.on_accent } else { k.ink }, &s);
+            }
+            if let Some(wait) = gate.waiting(std::time::Instant::now()) {
+                centre(text, c, Face::Body, 38.0, 680.0, k.ink, &format!("Too many tries. Wait {} seconds.", wait.as_secs() + 1));
+            } else if gate.wrong > 0 {
+                centre(text, c, Face::Body, 38.0, 680.0, k.ink, "That's not it. Try again.");
+            }
+            if gate.wrong >= pocket_ui::kids::WRONG_BEFORE_HELP {
+                centre(text, c, Face::Body, 34.0, 750.0, k.ink, &format!("Forgot it? Put a file called {} on the card and restart.", pocket_ui::kids::RESET_FILE));
+            }
+            return;
+        }
+        paint_plaster(c, k, 130.0);
+        centre(text, c, Face::Title, 86.0, 590.0, k.ink, "Oops, something broke");
+        centre(text, c, Face::Title, 66.0, 700.0, k.accent, "Please ask a grown-up");
+        centre(text, c, Face::Body, 32.0, 980.0, k.ink, "For grown-ups: hold SELECT and START for 5 seconds.");
+        if let Some(t) = self.hold_since {
+            let p = (t.elapsed().as_secs_f32() / pocket_ui::kids::LEAVE_HOLD.as_secs_f32()).min(1.0);
+            let bar = (12.0 * u).max(4.0) as i32;
+            c.rect(0, 0, w, bar, k.on_accent);
+            c.rect(0, 0, (w as f32 * p) as i32, bar, k.accent);
+        }
+    }
+}
+
 /// The safe-mode app: the page, its window and nothing else.
 struct Rescue {
+    /// Kids Mode is on: its door in front of the page.
+    kids: Option<KidsDoor>,
     window: Option<Rc<Window>>,
     surface: pocket_ui::frame::Presenter<softbuffer::Surface<Rc<Window>, Rc<Window>>>,
     text: Text,
@@ -256,6 +380,7 @@ struct Rescue {
 impl Rescue {
     fn new(data_dir: PathBuf, page: RescuePage, light: bool) -> Rescue {
         Rescue {
+            kids: KidsDoor::for_data(&data_dir),
             window: None,
             surface: pocket_ui::frame::Presenter::empty(),
             text: Text::builtin(),
@@ -270,6 +395,16 @@ impl Rescue {
         }
     }
 
+    /// A button while Kids Mode's door is shut, a pad's or a keyboard's: the door has it, and the page behind sees nothing.
+    /// False: no door, the page's. The right PIN opens it, from the next press on.
+    fn door_takes(&mut self, button: Button, pressed: bool) -> bool {
+        let Some(door) = self.kids.as_mut() else { return false };
+        if door.button(button, pressed) {
+            self.kids = None;
+        }
+        true
+    }
+
     fn paint(&mut self, c: &mut Canvas) {
         pocket_ui::palette::set_blend(if self.light { 255 } else { 0 });
         if self.switching_off {
@@ -277,6 +412,10 @@ impl Rescue {
             let msg = "Switching off\u{2026}";
             let w = self.text.width(Face::Body, 46, msg);
             self.text.draw(c, Face::Body, 46, (c.w - w) / 2, c.h / 2, pal().text, msg);
+            return;
+        }
+        if let Some(door) = &self.kids {
+            door.paint(c, &mut self.text);
             return;
         }
         paint_page(c, &mut self.text, &mut self.hits, &self.page);
@@ -375,10 +514,16 @@ impl ApplicationHandler<UserEvent> for Rescue {
 
     fn user_event(&mut self, el: &ActiveEventLoop, ev: UserEvent) {
         match ev {
+            UserEvent::Pad(PadEvent::Button { source, button, pressed }) if self.kids.is_some() => {
+                let role = if source == usize::MAX { button } else { pocket_ui::device::current().menu_layout().role(button) };
+                self.door_takes(role, pressed);
+                self.redraw();
+            }
             UserEvent::Pad(PadEvent::Button { source, button, pressed: true }) => {
                 // The FIFO already speaks roles; only the physical pads need the printed layout.
                 self.press(el, if source == usize::MAX { button } else { pocket_ui::device::current().menu_layout().role(button) });
             }
+            UserEvent::Touch(_) if self.kids.is_some() => {}
             UserEvent::Touch(t) => {
                 let Some(window) = &self.window else { return };
                 let size = window.inner_size();
@@ -420,6 +565,10 @@ impl ApplicationHandler<UserEvent> for Rescue {
                     KeyCode::Backspace | KeyCode::Escape => CANCEL,
                     _ => return,
                 };
+                if self.door_takes(button, true) {
+                    self.redraw();
+                    return;
+                }
                 self.press(el, button);
             }
             _ => {}
@@ -427,6 +576,15 @@ impl ApplicationHandler<UserEvent> for Rescue {
     }
 
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+        // While SELECT + START are held the door's bar fills.
+        if let Some(door) = self.kids.as_mut() {
+            door.tick();
+            if door.hold_since.is_some() {
+                el.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(std::time::Instant::now() + std::time::Duration::from_millis(100)));
+                self.redraw();
+                return;
+            }
+        }
         // A frame that failed is tried again (`frame::Presenter`); otherwise the page waits for input.
         match self.surface.retry_at() {
             Some(at) => {
@@ -524,9 +682,50 @@ pub(crate) fn snapshot(data_dir: PathBuf, args: &[String]) {
         Some("done") => page.reset_finished(Ok(PathBuf::from(&page.backup))),
         _ => {}
     }
+    let kids = state.split(':').nth(1).filter(|p| p.starts_with("kids")).map(str::to_string);
     let mut app = Rescue::new(data_dir.clone(), page, wants_light(&data_dir));
+    // `rescue:kids`, `rescue:kids-pin`: Kids Mode's door, whatever POCKETUI_DATA says.
+    match kids.as_deref() {
+        Some(what) => {
+            let gate = (what == "kids-pin").then(|| {
+                let mut g = pocket_ui::kids::Gate { wrong: pocket_ui::kids::WRONG_BEFORE_HELP, ..Default::default() };
+                g.dials.digits = [4, 0, 0, 0];
+                g.dials.at = 1;
+                g
+            });
+            app.kids = Some(KidsDoor { theme: pocket_ui::kids::Theme::Blue, pin: "1234".into(), select: false, start: false, hold_since: None, gate });
+        }
+        None => app.kids = None,
+    }
     let (w, h) = super::snapshot_dims();
     let mut buf = vec![0u32; (w * h) as usize];
     app.paint(&mut Canvas::new(&mut buf, w, h));
     super::write_png(&buf, w, h, out);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The crash-loop door: a keyboard's keys go where the pad's go, so no press reaches the hidden page.
+    #[test]
+    fn a_keyboard_cannot_reach_the_rescue_page_behind_the_kids_door() {
+        let tmp = tempfile::tempdir().unwrap();
+        let page = RescuePage::new(rescue::WhatHappened { reason: None, last_crash: None, launcher: Vec::new() }, None, String::new());
+        let mut app = Rescue::new(tmp.path().to_path_buf(), page, false);
+        app.kids = Some(KidsDoor { theme: pocket_ui::kids::Theme::Blue, pin: "0000".into(), select: false, start: false, hold_since: None, gate: None });
+        for b in [Button::Down, Button::Down, Button::Down, CONFIRM, Button::Down, CONFIRM] {
+            assert!(app.door_takes(b, true), "{b:?}");
+            assert!(app.kids.is_some());
+        }
+        // The PIN opens it; from then on the page has the keys.
+        app.kids.as_mut().unwrap().gate = Some(Default::default());
+        for _ in 0..3 {
+            assert!(app.door_takes(CONFIRM, true));
+            assert!(app.kids.is_some());
+        }
+        assert!(app.door_takes(CONFIRM, true), "the press that opens it is the door's");
+        assert!(app.kids.is_none());
+        assert!(!app.door_takes(Button::Down, true));
+    }
 }

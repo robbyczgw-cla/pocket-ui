@@ -2,7 +2,7 @@
 //! from one, and pocket-ui's settings back to how they start (after an automatic backup).
 //!
 //! Only pocket-ui's own files, by name (`SETTINGS_FILES`, `SERVICE_FILES`, `LIBRARY_FILES`, `SETTINGS_DIRS`): never the
-//! games, saves or states, never a file of ROCKNIX (system.cfg included), never secrets (the file-sharing password in
+//! games, saves or states (those have `backup_saves`), never a file of ROCKNIX (system.cfg included), never secrets (the file-sharing password in
 //! `share/`, the RetroAchievements token), never what the Store installed (`store/` must match the files on the card)
 //! nor the notes pocket-ui uses to undo CPU and fan changes (`restore.json` and friends), which describe the running
 //! system and not a choice. A backup folder holds copies of those files and a `backup.json` listing them; a restore
@@ -71,12 +71,16 @@ pub struct Backup {
 }
 
 impl Backup {
-    /// "23 Oct 2026, 14:20" in the device's time zone.
     pub fn when(&self) -> String {
-        let t = local(self.manifest.created);
-        const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        format!("{} {} {}, {:02}:{:02}", t.2, MONTHS[(t.1 as usize).saturating_sub(1).min(11)], t.0, t.3, t.4)
+        when_text(self.manifest.created)
     }
+}
+
+/// "23 Oct 2026, 14:20" in the device's time zone.
+pub fn when_text(unix: u64) -> String {
+    let t = local(unix);
+    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    format!("{} {} {}, {:02}:{:02}", t.2, MONTHS[(t.1 as usize).saturating_sub(1).min(11)], t.0, t.3, t.4)
 }
 
 /// (year, month 1-12, day, hour, minute) of a Unix time in the device's time zone.
@@ -138,7 +142,7 @@ pub fn collect(data_dir: &Path) -> Vec<String> {
 }
 
 /// The folder name of a backup made at `unix`: "2026-10-23_1420", with "-2", "-3" when there is one already.
-fn folder_name(root: &Path, unix: u64) -> PathBuf {
+pub(crate) fn folder_name(root: &Path, unix: u64) -> PathBuf {
     let (y, mo, d, h, mi) = local(unix);
     let base = format!("{y:04}-{mo:02}-{d:02}_{h:02}{mi:02}");
     let mut dir = root.join(&base);

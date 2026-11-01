@@ -1,0 +1,36 @@
+/* "Send from your phone" (src/phone_upload.rs): one page, the Pocket's colours, the system's fonts (nothing is fetched). */
+:root {
+  --void: #000000; --spine: #1F1F22; --label: #ECE9E1; --ink: #151515; --chalk: #D9D6CE; --dust: #8E8B84;
+  --keycap: #2A2A2E; --alert: #E0705C; --ok: #8FB573;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root { --void: #F3EFE7; --spine: #E6E1D6; --label: #FFFDF8; --ink: #1A1916; --chalk: #2B2925; --dust: #625E56;
+    --keycap: #DCD6CA; --alert: #A63A28; --ok: #3F6B2A; color-scheme: light; }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--void); color: var(--chalk); font: 17px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+main { max-width: 640px; margin: 0 auto; }
+h1 { font-size: 28px; line-height: 1.15; margin: 8px 0; }
+p { margin: 10px 0; }
+.quiet { color: var(--dust); }
+.alert { color: var(--alert); }
+.ok { color: var(--ok); }
+.small { font-size: 14px; }
+.pick { display: block; margin: 18px 0 0; }
+.pick input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.pick span { display: block; text-align: center; padding: 16px; border-radius: 12px; background: var(--label); color: var(--ink); font-weight: 600; font-size: 19px; }
+.pick.second span { background: var(--spine); color: var(--chalk); font-size: 17px; padding: 12px; }
+.pick input:focus-visible + span { outline: 3px solid var(--dust); outline-offset: 2px; }
+ul { list-style: none; padding: 0; margin: 18px 0; }
+li { background: var(--spine); border-radius: 12px; padding: 12px 14px; margin: 0 0 10px; }
+li .name { font-weight: 600; overflow-wrap: anywhere; }
+li .line { color: var(--dust); font-size: 15px; margin-top: 2px; overflow-wrap: anywhere; }
+li .line.alert { color: var(--alert); }
+li .line.ok { color: var(--ok); }
+li select, li button { font: inherit; font-size: 16px; margin-top: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--keycap); background: var(--void); color: var(--chalk); max-width: 100%; }
+li button { background: var(--label); color: var(--ink); border: 0; margin-right: 8px; }
+li button.plain { background: var(--keycap); color: var(--chalk); }
+progress { width: 100%; height: 8px; margin-top: 8px; accent-color: var(--ok); }

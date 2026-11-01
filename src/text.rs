@@ -876,6 +876,13 @@ pub mod boxes {
         record().and_then(|r| r.lock().ok()).map_or(0, |r| r.len())
     }
 
+    /// What was painted since `mark` is no string of its own: the soft edge of one painted again over it.
+    pub fn forget_since(mark: usize) {
+        if let Some(Ok(mut rec)) = record().map(|r| r.lock()) {
+            rec.truncate(mark);
+        }
+    }
+
     /// What was painted into `c` since `mark` shows only between its rows `y0` and `y1` (a page that puts back what
     /// its lines drew over its edges, the manual's).
     pub fn clip_since(mark: usize, c: &Canvas, y0: i32, y1: i32) {

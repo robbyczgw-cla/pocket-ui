@@ -935,7 +935,8 @@ impl Core {
                 let (name, data) = crate::archive::extract_rom(rom, &exts)?;
                 (rom.parent().unwrap_or(Path::new("")).join(name), data)
             } else {
-                (rom.to_path_buf(), std::fs::read(rom).map_err(|e| format!("{}: {e}", rom.display()))?)
+                // Bounded before reading (security review M5): a file far larger than any cartridge is not read whole.
+                (rom.to_path_buf(), crate::archive::read_bounded(rom, crate::archive::MAX_IN_MEMORY)?)
             };
             let game_path = CString::new(shown_path.as_os_str().as_encoded_bytes()).map_err(|e| e.to_string())?;
             let game = GameInfo {

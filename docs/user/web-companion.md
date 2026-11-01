@@ -9,6 +9,10 @@ PortMaster files, see your play time and the battery, and look at the Pocket's s
 > screenshot placeholder were checked on a Mini V2. Pairing a browser with a code, uploading files and using it while
 > a game runs were only tried on a computer with a stand-in library. Please tell us what happens.
 
+To send a few games from a phone on the same Wi-Fi without Tailscale, use Add games → Y instead ([From your
+phone](phone-upload.md)): a page that exists only while it is open on the Pocket. It is separate from the
+companion, which stays Tailscale-only.
+
 ## Turn it on
 
 1. Set up Tailscale first: Settings → Connections → **Tailscale**, switch it on and sign in ([Tailscale](remote.md)). Your phone or

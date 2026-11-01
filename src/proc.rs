@@ -2,6 +2,7 @@
 //! hangs must cost a bounded delay, never the whole UI (the internal review, B10).
 
 use std::io::{self, Read};
+use std::path::Path;
 use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -94,6 +95,7 @@ fn timed_out() -> io::Error {
 }
 
 fn spawn(cmd: &mut Command) -> io::Result<Child> {
+    refuse_in_mock(cmd)?;
     // Its own process group: a timeout kills the shell's children with it, and nothing else.
     cmd.process_group(0).spawn()
 }
@@ -175,6 +177,25 @@ impl Pipe {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_mock_refuses_what_changes_the_system() {
+        let v = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!(super::changes_system("nmcli", &v(&["connection", "modify", "id", "Wifi", "x", "y"])));
+        assert!(super::changes_system("/usr/bin/nmcli", &v(&["connection", "delete", "uuid", "u"])));
+        assert!(super::changes_system("nmcli", &v(&["-w", "60", "device", "wifi", "connect", "Wifi"])));
+        assert!(super::changes_system("systemctl", &v(&["restart", "nmbd", "smbd"])));
+        assert!(super::changes_system("chown", &v(&["-R", "nobody", "/storage/roms"])));
+        assert!(super::changes_system("reboot", &[]));
+        assert!(super::changes_system("iw", &v(&["reg", "set", "DE"])));
+        assert!(super::line_changes_system("systemctl reboot --reboot-argument=bootloader"));
+        assert!(super::line_changes_system("cd /x && chown -R a /storage/roms"));
+        // reading stays allowed
+        assert!(!super::changes_system("nmcli", &v(&["-g", "802-11-wireless-security.key-mgmt", "connection", "show", "id", "W"])));
+        assert!(!super::changes_system("systemctl", &v(&["is-active", "--quiet", "smbd"])));
+        assert!(!super::changes_system("ip", &v(&["-4", "-o", "addr", "show"])));
+        assert!(!super::line_changes_system("echo hello"));
+    }
+
     use super::*;
 
     fn sh(script: &str) -> Command {
@@ -266,4 +287,85 @@ mod tests {
         assert_eq!(b.left(), Duration::ZERO);
         assert_eq!(b.cap(Duration::from_millis(100)), Duration::ZERO);
     }
+}
+
+/// Under `POCKETUI_MOCK` (tests, monkey, desktop preview) a program must not change the machine it runs on.
+pub fn mock() -> bool {
+    std::env::var_os("POCKETUI_MOCK").is_some()
+}
+
+/// Whether `program args…` changes the system: network profiles, services, power, owners, regulatory domain.
+/// Reading (`systemctl is-active`, `nmcli -g …`, `ip addr`) stays allowed.
+fn changes_system(program: &str, args: &[String]) -> bool {
+    let name = program.rsplit('/').next().unwrap_or(program);
+    let has = |w: &str| args.iter().any(|a| a == w);
+    match name {
+        "reboot" | "poweroff" | "shutdown" | "halt" | "chown" | "rfkill" | "usbgadget" | "systemd-run" | "mount" | "umount" => true,
+        "systemctl" => !args.iter().any(|a| matches!(a.as_str(), "is-active" | "is-enabled" | "is-failed" | "status" | "show" | "list-units" | "list-unit-files")),
+        "nmcli" => {
+            ((has("connection") || has("con")) && (has("modify") || has("delete") || has("add") || has("up") || has("down") || has("reload")))
+                || has("connect")
+                || has("disconnect")
+        }
+        "iw" => has("set"),
+        "wpctl" => args.first().is_some_and(|a| a.starts_with("set-")),
+        "tailscale" => args.first().is_some_and(|a| matches!(a.as_str(), "up" | "down" | "set" | "logout" | "login")),
+        "pkill" | "killall" => true,
+        _ => false,
+    }
+}
+
+/// A shell line (`sh -c "<line>"`) changes the system when any of its words starts such a command.
+fn line_changes_system(line: &str) -> bool {
+    let words: Vec<String> = line.split_whitespace().map(str::to_string).collect();
+    (0..words.len()).any(|i| changes_system(&words[i], &words[i + 1..]))
+}
+
+/// `Err(PermissionDenied)` when the mock is on and `cmd` would change the system: it is not started and says so on
+/// stderr. Every runner in this file goes through it; code that calls `Command::output` itself uses `output`/`status` below.
+pub fn refuse_in_mock(cmd: &Command) -> io::Result<()> {
+    if !mock() {
+        return Ok(());
+    }
+    let program = cmd.get_program().to_string_lossy().into_owned();
+    // A stand-in the test put on its own PATH (in the temp folder) can't change the machine.
+    if is_stand_in(cmd) {
+        return Ok(());
+    }
+    let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+    let shell = matches!(program.rsplit('/').next(), Some("sh" | "bash")) && args.first().is_some_and(|a| a == "-c");
+    let hit = if shell { args.get(1).is_some_and(|l| line_changes_system(l)) } else { changes_system(&program, &args) };
+    if hit {
+        eprintln!("mock: refused `{program} {}`", args.join(" "));
+        return Err(io::Error::new(io::ErrorKind::PermissionDenied, "refused under POCKETUI_MOCK"));
+    }
+    Ok(())
+}
+
+/// Whether the program `cmd` starts is a file below the temp folder (an absolute path, or the first match on the PATH
+/// the child gets).
+fn is_stand_in(cmd: &Command) -> bool {
+    let tmp = std::env::temp_dir();
+    let program = Path::new(cmd.get_program());
+    if program.is_absolute() {
+        return program.starts_with(&tmp);
+    }
+    let path = cmd
+        .get_envs()
+        .find(|(k, _)| *k == "PATH")
+        .and_then(|(_, v)| v.map(|v| v.to_os_string()))
+        .or_else(|| std::env::var_os("PATH"));
+    path.is_some_and(|p| std::env::split_paths(&p).map(|d| d.join(program)).find(|f| f.is_file()).is_some_and(|f| f.starts_with(&tmp)))
+}
+
+/// `Command::output`, refused under the mock when it would change the system.
+pub fn output(cmd: &mut Command) -> io::Result<Output> {
+    refuse_in_mock(cmd)?;
+    cmd.output()
+}
+
+/// `Command::status`, refused under the mock when it would change the system.
+pub fn status(cmd: &mut Command) -> io::Result<ExitStatus> {
+    refuse_in_mock(cmd)?;
+    cmd.status()
 }

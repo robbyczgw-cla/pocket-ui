@@ -49,6 +49,8 @@ Start at [user/index.md](user/index.md).
 | [user/extras.md](user/extras.md) | Cover art, game pictures (screenshots and title screens), PortMaster games, the Store |
 | [user/sync.md](user/sync.md) | Syncing saves and states with Syncthing |
 | [user/remote.md](user/remote.md) | Reaching the Pocket from anywhere with Tailscale: switch, QR sign-in, name, what it does to SSH |
+| [user/kids-mode.md](user/kids-mode.md), [KIDS-MODE.md](KIDS-MODE.md) | Kids mode: for a grown-up; what is closed and how, the clock, what is left open |
+| [user/phone-upload.md](user/phone-upload.md) | Games from your phone: Add games → Y, the QR code, what it takes and refuses, what plain HTTP on a Wi-Fi means |
 | [user/web-companion.md](user/web-companion.md) | The web companion: switching it on, pairing a browser, what it can do, how it is kept safe |
 | [user/pc-streaming.md](user/pc-streaming.md) | PC streaming with Moonlight: pairing, starting, leaving |
 | [user/updates.md](user/updates.md) | Updating pocket-ui and the system |
@@ -98,6 +100,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [PORTAL-SIGNIN.md](PORTAL-SIGNIN.md) | Design and reference | Wi-Fi with a sign-in page: the row and sheet, the re-check, the sign-in helper, what it never does, limits, tests |
 | [SECURITY-HARDENING.md](SECURITY-HARDENING.md) | Reference | File sharing, SSH and other network services |
 | [WEB-COMPANION.md](WEB-COMPANION.md) | Reference | The web companion: threads and cost, where it listens, sign-in, CSRF, every endpoint, uploads, the threat model and its self-review |
+| [PHONE-UPLOAD.md](PHONE-UPLOAD.md) | Reference | "Send from your phone": the upload server that exists only while its page is open, its routes, limits and threat model |
 | [VIRTUAL-DEVICE.md](VIRTUAL-DEVICE.md) | Reference | The Docker-based virtual Mini V2 |
 | [WIFI-BENCH.md](WIFI-BENCH.md) | Reference | The Wi-Fi bench: ROCKNIX's NetworkManager + iwd and the real pocket-ui against simulated radios and access points (mac80211_hwsim + hostapd), its scenarios and the first results |
 | [LATENCY.md](LATENCY.md) | Reference | The speed guard: latency benchmark, baselines, comparing in CI |

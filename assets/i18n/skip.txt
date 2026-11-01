@@ -1001,6 +1001,12 @@ diagnosticAudio
 # Android native audio diagnostics; logcat only, never drawn in the interface.
 AAudio write failed: {s}
 {s} frames={s} p50_us={s} p95_us={s} max_us={s} over_16ms={s}
+
+# src/phone_upload.rs: the HTTP bodies the phone gets for a request without the code or a bad one (never painted)
+text/plain; charset=utf-8
+Bad request
+Forbidden
+Closed
 game check
 the zip's directory is too big
 {s} Put {s} into roms/bios.
@@ -1016,3 +1022,7 @@ after USB file transfer
 leaving Settings with USB file transfer on
 a games card came
 back on the first card
+refused under POCKETUI_MOCK
+[Hotkeys]
+Hotkeys
+HOTKEY

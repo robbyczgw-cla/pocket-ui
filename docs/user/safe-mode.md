@@ -22,6 +22,8 @@ started again in the same way.
 
 ## Safe mode
 
+With [Kids mode](kids-mode.md) on, a child sees a picture and "Please ask a grown-up" first. Hold SELECT and START for 5 seconds and enter the PIN for the page below.
+
 Safe mode starts pocket-ui with only what this page needs. It shows no covers or other pictures and runs no extras
 (Curator, achievements, Sync, the Store, cover downloads), and it uses the standard look in dark or light, as you set
 it. Your games and saves are not touched.

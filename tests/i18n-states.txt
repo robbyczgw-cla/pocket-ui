@@ -72,6 +72,15 @@ setup:wifi-save-failed
 setup:wifi-empty
 setup:wifi-switching
 setup:games
+# Add games → Y: Send from your phone (src/phone_upload_page.rs)
+setup:phone=waiting
+setup:phone=connected
+setup:phone=receiving
+setup:phone=done
+setup:phone=idle
+setup:phone=slept
+setup:phone=timeup
+setup:phone=nowifi
 setup:extras
 setup:extras:da
 setup:card=lens
@@ -180,6 +189,13 @@ backup:reset
 backup:restore
 backup:done
 backup:empty
+backup:saves-counted
+backup:saves-card
+backup:saves-copying
+backup:saves-full
+backup:saves-restore
+backup:saves-done
+backup:3
 storage
 storage:2
 storage:2:confirm
@@ -768,3 +784,39 @@ info:cards:ps2:revenge:dda
 info:split:ps2:revenge:ddda
 info:minimal:ps2:revenge:dddda
 info:shelf:ps2:revenge:rd
+
+# Kids Mode (docs/KIDS-MODE.md): the child's screens, the grown-up's flow, the door in front of safe mode. The games are in
+# scripts/curator-fake-library.py's kids.json, with the mode off.
+kids-shelf
+kids-shelf:2
+kids-hold
+kids-trouble
+kids-empty
+kids-timeup
+kids-warning
+kids-warning:1
+kids-power
+kids-pause
+kids-pause:stop
+kids-pause:saving
+kids-pin
+kids-pin:wrong
+kids-pin:help
+kids-pin:wait
+kids-adult
+kids-adult:0:behind
+kids-flow:welcome
+kids-flow:pin
+kids-flow:pin-again
+kids-flow:pin-differ
+kids-flow:games
+kids-flow:games-empty
+kids-flow:games-first
+kids-flow:games-left
+kids-flow:games-none-left
+kids-flow:theme
+kids-flow:limit
+kids-flow:volume
+kids-flow:ready
+safe rescue:kids
+safe rescue:kids-pin

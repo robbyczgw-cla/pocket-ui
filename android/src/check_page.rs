@@ -158,7 +158,7 @@ impl Ui {
     /// The rows of the list on screen.
     pub(super) fn check_rows(&self) -> Vec<MenuRow> {
         let Some(page) = &self.check.page else { return Vec::new() };
-        let row = |label: String, value: String| MenuRow { label, value, check: None };
+        let row = |label: String, value: String| MenuRow { label, value, check: None, stepper: false };
         match page.level {
             Level::Groups if !self.nothing_to_list() && self.only_unreadable().is_none() => page.groups().iter().map(|(g, n)| row(tr(g.name()), n.to_string())).collect(),
             Level::Items(g) => {

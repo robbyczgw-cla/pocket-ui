@@ -698,11 +698,9 @@ mod imp {
         // The new address for `ip` (this runs on a thread).
         ip_now();
         // Same as ROCKNIX's wifictl: keep the password in the keyfile so it reconnects at boot.
-        let _ = Command::new("nmcli").args(["connection", "modify", ssid, "wifi-sec.psk-flags", "0"]).output();
+        let _ = crate::proc::output(Command::new("nmcli").args(["connection", "modify", ssid, "wifi-sec.psk-flags", "0"]));
         // NetworkManager's default gives up after a few failed tries; this network is retried forever.
-        let _ = Command::new("nmcli")
-            .args(["connection", "modify", ssid, "connection.autoconnect-retries", "0"])
-            .output();
+        let _ = crate::proc::output(Command::new("nmcli").args(["connection", "modify", ssid, "connection.autoconnect-retries", "0"]));
         // And in ROCKNIX's settings, which wifictl rebuilds the profile from (under ROCKNIX's lock, `system_cfg`).
         for (key, value) in rocknix_settings(ssid, psk) {
             set_rocknix_setting(key, value);
@@ -747,7 +745,7 @@ mod imp {
             }
             // A profile of this name without security (see `stale_profile`): drop it and connect afresh.
             eprintln!("wifi: the stored profile for this network has no security settings; replacing it");
-            let _ = Command::new(nmcli).args(["connection", "delete", "id", ssid]).output();
+            let _ = crate::proc::output(Command::new(nmcli).args(["connection", "delete", "id", ssid]));
             attempt()?;
         }
         Ok(false)
@@ -875,7 +873,7 @@ mod imp {
     }
 
     fn forget_with(nmcli: &Path, s: &Saved) -> Result<(), String> {
-        let out = Command::new(nmcli).env("LC_ALL", "C").args(["connection", "delete", "uuid", &s.uuid]).output().map_err(|e| e.to_string())?;
+        let out = crate::proc::output(Command::new(nmcli).env("LC_ALL", "C").args(["connection", "delete", "uuid", &s.uuid])).map_err(|e| e.to_string())?;
         if !out.status.success() {
             let err = String::from_utf8_lossy(&out.stderr);
             let err = err.lines().last().unwrap_or("could not delete it").trim().to_string();
@@ -977,11 +975,12 @@ mod imp {
                     let key_mgmt = nmcli(&["-g", "802-11-wireless-security.key-mgmt", "connection", "show", "id", &w.ssid]);
                     if key_mgmt.as_deref().is_some_and(|k| super::profile_needs_key(k, &w)) {
                         println!("wifi: the profile for this network had lost its key; restored from ROCKNIX's settings");
-                        let _ = Command::new("nmcli")
-                            .args(["connection", "modify", "id", &w.ssid, "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk"])
-                            .arg(&w.key)
-                            .args(["wifi-sec.psk-flags", "0", "connection.autoconnect-retries", "0"])
-                            .output();
+                        let _ = crate::proc::output(
+                            Command::new("nmcli")
+                                .args(["connection", "modify", "id", &w.ssid, "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk"])
+                                .arg(&w.key)
+                                .args(["wifi-sec.psk-flags", "0", "connection.autoconnect-retries", "0"]),
+                        );
                     }
                     // The other way round: the profile has the key and system.cfg lost it (EmulationStation), so that
                     // wifictl can never rebuild a profile without one from it (`key_to_restore`).
@@ -1422,14 +1421,14 @@ esac
         }
         println!("file sharing: starting");
         // A restart, not a start: smbd only binds to the Wi-Fi address it finds when it starts.
-        Command::new("systemctl").args(["restart", "nmbd", "smbd"]).status().is_ok_and(|s| s.success())
+        crate::proc::status(Command::new("systemctl").args(["restart", "nmbd", "smbd"])).is_ok_and(|s| s.success())
     }
 
     pub fn disable_sharing() -> bool {
         let _one = SWITCH.lock();
         super::set_share_wanted(Path::new(super::SHARE_DIR), false);
         samba_setting_off();
-        Command::new("systemctl").args(["stop", "smbd", "nmbd"]).status().is_ok_and(|s| s.success())
+        crate::proc::status(Command::new("systemctl").args(["stop", "smbd", "nmbd"])).is_ok_and(|s| s.success())
     }
 
     /// Runs on its own thread for good: file sharing the player left on comes back after a restart once Wi-Fi has an
@@ -1477,7 +1476,7 @@ esac
         super::ensure_share_login(Path::new(super::SHARE_DIR))?;
         samba_setting_off();
         if changed && sharing_enabled() {
-            let _ = Command::new("systemctl").args(["reload", "smbd"]).status();
+            let _ = crate::proc::status(Command::new("systemctl").args(["reload", "smbd"]));
         }
         Ok(())
     }

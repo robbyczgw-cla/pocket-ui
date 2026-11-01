@@ -1732,6 +1732,8 @@ impl Sleep {
 
     /// Screen off, game paused.
     fn light(&mut self, ctx: Ctx) {
+        // Send from your phone closes before the screen goes dark (security review M2).
+        crate::phone_upload::sleeping();
         self.power_key.cancel();
         crate::trace::step("sleep: light");
         // 0 when a screen-on is still under way (asleep again at once): the level from before stays.
@@ -1820,6 +1822,7 @@ impl Sleep {
             self.light(ctx);
             return;
         }
+        crate::phone_upload::sleeping();
         self.power_key.cancel();
         crate::trace::step("sleep: screen off, the game on");
         self.brightness = self.sys.screen_off().filter(|l| *l > 0).or(self.brightness);
@@ -1863,6 +1866,8 @@ impl Sleep {
     }
     /// Saves, then suspends, in a worker thread; `tick` sees it come back.
     fn deep(&mut self, _ctx: Ctx, origin: SuspendOrigin) {
+        // Closed in `light` already; again here in case a path ever reaches the suspend without it.
+        crate::phone_upload::sleeping();
         // Final barrier: no worker, suspend command or RTC alarm on this platform.
         if self.screen_only {
             return;
@@ -2009,7 +2014,10 @@ impl Sleep {
         if action != PowerAction::RestartUi {
             self.rtc.close();
         }
-        // A game playing in the dark is quit from where it is (it saves on the way).
+        // A game playing in the dark is quit from where it is (it saves on the way). pocket-core takes no command
+        // while its output is off (it waits for a frame that never comes; soak 2026-11-01: Quit after 7-10 s by the
+        // fallback, no exit save), so the output goes on first, the backlight staying at 0 where it is dark.
+        let dark_output = self.dark_game && self.sys.dpms;
         self.dark_game = false;
         let (game, sys, data_dir, overlay) = (self.game.clone(), self.sys.clone(), self.data_dir.clone(), self.overlay.clone());
         let (notify, tx, wake_app) = (self.notify.clone(), self.tx.clone(), self.notify.clone());
@@ -2039,6 +2047,10 @@ impl Sleep {
                 }
             }
             if let Some(game) = &game {
+                if dark_output {
+                    let _turn = sys.screen_lock.lock().unwrap_or_else(|e| e.into_inner());
+                    crate::control::sway_command("output * power on");
+                }
                 say(if why == Why::BatteryEmpty { "Battery empty. Saving…" } else { "Saving…" });
                 write_resume(&data_dir, game);
                 // In a bag: no sound of the game going on for a moment before it quits (RetroArch resumes first).
@@ -2872,6 +2884,19 @@ mod tests {
         assert!(log.contains("RTC alarm disarm verified") && log.contains("ended: exit 1"), "{log}");
         assert!(!s.rtc.shut());
         assert!(s.rtc.set(Some(30)), "the next sleep can arm its alarm");
+    }
+
+    /// Security review M2: going dark (light sleep, the power key's sleep) closes "Send from your phone" first.
+    #[test]
+    fn going_dark_closes_the_phone_page() {
+        let (_dir, mut s, _file) = test_sleep("phone-page");
+        let before = crate::phone_upload::sleeping_calls();
+        s.light(Ctx::default());
+        assert!(crate::phone_upload::sleeping_calls() > before, "light sleep");
+        let (_dir, mut s, _file) = test_sleep("phone-page-2");
+        let before = crate::phone_upload::sleeping_calls();
+        s.sleep_now(Ctx::default());
+        assert!(crate::phone_upload::sleeping_calls() > before, "the power key");
     }
 
     #[test]

@@ -218,6 +218,7 @@ echo "== STORAGE partition"
 dd if="$IMG" of="$W/p2.ext4" bs=512 skip="$P2_START" count="$P2_SIZE" status=none
 check "label STORAGE (disk=LABEL=STORAGE)" '[ "$(e2label "$W/p2.ext4")" = STORAGE ]'
 check "file system clean (e2fsck -fn)" 'e2fsck -fn "$W/p2.ext4" >"$W/lists/e2fsck" 2>&1'
+check "STORAGE survives the first boot's resize on any card, 8 GB to 2 TB (grow-check.sh)" 'P2_START=$P2_START sh /repo/scripts/image/grow-check.sh "$W/p2.ext4"'
 # Dumped inside the container, not to the bind mount, so owners and modes are the ones in the image.
 S=/tmp/storage
 rm -rf "$S"

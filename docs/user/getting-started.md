@@ -122,7 +122,7 @@ step leaves out A ("Download", "Browse"), and Add your games leaves out X (file 
 ### How do you like to play?
 
 pocket-ui has more than it shows at first: Curator's Lens and Echoes, Pixel Path, screen frames, going straight back
-into your game, and more. This step sets them in one go. Up/Down choose, A takes it; under the three rows the page
+into your game, and more. This step sets them in one go. Up/Down choose, A takes it; under the rows the page
 says what the selected one switches on and off, in everyday words ("On: suggestions for similar games, gentle
 animations. Off: pick games by mood and length, ..."). The names of the features are on their cards in
 [Settings → Help & tools → Tour](tour.md).
@@ -135,6 +135,9 @@ animations. Off: pick games by mood and length, ..."). The names of the features
 - **Choose for yourself**: one card per feature, each with a small picture of what it does and three rows, **On**, **Off**
   and **Later**. Up/Down choose, A takes the choice and shows the next card, B goes back a card, START skips the rest.
   Later leaves the feature as it is and keeps the card for [Settings → Help & tools → Tour](tour.md).
+
+- **For a child**: a big, simple shelf with the games you pick, behind your PIN. Its own steps follow, then the rest of the first start
+  ([Kids mode](kids-mode.md)). Not on the Steam Deck.
 
 START skips the step and leaves everything as it is, which is the same as Simple. A profile only sets switches that Settings has too, nothing of
 its own: each one stays in its Settings page afterwards, and [Settings → Help & tools → Tour](tour.md) shows the cards again
@@ -262,7 +265,7 @@ Advance or `roms/snes` for Super Nintendo. The folder names are the ones ROCKNIX
   with the same name, each keeps what tells it apart: "Tobu Tobu Girl (Europe)" and "Tobu Tobu Girl (World)", else the
   file type ("(ZIP)") or the folder it is in.
 - A disc game (`.cue` or `.gdi`) whose track file is missing is not on the shelf: it could not start. Add games
-  names it (see below); once the file is there, the game appears. The track files of a disc (`.bin` next to its
+  names it ("A file is missing: ...", see below); once the file is there, the game appears. The track files of a disc (`.bin` next to its
   `.cue`) are part of that game, not games of their own.
 - BIOS files, for the systems that need them, go into `roms/bios`: your own. [Game check](game-check.md) says what's missing.
 

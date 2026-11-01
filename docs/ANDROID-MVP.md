@@ -5,7 +5,7 @@
 `android/` is a normal consumer of the root `pocket-ui` library. `src/lib.rs` selects the Linux or Android module
 composition. The Android launcher uses shared media/spine/box painters, the interface kit, text/i18n, search,
 Curator facets and metadata. Its navigation is Android's own controller, not the entire ROCKNIX App transplanted.
-Shelf, Cabinet, Cards, Minimal and Split are available. Favourites and appearance/language/text/sound settings are
+Shelf, Cabinet, Cards, Minimal and Split are available, the first three with [several shelves](#shelves-on-the-games-page). Favourites and appearance/language/text/sound settings are
 app-private; Linux radio, sleep, fan and system-management pages are absent. Search has the shared gamepad keyboard.
 The game box supports front/back and scrolling. The full Linux This-game orchestration and every Curator workflow
 are not yet feature-parity claims.
@@ -82,6 +82,28 @@ Test: `scripts/android/frozen-smoke.py ... big`, needing root (Google APIs image
 padded with holes to 1843 MiB; Later Test (300 MiB) takes the faults that copy again. `BIG_REAL_BYTES=1` adds 600 MiB of real bytes for the speed. The launch
 extra `slowCopy` (test only, ms a block) brakes the copy so that Cancel can be pressed; a moving bar keeps UIAutomator from reading the window, so it goes by the log
 and a fixed place. Times: [MEASURED.md](MEASURED.md#big-psp-games-on-android-emulator).
+
+## Shelves on the Games page
+
+`src/phone_shelves.rs` (Linux runs its tests in the gate) orders the page with the shared `Cabinet::build`: Recent games (the last 12 started,
+newest first), Favourites (grouped by case), then one shelf per system by name; empty ones are left out. A game can stand on several shelves, so
+`Ui::visible` holds it more than once and a position says which shelf is meant; after the favourites or the recent games change, the selection stays
+on its game and on its shelf while it is there (`Ui::reshelve`). Shelf, Cabinet and Cards have them; with one shelf (one system, nothing played) the page
+is the old rows of fronts. Minimal and Split stay flat lists, as do Favourites, Search and Curator's results.
+
+Portrait (`paint_rows`): the shelves one under the other, each named with its number of games and as high as its tallest case. A swipe goes along the
+shelf it started on or up the page, whichever way it set off (`drag_along`), and a little of the next case shows at the right. Landscape: one shelf at a time, as tall as the
+page, its name as the title. Two buttons in the header or a swipe up or down change the shelf, one a swipe; a swipe along stays on the shelf. Controller: Up/Down
+change the shelf (portrait: the case under the selected one; landscape: where that shelf was left), Left/Right go along it and on to the next one.
+
+## Case stickers
+
+Completed, 100 %, Playing now and Game of the year (with its year) are kept per game in `launcher.json` `stickers`; the star is the game being a favourite, on a phone as
+before, so Favourite on the sheet and on the card are one thing. The card's Stickers button or SELECT opens the sheet (`Screen::Stickers`; tick boxes, a Year row with
+arrows; a sticker that is on takes the new year at once; the year starts at the game's release year or this one, `case_stickers::default_year`). B comes back to the card. The shared painters show
+them on the case's front, its spine and the box, as on Linux. Off in Cozy extras, or in Minimal and Split, the sheet says why they don't show. Completed and 100 % earn the trophy and the framed "100 %" (`room_deco::earned`). A phone has no Curator stickers of its own yet.
+
+Test: `scripts/android/phone-design-smoke.py --parity` clears the app and goes through the first start with the real folder picker, in each orientation.
 
 ## Phones, touch and gamepads
 
@@ -177,7 +199,7 @@ so main stays buildable for Android. See [android/README.md](../android/README.m
 The dedicated release keystore is outside every checkout, in `~/.local/share/pocket-ui/android-signing/release.jks`;
 its password is a separate private file. Neither is committed. The first debug-signed preview must be uninstalled
 once before installing this identity. Further APKs with this key update normally. Current Android version is
-`0.1.8-android.3`, versionCode 10803 (the build script derives both from Cargo.toml); the source version is 0.1.9.
+`0.1.8-android.3`, versionCode 10803 (the build script derives both from Cargo.toml); the source version is 0.1.10.
 
 `player-smoke.py` uses real SAF, a hash-checked starter homebrew, live UI node bounds, in-app pause/slots/options,
 screenshot, Quit/auto-resume and an original GB audio diagnostic. It does not install a mock emulator receiver.
@@ -228,13 +250,10 @@ and its sound; input dismisses it, rotation and resume do not replay it.
 
 A game's start is the handhelds' (`src/insert_scene.rs`, shared with `app_cabinet`; `android/src/insert.rs`): Cozy + Playful plays the console's rig at the phone's own pixels, every other system the plain animation, from where the case stood (no case on the page, as in Minimal or Search: no animation). `PlayerActivity` is held back until the fade has run (1.6 s), its process warmed meanwhile (`PlayerWarm`), and comes up on black; a tap or any button skips; Quick, Motion Reduced/Off and frozen games don't hold (`cabinet::starts_cozy`). `scripts/android/insert-smoke.py`, `insert-sync.py` (sound against picture, up to AAudio's presentation time and the frame handed to the screen).
 
-Remaining parity work: Linux's multi-shelf Cabinet navigation, editable case stickers
-beyond favourites, Connections/Rediscover, the This-game/Extras pages, time-of-day lighting and idle
-slideshow are not yet Android features. The TV uses a downloaded game screenshot, falling back to cover or console art; the
+Remaining parity work: RetroAchievements (not in the Android build: rcheevos and `rc_shim.c` in the player, `achievements::http` calls the system's curl, and checking it needs a test account), the This-game page (its rows are Linux's `options::GameSettings`, `emu_menu` and `standalone` files; on a phone the pause menu has the picture and the options) and Linux's screen frames. The TV uses a downloaded game screenshot, falling back to cover or console art; the
 resume-picture carousel is still to connect. Sharing the remaining Home controller
 requires replacing its Linux services with Android library/session adapters, rather than compiling nmcli,
-standalone guest control or hardware settings into the APK. Estimated remaining UI parity: 5–8 agent-hours;
-real-hardware audio/core compatibility is a separate validation pass.
+standalone guest control or hardware settings into the APK. Real-hardware audio/core compatibility is a separate validation pass.
 
 
 ### First start and library policy (0.1.5-android.2)
@@ -388,7 +407,7 @@ the eight of Linux's Cozy extras page in its order (`Extra::PAGE_ROWS`). These l
 the shared painters' process-wide switches by `Preferences::apply_look` (every paint, at start, and in the player from
 the launch's `playerSettings`).
 Cozy extras on a phone (as rows of Settings or of the sheet, above): Case sounds, Old-TV switch-on (player), TV on the cabinet (landscape Cabinet panel), Stickers on
-cases (the Favourite sticker is the only one a phone has), Memory card in the pause menu (off: the slot picker's slim row;
+cases ([Case stickers](#case-stickers)), Memory card in the pause menu (off: the slot picker's slim row;
 on: the game's card or cartridge with its eight slots in the picker, which grows to hold it; `player.rs` `touch_pause`;
 `scripts/android/extras-smoke.py`), Printed discs (the disc or UMD in an open box, `ui.rs` `paint_box`; off: a plain disc in
 the system's colour), Game connections (a fact on the card that other games share, Developer/Publisher/Series/Genre from the
@@ -400,8 +419,8 @@ Light by time of day (the Shelf and Cabinet looks' boards, compartments and case
 morning, warm evening, dim night; half as strong on the Light page; read every 20 s, so it follows the next paint, `Ui::room_sync`),
 Decorations (one more shelf at the end of the portrait list, and after the last case in landscape, with the plant at its stage
 and a figurine per system played ten hours: `room_deco::earned` over the play time the launcher keeps per game in
-`launcher.json` `play_secs`, counted from the launch to the launcher coming back, at most a day a launch; no completed or
-"100 %" status exists on a phone, so no trophy or framed "100 %"; shared `room_props.rs`), Idle slideshow (off until switched on, as everywhere: after a quiet minute on Games or Favourites the
+`launcher.json` `play_secs`, counted from the launch to the launcher coming back, at most a day a launch; the trophy and the
+framed "100 %" from the Completed and 100 % stickers; shared `room_props.rs`), Idle slideshow (off until switched on, as everywhere: after a quiet minute on Games or Favourites the
 phone shows the games' covers and pictures and the player's save pictures and screenshots, `android/src/show.rs` over
 `slideshow.rs`'s timing and painting at half the screen's size; a touch, key or Back only ends it; it ends by itself after
 ten minutes; while it can run the window keeps the screen on, `PocketActivity.keepScreenOn`, and lets go when it has run

@@ -48,15 +48,23 @@ are not enabled yet.
 
 PSP face controls use drawn cross/circle/square/triangle symbols, independent of the UI font. Short gamepad presses are held for at least one emulated frame so a quick tap is not lost between Android input events and rendering.
 
-The 0.1.5 Android preview draws the current real game cases, discs and cartridges. Favourite games have
-a sticker. Cabinet shows a TV beside the shelf in wide landscape and below it in portrait; the TV currently
+The 0.1.5 Android preview draws the current real game cases, discs and cartridges. Cabinet shows a TV beside the shelf in wide landscape and below it in portrait; the TV currently
 shows cover/console art. X opens the case in Shelf/Cabinet or the shared info page in the other looks.
 The info page and back of the box show your eight save slots on the system's save medium.
 The pause menu has the same slim, coloured save row as the handheld version. Menus and opening a case
 use the current sounds; a brief CRT power-on accompanies a new in-app game and is skipped by input.
 Connections (a developer, publisher, series or genre shared with other games of yours has an arrow; tap it for those
-games) and Rediscover (Curator; fills after a year of play on the phone) work; editable case stickers and This game/Extras
+games) and Rediscover (Curator; fills after a year of play on the phone) work; This game and RetroAchievements
 are not yet available in this Android preview.
+
+**Your games stand on shelves** in the Shelf, Cabinet and Cards looks: the games you played last on top, then your
+Favourites, then a shelf for each system. Upright, swipe along a shelf to see more of it and up or down to move through them.
+Sideways, one shelf fills the screen: swipe up or down, or use the two arrows at the top, to get to the next. On a controller Up and Down change the shelf.
+With only one system and nothing played yet, your games stand in simple rows.
+
+**Stickers:** on a game's card tap **Stickers** (or press SELECT): Completed, 100 %, Favourite, Playing now and Game of the
+year with a year you choose go on its case. Completed and 100 % also earn the trophy and the framed "100 %" on your shelf.
+Minimal and Split show no cases, so no stickers either; the sticker page says so.
 
 Every Cozy extra of the handheld version has its switch: the eight you see on Settings → Cozy extras, and Playful
 cases, Old-TV switch-on, Case sounds and Slideshow before screen off as rows of Settings itself. The memory card in the pause menu shows the whole card

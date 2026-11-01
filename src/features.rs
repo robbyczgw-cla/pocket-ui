@@ -83,16 +83,24 @@ pub enum Profile {
     Enthusiast,
     /// The cards, one by one.
     Choose,
+    /// Kids Mode's own steps (`app_kids`): no switch of this list changes.
+    Child,
 }
 
 impl Profile {
-    pub const ALL: [Profile; 3] = [Profile::Simple, Profile::Enthusiast, Profile::Choose];
+    pub const ALL: [Profile; 4] = [Profile::Simple, Profile::Enthusiast, Profile::Choose, Profile::Child];
+
+    /// What this device offers: no "For a child" where the host owns buttons a child can reach (the Steam Deck's Steam button).
+    pub fn offered() -> Vec<Profile> {
+        Profile::ALL.into_iter().filter(|p| *p != Profile::Child || !crate::device::hides_here("kids")).collect()
+    }
 
     pub fn name(self) -> &'static str {
         match self {
             Profile::Simple => "Simple",
             Profile::Enthusiast => "Enthusiast",
             Profile::Choose => "Choose for yourself",
+            Profile::Child => "For a child",
         }
     }
 
@@ -101,6 +109,7 @@ impl Profile {
             Profile::Simple => "As pocket-ui ships, the same as skipping this step.",
             Profile::Enthusiast => "Suggestions, play statistics, picture details and frames, all on.",
             Profile::Choose => "One card per feature, with a preview: on, off, or later.",
+            Profile::Child => "A big, simple shelf with the games you pick, behind your PIN.",
         }
     }
 }
@@ -139,7 +148,7 @@ impl Feature {
         match p {
             Profile::Simple => self.simple,
             Profile::Enthusiast => self.enthusiast,
-            Profile::Choose => Pick::Keep,
+            Profile::Choose | Profile::Child => Pick::Keep,
         }
     }
 
@@ -1019,22 +1028,27 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize) -> Hits {
         "A starting point for the extras. Every switch stays in Settings.",
     );
     let width = c.w - 2 * MARGIN;
-    for (i, p) in Profile::ALL.iter().enumerate() {
-        let y = 240 + i as i32 * 150;
+    let profiles = Profile::offered();
+    for (i, p) in profiles.iter().enumerate() {
+        let y = 230 + i as i32 * 124;
         let selected = i == sel;
-        c.rect(MARGIN, y, width, 132, if selected { pal().label } else { pal().spine });
+        c.rect(MARGIN, y, width, 112, if selected { pal().label } else { pal().spine });
         if selected {
-            crate::game_card::lift_shadow(c, MARGIN, y + 132, width, pal().t);
+            crate::game_card::lift_shadow(c, MARGIN, y + 112, width, pal().t);
         }
         let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else { (pal().chalk, pal().dust) };
-        text.draw(c, Face::Title, 50, MARGIN + 28, y + 62, fg, p.name());
+        text.draw(c, Face::Title, 46, MARGIN + 28, y + 50, fg, p.name());
         let blurb = text.fit(Face::Body, 24, p.blurb(), width - 56);
-        text.draw(c, Face::Body, 24, MARGIN + 28, y + 104, dim, &blurb);
-        hits.choices.push((Area::new(MARGIN, y, width, 132), i));
+        text.draw(c, Face::Body, 24, MARGIN + 28, y + 90, dim, &blurb);
+        hits.choices.push((Area::new(MARGIN, y, width, 112), i));
     }
-    let mut y = 240 + 3 * 150 + 40;
-    let p = Profile::ALL[sel.min(2)];
+    let mut y = 230 + profiles.len() as i32 * 124 + 30;
+    let p = profiles[sel.min(profiles.len() - 1)];
     let lines: Vec<(String, u32)> = match p {
+        Profile::Child => vec![
+            ("Next: a PIN, the games, Blue or Pink, and a time and volume limit if you like.".to_string(), pal().chalk),
+            ("Your settings and saves stay as they are for when the mode goes off.".to_string(), pal().dust),
+        ],
         Profile::Choose => vec![
             (
                 format!("{} cards, each with a small picture of what it does.", choose_list().len()),
@@ -1349,6 +1363,6 @@ mod tests {
         let hits = c.paint(&mut Canvas::new(&mut px, w, h), &mut text);
         assert!(hits.choices.is_empty(), "nothing to switch");
         let hits = paint_profiles(&mut Canvas::new(&mut px, w, h), &mut text, 1);
-        assert_eq!((hits.choices.len(), hits.sel), (3, 1));
+        assert_eq!((hits.choices.len(), hits.sel), (4, 1));
     }
 }

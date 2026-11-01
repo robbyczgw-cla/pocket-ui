@@ -2,6 +2,13 @@
 
 Two ways to copy games without Wi-Fi.
 
+## One note on some systems
+
+Pick a system on Add games and it may say under its Files and BIOS lines: *Runs on this handheld, but not every game runs
+smoothly.* It appears where the system is heavy for the chip in your handheld (for example PlayStation 2 and GameCube on a
+Snapdragon 865, Nintendo 64, PSP, Dreamcast and Nintendo DS on an H700), so a game or two may stutter or need another try. Systems
+without the note are ones where games normally run fine; a handheld pocket-ui doesn't know shows no note at all.
+
 ## The ways on Add games
 
 Settings → Games → **Add games** (and the first start's last step) has a row of tiles under the grid, one for each way your

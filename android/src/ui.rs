@@ -62,6 +62,9 @@ pub struct Preferences {
     pub play_secs: std::collections::HashMap<String, u64>,
     #[serde(deserialize_with = "lenient")]
     pub playing: Option<(String, u64)>,
+    /// The case stickers per game key, without the star: that is `favorites`.
+    #[serde(deserialize_with = "lenient")]
+    pub stickers: std::collections::HashMap<String, pocket_ui::case_stickers::CaseStickers>,
 }
 
 impl Preferences {
@@ -74,6 +77,20 @@ impl Preferences {
         self.language = Some(lang);
         self.german = None;
         pocket_ui::i18n::set(lang);
+    }
+    /// The stickers a game has, the star included (a phone's Favourite sticker is the game being a favourite).
+    pub fn stickers_of(&self, key: &str) -> pocket_ui::case_stickers::CaseStickers {
+        let mut stickers = self.stickers.get(key).copied().unwrap_or_default();
+        stickers.favourite = self.favorites.contains(key);
+        stickers
+    }
+    /// What the pictures show: nothing with Cozy extras → Stickers on cases off.
+    pub fn stickers_shown(&self, key: &str) -> pocket_ui::case_stickers::CaseStickers {
+        if self.extras.case_stickers {
+            self.stickers_of(key)
+        } else {
+            Default::default()
+        }
     }
 }
 /// One wrong value in launcher.json costs that setting only, never the rest of the file.
@@ -157,11 +174,17 @@ pub enum Screen {
     GameCheck,
     Quick,
     Box,
+    /// The open card's stickers.
+    Stickers,
 }
 #[derive(Clone)]
 pub enum Action {
     /// A fact on the open card that leads to the player's other games.
     Link(usize),
+    /// The landscape shelf's arrows: the shelf above (-1) or below (1).
+    Shelf(i32),
+    /// The Game of the year sticker's year, back (-1) or on (1).
+    Year(i32),
     Setup(usize),
     /// Words that are read, not tapped (a title, a status).
     Label,
@@ -284,6 +307,23 @@ pub struct Ui {
     pub front_at: Option<((i32, i32, i32, i32), art::Pic)>,
     /// Where the card's canvas starts on the page.
     card_origin: (i32, i32),
+    /// The Games page's shelves (Shelf, Cabinet and Cards looks with more than one), positions in `visible`.
+    rows: Option<pocket_ui::phone_shelves::Shelves>,
+    /// How far each portrait shelf is scrolled along, and where each landscape shelf's selection was left.
+    row_scroll: std::collections::HashMap<pocket_ui::cabinet::ShelfKey, f32>,
+    row_left_at: std::collections::HashMap<pocket_ui::cabinet::ShelfKey, usize>,
+    /// Where each portrait shelf lies on the page (top, bottom, its shelf, how far it can scroll), from the last paint.
+    row_bands: Vec<(i32, i32, pocket_ui::cabinet::ShelfKey, f32)>,
+    /// One game's width on a portrait shelf (0 when the page is not that).
+    row_pitch: i32,
+    /// This finger's page height, and what it drags: along a shelf (true) or across them, and which portrait shelf.
+    finger_y: f32,
+    drag_along: Option<bool>,
+    drag_row: Option<pocket_ui::cabinet::ShelfKey>,
+    /// Finger travel towards changing the landscape shelf; None once this finger has changed it (one a swipe).
+    drag_across: Option<f32>,
+    /// The Game of the year sticker's year on the open sheet.
+    sticker_year: u16,
 }
 impl Ui {
     pub fn new(prefs: Preferences) -> Self {
@@ -335,6 +375,16 @@ impl Ui {
             launching: false,
             front_at: None,
             card_origin: (0, 0),
+            rows: None,
+            row_scroll: Default::default(),
+            row_left_at: Default::default(),
+            row_bands: Vec::new(),
+            row_pitch: 0,
+            finger_y: 0.0,
+            drag_along: None,
+            drag_row: None,
+            drag_across: Some(0.0),
+            sticker_year: 0,
         }
     }
     pub fn is_frozen(&self, key: &str) -> bool {
@@ -355,20 +405,25 @@ impl Ui {
         let restored = library
             .games
             .iter()
-            .position(|g| g.key == self.prefs.selected_key || g.uri == self.prefs.selected_uri)
-            .unwrap_or(0);
+            .position(|g| g.key == self.prefs.selected_key || g.uri == self.prefs.selected_uri);
         self.library = Some(library);
         self.frozen_stale = true;
         self.message.clear();
         self.filter();
-        self.selected = self.visible.iter().position(|i| *i == restored).unwrap_or(0);
+        // Nothing remembered (a fresh start): the page's first game, so several shelves open at the top with Recent,
+        // not on the shelf of the library's alphabetically first title.
+        self.selected = restored.and_then(|r| self.visible.iter().position(|i| *i == r)).unwrap_or(0);
         self.cards.clear();
     }
     pub fn filter(&mut self) {
         let Some(lib) = &self.library else {
             self.visible.clear();
+            self.rows = None;
             return;
         };
+        if !matches!(self.screen, Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Quick | Screen::Curator | Screen::Facet | Screen::Box | Screen::Stickers) {
+            self.rows = None;
+        }
         self.visible = match self.screen {
             Screen::Favorites => lib
                 .games
@@ -380,8 +435,12 @@ impl Ui {
             Screen::Search => lib.search.search(&self.query, &|_| true).iter().map(|h| h.game).collect(),
             Screen::Results => lib.index.list(&lib.index.matches(&self.lens), false),
             Screen::Connection => self.connection.as_ref().map(|l| l.games.clone()).unwrap_or_default(),
-            Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Quick | Screen::Curator | Screen::Facet | Screen::Box => return,
-            _ => (0..lib.games.len()).collect(),
+            Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Quick | Screen::Curator | Screen::Facet | Screen::Box | Screen::Stickers => return,
+            _ => {
+                let shelves = (!matches!(self.prefs.theme, Theme::Minimal | Theme::Split)).then(|| shelves_of(lib, &self.prefs)).filter(|s| s.rows.len() > 1);
+                self.rows = shelves;
+                self.rows.as_ref().map_or_else(|| (0..lib.games.len()).collect(), |s| s.games.clone())
+            }
         };
         self.selected = self.selected.min(self.visible.len().saturating_sub(1));
     }
@@ -437,6 +496,7 @@ impl Ui {
             Screen::Extras => PHONE_EXTRAS.len() + 1,
             Screen::GameCheck => self.check_rows().len(),
             Screen::Quick => 2,
+            Screen::Stickers => STICKER_ROWS,
             Screen::Curator => 2 + self.facets().len() + self.rediscover_row() as usize,
             Screen::Facet => self.library.as_ref().map_or(2, |l| 2 + l.index.facet(self.facet).values.len()),
             _ => self.visible.len(),
@@ -452,13 +512,17 @@ impl Ui {
             return;
         }
         let count = self.count();
-        let selected = if matches!(self.screen, Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Quick | Screen::Curator | Screen::Facet) {
+        let selected = if self.sheet() {
             &mut self.menu
         } else {
             &mut self.selected
         };
         *selected = (*selected as i32 + delta).clamp(0, count.saturating_sub(1) as i32) as usize;
         self.follow = true;
+    }
+    /// The page is a sheet of rows, not a shelf of games.
+    fn sheet(&self) -> bool {
+        matches!(self.screen, Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Quick | Screen::Curator | Screen::Facet | Screen::Stickers)
     }
     pub fn press(&mut self, b: Button) -> Command {
         if !self.prefs.onboarding_done {
@@ -478,6 +542,11 @@ impl Ui {
         }
         if self.screen == Screen::Box && self.card_link_press(b) {
             return Command::None;
+        }
+        if self.screen == Screen::Stickers {
+            if let Some(command) = self.sticker_press(b) {
+                return command;
+            }
         }
         if b == Button::South {
             if self.screen == Screen::Box {
@@ -501,6 +570,10 @@ impl Ui {
             }
             return Command::None;
         }
+        if b == Button::Select && self.screen == Screen::Box {
+            self.open_stickers();
+            return Command::None;
+        }
         if b == Button::Select {
             self.navigate(Screen::Quick);
             return Command::None;
@@ -518,7 +591,12 @@ impl Ui {
                     self.prefs.favorites.insert(key);
                 }
                 self.cards.clear();
-                self.filter();
+                // On the shelves `reshelve` reads the selection before it rebuilds them; `filter` first would lose it.
+                if self.on_shelves() {
+                    self.reshelve();
+                } else {
+                    self.filter();
+                }
                 return Command::Persist;
             }
         }
@@ -542,6 +620,10 @@ impl Ui {
             if let Some(k) = &mut self.keyboard {
                 k.text = self.query.clone();
             }
+            return Command::None;
+        }
+        if matches!(b, Button::Up | Button::Down) && self.rows.is_some() && self.screen == Screen::Library {
+            self.step_shelf(if b == Button::Up { -1 } else { 1 });
             return Command::None;
         }
         if matches!(b, Button::Up | Button::Down) && self.grid_cols > 1 && Self::list_screen(self.screen) {
@@ -711,8 +793,13 @@ impl Ui {
                         .iter()
                         .flat_map(|l| l.games.iter())
                         .filter_map(|g| {
-                            let secs = *self.prefs.play_secs.get(&g.key)?;
-                            Some((format!("{}/{}", g.system_id, g.name), pocket_ui::library_meta::GameMeta { secs, ..Default::default() }))
+                            let secs = self.prefs.play_secs.get(&g.key).copied();
+                            let case = self.prefs.stickers.get(&g.key).copied();
+                            if secs.is_none() && case.is_none() {
+                                return None;
+                            }
+                            let meta = pocket_ui::library_meta::GameMeta { secs: secs.unwrap_or(0), case: case.unwrap_or_default(), ..Default::default() };
+                            Some((format!("{}/{}", g.system_id, g.name), meta))
                         })
                         .collect();
                     let e = std::rc::Rc::new(pocket_ui::room_deco::earned(metas.iter().map(|(p, m)| (p.as_str(), m))));
@@ -739,6 +826,140 @@ impl Ui {
         let secs = now.saturating_sub(start).min(86_400);
         *self.prefs.play_secs.entry(key).or_default() += secs;
         self.room.earned = None;
+        // The game goes to the top of the recent games.
+        self.reshelve();
+    }
+    /// The Games page's shelves after the favourites or the recent games changed: the selection stays on its game, on
+    /// the same shelf while it is there.
+    fn on_shelves(&self) -> bool {
+        self.screen == Screen::Library || self.screen == Screen::Box && self.prior == Screen::Library
+    }
+    fn reshelve(&mut self) {
+        if !self.on_shelves() {
+            return;
+        }
+        let game = self.visible.get(self.selected).copied();
+        let key = self.shelf_row().map(|r| r.key);
+        let screen = std::mem::replace(&mut self.screen, Screen::Library);
+        self.filter();
+        self.screen = screen;
+        if let Some(game) = game {
+            let place = self.rows.as_ref().map_or_else(|| self.visible.iter().position(|g| *g == game), |s| s.place_of(game, key));
+            self.selected = place.unwrap_or(0);
+        }
+    }
+    /// The shelf the selection stands on.
+    pub(super) fn shelf_row(&self) -> Option<pocket_ui::phone_shelves::Row> {
+        let rows = self.rows.as_ref()?;
+        rows.rows.get(rows.row_of(self.selected)?).copied()
+    }
+    /// Up or Down, the shelf's arrows or a swipe across: the case on the next shelf that stands under this one in
+    /// portrait, in landscape (one shelf at a time on the page) the one left selected there.
+    pub(super) fn step_shelf(&mut self, delta: i32) -> bool {
+        let Some(rows) = &self.rows else { return false };
+        let Some(at) = rows.row_of(self.selected) else { return false };
+        let Some(target) = at.checked_add_signed(delta as isize).and_then(|t| rows.rows.get(t)).copied() else { return false };
+        let here = rows.rows[at];
+        let offset = if self.row_pitch > 0 {
+            let first = |key| (self.row_scroll.get(&key).copied().unwrap_or(0.0) as i32 + self.row_pitch / 2) / self.row_pitch;
+            ((self.selected - here.start) as i32 - first(here.key)).max(0) as usize + first(target.key) as usize
+        } else {
+            self.row_left_at.get(&target.key).copied().unwrap_or(0)
+        };
+        self.row_left_at.insert(here.key, self.selected - here.start);
+        self.selected = (target.start + offset).min(target.end - 1);
+        self.follow = true;
+        true
+    }
+    /// The open card's sticker sheet.
+    fn open_stickers(&mut self) {
+        let Some(&index) = self.visible.get(self.selected) else { return };
+        let Some(lib) = &self.library else { return };
+        let key = &lib.games[index].key;
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        let year = pocket_ui::civil_date::civil(pocket_ui::civil_date::local_day(now, 0)).0;
+        self.sticker_year = self
+            .prefs
+            .stickers_of(key)
+            .goty
+            .unwrap_or_else(|| pocket_ui::case_stickers::default_year(lib.cards[index].year, year as u16));
+        self.screen = Screen::Stickers;
+        self.menu = 0;
+        self.scroll = 0.0;
+        self.follow = true;
+    }
+    /// A key on the sticker sheet; None: the same as on every sheet (moving up and down).
+    fn sticker_press(&mut self, b: Button) -> Option<Command> {
+        use pocket_ui::case_stickers::Kind;
+        let on_year = self.menu == Kind::ALL.len() || Kind::ALL.get(self.menu) == Some(&Kind::Goty);
+        match b {
+            Button::South => {
+                self.screen = Screen::Box;
+                Some(Command::None)
+            }
+            Button::Left | Button::Right if on_year => Some(self.sticker_year_by(if b == Button::Left { -1 } else { 1 })),
+            Button::Left | Button::Right => Some(Command::None),
+            Button::East => match Kind::ALL.get(self.menu) {
+                Some(&kind) => Some(self.sticker_toggle(kind)),
+                None if self.menu == Kind::ALL.len() => Some(Command::None),
+                None => {
+                    self.screen = Screen::Box;
+                    Some(Command::None)
+                }
+            },
+            Button::Up | Button::Down => None,
+            _ => Some(Command::None),
+        }
+    }
+    /// Puts sticker `kind` on the open game or takes it off. The star is the game being a favourite.
+    fn sticker_toggle(&mut self, kind: pocket_ui::case_stickers::Kind) -> Command {
+        use pocket_ui::case_stickers::Kind;
+        let Some(key) = self.game().map(|g| g.key.clone()) else { return Command::None };
+        let has = self.prefs.stickers_of(&key).has(kind);
+        if kind == Kind::Favourite {
+            if has {
+                self.prefs.favorites.remove(&key);
+            } else {
+                self.prefs.favorites.insert(key);
+            }
+            self.reshelve_from_sheet();
+        } else {
+            let year = self.sticker_year;
+            self.edit_stickers(key, |s| s.set(kind, !has, year));
+        }
+        self.sticker_changed();
+        Command::Persist
+    }
+    /// Changes the year; a sticker that is on keeps the new year at once.
+    fn sticker_year_by(&mut self, delta: i32) -> Command {
+        use pocket_ui::case_stickers::{Kind, YEAR_FIRST, YEAR_LAST};
+        self.sticker_year = (self.sticker_year as i32 + delta).clamp(YEAR_FIRST as i32, YEAR_LAST as i32) as u16;
+        let Some(key) = self.game().map(|g| g.key.clone()) else { return Command::None };
+        if self.prefs.stickers_of(&key).has(Kind::Goty) {
+            let year = self.sticker_year;
+            self.edit_stickers(key, |s| s.set(Kind::Goty, true, year));
+            self.sticker_changed();
+            return Command::Persist;
+        }
+        Command::None
+    }
+    fn edit_stickers(&mut self, key: String, edit: impl FnOnce(&mut pocket_ui::case_stickers::CaseStickers)) {
+        let stickers = self.prefs.stickers.entry(key.clone()).or_default();
+        edit(stickers);
+        if stickers.is_empty() {
+            self.prefs.stickers.remove(&key);
+        }
+    }
+    /// The pictures with stickers on them, and what they earn on the shelf, are made again.
+    fn sticker_changed(&mut self) {
+        self.cards.clear();
+        self.room.earned = None;
+    }
+    /// The shelves under the sheet, opened from the Games page's card.
+    fn reshelve_from_sheet(&mut self) {
+        let sheet = std::mem::replace(&mut self.screen, Screen::Box);
+        self.reshelve();
+        self.screen = sheet;
     }
     /// Curator lists Rediscover (Cozy extras → Rediscover).
     fn rediscover_row(&self) -> bool {
@@ -950,9 +1171,14 @@ impl Ui {
                 self.open_link(i);
                 Command::None
             }
+            Some(Action::Shelf(delta)) => {
+                self.step_shelf(delta);
+                Command::None
+            }
+            Some(Action::Year(delta)) => self.sticker_year_by(delta),
             Some(Action::Folder) => Command::Folder,
             Some(Action::Row(i)) => {
-                if matches!(self.screen, Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Quick | Screen::Curator | Screen::Facet) {
+                if self.sheet() {
                     // A sheet row does what it says at the first tap.
                     self.menu = i;
                     self.press(Button::East)
@@ -1006,12 +1232,35 @@ impl Ui {
             }
             return true;
         }
+        let shelves = self.rows.is_some() && self.screen == Screen::Library;
+        if shelves {
+            // A finger goes along a shelf or across the shelves, whichever way it set off.
+            let along = *self.drag_along.get_or_insert(dx.abs() >= dy.abs());
+            if self.step.0 > 0.0 && !along {
+                let Some(across) = self.drag_across.map(|d| d + dy) else { return false };
+                self.drag_across = Some(across);
+                if across.abs() < self.dp * 48.0 {
+                    return false;
+                }
+                self.drag_across = None;
+                return self.step_shelf(if across < 0.0 { 1 } else { -1 });
+            }
+            if self.step.0 == 0.0 && along {
+                return self.drag_shelf(dx);
+            }
+        }
         if self.step.0 > 0.0 && Self::list_screen(self.screen) {
             self.drag_rest += dx;
             let before = self.selected;
+            let range = self.shelf_row().filter(|_| shelves).map(|r| r.start as i32..r.end as i32);
             while self.drag_rest.abs() >= self.step.0 {
                 let one = if self.drag_rest > 0.0 { -1 } else { 1 };
                 self.drag_rest -= -one as f32 * self.step.0;
+                // A finger stays on its shelf.
+                if range.as_ref().is_some_and(|r| !r.contains(&(self.selected as i32 + one))) {
+                    self.drag_rest = 0.0;
+                    break;
+                }
                 self.move_by(one);
             }
             self.follow = false;
@@ -1022,6 +1271,21 @@ impl Ui {
         self.follow = false;
         before != self.scroll
     }
+    /// A portrait shelf follows the finger along it: the one the finger came down on.
+    fn drag_shelf(&mut self, dx: f32) -> bool {
+        let y = self.finger_y as i32;
+        let band = match self.drag_row {
+            Some(key) => self.row_bands.iter().find(|b| b.2 == key),
+            None => self.row_bands.iter().find(|b| (b.0..b.1).contains(&y)),
+        };
+        let Some(&(_, _, key, most)) = band else { return false };
+        self.drag_row = Some(key);
+        self.follow = false;
+        let scroll = self.row_scroll.entry(key).or_default();
+        let before = *scroll;
+        *scroll = (*scroll - dx).clamp(0.0, most);
+        before != *scroll
+    }
     /// The finger left at (vx, vy) canvas pixels a second: the page keeps going and slows down.
     pub fn fling(&mut self, vx: f32, vy: f32) {
         self.drag_rest = 0.0;
@@ -1029,11 +1293,26 @@ impl Ui {
         if self.screen == Screen::Box {
             self.velocity = (0.0, vy);
         }
+        if self.rows.is_some() && self.screen == Screen::Library {
+            self.velocity = match (self.drag_along, self.step.0 > 0.0) {
+                (Some(true), _) => (vx, 0.0),
+                (_, true) => (0.0, 0.0),
+                (_, false) => (0.0, vy),
+            };
+        }
     }
     /// Stops a fling (a finger came down).
     pub fn hold(&mut self) {
         self.velocity = (0.0, 0.0);
         self.drag_rest = 0.0;
+        self.drag_along = None;
+        self.drag_row = None;
+        self.drag_across = Some(0.0);
+    }
+    /// A finger came down at this height of the page.
+    pub fn hold_at(&mut self, y: f32) {
+        self.hold();
+        self.finger_y = y;
     }
     /// Advances a fling by `dt` seconds; false once it has stopped.
     pub fn tick(&mut self, dt: f32) -> bool {
@@ -1055,7 +1334,7 @@ impl Ui {
         match region.action {
             Action::Setup(i) => i == self.setup_row,
             Action::Row(i) => {
-                i == if matches!(self.screen, Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Quick | Screen::Curator | Screen::Facet) {
+                i == if self.sheet() {
                     self.menu
                 } else {
                     self.selected
@@ -1101,6 +1380,7 @@ impl Ui {
             label: tr(label),
             value: tr(value),
             check: None,
+            stepper: false,
         };
         let on_off = |on: bool| if on { "On" } else { "Off" };
         match self.screen {
@@ -1132,6 +1412,14 @@ impl Ui {
                 rows
             }
             Screen::Quick => vec![row("UI sounds", on_off(!self.prefs.muted)), row("Settings", "")],
+            Screen::Stickers => {
+                use pocket_ui::case_stickers::Kind;
+                let on = self.game().map(|g| self.prefs.stickers_of(&g.key)).unwrap_or_default();
+                let mut rows: Vec<_> = Kind::ALL.iter().map(|k| phone::MenuRow { label: tr(k.label()), value: String::new(), check: Some(on.has(*k)), stepper: false }).collect();
+                rows.push(phone::MenuRow { label: tr("Year"), value: self.sticker_year.to_string(), check: None, stepper: true });
+                rows.push(row("Back", ""));
+                rows
+            }
             Screen::Facet => {
                 let mut rows = vec![row("Clear filters", "")];
                 if let Some(lib) = &self.library {
@@ -1141,6 +1429,7 @@ impl Ui {
                             label: tr(&value.label),
                             value: counts[i].to_string(),
                             check: Some(self.lens.picked(self.facet, &value.key)),
+                            stepper: false,
                         });
                     }
                 }
@@ -1160,6 +1449,7 @@ impl Ui {
                         label: tr(facet.label()),
                         value: picked,
                         check: None,
+                        stepper: false,
                     });
                 }
                 if self.rediscover_row() {
@@ -1202,8 +1492,7 @@ impl Ui {
         let k = pocket_ui::game_box::case_height(c.w, c.h, m) as f32 / m.size().h as f32;
         let console = pocket_ui::system_art::get(game.system_id);
         let mut front = media::front(text, m, k, look, &game.name, cover, console, game.system);
-        let mut stickers = pocket_ui::case_stickers::CaseStickers::default();
-        stickers.set(pocket_ui::case_stickers::Kind::Favourite, self.prefs.extras.case_stickers && self.prefs.favorites.contains(&game.key), 2026);
+        let stickers = self.prefs.stickers_shown(&game.key);
         pocket_ui::case_stickers::on_front(text, &mut front, &stickers, media::label_rect(m, k), index as u64);
         let inside = game_inside(text, game, (m, front.h), look, cover, self.prefs.extras.printed_discs);
         self.box_view.hide_case = self.launching;
@@ -1235,6 +1524,18 @@ impl Ui {
     pub fn animating(&self) -> bool {
         self.screen == Screen::Box && self.box_view.animating(std::time::Instant::now())
     }
+}
+
+/// The rows of the sticker sheet: the stickers, the year, Back.
+const STICKER_ROWS: usize = pocket_ui::case_stickers::Kind::ALL.len() + 2;
+/// The Games page's shelves: the games started last, the favourites, one shelf per system.
+fn shelves_of(lib: &Library, prefs: &Preferences) -> pocket_ui::phone_shelves::Shelves {
+    let games: Vec<(&str, &str)> = lib.games.iter().map(|g| (g.system_id, g.system)).collect();
+    let mut played: Vec<(u64, usize)> = lib.games.iter().enumerate().filter_map(|(i, g)| Some((*prefs.played.get(&g.key)?, i))).collect();
+    played.sort_by_key(|(at, _)| std::cmp::Reverse(*at));
+    let recent: Vec<usize> = played.into_iter().map(|(_, i)| i).collect();
+    let favourites: Vec<usize> = lib.games.iter().enumerate().filter(|(_, g)| prefs.favorites.contains(&g.key)).map(|(i, _)| i).collect();
+    pocket_ui::phone_shelves::build(&games, &recent, &favourites)
 }
 
 /// The cartridge, card or disc in a case of `front_h`, beside it.

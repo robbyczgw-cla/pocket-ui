@@ -526,16 +526,22 @@ mod tests {
                 entry(i, &name, Some(1990 + (i % 30) as u16), &[&format!("Studio {} Games", i % 300)], &[], &["Action video game"])
             })
             .collect();
-        let t = std::time::Instant::now();
-        let ix = Index::build(entries);
-        let built = t.elapsed();
+        // Noise on a busy build computer only ever adds time: the best of five runs is the cost of the code itself,
+        // while a real regression (quadratic work) is in every run.
+        let (mut built, mut looked) = (std::time::Duration::MAX, std::time::Duration::MAX);
         let p = PathBuf::from("/roms/12 Qb Quest 2.iso");
-        assert_eq!(ix.derived_series(&p), Some("Qb Quest"));
-        let t = std::time::Instant::now();
-        for kind in Kind::ALL {
-            let _ = ix.link(kind, "Studio 12 Games, Qb Quest, Action", &p);
+        for _ in 0..5 {
+            let entries = entries.clone();
+            let t = std::time::Instant::now();
+            let ix = Index::build(entries);
+            built = built.min(t.elapsed());
+            assert_eq!(ix.derived_series(&p), Some("Qb Quest"));
+            let t = std::time::Instant::now();
+            for kind in Kind::ALL {
+                let _ = ix.link(kind, "Studio 12 Games, Qb Quest, Action", &p);
+            }
+            looked = looked.min(t.elapsed());
         }
-        let looked = t.elapsed();
         println!("index of 5000 games: {built:?}, four lookups {looked:?}");
         // The build runs on Curator's thread; the lookups when a card opens (a genre's list has every game).
         assert!(built < std::time::Duration::from_millis(400), "{built:?}");

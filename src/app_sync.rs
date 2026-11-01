@@ -449,22 +449,7 @@ impl App {
 /// The details under the Sync list, from the list's end to the baseline of the login line (Normal sizes).
 const DETAILS_H: i32 = 314;
 
-/// A QR code of `data`, `size` pixels square including a white margin; dark modules in black.
+/// A QR code of `data`, `size` pixels square including a white margin; dark modules in black (`kit::qr`).
 pub(crate) fn paint_qr(c: &mut Canvas, x: i32, y: i32, size: i32, data: &str) {
-    use qrcode::{Color, EcLevel, QrCode};
-    let Ok(code) = QrCode::with_error_correction_level(data, EcLevel::M) else {
-        return;
-    };
-    let modules = code.width() as i32;
-    let quiet = 2;
-    let cell = (size / (modules + 2 * quiet)).max(1);
-    let total = cell * (modules + 2 * quiet);
-    let (x, y) = (x + (size - total) / 2, y);
-    c.round_rect(x, y, total, total, 12, 0xffffff);
-    for (i, color) in code.to_colors().into_iter().enumerate() {
-        if color == Color::Dark {
-            let (mx, my) = (i as i32 % modules, i as i32 / modules);
-            c.rect(x + (quiet + mx) * cell, y + (quiet + my) * cell, cell, cell, 0x000000);
-        }
-    }
+    pocket_ui::kit::qr(c, x, y, size, data, 2, false);
 }

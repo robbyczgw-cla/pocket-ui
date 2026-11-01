@@ -268,7 +268,8 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
             driver
         }
         fn wait(&mut self, mut condition: impl FnMut(&mut Self) -> bool) {
-            let until = Instant::now() + Duration::from_secs(8);
+            // Polls every 5 ms, so a generous bound costs nothing when all is well; a gate under load needed more than 8 s.
+            let until = Instant::now() + Duration::from_secs(30);
             while Instant::now() < until {
                 if condition(self) {
                     return;
@@ -345,6 +346,108 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
             let _ = self.child.kill();
             let _ = self.child.wait();
         }
+    }
+
+    /// A Kids Mode card whose one game is the Game Boy one, routed to pocket-core (a stand-in), `run-game` exiting with an error.
+    fn kids_card_with_failing_game(name: &str, prepare: impl FnOnce(&Path)) -> Driver {
+        Driver::start(name, true, |tmp, cmd| {
+            let game = tmp.join("gb/Tobu Tobu Girl (World).gb");
+            let games = serde_json::json!({"on": true, "pin": "0000", "games": [game], "theme": "blue"});
+            std::fs::write(tmp.join("data/kids.json"), games.to_string()).unwrap();
+            cmd.env("POCKETUI_HOST_BIN", tmp.join("pocket-core-stand-in"));
+            std::fs::write(tmp.join("pocket-core-stand-in"), "").unwrap();
+            prepare(tmp);
+        })
+    }
+
+    fn fail_at_once(tmp: &Path) {
+        let _ = std::fs::remove_file(tmp.join("run-game"));
+        executable(&tmp.join("run-game"), "#!/bin/sh\nprintf 'x' >> \"$0.starts\"\nexit 1\n");
+    }
+
+    /// pocket-core fails on a child's game: no RetroArch, no second start, nothing in `fallback.json`; the picture, and a
+    /// press is the shelf again.
+    #[test]
+    fn a_childs_game_that_fails_stops_on_the_picture_and_never_falls_back() {
+        let mut d = kids_card_with_failing_game("kids-fail", |_| {});
+        d.sees("Tobu Tobu Girl");
+        fail_at_once(&d.card.tmp.clone());
+        d.send("a");
+        let picture = d.sees("Please ask a grown-up");
+        assert!(picture.contains("won't start right now"), "{picture}");
+        assert_eq!(std::fs::read_to_string(d.card.tmp.join("run-game.starts")).unwrap(), "x", "one start, no retry");
+        assert!(!d.card.tmp.join("data/fallback.json").exists(), "the normal shelf's list stays as it was");
+        assert!(d.log().contains("(emulator pocket-core"), "{}", d.log());
+        d.send("a");
+        let shelf = d.sees("Tobu Tobu Girl");
+        assert!(!shelf.contains("Please ask a grown-up"), "{shelf}");
+    }
+
+    /// A game moved to RetroArch before the mode went on (`fallback.json`): it isn't started there.
+    #[test]
+    fn a_childs_game_routed_to_retroarch_does_not_start() {
+        let mut d = kids_card_with_failing_game("kids-routed", |tmp| {
+            let game = tmp.join("gb/Tobu Tobu Girl (World).gb");
+            std::fs::write(tmp.join("data/fallback.json"), serde_json::json!([game]).to_string()).unwrap();
+        });
+        d.sees("Tobu Tobu Girl");
+        d.send("a");
+        d.sees("Please ask a grown-up");
+        assert!(!d.card.tmp.join("run-game.started").exists(), "{}", d.log());
+        assert!(d.log().contains("kids mode: stopped"), "{}", d.log());
+    }
+
+    /// The dialog with Open EmulationStation isn't there in Kids Mode, however it is asked for (a keyboard's Escape comes the
+    /// same way as the command pipe's `leave`).
+    #[test]
+    fn a_child_cannot_open_the_leave_dialog() {
+        let mut d = kids_card_with_failing_game("kids-leave", |_| {});
+        d.sees("Tobu Tobu Girl");
+        d.send("leave");
+        let frame = d.frame();
+        assert!(!frame.contains("EmulationStation"), "{frame}");
+    }
+
+    /// Kids Mode on an empty card, with the real buttons' way through: the child's shelf says so; a grown-up holds SELECT and
+    /// START, enters the PIN, goes to Games, is sent to Add games and comes back; turning the mode off brings the normal shelf.
+    #[test]
+    fn kids_mode_with_no_games_goes_to_add_games_and_back_and_turns_off() {
+        let mut d = Driver::start("kids", true, |tmp, _| {
+            std::fs::remove_file(tmp.join("gb/Tobu Tobu Girl (World).gb")).unwrap();
+            std::fs::remove_file(tmp.join("segacd/Pocket CD Demo (USA).cue")).unwrap();
+            std::fs::write(tmp.join("data/kids.json"), r#"{"on":true,"pin":"0000","games":[],"theme":"pink"}"#).unwrap();
+        });
+        d.sees("No games here yet");
+        // Nothing of the normal shelf reaches a child.
+        d.send("start");
+        d.send("home");
+        d.sees("No games here yet");
+        d.send("holddown");
+        d.sees("Enter your PIN");
+        d.send("holdup");
+        for _ in 0..4 {
+            d.send("a");
+        }
+        d.sees("30 more minutes today");
+        d.send("down");
+        d.send("down");
+        d.send("a");
+        d.sees("No games to pick yet");
+        d.send("a");
+        let add = d.sees("Add your games");
+        assert!(!add.contains("No games to pick yet"), "{add}");
+        d.send("b");
+        d.sees("No games to pick yet");
+        d.send("start");
+        d.sees("30 more minutes today");
+        for _ in 0..5 {
+            d.send("down");
+        }
+        d.send("a");
+        let file = d.card.tmp.join("data/kids.json");
+        d.wait(|_| std::fs::read_to_string(&file).is_ok_and(|t| t.contains("\"on\": false") || t.contains("\"on\":false")));
+        let shelf = d.sees("Settings");
+        assert!(!shelf.contains("No games here yet"), "{shelf}");
     }
 
     #[test]

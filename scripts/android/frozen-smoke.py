@@ -172,14 +172,23 @@ def restart(*extras):
 
 def choose(name):
     """Selects the game on the shelf: by a tap on its case or row where it is on screen, else with the arrow keys."""
-    for _ in range(40):
+    # Shelves hold one game per system row here: the page is searched top to bottom with Down, then (from the end) with Up,
+    # and along a shelf with Right and Left when a row holds several games.
+    for step in [19] * 12 + [20] * 40 + [19] * 40:
         found = [n for n in nodes() if (n.get('text') or '').casefold() == name.casefold()]
         if found:
             if not any(n.get('selected') == 'true' for n in found):
                 touch(found[0])
                 time.sleep(.6)
             return
-        key(22)
+        key(step)
+    for step in [22] * 6 + [21] * 6:
+        found = [n for n in nodes() if (n.get('text') or '').casefold() == name.casefold()]
+        if found:
+            touch(found[0])
+            time.sleep(.6)
+            return
+        key(step)
     raise AssertionError('Missing fixture ' + name)
 
 def status():

@@ -374,3 +374,27 @@ mod tests {
         assert_eq!(pal().select, pal().label, "the selected name is on the label's paper");
     }
 }
+
+/// A QR code of `data`, `size` pixels square including a white margin of `quiet` modules (4 is the standard's; the
+/// pairing codes use 2), dark modules in black, centred in `size` across, at `y`. `even`: each module an even number of
+/// pixels, so that a 640×480 panel (the logical canvas halved) keeps them sharp.
+pub fn qr(c: &mut Canvas, x: i32, y: i32, size: i32, data: &str, quiet: i32, even: bool) {
+    use qrcode::{Color, EcLevel, QrCode};
+    let Ok(code) = QrCode::with_error_correction_level(data, EcLevel::M) else {
+        return;
+    };
+    let modules = code.width() as i32;
+    let mut cell = (size / (modules + 2 * quiet)).max(1);
+    if even && cell >= 4 {
+        cell &= !1;
+    }
+    let total = cell * (modules + 2 * quiet);
+    let (x, y) = (x + (size - total) / 2, y);
+    c.round_rect(x, y, total, total, 12, 0xffffff);
+    for (i, color) in code.to_colors().into_iter().enumerate() {
+        if color == Color::Dark {
+            let (mx, my) = (i as i32 % modules, i as i32 / modules);
+            c.rect(x + (quiet + mx) * cell, y + (quiet + my) * cell, cell, cell, 0x000000);
+        }
+    }
+}

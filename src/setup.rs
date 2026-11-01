@@ -69,6 +69,8 @@ pub enum SetupEvent {
     Catalog(Result<Vec<Port>, String>),
     /// `name`: the catalog name of the port, to open its "Copy your game files" page after an install.
     PortDone { name: String, title: String, result: Result<(), String>, installing: bool, updated: bool },
+    /// The phone page's server saw something: a phone, a file's bytes, a file in place, it closed by itself.
+    Phone,
 }
 
 /// The row at the top of the Wi-Fi page, when there is one (`Setup::lead_kind`).
@@ -207,6 +209,8 @@ enum Step {
     /// "Copy your game files" for a port that needs them: X in the browser, and after installing one.
     PortFiles(Box<FilesPage>),
     Games,
+    /// "Send from your phone" (Y on Add games): its upload server runs while this step is shown (`phone_upload`).
+    Phone(Box<crate::phone_upload_page::PhonePage>),
     Remote,
     Done,
 }
@@ -304,6 +308,8 @@ impl ZoneStep {
 }
 
 pub struct Setup {
+    /// "For a child" was pressed (`take_kids_asked`).
+    kids_asked: bool,
     step: Step,
     /// Opened straight at Systems on the shelf (`at_shelf_systems`): B there closes the setup, back to the row, instead
     /// of going to the Look step.
@@ -429,6 +435,8 @@ pub struct Setup {
     previews: HashMap<String, Option<Image>>,
     /// Opened from Settings for one step: leaving that step ends setup instead of moving on.
     only: Option<Only>,
+    /// Games came in from the phone and its page closed: the shelf reads the folders again (`take_phone_added`).
+    phone_added: bool,
     /// The phone page asked for the Wi-Fi settings (`take_open_wifi`).
     open_wifi: bool,
     /// The system controls: the time zone step reads and sets the zone through them.
@@ -794,6 +802,8 @@ impl Setup {
             Way::Sharing if self.sharing => ("File sharing", "On".to_string(), true),
             Way::Sharing if self.ip.is_none() => ("File sharing", "Connect to Wi-Fi first".to_string(), false),
             Way::Sharing => ("File sharing", "Off".to_string(), false),
+            Way::Phone if self.ip.is_none() => ("From your phone", "Connect to Wi-Fi first".to_string(), false),
+            Way::Phone => ("From your phone", "Same Wi-Fi as your phone".to_string(), false),
             Way::Usb if self.usb_busy => ("USB file transfer", format!("Switching{dots}"), self.usb_status() != crate::usb_transfer::Status::Off),
             Way::Usb => ("USB file transfer", self.usb_status().label().to_string(), self.usb_status() != crate::usb_transfer::Status::Off),
         }
@@ -805,6 +815,8 @@ impl Setup {
             Way::Sharing if self.sharing => "Turn off file sharing",
             Way::Sharing if self.ip.is_none() => "Connect to Wi-Fi",
             Way::Sharing => "Turn on file sharing",
+            Way::Phone if self.ip.is_none() => "Connect to Wi-Fi",
+            Way::Phone => "From your phone",
             Way::Usb if self.usb_status() == crate::usb_transfer::Status::Off => "Turn on USB file transfer",
             Way::Usb => "Turn off USB file transfer",
         }
@@ -917,8 +929,16 @@ impl Setup {
                     systems_grid::Bios::Needed { missing: None, what } => (format!("In place ({what})"), pal().chalk),
                     systems_grid::Bios::Unknown => ("Not known to pocket-ui. If its emulator needs one, it goes in roms/bios.".to_string(), pal().dust),
                 };
-                for (i, l) in text.wrap(Face::Body, 24, &line, w - label_w).iter().take(3).enumerate() {
+                let bios_lines = text.wrap(Face::Body, 24, &line, w - label_w);
+                for (i, l) in bios_lines.iter().take(3).enumerate() {
                     text.draw(c, Face::Body, 24, x + label_w, top + 160 + i as i32 * 32, color, l);
+                }
+                // One plain caution where the handheld runs the system but not every game of it smoothly.
+                if let Some(note) = crate::system_notes::note(&sys.id) {
+                    let y = top + 160 + bios_lines.len().min(3) as i32 * 32 + 14;
+                    for (i, l) in text.wrap(Face::Body, 24, note, w).iter().take(2).enumerate() {
+                        text.draw(c, Face::Body, 24, x, y + i as i32 * 32, pal().dust, l);
+                    }
                 }
             }
             Some(Tile::More) => {
@@ -1024,11 +1044,11 @@ const USB_FAILED: &str = "USB file transfer didn't start. Take out what's in the
 
 /// A way to get games onto this device that Add games lets you start from its row of tiles. The ways with only a
 /// sentence (the second card, the GAMES drive) are not here: they have nothing to switch (`offline_way`).
-/// "From your phone" (Y, feat/phone-upload) joins as a third: a `Way::Phone` here, in `ways_for`, `way_state` and
-/// `activate_way`, instead of only a hint in `games_hints`.
+/// "From your phone" (`Way::Phone`, also Y) opens the upload page; unconnected, it leads to the Wi-Fi page like sharing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Way {
     Sharing,
+    Phone,
     Usb,
 }
 
@@ -1048,6 +1068,9 @@ fn ways_for(host_owned: bool, wifi: bool, usb: bool) -> Vec<Way> {
     }
     if wifi {
         ways.push(Way::Sharing);
+        if crate::phone_upload_page::offered() {
+            ways.push(Way::Phone);
+        }
     }
     if usb {
         ways.push(Way::Usb);
@@ -1109,7 +1132,7 @@ fn stage(step: &Step) -> Option<Only> {
         Step::Look | Step::ShelfSystems { .. } => Some(Only::Look),
         Step::Wifi | Step::Portal(_) | Step::Password { .. } | Step::Connecting { .. } | Step::HiddenName { .. } | Step::Country { .. } => Some(Only::Wifi),
         Step::Extras { .. } | Step::Ports | Step::PortFiles(_) => Some(Only::Extras),
-        Step::Games => Some(Only::Games),
+        Step::Games | Step::Phone(_) => Some(Only::Games),
         Step::Remote => Some(Only::Remote),
         // Settings > Time is the way to this one on its own.
         // The profiles and the cards are first-start steps; Settings → Tour shows the cards on its own.
@@ -1151,7 +1174,7 @@ fn resume_name(step: &Step) -> Option<&'static str> {
         Step::Wifi | Step::Portal(_) | Step::Password { .. } | Step::Connecting { .. } | Step::HiddenName { .. } | Step::Country { .. } => Some("wifi"),
         Step::Zone(_) => Some("zone"),
         Step::Extras { .. } | Step::Ports | Step::PortFiles(_) => Some("extras"),
-        Step::Games => Some("games"),
+        Step::Games | Step::Phone(_) => Some("games"),
         Step::Welcome | Step::ShelfSystems { .. } | Step::Remote | Step::Done => None,
     }
 }
@@ -1184,6 +1207,20 @@ fn look_zone(hw: &dyn crate::system_ctl::Hw) -> ZoneStep {
     z
 }
 
+/// The Extras step's line under the title. A handheld without a Wi-Fi chip (the RG28XX) can't "connect to Wi-Fi first":
+/// it says so instead (first-start test 2026-11-01).
+fn extras_sub(online: bool, host_owned: bool, has_wifi: bool) -> &'static str {
+    if online {
+        "Optional. You can get these any time later."
+    } else if host_owned {
+        "Connect to the internet first to use these."
+    } else if !has_wifi {
+        "This device has no Wi-Fi, so the downloads aren't available."
+    } else {
+        "Connect to Wi-Fi first to use these."
+    }
+}
+
 /// The right-hand line of the Extras step's cover row. While it runs the count names what it counts: with pictures on a
 /// game has up to three (box art, screenshot, title screen), so "2 of 12" beside "6 games" read as a contradiction
 /// (new-user test 2026-10-30).
@@ -1196,6 +1233,8 @@ fn extras_status(covers: Option<(usize, usize, usize)>, running: bool, pictures:
         (Some((_, _, f)), false) if f > 0 => format!("Found {f} new covers"),
         (Some(_), false) if pictures => "No new pictures found".into(),
         (Some(_), false) => "No new covers found".into(),
+        (None, _) if games == 0 => "no games yet".into(),
+        (None, _) if games == 1 => "1 game".into(),
         (None, _) => format!("{games} games"),
     }
 }
@@ -1254,7 +1293,7 @@ pub fn unread_lines(strays: &[library::StrayFolder], broken: &[library::BrokenDi
     let title = |b: &library::BrokenDisc| display_name_of(&b.sheet);
     match broken {
         [] => {}
-        [one] => lines.push(format!("Not on the shelf: {}. Its file {} is missing.", title(one), one.missing)),
+        [one] => lines.push(format!("Not on the shelf: {}. A file is missing: {}", title(one), one.missing)),
         many => {
             let names: Vec<String> = many.iter().map(title).collect();
             lines.push(format!("Not on the shelf, a disc file is missing: {}", names.join(", ")));
@@ -1291,6 +1330,7 @@ impl Setup {
         let net = default_net(&hw);
         Self {
             step: Step::Welcome,
+            kids_asked: false,
             notify,
             seen_notice: net.snapshot().notice.map_or(0, |n| n.id),
             net,
@@ -1364,6 +1404,7 @@ impl Setup {
             previews: HashMap::new(),
             only: None,
             open_wifi: false,
+            phone_added: false,
             direct: false,
             hw,
             shelf: Vec::new(),
@@ -1395,6 +1436,16 @@ impl Setup {
 
     /// The switches and the cards put off after a profile or a card changed them, once; the app applies and saves
     /// them as their Settings pages do (`App::adopt_switches`).
+    /// "For a child" was chosen: the App opens Kids Mode's steps (`app_kids`).
+    pub fn take_kids_asked(&mut self) -> bool {
+        std::mem::take(&mut self.kids_asked)
+    }
+
+    /// Kids Mode's steps are done: the first start goes on with the network.
+    pub fn kids_done(&mut self) {
+        self.step = network_step();
+    }
+
     pub fn take_tour(&mut self) -> Option<(Switches, Vec<String>)> {
         std::mem::take(&mut self.tour_changed).then(|| (self.switches.clone(), self.later.clone()))
     }
@@ -2152,6 +2203,8 @@ impl Setup {
                     z.offsets.extend(found);
                 }
             }
+            // Painted from the server's status; the event only asks for a frame.
+            SetupEvent::Phone => {}
             SetupEvent::GameCounts(found) => {
                 self.counting = false;
                 self.strays = found.strays;
@@ -2324,18 +2377,23 @@ impl Setup {
     /// Wi-Fi settings (`take_open_wifi`).
     fn activate_way(&mut self) {
         match self.ways().get(self.ways_sel) {
-            Some(Way::Sharing) if self.ip.is_none() && !self.sharing => {
-                if self.only.is_none() {
-                    self.step = Step::Wifi;
-                    self.scan();
-                } else {
-                    self.open_wifi = true;
-                    self.step = Step::Done;
-                }
-            }
+            Some(Way::Sharing) if self.ip.is_none() && !self.sharing => self.to_wifi(),
+            Some(Way::Phone) if self.ip.is_none() => self.to_wifi(),
+            Some(Way::Phone) => self.open_phone(),
             Some(Way::Sharing) => self.switch_sharing(),
             Some(Way::Usb) => self.switch_usb(),
             None => {}
+        }
+    }
+
+    /// The Wi-Fi page: the first start's step, or from Settings the Wi-Fi settings (`take_open_wifi`).
+    fn to_wifi(&mut self) {
+        if self.only.is_none() {
+            self.step = Step::Wifi;
+            self.scan();
+        } else {
+            self.open_wifi = true;
+            self.step = Step::Done;
         }
     }
 
@@ -2498,6 +2556,7 @@ impl Setup {
             Step::Ports => (6u8, self.port_tab).hash(&mut h),
             Step::PortFiles(page) => (12u8, page.scroll()).hash(&mut h),
             Step::Games => 7u8.hash(&mut h),
+            Step::Phone(_) => 18u8.hash(&mut h),
             Step::Remote => 8u8.hash(&mut h),
             Step::Done => 9u8.hash(&mut h),
             Step::ShelfSystems { sel } => (11u8, sel, &self.hidden, self.streaming).hash(&mut h),
@@ -2539,6 +2598,7 @@ impl Setup {
             },
             Step::PortFiles(_) => "port files",
             Step::Games => "games",
+            Step::Phone(_) => "phone",
             Step::Remote => "remote",
             Step::Done => "done",
             Step::ShelfSystems { .. } => "shelf systems",
@@ -2898,9 +2958,11 @@ impl Setup {
                 _ => {}
             },
             Step::Play { sel } => match b {
-                Button::Up => *sel = (*sel + Profile::ALL.len() - 1) % Profile::ALL.len(),
-                Button::Down => *sel = (*sel + 1) % Profile::ALL.len(),
-                Button::East => match Profile::ALL[*sel] {
+                Button::Up => *sel = (*sel + Profile::offered().len() - 1) % Profile::offered().len(),
+                Button::Down => *sel = (*sel + 1) % Profile::offered().len(),
+                Button::East => match Profile::offered()[*sel] {
+                    // Kids Mode's steps open over this one (`app_kids`), which `kids_done` leaves.
+                    Profile::Child => self.kids_asked = true,
                     Profile::Choose => {
                         let cards = Cards::new(features::Mode::First, features::choose_list(), self.switches.clone(), self.later.clone());
                         self.step = Step::Cards(Box::new(cards));
@@ -3038,10 +3100,29 @@ impl Setup {
                     self.step = Step::Ports;
                 }
             }
-            // The grid moves and opens All systems; X switches file sharing.
+            // B closes the phone page (and its server) back to the grid, whose counts are read again.
+            Step::Phone(page) => match page.press(b) {
+                crate::phone_upload_page::Action::Close => {
+                    self.phone_added |= page.added() > 0;
+                    self.step = Step::Games;
+                    self.count_games();
+                }
+                // No Wi-Fi: the first start goes back to its Wi-Fi step; from Settings the app opens Wi-Fi.
+                crate::phone_upload_page::Action::Wifi if self.only.is_none() => {
+                    self.step = Step::Wifi;
+                    self.scan();
+                }
+                crate::phone_upload_page::Action::Wifi => {
+                    self.open_wifi = true;
+                    self.step = Step::Done;
+                }
+                crate::phone_upload_page::Action::None => {}
+            },
+            // The grid moves and opens All systems; X switches file sharing; Y sends games from a phone.
             Step::Games if self.grid.as_mut().is_some_and(|g| g.press(b)) => {}
             Step::Games => match b {
                 Button::North => self.switch_sharing(),
+                Button::West if crate::phone_upload_page::offered() => self.open_phone(),
                 Button::Start => self.step = Step::Done,
                 Button::South => self.step = Step::Extras { sel: 0 },
                 _ => {}
@@ -3076,6 +3157,35 @@ impl Setup {
         self.grid = Some(Grid::new(self.catalog.clone(), counts, GRID_COLS));
         self.step = Step::Games;
         self.count_games();
+    }
+
+    /// "Send from your phone": its server starts here, on the Wi-Fi address (none without Wi-Fi: the page says so).
+    fn open_phone(&mut self) {
+        let notify = self.notify.clone();
+        let page = crate::phone_upload_page::PhonePage::open(self.ip.clone(), self.catalog.clone(), Arc::new(move || notify(SetupEvent::Phone)));
+        self.step = Step::Phone(Box::new(page));
+    }
+
+    /// The phone page is open and its server listens: the Pocket stays awake (no idle sleep, no screen-off timer) until
+    /// the page closes itself (`IDLE`, `MAX_SESSION`); the power button still closes it (`phone_upload::sleeping`).
+    pub fn phone_open(&self) -> bool {
+        matches!(&self.step, Step::Phone(p) if p.listening())
+    }
+
+    /// The phone page's server listens (tests: nothing else ever does).
+    pub fn phone_listening(&self) -> bool {
+        matches!(&self.step, Step::Phone(p) if p.listening())
+    }
+
+    /// The phone page closed after files arrived: true once, the app reads the game folders again.
+    pub fn take_phone_added(&mut self) -> bool {
+        std::mem::take(&mut self.phone_added)
+    }
+
+    /// `--snapshot setup:phone=<kind>`: the phone page with a made-up address and status (`PhonePage::demo`).
+    pub fn with_phone_demo(mut self, kind: &str) -> Self {
+        self.step = Step::Phone(Box::new(crate::phone_upload_page::PhonePage::demo(kind)));
+        self
     }
 
     /// Counts the games in every system's folder on a thread; `SetupEvent::GameCounts` brings the numbers.
@@ -3124,7 +3234,7 @@ impl Setup {
                 let on = crate::i18n::Lang::ALL.iter().position(|l| *l == crate::i18n::current()).unwrap_or(0);
                 let names: Vec<&str> = crate::i18n::Lang::ALL.iter().map(|l| l.name()).collect();
                 pill_row(c, text, below.max(470 - 40) + 40, "Language", &names, on, "You can change it later in Settings.", 0);
-                hints(c, text, &[("Left/Right", "Language"), ("A", "Start"), ("SELECT", "Manual")]);
+                hints(c, text, &[("Left/Right", "Language"), ("A", "Get started"), ("SELECT", "Manual")]);
             }
             // The app paints this step itself, with the previews (`paint_look`); without them, the names.
             Step::Look => self.paint_look(c, text, &[], false),
@@ -3199,6 +3309,10 @@ impl Setup {
             Step::Ports => self.paint_ports(c, text, &dots),
             Step::PortFiles(_) => self.paint_port_files(c, text, &dots),
             Step::Games => self.paint_games(c, text, &dots),
+            Step::Phone(page) => {
+                page.paint(c, text);
+                hints(c, text, &page.hints());
+            }
             Step::Remote => {
                 text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Remote access");
                 let lines = [
@@ -3263,14 +3377,8 @@ impl Setup {
     fn paint_extras(&mut self, c: &mut Canvas, text: &mut Text, sel: usize, dots: &str) {
         text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Extras");
         let online = wifi::ip().is_some();
-        let sub = if online {
-            "Optional. You can get these any time later."
-        } else if crate::device::current().host_owned() {
-            "Connect to the internet first to use these."
-        } else {
-            "Connect to Wi-Fi first to use these."
-        };
-        text.draw(c, Face::Body, 28, MARGIN, 192, pal().dust, sub);
+        let d = crate::device::current();
+        text.draw(c, Face::Body, 28, MARGIN, 192, pal().dust, extras_sub(online, d.host_owned(), d.has_wifi()));
         let pictures = self.art == Art::Pictures;
         let covers = extras_status(self.covers, self.covers_running, pictures, self.games.len(), dots);
         let ports = if self.ports.is_empty() { "Browse".to_string() } else { format!("{} ready to play", self.tab_count(PortTab::Ready)) };
@@ -4081,6 +4189,9 @@ fn games_hints(more: Option<bool>, sharing: bool, online: bool) -> Vec<(&'static
     if sharing || online {
         h.push(("X", if sharing { "Turn off file sharing" } else { "Turn on file sharing" }));
     }
+    if crate::phone_upload_page::offered() {
+        h.push(("Y", "From your phone"));
+    }
     h.push(("START", "Next"));
     h.push(("B", "Back"));
     h
@@ -4151,8 +4262,18 @@ mod tests {
     }
 
     #[test]
+    fn extras_without_a_wifi_chip_does_not_ask_to_connect() {
+        assert_eq!(extras_sub(false, false, true), "Connect to Wi-Fi first to use these.");
+        assert_eq!(extras_sub(false, false, false), "This device has no Wi-Fi, so the downloads aren't available.");
+        assert_eq!(extras_sub(false, true, false), "Connect to the internet first to use these.");
+        assert_eq!(extras_sub(true, false, false), "Optional. You can get these any time later.");
+    }
+
+    #[test]
     fn the_extras_counter_says_what_it_counts() {
         assert_eq!(extras_status(None, false, true, 6, ""), "6 games");
+        assert_eq!(extras_status(None, false, true, 1, ""), "1 game", "first-start test 2026-11-01: was \"1 games\"");
+        assert_eq!(extras_status(None, false, true, 0, ""), "no games yet");
         assert_eq!(extras_status(Some((2, 12, 0)), true, true, 6, "…"), "Looking up 2 of 12 pictures…", "pictures: up to three a game, so not '6 games'");
         assert_eq!(extras_status(Some((2, 6, 0)), true, false, 6, ""), "Looking up 2 of 6 covers");
         assert_eq!(extras_status(Some((6, 6, 4)), false, false, 6, ""), "Found 4 new covers");
@@ -5370,6 +5491,35 @@ mod tests {
         paint_it(&mut s);
     }
 
+    /// Send from your phone: nothing listens on Add games; Y opens the page (its server only there), B closes it and
+    /// the grid counts again; without Wi-Fi from Settings, A asks the app for the Wi-Fi settings.
+    #[test]
+    fn the_phone_page_listens_only_while_it_is_open() {
+        let (_dir, catalog) = roms("phone", &[("gba", 1)]);
+        let (s, _) = setup("phone", "UTC", None);
+        let mut s = s.with_catalog(catalog).only(Only::Games);
+        s.settle();
+        assert!(!s.phone_listening(), "Add games alone opens no port");
+        assert!(games_hints(None, false, true).contains(&("Y", "From your phone")));
+        // No Wi-Fi address on the test machine's interfaces: the page opens and says so, nothing listens.
+        s.ip = None;
+        assert!(!s.press(Button::West));
+        assert_eq!(s.at(), "phone");
+        assert!(!s.phone_listening());
+        paint_it(&mut s);
+        assert!(s.press(Button::East), "from Settings, A on \"Connect to Wi-Fi first\" leaves for the Wi-Fi page");
+        assert!(s.take_open_wifi() && !s.take_open_wifi());
+        let (s, _) = setup("phone-2", "UTC", None);
+        let mut s = s.only(Only::Games);
+        s.ip = Some("203.0.113.9".into());
+        s.press(Button::West);
+        assert!(!s.phone_listening(), "an address that is not this machine's: the page says it couldn't open");
+        paint_it(&mut s);
+        assert!(!s.press(Button::South), "B goes back to the grid, not out of Settings");
+        assert_eq!(s.at(), "games");
+        assert!(!s.phone_listening());
+    }
+
     /// Down from the grid's last row reaches the row of ways, Left/Right choose, Up goes back, and B still leaves.
     #[test]
     fn the_row_of_ways_is_reached_with_down_and_left_alone_with_b() {
@@ -5425,10 +5575,19 @@ mod tests {
             unread_lines(&s.strays, &s.broken, "roms"),
             [
                 "Folder without a system: Sega Genesis. Its games go in roms/megadrive.",
-                "Not on the shelf: Lost Bin. Its file Lost Bin (Europe).bin is missing.",
+                "Not on the shelf: Lost Bin. A file is missing: Lost Bin (Europe).bin",
             ]
         );
         paint_it(&mut s);
+    }
+
+    /// Large text cuts a long line with "...": what is wrong must come before the long file name, never after it
+    /// (daily-use walk: "Its file Crash Bandicoot (USA) (Track 1).bin is..." lost the word "missing").
+    #[test]
+    fn a_disc_missing_a_file_says_so_before_the_long_file_name() {
+        let disc = library::BrokenDisc { sheet: PathBuf::from("/storage/roms/psx/Crash Bandicoot (USA).cue"), missing: "Crash Bandicoot (USA) (Track 1).bin".into() };
+        let line = &unread_lines(&[], &[disc], "roms")[0];
+        assert!(line.find("missing").unwrap() < line.find("Track 1").unwrap(), "{line}");
     }
 
     #[test]
@@ -5604,25 +5763,26 @@ mod hint_bars {
     #[test]
     fn add_games_offers_the_ways_the_device_has() {
         // Wi-Fi, connected or not (unconnected, file sharing leads to the Wi-Fi page), with and without USB transfer.
-        assert_eq!(ways_for(false, true, true), [Way::Sharing, Way::Usb]);
-        assert_eq!(ways_for(false, true, false), [Way::Sharing], "USB file transfer not available: no tile for it");
+        assert_eq!(ways_for(false, true, true), [Way::Sharing, Way::Phone, Way::Usb]);
+        assert_eq!(ways_for(false, true, false), [Way::Sharing, Way::Phone], "USB file transfer not available: no tile for it");
         // The RG28XX: no Wi-Fi, a second slot (a sentence, not a way) and maybe the cable.
         assert_eq!(ways_for(false, false, false), [], "no Wi-Fi, no USB: the sentence about the card or the GAMES drive alone");
         assert_eq!(ways_for(false, false, true), [Way::Usb]);
         // The Deck's games go through Desktop Mode.
         assert_eq!(ways_for(true, true, true), []);
         let de = crate::i18n::german();
-        for line in ["File sharing", "USB file transfer", "Connect to Wi-Fi first", "Connect to Wi-Fi", "Turn on USB file transfer", "Turn off USB file transfer", "On", "Off", "Switching…", USB_WAY, USB_FAILED] {
+        for line in ["File sharing", "USB file transfer", "Connect to Wi-Fi first", "Connect to Wi-Fi", "From your phone", "Same Wi-Fi as your phone", "Turn on USB file transfer", "Turn off USB file transfer", "On", "Off", "Switching…", USB_WAY, USB_FAILED] {
             assert!(de.translate(line).is_some(), "{line} has a German line");
         }
     }
 
     #[test]
     fn add_games_offers_file_sharing_only_with_an_address_or_while_it_is_on() {
-        assert_eq!(keys(&games_hints(None, false, false)), ["START", "B"], "offline, sharing off: X would do nothing");
+        // Y (Send from your phone) stays: offline its page says "Connect to Wi-Fi first" and A leads there.
+        assert_eq!(keys(&games_hints(None, false, false)), ["Y", "START", "B"], "offline, sharing off: X would do nothing");
         assert_eq!(games_hints(None, false, true)[0], ("X", "Turn on file sharing"));
         assert_eq!(games_hints(None, true, false)[0], ("X", "Turn off file sharing"), "on: it can be turned off");
-        assert_eq!(keys(&games_hints(Some(false), false, false)), ["A", "START", "B"]);
+        assert_eq!(keys(&games_hints(Some(false), false, false)), ["A", "Y", "START", "B"]);
         assert_eq!(games_hints(Some(true), false, true)[0], ("A", "Fewer systems"));
     }
 }

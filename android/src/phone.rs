@@ -28,6 +28,8 @@ pub(super) struct MenuRow {
     pub label: String,
     pub value: String,
     pub check: Option<bool>,
+    /// The value has arrows beside it (`Action::Year`).
+    pub stepper: bool,
 }
 
 impl Ui {
@@ -103,12 +105,13 @@ impl Ui {
         self.target(area, label, action);
     }
     /// The page's title at the top left and a quiet note at its right: returns where the content starts.
-    pub(super) fn header(&mut self, c: &mut Canvas, text: &mut Text, title: &str, note: &str) -> i32 {
+    /// `keep`: pixels at the right for what stands beside the title.
+    fn header(&mut self, c: &mut Canvas, text: &mut Text, title: &str, note: &str, keep: i32) -> i32 {
         let margin = self.margin(c);
         let h = self.d(56.0);
         let size = self.sp(26.0);
         let base = h / 2 + type_mid(size);
-        let note_w = if note.is_empty() { 0 } else { text.width(Face::Body, self.sp(14.0), note) + self.d(12.0) };
+        let note_w = if note.is_empty() { 0 } else { text.width(Face::Body, self.sp(14.0), note) + self.d(12.0) }.max(keep);
         let shown = text.fit(Face::Title, size, title, c.w - 2 * margin - note_w);
         text.draw(c, Face::Title, size, margin, base, pal().chalk, &shown);
         // A title that is also a tab's name is already spoken by the tab (and taps by name find the tab).
@@ -131,7 +134,8 @@ impl Ui {
         let top = c.h - h;
         c.rect(0, top, c.w, h, pal().void);
         c.rect(0, top, c.w, 1.max(self.d(0.5)), pal().pill);
-        let current = match self.screen {
+        // The sticker sheet belongs where its card came from.
+        let current = match if self.screen == Screen::Stickers { self.prior } else { self.screen } {
             Screen::Results | Screen::Facet => Screen::Curator,
             // A fact's list belongs to the card's tab, Rediscover to Curator.
             Screen::Connection if self.list_from_curator() => Screen::Curator,
@@ -249,11 +253,18 @@ impl Ui {
         let hints: Vec<(&str, &str)> = match self.screen {
             _ if keyboard => vec![("A", "Choose"), ("B", "Delete"), ("START", "Done")],
             Screen::GameCheck => vec![("A", "Choose"), ("B", "Back"), ("X", "Check again")],
+            Screen::Stickers => vec![("A", "Choose"), ("B", "Back")],
             Screen::Settings | Screen::Extras | Screen::Quick | Screen::Curator | Screen::Facet => vec![("A", "Choose"), ("B", "Back"), ("L1/R1", "Tabs")],
             _ => vec![("A", self.play_word()), ("X", "Info"), ("Y", "Favourite"), ("L1/R1", "Tabs"), ("START", "Settings")],
         };
         let bottom = if keyboard { bar } else { self.hint_row(c, text, bar, &hints) };
         let (title, note) = match self.screen {
+            // One shelf at a time in landscape: the page says which.
+            Screen::Library if c.w > c.h && self.shelf_row().is_some() => {
+                let row = self.shelf_row().unwrap();
+                let rows = self.rows.as_ref().unwrap();
+                (tr(rows.title(rows.row_of(row.start).unwrap_or(0))), games_note(row.end - row.start))
+            }
             Screen::Library => ("Games".to_string(), if self.library.is_some() { self.count_note() } else { String::new() }),
             Screen::Favorites => ("Favourites".into(), self.count_note()),
             Screen::Search => ("Search".into(), if self.query.is_empty() { String::new() } else { self.count_note() }),
@@ -263,16 +274,28 @@ impl Ui {
             Screen::Curator => ("Curator".into(), String::new()),
             Screen::Quick => ("Quick settings".into(), String::new()),
             Screen::Extras => ("Cozy extras".into(), String::new()),
+            Screen::Stickers => ("Stickers".into(), self.sticker_note()),
             Screen::GameCheck => (self.check_title(), String::new()),
             _ => ("Settings".into(), String::new()),
         };
-        let top = self.header(c, text, &title, &note);
+        let keep = if self.screen == Screen::Library && self.shelf_row().is_some() && c.w > c.h {
+            c.w - self.landscape_shelf_w(c) + self.d(112.0)
+        } else {
+            0
+        };
+        let top = self.header(c, text, &title, &note, keep);
+        // Why the stickers don't show is read out too.
+        if self.screen == Screen::Stickers && !note.is_empty() {
+            self.target(Area::new(c.w / 2, 0, c.w / 2, top), &note, Action::Label);
+        }
         self.grid_cols = 0;
+        self.row_pitch = 0;
+        self.row_bands.clear();
         let room = Room { top, bottom, margin: self.margin(c) };
         match self.screen {
             // Curator has nothing to sort before there are games: say so, with the way to add them.
             Screen::Curator | Screen::Facet if self.library.as_ref().is_none_or(|l| l.games.is_empty()) => self.paint_empty_phone(c, text, room),
-            Screen::Settings | Screen::Extras | Screen::Quick | Screen::Curator | Screen::Facet => {
+            Screen::Settings | Screen::Extras | Screen::Quick | Screen::Curator | Screen::Facet | Screen::Stickers => {
                 let rows = self.menu_rows();
                 self.paint_menu_phone(c, text, room, rows);
             }
@@ -285,13 +308,21 @@ impl Ui {
         }
     }
     fn count_note(&self) -> String {
-        // An empty page says so itself; "0 games" over it would only repeat it.
-        if self.visible.is_empty() {
-            String::new()
-        } else if self.visible.len() == 1 {
-            tr("1 game")
+        // A game can stand on several shelves: the library is what counts there.
+        let n = match (&self.rows, &self.library) {
+            (Some(_), Some(lib)) => lib.games.len(),
+            _ => self.visible.len(),
+        };
+        games_note(n)
+    }
+    /// Why the stickers can't be seen, where they can't.
+    fn sticker_note(&self) -> String {
+        if !self.prefs.extras.case_stickers {
+            tr("Stickers on cases is off")
+        } else if matches!(self.prefs.theme, Theme::Minimal | Theme::Split) {
+            tr("This look shows no cases")
         } else {
-            tr(&format!("{} games", self.visible.len()))
+            String::new()
         }
     }
 
@@ -331,6 +362,7 @@ impl Ui {
         let margin = room.margin;
         let hints = self.controller_hints();
         let mut targets = Vec::new();
+        let mut steppers = Vec::new();
         {
             let mut clip = c.rows(top, room.bottom);
             for (i, row) in rows.iter().enumerate() {
@@ -350,22 +382,46 @@ impl Ui {
                     self.check_box(&mut clip, x, y + (pitch - s) / 2, s, on);
                     x += s + self.d(16.0);
                 }
-                let value_w = if row.value.is_empty() { 0 } else { (text.width(Face::Body, size, &row.value) + self.d(16.0)).min((w - x - margin) / 2) };
+                let arrows = if row.stepper { self.d(TARGET) } else { 0 };
+                let value_w = if row.value.is_empty() { 0 } else { (text.width(Face::Body, size, &row.value) + self.d(16.0) + 2 * arrows).min((w - x - margin) * 2 / 3) };
                 let label = text.fit(Face::Body, size, &row.label, w - x - margin - value_w);
                 text.draw(&mut clip, Face::Body, size, x, base, fg, &label);
                 if !row.value.is_empty() {
-                    let value = text.fit(Face::Body, size, &row.value, value_w - self.d(16.0));
-                    text.draw_right(&mut clip, Face::Body, size, w - margin, base, quiet, &value);
+                    let value = text.fit(Face::Body, size, &row.value, value_w - self.d(16.0) - 2 * arrows);
+                    text.draw_right(&mut clip, Face::Body, size, w - margin - arrows, base, quiet, &value);
+                    if row.stepper {
+                        for (ax, back) in [(w - margin - value_w + self.d(16.0), true), (w - margin - arrows, false)] {
+                            let mid = ax + arrows / 2;
+                            let big = self.d(7.0);
+                            for dx in 0..=big {
+                                let reach = if back { dx } else { big - dx };
+                                clip.rect(mid - big / 2 + dx, y + pitch / 2 - reach, 1, 2 * reach + 1, fg);
+                            }
+                        }
+                        steppers.push((Area::new(w - margin - value_w + self.d(16.0), top + y, arrows, pitch).clip_y(top, room.bottom), -1));
+                        steppers.push((Area::new(w - margin - arrows, top + y, arrows, pitch).clip_y(top, room.bottom), 1));
+                    }
                 }
                 if i + 1 < rows.len() {
                     clip.rect(margin, y + pitch - 1, w - 2 * margin, 1, pal().pill);
                 }
-                targets.push((Area::new(0, top + y, w, pitch).clip_y(top, room.bottom), if row.value.is_empty() { row.label.clone() } else { format!("{} · {}", row.label, row.value) }, i));
+                // A tick box says its state to a screen reader, where no number stands beside it.
+                let spoken = match (row.value.is_empty(), row.check) {
+                    (true, Some(on)) => format!("{} · {}", row.label, tr(if on { "On" } else { "Off" })),
+                    (true, None) => row.label.clone(),
+                    (false, _) => format!("{} · {}", row.label, row.value),
+                };
+                targets.push((Area::new(0, top + y, w, pitch).clip_y(top, room.bottom), spoken, i));
             }
         }
         for (area, label, i) in targets {
             if area.h > 0 {
                 self.target(area, &label, Action::Row(i));
+            }
+        }
+        for (area, delta) in steppers {
+            if area.h > 0 {
+                self.target(area, if delta < 0 { "Earlier" } else { "Later" }, Action::Year(delta));
             }
         }
         self.scrollbar(c, top, room.bottom - top, rows.len() as i32 * pitch);
@@ -401,13 +457,14 @@ impl Ui {
         let landscape = c.w > c.h;
         let list = matches!(self.prefs.theme, Theme::Minimal | Theme::Split);
         if landscape {
-            let side = (c.w * 34 / 100).clamp(self.d(220.0), self.d(360.0));
+            let side = c.w - self.landscape_shelf_w(c) - room.margin;
             let area = Room { bottom: room.bottom, ..room };
-            let shelf_w = c.w - side - room.margin;
+            let shelf_w = self.landscape_shelf_w(c);
             if list {
                 self.paint_list_phone(c, text, area, shelf_w);
             } else {
                 self.paint_shelf_landscape(c, text, area, shelf_w, cover);
+                self.shelf_arrows(c, shelf_w);
             }
             self.side_panel(c, text, (shelf_w + self.d(16.0), room.top, side - self.d(16.0), room.bottom - room.top), cover);
         } else {
@@ -415,10 +472,37 @@ impl Ui {
             let area = Room { bottom: room.bottom - strip, ..room };
             if list {
                 self.paint_list_phone(c, text, area, c.w);
+            } else if self.rows.is_some() && self.screen == Screen::Library {
+                self.paint_rows(c, text, area, cover);
             } else {
                 self.paint_grid(c, text, area, cover);
             }
             self.strip(c, text, room.bottom - strip, strip);
+        }
+    }
+    /// How wide the landscape shelf is, beside the panel with the selected game.
+    fn landscape_shelf_w(&self, c: &Canvas) -> i32 {
+        c.w - (c.w * 34 / 100).clamp(self.d(220.0), self.d(360.0)) - self.margin(c)
+    }
+    /// Landscape: two buttons in the page's header, at the shelf's right end, go to the shelf above and below.
+    fn shelf_arrows(&mut self, c: &mut Canvas, right: i32) {
+        let Some(rows) = &self.rows else { return };
+        if self.screen != Screen::Library {
+            return;
+        }
+        let Some(at) = rows.row_of(self.selected) else { return };
+        let last = rows.rows.len() - 1;
+        let (w, h) = (self.d(48.0), self.d(44.0));
+        let y = (self.d(56.0) - h) / 2;
+        for (x, up, can, delta, label) in [(right - 2 * w - self.d(8.0), true, at > 0, -1, "Shelf above"), (right - w, false, at < last, 1, "Shelf below")] {
+            c.round_rect(x, y, w, h, h / 2, pal().pill);
+            let big = self.d(8.0);
+            let ink = if can { pal().chalk } else { pal().dust };
+            for dy in 0..=big {
+                let reach = if up { dy } else { big - dy };
+                c.rect(x + w / 2 - reach, y + h / 2 - big / 2 + dy, 2 * reach + 1, 1, ink);
+            }
+            self.target(Area::new(x, y, w, h), label, Action::Shelf(delta));
         }
     }
     /// Portrait: the selected game's name and system, Info and the Play button.
@@ -535,8 +619,7 @@ impl Ui {
         let console = pocket_ui::system_art::get(game.system_id);
         let label = if selected { cover } else { None };
         let mut pic = media::front(text, m, k, look, &game.name, label, console, game.system);
-        let mut stickers = pocket_ui::case_stickers::CaseStickers::default();
-        stickers.set(pocket_ui::case_stickers::Kind::Favourite, self.prefs.extras.case_stickers && self.prefs.favorites.contains(&game.key), 2026);
+        let stickers = self.prefs.stickers_shown(&game.key);
         pocket_ui::case_stickers::on_front(text, &mut pic, &stickers, media::label_rect(m, k), index as u64);
         if pic.w > w || pic.h > h {
             let s = (w as f32 / pic.w as f32).min(h as f32 / pic.h as f32);
@@ -588,7 +671,6 @@ impl Ui {
         self.scroll = self.scroll.clamp(0.0, self.scroll_max);
         self.step = (0.0, row_h as f32 / cols as f32);
         let offset = self.scroll.round() as i32;
-        let cabinet = self.prefs.theme == Theme::Cabinet;
         let mut targets = Vec::new();
         let first = (offset / row_h).max(0) as usize;
         let last = ((offset + view) / row_h + 1) as usize;
@@ -596,24 +678,7 @@ impl Ui {
         for r in first..=last.min(total.max(1) as usize - 1) {
             let y = r as i32 * row_h - offset + self.d(4.0);
             let base = y + lift + case_h;
-            if cabinet {
-                let inner = case_h + lift + self.d(8.0);
-                let key = (clip.w, inner, r % 3);
-                if self.shelves.iter().all(|(k, _)| *k != key) {
-                    if self.shelves.len() > 6 {
-                        self.shelves.clear();
-                    }
-                    let mut pic = art::compartment(clip.w - 2 * margin + 2 * self.d(8.0), inner, r as u32 % 3);
-                    light.tint_all(&mut pic.px);
-                    self.shelves.push((key, pic));
-                }
-                if let Some((_, pic)) = self.shelves.iter().find(|(k, _)| *k == key) {
-                    art::blit(&mut clip, pic, margin - self.d(8.0), base - inner, 255, (0, i32::MAX));
-                }
-            } else {
-                clip.rect(margin - self.d(6.0), base, clip.w - 2 * margin + self.d(12.0), board / 2, light.tint(pal().spine));
-                clip.rect(margin - self.d(6.0), base + board / 2, clip.w - 2 * margin + self.d(12.0), board / 2, light.tint(pal().dust));
-            }
+            self.paint_board(&mut clip, r, base, (case_h, lift, board), margin, &light);
             if let (true, Some(earned)) = (r as i32 == rows, &earned) {
                 let right = clip.w - margin;
                 self.paint_deco_props(text, &mut clip, (margin, right), base, case_h, shade, (0, i32::MAX), earned);
@@ -625,22 +690,7 @@ impl Ui {
                 let selected = pos == self.selected;
                 let Some(pic) = self.front_pic(text, index, selected, (cell_w, case_h), cover) else { continue };
                 let x = margin + col as i32 * (cell_w + gap) + ((cell_w - pic.w) / 2).max(0);
-                let up = if selected { lift } else { 0 };
-                let py = base - pic.h - up;
-                // Its start is on its way (`insert`): the case goes from here, its place stays empty.
-                let leaving = selected && self.launching;
-                if leaving {
-                    self.front_at = Some(((x, room.top + py, pic.w, pic.h), pic.clone()));
-                } else if selected {
-                    // The lifted case's shadow on the board.
-                    clip.shade_rect(x + self.d(4.0), base - self.d(3.0), pic.w - self.d(8.0), self.d(3.0), 0, 120);
-                }
-                if !leaving {
-                    art::blit(&mut clip, &pic, x, py, shade, (0, i32::MAX));
-                }
-                if selected && !leaving && self.controller_hints() {
-                    clip.frame(x - self.d(3.0), py - self.d(3.0), pic.w + self.d(6.0), pic.h + self.d(6.0), self.d(2.0), pal().chalk);
-                }
+                self.stand_case(&mut clip, &pic, (x, base, room.top), selected, lift, shade);
                 let name = self.library.as_ref().map(|l| l.games[index].name.clone()).unwrap_or_default();
                 targets.push((Area::new(margin + col as i32 * (cell_w + gap), room.top + y, cell_w + gap, row_h).clip_y(room.top, room.bottom), name, pos));
             }
@@ -651,6 +701,168 @@ impl Ui {
             }
         }
         self.scrollbar(c, room.top, view, total * row_h);
+    }
+    /// A board of the portrait shelves, or a Cabinet's compartment, under cases standing on `base`.
+    fn paint_board(&mut self, clip: &mut Canvas, r: usize, base: i32, (case_h, lift, board): (i32, i32, i32), margin: i32, light: &pocket_ui::room_light::Light) {
+        if self.prefs.theme == Theme::Cabinet {
+            let inner = case_h + lift + self.d(8.0);
+            let key = (clip.w, inner, r % 3);
+            if self.shelves.iter().all(|(k, _)| *k != key) {
+                if self.shelves.len() > 6 {
+                    self.shelves.clear();
+                }
+                let mut pic = art::compartment(clip.w - 2 * margin + 2 * self.d(8.0), inner, r as u32 % 3);
+                light.tint_all(&mut pic.px);
+                self.shelves.push((key, pic));
+            }
+            if let Some((_, pic)) = self.shelves.iter().find(|(k, _)| *k == key) {
+                art::blit(clip, pic, margin - self.d(8.0), base - inner, 255, (0, i32::MAX));
+            }
+        } else {
+            clip.rect(margin - self.d(6.0), base, clip.w - 2 * margin + self.d(12.0), board / 2, light.tint(pal().spine));
+            clip.rect(margin - self.d(6.0), base + board / 2, clip.w - 2 * margin + self.d(12.0), board / 2, light.tint(pal().dust));
+        }
+    }
+    /// A case standing on `base` at `x` of a portrait shelf, the selected one lifted. `top`: where `clip` starts on the page.
+    fn stand_case(&mut self, clip: &mut Canvas, pic: &art::Pic, (x, base, top): (i32, i32, i32), selected: bool, lift: i32, shade: u32) {
+        let up = if selected { lift } else { 0 };
+        let py = base - pic.h - up;
+        // Its start is on its way (`insert`): the case goes from here, its place stays empty.
+        let leaving = selected && self.launching;
+        if leaving {
+            self.front_at = Some(((x, top + py, pic.w, pic.h), pic.clone()));
+        } else if selected {
+            // The lifted case's shadow on the board.
+            clip.shade_rect(x + self.d(4.0), base - self.d(3.0), pic.w - self.d(8.0), self.d(3.0), 0, 120);
+        }
+        if !leaving {
+            art::blit(clip, pic, x, py, shade, (0, i32::MAX));
+        }
+        if selected && !leaving && self.controller_hints() {
+            clip.frame(x - self.d(3.0), py - self.d(3.0), pic.w + self.d(6.0), pic.h + self.d(6.0), self.d(2.0), pal().chalk);
+        }
+    }
+    /// Portrait with several shelves: the Cabinet's order from top to bottom, each with its name and sliding along by
+    /// itself, a little of the next case showing at the right end to say there is more.
+    fn paint_rows(&mut self, c: &mut Canvas, text: &mut Text, room: Room, cover: Option<&Image>) {
+        let Some(shelves) = self.rows.clone() else { return };
+        let margin = room.margin;
+        let cols = ((c.w as f32 / self.dp / 116.0) as usize).clamp(2, 6) as i32;
+        let gap = self.d(12.0);
+        let cell_w = ((c.w - margin - cols * gap) as f32 / (cols as f32 + 0.35)) as i32;
+        let pitch = cell_w + gap;
+        self.row_pitch = pitch;
+        let case_h = cell_w * 3 / 2;
+        let lift = self.d(16.0);
+        let board = self.d(10.0);
+        let heading = self.d(30.0);
+        // Each shelf as high as its tallest case: a shelf of cartridges leaves no gap under its name.
+        let heights: Vec<i32> = shelves
+            .rows
+            .iter()
+            .map(|row| {
+                let games = &shelves.games[row.start..row.end];
+                // One system's games all have the same case.
+                let games = if matches!(row.key, pocket_ui::cabinet::ShelfKey::System(_)) { &games[..1] } else { games };
+                let lib = self.library.as_ref();
+                let tall = games
+                    .iter()
+                    .filter_map(|&g| Some(media::front_size(Medium::of(lib?.games[g].system_id), 1.0)))
+                    .map(|(fw, fh)| cell_w * fh / fw.max(1))
+                    .max()
+                    .unwrap_or(case_h)
+                    .min(case_h);
+                heading + lift + tall + board + self.d(14.0)
+            })
+            .collect();
+        let (light, earned) = if matches!(self.prefs.theme, Theme::Shelf | Theme::Cabinet) {
+            self.room_sync()
+        } else {
+            (pocket_ui::room_light::Light::NEUTRAL, None)
+        };
+        let shade = light.case_shade().min(255);
+        let count = shelves.rows.len() as i32;
+        let earned_h = lift + cell_w + board + self.d(14.0);
+        let content = heights.iter().sum::<i32>() + if earned.is_some() { earned_h } else { 0 };
+        let view = room.bottom - room.top;
+        self.scroll_max = (content + self.d(8.0) - view).max(0) as f32;
+        let picked = shelves.row_of(self.selected);
+        if self.follow {
+            if let Some(at) = picked {
+                let row = shelves.rows[at];
+                let x = (self.selected - row.start) as i32 * pitch;
+                let most = ((row.end - row.start) as i32 * pitch - gap + 2 * margin - c.w).max(0) as f32;
+                let scroll = self.row_scroll.entry(row.key).or_default();
+                if (x as f32) < *scroll {
+                    *scroll = x as f32;
+                } else if (x + pitch + margin) as f32 > *scroll + c.w as f32 {
+                    *scroll = (x + pitch + margin - c.w) as f32;
+                }
+                *scroll = scroll.clamp(0.0, most);
+                self.reveal(heights[..at].iter().sum(), heights[at], view);
+            }
+        }
+        self.scroll = self.scroll.clamp(0.0, self.scroll_max);
+        self.step = (0.0, 0.0);
+        let offset = self.scroll.round() as i32;
+        let mut targets = Vec::new();
+        let title_size = self.sp(15.0);
+        let mut clip = c.rows(room.top, room.bottom);
+        let mut next_y = self.d(4.0) - offset;
+        for r in 0..count + earned.is_some() as i32 {
+            let row_h = heights.get(r as usize).copied().unwrap_or(earned_h);
+            let y = next_y;
+            next_y += row_h;
+            if y + row_h < 0 || y > view {
+                continue;
+            }
+            let tall = row_h - heading - lift - board - self.d(14.0);
+            let base = y + heading + lift + tall;
+            if r == count {
+                let base = y + lift + cell_w;
+                self.paint_board(&mut clip, r as usize, base, (cell_w, lift, board), margin, &light);
+                if let Some(earned) = &earned {
+                    let right = clip.w - margin;
+                    self.paint_deco_props(text, &mut clip, (margin, right), base, cell_w, shade, (0, i32::MAX), earned);
+                }
+                continue;
+            }
+            self.paint_board(&mut clip, r as usize, base, (tall, lift, board), margin, &light);
+            let row = shelves.rows[r as usize];
+            let n = row.end - row.start;
+            let title = tr(shelves.title(r as usize));
+            let note = games_note(n);
+            let note_w = text.width(Face::Body, self.sp(13.0), &note);
+            let shown = text.fit(Face::Title, title_size, &title, clip.w - 2 * margin - note_w - self.d(12.0));
+            text.draw(&mut clip, Face::Title, title_size, margin, y + heading / 2 + type_mid(title_size), pal().chalk, &shown);
+            let right = clip.w - margin;
+            text.draw_right(&mut clip, Face::Body, self.sp(13.0), right, y + heading / 2 + type_mid(title_size), pal().dust, &note);
+            targets.push((Area::new(margin, room.top + y, clip.w - 2 * margin, heading).clip_y(room.top, room.bottom), title, None));
+            let most = (n as i32 * pitch - gap + 2 * margin - clip.w).max(0) as f32;
+            self.row_bands.push(((room.top + y).max(room.top), (room.top + y + row_h).min(room.bottom), row.key, most));
+            let along = self.row_scroll.get(&row.key).copied().unwrap_or(0.0).clamp(0.0, most).round() as i32;
+            let from = row.start + (along / pitch) as usize;
+            for pos in from..row.end {
+                let cell_x = margin + (pos - row.start) as i32 * pitch - along;
+                if cell_x >= clip.w {
+                    break;
+                }
+                let index = shelves.games[pos];
+                let selected = pos == self.selected;
+                let Some(pic) = self.front_pic(text, index, selected, (cell_w, tall), cover) else { continue };
+                let x = cell_x + ((cell_w - pic.w) / 2).max(0);
+                self.stand_case(&mut clip, &pic, (x, base, room.top), selected, lift, shade);
+                let name = self.library.as_ref().map(|l| l.games[index].name.clone()).unwrap_or_default();
+                let (x0, x1) = (cell_x.max(0), (cell_x + pitch).min(clip.w));
+                targets.push((Area::new(x0, room.top + y + heading, x1 - x0, row_h - heading).clip_y(room.top, room.bottom), name, Some(pos)));
+            }
+        }
+        for (area, name, pos) in targets {
+            if area.h > self.d(12.0) && area.w > self.d(12.0) {
+                self.target(area, &name, pos.map_or(Action::Label, Action::Row));
+            }
+        }
+        self.scrollbar(c, room.top, view, content);
     }
     /// The list looks (Minimal, Split): a row per game with its system's stripe at the left edge, 64 dp high.
     fn paint_list_phone(&mut self, c: &mut Canvas, text: &mut Text, room: Room, right: i32) {
@@ -736,11 +948,12 @@ impl Ui {
         }
         let gap = self.d(4.0);
         // Neighbours first, to find how many fit left of the selected game (a third of the shelf).
-        let lib_len = self.visible.len();
+        // With several shelves, only the selection's.
+        let (lo, lib_len) = self.shelf_row().filter(|_| self.screen == Screen::Library).map_or((0, self.visible.len()), |r| (r.start, r.end));
         let mut pics: Vec<(usize, art::Pic)> = Vec::new();
         let mut used = 0;
         let mut start = self.selected;
-        while start > 0 {
+        while start > lo {
             let pic = self.shelf_pic(text, start - 1, false, case_h, cover);
             if used + pic.w + gap > width / 3 {
                 break;
@@ -837,8 +1050,7 @@ impl Ui {
             plastic: art::plastic(game.system_id),
         };
         let mut pic = media::spine(text, m, k, look, &game.name);
-        let mut stickers = pocket_ui::case_stickers::CaseStickers::default();
-        stickers.set(pocket_ui::case_stickers::Kind::Favourite, self.prefs.extras.case_stickers && self.prefs.favorites.contains(&game.key), 2026);
+        let stickers = self.prefs.stickers_shown(&game.key);
         let (lx, ly, lw, _) = media::spine_label_rect(m, k);
         pocket_ui::case_stickers::on_spine(text, &mut pic, &stickers, (lx, 0, lw, ly), index as u64);
         if pic.h != case_h && pic.h > 0 {
@@ -1034,6 +1246,7 @@ impl Ui {
         if boxed {
             secondary.push(("Turn over", Action::Press(Button::North)));
         }
+        secondary.push(("Stickers", Action::Press(Button::Select)));
         // A favourite's button is amber, the colour of Favourites on the shelf.
         let colors = |label: &str| {
             if label == "Favourite" && favourite {
@@ -1079,9 +1292,13 @@ impl Ui {
             let play_h = self.d(52.0);
             let mut y = c.h - hint_h - self.d(12.0) - play_h;
             self.play_pill(c, text, Area::new(col_x, y, col_w, play_h));
-            for (label, action) in secondary.into_iter().rev() {
-                y -= bh + gap;
-                self.pill_in(c, text, Area::new(col_x, y, col_w, bh), label, colors(label), action);
+            // Two to a line, so a long name above them keeps its room.
+            let half = (col_w - gap) / 2;
+            let lines = secondary.len().div_ceil(2) as i32;
+            y -= lines * (bh + gap);
+            for (i, (label, action)) in secondary.into_iter().enumerate() {
+                let x = col_x + (i as i32 % 2) * (half + gap);
+                self.pill_in(c, text, Area::new(x, y + (i as i32 / 2) * (bh + gap), half, bh), label, colors(label), action);
             }
         } else {
             let bar = 2 * bh + 3 * gap;
@@ -1144,9 +1361,10 @@ impl Ui {
             }
         }
         if hints {
-            let mut keys = vec![("A", self.play_word()), ("B", "Back"), ("Y", "Favourite")];
+            // What only a key reaches first: a narrow phone leaves out what doesn't fit, and A and B say themselves.
+            let mut keys = vec![("SELECT", "Stickers"), ("Y", "Favourite"), ("A", self.play_word()), ("B", "Back")];
             if boxed {
-                keys.insert(2, ("X", "Turn over"));
+                keys.insert(1, ("X", "Turn over"));
             }
             self.hint_row(c, text, c.h, &keys);
         }
@@ -1217,6 +1435,14 @@ impl Ui {
     }
 }
 
+/// "12 games", nothing for none: an empty page says so itself.
+fn games_note(n: usize) -> String {
+    match n {
+        0 => String::new(),
+        1 => tr("1 game"),
+        n => tr(&format!("{n} games")),
+    }
+}
 /// The middle of a line of `size` px to its baseline.
 pub(super) fn type_mid(size: u32) -> i32 {
     type_scale::mid(size)

@@ -74,7 +74,7 @@ Ordered by how much a player on this device would miss it:
 1. **Install image.** Nobody can try pocket-ui without SSH. This blocks the public release more than any feature.
 2. **RetroAchievements.** A standard feature on ROCKNIX and KNULLI. pocket-core would need rcheevos; the
    standalones (Dolphin, ARMSX2) bring their own.
-3. ~~**Save sync.**~~ Built (22 Oct 2026, not merged yet): switch, device ID and QR code, status line, a rescan
+3. ~~**Save sync.**~~ Built (22 Oct 2026, shipped): switch, device ID and QR code, status line, a rescan
    of the save folders when a game ends, and a protected web interface instead of ROCKNIX's open one. Needs a
    first pairing with a real second device.
 4. **Shaders.** Three built-in effects cover most of it; people coming from RetroArch expect their CRT shaders.

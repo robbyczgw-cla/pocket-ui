@@ -60,6 +60,10 @@ impl App {
         if !self.sleep.touched() {
             return self.touch_ignored(touch::Ignored::Asleep);
         }
+        // Kids Mode: a tap on the shelf or the pause menu; its pages and a game keep their own (`app_kids`).
+        if self.kids_live() {
+            return self.kids_touch(ev);
+        }
         if let Some(why) = self.touch_blocked() {
             return self.touch_ignored(why);
         }

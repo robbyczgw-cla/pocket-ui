@@ -163,6 +163,10 @@ impl App {
     /// From `about_to_wait`: starts the show after the quiet time, keeps it going, ends it when the shelf is no longer
     /// alone or the screen is going off. Returns when to look again.
     pub(crate) fn slideshow_tick(&mut self, now: Instant) -> Option<Instant> {
+        // Kids Mode's shelf stays what it is.
+        if self.kids_live() {
+            return None;
+        }
         if !extra(Extra::IdleSlideshow) || !self.slideshow_shelf() {
             if !matches!(self.slideshow.phase, Phase::Off) {
                 self.slideshow_end();

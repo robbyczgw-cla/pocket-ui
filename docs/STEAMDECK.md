@@ -125,6 +125,9 @@ EmulationStation row, CPU and fan are not restored after a game (they were never
 (see the profile above). 1280x800 is painted at 1536x960 and scaled down (`scaled_layout`), because the pages are made for more lines
 than 800 pixels hold: at 800 pixels the first-start pages ran into their hint bars.
 
+Kids mode is off here: Steam's button opens its overlay over anything pocket-ui shows, so neither the Settings row nor the first start's "For a child" is there
+(`device::hides`; docs/KIDS-MODE.md).
+
 ## What needs real hardware
 
 Whether the project owner has a Deck is unknown. Exactly what has **not** been seen on one, in the order it would matter:

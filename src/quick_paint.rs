@@ -401,8 +401,8 @@ impl Sys {
         let row_h = top_h + hint_h;
         let panel_w = 960.min(c.w - 2 * PAD);
         let inner_w = panel_w - 2 * BTN_PAD;
-        // No Android on a Steam Deck (docs/STEAMDECK.md): nothing to say about a boot menu there.
-        let note: Vec<String> = if choices.contains(&Choice::BootMenu) || crate::device::current().host_owned() {
+        // No Android on a Steam Deck (docs/STEAMDECK.md): nothing to say about a boot menu there. Nor to a child (no Restart pocket-ui: Kids Mode).
+        let note: Vec<String> = if choices.contains(&Choice::BootMenu) || !choices.contains(&Choice::RestartUi) || crate::device::current().host_owned() {
             Vec::new()
         } else {
             text.wrap(Face::Body, HINT_SIZE, power_menu::NO_BOOT_MENU_HINT, inner_w)

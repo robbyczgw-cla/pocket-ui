@@ -6,6 +6,8 @@ Needs a finished first start with Download/PocketMvp chosen (onboarding-smoke.py
 data, but changes its look, language and favourites. Emulator only; no hardware targets are accepted.
 Screens: Games in every look, a selected game, its card (long press) and info page, Favourites empty and filled,
 Search (field, keyboard, results), Curator, a facet, Settings, and the controller hints after a key press.
+--parity clears the app and goes through the first start: one system stays the plain shelves; several get a shelf each,
+Recent games and Favourites on top, along and across by touch and keys; the card's Stickers sheet, kept over a restart.
 """
 import argparse
 import re
@@ -17,6 +19,8 @@ from pathlib import Path
 
 PACKAGE = 'dev.pocket.spike'
 LOOKS = ['Shelf', 'Minimal', 'Split', 'Cards', 'Cabinet']
+SYSTEMS = ['Recent games', 'Favourites', 'Game Boy', 'Game Boy Advance', 'Game Boy Color', 'Nintendo Entertainment System', 'Super Nintendo',
+           'Atari 2600', 'Atari Lynx', 'Master System', 'Mega Drive', 'Neo Geo Pocket', 'PlayStation Portable', 'Game Gear', 'PC Engine']
 
 
 def main():
@@ -27,6 +31,7 @@ def main():
     parser.add_argument('--lang', default='en', choices=['en', 'de'])
     parser.add_argument('--orientation', default='portrait', choices=['portrait', 'landscape'])
     parser.add_argument('--looks', default=','.join(LOOKS))
+    parser.add_argument('--parity', action='store_true', help='clear the app, go through the first start, check the shelves and stickers; needs Download/PocketMvp (5 systems) and Download/PocketOne (one system)')
     parser.add_argument('--empty', action='store_true', help='clear the app, skip the first start, capture every tab without games')
     args = parser.parse_args()
     out = args.output
@@ -137,6 +142,216 @@ def main():
             assert any(v.startswith(expected) for v in labels()), f'{tab}: nothing visible ({labels()!r})'
             shot('empty-' + tab.lower())
         print('Empty tabs captured.')
+        return
+    if args.parity:
+        def first_start(folder):
+            shell('am', 'force-stop', PACKAGE)
+            assert 'Success' in shell('pm', 'clear', PACKAGE)
+            shell('am', 'start', '-W', '-n', PACKAGE + '/.PocketActivity')
+            time.sleep(2)
+            if 'Got it' in labels():
+                tap('Got it')
+            tap('Continue')
+            tap('Continue')
+            tap('Choose your ROM folder')
+            time.sleep(2)
+            subprocess.run(['python3', str(Path(__file__).with_name('select-demo-folder.py')), args.adb, args.serial, str(out), folder], check=True, stdout=subprocess.DEVNULL)
+            time.sleep(3)
+            for _ in range(5):
+                tap('Continue')
+            time.sleep(1.5)
+
+        def swipe(x0, y0, x1, y1):
+            shell('input', 'swipe', str(x0), str(y0), str(x1), str(y1), '350')
+            time.sleep(1.2)
+
+        def size():
+            png = run('exec-out', 'screencap', '-p', text=False)
+            return struct.unpack('>II', png[16:24])
+
+        def strip_name():
+            # The selected game's name: before Info in portrait's strip, last in landscape's panel.
+            names = labels()
+            return names[-1] if args.orientation == 'landscape' else names[names.index('Info') - 1]
+
+        def play_and_quit(game):
+            # The name of the selected game opens its card.
+            if strip_name() != game:
+                tap(game)
+            tap('Play')
+            time.sleep(4)
+            back()
+            tap('Quit')
+            time.sleep(2.5)
+
+        landscape = args.orientation == 'landscape'
+        # One system and nothing played: the plain shelves as before, no names of shelves.
+        first_start('PocketOne')
+        # "Game Boy" stays the selected game's system line only.
+        assert 'Recent games' not in labels() and sum(n.get('text') == 'Game Boy' for n in tree()) == 1, labels()
+        shot('one-system')
+        # A normal library from a fresh start, default settings.
+        first_start('PocketMvp')
+        shot('fresh')
+        w, h = size()
+        current = labels()
+        if landscape:
+            assert 'Shelf below' in current and 'Shelf above' in current, current
+            # The arrows and a swipe across change the shelf; the page's title says which.
+            titles = [t for t in current if t in SYSTEMS]
+            assert titles, current
+            tap('Shelf below')
+            below = [t for t in labels() if t in SYSTEMS]
+            assert below and below != titles, (titles, below)
+            swipe(w // 3, h * 2 // 3, w // 3, h // 5)
+            assert [t for t in labels() if t in SYSTEMS] != below, 'A swipe up goes to the shelf below'
+            swipe(w // 3, h // 5, w // 3, h * 2 // 3)
+            assert [t for t in labels() if t in SYSTEMS] == below, 'A swipe down comes back'
+            shot('shelf-below')
+            tap('Shelf above')
+        else:
+            # The fixture has a dozen systems: the page opens at the top (no shelf scrolled past) with two or more shelves on the
+            # first screen, and the fresh start's selected game is the first one on the page.
+            assert sum(t in SYSTEMS for t in current) >= 2, current
+            assert not any(t in current for t in ('Neo Geo Pocket', 'PlayStation Portable')), ('A fresh start opens at the top', current)
+            # Along a shelf: the shelf moves, the selection stays. The Game Boy shelf is the fixture's long one.
+            selected = strip_name()
+            # The Game Boy shelf may be below the first screen: scroll the page down to it.
+            for _ in range(8):
+                if any((n.get('text') or n.get('content-desc')) == 'Libbet 1' for n in tree()):
+                    break
+                swipe(w // 2, h * 3 // 4, w // 2, h // 4)
+            bounds = centre(next(n for n in tree() if (n.get('text') or n.get('content-desc')) == 'Libbet 1'))
+            swipe(w - 80, bounds[1], 80, bounds[1])
+            after = labels()
+            assert 'Libbet 1' not in after or 'Libbet 6' in after, after
+            assert strip_name() == selected, 'A swipe along a shelf keeps the selection'
+            shot('along-shelf')
+            swipe(80, bounds[1], w - 80, bounds[1])
+            swipe(w // 2, h * 3 // 4, w // 2, h // 4)
+            shot('down-the-page')
+            swipe(w // 2, h // 4, w // 2, h * 3 // 4)
+            swipe(w // 2, h // 4, w // 2, h * 3 // 4)
+        # A played game stands on Recent games, on top. Reaching it with Search keeps the test off the shelf's order.
+        tap('Search')
+        if any(k in labels() for k in ('Done',)):
+            back()
+        back()
+        tap('Games')
+        for _ in range(6):
+            if 'Attack on Voxelburg' in labels():
+                break
+            shell('input', 'keyevent', '20')
+            time.sleep(.5)
+        play_and_quit('Attack on Voxelburg')
+        now = labels()
+        if landscape:
+            for _ in range(8):
+                if 'Recent games' in labels():
+                    break
+                tap('Shelf above')
+            assert 'Recent games' in labels(), labels()
+        else:
+            shell('input', 'keyevent', *(['19'] * 8))
+            time.sleep(1)
+            assert 'Recent games' in labels(), (now, labels())
+        shot('recent')
+        # Favourite from the card: a shelf of its own, the card's game stays selected.
+        tap('Info')
+        selected = 'Attack on Voxelburg'
+        tap('Favourite')
+        shot('card')
+        back()
+        assert strip_name() == selected, labels()
+        if not landscape:
+            assert 'Favourites' in labels()[10:], labels()
+        # Stickers: the card's button, the sheet, ticks, the year; kept over a restart.
+        tap('Info')
+        tap('Stickers')
+        rows = labels()
+        for row in ('Completed · Off', '100 % · Off', 'Favourite · On', 'Playing now · Off', 'Game of the year · Off'):
+            assert row in rows, rows
+        shot('stickers-sheet')
+        tap('Completed', prefix=True)
+        tap('100 %', prefix=True)
+        tap('Game of the year', prefix=True)
+        assert 'Completed · On' in labels() and 'Game of the year · On' in labels(), labels()
+        if landscape:
+            # The sheet is longer than a landscape page.
+            swipe(w // 2, h // 2, w // 2, h // 5)
+        year = next(t for t in labels() if t.startswith('Year · '))
+        tap('Later')
+        assert next(t for t in labels() if t.startswith('Year · ')) != year, 'The year moves'
+        shot('stickers-on')
+        back()
+        assert 'Turn over' in labels(), 'Back from the sheet goes to the card'
+        shot('card-stickers')
+        back()
+        shot('shelf-stickers')
+        shell('am', 'force-stop', PACKAGE)
+        shell('am', 'start', '-W', '-n', PACKAGE + '/.PocketActivity')
+        time.sleep(3)
+        assert 'Attack on Voxelburg' in labels(), labels()
+        tap('Info')
+        tap('Stickers')
+        assert 'Completed · On' in labels() and 'Game of the year · On' in labels(), 'Stickers are kept over a restart'
+        back()
+        # Taking the star off on the sheet takes the game out of Favourites.
+        tap('Stickers')
+        tap('Favourite · On')
+        assert 'Favourite · Off' in labels(), labels()
+        back()
+        back()
+        # A key opens the sheet from the card, Up/Down change shelves.
+        tap('Info')
+        shell('input', 'keyevent', '109')
+        time.sleep(.6)
+        assert 'Completed · On' in labels(), 'SELECT on the card opens the stickers'
+        shell('input', 'keyevent', '4')
+        time.sleep(.5)
+        shell('input', 'keyevent', '4')
+        time.sleep(.5)
+        selected = strip_name()
+        shell('input', 'keyevent', '20')
+        time.sleep(.7)
+        assert strip_name() != selected, 'Down goes to the next shelf'
+        shot('controller')
+        tap('Games')
+        # The other looks: Cabinet and Cards have the shelves, Minimal's list keeps its flat page and the sheet says why
+        # stickers don't show.
+        for look in ('Cabinet', 'Cards'):
+            set_look(look)
+            assert 'Recent games' in labels() or landscape, labels()
+            shot('look-' + look.lower())
+        set_look('Minimal')
+        assert 'Shelf below' not in labels() and 'Recent games' not in labels(), labels()
+        tap('Attack on Voxelburg')
+        tap('Info')
+        tap('Stickers')
+        assert 'This look shows no cases' in labels(), labels()
+        back()
+        back()
+        set_look('Shelf')
+        # Stickers on cases off: they stay on the game, and the sheet says why they don't show.
+        tap('Settings')
+        if landscape:
+            swipe(w // 2, h // 2, w // 2, h // 4)
+        tap('Cozy extras')
+        tap('Stickers on cases', prefix=True)
+        tap('Games')
+        tap('Info')
+        tap('Stickers')
+        assert 'Stickers on cases is off' in labels() and 'Completed · On' in labels(), labels()
+        shot('stickers-off')
+        back()
+        back()
+        tap('Settings')
+        if landscape:
+            swipe(w // 2, h // 2, w // 2, h // 4)
+        tap('Cozy extras')
+        tap('Stickers on cases', prefix=True)
+        tap('Games')
+        print('Shelves and stickers checked.', args.orientation)
         return
     shell('am', 'force-stop', PACKAGE)
     shell('logcat', '-c')

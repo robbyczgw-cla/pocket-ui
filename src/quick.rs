@@ -250,6 +250,10 @@ pub struct Sys {
     observe: Option<Observe>,
     /// Levels we set ourselves, trusted for a moment (a read right after a write can lag).
     pub(crate) levels: Levels,
+    /// Kids Mode's ceiling for the volume keys.
+    volume_cap: Option<u8>,
+    /// Kids Mode: what `rocknix_keys` is outside it, and with Some, the mode is on (`kids_enter`).
+    kids_rocknix_keys: Option<bool>,
     persist_at: Option<Instant>,
     pub(crate) polled: Arc<Mutex<Polled>>,
     pub(crate) view: Polled,
@@ -365,6 +369,8 @@ impl Sys {
             over_game: false,
             observe: None,
             levels: Levels::default(),
+            volume_cap: None,
+            kids_rocknix_keys: None,
             persist_at: None,
             polled: Arc::new(Mutex::new(Polled::default())),
             view: Polled::default(),
@@ -624,10 +630,47 @@ impl Sys {
     }
 
     /// One step of the volume (on the worker: `volume` is a process); None as for `step_brightness`.
+    /// Kids Mode: the volume keys stop at `cap`, and a louder volume comes down now. The volume before is kept in a file
+    /// of the mode's for `kids_volume_leave`, once. ROCKNIX's own answer to the keys is closed meanwhile
+    /// (`fn_keys::kids_keys`), so they are ours to act on, and the power menu has only the everyday entries.
+    pub fn kids_volume_enter(&mut self, cap: Option<u8>, data_dir: &std::path::Path) {
+        self.volume_cap = cap;
+        self.kids_rocknix_keys.get_or_insert(self.rocknix_keys);
+        self.rocknix_keys = false;
+        let (hw, file) = (self.hw.clone(), data_dir.join("kids-normal-volume"));
+        self.spawn("volume", move || {
+            let Some(v) = hw.volume() else { return };
+            if !file.exists() {
+                let _ = crate::fsutil::write_atomic(&file, v.to_string().as_bytes());
+            }
+            if let Some(cap) = cap.filter(|c| v > *c) {
+                hw.set_volume(cap);
+            }
+        });
+    }
+
+    /// Kids Mode went off: the volume from before it, and no ceiling.
+    pub fn kids_volume_leave(&mut self, data_dir: &std::path::Path) {
+        self.volume_cap = None;
+        if let Some(keys) = self.kids_rocknix_keys.take() {
+            self.rocknix_keys = keys;
+        }
+        let (hw, file) = (self.hw.clone(), data_dir.join("kids-normal-volume"));
+        self.spawn("volume", move || {
+            if let Some(v) = std::fs::read_to_string(&file).ok().and_then(|s| s.trim().parse().ok()) {
+                hw.set_volume(v);
+            }
+            let _ = std::fs::remove_file(&file);
+        });
+    }
+
     fn step_volume(&mut self, dir: i32, now: Instant) -> Option<u8> {
-        let step = move |v: u8| (v as i32 + dir * STEP as i32).clamp(0, 100) as u8;
+        let cap = self.volume_cap.unwrap_or(100);
+        let step = move |v: u8| ((v as i32 + dir * STEP as i32).clamp(0, 100) as u8).min(cap);
         let (hw, polled) = (self.hw.clone(), self.polled.clone());
-        let Some(v) = self.volume_now(now) else {
+        // Kids Mode has no quick settings keeping `view` fresh: the worker reads it, unless a step has just set it.
+        let known = if self.kids_rocknix_keys.is_some() { self.levels.volume.filter(|(_, at)| now < *at + Duration::from_millis(1500)).map(|(v, _)| v) } else { self.volume_now(now) };
+        let Some(v) = known else {
             self.spawn("volume", move || {
                 let next = step(hw.volume().unwrap_or(50));
                 hw.set_volume(next);
@@ -1140,7 +1183,10 @@ impl Sys {
         }
         // Known from the background's first look; until then (the first moments) without the boot menu.
         self.take_polled();
-        let choices = crate::power_menu::choices(self.view.boot_menu == Some(true));
+        let mut choices = crate::power_menu::choices(self.view.boot_menu == Some(true));
+        if self.kids_rocknix_keys.is_some() {
+            choices.retain(|c| crate::power_menu::for_a_child(*c));
+        }
         let ctx = crate::power_menu::Context { game: game || self.over_game, ram_booted: self.ram_booted() };
         let under = Box::new(std::mem::replace(&mut self.screen, Screen::Closed));
         self.held = None;

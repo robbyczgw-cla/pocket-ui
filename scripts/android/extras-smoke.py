@@ -79,6 +79,12 @@ sh('am', 'start', '-W', '-n', 'dev.pocket.spike/.PocketActivity')
 time.sleep(2)
 tap('Settings')
 shown = texts()
+# Settings is longer than the page.
+sh('input', 'swipe', '600', '1800', '600', '800', '400')
+time.sleep(1)
+shown += texts()
+sh('input', 'swipe', '600', '800', '600', '1800', '400')
+time.sleep(1)
 for label in SETTINGS_ROWS:
     assert any(t.startswith(label + ' ·') for t in shown), f'Missing Settings row {label}: {shown}'
 tap('Cozy extras')

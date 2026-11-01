@@ -11,6 +11,11 @@ About › Report a problem). How far each feature is proven: [STATUS.md](STATUS.
 The "Plays" line of each chip comes from what pocket-ui starts there (`hostsys`, `standalone.rs`, `hakux.rs`) and from the
 runs in [STATUS.md](STATUS.md) and [BIG-EMULATORS.md](BIG-EMULATORS.md), in order of the consoles' years.
 
+Add games shows one sentence under a system's Files and BIOS lines where the chip runs it, but not every game smoothly
+(`src/system_notes.rs`, the sources are named there): Snapdragon 865: PS2, GameCube, Wii, 3DS, Xbox. Snapdragon 8 Gen 2:
+PS2, GameCube, Xbox, PS3, Wii U, PS Vita. H700: Nintendo 64, PSP, Dreamcast, Nintendo DS, Saturn. Unknown handhelds and the Steam Deck
+show none. It changes nothing about which emulator plays a system.
+
 ### Snapdragon 865: ROCKNIX SM8250 image
 
 **Plays, by console release:** NES, Master System, PC Engine, Mega Drive, Game Boy, SNES, Saturn, PlayStation, Nintendo 64, Game Boy Color, Dreamcast, PlayStation 2, Game Boy Advance, GameCube, Xbox, Nintendo DS, PSP, Wii, 3DS. Has a fan.

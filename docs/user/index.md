@@ -76,7 +76,7 @@ today and say clearly where something is still being built or has not been confi
 
 ## Pages
 
-1. [Getting started](getting-started.md): installing, first start, Wi-Fi, adding games; [The GAMES drive](games-drive.md): games from a computer; [Second card and USB cable](copy-games.md): games without Wi-Fi; [Game check](game-check.md): will your games start?
+1. [Getting started](getting-started.md): installing, first start, Wi-Fi, adding games; [The GAMES drive](games-drive.md): games from a computer; [Second card and USB cable](copy-games.md): games without Wi-Fi; [Game check](game-check.md): will your games start?; [games from your phone](phone-upload.md) over the same Wi-Fi; [Kids mode](kids-mode.md): a big simple shelf for a child.
 2. [Coming from ROCKNIX or Android](coming-from.md): what happens to your saves, states, favourites and settings.
 3. [Playing](playing.md): Home, finding a game, the looks, console pages, the game switcher. [Frozen games](frozen-games.md): your last five games stand a little open, and A goes straight back.
 4. [The pause menu](pause-menu.md): save slots, Auto and Before load, quitting, Pixel Path.

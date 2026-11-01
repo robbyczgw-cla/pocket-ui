@@ -120,6 +120,7 @@ fn device_key(opens: Opens) -> Option<&'static str> {
         Opens::PerfFan => "perf_fan",
         Opens::Setup(Only::Wifi | Only::Remote) | Opens::Bluetooth => "radios",
         Opens::Time => "time",
+        Opens::Kids => "kids",
         Opens::Updates => "updates",
         Opens::Store => "store",
         Opens::Extra(pocket_ui::cozy_extras::Extra::FrozenGames) => "frozen_games",
@@ -270,6 +271,7 @@ impl App {
             Opens::OnStart if i == sel => format!("‹ {} ›", self.on_start.label()),
             Opens::OnStart => self.on_start.label().to_string(),
             Opens::RememberQuit => values::on_off(self.remember_quit).to_string(),
+            Opens::Kids => String::new(),
             Opens::Animations if i == sel => format!("‹ {} ›", self.animations_in_use().name()),
             Opens::Animations => self.animations_in_use().name().to_string(),
             Opens::Buttons => page(&self.buttons_list_value()),
@@ -312,6 +314,8 @@ impl App {
             Opens::Motion => pocket_ui::motion::level().name().to_string(),
             Opens::Setup(Only::Games) => page(&values::games(self.systems.iter().map(|s| s.games.len()).sum())),
             Opens::GameCheck => page(&self.game_check_value()),
+            // Hidden systems that have games: the row says so, since Home shows nothing of them.
+            Opens::ShelfSystems => page(&values::hidden_systems(self.systems.iter().filter(|s| !s.games.is_empty() && self.hidden.contains(&s.name)).count())),
             Opens::Setup(Only::Wifi) => page(&facts.wifi.map(|w| w.label()).unwrap_or_default()),
             Opens::Setup(Only::Remote) => page(facts.ssh.map(values::on_off).unwrap_or_default()),
             Opens::Time => page(&facts.zone.as_deref().map(values::zone).unwrap_or_default()),
@@ -849,5 +853,16 @@ mod tests {
         assert!(!blurb_with(help, false, true, false, id).contains("Store"));
         assert!(!blurb(help, id).contains("Store"), "no catalog in a test run");
         assert_eq!(blurb(category("Playing"), id), SETTINGS_GROUPS[category("Playing")].1);
+    }
+
+    /// A stranger looks for volume, brightness and BIOS in Settings (daily-use walk): "Sounds 70%" looked like the game
+    /// volume, and nothing named BIOS. The lines say where those really are.
+    #[test]
+    fn beginners_find_volume_brightness_and_bios_from_settings() {
+        let line = |name: &str| SETTINGS.iter().find(|r| r.0 == name).unwrap().2;
+        let sounds = line("Sounds");
+        assert!(sounds.contains("Game volume") && sounds.contains("brightness") && sounds.contains("HOME"), "{sounds}");
+        assert!(line("Add games").contains("BIOS"), "{}", line("Add games"));
+        assert!(line("Over the game").contains("picture and sound"), "Pixel Path says what it is where it first appears");
     }
 }

@@ -26,6 +26,8 @@ Install
 3. The first start shows some text on a dark screen and restarts once by itself while the card is set up: don't switch
    off. If it does lose power, just switch it on again: it carries on from where it stopped.
    Then pocket-ui's first-start setup opens: look, Wi-Fi, extras.
+4. To go back to the handheld's own system, switch off, take this card out and put the original card back into the
+   first slot (TF1): the handheld's own system lives on that card, not inside the handheld. Keep it safe.
 
 
 Add your games
@@ -59,8 +61,6 @@ never say yes, press Cancel. Formatting would erase pocket-ui from the card.
 This image is for the @MODEL_NAME@ with DDR4 memory. It carries that model's device tree as dtb.img, so
 there is nothing to copy. If the screen stays black or shows a broken picture, switch off (hold Power for
 10 seconds) and report it with the model and the screen's look; some units have another screen revision.
-To go back to the handheld's own system, take this card out and put the original card back into the first slot (TF1):
-the old system lives on that card.
 
 This card contains no games and no console maker's BIOS files (the one BIOS in it is DraStic's open replacement). Add only games and BIOS files you own.
 Remote access (SSH), file sharing and Syncthing are off. When you turn on Remote access or file

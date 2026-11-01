@@ -18,7 +18,7 @@ const TREE: [(&str, &[&str]); 7] = [
     ("Playing", &["On start", "Remember where I quit", "Buttons", "Over the game", "Screen frames", "Performance & fan", "Battery", "RetroAchievements"]),
     ("Games", &["Add games", "Game check", "Starter pack", "Pictures & extras", "From EmulationStation", "Screenshots", "Curator", "PC streaming"]),
     ("Connections", &["Wi-Fi", "Bluetooth", "USB file transfer", "Tailscale", "Sync", "Remote access (SSH)", "Web companion"]),
-    ("System", &["Language", "Time", "Sleep & power", "Frozen games", "Updates", "Storage", "Backup & reset"]),
+    ("System", &["Language", "Time", "Sleep & power", "Frozen games", "Kids mode", "Updates", "Storage", "Backup & reset"]),
     ("Help & tools", &["Tour", "Manual", "Tools", "Report a problem", "About"]),
 ];
 
@@ -69,7 +69,7 @@ const LINES: [&str; 7] = [
     "On start, quit, buttons, over the game, frames, performance, battery, achievements.",
     "Games, game check, starter pack, pictures, EmulationStation, screenshots, Curator, PC.",
     "Wi-Fi, Bluetooth, USB file transfer, Tailscale, Sync, remote access, web companion.",
-    "Language, time, sleep & power, frozen games, updates, storage, backup & reset.",
+    "Language, time, sleep & power, frozen games, kids mode, updates, storage, backup & reset.",
     // With the Store, as the German table has it; a test run has no catalog, so its part is left out (below).
     "Tour, manual, tools, Store, report a problem, about.",
 ];

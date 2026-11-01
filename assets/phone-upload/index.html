@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<title>pocket-ui: add games</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/{{TOKEN}}/app.css">
+<script type="application/json" id="data">{{DATA}}</script>
+<script src="/{{TOKEN}}/app.js" defer></script>
+</head>
+<body>
+<main>
+  <h1 data-t="title">Add games to your Pocket</h1>
+  <p class="quiet" data-t="lead">Pick game files on this phone. They go straight into the right folder on the Pocket.</p>
+  <label class="pick">
+    <input type="file" id="files" multiple>
+    <span data-t="pick">Choose files</span>
+  </label>
+  <label class="pick second" id="folder-pick" hidden>
+    <input type="file" id="folder" webkitdirectory multiple>
+    <span data-t="folder">Choose a folder</span>
+  </label>
+  <p id="summary" class="quiet" hidden></p>
+  <ul id="list"></ul>
+  <p id="stopped" class="alert" hidden data-t="stopped">The Pocket closed this page or went to sleep. Files that were still on their way were not kept. Open “Send from your phone” on the Pocket again and scan the new code.</p>
+  <p class="small" data-t="help">Same Wi-Fi only, and only while the page is open on the Pocket. Not encrypted: others on this Wi-Fi could see the code and the games you send, and change them on the way. Use it on your own Wi-Fi at home. Nobody can download anything from the Pocket this way; it only says whether a game of the same name is already there.</p>
+</main>
+</body>
+</html>

@@ -967,7 +967,7 @@ fn upload(ctx: &Ctx, req: &Request, body: &mut impl BufRead) -> Response {
     };
     let (wait, abort) = (|| ctx.shared.playing(), || ctx.stopped.load(Ordering::Relaxed));
     let gate = files::Gate { wait: &wait, abort: &abort, no_programs: req.query("kind") == Some("port") };
-    match files::receive(body, &t, len, overwrite, &gate) {
+    match files::receive(body, &t, &ctx.roots.uploads, len, overwrite, &gate) {
         Ok(w) => {
             let kind = req.query("kind").unwrap_or("");
             let mut v = json!({ "ok": true, "path": shown(ctx, &t), "bytes": w.bytes, "replaced": w.replaced });

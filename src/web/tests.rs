@@ -21,6 +21,11 @@ fn tmp(name: &str) -> crate::testutil::TestDir {
     TestDir::new(&format!("web-{name}"))
 }
 
+/// The uploads folder of a test folder (`Roots::uploads`).
+fn up(dir: &std::path::Path) -> std::path::PathBuf {
+    dir.join(files::UPLOADS_DIR)
+}
+
 // --- HTTP ------------------------------------------------------------------------------------------------------
 
 fn head(raw: &str) -> Result<http::Request, BadRequest> {
@@ -422,41 +427,48 @@ fn uploads_are_atomic_and_never_replace_without_asking() {
     let dir = tmp("receive");
     let target = dir.join("Game.gba");
     let no_wait = &files::Gate::OPEN;
-    let w = files::receive(&mut &b"first"[..], &target, 5, false, no_wait).unwrap();
+    let w = files::receive(&mut &b"first"[..], &target, &up(&dir), 5, false, no_wait).unwrap();
     assert_eq!(w, files::Written { bytes: 5, replaced: false });
     assert_eq!(std::fs::read(&target).unwrap(), b"first");
-    assert!(matches!(files::receive(&mut &b"second"[..], &target, 6, false, no_wait), Err(Refused::Exists(_))));
+    assert!(matches!(files::receive(&mut &b"second"[..], &target, &up(&dir), 6, false, no_wait), Err(Refused::Exists(_))));
     assert_eq!(std::fs::read(&target).unwrap(), b"first", "kept");
-    let w = files::receive(&mut &b"second"[..], &target, 6, true, no_wait).unwrap();
+    let w = files::receive(&mut &b"second"[..], &target, &up(&dir), 6, true, no_wait).unwrap();
     assert!(w.replaced);
     assert_eq!(std::fs::read(&target).unwrap(), b"second");
     // Cut off: nothing new, no temporary file left behind.
-    assert_eq!(files::receive(&mut &b"abc"[..], &dir.join("Cut.gba"), 10, false, no_wait).unwrap_err(), Refused::Short);
+    assert_eq!(files::receive(&mut &b"abc"[..], &dir.join("Cut.gba"), &up(&dir), 10, false, no_wait).unwrap_err(), Refused::Short);
     assert!(!dir.join("Cut.gba").exists());
-    let left: Vec<String> = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    let left: Vec<String> = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n != files::UPLOADS_DIR).collect();
     assert_eq!(left, ["Game.gba"], "only the finished file");
+    assert_eq!(std::fs::read_dir(up(&dir)).unwrap().count(), 0, "no temporary file left behind");
     #[cfg(unix)]
     {
         std::os::unix::fs::symlink(dir.join("Game.gba"), dir.join("Link.gba")).unwrap();
-        assert!(files::receive(&mut &b"x"[..], &dir.join("Link.gba"), 1, false, no_wait).is_err());
-        assert!(files::receive(&mut &b"x"[..], &dir.join("Link.gba"), 1, true, no_wait).is_err(), "never written through a link");
+        assert!(files::receive(&mut &b"x"[..], &dir.join("Link.gba"), &up(&dir), 1, false, no_wait).is_err());
+        assert!(files::receive(&mut &b"x"[..], &dir.join("Link.gba"), &up(&dir), 1, true, no_wait).is_err(), "never written through a link");
         assert_eq!(std::fs::read(&target).unwrap(), b"second");
     }
 }
 
 #[test]
-fn leftovers_of_an_earlier_run_are_swept() {
+fn leftovers_of_an_earlier_run_are_swept_only_in_the_uploads_folder() {
     let dir = tmp("sweep");
+    let uploads = up(&dir);
+    std::fs::create_dir_all(&uploads).unwrap();
     let ours = format!(".Game.gba.{}-3.upload", std::process::id());
-    for n in [".Game.gba.1-0.upload", ".Other (USA).gba.4242-17.upload", ours.as_str(), "Game.gba", "notes.upload", ".hidden"] {
-        std::fs::write(dir.join(n), b"x").unwrap();
+    for n in [".Game.gba.1-0.upload", ".Other (USA).gba.4242-17.upload", ours.as_str(), "notes.upload", ".hidden"] {
+        std::fs::write(uploads.join(n), b"x").unwrap();
     }
-    files::sweep_leftovers(&dir.join("New.gba"));
-    let mut left: Vec<String> = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    // The same pattern in a game folder is not ours: never touched (review L3).
+    std::fs::write(dir.join(".Keep.gba.99999999-0.upload"), b"x").unwrap();
+    files::receive(&mut &b"data"[..], &dir.join("New.gba"), &uploads, 4, false, &files::Gate::OPEN).unwrap();
+    let mut left: Vec<String> = std::fs::read_dir(&uploads).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
     left.sort();
-    let mut want = vec![ours.clone(), ".hidden".into(), "Game.gba".into(), "notes.upload".into()];
+    let mut want = vec![ours.clone(), ".hidden".into(), "notes.upload".into()];
     want.sort();
     assert_eq!(left, want, "only another run's temporary files go; one under way stays");
+    assert!(dir.join(".Keep.gba.99999999-0.upload").exists());
+    assert_eq!(std::fs::read(dir.join("New.gba")).unwrap(), b"data");
 }
 
 #[test]
@@ -465,7 +477,7 @@ fn an_upload_waits_while_a_game_runs() {
     let started = Instant::now();
     let wait = move || started.elapsed() < Duration::from_millis(700);
     let gate = files::Gate { wait: &wait, ..files::Gate::OPEN };
-    files::receive(&mut &b"data"[..], &dir.join("a.gba"), 4, false, &gate).unwrap();
+    files::receive(&mut &b"data"[..], &dir.join("a.gba"), &up(&dir), 4, false, &gate).unwrap();
     assert!(started.elapsed() >= Duration::from_millis(700), "it did not write before the game ended");
 }
 
@@ -1268,9 +1280,9 @@ fn no_programs_go_into_a_port() {
     let target = files::port_target(&roots, "sprout", "data.win").unwrap();
     let gate = files::Gate { no_programs: true, ..files::Gate::OPEN };
     let elf = b"\x7fELF\x02\x01\x01\x00rest of a program";
-    assert!(matches!(files::receive(&mut &elf[..], &target, elf.len() as u64, false, &gate), Err(Refused::NotAllowed(_))));
+    assert!(matches!(files::receive(&mut &elf[..], &target, &roots.uploads, elf.len() as u64, false, &gate), Err(Refused::NotAllowed(_))));
     assert!(walk(target.parent().unwrap()).is_empty(), "nothing kept");
-    assert!(files::receive(&mut &b"GMS\x00data"[..], &target, 8, false, &gate).is_ok(), "game data is fine");
+    assert!(files::receive(&mut &b"GMS\x00data"[..], &target, &roots.uploads, 8, false, &gate).is_ok(), "game data is fine");
     assert!(files::bios_target(&Roots::under(&roms), "evil.so", None).is_err());
 }
 
@@ -1299,7 +1311,7 @@ fn a_folder_that_became_a_link_keeps_nothing() {
     let dir = tmp("swapped");
     std::fs::create_dir_all(dir.join("real")).unwrap();
     std::os::unix::fs::symlink(dir.join("real"), dir.join("link")).unwrap();
-    let r = files::receive(&mut &b"data"[..], &dir.join("link/a.gba"), 4, false, &files::Gate::OPEN);
+    let r = files::receive(&mut &b"data"[..], &dir.join("link/a.gba"), &up(&dir), 4, false, &files::Gate::OPEN);
     assert!(matches!(r, Err(Refused::NotAllowed(_))), "{r:?}");
     assert!(walk(&dir.join("real")).is_empty(), "nothing kept, no temporary file");
 }

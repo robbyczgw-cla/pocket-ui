@@ -547,7 +547,7 @@ impl App {
         let action = self.ui.regions.iter().rev().find(|r| r.area.contains(x, y)).map(|r| r.action.clone());
         let button = match action {
             Some(ui::Action::Press(b)) => Some(b),
-            Some(ui::Action::Tab(_)) => Some(Button::Right),
+            Some(ui::Action::Tab(_) | ui::Action::Shelf(_) | ui::Action::Year(_)) => Some(Button::Right),
             Some(ui::Action::Row(i)) if ui::Ui::list_screen(self.ui.screen) && i != self.ui.selected => Some(Button::Right),
             Some(ui::Action::Label) | None => None,
             _ => Some(Button::East),
@@ -784,7 +784,8 @@ impl ApplicationHandler for App {
                 match t.phase {
                     TouchPhase::Started => {
                         if self.finger.is_none() {
-                            self.ui.hold();
+                            let at = self.point(x, y);
+                            self.ui.hold_at(at.1);
                             self.finger = Some(Finger {
                                 id: t.id,
                                 start: (x, y),

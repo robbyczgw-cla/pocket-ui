@@ -196,10 +196,10 @@ type Shown = (Rc<Pic>, Rc<Pic>, bool, u64);
 const FRONT_KEEP: usize = 12;
 
 /// The case going into the console while the game starts (the launch animation, `App::launch_animation`).
-struct Inserting {
+pub(crate) struct Inserting {
     /// When the game was started: the animation's clock.
     at: Instant,
-    item: Item,
+    pub(crate) item: Item,
     /// What it shows, shared with the Android launcher.
     scene: Scene,
 }
@@ -252,7 +252,7 @@ pub(crate) struct CabinetUi {
     /// A snapshot's clock for the Shelf's frames (`shelf_playful_snapshot`); None: the real one.
     pub(crate) shelf_clock: Option<Instant>,
     shelf_board: Option<(i32, i32, u32, Rc<Pic>)>,
-    shelf_lit: Option<(Rc<Pic>, i32, i32)>,
+    pub(crate) shelf_lit: Option<(Rc<Pic>, i32, i32)>,
     /// The big spine of a case whose front is made with the next frame (`stand_front`'s `later`), the entry whose
     /// front was asked for last, and whether a front is still to come.
     shelf_spine_only: Option<((CaseKey, i32), Rc<Pic>)>,
@@ -268,12 +268,12 @@ pub(crate) struct CabinetUi {
     show_room: i32,
     show_top: Tween,
     reader: Option<Reader>,
-    pending: usize,
+    pub(crate) pending: usize,
     /// Read covers right away instead of on the thread (snapshots, the look step's previews).
     pub(crate) inline: bool,
     /// Where each case was painted, for taps: (rectangle, shelf, case); the pulled-out one last.
     drawn: Vec<(i32, i32, i32, i32, usize, usize)>,
-    insert: Option<Inserting>,
+    pub(crate) insert: Option<Inserting>,
     /// The game box's cartridge or card, made for the case front it came out of (`box_game`).
     box_game: Option<(Rc<Pic>, Rc<Pic>)>,
     /// Fronts with case stickers and the same without (`app_case_stickers`).
@@ -1095,6 +1095,13 @@ impl App {
             Some(Slot::Ready(img)) => Some(img.clone()),
             _ => None,
         }
+    }
+
+    /// The cover of an entry is read and ready for its front (a game without one counts as ready: it has nothing to wait for).
+    pub(crate) fn kids_cover_ready(&mut self, item: Item) -> bool {
+        let info = self.case_info(item);
+        let Some(file) = self.cover_file(&info.system, &info.rom) else { return true };
+        self.cabinet.labels.iter().any(|((f, _, _), slot)| *f == file && matches!(slot, Slot::Ready(_)))
     }
 
     /// The day's pick (system, file) whose box art is on Surprise me's front (docs/DESIGN.md "Home panels").
@@ -2124,7 +2131,7 @@ impl App {
     /// `later`: the case has only just started to turn (the first frame on it), so its spine is all there is to see; a
     /// front not made yet is then left for the next frame (None), and the first frame after a move costs about what
     /// the list looks' does (tests/shelf_moves.rs).
-    fn stand_front(&mut self, item: Item, m: Medium, k: f32, later: bool) -> (Rc<Pic>, Option<Rc<Pic>>) {
+    pub(crate) fn stand_front(&mut self, item: Item, m: Medium, k: f32, later: bool) -> (Rc<Pic>, Option<Rc<Pic>>) {
         let (info, key) = self.shelf_key(item, m);
         let file = match (item, self.surprise_front()) {
             (Item::Surprise, Some((system, rom))) => self.cover_file(&system, &rom),

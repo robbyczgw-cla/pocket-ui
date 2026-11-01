@@ -591,6 +591,61 @@ No pictures found for this game	Für dieses Spiel wurden keine Bilder gefunden
 Couldn't reach the picture collection. Try again later.	Die Bildersammlung ist nicht erreichbar. Versuch es später wieder.
 
 # --- Backup
+Files: {n}, {s}, made by pocket-ui {s2}. {s3}	Dateien: {n}, {s}, von pocket-ui {s2}. {s3}
+Backing up your saves.	Spielspeicher werden gesichert.
+Backing up your saves..	Spielspeicher werden gesichert..
+Backing up your saves...	Spielspeicher werden gesichert...
+Counting your saves.	Spielspeicher werden gezählt.
+Counting your saves..	Spielspeicher werden gezählt..
+Counting your saves...	Spielspeicher werden gezählt...
+Putting your saves back.	Spielspeicher kommen zurück.
+Putting your saves back..	Spielspeicher kommen zurück..
+Putting your saves back...	Spielspeicher kommen zurück...
+Comparing with what is on the card.	Vergleich mit der Karte.
+Comparing with what is on the card..	Vergleich mit der Karte..
+Comparing with what is on the card...	Vergleich mit der Karte...
+Stopping.	Wird abgebrochen.
+Stopping..	Wird abgebrochen..
+Stopping...	Wird abgebrochen...
+Back up saves	Spielspeicher sichern
+Back up settings	Einstellungen sichern
+{n} of {m} files.	{n} von {m} Dateien.
+B stops it. A backup that is stopped leaves nothing behind.	B bricht ab. Eine abgebrochene Sicherung hinterlässt nichts.
+Files: {n}. Free on the card: {s}.	Dateien: {n}. Frei auf der Karte: {s}.
+Files: {n}. The card doesn't say how much is free.	Dateien: {n}. Die Karte sagt nicht, wie viel frei ist.
+Could not be read, staying out: {n}.	Nicht lesbar, bleiben draußen: {n}.
+It goes on your games card, which flashing the system card does not touch.	Sie kommt auf deine Spielekarte. Neues Aufspielen der Systemkarte lässt sie in Ruhe.
+Flashing this card erases the backup too: copy it to a computer over file sharing, in the backup folder.	Neues Aufspielen löscht auch die Sicherung: Kopiere sie per Dateifreigabe auf einen Computer, sie liegt im Ordner backup.
+Press A again; B keeps things as they are.	Drücke nochmal A; mit B bleibt alles, wie es ist.
+Back up {s}?	{s} sichern?
+Coming back: {n}. Older ones replaced, after a copy of them: {m}.	Kommen zurück: {n}. Ältere werden ersetzt, nachdem sie kopiert wurden: {m}.
+Newer on the card, staying: {n}. The backup keeps its copies.	Auf der Karte neuer, bleiben: {n}. Die Sicherung behält ihre Kopien.
+Damaged in this backup, staying out: {n}.	In dieser Sicherung beschädigt, bleiben draußen: {n}.
+Put these saves back?	Diese Spielspeicher zurückholen?
+Battery saves, save states, and the memory cards and save data of PS2, GameCube, Wii and 3DS. No games, no BIOS files.	Spielspeicher, Spielstände sowie Memory Cards und Speicherdaten von PS2, GameCube, Wii und 3DS. Keine Spiele, keine BIOS-Dateien.
+A counts them first and shows the size.	A zählt sie zuerst und zeigt die Größe.
+To {s} on the SD card. Flashing the card erases it, so copy it to a computer too.	Nach {s} auf der SD-Karte. Neues Aufspielen löscht sie, kopiere sie also auch auf einen Computer.
+A compares it with the card and says what would change. What is newer on the card stays.	A vergleicht sie mit der Karte und sagt, was sich ändern würde. Was auf der Karte neuer ist, bleibt.
+Stopping	Wird abgebrochen
+Backing up your saves	Spielspeicher werden gesichert
+Counting your saves	Spielspeicher werden gezählt
+Putting your saves back	Spielspeicher kommen zurück
+Comparing with what is on the card	Vergleich mit der Karte
+No saves or states on this card yet.	Noch keine Spielspeicher oder Spielstände auf dieser Karte.
+Not enough space on the card: this needs {s}, {s2} are free.	Nicht genug Platz auf der Karte: Das braucht {s}, frei sind {s2}.
+Everything in this backup is already on the card.	Alles aus dieser Sicherung ist schon auf der Karte.
+Nothing to put back. Newer on the card: {n}. Damaged in this backup: {m}.	Nichts zurückzuholen. Auf der Karte neuer: {n}. In dieser Sicherung beschädigt: {m}.
+Nothing to put back. Newer on the card, staying: {n}.	Nichts zurückzuholen. Auf der Karte neuer, bleiben: {n}.
+Files saved: {n}. Could not be read and missing: {m}, the first: {s}	Dateien gesichert: {n}. Nicht lesbar und fehlen: {m}, zuerst: {s}
+Files saved: {n}. In {s}	Dateien gesichert: {n}. In {s}
+Count	Zählen
+Back: {n}. Replaced: {m}. Could not be written: {k}, the first: {s}	Zurück: {n}. Ersetzt: {m}. Nicht schreibbar: {k}, zuerst: {s}
+Stopped. Back: {n}. Replaced: {m}. The rest is still in the backup.	Abgebrochen. Zurück: {n}. Ersetzt: {m}. Der Rest ist noch in der Sicherung.
+Back: {n}. Replaced: {m}. Newer on the card, stayed: {k}. This backup still has its copies.	Zurück: {n}. Ersetzt: {m}. Auf der Karte neuer, geblieben: {k}. Diese Sicherung hat noch ihre Kopien.
+Back: {n}. Replaced: {m}.	Zurück: {n}. Ersetzt: {m}.
+Stopped. No backup was made.	Abgebrochen. Keine Sicherung angelegt.
+Saves · {s}	Spielspeicher · {s}
+Before restore · {s}	Vor dem Wiederherstellen · {s}
 The backup couldn't be written ({s}). Nothing was changed.	Die Sicherung ließ sich nicht schreiben ({s}). Nichts wurde geändert.
 The backup's list can't be read ({s}). Nothing was changed.	Die Liste der Sicherung ist nicht lesbar ({s}). Nichts wurde geändert.
 {s} is missing from the backup. Nothing was changed.	{s} fehlt in der Sicherung. Nichts wurde geändert.
@@ -1463,7 +1518,7 @@ Large	Groß
 Connect to a network.	Mit einem Netzwerk verbinden.
 Pair a controller or headphones, see what is connected.	Controller oder Kopfhörer koppeln, sehen, was verbunden ist.
 Cover art, game pictures and PortMaster games.	Cover, Spielbilder und PortMaster-Spiele.
-Where each system's games go, and file sharing.	Ordner pro System und Dateifreigabe.
+Where each system's games and BIOS files go, and file sharing.	Ordner pro System für Spiele und BIOS-Dateien, und Dateifreigabe.
 Remote access (SSH)	Fernzugriff (SSH)
 Log in from a computer. Turns itself off when the Pocket restarts.	Vom Computer anmelden. Geht beim Neustart aus.
 Reach the Pocket from your other devices.	Den Pocket von anderen Geräten erreichen.
@@ -1485,7 +1540,7 @@ Turn over	Umdrehen
 No picture yet	Noch kein Bild
 No pictures yet. HOME + A in the game takes one.	Noch keine Bilder. HOME + A im Spiel macht eins.
 No description yet.	Noch keine Beschreibung.
-Soft clicks in menus, not in games. Left/right: how loud.	Klicks nur in Menüs. Links/Rechts: wie laut.
+Soft clicks in menus, not in games. Left/right: how loud. Game volume and brightness: HOME.	Klicks nur in Menüs. Links/Rechts: wie laut. Spiellautstärke und Helligkeit: HOME.
 The lights around the sticks. Off unless you turn them on.	Die Lichter um die Sticks. Aus, bis du sie einschaltest.
 Home, or straight back into the game you played last.	Home oder direkt zurück ins letzte Spiel.
 Quit keeps the moment for the next start.	Beenden hält den Moment für später fest.
@@ -1498,7 +1553,7 @@ Time	Uhrzeit
 Time zone, date and network time.	Zeitzone, Datum und Netzwerkzeit.
 Updates	Updates
 New versions of pocket-ui and the system.	Neue Versionen von pocket-ui und dem System.
-Save pocket-ui's settings to the SD card, restore them, or start afresh.	Einstellungen sichern, zurückholen, neu anfangen.
+Save your saves, states and pocket-ui's settings to the SD card, restore them, or start afresh.	Sichere Spielspeicher, Spielstände und die Einstellungen von pocket-ui auf die SD-Karte, stelle sie wieder her oder fang neu an.
 Every feature on a card, with a picture: switch it on or off.	Jede Funktion als Karte mit Bild: an oder aus.
 Manual	Handbuch
 The user guide, on the device.	Die Anleitung auf dem Gerät, auf Englisch.
@@ -1641,7 +1696,7 @@ Fan off	Lüfter aus
 Fan {n}%	Lüfter {n} %
 Fan {n} rpm	Lüfter {n} rpm
 charging	lädt
-FPS, sensors or Pixel Path over every game.	FPS, Sensoren oder Pixel Path in jedem Spiel.
+FPS, sensors or Pixel Path (how a game's picture and sound reach you) over every game.	FPS, Sensoren oder Pixel Path (wie Bild und Ton des Spiels bei dir ankommen) in jedem Spiel.
 How strongly games shake the console, for games that rumble.	Wie stark Spiele das Gerät rütteln lassen, bei Spielen mit Vibration.
 Off keeps it still.	Aus lässt es still.
 Low	Niedrig
@@ -2218,7 +2273,7 @@ Folder without a system: {s}. Its games go in {s2}.	Ordner ohne System: {s}. Sei
 Folder without a system: {s}. The tiles below show the folder names.	Ordner ohne System: {s}. Die Kacheln unten zeigen die Ordnernamen.
 Folders without a system: {s}. Their games go in {s2}.	Ordner ohne System: {s}. Ihre Spiele gehören nach {s2}.
 Folders without a system: {s}. The tiles below show the folder names.	Ordner ohne System: {s}. Die Kacheln unten zeigen die Ordnernamen.
-Not on the shelf: {s}. Its file {s2} is missing.	Nicht im Regal: {s}. Die Datei {s2} fehlt.
+Not on the shelf: {s}. A file is missing: {s2}	Nicht im Regal: {s}. Es fehlt eine Datei: {s2}
 Not on the shelf, a disc file is missing: {s}	Nicht im Regal, eine Disc-Datei fehlt: {s}
 Fewer systems	Weniger Systeme
 All systems	Alle Systeme
@@ -3446,8 +3501,8 @@ LCD grid, GBA colours	LCD-Raster, GBA-Farben
 The colours are the Game Boy Advance screen's: darker and softer, as the games were made for.	Die Farben sind die des Game-Boy-Advance-Bildschirms: dunkler und weicher, wie die Spiele dafür gemacht wurden.
 {s} didn't start. The file may be damaged, or the system needs a BIOS file (Settings › Games › Add games).	{s} wurde nicht gestartet. Die Datei ist vielleicht beschädigt, oder das System braucht eine BIOS-Datei (Einstellungen › Spiele › Spiele hinzufügen).
 {s} didn't start. It may need files or libraries that aren't installed: reinstall it in Ports, or check log.txt in its folder.	{s} wurde nicht gestartet. Vielleicht fehlen Dateien oder Bibliotheken: Installier es in Ports neu oder sieh in der log.txt in seinem Ordner nach.
-{s} didn't start. {s2} needs a BIOS file in roms/bios: {s3} or {s4}.	{s} wurde nicht gestartet. {s2} braucht eine BIOS-Datei in roms/bios: {s3} oder {s4}.
-{s} didn't start. {s2} needs a BIOS file in roms/bios: {s3}.	{s} wurde nicht gestartet. {s2} braucht eine BIOS-Datei in roms/bios: {s3}.
+{s} didn't start. {s2} needs a BIOS file in roms/bios: {s3} or {s4}. BIOS files come from your own console.	{s} wurde nicht gestartet. {s2} braucht eine BIOS-Datei in roms/bios: {s3} oder {s4}. BIOS-Dateien stammen von deiner eigenen Konsole.
+{s} didn't start. {s2} needs a BIOS file in roms/bios: {s3}. BIOS files come from your own console.	{s} wurde nicht gestartet. {s2} braucht eine BIOS-Datei in roms/bios: {s3}. BIOS-Dateien stammen von deiner eigenen Konsole.
 Your progress couldn't be saved to the SD card. Free some space; it will try again.	Dein Fortschritt ließ sich nicht auf der SD-Karte speichern. Mach etwas Platz frei; es wird erneut versucht.
 Your progress couldn't be saved: the SD card can't be written to right now. It will try again.	Dein Fortschritt ließ sich nicht speichern: Auf die SD-Karte lässt sich gerade nicht schreiben. Es wird erneut versucht.
 The SD card is full. Quitting now loses what you did since the last save that reached the SD card; that save is kept. Free some space first if you can.	Die SD-Karte ist voll. Beendest du jetzt, geht verloren, was du seit dem letzten Speichern auf der SD-Karte gespielt hast; dieser Spielspeicher bleibt. Mach vorher etwas Platz frei, wenn du kannst.
@@ -3999,7 +4054,59 @@ Where each system's games go.	Wohin die Spiele jedes Systems kommen.
 Cover art and game pictures.	Cover und Spielbilder.
 Nothing to rediscover yet	Noch nichts wiederzuentdecken
 Games you haven't played for a year, or played a year ago today, show up here.	Spiele, die du seit einem Jahr nicht gespielt hast oder vor genau einem Jahr gespielt hast, erscheinen hier.
-Language, time, sleep & power, frozen games, updates, storage, backup & reset.	Sprache, Uhrzeit, Ruhezustand, eingefrorene Spiele, Updates, Speicher, Sichern & Zurücksetzen.
+# Add games → Y: Send from your phone (src/phone_upload_page.rs)
+Send from your phone	Vom Handy senden
+From your phone	Vom Handy
+Scan the code with your phone's camera and pick games there.	Scanne den Code mit der Handykamera und wähle dort die Spiele.
+Your phone and the Pocket need to be on the same Wi-Fi. A opens the Wi-Fi settings.	Handy und Pocket müssen im selben WLAN sein. A öffnet die WLAN-Einstellungen.
+Wi-Fi settings	WLAN-Einstellungen
+Open again	Erneut öffnen
+The page couldn't open	Die Seite ließ sich nicht öffnen
+A tries again.	A versucht es erneut.
+Can't open the page.	Die Seite lässt sich nicht öffnen.
+No Wi-Fi address.	Keine WLAN-Adresse.
+The Wi-Fi address is gone.	Die WLAN-Adresse ist weg.
+Can't open the page: {s}	Die Seite lässt sich nicht öffnen: {s}
+Closed after 10 minutes	Nach 10 Minuten geschlossen
+Nothing came from the phone for 10 minutes, so the page closed.	10 Minuten lang kam nichts vom Handy, deshalb wurde die Seite geschlossen.
+Closed while the Pocket slept	Geschlossen, während der Pocket schlief
+Files that were on their way were not kept.	Dateien, die noch unterwegs waren, wurden nicht behalten.
+Closed: someone was guessing	Geschlossen: Jemand hat geraten
+Too many tries without the right code came over the Wi-Fi.	Über das WLAN kamen zu viele Versuche ohne den richtigen Code.
+A opens it again with a new code.	A öffnet sie erneut mit einem neuen Code.
+Or type this address	Oder diese Adresse eintippen
+Receiving 1 file	1 Datei kommt an
+Receiving {n} files	{n} Dateien kommen an
+Added: 1 game	Hinzugefügt: 1 Spiel
+Added: {n} games	Hinzugefügt: {n} Spiele
+Phone connected	Handy verbunden
+Waiting for your phone	Warte auf dein Handy
+Pick games on the phone; they show up here as they arrive.	Wähle Spiele auf dem Handy; sie erscheinen hier, sobald sie ankommen.
+Open the camera on your phone and point it at the code.	Öffne die Kamera am Handy und richte sie auf den Code.
+Added, {s}	Hinzugefügt, {s}
+Saves can't be sent this way.	Spielstände werden so nicht übertragen.
+That is a BIOS file. BIOS files go in roms/bios with the SD card or the web companion.	Das ist eine BIOS-Datei. BIOS-Dateien kommen über die SD-Karte oder den Web-Begleiter nach roms/bios.
+Several systems take this kind of file: choose one.	Mehrere Systeme nehmen diese Art Datei: wähle eines.
+That folder name can't be used.	Dieser Ordnername geht nicht.
+Can't make the folder {s}: {s2}	Der Ordner {s} lässt sich nicht anlegen: {s2}
+The phone did not say how large the file is.	Das Handy hat nicht gesagt, wie groß die Datei ist.
+Not encrypted: someone else on this Wi-Fi could see the code and the games you send, and could change them on the way. Only use it on your own Wi-Fi at home. Nothing can be downloaded from the Pocket. B ends it.	Nicht verschlüsselt: Jemand anderes in diesem WLAN könnte den Code und die gesendeten Spiele sehen und sie unterwegs verändern. Nur im eigenen WLAN zu Hause nutzen. Vom Pocket lässt sich nichts herunterladen. B beendet es.
+Closed after an hour	Nach einer Stunde geschlossen
+The page stays open for an hour at most.	Die Seite bleibt höchstens eine Stunde offen.
+No system takes this kind of file here.	Kein System nimmt diese Art Datei hier an.
+That system doesn't take this kind of file here.	Dieses System nimmt diese Art Datei hier nicht an.
+{s} files are at most {s2} here.	{s}-Dateien dürfen hier höchstens {s2} groß sein.
+The SD card has no room for more files.	Auf der SD-Karte ist kein Platz für weitere Dateien.
+This page has taken enough files. Close it and open it again for more.	Diese Seite hat genug Dateien angenommen. Schließe sie und öffne sie für mehr erneut.
+That disc sheet is too large.	Diese Disc-Datei ist zu groß.
+This disc sheet names "{s}": it may name only files in its own folder.	Diese Disc-Datei nennt „{s}“: Sie darf nur Dateien im eigenen Ordner nennen.
+{s} is there already.	{s} ist schon da.
+Can't make the uploads folder: {s}	Der Upload-Ordner lässt sich nicht anlegen: {s}
+{s} is in the way.	{s} steht im Weg.
+{s} is too big to load ({n} MB; at most {n2} MB)	{s} ist zu groß zum Laden ({n} MB; höchstens {n2} MB)
+A name with ".{s}" inside can't be sent this way. Rename the file first.	Ein Name mit „.{s}“ darin lässt sich so nicht senden. Benenne die Datei vorher um.
+A folder with ".{s}" in its name can't be used. Rename it first.	Ein Ordner mit „.{s}“ im Namen geht nicht. Benenne ihn vorher um.
+Language, time, sleep & power, frozen games, kids mode, updates, storage, backup & reset.	Sprache, Uhrzeit, Ruhezustand, eingefrorene Spiele, Kindermodus, Updates, Speicher, Sichern & Zurücksetzen.
 Frozen games	Eingefrorene Spiele
 Frozen	Eingefroren
 Your last five games stand a little open. A goes straight back to the moment you left.	Deine letzten fünf Spiele stehen einen Spalt offen. A führt direkt zurück in den Moment.
@@ -4162,3 +4269,101 @@ Connect to Wi-Fi	Mit dem WLAN verbinden
 Turn on USB file transfer	USB-Dateiübertragung einschalten
 Turn off USB file transfer	USB-Dateiübertragung ausschalten
 Switching{s}	Wird umgeschaltet{s}
+Same Wi-Fi as your phone	Selbes WLAN wie dein Handy
+
+# Console sales figures (data/consoles.json)
+{n} million	{n} Millionen
+over {n} million	über {n} Millionen
+{n} million (all models)	{n} Millionen (alle Modelle)
+{n} million (with Game Boy Color)	{n} Millionen (mit Game Boy Color)
+{n} million, counted with the Game Boy	{n} Millionen, mit dem Game Boy gezählt
+{n} million by March 2001 (Sega)	{n} Millionen bis März 2001 (Sega)
+{s}, {n} million	{s}, {n} Millionen
+Get started	Loslegen
+Shelf above	Regal darüber
+Shelf below	Regal darunter
+Stickers on cases is off	Sticker auf den Hüllen sind aus
+This look shows no cases	Diese Ansicht zeigt keine Hüllen
+Runs on this handheld, but not every game runs smoothly.	Läuft auf diesem Handheld, aber nicht jedes Spiel läuft flüssig.
+No games here yet	Hier sind noch keine Spiele
+Ask a grown-up to pick some.	Frag einen Erwachsenen, ob er welche aussucht.
+This game won't start. Ask a grown-up.	Dieses Spiel startet nicht. Frag einen Erwachsenen.
+That's all for today!	Das war's für heute!
+Your game is saved. It waits for you tomorrow, right where you left it.	Dein Spiel ist gespeichert. Morgen wartet es genau dort auf dich, wo du aufgehört hast.
+Saving your game…	Dein Spiel wird gespeichert…
+It saves by itself. Press A next time to carry on.	Es speichert von selbst. Mit A geht es wieder weiter.
+For grown-ups	Für Erwachsene
+Enter your PIN.	Gib deine PIN ein.
+Too many tries. Wait {n} seconds.	Zu viele Versuche. Warte {n} Sekunden.
+That's not it. Try again.	Das war sie nicht. Versuch es noch einmal.
+Forgot it? Put a file called {s} on the card and restart.	Vergessen? Leg eine Datei namens {s} auf die Karte und starte neu.
+D-PAD	STEUERKREUZ
+Numbers	Ziffern
+Kids mode	Kindermodus
+For grown-ups. The child's saves and settings stay as they are.	Für Erwachsene. Spielstände und Einstellungen des Kindes bleiben, wie sie sind.
+{n} of {m} min today	Heute {n} von {m} Min.
+30 more minutes today	Heute 30 Minuten mehr
+Time per day	Zeit pro Tag
+Loudest volume	Höchste Lautstärke
+New PIN	Neue PIN
+Turn off Kids mode	Kindermodus ausschalten
+Back to the shelf	Zurück zum Regal
+Set it up for a child	Für ein Kind einrichten
+It takes two minutes. Your child gets a big, simple shelf with only the games you pick. Settings stay out of reach, behind your PIN.	Das dauert zwei Minuten. Dein Kind bekommt ein großes, einfaches Regal nur mit den Spielen, die du aussuchst. Die Einstellungen bleiben hinter deiner PIN.
+A 4-digit PIN	Eine 4-stellige PIN
+5 to 20 games	5 bis 20 Spiele
+Blue or Pink	Blau oder Pink
+A time per day and a loudest volume, if you like	Wenn du möchtest: Zeit pro Tag und höchste Lautstärke
+Once more	Noch einmal
+Enter the same PIN again, so a slip doesn't lock you out.	Gib dieselbe PIN noch einmal ein, damit dich kein Vertipper aussperrt.
+Pick a PIN	PIN aussuchen
+Four digits for you, not for your child. You'll need it to leave Kids mode.	Vier Ziffern für dich, nicht für dein Kind. Du brauchst sie, um den Kindermodus zu verlassen.
+Those two were different. Pick one again.	Die beiden waren verschieden. Such noch einmal eine aus.
+Blue or Pink?	Blau oder Pink?
+Pick the one your child likes. You can change it later.	Nimm, was deinem Kind gefällt. Du kannst es später ändern.
+How long per day?	Wie lange pro Tag?
+When the time is up, the game saves itself and a friendly screen says goodbye until tomorrow.	Wenn die Zeit um ist, speichert sich das Spiel, und ein freundlicher Bildschirm verabschiedet sich bis morgen.
+How loud at most?	Wie laut höchstens?
+The volume keys stop here. Good for small ears and headphones.	Hier stoppen die Lautstärketasten. Gut für kleine Ohren und Kopfhörer.
+Ready	Fertig
+Hand it over any time. To get back in:	Du kannst es jetzt weitergeben. So kommst du wieder hinein:
+Hold SELECT and START for 5 seconds, then enter your PIN.	Halte SELECT und START 5 Sekunden lang und gib dann deine PIN ein.
+Forgot the PIN? Make a file called {s} on the card (a phone with a card reader or the Wi-Fi share will do) and restart. Kids mode goes off, and saves and games stay.	PIN vergessen? Leg eine Datei namens {s} auf die Karte (Handy mit Kartenleser oder die WLAN-Freigabe reichen) und starte neu. Der Kindermodus geht aus, Spielstände und Spiele bleiben.
+Go on	Weiter
+Pick the games	Spiele aussuchen
+{n} of {m} picked. At least {k}.	{n} von {m} ausgewählt. Mindestens {k}.
+Twenty is the most. Take one off first.	Zwanzig sind das Maximum. Nimm erst eins heraus.
+Pick more first	Erst mehr aussuchen
+For a child	Für ein Kind
+A big, simple shelf with the games you pick, behind your PIN.	Ein großes, einfaches Regal mit den Spielen, die du aussuchst, hinter deiner PIN.
+Next: a PIN, the games, Blue or Pink, and a time and volume limit if you like.	Als Nächstes: PIN, Spiele, Blau oder Pink und auf Wunsch Zeit- und Lautstärke-Grenze.
+Your settings and saves stay as they are for when the mode goes off.	Deine Einstellungen und Spielstände bleiben für später, wenn der Modus ausgeht.
+A big, simple shelf for a child, with a PIN.	Ein großes, einfaches Regal für ein Kind, mit PIN.
+{n} hours	{n} Stunden
+1 hour	1 Stunde
+Pink	Pink
+Battery low. Please charge.	Akku fast leer. Bitte aufladen.
+Forgot the PIN? Make a file called {s} on the card (a computer or a phone with a card reader will do) and restart. Kids mode goes off, and saves and games stay.	PIN vergessen? Leg eine Datei namens {s} auf die Karte (Computer oder Handy mit Kartenleser reichen) und starte neu. Der Kindermodus geht aus, Spielstände und Spiele bleiben.
+
+# Kids Mode
+Start today's time again	Heutige Zeit neu starten
+The clock is behind the last date it knew, so today's time goes on counting. Start it again here if that's wrong.	Die Uhr steht vor dem letzten bekannten Datum, deshalb zählt die heutige Zeit weiter. Stimmt das nicht, starte sie hier neu.
+{n} minutes left	Noch {n} Minuten
+1 minute left	Noch 1 Minute
+Then your game saves itself.	Dann speichert sich dein Spiel.
+Then it's time to stop.	Dann ist Schluss für heute.
+Your game waits for you tomorrow.	Dein Spiel wartet morgen auf dich.
+Save in the game before you stop.	Speichere im Spiel, bevor du aufhörst.
+{n} games aren't offered: RetroArch and PortMaster have menus of their own a child could reach.	{n} Spiele stehen nicht zur Wahl: RetroArch und PortMaster haben eigene Menüs, die ein Kind erreichen könnte.
+1 game isn't offered: RetroArch and PortMaster have menus of their own a child could reach.	1 Spiel steht nicht zur Wahl: RetroArch und PortMaster haben eigene Menüs, die ein Kind erreichen könnte.
+The next steps show how to add them. You pick the games for your child right after that.	Die nächsten Schritte zeigen, wie du welche hinzufügst. Gleich danach suchst du die Spiele für dein Kind aus.
+Add some first: you pick the games for your child right after.	Füg zuerst welche hinzu: Gleich danach suchst du die Spiele für dein Kind aus.
+No games to pick yet	Noch keine Spiele zum Aussuchen
+Saves only in the game: Stop doesn't keep the moment.	Speichert nur im Spiel: Stopp behält den Moment nicht.
+Oops, something broke	Hoppla, etwas ist kaputt
+Please ask a grown-up	Bitte frag einen Erwachsenen
+For grown-ups: hold SELECT and START for 5 seconds.	Für Erwachsene: SELECT und START 5 Sekunden halten.
+No limit	Keine Grenze
+This game won't start right now. Press a button to pick another one.	Dieses Spiel startet gerade nicht. Drück eine Taste und such dir ein anderes aus.
+{n} hidden	{n} ausgeblendet
+This device has no Wi-Fi, so the downloads aren't available.	Dieses Gerät hat kein WLAN, deshalb sind die Downloads nicht verfügbar.

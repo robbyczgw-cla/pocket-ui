@@ -11,6 +11,14 @@ use crate::power::{Fan, Performance, Power};
 use crate::rewind::Rewind;
 use crate::rumble::Strength;
 
+/// Set by pocket-ui for a Kids Mode game (`app_kids`): no HOME shortcut does anything.
+pub const NO_SHORTCUTS: &str = "POCKET_CORE_NO_SHORTCUTS";
+
+/// What the settings ask for, or nothing in a Kids Mode game: applying the game's settings comes through here as well.
+fn allowed_shortcuts(wanted: Enabled) -> Enabled {
+    if std::env::var_os(NO_SHORTCUTS).is_some() { Enabled::none() } else { wanted }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum FastForward {
     Times(u32),
@@ -175,7 +183,7 @@ impl Extras {
                 fan: Fan::Auto,
                 ..Settings::default()
             },
-            hotkeys: Arc::new(Mutex::new(Hotkeys::new(cfg.shortcuts))),
+            hotkeys: Arc::new(Mutex::new(Hotkeys::new(allowed_shortcuts(cfg.shortcuts)))),
             power,
             rewind: Rewind::new(REWIND_BYTES, REWIND_FRAMES),
             ff_on: false,
@@ -218,7 +226,7 @@ impl Extras {
             self.rewind.clear();
             self.verify.iter_mut().for_each(|v| v.hashes.clear());
         }
-        self.hotkeys.lock().unwrap().enabled = new.shortcuts;
+        self.hotkeys.lock().unwrap().enabled = allowed_shortcuts(new.shortcuts);
         self.ahead.configure(new.run_ahead);
         if new.over_game != old.over_game {
             self.over_game = new.over_game;

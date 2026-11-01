@@ -142,7 +142,7 @@ const NO_BIOS: &[&str] = &[
 /// [`not_started_notice`] knowing the game's system: a system that needs no BIOS doesn't mention one.
 pub fn not_started_notice_on(system: &str, name: &str, missing_bios: Option<&str>) -> String {
     match missing_bios {
-        Some(bios) => format!("{name} didn't start. {bios}."),
+        Some(bios) => format!("{name} didn't start. {bios}. BIOS files come from your own console."),
         None if NO_BIOS.contains(&system) => format!("{name} didn't start. The file may be damaged: copy the game to the card again."),
         None => format!("{name} didn't start. The file may be damaged, or the system needs a BIOS file (Settings › Games › Add games)."),
     }
@@ -270,12 +270,12 @@ mod tests {
         let text = not_started_notice("Pocket CD Demo", missing.as_deref());
         assert_eq!(
             text,
-            "Pocket CD Demo didn't start. Sega CD needs a BIOS file in roms/bios: bios_CD_U.bin, bios_CD_E.bin or bios_CD_J.bin."
+            "Pocket CD Demo didn't start. Sega CD needs a BIOS file in roms/bios: bios_CD_U.bin, bios_CD_E.bin or bios_CD_J.bin. BIOS files come from your own console."
         );
         let de = crate::i18n::german().translate(&text).expect("a German line");
         assert_eq!(
             de,
-            "Pocket CD Demo wurde nicht gestartet. Sega CD braucht eine BIOS-Datei in roms/bios: bios_CD_U.bin, bios_CD_E.bin oder bios_CD_J.bin."
+            "Pocket CD Demo wurde nicht gestartet. Sega CD braucht eine BIOS-Datei in roms/bios: bios_CD_U.bin, bios_CD_E.bin oder bios_CD_J.bin. BIOS-Dateien stammen von deiner eigenen Konsole."
         );
         // Add games names the same files: in German with "oder" there as well.
         assert_eq!(

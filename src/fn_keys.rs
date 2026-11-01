@@ -24,6 +24,71 @@
 use std::path::Path;
 use std::process::{Command, Stdio};
 
+/// Kids Mode (docs/KIDS-MODE.md): ROCKNIX's own answers to buttons, closed while the mode is on. `key.hotkey.a` is L1:
+/// L1 + A a screenshot, L1 + X MangoHud, L1 + Y the game guide over the game, L1 + SELECT + START killing the emulator
+/// with no save. `key.volume.*` is `volume up|down`, which knows no ceiling: pocket-ui takes those keys itself
+/// (`Sys::kids_enter`). A name no key has matches nothing in `input_sense`'s globs. What these keys were before waits in
+/// `KIDS_KEEP` until the mode goes off.
+pub const KIDS_KEYS: [(&str, &str); 3] = [("key.hotkey.a", "kids-mode-closed"), ("key.volume.up", "kids-mode-closed"), ("key.volume.down", "kids-mode-closed")];
+const KIDS_KEEP: &str = "kids-rocknix-keys";
+
+/// `cfg` with the keys closed; what was set for them, as lines for `kids_opened`.
+pub fn kids_closed(cfg: &str) -> (String, String) {
+    let mut kept = String::new();
+    let mut lines: Vec<String> = Vec::new();
+    for line in cfg.lines() {
+        match line.split_once('=').filter(|(k, _)| KIDS_KEYS.iter().any(|(key, _)| k.trim() == *key)) {
+            Some(_) => kept.push_str(&format!("{line}\n")),
+            None => lines.push(line.to_string()),
+        }
+    }
+    lines.extend(KIDS_KEYS.iter().map(|(k, v)| format!("{k}={v}")));
+    (lines.join("\n") + "\n", kept)
+}
+
+/// `cfg` with the keys as they were before `kids_closed`.
+pub fn kids_opened(cfg: &str, kept: &str) -> String {
+    let mut out = String::new();
+    for line in cfg.lines().filter(|l| !l.split_once('=').is_some_and(|(k, _)| KIDS_KEYS.iter().any(|(key, _)| k.trim() == *key))).chain(kept.lines()) {
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
+}
+
+/// Closes or opens them in system.cfg and restarts `input.service` if that changed anything. Slow: call it from a thread.
+/// Does nothing where `input_sense` doesn't run; a start with the mode off opens what a crash may have left closed.
+pub fn kids_keys(on: bool, data_dir: &Path) -> Result<bool, String> {
+    if !rocknix_handles_volume(Path::new("/")) {
+        return Ok(false);
+    }
+    let cfg_path = Path::new(crate::standalone::SYSTEM_CFG);
+    let keep = data_dir.join(KIDS_KEEP);
+    let mut changed = false;
+    crate::system_cfg::SystemCfg::at(cfg_path)
+        .edit(|old| {
+            let closed = KIDS_KEYS.iter().all(|(k, v)| old.lines().any(|l| l == format!("{k}={v}")));
+            if closed == on {
+                return None;
+            }
+            changed = true;
+            if on {
+                let (new, kept) = kids_closed(old);
+                let _ = crate::fsutil::write_atomic(&keep, kept.as_bytes());
+                Some(new)
+            } else {
+                let kept = std::fs::read_to_string(&keep).unwrap_or_default();
+                let _ = std::fs::remove_file(&keep);
+                Some(kids_opened(old, &kept))
+            }
+        })
+        .map_err(|e| e.to_string())?;
+    if changed {
+        let _ = Command::new("systemctl").args(["restart", "input.service"]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status();
+    }
+    Ok(changed)
+}
+
 pub const KEYS: [(&str, &str); 3] = [
     ("key.function.b", "BTN_S[TE][AL]*"),
     ("key.function.b.up", "true"),
@@ -124,6 +189,21 @@ mod tests {
         let set = |k: &str| if k == "key.function.b" { "BTN_S[TE][AL]*".to_string() } else { String::new() };
         assert_eq!(missing(set), [KEYS[1], KEYS[2]]);
         assert!(missing(|k| KEYS.iter().find(|(n, _)| *n == k).unwrap().1.to_string()).is_empty());
+    }
+
+    #[test]
+    fn kids_mode_closes_rocknix_keys_and_gives_them_back_as_they_were() {
+        let cfg = "a=1\nkey.hotkey.a=BTN_MODE\nkey.function.b=x\n";
+        let (closed, kept) = kids_closed(cfg);
+        assert!(closed.contains("key.hotkey.a=kids-mode-closed\n") && closed.contains("key.volume.up=kids-mode-closed\n") && closed.contains("key.volume.down=kids-mode-closed\n"), "{closed}");
+        assert!(!closed.contains("BTN_MODE"));
+        assert_eq!(kept, "key.hotkey.a=BTN_MODE\n");
+        let opened = kids_opened(&closed, &kept);
+        assert!(opened.contains("a=1\n") && opened.contains("key.function.b=x\n") && opened.contains("key.hotkey.a=BTN_MODE\n"), "{opened}");
+        assert!(!opened.contains("kids-mode-closed"));
+        // Nothing set before: nothing stays.
+        let (closed, kept) = kids_closed("a=1\n");
+        assert_eq!(kids_opened(&closed, &kept), "a=1\n");
     }
 
     #[test]

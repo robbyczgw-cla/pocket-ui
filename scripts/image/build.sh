@@ -241,6 +241,11 @@ assemble() {
     cat /tmp/debugfs.log >&2
     die "debugfs reported errors"
   fi
+  # No resize_inode. It only serves growing a mounted file system, which nothing here does, and with it resize2fs breaks
+  # STORAGE at the first boot on a card over about 36 GB once more than about 18 MB of the 32 MB is in use (resize2fs 1.47:
+  # "Illegal doubly indirect block", and it has already moved the root directory). scripts/image/grow-check.sh.
+  tune2fs -O ^resize_inode "$P2" >/dev/null 2>&1 || die "tune2fs could not take resize_inode off STORAGE"
+  e2fsck -fy "$P2" >/dev/null 2>&1 || [ $? = 1 ] || die "e2fsck failed after taking resize_inode off STORAGE"
   e2fsck -fn "$P2" >/dev/null || die "STORAGE file system not clean after writing"
   dd if="$P2" of="$IMG" bs=512 seek="$P2_START" conv=notrunc status=none
   rm -f "$P2"

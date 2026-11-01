@@ -41,6 +41,13 @@ impl Default for Enabled {
     }
 }
 
+impl Enabled {
+    /// Kids Mode: nothing but the HOME tap, which is pocket-ui's.
+    pub fn none() -> Self {
+        Enabled { save: false, load: false, slot: false, fast_forward: false, rewind: false, over_game: false, screenshot: false }
+    }
+}
+
 /// Analog travel (0 to 1) from which a trigger counts as pressed.
 const TRIGGER: f32 = 0.5;
 

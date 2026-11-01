@@ -57,9 +57,10 @@ card and backups.
 | **Time** | Time zone, date and network time. See [Time](#time) |
 | **Sleep & power** | When the screen goes off and the device sleeps, the slideshow before it, when it switches off after sleeping, and what the power button does. The row shows the screen-off time ("2 min"). See [Sleep & power](#sleep--power) |
 | **Frozen games** | Your last five games with a saved moment stand a little open on the shelf, and A goes straight back. On at the start; A switches it. See [Frozen games](frozen-games.md#frozen-games) |
+| **Kids mode** | A big, simple shelf for a child, with a PIN: see [Kids mode](kids-mode.md). Not on the Steam Deck |
 | **Updates** | New versions of pocket-ui and the system. See [Updates](updates.md) |
 | **Storage** | What takes up space on the SD card, what can go, and the games you hid. The row shows the free space ("41.2 GB free"). See [Storage](storage.md) |
-| **Backup & reset** | Back up pocket-ui's settings and library notes to the SD card, restore a backup, or reset the settings. See [Backup & reset](#backup--reset) |
+| **Backup & reset** | Back up your saves and states, or pocket-ui's settings and library notes, to the SD card, restore a backup, or reset the settings. See [Backup & reset](#backup--reset) |
 
 ### Time
 
@@ -102,17 +103,29 @@ See [Other Retroid devices](getting-started.md#other-retroid-devices).
 
 Settings → System → **Backup & reset**.
 
-- **Back up now** copies pocket-ui's settings, every Options page and your library notes (play status, notes, time
+- **Back up saves** copies your battery saves, save states (all of `savestates`, and the states beside your games), the
+  PS2 and GameCube memory cards, and Wii and 3DS save data to a folder named after the date and time, in
+  `/storage/roms/backup/pocket-ui-saves`. No games and no BIOS files. **A** counts them and shows the size and the free
+  space; **A** again copies them, and you can keep looking at the page while it does (**B** stops it, and a stopped backup
+  leaves nothing behind). If they don't fit, the page says how much is needed and nothing starts.
+- **Flashing the card erases that folder too**, unless your games are on a second card, where the backup goes with them. So
+  before you flash, copy it to a computer: over file sharing it is `backup/pocket-ui-saves` in the games share. To get
+  the saves back on a newly flashed card, copy the folder back to the same place.
+- **Restoring saves:** **A** on a backup marked **Saves** compares it with the card and says what would change; **A** again
+  does it. What is missing comes back. What is older on the card is replaced, after a copy of it goes into a backup marked
+  **Before restore**. What is newer on the card stays, and the backup keeps its copy, so you have both. A file name the
+  card can't hold is named at the end. pocket-ui doesn't need to start again.
+- **Back up settings** copies pocket-ui's settings, every Options page and your library notes (play status, notes, time
   played, favourites, recent games) to a folder named after the date and time, in `/storage/roms/backup/pocket-ui`
   on the SD card. Not your games, saves or states, not the file-sharing password and not your RetroAchievements sign-in.
   Over file sharing the folder is `backup/pocket-ui` in the games share.
-- The backups are listed below, newest first, with why they were made (**Backup**, **Before reset**, **Before
-  restore**) and their size. **A** on one, then **A** again, restores it: settings and library notes go back to how
+- The backups are listed below, newest first (saves first), with why they were made (**Backup**, **Before reset**, **Before
+  restore**) and their size. **A** on a settings backup, then **A** again, restores it: settings and library notes go back to how
   they were then. What you had is backed up first, so a restore can be undone.
 - **Reset settings**, then **A** again: the look, appearance, motion, sounds, haptics, LEDs, sleep, Performance & fan,
   Curator and every console's and game's Options go back to their defaults. A backup is made first. Kept: your
   library notes, Sync and Tailscale, your accounts, what the Store installed, and the first start (you land on Home).
-- After a restore or a reset pocket-ui starts again by itself, which takes a few seconds.
+- After a restore of settings or a reset pocket-ui starts again by itself, which takes a few seconds.
 
 ROCKNIX's own settings are not part of it, nor are the options PlayStation 2, GameCube, Wii and 3DS keep in ROCKNIX's
 settings file.
@@ -170,7 +183,7 @@ Settings → **Help & tools**. The Tour, this guide, ROCKNIX's tools, the bug re
 | **Tools** | ROCKNIX's tools without its old menu: the emulators' own settings, RetroArch's menu, gamepad test and calibration, file manager, terminal, and tools installed from a store. See [Tools](#tools) |
 | **Store** | Emulators, frames, themes and tools. Shown only on a device that has a store set up; there is no public store yet, so you will not see this row. See [Store](extras.md#store) |
 | **Report a problem** | One press saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)) and shows where it is. The same row is in About, and in the dialog of SELECT + START held, where you look when something has just gone wrong |
-| **About** | Version, the system underneath (on the SD card image "pocket-ui OS 0.1.9 · built on ROCKNIX 20261001 (SM8250)", on a ROCKNIX card with pocket-ui added just the ROCKNIX version), number of games, free space, network address, battery, where the logs are kept, and where the licence texts are (a Licences row when the page has the room: `/storage/pocket-ui/licences`: pocket-ui's licence, the credits, the licences of the programs it is built from and of its fonts; they come with the install package and the SD card image); on a Retroid Pocket 5, Flip 2 or first Mini also which one it is, marked experimental ([Getting started](getting-started.md#other-retroid-devices)). Two rows: **Report a problem** saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)); **Open EmulationStation…** opens ROCKNIX's own menu, after a warning ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)) |
+| **About** | Version, the system underneath (on the SD card image "pocket-ui OS 0.1.10 · built on ROCKNIX 20261001 (SM8250)", on a ROCKNIX card with pocket-ui added just the ROCKNIX version), number of games, free space, network address, battery, where the logs are kept, and where the licence texts are (a Licences row when the page has the room: `/storage/pocket-ui/licences`: pocket-ui's licence, the credits, the licences of the programs it is built from and of its fonts; they come with the install package and the SD card image); on a Retroid Pocket 5, Flip 2 or first Mini also which one it is, marked experimental ([Getting started](getting-started.md#other-retroid-devices)). Two rows: **Report a problem** saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)); **Open EmulationStation…** opens ROCKNIX's own menu, after a warning ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)) |
 
 ### Manual
 

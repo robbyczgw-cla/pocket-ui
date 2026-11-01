@@ -109,6 +109,11 @@ SYSTEM. The initramfs `init` inside the kernel matches
 - **First boot.** `init` sees `/storage/.please_resize_me` and starts systemd with `--unit=fs-resize.target`
   (end of `init`). `fs-resize.service` runs `/usr/lib/rocknix/fs-resize`: `parted resizepart 2 100%`, `e2fsck`,
   `resize2fs`, new UUIDs (`tune2fs -U random`, `fatlabel -i -r`; the labels stay), then a reboot. [V]
+- **`resize_inode` is off on our STORAGE** (ROCKNIX's has it). `fs-resize` ignores what `resize2fs` returns and prints
+  "done". With `resize_inode` and our programs on STORAGE, `resize2fs` fails on a card over about 36 GB once more than
+  about 18 MB is in use, after moving the root directory: the next boot says "Filesystem corruption", and the repair
+  leaves an empty 32 MB STORAGE with everything in `lost+found`. Nothing needs the feature: it serves online growing
+  only. `scripts/image/grow-check.sh`, part of the image checks, replays the steps from 8 GB to 2 TB. [V]
 - **The catch:** `fs-resize` refuses to grow STORAGE if `/storage/.config` or `/storage/.cache` already exists
   ("Resizing is not permitted - the system has already been initialised"): it deletes the marker, reboots, and the
   card keeps a 32 MB STORAGE for good. [V] Our essway drop-in has to live in `/storage/.config/system.d`, so it
@@ -158,7 +163,7 @@ own mount of `/storage` (`mount_flash`, `mount_sysroot`, `mount_storage`). [V]
   that can't be made (twice: the second never replaces the first), and a STORAGE where nothing can be moved (the
   update check is skipped; an approved update still installs). The fake init calls `mount_storage` and then
   `check_update` by name, as the real one does. [V] With the hook of 0.1.6, 24 of the first 42 checks fail; the
-  first 0.1.7 hook fails the 3 checks of Sol's review findings 2 and 3. `deploy/image/test-hooks.sh` runs
+  first 0.1.7 hook fails the 3 checks of the review's findings 2 and 3. `deploy/image/test-hooks.sh` runs
   `post-flash.sh` in the virtual device's base image (Docker).
 
 So a new card goes: **boot 1** grows STORAGE and restarts; **boot 2** puts the drop-in and the boot screen's unit in

@@ -369,6 +369,10 @@ exec "$@"
 /// kept in `locales` (`<data>/locale`). Without a terminal (`terminal` missing) the script runs on its own. Paths are
 /// arguments, never part of the shell line.
 pub fn command(tool: &Tool, terminal: &Path, locales: &Path) -> Command {
+    // Tool scripts change the device (restore, installs, services): under the mock they start nothing.
+    if crate::proc::mock() {
+        return Command::new("true");
+    }
     let mut c = Command::new("/bin/sh");
     c.arg("-c").arg(WITH_LOCALE).arg("sh").arg(locales);
     if terminal.is_file() {
@@ -381,6 +385,9 @@ pub fn command(tool: &Tool, terminal: &Path, locales: &Path) -> Command {
 
 /// Runs a Store tool's script with `sh` in `/tmp` and returns its last line of output (of its errors if it fails).
 pub fn run_quiet(script: &Path) -> Result<String, String> {
+    if crate::proc::mock() {
+        return Ok("Done.".into());
+    }
     let out = Command::new("sh").arg(script).current_dir("/tmp").output().map_err(|e| format!("Couldn't start the tool: {e}"))?;
     let last = |b: &[u8]| String::from_utf8_lossy(b).lines().map(str::trim).rfind(|l| !l.is_empty()).map(str::to_string);
     if out.status.success() {

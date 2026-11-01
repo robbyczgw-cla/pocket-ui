@@ -1500,7 +1500,9 @@ impl App {
                 }
                 // "set <key> <value>": a change in the pause menu, applied before it is saved.
                 ["set", key, value] => {
-                    if !self.video.set(key, value) {
+                    // Kids Mode keeps the picture as large as fits (`VideoSettings::for_kids`); the menu can't change it.
+                    let kids_picture = matches!(*key, "scaling" | "frame") && pocket_ui::kids::Config::load(&data_dir()).on;
+                    if !kids_picture && !self.video.set(key, value) {
                         self.ex.set(key, value);
                     }
                 }

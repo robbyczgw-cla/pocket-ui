@@ -70,10 +70,12 @@ const SAVES: Dir = Dir {
     label: "Pocket saves",
     path: ROMS_DIR,
     // Azahar's save data lies below /storage/roms too, and has its own folder: never shared twice. The versions of
-    // a save the player chose not to keep (`sync_conflicts::keep`) stay on this device.
+    // a save the player chose not to keep (`sync_conflicts::keep`) stay on this device, and so do backups of saves
+    // (`backup_saves`), or every copy of a save would go to every device.
     ignore: &[
         "/3ds/azahar",
         "/sync-backups",
+        "/backup",
         "!**/*.srm",
         // The cartridge clock beside the battery save (pocket-core and RetroArch: Pokémon Gold, Silver, Crystal).
         "!**/*.rtc",
@@ -88,6 +90,11 @@ const SAVES: Dir = Dir {
     ],
     wait_for_root: false,
 };
+
+/// The file endings of battery saves beside the games, the saves folder's list.
+pub fn save_extensions() -> impl Iterator<Item = &'static str> {
+    SAVES.ignore.iter().filter_map(|l| l.strip_prefix("!**/*."))
+}
 
 const STATES: Dir = Dir {
     id: "pocket-states",
@@ -1129,7 +1136,11 @@ fn write_ignore_at(dir: &Path, text: &str) -> std::io::Result<()> {
 /// Brings `/storage/roms/.stignore` up to date when pocket-ui wrote it (a line added since, such as the backup
 /// folder of `sync_conflicts`); a missing one or the user's own is left alone.
 pub fn refresh_saves_ignore() {
-    let dir = Path::new(ROMS_DIR);
+    refresh_saves_ignore_in(Path::new(ROMS_DIR));
+}
+
+/// `refresh_saves_ignore` for the ROMs folder `dir`.
+pub fn refresh_saves_ignore_in(dir: &Path) {
     if dir.join(".stignore").is_file() {
         if let Err(e) = write_saves_ignore(dir) {
             println!("sync: {}/.stignore: {e}", dir.display());
@@ -2008,6 +2019,7 @@ mod tests {
                 ("gba/Pokemon Emerald.sync-conflict-20261024-181502-ABCDEF7.srm", true),
                 ("sync-backups/2026-10-25/gba/Pokemon Emerald.srm", false),
                 ("sync-backups/2026-10-25/ps2/Mcd001.ps2", false),
+                ("backup/pocket-ui-saves/2026-10-25_1200/files/roms/gba/Pokemon Emerald.srm", false),
                 ("3ds/azahar/sdmc/Nintendo 3DS/0/0/title/00040000/1/data/00000001/game.sav", false),
                 ("ps2/Mcd001.ps2", false),
                 ("bios/GC/MemoryCardA.USA.raw", false),

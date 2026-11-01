@@ -156,6 +156,8 @@ mod app_storage;
 mod app_rescue;
 // Settings → Tour and "New in this version": the feature cards outside the first start (`pocket_ui::features`).
 mod app_tour;
+// Kids Mode (`pocket_ui::kids`, docs/KIDS-MODE.md).
+mod app_kids;
 /// Settings in categories: the category list, a category's rows, the way back (`SETTINGS_GROUPS`).
 mod app_settings_groups;
 /// The status corner at the top right (time, Wi-Fi, battery): its top line, the minute wake, its thread.
@@ -210,6 +212,8 @@ const CANCEL: Button = Button::South;
 
 #[derive(Debug)]
 enum UserEvent {
+    /// Every few seconds while Kids Mode is on: the day's play time (`app_kids`).
+    KidsTick,
     Pad(PadEvent),
     /// The finger on the touch screen (`pocket_ui::touch`); pocket-core reads it itself while a game runs.
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
@@ -365,6 +369,8 @@ enum Opens {
     OnStart,
     /// A switch, not a page: whether the pause menu's Quit keeps a resume point (`App::remember_quit`).
     RememberQuit,
+    /// Kids Mode's setup (`app_kids`).
+    Kids,
     /// A switch, not a page: Cozy or Quick animations (`App::animations`).
     Animations,
     /// Button layout and Button symbols on one page (`app_buttons.rs`).
@@ -462,7 +468,7 @@ const SETTINGS_GROUPS: [(&str, &str, &[SettingsRow]); 7] = [
         (Extra::Playful.label(), Opens::Extra(Extra::Playful), Extra::Playful.blurb()),
         (Extra::CrtOn.label(), Opens::Extra(Extra::CrtOn), Extra::CrtOn.blurb()),
         ("Motion", Opens::Motion, "Full: selections glide. Reduced: only fades. Off: nothing moves."),
-        ("Sounds", Opens::Sounds, "Soft clicks in menus, not in games. Left/right: how loud."),
+        ("Sounds", Opens::Sounds, "Soft clicks in menus, not in games. Left/right: how loud. Game volume and brightness: HOME."),
         (Extra::CaseSounds.label(), Opens::Extra(Extra::CaseSounds), Extra::CaseSounds.blurb()),
         ("Haptics", Opens::Haptics, "A soft tick as you move."),
         ("LEDs", Opens::Leds, "The lights around the sticks. Off unless you turn them on."),
@@ -471,14 +477,14 @@ const SETTINGS_GROUPS: [(&str, &str, &[SettingsRow]); 7] = [
         ("On start", Opens::OnStart, "Home, or straight back into the game you played last."),
         ("Remember where I quit", Opens::RememberQuit, "Quit keeps the moment for the next start."),
         (app_buttons::SETTINGS_NAME, Opens::Buttons, "Which button confirms, and how the buttons look in the hints."),
-        ("Over the game", Opens::OverGame, "FPS, sensors or Pixel Path over every game."),
+        ("Over the game", Opens::OverGame, "FPS, sensors or Pixel Path (how a game's picture and sound reach you) over every game."),
         ("Screen frames", Opens::Frames, "Auto frames on the handhelds, or on every console."),
         (app_perf_fan::SETTINGS_NAME, Opens::PerfFan, "Processor speed and fan, in games and in menus."),
         ("Battery", Opens::Battery, "Battery history, time left, what each game uses."),
         (app_achievements::SETTINGS_NAME, Opens::Achievements, "Earn achievements in your games."),
     ]),
     ("Games", "Games, game check, starter pack, pictures, EmulationStation, screenshots, Curator, PC.", &[
-        ("Add games", Opens::Setup(Only::Games), "Where each system's games go, and file sharing."),
+        ("Add games", Opens::Setup(Only::Games), "Where each system's games and BIOS files go, and file sharing."),
         (app_game_check::SETTINGS_NAME, Opens::GameCheck, "Will your games start? What's missing, in plain words."),
         (app_starter::SETTINGS_NAME, Opens::Starter, "A few free games to start with, downloaded to your SD card."),
         ("Pictures & extras", Opens::Setup(Only::Extras), "Cover art, game pictures and PortMaster games."),
@@ -496,14 +502,15 @@ const SETTINGS_GROUPS: [(&str, &str, &[SettingsRow]); 7] = [
         ("Remote access (SSH)", Opens::Setup(Only::Remote), "Log in from a computer. Turns itself off when the Pocket restarts."),
         (app_web::SETTINGS_NAME, Opens::Web, "Your games, play time and uploads in a browser."),
     ]),
-    ("System", "Language, time, sleep & power, frozen games, updates, storage, backup & reset.", &[
+    ("System", "Language, time, sleep & power, frozen games, kids mode, updates, storage, backup & reset.", &[
         ("Language", Opens::Language, "Menus and messages in English, German or Spanish."),
         ("Time", Opens::Time, "Time zone, date and network time."),
         (app_sleep_power::SETTINGS_NAME, Opens::SleepPower, "When the screen goes off and the device sleeps, and the power button."),
         (Extra::FrozenGames.label(), Opens::Extra(Extra::FrozenGames), Extra::FrozenGames.blurb()),
+        ("Kids mode", Opens::Kids, "A big, simple shelf for a child, with a PIN."),
         ("Updates", Opens::Updates, "New versions of pocket-ui and the system."),
         (app_storage::SETTINGS_NAME, Opens::Storage, "What takes up space on the SD card, and what can go."),
-        (app_backup::SETTINGS_NAME, Opens::Backup, "Save pocket-ui's settings to the SD card, restore them, or start afresh."),
+        (app_backup::SETTINGS_NAME, Opens::Backup, "Save your saves, states and pocket-ui's settings to the SD card, restore them, or start afresh."),
     ]),
     ("Help & tools", "Tour, manual, tools, Store, report a problem, about.", &[
         ("Tour", Opens::Tour, "Every feature on a card, with a picture: switch it on or off."),
@@ -1073,6 +1080,8 @@ struct App {
     art: std::collections::HashMap<(String, i32, i32), Option<Rc<Sprite>>>,
     /// HOME is down in a game with no other button yet; releasing it opens the quick menu.
     home_tap: bool,
+    /// Kids Mode (`app_kids`).
+    kids: app_kids::Kids,
     /// The manual's reading position (Settings > Manual) and a held Up/Down waiting to start scrolling by itself.
     manual: pocket_ui::manual::Reader,
     manual_hold: Option<(Button, Instant)>,
@@ -1262,6 +1271,7 @@ impl App {
 
     fn rebuild(&mut self) {
         self.items = match self.screen {
+            Screen::Home if self.kids_live() => self.kids_items(),
             Screen::Home => self.home_items(),
             Screen::Games(s) => (0..self.systems[s].games.len()).map(|g| Item::Game(s, g)).collect(),
             Screen::Favorites => self.favorite_items(),
@@ -1415,6 +1425,9 @@ impl App {
     #[cfg(target_os = "linux")]
     fn start_game_at_start(&mut self, note: Option<pocket_ui::sleep::Resume>) {
         use pocket_ui::on_start::{self, Decision, Facts};
+        if self.kids_live() {
+            return self.kids_resume(note);
+        }
         let first = on_start::first_start_this_boot(&self.data_dir, pocket_ui::logs::boot_id().as_deref());
         let last = on_start::last_game(&self.data_dir);
         // The first recent game Home shows (`home_items`).
@@ -1468,6 +1481,11 @@ impl App {
         self.search_launching(&path);
         let Some(sys) = self.systems.iter().find(|s| s.name == system) else { return };
         let (emulator, core) = self.route(sys, Some(&path), std::path::Path::new(host_bin()).exists());
+        // Kids Mode: every start, also a retry, stays on routes that keep a child inside the game (`kids_route_closed`).
+        if self.kids_route_closed(&system, &emulator, &core, &path) {
+            println!("kids mode: stopped, {} would start on {emulator}", path.display());
+            return self.kids_stuck();
+        }
         // A game still ending after a hand-over (`app_fast_switch`) ends first, unless this one may start next to it.
         self.wait_for_drained(&system, &path, &emulator, &core);
         // The game's window opens fullscreen only once sway has the rules (set on a thread at start).
@@ -1490,6 +1508,7 @@ impl App {
         // A moment that can't be used is left out and said so (`frozen::at_launch`); else the normal start, which loads it.
         let mut frozen_env = Vec::new();
         self.frozen_at_launch(&system, &path, &emulator, &core, &mut frozen_env);
+        standalone::set_kids(self.kids_live());
         standalone::launch(&system, &emulator, &core, &path, &self.data_dir);
         emu_settings::launch(standalone::session().map(|s| s.emu), &system, &path);
         // Pixel Path's first reading of the emulator's settings, on a thread once the start script is done.
@@ -1504,6 +1523,13 @@ impl App {
         // The case goes into its console while the game loads (Cabinet and Shelf looks, `app_cabinet`). In Cozy a
         // pocket-core game keeps its window back until the animation has been seen.
         pocket_ui::motion::set_cozy(self.cozy());
+        // Kids Mode: pocket-core's HOME shortcuts are off (`extras::NO_SHORTCUTS`).
+        if self.kids_live() {
+            env.push((pocket_ui::extras::NO_SHORTCUTS, "1".into()));
+            if system == "3ds" {
+                env.push((standalone::KIDS_GPTOKEYB_ENV.0, standalone::KIDS_GPTOKEYB_ENV.1.into()));
+            }
+        }
         if let Some(hold) = self.launch_animation(&path, emulator == "pocket-core") {
             env.push((pocket_ui::startup::HOLD_UNTIL, format!("{:.1}", asked + hold.as_secs_f64() * 1000.0)));
             pocket_ui::startup::prepare_skip();
@@ -1617,6 +1643,13 @@ impl App {
         }
         // pocket-core couldn't start this game: remember it and start it with the system's default emulator instead.
         let failed = run.hosted() && pocket_ui::fallback::should_retry(ok, secs, quit_requested, self.notice.as_ref().map(|n| n.text()));
+        // Kids Mode has no next choice: RetroArch's menu is no place for a child, and the failure isn't remembered for the normal shelf.
+        let kids_stopped = failed && self.kids_live();
+        let failed = failed && !kids_stopped;
+        if kids_stopped {
+            println!("kids mode: stopped, pocket-core couldn't start {} (exit ok {ok}, {secs} s), no fallback here", run.path.display());
+            self.kids_stuck();
+        }
         // What starts it from now on: the next choice down (`emu_choice::resolve`), as the retry below.
         let default = if failed { self.fallback.add(&run.path); self.systems.iter().find(|s| s.name == run.system).map(|s| self.route(s, Some(&run.path), true).0).unwrap_or_default() } else { String::new() };
         // A system with no other emulator than pocket-core (its core is missing): the next choice is pocket-core again, which
@@ -1682,7 +1715,8 @@ impl App {
         // Stick movements were thinned out while the game ran (`idle::StickThrottle`); the controllers stay known.
         self.pad.let_go();
         self.rebuild();
-        if self.screen == Screen::Home {
+        // Kids Mode's shelf stays on the game just played, so A brings the moment back.
+        if self.screen == Screen::Home && !self.kids_live() {
             self.sel = Item::first_row(&self.items);
             self.prev_sel = self.sel;
         }
@@ -3068,6 +3102,10 @@ impl App {
                     self.save_settings();
                     Some(SettingsPage::List(sel))
                 }
+                Opens::Kids => {
+                    self.kids_open_flow(false);
+                    Some(SettingsPage::List(sel))
+                }
                 Opens::RememberQuit => {
                     self.remember_quit = !self.remember_quit;
                     self.save_settings();
@@ -3576,7 +3614,7 @@ impl App {
 
     fn save_settings(&self) {
         Settings {
-            theme: self.theme,
+            theme: self.kids_saved_settings().0,
             onboarded: self.onboarded,
             update_url: self.update_url.clone(),
             store_url: self.store.url.clone(),
@@ -3584,7 +3622,7 @@ impl App {
             streaming_on_home: self.streaming_on,
             appearance: self.appearance,
             on_start: self.on_start,
-            forget_where_quit: !self.remember_quit,
+            forget_where_quit: !self.kids_saved_settings().1,
             button_layout: self.button_layout,
             prompts: pocket_ui::button_prompts::get(),
             colours: pocket_ui::palette::colours(),
@@ -3937,7 +3975,7 @@ impl App {
             return false;
         }
         self.setup.as_ref().is_some_and(|s| s.animating()) || (self.marquee.animating() && (self.running.is_none() || self.switcher.is_some())) || self.switcher.as_ref().is_some_and(|s| s.animating()) ||
-        self.pull_moving(Instant::now()) || self.motion_animating(Instant::now()) || self.toast.as_ref().is_some_and(|(_, t)| t.elapsed() < TOAST) || self.sync_note_active() || self.tailscale_animating() || self.bluetooth_animating() || self.tools_animating() || self.game_check_animating() || self.pc_streaming_animating() || self.backup_animating() || (self.updates.restart_at.is_some() && self.running.is_none()) || self.notice.as_ref().is_some_and(Notice::active) || self.launch_at.is_some_and(|t| t.elapsed() < FADE + self.cabinet.launch_delay() + LAST_FADE_FRAME) || (self.theme == Theme::Cabinet && self.running.is_none() && self.cabinet.animating(Instant::now())) || (self.theme == Theme::Shelf && self.running.is_none() && self.shelf_media_animating(Instant::now())) || self.stream_message_due() || self.exit_since.is_some() || self.sys.animating(Instant::now()) || (self.manual.moving() && self.settings_page == Some(SettingsPage::Manual)) || self.appearance_animating() || self.card.as_ref().is_some_and(|o| o.card.boxed.as_ref().is_some_and(|b| b.animating(Instant::now()))) || self.find_animating() || self.boot_fade.active()
+        self.kids_animating() || self.pull_moving(Instant::now()) || self.motion_animating(Instant::now()) || self.toast.as_ref().is_some_and(|(_, t)| t.elapsed() < TOAST) || self.sync_note_active() || self.tailscale_animating() || self.bluetooth_animating() || self.tools_animating() || self.game_check_animating() || self.pc_streaming_animating() || self.backup_animating() || (self.updates.restart_at.is_some() && self.running.is_none()) || self.notice.as_ref().is_some_and(Notice::active) || self.launch_at.is_some_and(|t| t.elapsed() < FADE + self.cabinet.launch_delay() + LAST_FADE_FRAME) || (self.theme == Theme::Cabinet && self.running.is_none() && self.cabinet.animating(Instant::now())) || (self.theme == Theme::Shelf && self.running.is_none() && self.shelf_media_animating(Instant::now())) || self.stream_message_due() || self.exit_since.is_some() || self.sys.animating(Instant::now()) || (self.manual.moving() && self.settings_page == Some(SettingsPage::Manual)) || self.appearance_animating() || self.card.as_ref().is_some_and(|o| o.card.boxed.as_ref().is_some_and(|b| b.animating(Instant::now()))) || self.find_animating() || self.boot_fade.active()
     }
 
     fn openness(&self, i: usize) -> f32 {
@@ -3963,7 +4001,8 @@ impl App {
     }
 
     fn cozy(&self) -> bool {
-        self.animations_in_use() == pocket_ui::settings::Animations::Cozy
+        // Kids Mode: the case always goes into its console.
+        self.kids_live() || self.animations_in_use() == pocket_ui::settings::Animations::Cozy
     }
 
     /// The other of Cozy and Quick, kept: from now on the look no longer decides.
@@ -4093,6 +4132,10 @@ impl App {
         if let Some(msg) = self.sleep.overlay() {
             c.clear(pal().void);
             self.centered(c, 0, 0, c.w, c.h, &msg);
+            return;
+        }
+        // Kids Mode paints its own few screens (`app_kids`).
+        if self.kids_paint(c) {
             return;
         }
         // PC streaming looks for the PC for up to 12 s before Moonlight's own window comes up over this one; a tool's
@@ -4743,6 +4786,23 @@ fn snapshot(app: &mut App, args: &[String]) {
     // The player's EmulationStation gamelists (`app_gamelist`): the card's description and the covers come from them.
     app.gamelist_load_now();
     app.port_perf_wait_loaded();
+    // "kids-…": Kids Mode's screens (`app_kids`).
+    if state.starts_with("kids-") {
+        let background = args.get(2).and_then(|p| image::load_image(std::path::Path::new(p)));
+        if app.kids_snapshot(state, background, w, h) {
+            let mut buf = vec![0u32; (w * h) as usize];
+            let mut c = Canvas::new(&mut buf, w, h);
+            app.moved_at = Instant::now() - Duration::from_secs(5);
+            if matches!(state.as_str(), "kids-flow:games-thread" | "kids-shelf-thread") {
+                app.kids_cover_settle(&mut c);
+            } else {
+                app.paint(&mut c);
+            }
+            app.sys.paint(&mut c, &mut app.text, app.menu.is_none());
+            write_png(&buf, w, h, out);
+        }
+        return;
+    }
     // "bench-playful:<system>:<launch|pull|lean>": the playful animations' frames in numbers (`App::bench_playful`).
     if let Some(rest) = state.strip_prefix("bench-playful:") {
         app.bench_playful(rest, w, h);
@@ -4839,6 +4899,9 @@ fn snapshot(app: &mut App, args: &[String]) {
             // Settings → Look → Systems on the shelf, opened from its own row (B goes back to Settings).
             "look-systems" => setup.only(Only::Look).at_shelf_systems(),
             "games" => setup.only(Only::Games),
+            // Add games → Y, "Send from your phone", with a made-up address (`PhonePage::demo`: waiting, connected,
+            // receiving, done, idle, slept, nowifi).
+            _ if step.starts_with("phone=") => setup.only(Only::Games).with_phone_demo(&step["phone=".len()..]),
             // Settings > Games > Extras: Cover art, Game pictures, PortMaster games (keys: d down, u up, a).
             "extras" => setup.only(Only::Extras),
             // "How do you like to play?" (keys: d down, a); "card=<feature id>": Choose yourself at that card (keys d, a, b, r).
@@ -5822,6 +5885,14 @@ fn spawn_command_fifo(proxy: EventLoopProxy<UserEvent>) {
                     let _ = proxy.send_event(UserEvent::Leave);
                     continue;
                 }
+                // SELECT and START held and let go: Kids Mode's way out, for its journey.
+                "holddown" | "holdup" if test_driver_dir().is_some() => {
+                    let pressed = line.trim() == "holddown";
+                    for button in [Button::Select, Button::Start] {
+                        let _ = proxy.send_event(UserEvent::Pad(PadEvent::Button { source: usize::MAX, button, pressed }));
+                    }
+                    continue;
+                }
                 "poweroff" => {
                     let _ = proxy.send_event(UserEvent::PowerOff);
                     continue;
@@ -5927,6 +5998,13 @@ impl App {
     }
 
     fn user_event_inner(&mut self, el: &ActiveEventLoop, ev: UserEvent) {
+        // Kids Mode takes the buttons first (`app_kids`).
+        if let UserEvent::Pad(pe) = &ev {
+            if self.kids_pad(pe) {
+                self.request_redraw();
+                return;
+            }
+        }
         // The dialog before EmulationStation takes the buttons while it is open (`app_rescue`).
         if let UserEvent::Pad(pe) = &ev {
             if self.leave_input(el, pe) {
@@ -5958,6 +6036,7 @@ impl App {
         }
         match ev {
             UserEvent::Quit => el.exit(),
+            UserEvent::KidsTick => self.kids_tick(),
             UserEvent::TestFrame => {
                 if let Some(dir) = test_driver_dir() {
                     let (w, h) = snapshot_dims();
@@ -6101,6 +6180,10 @@ impl App {
             UserEvent::Pad(PadEvent::Button { button, pressed: true, .. }) if self.setup.is_some() => {
                 let before_wifi = self.setup.as_ref().is_some_and(|s| !s.past_wifi());
                 let done = self.setup.as_mut().is_some_and(|s| s.press(button));
+                // "For a child" (`app_kids`): its steps open over the first start, which goes on after them.
+                if self.setup.as_mut().is_some_and(|s| s.take_kids_asked()) {
+                    self.kids_open_flow(true);
+                }
                 // Y on the look step: the new appearance shows at once and is kept.
                 if let Some(a) = self.setup.as_ref().map(|s| s.appearance()).filter(|a| *a != self.appearance) {
                     self.set_appearance(a);
@@ -6161,6 +6244,10 @@ impl App {
                 }
                 // The phone page without Wi-Fi, opened from Settings: A leads to the Wi-Fi settings.
                 let wifi = self.setup.as_mut().is_some_and(|s| s.take_open_wifi());
+                // Games came from the phone: the folders are read again now, the shelf swaps the list in when setup is left.
+                if self.setup.as_mut().is_some_and(|s| s.take_phone_added()) {
+                    self.library_rescan("games added");
+                }
                 if done {
                     self.finish_setup();
                 }
@@ -6405,6 +6492,7 @@ impl ApplicationHandler<UserEvent> for App {
     }
 
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+        self.kids_about_to_wait();
         // SELECT + START held: the dialog (Restart pocket-ui, Open EmulationStation), never EmulationStation at once.
         if self.exit_since.is_some_and(|t| t.elapsed() >= EXIT_HOLD) {
             self.open_leave(pocket_ui::rescue::DialogKind::Leave);
@@ -6624,7 +6712,12 @@ impl App {
                 // A store install or tool (review N5), with the same cap.
                 || update::busy_blocks_sleep(self.store.loaded().and_then(|s| s.busy_since()), Instant::now())
                 // A starter pack download keeps the Pocket awake the same way (`app_starter`).
-                || update::busy_blocks_sleep(self.starter.busy_since(), Instant::now()),
+                || update::busy_blocks_sleep(self.starter.busy_since(), Instant::now())
+                // A backup or restore of saves copies for as long as the card needs: it ends itself, and says so (`app_backup`).
+                || self.backup_working()
+                // "Send from your phone" is open (Add games, Y): no idle sleep while it listens or a file arrives; the page
+                // ends itself after `IDLE` / `MAX_SESSION`, the power button closes it.
+                || self.setup.as_ref().is_some_and(|s| s.phone_open()),
             power_menu: self.sys.power_menu_open(),
         }
     }
@@ -7100,6 +7193,7 @@ fn main() {
         covers: std::collections::HashMap::new(),
         art: std::collections::HashMap::new(),
         home_tap: false,
+        kids: Default::default(),
         cover_run: Default::default(),
         usb_busy: false,
         card_out_note: false,
@@ -7189,6 +7283,7 @@ fn main() {
     // Home opens on Continue, under the Search row.
     app.sel = Item::first_row(&app.items);
     app.prev_sel = app.sel;
+    app.kids_load();
     // A pocket-core that was killed last time may have left the CPU or fan profile changed, and a pocket-ui that
     // crashed its fan outside games; the fan outside games waits for that.
     #[cfg(target_os = "linux")]

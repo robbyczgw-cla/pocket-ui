@@ -505,6 +505,11 @@ GameCube and Wii, More… and the button layout:
    no counter.
 6. Quit, start another 3DS game: 1x, Stacked, no filter, no counter.
 
+## Kids Mode
+
+A child's games on these emulators have their own shortcuts closed for the start and given back after: ARMSX2's `[Hotkeys]` lines, Dolphin's `Buttons/Hotkey`, Azahar's gptokeyb hotkey.
+Continue and Stop are the pause menu's own, with the same Quit and resume. [KIDS-MODE.md](KIDS-MODE.md) has how, and what stays reachable.
+
 ## Measuring
 - PS2: `python3 /storage/pocket-ui/pine.py watch 25` (fps, frame time, thread load per second) next to
   `deploy/bench.sh 25 armsx2-qt`; `pine.py save 9` / `load 9` give a repeatable scene, `pine.py set SECTION KEY

@@ -47,6 +47,11 @@ pub fn choices(boot_menu: bool) -> Vec<Choice> {
     v
 }
 
+/// Kids Mode's power menu: what a child can use. The others are ways out of it.
+pub fn for_a_child(c: Choice) -> bool {
+    !matches!(c, Choice::RestartUi | Choice::BootMenu)
+}
+
 /// What the menu knows when it opens: a game is running (it is saved first), ROCKNIX was started from a computer
 /// (a restart goes back to Android).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

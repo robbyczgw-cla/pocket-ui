@@ -267,7 +267,7 @@ def main():
                POCKETUI_VISIBLE_TEXT=os.path.join(tmp, "frame.txt"), POCKETUI_TEXT_BOXES=os.path.join(tmp, "frame.box"),
                POCKETUI_DATA=data, POCKETUI_ES_SYSTEMS=os.path.join(tmp, "es_systems.cfg"),
                POCKETUI_RTC_ALARM=os.path.join(tmp, "wakealarm"), POCKETUI_SUSPEND_CMD="false",
-               POCKETUI_POWEROFF_CMD="true", POCKETUI_NO_AUTOSUSPEND="1", POCKETUI_NO_HISTORY="1")
+               POCKETUI_POWEROFF_CMD="true", POCKETUI_REBOOT_CMD="true", POCKETUI_BOOTLOADER_CMD="true", POCKETUI_NO_AUTOSUSPEND="1", POCKETUI_NO_HISTORY="1")
     if a.profile:
         device, size = PROFILES[a.profile]
         env["POCKETUI_DEVICE"] = device

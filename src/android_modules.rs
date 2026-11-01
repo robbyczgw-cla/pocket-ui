@@ -29,6 +29,7 @@ pub mod connections;
 pub mod curator_page;
 pub mod cabinet;
 pub mod cabinet_art;
+pub mod phone_shelves;
 pub mod media;
 pub mod slideshow;
 pub mod motion;

@@ -104,6 +104,10 @@ pocket-ui's own folder; a tool that was lost that way shows **Install** again in
 Settings → System → Backup & reset lists the backups, including the one made before every reset and restore. Restore one (A,
 then A again).
 
+**I want my saves back, or I have to flash the card again.**
+Settings → System → Backup & reset → Back up saves, then copy the folder `backup/pocket-ui-saves` to a computer: flashing erases it
+with the rest of the card. Afterwards copy it back to the same place and restore it on the same page. What is newer on the card stays.
+
 **My device does not show up in the Bluetooth search.**
 It has to be in pairing mode while the search runs: most controllers flash their light fast then. A controller that
 was paired with a phone or a console before often tries to reconnect there first; switch Bluetooth off on that device,
@@ -179,7 +183,7 @@ The game's emulator gave up within five seconds, with an error, and nothing else
 such as "needs a BIOS file in roms/bios", are shown as they are). Check that the file is whole (copy it again) and, for a
 system that needs one, that its BIOS is in `roms/bios`: Settings → Games → **Add games** lists the BIOS files per
 system. When pocket-ui knows the system's BIOS and it is missing (Sega CD, PC Engine CD and others), the line names the
-files instead: "... didn't start. Sega CD needs a BIOS file in roms/bios: bios_CD_U.bin, bios_CD_E.bin or bios_CD_J.bin."
+files instead: "... didn't start. Sega CD needs a BIOS file in roms/bios: bios_CD_U.bin, bios_CD_E.bin or bios_CD_J.bin. BIOS files come from your own console."
 A game that never started is not counted as played: it does not become Continue and is not in the switcher.
 For a zip file, pocket-core says what is wrong with it: [see below](#a-zip-game-says-it-holds-several-games-is-damaged-or-cant-be-opened).
 

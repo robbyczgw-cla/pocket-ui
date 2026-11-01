@@ -86,6 +86,8 @@ EPOCH=${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || e
 if [ -n "$RELEASE_URL" ]; then
   ISSUES="${RELEASE_URL%%/releases*}/issues"
 else
+  # The notes then name no web address, and the check refuses that at the very end of the build: fine for a card only we test.
+  echo "note: no --release-url: scripts/check-image-family.sh will fail SOURCE-OFFER.txt, which must name the issues page" >&2
   RELEASE_URL="the pocket-ui release page for version $VERSION"
   ISSUES="the pocket-ui repository's issues page"
 fi

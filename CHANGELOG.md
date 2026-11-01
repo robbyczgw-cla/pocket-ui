@@ -19,6 +19,12 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ### Fixed
 
+- SD card images: a build without a model (Mini V2) no longer gets GAMES drive files.
+- SD card image: a card over about 36 GB (the 64 GB card an RG35XX SP comes with, for one) no longer ends in "Filesystem
+  corruption has been detected" and a black screen after the first start's resize. Cards flashed with an earlier image
+  have to be flashed again.
+- Android: marking a game as a favourite keeps it selected, so Play starts that game.
+- Android: the Games page with several shelves opened scrolled down to the shelf of the alphabetically first title after a fresh start. It now opens at the top (Recent games first); a remembered game still opens on its own shelf.
 - On Android, a moment set aside while all eight slots are full is now under Load, after the last slot.
 - On Android, Home during a slow game copy stops the start: no game comes up in the background later.
 - On Android, Play works right after Game check found a disc's missing track copied in.
@@ -26,6 +32,38 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 - Tour and first-start cards on the Steam Deck: none for Haptics, Sync, Tailscale, Tools or Performance & fan.
 - Steam Deck: no idle timers, suspend, power-key hold or low-battery power-off of ours any more; SteamOS owns sleep and the
   power button (the Settings rows were hidden, but the timers still ran and would have suspended after 4 minutes).
+
+## [0.1.10] - 2026-11-01
+
+### Added
+
+- Settings → System → Backup & reset backs up your saves and states: battery saves, save states, PS2 and GameCube memory
+  cards, Wii and 3DS save data, no games and no BIOS files. It shows the size and the free space first and keeps the page
+  moving while it copies. A restore never overwrites what is newer on the card. Flashing a card erases the folder, so copy it
+  to a computer first; a second card keeps it ([docs/user/settings-system.md](docs/user/settings-system.md#backup--reset)).
+- **Kids mode** (Settings → System, or "For a child" at the first start): a big, simple shelf with the games you pick, behind your PIN. Blue or Pink, a
+  time per day with a warning five minutes before, a loudest volume. PS2, GameCube, Wii, 3DS and Xbox games too, on handhelds that play them; the emulators' and
+  ROCKNIX's own shortcuts are closed meanwhile ([docs/user/kids-mode.md](docs/user/kids-mode.md)).
+- Add games: a system the handheld runs but not every game of it smoothly (heavy ones such as PS2 and GameCube on a Snapdragon 865, Nintendo 64, PSP, Dreamcast and DS on an H700) says so in one plain sentence under its Files and BIOS lines.
+- Add games: **From your phone** (a tile in the row of ways, also Y, also on the first start). Scan the code with your
+  phone's camera, pick game files on the page it opens, and they land in the right system's folder; the shelf has them
+  when you leave. Disc images and anything several systems take (`.iso`, `.chd`, `.cue`, `.zip`) ask which system. The
+  Pocket stays awake while the page is open; it closes by itself after 10 minutes idle or when the screen goes dark
+  ([docs/user/phone-upload.md](docs/user/phone-upload.md)).
+
+### Fixed
+
+- Kids mode: "Pick the games" shows the cover of the game under the cursor (it stayed an empty box on a device), and the case on the child's shelf fills as soon as its cover is read.
+- Kids mode: the child's shelf reads the covers that arrive after it is shown (a case could stay blank), and stops repainting once they are in.
+- Kids mode: a game that can't start stops on a picture asking for a grown-up. It no longer falls back to RetroArch, whose menu leaves the mode.
+- Kids mode: a game paused by the screen going dark no longer uses up the day's time.
+- Kids mode: a keyboard's Escape with the power menu, and a keyboard on the crash-loop door, no longer get past the PIN.
+- A restore keeps a save that arrived or got newer after the comparison, also during the copy; it counts as kept.
+- From your phone: a disc's tracks (`.bin`, `.raw`, `.img`, `.wav`) can be sent for Dreamcast, Saturn, Sega CD, PC Engine CD and the others, and go where the `.cue` or `.gdi` in their own folder goes.
+- From your phone: choosing a system for one file no longer sends other files there; a button offers the same system for the rest, if you want it.
+- The first saves backup after an update no longer goes to your other devices: the sync's ignore list is brought up to date first.
+- Kids mode: a game hosted by pocket-core fills the screen as large as fits in its shape (a Game Boy Advance game on a 640x480 handheld is 640x427, no longer 480x320), whatever picture settings the grown-up saved; they come back when Kids mode is off.
+- A large saves backup or restore keeps the handheld awake until it is done, instead of going to sleep halfway.
 
 ## [0.1.9] - 2026-11-01
 

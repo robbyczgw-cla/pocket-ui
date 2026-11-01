@@ -263,6 +263,8 @@ def main():
         "favorites.json": favorites,
         "recents.json": recents,
         "curator.json": curator,
+        # Kids Mode's snapshots (kids-…); the mode itself stays off for all the others.
+        "kids.json": {"on": False, "pin": "1234", "theme": "blue", "minutes": 30, "volume": 55, "games": [os.path.join(roms, "gba", f) for f in sorted(os.listdir(os.path.join(out, "roms", "gba")))[:6]]},
     }
     for name, value in files.items():
         with open(os.path.join(data, name), "w") as fh:

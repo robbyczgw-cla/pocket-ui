@@ -151,6 +151,7 @@ Settings → System → **Backup & reset** (`src/backup.rs`, `backup_page.rs`, `
 | Options per console and game | `game-settings/`, `core-options/`, `cheats/` | yes | yes | removed |
 | Services | `sync.json`, `tailscale.json`, `web.json` (never the paired browsers in `web/`) | yes | yes | kept (a reset never switches a service off) |
 | Library notes | `library.json`, `favorites.json`, `recents.json`, `fallback.json`, `moonlight-pcs.json` | yes | yes | kept |
+| Saves and states | See "Saves" below | yes, on its own row | yes, on its own row | kept |
 | Never | `retroachievements.json` (token), `share/` (password), `store/` (must match the files), `frames/`, `fonts/`, `tools/`, `covers/`, `snaps/`, `titles/`, `slots/`, `logs/`, `restore.json` and the other undo notes, `last-game.json`, `play-log.bin` (play history stays private: it is never copied to the games part of the card, which file sharing reaches), ROCKNIX's files (system.cfg included) | | | |
 
 - A backup is a folder `/storage/roms/backup/pocket-ui/<YYYY-MM-DD_HHMM>` (next to ROCKNIX's own
@@ -166,6 +167,30 @@ Settings → System → **Backup & reset** (`src/backup.rs`, `backup_page.rs`, `
 - System.cfg is not touched: the per-game options PlayStation 2, GameCube, Wii and 3DS keep there
   (`<platform>["<rom>"].<key>`) are neither backed up nor reset.
 
+### Saves
+
+`src/backup_saves.rs`. Flashing a card again is the only way back from a bad system update, and it erases STORAGE.
+
+- **What:** `backup_saves::wanted`, for backup and restore alike, on paths relative to `/storage`: all of `roms/savestates`, the
+  saves folder's endings (`sync::save_extensions`) and `.pstate*` beside the games, and what the `.stignore` of `sync::Share`'s
+  PS2, Dolphin and Azahar folders shares (the Wii's lie outside `roms`). Never `bios` otherwise, `backup`, `backups`, `sync-backups`,
+  hidden top folders, the rest of `3ds/azahar`. No links are followed. A list edited over the share reaches nothing else.
+- **Where:** `/storage/roms/backup/pocket-ui-saves/<YYYY-MM-DD_HHMM>`: `files/` and `saves.json` (place, stored name, size, time per file; what
+  could not be read). Its own folder and list name, so `backup::list` and Storage's clean-up of old backups never see it; Storage counts it
+  under Backups. Sync's saves folder ignores `/backup`, or every copy of a save would go to every device.
+- **File systems:** `/storage/roms` is ext4, or exFAT on a second card (`games_card`, the page then says flashing leaves it alone). FAT
+  names (`:`, `?`, case) get another stored name, the list keeps the real one. Times closer than 2 s count as equal and the list's time
+  decides, not the copy's, which a computer may have changed. Nothing depends on permissions, links or hard links. On a real exFAT:
+  `BACKUP_SAVES_EXFAT=<mount> cargo test --profile gate --lib backup_saves::tests::on_exfat -- --ignored`.
+- **Backup:** A counts on a thread (a listing per folder, a `stat` per save) and shows size, free space and where it goes; not enough room
+  (per cluster, with 16 MB spare) stops here. A again copies on a thread, with `Progress` for the page, into a hidden folder, flushed, then renamed:
+  whole or not at all. B stops it between two files. A file that can't be read is left out and named, so a dying card gives what it can;
+  a write error ends it and removes the hidden folder. A hidden folder a power cut left goes with the next backup.
+- **Restore:** A compares on a thread, then says what would change. Missing: comes back. Older on the card: copied to a `Before restore`
+  folder, then replaced. Newer on the card, or the same time and different bytes: stays, and the backup keeps its copy. Same size and
+  time, or same bytes: nothing. A file goes in under a temporary name and is renamed. One that fails is named, the rest go on. No restart: nothing
+  in memory holds them.
+
 ## Snapshots
 
 | State | Screen |
@@ -175,7 +200,7 @@ Settings → System → **Backup & reset** (`src/backup.rs`, `backup_page.rs`, `
 | `setup:wifi-off`, `-switch-failed`, `-save-failed`, `-scan-failed`, `-empty`, `-switching` | The same page with the radio off (the boot hooks blocked it), with a switch that did not work, with a scan that failed, with one that found nobody, and with the radio on its way on (`net_state::demo`); the picture stays as it is |
 | `sys:quick-wifi-off`, `sys:quick-wifi-failed`, `sys:quick-wifi-save-failed` | Quick settings with the Wi-Fi row on Off, and with the line of a switch that did not work |
 | `pc-streaming[:<row>][:pin\|:searching\|:address\|:unpair\|:done\|:none\|:missing]` | Settings → Games → PC streaming with two PCs and three games |
-| `backup[:<row>][:reset\|:restore\|:done\|:empty]` | Settings → System → Backup & reset with three backups |
+| `backup[:<row>][:reset\|:restore\|:done\|:empty\|:saves-counted\|:saves-card\|:saves-copying\|:saves-full\|:saves-restore\|:saves-done]` | Settings → System → Backup & reset with made-up backups: saves counted (and on a second card), being copied, not fitting, compared for a restore, done |
 
 ## Trying it in the virtual device
 

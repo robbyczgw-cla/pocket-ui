@@ -171,6 +171,7 @@ H700_GAMES_DRIVE_MODELS="rg28xx"
 SM8550_GAMES_DRIVE_MODELS=""
 # has_games_drive FAMILY MODEL
 has_games_drive() {
+  [ -n "$2" ] || return 1 # no model (the Mini V2 build): no GAMES drive; an empty list matched the empty name before
   eval "pu_list=\${${1}_GAMES_DRIVE_MODELS:-}"
   case " $pu_list " in *" $2 "*) return 0 ;; esac
   return 1

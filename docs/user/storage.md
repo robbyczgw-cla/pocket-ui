@@ -34,8 +34,8 @@ A does it, B keeps it. Moving to another row cancels the question. What each one
 - **Box art and pictures**: the whole picture cache, including pictures you put there yourself. They are downloaded
   again when the Pocket is online and no game runs ([Extras](extras.md)).
 - **Logs**: the logs of earlier starts. The ones of this start stay (pocket-ui keeps those of three starts anyway).
-- **Backups**: every backup of pocket-ui's settings but the newest ([Backup & reset](settings-system.md#backup--reset)). Other files in
-  the backup folder stay.
+- **Backups**: every backup of pocket-ui's settings but the newest ([Backup & reset](settings-system.md#backup--reset)). Backups of
+  your saves and other files in the backup folder stay; delete those yourself, over file sharing.
 
 To free more space, delete games you don't play any more: open a game's card and choose **Hide or delete** at its end
 ([Hide or delete a game](library.md#hide-or-delete-a-game)).

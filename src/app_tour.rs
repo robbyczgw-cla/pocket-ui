@@ -124,7 +124,7 @@ impl App {
     /// Called as the loop goes idle: once per run, on the shelf with nothing over it (not over a game that On start
     /// continued, not over Settings), notes this version and shows its new cards if it has any.
     pub(crate) fn tour_tick(&mut self) {
-        if self.tour.checked || !self.drew_first || !self.onboarded {
+        if self.tour.checked || !self.drew_first || !self.onboarded || self.kids_live() {
             return;
         }
         let busy = self.running.is_some()

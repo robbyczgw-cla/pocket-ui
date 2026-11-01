@@ -29,6 +29,31 @@ pub fn move_file(from: &Path, to: &Path) -> io::Result<()> {
     std::fs::remove_file(from)
 }
 
+/// Renames `from` to `to` only if nothing is at `to`, as one step: what arrives at any moment before stays, and the answer is
+/// `AlreadyExists`. ext4, vfat and exFAT all do this in the kernel (`RENAME_NOREPLACE`; seen on 7.2, 2026-11-01). A file system
+/// that doesn't gets a hard link, which is as safe; one with neither answers `Unsupported`, never an overwrite.
+pub fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        const RENAME_NOREPLACE: libc::c_uint = 1;
+        let (a, b) = (std::ffi::CString::new(from.as_os_str().as_bytes())?, std::ffi::CString::new(to.as_os_str().as_bytes())?);
+        // SAFETY: both are NUL-terminated paths that outlive the call; the kernel only reads them.
+        if unsafe { libc::syscall(libc::SYS_renameat2, libc::AT_FDCWD, a.as_ptr(), libc::AT_FDCWD, b.as_ptr(), RENAME_NOREPLACE) } == 0 {
+            return Ok(());
+        }
+        let e = io::Error::last_os_error();
+        if !matches!(e.raw_os_error(), Some(libc::EINVAL | libc::ENOSYS | libc::ENOTSUP)) {
+            return Err(e);
+        }
+    }
+    match std::fs::hard_link(from, to) {
+        Ok(()) => std::fs::remove_file(from),
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Err(e),
+        Err(e) => Err(io::Error::new(io::ErrorKind::Unsupported, e)),
+    }
+}
+
 /// A game file with nothing in it (0 bytes): a copy that never finished, or a placeholder. No emulator can start it, and
 /// no picture belongs to it (new-user test 2026-10-30: an empty Tetris got a cover and a box like a healthy game).
 pub fn is_empty_file(path: &Path) -> bool {

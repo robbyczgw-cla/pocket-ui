@@ -19,7 +19,7 @@ Screen frames and the like change with A or Left/Right, right in the list.
 | **Playing** | On start, Remember where I quit, Buttons, Over the game, Screen frames, Performance & fan, Battery, RetroAchievements. See [Playing](#playing) |
 | **Games** | Add games, Game check, Starter pack, Pictures & extras, From EmulationStation, Screenshots, Curator, PC streaming. See [Games](#games) |
 | **Connections** | Wi-Fi, Bluetooth, USB file transfer, Tailscale, Sync, Remote access (SSH), Web companion. See [Connections](settings-system.md#connections) |
-| **System** | Language, Time, Sleep & power, Frozen games, Updates, Storage, Backup & reset. See [System](settings-system.md#system) |
+| **System** | Language, Time, Sleep & power, Frozen games, Kids mode, Updates, Storage, Backup & reset. See [System](settings-system.md#system) |
 | **Help & tools** | Tour, Manual, Tools, Store (only on a device with a store set up), Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
 
 The second half of Settings, [Connections, System and Help & tools](settings-system.md), has its own page.
@@ -45,7 +45,7 @@ Settings → **Look**. How pocket-ui looks. Every choice has a row of its own; t
 | **Font** | The type of every screen: Barlow, Pixel or Rounded. A or Left/Right switches it. See [Colours and font](theme.md#font) |
 | **Text size** | **Normal** (the default), **Medium** or **Large**: larger text on every screen, fewer rows on a page. A or Left/Right switches it. See [Text size](#text-size) |
 | **Night light** | Warmer, less blue colours in the evening, in the menus and in games: **Off** (the default), **On** or **Scheduled**, with a strength. See [Night light](night-light.md) |
-| **Systems on the shelf** | Which systems are on Home, a tick each. See [Systems on the shelf](#systems-on-the-shelf) |
+| **Systems on the shelf** | Which systems are on Home, a tick each. The row says "1 hidden" (or 2, 3...) while a system with games is off the shelf: this is the way back. See [Systems on the shelf](#systems-on-the-shelf) |
 | **Cozy extras** | The little touches you see, each on or off on its own: the TV on the cabinet, stickers, printed discs, the memory card in the pause menu, light by time of day, decorations, game connections, Rediscover. See [Cozy extras](#cozy-extras) |
 
 ### Choose a look
@@ -143,7 +143,7 @@ Settings → **Sound & feel**. What moves, what you hear and what you feel in yo
 | **Playful cases** | Cases spring out and wiggle, each game goes into its console its own way, the open box's disc turns, spines lean as you scroll ([Playing](playing.md#starting-a-game)). Shelf and Cabinet looks only, with Motion on Full. **On with Cozy, Off with Quick** until you switch it. A or Left/Right switches it |
 | **Old-TV switch-on** | The game's picture comes on like an old TV when it starts. Shelf and Cabinet looks only, with Animations on Cozy and Motion on Full. **On** at the start. A or Left/Right switches it |
 | **Motion** | **Full** (the default), **Reduced** or **Off**: how much the menus move. A or Left/Right switches it. See [Motion](#motion) |
-| **Sounds** | Soft clicks in the menus. A turns them on or off, Left/Right set how loud. See [Playing](playing.md#menu-sounds) |
+| **Sounds** | Soft clicks in the menus (not the game's volume or the screen brightness: those are on HOME, [Quick settings](quick-settings.md)). A turns them on or off, Left/Right set how loud. See [Playing](playing.md#menu-sounds) |
 | **Case sounds** | Cases click open, cartridges and discs go in with a sound, the old TV hums on. Shelf and Cabinet looks only. Needs Sounds on; the menu sounds are not affected. **On** at the start. A or Left/Right switches it |
 | **Haptics** | A very short tick in the menus as the selection moves. A turns it on or off. Off by default |
 | **LEDs** | The lights around the sticks: off, one colour, or the battery colours. Only on a device with sticks. See [LEDs](#leds) |
@@ -343,7 +343,7 @@ Settings → **Games**. Getting games and what runs them onto the Pocket, and th
 
 | Entry | What it holds |
 |---|---|
-| **Add games** | A tile per system with its folder, file types and BIOS needs, file sharing, and folders or disc games it can't read. See [Getting started](getting-started.md#the-systems-grid) |
+| **Add games** | A tile per system with its folder, file types and BIOS needs, file sharing, sending games from your phone (Y), and folders or disc games it can't read. See [Getting started](getting-started.md#the-systems-grid) and [From your phone](phone-upload.md) |
 | **Game check** | "Will my games start?": goes through your card and says, in plain words, what is missing and what to do. Only looks; it can hide a duplicate from the shelf when you press A. See [Getting started](game-check.md) |
 | **Starter pack** | A handful of free games to download when the SD card has none: pick one or take them all. Also offered on Home while the SD card is empty. See [Getting started](getting-started.md#nothing-on-the-sd-card-yet-the-starter-pack) |
 | **Pictures & extras** | Cover art, the Pictures choice (Box art, Box art and screenshots or Off) and PortMaster games. See [Pictures and extras](extras.md) |

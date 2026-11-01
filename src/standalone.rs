@@ -50,7 +50,7 @@ pub const PCSX2_FLATPAK: &str = "net.pcsx2.PCSX2";
 /// How long the main loop waits after a guest's Quit (`guest::WORST` plus slack) before it stops the process group.
 pub const GUEST_GRACE: Duration = Duration::from_secs(20);
 
-const SYSTEM_CFG: &str = "/storage/.config/system/configs/system.cfg";
+pub(crate) const SYSTEM_CFG: &str = "/storage/.config/system/configs/system.cfg";
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Emu {
@@ -239,6 +239,34 @@ pub fn resuming() -> bool {
 
 /// Called before the game is started: writes what the integration needs (and, once, the tuned defaults) into
 /// the emulator's config, and starts the thread that resumes from the Quit state. False for other emulators.
+/// Whether a game of a Kids Mode's shelf plays in an emulator whose own menus and shortcuts are closed (`defaults::apply`
+/// with `set_kids`, docs/KIDS-MODE.md). None: it can't be offered. Some(false): Stop keeps no moment, the game's own saves are
+/// all there is (Xbox while its core has no states, Wii channels). Dolphin's Qt builds have no `Emu`, RetroArch and ports neither.
+pub fn kids_keeps_moment(system: &str, emulator: &str, core: &str, rom: &Path) -> Option<bool> {
+    let emu = Emu::detect(system, emulator, core)?;
+    Some(emu.handles(rom) && (emu != Emu::Hakux || crate::hakux::core_has_states()))
+}
+
+/// The next starts are a Kids Mode's: the emulators' own shortcuts are taken away from them.
+static KIDS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_kids(on: bool) {
+    KIDS.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn kids() -> bool {
+    KIDS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// `gptokeyb`'s environment for a Kids Mode's 3DS game (start_azahar.sh starts it): its HOTKEY, which SELECT + START kills the
+/// emulator with and which HOME + a shoulder quick-saves with, is a button the handhelds have not got.
+pub const KIDS_GPTOKEYB_ENV: (&str, &str) = ("HOTKEY", "misc1");
+
+/// Kids Mode went off: the emulators' shortcuts back as they were, also for what doesn't start through pocket-ui. Files: on a thread.
+pub fn kids_restore(data_dir: &Path) {
+    defaults::kids_restore(data_dir);
+}
+
 pub fn launch(system: &str, emulator: &str, core: &str, rom: &Path, data_dir: &Path) -> bool {
     // Consumed by this start whatever happens to it: an early return must not leave it for the next game's resume.
     let skip = SKIP_RESUME.swap(false, std::sync::atomic::Ordering::Relaxed);
@@ -297,6 +325,51 @@ pub fn exited() {
     }
     guest::ended();
     restore_performance();
+    settle_governors();
+}
+
+/// An emulator that was killed hard takes runemu.sh's clean-up with it and leaves every cluster on `performance`,
+/// which runemu.sh sets at its start (soak 2026-11-01: Dolphin killed on the Odin). Once no emulator and no runemu.sh
+/// is left, a cluster still on `performance` goes to the governor the system settings name (`system.cpugovernor`,
+/// default `ondemand`), unless the player chose `performance` there.
+fn settle_governors() {
+    if crate::proc::mock() {
+        return;
+    }
+    std::thread::spawn(|| {
+        // A clean end: runemu.sh is still putting the governors back for a moment.
+        for _ in 0..8 {
+            std::thread::sleep(Duration::from_secs(1));
+            if emulator_running() || find_pid(None, "runemu.sh").is_some() {
+                return;
+            }
+        }
+        let cfg = std::fs::read_to_string(SYSTEM_CFG).unwrap_or_default();
+        let n = settle_governors_in(Path::new("/"), &cfg);
+        if n > 0 {
+            println!("standalone: {n} cpu clusters were left on performance after the game; back to the system's governor");
+        }
+    });
+}
+
+/// Writes the system's governor to every cluster of `root` that is on `performance`; how many were changed.
+fn settle_governors_in(root: &Path, cfg: &str) -> usize {
+    let wanted = cfg
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix("system.cpugovernor="))
+        .next_back()
+        .map(str::trim)
+        .filter(|g| !g.is_empty())
+        .unwrap_or("ondemand");
+    if wanted == "performance" {
+        return 0;
+    }
+    let Ok(dir) = std::fs::read_dir(root.join("sys/devices/system/cpu/cpufreq")) else { return 0 };
+    dir.flatten()
+        .map(|e| e.path().join("scaling_governor"))
+        .filter(|f| std::fs::read_to_string(f).is_ok_and(|g| g.trim() == "performance"))
+        .filter(|f| std::fs::write(f, wanted).is_ok())
+        .count()
 }
 
 /// What `set_performance` changed while a standalone game ran, noted in this file until it is undone, so a crash of
@@ -1414,13 +1487,15 @@ mod defaults {
                     write_atomic(&ini, "");
                 }
                 edit_ini(&ini, ARMSX2_ENFORCED);
+                armsx2_hotkeys(&ini, data_dir, super::kids());
             }
             Emu::Dolphin => {
                 let hotkey = if super::hotkey_is_guide(system, rom) { "Guide" } else { "Back" };
+                let kids = super::kids();
                 edit_files(
                     DOLPHIN_PROFILES,
                     |name| name.starts_with("GCPadNew.ini.") && !name.ends_with("backup"),
-                    |t| with_extra_triggers(t, hotkey),
+                    |t| with_hotkey_for(&with_extra_triggers(t, hotkey), hotkey, kids),
                 );
                 if system == "wii" {
                     edit_files(WII_PROFILES, |name| WII_STOCK_PROFILES.contains(&name), with_quiet_wiimote);
@@ -1428,6 +1503,75 @@ mod defaults {
             }
             Emu::Azahar => azahar_config(),
         }
+    }
+
+    /// Where the `[Hotkeys]` lines of ARMSX2's INI wait while a Kids Mode's game plays.
+    const ARMSX2_HOTKEYS_KEPT: &str = "kids-armsx2-hotkeys";
+
+    /// ARMSX2's own shortcuts are `[Hotkeys]` lines: HOME + X its menu with every setting, HOME + a shoulder a state. For a
+    /// Kids Mode's game they go, kept in a file of the mode's; any other start (or the mode going off) puts them back.
+    fn armsx2_hotkeys(ini: &str, data_dir: &Path, kids: bool) {
+        let Ok(old) = std::fs::read_to_string(ini) else { return };
+        let keep = data_dir.join(ARMSX2_HOTKEYS_KEPT);
+        let new = if kids {
+            let (new, lines) = without_hotkeys(&old);
+            if !lines.is_empty() && !keep.exists() {
+                let _ = crate::fsutil::write_atomic(&keep, (lines.join("\n") + "\n").as_bytes());
+            }
+            new
+        } else {
+            let Ok(kept) = std::fs::read_to_string(&keep) else { return };
+            let new = with_hotkeys(&old, &kept);
+            let _ = std::fs::remove_file(&keep);
+            new
+        };
+        if new != old {
+            write_atomic(ini, &new);
+        }
+    }
+
+    /// The INI without the keys of `[Hotkeys]`, and those lines.
+    pub fn without_hotkeys(ini: &str) -> (String, Vec<String>) {
+        let (mut out, mut lines, mut inside) = (String::new(), Vec::new(), false);
+        for line in ini.lines() {
+            let t = line.trim();
+            if t.starts_with('[') {
+                inside = t == "[Hotkeys]";
+            }
+            if inside && !t.starts_with('[') && t.contains('=') {
+                lines.push(line.to_string());
+            } else {
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+        (out, lines)
+    }
+
+    pub fn with_hotkeys(ini: &str, kept: &str) -> String {
+        kept.lines().filter_map(|l| l.split_once('=')).fold(ini.to_string(), |t, (k, v)| ini_set(&t, "Hotkeys", k.trim(), Some(v.trim())))
+    }
+
+    /// The patch behind Dolphin's HOTKEY chords reads one binding, `Buttons/Hotkey` (SELECT + START quits with no save, SELECT +
+    /// a trigger saves or loads, SELECT + A a screenshot and so on). For a Kids Mode's game it also wants a stick click, which every chord
+    /// of ours holds (`dolphin::chords`) and a game doesn't ask for: SELECT and a button alone do nothing. Written without the
+    /// blank before `=`, which the start scripts' `sed '/^Buttons\/Hotkey =/c…'` would replace; Dolphin's INI reader takes both.
+    pub fn with_hotkey_for(profile: &str, hotkey: &str, kids: bool) -> String {
+        let closed = format!("Buttons/Hotkey= (`{hotkey}` & (`Thumb L` | `Thumb R`))");
+        let lines: Vec<String> = profile
+            .lines()
+            .map(|line| match (line.starts_with("Buttons/Hotkey"), kids) {
+                (true, true) => closed.clone(),
+                (true, false) if line.starts_with("Buttons/Hotkey=") => format!("Buttons/Hotkey = `{hotkey}`"),
+                _ => line.to_string(),
+            })
+            .collect();
+        lines.join("\n") + "\n"
+    }
+
+    pub fn kids_restore(data_dir: &Path) {
+        armsx2_hotkeys(&pcsx2_ini(), data_dir, false);
+        edit_files(DOLPHIN_PROFILES, |name| name.starts_with("GCPadNew.ini.") && !name.ends_with("backup"), |t| with_hotkey_for(t, "Back", false));
     }
 
     /// Rewrites the files of `dir` that `pick` names through `edit`, where that changes them.
@@ -2026,6 +2170,38 @@ mod tests {
     }
 
     #[test]
+    fn a_kids_game_has_no_emulator_shortcut_and_the_others_get_theirs_back() {
+        let stock = "[GCPad1]\nButtons/Z = `Shoulder R`\nButtons/Hotkey = `Back`\nMain Stick/Up = `Axis 1-`\n";
+        let closed = defaults::with_hotkey_for(stock, "Back", true);
+        assert!(closed.contains("Buttons/Hotkey= (`Back` & (`Thumb L` | `Thumb R`))\n"), "{closed}");
+        assert!(!closed.lines().any(|l| l.starts_with("Buttons/Hotkey =")), "the start scripts' sed would write over this: {closed}");
+        assert_eq!(defaults::with_hotkey_for(&closed, "Back", true), closed, "at every start the same");
+        assert_eq!(defaults::with_hotkey_for(&closed, "Back", false), stock);
+        assert_eq!(defaults::with_hotkey_for(stock, "Back", false), stock);
+
+        // Every chord of ours holds a stick click, or the mode would close them too.
+        for (slot, action) in [(0, dolphin::Action::Save), (1, dolphin::Action::Load), (3, dolphin::Action::Save)] {
+            for chord in dolphin::chords(slot, action, "Gamepad:Button:Select") {
+                assert!(chord.iter().any(|b| b.contains("Stick") || b.contains("Thumb")), "{chord:?}");
+            }
+        }
+
+        let ini = "[UI]\nA = 1\n\n[Hotkeys]\nLoadStateFromSlot = SDL-0/Guide & SDL-0/LeftShoulder\nOpenPauseMenu = SDL-0/Guide & SDL-0/FaceNorth\n\n[Pad]\nB = 2\n";
+        let (without, lines) = defaults::without_hotkeys(ini);
+        assert_eq!(lines.len(), 2);
+        assert!(!without.contains("Guide") && without.contains("[Hotkeys]") && without.contains("B = 2"), "{without}");
+        let back = defaults::with_hotkeys(&without, &(lines.join("\n") + "\n"));
+        assert!(back.contains("OpenPauseMenu = SDL-0/Guide & SDL-0/FaceNorth") && back.contains("LoadStateFromSlot = SDL-0/Guide & SDL-0/LeftShoulder"), "{back}");
+
+        assert_eq!(kids_keeps_moment("ps2", "armsx2", "armsx2-sa", Path::new("/g/a.chd")), Some(true));
+        assert_eq!(kids_keeps_moment("gamecube", "dolphin", "dolphin-sa-gc", Path::new("/g/a.rvz")), Some(true));
+        assert_eq!(kids_keeps_moment("gamecube", "dolphin", "dolphin-qt-gc", Path::new("/g/a.rvz")), None, "Qt has menus");
+        assert_eq!(kids_keeps_moment("wii", "dolphin", "dolphin-sa-wii", Path::new("/g/a.wad")), Some(false), "a channel keeps no moment");
+        assert_eq!(kids_keeps_moment("snes", "retroarch", "snes9x", Path::new("/g/a.sfc")), None);
+        assert_eq!(kids_keeps_moment("ports", "ports", "", Path::new("/g/a.sh")), None);
+    }
+
+    #[test]
     fn wii_u_ps3_and_vita_are_guests_that_close_by_their_window() {
         use super::guest::{Guest, PLAN, WORST};
         assert_eq!(Guest::detect("wiiu", "cemu"), Some(Guest::Cemu));
@@ -2233,6 +2409,26 @@ mod tests {
             id: 1,
         };
         assert_eq!(wii.state_path(Target::Slot(1)).unwrap(), PathBuf::from("/storage/roms/savestates/wii/ID-boot.s01"));
+    }
+
+    #[test]
+    fn a_cluster_left_on_performance_goes_back_to_the_systems_governor() {
+        let d = scratch("governors");
+        for (p, g) in [("policy0", "ondemand"), ("policy4", "performance"), ("policy7", "performance")] {
+            let dir = d.join("sys/devices/system/cpu/cpufreq").join(p);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("scaling_governor"), format!("{g}\n")).unwrap();
+        }
+        let gov = |p: &str| std::fs::read_to_string(d.join("sys/devices/system/cpu/cpufreq").join(p).join("scaling_governor")).unwrap();
+        // The player chose performance: left alone.
+        assert_eq!(super::settle_governors_in(&d, "system.cpugovernor=performance\n"), 0);
+        assert_eq!(gov("policy4").trim(), "performance");
+        // Otherwise the system's governor (ondemand when the key is missing).
+        assert_eq!(super::settle_governors_in(&d, "system.cpugovernor=schedutil\n"), 2);
+        assert_eq!((gov("policy0").trim(), gov("policy4").trim(), gov("policy7").trim()), ("ondemand", "schedutil", "schedutil"));
+        std::fs::write(d.join("sys/devices/system/cpu/cpufreq/policy7/scaling_governor"), "performance\n").unwrap();
+        assert_eq!(super::settle_governors_in(&d, ""), 1);
+        assert_eq!(gov("policy7").trim(), "ondemand");
     }
 
     fn scratch(tag: &str) -> crate::testutil::TestDir {

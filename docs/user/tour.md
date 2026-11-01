@@ -43,6 +43,8 @@ Cards without a switch, after those: **Search and the letter jump**, **Console c
 **RetroAchievements**, **Sync**, **Tailscale**, **Tools**, **Cozy extras** (real cases, the memory card, stickers and the other
 little touches, each switched in Settings → Look → [Cozy extras](settings.md#cozy-extras)) and **Performance & fan**.
 
+The profile **For a child** sets none of these: [Kids mode](kids-mode.md) keeps its own choices and leaves the switches as they are.
+
 ## New in this version
 
 After an update, pocket-ui shows the cards of the features that are new since the version you had, at most three,

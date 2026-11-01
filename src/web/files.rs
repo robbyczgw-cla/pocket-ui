@@ -10,7 +10,7 @@
 //! - A ROM must have one of its system's extensions. Names are cut to their last part, control characters and the
 //!   characters Windows and the share refuse are replaced, no leading dot, at most 200 bytes. A folder upload's
 //!   relative path is cleaned segment by segment; `..`, empty segments and links are refused.
-//! - The file is written to a temporary name beside the target (created exclusively, not through a link), synced,
+//! - The file is written to a temporary name in `roms/.pocket-ui-uploads` (created exclusively, not through a link), synced,
 //!   and renamed into place with `RENAME_NOREPLACE`, so an existing file is replaced only when the player confirmed
 //!   it (`overwrite`). Anything that goes wrong removes the temporary file.
 //! - At most [`MAX_ROM`], [`MAX_BIOS`] or [`MAX_PORT`] bytes, and never more than the card's free space less
@@ -43,7 +43,13 @@ pub struct Roots {
     pub ports: PathBuf,
     /// Where HOME + A in a game saves its pictures (`screenshot`); read-only for the companion.
     pub screenshots: PathBuf,
+    /// Uploads under way, as temporary files ([`UPLOADS_DIR`] in the ROMs folder: the same file system, so the rename
+    /// into place is atomic). Only pocket-ui writes there, so only there are leftovers swept.
+    pub uploads: PathBuf,
 }
+
+/// The folder of uploads under way, hidden in the ROMs folder (no system reads a folder starting with ".").
+pub const UPLOADS_DIR: &str = ".pocket-ui-uploads";
 
 impl Default for Roots {
     fn default() -> Self {
@@ -52,6 +58,7 @@ impl Default for Roots {
             bios: PathBuf::from(crate::hostsys::BIOS_DIR),
             ports: PathBuf::from(crate::ports::PORTS_DIR),
             screenshots: crate::screenshot::dir(),
+            uploads: PathBuf::from("/storage/roms").join(UPLOADS_DIR),
         }
     }
 }
@@ -59,7 +66,7 @@ impl Default for Roots {
 impl Roots {
     /// The same layout under `roms` (tests, the virtual device).
     pub fn under(roms: &Path) -> Roots {
-        Roots { roms: roms.to_path_buf(), bios: roms.join("bios"), ports: roms.join("ports"), screenshots: roms.join("screenshots") }
+        Roots { roms: roms.to_path_buf(), bios: roms.join("bios"), ports: roms.join("ports"), screenshots: roms.join("screenshots"), uploads: roms.join(UPLOADS_DIR) }
     }
 }
 
@@ -199,7 +206,11 @@ fn inside(root: &Path, dir: &Path, allowed: Option<&str>) -> Result<PathBuf, Str
         if dir.parent() != Some(root) {
             return Err("that folder is missing.".into());
         }
-        std::fs::create_dir(dir).map_err(|e| format!("can't make the folder: {e}"))?;
+        // Two uploads at once may both find it missing: the second one's "exists" is fine.
+        match std::fs::create_dir(dir) {
+            Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => return Err(format!("can't make the folder: {e}")),
+            _ => {}
+        }
     }
     let real_root = root.canonicalize().map_err(|_| "the ROMs folder is missing.".to_string())?;
     let real = dir.canonicalize().map_err(|_| "that folder is missing.".to_string())?;
@@ -389,18 +400,34 @@ impl Gate<'_> {
     pub const OPEN: Gate<'static> = Gate { wait: &never, abort: &never, no_programs: false };
 }
 
-/// The temporary file beside `target`: hidden, with an ending no system lists, so a cut upload is never a game.
-fn temp_path(target: &Path, n: u64) -> PathBuf {
+/// The temporary file for `target` in the uploads folder `tmp_dir`: hidden, with an ending no system lists.
+fn temp_path(tmp_dir: &Path, target: &Path, n: u64) -> PathBuf {
     let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    target.with_file_name(format!(".{name}.{}-{n}.upload", std::process::id()))
+    tmp_dir.join(format!(".{name}.{}-{n}.upload", std::process::id()))
+}
+
+/// The uploads folder, made when missing; never a link, never anything but a folder.
+fn uploads_dir(tmp_dir: &Path) -> Result<(), Refused> {
+    match std::fs::symlink_metadata(tmp_dir) {
+        Ok(m) if m.is_dir() && !m.file_type().is_symlink() => Ok(()),
+        Ok(_) => Err(Refused::NotAllowed(format!("{} is in the way.", tmp_dir.display()))),
+        Err(_) => match std::fs::create_dir(tmp_dir) {
+            Err(e) if e.kind() != io::ErrorKind::AlreadyExists => Err(Refused::Io(format!("Can't make the uploads folder: {e}"))),
+            _ => Ok(()),
+        },
+    }
 }
 
 static TEMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Removes the temporary files an earlier pocket-ui left beside `target` (it ended in the middle of an upload): hidden
-/// files ending in `.upload` whose process id is not ours. Only plain files, never through a link.
-pub fn sweep_leftovers(target: &Path) {
-    let Some(dir) = target.parent() else { return };
+/// Removes the temporary files an earlier pocket-ui left in the uploads folder `tmp_dir` (it ended in the middle of an
+/// upload): hidden files ending in `.upload` whose process id is not ours. Only there, only plain files, never through
+/// a link: a file of that pattern anywhere else (a game folder) is never touched (review L3).
+pub fn sweep_leftovers(tmp_dir: &Path) {
+    let dir = tmp_dir;
+    if !std::fs::symlink_metadata(dir).is_ok_and(|m| m.is_dir()) {
+        return;
+    }
     let ours = format!(".{}-", std::process::id());
     for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
         let name = e.file_name().to_string_lossy().into_owned();
@@ -420,11 +447,11 @@ pub fn sweep_leftovers(target: &Path) {
     }
 }
 
-/// Writes `len` bytes from `r` to `target`: a temporary file, synced, then renamed into place (over an existing file
+/// Writes `len` bytes from `r` to `target`: a temporary file in `tmp_dir` (`Roots::uploads`), synced, then renamed into place (over an existing file
 /// only with `overwrite`). `target`'s folder must be the one the checks resolved (no link in it): it is resolved again
 /// just before the rename, and a folder that became a link meanwhile is refused (review F11). `gate` is asked between
 /// chunks: while a game runs the upload pauses; switched off, it stops.
-pub fn receive(r: &mut impl Read, target: &Path, len: u64, overwrite: bool, gate: &Gate) -> Result<Written, Refused> {
+pub fn receive(r: &mut impl Read, target: &Path, tmp_dir: &Path, len: u64, overwrite: bool, gate: &Gate) -> Result<Written, Refused> {
     use std::os::unix::fs::OpenOptionsExt;
     let exists = std::fs::symlink_metadata(target).is_ok();
     if exists && !overwrite {
@@ -433,8 +460,9 @@ pub fn receive(r: &mut impl Read, target: &Path, len: u64, overwrite: bool, gate
     if std::fs::symlink_metadata(target).is_ok_and(|m| !m.is_file()) {
         return Err(Refused::NotAllowed("Something that is not a file has that name.".into()));
     }
-    sweep_leftovers(target);
-    let tmp = temp_path(target, TEMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+    uploads_dir(tmp_dir)?;
+    sweep_leftovers(tmp_dir);
+    let tmp = temp_path(tmp_dir, target, TEMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
     let mut f = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)

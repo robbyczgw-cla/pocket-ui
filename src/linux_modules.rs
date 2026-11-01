@@ -25,9 +25,13 @@ pub mod players;
 pub mod players_page;
 pub mod touch;
 pub mod frozen;
+pub mod kids;
 // Android's files for Frozen games: on Linux only so the gate tests its rules.
 #[cfg(test)]
 pub(crate) mod frozen_phone;
+// A phone's Games page: on Linux only so the gate tests its rules.
+#[cfg(test)]
+pub(crate) mod phone_shelves;
 pub mod recents;
 pub mod text;
 pub mod this_game_page;
@@ -199,6 +203,7 @@ pub mod fast_switch;
 pub mod system_art;
 pub mod ui_art;
 pub mod systems_grid;
+pub mod system_notes;
 pub mod look_sample;
 pub mod lastframe;
 pub mod screenshot;
@@ -238,6 +243,9 @@ pub mod tailscale_page;
 /// The web companion: the library, edits and uploads from a browser on the tailnet (docs/user/web-companion.md).
 pub mod web;
 pub mod web_page;
+/// "Send from your phone": a small upload server that exists only while its page is open (Settings → Games → Add games).
+pub mod phone_upload;
+pub mod phone_upload_page;
 pub mod bluetooth;
 pub mod bluetooth_page;
 pub mod perf_fan;
@@ -271,9 +279,10 @@ pub mod game_check_page;
 pub mod tools_page;
 // Settings → PC streaming: pairing Moonlight on the device, the paired PCs, their games.
 pub mod moonlight_page;
-// Settings → Backup & reset: pocket-ui's settings and library notes to a dated folder, back, and reset.
+// Settings → Backup & reset: pocket-ui's settings and library notes, and the saves and states, to a dated folder and back; reset.
 pub mod backup;
 pub mod backup_page;
+pub mod backup_saves;
 // Settings → System → Storage: what takes the room on the card, the clean-ups, the low-space warning.
 pub mod storage;
 // Storage's Card check: read-only mount, the file system's error count and the kernel's log say something is wrong.

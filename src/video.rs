@@ -322,8 +322,23 @@ impl VideoSettings {
     }
 
     /// Reads the console's settings, or the game's own file when it has one (see `options.rs`).
+    /// While Kids Mode is on (`kids.json`), the picture is the kids' picture (`for_kids`).
     pub fn load(data_dir: &Path, system: &str, rom: &Path) -> Self {
-        Self::from_values(&GameSettings::load(data_dir, system, rom).effective())
+        Self::load_as(data_dir, system, rom, crate::kids::Config::load(data_dir).on)
+    }
+
+    /// `load` with Kids Mode given. Only the in-memory copy changes; the saved files stay as the grown-up left them.
+    pub fn load_as(data_dir: &Path, system: &str, rom: &Path, kids: bool) -> Self {
+        let v = Self::from_values(&GameSettings::load(data_dir, system, rom).effective());
+        if kids { v.for_kids() } else { v }
+    }
+
+    /// Kids Mode: as large as fits in the game's shape, whatever is saved for the console or the game, and no frame
+    /// (a frame would take room from the picture).
+    pub fn for_kids(mut self) -> Self {
+        self.scaling = Scaling::Aspect;
+        self.frame = FrameMode::None;
+        self
     }
 }
 
@@ -1004,6 +1019,38 @@ pub fn rgb1555_to_565(frame: &Frame) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn kids_mode_picks_aspect_over_any_saved_scaling_and_frame() {
+        for sc in ["native", "integer-smaller", "fullscreen", "aspect"] {
+            let mut v = VideoSettings::default();
+            v.set("scaling", sc);
+            v.set("frame", "shell");
+            let k = v.for_kids();
+            assert_eq!((k.scaling, k.frame), (Scaling::Aspect, FrameMode::None), "{sc}");
+        }
+        assert_eq!(dest_rect(Scaling::Aspect, 640, 480, 240, 160, 1.5), Rect { x: 0, y: 26, w: 640, h: 427 });
+    }
+
+    #[test]
+    fn kids_mode_leaves_saved_settings_alone() {
+        let dir = std::env::temp_dir().join(format!("kids-aspect-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let rom = std::path::Path::new("/roms/gba/Game.gba");
+        let mut gs = GameSettings::load(&dir, "gba", rom);
+        gs.values.insert("scaling".into(), "integer".into());
+        gs.values.insert("frame".into(), "shell".into());
+        assert!(gs.save_for_console());
+        gs.values.insert("scaling".into(), "integer-smaller".into());
+        assert!(gs.save_for_game());
+        let off = VideoSettings::load_as(&dir, "gba", rom, false);
+        assert_eq!((off.scaling, off.frame), (Scaling::IntegerSmaller, FrameMode::Shell), "off: the per-game value, as saved");
+        let on = VideoSettings::load_as(&dir, "gba", rom, true);
+        assert_eq!((on.scaling, on.frame), (Scaling::Aspect, FrameMode::None));
+        let again = VideoSettings::load_as(&dir, "gba", rom, false);
+        assert_eq!(again, off, "leaving Kids Mode brings the saved picture back");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     use super::*;
     use crate::testutil::TestDir;
 

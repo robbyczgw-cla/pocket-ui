@@ -24,7 +24,7 @@ device test uses). Only `https://` and `file://` are fetched, and a redirect is 
   releases/dev/            what scripts/dev.sh deploy copies
   current  -> releases/0.2.0      switched by one rename()
   previous -> releases/dev
-  known-good -> releases/0.1.9    last version that ran POCKETUI_STABLE_SECS (120 s) with a picture (the launcher sets it)
+  known-good -> releases/0.1.10    last version that ran POCKETUI_STABLE_SECS (120 s) with a picture (the launcher sets it)
   releases/dev-good/       a known good dev build, copied aside by dev.sh deploy before it overwrites releases/dev
   pocket-ui, pocket-core, portmaster-setup.sh -> current/…   (paths stay stable)
   update-pending           version just installed, until it has presented its first frame

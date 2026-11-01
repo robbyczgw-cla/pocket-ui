@@ -520,6 +520,13 @@ WonderSwan Color
 Neo Geo Pocket
 Neo Geo Pocket Color
 Atari Lynx
+# Send from your phone: the address to type, a file's percentage, the snapshots' file names (src/phone_upload_page.rs)
+re:^\d\.\d\.\d\.\d:\d/
+re:^\d %$
+Advance Wars.gba
+Chrono Trigger.sfc
+Super Metroid.sfc
+Super Metroid.srm
 Wii
 Pokémon Blau
 Chrono Trigger.gba

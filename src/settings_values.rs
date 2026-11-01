@@ -112,6 +112,16 @@ pub fn games(n: usize) -> String {
     }
 }
 
+/// Systems on the shelf: nothing while every system with games is on Home, else "1 hidden", "2 hidden", so the way back
+/// is visible on the row itself (daily-use walk: a hidden system left no trace on Home or in Settings).
+pub fn hidden_systems(n: usize) -> String {
+    if n == 0 {
+        String::new()
+    } else {
+        format!("{n} hidden")
+    }
+}
+
 /// PC streaming: "No PC paired", "1 PC", "2 PCs".
 pub fn pcs(n: usize) -> String {
     match n {
@@ -313,6 +323,7 @@ mod tests {
         assert_eq!(perf_fan(crate::power::Performance::Performance, crate::power::Fan::Cool), "Max · Cool");
         assert_eq!([games(0), games(1), games(332)], ["No games", "1 game", "332 games"]);
         assert_eq!([pcs(0), pcs(1), pcs(2)], ["No PC paired", "1 PC", "2 PCs"]);
+        assert_eq!([hidden_systems(0), hidden_systems(1), hidden_systems(3)], ["", "1 hidden", "3 hidden"]);
         assert_eq!(zone("Europe/Vienna"), "Vienna");
         assert_eq!(zone("America/Indiana/Indianapolis"), "Indianapolis, Indiana");
         assert_eq!(zone("Etc/UTC"), "UTC");
