@@ -78,6 +78,10 @@ impl App {
 
 /// `--snapshot`: POCKETUI_SNAPSHOT_WIFI=1 shows the Wi-Fi symbol, 0 leaves it out, whatever this computer has.
 pub(crate) fn snapshot_knobs() {
+    // POCKETUI_SNAPSHOT_GAMES_CARD=1: Add games as with a games card in (`games_card`).
+    if std::env::var_os("POCKETUI_SNAPSHOT_GAMES_CARD").is_some() {
+        pocket_ui::games_card::set_in_use(true);
+    }
     match std::env::var("POCKETUI_SNAPSHOT_WIFI").as_deref() {
         Ok("1") => status_corner::force_wifi(true),
         Ok("0") => status_corner::force_wifi(false),

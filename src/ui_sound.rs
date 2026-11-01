@@ -797,11 +797,30 @@ struct Voice {
     pos: usize,
     gain: f32,
     wait: usize,
+    /// When it is to be heard: on Android its wait follows this until it starts (`keep_their_moment`).
+    #[cfg(target_os = "android")]
+    due: Instant,
 }
 
 /// The voices still waiting for their moment go; what has started plays out.
 fn forget_unstarted(voices: &mut Vec<Voice>) {
     voices.retain(|v| v.pos >= v.wait);
+}
+
+/// The sounds still waiting start when they will be heard on time, whatever the output holds ahead by then and however
+/// it started: an Android stream opened a moment ago (by a tap's tick, say) can hold a few hundred ms and doesn't tell
+/// until it runs, and counting frames from the sound's request would put all of it on the sound.
+#[cfg(target_os = "android")]
+fn keep_their_moment<O: MixerOutput>(voices: &mut [Voice], o: &mut O) {
+    if voices.iter().all(|v| v.pos >= v.wait) {
+        return;
+    }
+    let ahead = o.ahead_us() as u128;
+    let now = Instant::now();
+    for v in voices.iter_mut().filter(|v| v.pos < v.wait) {
+        let left = v.due.saturating_duration_since(now).as_micros().saturating_sub(ahead);
+        v.wait = v.pos + (left * RATE as u128 / 1_000_000) as usize;
+    }
 }
 
 /// Fills `chunk` (interleaved stereo) with the voices and moves them on; finished ones are dropped.
@@ -849,6 +868,11 @@ trait MixerOutput {
     fn write(&mut self, samples: &[i16]) -> bool;
     fn name(&self) -> &'static str;
     fn latency_us(&mut self) -> u64;
+    /// How far ahead of what is heard the next chunk will play.
+    #[cfg(target_os = "android")]
+    fn ahead_us(&mut self) -> u64 {
+        self.latency_us()
+    }
 }
 
 impl MixerOutput for crate::audio::Sink {
@@ -856,6 +880,8 @@ impl MixerOutput for crate::audio::Sink {
     fn write(&mut self, samples: &[i16]) -> bool { self.write(samples) }
     fn name(&self) -> &'static str { self.name() }
     fn latency_us(&mut self) -> u64 { self.latency_us() }
+    #[cfg(target_os = "android")]
+    fn ahead_us(&mut self) -> u64 { self.ahead_us() }
 }
 
 fn mixer(rx: Receiver<Msg>) {
@@ -1027,7 +1053,14 @@ fn mixer_with<O: MixerOutput>(
             }
             // The wait counts from when it was asked: the time it took to get here (opening the output) is part of it.
             let wait = (RATE as u128 * after.saturating_sub(asked.elapsed()).as_micros() / 1_000_000) as usize;
-            let voice = Voice { sound: ALL.iter().position(|s| *s == sound).unwrap_or(0), pos: 0, gain, wait };
+            let voice = Voice {
+                sound: ALL.iter().position(|s| *s == sound).unwrap_or(0),
+                pos: 0,
+                gain,
+                wait,
+                #[cfg(target_os = "android")]
+                due: asked + after,
+            };
             // The quantum is changing (right after a game): the sound waits for it rather than play through it.
             if CHANGING.load(Ordering::Relaxed) {
                 waiting.push(voice);
@@ -1088,6 +1121,8 @@ fn mixer_with<O: MixerOutput>(
             }
             continue;
         };
+        #[cfg(target_os = "android")]
+        keep_their_moment(&mut voices, o);
         mix(&mut chunk, &mut voices, &bank);
         // Blocks until the output has room: this thread runs at the sound card's pace while open.
         if !o.write(&chunk) {

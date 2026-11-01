@@ -498,17 +498,7 @@ fn folders_for(dest: &Path, list: &[crate::untar::Entry]) -> Vec<PathBuf> {
     folders
 }
 
-/// Renames, or copies when `to` is on another file system.
-fn move_file(from: &Path, to: &Path) -> std::io::Result<()> {
-    if std::fs::rename(from, to).is_ok() {
-        return Ok(());
-    }
-    if std::fs::symlink_metadata(to).is_ok_and(|m| !m.is_file()) {
-        return Err(std::io::Error::other("not a file"));
-    }
-    std::fs::copy(from, to)?;
-    std::fs::remove_file(from)
-}
+use crate::fsutil::move_file;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Status {

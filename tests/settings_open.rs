@@ -93,11 +93,11 @@ fn settings_first_frame_draws_no_glyph_runs_no_pattern_and_is_not_much_slower_th
     let _tmp_guard = tempfile::tempdir().unwrap();
     let tmp = _tmp_guard.path().to_path_buf();
     let wayland = wayland_for_snapshots(&tmp);
-    for lang in ["en", "de"] {
+    for lang in ["en", "de", "es"] {
         let runs: Vec<Bench> = (0..5).map(|_| run(&tmp, &wayland, lang)).collect();
         for r in &runs {
             assert_eq!(r.first_glyphs, 0, "{lang}: the categories page found every letter in the cache ({r:?})");
-            assert_eq!(r.first_patterns, 0, "{lang}: no string of the page ran the German table's patterns ({r:?})");
+            assert_eq!(r.first_patterns, 0, "{lang}: no string of the page ran the table's patterns ({r:?})");
         }
         let min = |f: fn(&Bench) -> f64| runs.iter().map(f).fold(f64::MAX, f64::min);
         let (first, steady, transition) = (min(|b| b.first_us), min(|b| b.steady_us), min(|b| b.transition_us));

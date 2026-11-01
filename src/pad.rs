@@ -1368,6 +1368,22 @@ pub mod linux {
         names
     }
 
+    /// ROCKNIX's built-in H700 pad (`rocknix-singleadc-joypad`) reports the printed X key as BTN_WEST and the printed Y
+    /// key as BTN_NORTH (ROCKNIX corrects this in its RetroArch and SDL configs). Only that name is crossed over.
+    pub(super) fn is_h700_pad(name: &str) -> bool {
+        name.trim() == "H700 Gamepad"
+    }
+
+    /// `button`, for the device called `name`: the H700 pad's X and Y cross over, so printed X is `North` and printed
+    /// Y is `West` like on every other pad. This is the only place evdev keys become `Button`, for the UI and the core.
+    pub(super) fn button_on(name: &str, code: KeyCode) -> Option<Button> {
+        match (button(code), is_h700_pad(name)) {
+            (Some(Button::North), true) => Some(Button::West),
+            (Some(Button::West), true) => Some(Button::North),
+            (b, _) => b,
+        }
+    }
+
     pub(super) fn button(code: KeyCode) -> Option<Button> {
         Some(match code {
             KeyCode::BTN_DPAD_UP => Button::Up,
@@ -1420,6 +1436,7 @@ pub mod linux {
             .get_absinfo()
             .map(|it| it.map(|(code, info)| (code, info.minimum(), info.maximum())).collect())
             .unwrap_or_default();
+        let name = dev.name().unwrap_or("").to_string();
         let norm = |code: AbsoluteAxisCode, v: i32| -> f32 {
             match ranges.iter().find(|(c, _, _)| *c == code) {
                 Some((_, lo, hi)) if hi > lo => (v - lo) as f32 / (hi - lo) as f32,
@@ -1440,7 +1457,7 @@ pub mod linux {
                     }
                 }
                 let out = match ev.destructure() {
-                    EventSummary::Key(_, code, value) if value != 2 => match button(code) {
+                    EventSummary::Key(_, code, value) if value != 2 => match button_on(&name, code) {
                         Some(b) => PadEvent::Button { source, button: b, pressed: value == 1 },
                         None => PadEvent::Raw { source, text: format!("{:?} {}", code, value) },
                     },
@@ -1517,6 +1534,18 @@ mod ayn_input_tests {
         // Plain ds5 target currently drops the Edge-only paddles. Do not turn them into face/menu buttons.
         assert_eq!(linux::button(KeyCode::BTN_Z), None);
         assert_eq!(linux::button(KeyCode::BTN_C), None);
+    }
+
+    /// An RG28XX (2026-10-31): the built-in "H700 Gamepad" sends the printed X as BTN_WEST and the printed Y as
+    /// BTN_NORTH. After the swap printed X is `North` and printed Y `West`; other pads and other keys stay as they are.
+    #[test]
+    fn the_h700_builtin_pad_crosses_x_and_y_and_other_pads_do_not() {
+        assert_eq!(linux::button_on("H700 Gamepad", KeyCode::BTN_WEST), Some(Button::North));
+        assert_eq!(linux::button_on("H700 Gamepad", KeyCode::BTN_NORTH), Some(Button::West));
+        assert_eq!(linux::button_on("H700 Gamepad", KeyCode::BTN_SOUTH), Some(Button::South));
+        assert_eq!(linux::button_on("H700 Gamepad", KeyCode::BTN_EAST), Some(Button::East));
+        assert_eq!(linux::button_on("Xbox Wireless Controller", KeyCode::BTN_WEST), Some(Button::West));
+        assert_eq!(linux::button_on("Xbox Wireless Controller", KeyCode::BTN_NORTH), Some(Button::North));
     }
 }
 

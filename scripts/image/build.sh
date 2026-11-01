@@ -6,17 +6,18 @@
 #   build.sh assemble VERSION EPOCH
 #       /w/image.img (a copy of base.img) gets the boot files from /w/sd-efi, the initramfs hooks, the notes from
 #       /w/info, and pocket-ui from /w/bin on STORAGE. EPOCH (seconds) is the time stamp of every added file.
-# FAMILY=H700 (scripts/make-image-h700.sh): the H700_ pins instead; strip-system works on the H700 SYSTEM, and
-# assemble takes MODEL (and no boot files from /w/sd-efi): the FAT root gets dtb.img, a copy of that model's tree
-# from device_trees/, and no GRUB.
+# FAMILY=H700 or SM8550 (scripts/make-image-family.sh): that family's pins instead; strip-system works on its SYSTEM, and
+# assemble takes MODEL (and no boot files from /w/sd-efi): no GRUB, and on the H700 the FAT root gets dtb.img, a copy of
+# that model's tree from device_trees/.
 set -eu
 . /repo/scripts/image/pins.sh
 FAMILY=${FAMILY:-SM8250}
-if [ "$FAMILY" = H700 ]; then
-  SYSTEM_MD5=$H700_SYSTEM_MD5
-  SYSTEM_REMOVE=$H700_SYSTEM_REMOVE
-  SYSTEM_ZIP_REMOVE=$H700_SYSTEM_ZIP_REMOVE
-  POCKET_SYSTEM_MD5=$H700_POCKET_SYSTEM_MD5
+if [ "$FAMILY" != SM8250 ]; then
+  family_pins "$FAMILY"
+  SYSTEM_MD5=$FAM_SYSTEM_MD5
+  SYSTEM_REMOVE=$FAM_SYSTEM_REMOVE
+  SYSTEM_ZIP_REMOVE=$FAM_SYSTEM_ZIP_REMOVE
+  POCKET_SYSTEM_MD5=$FAM_POCKET_SYSTEM_MD5
 fi
 W=/w
 die() { echo "build.sh: $*" >&2; exit 1; }
@@ -98,10 +99,10 @@ assemble() {
   IMG=$W/image.img
   FAT="$IMG@@$((P1_START * 512))"
   E=$W/sd-efi
-  if [ "$FAMILY" = H700 ]; then
-    [ -n "${MODEL:-}" ] || die "FAMILY=H700 needs MODEL"
-    set -- $(echo "$H700_MODELS" | awk -v m="$MODEL" '$1 == m { print $2, $3 }')
-    [ $# = 2 ] || die "$MODEL is not in H700_MODELS"
+  if [ "$FAMILY" != SM8250 ]; then
+    [ -n "${MODEL:-}" ] || die "FAMILY=$FAMILY needs MODEL"
+    set -- $(echo "$FAM_MODELS" | awk -v m="$MODEL" '$1 == m { print $2, $3 }')
+    [ $# = 2 ] || die "$MODEL is not in ${FAMILY}_MODELS"
     DTB_NAME=$1
     DTB_MD5_WANT=$2
   else
@@ -112,7 +113,9 @@ assemble() {
   S=/tmp/stage
   rm -rf "$S"
   mkdir -p "$S/fat/pocket-ui-info" "$S/storage/licences"
-  if [ "$FAMILY" = H700 ]; then
+  if [ "$FAMILY" = SM8550 ]; then
+    : # KERNEL carries the trees, ROCKNIX's ABL starts it: no boot files to add.
+  elif [ "$FAMILY" = H700 ]; then
     # The model's tree from ROCKNIX's own device_trees/, as ROCKNIX's install page has the player copy it by hand.
     mcopy -n -i "$FAT" "::/device_trees/$DTB_NAME.dtb" "$S/fat/dtb.img"
     [ "$(md5 "$S/fat/dtb.img")" = "$DTB_MD5_WANT" ] || die "device_trees/$DTB_NAME.dtb is not the expected tree (md5 $DTB_MD5_WANT)"
@@ -123,6 +126,13 @@ assemble() {
     cp "$E/boot/pocket/Image" "$E/boot/pocket/miniv2-noufs.dtb" "$E/boot/pocket/KERNEL.source.md5" "$S/fat/boot/pocket/"
   fi
   cp /repo/deploy/image/post-flash.sh /repo/deploy/image/mount-storage.sh "$S/fat/"
+  # The GAMES drive (docs/SD-IMAGE.md, "The GAMES drive"), only on the models pins.sh names: the first start's script, and at
+  # every start the drive's mount. All other cards have neither: ROCKNIX's fs-resize, STORAGE over the whole card.
+  if has_games_drive "$FAMILY" "${MODEL:-}"; then
+    cp /repo/deploy/image/games-first-start.sh "$S/fat/"
+    install -m 755 /repo/deploy/image/games-mount.sh "$S/storage/games-mount.sh"
+    install -m 644 /repo/deploy/image/rocknix-automount-games.conf "$S/storage/rocknix-automount-games.conf"
+  fi
   # The notes, the source offer, pocket-ui's LICENSE and NOTICE.md, licences/ (crates, fonts), rocknix-licenses/
   # (ROCKNIX's LICENSE.md and licenses folder at the tag) and firmware-licences/ (the firmware's terms).
   cp -r "$W/info/." "$S/fat/pocket-ui-info/"
@@ -176,6 +186,7 @@ assemble() {
   R=pocket-ui/releases/$VERSION
   UNITS=.pocket-seed/.config/system.d
   SEED=$UNITS/essway.service.d
+  GAMES_UNIT=$UNITS/rocknix-automount.service.d
   {
     echo "mkdir /pocket-ui"
     echo "mkdir /pocket-ui/releases"
@@ -207,12 +218,19 @@ assemble() {
     # ROCKNIX settings that differ on this card (updates off, hostname), run once by ROCKNIX's autostart.
     echo "mkdir /.pocket-seed/.config/autostart"
     echo "write $S/storage/pocket-ui-image-defaults /.pocket-seed/.config/autostart/pocket-ui-image-defaults"
+    GAMES_PATHS=
+    if has_games_drive "$FAMILY" "${MODEL:-}"; then
+      echo "write $S/storage/games-mount.sh /pocket-ui/games-mount.sh"
+      echo "mkdir /$GAMES_UNIT"
+      echo "write $S/storage/rocknix-automount-games.conf /$GAMES_UNIT/10-pocket-games.conf"
+      GAMES_PATHS="/pocket-ui/games-mount.sh /$GAMES_UNIT /$GAMES_UNIT/10-pocket-games.conf"
+    fi
     for p in / /pocket-ui /pocket-ui/releases "/$R" "/$R/pocket-ui" "/$R/pocket-core" "/$R/pocket-splash" "/$R/portmaster-setup.sh" \
       /pocket-ui/run-pocket-ui.sh /pocket-ui/current /pocket-ui/pocket-ui /pocket-ui/pocket-core \
       /pocket-ui/portmaster-setup.sh /pocket-ui/licences $(for f in $(ls "$S/storage/licences"); do echo "/pocket-ui/licences/$f"; done) /.pocket-seed /.pocket-seed/.config /.pocket-seed/.config/system.d "/$SEED" \
       "/$SEED/10-pocket-ui.conf" "/$UNITS/pocket-splash.service" "/$UNITS/sysinit.target.wants" \
       "/$UNITS/sysinit.target.wants/pocket-splash.service" /.pocket-seed/.config/autostart \
-      /.pocket-seed/.config/autostart/pocket-ui-image-defaults; do
+      /.pocket-seed/.config/autostart/pocket-ui-image-defaults $GAMES_PATHS; do
       for field in uid gid; do echo "set_inode_field $p $field 0"; done
       for field in atime mtime ctime crtime; do echo "set_inode_field $p $field @$EPOCH"; done
     done

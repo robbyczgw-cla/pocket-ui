@@ -78,6 +78,25 @@ pub fn mount_of(mounts: &str, path: &Path) -> Option<(String, bool)> {
     best.map(|(_, dev, ro)| (dev, ro))
 }
 
+/// Whether the games folder is on the card's own GAMES drive (docs/SD-IMAGE.md, "The GAMES drive"): `/storage/roms` mounted
+/// from an exFAT partition of the disk `/storage` is on. A games card in the second slot is another disk, and an ordinary
+/// card has its games in STORAGE, so neither counts. Goes by the mount, not the label: this is the drive pocket-ui uses.
+pub fn roms_on_games_drive(mounts: &str) -> bool {
+    let of = |point: &str| mounts.lines().rev().find_map(|l| {
+        let f: Vec<&str> = l.split_whitespace().collect();
+        (f.len() >= 3 && f[1] == point).then(|| (f[0].to_string(), f[2].to_string()))
+    });
+    let (Some((storage, _)), Some((roms, fs))) = (of("/storage"), of("/storage/roms")) else { return false };
+    let disk = |dev: &str| disk_of(device_name(dev)).to_string();
+    fs == "exfat" && roms != storage && disk(&roms) == disk(&storage)
+}
+
+/// [`roms_on_games_drive`] of this start, read once: the mounts are settled before pocket-ui runs, and pages ask while painting.
+pub fn games_drive() -> bool {
+    static ON_IT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON_IT.get_or_init(|| std::fs::read_to_string("/proc/mounts").is_ok_and(|m| roms_on_games_drive(&m)))
+}
+
 /// "mmcblk0p2" from "/dev/mmcblk0p2".
 fn device_name(dev: &str) -> &str {
     dev.rsplit('/').next().unwrap_or(dev)
@@ -154,6 +173,18 @@ mod tests {
 
     const MOUNTS: &str = "proc /proc proc rw,nosuid 0 0\n/dev/mmcblk0p1 /flash vfat rw,relatime 0 0\n/dev/mmcblk0p2 /storage ext4 rw,noatime 0 0\n";
     const MOUNTS_RO: &str = "/dev/mmcblk0p2 /storage ext4 ro,noatime,errors=remount-ro 0 0\n";
+
+    #[test]
+    fn the_games_drive_is_an_exfat_partition_of_the_card_the_system_runs_from() {
+        let stor = "/dev/mmcblk0p2 /storage ext4 rw,noatime 0 0\n";
+        let on = |rest: &str| roms_on_games_drive(&format!("{stor}{rest}"));
+        assert!(on("/dev/mmcblk0p3 /storage/games-external exfat rw 0 0\n/dev/mmcblk0p3 /storage/roms exfat rw 0 0\n"));
+        assert!(!on(""), "no separate mount: games in STORAGE");
+        assert!(!on("/dev/mmcblk0p2 /storage/roms ext4 rw 0 0\n"), "bound from STORAGE");
+        assert!(!on("/dev/mmcblk1p1 /storage/roms exfat rw 0 0\n"), "a card in the second slot");
+        assert!(!on("/dev/mmcblk0p3 /storage/roms ext4 rw 0 0\n"), "not the exFAT drive this card makes");
+        assert!(!roms_on_games_drive(""), "nothing readable");
+    }
 
     #[test]
     fn the_card_is_the_longest_mount_the_path_lies_under() {

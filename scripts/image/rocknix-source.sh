@@ -6,7 +6,7 @@
 #
 #   scripts/image/rocknix-source.sh OUT [--device FAMILY] [--no-pack | --pack-only | --plan-only | --dry-run]
 #     OUT        work and output directory (several GB; needs bash, git, curl/wget, python3, xz, split)
-#     --device   the ROCKNIX device family whose build is fetched (default SM8250; H700 for the H700 images);
+#     --device   the ROCKNIX device family whose build is fetched (default SM8250; H700 and SM8550 for those images);
 #                the Makefile's target of that name builds ARCH=arm and ARCH=aarch64
 #     --no-pack  fetch only, do not write the tar parts
 #     --plan-only  clone the tree and write packages.txt, then stop (to seed sources/ from an earlier fetch first)
@@ -39,7 +39,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 # Only families whose images this project builds; the name goes into file names and into DEVICE= of ROCKNIX's tools.
-case $FAMILY in SM8250 | H700) ;; *) echo "unsupported --device '$FAMILY' (SM8250 or H700)" >&2; exit 2 ;; esac
+case $FAMILY in SM8250 | H700 | SM8550) ;; *) echo "unsupported --device '$FAMILY' (SM8250, H700 or SM8550)" >&2; exit 2 ;; esac
 if [ $DRY = 1 ]; then
   echo "device=$FAMILY tag=$ROCKNIX_TAG commit=$ROCKNIX_COMMIT"
   echo "sources=rocknix-$ROCKNIX_TAG-$FAMILY-sources.tar.xz.part-NN"
@@ -55,7 +55,7 @@ fi
 got=$(git -C "$D" rev-parse HEAD)
 [ "$got" = "$ROCKNIX_COMMIT" ] || { echo "tag $ROCKNIX_TAG is $got, pinned $ROCKNIX_COMMIT" >&2; exit 1; }
 
-# The family build runs ARCH=arm (32-bit libraries) and ARCH=aarch64 (Makefile, target SM8250 / H700); both build "image".
+# The family build runs ARCH=arm (32-bit libraries) and ARCH=aarch64 (Makefile, target SM8250 / H700 / SM8550); both build "image".
 cd "$D"
 export PROJECT=ROCKNIX DEVICE=$FAMILY
 for a in aarch64 arm; do

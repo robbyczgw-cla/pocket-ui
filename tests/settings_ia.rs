@@ -17,7 +17,7 @@ const TREE: [(&str, &[&str]); 7] = [
     ("Sound & feel", &["Animations", "Playful cases", "Old-TV switch-on", "Motion", "Sounds", "Case sounds", "Haptics", "LEDs"]),
     ("Playing", &["On start", "Remember where I quit", "Buttons", "Over the game", "Screen frames", "Performance & fan", "Battery", "RetroAchievements"]),
     ("Games", &["Add games", "Game check", "Starter pack", "Pictures & extras", "From EmulationStation", "Screenshots", "Curator", "PC streaming"]),
-    ("Connections", &["Wi-Fi", "Bluetooth", "Tailscale", "Sync", "Remote access (SSH)", "Web companion"]),
+    ("Connections", &["Wi-Fi", "Bluetooth", "USB file transfer", "Tailscale", "Sync", "Remote access (SSH)", "Web companion"]),
     ("System", &["Language", "Time", "Sleep & power", "Frozen games", "Updates", "Storage", "Backup & reset"]),
     ("Help & tools", &["Tour", "Manual", "Tools", "Report a problem", "About"]),
 ];
@@ -68,7 +68,7 @@ const LINES: [&str; 7] = [
     "Animations, playful cases, old-TV switch-on, motion, sounds, case sounds, haptics, LEDs.",
     "On start, quit, buttons, over the game, frames, performance, battery, achievements.",
     "Games, game check, starter pack, pictures, EmulationStation, screenshots, Curator, PC.",
-    "Wi-Fi, Bluetooth, Tailscale, Sync, remote access, web companion.",
+    "Wi-Fi, Bluetooth, USB file transfer, Tailscale, Sync, remote access, web companion.",
     "Language, time, sleep & power, frozen games, updates, storage, backup & reset.",
     // With the Store, as the German table has it; a test run has no catalog, so its part is left out (below).
     "Tour, manual, tools, Store, report a problem, about.",
@@ -88,6 +88,7 @@ fn shot(tmp: &Path, stub: &Option<Stub>, state: &str, lang: &str, size: &str, te
     let (visible, boxes) = (tmp.join(format!("{name}.txt")), tmp.join(format!("{name}.tsv")));
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
     cmd.args(["--snapshot", state, tmp.join(format!("{name}.png")).to_str().unwrap()])
+        .env("POCKETUI_SNAPSHOT_USB", "1")
         .env("POCKETUI_MOCK", "1")
         .env("POCKETUI_LANG", lang)
         .env("POCKETUI_TEXT_SIZE", text)

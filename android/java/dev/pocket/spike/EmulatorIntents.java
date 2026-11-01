@@ -7,6 +7,30 @@ import java.io.IOException;
 /** Explicit, version-sensitive recipes. Presence is checked before granting or starting anything. */
 final class EmulatorIntents {
     private static final String RA_ACTIVITY = "com.retroarch.browser.retroactivity.RetroActivityFuture";
+    /** The apps that take a profile, in the order they are tried. Empty: none can be started from here yet. */
+    private static String[][] apps(String profile) {
+        if (profile.startsWith("retroarch:")) return new String[][]{{"com.retroarch.aarch64", RA_ACTIVITY}, {"com.retroarch", RA_ACTIVITY}, {"com.retroarch.ra32", RA_ACTIVITY}};
+        switch (profile) {
+            case "ps2": return new String[][]{{"xyz.aethersx2.android", "xyz.aethersx2.android.EmulationActivity"}};
+            case "dolphin": return new String[][]{{"org.dolphinemu.dolphinemu", "org.dolphinemu.dolphinemu.ui.main.MainActivity"}};
+            case "psx": return new String[][]{{"com.github.stenzek.duckstation", "com.github.stenzek.duckstation.EmulationActivity"}};
+            case "psp": return new String[][]{{"org.ppsspp.ppsspp", "org.ppsspp.ppsspp.PpssppActivity"}, {"org.ppsspp.ppssppgold", "org.ppsspp.ppsspp.PpssppActivity"}};
+            case "3ds": return new String[][]{{"org.azahar_emu.azahar", "org.citra.citra_emu.activities.EmulationActivity"},
+                {"io.github.lime3ds.android", "org.citra.citra_emu.activities.EmulationActivity"},
+                {"io.github.lime3ds.android", "io.github.lime3ds.android.activities.EmulationActivity"}};
+            case "switch": return new String[][]{{"dev.eden.eden_emulator", "org.yuzu.yuzu_emu.activities.EmulationActivity"},
+                {"org.citron.citron_emu", "org.citron.citron_emu.activities.EmulationActivity"}};
+            default: return new String[0][];
+        }
+    }
+    /** The Game check: is an app that takes this profile on the phone? The components `create` would start. */
+    static boolean available(Context context, String profile) {
+        for (String[] pair : apps(profile)) {
+            Intent intent = new Intent(Intent.ACTION_MAIN).setClassName(pair[0], pair[1]);
+            if (context.getPackageManager().resolveActivity(intent, 0) != null) return true;
+        }
+        return false;
+    }
     static Intent create(Context context, Uri document, String relative, String profile) throws Exception {
         if (!"content".equals(document.getScheme()) || !DocumentsContract.isDocumentUri(context, document))
             throw new IOException("A SAF document is required");
@@ -16,7 +40,7 @@ final class EmulatorIntents {
         if (profile.startsWith("retroarch:")) {
             String[] parts = profile.split(":", -1);
             if (parts.length != 2 || !parts[1].matches("[a-z0-9_]+")) throw new IOException("Invalid RetroArch core");
-            pkg = installed(context, new String[][]{{"com.retroarch.aarch64", RA_ACTIVITY}, {"com.retroarch", RA_ACTIVITY}, {"com.retroarch.ra32", RA_ACTIVITY}}, intent);
+            pkg = installed(context, apps(profile), intent);
             // RetroArch 1.22.2's VFS uses saf://<escaped tree>/<relative path>, not a content:// ROM path.
             grant = DocumentsContract.buildTreeDocumentUri(document.getAuthority(), DocumentsContract.getTreeDocumentId(document));
             if (relative.startsWith("/") || relative.contains("\\") || java.util.Arrays.asList(relative.split("/")).contains(".."))
@@ -40,18 +64,14 @@ final class EmulatorIntents {
                 case "ps2": pkg = "xyz.aethersx2.android"; activity = pkg + ".EmulationActivity"; extra = "bootPath"; break;
                 case "dolphin": pkg = "org.dolphinemu.dolphinemu"; activity = pkg + ".ui.main.MainActivity"; extra = "AutoStartFile"; break;
                 case "psp":
-                    pkg = installed(context, new String[][]{{"org.ppsspp.ppsspp", "org.ppsspp.ppsspp.PpssppActivity"},
-                        {"org.ppsspp.ppssppgold", "org.ppsspp.ppsspp.PpssppActivity"}}, intent);
+                    pkg = installed(context, apps(profile), intent);
                     activity = intent.getComponent().getClassName(); intent.setAction(Intent.ACTION_VIEW); break;
                 case "psx": pkg = "com.github.stenzek.duckstation"; activity = pkg + ".EmulationActivity"; extra = "bootPath"; break;
                 case "3ds":
-                    pkg = installed(context, new String[][]{{"org.azahar_emu.azahar", "org.citra.citra_emu.activities.EmulationActivity"},
-                        {"io.github.lime3ds.android", "org.citra.citra_emu.activities.EmulationActivity"},
-                        {"io.github.lime3ds.android", "io.github.lime3ds.android.activities.EmulationActivity"}}, intent);
+                    pkg = installed(context, apps(profile), intent);
                     activity = intent.getComponent().getClassName(); intent.setAction(Intent.ACTION_VIEW); break;
                 case "switch":
-                    pkg = installed(context, new String[][]{{"dev.eden.eden_emulator", "org.yuzu.yuzu_emu.activities.EmulationActivity"},
-                        {"org.citron.citron_emu", "org.citron.citron_emu.activities.EmulationActivity"}}, intent);
+                    pkg = installed(context, apps(profile), intent);
                     activity = intent.getComponent().getClassName(); intent.setAction("android.nfc.action.TECH_DISCOVERED"); break;
                 default: throw new IOException("No emulator profile for " + profile);
             }

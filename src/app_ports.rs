@@ -1,6 +1,5 @@
-//! Part of the pocket-ui binary: PortMaster ports that need the player's own game files. Before such a port
-//! starts, files waiting in its drop folder on the share are moved into place, and when its files are surely
-//! missing (`port_files::check`) the "Copy your game files" page opens instead of a start into nothing.
+//! Part of the pocket-ui binary: PortMaster ports that need the player's own game files. When a port's files are
+//! surely missing (`port_files::check`) the "Copy your game files" page opens instead of a start into nothing.
 
 use std::path::Path;
 
@@ -44,24 +43,13 @@ impl App {
         }
         let port = ports_dir.join(&info.dir);
         let expect = port_files::expect(&info.instructions, &info.dir);
-        // Files the player put into the share's drop folder go where the port looks for them.
-        if let Some((dest, rule)) = port_files::drop_target(&port, &expect) {
-            let drop = Path::new(port_files::DROP_DIR).join(&info.dir);
-            match port_files::take_dropped(&drop, &dest, &rule) {
-                Ok(n) if n.moved + n.kept > 0 => println!("ports: {} moved from {} to {}, {} left there", n.moved, drop.display(), dest.display(), n.kept),
-                Ok(_) => {}
-                Err(e) => eprintln!("ports: moving {} to {}: {e}", drop.display(), dest.display()),
-            }
-        }
         let played = self.library.get(launcher).sessions > 0;
         let Verdict::Missing(folder) = port_files::check(&port, info.written, &expect, played) else {
             return false;
         };
         println!("ports: {} not started, its files are missing ({})", info.title, folder.display());
         let page = FilesPage::new(&info.title, &info.dir, &info.instructions, ports_dir).blocked();
-        if page.drop.is_some() {
-            port_files::make_drop(Path::new(port_files::DROP_DIR), &info.dir);
-        }
+        port_files::make_place(&port, &expect);
         let share = Share {
             on: wifi::sharing_enabled(),
             ip: wifi::ip(),

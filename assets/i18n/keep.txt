@@ -1,4 +1,4 @@
-# Strings the German interface shows in English on purpose (tests/i18n_snapshots.rs, scripts/i18n-extract.py):
+# Strings the translated interfaces show in English on purpose (tests/i18n_snapshots.rs, scripts/i18n-extract.py):
 # names of games, systems, emulators, cores, brands, places and people, and data that isn't prose. One per line,
 # exactly as shown; `re:` lines are patterns (`^` `$` anchor, `.*` any text, `\d` one or more digits, `\` before another
 # character takes it literally: `\.` `\+` `\\`; nothing else is special). See
@@ -60,8 +60,10 @@ Pocket
 8BitDo Pro 2
 English
 Deutsch
+Español
 ‹ English ›
 ‹ Deutsch ›
+‹ Español ›
 ‹ Normal ›
 Ports
 Vulkan
@@ -529,3 +531,6 @@ roms/gb/Pokémon Blau.gb
 roms/gba/Metroid Fusion (1).gba
 roms/snes/Chrono Trigger.gba
 roms/Sega Genesis
+Eden
+# The same word in Spanish, so its pattern changes nothing: a device's name with its note (About).
+re:\(experimental\)$

@@ -58,6 +58,10 @@ pub mod audio_route;
 pub mod search;
 
 pub mod document_library;
+pub mod document_check;
+pub mod game_check;
+pub mod game_check_page;
+pub mod game_files;
 
 #[path = "device_model.rs"]
 pub mod device;
@@ -78,6 +82,8 @@ pub mod hw_render;
 #[path="platform/android_rumble.rs"]
 pub mod rumble;
 
+pub mod frozen;
+pub mod frozen_phone;
 pub mod save_media;
 pub mod case_stickers;
 pub mod crt_on;
@@ -93,4 +99,5 @@ pub mod room_props;
 pub mod button_prompts;
 pub mod cozy_extras;
 pub mod insert_rig;
+pub mod insert_scene;
 pub mod playful;

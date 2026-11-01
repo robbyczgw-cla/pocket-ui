@@ -300,6 +300,13 @@ struct Player {
     base: PathBuf,
     data: PathBuf,
     key: String,
+    /// What this session's states are made with (`frozen_phone`), written beside the auto state.
+    mark: Option<pocket_ui::frozen::Mark>,
+    /// Lines over the game's first moments about its start (`frozen_phone`), where they are and until when.
+    note: Vec<String>,
+    note_until: Option<Instant>,
+    note_area: Area,
+    first_frame: bool,
     paused: bool,
     crt_started: Option<Instant>,
     crt_done: bool,
@@ -308,6 +315,8 @@ struct Player {
     row: usize,
     slot: usize,
     filled_slots: [bool; 8],
+    /// Moments set aside with every slot taken: the picker's places after the slots (`frozen_phone::kept`).
+    kept: Vec<PathBuf>,
     slot_icon: Option<pocket_ui::system_art::Sprite>,
     sounds: pocket_ui::ui_sound::Config,
     sounds_muted: bool,
@@ -353,7 +362,7 @@ struct Player {
     earlier: usize,
 }
 impl Player {
-    fn new(core_path: &str, rom: &str, system: String, key: String, title: String, light: bool) -> Result<Self, String> {
+    fn new(core_path: &str, rom: &str, system: String, key: String, title: String, light: bool, frozen: bool) -> Result<Self, String> {
         if key.len() != 16 || !key.bytes().all(|c| c.is_ascii_hexdigit()) {
             return Err("Invalid game identity".into());
         }
@@ -384,7 +393,18 @@ impl Player {
         if let Some(geometry) = geometry {
             core.av.geometry = geometry;
         }
-        let resume = core.resume(&pocket_ui::slots::auto_path(&base));
+        // Frozen games: the file just copied decides, before the core sees a state. A moment for another file or core
+        // isn't loaded and goes where it can't be lost; the start says so.
+        let core_id = pocket_ui::frozen_phone::core_of(Path::new(core_path));
+        let start = pocket_ui::frozen_phone::at_start(&base, Path::new(rom), &core_id, frozen);
+        // PPSSPP says 128 MB until its renderer is up and keeps a state for then: a shorter one isn't too short.
+        if core_id == "ppsspp" {
+            core.states_vary_in_size();
+        }
+        let resume = if start.resume { core.resume(&pocket_ui::slots::auto_path(&base)) } else { pocket_ui::libretro::Resume::NoState };
+        let mut note = start.note;
+        note.extend(pocket_ui::frozen_phone::after_resume(&base, resume));
+        let mark = pocket_ui::frozen::Mark::new(pocket_ui::frozen_phone::EMULATOR, &core_id, Path::new(rom), None);
         let period = Duration::from_secs_f64(1.0 / core.av.timing.fps.clamp(10.0, 240.0));
         let audio = pocket_ui::audio::Audio::open(core.av.timing.sample_rate, false);
         if audio.is_none() {
@@ -406,6 +426,7 @@ impl Player {
             .and_then(|bytes| pocket_ui::fsutil::write_atomic(&base.with_extension("earlier0"), &bytes).ok().map(|_| 1))
             .unwrap_or(0);
         let filled_slots = std::array::from_fn(|i| pocket_ui::slots::state_path(&base, i).is_file());
+        let kept = pocket_ui::frozen_phone::kept(&base);
         let slot_icon = pocket_ui::system_art::get(&system).map(|sprite| sprite.fitted(26, 26));
         let sounds = pocket_ui::ui_sound::Config::load(&data);
         let picture = picture::Settings::load(&data, &system, &key);
@@ -425,6 +446,11 @@ impl Player {
             base,
             data,
             key,
+            mark,
+            note,
+            note_until: None,
+            note_area: Area::new(0, 0, 0, 0),
+            first_frame: false,
             paused: false,
             crt_started: None,
             crt_done: false,
@@ -433,6 +459,7 @@ impl Player {
             row: 0,
             slot: 0,
             filled_slots,
+            kept,
             slot_icon,
             sounds,
             sounds_muted: false,
@@ -485,10 +512,15 @@ impl Player {
     }
     fn automatic(&mut self) -> Result<(), String> {
         let path = pocket_ui::slots::auto_path(&self.base);
+        // The battery save first, so the state is never older than it (`Core::resume`), as pocket-core's exit does.
+        let battery = self.core.write_sram();
+        if let Some(mark) = &self.mark {
+            pocket_ui::frozen_phone::write_mark(&self.base, mark);
+        }
         self.state(&path)?;
-        self.core.write_sram().map_err(|e| format!("{e:?}"))?;
         pocket_ui::slots::auto_written(&path);
-        Ok(())
+        pocket_ui::slots::battery_unsaved(&path, battery.is_err());
+        battery.map_err(|e| format!("{e:?}"))
     }
     fn load(&mut self, path: &Path) -> Result<(), String> {
         let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
@@ -634,14 +666,14 @@ impl Player {
                 20 => self.row = (self.row + 1).min(self.rows().len().saturating_sub(1)),
                 21 | 102 => {
                     if self.menu == Menu::Pause {
-                        self.slot = (self.slot + 7) % 8
+                        self.slot = (self.slot + self.places() - 1) % self.places()
                     } else {
                         self.change_option(-1)
                     }
                 }
                 22 | 103 => {
                     if self.menu == Menu::Pause {
-                        self.slot = (self.slot + 1) % 8
+                        self.slot = (self.slot + 1) % self.places()
                     } else {
                         self.change_option(1)
                     }
@@ -682,15 +714,27 @@ impl Player {
             rows.push("Back".into());
             return rows;
         }
+        let place = place_name(self.slot, self.filled_slots.len());
         vec![
             "Continue".into(),
-            format!("Save · Slot {}", self.slot + 1),
-            format!("Load · Slot {}", self.slot + 1),
+            format!("Save · {place}"),
+            format!("Load · {place}"),
             "Earlier".into(),
             "Options".into(),
             "Screenshot".into(),
             "Quit".into(),
         ]
+    }
+    /// The slot picker's places: the slots, then the kept moments.
+    fn places(&self) -> usize {
+        self.filled_slots.len() + self.kept.len()
+    }
+    /// The file at the picker's place.
+    fn place_path(&self) -> PathBuf {
+        match self.slot.checked_sub(self.filled_slots.len()) {
+            Some(kept) => self.kept[kept].clone(),
+            None => pocket_ui::slots::state_path(&self.base, self.slot),
+        }
     }
     fn change_option(&mut self, delta: i32) {
         if self.row < picture::ROWS {
@@ -731,12 +775,14 @@ impl Player {
                 self.pause(false);
                 return;
             }
+            // A kept moment is the only copy of it: never written over.
+            1 if self.slot >= self.filled_slots.len() => Err(KEPT_ONLY_LOADS.into()),
             1 => {
-                let path = pocket_ui::slots::state_path(&self.base, self.slot);
+                let path = self.place_path();
                 self.state(&path)
             }
             2 => {
-                let path = pocket_ui::slots::state_path(&self.base, self.slot);
+                let path = self.place_path();
                 self.load(&path)
             }
             3 => {
@@ -781,6 +827,7 @@ impl Player {
         let slot = self.slot + 1;
         self.message = match (result, self.row) {
             (Ok(()), 1) => format!("Saved to slot {slot}"),
+            (Ok(()), 2) if self.slot >= self.filled_slots.len() => "Loaded the kept moment".into(),
             (Ok(()), 2) => format!("Loaded slot {slot}"),
             (Ok(()), 3) => "Loaded an earlier moment".into(),
             (Ok(()), 5) => "Screenshot saved".into(),
@@ -1034,7 +1081,19 @@ impl Player {
                 self.last_earlier = Instant::now();
             }
         }
+        if self.frames > 0 && !self.note.is_empty() && !self.paused {
+            let until = *self.note_until.get_or_insert_with(|| Instant::now() + NOTE_FOR);
+            if Instant::now() >= until {
+                self.note.clear();
+                self.overlay_size = None;
+            }
+        }
         self.paint();
+        if self.frames > 0 && !self.first_frame {
+            // The tests' end of "A or tap to the game's first frame" (the launcher logs the start).
+            self.first_frame = true;
+            log::info!("player first game frame");
+        }
         if self.paused {
             1
         } else {
@@ -1090,6 +1149,9 @@ impl Player {
             let mut nodes: Vec<_> = self.controls.iter().map(|(a, bit)| (*a, self.control_label(*bit).to_string(), false)).collect();
             if self.touch_visible {
                 nodes.push((self.menu_button, "Pause".into(), false));
+            }
+            if !self.note.is_empty() {
+                nodes.push((self.note_area, self.note.iter().map(|l| note_text(l)).collect::<Vec<_>>().join(". "), false));
             }
             nodes
         };
@@ -1157,7 +1219,11 @@ impl Player {
             self.controls = out.0;
             self.dpad = out.1;
             self.menu_button = out.2;
-        } else if self.paused {
+        }
+        if !self.paused && !self.note.is_empty() {
+            self.note_area = paint_note(&mut c, &mut self.text, w, &self.note);
+        }
+        if self.paused {
             // A flat sheet for touch and controller alike (a controller gets a focus ring and a hint line): the
             // paused picture is only a thumbnail (portrait), never behind the buttons.
             c.clear(pal().void);
@@ -1197,6 +1263,31 @@ impl Player {
         self.gfx.present(&self.pixels, (w, h), self.view, game, true, &crt);
         self.overlay_size = if self.paused { None } else { Some(self.logical) };
     }
+}
+/// How long the lines about a start stay over the game.
+const NOTE_FOR: Duration = Duration::from_secs(8);
+const KEPT_ONLY_LOADS: &str = "A kept moment can only be loaded: pick a slot to save";
+/// What the slot picker calls a place: a slot, or one of the kept moments after them.
+fn place_name(place: usize, slots: usize) -> String {
+    match place.checked_sub(slots) {
+        Some(kept) => format!("Kept moment {}", kept + 1),
+        None => format!("Slot {}", place + 1),
+    }
+}
+fn note_text(line: &str) -> String {
+    pocket_ui::i18n::tr(line)
+}
+/// A band at the top of the game with the lines about its start; the band is what it covers. Colours are the band's own
+/// over any game: the overlay's black is see-through.
+fn paint_note(c: &mut Canvas, text: &mut Text, w: i32, lines: &[String]) -> Area {
+    let wrapped: Vec<String> = lines.iter().flat_map(|l| text.wrap_at_most(Face::Body, 34, &note_text(l), w - 2 * EDGE, 3)).collect();
+    let step = type_scale::row(44, 34);
+    let area = Area::new(0, 0, w, wrapped.len() as i32 * step + 2 * GAP);
+    c.rect(area.x, area.y, area.w, area.h, 0x241f1a);
+    for (i, line) in wrapped.iter().enumerate() {
+        text.draw(c, Face::Body, 34, EDGE, GAP + (i as i32 + 1) * step - 12, 0xf4efe6, line);
+    }
+    area
 }
 // Touch pause menu. Sizes are logical pixels (about 2.2 per dp): every target is at least 106 (48 dp) high with
 // gaps of 20 (9 dp); the primary button is 128 (58 dp).
@@ -1737,7 +1828,7 @@ fn touch_pause(c: &mut Canvas, text: &mut Text, v: &TouchView) -> TouchOut {
         chevron(c, right.x + zone / 2 - 6, area.y + area.h / 2, true, pal().text);
         out.slot_arrows = [Some(left), Some(right)];
         let middle = Area::new(area.x + zone, area.y, area.w - 2 * zone, area.h);
-        let name = format!("Slot {}", v.slot + 1);
+        let name = place_name(v.slot, v.filled.len());
         centered(c, text, Face::Body, 36, Area::new(middle.x, area.y + 6, middle.w, 62), pal().text, &name);
         if v.card {
             // The medium with its eight slots (as the info page shows it), in the room under the name.
@@ -1876,10 +1967,8 @@ pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeCreate(
     // The launch carries the current preferences, so a fast launch cannot race the async disk writer.
     let prefs: serde_json::Value = serde_json::from_str(&pocket_ui::platform::android::string("playerSettings"))
         .unwrap_or_else(|_| pocket_ui::fsutil::read_json_or_backup(&pocket_ui::platform::data_dir().join("launcher.json")).unwrap_or_default());
-    let language = prefs["german"].as_bool().map_or_else(
-        || pocket_ui::i18n::Lang::from_locale(&pocket_ui::platform::android::string("language")),
-        |g| if g { pocket_ui::i18n::Lang::De } else { pocket_ui::i18n::Lang::En },
-    );
+    // As `Preferences::chosen_language`: the choice, or what an older version wrote, or the phone's.
+    let language = prefs["language"].as_str().map(pocket_ui::i18n::Lang::from_locale).or(prefs["german"].as_bool().map(|g| if g { pocket_ui::i18n::Lang::De } else { pocket_ui::i18n::Lang::En })).unwrap_or_else(|| pocket_ui::i18n::Lang::from_locale(&pocket_ui::platform::android::string("language")));
     pocket_ui::i18n::set(language);
     let font_scale = pocket_ui::platform::android::string("fontScale").parse::<f32>().unwrap_or(1.0);
     let text_size = prefs["text_size"].as_str().unwrap_or("normal");
@@ -1910,10 +1999,13 @@ pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeCreate(
     let title = string(&mut env, title);
     let error = PLAYER.with(|slot| {
         slot.borrow_mut().take();
-        match Player::new(&core, &rom, system, key, title, prefs["light"].as_bool().unwrap_or(false)) {
+        let frozen = prefs["frozen_shown"].as_bool().unwrap_or(false);
+        match Player::new(&core, &rom, system, key, title, prefs["light"].as_bool().unwrap_or(false), frozen) {
             Ok(mut player) => {
                 player.sounds_muted = prefs["muted"].as_bool().unwrap_or(false);
-                player.crt_done = !prefs["cozy"].as_bool().unwrap_or(true) || !extras.tv_switch_on;
+                // A frozen game goes straight back: its moment is the first thing on screen (`cabinet::starts_cozy`).
+                let cozy = pocket_ui::cabinet::starts_cozy(prefs["cozy"].as_bool().unwrap_or(true), pocket_ui::motion::Motion::Full, frozen);
+                player.crt_done = !cozy || !extras.tv_switch_on;
                 player.core.frontend_current();
                 *slot.borrow_mut() = Some(player);
                 String::new()

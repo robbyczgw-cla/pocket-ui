@@ -194,3 +194,26 @@ pub fn name_extras(stem: &str) -> Vec<String> {
 pub fn strip_inner_ext(stem: &str) -> &str {
     [".nkit", ".NKIT", ".p8"].iter().find_map(|e| stem.strip_suffix(e)).unwrap_or(stem)
 }
+
+/// `display_name`, for a name that is going to be painted (the recents, the hidden games, the gallery, the history):
+/// the result is learned as a name (`i18n::learn_names`). Not for a name only compared (`gamedb`'s matching).
+pub fn shelf_name(stem: &str) -> String {
+    let name = title_case(&display_name(stem));
+    crate::i18n::learn_names([&name]);
+    name
+}
+
+/// A system pocket-ui can start, as es_systems.cfg describes it, without looking at its games.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SysInfo {
+    /// ROCKNIX id, e.g. "gba".
+    pub id: String,
+    /// Full name, e.g. "Game Boy Advance".
+    pub name: String,
+    /// The ROM folder as people see it over the share: "roms/gba".
+    pub folder: String,
+    /// The folder itself.
+    pub path: std::path::PathBuf,
+    /// File types it takes, lowercase without the dot, in es_systems order, each once.
+    pub extensions: Vec<String>,
+}

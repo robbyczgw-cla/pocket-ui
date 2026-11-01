@@ -170,10 +170,14 @@ pub fn rom_crc(zip_path: &Path, wanted: &[&str]) -> Option<(u32, u64)> {
 /// The entries of the zip at `zip_path`, read from the end of the file. Outer None: no end record, so the file was cut
 /// off or is no zip. An error: it could not be read, or its directory doesn't read as one.
 fn directory_of(zip_path: &Path) -> Result<Option<Vec<Entry>>, String> {
-    use std::io::{Read, Seek, SeekFrom};
+    directory_in(&mut std::fs::File::open(zip_path).map_err(|e| e.to_string())?)
+}
+
+/// `directory_of` over anything that reads and seeks: a file, or an open Android document.
+fn directory_in(f: &mut (impl std::io::Read + std::io::Seek)) -> Result<Option<Vec<Entry>>, String> {
+    use std::io::SeekFrom;
     let bad = |e: std::io::Error| e.to_string();
-    let mut f = std::fs::File::open(zip_path).map_err(bad)?;
-    let len = f.metadata().map_err(bad)?.len();
+    let len = f.seek(SeekFrom::End(0)).map_err(bad)?;
     let tail_len = len.min(22 + 65535);
     let mut tail = vec![0; tail_len as usize];
     f.seek(SeekFrom::Start(len - tail_len)).map_err(bad)?;
@@ -203,7 +207,12 @@ fn directory_of(zip_path: &Path) -> Result<Option<Vec<Entry>>, String> {
 /// or a rare kind of zip that is not this reader's to judge (RetroArch still tries those).
 pub fn refusal_of(zip_path: &Path, wanted: &[&str], only_cut_off: bool) -> Option<String> {
     let zip_name = zip_path.file_name().and_then(|n| n.to_str()).unwrap_or("The zip file");
-    let list = match directory_of(zip_path) {
+    refusal_in(&mut std::fs::File::open(zip_path).ok()?, zip_name, wanted, only_cut_off)
+}
+
+/// `refusal_of` for a zip that is open already; `zip_name` is how the sentence calls it.
+pub fn refusal_in(zip: &mut (impl std::io::Read + std::io::Seek), zip_name: &str, wanted: &[&str], only_cut_off: bool) -> Option<String> {
+    let list = match directory_in(zip) {
         Ok(Some(list)) => list,
         Ok(None) => return Some(message("incomplete", zip_name)),
         Err(_) => return None,

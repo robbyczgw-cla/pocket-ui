@@ -218,6 +218,11 @@ impl App {
             && !self.cabinet.insert_playing(std::time::Instant::now())
     }
 
+    /// The folders are read again once the running game has ended (`library_apply_pending`).
+    pub(crate) fn library_ui_rescan_after_game(&mut self) {
+        self.library_ui.after_start = AfterStart::Rescan;
+    }
+
     /// Swaps a waiting list in when it may (called after each event, `about_to_wait`). Cheap when nothing waits.
     pub(crate) fn library_apply_pending(&mut self) {
         self.identify_names_rescan();

@@ -1825,8 +1825,7 @@ the Pocket's motor at the same time, and the Players page (A on each controller)
   the Shutter sound through `ui_sound::play_over_game` (the mixer thread; only when Sounds is on) or the Error sound,
   and a line in the log. Not switchable. RetroArch is left alone: its own hotkeys (and screenshot key) stay its own.
 - **Files**: `/storage/roms/screenshots/<system>/<game> <YYYY-MM-DD HH-MM-SS>.png` (`POCKETUI_SCREENSHOTS` moves
-  the folder). Under `roms` the file share shows it (`wifi::SHARE_VETOED` hides only ports, PortMaster, bios and
-  savestates), and the companion lists it. (Where RetroArch's own screenshots go on ROCKNIX has not been checked on the
+  the folder). Under `roms` the file share shows it (nothing there is hidden), and the companion lists it. (Where RetroArch's own screenshots go on ROCKNIX has not been checked on the
   device.) The name is time-sorted, has no colon (vfat/exFAT), and the game part goes through
   `screenshot::clean` (slashes and the characters the card refuses become `_`, no leading dot, at most 120 bytes).
   The same second twice gets ` (2)`.

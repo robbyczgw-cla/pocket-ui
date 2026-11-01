@@ -1454,7 +1454,7 @@ Previous	Vorige
 # --- Settings list
 Settings	Einstellungen
 Choose how the shelf looks, dark or light.	Wähl, wie das Regal aussieht, dunkel oder hell.
-Menus and messages in English or German.	Menüs und Meldungen auf Englisch oder Deutsch.
+Menus and messages in English, German or Spanish.	Menüs und Meldungen auf Englisch, Deutsch oder Spanisch.
 Text size	Schriftgröße
 Larger text on every screen, fewer rows on a page.	Größere Schrift auf allen Seiten, dafür weniger Zeilen pro Seite.
 Larger text on every screen.	Größere Schrift auf allen Seiten.
@@ -1465,7 +1465,7 @@ Pair a controller or headphones, see what is connected.	Controller oder Kopfhör
 Cover art, game pictures and PortMaster games.	Cover, Spielbilder und PortMaster-Spiele.
 Where each system's games go, and file sharing.	Ordner pro System und Dateifreigabe.
 Remote access (SSH)	Fernzugriff (SSH)
-Log in from a computer. Turns itself off after 30 minutes.	Vom Computer anmelden. Geht nach 30 Minuten aus.
+Log in from a computer. Turns itself off when the Pocket restarts.	Vom Computer anmelden. Geht beim Neustart aus.
 Reach the Pocket from your other devices.	Den Pocket von anderen Geräten erreichen.
 Keep saves and states in step with your other devices.	Spielspeicher und -stände auf allen Geräten gleich.
 Pair a gaming PC for Moonlight, and stream its games.	Gaming-PC für Moonlight koppeln, Spiele streamen.
@@ -1909,14 +1909,12 @@ From a computer	Vom Computer
 the {s} folder	den Ordner {s}
 the folders {s}	die Ordner {s}
 the files	die Dateien
-Put the files there. pocket-ui moves the ones PortMaster names into place when you start the game.	Leg die Dateien dort ab. pocket-ui verschiebt die von PortMaster genannten beim Spielstart an ihren Platz.
-Put {t} there. pocket-ui moves {t2} into place when you start the game.	Leg {t} dort ab. pocket-ui verschiebt {t2} beim Spielstart an ihren Platz.
+Put {t} there.	Leg {t} dort ab.
 Switching file sharing{s}	Dateifreigabe wird umgeschaltet{s}
 File sharing needs Wi-Fi. Connect first, then turn it on.	Dateifreigabe braucht WLAN. Verbinde dich zuerst und schalte sie dann ein.
 File sharing is off. Press X to turn it on.	Dateifreigabe ist aus. X schaltet sie ein.
 File sharing is off. Turn it on in Settings, Add games (X).	Dateifreigabe ist aus. Schalte sie in Einstellungen, Spiele hinzufügen (X) ein.
-Then put {t} into games-roms\{s}. pocket-ui moves them into place when you start the game.	Leg dann {t} in games-roms\{s}. pocket-ui verschiebt sie beim Spielstart an ihren Platz.
-File sharing can't reach this folder. Copy the files with Remote access (SSH), or with the SD card in a computer that reads Linux (ext4) drives.	Die Dateifreigabe erreicht diesen Ordner nicht. Kopiere die Dateien per Fernzugriff (SSH) oder mit der SD-Karte in einem Computer, der Linux-Laufwerke (ext4) liest.
+Then put {t} into games-roms\{s}.	Leg dann {t} in games-roms\{s}.
 PortMaster says	PortMaster sagt
 
 # --- PortMaster
@@ -2122,7 +2120,7 @@ Name of the hidden network	Name des versteckten Netzwerks
 This can take up to a minute.	Das kann bis zu einer Minute dauern.
 Remote access	Fernzugriff
 Log in to this Pocket from a computer on the same Wi-Fi, with SSH.	Melde dich von einem Computer im selben WLAN per SSH auf diesem Pocket an.
-It turns itself off after 30 minutes without a connection, and when the Pocket restarts.	Er schaltet sich nach 30 Minuten ohne Verbindung ab, und wenn der Pocket neu startet.
+It stays on until you turn it off. It turns itself off when the Pocket restarts.	Er bleibt an, bis du ihn ausschaltest. Beim Neustart schaltet er sich selbst aus.
 Switching remote access{s}	Fernzugriff wird umgeschaltet{s}
 Remote access is on.	Fernzugriff ist an.
 Always on: this is a developer device (dev-ssh).	Immer an: Das ist ein Entwicklergerät (dev-ssh).
@@ -2215,6 +2213,7 @@ Take off the shelf	Aus dem Regal nehmen
 Put on the shelf	Ins Regal stellen
 Add your games	Deine Spiele hinzufügen
 One folder per system in roms. Copy games over Wi-Fi with file sharing.	Ein Ordner pro System in roms. Kopieren per Dateifreigabe über WLAN.
+One folder per system in roms.	Ein Ordner pro System in roms.
 Folder without a system: {s}. Its games go in {s2}.	Ordner ohne System: {s}. Seine Spiele gehören nach {s2}.
 Folder without a system: {s}. The tiles below show the folder names.	Ordner ohne System: {s}. Die Kacheln unten zeigen die Ordnernamen.
 Folders without a system: {s}. Their games go in {s2}.	Ordner ohne System: {s}. Ihre Spiele gehören nach {s2}.
@@ -2239,8 +2238,15 @@ File sharing is off	Dateifreigabe ist aus
 smb://(not connected)/games-roms	smb://(nicht verbunden)/games-roms
 \\(not connected)\games-roms	\\(nicht verbunden)\games-roms
 ssh root@(not connected)	ssh root@(nicht verbunden)
-Press X to turn it on. Then a computer on the same network can copy games into these folders. It stays on until you turn it off or restart.	Mit X einschalten. Dann kann ein Computer im selben Netzwerk Spiele in diese Ordner kopieren. Bleibt an, bis du sie ausschaltest oder neu startest.
+Press X to turn it on. Then a computer on the same network can copy games into these folders. It stays on until you turn it off.	Mit X einschalten. Dann kann ein Computer im selben Netzwerk Spiele in diese Ordner kopieren. Bleibt an, bis du sie ausschaltest.
 Then a computer on the same network can copy games straight into these folders.	Dann kann ein Computer im selben Netzwerk Spiele direkt in diese Ordner kopieren.
+Copy from a computer	Vom Computer kopieren
+Use a second card	Zweite Karte nehmen
+Put the card in your computer and copy games to the GAMES drive, into its roms folder.	Steck die Karte in deinen Computer und kopiere Spiele auf das Laufwerk GAMES, in den Ordner roms.
+Copy games to a second SD card (over 8 GB) in your computer, into a folder called roms, then put it in the second slot.	Kopiere Spiele am Computer auf eine zweite SD-Karte (über 8 GB), in einen Ordner namens roms, und steck sie in den zweiten Slot.
+Or copy games to a second SD card (over 8 GB) in your computer, into a folder called roms, then put it in the second slot.	Oder kopiere Spiele am Computer auf eine zweite SD-Karte (über 8 GB), in einen Ordner namens roms, und steck sie in den zweiten Slot.
+Or copy your own: put the card in your computer and copy them to the GAMES drive.	Oder kopiere eigene: Steck die Karte in deinen Computer und kopiere sie auf das Laufwerk GAMES.
+Needs a network, and this handheld has no Wi-Fi.	Braucht ein Netzwerk, und dieser Handheld hat kein WLAN.
 Automatic ({s})	Automatisch ({s})
 Connected to {s}	Verbunden mit {s}
 The saved password didn't work. Type it again.	Das gespeicherte Passwort hat nicht funktioniert. Gib es neu ein.
@@ -2907,7 +2913,7 @@ Look, language, text, night light, frames, sounds, LEDs, animations, extras.	Ans
 On start, quit, buttons, over the game, performance, battery, achievements, Curator.	Start, Beenden, Tasten, Anzeige im Spiel, Leistung, Akku, Erfolge, Curator.
 Add games, starter pack, extras, screenshots, the Store, tools, PC streaming.	Spiele hinzufügen, Startpaket, Extras, Screenshots, Store, Tools, PC-Streaming.
 Add games, starter pack, extras, screenshots, tools, PC streaming.	Spiele hinzufügen, Startpaket, Extras, Screenshots, Tools, PC-Streaming.
-Wi-Fi, Bluetooth, Tailscale, Sync, remote access, web companion.	WLAN, Bluetooth, Tailscale, Sync, Fernzugriff, Web-Begleiter.
+Wi-Fi, Bluetooth, USB file transfer, Tailscale, Sync, remote access, web companion.	WLAN, Bluetooth, USB-Dateiübertragung, Tailscale, Sync, Fernzugriff, Web-Begleiter.
 Time, updates, backup and reset, the Tour, the manual, about.	Uhrzeit, Updates, Sichern, Tour, Handbuch, Über.
 Web companion	Web-Begleiter
 Your games, play time and uploads in a browser.	Deine Spiele, Spielzeit und Uploads im Browser.
@@ -4043,7 +4049,11 @@ Move {s} to {s2}.	Verschiebe {s} nach {s2}.
 {s}: no BIOS.	{s}: kein BIOS.
 {s}: BIOS missing.	{s}: BIOS fehlt.
 BIOS files come from your own console.	BIOS-Dateien stammen von deiner eigenen Konsole.
-Copy them with the SD card in a computer or the Web companion.	Kopiere sie mit der SD-Karte im Computer oder mit dem Web-Begleiter.
+Copy them into the bios folder over file sharing (Settings › Games › Add games).	Kopiere sie per Dateifreigabe in den Ordner bios (Einstellungen › Spiele › Spiele hinzufügen).
+Or copy them into roms/bios on a second SD card in your computer.	Oder kopiere sie am Computer in roms/bios auf einer zweiten SD-Karte.
+Copy them into roms/bios on a second SD card in your computer.	Kopiere sie am Computer in roms/bios auf einer zweiten SD-Karte.
+Copy them into roms/bios.	Kopiere sie nach roms/bios.
+BIOS files go in the bios folder	BIOS-Dateien kommen in den Ordner bios
 Discs missing a file	Discs, denen eine Datei fehlt
 Empty files	Leere Dateien
 Zips that won't start	Zips, die nicht starten
@@ -4052,6 +4062,7 @@ Wrong folder or file type	Falscher Ordner oder Dateityp
 Needs a stronger handheld	Braucht einen stärkeren Handheld
 Tips	Tipps
 This file is empty.	Diese Datei ist leer.
+This file is empty inside.	Diese Datei ist innen leer.
 A copy or a download stopped early. Copy the game to the SD card again.	Ein Kopiervorgang oder Download brach zu früh ab. Kopiere das Spiel noch einmal auf die SD-Karte.
 Same game twice: {s} is the same game.	Dasselbe Spiel doppelt: {s} ist dasselbe Spiel.
 Hide this copy from the shelf. The file stays on the card.	Blende diese Kopie im Regal aus. Die Datei bleibt auf der Karte.
@@ -4079,3 +4090,75 @@ This is a {s} file, in the {s2} folder.	Das ist eine {s}-Datei im {s2}-Ordner.
 Typo in the file type: .{s} isn't read.	Tippfehler im Dateityp: .{s} wird nicht gelesen.
 {s} doesn't take .{s2} files, so this one isn't read.	{s} nimmt keine .{s2}-Dateien, diese wird deshalb nicht gelesen.
 It takes {s}.	Es nimmt {s}.
+The game's file changed: started fresh	Die Spieldatei hat sich geändert: neu gestartet
+Its moment is in slot {n}	Der Moment liegt in Slot {n}
+All slots are full: its moment is under Load, after the last slot	Alle Plätze sind voll: Der Moment liegt unter Laden, hinter dem letzten Platz
+Kept moment {n}	Aufgehobener Moment {n}
+Missing disc files: {t}	Es fehlen Disc-Dateien: {t}
+Loaded the kept moment	Aufgehobenen Moment geladen
+A kept moment can only be loaded: pick a slot to save	Ein aufgehobener Moment lässt sich nur laden: Wähle zum Speichern einen Platz
+Its moment couldn't be moved and stays where it is	Der Moment ließ sich nicht verschieben und bleibt, wo er ist
+The game didn't close normally: back at your last saved moment	Das Spiel wurde nicht normal beendet: zurück beim letzten gespeicherten Moment
+# --- Android: Game check (document_check, android/src/check_page.rs)
+Folders that can't be read	Ordner, die sich nicht lesen lassen
+Emulator apps to install	Emulator-Apps zum Installieren
+Can't start in this app yet	Starten in dieser App noch nicht
+Copy the game into this folder again.	Kopiere das Spiel noch einmal in diesen Ordner.
+A copy or a download stopped early. Copy the game into this folder again.	Ein Kopiervorgang oder Download brach zu früh ab. Kopiere das Spiel noch einmal in diesen Ordner.
+Both copies are on your shelf. To keep one, delete the other with your phone's file manager: pocket-ui never deletes a game.	Beide Kopien stehen im Regal. Willst du nur eine, lösche die andere mit dem Dateimanager deines Handys: pocket-ui löscht nie ein Spiel.
+Android no longer lets pocket-ui read {s}.	Android lässt pocket-ui {s} nicht mehr lesen.
+Your games are safe. Choose this folder again and they come back.	Deine Spiele sind sicher. Wähle diesen Ordner noch einmal, dann sind sie wieder da.
+{s} is not there any more.	{s} ist nicht mehr da.
+It was moved or renamed, or its memory card is out. Choose it again, or forget it here.	Er wurde verschoben oder umbenannt, oder seine Speicherkarte fehlt. Wähle ihn noch einmal oder vergiss ihn hier.
+{s} holds more than 50,000 files, so it isn't read.	{s} enthält mehr als 50.000 Dateien und wird deshalb nicht gelesen.
+Choose a smaller folder, the one that holds your games' folders.	Wähle einen kleineren Ordner, den mit den Ordnern deiner Spiele.
+Disc: {s} is there, its {s2} is empty.	Disc: {s} ist da, {s2} ist leer.
+Copy {s} into this folder again.	Kopiere {s} noch einmal in diesen Ordner.
+pocket-ui can't tell which system the game in {s} is for, so it isn't on your shelf.	pocket-ui erkennt nicht, zu welchem System das Spiel in {s} gehört, darum steht es nicht im Regal.
+pocket-ui can't tell which system the {n} games in {s} are for, so they aren't on your shelf.	pocket-ui erkennt nicht, zu welchem System die {n} Spiele in {s} gehören, darum stehen sie nicht im Regal.
+You chose {s} itself. Choose the folder above it, so that its name counts.	Du hast {s} selbst gewählt. Wähle den Ordner darüber, damit sein Name zählt.
+Rename the folder to {s}.	Benenne den Ordner in {s} um.
+Name the folder after the system, for example psx, ps2 or segacd.	Benenne den Ordner nach dem System, zum Beispiel psx, ps2 oder segacd.
+PC Engine CD games don't start in this app yet: its player has no way to get their BIOS and tracks.	PC-Engine-CD-Spiele starten in dieser App noch nicht: Ihr Player kommt nicht an BIOS und Tracks heran.
+The game stays on your shelf and nothing is changed.	Das Spiel bleibt im Regal, und nichts wird geändert.
+This game is {n} MB. This app's player takes games up to {m} MB on this system.	Dieses Spiel hat {n} MB. Der Player dieser App nimmt auf diesem System Spiele bis {m} MB.
+This game needs {n} MB free on your phone for its first start, and {m} MB is free.	Für den ersten Start braucht dieses Spiel {n} MB freien Speicher auf deinem Handy, frei sind {m} MB.
+Make some room and start it. The game stays on your shelf.	Schaff Platz und starte es. Das Spiel bleibt in deinem Regal.
+{s} games can't be started from pocket-ui yet.	{s}-Spiele lassen sich noch nicht aus pocket-ui starten.
+The game stays on your shelf. Start it in its own emulator app.	Das Spiel bleibt im Regal. Starte es in seiner eigenen Emulator-App.
+1 game needs the {s} app, which isn't installed.	1 Spiel braucht die App {s}, die nicht installiert ist.
+{n} games need the {s} app, which isn't installed.	{n} Spiele brauchen die App {s}, die nicht installiert ist.
+Install {s} from its official site or store and it starts from here. Until then it stays on your shelf.	Installiere {s} von der offiziellen Seite oder aus dem Store, dann startet es von hier. Bis dahin bleibt es im Regal.
+Install {s} from its official site or store and they start from here. Until then they stay on your shelf.	Installiere {s} von der offiziellen Seite oder aus dem Store, dann starten sie von hier. Bis dahin bleiben sie im Regal.
+{s} starts in RetroArch, with its {s2} core.	{s} startet in RetroArch, mit dem Core {s2}.
+Download that core once inside RetroArch. pocket-ui can't see into another app, so it can't say whether it is there.	Lade diesen Core einmal in RetroArch herunter. pocket-ui kann nicht in eine andere App schauen und darum nicht sagen, ob er da ist.
+{s} needs a BIOS file from your own console.	{s} braucht eine BIOS-Datei von deiner eigenen Konsole.
+{s} needs keys and firmware from your own console.	{s} braucht Schlüssel und Firmware von deiner eigenen Konsole.
+{s} asks for it and keeps it in its own folder. pocket-ui can't see into another app, so it can't say whether it is there.	{s} fragt danach und bewahrt sie im eigenen Ordner auf. pocket-ui kann nicht in eine andere App schauen und darum nicht sagen, ob sie da ist.
+The files in your bios folder aren't read.	Die Dateien in deinem bios-Ordner werden nicht gelesen.
+pocket-ui's own player needs no BIOS, and each emulator app keeps its own: add the file there.	pocket-uis eigener Player braucht kein BIOS, und jede Emulator-App hat ihr eigenes: Füge die Datei dort hinzu.
+Reading your folders. Nothing is changed.	Deine Ordner werden gelesen. Nichts wird geändert.
+Can't read your folders	Deine Ordner lassen sich nicht lesen
+Your games are safe. Try again in a moment.	Deine Spiele sind sicher. Versuch es gleich noch einmal.
+No folder yet	Noch kein Ordner
+Choose the folder with your games, and Game check looks them over.	Wähle den Ordner mit deinen Spielen, und der Spiele-Check schaut sie sich an.
+Can't read your folder	Dein Ordner lässt sich nicht lesen
+Nothing in your folders is a game yet. Game folders are named after their system, like gba or psx.	In deinen Ordnern ist noch kein Spiel. Spielordner heißen wie ihr System, zum Beispiel gba oder psx.
+Forget this folder	Diesen Ordner vergessen
+Choose it again	Noch einmal wählen
+1 new game. Game check in Settings looks it over.	1 neues Spiel. Der Spiele-Check in den Einstellungen schaut es sich an.
+{n} new games. Game check in Settings looks them over.	{n} neue Spiele. Der Spiele-Check in den Einstellungen schaut sie sich an.
+USB file transfer	USB-Dateiübertragung
+Copy games with a USB cable. Windows and Linux open it by themselves; a Mac needs the free OpenMTP app.	Spiele per USB-Kabel kopieren. Windows und Linux öffnen das von selbst; ein Mac braucht die kostenlose App OpenMTP.
+USB file transfer is on. Connect a computer: your games are under Roms.	USB-Dateiübertragung ist an. Schließ einen Computer an: Deine Spiele liegen unter Roms.
+USB file transfer didn't start. Take out what's in the USB port and try again.	USB-Dateiübertragung ist nicht gestartet. Zieh ab, was am USB-Anschluss steckt, und versuch es noch einmal.
+Your games card came out. Put it back to play: your games and saves are on it. A game that was running couldn't save after that moment.	Deine Spielekarte wurde herausgenommen. Steck sie wieder ein, um zu spielen: Deine Spiele und Spielstände sind darauf. Ein laufendes Spiel konnte ab diesem Moment nicht mehr speichern.
+Games card found. Reading its games.	Spielekarte gefunden. Ihre Spiele werden gelesen.
+Games card in	Spielekarte steckt
+Your games are read from your games card. To add more, put that card in your computer and copy them into its roms folder.	Deine Spiele kommen von deiner Spielekarte. Für weitere steck diese Karte in deinen Computer und kopiere sie in ihren Ordner roms.
+Card is read-only: copying won't work	Karte nur lesbar: Kopieren geht nicht
+File sharing	Dateifreigabe
+Connect to Wi-Fi	Mit dem WLAN verbinden
+Turn on USB file transfer	USB-Dateiübertragung einschalten
+Turn off USB file transfer	USB-Dateiübertragung ausschalten
+Switching{s}	Wird umgeschaltet{s}

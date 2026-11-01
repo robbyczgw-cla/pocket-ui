@@ -79,7 +79,7 @@ fn risk_states() -> Vec<(bool, String)> {
 /// the Shelf look's case fronts ("Favoriten"), the Cabinet's fronts, the Year in review's headline.
 const BROKEN_WORDS_SEEN: [&str; 4] = ["shelf:ps3:cards", "curator:home:shelf:favorites", "curator:cabinet:ddrrra", "curator:history-hub:cutoff"];
 
-fn check_font(font: &str) {
+fn check_font(font: &str, lang: &'static str) {
     let _tmp_guard = tempfile::tempdir().unwrap();
     let tmp = _tmp_guard.path().to_path_buf();
     fake_library(&tmp);
@@ -141,7 +141,7 @@ fn check_font(font: &str) {
     found.sort();
     assert!(
         found.is_empty(),
-        "{} problems with the {font} font at 640x480, Large, German (O: runs into another string or a hint bar, T: touches the string beside it, E: cut by the edge, W: a word broken in pieces):\n{}",
+        "{} problems with the {font} font at 640x480, Large, {lang} (O: runs into another string or a hint bar, T: touches the string beside it, E: cut by the edge, W: a word broken in pieces):\n{}",
         found.len(),
         found.join("\n")
     );
@@ -149,12 +149,22 @@ fn check_font(font: &str) {
 
 #[test]
 fn the_pixel_font_clips_nothing_at_640x480_large_german() {
-    check_font("pixel");
+    check_font("pixel", "de");
+}
+
+#[test]
+fn the_pixel_font_clips_nothing_at_640x480_large_spanish() {
+    check_font("pixel", "es");
 }
 
 #[test]
 fn the_rounded_font_clips_nothing_at_640x480_large_german() {
-    check_font("rounded");
+    check_font("rounded", "de");
+}
+
+#[test]
+fn the_rounded_font_clips_nothing_at_640x480_large_spanish() {
+    check_font("rounded", "es");
 }
 
 /// The PNG of the Home snapshot with `settings` (settings.json) and, when given, `POCKETUI_FONT` and a theme's faces.

@@ -1,9 +1,9 @@
 #!/bin/sh
-# Every state of tests/i18n-states.txt in German, dark and light, with Curator's made-up library, as contact sheets,
+# Every state of tests/i18n-states.txt in German (or SHOT_LANG=es), dark and light, with Curator's made-up library, as contact sheets,
 # plus what the painter noticed (docs/DEVELOPING.md "Translations"):
 #   missing.txt        strings painted without a German line, before keep.txt (the test sorts them)
-#   cut-de-only.txt    strings `Text::fit` cut short with "…" in German but not in English, with their states
-#   overflow-de-only.txt  strings drawn past the right edge in German but not in English
+#   cut-$SHOT_LANG-only.txt    strings `Text::fit` cut short with "…" in German but not in English, with their states
+#   overflow-$SHOT_LANG-only.txt  strings drawn past the right edge in German but not in English
 # The states are rendered in English too, for those two comparisons.
 #   scripts/i18n-shots.sh [OUT]   (default: screenshots/i18n-de)
 #   LOOKS="dark" TILE=3x3 STATES="settings;safe rescue:1" scripts/i18n-shots.sh   (some looks, smaller tiles, some states, ";" between)
@@ -12,7 +12,8 @@
 # compositor it starts scripts/wayland-stub.py.
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-OUT=${1:-$ROOT/screenshots/i18n-de}
+SHOT_LANG=${SHOT_LANG:-de}
+OUT=${1:-$ROOT/screenshots/i18n-$SHOT_LANG}
 LOOKS=${LOOKS:-dark light}
 TILE=${TILE:-2x2}
 JOBS=${JOBS:-4}
@@ -58,11 +59,11 @@ EOF
 export WORK BIN
 for look in $LOOKS; do
   python3 -I "$ROOT/scripts/curator-fake-library.py" "$WORK/lib-$look" "$look" >/dev/null
-  for lang in de en; do
+  for lang in $SHOT_LANG en; do
     mkdir -p "$WORK/$look-$lang"
     tr '\n' '\0' <"$WORK/states" | xargs -0 -P "$JOBS" -I{} sh "$WORK/one.sh" "$look" "$lang" {}
   done
-  # The German pictures, labelled with their state, in the list's order.
+  # The translated pictures, labelled with their state, in the list's order.
   n=$(echo "$TILE" | awk -Fx '{print $1 * $2}')
   cols=$(echo "$TILE" | cut -dx -f1)
   tile_w=$(( (1280 - 8 * cols) / cols ))
@@ -70,7 +71,7 @@ for look in $LOOKS; do
   while IFS= read -r line; do
     state=${line#safe }
     name=$(printf '%s' "$state" | tr ':/ ,=()' '-------')
-    [ -f "$WORK/$look-de/$name.png" ] && printf '%s\t%s\n' "$WORK/$look-de/$name.png" "$line" >>"$WORK/list"
+    [ -f "$WORK/$look-$SHOT_LANG/$name.png" ] && printf '%s\t%s\n' "$WORK/$look-$SHOT_LANG/$name.png" "$line" >>"$WORK/list"
   done <"$WORK/states"
   split -l "$n" -d -a 3 "$WORK/list" "$WORK/part-$look-"
   for part in "$WORK"/part-"$look"-*; do
@@ -84,13 +85,13 @@ for look in $LOOKS; do
 done
 
 # What the painter noticed, over every look.
-cat "$WORK"/*-de/*.tsv 2>/dev/null | grep '^M' | cut -f2- | sort -u >"$OUT/missing.txt" || true
+cat "$WORK"/*-$SHOT_LANG/*.tsv 2>/dev/null | grep '^M' | cut -f2- | sort -u >"$OUT/missing.txt" || true
 for kind in C X; do
-  file=cut-de-only.txt
-  [ "$kind" = X ] && file=overflow-de-only.txt
+  file=cut-$SHOT_LANG-only.txt
+  [ "$kind" = X ] && file=overflow-$SHOT_LANG-only.txt
   : >"$OUT/$file"
   for look in $LOOKS; do
-    for tsv in "$WORK/$look-de"/*.tsv; do
+    for tsv in "$WORK/$look-$SHOT_LANG"/*.tsv; do
       [ -f "$tsv" ] || continue
       en="$WORK/$look-en/$(basename "$tsv")"
       grep "^$kind	" "$tsv" | cut -f2- | sort -u >"$WORK/a" || true
@@ -99,4 +100,4 @@ for kind in C X; do
     done
   done | sort >>"$OUT/$file"
 done
-echo "$OUT: $(ls "$OUT"/sheet-*.jpg | wc -l | tr -d ' ') sheets; untranslated as recorded (before keep.txt): $(wc -l <"$OUT/missing.txt" | tr -d ' '); cut short only in German: $(wc -l <"$OUT/cut-de-only.txt" | tr -d ' '); past the edge only in German: $(wc -l <"$OUT/overflow-de-only.txt" | tr -d ' ')"
+echo "$OUT: $(ls "$OUT"/sheet-*.jpg | wc -l | tr -d ' ') sheets; untranslated as recorded (before keep.txt): $(wc -l <"$OUT/missing.txt" | tr -d ' '); cut short only in $SHOT_LANG: $(wc -l <"$OUT/cut-$SHOT_LANG-only.txt" | tr -d ' '); past the edge only in $SHOT_LANG: $(wc -l <"$OUT/overflow-$SHOT_LANG-only.txt" | tr -d ' ')"

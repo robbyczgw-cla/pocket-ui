@@ -76,14 +76,14 @@ today and say clearly where something is still being built or has not been confi
 
 ## Pages
 
-1. [Getting started](getting-started.md): installing, first start, Wi-Fi, adding games; [Game check](game-check.md): will your games start?
+1. [Getting started](getting-started.md): installing, first start, Wi-Fi, adding games; [The GAMES drive](games-drive.md): games from a computer; [Second card and USB cable](copy-games.md): games without Wi-Fi; [Game check](game-check.md): will your games start?
 2. [Coming from ROCKNIX or Android](coming-from.md): what happens to your saves, states, favourites and settings.
 3. [Playing](playing.md): Home, finding a game, the looks, console pages, the game switcher. [Frozen games](frozen-games.md): your last five games stand a little open, and A goes straight back.
 4. [The pause menu](pause-menu.md): save slots, Auto and Before load, quitting, Pixel Path.
 5. [Options](options.md): picture, screen frames, controls, shortcuts, extras and run-ahead in a game; [their shorter list](options-big.md) for PlayStation 2, GameCube, Wii and 3DS.
 6. [Controls](controls.md): every button, screen by screen; [in Settings, setup and on the touch screen](controls-settings.md), with the power and volume keys.
 7. [Settings](settings.md): the Settings categories and the entries of Look, Sound & feel, Playing and Games; [Connections, System and Help & tools](settings-system.md): Wi-Fi, Bluetooth, Tailscale, Sync, the clock, sleep, backups, the Tour and this guide; [quick settings, sleep and power](quick-settings.md); [storage](storage.md): what takes up space on the SD card, clean-ups, hidden games; [Bluetooth](bluetooth.md): pairing controllers, headphones and speakers.
-8. [Language](language.md): English or German menus, and what stays English.
+8. [Language](language.md): English, German or Spanish menus, and what stays English.
 9. [Night light](night-light.md): warmer, less blue colours in the evening, on a schedule or all the time.
 10. [Colours and font](theme.md): the colour sets and fonts for every screen, switched in place.
 11. [Performance and fan](performance.md): what games start with, the fan in the menus, Smooth fan, the readout.

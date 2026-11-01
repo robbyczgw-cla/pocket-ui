@@ -965,7 +965,7 @@ mod dolphin {
     pub fn through_transit_save(transit: &Path, dest: &Path, guide: bool) -> bool {
         let Ok(backup) = super::azahar::park(transit) else { return false };
         // Parked: whatever appears in the transit slot now is the state just asked for.
-        let ok = in_slot(0, Action::Save, guide) && super::wait_written(super::Emu::Dolphin, transit, None) && std::fs::rename(transit, dest).is_ok();
+        let ok = in_slot(0, Action::Save, guide) && super::wait_written(super::Emu::Dolphin, transit, None) && crate::fsutil::move_file(transit, dest).is_ok();
         if !ok {
             let _ = std::fs::remove_file(transit);
         }
@@ -1212,7 +1212,7 @@ mod azahar {
             return in_front(false, || super::chord(SAVE) && super::wait_written(super::Emu::Azahar, quick, before));
         };
         let Ok(backup) = park(quick) else { return false };
-        let ok = in_front(true, || super::chord(SAVE) && super::wait_written(super::Emu::Azahar, quick, None)) && std::fs::rename(quick, to).is_ok();
+        let ok = in_front(true, || super::chord(SAVE) && super::wait_written(super::Emu::Azahar, quick, None)) && crate::fsutil::move_file(quick, to).is_ok();
         if !ok {
             let _ = std::fs::remove_file(quick);
         }
@@ -1938,6 +1938,7 @@ mod tests {
 
     #[test]
     fn a_skipped_resume_is_used_up_by_the_start_it_was_for_even_when_that_start_is_no_standalone_one() {
+        let _session = SESSION_TESTS.lock().unwrap_or_else(|e| e.into_inner());
         let d = TestDir::new("skip-resume");
         let rom = d.join("Game.gba");
         std::fs::write(&rom, b"x").unwrap();
@@ -1948,6 +1949,9 @@ mod tests {
 
     const INI: &str =
         "[UI]\nConfirmShutdown = true\n\n\n[EmuCore]\nEnablePINE = false\nPINESlot = 28011\n\n[Pad1]\nCross = SDL-0/FaceSouth\nAnalog = SDL-0/Guide\n";
+
+    /// The tests that change `SESSION`: a `launch` that returns early ends the session (`exited`) under another test.
+    static SESSION_TESTS: Mutex<()> = Mutex::new(());
 
     fn session(id: u64) -> Session {
         Session {
@@ -1961,6 +1965,7 @@ mod tests {
 
     #[test]
     fn actions_take_turns_and_a_finished_games_worker_does_nothing() {
+        let _session = SESSION_TESTS.lock().unwrap_or_else(|e| e.into_inner());
         // Review N4 / SOL-03: Save, Load and Quit each ran on a thread of their own at once (Dolphin's slot steps of
         // two saves landed both in slot 2), and a slow worker of a game that had ended acted on the next one.
         let a = session(1_000_001);

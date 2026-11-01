@@ -1,9 +1,9 @@
-//! The interface in another language (German for now): Settings → Language, docs/DEVELOPING.md "Translations".
+//! The interface in another language (German, Spanish): Settings → Language, docs/DEVELOPING.md "Translations".
 //!
 //! Nothing in the rest of the code is wrapped for translation. The text painter (`Text::draw`, `width`, `fit`, `wrap`,
 //! `draw_right`, `draw_clipped`) looks every string it is given up here, by its exact English wording, and paints the
 //! translation instead. So the hint bar, toasts, notices, dialogs, page titles and rows are translated wherever they
-//! are drawn, and a new page needs no code for it: only lines in `assets/i18n/de.tsv`. One exception: pocket-core's
+//! are drawn, and a new page needs no code for it: only lines in `assets/i18n/de.tsv` and `es.tsv`. One exception: pocket-core's
 //! FPS + sensors line is put together from parts whose numbers change twice a second, so it looks its words up itself
 //! (`osd_sensors::Sensors::text_in`).
 //!
@@ -24,7 +24,7 @@
 //!
 //! What isn't in the table is painted as it is (English, or a name). `POCKETUI_I18N_MISSES=<file>` writes every
 //! string that had no translation (and every translation made) into that file; `tests/i18n_snapshots.rs` renders the
-//! snapshot states in German with it and fails on one that is neither translated nor in `assets/i18n/keep.txt`.
+//! snapshot states in each language with it and fails on one that is neither translated nor in `assets/i18n/keep.txt`.
 
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -40,33 +40,82 @@ pub enum Lang {
     #[default]
     En,
     De,
+    Es,
 }
 
+/// What differs by language besides the words. A new language is a line here, one in `Lang`, and its table.
+struct Traits {
+    /// The start of its locale names (`es_MX.UTF-8`).
+    code: &'static str,
+    /// In itself.
+    name: &'static str,
+    /// What the sign-in helper asks a hotel's page for (`portal`).
+    accept_language: &'static str,
+    /// The game search's keyboard has y and z the German way round.
+    qwertz: bool,
+}
+
+/// In the order of `Lang`.
+const TRAITS: [Traits; 3] = [
+    Traits { code: "en", name: "English", accept_language: "Accept-Language: en,de;q=0.5", qwertz: false },
+    Traits { code: "de", name: "Deutsch", accept_language: "Accept-Language: de,en;q=0.8", qwertz: true },
+    Traits { code: "es", name: "Español", accept_language: "Accept-Language: es,en;q=0.8", qwertz: false },
+];
+
 impl Lang {
-    pub const ALL: [Lang; 2] = [Lang::En, Lang::De];
+    pub const ALL: [Lang; 3] = [Lang::En, Lang::De, Lang::Es];
+
+    fn traits(self) -> &'static Traits {
+        &TRAITS[self as usize]
+    }
 
     /// The language's own name, for the Settings row and the welcome step; never translated.
     pub fn name(self) -> &'static str {
-        match self {
-            Lang::En => "English",
-            Lang::De => "Deutsch",
-        }
+        self.traits().name
     }
 
-    /// The next language (A or Left/Right on the row).
+    /// The next language (A or Right on the row), round to the first after the last.
     pub fn next(self) -> Lang {
-        Lang::ALL[(Lang::ALL.iter().position(|l| *l == self).unwrap_or(0) + 1) % Lang::ALL.len()]
+        Lang::ALL[(self as usize + 1) % Lang::ALL.len()]
     }
 
-    /// The language of a locale name as ROCKNIX writes it (`system.language=de_DE`, `LANG=de_AT.UTF-8`); English for
-    /// any other.
+    /// The one before (Left on the row).
+    pub fn previous(self) -> Lang {
+        Lang::ALL[(self as usize + Lang::ALL.len() - 1) % Lang::ALL.len()]
+    }
+
+    /// The header line a web page is asked in this language with.
+    pub fn accept_language(self) -> &'static str {
+        self.traits().accept_language
+    }
+
+    /// The game search's keyboard is QWERTZ.
+    pub fn qwertz(self) -> bool {
+        self.traits().qwertz
+    }
+
+    /// Its table of translations; English has none. Read on first use (`set` starts that on a thread).
+    pub fn table(self) -> Option<&'static Table> {
+        let (slot, src, file) = match self {
+            Lang::En => return None,
+            Lang::De => (&GERMAN, DE, "de.tsv"),
+            Lang::Es => (&SPANISH, ES, "es.tsv"),
+        };
+        Some(slot.get_or_init(|| {
+            let (table, errors) = Table::parse(src);
+            for e in &errors {
+                eprintln!("i18n: {file} {e}");
+            }
+            table
+        }))
+    }
+
+    /// The language of a locale name as ROCKNIX writes it (`system.language=de_DE`, `LANG=es_MX.UTF-8`) or Android
+    /// says it (`es`, `es-419`); English for any other.
     pub fn from_locale(locale: &str) -> Lang {
         let l = locale.trim().to_ascii_lowercase();
-        if l == "de" || l.starts_with("de_") || l.starts_with("de-") || l.starts_with("de.") {
-            Lang::De
-        } else {
-            Lang::En
-        }
+        let code = l.split(['_', '-', '.']).next().unwrap_or("");
+        Lang::ALL.into_iter().find(|lang| lang.traits().code == code).unwrap_or_default()
     }
 
     /// The start value when settings.json has no language: the system's, as EmulationStation set it. The launcher
@@ -81,7 +130,7 @@ impl Lang {
     }
 
     /// `system_default` without the device: `LANG` when it is set, else `system.language`, else English. A fresh
-    /// install with neither, or with any language but German, starts in English.
+    /// install with neither, or with a language pocket-ui doesn't have, starts in English.
     fn from_system(lang: Option<&str>, system_language: impl FnOnce() -> Option<String>) -> Lang {
         match lang.filter(|l| !l.is_empty()) {
             Some(lang) => Lang::from_locale(lang),
@@ -93,27 +142,24 @@ impl Lang {
 static LANG: AtomicU8 = AtomicU8::new(0);
 
 /// Switches the whole interface at once: the next frame is painted in it (no restart, nothing to reload).
-/// `POCKETUI_LANG` (`de` or `en`) overrides it, for snapshots and tests.
+/// `POCKETUI_LANG` (`de`, `es` or `en`) overrides it, for snapshots and tests.
 pub fn set(lang: Lang) {
     let lang = std::env::var("POCKETUI_LANG").ok().map_or(lang, |l| Lang::from_locale(&l));
     LANG.store(lang as u8, Ordering::Relaxed);
     // The table is read (1.3 ms on the build computer, `examples/i18n_cost.rs`) on a thread of its own, so the
     // first frame doesn't wait for it; one painted before it is ready waits only for what is left.
-    if lang == Lang::De && TABLE.get().is_none() {
-        std::thread::spawn(german);
+    if lang != Lang::En {
+        std::thread::spawn(move || lang.table());
     }
 }
 
 pub fn current() -> Lang {
-    if LANG.load(Ordering::Relaxed) == Lang::De as u8 {
-        Lang::De
-    } else {
-        Lang::En
-    }
+    Lang::ALL.get(LANG.load(Ordering::Relaxed) as usize).copied().unwrap_or_default()
 }
 
-/// The German table, compiled in.
+/// The tables, compiled in.
 const DE: &str = include_str!("../assets/i18n/de.tsv");
+const ES: &str = include_str!("../assets/i18n/es.tsv");
 
 /// FNV-1a: the keys are short, and SipHash's protection against crafted keys buys nothing here.
 #[derive(Default, Clone, Copy)]
@@ -300,7 +346,7 @@ impl Table {
         self.exact.is_empty() && self.patterns.is_empty()
     }
 
-    /// Every entry's English and German side, for the table's own tests.
+    /// Every entry's English and translated side, for the table's own tests.
     pub fn entries(&self) -> Vec<(String, String)> {
         let show = |v: &[Seg]| v.iter().map(|s| match s { Seg::Lit(l) => l.to_string(), Seg::Hole(_, n) => format!("{{{n}}}") }).collect::<String>();
         let mut all: Vec<(String, String)> = self.exact.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
@@ -531,7 +577,8 @@ fn match_segs<'s>(segs: &[Seg], s: &'s str, caps: &mut Vec<(&'static str, &'s st
     }
 }
 
-static TABLE: OnceLock<Table> = OnceLock::new();
+static GERMAN: OnceLock<Table> = OnceLock::new();
+static SPANISH: OnceLock<Table> = OnceLock::new();
 
 type NameSet = HashSet<Box<str>, BuildHasherDefault<Fnv>>;
 
@@ -575,15 +622,20 @@ pub fn is_name(s: &str) -> bool {
     NAMES_SEEN.load(Ordering::Relaxed) != 0 && names().read().is_ok_and(|n| n.contains(s))
 }
 
-/// The German table, read on first use (`set` starts that on a thread).
+/// The German table.
 pub fn german() -> &'static Table {
-    TABLE.get_or_init(|| {
-        let (table, errors) = Table::parse(DE);
-        for e in &errors {
-            eprintln!("i18n: de.tsv {e}");
-        }
-        table
-    })
+    Lang::De.table().expect("German has a table")
+}
+
+/// `s` in the language of the interface, for what isn't painted through `Text`: a part of a line put together in code,
+/// a message handed to another program. Whatever the table lacks stays as it is.
+pub fn tr(s: &str) -> String {
+    tr_in(current(), s)
+}
+
+/// [`tr`] in `lang`.
+pub fn tr_in(lang: Lang, s: &str) -> String {
+    lang.table().and_then(|t| t.translate(s)).map_or_else(|| s.to_string(), Cow::into_owned)
 }
 
 /// What the painter draws for a string: the string itself, a line of the table, or a pattern's result.
@@ -609,13 +661,15 @@ impl std::ops::Deref for Tr<'_> {
 #[derive(Default)]
 pub struct Cache {
     seen: FastMap<Box<str>, Option<Arc<str>>>,
-    /// Strings that are German already (`is_german`), until they are painted.
-    german: FastMap<Box<str>, ()>,
+    /// Strings that are translated already (`is_translated`), until they are painted.
+    translated: FastMap<Box<str>, ()>,
     /// How many strings ran the table's patterns (their first sight): the benchmark of Settings' first frame counts
     /// the ones that frame made.
     patterned: usize,
     /// `NAMES_SEEN` when `seen` was filled.
     names_seen: u32,
+    /// The language `seen` and `translated` are in: a switch from one table to another empties them.
+    lang: Lang,
 }
 
 const CACHE_LIMIT: usize = 4096;
@@ -623,10 +677,11 @@ const CACHE_LIMIT: usize = 4096;
 impl Cache {
     /// `s` in the language of the interface. English: `s`, at the cost of one atomic load.
     pub fn get<'a>(&mut self, s: &'a str) -> Tr<'a> {
-        if current() == Lang::En || !s.bytes().any(|b| b.is_ascii_alphabetic()) {
+        let lang = current();
+        let Some(table) = lang.table().filter(|_| s.bytes().any(|b| b.is_ascii_alphabetic())) else {
             return Tr::Same(s);
-        }
-        let table = german();
+        };
+        self.follow(lang);
         let names_seen = NAMES_SEEN.load(Ordering::Relaxed);
         if names_seen != self.names_seen {
             // A name learned since: what was made of a string before it may have been made of a name.
@@ -653,8 +708,8 @@ impl Cache {
                 None => Tr::Same(s),
             };
         }
-        // A line `Text::fit` or `Text::wrap` made of a translation: German already, painted as it is.
-        if self.german.remove(s).is_some() {
+        // A line `Text::fit` or `Text::wrap` made of a translation: translated already, painted as it is.
+        if self.translated.remove(s).is_some() {
             record(s, None);
             if self.seen.len() >= CACHE_LIMIT {
                 self.seen.clear();
@@ -671,7 +726,7 @@ impl Cache {
             self.seen.insert(s.into(), None);
             return Tr::Same(s);
         }
-        // A "translation" that changes nothing is German already (a line `Text::fit` gave back, a wrapped line):
+        // A "translation" that changes nothing is translated already (a line `Text::fit` gave back, a wrapped line):
         // painted as it is, and its parts are not English left over.
         self.patterned += 1;
         let t: Option<Arc<str>> = table.translate_with_parts(s).filter(|(t, _)| t.as_ref() != s).map(|(t, left)| {
@@ -692,18 +747,32 @@ impl Cache {
         }
     }
 
-    /// `s` is German already: a translation `Text::fit` gave back, cut short or not, or a line `Text::wrap` made of
+    /// What this cache holds is in `lang` from here on: nothing of another table stays.
+    fn follow(&mut self, lang: Lang) {
+        if lang != self.lang {
+            self.seen.clear();
+            self.translated.clear();
+            self.lang = lang;
+        }
+    }
+
+    /// `s` is translated already: a translation `Text::fit` gave back, cut short or not, or a line `Text::wrap` made of
     /// one. Painted next, it is drawn as it is. Without this its first sight ran every pattern of the table over it to
     /// find that none changes it (0.3 ms for a sentence on the build computer, a frame's worth on the Mini V2, for
     /// each line of Settings' categories).
-    pub fn is_german(&mut self, s: &str) {
-        if current() == Lang::En || self.seen.contains_key(s) || self.german.contains_key(s) {
+    pub fn is_translated(&mut self, s: &str) {
+        let lang = current();
+        if lang == Lang::En {
             return;
         }
-        if self.german.len() >= CACHE_LIMIT {
-            self.german.clear();
+        self.follow(lang);
+        if self.seen.contains_key(s) || self.translated.contains_key(s) {
+            return;
         }
-        self.german.insert(s.into(), ());
+        if self.translated.len() >= CACHE_LIMIT {
+            self.translated.clear();
+        }
+        self.translated.insert(s.into(), ());
     }
 
     /// How many strings have run the table's patterns so far.
@@ -722,8 +791,8 @@ impl Cache {
 
 /// `POCKETUI_I18N_MISSES`: the file the snapshot checks read, each line once: `M` a string painted without a
 /// translation, `P` a part of a pattern's result left in English, `O` a translation made, `C` a string `Text::fit`
-/// cut short with "…", `X` one that ran past the picture's right edge (the last two by their English, so a German
-/// and an English run compare).
+/// cut short with "…", `X` one that ran past the picture's right edge (the last two by their English, so a run in
+/// another language and an English run compare).
 struct Recorder {
     path: String,
     written: HashSet<(char, String)>,
@@ -777,6 +846,7 @@ pub fn note_overflow(english: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
 
     fn table(src: &'static str) -> Table {
         let (t, errors) = Table::parse(src);
@@ -784,11 +854,55 @@ mod tests {
         t
     }
 
+    /// Every language's table, by its file's name.
+    const SHIPPED: [(&str, &str); 2] = [("de.tsv", DE), ("es.tsv", ES)];
+
+    /// A table's lines: the English side as it is written, the rest of the line.
+    fn lines_of(src: &'static str) -> Vec<(&'static str, &'static str)> {
+        src.lines().filter(|l| !l.trim().is_empty() && !l.starts_with('#')).filter_map(|l| l.split_once('\t')).collect()
+    }
+
     #[test]
-    fn the_shipped_table_parses_cleanly() {
-        let (t, errors) = Table::parse(DE);
-        assert!(errors.is_empty(), "assets/i18n/de.tsv:\n{}", errors.join("\n"));
-        assert!(!t.is_empty());
+    fn the_shipped_tables_parse_cleanly() {
+        for (file, src) in SHIPPED {
+            let (t, errors) = Table::parse(src);
+            assert!(errors.is_empty(), "assets/i18n/{file}:\n{}", errors.join("\n"));
+            assert!(!t.is_empty());
+        }
+    }
+
+    /// No language can lose a string or a placeholder without a test failing: what one table translates, every table
+    /// translates, and each line keeps its English side's placeholders (`Table::parse` says so for the second).
+    /// The German table is held to every string of `src/` by `tests/i18n_snapshots.rs`, so all of them are.
+    #[test]
+    fn every_language_has_every_line_with_its_placeholders() {
+        let all: BTreeSet<&str> = SHIPPED.iter().flat_map(|(_, src)| lines_of(src)).map(|(en, _)| en).collect();
+        let mut bad = Vec::new();
+        for (file, src) in SHIPPED {
+            let lines = lines_of(src);
+            let has: BTreeSet<&str> = lines.iter().map(|(en, _)| *en).collect();
+            bad.extend(all.iter().filter(|en| !has.contains(**en)).map(|en| format!("{file} has no line for {en:?}")));
+            for (en, tr) in lines {
+                if tr.trim().is_empty() {
+                    bad.push(format!("{file}: an empty line for {en:?}"));
+                }
+                let holes = |s: &str| {
+                    let mut h: Vec<String> = s.split('{').skip(1).filter_map(|p| p.split_once('}').map(|(n, _)| n.to_string())).collect();
+                    h.sort();
+                    h
+                };
+                if holes(en) != holes(tr) {
+                    bad.push(format!("{file}: other placeholders in {tr:?} than in {en:?}"));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{} problems:\n{}", bad.len(), bad.join("\n"));
+    }
+
+    #[test]
+    fn a_table_that_loses_a_placeholder_or_a_line_is_noticed() {
+        let (_, errors) = Table::parse("{n} games\tjuegos\n");
+        assert_eq!(errors.len(), 1, "{errors:?}");
     }
 
     /// VDEV-ROUND-2026-10-25: "{s} of {s2}" (for "56.1 GB of 63.1 GB") made "The Legend von Zelda" of every game
@@ -796,30 +910,39 @@ mod tests {
     /// systems, emulators) come out of the shipped table as they are.
     #[test]
     fn the_names_kept_in_english_stay_english() {
-        let (t, _) = Table::parse(DE);
         let keep = include_str!("../assets/i18n/keep.txt");
-        let changed: Vec<String> = keep
-            .lines()
-            .filter(|l| !l.trim().is_empty() && !l.starts_with('#') && !l.starts_with("re:"))
-            // Words the table translates where they are no name (the Lens's language filter, a Curator tag).
-            .filter(|l| !["English", "‹ English ›", "puzzle"].contains(l))
-            .filter_map(|name| t.translate(name).filter(|g| g != name).map(|g| format!("{name:?} -> {g:?}")))
-            .collect();
-        assert!(changed.is_empty(), "{} names the table changes:\n{}", changed.len(), changed.join("\n"));
-        for name in ["Castlevania - Symphony of the Night", "Secret of Mana", "Street Fighter II' is the first update of Street Fighter"] {
-            assert_eq!(t.translate(name), None, "{name}");
+        for (file, src) in SHIPPED {
+            let (t, _) = Table::parse(src);
+            let changed: Vec<String> = keep
+                .lines()
+                .filter(|l| !l.trim().is_empty() && !l.starts_with('#') && !l.starts_with("re:"))
+                // Words the table translates where they are no name (the Lens's language filter, a Curator tag).
+                .filter(|l| !["English", "‹ English ›", "puzzle"].contains(l))
+                // In keep.txt because they read the same in German, not because they are names.
+                .filter(|l| !(file == "es.tsv" && (*l == "‹ Warm ›" || l.starts_with("Code "))))
+                .filter_map(|name| t.translate(name).filter(|g| g != name).map(|g| format!("{name:?} -> {g:?}")))
+                .collect();
+            assert!(changed.is_empty(), "{file}: {} names the table changes:\n{}", changed.len(), changed.join("\n"));
+            for name in ["Castlevania - Symphony of the Night", "Secret of Mana", "Street Fighter II' is the first update of Street Fighter"] {
+                assert_eq!(t.translate(name), None, "{file}: {name}");
+            }
         }
-        assert_eq!(t.translate("56.1 GB of 63.1 GB").as_deref(), Some("56.1 GB von 63.1 GB"), "the card's sizes still are");
+        assert_eq!(german().translate("56.1 GB of 63.1 GB").as_deref(), Some("56.1 GB von 63.1 GB"), "the card's sizes still are");
+        assert_eq!(Lang::Es.table().unwrap().translate("56.1 GB of 63.1 GB").as_deref(), Some("56.1 GB de 63.1 GB"));
     }
 
     #[test]
-    fn a_german_line_is_never_looked_up_as_english_again() {
-        // `Text::fit` returns the German, which its caller then draws: it must come back as it is.
-        let (t, _) = Table::parse(DE);
-        for (en, de) in t.entries() {
-            if !en.contains('{') {
-                assert!(t.translate(&de).is_none_or(|again| again == de), "{en:?} -> {de:?} -> {:?}", t.translate(&de));
-            }
+    fn a_translated_line_is_never_looked_up_as_english_again() {
+        // `Text::fit` returns the translation, which its caller then draws: it must come back as it is.
+        for (file, src) in SHIPPED {
+            let (t, _) = Table::parse(src);
+            let bad: Vec<String> = t
+                .entries()
+                .into_iter()
+                .filter(|(en, tr)| !en.contains('{') && t.translate(tr).is_some_and(|again| again != *tr))
+                .map(|(en, tr)| format!("{en:?} -> {tr:?} -> {:?}", t.translate(&tr)))
+                .collect();
+            assert!(bad.is_empty(), "{file}: {} lines change when looked up again:\n{}", bad.len(), bad.join("\n"));
         }
     }
 
@@ -925,15 +1048,39 @@ mod tests {
         assert_eq!(Lang::from_locale("en_US"), Lang::En);
         assert_eq!(Lang::from_locale("delta"), Lang::En);
         assert_eq!(Lang::from_locale(""), Lang::En);
+        for spanish in ["es", "ES", "es_ES", "es_MX.UTF-8", "es-419", "es-AR", "es.UTF-8"] {
+            assert_eq!(Lang::from_locale(spanish), Lang::Es, "{spanish}");
+        }
+        for other in ["est", "et_EE", "eo", "pt_BR", "fr_FR", "C.UTF-8"] {
+            assert_eq!(Lang::from_locale(other), Lang::En, "{other}");
+        }
     }
 
     #[test]
-    fn english_unless_the_system_says_german() {
+    fn the_row_walks_through_every_language_both_ways() {
+        assert_eq!([Lang::En.next(), Lang::De.next(), Lang::Es.next()], [Lang::De, Lang::Es, Lang::En]);
+        assert_eq!([Lang::En.previous(), Lang::De.previous(), Lang::Es.previous()], [Lang::Es, Lang::En, Lang::De]);
+        assert_eq!(Lang::ALL.map(Lang::name), ["English", "Deutsch", "Español"]);
+        assert_eq!(serde_json::to_string(&Lang::Es).unwrap(), "\"es\"");
+    }
+
+    #[test]
+    fn each_language_says_what_a_web_page_should_answer_in() {
+        assert_eq!(Lang::De.accept_language(), "Accept-Language: de,en;q=0.8");
+        assert_eq!(Lang::En.accept_language(), "Accept-Language: en,de;q=0.5");
+        assert!(Lang::Es.accept_language().contains("es,"));
+        assert!(Lang::De.qwertz() && !Lang::En.qwertz() && !Lang::Es.qwertz());
+    }
+
+    #[test]
+    fn english_unless_the_system_says_a_language_of_ours() {
         assert_eq!(Lang::from_system(None, || None), Lang::En, "a fresh install: no LANG, no system.language");
         assert_eq!(Lang::from_system(Some(""), || None), Lang::En);
         assert_eq!(Lang::from_system(Some("C.UTF-8"), || Some("de_DE".into())), Lang::En, "LANG comes first");
         assert_eq!(Lang::from_system(Some("fr_FR.UTF-8"), || None), Lang::En);
-        assert_eq!(Lang::from_system(None, || Some("es_ES".into())), Lang::En);
+        assert_eq!(Lang::from_system(None, || Some("it_IT".into())), Lang::En);
+        assert_eq!(Lang::from_system(None, || Some("es_ES".into())), Lang::Es);
+        assert_eq!(Lang::from_system(Some("es_MX.UTF-8"), || None), Lang::Es);
         assert_eq!(Lang::from_system(Some(""), || Some("de_DE".into())), Lang::De);
         assert_eq!(Lang::from_system(Some("de_AT.UTF-8"), || None), Lang::De);
         assert_eq!(Lang::default(), Lang::En);

@@ -617,9 +617,7 @@ The BIOS folder: {s}
 That folder is a link.
 Can't make the folder: {s}
 That port is not installed or doesn't need files.
-{s}: copy its files with the SD card or SSH (its instructions name no folder).
 That path can't be used.
-Can't make the drop folder.
 {s} is in the way.
 Can't make {s}: {s}
 That file is larger than {s}.
@@ -1008,3 +1006,13 @@ the zip's directory is too big
 {s} Put {s} into roms/bios.
 {s}. BIOS files come from your own console. Copy them with the SD card in a computer or the Web companion.
 {s}: {s}
+H700 Gamepad
+System Volume Information
+$RECYCLE.BIN
+RECYCLER
+# The header a web page is asked in Spanish with (src/i18n.rs TRAITS).
+Accept-Language: es,en;q=0.8
+after USB file transfer
+leaving Settings with USB file transfer on
+a games card came
+back on the first card

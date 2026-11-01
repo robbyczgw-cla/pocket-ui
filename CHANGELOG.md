@@ -7,7 +7,7 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ### Added
 
-- SD card image: Settings → Help & tools → About names the system, "pocket-ui OS 0.1.8 · built on ROCKNIX 20261001
+- SD card image: Settings → Help & tools → About names the system, "pocket-ui OS 0.1.9 · built on ROCKNIX 20261001
   (SM8250)" (on a ROCKNIX card with pocket-ui added, the ROCKNIX version). The device is called "pocket-ui" on the
   network, in Bluetooth and Tailscale, and EmulationStation's ROCKNIX update check is off.
 
@@ -19,10 +19,43 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ### Fixed
 
+- On Android, a moment set aside while all eight slots are full is now under Load, after the last slot.
+- On Android, Home during a slow game copy stops the start: no game comes up in the background later.
+- On Android, Play works right after Game check found a disc's missing track copied in.
 - On Android, back from Cozy extras lands on its row in Settings, no longer on the first.
 - Tour and first-start cards on the Steam Deck: none for Haptics, Sync, Tailscale, Tools or Performance & fan.
 - Steam Deck: no idle timers, suspend, power-key hold or low-battery power-off of ours any more; SteamOS owns sleep and the
   power button (the Settings rows were hidden, but the timers still ran and would have suspended after 4 minutes).
+
+## [0.1.9] - 2026-11-01
+
+### Added
+
+- File sharing: nothing under `roms` is hidden any more. BIOS files, save states, `ports` and `PortMaster` can be copied over Wi-Fi file sharing (a BIOS file no longer needs a computer that writes ext4). Anyone with the share password can then also change them, and put programs into `ports` that run as root when started. Game check says where to copy a missing BIOS on your model.
+- File sharing stays on across restarts until you switch it off, and comes back by itself once the Pocket is on Wi-Fi.
+- Add games (Settings → Games → Add games, and the first start's last step): a row of tiles under the grid for the ways your
+  handheld can take games, **File sharing** and **USB file transfer**. Reach it with Down from the grid, choose with Left
+  and Right, A switches it, or tap it. USB file transfer is the same switch as Settings → Connections and both show
+  the same state. Only the ways your handheld has appear; X still switches file sharing.
+- Spanish: pocket-ui now speaks Español, in neutral Spanish for Spain and Latin America. Choose it on the Welcome page or
+  in Settings → System → Language; a system set to any Spanish locale starts in it. The manual's pages stay in English.
+- A second card on Anbernic H700 handhelds: put a card with a `roms` folder in the second slot and the shelf shows its games within a few seconds, also while the handheld is on. While it's in, only its games are on the shelf; its saves and states stay on that card. Add games says when the games come from it, and the shelf says when it's been pulled.
+- USB file transfer: Settings → Connections → USB file transfer lets a computer copy games over a USB cable (MTP, ROCKNIX's own). Off by default, it stays on across restarts until you turn it off. Switched on and off on a Mini V2 and an Odin 2 Mini; copying to a computer has not been tried yet, and a Mac needs the free app OpenMTP, also untried.
+
+### Changed
+
+- PortMaster games that need your own files: the `port-files` folder is gone. Copy the files straight into the game's folder, `roms/ports/<game>/<folder>`, over file sharing or the web companion; "Copy your game files" shows the address. Files left in `port-files` stay on the card and are no longer moved.
+- Remote access (SSH) no longer turns itself off after 30 idle minutes: it stays on until you switch it off, and is off after a restart.
+- Enthusiast leaves the line over the game off: it's a choice of its own (Settings → Playing → Over the game), not part of the profile.
+
+### Fixed
+
+- File sharing writes as root: turning it on is instant and no longer interrupts a running copy, saves and port folders stay writable over the share, and a root-mounted exFAT or NTFS games card can be written. Add games says so when the card is read-only, and follows the real state while it is open. Safe mode's reset switches file sharing off; its password stays.
+- Game check reports a game that is zeros all through (a copy that stopped early) as an empty file, no longer as ready; disc images are left alone.
+- A game pocket-core couldn't start and that went to RetroArch goes back to pocket-core when you copy a new file over it (or delete it); a choice made under Runs on stays.
+- X and Y are the right way round on Anbernic H700 handhelds. If you had swapped X and Y yourself on an H700, set them back.
+- Game check no longer tells you to rename a save like `Game.nds.sav` to `Game.nds`: saves are left alone.
+- Scaling preview on small screens: on 640x480 the Picture page's preview keeps at least a quarter of the height.
 
 ## [0.1.8] - 2026-10-31
 

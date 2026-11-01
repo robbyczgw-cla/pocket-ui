@@ -3,38 +3,93 @@
 //! (ROCKNIX's RetroArch for most, standalone YabaSanshiro for the Saturn), and
 //! remembered so it goes there directly from then on. Stored in `<data>/fallback.json`.
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// pocket-core runs that end this fast with an error count as "didn't start".
 pub const START_WINDOW_SECS: u64 = 30;
 
+/// What the file looked like when pocket-core failed on it: a file copied over later differs.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct Stamp {
+    size: u64,
+    mtime_ms: u64,
+}
+
+impl Stamp {
+    fn of(path: &Path) -> Option<Stamp> {
+        let meta = std::fs::metadata(path).ok()?;
+        let mtime_ms = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_millis() as u64;
+        Some(Stamp { size: meta.len(), mtime_ms })
+    }
+}
+
+/// An entry of `fallback.json`: a plain path (written before the stamp existed: kept as it was) or the path with its stamp.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+enum Entry {
+    Path(String),
+    Stamped { path: String, size: u64, mtime_ms: u64 },
+}
+
 pub struct Fallback {
     file: PathBuf,
-    games: BTreeSet<String>,
+    games: BTreeMap<String, Option<Stamp>>,
 }
 
 impl Fallback {
+    /// Entries whose file is gone or is another file now (copied over after the failure) are dropped: pocket-core gets a
+    /// new try. Entries without a stamp stay until the player changes the game's emulator. A choice made under
+    /// "Runs on" lives in system.cfg and is not touched here.
     pub fn load(data_dir: &Path) -> Fallback {
         let file = data_dir.join("fallback.json");
-        let games = crate::fsutil::read_json_or_backup(&file).unwrap_or_default();
-        Fallback { file, games }
+        let entries: Vec<Entry> = crate::fsutil::read_json_or_backup(&file).unwrap_or_default();
+        let total = entries.len();
+        let games: BTreeMap<String, Option<Stamp>> = entries
+            .into_iter()
+            .map(|e| match e {
+                Entry::Path(path) => (path, None),
+                Entry::Stamped { path, size, mtime_ms } => (path, Some(Stamp { size, mtime_ms })),
+            })
+            .filter(|(path, stamp)| match stamp {
+                Some(stamp) => Stamp::of(Path::new(path)) == Some(*stamp),
+                None => true,
+            })
+            .collect();
+        let fallback = Fallback { file, games };
+        if fallback.games.len() != total {
+            fallback.save();
+        }
+        fallback
+    }
+
+    fn save(&self) {
+        let entries: Vec<Entry> = self
+            .games
+            .iter()
+            .map(|(path, stamp)| match stamp {
+                Some(stamp) => Entry::Stamped { path: path.clone(), size: stamp.size, mtime_ms: stamp.mtime_ms },
+                None => Entry::Path(path.clone()),
+            })
+            .collect();
+        let _ = crate::fsutil::write_json(&self.file, &entries);
     }
 
     pub fn contains(&self, rom: &Path) -> bool {
-        self.games.contains(&rom.to_string_lossy().into_owned())
+        self.games.contains_key(&rom.to_string_lossy().into_owned())
     }
 
     /// The player chose pocket-core for the game again ("Runs on"): it gets another try.
     pub fn remove(&mut self, rom: &Path) {
-        if self.games.remove(&rom.to_string_lossy().into_owned()) {
-            let _ = crate::fsutil::write_json(&self.file, &self.games);
+        if self.games.remove(&rom.to_string_lossy().into_owned()).is_some() {
+            self.save();
         }
     }
 
     pub fn add(&mut self, rom: &Path) {
-        if self.games.insert(rom.to_string_lossy().into_owned()) {
-            let _ = crate::fsutil::write_json(&self.file, &self.games);
+        let stamp = Stamp::of(rom);
+        if self.games.insert(rom.to_string_lossy().into_owned(), stamp) != Some(stamp) {
+            self.save();
         }
     }
 }
@@ -242,12 +297,60 @@ mod tests {
     #[test]
     fn remembers_games() {
         let dir = TestDir::new("fallback");
-        let rom = Path::new("/storage/roms/sms/Game.sms");
+        let rom = dir.join("Game.sms");
+        std::fs::write(&rom, b"rom").unwrap();
         let mut f = Fallback::load(&dir);
-        assert!(!f.contains(rom));
-        f.add(rom);
-        assert!(Fallback::load(&dir).contains(rom), "kept across restarts");
-        f.remove(rom);
-        assert!(!Fallback::load(&dir).contains(rom), "chosen again: another try");
+        assert!(!f.contains(&rom));
+        f.add(&rom);
+        assert!(Fallback::load(&dir).contains(&rom), "kept across restarts");
+        f.remove(&rom);
+        assert!(!Fallback::load(&dir).contains(&rom), "chosen again: another try");
+    }
+
+    #[test]
+    fn a_game_copied_over_gets_pocket_core_again_at_the_next_start() {
+        let dir = TestDir::new("fallback-recopy");
+        let rom = dir.join("Game.gba");
+        std::fs::write(&rom, vec![0u8; 100]).unwrap();
+        let mut f = Fallback::load(&dir);
+        f.add(&rom);
+        assert!(Fallback::load(&dir).contains(&rom), "same file: stays");
+        std::fs::write(&rom, vec![1u8; 4096]).unwrap();
+        assert!(!Fallback::load(&dir).contains(&rom), "another file: dropped");
+        assert!(!Fallback::load(&dir).contains(&rom), "and the drop is written");
+        assert!(!std::fs::read_to_string(dir.join("fallback.json")).unwrap().contains("Game.gba"));
+    }
+
+    #[test]
+    fn same_size_but_new_mtime_counts_as_another_file() {
+        let dir = TestDir::new("fallback-mtime");
+        let rom = dir.join("Game.gba");
+        std::fs::write(&rom, vec![0u8; 100]).unwrap();
+        let mut f = Fallback::load(&dir);
+        f.add(&rom);
+        let file = std::fs::File::options().write(true).open(&rom).unwrap();
+        file.set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(3600)).unwrap();
+        assert!(!Fallback::load(&dir).contains(&rom));
+    }
+
+    #[test]
+    fn a_game_that_is_gone_is_dropped_and_old_entries_without_a_stamp_stay() {
+        let dir = TestDir::new("fallback-old");
+        let old = dir.join("Old.gba");
+        std::fs::write(&old, b"x").unwrap();
+        let gone = dir.join("Gone.gba");
+        std::fs::write(&gone, b"x").unwrap();
+        let mut f = Fallback::load(&dir);
+        f.add(&gone);
+        std::fs::remove_file(&gone).unwrap();
+        let mut json: Vec<String> = vec![old.to_string_lossy().into_owned(), "/nowhere/Missing.gba".into()];
+        let stamped = std::fs::read_to_string(dir.join("fallback.json")).unwrap();
+        let mut parsed: Vec<serde_json::Value> = serde_json::from_str(&stamped).unwrap();
+        parsed.extend(json.drain(..).map(serde_json::Value::from));
+        std::fs::write(dir.join("fallback.json"), serde_json::to_string(&parsed).unwrap()).unwrap();
+        let f = Fallback::load(&dir);
+        assert!(f.contains(&old), "a plain path from before the stamp keeps working, as today");
+        assert!(f.contains(Path::new("/nowhere/Missing.gba")), "no stamp: nothing to compare");
+        assert!(!f.contains(&gone), "stamped and gone: dropped");
     }
 }

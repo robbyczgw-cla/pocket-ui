@@ -964,3 +964,22 @@ fn today_is_one_pick_a_day_and_the_games_waiting_without_it() {
     let empty = Index::build(Arc::new(Catalog::build(Vec::new(), Vec::new())), UserState::default());
     assert_eq!(empty.today(), today::Today::default());
 }
+
+/// Curator knows only what the shelf lists (`app_curator`): with a Mac's and Windows' litter next to a game, one game.
+#[test]
+fn a_macs_and_windows_litter_never_reaches_the_curator() {
+    let dir = std::env::temp_dir().join(format!("curator-litter-{}", std::process::id()));
+    let gba = dir.join("gba");
+    for f in ["._Metroid Fusion.gba", ".Spotlight-V100/Store-V2/Stray.gba", ".Trashes/501/Deleted.gba", "System Volume Information/Indexed.gba", "$RECYCLE.BIN/S-1/$R1.gba"] {
+        let p = gba.join(f);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, "x").unwrap();
+    }
+    std::fs::write(gba.join("Metroid Fusion.gba"), "game").unwrap();
+    let es = dir.join("es_systems.cfg");
+    std::fs::write(&es, format!("<systemList><system><name>gba</name><fullname>Game Boy Advance</fullname><path>{}</path><extension>.gba</extension></system></systemList>", gba.display())).unwrap();
+    let systems = crate::library::load(&es).unwrap();
+    let names: Vec<&str> = systems.iter().flat_map(|s| s.games.iter().map(|g| g.name.as_str())).collect();
+    assert_eq!(names, ["Metroid Fusion"]);
+    let _ = std::fs::remove_dir_all(&dir);
+}

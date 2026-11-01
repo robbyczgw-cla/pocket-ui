@@ -43,7 +43,7 @@ The current internal test build also starts PSP with PPSSPP, Nintendo DS with me
 with Mupen64Plus-Next in our player. PSP has four face buttons and L/R. On DS, tap the game picture for
 touchscreen input. N64 has Z and C buttons; the touch arrows move its analog stick. These three systems
 have had quick emulator starts only. N64's first fixture is a Hello World demo; full game compatibility,
-PSP support files and audio on a physical Android handheld still need checking. Large-core downloads
+A big game, such as a PSP ISO, is copied into the app on its first start. A window shows how far it is and lets you cancel; later starts don't wait, and your phone needs room for the copy. The app keeps the last five big games ready and clears older copies when it needs the room; your saves stay. PSP support files and audio on a physical Android handheld still need checking. Large-core downloads
 are not enabled yet.
 
 PSP face controls use drawn cross/circle/square/triangle symbols, independent of the UI font. Short gamepad presses are held for at least one emulated frame so a quick tap is not lost between Android input events and rendering.
@@ -72,7 +72,7 @@ covers and pictures, controls, and ready. Continue advances, Back returns, and S
 for later. If you close the app or return from the folder picker, setup resumes where you left it.
 Settings → First start opens the guide again. You can finish without games or a network connection.
 
-Choose English or German, one of the five looks, Cozy or Quick animations, and dark or light pages.
+Choose English, German or Spanish, one of the five looks, Cozy or Quick animations, and dark or light pages.
 Choose your ROM folder through Android's own picker and allow read access. Choosing another folder
 adds it to your library; existing folder permissions stay in place. An empty folder is harmless:
 choose another one or skip and add games later in Settings. Your ROM files stay in their folders.
@@ -81,7 +81,7 @@ Covers and pictures asks whether to download as you browse. Download on Wi-Fi lo
 screenshots and available game descriptions for the selected game over Wi-Fi without a data limit.
 Not now keeps downloads off; Settings → Covers and pictures changes the choice later. Already
 cached pictures still work offline. This does not download every game in the background. Some game
-descriptions are supplied in English by Wikipedia even when menus are German.
+descriptions are supplied in English by Wikipedia even when menus are in another language.
 
 The Android app icon is the pixel cartridge with the paper label and lowercase p; Android can also use its monochrome themed icon.
 
@@ -108,8 +108,32 @@ and small Select/Start pills. They are see-through, sit beside the picture in la
 tick when pressed if your phone's touch vibration is on, and hide while you play with a controller.
 
 
+Frozen games are here too: your last five games stand a little open and Resume goes straight back to the moment you left. See [Frozen games](frozen-games.md#on-an-android-phone).
+
 Version 0.1.6-android.8 adds the rest of the Cozy extras (see below). Version 0.1.6-android.7 brought the newer look of pocket-ui: real cases and cartridges, stickers, the TV on the Cabinet,
 new colour sets and the new logo. Settings has new rows: Colours (five sets), Font (Barlow, Pixel, Rounded), Motion
 (Full, Reduced, Off), Button symbols (letters, Xbox colours or PlayStation shapes in the controller hints) and Cozy
 extras, where case sounds, the old-TV switch-on, the TV on the Cabinet, stickers and playful animations can each be
 switched off. Settings that need hardware a phone does not have (LEDs, fan, sleep, Tailscale) are not shown.
+
+## Game check
+
+Settings → **Game check** asks the same question of the folders you chose. It reads your folders' lists through Android, nothing
+is downloaded, deleted or changed, and saves are not touched. It answers **All good** with how many games are ready, or a short
+list. Choosing a folder from Settings with new games offers the check. Tap a row or use A; Android's Back or B goes back,
+**Check again** (X) looks at everything again.
+
+| Row | Example | What to do |
+|---|---|---|
+| **Folders that can't be read** | "Android no longer lets pocket-ui read Games."; "Games is not there any more." | **Choose it again**; your games are safe. A folder that is gone can be forgotten here, its files stay |
+| **Discs missing a file** | "Disc: Game.cue is there, its Game.bin is missing." or "is empty" | Put the file next to it with that name; the line says when only capitals differ |
+| **Empty files**, **Zips that won't start** | As above | Copy the game into the folder again |
+| **Same game twice** | `Game (1).gba` next to `Game.gba` | Both stay on the shelf. A phone can't hide a copy yet; delete it with a file manager if you want |
+| **Wrong folder or file type** | A `.gba` in `snes`, `.sfcc`, `Game.sfc.part`; a folder whose name says no system, for a type that doesn't say either (`.iso`, `.chd`, `.zip`) | The line names the folder or the name it should have. A cartridge's type says its system, so `Sega Genesis/Sonic.md` is fine. Pick the folder above `psx`, not `psx` itself |
+| **Emulator apps to install** | "2 games need the DuckStation app, which isn't installed." | Install it from its official site or store. A game an installed emulator takes is no fault |
+| **Can't start in this app yet** | A game over 512 MB on systems other than PSP; a big game when the phone hasn't the room for its first start; PC Engine CD; PlayStation Vita | The game stays on the shelf |
+| **Tips** | "PlayStation needs a BIOS file from your own console."; "The files in your bios folder aren't read." | Your choice. Tips don't take the green away |
+
+A BIOS is never called missing on Android, because nobody here can know: this app's own player has no system that asks you for
+one, and each emulator app keeps its own in a folder other apps can't read. Which core RetroArch has is out of sight in the same
+way, so that is a tip too. A game's content is not read, so a damaged game with the right size and name is only found when it starts.

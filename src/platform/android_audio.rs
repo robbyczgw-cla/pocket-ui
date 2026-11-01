@@ -36,6 +36,8 @@ pub(crate) struct Sink {
     ring: Ring,
     capture: Option<Vec<i16>>,
     xruns: Vec<(usize, i32)>,
+    /// With the capture: (capture frame, monotonic ms, AAudio's presented frame, its time in ms), a few a second.
+    trace: Vec<(usize, f64, i64, f64)>,
 }
 // SAFETY: the owning writer thread is the only caller; the stream and its close move together.
 unsafe impl Send for Sink {}
@@ -80,6 +82,7 @@ impl Sink {
             ring,
             capture,
             xruns: Vec::new(),
+            trace: Vec::new(),
         })
     }
     pub fn name(&self) -> &'static str {
@@ -90,6 +93,12 @@ impl Sink {
     }
     pub(crate) fn write(&mut self, samples: &[i16]) -> bool {
         if let Some(capture) = &mut self.capture {
+            // Where this write starts in the capture, when, and what AAudio says was presented when (its timestamp):
+            // what the launch's sync measurement reads (scripts/android/insert-sync.py).
+            if self.trace.len() < 4096 && capture.len() % (OUT_RATE as usize / 25) < samples.len() {
+                let presented = self.stream.timestamp(ndk::audio::Clockid::Monotonic).ok().map_or((-1, 0.0), |t| (t.frame_position, t.time_nanoseconds as f64 / 1e6));
+                self.trace.push((capture.len() / 2, crate::platform::android::monotonic_ms(), presented.0, presented.1));
+            }
             let n = samples.len().min(OUT_RATE as usize * 60 - capture.len());
             capture.extend_from_slice(&samples[..n]);
             let xruns = self.stream.x_run_count();
@@ -118,6 +127,17 @@ impl Sink {
         }
         true
     }
+    /// How much of what was written isn't heard yet, by AAudio's own presentation timestamp (the read position comes in
+    /// coarse steps and can show next to nothing while a burst or two is still ahead).
+    pub(crate) fn ahead_us(&mut self) -> u64 {
+        // No timestamp yet, in a stream's first moments: its buffer is what it holds ahead by then.
+        let Ok(t) = self.stream.timestamp(ndk::audio::Clockid::Monotonic) else {
+            return self.latency_us().max(self.stream.buffer_size_in_frames().max(0) as u64 * 1_000_000 / OUT_RATE as u64);
+        };
+        let since_ms = crate::platform::android::monotonic_ms() - t.time_nanoseconds as f64 / 1e6;
+        let heard = t.frame_position as f64 + since_ms * OUT_RATE as f64 / 1000.0;
+        ((self.stream.frames_written() as f64 - heard).max(0.0) * 1e6 / OUT_RATE as f64) as u64
+    }
     pub(crate) fn latency_us(&mut self) -> u64 {
         (self.stream.frames_written() - self.stream.frames_read()).max(0) as u64 * 1_000_000 / OUT_RATE as u64
     }
@@ -135,7 +155,7 @@ impl Drop for Sink {
             // SAFETY: samples are contiguous native-endian i16; Android ARM64 is little endian.
             let bytes = unsafe { std::slice::from_raw_parts(capture.as_ptr().cast::<u8>(), capture.len() * 2) };
             let _ = crate::fsutil::write_atomic(&dir.join(format!("{id}.s16le")), bytes);
-            let meta = serde_json::json!({"rate":OUT_RATE,"channels":2,"samples":capture.len(),"frames_per_burst":self.stream.frames_per_burst(),"buffer_frames":self.stream.buffer_size_in_frames(),"xruns":self.xruns});
+            let meta = serde_json::json!({"rate":OUT_RATE,"channels":2,"samples":capture.len(),"frames_per_burst":self.stream.frames_per_burst(),"buffer_frames":self.stream.buffer_size_in_frames(),"xruns":self.xruns,"trace":self.trace});
             crate::fsutil::write_json_soon(&dir.join(format!("{id}.json")), &meta);
         }
     }

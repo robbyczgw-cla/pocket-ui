@@ -1,6 +1,7 @@
 #!/bin/sh
-# Tests of the SD image's initramfs hook deploy/image/mount-storage.sh: the first-start seed and the guard against
-# system updates pocket-ui did not stage (docs/SD-IMAGE.md "Updates on the card").
+# Tests of the SD image's initramfs hook deploy/image/mount-storage.sh: the first-start seed, the guard against
+# system updates pocket-ui did not stage (docs/SD-IMAGE.md "Updates on the card"), and the GAMES drive's two scripts
+# games-first-start.sh and games-mount.sh (docs/SD-IMAGE.md "The GAMES drive").
 #   sh deploy/image/test-mount-storage.sh
 # The hook runs under BusyBox sh with a PATH that holds ONLY applets ROCKNIX's initramfs has (busybox-init.conf of
 # 20261001: no date, no test, no printf applet; ash has them as builtins), so a tool missing there fails here too.
@@ -37,7 +38,7 @@ setup() {
 
 # Sources mount-storage.sh as ROCKNIX's init does (inside mount_storage, $disk set), with logging fakes.
 boot() {
-  env -i PATH="$T/applets" PU_STORAGE="$S" T="$T" FL="$FL" "$BB" sh -c '
+  env -i PATH="$T/applets" PU_STORAGE="$S" PU_FLASH="$FL" PU_SYSROOT="$T/sysroot" T="$T" FL="$FL" "$BB" sh -c '
     mount_part() { echo "mount_part $*" >>$T/calls; }
     mount() { echo "mount $*" >>$T/calls; }
     progress() { echo "progress $*" >>$T/calls; }
@@ -231,6 +232,260 @@ setup
 rm -rf $S/.pocket-seed $U
 boot
 check "nothing created" '[ ! -e $U ] && [ ! -e $R ]'
+
+echo "== first start with a GAMES drive: the hook starts games-first-start.sh instead of ROCKNIX's fs-resize"
+setup resize
+cp "$HERE/games-first-start.sh" "$FL/"
+chmod 755 "$FL/games-first-start.sh"
+boot
+check "bound over fs-resize" 'grep -qx "mount --bind $FL/games-first-start.sh $T/sysroot/usr/lib/rocknix/fs-resize" $T/calls'
+setup
+cp "$HERE/games-first-start.sh" "$FL/"
+chmod 755 "$FL/games-first-start.sh"
+boot
+check "not at later starts" '! grep -q "^mount " $T/calls'
+setup resize
+cp "$HERE/games-first-start.sh" "$FL/"
+chmod 644 "$FL/games-first-start.sh"
+boot
+check "not when /flash can't run it: ROCKNIX's script runs" '! grep -q "^mount " $T/calls'
+
+# games-first-start.sh with stand-ins for what changes the card. $G/table holds the partition table, $G/fs what's on
+# p3 ("exfat GAMES", "ext4 old" or nothing), $G/size the card in MiB; every tool call can be the moment the power goes.
+G=$T/g
+mkdir -p "$T/gtools"
+for a in basename cat cp cut grep head ls mkdir mv rm sync tr sleep wc touch; do ln -s "$BB" "$T/gtools/$a"; done
+tool() {
+  { printf '#!%s sh\nG=%s\necho "$(basename "$0") $*" >>$G/calls\n' "$BB" "$G"
+    cat <<'POWER'
+n=$(cat $G/n 2>/dev/null); n=$((${n:-0} + 1)); echo $n >$G/n
+if [ "$n" = "$(cat $G/cut-at 2>/dev/null)" ]; then echo cut >$G/was-cut; kill -9 $(cat $G/top); exit 1; fi
+POWER
+    cat; } >"$T/gtools/$1"
+  chmod 755 "$T/gtools/$1"
+}
+tool parted <<'TOOL'
+case "$*" in *print*)
+  echo "BYT;"; while read -r n a b; do echo "$n:${a}s:${b}s:0s:::;"; done <$G/table; exit 0 ;; esac
+case "$*" in *resizepart*) [ ! -e $G/refuse-table ] || exit 1
+  e=${6:-0}; for a in "$@"; do last=$a; done
+  grep -v '^2 ' $G/table >$G/t; a=$(grep '^2 ' $G/table | cut -d" " -f2); { cat $G/t; echo "2 $a ${last%s}"; } | sort >$G/table
+  echo $((${last%s} - a + 1)) >$G/block/mmcblk0p2/size ;; esac
+case "$*" in *mkpart*) [ ! -e $G/refuse-table ] || exit 1
+  set -- $*; shift $(($# - 2)); echo "3 $1 $2" >>$G/table; mkdir -p $G/block/mmcblk0p3; echo 1 >$G/block/mmcblk0p3/size ;; esac
+case "$*" in *" rm 3"*) grep -v '^3 ' $G/table >$G/t; cp $G/t $G/table; rm -rf $G/block/mmcblk0p3 ;; esac
+exit 0
+TOOL
+tool blkid <<'TOOL'
+set -- $* ; want=$5
+[ -s $G/fs ] || exit 2
+set -- $(cat $G/fs); [ "$want" = TYPE ] && echo "$1" || echo "$2"
+TOOL
+tool mkfs.exfat <<'TOOL'
+[ ! -e $G/refuse-mkfs ] || exit 1
+echo x >>$G/formatted; rm -f $G/games; echo "exfat GAMES" >$G/fs
+TOOL
+tool fsck.exfat <<'TOOL'
+[ ! -e $G/fsck-bad ] || [ "$(cat $G/fs)" != "exfat GAMES" ] || [ -e $G/formatted ]
+TOOL
+tool mount <<'TOOL'
+for a in "$@"; do [ "$a" = "$G/storage" ] && { echo "/dev/mmcblk0p2 $G/storage ext4 rw 0 0" >$G/mounts; exit 0; }; done
+for a in "$@"; do [ "$a" = "$G/work" ] && { mkdir -p $G/work; exit 0; }; done
+exit 1
+TOOL
+tool umount <<'TOOL'
+for a in "$@"; do [ "$a" = "$G/storage" ] && { : >$G/mounts; exit 0; }; done
+exit 0
+TOOL
+for t in partprobe e2fsck resize2fs tune2fs; do tool $t </dev/null; done
+tool reboot <<'TOOL'
+echo reboot >>$G/end
+TOOL
+
+newcard() {
+  rm -rf "$G"
+  mkdir -p "$G/storage" "$G/block/mmcblk0" "$G/block/mmcblk0p2"
+  : >"$G/storage/.please_resize_me"
+  printf '1 32768 4227071\n2 4227072 4292607\n' >"$G/table"
+  : >"$G/fs"
+  echo $((${1:-64000} * 2048)) >"$G/block/mmcblk0/size"
+  echo 65536 >"$G/block/mmcblk0p2/size"
+  echo "/dev/mmcblk0p2 $G/storage ext4 rw 0 0" >"$G/mounts"
+  printf 'd\t/storage/roms/gba\t\t\t0777 root root - -\nd\t/storage/roms/snes\t\t\t0777 root root - -\nd\t/tmp/x\n' >"$G/dirs"
+  # Stands for ROCKNIX's own script: what it does to the card is not this test's.
+  printf '#!%s sh\necho stock >>%s/end\nrm -f %s/storage/.please_resize_me\n' "$BB" "$G" "$G" >"$G/stock"
+  chmod 755 "$G/stock"
+}
+firststart() {
+  env -i PATH="$T/gtools" PU_STORAGE="$G/storage" PU_STOCK="$G/stock" PU_MOUNTS="$G/mounts" PU_BLOCK="$G/block" PU_DIRS="$G/dirs" \
+    PU_LOG="$G/log" PU_WORK="$G/work" T="$T" HERE="$HERE" "$BB" sh -c '
+      echo $$ >"$T/g/top"
+      # BusyBox may run its own applet before anything on PATH: these must be the stand-ins.
+      mount() { "$T/gtools/mount" "$@"; }
+      umount() { "$T/gtools/umount" "$@"; }
+      blkid() { "$T/gtools/blkid" "$@"; }
+      reboot() { "$T/gtools/reboot" "$@"; }
+      . "$HERE/games-first-start.sh"
+    ' >/dev/null 2>&1
+}
+split_right() {
+  [ "$(cat "$G/table")" = "$(printf '1 32768 4227071\n2 4227072 16809983\n3 16809984 131071999')" ]
+}
+marker_gone() { [ ! -e "$G/storage/.please_resize_me" ]; }
+
+echo "== games-first-start.sh: a 64 GB card"
+newcard
+firststart
+check "p2 is 6 GiB, p3 starts on 4 MiB, ends on a whole MiB" 'split_right && [ $(((16809983 - 4227072 + 1) / 2048)) = 6144 ] && [ $((16809984 % 8192)) = 0 ]'
+check "p3 is type 7 (parted's name for it: ntfs), exact as asked" 'grep -q "mkpart primary ntfs 16809984 131071999" $G/calls && grep -q -- "-a none" $G/calls'
+check "formatted once as exFAT GAMES, folders ready" '[ "$(wc -l <$G/formatted)" = 1 ] && [ "$(cat $G/fs)" = "exfat GAMES" ] && [ -d $G/work/roms/gba ] && [ -d $G/work/roms/snes ] && [ ! -e $G/work/roms/x ]'
+check "says where games go, on the drive" 'grep -q "roms" "$G/work/READ ME - games go in roms.txt"'
+check "restarts with the marker gone, no state left, ROCKNIX's script not used" 'marker_gone && [ "$(cat $G/end)" = reboot ] && [ ! -e $G/storage/.pocket-games-state ] && [ ! -e $G/storage/.pocket-games-tries ]'
+check "never writes to /flash" '! grep -q flash $G/calls'
+check "grows STORAGE after the table, before the GAMES drive" '[ "$(grep -n "^resize2fs" $G/calls | cut -d: -f1)" -gt "$(grep -n "mkpart" $G/calls | cut -d: -f1)" ] && [ "$(grep -n "^resize2fs" $G/calls | cut -d: -f1)" -lt "$(grep -n "^mkfs.exfat" $G/calls | cut -d: -f1)" ]'
+
+echo "== power cut at every step of a first start: the next start finishes the job"
+newcard
+firststart
+steps=$(cat "$G/n")
+bad=0
+c=1
+while [ $c -le $steps ]; do
+  newcard
+  echo $c >"$G/cut-at"
+  firststart
+  [ -e "$G/was-cut" ] || { echo "     step $c: no cut"; bad=1; }
+  # Gone is fine only when everything was done before the cut.
+  if marker_gone && ! { split_right && [ "$(cat "$G/fs")" = "exfat GAMES" ]; }; then echo "     step $c: marker gone early"; bad=1; fi
+  # The player switches on again: the kernel reads the table, init mounts STORAGE, and fs-resize.target runs only with the marker.
+  rm -f "$G/cut-at" "$G/n"
+  echo "/dev/mmcblk0p2 $G/storage ext4 rw 0 0" >"$G/mounts"
+  marker_gone || firststart
+  split_right && [ "$(cat "$G/fs")" = "exfat GAMES" ] && marker_gone || { echo "     step $c: table $(tr '\n' ',' <"$G/table") fs $(cat "$G/fs") end $(cat "$G/end" 2>/dev/null)"; bad=1; }
+  c=$((c + 1))
+done
+check "$steps cut points, each recovers to the same card" '[ $bad = 0 ] && [ "$steps" -gt 10 ]'
+
+echo "== after a cut, games already on a good GAMES are never formatted away"
+newcard
+firststart
+n=$(wc -l <"$G/formatted")
+: >"$G/storage/.please_resize_me"
+: >"$G/storage/.pocket-games-state"
+echo table >"$G/storage/.pocket-games-state"
+: >"$G/games"
+firststart
+check "no second format, games stay" '[ "$(wc -l <$G/formatted)" = "$n" ] && [ -e $G/games ]'
+
+echo "== a card flashed again with the old GAMES still behind the new table"
+newcard
+echo "exfat GAMES" >"$G/fs"
+: >"$G/games"
+firststart
+check "same split, GAMES and its games stay" 'split_right && [ ! -e $G/formatted ] && [ -e $G/games ] && marker_gone'
+
+echo "== a half-made GAMES from a cut during formatting is made again"
+newcard
+printf '1 32768 4227071\n2 4227072 16809983\n3 16809984 131071999\n' >"$G/table"
+echo 12582912 >"$G/block/mmcblk0p2/size"
+mkdir -p "$G/block/mmcblk0p3"
+echo 1 >"$G/block/mmcblk0p3/size"
+echo formatting >"$G/storage/.pocket-games-state"
+firststart
+check "formatted" '[ "$(wc -l <$G/formatted)" = 1 ] && [ "$(cat $G/fs)" = "exfat GAMES" ] && marker_gone'
+
+echo "== a third partition that isn't ours"
+newcard
+printf '1 32768 4227071\n2 4227072 4292607\n3 16809984 131071999\n' >"$G/table"
+echo "ext4 mine" >"$G/fs"
+firststart
+check "left alone: ROCKNIX's script, no format, table as it was" '[ "$(cat $G/end)" = stock ] && [ ! -e $G/formatted ] && [ "$(cat $G/fs)" = "ext4 mine" ] && grep -q "^3 16809984" $G/table && ! grep -q mkpart $G/calls && ! grep -q " rm 3" $G/calls'
+
+echo "== cards too small to split"
+newcard 7400
+firststart
+check "8 GB card: ROCKNIX's script, table untouched, marker still there for it" '[ "$(cat $G/end)" = stock ] && [ ! -e $G/formatted ] && ! grep -q "resizepart\|mkpart" $G/calls'
+newcard 12288
+firststart
+check "just big enough (12 GiB): split" 'grep -q mkpart $G/calls && [ "$(tail -1 $G/end)" = reboot ]'
+
+echo "== what goes wrong ends in ROCKNIX's script, with today's layout and no state left"
+newcard
+: >"$G/refuse-table"
+firststart
+check "the table can't be changed" '[ "$(cat $G/end)" = stock ] && [ ! -e $G/formatted ] && [ ! -e $G/storage/.pocket-games-state ] && grep -q "/storage ext4\|$G/storage" $G/mounts'
+newcard
+: >"$G/refuse-mkfs"
+firststart
+check "formatting fails: p3 goes again, STORAGE gets the card" '[ "$(cat $G/end)" = stock ] && ! grep -q "^3 " $G/table && grep -q "rm 3" $G/calls && grep -q "$G/storage" $G/mounts'
+newcard
+: >"$G/storage/.pocket-games-tries"; printf xxx >"$G/storage/.pocket-games-tries"
+firststart
+check "three tries used up: no loop of restarts" '[ "$(cat $G/end)" = stock ] && ! grep -q mkpart $G/calls'
+newcard
+mkdir "$G/storage/.config"
+firststart
+check "a card already set up: ROCKNIX's refusal, nothing changed" '[ "$(cat $G/end)" = stock ] && ! grep -q "resizepart\|mkpart" $G/calls'
+
+echo "== games-mount.sh: the drive's own mount"
+M=$T/m
+mkdir -p "$M/tools"
+for a in basename cat cp cut grep rm od sync tr; do ln -s "$BB" "$M/tools/$a"; done
+mtool() { { printf '#!%s sh\nM=%s\necho "$(basename "$0") $*" >>$M/calls\n' "$BB" "$M"; cat; } >"$M/tools/$1"; chmod 755 "$M/tools/$1"; }
+mtool blkid <<'TOOL'
+cat $M/label
+TOOL
+mtool umount <<'TOOL'
+for a in "$@"; do grep -v " $a " $M/mounts >$M/m2; cp $M/m2 $M/mounts; done
+TOOL
+mtool mount <<'TOOL'
+case "$*" in *--bind*) ;; *) [ ! -e $M/refuse ] || case "$*" in *noatime*) exit 1 ;; esac
+  echo "$(echo "$*" | grep -o '/dev/[a-z0-9]*') /e exfat rw 0 0" >>$M/mounts ;; esac
+TOOL
+mtool timeout <<'TOOL'
+:
+TOOL
+# The flags byte, 106 bytes in, as dd would read it.
+printf '#!%s sh\nprintf "\\\\$(cat %s/flags)"\n' "$BB" "$M" >"$M/tools/dd"
+chmod 755 "$M/tools/dd"
+gamesmount() {
+  env -i PATH="$M/tools" PU_MOUNTS="$M/mounts" PU_EXTERNAL=/e PU_ROMS=/r PU_INTERNAL=/i M="$M" HERE="$HERE" "$BB" sh -c '
+      mount() { "$M/tools/mount" "$@"; }
+      umount() { "$M/tools/umount" "$@"; }
+      blkid() { "$M/tools/blkid" "$@"; }
+      timeout() { "$M/tools/timeout" "$@"; }
+      dd() { "$M/tools/dd" "$@"; }
+      . "$HERE/games-mount.sh"
+    ' >/dev/null 2>&1
+}
+minit() {
+  rm -f "$M/calls" "$M/refuse"
+  printf '/dev/mmcblk0p2 /storage ext4 rw 0 0\n%s /e %s rw 0 0\n' "$1" "$2" >"$M/mounts"
+  echo "$3" >"$M/label"
+  echo 000 >"$M/flags"
+}
+minit /dev/mmcblk0p3 exfat GAMES
+gamesmount
+check "GAMES on the boot card: mounted again, then bound to roms" 'grep -q "mount -t exfat -o noatime,fmask=0022,dmask=0022" $M/calls && grep -q -- "--bind /e/roms /r\|--bind /i/roms /r" $M/calls'
+check "a clean drive isn't checked" '! grep -q "^timeout" $M/calls'
+minit /dev/mmcblk0p3 exfat GAMES
+echo 002 >"$M/flags"
+gamesmount
+check "a drive not closed properly is checked first" 'grep -q "^timeout 120 fsck.exfat -p /dev/mmcblk0p3" $M/calls'
+minit /dev/mmcblk0p3 exfat GAMES
+: >"$M/refuse"
+gamesmount
+check "the new mount refused: the plain one comes back" 'grep -qx "mount -t exfat /dev/mmcblk0p3 /e" $M/calls && grep -q " /e " $M/mounts'
+minit /dev/mmcblk1p1 exfat GAMES
+gamesmount
+check "a card in the second slot stays as automount left it, even one called GAMES" '[ "$(grep -c "^mount\|^umount" $M/calls)" = 0 ]'
+minit /dev/mmcblk0p3 ext4 GAMES
+gamesmount
+check "not exFAT: nothing" '[ ! -e $M/calls ]'
+printf '/dev/mmcblk0p2 /storage ext4 rw 0 0\n' >"$M/mounts"
+rm -f "$M/calls"
+gamesmount
+check "no drive mounted (games in STORAGE): nothing" '[ ! -e $M/calls ]'
 
 echo
 if [ $fails -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi

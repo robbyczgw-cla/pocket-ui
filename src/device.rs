@@ -153,6 +153,13 @@ impl Device {
         !self.model.is_some_and(Model::is_h700)
     }
 
+    /// A second card slot, for a games card ROCKNIX reads by itself: every H700 handheld has one (TF2; every H700 device
+    /// tree in ROCKNIX's image has `mmc@4020000` and `mmc@4022000`, both with `cd-gpios`). The SM8250 and SM8550 trees
+    /// have one card slot (`sdhc_2`).
+    pub fn has_second_card_slot(&self) -> bool {
+        self.model.is_some_and(Model::is_h700)
+    }
+
     /// Analog sticks, and so the lights around them. Per model on the H700 handhelds.
     pub fn has_sticks(&self) -> bool {
         !self.model.is_some_and(Model::is_desktop) && !matches!(self.model, Some(Model::H700(b)) if !b.sticks)
@@ -355,7 +362,7 @@ pub fn snapshot_state(state: &str) -> (&str, Option<Device>) {
 pub fn hides(key: &str, sticks: bool, host_owned: bool) -> bool {
     match key {
         "leds" => !sticks,
-        "haptics" | "sync" | "tailscale" | "tools" | "perf_fan" | "radios" | "time" | "updates" | "store" | "frozen_games" => host_owned,
+        "haptics" | "usb_transfer" | "sync" | "tailscale" | "tools" | "perf_fan" | "radios" | "time" | "updates" | "store" | "frozen_games" => host_owned,
         _ => false,
     }
 }

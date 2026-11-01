@@ -7,7 +7,7 @@ const BACK: u16 = 102;
 impl Ui {
     fn setup_items(&self) -> Vec<(String, u16)> {
         let mut items = match self.prefs.onboarding_step.min(6) {
-            1 => vec![("English".into(), 0), ("Deutsch".into(), 1)],
+            1 => pocket_ui::i18n::Lang::ALL.iter().enumerate().map(|(i, l)| (l.name().to_string(), i as u16)).collect(),
             2 => vec![(
                 tr(if self.library.is_some() {
                     "Choose another folder"
@@ -75,9 +75,9 @@ impl Ui {
             }
             _ => match step {
                 1 => {
-                    let de = action == 1;
-                    self.prefs.german = Some(de);
-                    pocket_ui::i18n::set(if de { pocket_ui::i18n::Lang::De } else { pocket_ui::i18n::Lang::En });
+                    if let Some(lang) = pocket_ui::i18n::Lang::ALL.get(action as usize) {
+                        self.prefs.choose_language(*lang);
+                    }
                 }
                 2 => return Command::Folder,
                 3 => {
@@ -132,7 +132,7 @@ impl Ui {
     /// Whether choice `action` of this step is the one in use (a radio mark), or `None` for a row that acts.
     fn setup_chosen(&self, action: u16) -> Option<bool> {
         match self.prefs.onboarding_step.min(6) {
-            1 => Some((action == 1) == (pocket_ui::i18n::current() == pocket_ui::i18n::Lang::De)),
+            1 => Some(pocket_ui::i18n::Lang::ALL.get(action as usize) == Some(&pocket_ui::i18n::current())),
             3 if action < 5 => Some(Theme::ALL.get(action as usize) == Some(&self.prefs.theme)),
             4 => Some(self.prefs.download_media == Some(action == 0)),
             _ => None,

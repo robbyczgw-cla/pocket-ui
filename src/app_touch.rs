@@ -24,7 +24,8 @@ impl App {
             Some(touch::Ignored::Launching)
         } else if self.menu.is_some() {
             Some(touch::Ignored::PauseMenu)
-        } else if self.setup.is_some() {
+        } else if self.setup.as_ref().is_some_and(|s| !s.takes_touch()) {
+            // The first start's other steps are buttons only; Add games takes touch (`Setup::register_touch`).
             Some(touch::Ignored::Setup)
         } else if self.sys.is_open() {
             Some(touch::Ignored::SystemPanel)
@@ -66,6 +67,24 @@ impl App {
         let (w, h) = self.screen_size();
         let (x, y) = touch::to_px((ev.x, ev.y), w, h);
         let gesture = self.touch_rec.feed(ev.phase, x, y, std::time::Instant::now(), self.hits.pitch());
+        // Add games: a tap on a way selects it, a tap on the selected one does it; its hints are buttons.
+        if self.setup.is_some() {
+            if let Some(Gesture::Tap { x, y }) = gesture {
+                match self.hits.tap(x, y) {
+                    TapAction::Press(b) => self.tap_button(el, b),
+                    TapAction::Activate if self.setup.as_ref().is_some_and(|s| s.ways_focused()) => self.tap_button(el, CONFIRM),
+                    action @ (TapAction::Activate | TapAction::Steps(_)) => {
+                        let n = if let TapAction::Steps(n) = action { n } else { 0 };
+                        if let Some(s) = self.setup.as_mut() {
+                            s.ways_steps(n);
+                        }
+                        self.request_redraw();
+                    }
+                    _ => {}
+                }
+            }
+            return;
+        }
         // The search: keys, result rows and its list's swipe (`app_search`); its hints go the usual way below.
         if self.find.is_open() && self.search_touch(el, gesture) {
             return;

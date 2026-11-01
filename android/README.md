@@ -99,3 +99,9 @@ and full-width buttons. Capture its screens (keeps app data, changes look/langua
 python3 scripts/android/phone-design-smoke.py "$ANDROID_HOME/platform-tools/adb" emulator-5582 android/build/phone --lang de --orientation landscape
 python3 scripts/android/phone-design-smoke.py "$ANDROID_HOME/platform-tools/adb" emulator-5582 android/build/phone-empty --empty
 ```
+
+Settings → Game check, from a fresh install through the real picker (clears the app's data; `--phase lost` needs a Google APIs image):
+
+```sh
+python3 scripts/android/game-check-smoke.py "$ANDROID_HOME/platform-tools/adb" emulator-5598 android/build/game-check ROMS --lang de --orientation landscape
+```

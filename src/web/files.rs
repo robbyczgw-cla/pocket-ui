@@ -4,10 +4,9 @@
 //!
 //! The rules, all checked here and unit-tested:
 //! - Only three kinds of place: a game system's ROM folder (from es_systems.cfg, inside `/storage/roms`, never
-//!   `ports`, `bios`, `PortMaster`, `savestates` or `port-files`, never a system that runs scripts), `roms/bios` (and
-//!   its `dc/` folder for the arcade sets hostsys names), and a port's drop folder `roms/port-files/<port>/…`, from
-//!   which pocket-ui moves the files into the port when it starts (the same path as the file share, docs/DEVELOPING.md).
-//!   The share hides `ports/` because the Pocket runs programs from there; so does this.
+//!   `ports`, `bios`, `PortMaster` or `savestates`, never a system that runs scripts), `roms/bios` (and its `dc/`
+//!   folder for the arcade sets hostsys names), and the folder of an installed port that waits for the player's files,
+//!   `roms/ports/<port>/…`, where its instructions want them; never a script or a program there.
 //! - A ROM must have one of its system's extensions. Names are cut to their last part, control characters and the
 //!   characters Windows and the share refuse are replaced, no leading dot, at most 200 bytes. A folder upload's
 //!   relative path is cleaned segment by segment; `..`, empty segments and links are refused.
@@ -34,14 +33,13 @@ const NAME_MAX: usize = 200;
 /// Folders deep in a port upload.
 const DEPTH_MAX: usize = 12;
 /// Folders under `/storage/roms` nothing is ever uploaded into.
-pub const NEVER: &[&str] = &["ports", "bios", "portmaster", "savestates", "port-files"];
+pub const NEVER: &[&str] = &["ports", "bios", "portmaster", "savestates"];
 
 /// The folders uploads go into; tests point them at a temporary folder.
 #[derive(Clone, Debug)]
 pub struct Roots {
     pub roms: PathBuf,
     pub bios: PathBuf,
-    pub drop: PathBuf,
     pub ports: PathBuf,
     /// Where HOME + A in a game saves its pictures (`screenshot`); read-only for the companion.
     pub screenshots: PathBuf,
@@ -52,7 +50,6 @@ impl Default for Roots {
         Roots {
             roms: PathBuf::from("/storage/roms"),
             bios: PathBuf::from(crate::hostsys::BIOS_DIR),
-            drop: PathBuf::from(crate::port_files::DROP_DIR),
             ports: PathBuf::from(crate::ports::PORTS_DIR),
             screenshots: crate::screenshot::dir(),
         }
@@ -62,7 +59,7 @@ impl Default for Roots {
 impl Roots {
     /// The same layout under `roms` (tests, the virtual device).
     pub fn under(roms: &Path) -> Roots {
-        Roots { roms: roms.to_path_buf(), bios: roms.join("bios"), drop: roms.join("port-files"), ports: roms.join("ports"), screenshots: roms.join("screenshots") }
+        Roots { roms: roms.to_path_buf(), bios: roms.join("bios"), ports: roms.join("ports"), screenshots: roms.join("screenshots") }
     }
 }
 
@@ -196,7 +193,7 @@ pub fn system_folder_ok(roots: &Roots, sys: &crate::library::SysInfo) -> bool {
 /// `dir` exists (or is made, one level below `root`) and is really inside `root` once links are followed; returns
 /// it with every link resolved, and that is the path the upload is written through. The first folder below `root`,
 /// after resolving, must not be one of the [`NEVER`] folders (a link `roms/gba` → `roms/ports` is refused, review
-/// F12), except `allowed` (the BIOS folder for BIOS files, `port-files` for a port's drop folder).
+/// F12), except `allowed` (the BIOS folder for BIOS files, `ports` for a port's own folder).
 fn inside(root: &Path, dir: &Path, allowed: Option<&str>) -> Result<PathBuf, String> {
     if !dir.exists() {
         if dir.parent() != Some(root) {
@@ -278,29 +275,28 @@ pub fn bios_target(roots: &Roots, raw: &str, sub: Option<&str>) -> Result<PathBu
     }
 }
 
-/// Where a port's file goes: its drop folder `roms/port-files/<dir>/<rel…>`, for a port that is installed, waits for
-/// files and has a drop folder. Folders on the way are made; none of them may be a link.
+/// Where a port's file goes: the folder its instructions name, `roms/ports/<dir>/<folder>/<rel…>`, else the port's
+/// own folder, for a port that is installed and waits for files. Folders on the way are made; none may be a link.
 pub fn port_target(roots: &Roots, dir: &str, rel: &str) -> Result<PathBuf, Refused> {
     let ports = ports_needing_files(roots);
     let Some(port) = ports.iter().find(|p| p.dir == dir) else {
         return Err(Refused::NotAllowed("That port is not installed or doesn't need files.".into()));
     };
-    if !port.drop {
-        return Err(Refused::NotAllowed(format!("{}: copy its files with the SD card or SSH (its instructions name no folder).", port.title)));
-    }
     let parts = sanitize_rel(rel).ok_or_else(|| Refused::NotAllowed("That path can't be used.".into()))?;
     // A port's launcher runs as root: nothing that a shell, Python or the system would run goes into its folder.
     if parts.last().is_some_and(|n| script(n) || native(n)) {
         return Err(Refused::NotAllowed("Scripts and programs don't go into a port's folder.".into()));
     }
-    let drop = crate::port_files::make_drop(&roots.drop, dir).ok_or_else(|| Refused::Io("Can't make the drop folder.".into()))?;
-    let mut at = inside(&roots.roms, &drop, Some("port-files")).map_err(Refused::NotAllowed)?;
-    for seg in &parts[..parts.len() - 1] {
-        at = at.join(seg);
+    let mut at = inside(&roots.roms, &roots.ports.join(dir), Some("ports")).map_err(Refused::NotAllowed)?;
+    let folder = port.place.split('/').skip(3).map(str::to_string);
+    for seg in folder.chain(parts[..parts.len() - 1].iter().cloned()) {
+        at = at.join(&seg);
         match std::fs::symlink_metadata(&at) {
             Ok(m) if m.file_type().is_symlink() || !m.is_dir() => return Err(Refused::NotAllowed(format!("{seg} is in the way."))),
             Ok(_) => {}
-            Err(_) => std::fs::create_dir(&at).map_err(|e| Refused::Io(format!("Can't make {seg}: {e}")))?,
+            Err(_) => {
+                std::fs::create_dir(&at).map_err(|e| Refused::Io(format!("Can't make {seg}: {e}")))?;
+            }
         }
     }
     Ok(at.join(&parts[parts.len() - 1]))
@@ -620,16 +616,10 @@ pub fn bios_for(name: &str) -> Option<&'static str> {
 pub struct PortNeed {
     pub title: String,
     pub dir: String,
-    /// Folders in the port the files belong in, as its instructions name them.
-    pub folders: Vec<String>,
-    /// Files the instructions name; any one of them is enough.
-    pub files: Vec<String>,
     /// The instructions, as PortMaster has them.
     pub instructions: String,
-    /// Uploads are taken (the instructions name a folder or the files).
-    pub drop: bool,
-    /// Entries waiting in the drop folder for the next start of the port.
-    pub waiting: usize,
+    /// Where uploads go, as the player knows it: "roms/ports/sprout/assets".
+    pub place: String,
 }
 
 pub fn ports_needing_files(roots: &Roots) -> Vec<PortNeed> {
@@ -638,9 +628,12 @@ pub fn ports_needing_files(roots: &Roots) -> Vec<PortNeed> {
         .filter(|p| crate::port_files::plain_name(&p.dir))
         .map(|p| {
             let e = crate::port_files::expect(&p.instructions, &p.dir);
-            let drop = crate::port_files::drop_target(&roots.ports.join(&p.dir), &e).is_some();
-            let waiting = std::fs::read_dir(roots.drop.join(&p.dir)).map(|d| d.count()).unwrap_or(0);
-            PortNeed { title: p.title, dir: p.dir, folders: e.folders, files: e.files, instructions: p.instructions, drop, waiting }
+            // One folder named: there. Several go side by side in the port's own folder.
+            let mut place = format!("roms/ports/{}", p.dir);
+            if let ([_], Ok(sub)) = (e.folders.as_slice(), crate::port_files::place(&roots.ports.join(&p.dir), &e).strip_prefix(roots.ports.join(&p.dir))) {
+                place = format!("{place}/{}", sub.to_string_lossy());
+            }
+            PortNeed { title: p.title, dir: p.dir, instructions: p.instructions, place }
         })
         .collect()
 }

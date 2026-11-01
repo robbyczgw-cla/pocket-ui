@@ -25,6 +25,9 @@ pub mod players;
 pub mod players_page;
 pub mod touch;
 pub mod frozen;
+// Android's files for Frozen games: on Linux only so the gate tests its rules.
+#[cfg(test)]
+pub(crate) mod frozen_phone;
 pub mod recents;
 pub mod text;
 pub mod this_game_page;
@@ -35,6 +38,7 @@ pub mod boot_fade;
 pub mod crt_on;
 pub mod cozy_extras;
 pub mod insert_rig;
+pub mod insert_scene;
 pub mod playful;
 pub mod text_fallback;
 pub mod type_scale;
@@ -274,6 +278,10 @@ pub mod backup_page;
 pub mod storage;
 // Storage's Card check: read-only mount, the file system's error count and the kernel's log say something is wrong.
 pub mod card_health;
+// A games card in the second slot: it came or went (the shelf reads again, or says so). Sleeps in poll, no wake-ups.
+pub mod games_card;
+// Settings → Connections → USB file transfer: ROCKNIX's MTP gadget on or off.
+pub mod usb_transfer;
 // A Wi-Fi network that wants a sign-in in a browser (a hotel, a train): found by one plain request, said instead of "Check Wi-Fi".
 pub mod net_check;
 // A network with a sign-in page: the Wi-Fi page's sheet (other ways online, the sign-in helper).
@@ -328,5 +336,6 @@ pub mod play_time;
 pub mod touch_ui;
 
 pub mod document_library;
+pub mod document_check;
 
 pub mod device_model;

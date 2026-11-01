@@ -69,11 +69,14 @@ pub const SMB_CONF_PATH: &str = "/storage/.config/smb.conf";
 /// internal bootloader Android depends on; a script dropped into .config runs as root. So only
 /// the games folder is shared, and links can't lead out of it.
 ///
-/// Who may write there (K1 in the internal review): only someone with this device's
-/// password (shown on the Add games screen), only over Wi-Fi, and only as the unprivileged `nobody`
-/// (ROCKNIX's /etc/passwd is on the read-only system image, so no user of our own can be added;
-/// `nobody` is the one unprivileged account no service runs as). Folders root runs code or emulator
-/// state from are not reachable at all: Ports and PortMaster scripts, BIOS files, savestates.
+/// Who may write there: only someone with this device's password (shown on the Add games screen) and only over Wi-Fi.
+/// Writes happen as root (decision of 2026-11-01): whoever has the password may put programs into `ports` that
+/// then run as root when started anyway, and on a retro handheld that person is trusted (ROCKNIX's own share needs not
+/// even a password). So nothing under `roms` has to change owner, saves and ports pocket-ui writes stay writable over
+/// the share, and a root-mounted exFAT or NTFS card works. The share stays confined to `roms`: links aren't followed,
+/// and root can't log in. The password logs in as `nobody` (`SHARE_UNIX_USER`). New files are made executable
+/// (`force create mode`), which PortMaster's scripts and binaries need; `map archive = no` keeps Samba from turning
+/// that bit into the DOS archive flag.
 pub const SMB_CONF: &str = "\
 # Written by pocket-ui; ROCKNIX's original is kept next to it as smb.conf.rocknix.
 # Only the games are shared: no update, config, log or theme shares.
@@ -116,24 +119,39 @@ pub const SMB_CONF: &str = "\
   writeable = yes
   guest ok = no
   valid users = nobody
-  force user = nobody
-  force group = nogroup
-  create mask = 0664
+  force user = root
+  create mask = 0775
+  force create mode = 0755
   directory mask = 0775
-  veto files = /ports/PortMaster/bios/savestates/
-  delete veto files = no
+  map archive = no
 ";
 
 /// Name to type on the computer; `users.map` maps it to `SHARE_UNIX_USER`.
 pub const SHARE_LOGIN: &str = "pocket";
-/// The account smbd writes as (`force user`); present in ROCKNIX's read-only /etc/passwd.
+/// The account the password belongs to: Samba's password file needs one, and ROCKNIX's /etc/passwd is on the read-only
+/// system image, so no user of our own can be added. It only logs in; writes happen as root (`force user`).
 pub const SHARE_UNIX_USER: &str = "nobody";
 pub const SHARE_UID: u32 = 65534;
-pub const SHARE_GID: u32 = 65534;
 /// Password, smbpasswd and username map, all written by pocket-ui.
 pub const SHARE_DIR: &str = "/storage/.config/pocket-ui/share";
-/// Top-level folders of the share that `veto files` hides (case does not matter to clients).
-pub const SHARE_VETOED: [&str; 4] = ["ports", "PortMaster", "bios", "savestates"];
+
+/// Exists in `SHARE_DIR` while the player wants file sharing on: it stays on across restarts and comes back by itself
+/// once Wi-Fi is up (`keep_sharing_on`), until it is switched off. pocket-ui's own setting; ROCKNIX's `samba.enabled`
+/// stays 0, as ROCKNIX would start its own Samba configuration before ours is in place.
+pub fn share_wanted(dir: &std::path::Path) -> bool {
+    dir.join("on").is_file()
+}
+
+/// Remembers whether the player wants file sharing on (`share_wanted`).
+pub fn set_share_wanted(dir: &std::path::Path, wanted: bool) {
+    let marker = dir.join("on");
+    if wanted {
+        let _ = std::fs::create_dir_all(dir);
+        let _ = std::fs::write(&marker, b"");
+    } else {
+        let _ = std::fs::remove_file(&marker);
+    }
+}
 
 /// MD4 (RFC 1320); only for the NT hash Samba's smbpasswd file stores.
 fn md4(input: &[u8]) -> [u8; 16] {
@@ -212,33 +230,10 @@ pub fn ensure_share_login(dir: &std::path::Path) -> std::io::Result<String> {
     Ok(password)
 }
 
-/// Everything under `root` that the share user doesn't own yet, except the vetoed folders and
-/// symlinks (never followed). Games copied in earlier as root or by `rsync` from a Mac (uid 501)
-/// would otherwise be read-only over the share. The share root itself stays root's.
-pub fn share_adoption(root: &std::path::Path, uid: u32) -> Vec<std::path::PathBuf> {
-    use std::os::unix::fs::MetadataExt;
-    let mut out = Vec::new();
-    let mut stack: Vec<std::path::PathBuf> = match std::fs::read_dir(root) {
-        Ok(rd) => rd
-            .flatten()
-            .filter(|e| !SHARE_VETOED.iter().any(|v| e.file_name().to_string_lossy().eq_ignore_ascii_case(v)))
-            .map(|e| e.path())
-            .collect(),
-        Err(_) => return out,
-    };
-    while let Some(path) = stack.pop() {
-        let Ok(meta) = std::fs::symlink_metadata(&path) else { continue };
-        if meta.file_type().is_symlink() {
-            continue;
-        }
-        if meta.uid() != uid {
-            out.push(path.clone());
-        }
-        if meta.is_dir() {
-            stack.extend(std::fs::read_dir(&path).into_iter().flatten().flatten().map(|e| e.path()));
-        }
-    }
-    out
+/// Whether smbd has to be started: only when it doesn't run, or runs on an address the Pocket no longer has. A running
+/// one that listens where it should is left alone, as a restart cuts the copies in progress (review 2026-11-01).
+pub fn share_restart_needed(running: bool, listening_here: bool) -> bool {
+    !(running && listening_here)
 }
 
 /// Shares named in a Samba configuration, e.g. ["global", "games-roms"].
@@ -1403,27 +1398,67 @@ esac
         Some(cidr.split('/').next()?.to_string())
     }
 
-    /// Turns on the Samba share (`games-roms` → /storage/roms) for this session only, after our
-    /// restricted configuration and login are in place. ROCKNIX's `samba.enabled` stays 0, so the
-    /// share is off again after a restart.
+    /// Turning sharing on or off or following a new address, by the player or by `keep_sharing_on`: one at a time.
+    static SWITCH: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Turns on the Samba share (`games-roms` → /storage/roms), after our restricted configuration and login are in
+    /// place. It stays on across restarts (`keep_sharing_on`).
     pub fn enable_sharing() -> bool {
+        let _one = SWITCH.lock();
+        enable_locked(true)
+    }
+
+    fn enable_locked(remember: bool) -> bool {
         if let Err(e) = secure_sharing() {
             eprintln!("file sharing: {e}");
             return false;
         }
-        // Games copied earlier as root (or rsync'd from a Mac) become writable for the share user.
-        for path in super::share_adoption(Path::new("/storage/roms"), super::SHARE_UID) {
-            if let Err(e) = std::os::unix::fs::lchown(&path, Some(super::SHARE_UID), Some(super::SHARE_GID)) {
-                eprintln!("file sharing: chown {}: {e}", path.display());
-            }
+        if remember {
+            super::set_share_wanted(Path::new(super::SHARE_DIR), true);
         }
+        // Already there, on this address: a restart would cut a copy that is running.
+        if !super::share_restart_needed(sharing_enabled(), listening_here()) {
+            return true;
+        }
+        println!("file sharing: starting");
         // A restart, not a start: smbd only binds to the Wi-Fi address it finds when it starts.
         Command::new("systemctl").args(["restart", "nmbd", "smbd"]).status().is_ok_and(|s| s.success())
     }
 
     pub fn disable_sharing() -> bool {
+        let _one = SWITCH.lock();
+        super::set_share_wanted(Path::new(super::SHARE_DIR), false);
         samba_setting_off();
         Command::new("systemctl").args(["stop", "smbd", "nmbd"]).status().is_ok_and(|s| s.success())
+    }
+
+    /// Runs on its own thread for good: file sharing the player left on comes back after a restart once Wi-Fi has an
+    /// address, and follows a new address (`rebind_sharing`; smbd binds to the one it started with). Does nothing
+    /// while sharing is off. smbd is an ordinary service: it holds no wake lock, and suspend freezes it with the rest.
+    pub fn keep_sharing_on() {
+        let mut came_back = false;
+        loop {
+            std::thread::sleep(Duration::from_secs(if came_back { 60 } else { 10 }));
+            if !super::share_wanted(Path::new(super::SHARE_DIR)) || ip_now().is_none() {
+                continue;
+            }
+            // Asked without the lock first: nearly always there is nothing to do.
+            if !super::share_restart_needed(sharing_enabled(), listening_here()) || follow_wish() {
+                came_back = true;
+            }
+        }
+    }
+
+    /// Whether smbd listens on the Wi-Fi address it has now.
+    fn listening_here() -> bool {
+        ip_now().and_then(|ip| ip.parse().ok()).is_some_and(|ip| crate::sockets::listening(&crate::sockets::read(), ip, 445))
+    }
+
+    /// Does what the player's wish says, unless it is off. The wish is read here, under the lock: it may have been
+    /// switched off while we waited, and then this must not start anything.
+    fn follow_wish() -> bool {
+        let _one = SWITCH.lock();
+        super::share_wanted(Path::new(super::SHARE_DIR)) && enable_locked(false)
     }
 
     /// ROCKNIX starts Samba at boot when this setting is 1; pocket-ui switches it on per session. Written under
@@ -1459,10 +1494,17 @@ esac
     /// smbd stays on the address it started with (`bind interfaces only`, verified: not even
     /// SIGHUP adds a new one); after a new Wi-Fi address it is restarted so the share is reachable.
     pub fn rebind_sharing() {
-        let Some(ip) = ip_now().and_then(|ip| ip.parse().ok()) else { return };
-        if sharing_enabled() && !crate::sockets::listening(&crate::sockets::read(), ip, 445) {
-            let _ = Command::new("systemctl").args(["restart", "nmbd", "smbd"]).status();
+        if ip_now().is_some() {
+            follow_wish();
         }
+    }
+
+    /// Whether the games folder is on a read-only mount (a damaged card, a dirty NTFS card): smbd then runs and every
+    /// copy fails. Root isn't held back by a card's owners and modes, so this is the one way writing still fails.
+    pub fn share_read_only() -> bool {
+        // SAFETY: a NUL-terminated path, read only during the call.
+        let refused = unsafe { libc::access(b"/storage/roms\0".as_ptr().cast(), libc::W_OK) } != 0;
+        refused && std::io::Error::last_os_error().raw_os_error() == Some(libc::EROFS)
     }
 }
 
@@ -1557,10 +1599,16 @@ mod imp {
 
     pub fn rebind_sharing() {}
 
+    pub fn share_read_only() -> bool {
+        false
+    }
+
+    pub fn keep_sharing_on() {}
+
     pub fn watchdog(_net: std::sync::Arc<crate::net_state::NetState>) {}
 }
 
-pub use imp::{connected_ssid, watchdog, connect, disable_sharing, enable_sharing, ip, ip_now, rebind_sharing, scan, scan_checked, secure_sharing, share_password, sharing_enabled};
+pub use imp::{connected_ssid, watchdog, connect, disable_sharing, enable_sharing, ip, ip_now, keep_sharing_on, rebind_sharing, scan, scan_checked, secure_sharing, share_password, share_read_only, sharing_enabled};
 pub use imp::{connect_saved, connect_with, forget, saving, saving_until, scan_until, set_country, set_rocknix_setting};
 
 /// Two saved networks for the desktop preview and `--snapshot`: the one in use, and one out of reach.
@@ -1714,19 +1762,20 @@ mod tests {
         out
     }
 
-    /// K1 (the internal review): nobody on the Wi-Fi may write as root, without a password,
-    /// into folders root runs code from.
+    /// K1 (the internal review): nobody on the Wi-Fi may write without a password. Who has it writes as root
+    /// (docs/SECURITY-HARDENING.md), in `roms` only, and can't log in as root.
     #[test]
-    fn share_is_not_root_and_needs_a_password() {
+    fn share_writes_as_root_and_needs_the_password() {
         let conf = parse_conf(SMB_CONF);
         let global = &conf["global"];
         let share = &conf["games-roms"];
         let get = |m: &std::collections::HashMap<String, String>, k: &str| m.get(k).cloned().unwrap_or_default();
 
         assert_ne!(get(global, "guest account"), "root", "guest mapped to root");
-        let user = get(share, "force user");
-        assert!(!user.is_empty() && user != "root" && user != "0", "share must write as a non-root user, not {user:?}");
-        assert!(!get(share, "force group").is_empty() && get(share, "force group") != "root");
+        assert_eq!(get(share, "force user"), "root", "nothing under roms has to change owner");
+        assert_eq!(get(share, "path"), "/storage/roms");
+        assert_eq!(get(global, "follow symlinks"), "no");
+        assert_eq!(get(global, "wide links"), "no");
 
         // A password is required: no guest fallback, no public share, only our user, our own passdb.
         assert_eq!(get(global, "map to guest"), "never");
@@ -1739,12 +1788,11 @@ mod tests {
         assert!(passdb.starts_with("/storage/.config/pocket-ui/"), "our own smbpasswd, not ROCKNIX's: {passdb:?}");
         assert!(get(global, "invalid users").contains("root"));
 
-        // Code-bearing folders are not reachable over the share.
-        let veto = get(share, "veto files");
-        for dir in ["ports", "portmaster", "bios", "savestates"] {
-            assert!(veto.split('/').any(|v| v == dir), "{dir}/ must be vetoed, veto files = {veto:?}");
-        }
-        assert_ne!(get(share, "delete veto files"), "yes");
+        // Nothing under roms is hidden (2026-11-01): BIOS files, states and ports are copied over the share.
+        assert!(!SMB_CONF.contains("veto"), "no veto files");
+        // New files stay runnable for PortMaster; Samba doesn't turn the owner's x bit into the DOS archive flag.
+        assert_eq!(get(share, "force create mode"), "0755");
+        assert_eq!(get(share, "map archive"), "no");
 
         assert_eq!(get(global, "interfaces"), "wlan0");
         assert_eq!(get(global, "bind interfaces only"), "yes");
@@ -1787,19 +1835,25 @@ mod tests {
     }
 
     #[test]
-    fn adopts_games_but_not_code_folders_or_links() {
-        let dir = TestDir::new("adopt");
-        for d in ["gba/Hacks", "ports/PortMaster", "PortMaster", "BIOS", "savestates/gba"] {
-            std::fs::create_dir_all(dir.join(d)).unwrap();
-        }
-        std::fs::write(dir.join("gba/a.gba"), "x").unwrap();
-        std::fs::write(dir.join("ports/evil.sh"), "x").unwrap();
-        std::os::unix::fs::symlink("/etc", dir.join("gba/link")).unwrap();
-        let mut got: Vec<String> =
-            share_adoption(&dir, u32::MAX).iter().map(|p| p.strip_prefix(&dir).unwrap().to_string_lossy().into_owned()).collect();
-        got.sort();
-        assert_eq!(got, ["gba", "gba/Hacks", "gba/a.gba"]);
-        assert!(share_adoption(&dir, unsafe { libc::getuid() }).is_empty(), "nothing left once owned");
+    fn file_sharing_is_remembered_until_it_is_switched_off() {
+        let dir = TestDir::new("share-wanted");
+        let share = dir.join("share");
+        assert!(!share_wanted(&share), "off by default");
+        set_share_wanted(&share, true);
+        assert!(share_wanted(&share));
+        set_share_wanted(&share, true);
+        assert!(share_wanted(&share));
+        set_share_wanted(&share, false);
+        assert!(!share_wanted(&share));
+        set_share_wanted(&share, false);
+    }
+
+    #[test]
+    fn a_running_share_on_the_right_address_is_left_alone() {
+        assert!(!share_restart_needed(true, true), "a copy may be running");
+        assert!(share_restart_needed(true, false), "a new address");
+        assert!(share_restart_needed(false, false), "not running");
+        assert!(share_restart_needed(false, true), "a stale socket doesn't count as running");
     }
 
     #[test]

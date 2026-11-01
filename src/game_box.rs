@@ -178,6 +178,10 @@ pub struct Inputs<'a> {
 /// The box's state on an open card.
 #[derive(Default)]
 pub struct BoxView {
+    /// A phone's start of the game takes the case from here: nothing of it is painted.
+    pub hide_case: bool,
+    /// Where the case's front was painted last.
+    pub front_rect: Option<(i32, i32, i32, i32)>,
     /// The back is up (or turning to it).
     pub back: bool,
     flip_at: Option<Instant>,
@@ -480,6 +484,10 @@ impl BoxView {
         let x = (c.w - (cw + out)) / 2;
         let y = top + (hh - ch) / 2;
         let open = if off.is_some() { 1.0 } else { self.openness(Instant::now()) };
+        self.front_rect = Some((x, y, cw, ch));
+        if self.hide_case {
+            return (x, top, cw + out, hh);
+        }
         // Inside, its right edge at the case's; open, `out` past it.
         let gx = x + cw - gw + (out as f32 * open) as i32;
         let gy = y + (ch - gh) / 2;
@@ -820,9 +828,9 @@ pub(crate) fn about(d: &CardData) -> (Option<String>, Option<String>) {
         Summary::None => (d.sentence.clone(), None),
     };
     // The sentence made of the facts (`game_card::sentence`) is English only, and the facts under it say the same in
-    // the player's language: in German the back has no description then rather than an English one.
+    // the player's language: in any other language the back has no description then rather than an English one.
     let made_up = matches!(d.summary, Summary::None | Summary::Loading | Summary::Unavailable(_));
-    let about = about.filter(|_| !(made_up && crate::i18n::current() == crate::i18n::Lang::De));
+    let about = about.filter(|_| !(made_up && crate::i18n::current() != crate::i18n::Lang::En));
     (about.filter(|a| !a.trim().is_empty()), credit)
 }
 

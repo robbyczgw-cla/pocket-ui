@@ -622,7 +622,7 @@ impl Session {
             line("cookie-jar", Some(&self.jar().to_string_lossy()));
             line("user-agent", Some("Mozilla/5.0 (Linux; aarch64) pocket-ui sign-in helper"));
             line("header", Some("Accept: text/html,application/xhtml+xml,*/*;q=0.8"));
-            line("header", Some(if crate::i18n::current() == crate::i18n::Lang::De { "Accept-Language: de,en;q=0.8" } else { "Accept-Language: en,de;q=0.5" }));
+            line("header", Some(crate::i18n::current().accept_language()));
             if let Some(r) = referer {
                 line("referer", Some(r));
             }

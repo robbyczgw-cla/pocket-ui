@@ -30,7 +30,7 @@ this device, Pixel Path, frames and "Straight back into your game" are off by de
 | **Stickers** | On | On | Settings → Games → Curator |
 | **Play history** | As it is | On | Settings → Games → Curator ([Play history](curator.md#play-history)); on by default |
 | **Pixel Path** | Off | On | Settings → Games → Curator ("Pixel Path in the pause menu") |
-| **Pixel Path over every game** | As it is | On | Settings → Playing → [Over the game](settings.md#over-the-game) on Pixel Path ([Pixel Path over the game](pause-menu.md#pixel-path-over-the-game)); Off takes only that level away |
+| **Pixel Path over every game** | As it is | As it is | Settings → Playing → [Over the game](settings.md#over-the-game) on Pixel Path ([Pixel Path over the game](pause-menu.md#pixel-path-over-the-game)); Off takes only that level away |
 | **Screen frames on every console** | Off | On | Settings → Playing → [Screen frames](settings.md#screen-frames) |
 | **Straight back into your game** | Off | On | Settings → Playing → [On start](settings.md#on-start) (Last game) |
 | **Remember where I quit** | As it is | As it is | Settings → Playing → [Remember where I quit](settings.md#remember-where-i-quit) |

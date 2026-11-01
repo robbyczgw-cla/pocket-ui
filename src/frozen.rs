@@ -23,9 +23,9 @@ pub const NOTE_ENV: &str = "POCKET_START_NOTE";
 
 /// What pocket-core says when the core refuses the state.
 pub const REFUSED: &str = "Couldn't go back to that moment: started fresh";
-const GONE: &str = "Its saved moment is gone: started fresh";
-const OTHER_EMULATOR: &str = "Started fresh: its saved moment belongs to its other emulator";
-const CHANGED: &str = "The game's file changed: started fresh. The moment is still under Load";
+pub const GONE: &str = "Its saved moment is gone: started fresh";
+pub const OTHER_EMULATOR: &str = "Started fresh: its saved moment belongs to its other emulator";
+pub const CHANGED: &str = "The game's file changed: started fresh. The moment is still under Load";
 
 /// What the moment of a recent game was written with, kept in its `recents.json` entry when a session ends with a new
 /// state.
@@ -49,19 +49,27 @@ fn is_zero(n: &u64) -> bool {
 
 /// How much of a file is read to tell it from another one of the same size: its start, middle and end.
 const SAMPLE: u64 = 4096;
+/// Up to this size the whole file is read instead. A phone plays a private copy it has made of the document, with no card
+/// to spare, and a game patched in the middle looks the same to the samples: all cartridges are read whole there, and a
+/// bigger copy has its whole file's check beside it (`GameCopy.COPIED_EVERY_START`, change them together).
+const WHOLE_UP_TO: u64 = if cfg!(target_os = "android") { 64 << 20 } else { 0 };
 
 /// A game's size and a hash of what it holds: for a disc sheet (`.cue`, `.m3u`, `.gdi`) the sheet and every file it names,
 /// down to the tracks, so a swapped BIN or CHD counts as another game. The time isn't in it: a card copied on a PC, or a
 /// patched file with the old time, is judged by what is in the file. None when something can't be read.
 pub fn fingerprint(rom: &Path) -> Option<(u64, u64)> {
+    fingerprint_up_to(rom, WHOLE_UP_TO)
+}
+
+fn fingerprint_up_to(rom: &Path, whole_up_to: u64) -> Option<(u64, u64)> {
     let mut hash = 0xcbf29ce484222325u64;
     let mut bytes = 0u64;
     let mut seen = Vec::new();
-    mix_file(rom, 0, &mut hash, &mut bytes, &mut seen)?;
+    mix_file(rom, 0, whole_up_to, &mut hash, &mut bytes, &mut seen)?;
     Some((bytes, hash | 1))
 }
 
-fn mix_file(path: &Path, depth: u32, hash: &mut u64, bytes: &mut u64, seen: &mut Vec<PathBuf>) -> Option<()> {
+fn mix_file(path: &Path, depth: u32, whole_up_to: u64, hash: &mut u64, bytes: &mut u64, seen: &mut Vec<PathBuf>) -> Option<()> {
     use std::io::{Read, Seek, SeekFrom};
     if seen.iter().any(|p| p == path) {
         return Some(());
@@ -88,12 +96,28 @@ fn mix_file(path: &Path, depth: u32, hash: &mut u64, bytes: &mut u64, seen: &mut
             // A file the sheet names that isn't there (a sheet that names nothing real) leaves it as it is.
             let target = dir.join(name.replace('\\', "/"));
             if target.is_file() {
-                mix_file(&target, depth + 1, hash, bytes, seen)?;
+                mix_file(&target, depth + 1, whole_up_to, hash, bytes, seen)?;
             }
         }
         return Some(());
     }
     let mut buf = vec![0u8; SAMPLE as usize];
+    if len <= whole_up_to {
+        loop {
+            let n = file.read(&mut buf).ok()?;
+            if n == 0 {
+                return Some(());
+            }
+            feed(&buf[..n], hash);
+        }
+    }
+    // A phone's big copy (`GameCopy`, whole_up_to is only set there): what the whole file came to when it was copied, so
+    // that a patch between the samples is still another game. Without it (a copy nothing could vouch for) the samples say.
+    if whole_up_to > 0 {
+        if let Some(line) = std::fs::read_to_string(path.with_file_name(".stage")).ok().as_deref().and_then(|s| s.trim().split(' ').nth(2).map(str::to_owned)) {
+            feed(line.as_bytes(), hash);
+        }
+    }
     for at in [0, (len / 2).saturating_sub(SAMPLE / 2), len.saturating_sub(SAMPLE)] {
         file.seek(SeekFrom::Start(at)).ok()?;
         let n = file.read(&mut buf).ok()?;
@@ -139,7 +163,8 @@ pub struct Game {
 }
 
 /// The files the next start of this game would resume from, the first that exists; empty for an emulator without a
-/// moment to go back to (ports, ScummVM's, a game on an emulator without states).
+/// moment to go back to (ports, ScummVM's, a game on an emulator without states). On a phone: `frozen_phone::files`.
+#[cfg(not(target_os = "android"))]
 pub fn resume_files(g: &Game) -> Vec<PathBuf> {
     let stem = g.path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
     if g.emulator == "pocket-core" {
@@ -168,6 +193,7 @@ pub fn is_frozen(g: &Game, files: &[PathBuf]) -> bool {
 
 /// The paths of the newest [`MOST`] games that stand open, of the recent games given newest first. On a thread: it looks
 /// at the card, and for GameCube and 3DS reads the game file's header.
+#[cfg(not(target_os = "android"))]
 pub fn scan(games: &[Game]) -> Vec<PathBuf> {
     games.iter().filter(|g| is_frozen(g, &resume_files(g))).take(MOST).map(|g| g.path.clone()).collect()
 }
@@ -183,6 +209,7 @@ pub enum AtLaunch {
 }
 
 /// `shown`: the shelf showed the game as frozen. RetroArch's own start loads what it finds, so it stays as it is.
+#[cfg(not(target_os = "android"))]
 pub fn at_launch(g: &Game, shown: bool) -> AtLaunch {
     if g.emulator == "retroarch" {
         return AtLaunch::Normal;
@@ -191,7 +218,7 @@ pub fn at_launch(g: &Game, shown: bool) -> AtLaunch {
 }
 
 /// [`at_launch`] for a game whose state is there or not (`has_state`).
-fn at_launch_with(g: &Game, shown: bool, has_state: bool) -> AtLaunch {
+pub fn at_launch_with(g: &Game, shown: bool, has_state: bool) -> AtLaunch {
     match (&g.mark, has_state) {
         // The state is another emulator's or core's, or of another file: the normal start would load it, so it is skipped
         // (and stays). A mark outlives sessions that wrote no state (`next_mark`), so this holds after a detour too.
@@ -214,6 +241,7 @@ pub fn next_mark(previous: Option<Mark>, state_written: bool, new: impl FnOnce()
 }
 
 /// Whether Frozen games is on this device: not where the host owns the emulators and their states (the Steam Deck).
+#[cfg(not(target_os = "android"))]
 pub fn available() -> bool {
     !crate::device::current().host_owned()
 }
@@ -234,6 +262,29 @@ mod tests {
         std::fs::write(&rom, b"rom").unwrap();
         let state = d.join("Game.pstate.auto");
         (d, rom, state)
+    }
+
+    #[test]
+    fn a_big_copy_is_told_apart_by_its_whole_file_check_on_a_phone() {
+        let d = crate::testutil::TestDir::new("frozen-big-copy");
+        let rom = d.join("Game.iso");
+        std::fs::write(&rom, vec![7u8; 200_000]).unwrap();
+        let of = |up_to| fingerprint_up_to(&rom, up_to).unwrap();
+        let bare = of(10);
+        // Beside the copy after a copy; the same content and another time: the same game.
+        std::fs::write(d.join(".stage"), "200000 111 3735928559\n").unwrap();
+        let checked = of(10);
+        assert_ne!(checked, bare);
+        std::fs::write(d.join(".stage"), "200000 222 3735928559\n").unwrap();
+        assert_eq!(of(10), checked);
+        // The same samples, patched between them.
+        std::fs::write(d.join(".stage"), "200000 222 1234\n").unwrap();
+        assert_ne!(of(10), checked);
+        assert_eq!(of(0), bare_linux(&rom), "no check beside a handheld's file counts");
+    }
+
+    fn bare_linux(rom: &Path) -> (u64, u64) {
+        fingerprint_up_to(rom, 0).unwrap()
     }
 
     #[test]
@@ -320,6 +371,19 @@ mod tests {
         std::fs::write(&rom, vec![7u8; 20000]).unwrap();
         std::fs::File::options().write(true).open(&rom).unwrap().set_modified(before + std::time::Duration::from_secs(3600)).unwrap();
         assert!(mr.same_file(&rom), "a new time alone changes nothing");
+    }
+
+    #[test]
+    fn read_whole_a_patch_between_the_samples_shows() {
+        let d = TestDir::new("frozen-whole");
+        let rom = d.join("Game.gb");
+        std::fs::write(&rom, vec![7u8; 64 * 1024]).unwrap();
+        let (sampled, whole) = (fingerprint_up_to(&rom, 0), fingerprint_up_to(&rom, u64::MAX));
+        let mut patched = vec![7u8; 64 * 1024];
+        patched[8192] = 8;
+        std::fs::write(&rom, patched).unwrap();
+        assert_eq!(fingerprint_up_to(&rom, 0), sampled, "the samples don't see it");
+        assert_ne!(fingerprint_up_to(&rom, u64::MAX), whole);
     }
 
     #[test]

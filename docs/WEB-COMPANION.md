@@ -157,15 +157,14 @@ totals under **Play time**. Charts are drawn for the width they get and again wh
 `files.rs`. Three kinds of place only:
 
 - **Games**: the system's folder from es_systems.cfg, only inside `/storage/roms`, never `ports`, `bios`,
-  `portmaster`, `savestates` or `port-files`, never a system whose extensions are scripts or programs; the folder,
+  `portmaster` or `savestates`, never a system whose extensions are scripts or programs; the folder,
   once links are followed, must still be inside the ROMs folder and its first folder there must still not be one of
   those (a link `roms/gba` → `roms/ports` is refused); it is made if missing, one level below. The file is written
   through the resolved folder. The name must end in one of the system's extensions.
 - **BIOS**: `roms/bios` (itself checked the same way), or `roms/bios/dc` for the files `hostsys` names there (the
   folder spelt as hostsys spells it, not as sent; not a link). No scripts, no programs.
-- **PortMaster**: `roms/port-files/<port>/<relative path>` for an installed port that says it is not ready to run and
-  whose instructions name a place (`port_files::drop_target`); pocket-ui moves the files into the port at its next
-  start, never over an existing file, never a link (`port_files::take_dropped`, as for the file share). Every folder
+- **PortMaster**: `roms/ports/<port>/<folder>/<relative path>` for an installed port that says it is not ready to
+  run; `<folder>` is the one its instructions name (`port_files::place`), else none. Every folder
   on the way is made by us and must not be a link; at most 12 levels; no scripts (`.sh`, `.bash`, `.py`, `.pl`), no
   native code by name (`.so`, `.so.N…`, `.elf`, `.ko`, `.AppImage`, `.run`) or by content (a file that starts with
   the ELF magic is refused while it arrives and nothing is kept).
@@ -199,7 +198,7 @@ Out of scope: someone with SSH or the card in hand.
 | Another user's device on the tailnet (shared node) or a tagged node | Yes, if the tailnet's ACLs allow | `whois` names another user or a tag: a code is needed, which only the Pocket's screen shows. Guessing: one try a second, five per code, 1 in 200 000 per code |
 | The owner's own device, with a malicious website open | Yes (the browser can send requests to 100.x) | No CORS; the origin check refuses requests marked cross-site; writes need the CSRF token, which the other site can't read; `SameSite=Strict` cookies; the Host check stops DNS rebinding; `X-Frame-Options`/`frame-ancestors` stop framing |
 | A paired browser that is lost | Yes | Revoke it in Settings → Connections → Web companion → Paired browsers; the token is useless from then on (only its hash was kept) |
-| A malicious authorised user (the owner or a paired friend) | Yes | Can write only into the three kinds of place above, never over a file without asking, never a script or native code, never into `ports/`; cannot read files other than covers, the library data and the screen (never while it shows Settings or a first-start step). Not a code-execution boundary for ports: a port's engine reads the data the player drops (that is what the drop is for), may run data in formats of its own (Lua, a game's own bytecode), and `take_dropped` lets a dropped file replace a placeholder (`readme*`, `.txt`, `.md`, empty) in the port. That is the same trust as the file share, which can write the same folders |
+| A malicious authorised user (the owner or a paired friend) | Yes | Can write only into the three kinds of place above, never over a file without asking, never a script or native code, in `ports/` only into the folder of an installed port that waits for files; cannot read files other than covers, the library data and the screen (never while it shows Settings or a first-start step). Not a code-execution boundary for ports: a port's engine reads the data the player uploads (that is what the upload is for) and may run data in formats of its own (Lua, a game's own bytecode). That is the same trust as the file share, which can write the same folders |
 | Someone using the owner's Tailscale account on another device (family, a server added with the owner's key) | Yes | With "Your Tailscale devices" Open, nothing: the trust unit is the account (the manual says so). Code makes every browser pair, and revoking then locks a device out |
 | A slow or flooding client | Yes (tailnet only) | 15 s for the head, three workers, a queue of 24, `503` beyond; all at the lowest priority, so games and menus come first |
 

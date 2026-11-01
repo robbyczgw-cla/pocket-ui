@@ -78,9 +78,9 @@ P2_SIZE=65536
 # models differ in exactly one file, the FAT root's dtb.img (a copy of device_trees/<model>.dtb).
 # Checked by hand on 2026-10-30, see docs/SD-IMAGE.md "H700".
 # ---------------------------------------------------------------------------------------------------------------
-# The DDR4 image. The RG35XX Plus reads vdd-dram = 1.1 V = DDR4 (checked on the author's unit). The RG35XX SP and the
-# RG28XX are expected to be DDR4 too (ROCKNIX's pages say LPDDR4 for both) but that is NOT confirmed on the units: a
-# wrong RAM type does not boot (the U-Boot at 8 KiB of the card cannot start the RAM), the card is not harmed.
+# The DDR4 image. The RG35XX Plus reads vdd-dram = 1.1 V = DDR4 (checked on the author's unit), and the owner's RG28XX
+# booted this image (2026-10-31). The RG35XX SP is expected to be DDR4 too (ROCKNIX's pages say LPDDR4) but that is NOT
+# confirmed on a unit: a wrong RAM type does not boot (the U-Boot at 8 KiB of the card cannot start the RAM), the card is not harmed.
 H700_IMG=ROCKNIX-H700.aarch64-20261001-DDR4.img
 H700_URL=https://github.com/ROCKNIX/distribution/releases/download/20261001/ROCKNIX-H700.aarch64-20261001-DDR4.img.gz
 H700_GZ_SHA256=cd070faf05754b77a3f8687e4add5e00fc7d261518d8fc95dea188f2ef9eb9d4
@@ -115,3 +115,69 @@ usr/config/amiberry/whdboot/boot-data.zip Devs/Kickstarts/*.RTB
 # md5 of the repacked H700 SYSTEM (same mksquashfs settings); "unset" for one build prints it. Two independent strip
 # runs (2026-10-31, side by side; the same md5 as on 2026-10-30) gave this md5; a build that does not reproduce it is refused.
 H700_POCKET_SYSTEM_MD5=81d174ea53cca597f909ca109547b149
+
+# ---------------------------------------------------------------------------------------------------------------
+# SM8550 family (Snapdragon 8 Gen 2; AYN Odin 2 family, Retroid Pocket 6 and Nova): scripts/make-image-family.sh. Same
+# ROCKNIX tag and commit. Nothing on the card boots it: ROCKNIX's ABL, flashed into the handheld once from Android,
+# starts KERNEL (an Android boot image holding every model's device tree). We never flash it, and it is not on our card.
+# So there is no GRUB and no dtb.img, and the images of one family differ only in their name and notes.
+# ---------------------------------------------------------------------------------------------------------------
+SM8550_IMG=ROCKNIX-SM8550.aarch64-20261001.img
+SM8550_URL=https://github.com/ROCKNIX/distribution/releases/download/20261001/ROCKNIX-SM8550.aarch64-20261001.img.gz
+SM8550_GZ_SHA256=2314561e75bc8dbbc91a7dd5aac719d49ed98d07428d8d0967797a79c0b3b16f
+SM8550_IMG_SHA256=33d4119f7d4822fdddb8ef0cfb41295bae62aaed323e663516dbabffa579a0fe
+SM8550_KERNEL_MD5=50d85d0461b8ce820f494c50e317112c
+SM8550_SYSTEM_MD5=2bcc1d80a64b8c1739d2aec9e24b54f9
+# Models: as H700_MODELS; "-" and "-" for the tree and its md5, because KERNEL carries the trees (the check finds the
+# model string in it). Only the Odin 2 Mini has a unit to test.
+SM8550_MODELS="
+odin2-mini - - AYN_Odin_2_Mini
+odin2 - - AYN_Odin_2
+odin2-portal - - AYN_Odin_2_Portal
+rp6 - - Retroid_Pocket_6
+nova - - Retroid_Pocket_Nova
+"
+# SYSTEM on an SM8550 card, as for the SM8250 list above. The firmware of devices we don't list goes (AYANEO Pocket
+# family, AYN Thor; ROCKNIX's extra-firmware, which states no licence). The rest of extra-firmware STAYS because the listed
+# devices need it (sound and battery run on the ADSP): an open licence question, deploy/image/firmware-licences-sm8550/README.txt.
+# DraStic stays unchanged as on the H700. usr/share/bootloader/rocknix_abl goes: without it ROCKNIX's update.sh cannot flash.
+SM8550_SYSTEM_REMOVE="
+usr/config/amiberry/whdboot/save-data/Kickstarts/kick33180.A500.RTB
+usr/config/amiberry/whdboot/save-data/Kickstarts/kick33192.A500.RTB
+usr/config/amiberry/whdboot/save-data/Kickstarts/kick34005.A500.RTB
+usr/config/amiberry/whdboot/save-data/Kickstarts/kick40063.A600.RTB
+usr/config/amiberry/whdboot/save-data/Kickstarts/kick40068.A1200.RTB
+usr/config/amiberry/whdboot/save-data/Kickstarts/kick40068.A4000.RTB
+usr/lib/kernel-overlays/base/lib/firmware/qcom/sm8550/ayaneo
+usr/lib/kernel-overlays/base/lib/firmware/qcom/sm8550/ayn/thor
+usr/share/bootloader/rocknix_abl
+usr/share/idtech/doom.tar.gz
+"
+SM8550_SYSTEM_ZIP_REMOVE="
+usr/config/amiberry/whdboot/boot-data.zip Devs/Kickstarts/*.RTB
+"
+# md5 of the repacked SM8550 SYSTEM; two strip runs side by side (2026-10-31) gave this md5.
+SM8550_POCKET_SYSTEM_MD5=ca26139c1ec4416b42bb3ea80a014e99
+
+# The firmware licence texts a family shares with deploy/image/firmware-licences/.
+H700_FW_SHARED="LICENCE.rtlwifi_firmware.txt wireless-regdb-LICENSE"
+SM8550_FW_SHARED="LICENCE.rtlwifi_firmware.txt LICENSE.QualcommAtheros_ath10k LICENSE.qcom qca-NOTICE.txt qcom-NOTICE.txt wireless-regdb-LICENSE"
+
+# A family's pins under one set of names, for the scripts all such families share.
+# Cards that make a GAMES drive at their first start (docs/SD-IMAGE.md, "The GAMES drive"), by model. ROCKNIX's layout, with
+# STORAGE over the whole card, is the standard on every image; two partitions for a player to think about are only worth
+# it on a handheld with no Wi-Fi chip, which has no file sharing (RG28XX; the RG35XX 2024 too, if it gets an image).
+H700_GAMES_DRIVE_MODELS="rg28xx"
+SM8550_GAMES_DRIVE_MODELS=""
+# has_games_drive FAMILY MODEL
+has_games_drive() {
+  eval "pu_list=\${${1}_GAMES_DRIVE_MODELS:-}"
+  case " $pu_list " in *" $2 "*) return 0 ;; esac
+  return 1
+}
+
+family_pins() {
+  for v in IMG URL GZ_SHA256 IMG_SHA256 KERNEL_MD5 SYSTEM_MD5 MODELS SYSTEM_REMOVE SYSTEM_ZIP_REMOVE POCKET_SYSTEM_MD5 FW_SHARED; do
+    eval "FAM_$v=\${${1}_$v}"
+  done
+}

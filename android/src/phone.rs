@@ -59,6 +59,31 @@ impl Ui {
     pub(super) fn target(&mut self, area: Area, label: &str, action: Action) {
         self.region(area, label.into(), action);
     }
+    /// What Play does for the selected game: goes back to its moment when it stands open.
+    fn play_word(&self) -> &'static str {
+        if self.game().is_some_and(|g| self.is_frozen(&g.key)) {
+            "Resume"
+        } else {
+            "Play"
+        }
+    }
+    /// The primary button of the selected game. Named Play for screen readers and tests whatever it says: the line
+    /// under the name reads out Frozen.
+    fn play_pill(&mut self, c: &mut Canvas, text: &mut Text, area: Area) {
+        let word = self.play_word();
+        self.pill(c, text, area, word, true, Action::Press(Button::East));
+        if let Some(region) = self.regions.last_mut() {
+            region.label = super::tr("Play");
+        }
+    }
+    /// The line under a game's name: its system, after "Frozen" when it stands open.
+    fn system_line(&self, game: &Game) -> String {
+        if self.is_frozen(&game.key) {
+            format!("{} · {}", super::tr("Frozen"), game.system)
+        } else {
+            game.system.to_string()
+        }
+    }
     /// A pill button: paper with ink for the primary action, the sheet's pill colour otherwise. The label is
     /// centred and never cut while it fits at a slightly smaller size.
     pub(super) fn pill(&mut self, c: &mut Canvas, text: &mut Text, area: Area, label: &str, primary: bool, action: Action) {
@@ -111,7 +136,7 @@ impl Ui {
             // A fact's list belongs to the card's tab, Rediscover to Curator.
             Screen::Connection if self.list_from_curator() => Screen::Curator,
             Screen::Connection => Screen::Library,
-            Screen::Quick | Screen::Extras => Screen::Settings,
+            Screen::Quick | Screen::Extras | Screen::GameCheck => Screen::Settings,
             s => s,
         };
         let margin = if landscape { self.d(24.0) } else { 0 };
@@ -223,8 +248,9 @@ impl Ui {
         let bar = if keyboard { c.h } else { self.tab_bar(c, text) };
         let hints: Vec<(&str, &str)> = match self.screen {
             _ if keyboard => vec![("A", "Choose"), ("B", "Delete"), ("START", "Done")],
+            Screen::GameCheck => vec![("A", "Choose"), ("B", "Back"), ("X", "Check again")],
             Screen::Settings | Screen::Extras | Screen::Quick | Screen::Curator | Screen::Facet => vec![("A", "Choose"), ("B", "Back"), ("L1/R1", "Tabs")],
-            _ => vec![("A", "Play"), ("X", "Info"), ("Y", "Favourite"), ("L1/R1", "Tabs"), ("START", "Settings")],
+            _ => vec![("A", self.play_word()), ("X", "Info"), ("Y", "Favourite"), ("L1/R1", "Tabs"), ("START", "Settings")],
         };
         let bottom = if keyboard { bar } else { self.hint_row(c, text, bar, &hints) };
         let (title, note) = match self.screen {
@@ -237,6 +263,7 @@ impl Ui {
             Screen::Curator => ("Curator".into(), String::new()),
             Screen::Quick => ("Quick settings".into(), String::new()),
             Screen::Extras => ("Cozy extras".into(), String::new()),
+            Screen::GameCheck => (self.check_title(), String::new()),
             _ => ("Settings".into(), String::new()),
         };
         let top = self.header(c, text, &title, &note);
@@ -249,6 +276,7 @@ impl Ui {
                 let rows = self.menu_rows();
                 self.paint_menu_phone(c, text, room, rows);
             }
+            Screen::GameCheck => self.paint_check(c, text, room),
             Screen::Search => self.paint_search_phone(c, text, room, cover),
             _ => self.paint_games_phone(c, text, room, cover),
         }
@@ -408,11 +436,14 @@ impl Ui {
         let name_w = info.x - margin - self.d(12.0);
         let name = text.fit(Face::Title, self.sp(20.0), &game.name, name_w);
         text.draw(c, Face::Title, self.sp(20.0), margin, y + h / 2 - self.d(2.0), pal().chalk, &name);
-        let system = text.fit(Face::Body, self.sp(14.0), game.system, name_w);
+        let line = self.system_line(&game);
+        let system = text.fit(Face::Body, self.sp(14.0), &line, name_w);
         text.draw(c, Face::Body, self.sp(14.0), margin, y + h / 2 + self.d(20.0), pal().dust, &system);
+        // Read out, not tapped: the name's target below lies over it.
+        self.target(Area::new(margin, y + h / 2 + self.d(4.0), name_w, self.d(20.0)), &line, Action::Label);
         self.target(Area::new(margin, y, name_w, h), &game.name, Action::Press(Button::North));
         self.pill(c, text, info, "Info", false, Action::Press(Button::North));
-        self.pill(c, text, play, "Play", true, Action::Press(Button::East));
+        self.play_pill(c, text, play);
     }
     /// Landscape: the selected game's picture (or the Cabinet's TV), its name and system, Info and Play.
     fn side_panel(&mut self, c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, i32), cover: Option<&Image>) {
@@ -422,10 +453,12 @@ impl Ui {
         let gap = self.d(8.0);
         let info_w = (w - gap) * 2 / 5;
         self.pill(c, text, Area::new(x, buttons_y, info_w, bh), "Info", false, Action::Press(Button::North));
-        self.pill(c, text, Area::new(x + info_w + gap, buttons_y, w - info_w - gap, bh), "Play", true, Action::Press(Button::East));
+        self.play_pill(c, text, Area::new(x + info_w + gap, buttons_y, w - info_w - gap, bh));
         let system_base = buttons_y - self.d(14.0);
-        let system = text.fit(Face::Body, self.sp(14.0), game.system, w);
+        let line = self.system_line(&game);
+        let system = text.fit(Face::Body, self.sp(14.0), &line, w);
         text.draw(c, Face::Body, self.sp(14.0), x, system_base, pal().dust, &system);
+        self.target(Area::new(x, system_base - self.d(14.0), w, self.d(18.0)), &line, Action::Label);
         let size = self.sp(22.0);
         let lines = text.wrap_at_most(Face::Title, size, &game.name, w, 2);
         let step = size as i32 + self.d(2.0);
@@ -482,7 +515,13 @@ impl Ui {
         let lib = self.library.as_ref()?;
         let game = &lib.games[index];
         let key = (index, selected);
-        if let Some(pic) = self.cards.get(&key).filter(|p| p.w <= w && p.h <= h && (p.w + 2 >= w || p.h + 2 >= h)) {
+        // A frozen game's front keeps its size: what is inside comes out into the gap beside it.
+        let frozen = self.frozen.contains(&game.key);
+        let peek = self.d(AJAR_MOST_DP);
+        if let Some(pic) = self.cards.get(&key).filter(|p| {
+            let front_w = p.w - if frozen { peek } else { 0 };
+            front_w <= w && p.h <= h && (front_w + 2 >= w || p.h + 2 >= h)
+        }) {
             return Some(pic.clone());
         }
         let m = Medium::of(game.system_id);
@@ -494,13 +533,27 @@ impl Ui {
             plastic: art::plastic(game.system_id),
         };
         let console = pocket_ui::system_art::get(game.system_id);
-        let mut pic = media::front(text, m, k, look, &game.name, if selected { cover } else { None }, console, game.system);
+        let label = if selected { cover } else { None };
+        let mut pic = media::front(text, m, k, look, &game.name, label, console, game.system);
         let mut stickers = pocket_ui::case_stickers::CaseStickers::default();
         stickers.set(pocket_ui::case_stickers::Kind::Favourite, self.prefs.extras.case_stickers && self.prefs.favorites.contains(&game.key), 2026);
         pocket_ui::case_stickers::on_front(text, &mut pic, &stickers, media::label_rect(m, k), index as u64);
         if pic.w > w || pic.h > h {
             let s = (w as f32 / pic.w as f32).min(h as f32 / pic.h as f32);
             pic = pic.scaled((pic.w as f32 * s) as i32, (pic.h as f32 * s) as i32);
+        }
+        if frozen {
+            // What is inside comes a little out of the side (`app_cabinet::paint_ajar_game`); always this wide, so the
+            // cached picture's front is known.
+            if let Some(inside) = super::game_inside(text, game, (m, pic.h), look, label, self.prefs.extras.printed_discs) {
+                pic = ajar_front(pic, &inside, peek);
+            } else {
+                let mut wider = art::Pic::new(pic.w + peek, pic.h, 0);
+                for y in 0..pic.h {
+                    wider.px[(y * wider.w) as usize..][..pic.w as usize].copy_from_slice(&pic.px[(y * pic.w) as usize..][..pic.w as usize]);
+                }
+                pic = wider;
+            }
         }
         self.cards.insert(key, pic.clone());
         Some(pic)
@@ -571,15 +624,21 @@ impl Ui {
                 let Some(&index) = self.visible.get(pos) else { break };
                 let selected = pos == self.selected;
                 let Some(pic) = self.front_pic(text, index, selected, (cell_w, case_h), cover) else { continue };
-                let x = margin + col as i32 * (cell_w + gap) + (cell_w - pic.w) / 2;
+                let x = margin + col as i32 * (cell_w + gap) + ((cell_w - pic.w) / 2).max(0);
                 let up = if selected { lift } else { 0 };
                 let py = base - pic.h - up;
-                if selected {
+                // Its start is on its way (`insert`): the case goes from here, its place stays empty.
+                let leaving = selected && self.launching;
+                if leaving {
+                    self.front_at = Some(((x, room.top + py, pic.w, pic.h), pic.clone()));
+                } else if selected {
                     // The lifted case's shadow on the board.
                     clip.shade_rect(x + self.d(4.0), base - self.d(3.0), pic.w - self.d(8.0), self.d(3.0), 0, 120);
                 }
-                art::blit(&mut clip, &pic, x, py, shade, (0, i32::MAX));
-                if selected && self.controller_hints() {
+                if !leaving {
+                    art::blit(&mut clip, &pic, x, py, shade, (0, i32::MAX));
+                }
+                if selected && !leaving && self.controller_hints() {
                     clip.frame(x - self.d(3.0), py - self.d(3.0), pic.w + self.d(6.0), pic.h + self.d(6.0), self.d(2.0), pal().chalk);
                 }
                 let name = self.library.as_ref().map(|l| l.games[index].name.clone()).unwrap_or_default();
@@ -620,9 +679,13 @@ impl Ui {
                 let (fg, quiet) = if selected { (pal().ink, pal().ink) } else { (pal().chalk, pal().dust) };
                 let favourite = self.prefs.favorites.contains(&game.key);
                 let k = (self.d(16.0) / 16).max(1);
-                let star_w = if favourite { 16 * k + self.d(12.0) } else { 0 };
+                let mut star_w = if favourite { 16 * k + self.d(12.0) } else { 0 };
                 if favourite {
                     pocket_ui::ui_art::paint_tinted(&mut clip, Art::Icon(Icon::Favourites), x + w - self.d(12.0) - 16 * k, y + (h - 16 * k) / 2, k, if selected { pal().ink } else { pal().amber });
+                }
+                if self.frozen.contains(&game.key) {
+                    text.draw_right(&mut clip, Face::Body, self.sp(13.0), x + w - self.d(12.0) - star_w, y + h / 2 + self.d(5.0), fg, "Frozen");
+                    star_w += text.width(Face::Body, self.sp(13.0), "Frozen") + self.d(12.0);
                 }
                 let name = text.fit(Face::Title, self.sp(18.0), &game.name, w - self.d(32.0) - star_w);
                 text.draw(&mut clip, Face::Title, self.sp(18.0), x + self.d(18.0), y + h / 2 - self.d(2.0), fg, &name);
@@ -700,8 +763,13 @@ impl Ui {
                 break;
             }
             let up = if selected { self.d(10.0) } else { 0 };
-            art::blit(c, &pic, x, base - pic.h - up, shade, (room.top, room.bottom));
-            if selected && self.controller_hints() {
+            let leaving = selected && self.launching;
+            if leaving {
+                self.front_at = Some(((x, base - pic.h - up, pic.w, pic.h), pic.clone()));
+            } else {
+                art::blit(c, &pic, x, base - pic.h - up, shade, (room.top, room.bottom));
+            }
+            if selected && !leaving && self.controller_hints() {
                 c.frame(x - self.d(3.0), base - pic.h - up - self.d(3.0), pic.w + self.d(6.0), pic.h + self.d(6.0), self.d(2.0), pal().chalk);
             }
             if !selected {
@@ -755,12 +823,14 @@ impl Ui {
             self.cards.clear();
         }
         let key = (index, false);
-        if let Some(pic) = self.cards.get(&key).filter(|p| p.h == case_h) {
-            return pic.clone();
-        }
         let game = &self.library.as_ref().unwrap().games[index];
         let m = Medium::of(game.system_id);
         let k = case_h as f32 / m.size().h as f32;
+        let frozen = self.frozen.contains(&game.key);
+        let want = case_h + if frozen { media::ajar_peek(k) } else { 0 };
+        if let Some(pic) = self.cards.get(&key).filter(|p| p.h == want) {
+            return pic.clone();
+        }
         let look = art::Look {
             color: game.color,
             band: game.color,
@@ -773,6 +843,9 @@ impl Ui {
         pocket_ui::case_stickers::on_spine(text, &mut pic, &stickers, (lx, 0, lw, ly), index as u64);
         if pic.h != case_h && pic.h > 0 {
             pic = pic.scaled(pic.w * case_h / pic.h, case_h);
+        }
+        if frozen {
+            pic = media::ajar_spine(text, pic, game.system_id, std::path::Path::new(&game.relative), k, look);
         }
         self.cards.insert(key, pic.clone());
         pic
@@ -851,10 +924,15 @@ impl Ui {
         text.draw(c, Face::Title, hs, tx + (w - hw) / 2, y, pal().chalk, &heading_shown);
         self.target(Area::new(tx, y - hs as i32, w, hs as i32 + self.d(8.0)), heading, Action::Label);
         y += self.d(10.0);
+        let line_top = y;
         for l in &lines {
             y += self.d(24.0);
             let lw = text.width(Face::Body, self.sp(16.0), l);
             text.draw(c, Face::Body, self.sp(16.0), tx + (w - lw) / 2, y, pal().dust, l);
+        }
+        // The words are read out too, not only the heading.
+        if !lines.is_empty() {
+            self.target(Area::new(tx, line_top, w, y - line_top + self.d(4.0)), line, Action::Label);
         }
         if let Some((label, action)) = button {
             y += self.d(28.0);
@@ -975,6 +1053,7 @@ impl Ui {
             {
                 let mut card = Canvas::new(&mut buf, bw.max(1) as u32, bh_card.max(1) as u32);
                 card.clear(pal().void);
+                self.card_origin = (0, 0);
                 self.paint_box(&mut card, text, cover);
             }
             for y in 0..bh_card.min(c.h) {
@@ -999,7 +1078,7 @@ impl Ui {
             }
             let play_h = self.d(52.0);
             let mut y = c.h - hint_h - self.d(12.0) - play_h;
-            self.pill(c, text, Area::new(col_x, y, col_w, play_h), "Play", true, Action::Press(Button::East));
+            self.play_pill(c, text, Area::new(col_x, y, col_w, play_h));
             for (label, action) in secondary.into_iter().rev() {
                 y -= bh + gap;
                 self.pill_in(c, text, Area::new(col_x, y, col_w, bh), label, colors(label), action);
@@ -1047,6 +1126,7 @@ impl Ui {
             {
                 // The shared painter keeps a hint strip of its own at the bottom; it goes under the buttons.
                 let mut card = c.rows(head, head + box_h);
+                self.card_origin = (0, head);
                 self.paint_box(&mut card, text, cover);
             }
             self.link_targets((0, head));
@@ -1056,7 +1136,7 @@ impl Ui {
             }
             c.rect(0, top, c.w, c.h - top, pal().void);
             let w = c.w - 2 * margin;
-            self.pill(c, text, Area::new(margin, top + gap, w, bh), "Play", true, Action::Press(Button::East));
+            self.play_pill(c, text, Area::new(margin, top + gap, w, bh));
             let n = secondary.len() as i32;
             let sw = (w - gap * (n - 1)) / n;
             for (i, (label, action)) in secondary.into_iter().enumerate() {
@@ -1064,7 +1144,7 @@ impl Ui {
             }
         }
         if hints {
-            let mut keys = vec![("A", "Play"), ("B", "Back"), ("Y", "Favourite")];
+            let mut keys = vec![("A", self.play_word()), ("B", "Back"), ("Y", "Favourite")];
             if boxed {
                 keys.insert(2, ("X", "Turn over"));
             }
@@ -1140,6 +1220,34 @@ impl Ui {
 /// The middle of a line of `size` px to its baseline.
 pub(super) fn type_mid(size: u32) -> i32 {
     type_scale::mid(size)
+}
+/// How far a frozen game's front shows what is inside.
+const AJAR_MOST_DP: f32 = 10.0;
+/// The case `front` with `inside` behind it, out of its side by `peek`. The picture only grows sideways.
+fn ajar_front(front: art::Pic, inside: &art::Pic, peek: i32) -> art::Pic {
+    let (gw, gh) = (inside.w, inside.h);
+    let mut pic = art::Pic::new(front.w + peek, front.h.max(gh), 0);
+    let top = (pic.h - front.h) / 2;
+    let (gx, gy) = (front.w + peek - gw, (pic.h - gh) / 2);
+    for y in 0..gh {
+        for x in 0..gw {
+            let (px, at) = (inside.px[(y * gw + x) as usize], (y + gy) * pic.w + x + gx);
+            if px >> 24 != 0 && gx + x >= 0 {
+                pic.px[at as usize] = px;
+            }
+        }
+    }
+    for y in 0..front.h {
+        for x in 0..front.w {
+            let px = front.px[(y * front.w + x) as usize];
+            let at = ((y + top) * pic.w + x) as usize;
+            // A soft edge keeps what lies behind it only where there is nothing under the front to mix with.
+            if px >> 24 >= 128 || pic.px[at] == 0 {
+                pic.px[at] = px;
+            }
+        }
+    }
+    pic
 }
 fn c_band(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, color: u32) {
     c.round_rect(x, y, w, h, h / 2, color);

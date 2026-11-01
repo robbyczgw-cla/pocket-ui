@@ -1,24 +1,30 @@
 #!/bin/sh
-# Offline checks of a pocket-ui H700 SD image (the H700 half of scripts/image/check.sh). Runs in the
-# pocket-image-tools container (scripts/check-image-h700.sh starts it), with the repository at /repo. Only reads
-# the image: the FAT partition through mtools, STORAGE as a copy.
-#   check-h700.sh IMG VERSION WORKDIR MODEL
+# Offline checks of a pocket-ui SD image of a family that boots ROCKNIX's own way: FAMILY=H700 or SM8550 (the other half
+# of scripts/image/check.sh). Runs in the pocket-image-tools container (scripts/check-image-family.sh starts it), with the
+# repository at /repo. Only reads the image: the FAT partition through mtools, STORAGE as a copy.
+#   FAMILY=H700 check-h700.sh IMG VERSION WORKDIR MODEL
 set -u
 . /repo/scripts/image/pins.sh
 IMG=$1
 VERSION=$2
 W=$3
 MODEL=$4
-set -- $(echo "$H700_MODELS" | awk -v m="$MODEL" '$1 == m { print $2, $3, $4 }')
-[ $# = 3 ] || { echo "FAIL $MODEL is not in H700_MODELS"; exit 1; }
+FAMILY=${FAMILY:-H700}
+FAM=$(echo "$FAMILY" | tr 'A-Z' 'a-z')
+family_pins "$FAMILY"
+# This model's card makes a GAMES drive (pins.sh); every other one is ROCKNIX's layout, with none of its files on it.
+GAMES=0
+has_games_drive "$FAMILY" "$MODEL" && GAMES=1
+set -- $(echo "$FAM_MODELS" | awk -v m="$MODEL" '$1 == m { print $2, $3, $4 }')
+[ $# = 3 ] || { echo "FAIL $MODEL is not in ${FAMILY}_MODELS"; exit 1; }
 DTB_NAME=$1
 DTB_MD5_WANT=$2
 DT_MODEL=$(echo "$3" | tr _ ' ')
 # The family's pins under the names the shared checks use.
-SYSTEM_REMOVE=$H700_SYSTEM_REMOVE
-SYSTEM_ZIP_REMOVE=$H700_SYSTEM_ZIP_REMOVE
-POCKET_SYSTEM_MD5=$H700_POCKET_SYSTEM_MD5
-KERNEL_MD5=$H700_KERNEL_MD5
+SYSTEM_REMOVE=$FAM_SYSTEM_REMOVE
+SYSTEM_ZIP_REMOVE=$FAM_SYSTEM_ZIP_REMOVE
+POCKET_SYSTEM_MD5=$FAM_POCKET_SYSTEM_MD5
+KERNEL_MD5=$FAM_KERNEL_MD5
 FAT="$IMG@@$((P1_START * 512))"
 fails=0
 warns=0
@@ -48,16 +54,23 @@ mkdir -p "$W/fat" "$W/lists"
 
 echo "== partition table"
 sfdisk -d "$IMG" >"$W/lists/sfdisk" 2>/dev/null
-part() { grep "^$IMG$1 " "$W/lists/sfdisk" | sed 's/^[^:]*: *//'; }
-check "MBR (dos), as ROCKNIX's H700 image" 'grep -qx "label: dos" "$W/lists/sfdisk"'
+part() { grep "^$IMG$1 " "$W/lists/sfdisk" | sed 's/^[^:]*: *//; s/, uuid=[^,]*//'; }
 check "exactly two partitions" '[ "$(grep -c "^$IMG[0-9]" "$W/lists/sfdisk")" = 2 ]'
+if [ "$FAMILY" = H700 ]; then
+check "MBR (dos), as ROCKNIX's H700 image" 'grep -qx "label: dos" "$W/lists/sfdisk"'
 check "p1 FAT32 (LBA), bootable, as in ROCKNIX $ROCKNIX_TAG" \
   '[ "$(part 1)" = "start=       $P1_START, size=     $P1_SIZE, type=c, bootable" ]'
 check "p2 Linux, as in ROCKNIX $ROCKNIX_TAG" '[ "$(part 2)" = "start=     $P2_START, size=       $P2_SIZE, type=83" ]'
+else
+check "GPT, as ROCKNIX's $FAMILY image" 'grep -qx "label: gpt" "$W/lists/sfdisk"'
+check "p1 \"system\", as in ROCKNIX $ROCKNIX_TAG" \
+  '[ "$(part 1)" = "start=       $P1_START, size=     $P1_SIZE, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7, name=\"system\", attrs=\"LegacyBIOSBootable\"" ]'
+check "p2 \"storage\", as in ROCKNIX $ROCKNIX_TAG" '[ "$(part 2)" = "start=     $P2_START, size=       $P2_SIZE, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name=\"storage\"" ]'
+fi
 check "image size unchanged (2,198,863,872 bytes)" '[ "$(stat -c %s "$IMG")" = 2198863872 ]'
 # ROCKNIX's U-Boot sits before the first partition at 8 KiB (dd seek=8, bootloader/update.sh): the card's boot chain.
 tail -c +8193 "$IMG" | head -c 666105 >"$W/lists/uboot"
-check "ROCKNIX's DDR4 U-Boot is 8 KiB into the card, unchanged" '[ "$(md5 "$W/lists/uboot")" = f7008775f3e7b5fa45f869288752d3a3 ]'
+[ "$FAMILY" != H700 ] || check "ROCKNIX's DDR4 U-Boot is 8 KiB into the card, unchanged" '[ "$(md5 "$W/lists/uboot")" = f7008775f3e7b5fa45f869288752d3a3 ]'
 
 echo "== FAT partition (/flash)"
 check "label ROCKNIX (boot=LABEL=ROCKNIX)" 'mlabel -i "$FAT" -s :: 2>/dev/null | grep -q "Volume label is ROCKNIX"'
@@ -82,21 +95,27 @@ pocket-ui-info/pocket-ui-os.txt
 post-flash.sh
 EOF
 mdir -b -i "$FAT" ::/device_trees 2>/dev/null | sed 's#.*/#device_trees/#' >>"$W/lists/fat.expected"
+# SM8550: ROCKNIX's ABL in the handheld starts KERNEL, so the card has none of the H700's boot files (and no rocknix_abl).
+if [ "$FAMILY" = SM8550 ]; then
+  grep -Ev '^(device_trees/|dtb\.img|extlinux/|overlays/|games-first-start\.sh)' "$W/lists/fat.expected" >"$W/lists/fat.expected.new"
+  mv "$W/lists/fat.expected.new" "$W/lists/fat.expected"
+fi
 # The firmware's terms, as in the repository.
 echo "pocket-ui-info/firmware-licences/" >>"$W/lists/fat.expected"
-for f in README.txt LICENCE.rtlwifi_firmware.txt wireless-regdb-LICENSE; do echo "pocket-ui-info/firmware-licences/$f" >>"$W/lists/fat.expected"; done
+for f in $(ls "/repo/deploy/image/firmware-licences-$FAM") $FAM_FW_SHARED; do echo "pocket-ui-info/firmware-licences/$f" >>"$W/lists/fat.expected"; done
 # pocket-ui's LICENSE and NOTICE.md belong on the card as soon as the repository has them.
 for f in LICENSE NOTICE.md; do [ ! -f "/repo/$f" ] || echo "pocket-ui-info/$f" >>"$W/lists/fat.expected"; done
 # The crates' licence texts and the fonts' OFL (scripts/licence-files.sh); mdir lists the directory too.
 echo "pocket-ui-info/licences/" >>"$W/lists/fat.expected"
 for f in LICENSE NOTICE.md FONTS-OFL.txt THIRD-PARTY-CRATES.md THIRD-PARTY-LICENSES.txt; do echo "pocket-ui-info/licences/$f" >>"$W/lists/fat.expected"; done
+[ $GAMES = 0 ] || echo games-first-start.sh >>"$W/lists/fat.expected"
 sort -o "$W/lists/fat.expected" "$W/lists/fat.expected"
 # ROCKNIX's LICENSE.md and licenses folder come from the tag at build time; counted and spot-checked below.
 grep -v '^pocket-ui-info/rocknix-licenses/' "$W/lists/fat" >"$W/lists/fat.own"
 check "exactly the expected files (ROCKNIX's, dtb.img, the hooks, pocket-ui-info/; nothing else)" 'same "$W/lists/fat.own" "$W/lists/fat.expected"' || diff "$W/lists/fat.expected" "$W/lists/fat.own" | sed 's/^/     /'
 check "rocknix-licenses/: ROCKNIX's LICENSE.md and its licenses folder ($ROCKNIX_LICENSE_FILES files)" \
   '[ "$(grep -c "^pocket-ui-info/rocknix-licenses/.*[^/]$" "$W/lists/fat")" = "$ROCKNIX_LICENSE_FILES" ] && grep -qx "pocket-ui-info/rocknix-licenses/LICENSE.md" "$W/lists/fat" && grep -qx "pocket-ui-info/rocknix-licenses/licenses/GPL-2.0-only.txt" "$W/lists/fat"'
-for f in KERNEL KERNEL.md5 SYSTEM.md5 dtb.img extlinux/extlinux.conf mount-storage.sh post-flash.sh \
+for f in KERNEL KERNEL.md5 SYSTEM.md5 dtb.img extlinux/extlinux.conf mount-storage.sh post-flash.sh games-first-start.sh \
   pocket-ui-info/README.txt pocket-ui-info/pocket-ui-os.txt; do
   mkdir -p "$W/fat/$(dirname "$f")"
   mcopy -n -i "$FAT" "::/$f" "$W/fat/$f" 2>/dev/null
@@ -134,19 +153,48 @@ for k in ssh.enabled samba.enabled syncthing.enabled; do
 done
 check "no SSH keys or host keys in SYSTEM (usr/config/ssh/authorized_keys, ssh_host_*)" \
   '! grep -Eq "(^usr/config/ssh/authorized_keys|ssh_host_.*key)" "$W/lists/system"'
+if [ "$FAMILY" = H700 ]; then
 check "the kernel command line does not turn SSH on (no ssh word)" '! grep -Eq "^ *APPEND .* ssh( |$)" "$W/fat/extlinux/extlinux.conf"'
 check "the only BIOS files in SYSTEM are DraStic's open replacement pair (BSD, drastic_bios_arm7/arm9.bin)" \
   '[ "$(grep -i "bios.*\\.bin$" "$W/lists/system" | sort | tr "\n" " ")" = "usr/config/drastic/system/drastic_bios_arm7.bin usr/config/drastic/system/drastic_bios_arm9.bin " ]'
+else
+check "the only BIOS files in SYSTEM are DraStic's open pair and ReGBA's open GBA BIOS (GPL, md5 $REGBA_BIOS_MD5)" \
+  '[ "$(grep -i "bios.*\\.bin$" "$W/lists/system" | sort | tr "\n" " ")" = "usr/config/drastic/system/drastic_bios_arm7.bin usr/config/drastic/system/drastic_bios_arm9.bin usr/config/nanoboyadvance/bios/gba_bios.bin " ] && [ "$(syscat usr/config/nanoboyadvance/bios/gba_bios.bin | md5sum | cut -d" " -f1)" = "$REGBA_BIOS_MD5" ]'
+# ROCKNIX's update.sh runs updateabl, which flashes the ABL from this folder: without the file it cannot (exit 1, "ABL update not found").
+check "no ABL anywhere in SYSTEM: nothing on this card can flash the handheld's bootloader" '! grep -q "abl_signed\|rocknix_abl" "$W/lists/system"'
+fi
 check "DraStic is there unchanged with its permission texts (usr/config/drastic: drastic, LICENSE.pdf)" \
   'grep -qx "usr/config/drastic/drastic" "$W/lists/system" && grep -qx "usr/config/drastic/LICENSE.pdf" "$W/lists/system"'
 check "ROCKNIX's licenses/DRASTIC.pdf is on the card" '[ -n "$(mdir -b -i "$FAT" ::/pocket-ui-info/rocknix-licenses/licenses 2>/dev/null | grep DRASTIC.pdf)" ]'
 FW=usr/lib/kernel-overlays/base/lib/firmware
 unsquashfs -lln "$W/SYSTEM" "$FW" 2>/dev/null | grep '^-' | sed -n "s#^.* squashfs-root/$FW/##p" | sort >"$W/lists/firmware"
-check "every firmware file in SYSTEM ($(wc -l <"$W/lists/firmware")) is listed with its terms in firmware-licences-h700/README.txt" \
-  '( while read -r f; do grep -q " $f\\( \\|\$\\)" /repo/deploy/image/firmware-licences-h700/README.txt || { echo "     not listed: $f"; exit 1; }; done <"$W/lists/firmware" )'
+check "every firmware file in SYSTEM ($(wc -l <"$W/lists/firmware")) is listed with its terms in firmware-licences-$FAM/README.txt" \
+  '( while read -r f; do grep -q " $f\\( \\|\$\\)" /repo/deploy/image/firmware-licences-$FAM/README.txt || { echo "     not listed: $f"; exit 1; }; done <"$W/lists/firmware" )'
+if [ $GAMES = 1 ]; then
+  # The GAMES drive's first start (deploy/image/games-first-start.sh) replaces this file for one boot and goes back to it.
+  check "SYSTEM has ROCKNIX's fs-resize, its service, and what the first start and the drive's mount run" \
+    'for p in usr/lib/rocknix/fs-resize usr/lib/systemd/system/fs-resize.service usr/lib/systemd/system/rocknix-automount.service usr/bin/automount usr/config/system-dirs.conf usr/sbin/parted usr/sbin/partprobe usr/sbin/mkfs.exfat usr/sbin/fsck.exfat usr/sbin/e2fsck usr/sbin/resize2fs usr/sbin/tune2fs usr/sbin/blkid usr/bin/timeout; do grep -q "^$p\\( \\|\$\\)" "$W/lists/system" || { echo "     not in SYSTEM: $p"; exit 1; }; done'
+  syscat usr/bin/automount >"$W/lists/automount"
+  check "ROCKNIX's automount takes an unmounted partition of a card over 8 GB, highest device first (a second card wins over GAMES)" \
+    'grep -qF "\${SIZE} <= 8388608" "$W/lists/automount" && grep -qF "sort -r" "$W/lists/automount" && grep -qF "/fat/" "$W/lists/automount"'
+fi
 rm -f "$W/SYSTEM"
 
 echo "== boot files"
+boot_sm8550() {
+  # ROCKNIX's ABL starts KERNEL, an Android boot image: the words after boot= are its kernel command line.
+  head -c 2048 "$W/fat/KERNEL" | tr -d '\000' | grep -a -o 'boot=LABEL[ -~]*' >"$W/lists/cmdline"
+  check "KERNEL is an Android boot image: boot=LABEL=ROCKNIX disk=LABEL=STORAGE" '[ "$(head -c 8 "$W/fat/KERNEL")" = "ANDROID!" ] && grep -q "^boot=LABEL=ROCKNIX disk=LABEL=STORAGE " "$W/lists/cmdline"'
+  check "the kernel command line does not turn SSH on (no ssh word)" '! grep -Eq "( |^)ssh( |$)" "$W/lists/cmdline"'
+  check "no GRUB, no EFI folder, no boot/ folder, no rocknix_abl/ (nothing on the card flashes or boots but KERNEL)" '! grep -Eq "^(EFI|boot|rocknix_abl)/" "$W/lists/fat"'
+  check "KERNEL holds the tree of the $DT_MODEL" 'python3 -I /repo/scripts/make-test-bootimg.py "$W/fat/KERNEL" "$W/lists/boot.img" "$DT_MODEL" >/dev/null 2>&1 && [ "$(fdtget -t s "$W/lists/boot.img.orig.dtb" / model)" = "$DT_MODEL" ]'
+  # What that tree asks for by name: if the list of removed files took one, the handheld loses its sound or battery.
+  dtc -q -I dtb -O dts "$W/lists/boot.img.orig.dtb" 2>/dev/null | sed -n '/firmware-name/,/;/p' | grep -o '"[^"]*"' | tr -d '"' | sed 's/\\0/\n/g' | grep . | sort -u >"$W/lists/tree-firmware"
+  check "every firmware the tree asks for ($(wc -l <"$W/lists/tree-firmware") files) is in SYSTEM" \
+    '[ -s "$W/lists/tree-firmware" ] && ( while read -r f; do grep -qx "usr/lib/kernel-overlays/base/lib/firmware/$f" "$W/lists/system" || { echo "     missing: $f"; exit 1; }; done <"$W/lists/tree-firmware" )'
+  rm -f "$W/lists/boot.img"*
+}
+boot_h700() {
 X=$W/fat/extlinux/extlinux.conf
 # ROCKNIX's U-Boot reads extlinux/extlinux.conf: kernel /KERNEL, tree /dtb.img. It is ROCKNIX's file, unchanged.
 check "extlinux.conf: LINUX /KERNEL, FDT /dtb.img, boot=LABEL=ROCKNIX disk=LABEL=STORAGE" \
@@ -158,15 +206,31 @@ check "dtb.img is byte for byte that tree on the card" 'same "$W/fat/dtb.img" "$
 check "dtb model is $DT_MODEL" '[ "$(fdtget -t s "$W/fat/dtb.img" / model)" = "$DT_MODEL" ]'
 check "dtb.img is a device tree ROCKNIX ships and this model's only: no other model's dtb.img would match" \
   '[ "$(for d in $(mdir -b -i "$FAT" ::/device_trees | sed "s#.*/##"); do mcopy -n -i "$FAT" "::/device_trees/$d" - | cmp -s - "$W/fat/dtb.img" && echo "$d"; done)" = "$DTB_NAME.dtb" ]'
+}
+case $FAMILY in H700) boot_h700 ;; SM8550) boot_sm8550 ;; esac
 check "KERNEL.md5 is KERNEL's" '[ "$(cut -d" " -f1 "$W/fat/KERNEL.md5")" = "$(md5 "$W/fat/KERNEL")" ]'
 check "initramfs hook mount-storage.sh is deploy/image/mount-storage.sh" 'same "$W/fat/mount-storage.sh" /repo/deploy/image/mount-storage.sh'
 check "initramfs hook post-flash.sh is deploy/image/post-flash.sh" 'same "$W/fat/post-flash.sh" /repo/deploy/image/post-flash.sh'
+if [ $GAMES = 1 ]; then
+  check "first start's games-first-start.sh is deploy/image/games-first-start.sh, a shell script" \
+    'same "$W/fat/games-first-start.sh" /repo/deploy/image/games-first-start.sh && [ "$(head -c 9 "$W/fat/games-first-start.sh")" = "#!/bin/sh" ]'
+else
+  check "ROCKNIX's own first start: no games-first-start.sh on the card" '! grep -qx games-first-start.sh "$W/lists/fat"'
+fi
 check "pocket-ui-info/pocket-ui-os.txt: $POCKET_OS_NAME $VERSION, for Settings > About" \
   '[ "$(cat "$W/fat/pocket-ui-info/pocket-ui-os.txt")" = "$(printf "NAME=%s\nVERSION=%s" "$POCKET_OS_NAME" "$VERSION")" ]'
 
 echo "== notes on the card (pocket-ui-info/README.txt)"
 R=$W/fat/pocket-ui-info/README.txt
+if [ "$FAMILY" = H700 ]; then
 check "names the model: $DT_MODEL, DDR4, dtb.img from device_trees/$DTB_NAME.dtb" 'grep -q "for the $DT_MODEL: SD card image" "$R" && grep -q "DDR4" "$R" && grep -q "device_trees/$DTB_NAME.dtb" "$R"'
+else
+check "names the model: $DT_MODEL" 'grep -q "for the $DT_MODEL: SD card image" "$R"'
+check "says plainly what the handheld needs first: ROCKNIX's boot helper (ABL), once, from Android, and that this card doesn't do it" \
+  'grep -q "needs one thing first" "$R" && grep -q "ABL" "$R" && grep -q "from Android" "$R" && grep -q "does not flash" "$R"'
+check "says an internal ROCKNIX install wins over this card, and what to use instead" 'grep -q "internal storage, this card" "$R" && grep -q "install package" "$R"'
+check "says the firmware without a stated licence stays, and comes out on request" 'grep -q "states no licence" "$R" && grep -q "on request" "$R"'
+fi
 check "DraStic: closed source, unchanged like ROCKNIX, 2017 statement, not a formal licence, credit Exophase, removed on request" 'grep -q "DraStic by Exophase" "$R" && grep -q "closed-source" "$R" && grep -q "not a formal licence" "$R" && grep -q "on request" "$R"'
 check "names version $VERSION" 'grep -q "pocket-ui $VERSION" "$R"'
 check "$POCKET_OS_NAME, built on ROCKNIX, not made or endorsed by its team, with link" 'grep -q "$POCKET_OS_NAME $VERSION" "$R" && grep -q "built on ROCKNIX" "$R" && grep -q "not made or" "$R" && grep -q "https://github.com/ROCKNIX/distribution" "$R"'
@@ -175,6 +239,13 @@ check "artwork under CC BY-NC-SA 4.0" 'grep -q "CC BY-NC-SA 4.0" "$R"'
 check "free, non-commercial distribution only" 'grep -qi "non-commercial" "$R"'
 check "says: no games, no console maker's BIOS files" 'grep -q "no games and no console maker" "$R"'
 check "says what was removed from SYSTEM and why (SKick, DOOM shareware)" 'grep -q "skick346.lha" "$R" && grep -q "DOOM shareware" "$R"'
+if [ $GAMES = 1 ]; then
+  check "says how to copy games: the GAMES drive, never format" 'grep -q "GAMES" "$R" && grep -q "never say yes" "$R"'
+else
+  check "says nothing of a GAMES drive, and how to copy games: file sharing, a second card, never format" '! grep -q "GAMES" "$R" && grep -q "file sharing" "$R" && grep -q "never say yes" "$R"'
+fi
+check "no #if lines of the notes' template left" '! grep -Eq "^#(if|else|endif)" "$R"'
+[ "$FAMILY" != H700 ] || check "going back: the original card, into the first slot (TF1)" 'grep -q "original card back" "$R"'
 check "says remote access is off, and that pocket-ui makes the password" 'grep -q "Remote access (SSH), file sharing and Syncthing are off" "$R"'
 check "points to the source next to the image and to SOURCE-OFFER.txt" 'grep -q "pocket-ui-info/SOURCE-OFFER.txt" "$R"'
 warn "names a clean pocket-ui source (no -dirty commit)" '! grep -q -- "-dirty" "$R"'
@@ -183,11 +254,11 @@ O=$W/fat/pocket-ui-info/SOURCE-OFFER.txt
 check "SOURCE-OFFER.txt: written offer for three years, how to ask, ROCKNIX tag and commit" \
   'grep -q "^Written offer" "$O" && grep -q "at least three years" "$O" && grep -q "https://github.com/.*/issues" "$O" && grep -q "$ROCKNIX_COMMIT" "$O" && grep -q "pocket-ui $VERSION" "$O"'
 mkdir -p "$W/fat/pocket-ui-info/firmware-licences"
-for f in README.txt LICENCE.rtlwifi_firmware.txt wireless-regdb-LICENSE; do
+for f in README.txt $FAM_FW_SHARED; do
   mcopy -n -i "$FAT" "::/pocket-ui-info/firmware-licences/$f" "$W/fat/pocket-ui-info/firmware-licences/$f" 2>/dev/null
 done
-check "firmware-licences/: the H700 list and the two licence texts it names" \
-  'same "$W/fat/pocket-ui-info/firmware-licences/README.txt" /repo/deploy/image/firmware-licences-h700/README.txt && same "$W/fat/pocket-ui-info/firmware-licences/LICENCE.rtlwifi_firmware.txt" /repo/deploy/image/firmware-licences/LICENCE.rtlwifi_firmware.txt && same "$W/fat/pocket-ui-info/firmware-licences/wireless-regdb-LICENSE" /repo/deploy/image/firmware-licences/wireless-regdb-LICENSE'
+check "firmware-licences/: the family's list and the licence texts it names" \
+  '( same "$W/fat/pocket-ui-info/firmware-licences/README.txt" /repo/deploy/image/firmware-licences-$FAM/README.txt && for f in $FAM_FW_SHARED; do same "$W/fat/pocket-ui-info/firmware-licences/$f" "/repo/deploy/image/firmware-licences/$f" || exit 1; done )'
 check "pocket-ui licensed GPL-2.0-or-later, credits in NOTICE.md" \
   'grep -q "GNU GPL version 2 or later (pocket-ui-info/LICENSE)" "$R" && grep -q "pocket-ui-info/NOTICE.md" "$R"'
 for f in LICENSE NOTICE.md; do
@@ -250,14 +321,23 @@ sort >"$W/lists/storage.expected" <<EOF
 755 0:0 f ./pocket-ui/releases/$V/pocket-splash
 755 0:0 f ./pocket-ui/releases/$V/portmaster-setup.sh
 EOF
+if [ $GAMES = 1 ]; then
+  sort -o "$W/lists/storage.expected" - "$W/lists/storage.expected" <<GAMESFILES
+755 0:0 d ./.pocket-seed/.config/system.d/rocknix-automount.service.d
+644 0:0 f ./.pocket-seed/.config/system.d/rocknix-automount.service.d/10-pocket-games.conf
+755 0:0 f ./pocket-ui/games-mount.sh
+GAMESFILES
+fi
 check "exactly the expected files, owners and modes" 'same "$W/lists/storage" "$W/lists/storage.expected"' ||
   diff "$W/lists/storage.expected" "$W/lists/storage" | sed 's/^/     /'
-check ".please_resize_me there: ROCKNIX grows STORAGE at the first boot" '[ -f "$S/.please_resize_me" ]'
+check ".please_resize_me there: the first boot splits the card (or ROCKNIX grows STORAGE)" '[ -f "$S/.please_resize_me" ]'
 check "no /storage/.config or .cache yet (fs-resize would refuse to grow)" '[ ! -e "$S/.config" ] && [ ! -e "$S/.cache" ]'
 check "drop-in waiting in .pocket-seed is deploy/essway-pocket-ui.conf" \
   'same "$S/.pocket-seed/.config/system.d/essway.service.d/10-pocket-ui.conf" /repo/deploy/essway-pocket-ui.conf'
 check "boot screen unit waiting in .pocket-seed is deploy/pocket-splash.service" \
   'same "$S/.pocket-seed/.config/system.d/pocket-splash.service" /repo/deploy/pocket-splash.service'
+[ $GAMES = 0 ] || check "the GAMES drive's mount is deploy/image/games-mount.sh, started by the seed's automount drop-in" \
+  'same "$S/pocket-ui/games-mount.sh" /repo/deploy/image/games-mount.sh && same "$S/.pocket-seed/.config/system.d/rocknix-automount.service.d/10-pocket-games.conf" /repo/deploy/image/rocknix-automount-games.conf'
 check "first-start settings waiting in .pocket-seed are deploy/image/image-defaults.sh" \
   'same "$S/.pocket-seed/.config/autostart/pocket-ui-image-defaults" /repo/deploy/image/image-defaults.sh'
 check "licence texts in STORAGE: the repository's LICENSE and NOTICE.md, the fonts' OFL, the crates' texts (not empty)" \
@@ -272,6 +352,7 @@ check "no pocket-ui settings (first-start setup runs)" '[ -z "$(find "$S" -path 
 check "no dev-ssh marker, no SSH keys" '[ -z "$(find "$S" -name dev-ssh -o -name .ssh -o -name "*authorized_keys*" -o -name "ssh_host_*")" ]'
 check "no Wi-Fi credentials (iwd, NetworkManager, wpa_supplicant)" \
   '[ -z "$(find "$S" -name "*.psk" -o -name "*.8021x" -o -name "*.nmconnection" -o -name "wpa_supplicant*" -o -path "*/iwd*")" ]'
+check "the card has no GAMES drive yet (the first start makes it), and no state of a first start" '[ ! -e "$S/.pocket-games-state" ] && [ ! -e "$S/.pocket-games-tries" ]'
 check "no recents, saves or games" '[ -z "$(find "$S" -name "recents*" -o -name roms -o -name "*.srm" -o -name "*.state*")" ]'
 check "no BIOS files" '[ -z "$(find "$S" -iname "*bios*")" ] && ! grep -qi bios "$W/lists/fat"'
 check "no update left pending (update-pending, previous, dev.env)" \

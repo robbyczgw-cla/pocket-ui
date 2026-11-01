@@ -102,7 +102,7 @@ mod app_report;
 mod app_web;
 /// Quick settings' Performance and Fan rows: the game under the panel, a change saved and applied on a thread.
 mod app_quick_profiles;
-/// PortMaster ports that need the player's own game files: the drop folder and the check before a start.
+/// PortMaster ports that need the player's own game files: the check before a start and its page.
 mod app_ports;
 /// A PortMaster port's Performance & fan (START on its card), applied while it runs; the busy-core hint.
 mod app_port_perf;
@@ -117,6 +117,8 @@ mod app_achievements;
 /// Finding games fast: the search (the Search row on Home) and the letter jump of the lists (L2/R2).
 mod app_search;
 mod app_starter;
+/// Settings → Connections → USB file transfer, and a games card coming or going.
+mod app_usb_transfer;
 /// Pixel Path: the pause menu's graded chain of a game's picture and sound (docs/CURATOR.md).
 mod app_pixel_path;
 /// The pause menu at once: pocket-core paused before it is covered, its picture after the menu is up.
@@ -173,7 +175,7 @@ const LABEL_ART_H: i32 = 176;
 const SPLIT_PANEL_H: i32 = 260;
 
 const PULL: Duration = Duration::from_millis(120);
-const FADE: Duration = Duration::from_millis(250);
+const FADE: Duration = pocket_ui::insert_scene::FADE;
 /// What the start puts off until the first frame (`App::after_first_frame`) runs by this time even without one.
 const AFTER_FIRST_FRAME_AT_LATEST: Duration = Duration::from_secs(2);
 /// Frames go on this long after a fade, so that its last one is drawn at the end (the launch picture at full strength,
@@ -316,6 +318,11 @@ enum UserEvent {
     StatusCorner,
     /// The values of Settings rows that need a process or a file came in (`app_settings_groups`, `settings_values`).
     SettingsValues,
+    /// USB file transfer was switched (`app_usb_transfer`).
+    UsbTransfer { wanted_on: bool, status: pocket_ui::usb_transfer::Status },
+    /// A games card came or went (`pocket_ui::games_card`).
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    GamesCard(pocket_ui::games_card::Change),
     /// The folders were read again and the list differs from the one on screen (`app_library`); the cache holds it
     /// for the key.
     LibraryRescanned(Vec<System>, Option<pocket_ui::library_cache::Key>),
@@ -352,6 +359,8 @@ enum Opens {
     About,
     /// A switch, not a page: menu haptics on or off.
     Haptics,
+    /// A switch, not a page: ROCKNIX's MTP gadget on or off (`pocket_ui::usb_transfer`). Only where it can work.
+    UsbTransfer,
     /// A switch, not a page: Home or the last game when the Pocket starts (`on_start`).
     OnStart,
     /// A switch, not a page: whether the pause menu's Quit keeps a resume point (`App::remember_quit`).
@@ -478,16 +487,17 @@ const SETTINGS_GROUPS: [(&str, &str, &[SettingsRow]); 7] = [
         (app_curator::SETTINGS_NAME, Opens::Curator, "Lens, smart shelves, stickers, Echoes, versions and play history."),
         (app_moonlight::SETTINGS_NAME, Opens::PcStreaming, "Pair a gaming PC for Moonlight, and stream its games."),
     ]),
-    ("Connections", "Wi-Fi, Bluetooth, Tailscale, Sync, remote access, web companion.", &[
+    ("Connections", "Wi-Fi, Bluetooth, USB file transfer, Tailscale, Sync, remote access, web companion.", &[
         ("Wi-Fi", Opens::Setup(Only::Wifi), "Connect to a network."),
         ("Bluetooth", Opens::Bluetooth, "Pair a controller or headphones, see what is connected."),
+        ("USB file transfer", Opens::UsbTransfer, "Copy games with a USB cable. Windows and Linux open it by themselves; a Mac needs the free OpenMTP app."),
         ("Tailscale", Opens::Tailscale, "Reach the Pocket from your other devices."),
         ("Sync", Opens::Sync, "Keep saves and states in step with your other devices."),
-        ("Remote access (SSH)", Opens::Setup(Only::Remote), "Log in from a computer. Turns itself off after 30 minutes."),
+        ("Remote access (SSH)", Opens::Setup(Only::Remote), "Log in from a computer. Turns itself off when the Pocket restarts."),
         (app_web::SETTINGS_NAME, Opens::Web, "Your games, play time and uploads in a browser."),
     ]),
     ("System", "Language, time, sleep & power, frozen games, updates, storage, backup & reset.", &[
-        ("Language", Opens::Language, "Menus and messages in English or German."),
+        ("Language", Opens::Language, "Menus and messages in English, German or Spanish."),
         ("Time", Opens::Time, "Time zone, date and network time."),
         (app_sleep_power::SETTINGS_NAME, Opens::SleepPower, "When the screen goes off and the device sleeps, and the power button."),
         (Extra::FrozenGames.label(), Opens::Extra(Extra::FrozenGames), Extra::FrozenGames.blurb()),
@@ -1070,6 +1080,10 @@ struct App {
     manual_from_setup: bool,
     /// Box art downloaded in the background while online (`pocket_ui::auto_covers`).
     cover_run: pocket_ui::auto_covers::AutoCovers,
+    /// USB file transfer is being switched (`app_usb_transfer`).
+    usb_busy: bool,
+    /// A games card came out and the player hasn't been told yet (`app_usb_transfer`).
+    card_out_note: bool,
     /// The game card's descriptions loaded ahead while online, under the same rules (`pocket_ui::auto_texts`).
     text_run: pocket_ui::auto_texts::AutoTexts,
     /// The games recognised by their checksum, before the covers and descriptions (`app_identify`).
@@ -2439,7 +2453,7 @@ impl App {
         // The explanation stands beside the hint pill, in the column left of it, its last line on the pill's
         // (`kit::footer`); the longest of the group sets the room.
         let pill_x = w - NU_PAD - pocket_ui::kit::pill_width(&mut self.text, w, PICTURE_HINTS);
-        let lines = g.settings.iter().map(|s| pocket_ui::kit::footer_lines(&mut self.text, s.desc, w, pill_x, 5).len()).max().unwrap_or(1);
+        let lines = g.settings.iter().map(|s| pocket_ui::kit::footer_lines(&mut self.text, s.desc, w, pill_x, if preview::small_screen(h) { preview::SMALL_SCREEN_LINES } else { 5 }).len()).max().unwrap_or(1);
         let foot = h - pocket_ui::kit::footer_baseline(h) + NU_SMALL as i32 - pocket_ui::type_scale::line(NU_SMALL, 10);
         Some(preview::picture_page_over((w, h), NU_PAD, foot, NU_PAD + NU_PILL + 12, max_rows, lines, NU_SMALL))
     }
@@ -2846,7 +2860,8 @@ impl App {
             Some("") | None => &[("B", "Back"), ("A", "Choose")],
             Some(_) => PICTURE_HINTS,
         };
-        pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, hints, &desc, 5, pal().text);
+        let desc_lines = if self.picture_page(c.w, c.h).is_some() && preview::small_screen(c.h) { preview::SMALL_SCREEN_LINES } else { 5 };
+        pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, hints, &desc, desc_lines, pal().text);
     }
 
     /// The status corner (time, Wi-Fi while connected, battery) in a pill at the top right, from memory like Home's
@@ -2960,6 +2975,10 @@ impl App {
     }
 
     fn settings_input(&mut self, b: Button) {
+        // B on the categories closes Settings.
+        if matches!(self.settings_page, Some(SettingsPage::Groups(_))) && b == CANCEL {
+            self.usb_transfer_left_settings();
+        }
         self.settings_page = match (self.settings_page, b) {
             // The categories, and moving and B in a category's list (`app_settings_groups`).
             (Some(page @ SettingsPage::Groups(_)), b) => app_settings_groups::groups_input(page, b),
@@ -3032,6 +3051,10 @@ impl App {
                 Opens::About => self.open_about(),
                 // One press: the file is written and the sheet says where it went (Settings → System → About has the row too).
                 Opens::Report => self.open_report(),
+                Opens::UsbTransfer => {
+                    self.usb_transfer_switch();
+                    Some(SettingsPage::List(sel))
+                }
                 Opens::Haptics => {
                     pocket_ui::rumble::set_menu_haptics(&self.data_dir, !pocket_ui::rumble::menu_haptics());
                     Some(SettingsPage::List(sel))
@@ -3134,7 +3157,8 @@ impl App {
                 Some(SettingsPage::List(sel))
             }
             (Some(SettingsPage::List(sel)), Button::Left | Button::Right) if matches!(SETTINGS[sel].1, Opens::Language) => {
-                self.set_language(pocket_ui::i18n::current().next());
+                let now = pocket_ui::i18n::current();
+                self.set_language(if b == Button::Left { now.previous() } else { now.next() });
                 Some(SettingsPage::List(sel))
             }
             (Some(SettingsPage::List(sel)), Button::Left | Button::Right) if matches!(SETTINGS[sel].1, Opens::TextSize) => {
@@ -4122,6 +4146,7 @@ impl App {
             self.in_column(c, |app, c| {
                 if let Some(setup) = app.setup.as_mut() {
                     setup.paint(c, &mut app.text);
+                    setup.register_touch(&mut app.hits);
                 }
             });
             return;
@@ -6028,6 +6053,8 @@ impl App {
             UserEvent::SlideScene(generation, index, scene) => self.slideshow_scene(generation, index, scene),
             UserEvent::Online => self.auto_covers("online after boot"),
             UserEvent::LibraryRescanned(systems, key) => self.library_rescanned(systems, key),
+            UserEvent::UsbTransfer { wanted_on, status } => self.usb_transfer_switched(wanted_on, status),
+            UserEvent::GamesCard(change) => self.games_card_changed(change),
             UserEvent::Display(tv) => self.display_changed(tv),
             // A frame only while the corner is on screen (every event below ends in one).
             UserEvent::StatusCorner => {
@@ -6132,8 +6159,13 @@ impl App {
                     self.adopt_switches(&switches);
                     self.save_settings();
                 }
+                // The phone page without Wi-Fi, opened from Settings: A leads to the Wi-Fi settings.
+                let wifi = self.setup.as_mut().is_some_and(|s| s.take_open_wifi());
                 if done {
                     self.finish_setup();
+                }
+                if wifi {
+                    self.setup = Some(self.new_setup().only(Only::Wifi));
                 }
             }
             UserEvent::Pad(_) if self.setup.is_some() => {}
@@ -6391,6 +6423,7 @@ impl ApplicationHandler<UserEvent> for App {
         }
         // A game list read again after the start, swapped in once nothing holds a game by its place (`app_library`).
         self.library_apply_pending();
+        self.games_card_say();
         // The Cabinet's TV may have finished behind Settings, a card or another look. Drain its answers here too,
         // so a completed request cannot keep an invisible Cabinet animating forever.
         if self.cabinet.tv.poll() {
@@ -7068,6 +7101,8 @@ fn main() {
         art: std::collections::HashMap::new(),
         home_tap: false,
         cover_run: Default::default(),
+        usb_busy: false,
+        card_out_note: false,
         text_run: Default::default(),
         identify: app_identify::Identify::new(),
         look_previews: None,
@@ -7233,8 +7268,18 @@ fn main() {
                 eprintln!("couldn't restrict file sharing: {e}");
             }
         });
-        // Remote access switched on in Settings turns itself off after 30 idle minutes (src/remote.rs).
-        pocket_ui::startup::after_first_frame("remote-watch", pocket_ui::remote::watch);
+        // File sharing left on comes back after a restart, once Wi-Fi is up (`wifi::keep_sharing_on`).
+        pocket_ui::startup::after_first_frame("keep-sharing", pocket_ui::wifi::keep_sharing_on);
+        // A games card coming or going while we run: the shelf reads the folders again, or says the card is out.
+        #[cfg(target_os = "linux")]
+        if !pocket_ui::device::current().host_owned() {
+            let proxy = app.proxy.clone();
+            pocket_ui::startup::after_first_frame("games-card", move || {
+                pocket_ui::games_card::watch(move |change| {
+                    let _ = proxy.send_event(UserEvent::GamesCard(change));
+                })
+            });
+        }
         // Store tools an older version put into ROCKNIX's Tools folder, which ROCKNIX empties at every boot, move to
         // pocket-ui's own folder (`store::migrate_tools_in`; nothing is read when there are none).
         let data_dir = app.data_dir.clone();

@@ -15,6 +15,8 @@ use pocket_ui::{
     touch::{Area, HitMap},
 };
 use std::{collections::HashSet, sync::Arc};
+#[path = "check_page.rs"]
+mod check_page;
 #[path = "onboarding.rs"]
 mod onboarding;
 #[path = "phone.rs"]
@@ -28,6 +30,10 @@ pub struct Preferences {
     pub selected_key: String,
     pub theme: Theme,
     pub favorites: HashSet<String>,
+    /// Settings → Language, once chosen (`chosen_language`).
+    pub language: Option<pocket_ui::i18n::Lang>,
+    /// What an older version wrote for the same choice; read, and gone once a language is chosen again.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub german: Option<bool>,
     pub text_size: pocket_ui::text_size::TextSize,
     pub muted: bool,
@@ -56,6 +62,19 @@ pub struct Preferences {
     pub play_secs: std::collections::HashMap<String, u64>,
     #[serde(deserialize_with = "lenient")]
     pub playing: Option<(String, u64)>,
+}
+
+impl Preferences {
+    /// The language chosen in Settings or the first start, however it was written down; `None`: the phone's.
+    pub fn chosen_language(&self) -> Option<pocket_ui::i18n::Lang> {
+        self.language.or(self.german.map(|g| if g { pocket_ui::i18n::Lang::De } else { pocket_ui::i18n::Lang::En }))
+    }
+    /// Keeps `lang` and paints in it from the next frame on.
+    pub fn choose_language(&mut self, lang: pocket_ui::i18n::Lang) {
+        self.language = Some(lang);
+        self.german = None;
+        pocket_ui::i18n::set(lang);
+    }
 }
 /// One wrong value in launcher.json costs that setting only, never the rest of the file.
 fn lenient<'de, D: serde::Deserializer<'de>, T: serde::de::DeserializeOwned + Default>(d: D) -> Result<T, D::Error> {
@@ -94,10 +113,11 @@ enum Setting {
     ButtonSymbols,
     GameBoy,
     Folder,
+    GameCheck,
     Media,
     FirstStart,
 }
-const SETTINGS: [Setting; 19] = [
+const SETTINGS: [Setting; 21] = [
     Setting::Look,
     Setting::Appearance,
     Setting::Colours,
@@ -112,9 +132,11 @@ const SETTINGS: [Setting; 19] = [
     Setting::Sounds,
     Setting::Extra(pocket_ui::cozy_extras::Extra::CaseSounds),
     Setting::Extra(pocket_ui::cozy_extras::Extra::IdleSlideshow),
+    Setting::Extra(pocket_ui::cozy_extras::Extra::FrozenGames),
     Setting::ButtonSymbols,
     Setting::GameBoy,
     Setting::Folder,
+    Setting::GameCheck,
     Setting::Media,
     Setting::FirstStart,
 ];
@@ -131,6 +153,8 @@ pub enum Screen {
     Settings,
     /// Settings → Cozy extras.
     Extras,
+    /// Settings → Game check.
+    GameCheck,
     Quick,
     Box,
 }
@@ -162,6 +186,10 @@ pub enum Command {
     Launch,
     Folder,
     Persist,
+    /// Start the Game check on a worker.
+    Check,
+    /// Stop reading this chosen folder (it can't be read any more).
+    Forget(String),
 }
 pub struct Library {
     pub games: Vec<Game>,
@@ -214,10 +242,15 @@ pub struct Ui {
     pub controller_connected: bool,
     pub wifi_ready: bool,
     pub snapshot: Option<Image>,
+    /// The games that stand open (`frozen_phone::stand_open`), by `Game::key`.
+    frozen: HashSet<String>,
+    /// Which stand open is to be read again (the host does, on a thread).
+    pub frozen_stale: bool,
     menu: usize,
     connection: Option<OpenList>,
     list_back: Vec<ListBack>,
     room: RoomUi,
+    check: check_page::CheckUi,
     facet: pocket_ui::curator::Facet,
     positions: std::collections::HashMap<Screen, usize>,
     box_view: pocket_ui::game_box::BoxView,
@@ -244,6 +277,13 @@ pub struct Ui {
     grid_cols: usize,
     /// The landscape game card's own canvas (narrower than the page, beside its buttons).
     card_buf: Vec<u32>,
+    /// The next paint is the page under a game's start (`insert`): the selected case isn't drawn, `front_at` says where
+    /// it stood.
+    pub launching: bool,
+    /// Where the selected case stood in that paint (canvas pixels) and its front; None when the page shows no case.
+    pub front_at: Option<((i32, i32, i32, i32), art::Pic)>,
+    /// Where the card's canvas starts on the page.
+    card_origin: (i32, i32),
 }
 impl Ui {
     pub fn new(prefs: Preferences) -> Self {
@@ -266,10 +306,13 @@ impl Ui {
             controller_connected: false,
             wifi_ready: false,
             snapshot: None,
+            frozen: HashSet::new(),
+            frozen_stale: true,
             menu: 0,
             connection: None,
             list_back: Vec::new(),
             room: RoomUi::default(),
+            check: Default::default(),
             facet: pocket_ui::curator::Facet::System,
             positions: Default::default(),
             box_view: Default::default(),
@@ -289,6 +332,20 @@ impl Ui {
             shelves: Vec::new(),
             card_buf: Vec::new(),
             grid_cols: 0,
+            launching: false,
+            front_at: None,
+            card_origin: (0, 0),
+        }
+    }
+    pub fn is_frozen(&self, key: &str) -> bool {
+        self.frozen.contains(key)
+    }
+    /// The answer of the read: the cases are made again when it changed.
+    pub fn frozen_got(&mut self, open: Vec<String>) {
+        let open: HashSet<String> = open.into_iter().collect();
+        if open != self.frozen {
+            self.frozen = open;
+            self.cards.clear();
         }
     }
     pub fn game(&self) -> Option<&Game> {
@@ -301,6 +358,7 @@ impl Ui {
             .position(|g| g.key == self.prefs.selected_key || g.uri == self.prefs.selected_uri)
             .unwrap_or(0);
         self.library = Some(library);
+        self.frozen_stale = true;
         self.message.clear();
         self.filter();
         self.selected = self.visible.iter().position(|i| *i == restored).unwrap_or(0);
@@ -322,7 +380,7 @@ impl Ui {
             Screen::Search => lib.search.search(&self.query, &|_| true).iter().map(|h| h.game).collect(),
             Screen::Results => lib.index.list(&lib.index.matches(&self.lens), false),
             Screen::Connection => self.connection.as_ref().map(|l| l.games.clone()).unwrap_or_default(),
-            Screen::Settings | Screen::Extras | Screen::Quick | Screen::Curator | Screen::Facet | Screen::Box => return,
+            Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Quick | Screen::Curator | Screen::Facet | Screen::Box => return,
             _ => (0..lib.games.len()).collect(),
         };
         self.selected = self.selected.min(self.visible.len().saturating_sub(1));
@@ -340,6 +398,8 @@ impl Ui {
         // Back from Cozy extras (B, Android Back or its Back row): its own row in Settings, not the first.
         let back_to_row = if self.screen == Screen::Extras && screen == Screen::Settings {
             SETTINGS.iter().position(|s| matches!(s, Setting::CozyExtras))
+        } else if self.screen == Screen::GameCheck && screen == Screen::Settings {
+            SETTINGS.iter().position(|s| matches!(s, Setting::GameCheck))
         } else {
             None
         };
@@ -360,6 +420,11 @@ impl Ui {
         }
         self.filter();
     }
+    /// The page's scroll follows the selection again: the case to start from comes into view.
+    pub fn follow_selection(&mut self) {
+        self.follow = true;
+        self.velocity = (0.0, 0.0);
+    }
     /// What was painted with the old colours or type (case fronts, shelves, the TV): made again at the next paint.
     fn drop_pictures(&mut self) {
         self.cards.clear();
@@ -370,6 +435,7 @@ impl Ui {
         match self.screen {
             Screen::Settings => SETTINGS.len(),
             Screen::Extras => PHONE_EXTRAS.len() + 1,
+            Screen::GameCheck => self.check_rows().len(),
             Screen::Quick => 2,
             Screen::Curator => 2 + self.facets().len() + self.rediscover_row() as usize,
             Screen::Facet => self.library.as_ref().map_or(2, |l| 2 + l.index.facet(self.facet).values.len()),
@@ -386,7 +452,7 @@ impl Ui {
             return;
         }
         let count = self.count();
-        let selected = if matches!(self.screen, Screen::Settings | Screen::Extras | Screen::Quick | Screen::Curator | Screen::Facet) {
+        let selected = if matches!(self.screen, Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Quick | Screen::Curator | Screen::Facet) {
             &mut self.menu
         } else {
             &mut self.selected
@@ -406,6 +472,9 @@ impl Ui {
                 self.keyboard = None;
             }
             return Command::None;
+        }
+        if self.screen == Screen::GameCheck {
+            return self.check_press(b);
         }
         if self.screen == Screen::Box && self.card_link_press(b) {
             return Command::None;
@@ -512,9 +581,7 @@ impl Ui {
                         self.drop_pictures();
                     }
                     Setting::Language => {
-                        let german = self.prefs.german.unwrap_or(pocket_ui::i18n::current() == pocket_ui::i18n::Lang::De);
-                        self.prefs.german = Some(!german);
-                        pocket_ui::i18n::set(if german { pocket_ui::i18n::Lang::En } else { pocket_ui::i18n::Lang::De });
+                        self.prefs.choose_language(pocket_ui::i18n::current().next());
                     }
                     Setting::TextSize => self.prefs.text_size = self.prefs.text_size.next(),
                     Setting::Sounds => self.prefs.muted = !self.prefs.muted,
@@ -522,6 +589,7 @@ impl Ui {
                     Setting::ButtonSymbols => self.prefs.prompts = self.prefs.prompts.step(true),
                     Setting::GameBoy => self.prefs.gameboy_gambatte = !self.prefs.gameboy_gambatte,
                     Setting::Folder => return Command::Folder,
+                    Setting::GameCheck => return self.open_check(),
                     Setting::Media => self.prefs.download_media = Some(!self.prefs.download_media.unwrap_or(false)),
                     Setting::Animations => self.prefs.cozy = Some(!self.prefs.cozy.unwrap_or(true)),
                     Setting::CozyExtras => {
@@ -541,6 +609,7 @@ impl Ui {
                     }
                 };
                 self.prefs.apply_look();
+                self.frozen_stale = true;
                 Command::Persist
             }
             Screen::Extras => {
@@ -664,6 +733,7 @@ impl Ui {
     /// The launcher is back: the time since the game was started counts as played (at most a day, so a game left
     /// running overnight does not grow the plant by itself).
     pub fn game_returned(&mut self) {
+        self.frozen_stale = true;
         let Some((key, start)) = self.prefs.playing.take() else { return };
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
         let secs = now.saturating_sub(start).min(86_400);
@@ -882,7 +952,7 @@ impl Ui {
             }
             Some(Action::Folder) => Command::Folder,
             Some(Action::Row(i)) => {
-                if matches!(self.screen, Screen::Settings | Screen::Extras | Screen::Quick | Screen::Curator | Screen::Facet) {
+                if matches!(self.screen, Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Quick | Screen::Curator | Screen::Facet) {
                     // A sheet row does what it says at the first tap.
                     self.menu = i;
                     self.press(Button::East)
@@ -985,7 +1055,7 @@ impl Ui {
         match region.action {
             Action::Setup(i) => i == self.setup_row,
             Action::Row(i) => {
-                i == if matches!(self.screen, Screen::Settings | Screen::Extras | Screen::Quick | Screen::Curator | Screen::Facet) {
+                i == if matches!(self.screen, Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Quick | Screen::Curator | Screen::Facet) {
                     self.menu
                 } else {
                     self.selected
@@ -1018,6 +1088,7 @@ impl Ui {
         c.clear(pal().void);
         self.hits.clear();
         self.regions.clear();
+        self.front_at = None;
         if !self.prefs.onboarding_done {
             self.paint_setup(c, text);
             return;
@@ -1050,6 +1121,7 @@ impl Ui {
                     Setting::ButtonSymbols => row("Button symbols", self.prefs.prompts.label()),
                     Setting::GameBoy => row("Game Boy core", if self.prefs.gameboy_gambatte { "Gambatte" } else { "mGBA" }),
                     Setting::Folder => row("Choose your ROM folder", ""),
+                    Setting::GameCheck => row("Game check", &self.check_value()),
                     Setting::Media => row("Covers and pictures", on_off(self.prefs.download_media.unwrap_or(false))),
                     Setting::FirstStart => row("First start", ""),
                 })
@@ -1133,19 +1205,9 @@ impl Ui {
         let mut stickers = pocket_ui::case_stickers::CaseStickers::default();
         stickers.set(pocket_ui::case_stickers::Kind::Favourite, self.prefs.extras.case_stickers && self.prefs.favorites.contains(&game.key), 2026);
         pocket_ui::case_stickers::on_front(text, &mut front, &stickers, media::label_rect(m, k), index as u64);
-        let h = m.game().size_beside(m, front.h).1;
-        let inside = if m.game().is_round() {
-            // A disc or a UMD: printed with the cover's art and the title, or with Printed discs off a plain one in the
-            // system's colour (`app_cabinet::printed_disc` on the shelf).
-            let kind = media::DiscKind::of(game.system_id);
-            Some(if self.prefs.extras.printed_discs {
-                media::disc_pic(text, kind, h, look, &game.name, cover)
-            } else {
-                media::disc_pic(text, kind, h, art::Look { color: game.color, ..look }, "", None)
-            })
-        } else {
-            media::game_pic(text, m.game(), h, look, &game.name, cover, console)
-        };
+        let inside = game_inside(text, game, (m, front.h), look, cover, self.prefs.extras.printed_discs);
+        self.box_view.hide_case = self.launching;
+        self.box_view.front_rect = None;
         self.box_view.paint(
             c,
             text,
@@ -1160,6 +1222,10 @@ impl Ui {
                 console,
             },
         );
+        if self.launching {
+            let (ox, oy) = self.card_origin;
+            self.front_at = self.box_view.front_rect.map(|(x, y, w, h)| ((x + ox, y + oy, w, h), front));
+        }
     }
     pub fn cover_changed(&mut self) {
         self.cards.clear();
@@ -1171,24 +1237,42 @@ impl Ui {
     }
 }
 
+/// The cartridge, card or disc in a case of `front_h`, beside it.
+fn game_inside(text: &mut Text, game: &Game, (m, front_h): (Medium, i32), look: art::Look, cover: Option<&Image>, printed: bool) -> Option<art::Pic> {
+    let h = m.game().size_beside(m, front_h).1;
+    if m.game().is_round() {
+        // A disc or a UMD: printed with the cover's art and the title, or with Printed discs off a plain one in the
+        // system's colour (`app_cabinet::printed_disc` on the shelf).
+        let kind = media::DiscKind::of(game.system_id);
+        Some(if printed {
+            media::disc_pic(text, kind, h, look, &game.name, cover)
+        } else {
+            media::disc_pic(text, kind, h, art::Look { color: game.color, ..look }, "", None)
+        })
+    } else {
+        media::game_pic(text, m.game(), h, look, &game.name, cover, pocket_ui::system_art::get(game.system_id))
+    }
+}
 /// Same provider identity and alternative-core namespace as the player's save directory.
 pub fn game_key(game: &Game, gambatte: bool) -> String {
-    let mut hash = game
-        .key
-        .bytes()
-        .fold(0xcbf29ce484222325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x100000001b3));
+    let mut hash = key_hash(&game.key);
     if gambatte && matches!(game.system_id, "gb" | "gbc") {
         hash = "gambatte".bytes().fold(hash, |h, b| (h ^ u64::from(b)).wrapping_mul(0x100000001b3));
     }
     format!("{hash:016x}")
 }
 
-fn tr(s: &str) -> String {
-    if pocket_ui::i18n::current() == pocket_ui::i18n::Lang::De {
-        pocket_ui::i18n::german().translate(s).map(|s| s.into_owned()).unwrap_or_else(|| s.into())
-    } else {
-        s.into()
-    }
+fn key_hash(key: &str) -> u64 {
+    key.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x100000001b3))
+}
+
+/// [`game_key`] of a game no Game Boy choice touches: the big ones.
+pub fn game_key_of(key: &str) -> String {
+    format!("{:016x}", key_hash(key))
+}
+
+pub(crate) fn tr(s: &str) -> String {
+    pocket_ui::i18n::tr(s)
 }
 
 pub fn library(games: Vec<Game>) -> Library {

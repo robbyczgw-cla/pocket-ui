@@ -19,6 +19,8 @@ Start at [user/index.md](user/index.md).
 |---|---|
 | [user/index.md](user/index.md) | The first page: what pocket-ui is and does, what it leaves alone, the list of pages |
 | [user/getting-started.md](user/getting-started.md) | Preparing the card, first start, Wi-Fi, adding games |
+| [user/games-drive.md](user/games-drive.md) | RG28XX card: copying games from a Mac or Windows PC |
+| [user/copy-games.md](user/copy-games.md) | Copying games without Wi-Fi: second card, USB file transfer |
 | [user/game-check.md](user/game-check.md) | Settings → Games → Game check: will your games start? |
 | [user/coming-from.md](user/coming-from.md) | Coming from ROCKNIX or Android: what happens to saves, states, favourites and settings, what needs a copy, what does not come over |
 | [user/playing.md](user/playing.md) | Home, finding a game, the looks, console pages, starting a game, the game switcher, continuing, menu sounds |
@@ -33,7 +35,7 @@ Start at [user/index.md](user/index.md).
 | [user/bluetooth.md](user/bluetooth.md) | Settings → Connections → Bluetooth: pairing controllers, headphones and speakers, reconnecting, forgetting |
 | [user/frozen-games.md](user/frozen-games.md) | Frozen games: your last five games stand a little open and A goes straight back; how long each system takes, what can't be frozen |
 | [user/quick-settings.md](user/quick-settings.md) | Quick settings (HOME), the power menu, sleep, power off and low battery |
-| [user/language.md](user/language.md) | Settings → System → Language: English or German, what stays English |
+| [user/language.md](user/language.md) | Settings → System → Language: English, German or Spanish, what stays English |
 | [user/night-light.md](user/night-light.md) | Settings → Look → Night light: warmer, less blue colours in the evening, the schedule, the strength, how it fades and where it reaches |
 | [user/theme.md](user/theme.md) | Settings → Look → Colours and Font: the five colour sets and the three fonts |
 | [user/performance.md](user/performance.md) | Settings → Playing → Performance & fan: game defaults, the fan in the menus, Smooth fan, the readout |
@@ -74,7 +76,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 |---|---|---|
 | [DEVELOPING.md](DEVELOPING.md) | Reference | Building, the dev loop, the virtual device, tests and the documentation checks, environment variables, repository layout |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Reference | How pocket-ui fits into ROCKNIX, the processes, the launch flow, switching games, the pause menu, and where each feature lives |
-| [i18n-glossary.md](i18n-glossary.md) | Reference | The German interface: tone, the terms every page uses, what stays English and why |
+| [i18n-glossary.md](i18n-glossary.md) | Reference | The German and Spanish interfaces: tone, the terms every page uses, what stays English and why |
 | [HOST.md](HOST.md) | Reference | pocket-core, our libretro host: how it works, systems, measurements |
 | [XBOX.md](XBOX.md) | Reference | Xbox through the hakuX core in RetroArch: start, appendconfig, pause menu, licence, device test (experimental) |
 | [BIG-EMULATORS.md](BIG-EMULATORS.md) | Reference | PlayStation 2, GameCube, Wii and 3DS through ARMSX2, Dolphin and Azahar: save slots, Options, measurements |
@@ -83,6 +85,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [SLEEP.md](SLEEP.md) | Reference and design notes | Sleep and power: research, what is built, a device test plan |
 | [DEVICES.md](DEVICES.md) | Design and reference | The Mini V2 and its experimental SM8250 siblings (Pocket 5, Flip 2, Mini V1): how pocket-ui tells them apart, what each gets, layouts at 1920x1080 and 1280x960, safety on untested hardware, installing |
 | [STEAMDECK.md](STEAMDECK.md) | Design and reference | pocket-ui on a Steam Deck (first preparation, run on a PC only): the Deck profile, EmuDeck library, emulators, bundle and Flatpak plan, Add to Steam, what needs real hardware |
+| [PLATFORMS.md](PLATFORMS.md) | Reference | Which user-visible feature exists on ROCKNIX handhelds, Android and the Steam Deck, and what was seen on a device |
 | [H700-SCALED-LAYOUT.md](H700-SCALED-LAYOUT.md) | Small-panel logical layouts, complete snapshot comparisons, JPEG readability and CPU measurement method |
 | [DISPLAY-OUT.md](DISPLAY-OUT.md) | Design and reference | Playing on a TV through USB-C: what ROCKNIX does, TV mode, what is built, the device test plan |
 | [FAN-CURVE.md](FAN-CURVE.md) | Design and reference | Smooth fan: why the mechanism, the curves, the safety net, the simulation, the device test |

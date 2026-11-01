@@ -90,6 +90,7 @@ public class PocketActivity extends NativeActivity {
     }
     public String externalPlayer() { return Boolean.toString(getIntent().getBooleanExtra("externalPlayer",false)); }
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);}
+    public String insertRehearsal() { return Boolean.toString(getIntent().getBooleanExtra("insertRehearsal",false)); }
     public String diagnosticAudio() { return Boolean.toString(getIntent().getBooleanExtra("diagnosticAudio",false)); }
     public String language() { return Locale.getDefault().getLanguage(); }
     public String dataPath() { return getFilesDir().getAbsolutePath(); }
@@ -171,13 +172,7 @@ public class PocketActivity extends NativeActivity {
             String root = roots.getString(i);
             try {
                 JSONArray entries = new JSONArray(scanLibrary(root));
-                String prefix = "";
-                if (i > 0) {
-                    byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(root.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                    StringBuilder hex = new StringBuilder("@pocket-root-");
-                    for (int j = 0; j < 8; j++) hex.append(String.format(Locale.ROOT, "%02x", digest[j] & 255));
-                    prefix = hex.toString() + "/";
-                }
+                String prefix = rootPrefix(i, root);
                 for (int j = 0; j < entries.length(); j++) {
                     JSONObject entry = entries.getJSONObject(j);
                     entry.put("relative", prefix + entry.getString("relative"));
@@ -192,6 +187,65 @@ public class PocketActivity extends NativeActivity {
         if (scanned == 0 && failure != null) throw failure;
         android.util.Log.i(TAG, "SAF multi-root scan roots=" + scanned + " entries=" + files.length());
         return files.toString();
+    }
+    private static String rootPrefix(int index, String root) throws Exception {
+        if (index == 0) return "";
+        byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(root.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        StringBuilder hex = new StringBuilder("@pocket-root-");
+        for (int j = 0; j < 8; j++) hex.append(String.format(Locale.ROOT, "%02x", digest[j] & 255));
+        return hex.toString() + "/";
+    }
+    /** "GameCheck" of primary:Download/GameCheck, "Phone storage" for the top of a volume. */
+    private static String rootName(String root) {
+        try {
+            String id = DocumentsContract.getTreeDocumentId(Uri.parse(root));
+            String name = id.substring(Math.max(id.lastIndexOf('/'), id.lastIndexOf(':')) + 1);
+            return name.isEmpty() ? "Phone storage" : name;
+        } catch (RuntimeException e) { return "Your folder"; }
+    }
+    /** Worker-only, for the Game check: every chosen folder as it is now, or why it can't be read. Android's grants can vanish. */
+    public String checkListing() throws Exception {
+        HashSet<String> granted = new HashSet<>();
+        for (android.content.UriPermission p : getContentResolver().getPersistedUriPermissions()) if (p.isReadPermission()) granted.add(p.getUri().toString());
+        JSONArray roots = roots(), out = new JSONArray();
+        for (int i = 0; i < roots.length(); i++) {
+            String root = roots.getString(i), prefix = rootPrefix(i, root);
+            JSONObject entry = new JSONObject().put("uri", root).put("name", rootName(root)).put("prefix", prefix);
+            String state = "ok";
+            JSONArray files = new JSONArray();
+            if (!granted.contains(root)) state = "lost";
+            else try {
+                files = new JSONArray(scanLibrary(root));
+                for (int j = 0; j < files.length(); j++) { JSONObject f = files.getJSONObject(j); f.put("relative", prefix + f.getString("relative")); }
+            } catch (SecurityException e) { state = "lost"; files = new JSONArray(); }
+            catch (LibraryTooBig e) { state = "big"; files = new JSONArray(); }
+            catch (Exception e) { android.util.Log.w(TAG, "Game check: folder unreadable", e); state = "gone"; files = new JSONArray(); }
+            out.put(entry.put("state", state).put("files", files));
+        }
+        return new JSONObject().put("roots", out).toString();
+    }
+    /** Worker-only: a document open for reading, its descriptor handed over to the caller. Empty: it can't be opened. */
+    public String openDocument(String document) {
+        try (android.os.ParcelFileDescriptor file = getContentResolver().openFileDescriptor(Uri.parse(document), "r")) {
+            return file == null ? "" : Integer.toString(file.dup().detachFd());
+        } catch (Exception e) { return ""; }
+    }
+    public String emulatorInstalled(String profile) { return Boolean.toString(EmulatorIntents.available(this, profile)); }
+    /** Stops reading a chosen folder that can't be read any more; its files aren't touched. */
+    public String forgetFolder(String root) throws Exception {
+        JSONArray roots = roots(), left = new JSONArray();
+        for (int i = 0; i < roots.length(); i++) if (!root.equals(roots.getString(i))) left.put(roots.getString(i));
+        try { getContentResolver().releasePersistableUriPermission(Uri.parse(root), Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (SecurityException | IllegalArgumentException e) { android.util.Log.i(TAG, "No grant left to release"); }
+        String tree = left.length() == 0 ? "" : left.getString(left.length() - 1);
+        getPreferences(0).edit().putString("trees", left.toString()).putString("tree", tree).putInt("revision", getPreferences(0).getInt("revision", 0) + 1).commit();
+        return "";
+    }
+    public String toast(String text) { runOnUiThread(() -> android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_LONG).show()); return ""; }
+    private static final class LibraryTooBig extends IOException { LibraryTooBig(String message) { super(message); } }
+    /** A sheet's names as they were written: many cue sheets are Latin-1, not UTF-8. */
+    private static String sheetText(byte[] bytes) {
+        try { return java.nio.charset.StandardCharsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes)).toString(); }
+        catch (java.nio.charset.CharacterCodingException e) { return new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1); }
     }
     /** Called on a Rust worker with the captured tree, never traverses providers on the UI thread. */
     public String scanLibrary(String selected) throws Exception {
@@ -213,7 +267,7 @@ public class PocketActivity extends NativeActivity {
             try (Cursor cursor = getContentResolver().query(children, projection, null, null, null)) {
                 if (cursor == null) throw new IOException("Provider did not return the folder");
                 while (cursor.moveToNext()) {
-                    if (++seen > 50000) throw new IOException("Library exceeds 50,000 entries; choose a smaller folder");
+                    if (++seen > 50000) throw new LibraryTooBig("Library exceeds 50,000 entries; choose a smaller folder");
                     String id = cursor.getString(0), name = cursor.getString(1), mime = cursor.getString(2);
                     if (name == null || name.equals(".") || name.equals("..") || name.contains("/") || name.contains("\\")) continue;
                     String relative = folder[1] + name;
@@ -233,7 +287,7 @@ public class PocketActivity extends NativeActivity {
                                 byte[] bytes = new byte[4096]; int n;
                                 while (out.size() <= 262144 && (n = in.read(bytes)) != -1) out.write(bytes, 0, n);
                                 if (out.size() > 262144) throw new IOException("Disc sheet too large: " + relative);
-                                entry.put("sheet", out.toString("UTF-8"));
+                                entry.put("sheet", sheetText(out.toByteArray()));
                             }
                         }
                         entry.put("size", cursor.isNull(3) ? -1 : cursor.getLong(3));
@@ -289,42 +343,150 @@ public class PocketActivity extends NativeActivity {
         }
         throw new IOException("Too many redirects");
     }
+    /** The launcher's start animation (`insert.rs`): the game is made ready at once and comes when the animation lets it. */
+    private final Object handOver=new Object();
+    private boolean holding;
+    private Runnable heldStart;
+    /** Which start is on its way: `cancelLaunch` moves on, and a worker of an earlier turn stops, starts nothing and says nothing. */
+    private int launchTurn;
+    private volatile boolean launchFailed;
+    private boolean launchCurrent(int turn){synchronized(handOver){return turn==launchTurn;}}
+    public String holdLaunch(){
+        synchronized(handOver){holding=true;heldStart=null;launchFailed=false;}
+        // The player's process comes up while the animation plays: shorter on black afterwards, and Android shows no splash for a running process.
+        try{startService(new Intent(this,PlayerWarm.class));}catch(RuntimeException e){android.util.Log.w(TAG,"player warm-up",e);}
+        return "";
+    }
+    public String releaseLaunch(){Runnable start;synchronized(handOver){holding=false;start=heldStart;heldStart=null;}if(start!=null)runOnUiThread(start);return "";}
+    /** Left the launcher before the game came, or the shelf came back: nothing comes up later. "true": a start was stopped. */
+    public String cancelLaunch(){synchronized(handOver){launchTurn++;holding=false;heldStart=null;return Boolean.toString(launching.getAndSet(false));}}
+    /** A worker is still making the game ready, or its start hasn't been handed to Android yet. */
+    public String launchOnItsWay(){return Boolean.toString(launching.get());}
+    public String launchFailed(){boolean failed=launchFailed;launchFailed=false;return Boolean.toString(failed);}
+    private void whenReleased(int turn,Runnable start){
+        Runnable checked=()->{if(launchCurrent(turn))start.run();else android.util.Log.i(TAG,"launch: cancelled start dropped");};
+        boolean now;synchronized(handOver){if(turn!=launchTurn){android.util.Log.i(TAG,"launch: cancelled start dropped");return;}now=!holding;if(!now)heldStart=checked;}
+        if(now)runOnUiThread(checked);
+    }
+    private void launchError(int turn,String title,Exception e){
+        synchronized(handOver){if(turn!=launchTurn){android.util.Log.i(TAG,"launch: cancelled start ended: "+e);return;}holding=false;heldStart=null;launching.set(false);}
+        launchFailed=true;error(title,e);
+    }
     /** Stage one cartridge on a worker, then enter our own EGL player. URI identity owns its saves. */
     public String launchInternal(String document,String relative,String core,String key,String title,String system,String settings) {
-        if (!launching.compareAndSet(false,true)) return "Already opening a game";
+        final int turn;
+        synchronized(handOver){if(!launching.compareAndSet(false,true))return "Already opening a game";turn=launchTurn;}
         new Thread(()->{
             try {
                 if (!core.matches("[a-z][a-z0-9_]{0,39}") || !new File(getApplicationInfo().nativeLibraryDir,"lib"+core+"_libretro.so").isFile())
                     throw new IOException("Core not bundled: " + core);
                 if (!key.matches("[a-f0-9]{16}")) throw new IOException("Invalid game identity");
-                File folder=new File(getFilesDir(),"content/"+key); if(!folder.mkdirs()&&!folder.isDirectory())throw new IOException("Cannot prepare content");
                 String name=relative.substring(relative.lastIndexOf('/')+1);
                 if(name.isEmpty()||name.equals(".")||name.equals("..")||name.contains("\\"))throw new IOException("Invalid ROM name");
-                File rom=new File(folder,name), part=new File(folder,name+".part");
-                try(InputStream in=getContentResolver().openInputStream(Uri.parse(document));OutputStream out=new FileOutputStream(part)) {
-                    byte[] bytes=new byte[65536];long total=0;int n;
-                    while((n=in.read(bytes))!=-1){if((total+=n)>128*1024*1024)throw new IOException("Cartridge exceeds 128 MiB");out.write(bytes,0,n);}
-                }
-                if(!part.renameTo(rom))throw new IOException("Cannot finish content copy");
-                Intent player=new Intent(this,PlayerActivity.class).putExtra("core",getApplicationInfo().nativeLibraryDir+"/lib"+core+"_libretro.so").putExtra("rom",rom.getAbsolutePath()).putExtra("system",system).putExtra("key",key).putExtra("title",title).putExtra("diagnosticAudio",getIntent().getBooleanExtra("diagnosticAudio",false)).putExtra("settings",settings);
-                runOnUiThread(()->{try{startActivity(player);}finally{launching.set(false);}});
-            }catch(Exception e){launching.set(false);error("Game couldn't start",e);}
+                CopyWindow window=new CopyWindow(title,settings,turn);
+                File rom;
+                try{rom=new GameCopy(this).prepare(Uri.parse(document),key,name,name+"."+turn+".part",core,copyWords(settings),window);}
+                catch(SecurityException e){throw new IOException(cannotRead(settings,false),e);}
+                catch(FileNotFoundException|IllegalArgumentException e){throw new IOException(cannotRead(settings,true),e);} // The storage provider's way of saying it is gone.
+                finally{window.close();}
+                Intent player=new Intent(this,PlayerActivity.class).putExtra("core",getApplicationInfo().nativeLibraryDir+"/lib"+core+"_libretro.so").putExtra("rom",rom.getAbsolutePath()).putExtra("system",system).putExtra("key",key).putExtra("title",title).putExtra("diagnosticAudio",getIntent().getBooleanExtra("diagnosticAudio",false)).putExtra("settings",settings).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+                whenReleased(turn,()->{try{startActivity(player);}finally{launching.set(false);}});
+            }catch(GameCopy.Cancelled e){android.util.Log.i(TAG,"launch: cancelled start ended");if(launchCurrent(turn)){cancelLaunch();launchFailed=true;} // Its Cancel: back to the shelf. Home has moved on already.
+            }catch(Exception e){launchError(turn,inLanguage(settings,"Game couldn't start","Das Spiel konnte nicht starten","No se pudo iniciar el juego"),e);}
         },"pocket-content").start();return "";
+    }
+    private static GameCopy.Words copyWords(String settings){
+        return new GameCopy.Words(){
+            @Override public String tooBig(String size,String most){return inLanguage(settings,"This game is "+size+". This app's player loads it into memory whole and takes games up to "+most+" on this system.","Dieses Spiel hat "+size+". Der Player dieser App lädt es ganz in den Speicher und nimmt auf diesem System Spiele bis "+most+".","Este juego pesa "+size+". El emulador de esta app lo carga entero en la memoria y admite juegos de hasta "+most+" en este sistema.");}
+            @Override public String noRoom(String size,String free){return inLanguage(settings,"This game needs "+size+" free on your phone for its first start, and "+free+" is free. Make some room and start it again. Your saves are safe.","Für den ersten Start braucht dieses Spiel "+size+" freien Speicher auf deinem Handy, frei sind "+free+". Schaff Platz und starte es noch einmal. Deine Spielstände bleiben erhalten.","Para su primer inicio este juego necesita "+size+" libres en tu móvil, y hay "+free+" libres. Libera espacio e inícialo de nuevo. Tus partidas guardadas están a salvo.");}
+            @Override public String full(){return inLanguage(settings,"Your phone's storage is full. Make some room and start the game again. Your saves are safe.","Der Speicher deines Handys ist voll. Schaff Platz und starte das Spiel noch einmal. Deine Spielstände bleiben erhalten.","El almacenamiento de tu móvil está lleno. Libera espacio e inicia el juego de nuevo. Tus partidas guardadas están a salvo.");}
+        };
+    }
+    /** The bar of a big game's first start: Cancel or Back stops the copy, the screen stays on meanwhile. Shown at its first report. */
+    private final class CopyWindow implements GameCopy.Progress {
+        private final String title,settings;
+        private final int turn;
+        // Test only (`slowCopy` launch extra, milliseconds a block, as `insertRehearsal`): a provider that takes its time.
+        private final int slowCopy=getIntent().getIntExtra("slowCopy",0);
+        private final long began=android.os.SystemClock.elapsedRealtime();
+        private volatile boolean stop,open;
+        private long drawn;
+        private AlertDialog dialog;
+        private android.widget.ProgressBar bar;
+        private android.widget.TextView line;
+        CopyWindow(String title,String settings,int turn){this.title=title;this.settings=settings;this.turn=turn;}
+        @Override public boolean current(){return launchCurrent(turn);}
+        @Override public Object lock(){return handOver;}
+        @Override public boolean at(long done,long total,boolean big){
+            if(slowCopy>0)android.os.SystemClock.sleep(slowCopy);
+            if(!big)return !stop&&launchCurrent(turn);
+            long now=android.os.SystemClock.elapsedRealtime();
+            boolean first=!open;
+            if(first||now-drawn>=250){
+                drawn=now;open=true;
+                long left=total>0&&done>0&&now-began>=2000?(total-done)*(now-began)/done/1000+1:-1;
+                String of=total>0?GameCopy.shown(done)+inLanguage(settings," of "," von "," de ")+GameCopy.shown(total):GameCopy.shown(done);
+                String text=left>=0?of+inLanguage(settings," · about "," · noch etwa "," · unos ")+(left>=90?(left+30)/60+" min":left+" s"):of;
+                int percent=total>0?(int)(done*1000/total):0;
+                runOnUiThread(()->draw(first,total>0,percent,text));
+            }
+            return !stop&&launchCurrent(turn);
+        }
+        private void draw(boolean first,boolean known,int percent,String text){
+            if(first&&dialog==null&&!isFinishing()){
+                bar=new android.widget.ProgressBar(PocketActivity.this,null,android.R.attr.progressBarStyleHorizontal);
+                bar.setMax(1000);bar.setIndeterminate(!known);
+                line=new android.widget.TextView(PocketActivity.this);
+                android.widget.TextView about=new android.widget.TextView(PocketActivity.this);
+                about.setText(inLanguage(settings,"The first start copies this big game into the app's own storage. After that it starts without this wait.","Beim ersten Start kommt dieses große Spiel in den Speicher der App, danach startet es ohne Warten.","El primer inicio copia este juego grande al almacenamiento de la app. Después arranca sin esta espera."));
+                android.widget.LinearLayout box=new android.widget.LinearLayout(PocketActivity.this);
+                box.setOrientation(android.widget.LinearLayout.VERTICAL);
+                int pad=(int)(20*getResources().getDisplayMetrics().density);
+                box.setPadding(pad,pad/2,pad,0);
+                box.addView(about);box.addView(bar);box.addView(line);
+                dialog=new AlertDialog.Builder(PocketActivity.this).setTitle(title).setView(box)
+                    .setNegativeButton(inLanguage(settings,"Cancel","Abbrechen","Cancelar"),(d,w)->stop=true).setOnCancelListener(d->stop=true).create();
+                dialog.setCanceledOnTouchOutside(false);
+                dialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                dialog.show();
+                android.util.Log.i(TAG,"copy: bar shown");
+            }
+            if(bar!=null){bar.setProgress(percent);line.setText(text);}
+        }
+        void close(){runOnUiThread(()->{if(dialog!=null&&dialog.isShowing())dialog.dismiss();});android.util.Log.i(TAG,"copy: "+(open?"window ":"")+(android.os.SystemClock.elapsedRealtime()-began)+" ms");}
+    }
+    /** Room for a first copy of this game (`document_check::Host`); -1: it has one. */
+    public String roomForCopy(String key){return Long.toString(new GameCopy(this).room(key));}
+    /** The player's language: Settings' choice ("language", an older version's "german"), else the phone's. English for any other. */
+    private static String inLanguage(String settings,String english,String german,String spanish) {
+        String system=java.util.Locale.getDefault().getLanguage();
+        boolean de=settings.contains("\"language\":\"de\"")||settings.contains("\"german\":true");
+        boolean es=settings.contains("\"language\":\"es\"");
+        boolean chosen=de||es||settings.contains("\"language\":\"en\"")||settings.contains("\"german\":false");
+        if(de||(!chosen&&system.equals("de")))return german;
+        return es||(!chosen&&system.equals("es"))?spanish:english;
+    }
+    /** Nothing was replaced: the copy before this start, the moments and the in-game saves are as they were. */
+    private static String cannotRead(String settings,boolean gone) {
+        if(gone)return inLanguage(settings,"This game's file isn't in its folder any more. Your moment and your saves are safe; put the file back to carry on.","Die Datei des Spiels ist nicht mehr in seinem Ordner. Dein Moment und deine Spielstände bleiben erhalten; leg die Datei zurück, dann geht es weiter.","El archivo de este juego ya no está en su carpeta. Tu momento y tus partidas guardadas siguen a salvo; vuelve a poner el archivo para continuar.");
+        return inLanguage(settings,"Android no longer lets pocket-ui read this file. Choose its folder again in Settings. Your moment and your saves are safe.","Android lässt pocket-ui diese Datei nicht mehr lesen. Wähle den Ordner in den Einstellungen unter „ROM-Ordner“ noch einmal. Dein Moment und deine Spielstände bleiben erhalten.","Android ya no deja que pocket-ui lea este archivo. Vuelve a elegir su carpeta en Ajustes. Tu momento y tus partidas guardadas siguen a salvo.");
     }
     public String launchState() { return launchStatus; }
     /** Called by Rust with a profile id and document URI. No URI is converted into a fake filesystem path. */
     public String launchGame(String document, String relative, String profile) {
-        if (!launching.compareAndSet(false, true)) return "Already opening a game";
+        final int turn;
+        synchronized (handOver) { if (!launching.compareAndSet(false, true)) return "Already opening a game"; turn = launchTurn; }
         launchStatus = "Opening game...";
         new Thread(() -> {
             try {
                 Intent intent = EmulatorIntents.create(this, Uri.parse(document), relative, profile);
-                runOnUiThread(() -> {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+                whenReleased(turn, () -> {
                     try { startActivity(intent); launchStatus = ""; android.util.Log.i(TAG, "launch profile=" + profile + " ROM=" + document); }
-                    catch (Exception e) { launchStatus = e.getMessage(); error("Emulator couldn't start", e); }
+                    catch (Exception e) { launchStatus = e.getMessage(); launchError(turn, "Emulator couldn't start", e); }
                     finally { launching.set(false); }
                 });
-            } catch (Exception e) { launchStatus = e.getMessage(); launching.set(false); error("Emulator couldn't start", e); }
+            } catch (Exception e) { launchStatus = e.getMessage(); launchError(turn, "Emulator couldn't start", e); }
         }, "pocket-launch").start();
         return "";
     }

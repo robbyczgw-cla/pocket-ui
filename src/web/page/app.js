@@ -588,7 +588,6 @@ async function uploadView() {
     u.ports.length === 0 ? h("p", { class: "quiet" }, "No installed port is waiting for files.") : null,
     u.ports.map((p) => {
       const rows = h("div", {});
-      const where = p.folders.length ? "Into " + p.folders.join(", ") : p.files.length ? "The files " + p.files.join(", ") : "";
       const send = async (filesIn, fromFolder) => {
         for (const file of filesIn) {
           // A chosen folder's own name is left out: its contents go where the port wants them.
@@ -601,9 +600,8 @@ async function uploadView() {
       return h("div", {},
         h("h3", {}, p.title),
         h("p", { class: "small" }, p.instructions),
-        where ? h("p", { class: "quiet small" }, where + ". They wait in roms/port-files/" + p.dir + " and move into the port when you start it.") : null,
-        p.waiting ? h("p", { class: "quiet small" }, p.waiting + " waiting for the next start.") : null,
-        p.drop ? h("div", { class: "stack" }, dropZone("Drop files here", true, (f) => send(f, false)), dropZone("Or a whole folder: its contents keep their folders", false, (f) => send(f, true), true)) : h("p", { class: "quiet small" }, "Its instructions name no folder: copy these files with the SD card or over SSH."),
+        h("p", { class: "quiet small" }, "They go into " + p.place + "."),
+        h("div", { class: "stack" }, dropZone("Drop files here", true, (f) => send(f, false)), dropZone("Or a whole folder: its contents keep their folders", false, (f) => send(f, true), true)),
         rows);
     }));
 

@@ -94,7 +94,7 @@ impl Default for Text {
 /// pause menu 21) and of the titles (50), for ASCII and `PREWARM_MORE`.
 const PREWARM: [(Face, &[u32]); 2] = [(Face::Body, &[21, 28, 30, 36, 46]), (Face::Title, &[50])];
 /// The letters of German and the marks of Settings' values besides ASCII.
-const PREWARM_MORE: &str = "ÄÖÜäöüß…‹›·–×°→\u{200b}";
+const PREWARM_MORE: &str = "ÄÖÜäöüßáéíóúñÁÉÍÓÚÑ¿¡“”…‹›·–×°→\u{200b}";
 /// The sizes games' names are painted at (the rows of a list and of search 37, the card's title 50 and 67, a cover's
 /// caption 44, the hints and meta lines 28 and 30), at which `prewarm_names` draws their CJK letters ahead.
 const PREWARM_NAMES: [(Face, &[u32]); 2] = [(Face::Title, &[37, 44, 50, 67]), (Face::Body, &[28, 30])];
@@ -472,7 +472,7 @@ impl Text {
         }
         // The names of the buttons are never translated: their first sight needn't try the patterns.
         for key in ["A", "B", "X", "Y", "L1", "R1", "L2", "R2", "START", "SELECT"] {
-            self.tr.is_german(key);
+            self.tr.is_translated(key);
         }
         let (tx, rx) = mpsc::channel();
         let (title, body, scale) = (self.title.clone(), self.body.clone(), self.scale);
@@ -655,10 +655,10 @@ impl Text {
         if !line.is_empty() {
             lines.push(line);
         }
-        // Lines of a translation are German already when they are painted.
+        // Lines of a translation are translated already when they are painted.
         if translated {
             for l in &lines {
-                self.tr.is_german(l);
+                self.tr.is_translated(l);
             }
         }
         lines
@@ -775,12 +775,12 @@ impl Text {
     pub fn fit(&mut self, face: Face, px: u32, english: &str, max: i32) -> String {
         let px = crate::type_scale::px(px);
         let s = self.translated(english);
-        // What comes back of a translation is German already when it is painted (`i18n::Cache::is_german`).
+        // What comes back of a translation is translated already when it is painted (`i18n::Cache::is_translated`).
         let translated = !self.raw && !matches!(s, crate::i18n::Tr::Same(_));
         if self.width_raw(face, px, &s) <= max {
             let whole = s.to_string();
             if translated {
-                self.tr.is_german(&whole);
+                self.tr.is_translated(&whole);
             }
             return whole;
         }
@@ -792,7 +792,7 @@ impl Text {
             let candidate: String = chars.iter().collect::<String>().trim_end().to_string() + "…";
             if self.width_raw(face, px, &candidate) <= max {
                 if translated {
-                    self.tr.is_german(&candidate);
+                    self.tr.is_translated(&candidate);
                 }
                 return candidate;
             }

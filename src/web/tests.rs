@@ -388,17 +388,18 @@ fn port(roms: &Path, rtr: bool) {
 }
 
 #[test]
-fn port_files_go_into_its_drop_folder_only() {
+fn port_files_go_into_the_ports_own_folder() {
     let root = tmp("porttarget");
     let roms = root.join("roms");
     port(&roms, false);
     let roots = Roots::under(&roms);
     let needs = files::ports_needing_files(&roots);
     assert_eq!(needs.len(), 1);
-    assert!(needs[0].drop && needs[0].folders == ["assets"]);
-    assert_eq!(files::port_target(&roots, "sprout", "data.win").unwrap(), roms.join("port-files/sprout/data.win"));
-    assert_eq!(files::port_target(&roots, "sprout", "music/a.ogg").unwrap(), roms.join("port-files/sprout/music/a.ogg"));
-    assert!(roms.join("port-files/sprout/music").is_dir());
+    assert_eq!(needs[0].place, "roms/ports/sprout/assets");
+    assert_eq!(files::port_target(&roots, "sprout", "data.win").unwrap(), roms.join("ports/sprout/assets/data.win"));
+    assert_eq!(files::port_target(&roots, "sprout", "music/a.ogg").unwrap(), roms.join("ports/sprout/assets/music/a.ogg"));
+    assert!(roms.join("ports/sprout/assets/music").is_dir());
+    assert!(!roms.join("port-files").exists());
     for bad in ["../x", "a/../../b", "/etc/passwd"] {
         assert!(files::port_target(&roots, "sprout", bad).is_err(), "{bad}");
     }
@@ -408,7 +409,7 @@ fn port_files_go_into_its_drop_folder_only() {
     assert!(files::port_target(&roots, "other", "x").is_err(), "not installed");
     #[cfg(unix)]
     {
-        std::os::unix::fs::symlink(root.join("elsewhere"), roms.join("port-files/sprout/linked")).unwrap();
+        std::os::unix::fs::symlink(root.join("elsewhere"), roms.join("ports/sprout/assets/linked")).unwrap();
         assert!(files::port_target(&roots, "sprout", "linked/x.dat").is_err(), "never through a link");
     }
     port(&roms, true);
@@ -826,8 +827,7 @@ fn uploads_through_the_api() {
     assert_eq!(chunked.status, 411);
 
     assert_eq!(up("kind=port&dir=sprout&rel=sub%2Fdata.win&name=data.win", b"win").status, 200);
-    assert!(r.root.join("roms/port-files/sprout/sub/data.win").is_file());
-    assert!(!r.root.join("roms/ports/sprout/assets/data.win").exists(), "the port gets it when it starts, not now");
+    assert!(r.root.join("roms/ports/sprout/assets/sub/data.win").is_file());
     assert_eq!(up("kind=port&dir=sprout&rel=..%2F..%2Fports%2Fx.sh&name=x.sh", b"x").status, 403);
     assert_eq!(up("kind=port&dir=..&rel=x&name=x", b"x").status, 403);
     let leftovers: Vec<_> = walk(&r.root.join("roms")).into_iter().filter(|p| p.to_string_lossy().ends_with(".upload")).collect();

@@ -186,6 +186,19 @@ pub fn rows_above(max_rows: usize, top_for: impl Fn(usize) -> i32, bottom: i32, 
 /// the bottom (the longest of the group, `desc_lines` lines of `desc_font` px). Normal text shows every row, so the
 /// images stay put when a sub-choice appears; Medium and Large show as many as leave the images `LARGE_MIN_SHARE` of the screen
 /// (`rows_above`) and keeps at most the five lines the explanation shows free for it.
+/// Screens this short (the H700 handhelds' 640x480) can't hold the whole page at its normal size: the list gives up
+/// rows and the explanation keeps `SMALL_SCREEN_LINES` lines, so the images get `SMALL_SCREEN_MIN` of the height (a 640x480 panel is laid out at 1280x960, `scaled_layout`)
+/// at least, with every text size.
+pub fn small_screen(h: i32) -> bool {
+    h <= 960
+}
+
+/// The most lines of explanation the Picture page shows on a small screen (`small_screen`).
+pub const SMALL_SCREEN_LINES: usize = 3;
+
+/// The smallest share of the height the images get on a small screen: 25 %, 240 px on the 1280x960 canvas (120 px on the panel).
+pub const SMALL_SCREEN_MIN: (i32, i32) = (1, 4);
+
 pub fn picture_page(screen: (i32, i32), pad: i32, list_top: i32, max_rows: usize, desc_lines: usize, desc_font: u32) -> (usize, Layout) {
     picture_page_over(screen, pad, pad, list_top, max_rows, desc_lines, desc_font)
 }
@@ -194,13 +207,15 @@ pub fn picture_page(screen: (i32, i32), pad: i32, list_top: i32, max_rows: usize
 /// them: over the hint pill (`kit::footer`).
 pub fn picture_page_over(screen: (i32, i32), pad: i32, foot: i32, list_top: i32, max_rows: usize, desc_lines: usize, desc_font: u32) -> (usize, Layout) {
     let (w, h) = screen;
-    let large = crate::type_scale::scaled();
-    let lines = if large { desc_lines.min(5) } else { desc_lines };
+    let small = small_screen(h);
+    let large = crate::type_scale::scaled() || small;
+    let lines = if small { desc_lines.min(SMALL_SCREEN_LINES) } else if large { desc_lines.min(5) } else { desc_lines };
     let footer_top = h - foot - lines as i32 * crate::type_scale::line(desc_font, 10) + desc_font as i32 / 4;
     let bottom = footer_top - 20;
     let row = crate::type_scale::row(66, 36);
     let top_for = |n: usize| list_top + n as i32 * row + 18;
-    let rows = if large { rows_above(max_rows, top_for, bottom, h * LARGE_MIN_SHARE.0 / LARGE_MIN_SHARE.1) } else { max_rows };
+    let share = if small { SMALL_SCREEN_MIN } else { LARGE_MIN_SHARE };
+    let rows = if large { rows_above(max_rows, top_for, bottom, h * share.0 / share.1) } else { max_rows };
     (rows, layout(w, pad, top_for(rows), bottom, (w as u32, h as u32)))
 }
 
@@ -357,6 +372,27 @@ mod tests {
         assert_eq!((n, l.whole.1), (7, 132 + 7 * 66 + 18 + 44 + 8));
         // A band too small for even three rows keeps three.
         assert_eq!(rows_above(7, |n| 900 + n as i32 * 76, 1000, 324), 3);
+    }
+
+    #[test]
+    fn a_640x480_panel_keeps_a_useful_preview_with_every_text_size() {
+        use crate::type_scale::{set, TextSize};
+        // 640x480 is laid out at 1280x960 (`scaled_layout::logical_size`); the images are 25 % of the height at least
+        // (120 px on the panel) for every group size and explanation length, Normal, Medium and Large.
+        assert_eq!(crate::scaled_layout::logical_size((640, 480)), (1280, 960));
+        for size in [TextSize::Normal, TextSize::Medium, TextSize::Large] {
+            set(size);
+            for max in 1..=9 {
+                for lines in 1..=8 {
+                    let (n, l) = picture_page((1280, 960), 30, 132, max, lines, 30);
+                    assert!(l.whole.3 >= 960 * SMALL_SCREEN_MIN.0 / SMALL_SCREEN_MIN.1 || n == max.min(3), "{size:?} {max} rows, {lines} lines: {n} rows leave {l:?}");
+                    assert!(l.whole.3 >= 100 && l.detail.3 >= 100, "{size:?} {max} rows, {lines} lines: {l:?}");
+                }
+            }
+        }
+        set(TextSize::Normal);
+        // The Mini V2's layout does not move.
+        assert!(!small_screen(1080) && !small_screen(1440));
     }
 
     #[test]

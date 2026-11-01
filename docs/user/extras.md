@@ -164,35 +164,24 @@ itself after you install one of these games.
 
 - **On this Pocket**: the folder the files go into, for example `/storage/roms/ports/sprout/assets`. pocket-ui
   reads it from the instructions; when they name no folder, it shows the game's own folder.
-- **From a computer**: file sharing hides the `ports` folder, because the Pocket runs programs from it. Each
-  of these games gets a folder of its own in the share instead, in `port-files`, named like the game's folder.
-  Put the files there; **when you start the game, pocket-ui moves them into place**. The page shows the
-  address, user and password while file sharing is on; when it is off, press X on the page to turn it on
-  (the same switch as on Settings → Games → Add games). For -SPROUT-:
-  - Windows: `\\<address>\games-roms\port-files\sprout`
-  - macOS and Linux: `smb://<address>/games-roms/port-files/sprout`
-- **From a browser**: the [web companion](web-companion.md)'s Upload page puts files into the same `port-files`
-  folder, over Tailscale.
+- **From a computer**: over file sharing the same folder is in `ports`, and **you copy the files straight
+  there**. The page shows the address, user and password while file sharing is on; when it is off, press X on
+  the page to turn it on (the same switch as on Settings → Games → Add games). For -SPROUT-:
+  - Windows: `\\<address>\games-roms\ports\sprout\assets`
+  - macOS and Linux: `smb://<address>/games-roms/ports/sprout/assets`
+- **From a browser**: the [web companion](web-companion.md)'s Upload page puts files into the same folder, over
+  Tailscale.
 - **PortMaster says**: the instructions as PortMaster wrote them. Up/Down scrolls when they are long.
 
-What pocket-ui moves from `port-files`:
-
-- When the instructions name one folder (most games: `assets` or `gamedata`), everything you put into
-  `port-files/<game>` goes into that folder.
-- When they name several (Counter-Strike: `valve` and `cstrike`), put those folders into `port-files/<game>`;
-  only folders with those names are moved.
-- When they name the game's folder itself and the files to copy (for example `arco.exe`), only those files
-  are moved.
-- A file that is already in the game's folder is never replaced (only the empty placeholder some games come
-  with), and links are not moved. Whatever is not moved stays in `port-files`.
-- When the instructions say neither, there is no `port-files` folder for the game. Copy the files with
-  [Remote access (SSH)](settings-system.md#remote-access-ssh), or with the SD card in a computer that reads Linux (ext4) drives.
+When the instructions name several folders (Counter-Strike: `valve` and `cstrike`), the address is the game's
+own folder: put those folders there. If you used `port-files` with an earlier version, your files are still
+there and pocket-ui no longer touches them: move them into the game's folder.
 
 ### When the files are missing
 
 When you start one of these games and its files are definitely not there, pocket-ui shows **Copy your game
 files** ("… can't start yet") instead of starting into a black screen. A or B goes back to the shelf.
-Before that it moves anything waiting in `port-files` into place, so copying and starting is enough.
+Once the files are in the folder it names, start the game again.
 
 pocket-ui only stops a game when it is sure: the folder the instructions name is missing or holds nothing
 but the placeholder the game came with, or none of the files the instructions name is anywhere in the game's

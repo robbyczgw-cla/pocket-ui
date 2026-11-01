@@ -2,7 +2,9 @@
 """Drive API-35 DocumentsUI into our demo subtree using live UI nodes and bounded retries."""
 import re, subprocess, sys, time, xml.etree.ElementTree as ET
 from pathlib import Path
-adb, serial, output = sys.argv[1:]
+adb, serial, output = sys.argv[1:4]
+# The folder under Download to choose.
+FOLDER = sys.argv[4] if len(sys.argv) > 4 else 'PocketMvp'
 model = subprocess.check_output([adb, '-s', serial, 'shell', 'getprop', 'ro.product.model'], text=True).strip()
 for step in range(16):
     raw = subprocess.check_output([adb, '-s', serial, 'exec-out', 'uiautomator', 'dump', '/dev/tty'], text=True)
@@ -22,11 +24,13 @@ for step in range(16):
         target = choose
     elif allow is not None:
         target = allow
-    elif use is not None and any(n.get('text') == 'PocketMvp' for n in nodes):
+    elif use is not None and any(n.get('text') == FOLDER for n in nodes):
         target = use
     else:
-        target = find('PocketMvp', 'android:id/title')
+        target = find(FOLDER, 'android:id/title')
         if target is None: target = find('Download', 'android:id/title')
+        # The picker remembers the last folder: its path at the top leads back to Download.
+        if target is None: target = next((n for n in nodes if n.get('text') == 'Download' and n.get('resource-id', '').endswith('breadcrumb_text')), None)
         if target is None: target = find(model, 'android:id/title')
         if target is None: target = find('Show roots')
     if target is None and any(n.get('package') == 'dev.pocket.spike' for n in nodes):
@@ -37,4 +41,4 @@ for step in range(16):
         if allow is not None: break
     time.sleep(1)
 else:
-    sys.exit('Could not select PocketMvp through the real SAF picker; see picker XML evidence')
+    sys.exit(f'Could not select {FOLDER} through the real SAF picker; see picker XML evidence')

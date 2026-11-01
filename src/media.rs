@@ -966,6 +966,25 @@ pub fn game_top(text: &mut Text, system: &str, rom: &str, w: i32, h: i32, look: 
     Some(top)
 }
 
+/// How much of a frozen game shows over its spine at `f` screen pixels a template pixel.
+pub fn ajar_peek(f: f32) -> i32 {
+    (5.0 * f).round() as i32
+}
+
+/// A frozen game's spine on the shelf: the game out of the case by a little, over its top. Nothing is drawn for it: the
+/// top of the game's own picture (`game_top`) over the spine's own, which keeps its width and its place.
+pub fn ajar_spine(text: &mut Text, spine: Pic, system: &str, rom: &std::path::Path, f: f32, look: Look) -> Pic {
+    let peek = ajar_peek(f);
+    let Some(top) = game_top(text, system, &rom.to_string_lossy(), spine.w - 4, peek, look) else { return spine };
+    let mut pic = Pic::new(spine.w, spine.h + peek, 0);
+    for y in 0..top.h {
+        let row = (y * top.w) as usize;
+        pic.px[(y * pic.w + 2) as usize..][..top.w as usize].copy_from_slice(&top.px[row..row + top.w as usize]);
+    }
+    pic.px[(peek * pic.w) as usize..].copy_from_slice(&spine.px);
+    pic
+}
+
 pub fn game_pic(text: &mut Text, g: Game, h: i32, look: Look, title: &str, cover: Option<&Image>, console: Option<&Sprite>) -> Option<Pic> {
     let i = g.drawn()?;
     let sprite = g.pic()?;

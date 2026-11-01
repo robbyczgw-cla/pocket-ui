@@ -15,6 +15,7 @@ Settings → **Connections**. Networks, controllers, and reaching the Pocket fro
 |---|---|
 | **Wi-Fi** | Connect to a network, switch between saved ones, forget one, join a hidden network, set the Wi-Fi country. See [Getting started](getting-started.md#4-connect-to-wi-fi) |
 | **Bluetooth** | Pair a controller, headphones or a speaker and see what is connected. See [Bluetooth](bluetooth.md) |
+| **USB file transfer** | Copy games with a USB cable, off until you turn it on; shows Off, On or Connected. Windows and Linux open it by themselves, a Mac needs the OpenMTP app. Only on handhelds where it can work. See [With a USB cable](copy-games.md#with-a-usb-cable) |
 | **Tailscale** | Reach the Pocket from your other devices over a private network, even away from home. See [Tailscale](remote.md) |
 | **Sync** | Keep saves and save states in step with your other devices with Syncthing, and, if you like, your favourites, notes and play history too. See [Sync](sync.md) |
 | **Remote access (SSH)** | Log in from a computer. See [Remote access](#remote-access-ssh) |
@@ -40,7 +41,7 @@ Settings → Connections → **Remote access (SSH)**. Remote access is **off** b
 1. Press A ("Turn on remote access"). The screen shows `ssh root@<address>`, the user and a password made for this
    Pocket.
 2. Log in from your computer with those. The password stays the same for this Pocket.
-3. It turns itself off after 30 minutes without an open connection. Press A again to turn it off sooner.
+3. It stays on until you press A again to turn it off. After a restart it is off again.
 
 Remote access is meant for people who want to copy files or look at logs. You do not need it to play. See
 [SECURITY-HARDENING.md](../SECURITY-HARDENING.md) for what it changes.
@@ -52,7 +53,7 @@ card and backups.
 
 | Entry | What it holds |
 |---|---|
-| **Language** | **English** or **Deutsch**: menus, hints and messages. See [Language](language.md) |
+| **Language** | **English**, **Deutsch** or **Español**: menus, hints and messages. See [Language](language.md) |
 | **Time** | Time zone, date and network time. See [Time](#time) |
 | **Sleep & power** | When the screen goes off and the device sleeps, the slideshow before it, when it switches off after sleeping, and what the power button does. The row shows the screen-off time ("2 min"). See [Sleep & power](#sleep--power) |
 | **Frozen games** | Your last five games with a saved moment stand a little open on the shelf, and A goes straight back. On at the start; A switches it. See [Frozen games](frozen-games.md#frozen-games) |
@@ -169,7 +170,7 @@ Settings → **Help & tools**. The Tour, this guide, ROCKNIX's tools, the bug re
 | **Tools** | ROCKNIX's tools without its old menu: the emulators' own settings, RetroArch's menu, gamepad test and calibration, file manager, terminal, and tools installed from a store. See [Tools](#tools) |
 | **Store** | Emulators, frames, themes and tools. Shown only on a device that has a store set up; there is no public store yet, so you will not see this row. See [Store](extras.md#store) |
 | **Report a problem** | One press saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)) and shows where it is. The same row is in About, and in the dialog of SELECT + START held, where you look when something has just gone wrong |
-| **About** | Version, the system underneath (on the SD card image "pocket-ui OS 0.1.8 · built on ROCKNIX 20261001 (SM8250)", on a ROCKNIX card with pocket-ui added just the ROCKNIX version), number of games, free space, network address, battery, where the logs are kept, and where the licence texts are (a Licences row when the page has the room: `/storage/pocket-ui/licences`: pocket-ui's licence, the credits, the licences of the programs it is built from and of its fonts; they come with the install package and the SD card image); on a Retroid Pocket 5, Flip 2 or first Mini also which one it is, marked experimental ([Getting started](getting-started.md#other-retroid-devices)). Two rows: **Report a problem** saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)); **Open EmulationStation…** opens ROCKNIX's own menu, after a warning ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)) |
+| **About** | Version, the system underneath (on the SD card image "pocket-ui OS 0.1.9 · built on ROCKNIX 20261001 (SM8250)", on a ROCKNIX card with pocket-ui added just the ROCKNIX version), number of games, free space, network address, battery, where the logs are kept, and where the licence texts are (a Licences row when the page has the room: `/storage/pocket-ui/licences`: pocket-ui's licence, the credits, the licences of the programs it is built from and of its fonts; they come with the install package and the SD card image); on a Retroid Pocket 5, Flip 2 or first Mini also which one it is, marked experimental ([Getting started](getting-started.md#other-retroid-devices)). Two rows: **Report a problem** saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)); **Open EmulationStation…** opens ROCKNIX's own menu, after a warning ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)) |
 
 ### Manual
 

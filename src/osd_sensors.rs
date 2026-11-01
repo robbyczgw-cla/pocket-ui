@@ -100,10 +100,7 @@ impl Sensors {
     /// [`text`](Self::text) in `lang`: the fan and "charging" through the table ("62 °C   Lüfter 45 %   4.8 W"), the
     /// temperature and the watts, only a number and a unit, as they are. A part the table lacks stays English.
     pub fn text_in(&self, lang: Lang) -> String {
-        let words = |part: Option<String>| match (lang, part) {
-            (Lang::De, Some(p)) => Some(crate::i18n::german().translate(&p).map_or(p, |t| t.into_owned())),
-            (_, part) => part,
-        };
+        let words = |part: Option<String>| part.map(|p| crate::i18n::tr_in(lang, &p));
         let battery = if self.power == Some(Power::Charging) { words(self.battery()) } else { self.battery() };
         [self.temperature(), words(self.fan()), battery].into_iter().flatten().collect::<Vec<_>>().join("   ")
     }

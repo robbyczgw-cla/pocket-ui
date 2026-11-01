@@ -157,3 +157,97 @@ use "Keine Verbindung zum Netzwerk. Versuch es noch einmal." without quoting tec
 For Wi-Fi, use "Versuch es noch einmal" consistently. A device still starting says
 "WLAN ist noch nicht bereit. Versuch es gleich noch einmal."; it does not blame the network. Failed removal uses
 "Das Netzwerk ließ sich nicht entfernen" and a failed country change uses "Das WLAN-Land ließ sich nicht einstellen".
+
+# Spanish glossary
+
+The words the Spanish interface uses (`assets/i18n/es.tsv`), translated from the English source, not from German.
+The rules for adding a string are the ones at the top of this page; a line goes into `de.tsv` and `es.tsv` together
+(`i18n`'s test `every_language_has_every_line_with_its_placeholders`).
+
+## Tone
+
+- Neutral international Spanish for Spain and Latin America: **tú**, no vos, no vosotros, no regional word where a
+  neutral one exists (`archivo`, not `fichero`; `PC`, not `ordenador` or `computadora`; `teléfono`, not `móvil` or `celular`).
+- A retro handheld player talking: short, friendly, plain. No machine-stiff passives, no "por favor" unless the
+  English says please, no exclamation marks the English doesn't have.
+- Imperatives in tú: "Pulsa A", "Elige tu red", "Inténtalo de nuevo".
+- Short. Spanish runs longer than English and the pages were laid out for English: take the shorter of two good words,
+  drop articles in labels and hints. Hint bar and pills: one or two words.
+- Typography: ¿…? and ¡…! in pairs, “comillas”, an ellipsis with no space ("Cargando…"), "45 %" and "12 h" with a
+  space, numbers as the code formats them. Dates: "14 de marzo de 2025", short "14 mar 2025"; months and weekdays are
+  lower case inside a date and a capital when alone. Time stays 24-hour.
+
+## What stays as it is
+
+pocket-ui, pocket-core, Curator, Lens, Echoes, Pixel Path, ROCKNIX, RetroArch, RetroAchievements, EmulationStation,
+PortMaster, Moonlight, Sunshine, Syncthing, Tailscale, Bluetooth, Store, Wi-Fi; console, game, emulator and core names; button
+names as printed (A, B, X, Y, L1, R1, L2, R2, SELECT, START, HOME, Vol+, Vol-); Run-ahead, Grinding, Shader, Core,
+Extras, Sticker(s), Home, FPS, CPU, "Pocket" ("el Pocket", masculine); Little, Big, Prime; English, Deutsch, Español as a language's own name.
+
+## Terms
+
+| English | Spanish | Note |
+|---|---|---|
+| Settings | Ajustes | a path: "Ajustes › Jugando › Batería" |
+| Settings' categories: Look, Sound & feel, Playing, Games, Connections, System, Help & tools | Aspecto, Sonido y tacto, Jugando, Juegos, Conexiones, Sistema, Ayuda y herramientas | |
+| Look (Settings → Look → Look), look | Vista | "Choose a look" → "Elige una vista" |
+| Shelf, Minimal, Split, Cards, Cabinet (the looks) | Estante, Minimal, Dividida, Tarjetas, Vitrina | |
+| Appearance: Dark, Light, Automatic | Apariencia: Oscuro, Claro, Automático | |
+| Motion: Full, Reduced, Off | Movimiento: Completo, Reducido, Desactivado | |
+| Language | Idioma | |
+| Button layout | Disposición de botones | |
+| Continue, Resume | Continuar | one word for both |
+| Game card (a game's page) | ficha del juego, ficha | never "tarjeta" |
+| SD card | tarjeta SD | never just "tarjeta" |
+| Memory card | tarjeta de memoria | |
+| save, in-game save (what the game writes) | partida guardada, partida | |
+| Save state | estado guardado, estado | a moment saved by pocket-core or the emulator |
+| saves and states | partidas y estados | |
+| Save / Load (pause menu) | Guardar / Cargar | |
+| Slot | Ranura | |
+| Before load, Earlier (pause menu pills) | Antes, Anterior | "Earlier states": "Estados anteriores" |
+| Quit | Salir | |
+| Pause menu, Quick settings | Menú de pausa, Ajustes rápidos | |
+| Options (a game's); Picture, Shortcuts | Opciones; Imagen, Atajos | |
+| Over the game | Sobre el juego | what pocket-core draws over a game |
+| Screen frame(s); frames | Marco(s) de pantalla; marcos | |
+| Moment; Frozen, Frozen games | Momento; Congelado, Juegos congelados | |
+| Runs on | Funciona con | |
+| Achievements | Logros | |
+| Smart shelf | Estante inteligente | |
+| Up next | A continuación | |
+| Versions, preferred | Versiones, preferida | |
+| Star / Unstar, starred | Favorito / Quitar, favoritos | a star is a favourite |
+| Favourites | Favoritos | |
+| Pin / Unpin | Fijar / Soltar | |
+| Recent games, Recently played | Recientes, Jugado hace poco | |
+| Home (the screen) | Home | a name, as in the manual; also on the hint bar |
+| Game check | Revisión de juegos | |
+| Controller | mando | |
+| Press (a button) | pulsar | |
+| D-pad directions | Izquierda/Derecha, Arriba/Abajo; hint bar "Izq./Der." | |
+| Pair, pairing; Forget | vincular, vinculación; olvidar | |
+| Remote access; File sharing; PC streaming | Acceso remoto; Compartir archivos; Streaming desde PC | |
+| Web companion | Compañero web | |
+| Sleep; Power off; Restart; Power | Suspender; Apagar; Reiniciar; Encendido | |
+| Battery; Haptics; Sounds | Batería; Vibración; Sonidos | |
+| Performance & fan, Smooth fan | Rendimiento y ventilador, Ventilador suave | |
+| Balanced, Quiet, Cool | Equilibrado, Silencioso, Fresco | |
+| Fast-forward, Rewind | Avance rápido, Retroceso | |
+| Cover art, box art | Portada | |
+| Pictures; screenshot; title screen | Imágenes; captura; pantalla de título | |
+| Cheats; Patch; Tour; Updates; Sync; Logs | Trucos; Parche; Recorrido; Actualizaciones; Sincronizar; Registros | |
+| History, Play history, Year in review, Month in review | Historial, Historial de juego, Resumen del año, Resumen del mes | |
+| Session, streak | Sesión, racha | |
+| Safe mode; Backup & reset | Modo seguro; Copia y restablecer | |
+| Manual; About; Tools | Manual; Acerca de; Herramientas | |
+| Back, Open, Switch, Change, Close, Choose, Select | Atrás, Abrir, Cambiar, Cambiar, Cerrar, Elegir, Seleccionar | |
+| On, Off | Activado, Desactivado | |
+| Delete; Keep; Folder; Password; Download | Borrar; Conservar; Carpeta; Contraseña; Descargar | |
+| Hold; online; D-pad; slot; rating; clock | mantener pulsado; con conexión; cruceta; ranura; puntuación; frecuencia | |
+| Clamshell | Plegable | |
+
+## Left in English
+
+The same as in German, above: the manual's pages (the painter is switched off while they are drawn), data from
+elsewhere, messages of other programs, names.

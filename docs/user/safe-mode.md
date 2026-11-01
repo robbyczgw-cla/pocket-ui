@@ -33,7 +33,7 @@ the start. Under it:
 |---|---|
 | **Restart normally** | Starts pocket-ui as usual. If it fails again, this page comes back. |
 | **Use previous version** | Shown only when there is one: goes back to the version that ran before (its number is in brackets), then starts it as usual. Your settings and games stay. |
-| **Reset pocket-ui settings…** | Asks first. Moves pocket-ui's settings aside: your look, Curator, favourites, play history, covers and what the Store installed go to a folder next to them, `/storage/.config/pocket-ui.rescue-<date>`. Nothing is deleted. Games, saves, the logs and the passwords for file sharing and remote access stay. Then choose Restart normally: pocket-ui starts like new, with the first-start setup. |
+| **Reset pocket-ui settings…** | Asks first. Moves pocket-ui's settings aside: your look, Curator, favourites, play history, covers and what the Store installed go to a folder next to them, `/storage/.config/pocket-ui.rescue-<date>`. Nothing is deleted. Games, saves, the logs and the passwords for file sharing and remote access stay; file sharing is switched off. Then choose Restart normally: pocket-ui starts like new, with the first-start setup. |
 | **Open EmulationStation…** | ROCKNIX's own menu, after the warning below. |
 | **Power off** | Switches the Pocket off. |
 

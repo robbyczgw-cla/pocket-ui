@@ -6,12 +6,8 @@
 //! the folder and the file names out of that text; [`check`] decides before a start whether the files are
 //! surely missing. It only says so when it is confident, and lets the port start whenever it is unsure.
 //!
-//! File sharing hides `roms/ports` (the Pocket runs programs from there, see `wifi::SHARE_VETOED`). So that
-//! files can still be copied over the network, the share has a drop folder per port, `roms/port-files/<dir>`;
-//! pocket-ui moves what is in it into the port's folder when the player starts the port ([`take_dropped`]).
-//! Only into a sub-folder the instructions name (`assets`, `gamedata`, …), or only the files the instructions
-//! name when they go into the port folder itself; never over a file that is already there, never a link.
-//! pocket-ui never downloads game files itself.
+//! The files go straight into the port's own folder, `roms/ports/<dir>/<folder>`, which the file share and the
+//! web companion reach directly. pocket-ui never downloads game files itself.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
@@ -21,10 +17,8 @@ use crate::pad::Button;
 use crate::palette::*;
 use crate::text::{Face, Text};
 
-/// The drop folders, one per port: `\\<address>\games-roms\port-files\<dir>` over the share.
-pub const DROP_DIR: &str = "/storage/roms/port-files";
-/// The drop folders' name inside the share (the share is /storage/roms).
-pub const DROP_SHARE_NAME: &str = "port-files";
+/// The ports folder's name inside the share (the share is /storage/roms).
+const PORTS_SHARE_NAME: &str = "ports";
 
 /// Folder names that instructions use for "the folder in the port where your files go".
 const FOLDER_WORDS: [&str; 10] = [
@@ -186,7 +180,7 @@ fn path_target(token: &str, dir: &str, e: &mut Expect) {
     }
 }
 
-/// A port folder's name as the drop folders take it (see `plain_segment`): for the web companion.
+/// A port folder's name we are willing to write under (see `plain_segment`): for the web companion.
 pub fn plain_name(s: &str) -> bool {
     plain_segment(s)
 }
@@ -438,146 +432,16 @@ fn names_match(names: &[String], name: &str) -> bool {
     names.iter().any(|n| name.ends_with(&n.to_lowercase()))
 }
 
-/// Where the drop folder's contents go, if the port has one: the one sub-folder the instructions name
-/// (everything goes there); with several, the port folder, but only folders of those names; or the port folder
-/// with only the files the instructions name.
-pub fn drop_target(port: &Path, e: &Expect) -> Option<(PathBuf, DropRule)> {
-    match e.folders.len() {
-        0 => (e.root && !e.files.is_empty()).then(|| (port.to_path_buf(), DropRule::Named(e.files.clone()))),
-        1 => Some((place(port, e), DropRule::Everything)),
-        _ => {
-            let mut tops: Vec<String> = Vec::new();
-            for f in &e.folders {
-                let top = f.split('/').next().unwrap_or(f).to_string();
-                if !tops.iter().any(|t| t.eq_ignore_ascii_case(&top)) {
-                    tops.push(top);
-                }
-            }
-            Some((port.to_path_buf(), DropRule::Folders(tops)))
-        }
+/// Makes the folder the page names when the instructions name it with the port's own folder, so that the address
+/// leads somewhere (`check` already says missing without it, so this changes nothing for a start).
+pub fn make_place(port: &Path, e: &Expect) {
+    if !e.sure || !port.is_dir() {
+        return;
     }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum DropRule {
-    /// Files and folders, as they are.
-    Everything,
-    /// Only files with these names (`names_match`), from the top of the drop folder.
-    Named(Vec<String>),
-    /// Only folders with these names (any letter case) from the top of the drop folder, with all in them
-    /// (Counter-Strike: "valve" and "cstrike").
-    Folders(Vec<String>),
-}
-
-/// What [`take_dropped`] did.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct Moved {
-    pub moved: usize,
-    /// Left in the drop folder: already in the port, a link, or not a file the instructions name.
-    pub kept: usize,
-}
-
-/// Moves what the player put into `drop` into `dest` (the same file system, so a rename): never a link, never
-/// over a file that is already there (a placeholder excepted), and under `DropRule::Named` only those files.
-/// Folders that are emptied are removed; `drop` itself stays for the next time.
-pub fn take_dropped(drop: &Path, dest: &Path, rule: &DropRule) -> std::io::Result<Moved> {
-    let mut moved = Moved::default();
-    if !drop.is_dir() {
-        return Ok(moved);
+    let dest = place(port, e);
+    if !dest.is_dir() {
+        let _ = std::fs::create_dir_all(&dest);
     }
-    std::fs::create_dir_all(dest)?;
-    merge(drop, dest, rule, &mut moved, true)?;
-    Ok(moved)
-}
-
-fn merge(from: &Path, to: &Path, rule: &DropRule, n: &mut Moved, top: bool) -> std::io::Result<()> {
-    for entry in std::fs::read_dir(from)?.flatten() {
-        let src = entry.path();
-        let name = entry.file_name();
-        let meta = std::fs::symlink_metadata(&src)?;
-        let wanted = match rule {
-            DropRule::Named(names) if top => meta.is_file() && names_match(names, &name.to_string_lossy()),
-            DropRule::Folders(names) if top => meta.is_dir() && names.iter().any(|f| f.eq_ignore_ascii_case(&name.to_string_lossy())),
-            _ => true,
-        };
-        if !wanted {
-            n.kept += 1;
-            continue;
-        }
-        // Into the port's own folder of that name, as it is spelt there ("Assets" for "assets").
-        let dst = if top && matches!(rule, DropRule::Folders(_)) {
-            resolve(to, &name.to_string_lossy())
-        } else {
-            to.join(&name)
-        };
-        if meta.file_type().is_symlink() {
-            n.kept += 1;
-        } else if meta.is_dir() {
-            match std::fs::symlink_metadata(&dst) {
-                // A whole new folder goes over in one rename, unless a link hides inside it.
-                Err(_) if !has_link(&src) => {
-                    std::fs::rename(&src, &dst)?;
-                    n.moved += 1;
-                }
-                Err(_) => {
-                    std::fs::create_dir(&dst)?;
-                    merge(&src, &dst, rule, n, false)?;
-                    let _ = std::fs::remove_dir(&src);
-                }
-                Ok(m) if m.is_dir() => {
-                    merge(&src, &dst, rule, n, false)?;
-                    let _ = std::fs::remove_dir(&src);
-                }
-                Ok(_) => n.kept += 1,
-            }
-        } else if meta.is_file() {
-            let free = match std::fs::symlink_metadata(&dst) {
-                Err(_) => true,
-                Ok(m) => m.is_file() && placeholder(&name.to_string_lossy(), m.len()),
-            };
-            if free {
-                std::fs::rename(&src, &dst)?;
-                n.moved += 1;
-            } else {
-                n.kept += 1;
-            }
-        } else {
-            n.kept += 1;
-        }
-    }
-    Ok(())
-}
-
-fn has_link(dir: &Path) -> bool {
-    let mut stack = vec![dir.to_path_buf()];
-    while let Some(d) = stack.pop() {
-        for entry in std::fs::read_dir(&d).into_iter().flatten().flatten() {
-            match std::fs::symlink_metadata(entry.path()) {
-                Ok(m) if m.file_type().is_symlink() => return true,
-                Ok(m) if m.is_dir() => stack.push(entry.path()),
-                Ok(_) => {}
-                Err(_) => return true,
-            }
-        }
-    }
-    false
-}
-
-/// Makes the port's drop folder, writable for the share's user (it would otherwise be root's, and sharing
-/// may already be on: the share only takes over folders when it is switched on).
-pub fn make_drop(drop_root: &Path, dir: &str) -> Option<PathBuf> {
-    if !plain_segment(dir) {
-        return None;
-    }
-    let path = drop_root.join(dir);
-    std::fs::create_dir_all(&path).ok()?;
-    #[cfg(target_os = "linux")]
-    if unsafe { libc::geteuid() } == 0 {
-        for p in [drop_root, path.as_path()] {
-            let _ = std::os::unix::fs::lchown(p, Some(crate::wifi::SHARE_UID), Some(crate::wifi::SHARE_GID));
-        }
-    }
-    Some(path)
 }
 
 /// Whether the page itself switches file sharing (X, in Settings > Extras) or only says where to.
@@ -606,8 +470,10 @@ pub struct FilesPage {
     pub inst: String,
     pub place: PathBuf,
     pub also: Vec<PathBuf>,
-    /// The drop folder's name under port-files, when the port has one; and whether only named files go.
-    pub drop: Option<(String, DropRule)>,
+    /// The folder the address on a computer leads to, under the share's ports folder: `/` between its parts.
+    share_dir: String,
+    /// What goes there when the instructions name several folders (Counter-Strike: "valve", "cstrike").
+    folders: Vec<String>,
     /// Shown instead of a start: the files are missing.
     pub blocked: bool,
     scroll: usize,
@@ -620,14 +486,27 @@ impl FilesPage {
     pub fn new(title: &str, dir: &str, inst: &str, ports_dir: &Path) -> FilesPage {
         let e = expect(inst, dir);
         let port = ports_dir.join(dir);
-        let drop = drop_target(&port, &e).map(|(_, rule)| (dir.to_string(), rule));
+        // One folder: that folder, unless the text names it only in passing and the port doesn't have it. Several
+        // go side by side in the port's own folder.
+        let share_dir = match e.folders.as_slice() {
+            [one] if e.sure || resolve(&port, one).is_dir() => format!("{dir}/{}", place(&port, &e).strip_prefix(&port).unwrap_or(Path::new(one)).to_string_lossy()),
+            _ => dir.to_string(),
+        };
+        let mut folders: Vec<String> = Vec::new();
+        for f in e.folders.iter().filter(|_| e.folders.len() > 1) {
+            let top = f.split('/').next().unwrap_or(f).to_string();
+            if !folders.iter().any(|t| t.eq_ignore_ascii_case(&top)) {
+                folders.push(top);
+            }
+        }
         FilesPage {
             title: title.to_string(),
             dir: dir.to_string(),
             inst: inst.trim().to_string(),
             place: place(&port, &e),
             also: also(&port, &e),
-            drop,
+            share_dir,
+            folders,
             blocked: false,
             scroll: 0,
             room: 0,
@@ -666,7 +545,7 @@ impl FilesPage {
     /// Hints for the page; the caller paints them (the shelf also makes them touchable).
     pub fn hints(&self, share: &Share, toggle: &Toggle) -> Vec<(&'static str, &'static str)> {
         let mut h = vec![("A", "OK")];
-        if matches!(toggle, Toggle::Here { busy: false, .. }) && self.drop.is_some() && (share.on || share.ip.is_some()) {
+        if matches!(toggle, Toggle::Here { busy: false, .. }) && (share.on || share.ip.is_some()) {
             h.push(("X", if share.on { "Turn off file sharing" } else { "Turn on file sharing" }));
         }
         if self.scrolls() {
@@ -676,13 +555,13 @@ impl FilesPage {
         h
     }
 
-    /// The address of the drop folder on a computer, Windows style and as a URL.
-    pub fn addresses(&self, ip: &str) -> Option<(String, String)> {
-        let (dir, _) = self.drop.as_ref()?;
-        Some((
-            format!("\\\\{ip}\\games-roms\\{DROP_SHARE_NAME}\\{dir}"),
-            format!("smb://{ip}/games-roms/{DROP_SHARE_NAME}/{dir}"),
-        ))
+    /// The address of the folder on a computer, Windows style and as a URL.
+    pub fn addresses(&self, ip: &str) -> (String, String) {
+        let dir = &self.share_dir;
+        (
+            format!("\\\\{ip}\\games-roms\\{PORTS_SHARE_NAME}\\{}", dir.replace('/', "\\")),
+            format!("smb://{ip}/games-roms/{PORTS_SHARE_NAME}/{dir}"),
+        )
     }
 
     pub fn paint(&mut self, c: &mut Canvas, text: &mut Text, share: &Share, toggle: &Toggle) {
@@ -717,69 +596,44 @@ impl FilesPage {
 
         y += 56;
         text.draw(c, Face::Body, 24, MARGIN, y, pal().dust, "From a computer");
-        // What goes into the drop folder: the files, or the folders the instructions name.
-        let what = match &self.drop {
-            Some((_, DropRule::Folders(names))) if names.len() == 1 => format!("the {} folder", names[0]),
-            Some((_, DropRule::Folders(names))) => format!("the folders {}", and_list(names)),
-            _ => "the files".to_string(),
+        // What goes there: the files, or the folders the instructions name.
+        let what = match self.folders.as_slice() {
+            [] => "the files".to_string(),
+            [one] => format!("the {one} folder"),
+            names => format!("the folders {}", and_list(names)),
         };
-        let named_only = matches!(self.drop, Some((_, DropRule::Named(_))));
-        match (&self.drop, share.on, share.ip.as_deref()) {
-            (Some(_), true, Some(ip)) => {
-                let (win, url) = self.addresses(ip).unwrap_or_default();
-                let win = text.fit(Face::Title, 37, &win, w);
-                text.draw(c, Face::Title, 37, MARGIN, y + 42, pal().chalk, &win);
-                let url = text.fit(Face::Body, 24, &url, w);
-                text.draw(c, Face::Body, 24, MARGIN, y + 78, pal().chalk, &url);
-                let login = format!(
-                    "User {}   Password {}",
-                    crate::wifi::SHARE_LOGIN,
-                    share.password.as_deref().unwrap_or("(not set yet)")
-                );
-                text.draw(c, Face::Body, 24, MARGIN, y + 112, pal().chalk, &login);
+        if let (true, Some(ip)) = (share.on, share.ip.as_deref()) {
+            let (win, url) = self.addresses(ip);
+            let win = text.fit(Face::Title, 37, &win, w);
+            text.draw(c, Face::Title, 37, MARGIN, y + 42, pal().chalk, &win);
+            let url = text.fit(Face::Body, 24, &url, w);
+            text.draw(c, Face::Body, 24, MARGIN, y + 78, pal().chalk, &url);
+            let login = format!(
+                "User {}   Password {}",
+                crate::wifi::SHARE_LOGIN,
+                share.password.as_deref().unwrap_or("(not set yet)")
+            );
+            text.draw(c, Face::Body, 24, MARGIN, y + 112, pal().chalk, &login);
+            y += 34;
+            let how = format!("Put {what} there.");
+            let how = text.fit(Face::Body, 24, &how, w);
+            text.draw(c, Face::Body, 24, MARGIN, y + 112, pal().dust, &how);
+            y += 112;
+        } else {
+            let first = match (toggle, share.ip.is_some()) {
+                (Toggle::Here { busy: true, dots }, _) => format!("Switching file sharing{dots}"),
+                (_, false) => "File sharing needs Wi-Fi. Connect first, then turn it on.".to_string(),
+                (Toggle::Here { .. }, true) => "File sharing is off. Press X to turn it on.".to_string(),
+                (Toggle::InSettings, true) => "File sharing is off. Turn it on in Settings › Games › Add games (X).".to_string(),
+            };
+            let folder = self.share_dir.replace('/', "\\");
+            let lines = [first, format!("Then put {what} into games-roms\\{PORTS_SHARE_NAME}\\{folder}.")];
+            let wrapped: Vec<String> = lines.iter().flat_map(|l| text.wrap(Face::Body, 24, l, w)).take(3).collect();
+            for l in wrapped {
+                text.draw(c, Face::Body, 24, MARGIN, y + 40, pal().chalk, &l);
                 y += 34;
-                let how = if named_only {
-                    "Put the files there. pocket-ui moves the ones PortMaster names into place when you start the game.".to_string()
-                } else {
-                    format!(
-                        "Put {what} there. pocket-ui moves {} into place when you start the game.",
-                        if what.starts_with("the folders") || what == "the files" {
-                            "them"
-                        } else {
-                            "it"
-                        }
-                    )
-                };
-                let how = text.fit(Face::Body, 24, &how, w);
-                text.draw(c, Face::Body, 24, MARGIN, y + 112, pal().dust, &how);
-                y += 112;
             }
-            (Some((dir, _)), _, _) => {
-                let first = match (toggle, share.ip.is_some()) {
-                    (Toggle::Here { busy: true, dots }, _) => format!("Switching file sharing{dots}"),
-                    (_, false) => "File sharing needs Wi-Fi. Connect first, then turn it on.".to_string(),
-                    (Toggle::Here { .. }, true) => "File sharing is off. Press X to turn it on.".to_string(),
-                    (Toggle::InSettings, true) => "File sharing is off. Turn it on in Settings › Games › Add games (X).".to_string(),
-                };
-                let lines = [
-                    first,
-                    format!("Then put {what} into games-roms\\{DROP_SHARE_NAME}\\{dir}. pocket-ui moves them into place when you start the game."),
-                ];
-                let wrapped: Vec<String> = lines.iter().flat_map(|l| text.wrap(Face::Body, 24, l, w)).take(3).collect();
-                for l in wrapped {
-                    text.draw(c, Face::Body, 24, MARGIN, y + 40, pal().chalk, &l);
-                    y += 34;
-                }
-                y += 6;
-            }
-            (None, _, _) => {
-                let l = "File sharing can't reach this folder. Copy the files with Remote access (SSH), or with the SD card in a computer that reads Linux (ext4) drives.";
-                for l in text.wrap(Face::Body, 24, l, w).iter().take(2) {
-                    text.draw(c, Face::Body, 24, MARGIN, y + 40, pal().chalk, l);
-                    y += crate::type_scale::line(24, 10);
-                }
-                y += 6;
-            }
+            y += 6;
         }
 
         // PortMaster's own words, as they are, in what is left of the page.
@@ -1090,122 +944,40 @@ mod tests {
     }
 
     #[test]
-    fn dropped_files_go_into_the_named_folder_without_replacing_anything() {
-        let root = tmp("drop");
-        let (port, _) = installed_port(&root, "sprout", &["assets/.gitkeep", "assets/options.ini"]);
-        let drop = root.join("port-files/sprout");
-        std::fs::create_dir_all(drop.join("sounds")).unwrap();
-        std::fs::write(drop.join("data.win"), "game").unwrap();
-        std::fs::write(drop.join("sounds/a.ogg"), "a").unwrap();
-        std::fs::write(drop.join("options.ini"), "theirs").unwrap();
-        std::fs::write(drop.join(".gitkeep"), "x").unwrap();
-        std::os::unix::fs::symlink("/etc", drop.join("etc")).unwrap();
-        let e = expect("place the game files in sprout/assets.", "sprout");
-        let (dest, rule) = drop_target(&port, &e).unwrap();
-        assert_eq!((dest.clone(), rule.clone()), (port.join("assets"), DropRule::Everything));
-        let n = take_dropped(&drop, &dest, &rule).unwrap();
-        assert_eq!(
-            n,
-            Moved { moved: 3, kept: 2 },
-            "data.win, sounds/ (in one go), the placeholder replaced; options.ini and the link stay"
-        );
-        assert_eq!(std::fs::read_to_string(port.join("assets/data.win")).unwrap(), "game");
-        assert_eq!(std::fs::read_to_string(port.join("assets/sounds/a.ogg")).unwrap(), "a");
-        assert_eq!(
-            std::fs::read_to_string(port.join("assets/options.ini")).unwrap(),
-            "x",
-            "the port's own file stays"
-        );
-        assert!(!port.join("assets/etc").exists());
-        assert!(drop.is_dir(), "the drop folder stays for next time");
-    }
-
-    #[test]
-    fn into_the_port_folder_only_the_named_files_go() {
-        let root = tmp("drop-named");
-        let (port, _) = installed_port(&root, "arco", &["gmloader.json", "lib/libc++_shared.so"]);
-        let drop = root.join("port-files/arco");
-        std::fs::create_dir_all(drop.join("lib")).unwrap();
-        std::fs::write(drop.join("Arco.exe"), "game").unwrap();
-        std::fs::write(drop.join("gmloader.json"), "evil").unwrap();
-        std::fs::write(drop.join("lib/libSDL2-2.0.so.0"), "evil").unwrap();
-        let e = expect("Copy arco.exe from your Steam download to ports/arco.", "arco");
-        let (dest, rule) = drop_target(&port, &e).unwrap();
-        assert_eq!(dest, port);
-        assert_eq!(take_dropped(&drop, &dest, &rule).unwrap(), Moved { moved: 1, kept: 2 });
-        assert!(port.join("Arco.exe").exists());
-        assert_eq!(std::fs::read_to_string(port.join("gmloader.json")).unwrap(), "x");
-        assert!(
-            !port.join("lib/libSDL2-2.0.so.0").exists(),
-            "nothing else reaches the folder the port loads libraries from"
-        );
-        // Nothing to say where: no drop folder at all.
-        assert_eq!(drop_target(&port, &expect("copy all game files into the port folder.", "arco")), None);
-    }
-
-    #[test]
-    fn with_several_folders_only_those_folders_go_in() {
-        let root = tmp("drop-folders");
-        let (port, _) = installed_port(&root, "counter-strike", &["valve/liblist.gam", "xash3d"]);
-        let e = expect(REAL.iter().find(|r| r.0 == "counter-strike").unwrap().1, "counter-strike");
-        let (dest, rule) = drop_target(&port, &e).unwrap();
-        assert_eq!(
-            (dest.as_path(), &rule),
-            (port.as_path(), &DropRule::Folders(vec!["valve".into(), "cstrike".into()]))
-        );
-        let drop = root.join("port-files/counter-strike");
-        for f in ["VALVE/pak0.pak", "valve/liblist.gam", "cstrike/maps/de_dust.bsp"] {
-            std::fs::create_dir_all(drop.join(f).parent().unwrap()).unwrap();
-            std::fs::write(drop.join(f), "theirs").unwrap();
-        }
-        std::fs::write(drop.join("xash3d"), "evil").unwrap();
-        let n = take_dropped(&drop, &dest, &rule).unwrap();
-        assert_eq!(
-            n,
-            Moved { moved: 2, kept: 2 },
-            "pak0.pak and cstrike/; the port's liblist.gam and the stray file stay"
-        );
-        assert_eq!(std::fs::read_to_string(port.join("valve/pak0.pak")).unwrap(), "theirs", "VALVE went into valve");
-        assert_eq!(std::fs::read_to_string(port.join("valve/liblist.gam")).unwrap(), "x");
-        assert!(port.join("cstrike/maps/de_dust.bsp").exists());
-        assert_eq!(std::fs::read_to_string(port.join("xash3d")).unwrap(), "x");
-    }
-
-    #[test]
-    fn a_dropped_folder_with_a_link_inside_is_taken_apart() {
-        let root = tmp("drop-link");
-        let dest = root.join("assets");
-        let drop = root.join("drop");
-        std::fs::create_dir_all(drop.join("music")).unwrap();
-        std::fs::write(drop.join("music/a.ogg"), "a").unwrap();
-        std::os::unix::fs::symlink("/etc/passwd", drop.join("music/b.ogg")).unwrap();
-        let n = take_dropped(&drop, &dest, &DropRule::Everything).unwrap();
-        assert_eq!(n, Moved { moved: 1, kept: 1 });
-        assert!(dest.join("music/a.ogg").exists());
-        assert!(std::fs::symlink_metadata(dest.join("music/b.ogg")).is_err());
-    }
-
-    #[test]
-    fn page_addresses_name_the_drop_folder() {
-        let p = FilesPage::new("-SPROUT-", "sprout", "place the game files in sprout/assets.", Path::new("/storage/roms/ports"));
+    fn page_addresses_name_the_ports_own_folder() {
+        let ports = Path::new("/storage/roms/ports");
+        let p = FilesPage::new("-SPROUT-", "sprout", "place the game files in sprout/assets.", ports);
         assert_eq!(p.place, PathBuf::from("/storage/roms/ports/sprout/assets"));
         assert_eq!(
             p.addresses("192.0.2.5"),
-            Some((
-                "\\\\192.0.2.5\\games-roms\\port-files\\sprout".to_string(),
-                "smb://192.0.2.5/games-roms/port-files/sprout".to_string()
-            ))
+            ("\\\\192.0.2.5\\games-roms\\ports\\sprout\\assets".to_string(), "smb://192.0.2.5/games-roms/ports/sprout/assets".to_string())
         );
-        let p = FilesPage::new(
-            "Aquaria",
-            "aquaria",
-            "copy the game files into your ports/aquaria folder.",
-            Path::new("/storage/roms/ports"),
-        );
+        let mut p = FilesPage::new("Aquaria", "aquaria", "copy the game files into your ports/aquaria folder.", ports);
         assert_eq!(p.place, PathBuf::from("/storage/roms/ports/aquaria"));
-        assert_eq!(p.addresses("192.0.2.5"), None, "sharing can't reach it");
-        let mut p = p;
+        assert_eq!(p.addresses("192.0.2.5").1, "smb://192.0.2.5/games-roms/ports/aquaria");
         assert!(!p.press(Button::Down));
         assert!(p.press(Button::South));
+        // No word on where: the port's own folder, where its instructions can be followed.
+        let p = FilesPage::new("Bare", "bare", "See the README.", ports);
+        assert_eq!(p.addresses("192.0.2.5").1, "smb://192.0.2.5/games-roms/ports/bare");
+        // Several folders go side by side in the port's folder.
+        let inst = "Copy your valve folder into: /roms/ports/counter-strike/valve\n\nCopy your cstrike folder into: /roms/ports/counter-strike/cstrike";
+        let p = FilesPage::new("Counter-Strike", "counter-strike", inst, ports);
+        assert_eq!(p.addresses("192.0.2.5").1, "smb://192.0.2.5/games-roms/ports/counter-strike");
+        assert_eq!(p.folders, ["valve", "cstrike"]);
+    }
+
+    #[test]
+    fn the_folder_the_page_names_is_made_only_when_the_instructions_are_sure() {
+        let root = tmp("makeplace");
+        let root: &Path = &root;
+        let port = root.join("sprout");
+        std::fs::create_dir_all(&port).unwrap();
+        make_place(&port, &expect("place the game files in sprout/assets/music.", "sprout"));
+        assert!(port.join("assets/music").is_dir());
+        make_place(&port, &expect("copy the game files into the gamedata folder.", "sprout"));
+        assert!(!port.join("gamedata").exists(), "an empty folder would stop a port that may do without it");
+        make_place(&root.join("not-installed"), &expect("place the game files in not-installed/assets.", "not-installed"));
+        assert!(!root.join("not-installed").exists());
     }
 }

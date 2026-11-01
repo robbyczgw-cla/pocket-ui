@@ -34,6 +34,8 @@ pub enum SetupEvent {
     /// The shared picture of the Wi-Fi changed (`net_state`): the radio, the saved networks, the address, a scan, a
     /// switch that did not work. The page reads the snapshot.
     Net,
+    /// USB file transfer was switched on Add games (`Setup::switch_usb`): what the controller says now.
+    Usb { wanted_on: bool, status: crate::usb_transfer::Status },
     Connected { ssid: String, result: Result<(), String> },
     /// What the connected network does with a plain web request (`net_check::probe`, and `net_check::recheck` every
     /// 15 s while the page shows a sign-in), with the sign-in page's address.
@@ -49,7 +51,10 @@ pub enum SetupEvent {
     CountrySet(Result<Option<String>, String>),
     /// File sharing as a thread found it (`systemctl is-active smbd`) and the share's password: after a switch
     /// (`switched`), or the look when a page with it opened (`Setup::look_sharing`).
-    Sharing { on: bool, password: Option<String>, switched: bool },
+    Sharing { on: bool, read_only: bool, password: Option<String>, switched: bool },
+    /// File sharing changed under an open page (`Setup::keep_share_watch`): it came back by itself, the Pocket got an
+    /// address, the card turned read-only.
+    ShareChanged { now: ShareNow, password: Option<String> },
     /// Remote access as a thread found it (`remote::current`, `systemctl`) and its password; `result`: the switch's,
     /// None for the look when the page opened.
     Remote { mode: remote::Mode, password: Option<String>, result: Option<Result<(), String>> },
@@ -120,6 +125,21 @@ pub type Notify = Arc<dyn Fn(SetupEvent) + Send + Sync>;
 
 /// How often the Wi-Fi page looks at the radio while it is up.
 const RADIO_LOOK_EVERY: std::time::Duration = std::time::Duration::from_secs(4);
+/// How often a page with the file sharing switch looks at the service (`Setup::keep_share_watch`).
+const SHARE_LOOK_EVERY: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// What a page with the file sharing switch shows, as the system has it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShareNow {
+    pub on: bool,
+    pub read_only: bool,
+    pub ip: Option<String>,
+}
+
+/// `Setup::keep_share_watch`'s look, on its thread.
+fn share_now() -> ShareNow {
+    ShareNow { on: wifi::sharing_enabled(), read_only: wifi::share_read_only(), ip: wifi::ip() }
+}
 
 /// How long a network may stay "Connecting…" before the page says it isn't answering (a refused password kept iwd
 /// trying for six minutes on a fresh card, 2026-10-27; a good one takes a few seconds, DHCP at most 45).
@@ -344,10 +364,24 @@ pub struct Setup {
     portal_io: PortalIo,
     sharing: bool,
     sharing_busy: bool,
+    /// Add games' ways (`Way`): the one last chosen, whether the focus is on that row instead of the grid, USB file
+    /// transfer being switched, and its last attempt having failed.
+    ways_sel: usize,
+    ways_focus: bool,
+    usb_busy: bool,
+    usb_failed: bool,
+    /// What the last Add games frame offers to touch (`register_touch`).
+    touch: std::cell::RefCell<Vec<(crate::touch::Area, Touch)>>,
     /// A thread is looking at file sharing (`look_sharing`): never `systemctl` on the UI thread.
     share_looking: bool,
     /// This device's file sharing password, once it exists.
     share_password: Option<String>,
+    /// The games folder is on a read-only mount: sharing runs, and every copy fails.
+    share_read_only: bool,
+    /// While a page with the switch is up, a thread looks at file sharing every `share_every` (`keep_share_watch`).
+    share_watch: Option<Arc<()>>,
+    share_every: std::time::Duration,
+    share_ask: fn() -> ShareNow,
     remote: remote::Mode,
     remote_busy: bool,
     /// A thread is looking at remote access (`look_remote`).
@@ -395,6 +429,8 @@ pub struct Setup {
     previews: HashMap<String, Option<Image>>,
     /// Opened from Settings for one step: leaving that step ends setup instead of moving on.
     only: Option<Only>,
+    /// The phone page asked for the Wi-Fi settings (`take_open_wifi`).
+    open_wifi: bool,
     /// The system controls: the time zone step reads and sets the zone through them.
     hw: SharedHw,
     /// Settings > Look > Systems on the shelf: the systems with games, the hidden ones, whether that changed,
@@ -453,7 +489,7 @@ impl PortTab {
     }
 }
 
-/// Where BIOS files go (the share hides this folder; see docs/user/getting-started.md).
+/// Where BIOS files go (see docs/user/getting-started.md).
 const BIOS_DIR: &str = "/storage/roms/bios";
 
 /// A system with games, for Settings > Look > Systems on the shelf.
@@ -666,7 +702,16 @@ impl Setup {
         match unread.as_slice() {
             [] => {
                 text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Add your games");
-                let line = text.fit(Face::Body, 28, if crate::device::current().host_owned() { "One folder per system in Emulation/roms. Copy games there from Desktop Mode." } else { "One folder per system in roms. Copy games over Wi-Fi with file sharing." }, width);
+                let d = crate::device::current();
+                let about = if d.host_owned() {
+                    "One folder per system in Emulation/roms. Copy games there from Desktop Mode."
+                } else if !d.has_wifi() || crate::card_health::games_drive() {
+                    // File sharing isn't the way, or not the only one: the right side says which is.
+                    "One folder per system in roms."
+                } else {
+                    "One folder per system in roms. Copy games over Wi-Fi with file sharing."
+                };
+                let line = text.fit(Face::Body, 28, about, width);
                 text.draw(c, Face::Body, 28, MARGIN, 192, pal().dust, &line);
             }
             [one] => {
@@ -684,23 +729,97 @@ impl Setup {
         }
         // Three rows of tiles on 1080 lines, two on the Mini V1's 960, so the details under them stay above the
         // hints (docs/DEVICES.md).
-        let grid_rows = ((c.h - 228 - 336) / (GRID_TILE_H + GRID_GAP)).clamp(1, 3) as usize;
+        // The row of ways takes the room of a grid row on the Mini V2 (3 → 2) and the V1 (2 → 1).
+        let ways = self.ways();
+        let ways_h = if ways.is_empty() { 0 } else { WAY_H + 10 };
+        let grid_rows = ((c.h - 228 - 336 - ways_h) / (GRID_TILE_H + GRID_GAP)).clamp(1, 3) as usize;
+        self.touch.borrow_mut().clear();
         if let Some(grid) = &self.grid {
             self.paint_grid(c, text, grid, 228, width, grid_rows);
         }
-        let top = 228 + grid_rows as i32 * (GRID_TILE_H + GRID_GAP) + 6;
+        let mut top = 228 + grid_rows as i32 * (GRID_TILE_H + GRID_GAP) + 6;
+        if !ways.is_empty() {
+            self.paint_ways(c, text, &ways, top - 6, width, dots);
+            top += ways_h;
+        }
         c.rect(MARGIN, top, width, 2, pal().keycap);
         let col_w = (width - 40) / 2;
         if let Some(grid) = &self.grid {
             self.paint_tile_details(c, text, grid, MARGIN, top, col_w);
         }
-        self.paint_share(c, text, MARGIN + col_w + 40, top, col_w, dots);
+        match ways.get(self.ways_sel).filter(|_| self.ways_focus) {
+            Some(Way::Usb) => self.paint_usb(c, text, MARGIN + col_w + 40, top, col_w),
+            _ => self.paint_share(c, text, MARGIN + col_w + 40, top, col_w, dots),
+        }
         // The "All systems" tile selected: whether its list is open.
         let more = match self.grid.as_ref().and_then(Grid::selected) {
             Some(Tile::More) => Some(self.grid.as_ref().is_some_and(|g| g.expanded)),
             _ => None,
         };
-        hints(c, text, &games_hints(more, self.sharing, self.ip.is_some() && !crate::device::current().host_owned()));
+        let mut bar = games_hints(more, self.sharing, self.ip.is_some() && !crate::device::current().host_owned());
+        // A on the row of ways: what it does to the one selected.
+        if let Some(label) = ways.get(self.ways_sel).filter(|_| self.ways_focus).map(|w| self.way_action(*w)) {
+            bar.insert(0, ("A", label));
+        }
+        let areas = hints(c, text, &bar);
+        self.touch.borrow_mut().extend(areas.into_iter().map(|(a, b)| (a, Touch::Hint(b))));
+    }
+
+    /// The row of ways under the grid: a tile each, the grid's own look; the selected one when the focus is here.
+    fn paint_ways(&self, c: &mut Canvas, text: &mut Text, ways: &[Way], y: i32, width: i32, dots: &str) {
+        let n = ways.len() as i32;
+        // Two columns of the grid wide while there are one or two, else the row shared out.
+        let tile_w = if n <= 2 { (width - GRID_GAP * 3) / 4 * 2 + GRID_GAP } else { (width - GRID_GAP * (n - 1)) / n };
+        for (i, way) in ways.iter().enumerate() {
+            let x = MARGIN + i as i32 * (tile_w + GRID_GAP);
+            let selected = self.ways_focus && i == self.ways_sel;
+            crate::kit::shelf_row(c, x, y, tile_w, WAY_H, selected);
+            let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else { (pal().chalk, pal().dust) };
+            let (title, state, on) = self.way_state(*way, dots);
+            let title = text.fit(Face::Title, 30, title, tile_w - 32 - 40);
+            text.draw(c, Face::Title, 30, x + 16, y + 38, fg, &title);
+            let state = text.fit(Face::Body, 21, &state, tile_w - 32);
+            text.draw(c, Face::Body, 21, x + 16, y + 68, dim, &state);
+            if on {
+                tick(c, x + tile_w - 16 - 22, y + 14, 22, fg);
+            }
+            self.touch.borrow_mut().push((crate::touch::Area::new(x, y, tile_w, WAY_H), Touch::Way(i)));
+        }
+    }
+
+    /// A way's name, its state in a few words, and whether it is on.
+    fn way_state(&self, way: Way, dots: &str) -> (&'static str, String, bool) {
+        match way {
+            Way::Sharing if self.sharing_busy => ("File sharing", format!("Switching{dots}"), self.sharing),
+            Way::Sharing if self.sharing => ("File sharing", "On".to_string(), true),
+            Way::Sharing if self.ip.is_none() => ("File sharing", "Connect to Wi-Fi first".to_string(), false),
+            Way::Sharing => ("File sharing", "Off".to_string(), false),
+            Way::Usb if self.usb_busy => ("USB file transfer", format!("Switching{dots}"), self.usb_status() != crate::usb_transfer::Status::Off),
+            Way::Usb => ("USB file transfer", self.usb_status().label().to_string(), self.usb_status() != crate::usb_transfer::Status::Off),
+        }
+    }
+
+    /// What A does on a way, for the hint bar.
+    fn way_action(&self, way: Way) -> &'static str {
+        match way {
+            Way::Sharing if self.sharing => "Turn off file sharing",
+            Way::Sharing if self.ip.is_none() => "Connect to Wi-Fi",
+            Way::Sharing => "Turn on file sharing",
+            Way::Usb if self.usb_status() == crate::usb_transfer::Status::Off => "Turn on USB file transfer",
+            Way::Usb => "Turn off USB file transfer",
+        }
+    }
+
+    /// Under the grid on the right while the USB file transfer tile is selected: its state and the one sentence.
+    fn paint_usb(&self, c: &mut Canvas, text: &mut Text, x: i32, top: i32, w: i32) {
+        let status = self.usb_status();
+        let head = if self.usb_busy { "Switching…" } else { status.label() };
+        let head = text.fit(Face::Title, 37, head, w);
+        text.draw(c, Face::Title, 37, x, top + 50, if status == crate::usb_transfer::Status::Off { pal().dust } else { pal().chalk }, &head);
+        let (about, color) = if self.usb_failed { (USB_FAILED, pal().alert) } else { (USB_WAY, pal().dust) };
+        for (i, l) in text.wrap(Face::Body, 24, about, w).iter().take(4).enumerate() {
+            text.draw(c, Face::Body, 24, x, top + 92 + i as i32 * 32, color, l);
+        }
     }
 
     fn paint_grid(&self, c: &mut Canvas, text: &mut Text, grid: &Grid, top: i32, width: i32, rows_shown: usize) {
@@ -714,7 +833,7 @@ impl Setup {
         for (i, tile) in tiles.iter().enumerate().skip(first_row * cols).take(rows_shown * cols) {
             let (r, col) = ((i / cols - first_row) as i32, (i % cols) as i32);
             let (x, y) = (MARGIN + col * (tile_w + GAP), top + r * (TILE_H + GAP));
-            let selected = i == grid.sel;
+            let selected = i == grid.sel && !self.ways_focus;
             crate::kit::shelf_row(c, x, y, tile_w, TILE_H, selected);
             let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else { (pal().chalk, pal().dust) };
             match tile {
@@ -834,7 +953,8 @@ impl Setup {
         } else if self.sharing {
             ("File sharing is on".to_string(), pal().chalk)
         } else if self.ip.is_none() {
-            ("Connect to Wi-Fi first".to_string(), pal().dust)
+            let d = crate::device::current();
+            (if crate::games_card::in_use() { "Games card in" } else { offline_way(crate::card_health::games_drive(), d.has_second_card_slot(), d.has_wifi()).0 }.to_string(), pal().dust)
         } else {
             ("File sharing is off".to_string(), pal().chalk)
         };
@@ -843,7 +963,12 @@ impl Setup {
         let Some(addrs) = share_addresses(self.ip.as_deref(), self.sharing) else {
             // No address to show: what the switch is for, not an address with "(not connected)" in it, and not one
             // that leads nowhere while sharing is off (the new-user test, 2026-10-30).
-            let about = if self.ip.is_some() { SHARE_OFF } else { SHARE_OFFLINE };
+            let d = crate::device::current();
+            let about = match self.ip {
+                Some(_) => SHARE_OFF,
+                None if crate::games_card::in_use() => GAMES_CARD_WAY,
+                None => offline_way(crate::card_health::games_drive(), d.has_second_card_slot(), d.has_wifi()).1,
+            };
             for (i, l) in text.wrap(Face::Body, 24, about, w).iter().take(4).enumerate() {
                 text.draw(c, Face::Body, 24, x, top + 92 + i as i32 * 32, pal().dust, l);
             }
@@ -858,17 +983,86 @@ impl Setup {
         text.draw(c, Face::Title, 30, x + label_w, top + 168, pal().chalk, wifi::SHARE_LOGIN);
         text.draw(c, Face::Body, 24, x, top + 204, pal().dust, "Password");
         text.draw(c, Face::Title, 30, x + label_w, top + 204, pal().chalk, self.share_password.as_deref().unwrap_or("(not set yet)"));
+        let (note, color) = if self.share_read_only { (SHARE_READ_ONLY, pal().alert) } else { (SHARE_BIOS_NOTE, pal().dust) };
+        let note = text.fit(Face::Body, 24, note, w);
+        text.draw(c, Face::Body, 24, x, top + 244, color, &note);
     }
 }
 
 /// Add games on a Steam Deck, where the file sharing is on the right on the handhelds.
 const DECK_GAMES_NOTE: &str = "Put games in the folders on the left (EmuDeck's Emulation/roms) or on the SD card. New ones show up the next time pocket-ui starts.";
 
-/// Add games without Wi-Fi, under "Connect to Wi-Fi first": what file sharing will do once there is an address.
+/// Add games without Wi-Fi and no other way, under "Connect to Wi-Fi first": what file sharing will do once there is an address.
 const SHARE_OFFLINE: &str = "Then a computer on the same network can copy games straight into these folders.";
 
+/// Add games without a network, on a card with the GAMES drive (docs/SD-IMAGE.md).
+const GAMES_DRIVE_WAY: &str = "Put the card in your computer and copy games to the GAMES drive, into its roms folder.";
+/// Add games without a network and without that drive, on a handheld with a second slot.
+const SECOND_CARD_WAY: &str = "Copy games to a second SD card (over 8 GB) in your computer, into a folder called roms, then put it in the second slot.";
+const OR_SECOND_CARD_WAY: &str = "Or copy games to a second SD card (over 8 GB) in your computer, into a folder called roms, then put it in the second slot.";
+
+/// Add games while a card in the second slot is what the games are read from.
+const GAMES_CARD_WAY: &str = "Your games are read from your games card. To add more, put that card in your computer and copy them into its roms folder.";
+
+/// What Add games says without a network: a heading and a line, the way that works here. A handheld without Wi-Fi must
+/// not end at "Connect to Wi-Fi first", which is a dead end there (RG28XX).
+fn offline_way(games_drive: bool, second_slot: bool, wifi: bool) -> (&'static str, &'static str) {
+    match (games_drive, second_slot, wifi) {
+        (true, _, _) => ("Copy from a computer", GAMES_DRIVE_WAY),
+        (false, true, false) => ("Use a second card", SECOND_CARD_WAY),
+        (false, true, true) => ("Connect to Wi-Fi first", OR_SECOND_CARD_WAY),
+        (false, false, _) => ("Connect to Wi-Fi first", SHARE_OFFLINE),
+    }
+}
+
+/// The height of a tile in the row of ways under the grid.
+const WAY_H: i32 = 84;
+
+/// Add games' USB file transfer: its sentence (the same as Settings → Connections) and what it says when it didn't start.
+const USB_WAY: &str = "Copy games with a USB cable. Windows and Linux open it by themselves; a Mac needs the free OpenMTP app.";
+const USB_FAILED: &str = "USB file transfer didn't start. Take out what's in the USB port and try again.";
+
+/// A way to get games onto this device that Add games lets you start from its row of tiles. The ways with only a
+/// sentence (the second card, the GAMES drive) are not here: they have nothing to switch (`offline_way`).
+/// "From your phone" (Y, feat/phone-upload) joins as a third: a `Way::Phone` here, in `ways_for`, `way_state` and
+/// `activate_way`, instead of only a hint in `games_hints`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Way {
+    Sharing,
+    Usb,
+}
+
+/// What a touch on Add games does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Touch {
+    Way(usize),
+    Hint(Button),
+}
+
+/// The ways this device offers: file sharing where there is Wi-Fi (connected or not: unconnected, it leads to the Wi-Fi
+/// page), USB file transfer where the device has it; nothing on a Steam Deck, whose games go through Desktop Mode.
+fn ways_for(host_owned: bool, wifi: bool, usb: bool) -> Vec<Way> {
+    let mut ways = Vec::new();
+    if host_owned {
+        return ways;
+    }
+    if wifi {
+        ways.push(Way::Sharing);
+    }
+    if usb {
+        ways.push(Way::Usb);
+    }
+    ways
+}
+
 /// Add games with Wi-Fi but file sharing off: how to start it, and how long it stays on.
-const SHARE_OFF: &str = "Press X to turn it on. Then a computer on the same network can copy games into these folders. It stays on until you turn it off or restart.";
+const SHARE_OFF: &str = "Press X to turn it on. Then a computer on the same network can copy games into these folders. It stays on until you turn it off.";
+
+/// Add games with file sharing on: BIOS files are copied over the share too.
+const SHARE_BIOS_NOTE: &str = "BIOS files go in the bios folder";
+
+/// Add games with file sharing on and the games folder on a read-only mount: every copy would fail.
+const SHARE_READ_ONLY: &str = "Card is read-only: copying won't work";
 
 /// File sharing's two addresses (macOS and Linux, Windows) for the Pocket's address; None without one, where the
 /// first-day run (2026-10-26) found "smb://(not connected)/games-roms" shown as if it were an address, and None while
@@ -1128,8 +1322,17 @@ impl Setup {
             portal_io: PortalIo::default(),
             sharing: false,
             sharing_busy: false,
+            ways_sel: 0,
+            ways_focus: false,
+            usb_busy: false,
+            usb_failed: false,
+            touch: Default::default(),
             share_looking: false,
             share_password: None,
+            share_read_only: false,
+            share_watch: None,
+            share_every: SHARE_LOOK_EVERY,
+            share_ask: share_now,
             remote: remote::Mode::Off,
             remote_busy: false,
             remote_looking: false,
@@ -1160,6 +1363,7 @@ impl Setup {
             port_note: None,
             previews: HashMap::new(),
             only: None,
+            open_wifi: false,
             direct: false,
             hw,
             shelf: Vec::new(),
@@ -1415,6 +1619,7 @@ impl Setup {
         self.scanning
             || self.switching.is_some()
             || self.sharing_busy
+            || self.usb_busy
             || self.remote_busy
             || self.share_looking
             || self.remote_looking
@@ -1597,6 +1802,7 @@ impl Setup {
     /// and when the page closes (the setup, and with it `watch`, is gone). It never sends anything else.
     fn keep_watch(&mut self) {
         self.keep_radio_watch();
+        self.keep_share_watch();
         let on_page = matches!(self.step, Step::Wifi) || matches!(&self.step, Step::Portal(p) if !p.online);
         if !(on_page && self.portal_shown()) {
             self.watch = None;
@@ -1659,6 +1865,46 @@ impl Setup {
         });
         if started.is_err() {
             self.radio_watch = None;
+        }
+    }
+
+    /// While a page with the file sharing switch is up, a thread looks at the service every `share_every`: it also comes
+    /// back by itself after a restart (`wifi::keep_sharing_on`), and X has to do what the page says. It ends with the
+    /// page (it holds a `Weak` of the token); the answers come as `SetupEvent::ShareChanged`, only when something changed.
+    fn keep_share_watch(&mut self) {
+        if !matches!(self.step, Step::Games | Step::PortFiles(_)) || crate::device::current().host_owned() {
+            self.share_watch = None;
+            return;
+        }
+        if self.share_watch.is_some() {
+            return;
+        }
+        let token = Arc::new(());
+        let alive = Arc::downgrade(&token);
+        self.share_watch = Some(token);
+        let (notify, every, ask) = (self.notify.clone(), self.share_every, self.share_ask);
+        let started = std::thread::Builder::new().name("share-page-look".into()).spawn(move || {
+            let mut seen = None;
+            loop {
+                let until = Instant::now() + every;
+                while Instant::now() < until {
+                    if alive.strong_count() == 0 {
+                        return;
+                    }
+                    std::thread::sleep(every.min(std::time::Duration::from_millis(200)));
+                }
+                if alive.strong_count() == 0 {
+                    return;
+                }
+                let now = ask();
+                if seen.as_ref() != Some(&now) {
+                    seen = Some(now.clone());
+                    notify(SetupEvent::ShareChanged { now, password: wifi::share_password() });
+                }
+            }
+        });
+        if started.is_err() {
+            self.share_watch = None;
         }
     }
 
@@ -1862,17 +2108,26 @@ impl Setup {
                 self.step = if refused { Step::Password { ssid, kb: Keyboard::default(), hidden: self.connect_hidden } } else { Step::Wifi };
                 // The scan that follows is `NetState::exclusive`'s own: asking again would run it twice.
             }
-            SetupEvent::Sharing { on, password, switched } => {
+            SetupEvent::Usb { wanted_on, status } => {
+                // Settings → Connections reads the same facts, so both places show the same state.
+                crate::settings_values::set_usb(status);
+                self.usb_failed = wanted_on && status == crate::usb_transfer::Status::Off;
+                self.usb_busy = false;
+            }
+            SetupEvent::Sharing { on, read_only, password, switched } => {
                 if switched {
                     self.sharing_busy = false;
-                    if on {
-                        // The page's drop folder exists by now; sharing took it over when it went on.
-                        std::thread::spawn(wifi::rebind_sharing);
-                    }
                 } else {
                     self.share_looking = false;
                 }
                 self.sharing = on;
+                self.share_read_only = read_only;
+                self.share_password = password;
+            }
+            SetupEvent::ShareChanged { now, password } => {
+                self.sharing = now.on;
+                self.share_read_only = now.read_only;
+                self.ip = now.ip;
                 self.share_password = password;
             }
             SetupEvent::Remote { mode, password, result } => {
@@ -2003,19 +2258,16 @@ impl Setup {
         let notify = self.notify.clone();
         std::thread::spawn(move || {
             let result = if installing { ports::install(&port) } else { ports::uninstall(&port) };
-            if !installing && result.is_ok() {
-                // Its drop folder on the share, if the player never used it.
-                let _ = std::fs::remove_dir(std::path::Path::new(port_files::DROP_DIR).join(&port.dir));
-            }
             notify(SetupEvent::PortDone { name: port.name, title: port.title, result, installing, updated: updating });
         });
     }
 
-    /// "Copy your game files" for `port`; its drop folder on the share is made once it is installed.
+    /// "Copy your game files" for `port`; the folder it names is made once it is installed.
     fn open_port_files(&mut self, port: &Port) {
         let page = FilesPage::new(&port.title, &port.dir, &port.instructions, std::path::Path::new(ports::PORTS_DIR));
-        if page.drop.is_some() && ports::installed(port) {
-            port_files::make_drop(std::path::Path::new(port_files::DROP_DIR), &port.dir);
+        if ports::installed(port) {
+            let dir = std::path::Path::new(ports::PORTS_DIR).join(&port.dir);
+            port_files::make_place(&dir, &port_files::expect(&port.instructions, &port.dir));
         }
         self.look_sharing();
         self.ip = wifi::ip();
@@ -2025,6 +2277,114 @@ impl Setup {
     /// File sharing as the "Copy your game files" page shows it.
     fn files_share(&self) -> Share {
         Share { on: self.sharing, ip: self.ip.clone(), password: self.share_password.clone() }
+    }
+
+    fn ways(&self) -> Vec<Way> {
+        let d = crate::device::current();
+        ways_for(d.host_owned(), d.has_wifi(), crate::usb_transfer::offered())
+    }
+
+    fn usb_status(&self) -> crate::usb_transfer::Status {
+        crate::settings_values::get().usb.unwrap_or(crate::usb_transfer::Status::Off)
+    }
+
+    /// The grid moves; Down from its last row goes on to the row of ways. True when the button was used.
+    fn press_grid(&mut self, b: Button) -> bool {
+        let has_ways = !self.ways().is_empty();
+        let Some(g) = self.grid.as_mut() else { return false };
+        let before = g.sel;
+        let used = g.press(b);
+        if used && b == Button::Down && g.sel == before && has_ways {
+            self.ways_focus = true;
+        }
+        used
+    }
+
+    /// With the focus on the row of ways: Left and Right choose, A does it, Up goes back to the grid. True when used.
+    fn press_ways(&mut self, b: Button) -> bool {
+        let n = self.ways().len();
+        if n == 0 {
+            self.ways_focus = false;
+            return false;
+        }
+        self.ways_sel = self.ways_sel.min(n - 1);
+        match b {
+            Button::Left => self.ways_sel = self.ways_sel.saturating_sub(1),
+            Button::Right => self.ways_sel = (self.ways_sel + 1).min(n - 1),
+            Button::Up | Button::L1 => self.ways_focus = false,
+            Button::East => self.activate_way(),
+            // Nothing below the row.
+            Button::Down => {}
+            _ => return false,
+        }
+        true
+    }
+
+    /// A on a way. File sharing without an address leads to the Wi-Fi page: the first start's step, or from Settings the
+    /// Wi-Fi settings (`take_open_wifi`).
+    fn activate_way(&mut self) {
+        match self.ways().get(self.ways_sel) {
+            Some(Way::Sharing) if self.ip.is_none() && !self.sharing => {
+                if self.only.is_none() {
+                    self.step = Step::Wifi;
+                    self.scan();
+                } else {
+                    self.open_wifi = true;
+                    self.step = Step::Done;
+                }
+            }
+            Some(Way::Sharing) => self.switch_sharing(),
+            Some(Way::Usb) => self.switch_usb(),
+            None => {}
+        }
+    }
+
+    /// The phone page without Wi-Fi asked for the Wi-Fi settings (opened from Settings: the app opens them).
+    pub fn take_open_wifi(&mut self) -> bool {
+        std::mem::take(&mut self.open_wifi)
+    }
+
+    /// USB file transfer on or off, on a thread (about a second): what Settings → Connections does, with the same
+    /// result in `settings_values`.
+    fn switch_usb(&mut self) {
+        if self.usb_busy {
+            return;
+        }
+        self.usb_busy = true;
+        self.usb_failed = false;
+        let on = self.usb_status() == crate::usb_transfer::Status::Off;
+        let notify = self.notify.clone();
+        std::thread::spawn(move || notify(SetupEvent::Usb { wanted_on: on, status: crate::usb_transfer::set(on) }));
+    }
+
+    /// A tap on a tile of the row of ways moves the selection there by `n` (0: the one that is, now with the focus).
+    pub fn ways_steps(&mut self, n: i32) {
+        let len = self.ways().len();
+        if len > 0 {
+            self.ways_sel = (self.ways_sel as i32 + n).clamp(0, len as i32 - 1) as usize;
+            self.ways_focus = true;
+        }
+    }
+
+    /// Whether the focus is on the row of ways (a tap on the selected tile then does it).
+    pub fn ways_focused(&self) -> bool {
+        self.ways_focus
+    }
+
+    /// Add games takes touch: its tiles of ways and its hints.
+    pub fn takes_touch(&self) -> bool {
+        matches!(self.step, Step::Games)
+    }
+
+    /// The last frame's touch targets, into the app's map: the ways as rows of a list, the hints as buttons.
+    pub fn register_touch(&self, hits: &mut crate::touch::HitMap) {
+        for (area, t) in self.touch.borrow().iter() {
+            match t {
+                Touch::Way(i) => hits.row(*area, *i),
+                Touch::Hint(b) => hits.button(*area, *b),
+            }
+        }
+        hits.list(self.ways_sel, self.ways().len(), 0.0, 0.0);
     }
 
     /// X on the games step and on "Copy your game files": file sharing on or off, on a thread.
@@ -2041,7 +2401,7 @@ impl Setup {
             } else {
                 wifi::disable_sharing();
             }
-            notify(SetupEvent::Sharing { on: wifi::sharing_enabled(), password: wifi::share_password(), switched: true })
+            notify(SetupEvent::Sharing { on: wifi::sharing_enabled(), read_only: wifi::share_read_only(), password: wifi::share_password(), switched: true })
         });
     }
 
@@ -2056,7 +2416,7 @@ impl Setup {
             if on {
                 wifi::rebind_sharing();
             }
-            notify(SetupEvent::Sharing { on, password: wifi::share_password(), switched: false })
+            notify(SetupEvent::Sharing { on, read_only: wifi::share_read_only(), password: wifi::share_password(), switched: false })
         });
     }
 
@@ -2064,6 +2424,7 @@ impl Setup {
     pub fn looked_now(&mut self) {
         if std::mem::take(&mut self.share_looking) {
             self.sharing = wifi::sharing_enabled();
+            self.share_read_only = wifi::share_read_only();
             self.share_password = wifi::share_password();
         }
         if std::mem::take(&mut self.remote_looking) {
@@ -2148,6 +2509,8 @@ impl Setup {
             },
         }
         (self.sel, self.theme, self.port_sel, self.port_tab, self.sharing, self.remote_busy, self.sharing_busy).hash(&mut h);
+        (self.share_read_only, &self.ip, &self.share_password).hash(&mut h);
+        (self.ways_sel, self.ways_focus, self.usb_busy, self.usb_failed, self.usb_status().label()).hash(&mut h);
         h.finish()
     }
 
@@ -2483,6 +2846,13 @@ impl Setup {
     }
 
     fn press_step(&mut self, b: Button) -> bool {
+        // Add games: the row of ways under the grid, and the grid's own keys.
+        if matches!(self.step, Step::Games) {
+            let used = if self.ways_focus { self.press_ways(b) } else { self.press_grid(b) };
+            if used {
+                return false;
+            }
+        }
         match &mut self.step {
             Step::Welcome => {
                 if b == Button::East || b == Button::Start {
@@ -2490,7 +2860,8 @@ impl Setup {
                 }
                 // The language, in use from the next frame on (`i18n`).
                 if matches!(b, Button::Left | Button::Right) {
-                    let lang = crate::i18n::current().next();
+                    let now = crate::i18n::current();
+                    let lang = if b == Button::Left { now.previous() } else { now.next() };
                     crate::i18n::set(lang);
                     self.language_chosen = Some(lang);
                 }
@@ -2832,7 +3203,7 @@ impl Setup {
                 text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Remote access");
                 let lines = [
                     "Log in to this Pocket from a computer on the same Wi-Fi, with SSH.",
-                    "It turns itself off after 30 minutes without a connection, and when the Pocket restarts.",
+                    "It stays on until you turn it off. It turns itself off when the Pocket restarts.",
                 ];
                 // Wrapped: at Large text the second line ran off the right edge
                 // (Mini V2 1240x1080, English; monkey run 2026-10-31, seed 102).
@@ -3739,6 +4110,44 @@ mod tests {
     fn setup(name: &str, zone: &str, reg: Option<&str>) -> (Setup, Arc<MockHw>) {
         let hw = Arc::new(mock(name, zone, reg));
         (setup_on(hw.clone(), name), hw)
+    }
+
+    /// Review 2026-11-01: sharing that came back by itself after the page opened: the page kept saying off, and X
+    /// switched on what was on.
+    #[test]
+    fn the_open_page_follows_file_sharing_as_it_changes() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static ON: AtomicBool = AtomicBool::new(false);
+        fn ask() -> ShareNow {
+            let on = ON.load(Ordering::SeqCst);
+            ShareNow { on, read_only: on, ip: on.then(|| "192.0.2.23".to_string()) }
+        }
+        let (sink, seen) = std::sync::mpsc::channel();
+        let sink = std::sync::Mutex::new(sink);
+        let (mut s, _hw) = setup("share-watch", "UTC", None);
+        s.notify = Arc::new(move |ev| {
+            let _ = sink.lock().unwrap().send(ev);
+        });
+        s.share_every = std::time::Duration::from_millis(5);
+        s.share_ask = ask;
+        s.step = Step::Games;
+        s.keep_watch();
+        let changed = |want: bool| loop {
+            let ev = seen.recv_timeout(std::time::Duration::from_secs(10)).expect("the page hears of it");
+            if matches!(&ev, SetupEvent::ShareChanged { now, .. } if now.on == want) {
+                return ev;
+            }
+        };
+        s.on_event(changed(false));
+        assert!(!s.sharing);
+        ON.store(true, Ordering::SeqCst);
+        s.on_event(changed(true));
+        assert!(s.sharing && s.share_read_only, "the page says what the system says");
+        assert_eq!(s.ip.as_deref(), Some("192.0.2.23"));
+        assert_eq!(games_hints(None, s.sharing, s.ip.is_some())[0], ("X", "Turn off file sharing"), "X does what it says");
+        s.step = Step::Done;
+        s.keep_watch();
+        assert!(s.share_watch.is_none(), "it ends with the page");
     }
 
     #[test]
@@ -4961,6 +5370,35 @@ mod tests {
         paint_it(&mut s);
     }
 
+    /// Down from the grid's last row reaches the row of ways, Left/Right choose, Up goes back, and B still leaves.
+    #[test]
+    fn the_row_of_ways_is_reached_with_down_and_left_alone_with_b() {
+        let (_dir, catalog) = roms("ways", &[("gba", 1)]);
+        let (s, _) = setup("ways", "UTC", None);
+        let mut s = s.with_catalog(catalog).only(Only::Games);
+        s.settle();
+        let ways = s.ways().len();
+        if ways == 0 {
+            // A test machine with neither Wi-Fi nor USB: Down stays in the grid.
+            s.press(Button::Down);
+            assert!(!s.ways_focused());
+            return;
+        }
+        for _ in 0..8 {
+            s.press(Button::Down);
+        }
+        assert!(s.ways_focused(), "Down past the last grid row");
+        s.press(Button::Right);
+        s.press(Button::Down);
+        assert!(s.ways_focused(), "nothing below the row");
+        paint_it(&mut s);
+        s.press(Button::Up);
+        assert!(!s.ways_focused());
+        s.ways_steps(0);
+        assert!(s.ways_focused(), "a tap on a tile selects it");
+        assert!(s.press(Button::South), "B leaves Add games from Settings");
+    }
+
     /// First-run test 2026-10-24, findings #10 and #11: a folder of no system and a disc missing its track file were
     /// passed over without a word. The games step's thread finds them; the page says so where its subtitle is, and
     /// without them the page is as before.
@@ -5143,9 +5581,40 @@ mod hint_bars {
     }
 
     #[test]
+    fn add_games_without_a_network_shows_the_way_that_works() {
+        // The RG28XX: no Wi-Fi at all. Never "Connect to Wi-Fi first" there.
+        assert_eq!(offline_way(true, true, false), ("Copy from a computer", GAMES_DRIVE_WAY));
+        assert_eq!(offline_way(false, true, false), ("Use a second card", SECOND_CARD_WAY));
+        assert_eq!(offline_way(true, true, true).0, "Copy from a computer", "not connected yet: the drive works anyway");
+        assert_eq!(offline_way(false, true, true), ("Connect to Wi-Fi first", OR_SECOND_CARD_WAY));
+        assert_eq!(offline_way(false, false, true), ("Connect to Wi-Fi first", SHARE_OFFLINE), "one slot, no drive: Wi-Fi is the way");
+        let de = crate::i18n::german();
+        for line in ["Copy from a computer", "Use a second card", GAMES_DRIVE_WAY, SECOND_CARD_WAY, OR_SECOND_CARD_WAY] {
+            assert!(de.translate(line).is_some(), "{line} has a German line");
+        }
+    }
+
+    #[test]
     fn extras_offers_a_only_where_it_works() {
         assert_eq!(keys(&extras_hints("Download", false)), ["B", "START"], "offline: nothing to download");
         assert_eq!(keys(&extras_hints("Download", true)), ["A", "B", "START"]);
+    }
+
+    /// Add games' row of ways per kind of device: Wi-Fi, USB cable, nothing on a Steam Deck (host-owned).
+    #[test]
+    fn add_games_offers_the_ways_the_device_has() {
+        // Wi-Fi, connected or not (unconnected, file sharing leads to the Wi-Fi page), with and without USB transfer.
+        assert_eq!(ways_for(false, true, true), [Way::Sharing, Way::Usb]);
+        assert_eq!(ways_for(false, true, false), [Way::Sharing], "USB file transfer not available: no tile for it");
+        // The RG28XX: no Wi-Fi, a second slot (a sentence, not a way) and maybe the cable.
+        assert_eq!(ways_for(false, false, false), [], "no Wi-Fi, no USB: the sentence about the card or the GAMES drive alone");
+        assert_eq!(ways_for(false, false, true), [Way::Usb]);
+        // The Deck's games go through Desktop Mode.
+        assert_eq!(ways_for(true, true, true), []);
+        let de = crate::i18n::german();
+        for line in ["File sharing", "USB file transfer", "Connect to Wi-Fi first", "Connect to Wi-Fi", "Turn on USB file transfer", "Turn off USB file transfer", "On", "Off", "Switching…", USB_WAY, USB_FAILED] {
+            assert!(de.translate(line).is_some(), "{line} has a German line");
+        }
     }
 
     #[test]

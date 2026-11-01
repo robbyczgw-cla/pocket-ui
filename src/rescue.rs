@@ -150,7 +150,8 @@ impl WhatHappened {
 }
 
 /// What "Reset pocket-ui settings" leaves where it is: the logs and crash.log (what happened), and the file sharing
-/// and remote access passwords, which belong to this Pocket and must not change.
+/// and remote access passwords, which belong to this Pocket and must not change. File sharing's switch is a setting:
+/// `reset_settings` turns it off in there.
 pub const KEPT_ON_RESET: [&str; 4] = ["logs", crate::crash::LOG_FILE, "share", "remote"];
 
 /// Where `reset_settings` moves the data folder's contents: `<data dir>.rescue-<stamp>` beside it.
@@ -182,6 +183,7 @@ pub fn reset_settings(data_dir: &Path, stamp: &str) -> io::Result<PathBuf> {
         }
         std::fs::rename(e.path(), backup.join(&name))?;
     }
+    crate::wifi::set_share_wanted(&data_dir.join("share"), false);
     Ok(backup)
 }
 
@@ -567,7 +569,7 @@ mod tests {
         for dir in ["logs", "share", "remote", "covers/nes", "store"] {
             std::fs::create_dir_all(data.join(dir)).unwrap();
         }
-        for f in ["settings.json", "crash.log", "library.json", "covers/nes/a.png", "share/password"] {
+        for f in ["settings.json", "crash.log", "library.json", "covers/nes/a.png", "share/password", "share/on"] {
             std::fs::write(data.join(f), f).unwrap();
         }
         assert_eq!(stamp(1_792_764_187), "20261023-140307");
@@ -576,6 +578,7 @@ mod tests {
         for kept in ["logs", "share/password", "remote", "crash.log"] {
             assert!(data.join(kept).exists(), "{kept} stays");
         }
+        assert!(!crate::wifi::share_wanted(&data.join("share")), "file sharing's switch goes back to off, its password stays");
         for moved in ["settings.json", "library.json", "covers/nes/a.png", "store"] {
             assert!(!data.join(moved).exists() && backup.join(moved).exists(), "{moved} moved");
         }

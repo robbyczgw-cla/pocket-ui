@@ -333,7 +333,12 @@ impl App {
             self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, line);
             y += 38;
         }
-        for line in self.text.wrap(Face::Body, 28, "Or copy your own into /storage/roms/<system>. Settings › Games › Add games shows where.", max_w) {
+        let own = if pocket_ui::card_health::games_drive() {
+            "Or copy your own: put the card in your computer and copy them to the GAMES drive."
+        } else {
+            "Or copy your own into /storage/roms/<system>. Settings › Games › Add games shows where."
+        };
+        for line in self.text.wrap(Face::Body, 28, own, max_w) {
             self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &line);
             y += pocket_ui::type_scale::line(28, 10);
         }
@@ -350,7 +355,9 @@ impl App {
             self.text.draw(c, Face::Body, 34, MARGIN + NU_BTN_PAD, y + h / 2 + 12, pal().ink, label);
             self.hits.button(Area::new(MARGIN, y, w, h), CONFIRM);
             // Said before anyone tries: the games come over the internet.
-            let note = if pocket_ui::wifi::ip().is_none() {
+            let note = if pocket_ui::wifi::ip().is_none() && !pocket_ui::device::current().has_wifi() {
+                "Needs a network, and this handheld has no Wi-Fi.".to_string()
+            } else if pocket_ui::wifi::ip().is_none() {
                 "Needs Wi-Fi. Connect in Settings › Connections › Wi-Fi first.".to_string()
             } else {
                 format!("{} small games, free to share, from their authors.", starter::games().len())

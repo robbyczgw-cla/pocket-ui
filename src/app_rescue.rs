@@ -297,6 +297,10 @@ impl Rescue {
                 let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
                 let result = rescue::reset_settings(&self.data_dir, &rescue::stamp(now)).map_err(|e| e.to_string());
                 println!("rescue: reset pocket-ui settings: {result:?}");
+                if result.is_ok() {
+                    // The switch went back to off with the settings; a share still running stops with it.
+                    std::thread::spawn(pocket_ui::wifi::disable_sharing);
+                }
                 self.page.reset_finished(result);
             }
             Action::PowerOff => {

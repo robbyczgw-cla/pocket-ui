@@ -24,6 +24,8 @@
 # PU_STORAGE is for the tests only. Tests: deploy/image/test-mount-storage.sh (part of the gate)
 
 pu_storage=${PU_STORAGE:-/storage}
+pu_flash=${PU_FLASH:-/flash}
+pu_sysroot=${PU_SYSROOT:-/sysroot}
 
 pu_seed() {
   [ -e "$pu_storage/.please_resize_me" ] && return 0
@@ -31,6 +33,15 @@ pu_seed() {
   progress "pocket-ui: putting the first-start files in place"
   cp -a "$pu_storage/.pocket-seed/." "$pu_storage/" && rm -rf "$pu_storage/.pocket-seed"
   sync
+}
+
+# First start, images with a GAMES drive (H700, build.sh): games-first-start.sh runs instead of ROCKNIX's fs-resize, and
+# goes back to it for anything it can't do. Nothing else on SYSTEM changes, and only for this boot. Without the file,
+# or if it can't run from /flash, or the bind doesn't work, ROCKNIX's script runs as it always did: today's card.
+pu_games_split() {
+  [ -e "$pu_storage/.please_resize_me" ] || return 0
+  [ -x "$pu_flash/games-first-start.sh" ] || return 0
+  mount --bind "$pu_flash/games-first-start.sh" "$pu_sysroot/usr/lib/rocknix/fs-resize" 2>/dev/null
 }
 
 # The first of NAME, NAME.1, NAME.2 ... that does not exist yet: a refused file never replaces an earlier one.
@@ -106,5 +117,6 @@ pu_guard() {
 
 mount_part "$disk" "/storage" "rw,noatime"
 pu_seed
+pu_games_split
 pu_guard
 true

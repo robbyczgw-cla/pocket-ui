@@ -225,6 +225,15 @@ fn fake_library(dir: &Path) {
 
 #[test]
 fn every_string_in_the_german_snapshots_is_translated_or_a_name() {
+    every_string_is_translated_or_a_name("de");
+}
+
+#[test]
+fn every_string_in_the_spanish_snapshots_is_translated_or_a_name() {
+    every_string_is_translated_or_a_name("es");
+}
+
+fn every_string_is_translated_or_a_name(lang: &'static str) {
     let _tmp_guard = tempfile::tempdir().unwrap();
     let tmp = _tmp_guard.path().to_path_buf();
     fake_library(&tmp);
@@ -250,7 +259,7 @@ fn every_string_in_the_german_snapshots_is_translated_or_a_name() {
                 let out = cmd
                     .args(["--snapshot", &state, tmp.join(format!("{i}.png")).to_str().unwrap()])
                     .env("POCKETUI_MOCK", "1")
-                    .env("POCKETUI_LANG", "de")
+                    .env("POCKETUI_LANG", lang)
                     .env("POCKETUI_I18N_MISSES", tmp.join(format!("{i}.tsv")))
                     .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
                     .env("POCKETUI_DATA", &data)
@@ -316,7 +325,7 @@ fn every_string_in_the_german_snapshots_is_translated_or_a_name() {
     let report: Vec<String> = missing.iter().map(|(s, states)| format!("{s:?}  ({})", states.join(", "))).collect();
     assert!(
         missing.is_empty(),
-        "{} strings are shown in German snapshots without a translation: add them to assets/i18n/de.tsv (or, for a name, to assets/i18n/keep.txt):\n{}",
+        "{} strings are shown in the {lang} snapshots without a translation: add them to assets/i18n/{lang}.tsv (or, for a name, to assets/i18n/keep.txt):\n{}",
         missing.len(),
         report.join("\n")
     );
@@ -384,6 +393,8 @@ fn the_system_language_decides_until_one_is_chosen() {
     };
     let german = shot("de_DE.UTF-8", None, "de");
     assert!(german.contains("O\tWillkommen auf deinem Pocket"), "ROCKNIX set to German, nothing chosen:\n{german}");
+    let spanish = shot("es_MX.UTF-8", None, "es");
+    assert!(spanish.contains("O\tTe damos la bienvenida a tu Pocket"), "ROCKNIX set to Spanish, nothing chosen:\n{spanish}");
     let english = shot("en_US.UTF-8", None, "en");
     assert!(!english.contains("O\t"), "ROCKNIX set to English:\n{english}");
     let chosen = shot("de_DE.UTF-8", Some(r#"{"language": "en"}"#), "chosen");

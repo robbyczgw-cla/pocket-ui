@@ -1,7 +1,7 @@
 //! A game going into its console's real mechanism (Cozy + Playful cases, docs/DESIGN.md "Starting a game"): a PS1's lid
 //! opens, the disc comes down onto the spindle and the lid shuts; a tray slides out and takes the disc in; a cartridge
 //! is pushed into its slot behind the slot's lip and clicks. Systems without a [`Rig`] keep the plain animation
-//! (`app_cabinet::paint_insert`), and so does every system in Quick.
+//! (`insert_scene`), and so does every system in Quick.
 //!
 //! A rig is pictures made from public-domain photos with PixelLab (`assets/media/rig/SOURCES.md`, never drawn in code),
 //! plus where things are on them. [`pose`] is the one timeline, a pure function of the time since A: the medium is in
@@ -205,8 +205,8 @@ impl Rig {
     }
 
     /// The medium's screen height lying in its seat as a size to print it at (the larger the two sizes wins).
-    pub fn seated_h(&self) -> i32 {
-        (2.0 * self.seat.u.0.hypot(self.seat.u.1) * SCALE).ceil() as i32
+    pub fn seated_h(&self, scale: f32) -> i32 {
+        (2.0 * self.seat.u.0.hypot(self.seat.u.1) * scale).ceil() as i32
     }
 
     /// The tray's picture's top-left corner at `open` (0 in, 1 all the way out).
@@ -214,10 +214,11 @@ impl Rig {
         sub(t.at, mul(t.out, 1.0 - open))
     }
 
-    /// Where the medium is at `pose`: from `start` (screen, face-on, `near` wide and high) to the hover and in.
-    pub fn medium_at(&self, start: V, screen: impl Fn(V) -> V, near: V, pose: &Pose) -> MediumAt {
+    /// Where the medium is at `pose`: from `start` (screen, face-on, `near` wide and high) to the hover and in. `scale`:
+    /// screen pixels per pixel of the art ([`SCALE`] on the handhelds, where the arc's 24 pixels were measured).
+    pub fn medium_at(&self, start: V, screen: impl Fn(V) -> V, near: V, pose: &Pose, scale: f32) -> MediumAt {
         let s = self.seat;
-        let (u1, v1) = (mul(s.u, SCALE), mul(s.v, SCALE));
+        let (u1, v1) = (mul(s.u, scale), mul(s.v, scale));
         // Standing face-on over its place at its final size: a disc as wide as it will be lying.
         let r = u1.0.hypot(u1.1);
         let (u_hover, v_hover) = if self.kind() != Kind::Cart && !s.flat { ((r, 0.0), (0.0, r)) } else { (u1, v1) };
@@ -226,7 +227,7 @@ impl Rig {
         let (mut at, mut u, mut v) = if pose.fly < 1.0 {
             // A shallow arc on the way.
             let mid = lerp(start, hover, pose.fly);
-            let arc = (pose.fly * std::f32::consts::PI).sin() * 24.0;
+            let arc = (pose.fly * std::f32::consts::PI).sin() * 24.0 * (scale / SCALE);
             (add(mid, (0.0, -arc)), lerp(u0, u_hover, pose.fly), lerp(v0, v_hover, pose.fly))
         } else {
             let tilt = (pose.drop / 0.75).min(1.0);
@@ -234,13 +235,13 @@ impl Rig {
         };
         // On a tray it rides with the tray once it is on it.
         if let (Mech::Tray(t), true) = (self.mech(), pose.landed >= 1.0) {
-            at = add(at, mul(t.out, -(1.0 - pose.open) * SCALE));
+            at = add(at, mul(t.out, -(1.0 - pose.open) * scale));
         }
         // After it is in, a small bounce along its way in.
         if pose.settle != 0.0 {
             let dir = sub(screen(s.at), hover);
             let n = dir.0.hypot(dir.1).max(1.0);
-            at = add(at, mul(dir, pose.settle * SCALE / n));
+            at = add(at, mul(dir, pose.settle * scale / n));
         }
         let squash = pose.squash;
         if squash != 0.0 {

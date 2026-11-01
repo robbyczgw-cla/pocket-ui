@@ -812,7 +812,7 @@ fn the_status_ledger_rows_have_a_known_status_and_no_private_data() {
 #[test]
 fn settings_paths_on_the_screen_use_the_glossarys_arrow() {
     // Put together, so this test's own lines don't count.
-    let (en, de) = (["Settings", " > "].concat(), ["Einstellungen", " > "].concat());
+    let (en, de, es) = (["Settings", " > "].concat(), ["Einstellungen", " > "].concat(), ["Ajustes", " > "].concat());
     let mut bad = Vec::new();
     for f in rust_sources() {
         let src = std::fs::read_to_string(&f).unwrap();
@@ -826,9 +826,11 @@ fn settings_paths_on_the_screen_use_the_glossarys_arrow() {
             }
         }
     }
-    for (n, line) in read("assets/i18n/de.tsv").lines().enumerate() {
-        if !line.starts_with('#') && (line.contains(&en) || line.contains(&de)) {
-            bad.push(format!("assets/i18n/de.tsv:{}: {line}", n + 1));
+    for file in ["de.tsv", "es.tsv"] {
+        for (n, line) in read(&format!("assets/i18n/{file}")).lines().enumerate() {
+            if !line.starts_with('#') && (line.contains(&en) || line.contains(&de) || line.contains(&es)) {
+                bad.push(format!("assets/i18n/{file}:{}: {line}", n + 1));
+            }
         }
     }
     assert!(bad.is_empty(), "write a Settings path with \"›\":\n{}", bad.join("\n"));
@@ -927,29 +929,21 @@ fn a_row_named_before_its_category_must_be_in_it() {
     assert!(settings_path_problems("the Tour row in Settings \u{2192} Help & tools then says", "", "Settings", &en).is_empty());
 }
 
-/// The names of the categories and their rows, in English or (through de.tsv) in German.
-fn settings_names(german: Option<&std::collections::HashMap<String, String>>) -> Vec<(String, Vec<String>)> {
+/// The names of the categories and their rows, in English or through a language's table.
+fn settings_names(table: Option<&std::collections::HashMap<String, String>>) -> Vec<(String, Vec<String>)> {
     let tr = |s: &str| -> String {
-        let key = german.and_then(|m| m.get(s)).map(|g| g.as_str()).unwrap_or(s);
+        let key = table.and_then(|m| m.get(s)).map(|g| g.as_str()).unwrap_or(s);
         key.trim_end_matches('\u{200b}').to_string()
     };
     super::SETTINGS_GROUPS.iter().map(|(c, _, rows)| (tr(c), rows.iter().map(|r| tr(r.0)).collect())).collect()
 }
 
 /// A path in Settings in the user documents (docs/user, README.md), on the web page, in a string of `src/` and on
-/// both sides of de.tsv has to name a category of main.rs SETTINGS_GROUPS, and a row of that category.
+/// both sides of each table has to name a category of main.rs SETTINGS_GROUPS, and a row of that category.
 /// Left out: dated and developer documents, comments in `src/`, this file (it spells bad paths on purpose).
 #[test]
 fn every_path_in_settings_names_a_category_and_one_of_its_rows() {
     let en = settings_names(None);
-    let tsv = read("assets/i18n/de.tsv");
-    let map: std::collections::HashMap<String, String> = tsv
-        .lines()
-        .filter(|l| !l.starts_with('#'))
-        .filter_map(|l| l.split_once('\t'))
-        .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect();
-    let de = settings_names(Some(&map));
     let mut bad = Vec::new();
     let mut scan = |name: String, text: &str, word: &str, cats: &[(String, Vec<String>)], skip_comments: bool| {
         let lines: Vec<&str> = text.lines().collect();
@@ -984,14 +978,24 @@ fn every_path_in_settings_names_a_category_and_one_of_its_rows() {
             scan(rel(&f), &std::fs::read_to_string(&f).unwrap(), "Settings", &en, true);
         }
     }
-    // Both sides of de.tsv: the English key as the code paints it, the German text with the German names.
-    for (n, line) in tsv.lines().enumerate().filter(|(_, l)| !l.starts_with('#')) {
-        let (k, v) = line.split_once('\t').unwrap_or((line, ""));
-        for p in settings_path_problems(k, "", "Settings", &en) {
-            bad.push(format!("assets/i18n/de.tsv:{} (English): {p}", n + 1));
-        }
-        for p in settings_path_problems(v, "", "Einstellungen", &de) {
-            bad.push(format!("assets/i18n/de.tsv:{} (German): {p}", n + 1));
+    // Both sides of each table: the English key as the code paints it, the translation with the translated names.
+    for (file, word) in [("de.tsv", "Einstellungen"), ("es.tsv", "Ajustes")] {
+        let tsv = read(&format!("assets/i18n/{file}"));
+        let map: std::collections::HashMap<String, String> = tsv
+            .lines()
+            .filter(|l| !l.starts_with('#'))
+            .filter_map(|l| l.split_once('\t'))
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        let names = settings_names(Some(&map));
+        for (n, line) in tsv.lines().enumerate().filter(|(_, l)| !l.starts_with('#')) {
+            let (k, v) = line.split_once('\t').unwrap_or((line, ""));
+            for p in settings_path_problems(k, "", "Settings", &en) {
+                bad.push(format!("assets/i18n/{file}:{} (English): {p}", n + 1));
+            }
+            for p in settings_path_problems(v, "", word, &names) {
+                bad.push(format!("assets/i18n/{file}:{} (translated): {p}", n + 1));
+            }
         }
     }
     assert!(

@@ -35,6 +35,23 @@ Settings → System → **Frozen games** switches it off: every case is closed a
 from before and from sleep still stand open, and A goes back to those. Motion off: the game is simply out, and the spinner's dots
 stand still.
 
+## On an Android phone
+
+It works the same way on your phone, out of the box. The last five games you played in pocket-ui's own player stand a little
+open, the line under the name says **Frozen**, and the button says **Resume** (with a controller, **A Resume**). One tap and
+you're back in that moment. The **Frozen games** row in your phone's Settings tab switches it off. Games that open in another app, like RetroArch, can't
+be frozen and stand closed.
+
+- **Home, or switching apps:** your moment is saved on the way out, and the game stands open.
+- **The game was killed while on screen** (a crash, or Force stop): you're back at the last moment that was saved, and the
+  start says so.
+- **The file changed, the emulator refuses the moment, or a newer in-game save exists:** the game starts fresh and tells you. The
+  moment isn't lost: it moves to a free save slot and the message says which one, so Load gets you there. If all eight are full it's kept aside.
+- **The file is gone, or Android took back access to its folder:** a message says so and nothing is touched. Put the file back
+  or choose the folder again, and the moment is still there.
+
+## In-game saves
+
 In-game saves (the kind a cartridge keeps, "battery saves") on pocket-ui's own host are written
 every 10 seconds when they change and again when you quit. They are stored in the same place and
 format RetroArch uses, so they work with both.

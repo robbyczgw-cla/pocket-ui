@@ -323,7 +323,8 @@ pub static FEATURES: &[Feature] = &[
             },
         }),
         simple: Pick::Keep,
-        enthusiast: Pick::On,
+        // A line over every game is a choice of its own, not part of a profile (Alex, 2026-10-31, on the RG28XX).
+        enthusiast: Pick::Keep,
         preview: pv::pixel_path_live,
         todo: None,
     },
@@ -1151,7 +1152,7 @@ mod tests {
         let c = &simple.curator;
         assert!(c.lens && c.stickers && c.echoes && c.merge_versions && !c.not_on_device && !c.pixel_path && !c.up_next);
         assert!(enthusiast.curator.up_next, "Enthusiast keeps Up next");
-        assert_eq!((simple.over_game, enthusiast.over_game), (crate::over_game::Level::Off, crate::over_game::Level::PixelPath));
+        assert_eq!((simple.over_game, enthusiast.over_game), (crate::over_game::Level::Off, crate::over_game::Level::Off), "no line over the game from a profile");
         assert_eq!(
             (simple.frames, simple.on_start, simple.motion),
             (Frames::Off, OnStart::Home, Motion::Full)
@@ -1167,7 +1168,7 @@ mod tests {
         apply(Profile::Simple, &mut again);
         assert_eq!(again, simple);
         let (on, off) = profile_summary(Profile::Enthusiast);
-        assert!(on.contains(&"a line of picture details over every game") && off.is_empty(), "{on:?} {off:?}");
+        assert!(!on.contains(&"a line of picture details over every game") && off.is_empty(), "{on:?} {off:?}");
     }
 
     #[test]

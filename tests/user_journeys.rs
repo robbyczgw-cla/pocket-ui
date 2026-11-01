@@ -136,7 +136,8 @@ fn a_typo_still_finds_the_game() {
 fn remote_access_explains_itself_inside_the_screen_at_large_text() {
     let card = Card::new("remote-large");
     let text = card.shot("setup:remote", "large");
-    assert!(text.contains("turns itself off") && text.contains("Pocket restarts"), "{text}");
+    let one_line = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(one_line.contains("turns itself off when the Pocket restarts"), "{text}");
     let boxes = std::fs::read_to_string(card.tmp.join("setup-remote.boxes")).unwrap();
     assert!(boxes.is_empty(), "remote access text clipped or overlapping: {boxes}");
 }

@@ -72,8 +72,8 @@ Pocket then.
   - **BIOS files** go into `roms/bios` (NAOMI and Atomiswave files into `roms/bios/dc`). The page lists what the
     Pocket's own emulator still misses, and ticks it off after the upload.
   - **PortMaster files**: for each installed port that waits for your own game files, its instructions and a place to
-    drop files or a whole folder. They wait in `roms/port-files/<port>` and move into the port when you start it, as
-    with file sharing ([Extras](extras.md)).
+    drop files or a whole folder. They go straight into the port's folder, `roms/ports/<port>/<folder>`, as with file
+    sharing ([Extras](extras.md)); scripts and programs are refused.
   - A file of the same name is only replaced after you say so. An upload that is cut off (the browser closed, the
     network dropped) leaves nothing behind. At most 9 GB per game or port file and 128 MB per BIOS file, and at
     least 256 MB stay free on the SD card, even with several uploads at once. Scripts and programs (`.sh`, `.py`, `.so`,
@@ -111,7 +111,7 @@ itself). An upload that was already running pauses and continues when the game e
   system alone; revoking one in Settings ends it at once.
 - **Only this page can change things.** Every change needs a token that only the companion's own page has, so another
   website open in the same browser can't change anything on the Pocket. The page loads nothing from the internet.
-- **Only the right folders.** Uploads go only into game folders, `roms/bios` and the PortMaster drop folders. Names
+- **Only the right folders.** Uploads go only into game folders, `roms/bios` and the folders of PortMaster games that wait for your files. Names
   that try to reach other folders (`..`, `/`, links, invisible characters) are cleaned or refused.
 - **It stays out of the way.** It runs at the lowest priority, apart from the menus and games, and does next to
   nothing while no browser is connected.

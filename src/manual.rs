@@ -21,9 +21,11 @@ use crate::text::{Face, Text};
 
 /// The guide, in reading order: the order of the "Pages" list on its first page (`index.md`). The names are the files
 /// of `docs/user/`; every file there is either here or in `DESKTOP_ONLY` (checked by `doc_checks`, cargo test).
-pub const PAGES: [(&str, &str); 36] = [
+pub const PAGES: [(&str, &str); 38] = [
     ("index", include_str!("../docs/user/index.md")),
     ("getting-started", include_str!("../docs/user/getting-started.md")),
+    ("games-drive", include_str!("../docs/user/games-drive.md")),
+    ("copy-games", include_str!("../docs/user/copy-games.md")),
     ("game-check", include_str!("../docs/user/game-check.md")),
     ("coming-from", include_str!("../docs/user/coming-from.md")),
     ("playing", include_str!("../docs/user/playing.md")),

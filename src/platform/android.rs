@@ -40,6 +40,13 @@ pub fn strings(name: &str, args: &[&str]) -> Result<String, String> {
     }
     result.map_err(|e| e.to_string())
 }
+/// `CLOCK_MONOTONIC` in milliseconds: the clock of the diagnostics' timelines and of logcat's own monotonic stamps.
+pub fn monotonic_ms() -> f64 {
+    let mut t = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+    // SAFETY: `t` is a valid out-pointer for the call.
+    unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut t) };
+    t.tv_sec as f64 * 1000.0 + t.tv_nsec as f64 / 1e6
+}
 pub fn string(name: &str) -> String { strings(name, &[]).unwrap_or_default() }
 pub fn data_dir() -> PathBuf { PathBuf::from(string("dataPath")) }
 pub fn is_speaker() -> bool { string("speakerState") == "true" }

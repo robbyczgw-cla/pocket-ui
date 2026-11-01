@@ -137,14 +137,6 @@ pub fn learn_names(systems: &[System]) {
     crate::i18n::learn_names(systems.iter().flat_map(|s| s.games.iter().map(|g| g.name.as_str())));
 }
 
-/// `display_name`, for a name that is going to be painted (the recents, the hidden games, the gallery, the history):
-/// the result is learned as a name (`i18n::learn_names`). Not for a name only compared (`gamedb`'s matching).
-pub fn shelf_name(stem: &str) -> String {
-    let name = title_case(&display_name(stem));
-    crate::i18n::learn_names([&name]);
-    name
-}
-
 /// Takes the games the player hid (`library_meta`, "Hide from the shelf" on the card) out of `systems`, and a system
 /// left without games with them, as `load` leaves out a system without games. Every list, the search, Curator and the
 /// web companion are made from what is left, so a hidden game is gone from all of them at once.
@@ -168,20 +160,6 @@ pub fn load_shown(es_systems: &Path, data_dir: &Path) -> Result<Vec<System>, Str
     Ok(systems)
 }
 
-/// A system pocket-ui can start, as es_systems.cfg describes it, without looking at its games.
-#[derive(Clone, Debug, PartialEq)]
-pub struct SysInfo {
-    /// ROCKNIX id, e.g. "gba".
-    pub id: String,
-    /// Full name, e.g. "Game Boy Advance".
-    pub name: String,
-    /// The ROM folder as people see it over the share: "roms/gba".
-    pub folder: String,
-    /// The folder itself.
-    pub path: PathBuf,
-    /// File types it takes, lowercase without the dot, in es_systems order, each once.
-    pub extensions: Vec<String>,
-}
 
 /// Every game system in `es_systems` (not Tools or Music), sorted by full name.
 pub fn all_systems(es_systems: &Path) -> Result<Vec<SysInfo>, String> {
@@ -246,10 +224,12 @@ pub struct StrayFolder {
 /// Folders of `roms` that ROCKNIX keeps for itself or that hold no games, never reported as strays.
 const NOT_STRAYS: &[&str] = &[
     "bios", "savestates", "screenshots", "videos", "music", "tools", "themes", "splash", "backups", "backup", "logs",
-    "lost+found", "system volume information", "moonlight", "port-files", "ports_scripts", "bgm", "mplayer", "manuals",
+    "lost+found", "system volume information", "$recycle.bin", "moonlight", "ports_scripts", "bgm", "mplayer", "manuals",
     "downloads", "media", "images", "covers",
     // Settings → System → About → Report a problem (`report`).
     "reports",
+    // Up to 0.1.8 a port's game files waited here; what a player left behind is no games.
+    "port-files",
 ];
 
 /// Common names people give system folders (lowercase, letters and digits only) and the ROCKNIX folder they mean;
@@ -334,9 +314,15 @@ pub fn roms_root(catalog: &[SysInfo]) -> Option<PathBuf> {
     seen.into_iter().max_by_key(|(_, n)| *n).map(|(p, _)| p.to_path_buf())
 }
 
+/// What a Mac or Windows leaves on a drive, and never a game or a folder of games: anything hidden (`._Game.gba`,
+/// `.Spotlight-V100`, `.Trashes`, `.fseventsd`, `.DS_Store`), Windows' `System Volume Information` and its recycle bins.
+pub fn computer_litter(name: &str) -> bool {
+    name.starts_with('.') || ["System Volume Information", "$RECYCLE.BIN", "RECYCLER"].iter().any(|w| name.eq_ignore_ascii_case(w))
+}
+
 /// Folders directly in `roms` that no system of `catalog` reads and that hold at least one file a system takes,
 /// sorted by name, each with the folder it probably should be. Hidden folders, those starting with `_` and ROCKNIX's
-/// own ([`NOT_STRAYS`]) are left out. A "GBA" is a stray too: ext4 tells it from "gba", and only "gba" is read.
+/// own ([`NOT_STRAYS`]) are left out. A "GBA" is a stray too on ext4, which tells it from "gba", and only "gba" is read (exFAT doesn't: there it is the same folder).
 /// Reads `roms` and up to two levels of each other folder; call it on a thread.
 pub fn stray_folders(roms: &Path, catalog: &[SysInfo]) -> Vec<StrayFolder> {
     let Ok(entries) = fs::read_dir(roms) else { return Vec::new() };
@@ -368,7 +354,9 @@ fn holds_games(dir: &Path, exts: &std::collections::HashSet<&str>) -> bool {
     let mut subs = Vec::new();
     for p in entries.flatten().map(|e| e.path()) {
         if p.is_dir() {
-            subs.push(p);
+            if !p.file_name().and_then(|n| n.to_str()).is_some_and(computer_litter) {
+                subs.push(p);
+            }
         } else if takes(&p) {
             return true;
         }
@@ -424,8 +412,8 @@ fn scan_for(system: &str, dir: &Path, exts: &[String]) -> Vec<Game> {
 
 /// `scan_flat` plus one level of subfolders, the way ES-DE and RetroArch read a folder per game. A subfolder with an
 /// `.m3u` is one game (that playlist); one with a single launchable file left after the duplicate rules is one game
-/// named after the folder; otherwise each launchable file is a game of its own. Hidden folders and those starting
-/// with `_` ("_saves-import") are skipped, and nothing is read two levels down.
+/// named after the folder; otherwise each launchable file is a game of its own. Hidden folders, those starting
+/// with `_` ("_saves-import") and what a computer leaves ([`computer_litter`]) are skipped, and nothing is read two levels down.
 fn scan(dir: &Path, exts: &[String]) -> Vec<Game> {
     scan_into(dir, exts, &mut Vec::new())
 }
@@ -436,7 +424,7 @@ fn scan_into(dir: &Path, exts: &[String], broken: &mut Vec<BrokenDisc>) -> Vec<G
     let Ok(entries) = fs::read_dir(dir) else { return games };
     for sub in entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
         let folder = sub.file_name().and_then(|n| n.to_str()).unwrap_or_default();
-        if folder.starts_with(['.', '_']) {
+        if folder.starts_with('_') || computer_litter(folder) {
             continue;
         }
         let mut inside = scan_flat_into(&sub, exts, broken);
@@ -547,7 +535,7 @@ fn sheet_text(bytes: Vec<u8>) -> String {
 
 /// The files a disc sheet names: `FILE "x.bin" BINARY` lines of a cue sheet, the lines of an m3u playlist, the
 /// file column of a gdi.
-pub use crate::library_names::{display_name, name_extras, split_version, strip_inner_ext, title_case};
+pub use crate::library_names::{display_name, name_extras, shelf_name, split_version, strip_inner_ext, title_case, SysInfo};
 pub(crate) use crate::library_names::sheet_references;
 
 
@@ -1218,6 +1206,7 @@ mod tests {
         // Not strays: ROCKNIX's own, hidden, "_", empty, nothing a system takes, games two levels down only.
         put(&dir, "bios/scph1001.bin", "x");
         put(&dir, "savestates/gba/Known.state", "x");
+        put(&dir, "port-files/sprout/Game.gba", "x");
         put(&dir, ".Trash/Sonic.md", "x");
         put(&dir, "_import/Sonic.md", "x");
         std::fs::create_dir_all(dir.join("Empty")).unwrap();
@@ -1236,5 +1225,46 @@ mod tests {
         assert!(super::stray_folders(&dir.join("missing"), &catalog).is_empty(), "no roms folder: nothing to report");
         // An alias only points at a folder this device has.
         assert_eq!(super::guess_folder("Dreamcast", &catalog), None);
+    }
+
+    /// What a Mac and Windows leave on a drive they've had in them: on the shelf none of it may ever be a game.
+    fn put_computer_litter(dir: &std::path::Path) {
+        for f in [
+            "gba/._Metroid.gba",
+            "gba/.DS_Store",
+            "gba/.Metroid.gba.swp",
+            "gba/.Spotlight-V100/Store-V2/Stray.gba",
+            "gba/.Trashes/501/Deleted.gba",
+            "gba/.fseventsd/fseventsd-uuid",
+            "gba/System Volume Information/Indexed.gba",
+            "gba/$RECYCLE.BIN/S-1-5-21/$R123.gba",
+            "._gba",
+            "._Loose.gba",
+            ".DS_Store",
+            ".Spotlight-V100/Store-V2/Stray.gba",
+            ".Trashes/501/Deleted.gba",
+            ".fseventsd/fseventsd-uuid",
+            "System Volume Information/IndexerVolumeGuid",
+            "System Volume Information/Indexed.gba",
+            "$RECYCLE.BIN/S-1-5-21/$R123.gba",
+        ] {
+            let p = dir.join(f);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, "x").unwrap();
+        }
+    }
+
+    #[test]
+    fn a_macs_and_windows_litter_is_no_game_and_no_stray_folder() {
+        let t = TestDir::new("litter");
+        let dir = t.join("roms");
+        put_computer_litter(&dir);
+        std::fs::write(dir.join("gba/Metroid.gba"), "game").unwrap();
+        let exts = vec!["gba".to_string()];
+        let games: Vec<String> = super::scan(&dir.join("gba"), &exts).into_iter().map(|g| g.name).collect();
+        assert_eq!(games, ["Metroid"]);
+        let catalog = vec![SysInfo { id: "gba".into(), name: "Game Boy Advance".into(), folder: "roms/gba".into(), path: dir.join("gba"), extensions: exts }];
+        let strays: Vec<String> = super::stray_folders(&dir, &catalog).into_iter().map(|s| s.name).collect();
+        assert_eq!(strays, Vec::<String>::new());
     }
 }

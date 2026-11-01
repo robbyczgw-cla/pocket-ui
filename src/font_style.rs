@@ -206,6 +206,24 @@ mod tests {
         }
     }
 
+    /// A letter a font lacks comes out as a hole in a word, in the fonts of Settings → Look → Font as much as in Barlow.
+    #[test]
+    fn every_font_has_every_letter_of_the_spanish_table() {
+        let table = include_str!("../assets/i18n/es.tsv");
+        let translated = table.lines().filter(|l| !l.starts_with('#')).filter_map(|l| l.split_once('\t')).flat_map(|(_, t)| t.chars());
+        let mut need: Vec<char> = "ñÑ¿¡áéíóúüÁÉÍÓÚÜ“”…".chars().chain(translated.filter(|c| !c.is_ascii())).collect();
+        need.sort_unstable();
+        need.dedup();
+        let barlow = [BARLOW_TITLE, BARLOW_BODY].map(|b| Font::from_bytes(b, FontSettings::default()).unwrap());
+        let mut faces: Vec<(String, &Font)> = barlow.iter().map(|f| ("Barlow".to_string(), f)).collect();
+        for s in [FontStyle::Pixel, FontStyle::Rounded] {
+            let fitted = s.fitted().unwrap();
+            faces.extend([&fitted.title, &fitted.body].into_iter().flatten().map(|f| (format!("{s:?}"), &*f.font)));
+        }
+        let missing: Vec<String> = faces.iter().flat_map(|(name, font)| need.iter().filter(|c| font.lookup_glyph_index(**c) == 0).map(move |c| format!("{name} lacks {c:?}"))).collect();
+        assert!(missing.is_empty(), "{}", missing.join("\n"));
+    }
+
     #[test]
     fn the_capitals_are_as_high_as_barlows_within_a_pixel() {
         for (s, face, barlow) in [

@@ -63,7 +63,7 @@ ssh root@pocket-mini
 ```
 
 (or `ssh root@100.x.y.z` with the address the page shows). The password is the one Remote access shows. Remote access
-still turns itself off after 30 minutes without a connection and after a restart; Tailscale does not change that.
+stays on until you turn it off, and is off again after a restart; Tailscale does not change that.
 This is also the way back in when the Pocket has lost its Wi-Fi: put the phone's hotspot on, connect the Pocket to it
 in Settings → Connections → Wi-Fi, and the Pocket and your computer (on Tailscale, wherever it is) can see each other.
 

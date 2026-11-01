@@ -63,7 +63,7 @@ impl Keyboard {
     /// Rows of keys as currently shown; the last row holds the special keys.
     pub fn rows(&self) -> Vec<Vec<Key>> {
         if self.search {
-            let layout = if crate::i18n::current() == crate::i18n::Lang::De { SEARCH_DE } else { SEARCH };
+            let layout = if crate::i18n::current().qwertz() { SEARCH_DE } else { SEARCH };
             let mut rows: Vec<Vec<Key>> = layout.iter().map(|r| r.chars().map(Key::Char).collect()).collect();
             rows.push(SEARCH_SPECIALS.iter().map(|s| Key::Special(*s)).collect());
             return rows;

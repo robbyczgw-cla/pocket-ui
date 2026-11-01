@@ -755,7 +755,7 @@ Two rows of Settings → Look → Cozy extras, both on from the start, Shelf loo
   window comes up first covers it, and any button skips it. Until 2026-10-28 the game was started only when the
   cartridge reached the slot (260 ms after A), which added that to every start in these looks. Cartridges stay
   half out of the console, as they do.
-- **A console's real mechanism** (Cozy + Playful cases, `src/insert_rig.rs`, `app_cabinet::paint_rig`): PS1, GameCube,
+- **A console's real mechanism** (Cozy + Playful cases, `src/insert_rig.rs`, `insert_scene::Scene::paint`): PS1, GameCube,
   Dreamcast, Saturn (lid); PS2, Xbox (tray, the disc comes from the front lying flat); SNES (US and PAL/JP rigs by the cartridge's
   region), N64, Mega Drive, Game Boy, GBA (cartridge); DS (the card goes in behind the upper screen, where its slot is); Wii (the disc goes into its slot on the front, along the console's depth). The console alone is shown larger than its system picture (2 screen pixels an art pixel). One timeline,
   `insert_rig::pose`, a pure function of the time since A: in at `IN_AT_COZY` with the sound's hit (`Sound::DiscDrop`), a disc rests on its

@@ -144,3 +144,30 @@ after that wasn't timed); GameCube Super Mario Sunshine, A until the resume thre
 wait for Dolphin's window and a timed wait for its message. 3DS: not measured, the device has only a homebrew game and the bench
 couldn't open its pause menu. The fan came on (pwm 41, 43) by the second start of each of the two.
 
+## Frozen games on Android (emulator)
+
+**Emulator, not a phone:** X300-sized AVD (1216x2640, 480 dpi) on a MacBook Air M4, software GPU, no sound, 2026-10-31. These numbers
+compare starts on that one setup and say nothing about a real phone. From the launcher taking the tap to the player's first game
+frame drawn, in ms, from their log lines (`scripts/android/frozen-smoke.py`, phase measure); the system's slide into the game
+is on top (film: the moment is already in the first frame of the slide, about 0.4 s until it has settled). Homebrew test games, all small.
+
+| Game | Frozen, 5 rounds | Frozen, app closed before | Frozen off, still from its moment | First start, no moment |
+|---|---|---|---|---|
+| GB Libbet | 181, 196, 280, 313, 163 | 730, 631, 1014 | 179, 262, 193 | 401 |
+| GBA Voxelburg | 158, 734, 288, 271, 232 | 776, 788, 627 | 208, 271, 153 | 179 |
+| SNES Elevator Madness | 293, 477, 320, 580, 293 | 1222, 2791, 904 | 237, 405, 486 | 424 |
+| PSP Sliding Tiles | 515, 477, 270, 272, 338 | 1370, 2149, 1913 | 383, 353, 347 | 621 |
+
+Measured before the insert animation came to Android's start: frozen and off are the same start in this table, and the time a frozen start saves by skipping that animation isn't in it.
+
+## Big PSP games on Android (emulator)
+
+2026-11-01, Android 15 ARM64 emulator on the MacBook Air, X300 size, 4 cores, 2 GB. `scripts/android/frozen-smoke.py ... big`, default settings from a fresh install.
+PSP2048 (homebrew) in a generated ISO, padded. The emulator's disk is the Mac's SSD: a phone's own time isn't measured here.
+
+| What | Time |
+|---|---|
+| Copy of 600 MiB of real bytes, page cache dropped | 3.25 s, about 185 MiB/s: about 10 s for 1.8 GB |
+| Copy of 1843 MiB, mostly holes in the file (the Air's disk had no room for real bytes) | 1.6 to 2.7 s |
+| Tap on Play to the game on screen, 1843 MiB with holes, first start | 6.0 to 7.2 s |
+| Second start's check instead of a copy (`copy:` in the log) | 12 to 23 ms |

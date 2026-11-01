@@ -314,6 +314,7 @@ sources are in `RESEARCH-H700-2026-10-27.md` (outside the repo). One generic pro
 1 GB, Nintendo labels) plus one row per model in `device::H700_BOARDS`; this table is that list. Device tree strings
 are ROCKNIX's (`sun50i-h700-anbernic-*.dts`), sizes are what sway gives pocket-ui (landscape; the RG28XX's panel is
 480×640, turned by sway) from the panel files ROCKNIX loads. Every model stays experimental until checked on a handheld.
+X and Y: the built-in "H700 Gamepad" sends the printed X as `BTN_WEST` and Y as `BTN_NORTH` (seen on an RG28XX; ROCKNIX corrects it in its own configs), so `pad.rs` crosses the two for that device name only.
 
 | Override / vdev key | DT model / first compatible | Screen (logical canvas) | Sticks | Wi-Fi | Lid | RGB |
 |---|---|---|---|---|---|---|
@@ -350,6 +351,24 @@ What pocket-ui does about what is missing (`Device::has_fan`, `has_touch`, `has_
 - **Touch:** nothing to hide; no touch device means no touch events. The vdev has no touch panel for these.
 - **Tools:** the gamepad-calibration helper's `inputplumber` restart is skipped where the service file is absent (already
   so); the H700 image has no InputPlumber.
+- **Adding games without a network (all H700):** Add games says "Copy from a computer" on a card with the GAMES drive
+  (the RG28XX image, [SD-IMAGE.md](SD-IMAGE.md), "The GAMES drive"), "Use a second card" otherwise on the handhelds without
+  Wi-Fi (they all have a second slot, `Device::has_second_card_slot`), and "Connect to Wi-Fi first" with the second card named
+  on a handheld with Wi-Fi that isn't connected.
+- **Second card** (`games_card.rs`): read from ROCKNIX's `automount` and the image's device trees. Every H700 tree has `mmc0` =
+  `mmc@4020000` (TF1) and `mmc1` = `mmc@4022000` (TF2), both with `cd-gpios`. Whole card over 8 GiB, exFAT/FAT32/NTFS/ext4/btrfs,
+  highest device first; mounted on `/storage/games-external`, `roms` bound on `/storage/roms` (`system.merged.storage=0`, and FAT
+  can't merge anyway), `mkdir roms` and `systemd-tmpfiles` make the system folders. udev restarts `automount` on *add*; there is
+  no rule for *remove*: the dead mount stays until a new card or a restart. `games_card::watch` (poll on the mount table and on
+  `/dev`, no wake-ups) makes the shelf read again, or say the card is out. pocket-core's saves then fail at `write_atomic`'s
+  fsync and `save_trouble` says so; ROCKNIX's standalone emulators can't, the notice afterwards is all there is.
+- **USB file transfer** (`usb_transfer.rs`, all three images): `umtprd` is in each SYSTEM, the gadget is prepared at every start by
+  autostart `081-usbgadget`, off by default, `usbgadget file_transfer` / `disabled`, storage `/storage/roms`, FunctionFS. H700:
+  `usb@5100000` `dr_mode = "otg"`, musb, `CONFIG_USB_CONFIGFS_F_FS`, and ROCKNIX rebinds after sleep
+  (`sleep.d/post/005-usbgadget`). SM8250: `dr_mode = "otg"`, `usb-role-switch`; SM8550: role switch; TCPM owns the role on both,
+  `usbgadget` doesn't touch it. Seen on the Odin 2 Mini and the Mini V2 with a charger on the port (no computer): on in 1.1 s, off in
+  0.06 s, 1.6 MB, no CPU while idle, charging unaffected. On a port in host mode there's no controller, it fails, and the row says so.
+  `systemd-run --scope` keeps `umtprd` when pocket-ui restarts. The row needs `usbgadget`, `umtprd` and the gadget directory.
 - **Wi-Fi (RG28XX, RG35XX 2024 without a chip):** the Wi-Fi page (first start and Settings) says "This device has no
   Wi-Fi. Everything else works without it." and offers nothing to choose; the Settings row reads "None on this device";
   Quick settings show no Wi-Fi row; the radio is "absent" instead of the mock's pretend networks. Pages that need the

@@ -14,6 +14,7 @@ o=$(sh $S "$T/o" --dry-run) && echo "$o" | grep -q '^device=SM8250 ' && echo "$o
   ok "default family is SM8250, file names unchanged" || bad "default family: $o"
 o=$(sh $S "$T/o" --device H700 --dry-run) && echo "$o" | grep -q '^device=H700 ' && echo "$o" | grep -q 'rocknix-20261001-H700-sources.tar.xz.part-NN' &&
   ok "--device H700" || bad "--device H700: $o"
+o=$(sh $S "$T/o" --device SM8550 --dry-run) && echo "$o" | grep -q 'rocknix-20261001-SM8550-sources.tar.xz.part-NN' && ok "--device SM8550" || bad "--device SM8550: $o"
 o=$(sh $S "$T/o" --dry-run --device H700) && echo "$o" | grep -q '^device=H700 ' && ok "option order does not matter" || bad "option order: $o"
 sh $S "$T/o" --device AMD64 --dry-run >/dev/null 2>&1 && bad "an unsupported family was accepted" || ok "unsupported family refused"
 sh $S "$T/o" --device >/dev/null 2>&1 && bad "--device without a value was accepted" || ok "--device needs a value"

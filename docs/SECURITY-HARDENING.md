@@ -49,27 +49,37 @@ Where things live, and what survives a reboot:
   screen. pocket-ui writes its own `smbpasswd` (NT hash, one line) and `users.map` (`nobody = pocket`)
   next to it; ROCKNIX's `/storage/.cache/samba/smbpasswd` is not used. `map to guest = Never`,
   `restrict anonymous = 2`, `invalid users = root`, `guest ok = no`, `valid users = nobody`;
-- writes happen as `nobody:nogroup` (`force user`), the only unprivileged account no service runs as;
-- `veto files = /ports/PortMaster/bios/savestates/`: these folders are invisible and can't be created,
-  in any case (clients are case-insensitive with `unix extensions = no`);
+- writes happen as **root** (`force user = root`, decision below); the password logs in as `nobody`, an account that
+  does nothing else here, as Samba's password file needs one and `/etc/passwd` is read-only;
+- no `veto files`: nothing under `roms` is hidden (2026-11-01, see the decision below);
 - `interfaces = wlan0`, `bind interfaces only = yes`, `smb encrypt = desired`, no symlinks followed;
-- the switch on the Add games screen turns sharing on and off **for this session**: ROCKNIX's
-  `samba.enabled` is kept at 0, so sharing is off after every restart;
-- turning it on hands everything under `/storage/roms` except the vetoed folders to `nobody` (games
-  copied earlier as root or rsync'd from a Mac would be read-only over the share otherwise). root,
-  and so pocket-ui and the emulators, still read everything;
+- the switch on the Add games screen turns sharing on and off. It **stays on across restarts** until switched off:
+  pocket-ui remembers it (`share/on` next to the password) and `wifi::keep_sharing_on` starts it again once Wi-Fi has an
+  address, and follows a new address. ROCKNIX's `samba.enabled` is kept at 0 (its own start would use ROCKNIX's
+  configuration before ours is in place). smbd holds no wake lock; suspend freezes it like everything else;
+- nothing changes owner, so turning it on is instant. Files written over the share are `root:root`; pocket-ui, the
+  emulators, PortMaster and Syncthing run as root and use them as any other. Files an earlier version handed to `nobody`
+  stay so: harmless, root writes them too. New files are made `0755` (`force create mode`) so that a port copied over
+  the share runs;
+- what can still fail is a read-only mount (a damaged card, a dirty NTFS card; Samba answers
+  `NT_STATUS_MEDIA_WRITE_PROTECTED`): Add games says so (`wifi::share_read_only`). A root-mounted exFAT or NTFS games
+  card writes normally, as root isn't held back by its owners and modes. Samba from 4.22 makes new folders under a
+  temporary name with `:` in it, which exFAT refuses (tested with 4.22.11, in a container on exfat-fuse); ROCKNIX ships
+  4.21. A ROCKNIX with a newer Samba needs `store dos attributes = no`, which ends that (tested);
 - smbd binds to the address wlan0 has when it starts and never picks up a new one, not even on SIGHUP
   (tested). pocket-ui restarts it when the Add games screen opens or a Wi-Fi connection succeeds and
-  smbd isn't listening on the current address.
+  smbd isn't listening on the current address. Every start and restart first looks at the service, under the same lock
+  as the switch, and reads the wish (`share/on`) again: a share that already runs on the right address is never
+  restarted (it would cut a copy), and one that was just switched off stays off.
 
 Checked on the device (22.10.2026) with `smbclient`:
 
 | Test | Result |
 |---|---|
 | listens on | `<device-ip>:139`, `<device-ip>:445` only; `127.0.0.1` refused |
-| `pocket` + password: list, write into `gba/` | works, file is `nobody:nogroup 0664`, root reads it |
-| `cd ports`, `PortMaster`, `bios`, `savestates`; `put evil.sh` into `ports`; create `Ports/` | `NT_STATUS_OBJECT_NAME_NOT_FOUND` / `ACCESS_DENIED`, nothing created |
-| anonymous, `guest`, wrong password, `root`/`rocknix` | refused |
+| `pocket` + password: list, write into `gba/` | works, file is `root:root 0775` (1.11.2026, see below) |
+| anonymous, `guest`, wrong password, `root`/`rocknix`, `root` + the share password | refused (1.11.2026, see below) |
+| `get link/secret` over a link out of `roms`, `get ../outside/secret` | `STOPPED_ON_SYMLINK`, `OBJECT_PATH_NOT_FOUND` (1.11.2026, see below) |
 | `--client-protection=encrypt` | works |
 | switch off | smbd and nmbd stop, nothing on 139/445 |
 
@@ -78,8 +88,21 @@ Windows (`\\<address>\games-roms`, then the user and password) both speak SMB 3 
 smbpasswd account supports. Windows 11 24H2 refuses guest shares and requires signing; a password-protected
 share is what it expects. macOS writes `._*` files for resource forks; harmless.
 
-Trade-off: BIOS files can't be copied over the share any more; they have to go onto the card from a
-computer that writes ext4, or over SSH.
+The lines dated 1.11.2026 were checked with this configuration on Samba 4.21.4 and 4.22.11 in a container (`smbclient`,
+ext4 and FUSE exFAT and NTFS), not yet on the device; also that a script copied in runs, and that a `nobody` file and a root
+`0644` save can be overwritten.
+
+Decision (2026-11-01): nothing under `roms` is hidden. `bios`, `savestates`, `ports` and `PortMaster` are visible
+and writable on the share, as on ROCKNIX, so players can copy BIOS files and PortMaster games over Wi-Fi (a Mac or
+Windows PC can't write the ext4 card, and some models have no second slot). **Anyone with the share password on the
+player's Wi-Fi can put programs into `ports` that then run as root when started**; they can also change a BIOS file,
+a save state or a GameCube memory card. On a retro handheld that person is trusted: ROCKNIX's own share is the same,
+without even a password. The share stays confined to `roms`, behind the password, over Wi-Fi only.
+
+Decision (2026-11-01): the share writes as root. With `nobody`, everything under `roms` had to change owner first
+(minutes on a big collection, a restart that cut running copies), every new save and port folder pocket-ui made went
+back to read-only for the share, and a root-mounted exFAT or NTFS card couldn't be written at all, all to guard a folder
+whose `ports` run as root anyway. Simple beats over-secure here: whoever has the password is trusted.
 
 ## Remote access (SSH, designed, partly implemented)
 
@@ -95,12 +118,10 @@ Implemented (`src/remote.rs`, Settings → Connections → Remote access (SSH), 
   `ssh root@<address>`, user and password, like the Add games screen. `ssh.enabled` stays 0, so SSH is off
   after a restart.
 - **Off:** removes the marker, `ssh.enabled` to 0 if it was 1, removes `sshd.conf`, `systemctl stop sshd`.
-- **Idle timeout:** a thread checks once a minute; when SSH runs **because of our switch** and no
-  connection to port 22 was open for 30 minutes (`/proc/net/tcp{,6}`, `src/sockets.rs`), it turns SSH off.
-  Pure logic in `IdleTimer::tick`, unit-tested.
+- **No idle timeout** (removed 2026-11-01): SSH stays on until switched off, and is off after a restart.
 - **Keys:** `/storage/.ssh/authorized_keys` works whenever sshd runs, also during the password window.
 - **Developer devices:** `/storage/.config/pocket-ui/dev-ssh` exists → mode `Dev`: the switch is
-  disabled, the timeout never fires, `turn_on`/`turn_off` refuse. **Created on the development device.**
+  disabled, `turn_on`/`turn_off` refuse. **Created on the development device.**
 - **sshd running for another reason** (ROCKNIX `ssh.enabled=1`, kernel `ssh` argument) → mode `External`:
   the timeout leaves it alone; only an explicit switch press stops it.
 
@@ -254,7 +275,6 @@ Everything ES does, with a sign-in that works on a handheld, and nothing else:
 |---|---|
 | Tailscale SSH instead of our sshd? | **No.** `--ssh` makes tailscaled answer on port 22 of the tailnet address itself, bypassing sshd, its password and `dev-ssh`. Every `tailscale up` and `tailscale set` pocket-ui runs says `--ssh=false` (`--reset` also clears a `--ssh` set by hand earlier; unit-tested). If someone starts it with `--ssh` by hand, the next switch-on or sign-in turns it off again (`tailscale set --ssh=false`) |
 | Is SSH reachable over the tailnet? | Only while sshd runs, and then with the rules of Remote access: the shown password, or a key in `/storage/.ssh/authorized_keys`. sshd listens on all addresses, so `tailscale0` is one of them. Nothing is changed in sshd or in root's password |
-| The SSH idle timeout | A session over the tailnet counts like any other: `sockets::established` matches local port 22 whatever the address, so an open session keeps SSH on and the 30 minutes run after it ends (to be confirmed on the device) |
 | `dev-ssh` devices | sshd is on for good, so with Tailscale on it is reachable from the tailnet at all times. Before relying on that, run `scripts/harden-ssh.sh --apply` on the device (keys only), and limit the Pocket to your own devices in the Tailscale access controls (e.g. tag it and allow only port 22 from your user) |
 | File sharing | Samba binds `wlan0` only (`bind interfaces only`), so it is **not** reachable over the tailnet |
 | Syncthing | Listens on all addresses (8384 with password and https, 22000): reachable over the tailnet with its own password, as on the Wi-Fi |
@@ -274,7 +294,7 @@ Everything ES does, with a sign-in that works on a handheld, and nothing else:
 | Sign in: scan the QR code with a phone, approve | the page leaves the QR code by itself, shows **Connected as …**, an address `100.x`, a name and the device count; the Pocket is in the admin console |
 | `tailscale status --json \| head`, `tailscale debug prefs` (or `tailscale status`) | Running; `RunSSH` false; the hostname as chosen |
 | `ss -tlnp \| grep ':22 '` with Remote access **off**, then ping the Pocket's `100.x` from the phone | nothing on 22; ping answers (Tailscale only) |
-| Remote access on, `ssh root@pocket-mini` from a tailnet device with the shown password | login works; after closing the session the 30 minutes start (journal or `/run/pocket-ui-ssh-on`) |
+| Remote access on, `ssh root@pocket-mini` from a tailnet device with the shown password | login works; SSH stays on after closing the session until switched off |
 | `nmap -p 22,445,8384 <100.x>` from a tailnet device with all three switched on | 22 open (sshd), 445 closed (Samba on wlan0 only), 8384 open (password and https) |
 | `tailscale up --ssh` by hand, then switch Tailscale off and on in the menu | `tailscale debug prefs` shows `RunSSH` false again |
 | Name: set `pocket-mini`, look in the admin console and `tailscale status` | renamed at once |
@@ -301,7 +321,7 @@ default; when on it listens on port 80 only on the Tailscale interface's address
 checked to be a Tailscale address), never on the Wi-Fi, with no switch for that. The owner's own devices get in by
 tailscaled's `whois`, any other browser with a six-digit code from the Pocket's screen (one try a second, five per
 code) and then a cookie whose hash only is kept; every write needs a CSRF token and passes an origin check; a strict
-Content-Security-Policy; uploads only into game folders, `roms/bios` and the PortMaster drop folders, with cleaned
+Content-Security-Policy; uploads only into game folders, `roms/bios` and the folders of PortMaster ports that wait for files, with cleaned
 names, size limits and no-replace renames; no shell. The protocol, every endpoint, the threat model and the
 self-review are in [WEB-COMPANION.md](WEB-COMPANION.md); the device checks at its end.
 

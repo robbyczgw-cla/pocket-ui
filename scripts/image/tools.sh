@@ -15,3 +15,9 @@ tools_image() {
 version_of() {
   basename "$1" | sed -n 's/^pocket-ui-\(.*\)-rp-mini-v2\.img\(\.xz\)\{0,1\}$/\1/p'
 }
+
+# The notes for one model, on stdin: keeps what's between "#if GAMES" and "#else" (GAMES = 1) or "#else" and "#endif"
+# (GAMES = 0), and drops those lines. $1: 1 for a card with the GAMES drive, else 0.
+notes_blocks() {
+  awk -v g="$1" 'BEGIN { s = 1 } /^#if GAMES$/ { s = (g == 1); next } /^#else$/ { s = (g != 1); next } /^#endif$/ { s = 1; next } s'
+}

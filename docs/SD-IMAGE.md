@@ -172,7 +172,7 @@ Status 2026-10-30: the builder and the offline check exist and pass; **no image 
 Built on an x86_64 Linux machine (3.6 GB of images and 7.5 GB of source are too much to move around). Nothing is published.
 
 ```sh
-scripts/make-image-h700.sh --version V           # build/image-h700/pocket-ui-V-{rg35xx-plus,rg35xx-sp,rg28xx}.img.xz, .txt, SHA256SUMS
+scripts/make-image-h700.sh --version V           # make-image-family.sh --family H700: build/image-h700/pocket-ui-V-{rg35xx-plus,rg35xx-sp,rg28xx}.img.xz, .txt, SHA256SUMS
 scripts/check-image-h700.sh build/image-h700/pocket-ui-V-rg35xx-sp.img.xz
 scripts/image/rocknix-source.sh OUT --device H700   # the source bundle of the H700 build (source-bundle.sh --device H700)
 sh scripts/image/test-h700-pins.sh                   # pins, notes and model list (part of the gate)
@@ -216,14 +216,94 @@ its source archive); the repository gives them no separate licence and we could 
 values first came from. `deploy/image/firmware-licences-h700/README.txt` says this next to every file's md5. The card
 also carries U-Boot and TF-A binaries (GPL, BSD) whose source is in the bundle.
 
+**The GAMES drive (by model, `pins.sh` `<FAMILY>_GAMES_DRIVE_MODELS`: today the RG28XX only, a handheld with no Wi-Fi chip and so
+no file sharing).** ROCKNIX's layout is the standard on every image (RG35XX Plus and SP, the SM8550 models, the Mini V2):
+STORAGE over the whole card, with ROCKNIX's fs-resize and none of the files below on the card; the add-on zips and anything
+already installed are unchanged too. After the first start an RG28XX card of 16 GB or more has a third partition, exFAT, label `GAMES`, that a Mac or
+Windows PC opens as a normal drive, with `roms/<system>/` ready. What and why:
+
+- *Layout.* p1 ROCKNIX (FAT, 2 GiB), p2 STORAGE (ext4, **6 GiB**), p3 GAMES (MBR type 7, the rest, from a 4 MiB boundary).
+  6 GiB: settings, covers and snaps (5,000 games' art is 2-3 GB), logs, and room for a system update's 1.5 GB tar in
+  `/storage/.update`; saves and states go with the games. Cards under 12 GiB (an 8 GB card: 7.4) keep ROCKNIX's layout:
+  STORAGE over the whole card. The image itself still has two partitions: the card's size is only known at the first start.
+- *Who does it.* `deploy/image/games-first-start.sh`, on the FAT partition. `mount-storage.sh` binds it over
+  `/usr/lib/rocknix/fs-resize` while `.please_resize_me` exists, so ROCKNIX's `fs-resize.target` starts it; SYSTEM stays
+  pinned, and with the file missing or not runnable from `/flash` ROCKNIX's script runs as it always did. It uses what
+  SYSTEM has (`parted`, `partprobe`, `e2fsck`, `resize2fs`, `tune2fs`, `mkfs.exfat`, `fsck.exfat`, `blkid`; there is no `sfdisk`).
+- *A power cut.* The marker goes last, so the next start runs the script again. Each step looks at what's there first. A
+  table with two partitions, then p2 grown, then p3 are each a single sector written. `.pocket-games-state` (`table`, then
+  `formatting`), on STORAGE and written before the table changes, tells our p3 from one that was already there. mkfs only runs
+  on an empty p3 or on one whose formatting this script began and that doesn't check out. `.pocket-games-tries` ends a
+  loop after three tries. ROCKNIX's own script would lose the marker first and keep 32 MB for good.
+- *Anything else that fails* goes to ROCKNIX's script (the bind is taken off with `umount -l`, it's the one case it runs):
+  it grows p2 as far as it can and starts the card with its games in STORAGE. `/flash` is never written.
+- *A card flashed again* over an old GAMES finds it behind the new table, at the same place: it stays, games included,
+  if it's exFAT and labelled GAMES. A third partition that isn't ours is never touched.
+- *Finding it.* ROCKNIX's `automount` (`find_games`) takes any unmounted ext4/btrfs/FAT/NTFS partition of a device over
+  8 GiB, in `sort -r` order, whether on the boot card or not, so no `system.gamesdevice` is needed. A card in the second
+  slot sorts first and wins: an existing games card works as before, and GAMES waits. It binds `games-external/roms` to
+  `/storage/roms`, with no overlay on exFAT (`.ms_unsupported`; `system.merged.storage=0` is the default anyway).
+- *Its mount.* The seed's drop-in `rocknix-automount.service.d/10-pocket-games.conf` runs `deploy/image/games-mount.sh` after
+  automount, for this drive only: mounted again with `noatime` (exFAT ignores options on a remount; file sharing writes as
+  root, like everything else on the Pocket), and first `fsck.exfat -p` when the drive's dirty flag is set. There's nothing to
+  replay on exFAT after a power cut, so this stands in for ext4's journal. Costs nothing on a clean drive.
+- *Saves on exFAT.* Checked on the real file system (Linux 6.8 exfat, 2026-10-31): rename over a file, fsync, chmod (a
+  silent no-op) and writing as an unprivileged user work; the dirty flag is on the card from the first write until a sync, so a power
+  cut does leave it set. Hard links, symlinks, chown and `:` `?` in names are refused, and pocket-ui copes: Dolphin's and
+  Azahar's hard links fall back to a copy, their states move with `fsutil::move_file` across the file systems, screenshot
+  names are cleaned (`screenshot::clean`), chown failures only log. `write_atomic` (what pocket-core's saves go through)
+  is fsync, rename, directory fsync, all of which work here. Weaker than ext4: no journal, so what a standalone emulator
+  hasn't flushed can go in a power cut. PortMaster ports with symlinks in their zips can't be unpacked there, as on any
+  exFAT games card.
+- *On screen.* The same dark text screen as ROCKNIX's script, with lines saying what's happening. It adds the format to
+  that phase: the whole script took 0.18 s on a fake 64 GB card with ROCKNIX's own programs, an SD card takes seconds more.
+
+Tests: `deploy/image/test-mount-storage.sh` (gate: the state machine with stand-ins, a power cut at every tool call, small
+card, foreign partition, each failure); `scripts/image/check-h700.sh` (the files, and that SYSTEM still has every tool
+and automount's filter). Run once by hand with SYSTEM's own aarch64 programs on a loop device: 64, 16 and 8 GB cards, `kill -9`
+at 20 points (during `parted` and `resize2fs` too), mkfs failing, a card flashed over an old GAMES, and ROCKNIX's real
+`automount` logic with GAMES, with a card in the second slot, and with one too small (the second card wins; under 8 GiB it's
+ignored). Never seen on a device yet: the fs-resize.target run itself, and a Mac or Windows PC opening the drive.
+
 **Pins.** The `H700_` block of `pins.sh` holds the image hashes, KERNEL and SYSTEM md5, the model list and
 `H700_POCKET_SYSTEM_MD5` (reproduced by two strip runs before it was pinned).
 
 **What a card does that nobody has seen yet:** U-Boot reads `extlinux.conf`, starts KERNEL with `dtb.img`; ROCKNIX's
-initramfs sources our two hooks; the first start grows STORAGE and moves the seed in (`.please_resize_me` is in the
+initramfs sources our two hooks; the first start splits the card and moves the seed in (`.please_resize_me` is in the
 base, as on the Mini V2). Updates: ROCKNIX's `bootloader/update.sh` on the H700 rewrites `dtb.img` and the card's
 U-Boot; the guard in `mount-storage.sh` keeps foreign updates out, and our own OS update is stage 2 of
 `DISTRO-PLAN.md` (not built).
+
+## SM8550: AYN Odin 2 family, Retroid Pocket 6 and Nova (test images, never booted)
+
+Status 2026-10-31: built and checked offline; no card has been started on a handheld. Same builder and check as the H700
+(`scripts/make-image-family.sh --family SM8550`, `scripts/check-image-family.sh`); a family is a block of pins plus its notes.
+
+**Boot path.** The official image holds only `KERNEL` (an Android boot image with every model's device tree and the
+command line `boot=LABEL=ROCKNIX disk=LABEL=STORAGE`), `SYSTEM` and `rocknix_abl/` on a GPT card with the same offsets as the
+Mini V2's. So there is no GRUB and no `dtb.img`, and the five images differ only in their name and notes.
+
+**What a player needs first.** ROCKNIX's ABL must be in the handheld: flashed once from Android with root
+(`rocknix_abl/README` of the official image: `backup_abl.sh`, `flash_abl.sh`, then Volume Down at start). Its menu then wants
+"Set device model" (the ABL's own text: "Device model not set, can't boot Linux") and "Switch boot mode"; it picks the tree in
+KERNEL by that model. We never flash a bootloader and don't carry the ABL. The first-start notes say so plainly. Our SYSTEM goes without
+`usr/share/bootloader/rocknix_abl`, so ROCKNIX's `update.sh` (which runs `updateabl`) has nothing to flash, on top of the
+guard in `mount-storage.sh`.
+
+**A ROCKNIX install on internal storage wins over the card** (`usr/bin/installtointernal`: partitions labelled `ROCKNIX` and
+`STORAGE` on the UFS). `boot=LABEL=ROCKNIX disk=LABEL=STORAGE` then finds the internal ones. Read from the project's Odin 2 Mini
+on 2026-10-31: `/flash` is `sda18`, `/storage` is `sda19`, and the card's own `ROCKNIX` and `STORAGE` partitions are ignored
+except as games card. Such a unit can't test this image by swapping cards, and such a player needs the install package.
+
+**SYSTEM without** (`SM8550_SYSTEM_REMOVE`, read with `check-release-tree.py` on the unpacked SYSTEM): the SKick tables, the
+DOOM shareware data, `rocknix_abl`, and the firmware of devices we don't list (AYANEO Pocket family, AYN Thor). DraStic stays
+as on the H700. The only other finds are the libretro cores, ReGBA's open GBA BIOS and glmark2 models.
+
+**Open before publishing: firmware without a stated licence.** The Odin's sound and battery firmware (`qcom/sm8550/ayn`) and a
+few more files come from ROCKNIX's `extra-firmware` repository, which has no licence file. On the Mini V2 such files could
+simply go; these handhelds can't work without them. `deploy/image/firmware-licences-sm8550/README.txt` lists each file. The
+check also proves every firmware the model's device tree names is still in SYSTEM. Also open: the source bundle
+(`scripts/image/rocknix-source.sh OUT --device SM8550`).
 
 ## Offline check (`scripts/check-image.sh`)
 

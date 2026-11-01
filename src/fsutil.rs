@@ -16,6 +16,19 @@ use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+/// Renames, or copies when `to` is on another file system: `/storage/roms` can be the GAMES drive or a games card, and
+/// the emulators' own folders are on STORAGE.
+pub fn move_file(from: &Path, to: &Path) -> io::Result<()> {
+    if std::fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    if std::fs::symlink_metadata(to).is_ok_and(|m| !m.is_file()) {
+        return Err(io::Error::other("not a file"));
+    }
+    std::fs::copy(from, to)?;
+    std::fs::remove_file(from)
+}
+
 /// A game file with nothing in it (0 bytes): a copy that never finished, or a placeholder. No emulator can start it, and
 /// no picture belongs to it (new-user test 2026-10-30: an empty Tetris got a cover and a box like a healthy game).
 pub fn is_empty_file(path: &Path) -> bool {

@@ -90,7 +90,7 @@ The first time pocket-ui runs, it walks you through a short setup. **START skips
 open every step again later from **Settings** (press START on the Home screen).
 Each step says "Step n of 7" at the top right.
 
-1. **Welcome.** Under the cartridge and your handheld, press A to begin. Left/Right choose the language, **English** or **Deutsch** (German): the screen
+1. **Welcome.** Under the cartridge and your handheld, press A to begin. Left/Right choose the language, **English**, **Deutsch** or **Español**: the screen
    changes at once, and the choice is kept ([Language](language.md)). It starts on the system language
    ROCKNIX was set to. SELECT opens the manual, this guide, on the device (in English); B comes back.
 2. **Choose a look.** A small picture of the shelf in each look, the one shown in the middle and its
@@ -130,7 +130,7 @@ animations. Off: pick games by mood and length, ..."). The names of the features
 - **Simple**: "As pocket-ui ships, the same as skipping this step." This is the start
   setting of a new Pocket, nothing more: Lens & smart shelves, Stickers, Echoes, Versions and Motion are on; Up next,
   Pixel Path, Echoes beyond this device, frames on every console and going straight back into your game are off.
-- **Enthusiast**: "Suggestions, play statistics, picture details and frames, all on." All of Curator, Pixel Path in the pause menu and over every game, Auto screen frames on every
+- **Enthusiast**: "Suggestions, play statistics, picture details and frames, all on." All of Curator, Pixel Path in the pause menu (the line over the game stays off), Auto screen frames on every
   console, and On start set to your last game.
 - **Choose for yourself**: one card per feature, each with a small picture of what it does and three rows, **On**, **Off**
   and **Later**. Up/Down choose, A takes the choice and shows the next card, B goes back a card, START skips the rest.
@@ -282,17 +282,14 @@ many.
   `roms/bios` (in red while one is missing), or, for systems pocket-ui knows nothing about, that a BIOS would go
   into `roms/bios`.
 - The game counts are read when the page opens.
-- Under the title, the page says what in `roms` isn't read, in place of its usual line: a folder that is no system's
-  ("Folder without a system: Sega Genesis. Its games go in roms/megadrive.", with the folder ROCKNIX reads when it can
-  guess it from the name), and a disc game whose file is missing ("Not on the shelf: Lost Bin. Its file Lost Bin
-  (Europe).bin is missing."). A folder counts when it holds a file some system takes; `bios`, `savestates` and the
-  other folders ROCKNIX keeps for itself, and folders starting with `.` or `_`, never do.
+- **Ways to copy games.** Down from the last row of tiles reaches a row with **File sharing** and **USB file transfer**
+  (only what your handheld has): Left/Right choose, A switches, or tap. Details: [Second card and USB cable](copy-games.md).
 
 ### Over Wi-Fi (file sharing)
 
-1. Open Settings → Games → **Add games** (or the "Add your games" step of the first start). Without Wi-Fi, the right
-   side says "Connect to Wi-Fi first" and shows no address yet. With Wi-Fi but sharing off, it says "File sharing is
-   off" and how to turn it on, again without an address.
+1. Open Settings → Games → **Add games** (or the "Add your games" step of the first start). Without a network, the
+   right side names the way that works on your card. With Wi-Fi but sharing off, it says "File sharing is off" and how
+   to turn it on, without an address yet.
 2. Press X ("Turn on file sharing"). The right side under the grid now shows the address, a user (`pocket`) and a
    password made for this Pocket.
 3. On your computer, open the address shown on the screen and log in with that user and password:
@@ -301,33 +298,32 @@ many.
    - Linux: `smb://<address>/games-roms` in the file manager.
 
    The share opens the `roms` folder. Only that folder is shared: pocket-ui's settings, system
-   updates and logs are not reachable over the network. The `ports`, `PortMaster`, `bios` and
-   `savestates` folders are hidden too, because the Pocket runs programs from them. Files for PortMaster
-   games go into `port-files` instead (see [Extras](extras.md#games-that-need-your-own-files)). The `screenshots`
+   updates and logs are not reachable over the network. Everything inside `roms` is
+   there, including `bios`, `savestates`, `ports` and `PortMaster`, so anyone who knows the password can change them.
+   PortMaster games take their own files in their folder inside `ports`. The `screenshots`
    folder is shared: that is where [screenshots](playing.md#screenshots) taken in a game end up.
 4. Copy your games into the right system folders.
-5. Press X again ("Turn off file sharing") when you're done. Sharing is also off after every restart.
+5. Press X again ("Turn off file sharing") when you're done. Otherwise it stays on, also after a restart, and comes back by itself once the Pocket is on Wi-Fi.
 
-The password stays the same for this Pocket. BIOS files can't be copied over the share; put them into
-`roms/bios` with the SD card in a computer.
+The password stays the same for this Pocket. BIOS files go into the `bios` folder of the share. Anyone who has the
+password can add or change files there, so keep it to yourself.
 
-### With the SD card in a computer
+### With the SD card in a computer: the GAMES drive
 
-The `roms` folder is on the SD card's large STORAGE part, which uses the Linux file system ext4.
-Windows and macOS cannot write to ext4 without extra software, so the "Add your games" screen
-suggests file sharing instead.
+The ready-to-flash RG28XX card, 16 GB or bigger, has a **GAMES** drive: put the card in your computer and drag your games
+in ([The GAMES drive](games-drive.md)). On other cards, use file sharing, or a second card on a handheld with a second
+slot: Windows and macOS can't write to the card's STORAGE part.
+
+Without Wi-Fi there's also a second card on a handheld with two slots, or a USB cable with
+Settings → Connections → **USB file transfer**: [Second card and USB cable](copy-games.md).
 
 ### Coming from EmulationStation
 
 The whole move, saves included, is on [Coming from ROCKNIX or Android](coming-from.md). Only the gamelists are here.
 
-If your games were on ROCKNIX's EmulationStation, KNULLI, Batocera or ES-DE, bring the scraped information along: copy
-each system's `gamelist.xml` with the games (it sits in the system's folder, `roms/gba/gamelist.xml`, and ES-DE keeps
-its lists in `ES-DE/gamelists/` and its pictures in `ES-DE/downloaded_media/`). pocket-ui reads them and never changes
-them. A file name like "sf2ce.zip" then shows its real name, a card shows the description, developer and genre
-the gamelist holds, and a game without box art shows the picture the gamelist names. Settings → Games →
-**From EmulationStation** offers to add your favourites to Favourites, and your ratings as My rating, when you want
-them; nothing is taken over by itself. More: [Your EmulationStation gamelists](library.md#your-emulationstation-gamelists).
+If your games were on ROCKNIX's EmulationStation, KNULLI, Batocera or ES-DE, copy each system's `gamelist.xml` with the games:
+pocket-ui reads the names, descriptions and pictures in it, and never changes it. More:
+[Your EmulationStation gamelists](library.md#your-emulationstation-gamelists).
 
 ### When new games appear
 

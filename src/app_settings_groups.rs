@@ -48,7 +48,7 @@ fn desc_lines(text: &mut pocket_ui::text::Text, s: &str, w: i32) -> Vec<String> 
 
 /// Whether a row's value needs `settings_values`' thread.
 fn needs_facts(opens: Opens) -> bool {
-    matches!(opens, Opens::Setup(Only::Wifi | Only::Remote) | Opens::Time | Opens::PcStreaming)
+    matches!(opens, Opens::Setup(Only::Wifi | Only::Remote) | Opens::Time | Opens::PcStreaming | Opens::UsbTransfer)
 }
 
 /// How many rows the categories hold together: the length of `SETTINGS`.
@@ -97,7 +97,8 @@ pub(crate) fn set_store_offered(on: bool) {
 /// Whether Settings has a row for `opens`, with the Store `store`-offered or not. The LEDs row (the lights around the
 /// sticks) is left out on a device without sticks (the H700 handhelds).
 fn shown(opens: Opens, store: bool) -> bool {
-    shown_on(opens, store, pocket_ui::device::current().has_sticks(), pocket_ui::device::current().host_owned())
+    (!matches!(opens, Opens::UsbTransfer) || pocket_ui::usb_transfer::offered())
+        && shown_on(opens, store, pocket_ui::device::current().has_sticks(), pocket_ui::device::current().host_owned())
 }
 
 fn shown_on(opens: Opens, store: bool, sticks: bool, host_owned: bool) -> bool {
@@ -112,6 +113,7 @@ fn device_key(opens: Opens) -> Option<&'static str> {
     Some(match opens {
         Opens::Leds => "leds",
         Opens::Haptics => "haptics",
+        Opens::UsbTransfer => "usb_transfer",
         Opens::Sync => "sync",
         Opens::Tailscale => "tailscale",
         Opens::Tools => "tools",
@@ -260,6 +262,8 @@ impl App {
     pub(crate) fn settings_row_value(&mut self, i: usize, sel: usize, room: i32) -> String {
         let facts = values::get();
         let value = match SETTINGS[i].1 {
+            Opens::UsbTransfer if i == sel && !self.usb_busy => format!("‹ {} ›", self.usb_transfer_value()),
+            Opens::UsbTransfer => self.usb_transfer_value(),
             Opens::Haptics => values::on_off(pocket_ui::rumble::menu_haptics()).to_string(),
             Opens::Extra(e) if i == sel => format!("‹ {} ›", values::on_off(pocket_ui::cozy_extras::on(e))),
             Opens::Extra(e) => values::on_off(pocket_ui::cozy_extras::on(e)).to_string(),
@@ -539,25 +543,27 @@ mod tests {
         use pocket_ui::type_scale::{self, TextSize};
         let mut text = pocket_ui::text::Text::new();
         text.set_translate(false);
-        let de = |s: &str| pocket_ui::i18n::german().translate(s).unwrap_or_else(|| panic!("no German line for {s:?}")).to_string();
-        // Every line as a device can show it (Store or not, sticks or not, the Deck), in English and in German.
+        // Every line as a device can show it (Store or not, sticks or not, the Deck), in every language.
         let mut lines: Vec<String> = Vec::new();
-        for g in 0..SETTINGS_GROUPS.len() {
-            for (store, sticks, deck) in [(true, true, false), (false, true, false), (true, false, false), (false, false, false), (false, false, true)] {
-                lines.push(blurb_with(g, store, sticks, deck, str::to_string));
-                lines.push(blurb_with(g, store, sticks, deck, de));
+        for lang in pocket_ui::i18n::Lang::ALL {
+            let tr = |s: &str| match lang.table() {
+                Some(t) => t.translate(s).unwrap_or_else(|| panic!("no {lang:?} line for {s:?}")).to_string(),
+                None => s.to_string(),
+            };
+            for g in 0..SETTINGS_GROUPS.len() {
+                for (store, sticks, deck) in [(true, true, false), (false, true, false), (true, false, false), (false, false, false), (false, false, true)] {
+                    lines.push(blurb_with(g, store, sticks, deck, tr));
+                }
             }
+            for row in SETTINGS.iter() {
+                lines.push(tr(row.2));
+            }
+            for note in [Needs::Sounds, Needs::CozyFull, Needs::MotionFull, Needs::RememberQuit].map(Needs::note) {
+                lines.push(tr(note));
+            }
+            let deck_lines = ["Where each system's games go.", "Cover art and game pictures.", "A slideshow of your games when the Deck sits idle."];
+            lines.extend(deck_lines.iter().map(|l| tr(l)));
         }
-        for row in SETTINGS.iter() {
-            lines.push(row.2.to_string());
-            lines.push(de(row.2));
-        }
-        for note in [Needs::Sounds, Needs::CozyFull, Needs::MotionFull, Needs::RememberQuit].map(Needs::note) {
-            lines.push(note.to_string());
-            lines.push(de(note));
-        }
-        let deck_lines = ["Where each system's games go.", "Cover art and game pictures.", "A slideshow of your games when the Deck sits idle."];
-        lines.extend(deck_lines.iter().flat_map(|l| [l.to_string(), de(l)]));
         for size in [TextSize::Normal, TextSize::Medium, TextSize::Large] {
             type_scale::set(size);
             for w in [1280, 1240, 1536] {
@@ -698,24 +704,23 @@ mod tests {
         assert!(opens.iter().all(|o| seen.insert(o)), "no page or switch twice: {opens:?}");
     }
 
-    /// The line under each category names its rows, one part each, in their order, in English and in German: every
-    /// part ("quit", "frames", "Bilder & Extras") is in its row's name or the other way round. A row added, moved or
-    /// renamed without its line fails here; so does a German line naming a word the German rows don't use.
+    /// The line under each category names its rows, one part each, in their order, in every language: every part
+    /// ("quit", "frames", "Bilder & Extras") is in its row's name or the other way round. A row added, moved or
+    /// renamed without its line fails here; so does a translated line naming a word its rows don't use.
     #[test]
     fn every_category_line_names_its_rows_in_order() {
-        let de = pocket_ui::i18n::german();
         let parts = |line: &str| -> Vec<String> { line.trim_end_matches('.').split(", ").map(|p| p.trim().to_lowercase()).collect() };
         for (store, sticks, deck) in [(true, true, false), (false, true, false), (true, false, false), (false, false, false), (false, false, true)] {
             for (g, (name, _, _)) in SETTINGS_GROUPS.iter().enumerate() {
                 let rows: Vec<&str> = rows_on(g, store, sticks, deck).iter().map(|i| SETTINGS[*i].0).collect();
-                for lang in ["en", "de"] {
-                    let tr = |s: &str| if lang == "de" { de.translate(s).map(|t| t.to_string()).unwrap_or_else(|| s.to_string()) } else { s.to_string() };
+                for lang in pocket_ui::i18n::Lang::ALL {
+                    let tr = |s: &str| pocket_ui::i18n::tr_in(lang, s);
                     let line = blurb_with(g, store, sticks, deck, tr);
                     let rows: Vec<String> = rows.iter().map(|r| tr(r).to_lowercase()).collect();
                     let got = parts(&line);
-                    assert_eq!(got.len(), rows.len(), "{lang} {name} (store {store}, sticks {sticks}, Deck {deck}): {line:?} has a part per row: {rows:?}");
+                    assert_eq!(got.len(), rows.len(), "{lang:?} {name} (store {store}, sticks {sticks}, Deck {deck}): {line:?} has a part per row: {rows:?}");
                     for (part, row) in got.iter().zip(&rows) {
-                        assert!(row.contains(part.as_str()) || part.contains(row.as_str()), "{lang} {name}: {part:?} is not the row {row:?} ({line:?})");
+                        assert!(row.contains(part.as_str()) || part.contains(row.as_str()), "{lang:?} {name}: {part:?} is not the row {row:?} ({line:?})");
                     }
                 }
             }
@@ -723,12 +728,12 @@ mod tests {
     }
 
     /// A device without sticks (the H700 handhelds) has no LEDs row, and Sound & feel's line doesn't promise one, in
-    /// English or German (review 2026-10-30).
+    /// any language (review 2026-10-30).
     #[test]
     fn without_sticks_the_sound_line_names_no_leds() {
         let g = category("Sound & feel");
-        let de = |s: &str| pocket_ui::i18n::german().translate(s).map(|t| t.to_string()).unwrap_or_else(|| s.to_string());
-        for tr in [&(|s: &str| s.to_string()) as &dyn Fn(&str) -> String, &de] {
+        for lang in pocket_ui::i18n::Lang::ALL {
+            let tr = |s: &str| pocket_ui::i18n::tr_in(lang, s);
             assert!(blurb_with(g, false, true, false, tr).contains("LEDs"), "with sticks");
             let line = blurb_with(g, false, false, false, tr);
             assert!(!line.contains("LED"), "{line:?}");

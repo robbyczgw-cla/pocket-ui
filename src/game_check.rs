@@ -8,24 +8,29 @@
 //! kept per [`Group`], at most [`MAX_PER_GROUP`] each, so a card full of trouble costs no more memory than a small one.
 
 use std::collections::{HashMap, HashSet};
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use crate::library::SysInfo;
+#[cfg(not(target_os = "android"))]
 use crate::systems_grid::Bios;
 
 /// Findings kept per group; the rest are counted (`Report::more`).
 pub const MAX_PER_GROUP: usize = 200;
 /// A BIOS file larger than this is not hashed.
+#[cfg(not(target_os = "android"))]
 const MAX_BIOS_BYTES: u64 = 128 << 20;
 /// Directory entries looked at per folder of a system.
+#[cfg(not(target_os = "android"))]
 const MAX_ENTRIES: usize = 50_000;
 
 /// What a finding is about; the page's first list, in this order.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum Group {
+    /// Android: a folder the player chose that can't be read any more (`document_check`).
+    Access,
     Bios,
     Discs,
     Empty,
@@ -33,14 +38,19 @@ pub enum Group {
     Twice,
     Place,
     Stronger,
+    /// Android: a game goes to an emulator app that isn't installed (`document_check`).
+    Emulator,
+    /// Android: nothing on the phone can start it yet.
+    NotHere,
     Tips,
 }
 
 impl Group {
-    pub const ALL: [Group; 8] = [Group::Bios, Group::Discs, Group::Empty, Group::Zips, Group::Twice, Group::Place, Group::Stronger, Group::Tips];
+    pub const ALL: [Group; 11] = [Group::Access, Group::Bios, Group::Discs, Group::Empty, Group::Zips, Group::Twice, Group::Place, Group::Stronger, Group::Emulator, Group::NotHere, Group::Tips];
 
     pub fn name(self) -> &'static str {
         match self {
+            Group::Access => "Folders that can't be read",
             Group::Bios => "BIOS files",
             Group::Discs => "Discs missing a file",
             Group::Empty => "Empty files",
@@ -48,6 +58,8 @@ impl Group {
             Group::Twice => "Same game twice",
             Group::Place => "Wrong folder or file type",
             Group::Stronger => "Needs a stronger handheld",
+            Group::Emulator => "Emulator apps to install",
+            Group::NotHere => "Can't start in this app yet",
             Group::Tips => "Tips",
         }
     }
@@ -119,6 +131,7 @@ impl Report {
 }
 
 /// A BIOS file pocket-ui knows, as libretro-database's System.dat lists it.
+#[cfg(not(target_os = "android"))]
 struct Known {
     name: &'static str,
     size: u64,
@@ -127,6 +140,7 @@ struct Known {
 
 /// One line per system: its known-good BIOS files, and for a system that plays without one the sentence the tip starts
 /// with. A system without a line has its files named by `hostsys`, or none to check by hash (NAOMI's zips differ by packer).
+#[cfg(not(target_os = "android"))]
 struct SystemBios {
     systems: &'static [&'static str],
     files: &'static [Known],
@@ -134,14 +148,17 @@ struct SystemBios {
 }
 
 /// The known file with this size and checksum.
+#[cfg(not(target_os = "android"))]
 fn known_as(files: &[Known], size: u64, crc: u32) -> Option<&Known> {
     files.iter().find(|k| k.size == size && k.crc == crc)
 }
 
+#[cfg(not(target_os = "android"))]
 const fn k(name: &'static str, size: u64, crc: u32) -> Known {
     Known { name, size, crc }
 }
 
+#[cfg(not(target_os = "android"))]
 const KNOWN_BIOS: &[SystemBios] = &[
     SystemBios {
         systems: &["psx"],
@@ -175,6 +192,7 @@ const KNOWN_BIOS: &[SystemBios] = &[
 
 /// The systems ROCKNIX's H700 image has no emulator for (docs/user/getting-started.md, "What works, what is hidden"), by
 /// the plain folder names people give them.
+#[cfg(not(target_os = "android"))]
 const NOT_ON_H700: &[(&str, &str)] = &[
     ("ps2", "PlayStation 2"),
     ("playstation2", "PlayStation 2"),
@@ -196,9 +214,141 @@ const UNFINISHED: &[&str] = &["part", "crdownload", "tmp", "download", "partial"
 /// keep beside games.
 const NOT_GAMES: &[&str] = &["cfg", "conf", "json", "opt", "cht", "mp4", "mkv", "webp", "svg", "db", "sub", "ccd", "sbi", "wav", "mp3", "ogg", "flac", "ape", "ips", "bps", "ups", "xdelta", "pal", "mdf", "dat", "sh", "state", "auto", "nvm", "nv", "hi"];
 /// Subfolders of a system's folder that belong to its emulator or to a scraper, not to its games.
-const DATA_FOLDERS: &[&str] = &["data", "azahar", "citra", "psp", "save", "saves", "savestates", "states", "system", "media", "images", "manuals", "videos", "covers", "snap", "snaps", "boxart", "downloaded_media", "cheats", "shaders"];
+pub(crate) const DATA_FOLDERS: &[&str] = &["data", "azahar", "citra", "psp", "save", "saves", "savestates", "states", "system", "media", "images", "manuals", "videos", "covers", "snap", "snaps", "boxart", "downloaded_media", "cheats", "shaders"];
+
+/// The seam between the checks and the place games are kept: a folder on the handheld (`Disk`), a document provider's
+/// listing on Android (`document_check`).
+pub trait Files {
+    /// The size of a file; None when it is no file or its size isn't known.
+    fn size(&self, path: &Path) -> Option<u64>;
+    /// `archive::refusal_of`.
+    fn zip_refusal(&self, zip: &Path, wanted: &[&str], only_cut_off: bool) -> Option<String>;
+    /// Where it is, as the player sees it.
+    fn shown(&self, path: &Path) -> String;
+    /// A game's bytes, open for reading with seeking; None when they can't be read.
+    fn open(&self, path: &Path) -> Option<Box<dyn crate::document_check::ReadSeek>>;
+}
+
+/// Disc images and their kin: they may begin with a zero megabyte and still run (Sonic Adventure 2's `.cdi`), so the zeros
+/// look says nothing about them.
+const DISC_EXTENSIONS: &[&str] = &[
+    "cdi", "iso", "bin", "img", "cue", "gdi", "chd", "cso", "ciso", "rvz", "wbfs", "gcm", "gcz", "mdf", "nrg", "pbp", "wux", "wud", "xiso", "ecm", "mds", "toc", "m3u", "dax", "jso", "zso", "3ds", "cia", "nsp", "xci",
+];
+const EDGE: u64 = 64 << 10;
+const SPOT: u64 = 4 << 10;
+const SPOTS: u64 = 8;
+
+/// Whether a cartridge game's bytes are zeros all through, as a copy that stopped early leaves them (six GBA games on
+/// a real card, 2026-10-22). Cheap on a big shelf: the first 4 KiB of a real game are never all zeros, so nearly every
+/// file costs one small read; only a file that starts with zeros has its first and last 64 KiB and eight spots read, and
+/// is called empty only when all of that is zeros. Disc images are not looked at (`DISC_EXTENSIONS`).
+fn zeros_inside(files: &dyn Files, path: &Path, len: u64) -> bool {
+    if len == 0 || DISC_EXTENSIONS.contains(&extension(path).as_str()) || extension(path) == "zip" || extension(path) == "7z" {
+        return false;
+    }
+    let Some(mut file) = files.open(path) else { return false };
+    let mut buf = vec![0u8; EDGE as usize];
+    let mut all_zero = |at: u64, n: u64| -> bool {
+        let n = n.min(len.saturating_sub(at)) as usize;
+        let chunk = &mut buf[..n];
+        file.seek(SeekFrom::Start(at)).is_ok() && file.read_exact(chunk).is_ok() && chunk.iter().all(|b| *b == 0)
+    };
+    if !all_zero(0, SPOT) {
+        return false;
+    }
+    if !all_zero(0, EDGE) || !all_zero(len.saturating_sub(EDGE), EDGE) {
+        return false;
+    }
+    (1..=SPOTS).all(|i| all_zero(len / (SPOTS + 1) * i, SPOT))
+}
+
+/// The sentences that name the place games are copied to, and what else differs between the two.
+pub struct Words {
+    pub copy_again: &'static str,
+    pub empty_todo: &'static str,
+    pub twin_todo: &'static str,
+    /// A copy can be hidden from the shelf (`Fix::Hide`).
+    pub twin_hides: bool,
+    pub short: fn(&SysInfo) -> String,
+    /// The systems a file type is most likely for, in order (`owner`).
+    pub popular: &'static [&'static str],
+}
+
+/// Findings per group, at most `MAX_PER_GROUP` kept, the rest counted.
+#[derive(Default)]
+pub struct Findings {
+    list: Vec<Finding>,
+    counts: HashMap<Group, usize>,
+}
+
+impl Findings {
+    pub fn add(&mut self, f: Finding) {
+        let n = self.counts.entry(f.group).or_default();
+        *n += 1;
+        if *n <= MAX_PER_GROUP {
+            self.list.push(f);
+        }
+    }
+
+    /// The report, sorted by group, then name.
+    pub fn report(mut self, total: usize, ready: usize) -> Report {
+        let order = |g: Group| Group::ALL.iter().position(|a| *a == g).unwrap_or(0);
+        self.list.sort_by_cached_key(|f| (order(f.group), f.name.to_lowercase()));
+        let more = Group::ALL.iter().filter_map(|g| self.counts.get(g).filter(|n| **n > MAX_PER_GROUP).map(|n| (*g, n - MAX_PER_GROUP))).collect();
+        Report { findings: self.list, total, ready, more }
+    }
+}
+
+/// Between two files: a stop is taken at once, and now and then the storage gets a breath, so the shelf's reads go first.
+pub fn breath(stop: &AtomicBool, n: usize) -> Option<()> {
+    if stop.load(Ordering::Relaxed) {
+        return None;
+    }
+    if n.is_multiple_of(64) {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    Some(())
+}
+
+/// The handheld's card.
+#[cfg(not(target_os = "android"))]
+struct Disk<'a> {
+    roms: &'a Path,
+}
+
+#[cfg(not(target_os = "android"))]
+impl Files for Disk<'_> {
+    fn size(&self, path: &Path) -> Option<u64> {
+        std::fs::metadata(path).ok().filter(|m| m.is_file()).map(|m| m.len())
+    }
+
+    fn zip_refusal(&self, zip: &Path, wanted: &[&str], only_cut_off: bool) -> Option<String> {
+        crate::archive::refusal_of(zip, wanted, only_cut_off)
+    }
+
+    /// "roms/snes/Game.sfc" for what is under the roms folder, else the path itself.
+    fn shown(&self, p: &Path) -> String {
+        let base = self.roms.parent().unwrap_or(self.roms);
+        p.strip_prefix(base).unwrap_or(p).to_string_lossy().into_owned()
+    }
+
+    fn open(&self, path: &Path) -> Option<Box<dyn crate::document_check::ReadSeek>> {
+        std::fs::File::open(path).ok().map(|f| Box::new(f) as Box<dyn crate::document_check::ReadSeek>)
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+const HANDHELD: Words = Words {
+    copy_again: "Copy the game to the SD card again.",
+    empty_todo: "A copy or a download stopped early. Copy the game to the SD card again.",
+    twin_todo: "Hide this copy from the shelf. The file stays on the card.",
+    twin_hides: true,
+    short: crate::systems_grid::short_name,
+    popular: &crate::systems_grid::POPULAR,
+};
 
 /// What the check is given: the App's lists, so what counts as a game is what the shelf says.
+#[cfg(not(target_os = "android"))]
 pub struct Input {
     pub catalog: Vec<SysInfo>,
     /// The games on the shelf per system id, hidden ones left out.
@@ -211,62 +361,49 @@ pub struct Input {
 }
 
 /// Collects the findings and how far the work has come.
+#[cfg(not(target_os = "android"))]
 struct Run<'a> {
     input: &'a Input,
+    disk: Disk<'a>,
     stop: &'a AtomicBool,
     progress: &'a mut dyn FnMut(usize, usize, &str),
     done: usize,
     total: usize,
-    findings: Vec<Finding>,
-    counts: HashMap<Group, usize>,
+    found: Findings,
     blocked_systems: HashSet<String>,
     blocked_games: HashSet<PathBuf>,
 }
 
 /// Goes through the card. None: stopped.
+#[cfg(not(target_os = "android"))]
 pub fn check(input: &Input, stop: &AtomicBool, progress: &mut dyn FnMut(usize, usize, &str)) -> Option<Report> {
     let total = input.shelf.iter().map(|(_, g)| g.len()).sum();
-    let mut run = Run { input, stop, progress, done: 0, total, findings: Vec::new(), counts: HashMap::new(), blocked_systems: HashSet::new(), blocked_games: HashSet::new() };
+    let mut run = Run { input, disk: Disk { roms: &input.roms }, stop, progress, done: 0, total, found: Findings::default(), blocked_systems: HashSet::new(), blocked_games: HashSet::new() };
     run.bios()?;
     run.games()?;
     run.folders()?;
     run.stray()?;
     let blocked_by_system: usize = input.shelf.iter().filter(|(id, _)| run.blocked_systems.contains(id)).map(|(_, g)| g.len()).sum();
     let blocked_alone = input.shelf.iter().filter(|(id, _)| !run.blocked_systems.contains(id)).flat_map(|(_, g)| g).filter(|p| run.blocked_games.contains(*p)).count();
-    let order = |g: Group| Group::ALL.iter().position(|a| *a == g).unwrap_or(0);
-    run.findings.sort_by_cached_key(|f| (order(f.group), f.name.to_lowercase()));
-    let more = Group::ALL.iter().filter_map(|g| run.counts.get(g).filter(|n| **n > MAX_PER_GROUP).map(|n| (*g, n - MAX_PER_GROUP))).collect();
-    Some(Report { findings: run.findings, total, ready: total - blocked_by_system - blocked_alone, more })
+    Some(run.found.report(total, total - blocked_by_system - blocked_alone))
 }
 
+#[cfg(not(target_os = "android"))]
 impl Run<'_> {
     fn add(&mut self, f: Finding) {
-        let n = self.counts.entry(f.group).or_default();
-        *n += 1;
-        if *n <= MAX_PER_GROUP {
-            self.findings.push(f);
-        }
+        self.found.add(f);
     }
 
-    /// Between two files: a stop is taken at once, and now and then the card gets a breath, so the shelf's reads go first.
     fn step(&mut self, n: usize) -> Option<()> {
-        if self.stop.load(Ordering::Relaxed) {
-            return None;
-        }
-        if n.is_multiple_of(64) {
-            std::thread::sleep(Duration::from_millis(1));
-        }
-        Some(())
+        breath(self.stop, n)
     }
 
     fn info(&self, id: &str) -> Option<&SysInfo> {
         self.input.catalog.iter().find(|s| s.id == id)
     }
 
-    /// "roms/snes/Game.sfc" for what is under the roms folder, else the path itself.
     fn shown(&self, p: &Path) -> String {
-        let base = self.input.roms.parent().unwrap_or(&self.input.roms);
-        p.strip_prefix(base).unwrap_or(p).to_string_lossy().into_owned()
+        self.disk.shown(p)
     }
 
     fn system_name(&self, id: &str) -> String {
@@ -369,7 +506,7 @@ impl Run<'_> {
             self.add(Finding { group, name: file, system, what, todo, place, fix: None });
         } else {
             let what = if optional { format!("{system}: no BIOS.") } else { format!("{system}: BIOS missing.") };
-            let todo = if optional { message } else { format!("{}. BIOS files come from your own console. Copy them with the SD card in a computer or the Web companion.", message.trim_end_matches('.')) };
+            let todo = if optional { message } else { format!("{}. BIOS files come from your own console. {}", message.trim_end_matches('.'), bios_copy_way()) };
             self.add(Finding { group, name: system.clone(), system, what, todo, place: None, fix: None });
         }
         if !optional {
@@ -384,7 +521,7 @@ impl Run<'_> {
     fn elsewhere(&mut self, id: &str, wanted: &[&str]) -> Option<Option<(PathBuf, String)>> {
         let bios = self.input.bios_dir.clone();
         let mut dirs = vec![bios.clone()];
-        dirs.extend(std::fs::read_dir(&bios).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.is_dir()));
+        dirs.extend(std::fs::read_dir(&bios).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.is_dir() && !is_litter(p)));
         dirs.push(self.input.roms.clone());
         if let Some(info) = self.info(id) {
             dirs.push(info.path.clone());
@@ -393,6 +530,9 @@ impl Run<'_> {
             for path in std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path()) {
                 self.step(1)?;
                 let Some(file) = path.file_name().and_then(|n| n.to_str()) else { continue };
+                if crate::library::computer_litter(file) {
+                    continue;
+                }
                 let hit = wanted.iter().find(|w| w.rsplit('/').next().is_some_and(|base| base.eq_ignore_ascii_case(file)));
                 if let Some(w) = hit {
                     if path.is_file() && path != bios.join(w) {
@@ -405,7 +545,7 @@ impl Run<'_> {
         for path in std::fs::read_dir(&bios).into_iter().flatten().flatten().map(|e| e.path()) {
             self.step(1)?;
             let Ok(meta) = std::fs::metadata(&path) else { continue };
-            if !meta.is_file() || !files.iter().any(|k| k.size == meta.len()) {
+            if is_litter(&path) || !meta.is_file() || !files.iter().any(|k| k.size == meta.len()) {
                 continue;
             }
             if let Some(k) = crc_of(&path, self.stop)?.and_then(|crc| known_as(files, meta.len(), crc)) {
@@ -422,85 +562,18 @@ impl Run<'_> {
         for (id, games) in shelf {
             let Some(info) = self.info(id).cloned() else { continue };
             (self.progress)(self.done, self.total, &info.name);
-            let wanted: Vec<&str> = info.extensions.iter().map(String::as_str).filter(|e| !matches!(*e, "zip" | "7z")).collect();
-            let cartridge = crate::rom_id::dat_name(id).is_some();
-            let mut sizes: Vec<(&PathBuf, u64)> = Vec::with_capacity(games.len());
-            for (i, path) in games.iter().enumerate() {
-                self.step(i)?;
-                self.done += 1;
-                if i % 128 == 0 {
-                    (self.progress)(self.done, self.total, &info.name);
+            let (stop, progress, done, total) = (self.stop, &mut self.progress, &mut self.done, self.total);
+            let mut between = |i: usize| {
+                breath(stop, i)?;
+                *done += 1;
+                if i.is_multiple_of(128) {
+                    progress(*done, total, &info.name);
                 }
-                let Ok(meta) = std::fs::metadata(path) else { continue };
-                if !meta.is_file() {
-                    continue;
-                }
-                sizes.push((path, meta.len()));
-                let system = crate::systems_grid::short_name(&info);
-                let place = Some(self.shown(path));
-                if meta.len() == 0 && !empty_on_purpose(id, path) {
-                    self.add(Finding {
-                        group: Group::Empty,
-                        name: name_of(path),
-                        system,
-                        what: "This file is empty.".into(),
-                        todo: "A copy or a download stopped early. Copy the game to the SD card again.".into(),
-                        place,
-                        fix: None,
-                    });
-                    self.blocked_games.insert(path.clone());
-                    continue;
-                }
-                let is_zip = path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("zip"));
-                if is_zip {
-                    if let Some(why) = crate::archive::refusal_of(path, &wanted, !cartridge) {
-                        // The same sentence the shelf would say, with its advice in it.
-                        self.add(Finding { group: Group::Zips, name: name_of(path), system, what: why, todo: String::new(), place, fix: None });
-                        self.blocked_games.insert(path.clone());
-                    }
-                }
-            }
-            self.twins(&info, &sizes);
+                Some(())
+            };
+            check_system(&mut self.found, &self.disk, &HANDHELD, &info, games, &mut self.blocked_games, &mut between)?;
         }
         Some(())
-    }
-
-    /// The same file twice on a system's shelf: the same name but for "(1)" or "- Copy", either as the same size or as
-    /// two file types. Tags count, so two regions of a game are two games; nothing is hashed.
-    fn twins(&mut self, info: &SysInfo, sizes: &[(&PathBuf, u64)]) {
-        // Per folder: two games of the same name in folders of their own are two games.
-        let mut by_name: HashMap<(Option<PathBuf>, String), Vec<(&PathBuf, u64)>> = HashMap::new();
-        for (path, len) in sizes {
-            let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-            by_name.entry((path.parent().map(Path::to_path_buf), without_copy_mark(&stem).to_lowercase())).or_default().push((path, *len));
-        }
-        let mut groups: Vec<Vec<(&PathBuf, u64)>> = by_name.into_values().filter(|g| g.len() > 1).collect();
-        groups.sort_by_key(|g| g[0].0.clone());
-        for mut group in groups {
-            // The one without a copy mark stays, then the shortest path.
-            group.sort_by_cached_key(|(p, _)| {
-                let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-                (without_copy_mark(&stem).len() != stem.len(), p.as_os_str().len(), (*p).clone())
-            });
-            let (first, first_len) = group[0];
-            for (path, len) in &group[1..] {
-                let same_type = path.extension().map(|e| e.to_ascii_lowercase()) == first.extension().map(|e| e.to_ascii_lowercase());
-                if same_type && *len != first_len {
-                    continue;
-                }
-                let name = file_of(path);
-                let (kept, place) = (self.shown(first), Some(self.shown(path)));
-                self.add(Finding {
-                    group: Group::Twice,
-                    what: format!("Same game twice: {kept} is the same game."),
-                    todo: "Hide this copy from the shelf. The file stays on the card.".into(),
-                    name,
-                    system: crate::systems_grid::short_name(info),
-                    place,
-                    fix: Some(Fix::Hide((*path).clone())),
-                });
-            }
-        }
     }
 
     // ---- what the shelf doesn't list -----------------------------------------------------------------------------
@@ -548,10 +621,10 @@ impl Run<'_> {
             n += 1;
             self.step(n)?;
             let ext = extension(&path);
-            if n > MAX_ENTRIES || !all.contains(&ext) || not_a_game_file(&path, &ext) {
+            if n > MAX_ENTRIES || !all.contains(&ext) || not_a_game_file(&path, &ext) || crate::library::computer_litter(&file_of(&path)) {
                 continue;
             }
-            let todo = match owner(&catalog, &ext) {
+            let todo = match owner(&catalog, &ext, HANDHELD.popular) {
                 Some(info) => format!("Move it to {}.", info.folder),
                 None => "Games go into the folder of their system, for example roms/snes.".to_string(),
             };
@@ -569,7 +642,7 @@ impl Run<'_> {
             let mut deeper = Vec::new();
             self.look_at_files(info, catalog, exts, &sub, &mut deeper)?;
             for dir in deeper {
-                let holds = std::fs::read_dir(&dir).into_iter().flatten().flatten().take(MAX_ENTRIES).map(|e| e.path()).find(|p| p.is_file() && exts.contains(&extension(p)) && !matches!(extension(p).as_str(), "zip" | "7z"));
+                let holds = std::fs::read_dir(&dir).into_iter().flatten().flatten().take(MAX_ENTRIES).map(|e| e.path()).find(|p| p.is_file() && exts.contains(&extension(p)) && !matches!(extension(p).as_str(), "zip" | "7z") && !crate::library::computer_litter(&file_of(p)));
                 if let Some(file) = holds {
                     let place = Some(self.shown(&file));
                     self.add(Finding {
@@ -592,7 +665,7 @@ impl Run<'_> {
             self.step(n)?;
             let path = entry.path();
             let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') {
+            if crate::library::computer_litter(&name) {
                 continue;
             }
             let Ok(kind) = entry.file_type() else { continue };
@@ -606,7 +679,7 @@ impl Run<'_> {
             if exts.contains(&ext) {
                 continue;
             }
-            if let Some((what, todo)) = wrong_file(info, catalog, exts, &path, &ext) {
+            if let Some((what, todo)) = wrong_file(&self.disk, &HANDHELD, info, catalog, exts, &path, &ext) {
                 let place = Some(self.shown(&path));
                 self.add(Finding { group: Group::Place, name: file_of(&path), system: crate::systems_grid::short_name(info), what, todo, place, fix: None });
             }
@@ -644,7 +717,98 @@ impl Run<'_> {
     }
 }
 
+/// One system's games on the shelf: empty files, zips that won't start, the same file twice. `between` comes before each
+/// game; None from it stops the check.
+pub fn check_system(found: &mut Findings, files: &dyn Files, words: &Words, info: &SysInfo, games: &[PathBuf], blocked: &mut HashSet<PathBuf>, between: &mut dyn FnMut(usize) -> Option<()>) -> Option<()> {
+    let id = info.id.as_str();
+    let wanted: Vec<&str> = info.extensions.iter().map(String::as_str).filter(|e| !matches!(*e, "zip" | "7z")).collect();
+    let cartridge = crate::rom_id::dat_name(id).is_some();
+    let mut sizes: Vec<(&PathBuf, u64)> = Vec::with_capacity(games.len());
+    for (i, path) in games.iter().enumerate() {
+        between(i)?;
+        let Some(len) = files.size(path) else { continue };
+        sizes.push((path, len));
+        let system = (words.short)(info);
+        let place = Some(files.shown(path));
+        if len == 0 && !empty_on_purpose(id, path) {
+            found.add(Finding {
+                group: Group::Empty,
+                name: name_of(path),
+                system,
+                what: "This file is empty.".into(),
+                todo: words.empty_todo.into(),
+                place,
+                fix: None,
+            });
+            blocked.insert(path.clone());
+            continue;
+        }
+        if cartridge && zeros_inside(files, path, len) {
+            found.add(Finding {
+                group: Group::Empty,
+                name: name_of(path),
+                system,
+                what: "This file is empty inside.".into(),
+                todo: words.copy_again.into(),
+                place,
+                fix: None,
+            });
+            blocked.insert(path.clone());
+            continue;
+        }
+        let is_zip = path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("zip"));
+        if is_zip {
+            if let Some(why) = files.zip_refusal(path, &wanted, !cartridge) {
+                // The same sentence the shelf would say, with its advice in it.
+                found.add(Finding { group: Group::Zips, name: name_of(path), system, what: why, todo: String::new(), place, fix: None });
+                blocked.insert(path.clone());
+            }
+        }
+    }
+    twins(found, files, words, info, &sizes);
+    Some(())
+}
+
+/// The same file twice on a system's shelf: the same name but for "(1)" or "- Copy", either as the same size or as
+/// two file types. Tags count, so two regions of a game are two games; nothing is hashed.
+fn twins(found: &mut Findings, files: &dyn Files, words: &Words, info: &SysInfo, sizes: &[(&PathBuf, u64)]) {
+    // Per folder: two games of the same name in folders of their own are two games.
+    let mut by_name: HashMap<(Option<PathBuf>, String), Vec<(&PathBuf, u64)>> = HashMap::new();
+    for (path, len) in sizes {
+        let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        by_name.entry((path.parent().map(Path::to_path_buf), without_copy_mark(&stem).to_lowercase())).or_default().push((path, *len));
+    }
+    let mut groups: Vec<Vec<(&PathBuf, u64)>> = by_name.into_values().filter(|g| g.len() > 1).collect();
+    groups.sort_by_key(|g| g[0].0.clone());
+    for mut group in groups {
+        // The one without a copy mark stays, then the shortest path.
+        group.sort_by_cached_key(|(p, _)| {
+            let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            (without_copy_mark(&stem).len() != stem.len(), p.as_os_str().len(), (*p).clone())
+        });
+        let (first, first_len) = group[0];
+        for (path, len) in &group[1..] {
+            let same_type = path.extension().map(|e| e.to_ascii_lowercase()) == first.extension().map(|e| e.to_ascii_lowercase());
+            if same_type && *len != first_len {
+                continue;
+            }
+            let name = file_of(path);
+            let (kept, place) = (files.shown(first), Some(files.shown(path)));
+            found.add(Finding {
+                group: Group::Twice,
+                what: format!("Same game twice: {kept} is the same game."),
+                todo: words.twin_todo.into(),
+                name,
+                system: (words.short)(info),
+                place,
+                fix: words.twin_hides.then(|| Fix::Hide((*path).clone())),
+            });
+        }
+    }
+}
+
 /// CRC-32 of a file, chunk by chunk. Outer None: stopped; inner None: can't be read.
+#[cfg(not(target_os = "android"))]
 fn crc_of(path: &Path, stop: &AtomicBool) -> Option<Option<u32>> {
     let Ok(mut f) = std::fs::File::open(path) else { return Some(None) };
     let mut hasher = crc32fast::Hasher::new();
@@ -661,12 +825,12 @@ fn crc_of(path: &Path, stop: &AtomicBool) -> Option<Option<u32>> {
     }
 }
 
-fn extension(path: &Path) -> String {
+pub(crate) fn extension(path: &Path) -> String {
     path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default()
 }
 
 /// The name a finding's row shows.
-fn name_of(path: &Path) -> String {
+pub(crate) fn name_of(path: &Path) -> String {
     crate::library::shelf_name(&path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default())
 }
 
@@ -676,7 +840,7 @@ fn empty_on_purpose(system: &str, path: &Path) -> bool {
 }
 
 /// The file's whole name, for a row about the name itself; painted as it is, in every language.
-fn file_of(path: &Path) -> String {
+pub(crate) fn file_of(path: &Path) -> String {
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     crate::i18n::learn_names([&name]);
     name
@@ -704,12 +868,12 @@ pub fn without_copy_mark(stem: &str) -> &str {
 }
 
 /// The catalog's system a file type is for, when the type says so: the popular ones first.
-fn owner<'a>(catalog: &'a [SysInfo], ext: &str) -> Option<&'a SysInfo> {
+fn owner<'a>(catalog: &'a [SysInfo], ext: &str, popular: &[&str]) -> Option<&'a SysInfo> {
     if SAY_NOTHING.contains(&ext) {
         return None;
     }
     let takes = |s: &&SysInfo| s.extensions.iter().any(|e| e == ext);
-    crate::systems_grid::POPULAR.iter().find_map(|id| catalog.iter().filter(takes).find(|s| s.id == *id)).or_else(|| catalog.iter().find(takes))
+    popular.iter().find_map(|id| catalog.iter().filter(takes).find(|s| s.id == *id)).or_else(|| catalog.iter().find(takes))
 }
 
 fn not_a_game_file(path: &Path, ext: &str) -> bool {
@@ -736,29 +900,33 @@ fn one_slip(a: &str, b: &str) -> bool {
 /// Why a file in a system's folder is no game of that system, and what to do; None when it says nothing (a picture, a
 /// save, a file type nobody uses for games). Common cases: another system's game, a typo, a second extension, a
 /// packed or unfinished file.
-fn wrong_file(info: &SysInfo, catalog: &[SysInfo], exts: &[String], path: &Path, ext: &str) -> Option<(String, String)> {
+pub(crate) fn wrong_file(files: &dyn Files, words: &Words, info: &SysInfo, catalog: &[SysInfo], exts: &[String], path: &Path, ext: &str) -> Option<(String, String)> {
     let file = path.file_name()?.to_string_lossy().into_owned();
     let takes = || exts.iter().filter(|e| !matches!(e.as_str(), "7z")).map(|e| format!(".{e}")).take(6).collect::<Vec<_>>().join(" ");
     let inner = path.file_stem().map(|s| extension(Path::new(s))).unwrap_or_default();
     if UNFINISHED.contains(&ext) {
-        return Some(("This file was not copied to the end.".to_string(), "Copy the game to the SD card again.".to_string()));
+        return Some(("This file was not copied to the end.".to_string(), words.copy_again.to_string()));
+    }
+    // `Game.nds.sav` is how other emulators name a game's save: renaming it would lose it, whatever its first type says.
+    if crate::game_files::is_save(path) {
+        return None;
     }
     if !inner.is_empty() && exts.contains(&inner) && !game_tag_ext(&inner) {
         let right = path.file_stem()?.to_string_lossy().into_owned();
         return Some((format!("{file} has two file types, so it isn't read."), format!("Rename it to {right}.")));
     }
     if PACKED.contains(&ext) {
-        return Some((format!("{} can't open .{ext} files.", crate::systems_grid::short_name(info)), "Unpack it on a computer and copy the game file.".to_string()));
+        return Some((format!("{} can't open .{ext} files.", (words.short)(info)), "Unpack it on a computer and copy the game file.".to_string()));
     }
     if not_a_game_file(path, ext) {
         return None;
     }
     if ext.is_empty() {
-        let big = std::fs::metadata(path).is_ok_and(|m| m.len() >= 32 << 10);
-        return big.then(|| (format!("{file} has no file type, so it isn't read."), format!("{} takes {}.", crate::systems_grid::short_name(info), takes())));
+        let big = files.size(path).is_some_and(|len| len >= 32 << 10);
+        return big.then(|| (format!("{file} has no file type, so it isn't read."), format!("{} takes {}.", (words.short)(info), takes())));
     }
-    if let Some(other) = owner(catalog, ext).filter(|o| o.path != info.path) {
-        return Some((format!("This is a {} file, in the {} folder.", crate::systems_grid::short_name(other), crate::systems_grid::short_name(info)), format!("Move it to {}.", other.folder)));
+    if let Some(other) = owner(catalog, ext, words.popular).filter(|o| o.path != info.path) {
+        return Some((format!("This is a {} file, in the {} folder.", (words.short)(other), (words.short)(info)), format!("Move it to {}.", other.folder)));
     }
     let close = exts.iter().find(|e| e.len() >= 2 && ext.len() >= 2 && one_slip(ext, e));
     if let Some(e) = close {
@@ -767,7 +935,7 @@ fn wrong_file(info: &SysInfo, catalog: &[SysInfo], exts: &[String], path: &Path,
         return Some((format!("Typo in the file type: .{ext} isn't read."), format!("Rename it to {right}.")));
     }
     if catalog.iter().any(|s| s.extensions.iter().any(|e| e == ext)) {
-        return Some((format!("{} doesn't take .{ext} files, so this one isn't read.", crate::systems_grid::short_name(info)), format!("It takes {}.", takes())));
+        return Some((format!("{} doesn't take .{ext} files, so this one isn't read.", (words.short)(info)), format!("It takes {}.", takes())));
     }
     None
 }
@@ -776,6 +944,24 @@ fn wrong_file(info: &SysInfo, catalog: &[SysInfo], exts: &[String], path: &Path,
 /// short version-like tails don't.
 fn game_tag_ext(ext: &str) -> bool {
     ext.chars().all(|c| c.is_ascii_digit()) || ext.len() < 2
+}
+
+#[cfg(not(target_os = "android"))]
+fn is_litter(path: &Path) -> bool {
+    path.file_name().and_then(|n| n.to_str()).is_some_and(crate::library::computer_litter)
+}
+
+/// Where to copy a missing BIOS file on this model: over the file share where there is Wi-Fi (`bios` is on the share),
+/// into `roms/bios` on a second card where the model has a slot.
+#[cfg(not(target_os = "android"))]
+fn bios_copy_way() -> &'static str {
+    let d = crate::device::current();
+    match (d.has_wifi(), d.has_second_card_slot()) {
+        (true, true) => "Copy them into the bios folder over file sharing (Settings › Games › Add games). Or copy them into roms/bios on a second SD card in your computer.",
+        (true, false) => "Copy them into the bios folder over file sharing (Settings › Games › Add games).",
+        (false, true) => "Copy them into roms/bios on a second SD card in your computer.",
+        (false, false) => "Copy them into roms/bios.",
+    }
 }
 
 /// A report with made-up findings for `--snapshot game-check` and the pictures in the manual.
@@ -810,7 +996,7 @@ pub fn demo(all_good: bool) -> Report {
         ready: 186,
         more: Vec::new(),
         findings: vec![
-            f(Group::Bios, "Sega CD", "Sega CD", "Sega CD: BIOS missing.", "Sega CD needs a BIOS file in roms/bios: bios_CD_U.bin, bios_CD_E.bin or bios_CD_J.bin. BIOS files come from your own console. Copy them with the SD card in a computer or the Web companion.", None, None),
+            f(Group::Bios, "Sega CD", "Sega CD", "Sega CD: BIOS missing.", "Sega CD needs a BIOS file in roms/bios: bios_CD_U.bin, bios_CD_E.bin or bios_CD_J.bin. BIOS files come from your own console. Copy them into the bios folder over file sharing (Settings › Games › Add games).", None, None),
             f(Group::Bios, "scph5501.bin", "PlayStation", "Wrong BIOS: its checksum differs from the file with this name.", "Games may not start or may crash. Copy your own console's scph5501.bin again.", Some("roms/bios/scph5501.bin"), None),
             f(Group::Discs, "Final Fantasy VII", "PlayStation", "Disc: Final Fantasy VII.cue is there, its Final Fantasy VII.bin is missing.", "Put Final Fantasy VII.bin next to it, with exactly this name.", Some("roms/psx/Final Fantasy VII.cue"), None),
             f(Group::Empty, "Pokémon Blau", "Game Boy", "This file is empty.", "A copy or a download stopped early. Copy the game to the SD card again.", Some("roms/gb/Pokémon Blau.gb"), None),
@@ -891,7 +1077,7 @@ mod tests {
         let mut out = Vec::new();
         for e in std::fs::read_dir(&s.path).into_iter().flatten().flatten() {
             let p = e.path();
-            if p.is_file() && s.extensions.contains(&extension(&p)) {
+            if p.is_file() && s.extensions.contains(&extension(&p)) && !crate::library::computer_litter(&file_of(&p)) {
                 out.push(p);
             }
         }
@@ -901,6 +1087,39 @@ mod tests {
 
     fn only(r: &Report, g: Group) -> Vec<&Finding> {
         r.in_group(g)
+    }
+
+    /// A Mac's `._` twins and hidden folders, and Windows' folders, on a drive a computer has had: nothing to report, and no game to count.
+    #[test]
+    fn a_macs_and_windows_litter_is_never_a_finding_or_a_game() {
+        let c = Card::new("litter");
+        c.put("gba/Metroid Fusion (USA).gba", b"game");
+        for f in [
+            "gba/._Metroid Fusion (USA).gba",
+            "gba/.DS_Store",
+            "gba/.Spotlight-V100/Store-V2/Stray.gba",
+            "gba/.Trashes/501/Deleted.gba",
+            "gba/.fseventsd/fseventsd-uuid",
+            "gba/System Volume Information/Indexed.gba",
+            "gba/System Volume Information/IndexerVolumeGuid",
+            "gba/$RECYCLE.BIN/S-1-5-21/$R123.gba",
+            "snes/._Chrono.sfc",
+            "psx/._Disc.cue",
+            "._Loose.gba",
+            "._gba",
+            ".DS_Store",
+            ".Spotlight-V100/Store-V2/Stray.gba",
+            ".Trashes/501/Deleted.gba",
+            ".fseventsd/fseventsd-uuid",
+            "System Volume Information/IndexerVolumeGuid",
+            "System Volume Information/Indexed.gba",
+            "$RECYCLE.BIN/S-1-5-21/$R123.gba",
+        ] {
+            c.put(f, b"x");
+        }
+        let r = c.report();
+        assert_eq!(r.findings, Vec::new());
+        assert_eq!((r.total, r.ready), (1, 1));
     }
 
     #[test]
@@ -926,6 +1145,23 @@ mod tests {
         // No folders at all.
         let i = Input { catalog: Vec::new(), shelf: Vec::new(), bios_dir: c.dir.join("nope/bios"), roms: c.dir.join("nope"), h700: false };
         assert_eq!(check(&i, &AtomicBool::new(false), &mut |_, _, _| {}).unwrap().findings, Vec::new());
+    }
+
+    #[test]
+    fn a_save_beside_its_game_is_no_fault_whatever_its_name_holds() {
+        let c = Card::new("save-two-types");
+        c.put("nds/Game.nds", &[7u8; 40000]);
+        c.put("nds/Game.nds.sav", b"save");
+        c.put("gba/Other.gba", &[7u8; 40000]);
+        c.put("gba/Other.gba.srm", b"save");
+        c.put("gba/Other.gba.part", b"half");
+        c.put("gba/Third.gba.txt", b"game");
+        let r = c.report();
+        let place = only(&r, Group::Place);
+        assert!(!place.iter().any(|f| f.place.as_deref().is_some_and(|p| p.contains(".sav") || p.contains(".srm"))), "{place:?}");
+        // What the check is for stays: a game with a second type, and a copy that stopped.
+        assert!(place.iter().any(|f| f.todo == "Rename it to Third.gba."), "{place:?}");
+        assert!(place.iter().any(|f| f.place.as_deref().is_some_and(|p| p.ends_with("Other.gba.part"))), "{place:?}");
     }
 
     #[test]
@@ -983,6 +1219,30 @@ mod tests {
         assert_eq!(bios[0].what, "Sega CD: BIOS missing.");
         assert!(bios[0].todo.starts_with("Sega CD needs a BIOS file in roms/bios: bios_CD_U.bin, bios_CD_E.bin or bios_CD_J.bin."), "{}", bios[0].todo);
         assert_eq!(bios[0].fix, None, "never fetched for the player");
+    }
+
+    #[test]
+    fn computer_litter_in_the_bios_folder_is_no_bios_and_no_alarm() {
+        // A Mac copying over the share leaves ._ files next to the BIOS files.
+        let c = Card::new("bioslitter");
+        c.put("segacd/Sonic CD.cue", b"FILE \"Sonic CD.bin\" BINARY\n");
+        c.put("segacd/Sonic CD.bin", b"x");
+        c.put("bios/._bios_CD_E.bin", &[1; 4096]);
+        c.put("bios/.DS_Store", &[1; 131072]);
+        let r = c.report();
+        let bios = only(&r, Group::Bios);
+        assert_eq!(bios.len(), 1, "{bios:?}");
+        assert_eq!(bios[0].what, "Sega CD: BIOS missing.", "the ._ file is not the BIOS, nor a misnamed one");
+        assert!(bios[0].todo.contains("over file sharing") || bios[0].todo.contains("roms/bios."), "{}", bios[0].todo);
+
+        let c = Card::new("bioslitter2");
+        c.put("segacd/Sonic CD.cue", b"FILE \"Sonic CD.bin\" BINARY\n");
+        c.put("segacd/Sonic CD.bin", b"x");
+        c.put("bios/bios_CD_E.bin", &[1; 131072]);
+        c.put("bios/._bios_CD_E.bin", &[1; 4096]);
+        let r = c.report();
+        assert!(only(&r, Group::Bios).iter().all(|f| !f.name.starts_with('.')), "no finding about the litter: {:?}", only(&r, Group::Bios));
+        assert!(r.findings.iter().all(|f| !f.name.starts_with('.') && !f.place.as_deref().is_some_and(|p| p.contains("/.")) ), "{:?}", r.findings);
     }
 
     #[test]
@@ -1059,6 +1319,37 @@ mod tests {
         assert!(zips.iter().any(|f| f.place.as_deref().is_some_and(|p| p.ends_with("mame/cut.zip"))), "a cut-off zip counts everywhere: {zips:?}");
         assert!(!zips.iter().any(|f| f.place.as_deref().is_some_and(|p| p.contains("sf2"))), "an arcade set is many files: {zips:?}");
         assert_eq!(r.ready, 2, "Good.zip and the arcade set");
+    }
+
+    #[test]
+    fn a_game_of_zeros_is_empty_inside_but_a_disc_that_starts_with_zeros_is_not() {
+        let c = Card::new("zeros");
+        let real = |zeros_first: usize, len: usize| {
+            let mut v = vec![0u8; len];
+            for (i, b) in v.iter_mut().enumerate().skip(zeros_first) {
+                *b = (i % 251) as u8 + 1;
+            }
+            v
+        };
+        c.put("gba/Blank.gba", &vec![0u8; 4096]);
+        c.put("gba/Big Blank.gba", &vec![0u8; 3 << 20]);
+        c.put("gba/Good.gba", &real(0, 1 << 20));
+        c.put("gba/Zero Head.gba", &real(100 << 10, 1 << 20));
+        let r = c.report();
+        let empty = only(&r, Group::Empty);
+        let names: Vec<&str> = empty.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names.len(), 2, "{names:?}");
+        // Sonic Adventure 2's .cdi has a zero first megabyte and runs: disc images are not looked at at all.
+        let roms = c.roms();
+        let disk = Disk { roms: &roms };
+        let sa2 = c.put("dreamcast/Sonic Adventure 2.cdi", &real(1 << 20, 4 << 20));
+        let zero_cdi = c.put("dreamcast/Zero.cdi", &vec![0u8; 2 << 20]);
+        assert!(!zeros_inside(&disk, &sa2, 4 << 20));
+        assert!(!zeros_inside(&disk, &zero_cdi, 2 << 20), "a disc format is skipped, whatever it holds");
+        assert!(zeros_inside(&disk, &roms.join("gba/Big Blank.gba"), 3 << 20));
+        assert!(names.iter().any(|n| n.contains("Blank")) && names.iter().any(|n| n.contains("Big Blank")), "{names:?}");
+        assert!(empty.iter().all(|f| f.what == "This file is empty inside."), "{empty:?}");
+        assert_eq!(r.ready, 2, "a real game and one starting with zeros but not zero all through");
     }
 
     #[test]

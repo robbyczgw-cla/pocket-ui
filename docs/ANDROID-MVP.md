@@ -40,10 +40,10 @@ visited-ID protection, 50,000-entry and 32-level limits. Identity is `authority:
 scan order or a generated fake filesystem URI. `document_library.rs` recognises system aliases in ancestors under
 one picked root, including nested game folders. M3U/CUE/GDI references suppress their tracks/discs and missing direct
 dependencies remain advice. Provider IDs remain as stable as the provider's own contract; cloud paging/cancellation,
-renames that change an ID, and fully staged large disc trees are not solved by this identity rule.
+renames that change an ID, and staged disc trees of several files are not solved by this identity rule.
 
 The launch intent carries the current appearance/language/text settings so it cannot race asynchronous preference persistence.
-Classic cartridges are copied from the selected document stream on a worker into private `files/content/<identity>/`.
+Games are copied from the selected document stream on a worker into private `files/content/<identity>/` (`GameCopy.java`; [big games](#big-games)).
 The core receives that genuine local file, not a `content://` string dressed as a path. The original basename is retained;
 saves and states are isolated by provider identity. Player files live in private `files/saves/`, `states/`,
 `core-options/` and `screenshots/`. Quit and lifecycle suspend write an auto state; next launch calls shared `Core::resume`.
@@ -53,6 +53,35 @@ cannot promise recovery. The Earlier ring is still a first implementation, not f
 Shared cover matching downloads art via Android HTTPS on a worker, with stable private cache keys. Offline game facts
 come from the shared embedded data; Wikipedia summaries use the shared parser/cache and Android transport. Artwork and
 Wikipedia text are fetched at runtime, with the box's existing attribution. Large-library incremental indexing remains open.
+
+## Big games
+
+Why a copy: PPSSPP opens a path, as the other cores' loaders do, and a document has none. Re-opening a provider's descriptor by `/proc/self/fd/N`
+fails with `EACCES` (measured, Android 15 emulator, a file in Downloads through the real picker: the descriptor points at the FUSE path the
+app may not open), and a cloud provider's is a pipe anyway. So the core gets a private file, and the 128 MiB limit that used to stop the copy is gone.
+
+- **Limits now.** PSP (PPSSPP, `need_fullpath`): none but room on the phone: the game's size plus 256 MiB (`KEEP_FREE`). Every other core gets the
+  whole game in memory from `Core::load`: 512 MiB, the biggest DS card (`LARGEST_IN_MEMORY`). PS1 and Flycast aren't in the APK; their discs are not
+  covered here, and neither are several-file games: one document is one file.
+- **Up to 64 MiB** (`COPIED_EVERY_START`, `frozen::WHOLE_UP_TO`) a game is copied at every start, as before, without a window.
+- **Over 64 MiB** the first start shows a window with a bar, the size, the time left and Cancel (Back too), the screen stays on. `.stage` beside
+  the copy holds `size time crc`. A later start doesn't copy when the document has the same size and time and the same bytes at 16 places.
+  The document is opened at every start, so a lost grant or a missing file says the usual sentence and the copy isn't played behind its back.
+- **Space.** Before a copy the room is asked of `StorageManager` (which may free other apps' caches) and reserved (`allocateBytes`). If it can't
+  be enough even without the older big copies, nothing is removed and the sentence has both numbers. Otherwise the oldest big copies go first, this
+  game's own last. At most 5 stay (`frozen::MOST`). A game whose copy went stands closed on the shelf; its next start copies and finds its moment.
+- **Kill mid-copy.** Only a `.part` is written; it is renamed at the end, so a part is never played, and the next start of any game removes it.
+  Leaving the app during a copy stops it as Cancel does (`cancelLaunch`, the launch's turn): the next start copies from the beginning.
+- **Frozen games.** The whole file's crc in `.stage` goes into `frozen::fingerprint`, so a patch of the same size between the samples is another
+  game. A patch that keeps both size and time and misses the 16 places isn't seen by the copy check: the old copy goes on being played, and the
+  moment with it. Time 0 in `.stage` (no time from the provider, or the file changed during the copy): the crc still counts, the next start copies again.
+- **PPSSPP's moments.** Until its renderer is up the core reports a state size of 128 MiB and keeps a state it is given for later. A shorter real
+  one (72 MiB here) was refused as too short whenever the core wasn't up yet, on any PSP game: the player now passes it on (`states_vary_in_size`).
+
+Test: `scripts/android/frozen-smoke.py ... big`, needing root (Google APIs image) and little disk: `Big Test` is PSP2048 (homebrew) in a generated ISO,
+padded with holes to 1843 MiB; Later Test (300 MiB) takes the faults that copy again. `BIG_REAL_BYTES=1` adds 600 MiB of real bytes for the speed. The launch
+extra `slowCopy` (test only, ms a block) brakes the copy so that Cancel can be pressed; a moving bar keeps UIAutomator from reading the window, so it goes by the log
+and a fixed place. Times: [MEASURED.md](MEASURED.md#big-psp-games-on-android-emulator).
 
 ## Phones, touch and gamepads
 
@@ -148,7 +177,7 @@ so main stays buildable for Android. See [android/README.md](../android/README.m
 The dedicated release keystore is outside every checkout, in `~/.local/share/pocket-ui/android-signing/release.jks`;
 its password is a separate private file. Neither is committed. The first debug-signed preview must be uninstalled
 once before installing this identity. Further APKs with this key update normally. Current Android version is
-`0.1.7-android.1`, versionCode 10701 (the build script derives both from Cargo.toml); the source version is 0.1.8.
+`0.1.8-android.3`, versionCode 10803 (the build script derives both from Cargo.toml); the source version is 0.1.9.
 
 `player-smoke.py` uses real SAF, a hash-checked starter homebrew, live UI node bounds, in-app pause/slots/options,
 screenshot, Quit/auto-resume and an original GB audio diagnostic. It does not install a mock emulator receiver.
@@ -197,7 +226,9 @@ the medium's colour, occupied-slot marks and the selected-slot ring. Current Ele
 samples play through AAudio. The first visible in-app game frame has the shared 300 ms CRT-on effect
 and its sound; input dismisses it, rotation and resume do not replay it.
 
-Remaining parity work: Linux's multi-shelf Cabinet navigation/launch choreography, editable case stickers
+A game's start is the handhelds' (`src/insert_scene.rs`, shared with `app_cabinet`; `android/src/insert.rs`): Cozy + Playful plays the console's rig at the phone's own pixels, every other system the plain animation, from where the case stood (no case on the page, as in Minimal or Search: no animation). `PlayerActivity` is held back until the fade has run (1.6 s), its process warmed meanwhile (`PlayerWarm`), and comes up on black; a tap or any button skips; Quick, Motion Reduced/Off and frozen games don't hold (`cabinet::starts_cozy`). `scripts/android/insert-smoke.py`, `insert-sync.py` (sound against picture, up to AAudio's presentation time and the frame handed to the screen).
+
+Remaining parity work: Linux's multi-shelf Cabinet navigation, editable case stickers
 beyond favourites, Connections/Rediscover, the This-game/Extras pages, time-of-day lighting and idle
 slideshow are not yet Android features. The TV uses a downloaded game screenshot, falling back to cover or console art; the
 resume-picture carousel is still to connect. Sharing the remaining Home controller
@@ -214,7 +245,7 @@ returns to the preceding step. Progress and choices are saved in `launcher.json`
 so force-stop or returning from the Android folder picker resumes the same step. Settings → First
 start reopens the guide. Skipping does not require a ROM folder or an Internet connection.
 
-Language is English/German. Look offers cached visual previews of Shelf, Minimal, Split, Cards and Cabinet, Cozy/Quick
+Language is English/German/Spanish. Look offers cached visual previews of Shelf, Minimal, Split, Cards and Cabinet, Cozy/Quick
 animations and dark/light appearance. Controls explain touch and controller navigation; the app
 asks Android whether a nonvirtual controller is connected. This uses the Android navigation
 controller and shared Pocket painters; it does not provide every Linux Home/settings feature.
@@ -272,6 +303,68 @@ packs and its full collection are not yet exposed here.
   `PlayerActivity.haptic()` (VIRTUAL_KEY feedback, follows the system setting); pressed controls light up.
 
 
+## Frozen games (0.1.8)
+
+The rules are Linux's (`src/frozen.rs`); `src/frozen_phone.rs` is where they meet Android's files, and its tests run on Linux in
+the gate. Settings has the row (`Setting::Extra(FrozenGames)`, on by default). Differences from Linux, all from the files:
+
+- Identity: a game's states are `states/<game_key>/<stem>` and the core plays a copy of the document (`content/<game_key>/<name>`)
+  made at every start. The mark lives beside the state (`<stem>.pstate.auto.mark`, written by the player before the state, from
+  this session's file), not in a recents list; "recent" is `launcher.json` `played`.
+- Which stand open: `App::frozen_refresh` on a worker, at each return from a game and on a changed setting or library. Only games
+  `player_core` would start (bundled cores; never `launchGame`'s external apps, nor with the test's `externalPlayer`). The shelf
+  can compare the document's size (`Document::size`) and the copy; a same-size change of the document is found at the start.
+- The start: `launchInternal` copies the document as before, then the player's `frozen_phone::at_start` judges the fresh copy
+  before the core sees a state. This holds with the switch off too. Cartridges up to 64 MiB are fingerprinted whole on a phone
+  (Linux samples them), so a patch in the middle counts as another file. The launcher hands `frozen_shown` in the settings JSON.
+  A frozen start has no old-TV switch-on (`cabinet::starts_cozy`).
+- A moment that isn't loaded (another file or core, refused, older than the in-game save) goes to the first free slot, or to
+  `.pstate.auto.kept<n>` when all eight are taken: the next Quit would remove it where it lies (`slots::auto_written`). The pause
+  menu's slot picker goes on after slot 8 through the kept moments (`frozen_phone::kept`), which Load loads and Save refuses, and a
+  start moves them into a slot that has come free. A note over the game's first 8 seconds says so (`Player::note`, also a semantic node).
+- `Player::automatic` writes the battery save before the state, as pocket-core's exit does.
+- Home while a start is on its way, a copy too (`App::suspended`), moves `launchTurn` on (`PocketActivity.cancelLaunch`): that worker
+  stops at its next block, starts nothing and says nothing, and each worker has its own `.part`, so the same game can start again
+  at once. The shelf comes back after 20 s only when no copy runs any more (`launchOnItsWay`): a slow copy keeps its words on screen.
+- A document that is gone or unreadable: `launchInternal` deletes its partial copy and says so plainly; nothing else is touched.
+- A kill while the game is on screen leaves the taken state: the shelf still shows it open and the next start goes back there with
+  a note (`Resume::ResumedAgain`). `onPause` (Home, app switch) writes a new state first, so only a kill without it does this.
+- A state from before the marks has no mark and goes by its state as the normal start always did.
+
+Test: `scripts/android/frozen-smoke.py` (phases flow, five, safety, strip, measure, lost; emulator only). Times: [MEASURED.md](MEASURED.md#frozen-games-on-android-emulator).
+## Game check (parity with Linux's Settings → Games → Game check)
+
+Settings → Game check (`android/src/check_page.rs` over the shared `game_check_page`) runs `src/document_check.rs` on a worker.
+`game_check.rs` keeps the shared logic; its seam is `Files` (size of a file, a zip's refusal, how a place is shown) and `Words` (the
+sentences that name where games are copied to): `Disk` on Linux, a provider's listing on Android, which gets it from
+`PocketActivity.checkListing` (the scan of every chosen folder, or per folder why not: `lost` when the persisted grant is gone or a
+`SecurityException` comes, `gone` for any other failure, `big` past 50,000 entries). A zip's directory is read from a detached
+descriptor (`openDocument`, `archive::refusal_in`), a cloud provider's pipe that can't seek is not judged. `document_check.rs`
+compiles on Linux too, so `cargo test` runs it on real listings with typical faults.
+
+What is true on Android, and so what it says:
+
+- **BIOS**: no check, only tips. The in-app player's system directory is the private `files/bios`, no player can fill it, and none
+  of the cartridge cores needs it. An emulator app's BIOS folder can't be read. Tips for what can't start without one
+  (`needs_own_files`: PS1, PS2, Sega CD, Switch keys) and for a `bios` folder among the games, which nothing reads; `scan` no longer lists
+  files in such a folder as games (`syscard3.pce` looks like one).
+- **What "can't play" means**: `Host::bundled` is the APK's core list, otherwise the launch profile's app must be there
+  (`EmulatorIntents.available`, the same components `create` starts; `<queries>` in the manifest makes them visible). A game an
+  installed app takes is no fault; a missing app is one line per system with its number of games. Nothing can be said about a RetroArch
+  core from outside: a tip. `Group::NotHere`: over `document_check::MAX_IN_MEMORY` on any system but PSP (`GameCopy.LARGEST_IN_MEMORY`; change them together), a big game without its copy when the phone hasn't the room for a first start (`Host::room_for_copy`),
+  PC Engine CD (one file is staged, and no way to its BIOS), PlayStation Vita (no launch recipe).
+- **File types**: `document_library::takes` per system, because a folder's system wins on the shelf: `.gba` in `snes` is listed and bsnes
+  can't open it. A cartridge type in a folder that names no system is fine, a disc or zip there isn't on the shelf: one line per folder.
+- **Sheets**: a cue in a playlist isn't on the shelf, so `sheet_files` looks at every sheet, not only the games'. Sheets are read as UTF-8,
+  else Latin-1, so an old cue's umlauts no longer read as a missing track (`sheetText`).
+- **After the check**, the shelf is brought up to date when the folders changed (no folder that can't be read), as X on Linux reads again.
+- **Adding games**: a folder chosen from Settings with new games offers the check (`App` when `scan_picked`), the first start's end says
+  where it is (a toast), and a folder chosen on the page itself looks again at once.
+
+`scripts/android/game-check-smoke.py` drives it on the emulator from a fresh install through the real picker, per language and orientation,
+with a real lost grant (`urigrants.xml` removed with root, zygote restarted) and 5000 files (`--phase big`). A phone has no hiding yet, so
+`Fix::Hide` is not offered (`Words::twin_hides`).
+
 ## 0.1.6-android.8: the rest of the Cozy extras (2026-10-30/31, from main)
 
 Memory card in the pause menu, printed discs, game connections, Rediscover, light by time of day, decorations and the idle
@@ -289,7 +382,7 @@ cartridge media, stickers, the Cabinet TV, light/dark sets, the new logo and the
 (`room_light`, `room_props`, `slideshow` (timing and painting), `connections` and `civil_date` followed in 0.1.6-android.8.)
 Settings (flat sheet, `ui.rs` `SETTINGS`): Look, Appearance, **Colours**, **Font**, Text size, **Cozy extras** (own sheet),
 Language, Animations, Playful cases, Old-TV switch-on, **Motion**, UI sounds, Case sounds, Slideshow before screen off,
-**Button symbols**, Game Boy core, ROM folder, Covers and pictures, First start. The cozy extras you hear or that move, and
+**Button symbols**, Frozen games, Game Boy core, ROM folder, Covers and pictures, First start. The cozy extras you hear or that move, and
 the slideshow, are rows of their own as on Linux (Sound & feel, Sleep & power; `cozy_extras::Extra::home`); the sheet holds
 the eight of Linux's Cozy extras page in its order (`Extra::PAGE_ROWS`). These look settings are kept in `launcher.json` (`Preferences`, a wrong value costs that value only), handed to
 the shared painters' process-wide switches by `Preferences::apply_look` (every paint, at start, and in the player from

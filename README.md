@@ -12,7 +12,7 @@ pocket-ui is a controller-first home screen and game player for the **Retroid Po
 PlayStation 2, gets the same small pause menu with save slots, pictures and a step back in time. Games show up with
 box art, their own card and facts, and a Curator that knows what you own and what you have not touched yet.
 
-Version **0.1.8** is out as a public alpha: [download it](../../releases/tag/v0.1.8),
+Version **0.1.9** is out as a public alpha: [download it](../../releases/tag/v0.1.9),
 [watch the trailer](https://pocketui.xyz) and see more at **[pocketui.xyz](https://pocketui.xyz)**.
 
 <p align="center">
@@ -51,19 +51,19 @@ The pictures are rendered from the code with made-up data (`pocket-ui --snapshot
   GameCube, Wii and 3DS run on their own emulators behind the same menu. PortMaster games install from the Extras page and start from pocket-ui.
 - **Web companion** on your own tailnet: library, what is playing, favourites, ratings, uploads.
 - **Looks after itself.** Wi-Fi (even hotel sign-in pages), Bluetooth pads and headphones, sleep and power, signed
-  updates with a way back. English and German.
+  updates with a way back. English, German and Spanish.
 - **Private.** No accounts, no tracking. It goes online for box art, game info and the downloads you ask for.
 
 ## Get it
 
-Download from the [v0.1.8 release](../../releases/tag/v0.1.8) and pick one way.
+Download from the [v0.1.9 release](../../releases/tag/v0.1.9) and pick one way.
 Checksums are in `SHA256SUMS`.
 
 | Way | When | What to do |
 |---|---|---|
-| **Ports installer** | ROCKNIX is already on your card | Unzip [pocket-ui-0.1.8-ports-installer.zip](../../releases/download/v0.1.8/pocket-ui-0.1.8-ports-installer.zip) into `roms/ports` (the games share of ROCKNIX's file sharing: switch on Samba in ROCKNIX's Network Settings, then open `\\<device name or IP>` on Windows or `smb://<device name or IP>` on a Mac; [ROCKNIX explains it](https://rocknix.org/play/add-games/)), then in EmulationStation open **Ports → Install pocket-ui**. To go back: **Ports → Uninstall pocket-ui** |
-| **Fresh card** | New card, nothing on it yet | New to ROCKNIX on the Mini V2? Set it up once with [ROCKNIX's own guide](https://rocknix.org/devices/retroid/retroid-pocket-mini/) (flashing the card plus its one-time bootloader step), then come back. With ROCKNIX 20261001 or newer on the card, copy the two files from [pocket-ui-0.1.8-rocknix-card.zip](../../releases/download/v0.1.8/pocket-ui-0.1.8-rocknix-card.zip) onto the card's `ROCKNIX` partition and boot. It installs on the second start |
-| **Over SSH** | You like a terminal | Unzip [pocket-ui-0.1.8-rocknix-install.zip](../../releases/download/v0.1.8/pocket-ui-0.1.8-rocknix-install.zip) in `/storage`, run `sh install.sh --check`, then `sh install.sh` |
+| **Ports installer** | ROCKNIX is already on your card | Unzip [pocket-ui-0.1.9-ports-installer.zip](../../releases/download/v0.1.9/pocket-ui-0.1.9-ports-installer.zip) into `roms/ports` (the games share of ROCKNIX's file sharing: switch on Samba in ROCKNIX's Network Settings, then open `\\<device name or IP>` on Windows or `smb://<device name or IP>` on a Mac; [ROCKNIX explains it](https://rocknix.org/play/add-games/)), then in EmulationStation open **Ports → Install pocket-ui**. To go back: **Ports → Uninstall pocket-ui** |
+| **Fresh card** | New card, nothing on it yet | New to ROCKNIX on the Mini V2? Set it up once with [ROCKNIX's own guide](https://rocknix.org/devices/retroid/retroid-pocket-mini/) (flashing the card plus its one-time bootloader step), then come back. With ROCKNIX 20261001 or newer on the card, copy the two files from [pocket-ui-0.1.9-rocknix-card.zip](../../releases/download/v0.1.9/pocket-ui-0.1.9-rocknix-card.zip) onto the card's `ROCKNIX` partition and boot. It installs on the second start |
+| **Over SSH** | You like a terminal | Unzip [pocket-ui-0.1.9-rocknix-install.zip](../../releases/download/v0.1.9/pocket-ui-0.1.9-rocknix-install.zip) in `/storage`, run `sh install.sh --check`, then `sh install.sh` |
 
 pocket-ui replaces exactly one thing: the program ROCKNIX's `essway` service starts. Remove it and stock ROCKNIX with
 EmulationStation is back; your games, saves and ROCKNIX settings stay where they are. Android on the internal storage
@@ -142,7 +142,7 @@ feature has been proven is in [docs/STATUS.md](docs/STATUS.md).
   left, stick LEDs, Settings → Playing → Performance & fan, time zone, Bluetooth controllers, and Wi-Fi that reconnects by
   itself.
 - **Sync and network:** saves and states kept in step with Syncthing (paused while a game runs), Tailscale with a QR
-  sign-in, PC streaming with Moonlight. File sharing (Samba) shares only the games folder, with a per-device
+  sign-in, PC streaming with Moonlight. File sharing (Samba) shows everything under `roms`, with a per-device
   password. SSH is off by default and, when switched on, shows a random password on the screen
   ([docs/SECURITY-HARDENING.md](docs/SECURITY-HARDENING.md)).
 - **Updates:** signed app updates installed live, with an automatic way back. System updates that could touch

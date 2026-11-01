@@ -5,4 +5,10 @@
         <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
         <item name="android:colorAccent">#ECE9E1</item>
     </style>
+    <!-- The player comes up on the black the launcher's start ended on; no splash colour or icon in between. -->
+    <style name="PlayerTheme" parent="android:style/Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">#000000</item>
+        <item name="android:windowSplashScreenBackground">#000000</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@android:color/transparent</item>
+    </style>
 </resources>
