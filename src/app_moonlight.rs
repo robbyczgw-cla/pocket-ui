@@ -300,7 +300,7 @@ impl App {
                     "GeForce Experience: the box it shows on the PC.".to_string(),
                     format!("Waiting for the PC{dots}"),
                 ] {
-                    for l in self.text.wrap(Face::Body, NU_SMALL, &line, width) {
+                    for l in self.text.wrap_prose(Face::Body, NU_SMALL, &line, width) {
                         self.text.draw(c, Face::Body, NU_SMALL, left, y, pal().dust, &l);
                         y += pocket_ui::type_scale::line(NU_SMALL, 14);
                     }
@@ -314,7 +314,7 @@ impl App {
                 };
                 let head = self.text.fit(Face::Title, 44, &head, width);
                 self.text.draw(c, Face::Title, 44, left, 320, pal().chalk, &head);
-                for (i, l) in self.text.wrap(Face::Body, NU_SMALL, "The PC must be on, on the same network, with Sunshine or GeForce Experience running. The PIN comes up here in a moment.", width).iter().enumerate() {
+                for (i, l) in self.text.wrap_prose(Face::Body, NU_SMALL, "The PC must be on, on the same network, with Sunshine or GeForce Experience running. The PIN comes up here in a moment.", width).iter().enumerate() {
                     self.text.draw(c, Face::Body, NU_SMALL, left, 380 + i as i32 * (pocket_ui::type_scale::line(NU_SMALL, 14)), pal().dust, l);
                 }
             }
@@ -395,7 +395,7 @@ impl App {
         self.text.draw(c, Face::Title, 44, left, y0 + 58, color, &head);
         let mut y = y0 + 108;
         for text in lines {
-            for line in self.text.wrap(Face::Body, NU_SMALL, &text, width).into_iter().take(3) {
+            for line in self.text.wrap_prose(Face::Body, NU_SMALL, &text, width).into_iter().take(3) {
                 self.text.draw(c, Face::Body, NU_SMALL, left, y, pal().text, &line);
                 y += pocket_ui::type_scale::line(NU_SMALL, 12);
             }

@@ -410,7 +410,7 @@ fn excerpt(text: &mut Text, page_text: &str, name: &str, w: i32) -> (Vec<String>
     let mut lines = Vec::new();
     // The heading is the page's name above: not again.
     for para in page_text.lines().skip_while(|l| *l == name) {
-        lines.extend(text.wrap(Face::Body, 24, para, w));
+        lines.extend(text.wrap_prose(Face::Body, 24, para, w));
         if lines.len() > EXCERPT_LINES {
             break;
         }
@@ -629,7 +629,7 @@ impl SignIn {
             if !label.is_empty() {
                 text.set_translate(false);
                 let mut yy = bottom + 4 + crate::type_scale::px(24) as i32;
-                for l in text.wrap_at_most(Face::Body, 24, &label, w, desc_lines as usize) {
+                for l in text.wrap_prose_at_most(Face::Body, 24, &label, w, desc_lines as usize) {
                     text.draw(c, Face::Body, 24, MARGIN, yy, pal().dust, &l);
                     yy += crate::type_scale::line(24, 8);
                 }
@@ -664,7 +664,7 @@ impl SignIn {
         let step = crate::type_scale::line(28, 12);
         let mut y = 40 - scroll;
         for para in f.page.text.lines().skip_while(|l| *l == f.page.name()) {
-            for l in text.wrap(Face::Body, 28, para, w) {
+            for l in text.wrap_prose(Face::Body, 28, para, w) {
                 if y > -step && y < bottom - top + step {
                     text.draw(&mut band, Face::Body, 28, MARGIN, y, pal().chalk, &l);
                 }

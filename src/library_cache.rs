@@ -235,6 +235,11 @@ pub use crate::fsutil::is_empty_file;
 
 /// What the player is told about a game whose file is empty (the start, the game's card); None for any other game.
 pub fn empty_game(name: &str, path: &Path) -> Option<String> {
+    // ROCKNIX's "Splore" is no game but PICO-8's game browser, and the official PICO-8 program is not there (it is not
+    // on the shelf, only a Recent entry, the search or a script can still ask for it).
+    if path.parent().and_then(Path::file_name).is_some_and(|d| d == "pico-8") && crate::hostsys::not_a_game("pico-8", path) {
+        return Some("Splore is PICO-8's game browser, not a game, and it needs the PICO-8 program from lexaloffle.com in roms/pico-8. Your own PICO-8 games work without it.".into());
+    }
     is_empty_file(path).then(|| format!("{name} can't start: its file is empty (0 bytes), so the copy didn't finish. Copy the game to the card again."))
 }
 
@@ -255,6 +260,13 @@ mod tests {
         assert_eq!(empty_game("Mario", &full), None);
         assert_eq!(empty_game("Nothing", &gone), None, "a missing file has its own message (missing_game)");
         assert_eq!(empty_game("Dir", &dir.join(".")), None, "a folder game is no empty file");
+        let pico = dir.join("pico-8");
+        std::fs::create_dir_all(&pico).unwrap();
+        std::fs::write(pico.join("Splore.png"), b"").unwrap();
+        let why = empty_game("Splore", &pico.join("Splore.png")).unwrap();
+        assert!(why.contains("PICO-8") && why.contains("lexaloffle") && !why.contains("0 bytes"), "{why}");
+        std::fs::write(pico.join("pico8_64"), b"x").unwrap();
+        assert!(empty_game("Splore", &pico.join("Splore.png")).unwrap().contains("0 bytes"), "with PICO-8 installed it behaves as before");
     }
 
     struct Fixture {

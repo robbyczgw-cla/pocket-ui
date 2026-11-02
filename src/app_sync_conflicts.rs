@@ -380,7 +380,7 @@ impl App {
         let mut y = top;
         // The last choice's outcome, until B.
         if let Some((msg, failed)) = &p.message {
-            for line in self.text.wrap(Face::Body, 28, msg, right - left) {
+            for line in self.text.wrap_prose(Face::Body, 28, msg, right - left) {
                 self.text.draw(c, Face::Body, 28, left, y + 28, if *failed { pal().alert } else { pal().chalk }, &line);
                 y += pocket_ui::type_scale::line(28, 10);
             }
@@ -390,7 +390,7 @@ impl App {
             let line = if p.message.is_some() { "Nothing else is waiting for a choice." } else { "Nothing is waiting for a choice." };
             self.text.draw(c, Face::Body, 28, left, y + 28 + pocket_ui::type_scale::grow(28), pal().dust, line);
             y += 64 + pocket_ui::type_scale::grow(28);
-            for line in self.text.wrap(Face::Body, 26, "When a save changes on two devices before they sync, both versions show here.", right - left) {
+            for line in self.text.wrap_prose(Face::Body, 26, "When a save changes on two devices before they sync, both versions show here.", right - left) {
                 self.text.draw(c, Face::Body, 26, left, y, pal().dust, &line);
                 y += pocket_ui::type_scale::line(26, 8);
             }
@@ -418,7 +418,7 @@ impl App {
         }
         self.hits.list(p.sel, p.entries.len(), 0.0, row as f32);
         y += p.entries.len() as i32 * row + 36;
-        for line in self.text.wrap(Face::Body, 26, "Saves changed on two devices before they could sync. Choose which version to keep.", right - left) {
+        for line in self.text.wrap_prose(Face::Body, 26, "Saves changed on two devices before they could sync. Choose which version to keep.", right - left) {
             self.text.draw(c, Face::Body, 26, left, y, pal().dust, &line);
             y += pocket_ui::type_scale::line(26, 8);
         }
@@ -441,7 +441,7 @@ impl App {
         y += 20;
         if let Some(warn) = page::card_warning(e.group.kind) {
             y += 20;
-            for line in self.text.wrap(Face::Body, 28, warn, right - left) {
+            for line in self.text.wrap_prose(Face::Body, 28, warn, right - left) {
                 y += pocket_ui::type_scale::line(28, 8);
                 self.text.draw(c, Face::Body, 28, left, y, pal().amber, &line);
             }
@@ -480,7 +480,7 @@ impl App {
         if p.busy {
             self.text.draw(c, Face::Body, 28, left, y + 10, pal().dust, "Keeping…");
         } else if let Some((msg, true)) = &p.message {
-            for line in self.text.wrap(Face::Body, 28, msg, right - left) {
+            for line in self.text.wrap_prose(Face::Body, 28, msg, right - left) {
                 self.text.draw(c, Face::Body, 28, left, y + 10, pal().alert, &line);
                 y += pocket_ui::type_scale::line(28, 8);
             }

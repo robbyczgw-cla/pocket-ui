@@ -405,7 +405,7 @@ impl Sys {
         let note: Vec<String> = if choices.contains(&Choice::BootMenu) || !choices.contains(&Choice::RestartUi) || crate::device::current().host_owned() {
             Vec::new()
         } else {
-            text.wrap(Face::Body, HINT_SIZE, power_menu::NO_BOOT_MENU_HINT, inner_w)
+            text.wrap_prose(Face::Body, HINT_SIZE, power_menu::NO_BOOT_MENU_HINT, inner_w)
         };
         let title_h = 112 + crate::type_scale::grow(50);
         let note_step = crate::type_scale::line(HINT_SIZE, 10);

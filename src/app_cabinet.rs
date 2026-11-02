@@ -1690,7 +1690,7 @@ impl App {
             let cover = has_cover.then_some(&cover);
             let pic = if game.is_round() {
                 // Printed at the larger of its two sizes, out of the case and over the drive (`draw_game`).
-                let sw = self.console_sprite(&system).map_or(360, |s| s.w as i32) as f32;
+                let sw = self.console_sprite(&system).or_else(|| self.console_sprite(pocket_ui::insert_scene::STAND_IN)).map_or(360, |s| s.w as i32) as f32;
                 let seated = seated;
                 let h = game.size_beside(medium, from.3).1.max(2 * pocket_ui::insert_scene::over_drive(game, sw, 1.0) as i32).max(seated);
                 Some(printed_disc(&mut self.text, &system, h, look, &title, cover))
@@ -1702,7 +1702,8 @@ impl App {
                 ins.scene.game = pic.map(Rc::new);
             }
         }
-        let sprite = self.console_sprite(&system);
+        // A system without a picture: its game goes into the crate of games, not into an empty box.
+        let sprite = self.console_sprite(&system).or_else(|| self.console_sprite(pocket_ui::insert_scene::STAND_IN));
         // The Shelf look has no scene of its own: the console stands on the screen's floor.
         let floor = if self.theme == super::Theme::Cabinet { scene_bottom(c.h) } else { c.h - 110 };
         let Some(ins) = self.cabinet.insert.as_mut() else { return };
@@ -2389,8 +2390,10 @@ impl App {
         // Low in the room, nearer the shelf it came from than the top line.
         let (fx, fy) = (sx, sy + (sh - fh) * 2 / 3);
         let show_clip = (sy, sy + sh);
-        if shadows && front.is_some() {
-            art::soft_shadow(c, fx + 10, fy + 12, fw, fh, 24, 0.45 * turned, (0, lay.floor));
+        // On its way into the console its shadow goes with it, or Light keeps a dark block where it stood.
+        let shown = self.cabinet.insert.as_ref().filter(|i| i.item == item).map_or(1.0, |i| i.scene.case_shown(now.saturating_duration_since(i.at)));
+        if shadows && front.is_some() && shown > 0.0 {
+            art::soft_shadow(c, fx + 10, fy + 12, fw, fh, 24, 0.45 * turned * shown, (0, lay.floor));
         }
         match front {
             Some(front) if turned >= 1.0 => {

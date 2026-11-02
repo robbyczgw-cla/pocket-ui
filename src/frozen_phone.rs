@@ -55,7 +55,7 @@ fn mark_path(base: &Path) -> PathBuf {
 /// The mark beside the state. A mark that can't be read trusts nothing: it matches no runner, so the state isn't loaded.
 pub fn read_mark(base: &Path) -> Option<Mark> {
     let bytes = std::fs::read(mark_path(base)).ok()?;
-    Some(serde_json::from_slice(&bytes).unwrap_or(Mark { emulator: "unreadable".into(), core: String::new(), rom_bytes: 0, rom_mtime: 0, rom_hash: 0, auto: None }))
+    Some(serde_json::from_slice(&bytes).unwrap_or(Mark { emulator: "unreadable".into(), core: String::new(), rom_bytes: 0, rom_mtime: 0, rom_hash: 0, patches: None, auto: None }))
 }
 
 /// Written before the state it describes: a kill in between leaves a state that is at worst set aside, never one taken

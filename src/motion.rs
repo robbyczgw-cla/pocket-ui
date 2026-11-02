@@ -734,6 +734,43 @@ mod tests {
         assert!(buf2.iter().all(|p| *p == 0x123456));
     }
 
+    /// Page push and pop frame by frame at 60 Hz, whatever the phase of the first frame (the polish run of
+    /// 2026-11-02): never blank on the first frame, only ever settling (the offset and the fade of every row only fall),
+    /// and the last frame before the page is at rest is within a few levels of it, with no offset left: no jump at the end.
+    #[test]
+    fn a_page_settles_frame_by_frame_with_no_blank_first_frame_and_no_jump_at_the_end() {
+        at_level(Motion::Full);
+        for enter in [Enter::Push, Enter::Pop, Enter::Fade] {
+            for phase_ms in [0.5f32, 4.0, 9.0, 15.0] {
+                let t0 = Instant::now();
+                let tr = Transition::new(enter, t0, 100).unwrap();
+                let mut last: Vec<(i32, u32)> = Vec::new();
+                let mut frame = 0;
+                loop {
+                    let now = t0 + Duration::from_secs_f32((phase_ms + frame as f32 * 16.667) / 1000.0);
+                    if !tr.active(now) {
+                        break;
+                    }
+                    let looks: Vec<(i32, u32)> = (0..=STAGGER_CAP).map(|k| tr.slide_fade(tr.progress_of(k, now))).collect();
+                    if frame == 0 {
+                        assert!(looks[0].1 < 250, "{enter:?} phase {phase_ms}: the first frame is blank: {:?}", looks[0]);
+                    }
+                    for (k, l) in looks.iter().enumerate() {
+                        if let Some(before) = last.get(k) {
+                            assert!(l.0.abs() <= before.0.abs() && l.1 <= before.1, "{enter:?} row {k} frame {frame}: {l:?} after {before:?}");
+                        }
+                    }
+                    last = looks;
+                    frame += 1;
+                }
+                assert!(frame >= 2, "{enter:?}: a transition of at least two frames");
+                for (k, (dx, fade)) in last.iter().enumerate() {
+                    assert!(*dx == 0 && *fade <= 8, "{enter:?} phase {phase_ms} row {k}: the last frame is {dx} px and {fade}/255 from rest");
+                }
+            }
+        }
+    }
+
     #[test]
     fn a_popped_page_comes_back_from_the_left_all_at_once() {
         at_level(Motion::Full);

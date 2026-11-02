@@ -210,7 +210,7 @@ impl InfoView {
         let facts = facts(d);
         self.link_rects = vec![(0, 0, 0, 0); d.links.len()];
         if facts.is_empty() {
-            for l in text.wrap_at_most(Face::Body, 28, "Not in the offline game list, so there are no facts to show.", tw, 2) {
+            for l in text.wrap_prose_at_most(Face::Body, 28, "Not in the offline game list, so there are no facts to show.", tw, 2) {
                 text.draw(c, Face::Body, 28, tx, ty, pal().dust, &l);
                 ty += type_scale::line(28, 8);
             }
@@ -227,7 +227,7 @@ impl InfoView {
                         let colors = (pal().chalk, pal().dust, pal().select, pal().ink);
                         // As a plain value: one that doesn't fit goes on a second line (the arrow and the pill on the last).
                         let room = tw - key_w - type_scale::wide(10, 28) - 26;
-                        let lines = text.wrap_at_most(Face::Body, 28, v, room, 2);
+                        let lines = text.wrap_prose_at_most(Face::Body, 28, v, room, 2);
                         if let [first, last] = lines.as_slice() {
                             let step = type_scale::line(28, 8);
                             text.draw(c, Face::Body, 28, tx + key_w, ty, pal().chalk, first);
@@ -242,7 +242,7 @@ impl InfoView {
                     None => {
                         // A long value ("Nintendo Research & Development 1, Intelligent Systems") takes a second line
                         // rather than ending in "…" (new-user test 2026-10-30); only the second may be cut.
-                        let lines = text.wrap_at_most(Face::Body, 28, v, tw - key_w, 2);
+                        let lines = text.wrap_prose_at_most(Face::Body, 28, v, tw - key_w, 2);
                         for (n, line) in lines.iter().enumerate() {
                             text.draw(c, Face::Body, 28, tx + key_w, ty + n as i32 * type_scale::line(28, 8), pal().chalk, line);
                         }
@@ -375,7 +375,7 @@ fn paint_about(c: &mut Canvas, text: &mut Text, d: &CardData, (x, w): (i32, i32)
     let (about, credit) = crate::game_box::about(d);
     match about {
         Some(about) => {
-            for l in text.wrap(Face::Body, 28, &about, w) {
+            for l in text.wrap_prose(Face::Body, 28, &about, w) {
                 text.draw(c, Face::Body, 28, x, y, pal().chalk, &l);
                 y += type_scale::line(28, 12);
             }
@@ -387,7 +387,7 @@ fn paint_about(c: &mut Canvas, text: &mut Text, d: &CardData, (x, w): (i32, i32)
         }
     }
     if let Some(credit) = credit {
-        for l in text.wrap(Face::Body, 24, &credit, w) {
+        for l in text.wrap_prose(Face::Body, 24, &credit, w) {
             text.draw(c, Face::Body, 24, x, y, pal().dust, &l);
             y += type_scale::line(24, 8);
         }

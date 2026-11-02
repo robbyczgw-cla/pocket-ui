@@ -1037,18 +1037,26 @@ impl App {
 
     /// The exit save: the auto state, and "Before load" ends with the session.
     fn save_exit(&mut self) {
+        pocket_ui::fast_switch::saving(true);
+        // For the device test of a slow card (`quit::still_saving`): the save takes this much longer.
+        if let Some(ms) = std::env::var("POCKET_TEST_SAVE_DELAY_MS").ok().and_then(|m| m.parse().ok()) {
+            std::thread::sleep(Duration::from_millis(ms));
+        }
         self.save_auto();
         slots::clear_undo(&self.states);
+        pocket_ui::fast_switch::saving(false);
     }
 
     /// The pause menu's "Quit without saving": the battery save as on every exit, but no new auto state. The one
     /// this session resumed from goes back in place (`Core::keep_resume_point`), so the next start continues from
     /// the last saving quit; one older than the battery save written now doesn't roll it back (`Core::resume`).
     fn exit_without_saving(&mut self) {
+        pocket_ui::fast_switch::saving(true);
         let battery = self.core.write_sram();
         self.note_save_trouble(battery.err());
         self.core.keep_resume_point(&slots::auto_path(&self.states));
         slots::clear_undo(&self.states);
+        pocket_ui::fast_switch::saving(false);
     }
 
     fn save_slot(&mut self, slot: usize) {

@@ -327,20 +327,29 @@ impl App {
         let dy = pocket_ui::ui_art::above_words(c, pocket_ui::ui_art::Art::NoGames, MARGIN, false, EMPTY_ART_TOP, 300, 50);
         self.text.draw(c, Face::Title, 50, MARGIN, 300 + dy, pal().chalk, "No games yet");
         let max_w = c.w - 2 * MARGIN;
-        let lines = self.text.wrap(Face::Body, 28, "Get a few free games to start playing right away.", max_w);
+        let lines = self.text.wrap_prose(Face::Body, 28, "Get a few free games to start playing right away.", max_w);
         let mut y = 350 + dy;
         for line in &lines {
             self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, line);
             y += 38;
         }
-        let own = if pocket_ui::card_health::games_drive() {
+        let own = if pocket_ui::card_health::image_card() {
+            pocket_ui::card_health::IMAGE_CARD_NOTE
+        } else if pocket_ui::card_health::games_drive() {
             "Or copy your own: put the card in your computer and copy them to the GAMES drive."
         } else {
-            "Or copy your own into /storage/roms/<system>. Settings › Games › Add games shows where."
+            "Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing, USB)."
         };
-        for line in self.text.wrap(Face::Body, 28, own, max_w) {
+        for line in self.text.wrap_prose(Face::Body, 28, own, max_w) {
             self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &line);
             y += pocket_ui::type_scale::line(28, 10);
+        }
+        // Files in the ROM folders that the shelf leaves out: said here, so the copy doesn't look like it never happened.
+        if self.library_ui.unread.is_some_and(|n| n > 0) {
+            for line in self.text.wrap(Face::Body, 28, "Some game files in your ROM folders can't be read. Settings › Games › Game check says why.", max_w) {
+                self.text.draw(c, Face::Body, 28, MARGIN, y, pal().chalk, &line);
+                y += pocket_ui::type_scale::line(28, 10);
+            }
         }
         y += 24;
         let busy = self.starter.busy_text();
@@ -368,7 +377,7 @@ impl App {
                 // Wrapped like the lines above: one long line runs off the right edge
                 // (German, Large text, 1280x800; monkey run 2026-10-30, seed 8).
                 let mut my = y + h + 90;
-                for line in self.text.wrap(Face::Body, 26, &m, max_w) {
+                for line in self.text.wrap_prose(Face::Body, 26, &m, max_w) {
                     self.text.draw(c, Face::Body, 26, MARGIN, my, pal().alert, &line);
                     my += pocket_ui::type_scale::line(26, 10);
                 }
@@ -452,19 +461,18 @@ impl App {
         self.nu_hints(c, hint);
     }
 
-    /// Wrapped lines, centred, ending just above the hint bar.
+    /// Wrapped lines, left aligned with the rows' names like every page's explanation, ending just above the hint bar.
     fn starter_footer(&mut self, c: &mut Canvas, lines: &[(String, u32)]) {
         let max_w = c.w - 2 * NU_PAD - 2 * NU_BTN_PAD;
         let mut all: Vec<(String, u32)> = Vec::new();
         for (text, colour) in lines {
-            for l in self.text.wrap(Face::Body, NU_SMALL, text, max_w) {
+            for l in self.text.wrap_prose(Face::Body, NU_SMALL, text, max_w) {
                 all.push((l, *colour));
             }
         }
         let mut y = c.h - NU_PAD - NU_PILL - 30 - 40 * (all.len() as i32 - 1).max(0);
         for (line, colour) in &all {
-            let w = self.text.width(Face::Body, NU_SMALL, line);
-            self.text.draw(c, Face::Body, NU_SMALL, (c.w - w) / 2, y, *colour, line);
+            self.text.draw(c, Face::Body, NU_SMALL, NU_PAD + NU_BTN_PAD, y, *colour, line);
             y += 40;
         }
     }

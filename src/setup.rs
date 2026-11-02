@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::covers;
 use crate::game_pictures;
@@ -422,6 +422,10 @@ pub struct Setup {
     /// (`take_art`).
     art: Art,
     art_changed: bool,
+    /// The time zone step was left without a pick and with nothing to go on: the clock is on UTC (the Done page says so).
+    zone_utc: bool,
+    /// When the games step's counts were last asked for (a press while the step is open counts again, at most every few seconds).
+    counted_at: Instant,
     ports: Vec<Port>,
     /// Snapshots and tests: catalogue names that count as having an update (`with_updates`).
     fake_updates: Option<Vec<String>>,
@@ -622,11 +626,19 @@ impl Setup {
             None => ("Untick a system to leave it off the shelf. Its games stay, starred ones in Favourites.".to_string(), pal().dust),
         };
         // Without systems there is nothing to untick: the line under the list below says why.
+        // A line that is too long for the page (German, Spanish, a small screen) takes a second line and the list moves
+        // down for it; it used to end in "…" ("…Seine Spiele bleiben, die m…").
+        let step = crate::type_scale::line(28, 10);
+        let mut top = 232;
         if self.shelf_rows() > 0 {
-            let line = text.fit(Face::Body, 28, &line, c.w - 2 * MARGIN);
-            text.draw(c, Face::Body, 28, MARGIN, 192, color, &line);
+            for (i, l) in text.wrap_prose_at_most(Face::Body, 28, &line, c.w - 2 * MARGIN, 2).iter().enumerate() {
+                text.draw(c, Face::Body, 28, MARGIN, 192 + i as i32 * step, color, l);
+                if i > 0 {
+                    top += step;
+                }
+            }
         }
-        let (top, row) = (232, 76);
+        let row = 76;
         let visible = ((c.h - 130 - top) / row).max(1) as usize;
         let first = sel.saturating_sub(visible / 2).min(self.shelf_rows().saturating_sub(visible));
         let width = c.w - 2 * MARGIN;
@@ -666,7 +678,7 @@ impl Setup {
         // No games on the card yet: nothing to tick, and the page says so instead of staying blank.
         if self.shelf_rows() == 0 {
             let mut y = top + 40;
-            for line in text.wrap_at_most(Face::Body, 28, "No systems with games yet. Once games are on the SD card, their systems show up here.", width, 3) {
+            for line in text.wrap_prose_at_most(Face::Body, 28, "No systems with games yet. Once games are on the SD card, their systems show up here.", width, 3) {
                 text.draw(c, Face::Body, 28, MARGIN, y, pal().chalk, &line);
                 y += crate::type_scale::line(28, 10);
             }
@@ -829,7 +841,7 @@ impl Setup {
         let head = text.fit(Face::Title, 37, head, w);
         text.draw(c, Face::Title, 37, x, top + 50, if status == crate::usb_transfer::Status::Off { pal().dust } else { pal().chalk }, &head);
         let (about, color) = if self.usb_failed { (USB_FAILED, pal().alert) } else { (USB_WAY, pal().dust) };
-        for (i, l) in text.wrap(Face::Body, 24, about, w).iter().take(4).enumerate() {
+        for (i, l) in text.wrap_prose(Face::Body, 24, about, w).iter().take(4).enumerate() {
             text.draw(c, Face::Body, 24, x, top + 92 + i as i32 * 32, color, l);
         }
     }
@@ -929,14 +941,14 @@ impl Setup {
                     systems_grid::Bios::Needed { missing: None, what } => (format!("In place ({what})"), pal().chalk),
                     systems_grid::Bios::Unknown => ("Not known to pocket-ui. If its emulator needs one, it goes in roms/bios.".to_string(), pal().dust),
                 };
-                let bios_lines = text.wrap(Face::Body, 24, &line, w - label_w);
+                let bios_lines = text.wrap_prose(Face::Body, 24, &line, w - label_w);
                 for (i, l) in bios_lines.iter().take(3).enumerate() {
                     text.draw(c, Face::Body, 24, x + label_w, top + 160 + i as i32 * 32, color, l);
                 }
                 // One plain caution where the handheld runs the system but not every game of it smoothly.
                 if let Some(note) = crate::system_notes::note(&sys.id) {
                     let y = top + 160 + bios_lines.len().min(3) as i32 * 32 + 14;
-                    for (i, l) in text.wrap(Face::Body, 24, note, w).iter().take(2).enumerate() {
+                    for (i, l) in text.wrap_prose(Face::Body, 24, note, w).iter().take(2).enumerate() {
                         text.draw(c, Face::Body, 24, x, y + i as i32 * 32, pal().dust, l);
                     }
                 }
@@ -948,7 +960,7 @@ impl Setup {
                 } else {
                     "Every system ROCKNIX can start, each with its own folder in roms."
                 };
-                for (i, l) in text.wrap(Face::Body, 24, about, w).iter().take(3).enumerate() {
+                for (i, l) in text.wrap_prose(Face::Body, 24, about, w).iter().take(3).enumerate() {
                     text.draw(c, Face::Body, 24, x, top + 86 + i as i32 * 32, pal().dust, l);
                 }
             }
@@ -961,7 +973,7 @@ impl Setup {
         if crate::device::current().host_owned() {
             let status = text.fit(Face::Title, 37, "Where games go", w);
             text.draw(c, Face::Title, 37, x, top + 50, pal().chalk, &status);
-            for (i, l) in text.wrap(Face::Body, 24, DECK_GAMES_NOTE, w).iter().take(4).enumerate() {
+            for (i, l) in text.wrap_prose(Face::Body, 24, DECK_GAMES_NOTE, w).iter().take(4).enumerate() {
                 text.draw(c, Face::Body, 24, x, top + 92 + i as i32 * 32, pal().dust, l);
             }
             return;
@@ -986,10 +998,11 @@ impl Setup {
             let d = crate::device::current();
             let about = match self.ip {
                 Some(_) => SHARE_OFF,
+                None if crate::card_health::image_card() => crate::card_health::IMAGE_CARD_NOTE,
                 None if crate::games_card::in_use() => GAMES_CARD_WAY,
                 None => offline_way(crate::card_health::games_drive(), d.has_second_card_slot(), d.has_wifi()).1,
             };
-            for (i, l) in text.wrap(Face::Body, 24, about, w).iter().take(4).enumerate() {
+            for (i, l) in text.wrap_prose(Face::Body, 24, about, w).iter().take(4).enumerate() {
                 text.draw(c, Face::Body, 24, x, top + 92 + i as i32 * 32, pal().dust, l);
             }
             return;
@@ -1139,6 +1152,9 @@ fn stage(step: &Step) -> Option<Only> {
         Step::Welcome | Step::Play { .. } | Step::Cards(_) | Step::Zone(_) | Step::Done => None,
     }
 }
+
+/// How soon after the last count a press on the games step counts again.
+const RECOUNT_AFTER: Duration = Duration::from_secs(3);
 
 /// The steps the first start counts: Welcome, Look, How you like to play, Wi-Fi, Time zone, Extras, Add your games (the
 /// last page, "You're all set", is the end, not a step). A Steam Deck skips Wi-Fi and the time zone: five.
@@ -1394,6 +1410,8 @@ impl Setup {
             covers_running: false,
             art: Art::default(),
             art_changed: false,
+            zone_utc: false,
+            counted_at: Instant::now(),
             ports: Vec::new(),
             fake_updates: None,
             port_tab: PortTab::Ready,
@@ -2783,7 +2801,9 @@ impl Setup {
             Guess::Utc | Guess::Several { .. } => None,
             g => g.zone().map(String::from),
         });
+        let unconfirmed = want.is_none() && matches!(z.guess, Guess::Utc);
         if want.is_none_or(|zone| self.set_zone(&zone)) {
+            self.zone_utc = unconfirmed;
             self.step = Step::Extras { sel: 0 };
         }
     }
@@ -2853,6 +2873,10 @@ impl Setup {
 
     pub fn press(&mut self, b: Button) -> bool {
         let done = self.press_step(b);
+        // Games being copied while the page is open: a press reads the folders again (not a read already under way).
+        if matches!(self.step, Step::Games) && !self.counting && self.counted_at.elapsed() >= RECOUNT_AFTER {
+            self.count_games();
+        }
         self.remember_step(done);
         self.keep_watch();
         // "Sign in…" was left: its session (and cookie jar) goes with it.
@@ -3191,6 +3215,7 @@ impl Setup {
     /// Counts the games in every system's folder on a thread; `SetupEvent::GameCounts` brings the numbers.
     fn count_games(&mut self) {
         self.counting = true;
+        self.counted_at = Instant::now();
         let (catalog, notify) = (self.catalog.clone(), self.notify.clone());
         std::thread::spawn(move || notify(SetupEvent::GameCounts(count_catalog(&catalog))));
     }
@@ -3317,13 +3342,13 @@ impl Setup {
                 text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Remote access");
                 let lines = [
                     "Log in to this Pocket from a computer on the same Wi-Fi, with SSH.",
-                    "It stays on until you turn it off. It turns itself off when the Pocket restarts.",
+                    "It stays on until you turn it off or the Pocket restarts.",
                 ];
                 // Wrapped: at Large text the second line ran off the right edge
                 // (Mini V2 1240x1080, English; monkey run 2026-10-31, seed 102).
                 let mut y = 210;
                 for l in lines {
-                    for line in text.wrap(Face::Body, 28, l, c.w - 2 * MARGIN) {
+                    for line in text.wrap_prose(Face::Body, 28, l, c.w - 2 * MARGIN) {
                         text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &line);
                         y += 44;
                     }
@@ -3359,7 +3384,11 @@ impl Setup {
             Step::Done => {
                 text.draw(c, Face::Title, 67, MARGIN, 300, pal().chalk, "You're all set");
                 let games = done_line(self.games.len());
-                paragraphs(c, text, &[games.as_str(), "Settings › Help & tools › Tour shows every feature again, one card each."], 360);
+                let mut lines = vec![games.as_str(), "Settings › Help & tools › Tour shows every feature again, one card each."];
+                if self.zone_utc {
+                    lines.push("The clock is on UTC. Set your time zone in Settings › System › Time.");
+                }
+                paragraphs(c, text, &lines, 360);
                 hints(c, text, &[("A", "Go to your games"), ("SELECT", "Manual")]);
             }
         }
@@ -3414,7 +3443,7 @@ impl Setup {
         }
         // What the downloads are and where from, whatever is chosen: this step is where it is decided.
         let mut y = 240 + extras_rows() as i32 * (h + 18) + 26;
-        for l in text.wrap(Face::Body, 24, PICTURES_NOTE, width) {
+        for l in text.wrap_prose(Face::Body, 24, PICTURES_NOTE, width) {
             text.draw(c, Face::Body, 24, MARGIN, y, pal().dust, &l);
             y += crate::type_scale::line(24, 10);
         }
@@ -3510,7 +3539,7 @@ impl Setup {
         let bottom = c.h - 120;
         let desc_lines = if port.needs_files { 3 } else { 5 };
         let mut ly = y + 76;
-        let desc = text.wrap(Face::Body, 24, &port.desc, pw);
+        let desc = text.wrap_prose(Face::Body, 24, &port.desc, pw);
         for (i, l) in desc.iter().take(desc_lines).enumerate() {
             let l = if i + 1 == desc_lines && desc.len() > desc_lines { text.fit(Face::Body, 24, &format!("{l} …"), pw) } else { l.clone() };
             text.draw(c, Face::Body, 24, px, ly, pal().chalk, &l);
@@ -3998,16 +4027,17 @@ fn signal_bars(c: &mut Canvas, x: i32, base: i32, signal: u8, color: u32) {
 /// start: the text size on R1, and B, which goes back to the welcome (the first-day run, 2026-10-26, found it unnamed).
 fn look_hints(settings: bool, has_systems: bool) -> Vec<(&'static str, &'static str)> {
     // The first start's bar is full with the Animations key: Left/Right says what it does by being there.
-    let mut h = vec![("Left/Right", if settings { "Change" } else { "" }), ("Y", "Appearance")];
+    // A (and B on the first start) come right after it: on a narrow bar, or at Large text, the labels go last first, and
+    // the keys that keep the page moving keep theirs (A, B, X and L1 lost theirs at Large text on 1240x1080).
+    let mut h = vec![("Left/Right", if settings { "Change" } else { "" }), ("A", "Keep this look")];
     if settings {
-        h.extend([("R1", "Motion"), ("A", "Keep this look")]);
+        h.extend([("Y", "Appearance"), ("R1", "Motion")]);
         if has_systems {
             h.push(("X", "Systems on the shelf"));
         }
     } else {
-        h.extend([("R1", "Text size"), ("A", "Keep this look"), ("B", "Back")]);
+        h.extend([("B", "Back"), ("Y", "Appearance"), ("R1", "Text size")]);
     }
-    // Last: on a narrow bar the labels go last first, and the ones that keep the page moving stay.
     h.push(("L1", "Animations"));
     h
 }
@@ -4028,7 +4058,7 @@ fn paragraphs(c: &mut Canvas, text: &mut Text, lines: &[&str], mut y: i32) -> i3
     let step = crate::type_scale::line(28, 12);
     let mut last = y;
     for line in lines {
-        for part in text.wrap(Face::Body, 28, line, c.w - 2 * MARGIN) {
+        for part in text.wrap_prose(Face::Body, 28, line, c.w - 2 * MARGIN) {
             text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &part);
             last = y;
             y += step;
@@ -4503,7 +4533,7 @@ mod tests {
         assert!(pictures.iter().any(|p| *p != pictures[0]), "something is painted");
         assert_ne!(pictures, off, "the pill moves with the choice");
         // Where the pictures come from: a few lines under the rows, never more than the page has room for.
-        let lines = Text::builtin().wrap(Face::Body, 24, PICTURES_NOTE, 1240 - 2 * MARGIN);
+        let lines = Text::builtin().wrap_prose(Face::Body, 24, PICTURES_NOTE, 1240 - 2 * MARGIN);
         assert!((1..=4).contains(&lines.len()), "{} lines", lines.len());
         assert!(PICTURES_NOTE.contains("libretro") && PICTURES_NOTE.contains("no account") && PICTURES_NOTE.contains("Off"));
     }
@@ -4638,6 +4668,15 @@ mod tests {
         press(&mut s, &[Button::Start, Button::East]);
         assert_eq!(s.at(), "extras");
         assert_eq!(hw.state().zone, "UTC");
+        assert!(s.zone_utc, "the last page says the clock is on UTC");
+    }
+
+    #[test]
+    fn a_confirmed_zone_leaves_no_utc_note() {
+        let (mut s, _hw) = setup("confirmed", "UTC", Some(IW_AT));
+        at_wifi(&mut s);
+        press(&mut s, &[Button::Start, Button::East]);
+        assert!(!s.zone_utc, "a guess the player took is no UTC fallback");
     }
 
     #[test]
@@ -5720,11 +5759,11 @@ mod hint_bars {
 
     #[test]
     fn the_first_starts_look_step_names_b() {
-        assert_eq!(keys(&look_hints(false, true)), ["Left/Right", "Y", "R1", "A", "B", "L1"], "B goes back to the welcome");
-        assert_eq!(keys(&look_hints(true, true)), ["Left/Right", "Y", "R1", "A", "X", "L1"], "every one also a row of Settings → Look and Sound & feel");
-        assert_eq!(keys(&look_hints(true, false)), ["Left/Right", "Y", "R1", "A", "L1"], "no systems: no X");
+        assert_eq!(keys(&look_hints(false, true)), ["Left/Right", "A", "B", "Y", "R1", "L1"], "B goes back to the welcome");
+        assert_eq!(keys(&look_hints(true, true)), ["Left/Right", "A", "Y", "R1", "X", "L1"], "every one also a row of Settings → Look and Sound & feel");
+        assert_eq!(keys(&look_hints(true, false)), ["Left/Right", "A", "Y", "R1", "L1"], "no systems: no X");
         assert_eq!(look_hints(false, false).last(), Some(&("L1", "Animations")));
-        assert_eq!(look_hints(false, false)[2], ("R1", "Text size"));
+        assert_eq!(look_hints(false, false)[4], ("R1", "Text size"));
     }
 
     #[test]

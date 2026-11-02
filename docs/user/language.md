@@ -16,6 +16,7 @@ What stays in English in the German and Spanish interfaces:
   Curator, Lens, Echoes and Pixel Path.
 - **What comes from elsewhere**: game descriptions from Wikipedia and Wikidata, the facts and notes on the console
   pages, PortMaster's texts, RetroAchievements' achievement names, the names of networks and devices.
+- **A few rare refusals on the phone upload page** (a name that can't be used, a folder in the way): the page shows the Pocket's English sentence when it has no translation for them. The common ones are in your phone's language.
 - **Technical details** inside a message, such as another program's reply or a missing library name: the
   sentence around them is translated.
 - **The web companion's pages in the browser** (Settings → Connections → Web companion is translated on the Pocket).

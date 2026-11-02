@@ -271,7 +271,7 @@ impl App {
         let mut y = top + rows.len() as i32 * row + 44;
         let [what, choice] = page.describe(page.row());
         for (text, color) in [(what.as_str(), pal().dust), (choice.as_str(), pal().text)] {
-            for line in self.text.wrap(Face::Body, NU_SMALL, text, width) {
+            for line in self.text.wrap_prose(Face::Body, NU_SMALL, text, width) {
                 self.text.draw(c, Face::Body, NU_SMALL, left, y, color, &line);
                 y += pocket_ui::type_scale::line(NU_SMALL, 12);
             }
@@ -280,7 +280,7 @@ impl App {
         y += 14;
         let note = "These apply to this port from its next start. What every port starts with is \
 in Settings › Playing › Performance & fan.";
-        for line in self.text.wrap(Face::Body, 24, note, width) {
+        for line in self.text.wrap_prose(Face::Body, 24, note, width) {
             self.text.draw(c, Face::Body, 24, left, y, pal().quiet, &line);
             y += pocket_ui::type_scale::line(24, 8);
         }

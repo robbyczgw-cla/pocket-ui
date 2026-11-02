@@ -223,8 +223,8 @@ pub fn fan_blurb(f: Fan, smooth: bool) -> String {
 }
 
 /// The note under the description: which settings win, and which games these are.
-pub const PRECEDENCE_NOTE: &str = "A choice saved in the pause menu for a console or a game (Options › Extras), or for a port on its card, \
-wins over these. Games: performance covers games with a pause menu and PortMaster ports; with Smooth fan, Games: fan covers every game.";
+pub const PRECEDENCE_NOTE: &str = "A choice saved in the pause menu (Options › Extras) wins over these. Games: performance covers games with a \
+pause menu and ports; with Smooth fan, Games: fan covers every game.";
 
 impl PerfFanPage {
     /// The readout thread's news.

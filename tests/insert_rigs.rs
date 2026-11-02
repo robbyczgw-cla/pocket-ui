@@ -150,3 +150,14 @@ fn a_frozen_game_goes_straight_back_and_the_others_keep_their_rig() {
     }
     assert!(frozen_rows >= 1, "the made-up library has frozen games in the PS2's list");
 }
+
+#[test]
+fn in_light_nothing_of_the_case_stays_where_it_stood() {
+    let w = World::new("light-shadow");
+    let light = r#"{"onboarded": true, "theme": "shelf", "appearance": "light", "animations": "cozy", "extras": {"playful_animations": true}}"#;
+    let (px, width) = (w.frame("gba", light, 1000), 1280usize);
+    let at = |x: usize, y: usize| { let i = (y * width + x) * 3; [px[i] as i32, px[i + 1] as i32, px[i + 2] as i32] };
+    // The middle of where the case stood (it has faded by now) against empty page in the same row.
+    let (place, page) = (at(150, 230), at(1180, 230));
+    assert!(place.iter().zip(&page).all(|(a, b)| (a - b).abs() <= 6), "a block stays where the case stood: {place:?}, the page {page:?}");
+}

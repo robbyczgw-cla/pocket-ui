@@ -53,7 +53,7 @@ ROCKNIX: `projects/ROCKNIX/devices/SM8550/linux/dts/qcom/qcs8550-{ayn-odin2mini,
 | ✅ | Anbernic RG35XX H | 640 × 480 | 2 | yes |
 | ✅ | Anbernic RG35XX Pro | 640 × 480 | 2 | yes |
 | ✅ | Anbernic RG35XX 2024 | 640 × 480 | no | no |
-| ✅ | Anbernic RG35XX SP (clamshell) | 640 × 480 | no | yes |
+| 🎮 | **Anbernic RG35XX SP (clamshell)** | 640 × 480 | no | yes |
 | ✅ | Anbernic RG28XX | 640 × 480 (portrait panel, turned) | no | no |
 | ✅ | Anbernic RG40XX H and V | 640 × 480 | 2 | yes |
 | ✅ | Anbernic RG34XX | 720 × 480 | no | yes |
@@ -404,6 +404,11 @@ Trimui, stays silent on the first start).
 Hardware plan (needs the owner's devices): flash ROCKNIX's H700 image (DDR4 first, DDR3 if it doesn't start) onto a
 spare card, copy the model's DTB to `dtb.img`, run the installer, check the SP's lid and sleep, the RG28XX's Wi-Fi
 (an `iw dev` and `ls /sys/class/net`), the battery source and the sway rotation of the RG28XX.
+
+Played on an RG35XX SP by its owner (2026-11-02, Super Mario Land among the games): closing and opening the lid puts it to sleep and wakes it, the picture
+back almost at once and the sound a moment after it; a 64 GB card (the size the SP comes with) boots the SD image. Asleep
+overnight the battery fell about 2.6 % an hour, read off the battery display by the owner, not measured by the project. The
+gap between picture and sound is not measured yet.
 
 ## AYN Odin 2 family (2026-10-27, experimental)
 

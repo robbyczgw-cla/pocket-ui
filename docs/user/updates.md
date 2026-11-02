@@ -2,8 +2,9 @@
 
 Settings → System → **Updates** ("New versions of pocket-ui and the system."). It needs Wi-Fi.
 
-> **No update has been published yet.** Until the first one is, a check ends with "The update server has no update
-> list right now. Try again later." Without a network it says "Couldn't reach the update server. Check Wi-Fi.", and
+> **No update has been published yet.** Until the first one is, a check ends with "No updates published yet. A new
+> version installs like the first one; your games and settings stay." To update today, run the installer again with
+> the new download ([Getting started](getting-started.md)); it installs over the current version. Without a network it says "Couldn't reach the update server. Check Wi-Fi.", and
 > on a network that wants a sign-in first (a hotel, a train) "Connected, but this network wants a sign-in first. Open
 > Settings › Connections › Wi-Fi." ([Hotel and train Wi-Fi](hotel-wifi.md)).
 

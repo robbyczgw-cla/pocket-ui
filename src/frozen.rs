@@ -26,6 +26,8 @@ pub const REFUSED: &str = "Couldn't go back to that moment: started fresh";
 pub const GONE: &str = "Its saved moment is gone: started fresh";
 pub const OTHER_EMULATOR: &str = "Started fresh: its saved moment belongs to its other emulator";
 pub const CHANGED: &str = "The game's file changed: started fresh. The moment is still under Load";
+/// A start of a game that shares its save states with another of its file name ([`shared_moment_is_own`]).
+pub const SHARED: &str = "Another game has this file name and shares its save states. Saving here can overwrite its saves. Rename one to keep them apart";
 
 /// What the moment of a recent game was written with, kept in its `recents.json` entry when a session ends with a new
 /// state.
@@ -38,6 +40,10 @@ pub struct Mark {
     /// What the file(s) hold, sampled ([`fingerprint`]); 0 in a mark from before it, which goes by size and time.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub rom_hash: u64,
+    /// The soft patches that were in effect ([`patch_stack`], 0 for none). None in a mark from before it: not known, so not
+    /// held against the moment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub patches: Option<u64>,
     /// The auto state's file where its name can't be worked out without the game running (ARMSX2's serial and CRC).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto: Option<PathBuf>,
@@ -126,6 +132,25 @@ fn mix_file(path: &Path, depth: u32, whole_up_to: u64, hash: &mut u64, bytes: &m
     Some(())
 }
 
+/// What says which soft patches a start would apply now (`softpatch::find`): each one's name, size and time, in their order.
+/// Another patch makes another game, whose state the old one isn't. 0 with no patch. Nothing is read, a look at each file is
+/// all a launch pays; a patch copied back with a new time counts as another one, and the game starts fresh once.
+pub fn patch_stack(rom: &Path) -> u64 {
+    let patches = crate::softpatch::find(rom);
+    if patches.is_empty() {
+        return 0;
+    }
+    let mut hash = 0xcbf29ce484222325u64;
+    let mut feed = |data: &[u8]| data.iter().for_each(|b| hash = (hash ^ u64::from(*b)).wrapping_mul(0x100000001b3));
+    for patch in &patches {
+        feed(patch.file_name().map_or(&[][..], |n| n.as_encoded_bytes()));
+        let (bytes, time) = rom_stamp(patch).unwrap_or((u64::MAX, u64::MAX));
+        feed(&bytes.to_le_bytes());
+        feed(&time.to_le_bytes());
+    }
+    hash | 1
+}
+
 /// The file's size and time; None when it can't be read.
 pub fn rom_stamp(rom: &Path) -> Option<(u64, u64)> {
     let m = std::fs::metadata(rom).ok()?;
@@ -136,7 +161,7 @@ impl Mark {
     pub fn new(emulator: &str, core: &str, rom: &Path, auto: Option<PathBuf>) -> Option<Mark> {
         let (rom_bytes, rom_mtime) = rom_stamp(rom)?;
         let rom_hash = fingerprint(rom).map_or(0, |(_, h)| h);
-        Some(Mark { emulator: emulator.into(), core: core.into(), rom_bytes, rom_mtime, rom_hash, auto })
+        Some(Mark { emulator: emulator.into(), core: core.into(), rom_bytes, rom_mtime, rom_hash, patches: Some(patch_stack(rom)), auto })
     }
 
     fn same_runner(&self, emulator: &str, core: &str) -> bool {
@@ -144,6 +169,9 @@ impl Mark {
     }
 
     fn same_file(&self, rom: &Path) -> bool {
+        if self.patches.is_some_and(|recorded| recorded != patch_stack(rom)) {
+            return false;
+        }
         if self.rom_hash == 0 {
             return rom_stamp(rom) == Some((self.rom_bytes, self.rom_mtime));
         }
@@ -238,6 +266,28 @@ pub fn next_mark(previous: Option<Mark>, state_written: bool, new: impl FnOnce()
     } else {
         previous
     }
+}
+
+/// States are named after the file name, so two games of one system with one file name in two folders share them. Whether
+/// the moment on the card is this game's: its session wrote one (a mark), and no session of the other came after it. `own`:
+/// this game's last session and whether it has a mark, if it is among the recent games; `others`: the last session of each other
+/// game of that name, None for one that isn't among them: it may have written since (taken off the list), so nothing is proven.
+pub fn shared_moment_is_own(own: Option<(u64, bool)>, others: impl IntoIterator<Item = Option<u64>>) -> bool {
+    own.is_some_and(|(last, marked)| marked && others.into_iter().all(|other| other.is_some_and(|other| last > other)))
+}
+
+/// The other installed games with the file name of `path`: those of the shelf, and hidden ones (`hidden`, with no system of
+/// their own to go by) that are still on the card and in this system (`in_system`). A hidden game keeps sharing its states.
+pub fn twins<'a>(path: &Path, shown: impl Iterator<Item = &'a Path>, hidden: impl Iterator<Item = &'a Path>, in_system: impl Fn(&Path) -> bool) -> Vec<PathBuf> {
+    let stem = path.file_stem();
+    let same = |p: &&Path| *p != path && p.file_stem() == stem;
+    let mut out: Vec<PathBuf> = shown.filter(same).map(Path::to_path_buf).collect();
+    for p in hidden.filter(same) {
+        if !out.iter().any(|o| o == p) && p.exists() && in_system(p) {
+            out.push(p.to_path_buf());
+        }
+    }
+    out
 }
 
 /// Whether Frozen games is on this device: not where the host owns the emulators and their states (the Steam Deck).
@@ -417,7 +467,7 @@ mod tests {
 
     #[test]
     fn a_session_that_wrote_no_state_keeps_the_mark_of_the_one_there() {
-        let m = |c: &str| Mark { emulator: "pocket-core".into(), core: c.into(), rom_bytes: 1, rom_mtime: 1, rom_hash: 0, auto: None };
+        let m = |c: &str| Mark { emulator: "pocket-core".into(), core: c.into(), rom_bytes: 1, rom_mtime: 1, rom_hash: 0, patches: None, auto: None };
         let next = |previous, written, new: Option<Mark>| next_mark(previous, written, || new);
         assert_eq!(next(Some(m("old")), false, Some(m("new"))), Some(m("old")));
         assert_eq!(next(Some(m("old")), true, Some(m("new"))), Some(m("new")));
@@ -431,9 +481,124 @@ mod tests {
         std::fs::write(d.join("recents.json"), r#"[{"system":"gba","name":"G","path":"/roms/g.gba","last_played":1,"play_secs":2}]"#).unwrap();
         let mut r = crate::recents::Recents::load(&d);
         assert_eq!(r.list[0].frozen, None, "a list from before Frozen games");
-        r.list[0].frozen = Some(Mark { emulator: "pocket-core".into(), core: "mgba".into(), rom_bytes: 3, rom_mtime: 4, rom_hash: 0, auto: None });
+        r.list[0].frozen = Some(Mark { emulator: "pocket-core".into(), core: "mgba".into(), rom_bytes: 3, rom_mtime: 4, rom_hash: 0, patches: None, auto: None });
         r.save();
         let again = crate::recents::Recents::load(&d);
         assert_eq!(again.list[0].frozen, r.list[0].frozen);
+    }
+
+    #[test]
+    fn a_patch_added_replaced_or_removed_invalidates_the_moment_and_it_stays() {
+        let (_d, rom, state) = setup("patch");
+        std::fs::write(&state, b"s").unwrap();
+        let files = vec![state.clone()];
+        let at = |mark: &Option<Mark>| at_launch_with(&game("pocket-core", "mgba", rom.clone(), mark.clone()), true, state.exists());
+        let ips = rom.with_extension("ips");
+        let write = |p: &Path, data: &[u8], secs: u64| {
+            std::fs::write(p, data).unwrap();
+            std::fs::File::options().write(true).open(p).unwrap().set_modified(UNIX_EPOCH + std::time::Duration::from_secs(secs)).unwrap();
+        };
+        let mark = Mark::new("pocket-core", "mgba", &rom, None);
+        assert_eq!(mark.as_ref().unwrap().patches, Some(0));
+        assert_eq!(at(&mark), AtLaunch::Normal);
+        write(&ips, b"PATCH\x00\x00\x00\x00\x01XEOF", 1000);
+        assert_eq!(at(&mark), AtLaunch::Fresh(CHANGED), "added");
+        assert!(!is_frozen(&game("pocket-core", "mgba", rom.clone(), mark.clone()), &files));
+        let patched = Mark::new("pocket-core", "mgba", &rom, None);
+        assert_eq!(at(&patched), AtLaunch::Normal);
+        write(&ips, b"PATCH\x00\x00\x00\x00\x01YEOF", 2000);
+        assert_eq!(at(&patched), AtLaunch::Fresh(CHANGED), "replaced, the same size");
+        write(&ips, b"PATCH\x00\x00\x00\x00\x01XEOF", 1000);
+        assert_eq!(at(&patched), AtLaunch::Normal, "the same patch as it was");
+        write(&rom.with_extension("ips1"), b"PATCH\x00\x00\x01\x00\x01ZEOF", 1000);
+        assert_eq!(at(&patched), AtLaunch::Fresh(CHANGED), "stacked");
+        std::fs::remove_file(rom.with_extension("ips1")).unwrap();
+        std::fs::remove_file(&ips).unwrap();
+        assert_eq!(at(&patched), AtLaunch::Fresh(CHANGED), "removed");
+        assert_eq!(at(&mark), AtLaunch::Normal, "back as it was made");
+        assert!(state.exists(), "the state stays for Load");
+    }
+
+    #[test]
+    fn a_patch_is_known_by_name_size_and_time_and_never_read() {
+        let (_d, rom, _state) = setup("patch-stamp");
+        let ips = rom.with_extension("ips");
+        let when = UNIX_EPOCH + std::time::Duration::from_secs(5000);
+        let write = |data: &[u8]| {
+            std::fs::write(&ips, data).unwrap();
+            std::fs::File::options().write(true).open(&ips).unwrap().set_modified(when).unwrap();
+        };
+        write(&[1; 1024]);
+        let before = patch_stack(&rom);
+        assert_ne!(before, 0);
+        write(&[2; 1024]);
+        assert_eq!(patch_stack(&rom), before, "the same name, size and time: its bytes aren't looked at");
+        // A restore that gives it a new time starts fresh once, no worse than that.
+        std::fs::File::options().write(true).open(&ips).unwrap().set_modified(when + std::time::Duration::from_secs(60)).unwrap();
+        assert_ne!(patch_stack(&rom), before);
+        // Another name of the same size and time.
+        std::fs::File::options().write(true).open(&ips).unwrap().set_modified(when).unwrap();
+        std::fs::rename(&ips, rom.with_extension("ups")).unwrap();
+        assert_ne!(patch_stack(&rom), before);
+    }
+
+    #[test]
+    fn a_mark_from_before_patches_is_not_held_against_a_patched_game() {
+        let (_d, rom, state) = setup("oldmark");
+        std::fs::write(&state, b"s").unwrap();
+        let now = Mark::new("pocket-core", "mgba", &rom, None).unwrap();
+        let old = format!(r#"{{"emulator":"pocket-core","core":"mgba","rom_bytes":{},"rom_mtime":{},"rom_hash":{}}}"#, now.rom_bytes, now.rom_mtime, now.rom_hash);
+        let mark: Mark = serde_json::from_str(&old).unwrap();
+        assert_eq!(mark.patches, None);
+        let launch = |mark: &Mark| at_launch_with(&game("pocket-core", "mgba", rom.clone(), Some(mark.clone())), false, true);
+        assert_eq!(launch(&mark), AtLaunch::Normal);
+        // The 0.1.10 game that has played with its patch all along.
+        std::fs::write(rom.with_extension("ips"), b"PATCH\x00\x00\x00\x00\x01XEOF").unwrap();
+        assert_eq!(launch(&mark), AtLaunch::Normal, "unknown: compared with nothing");
+        assert!(is_frozen(&game("pocket-core", "mgba", rom.clone(), Some(mark.clone())), &[state]));
+        // A new mark has it on record, none included, and is held to it.
+        std::fs::remove_file(rom.with_extension("ips")).unwrap();
+        let new = Mark::new("pocket-core", "mgba", &rom, None).unwrap();
+        let written = serde_json::to_string(&new).unwrap();
+        assert!(written.contains("\"patches\":0"), "{written}");
+        let back: Mark = serde_json::from_str(&written).unwrap();
+        std::fs::write(rom.with_extension("ips"), b"PATCH\x00\x00\x00\x00\x01XEOF").unwrap();
+        assert_eq!(launch(&back), AtLaunch::Fresh(CHANGED));
+    }
+
+    #[test]
+    fn a_shared_moment_is_only_the_game_s_that_wrote_it_last() {
+        let own = |game, others: &[Option<u64>]| shared_moment_is_own(game, others.iter().copied());
+        assert!(own(Some((100, true)), &[Some(50)]), "this game wrote last");
+        assert!(own(Some((100, true)), &[Some(50), Some(99)]));
+        assert!(!own(Some((100, true)), &[Some(150)]), "the other wrote after it: its mark says nothing any more");
+        assert!(!own(Some((100, true)), &[Some(100)]), "can't tell");
+        assert!(!own(Some((100, false)), &[Some(50)]), "a session that wrote no moment");
+        assert!(!own(None, &[Some(50)]), "first start of this game");
+        // The other game wrote later and was taken off the recent games, or never played: no entry is no proof.
+        assert!(!own(Some((10, true)), &[None]));
+        assert!(!own(Some((100, true)), &[Some(50), None]));
+    }
+
+    #[test]
+    fn a_hidden_game_still_shares_its_states_while_it_is_on_the_card() {
+        let d = TestDir::new("frozen-twins");
+        let put = |rel: &str| {
+            let p = d.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(&p, b"r").unwrap();
+            p
+        };
+        let (a, b, gba, gone) = (put("gb/A/Game.gb"), put("gb/B/Game.gb"), put("gba/Game.gba"), d.join("gb/Gone/Game.gb"));
+        let other = put("gb/Other.gb");
+        let gb = d.join("gb");
+        let in_gb = |p: &Path| p.starts_with(&gb);
+        let of = |shown: &[&Path], hidden: &[&Path]| twins(&a, shown.iter().copied(), hidden.iter().copied(), in_gb);
+        assert_eq!(of(&[&a, &b, &other], &[]), [b.clone()], "on the shelf");
+        assert_eq!(of(&[&a, &other], &[&b]), [b.clone()], "hidden, the ROM and its states still there");
+        assert_eq!(of(&[&a, &b], &[&b]), [b.clone()], "once");
+        assert!(of(&[&a, &other], &[&gone]).is_empty(), "hidden and since deleted");
+        assert!(of(&[&a, &other], &[&gba]).is_empty(), "another system's");
+        assert!(of(&[&a, &other], &[&a]).is_empty(), "itself hidden");
     }
 }

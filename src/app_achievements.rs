@@ -17,7 +17,7 @@ use pocket_ui::palette::*;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL};
 
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "RetroAchievements";
@@ -296,7 +296,7 @@ impl App {
         }
         y = y.max(panel_top + panel_h + 40);
         for p in page::ABOUT {
-            for line in self.text.wrap(Face::Body, 28, p, width) {
+            for line in self.text.wrap_prose(Face::Body, 28, p, width) {
                 self.text.draw(c, Face::Body, 28, left, y, pal().dust, &line);
                 y += pocket_ui::type_scale::line(28, 10);
             }
@@ -309,17 +309,7 @@ impl App {
             (_, false) => Some("Sign in"),
         };
         let hints: Vec<(&str, &str)> = std::iter::once(("B", "Back")).chain(action.map(|a| ("A", a))).collect();
-        let hints_at = self.nu_hints(c, &hints);
-        let desc = self.text.fit(Face::Body, NU_SMALL, page.describe(), hints_at - 24 - left);
-        self.text.draw(
-            c,
-            Face::Body,
-            NU_SMALL,
-            left,
-            c.h - pad - NU_PILL / 2 + pocket_ui::type_scale::mid(NU_SMALL),
-            pal().text,
-            &desc,
-        );
+        self.nu_foot(c, &hints, page.describe(), pal().text);
     }
 }
 

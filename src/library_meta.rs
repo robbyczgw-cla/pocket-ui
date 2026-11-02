@@ -240,6 +240,11 @@ impl LibraryMeta {
         self.games.get(&key(path)).is_some_and(|g| g.hidden)
     }
 
+    /// The games the player hid from the shelf (some may no longer be on the card).
+    pub fn hidden_games(&self) -> impl Iterator<Item = &Path> {
+        self.games.iter().filter(|(_, g)| g.hidden).map(|(path, _)| Path::new(path.as_str()))
+    }
+
     /// Hides the game from every list, or shows it again, and saves.
     pub fn set_hidden(&mut self, path: &Path, hidden: bool) -> io::Result<()> {
         self.games.entry(key(path)).or_default().hidden = hidden;

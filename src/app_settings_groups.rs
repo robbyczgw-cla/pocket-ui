@@ -43,7 +43,7 @@ fn desc_beside(hints_at: i32) -> i32 {
 
 /// `s` in the lines it takes over the hints on a screen `w` pixels wide (`App::paint_desc`).
 fn desc_lines(text: &mut pocket_ui::text::Text, s: &str, w: i32) -> Vec<String> {
-    text.wrap_at_most(Face::Body, NU_SMALL, s, w - 2 * (NU_PAD + NU_BTN_PAD), DESC_LINES)
+    text.wrap_prose_at_most(Face::Body, NU_SMALL, s, w - 2 * (NU_PAD + NU_BTN_PAD), DESC_LINES)
 }
 
 /// Whether a row's value needs `settings_values`' thread.
@@ -271,7 +271,6 @@ impl App {
             Opens::OnStart if i == sel => format!("‹ {} ›", self.on_start.label()),
             Opens::OnStart => self.on_start.label().to_string(),
             Opens::RememberQuit => values::on_off(self.remember_quit).to_string(),
-            Opens::Kids => String::new(),
             Opens::Animations if i == sel => format!("‹ {} ›", self.animations_in_use().name()),
             Opens::Animations => self.animations_in_use().name().to_string(),
             Opens::Buttons => page(&self.buttons_list_value()),

@@ -10,7 +10,7 @@ use super::{App, Notice, UserEvent};
 
 /// Over the shelf, once, after a games card came out; over a game it waits until the game ended.
 pub(crate) const CARD_OUT: &str = "Your games card came out. Put it back to play: your games and saves are on it. A game that was running couldn't save after that moment.";
-const CARD_IN: &str = "Games card found. Reading its games.";
+const CARD_IN: &str = "Games card found. While it's in, only its games show; your other games come back when you take it out.";
 
 const USB_ON: &str = "USB file transfer is on. Connect a computer: your games are under Roms.";
 const USB_FAILED: &str = "USB file transfer didn't start. Take out what's in the USB port and try again.";

@@ -382,6 +382,14 @@ impl Table {
             let inner = self.translate_at(trimmed, depth, memo)?;
             return Some(Made { text: Cow::Owned(format!("{}{}{}", &s[..at], inner.text, &s[at + trimmed.len()..])), left: inner.left });
         }
+        // A busy line's moving dots ("Turning Tailscale on.", "..", "..."; the page adds them by the clock): the
+        // words are translated, the dots stay. Without this a slow start (a loaded machine) painted the English.
+        let stem = s.trim_end_matches('.');
+        let dots = &s[stem.len()..];
+        if (2..=3).contains(&dots.len()) && !stem.is_empty() && !stem.ends_with(char::is_whitespace) {
+            let inner = self.translate_at(stem, depth, memo)?;
+            return Some(Made { text: Cow::Owned(format!("{}{dots}", inner.text)), left: inner.left });
+        }
         // "Arcade racing" first in a line, "arcade racing" in the table (Curator's vocabulary): the same word, capitalised.
         let mut chars = s.chars();
         if let Some(first) = chars.next().filter(|c| c.is_uppercase()) {
@@ -1025,6 +1033,23 @@ mod tests {
         let t = table("!{t} and {t2}\t{t} und {t2}\nRock\tFels\nFXAA\tFXAA\nMSAA\tMSAA\nSharpening\tSchärfung\n");
         assert_eq!(t.translate("Rock and Roll Racing"), None);
         assert_eq!(t.translate("FXAA and Sharpening").as_deref(), Some("FXAA und Schärfung"));
+    }
+
+    #[test]
+    fn the_moving_dots_of_a_busy_line_are_kept_whatever_their_number() {
+        let t = table("Turning Tailscale on\tTailscale wird eingeschaltet\nScanning..\tSuche (zwei)\n");
+        for dots in [".", "..", "..."] {
+            let line = format!("Turning Tailscale on{dots}");
+            let got = t.translate(&line);
+            if dots == "." {
+                assert_eq!(got, None, "one dot is a sentence's: only an entry of its own");
+            } else {
+                assert_eq!(got.as_deref(), Some(format!("Tailscale wird eingeschaltet{dots}").as_str()), "{line}");
+            }
+        }
+        assert_eq!(t.translate("Scanning..").as_deref(), Some("Suche (zwei)"), "an entry of its own wins");
+        assert_eq!(t.translate("Something else..."), None);
+        assert_eq!(t.translate("Wait..."), None);
     }
 
     #[test]

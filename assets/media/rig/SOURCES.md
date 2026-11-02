@@ -84,3 +84,5 @@ PixelLab image-to-pixelart: 2 credits (base, tray), strength 300.
 Scripts: tools/xbox_prep.py xbox_base.py xbox_tray.py xbox_finish.py
 Round 2: tray rebuilt at 130 mm out (+1 credit), 5 art px transparent padding at the bottom of base/over, disc hover in front of the tray (flat).
 
+## All rigs, 2026-11-02
+The photo's light backdrop left on `base.png`'s outline was cleared: an edge pixel of low colour clearly lighter than the plastic within 5 pixels (30 to 670 pixels a console), and on the GBA three grey patches of the photo's shadow at its corners. No PixelLab. The GameCube's `under.png` kept the photo's white backdrop along the lid's front edge: filled with the plastic above it.

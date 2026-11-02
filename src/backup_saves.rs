@@ -127,6 +127,10 @@ pub fn wanted(rel: &str) -> bool {
             return true;
         }
     }
+    // ScummVM's saves have many endings (`monkey.s01`) and nothing else lives in that folder.
+    if rel.strip_prefix(scummvm_saves()).is_some_and(|sub| sub.starts_with('/') && sub.len() > 1) {
+        return true;
+    }
     let Some(rest) = rel.strip_prefix("roms/") else { return false };
     let (top, below) = rest.split_once('/').unwrap_or(("", rest));
     if top == "savestates" {
@@ -139,6 +143,11 @@ pub fn wanted(rel: &str) -> bool {
     is_save_name(Path::new(below).file_name().and_then(|n| n.to_str()).unwrap_or(""))
 }
 
+/// ScummVM's save folder relative to `/storage`, outside the games.
+fn scummvm_saves() -> &'static str {
+    crate::hostsys::SCUMMVM_SAVES.trim_start_matches(STORAGE).trim_start_matches('/')
+}
+
 fn seconds(m: &std::fs::Metadata) -> u64 {
     m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs())
 }
@@ -148,6 +157,7 @@ fn seconds(m: &std::fs::Metadata) -> u64 {
 fn walk(storage: &Path) -> (Vec<Item>, usize) {
     let mut stack: Vec<String> = vec!["roms".into()];
     stack.extend(crate::sync::Share::Dolphin.dirs().iter().map(|d| d.path.trim_start_matches(STORAGE).trim_start_matches('/').to_string()).filter(|p| !p.starts_with("roms/")));
+    stack.push(scummvm_saves().to_string());
     let (mut out, mut skipped) = (Vec::new(), 0);
     while let Some(rel) = stack.pop() {
         let rd = match std::fs::read_dir(storage.join(&rel)) {
@@ -614,6 +624,8 @@ mod tests {
         "roms/3ds/azahar/sdmc/Nintendo 3DS/a/b/extdata/00000000/0022/x.bin",
         ".config/dolphin-emu/Wii/title/00010000/52534245/data/save.bin",
         ".config/dolphin-emu/Wii/title/00010004/52534245/data/banner.bin",
+        ".local/share/scummvm/saves/monkey.s01",
+        ".local/share/scummvm/saves/atlantis.012",
     ];
     const NOT_SAVES: &[&str] = &[
         "roms/gba/Game.gba",
@@ -633,6 +645,7 @@ mod tests {
         ".config/dolphin-emu/Wii/title/00000001/00000002/data/system.sav",
         ".config/dolphin-emu/Wii/title/00010000/52534245/content/game.wad",
         ".config/pocket-ui/settings.sav",
+        ".local/share/scummvm/scummvm.log",
     ];
 
     #[test]
@@ -1018,5 +1031,13 @@ mod tests {
         let again = compare(&b.dir, &on_card, &root).unwrap();
         assert_eq!(again.same, 1, "{again:?}");
         assert!(again.replace.is_empty(), "{again:?}");
+    }
+
+    #[test]
+    fn scummvm_saves_go_in_with_any_ending_and_nothing_beside_them() {
+        for name in ["monkey.s01", "atlantis.012", "no-ending"] {
+            assert!(wanted(&format!(".local/share/scummvm/saves/{name}")), "{name}");
+        }
+        assert!(!wanted(".local/share/scummvm/saves") && !wanted(".local/share/scummvm/savesx/monkey.s01") && !wanted(".local/share/scummvm/monkey.s01"));
     }
 }

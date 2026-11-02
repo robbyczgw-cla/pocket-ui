@@ -92,7 +92,7 @@ impl Launch {
         let base = rig.map_or((300, 200), |(_, b)| b);
         let blocks = insert_scene::phone_blocks(rig.as_ref().map(|(r, _)| r), base, (w, h));
         let k = blocks as f32 / ir::SCALE;
-        let sprite = system_art::get(system).map(|s| s.fitted((560.0 * k) as i32, (330.0 * k) as i32));
+        let sprite = system_art::get(system).or_else(|| system_art::get(insert_scene::STAND_IN)).map(|s| s.fitted((560.0 * k) as i32, (330.0 * k) as i32));
         let floor = if rig.is_some() {
             insert_scene::phone_floor(rig.as_ref().map(|(r, _)| r), base, blocks, h, k)
         } else {

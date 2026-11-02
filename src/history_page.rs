@@ -429,7 +429,7 @@ pub fn paint_history(c: &mut Canvas, text: &mut Text, page: &HistoryPage, names:
     let fw = c.w - MARGIN - fx;
     let mut y = top;
     for (head, line) in facts(s, page.today, names) {
-        let lines = text.wrap(Face::Body, 28, &line, fw);
+        let lines = text.wrap_prose(Face::Body, 28, &line, fw);
         let step = crate::type_scale::line(28, 10);
         let need = 30 + lines.len().min(2) as i32 * step;
         if y + need > c.h - 120 {
@@ -719,7 +719,7 @@ pub fn paint_review(c: &mut Canvas, text: &mut Text, page: &ReviewPage, names: N
         y += crate::type_scale::line(37, 13);
     }
     y += 10;
-    for line in text.wrap(Face::Body, 28, &quiet, width).iter().take(2) {
+    for line in text.wrap_prose(Face::Body, 28, &quiet, width).iter().take(2) {
         text.draw(c, Face::Body, 28, MARGIN, y, p.dust, line);
         y += crate::type_scale::line(28, 12);
     }

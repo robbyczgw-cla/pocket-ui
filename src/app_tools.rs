@@ -297,7 +297,7 @@ impl App {
             }
         };
         for (text, color) in lines {
-            for line in self.text.wrap(Face::Body, NU_SMALL, &text, width).into_iter().take(2) {
+            for line in self.text.wrap_prose(Face::Body, NU_SMALL, &text, width).into_iter().take(2) {
                 if y > y0 + DETAILS_H - 20 {
                     return;
                 }

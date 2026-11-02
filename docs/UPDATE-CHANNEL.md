@@ -131,6 +131,10 @@ On the build machine, from a clean checkout of the release commit. Nothing below
    site-updates/vercel-headers.json, NEXT-STEPS.txt
    ```
 
+   The loose Ports scripts (`Install pocket-ui.sh`, `Uninstall pocket-ui.sh`) in `release-out/` are copied to
+   `github/` under the names GitHub gives them (spaces become dots: `Install.pocket-ui.sh`), and `SHA256SUMS` lists
+   them so; the ports-installer and rocknix-card zips of `release-out/` are listed too.
+
    `--help` lists the rest (`--os-tar`/`--os-version` for a system update, `--channel`, `--base-url`).
 5. **Keep a copy** of `site-updates/` per version (`release-archive/<version>/` outside the repository): it is what a
    rollback deploys again.
@@ -203,7 +207,7 @@ What the page says when something is not right:
 
 | Situation | Message |
 |---|---|
-| No list on the website yet (404) or another error status | The update server has no update list right now. Try again later. |
+| No list on the website yet (404) or another error status | No updates published yet. A new version installs like the first one; your games and settings stay. |
 | No network, or the website can't be reached | Couldn't reach the update server. Check Wi-Fi. |
 | A network that wants a sign-in in a browser | Connected, but this network wants a sign-in in a browser. |
 | List or signature changed, or another key | The update list isn't signed by us. Nothing was changed. |

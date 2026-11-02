@@ -33,6 +33,77 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 - Steam Deck: no idle timers, suspend, power-key hold or low-battery power-off of ours any more; SteamOS owns sleep and the
   power button (the Settings rows were hidden, but the timers still ran and would have suspended after 4 minutes).
 
+## [0.1.11] - 2026-11-02
+
+### Added
+
+- A second card that still holds a flashed system image (its small STORAGE partition would be the whole shelf) is said plainly on
+  Add games and on Home's "No games yet": take it out, or format it for games. Nothing is reformatted.
+- PlayStation 3 and Wii U have their own console picture on their shelf card and front (public-domain photos by Evan Amos, pixel-art
+  conversion, lettering painted over), instead of the bare title card.
+- A copy the shelf can't read no longer vanishes without a word: when a rescan finds unread game files (a disc
+  without its file, a folder no system reads) and no new game, a note points to Game check, and an empty Home's "No
+  games yet" says the files are there.
+- Kids Mode: the PIN page names where the recovery file goes from the first look; the screens that stop the child say
+  "Grown-ups: hold SELECT and START."; the grown-ups' page says when picked games are no longer on the card.
+- The Manual shows the address after an outside link, to type on a phone. The phone upload page shows refusals in
+  German and Spanish. After a skipped time zone with nothing to go on, the last first-start page says the clock is on UTC.
+- The page you open on your phone for "From your phone" speaks Spanish too (after German and English), by the phone's
+  language like the device.
+
+### Changed
+
+- Updates: with no update list published yet, the page says "No updates published yet. A new version installs like
+  the first one; your games and settings stay." Sleep says what it costs ("a few percent of the battery an hour").
+- Words: second card ("only its games show while it's in"), empty Home's ways to add games, the remote access
+  sentence, the manual's H700 and "START skips a step" lines, getting started leads with the installs that exist.
+- Release scripts: the Ports scripts are uploaded and listed in `SHA256SUMS` under the names GitHub gives them
+  (`Install.pocket-ui.sh`), so `sha256sum -c SHA256SUMS` passes for them too.
+
+### Fixed
+
+- Quit no longer kills a game still writing its saved moment. On a busy card the save could pass the 7 seconds after which the game was stopped, and the moment was lost; now nothing stops it while it writes, and a wait over a second shows it is working.
+- Starting a game: the Game Boy Advance's cartridge goes into the middle of the console (it stood 35 pixels to the left on
+  a 1240x1080 screen) and the DS's card comes straight down behind its upper screen. Every other system's plain animation, and
+  Quick everywhere, aims at where the console's slot is on its picture, not at the middle of a picture that also holds the pad,
+  at a size that fits the console.
+- Starting a game in Light: no dark block stays where the case stood.
+- The consoles at a game's start have clean outlines: no white fringe or grey patches left from their photos, and no white
+  blade under the GameCube's open lid.
+- Starting a game on a system without a console picture (arcade, home computers): its game goes into the crate of games, not
+  into an empty grey box. The Saturn has a console picture everywhere now, in Quick too.
+- Uploading games from your phone no longer moves the selection to another game in the shelf: the same game stays
+  selected, as when the list is read again.
+- Settings: the Kids mode row shows ">" when selected, like every row that opens a page.
+- Tailscale, Sync, Bluetooth, the web companion and RetroAchievements: the line about the selected row wraps next to the
+  hint pill instead of ending in "…" (Spanish "…en un navegad…").
+- Explanations at the foot of a page no longer end on a single word ("ist."); a per-game Extras explanation takes the
+  free lines above it before it is cut. German: "Ganzes Bild" over the small preview, "Behalten" in the first start's
+  hint bar (the last key lost its label at 640x480), a shorter fan line so the note under it shows whole.
+- Performance & fan on a 640x480 screen: the readout's long values (the CPU's clocks, the fan's line) have the room the
+  short ones (temperature, power draw) don't need, instead of ending in "…". Starter pack: the explanation under the
+  list stands at the left like every page's, no longer centred. German: the picture page's second line fits.
+- First start / Settings → Systems on the shelf: a long line under the heading (German, Spanish, 640x480) takes a second
+  line instead of ending in "…". Sentences in the Kids Mode pages, the game page, search and the report page no longer
+  end on a single word.
+- Look step (first start, Settings → Look): A "Keep this look" and B "Back" come right after Left/Right, so at Large text
+  the keys that lose their label are the shortcuts (X, L1), no longer A.
+- Performance & fan: the note about saved choices is shorter and shows whole on a 640x480 screen. First start, "How do you
+  like to play?": the "Off:" line names two features and "and more" instead of running off the page.
+- A fresh ROCKNIX card no longer starts the shelf with an empty "Splore" game that doesn't start: ROCKNIX's own PICO-8
+  entry is hidden everywhere (shelf, counts, Recent, Add games, Kids Mode) until the official PICO-8 is installed, and a
+  card holding only it says "No games yet".
+- The install package no longer says pocket-ui "hasn't been tested" on an Odin 2 Mini, an RG35XX Plus or an RG35XX SP: it says the
+  project has played on that model; the others still say they are untested.
+- Two games with the same file name in different folders of one system share save states, as they always did, but no longer
+  silently: a game only continues on its own from a moment it wrote last, the start says when they share and that saving can
+  overwrite the other's, and deleting one leaves the shared states and pictures on the card. Rename one to keep them apart.
+- Back up saves now includes ScummVM's saves, so a backup before flashing keeps your adventures.
+- Adding, replacing or removing a soft patch no longer resumes the moment from the game's previous version: the game
+  starts fresh and the moment stays under Load until your next Quit. This also holds with Frozen games switched off.
+- Kids Mode: the grown-ups' page no longer offers "30 more minutes today" and "Start today's time again" while the time
+  per day is "No limit".
+
 ## [0.1.10] - 2026-11-01
 
 ### Added

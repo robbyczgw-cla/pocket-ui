@@ -164,7 +164,7 @@ fn fetch(tools: &Tools, url: &str) -> Result<Vec<u8>, String> {
     match out.status.code() {
         _ if out.status.success() => Ok(out.stdout),
         // The server is there but has no list (not published yet, or a wrong `update_url`): not a Wi-Fi problem.
-        Some(CURL_HTTP_ERROR) => Err("The update server has no update list right now. Try again later.".into()),
+        Some(CURL_HTTP_ERROR) => Err("No updates published yet. A new version installs like the first one; your games and settings stay.".into()),
         Some(CURL_PROTOCOL) => Err(NOT_HTTPS.into()),
         _ => Err(crate::net_check::refine("Couldn't reach the update server. Check Wi-Fi.")),
     }
@@ -1218,7 +1218,7 @@ mod tests {
             let tools = Tools { curl: &curl, unsquashfs: "unsquashfs", ..TOOLS };
             fetch_manifest_with(&tools, DEFAULT_URL, &key).unwrap_err()
         };
-        assert!(run(22).contains("no update list right now"), "404 before the first release is published");
+        assert!(run(22).contains("No updates published yet"), "404 before the first release is published");
         assert!(run(1).contains("isn't https"));
         assert!(run(6).contains("Check Wi-Fi"), "could not resolve the host");
     }

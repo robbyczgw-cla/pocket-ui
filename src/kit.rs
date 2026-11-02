@@ -160,10 +160,10 @@ pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lin
     let mut parts: Vec<Vec<String>> = Vec::new();
     for p in paragraphs.iter().rev() {
         if budget == 0 {
-            parts.push(text.wrap(Face::Body, SMALL, p, wide));
+            parts.push(text.wrap_prose(Face::Body, SMALL, p, wide));
             continue;
         }
-        let narrow = text.wrap(Face::Body, SMALL, p, column);
+        let narrow = text.wrap_prose(Face::Body, SMALL, p, column);
         let k = budget.min(narrow.len());
         budget -= k;
         if k == narrow.len() {
@@ -189,7 +189,7 @@ pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lin
         }
         // A short line above gets words back from the first line beside the pill until the two are about as long
         // ("LCD grid imitates a handheld screen," over "scanlines and CRT a TV.", not "LCD grid" alone on top).
-        let mut part = if words.is_empty() { Vec::new() } else { text.wrap(Face::Body, SMALL, &words.join(" "), wide) };
+        let mut part = if words.is_empty() { Vec::new() } else { text.wrap_prose(Face::Body, SMALL, &words.join(" "), wide) };
         if let ([above], Some(first)) = (part.as_mut_slice(), beside.first_mut()) {
             while text.width(Face::Body, SMALL, above) < text.width(Face::Body, SMALL, first) {
                 let Some((word, rest)) = first.split_once(' ') else { break };
@@ -214,7 +214,7 @@ pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lin
         if room == 0 {
             break;
         }
-        out.extend(text.wrap_at_most(Face::Body, SMALL, p, column, room));
+        out.extend(text.wrap_prose_at_most(Face::Body, SMALL, p, column, room));
     }
     out
 }
@@ -337,7 +337,7 @@ pub fn empty_state(c: &mut Canvas, text: &mut Text, art: Option<Art>, (x, w): (i
     text.draw(c, Face::Title, 37, x, base, pal().text, &heading);
     let step = type_scale::line(SMALL, 12);
     let mut y = base + 50 + type_scale::grow(SMALL);
-    let lines = text.wrap_at_most(Face::Body, SMALL, line, w, 3);
+    let lines = text.wrap_prose_at_most(Face::Body, SMALL, line, w, 3);
     for l in lines {
         if y > bottom {
             break;
@@ -372,6 +372,21 @@ mod tests {
         assert_eq!(buf[33 * 600 + 100], pal().select);
         assert_eq!(buf[33 * 600 + 400], pal().band);
         assert_eq!(pal().select, pal().label, "the selected name is on the label's paper");
+    }
+
+    /// The size sweep (1240x1080, German) found "ist." alone on the pill's line under a two-line explanation.
+    #[test]
+    fn a_footer_paragraph_does_not_end_on_one_word() {
+        let mut text = Text::new();
+        text.set_translate(false);
+        // Whatever the column, no paragraph's last line is a lone word (`Text::wrap`).
+        let desc = "Entfällt, solange die Farbkorrektur des Emulators an ist.";
+        for column in (300..1100).step_by(7) {
+            let out = footer_lines(&mut text, desc, column + 300, column + 24 + PAD + BTN_PAD, 5);
+            if out.len() >= 2 {
+                assert!(out.last().unwrap().contains(' '), "column {column}: {out:?}");
+            }
+        }
     }
 }
 

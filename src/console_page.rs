@@ -325,7 +325,7 @@ pub(crate) fn row(c: &mut Canvas, text: &mut Text, x: i32, key_w: i32, w: i32, y
     // The label column is as wide as its labels need at the text size in use.
     let key_w = crate::type_scale::wide(key_w, 28);
     text.draw(c, Face::Body, 28, x, y, pal().dust, label);
-    let lines = text.wrap(Face::Body, 28, value, w - key_w);
+    let lines = text.wrap_prose(Face::Body, 28, value, w - key_w);
     let n = lines.len().max(1) as i32;
     for (i, line) in lines.iter().enumerate() {
         text.draw(c, Face::Body, 28, x + key_w, y + i as i32 * value_line(), pal().chalk, line);
@@ -336,7 +336,7 @@ pub(crate) fn row(c: &mut Canvas, text: &mut Text, x: i32, key_w: i32, w: i32, y
 /// Small print under a row, in Dust.
 fn small(c: &mut Canvas, text: &mut Text, x: i32, w: i32, y: i32, s: &str) -> i32 {
     let mut y = y - 8;
-    for line in text.wrap(Face::Body, 21, s, w) {
+    for line in text.wrap_prose(Face::Body, 21, s, w) {
         text.draw(c, Face::Body, 21, x, y, pal().dust, &line);
         y += small_line();
     }
@@ -394,7 +394,7 @@ fn paint_body(c: &mut Canvas, text: &mut Text, d: &PageData, art: Option<&Sprite
     // Left column: what it was, when, and what it is here.
     let mut ly = y0 + 34;
     if let Some(s) = &con.summary {
-        for line in text.wrap(Face::Body, 28, s, summary_w) {
+        for line in text.wrap_prose(Face::Body, 28, s, summary_w) {
             text.draw(c, Face::Body, 28, lx, ly, pal().chalk, &line);
             ly += crate::type_scale::line(28, 12);
         }
@@ -472,7 +472,7 @@ fn paint_sources(c: &mut Canvas, text: &mut Text, con: &Console, y0: i32) -> i32
     let w = c.w - 2 * MARGIN - 40;
     let mut y = y0 + 34;
     if let Some(l) = consoles::license() {
-        for line in text.wrap(Face::Body, 21, l, w) {
+        for line in text.wrap_prose(Face::Body, 21, l, w) {
             text.draw(c, Face::Body, 21, MARGIN, y, pal().dust, &line);
             y += small_line();
         }

@@ -52,7 +52,7 @@ pub(crate) fn paint_dialog(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, d
     // Lay out first, to centre the sheet: 980 wide, or as wide as the screen when its words need more lines than the
     // room above the hints takes (640x480 with Large text in a wider font).
     let layout = |text: &mut Text, w: i32| {
-        let paragraphs: Vec<Vec<String>> = d.body().iter().map(|p| text.wrap(Face::Body, small, p, w - 2 * 48 - 28)).collect();
+        let paragraphs: Vec<Vec<String>> = d.body().iter().map(|p| text.wrap_prose(Face::Body, small, p, w - 2 * 48 - 28)).collect();
         let body_h: i32 = paragraphs.iter().map(|p| p.len() as i32 * line_h + 14).sum();
         (paragraphs, 48 + 58 + 26 + body_h + 16 + choices.len() as i32 * row + 36)
     };
@@ -105,7 +105,7 @@ fn paint_page(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, page: &RescueP
     let width = right - left;
     text.draw(c, Face::Title, 50, left, pad + 58, pal().chalk, "Safe mode");
     // On two lines when it is wider than the page (German, larger text); the panel moves down with it.
-    let sub = text.wrap(Face::Body, NU_SMALL, "pocket-ui started with only what this page needs. Games and saves are untouched.", width);
+    let sub = text.wrap_prose(Face::Body, NU_SMALL, "pocket-ui started with only what this page needs. Games and saves are untouched.", width);
     let sub_step = pocket_ui::type_scale::line(NU_SMALL, 12);
     for (k, l) in sub.iter().take(2).enumerate() {
         text.draw(c, Face::Body, NU_SMALL, left, pad + 58 + 48 + k as i32 * sub_step, pal().quiet, l);
@@ -115,11 +115,11 @@ fn paint_page(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, page: &RescueP
     // What happened, in a panel.
     let w = &page.what;
     let mut lines: Vec<(String, u32, u32)> = Vec::new();
-    for l in text.wrap(Face::Body, NU_SMALL, &w.headline(), width - 2 * 28).into_iter().take(2) {
+    for l in text.wrap_prose(Face::Body, NU_SMALL, &w.headline(), width - 2 * 28).into_iter().take(2) {
         lines.push((l, NU_SMALL, pal().text));
     }
     if let Some(crash) = &w.last_crash {
-        for l in text.wrap(Face::Body, 24, &format!("Last crash: {crash}"), width - 2 * 28).into_iter().take(2) {
+        for l in text.wrap_prose(Face::Body, 24, &format!("Last crash: {crash}"), width - 2 * 28).into_iter().take(2) {
             lines.push((l, 24, pal().quiet));
         }
     }
@@ -150,7 +150,7 @@ fn paint_page(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, page: &RescueP
     let (step, bottom) = (pocket_ui::type_scale::line(NU_SMALL, 12), c.h - pad - NU_PILL - 16);
     let mut y = top + rows.len() as i32 * row + 44;
     // What was just done (the message) keeps its lines; the row's explanation gives way first.
-    let message_h = page.message.as_ref().map_or(0, |m| text.wrap(Face::Body, NU_SMALL, m, width).len() as i32 * step + 12);
+    let message_h = page.message.as_ref().map_or(0, |m| text.wrap_prose(Face::Body, NU_SMALL, m, width).len() as i32 * step + 12);
     y = text.paragraph(c, Face::Body, NU_SMALL, (left, y), width, step, bottom - message_h, pal().quiet, page.describe(page.row()));
     if let Some(m) = &page.message {
         text.paragraph(c, Face::Body, NU_SMALL, (left, y + 12), width, step, bottom, pal().text, m);

@@ -49,8 +49,8 @@ pub fn label(hours: Option<u32>) -> String {
 /// The line under the setting on Settings → System → Sleep & power (`sleep_settings`, which steps through `CHOICES`).
 pub fn explain(hours: Option<u32>) -> &'static str {
     match hours {
-        Some(_) => "After this long asleep on battery, the Pocket saves the game and switches off.",
-        None => "The Pocket stays asleep until you wake it.",
+        Some(_) => "After this long asleep on battery, the Pocket saves the game and switches off. Sleeping uses a few percent of the battery an hour.",
+        None => "The Pocket stays asleep until you wake it. Sleeping uses a few percent of the battery an hour.",
     }
 }
 

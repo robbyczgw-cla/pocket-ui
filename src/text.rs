@@ -632,6 +632,18 @@ impl Text {
 
     /// Breaks `s` into lines no wider than `max` pixels, at spaces.
     pub fn wrap(&mut self, face: Face, px: u32, s: &str, max: i32) -> Vec<String> {
+        self.wrap_with(face, px, s, max, false)
+    }
+
+    /// `wrap` for sentences (explanations, notes, dialogs): a last line of one word takes the word before it along,
+    /// when the two fit ("an ist.", not "ist." alone under a paragraph; the size sweep found them under German
+    /// explanations). Not for titles and names, whose first line is the better one when it is longer ("Game Boy"
+    /// over "Advance").
+    pub fn wrap_prose(&mut self, face: Face, px: u32, s: &str, max: i32) -> Vec<String> {
+        self.wrap_with(face, px, s, max, true)
+    }
+
+    fn wrap_with(&mut self, face: Face, px: u32, s: &str, max: i32, no_widow: bool) -> Vec<String> {
         let px = crate::type_scale::px(px);
         let s = self.translated(s);
         let translated = !self.raw && !matches!(s, crate::i18n::Tr::Same(_));
@@ -654,6 +666,17 @@ impl Text {
         }
         if !line.is_empty() {
             lines.push(line);
+        }
+        if let (true, [.., prev, last]) = (no_widow, lines.as_mut_slice()) {
+            if !last.contains(' ') {
+                if let Some((head, word)) = prev.rsplit_once(' ') {
+                    let moved = format!("{word} {last}");
+                    if self.width_raw(face, px, &moved) <= max {
+                        *prev = head.to_string();
+                        *last = moved;
+                    }
+                }
+            }
         }
         // Lines of a translation are translated already when they are painted.
         if translated {
@@ -696,7 +719,16 @@ impl Text {
     /// `wrap`, but at most `lines` lines: when there are more, the last one shown ends with "…" (a paragraph given
     /// only the room above the hints, with larger text). None when `lines` is 0.
     pub fn wrap_at_most(&mut self, face: Face, px: u32, s: &str, max: i32, lines: usize) -> Vec<String> {
-        let mut all = self.wrap(face, px, s, max);
+        self.wrap_at_most_with(face, px, s, max, lines, false)
+    }
+
+    /// `wrap_at_most` for sentences (`wrap_prose`).
+    pub fn wrap_prose_at_most(&mut self, face: Face, px: u32, s: &str, max: i32, lines: usize) -> Vec<String> {
+        self.wrap_at_most_with(face, px, s, max, lines, true)
+    }
+
+    fn wrap_at_most_with(&mut self, face: Face, px: u32, s: &str, max: i32, lines: usize, no_widow: bool) -> Vec<String> {
+        let mut all = self.wrap_with(face, px, s, max, no_widow);
         if all.len() > lines {
             all.truncate(lines);
             if let Some(last) = all.last_mut() {
@@ -1050,6 +1082,20 @@ mod tests {
         let room = t.width(Face::Title, 37, "Game Boy Adv") + 4;
         assert_eq!(t.title_lines(Face::Title, 37, "Game Boy Advance", room), ["Game Boy", "Advance"]);
         assert_eq!(t.title_lines(Face::Title, 37, "Game Boy", 4000), ["Game Boy"]);
+    }
+
+    #[test]
+    fn a_wrapped_paragraph_does_not_end_on_one_word() {
+        let mut t = Text::builtin();
+        t.set_translate(false);
+        let s = "Entfällt, solange die Farbkorrektur des Emulators an ist.";
+        // The room that holds everything up to "an": the old wrap put "ist." alone on the second line.
+        let room = t.width(Face::Body, 30, "Entfällt, solange die Farbkorrektur des Emulators an") + 2;
+        assert_eq!(t.wrap_prose(Face::Body, 30, s, room), ["Entfällt, solange die Farbkorrektur des Emulators", "an ist."]);
+        // A single word, or two words that fit on a line, is left alone.
+        assert_eq!(t.wrap_prose(Face::Body, 30, "Zurück", 4000), ["Zurück"]);
+        assert_eq!(t.wrap_prose(Face::Body, 30, s, 4000), [s]);
+        assert_eq!(t.wrap(Face::Body, 30, s, room), ["Entfällt, solange die Farbkorrektur des Emulators an", "ist."], "plain wrap is as it was");
     }
 
     /// `draw` as it was before the inside-the-picture path: one `blend` (with its bounds test) per pixel.

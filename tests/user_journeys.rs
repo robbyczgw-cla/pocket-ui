@@ -137,7 +137,7 @@ fn remote_access_explains_itself_inside_the_screen_at_large_text() {
     let card = Card::new("remote-large");
     let text = card.shot("setup:remote", "large");
     let one_line = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    assert!(one_line.contains("turns itself off when the Pocket restarts"), "{text}");
+    assert!(one_line.contains("until you turn it off or the Pocket restarts"), "{text}");
     let boxes = std::fs::read_to_string(card.tmp.join("setup-remote.boxes")).unwrap();
     assert!(boxes.is_empty(), "remote access text clipped or overlapping: {boxes}");
 }
@@ -415,7 +415,7 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         let mut d = Driver::start("kids", true, |tmp, _| {
             std::fs::remove_file(tmp.join("gb/Tobu Tobu Girl (World).gb")).unwrap();
             std::fs::remove_file(tmp.join("segacd/Pocket CD Demo (USA).cue")).unwrap();
-            std::fs::write(tmp.join("data/kids.json"), r#"{"on":true,"pin":"0000","games":[],"theme":"pink"}"#).unwrap();
+            std::fs::write(tmp.join("data/kids.json"), r#"{"on":true,"pin":"0000","games":[],"theme":"pink","minutes":45}"#).unwrap();
         });
         d.sees("No games here yet");
         // Nothing of the normal shelf reaches a child.
@@ -948,6 +948,27 @@ true
         ui.sees("Starter pack");
     }
 
+    /// A fresh ROCKNIX card holds an empty roms/pico-8/Splore.png and nothing else; it is not a game without PICO-8,
+    /// so the page is "No games yet", not a shelf with a game that does not start.
+    #[test]
+    fn a_card_with_only_rocknixs_splore_says_no_games_yet() {
+        let mut ui = Driver::start("splore-only", true, |tmp, _| {
+            for f in ["gb/Tobu Tobu Girl (World).gb", "segacd/Pocket CD Demo (USA).cue", "segacd/Pocket CD Demo (USA).bin"] {
+                std::fs::remove_file(tmp.join(f)).unwrap();
+            }
+            let pico = tmp.join("pico-8");
+            std::fs::create_dir_all(&pico).unwrap();
+            std::fs::write(pico.join("Splore.png"), b"").unwrap();
+            let cfg = std::fs::read_to_string(tmp.join("es_systems.cfg")).unwrap().replace(
+                "</systemList>",
+                &format!("  <system><name>pico-8</name><fullname>PICO-8</fullname><path>{}</path><extension>.p8 .png</extension><command>true</command></system>\n</systemList>", pico.display()),
+            );
+            std::fs::write(tmp.join("es_systems.cfg"), cfg).unwrap();
+        });
+        let home = ui.sees("No games yet");
+        assert!(!home.contains("Splore") && !home.contains("PICO-8"), "{home}");
+    }
+
     /// A card with no games is not an empty screen: it says so, offers the starter pack, and says what is missing when
     /// the Pocket is offline.
     #[test]
@@ -966,7 +987,7 @@ true
             cmd.env("PATH", format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default()));
         });
         let home = ui.sees("No games yet");
-        assert!(home.contains("Get the starter pack") && home.contains("/storage/roms/<system>"), "{home}");
+        assert!(home.contains("Get the starter pack") && home.contains("Settings › Games › Add games shows the ways"), "{home}");
 
         // Hold the real starter-scan at its config read. The headless driver has completed startup and skips the
         // device startup jobs, so opening this FIFO belongs to that scan. This forces the slow-worker interleaving
@@ -1462,4 +1483,46 @@ fn the_info_page_says_how_many_slots_hold_a_save_and_says_so_when_none_do() {
     assert!(text.contains("Save slots") && text.contains("3 of 8") && text.contains("2 days ago"), "{text}");
     let text = card.shot("info:split:gb:tobu:saves=none", "normal");
     assert!(text.contains("Save slots") && text.contains("All empty"), "an empty medium says so: {text}");
+}
+
+/// The line about two games of one file name, on the smallest panel, in every language: over a pocket-core game and as RetroArch's
+/// notice, the sentence whole and on the panel.
+#[test]
+fn the_twin_notice_fits_640x480_whole_in_every_language() {
+    let card = Card::new("twin-notice");
+    let (data, png) = (card.tmp.join("data"), card.tmp.join("twin.png"));
+    std::fs::create_dir_all(&data).unwrap();
+    for (lang, last_word) in [("en", "apart"), ("de", "trennen"), ("es", "separarlos")] {
+        for state in ["game-twin-note", "notice:twin"] {
+            let (words, boxes) = (card.tmp.join("twin.tsv"), card.tmp.join("twin.boxes"));
+            let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+            if let Some(stub) = &card.stub {
+                cmd.env("WAYLAND_DISPLAY", &stub.path);
+            }
+            let out = cmd
+                .args(["--snapshot", state, png.to_str().unwrap()])
+                .env("POCKETUI_MOCK", "1")
+                .env("POCKETUI_LANG", lang)
+                .env("POCKETUI_SNAPSHOT_SIZE", "640x480")
+                .env("POCKETUI_VISIBLE_TEXT", &words)
+                .env("POCKETUI_TEXT_BOXES", &boxes)
+                .env("POCKETUI_DATA", &data)
+                .env("POCKETUI_ES_SYSTEMS", card.tmp.join("es_systems.cfg"))
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "{state} {lang}: {}", String::from_utf8_lossy(&out.stderr));
+            if state == "game-twin-note" {
+                let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+                let at = stdout.find("pill=").unwrap_or_else(|| panic!("{stdout}")) + "pill=".len();
+                let (w, h) = stdout[at..].split_whitespace().next().unwrap().split_once('x').unwrap();
+                let (w, h): (i32, i32) = (w.parse().unwrap(), h.parse().unwrap());
+                assert!(w <= 640 - 48 && h <= 240, "{lang}: {w}x{h} on a 640x480 panel");
+                // Its own small picture, outside what the transcript records; lines wrap and are never cut.
+                continue;
+            }
+            let shown = std::fs::read_to_string(&words).unwrap_or_default();
+            assert!(shown.contains(last_word) && !shown.contains('…'), "{state} {lang}: the sentence whole: {shown}");
+            assert!(std::fs::read_to_string(&boxes).unwrap_or_default().is_empty(), "{state} {lang}: overlaps");
+        }
+    }
 }

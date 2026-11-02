@@ -82,6 +82,10 @@ pub(crate) fn snapshot_knobs() {
     if std::env::var_os("POCKETUI_SNAPSHOT_GAMES_CARD").is_some() {
         pocket_ui::games_card::set_in_use(true);
     }
+    // POCKETUI_SNAPSHOT_IMAGE_CARD=1: Add games and Home as with a flashed system image in the second slot.
+    if std::env::var_os("POCKETUI_SNAPSHOT_IMAGE_CARD").is_some() {
+        pocket_ui::card_health::set_image_card(true);
+    }
     match std::env::var("POCKETUI_SNAPSHOT_WIFI").as_deref() {
         Ok("1") => status_corner::force_wifi(true),
         Ok("0") => status_corner::force_wifi(false),

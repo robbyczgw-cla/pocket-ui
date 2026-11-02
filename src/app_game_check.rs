@@ -309,7 +309,7 @@ impl App {
         let step = pocket_ui::type_scale::line(NU_SMALL, 12);
         let mut y = NU_PAD + NU_PILL + 12 + 36 + pocket_ui::type_scale::grow(NU_SMALL);
         for (s, colour) in [(f.what.as_str(), pal().text), (f.todo.as_str(), pal().quiet)] {
-            for l in self.text.wrap(Face::Body, NU_SMALL, s, w) {
+            for l in self.text.wrap_prose(Face::Body, NU_SMALL, s, w) {
                 if y + step > bottom {
                     break;
                 }

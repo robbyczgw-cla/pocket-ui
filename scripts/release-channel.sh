@@ -213,6 +213,18 @@ for kind in install_zip sd_image; do
   # The image's notes go along, under the same name as make-image.sh writes them.
   if [ $kind = sd_image ] && [ -f "${f%.img.xz}.txt" ]; then asset "${f%.img.xz}.txt"; fi
 done
+# The loose Ports scripts and the other zips of the release page. GitHub turns a space in an asset's name into a dot
+# ("Install pocket-ui.sh" becomes Install.pocket-ui.sh), so the file is uploaded and listed in SHA256SUMS under the dotted
+# name: `sha256sum -c` then finds what was downloaded. They work under either name (port-installer.sh looks at "Uninstall*").
+for f in "Install pocket-ui.sh" "Uninstall pocket-ui.sh"; do
+  [ -f "$IN/$f" ] || continue
+  g=$(printf '%s' "$f" | tr ' ' '.')
+  cp "$IN/$f" "$GH/$g"
+  asset "$GH/$g"
+done
+for f in "$IN/pocket-ui-$VERSION-ports-installer.zip" "$IN/pocket-ui-$VERSION-rocknix-card.zip"; do
+  [ -f "$f" ] && asset "$f"
+done
 
 # 3. The signature must be one pocket-ui accepts: the public key in src/store.rs.
 if [ $FOREIGN = 1 ]; then

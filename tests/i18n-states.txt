@@ -523,6 +523,8 @@ controls
 cheats
 cheats-more
 cheats-only
+notice:twin
+game-twin-note
 notice:several
 notice:password
 notice:packing
@@ -805,6 +807,7 @@ kids-pin:help
 kids-pin:wait
 kids-adult
 kids-adult:0:behind
+kids-adult:0:gone
 kids-flow:welcome
 kids-flow:pin
 kids-flow:pin-again

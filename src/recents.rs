@@ -49,6 +49,8 @@ impl Recents {
     /// list that was cached or scanned at start, and whenever the library is swapped in. One pass over the games of
     /// the systems the entries are of: nothing a start or a frame would notice.
     pub fn follow_library(&mut self, systems: &[crate::library::System]) {
+        // ROCKNIX's Splore entry is no game while PICO-8 isn't installed: an entry from before that was known goes.
+        self.list.retain(|r| !crate::hostsys::not_a_game(&r.system, &r.path));
         use std::collections::HashMap;
         let wanted: HashMap<&Path, usize> = self.list.iter().enumerate().map(|(i, r)| (r.path.as_path(), i)).collect();
         let mut found: Vec<Option<&str>> = vec![None; self.list.len()];
@@ -247,6 +249,22 @@ mod tests {
         // A game that is not in the library at all (its file was deleted, or its system is gone) is named by its file.
         r.follow_library(&[]);
         assert_eq!(names(&r), ["Tobu Tobu Girl"], "no library: the plain name");
+    }
+
+    #[test]
+    fn splores_old_entry_goes_unless_pico8_is_installed() {
+        let t = data_dir("splore");
+        let pico = t.join("roms/pico-8");
+        std::fs::create_dir_all(&pico).unwrap();
+        let mut r = Recents::load(&t.join("data"));
+        r.note("pico-8", "Splore", &pico.join("Splore.png"), 5);
+        r.note("pico-8", "Celeste", &pico.join("Celeste.png"), 5);
+        r.follow_library(&[]);
+        assert_eq!(names(&r), ["Celeste"], "ROCKNIX's Splore is no game without PICO-8");
+        std::fs::write(pico.join("pico8_64"), b"x").unwrap();
+        r.note("pico-8", "Splore", &pico.join("Splore.png"), 5);
+        r.follow_library(&[]);
+        assert_eq!(r.list.len(), 2, "with PICO-8 installed it stays");
     }
 
     #[test]

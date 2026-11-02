@@ -528,7 +528,7 @@ impl App {
         // What it is.
         let max_w = right - pad - 2 * NU_BTN_PAD;
         let mut y = top + lh + 64;
-        let lines = self.text.wrap(Face::Body, 34, &p.description, max_w);
+        let lines = self.text.wrap_prose(Face::Body, 34, &p.description, max_w);
         for line in lines.iter().take(4) {
             self.text.draw(c, Face::Body, 34, pad + NU_BTN_PAD, y, pal().chalk, line);
             y += 46;
@@ -617,7 +617,7 @@ impl App {
     /// Centred, wrapped text starting at `y`.
     pub(crate) fn store_paragraph(&mut self, c: &mut Canvas, y: i32, msg: &str, colour: u32) {
         let max_w = c.w - 2 * NU_PAD - 4 * NU_BTN_PAD;
-        for (i, line) in self.text.wrap(Face::Body, 40, msg, max_w).iter().enumerate() {
+        for (i, line) in self.text.wrap_prose(Face::Body, 40, msg, max_w).iter().enumerate() {
             let w = self.text.width(Face::Body, 40, line);
             self.text.draw(c, Face::Body, 40, (c.w - w) / 2, y + i as i32 * 54, colour, line);
         }
@@ -626,7 +626,7 @@ impl App {
     /// Wrapped, centred text just above the button hints, like the Updates page.
     pub(crate) fn store_footer(&mut self, c: &mut Canvas, msg: &str, colour: u32) {
         let max_w = c.w - 2 * NU_PAD - 2 * NU_BTN_PAD;
-        let lines = self.text.wrap(Face::Body, NU_SMALL, msg, max_w);
+        let lines = self.text.wrap_prose(Face::Body, NU_SMALL, msg, max_w);
         let mut y = c.h - NU_PAD - NU_PILL - 30 - 40 * (lines.len() as i32 - 1).max(0);
         for line in &lines {
             let w = self.text.width(Face::Body, NU_SMALL, line);

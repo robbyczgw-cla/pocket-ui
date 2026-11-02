@@ -7,11 +7,11 @@
 //! once, `settings_page_holds_games`), with the selection kept on the same game or system. Nothing of this runs on the UI thread but the comparison of the selection.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-use pocket_ui::library::System;
+use pocket_ui::library::{self, System};
 use pocket_ui::library_cache::{self, Key, Rescan, Start};
 use pocket_ui::shelf::Item;
 
@@ -38,6 +38,10 @@ pub(crate) struct LibraryUi {
     rescanning: Arc<AtomicBool>,
     /// A changed list that waits for a moment it can be swapped in (`library_apply_pending`).
     pending: Option<Vec<System>>,
+    /// Unread things (disc games missing a file, folders no system reads) the last look counted; None until one ran.
+    pub unread: Option<usize>,
+    /// The same count as the rescan thread saw it last, plus one (0: not yet), to tell a rise from what was known.
+    unread_seen: Arc<AtomicUsize>,
 }
 
 impl LibraryUi {
@@ -115,6 +119,23 @@ pub(crate) fn picked(item: Item, systems: &[System]) -> Picked {
     }
 }
 
+/// The selected row, noted before a new list goes in and put back on the same game or system after `rebuild`
+/// (the new list's numbers may mean another one). Shared by `library_apply_pending` and an upload's new list.
+pub(crate) struct KeepSelection(Option<Picked>);
+
+impl KeepSelection {
+    pub(crate) fn note(items: &[Item], sel: usize, systems: &[System]) -> Self {
+        Self(items.get(sel).map(|i| picked(*i, systems)))
+    }
+
+    pub(crate) fn restore(self, items: &[Item], systems: &[System], sel: &mut usize, prev_sel: &mut usize) {
+        if let Some(at) = self.0.and_then(|p| find_picked(&p, items, systems)) {
+            *sel = at;
+            *prev_sel = at;
+        }
+    }
+}
+
 impl App {
     /// The Japanese (CJK) letters of the games' names, drawn ahead on a thread from the system's font
     /// (`Text::prewarm_names`): once the first frame is on screen and whenever the list changes
@@ -141,11 +162,17 @@ impl App {
             AfterStart::Store(key) => {
                 let (data_dir, systems) = (self.data_dir.clone(), self.systems.clone());
                 self.library_ui.key = Some(key.clone());
+                // An empty shelf: Home says whether games are there that can't be read, so count them (on this thread).
+                let ask = systems.is_empty().then(|| (self.proxy.clone(), self.es_systems.clone()));
                 let _ = std::thread::Builder::new().name("library-cache".into()).spawn(move || {
                     let t0 = Instant::now();
                     match library_cache::write(&data_dir, &key, &systems) {
                         Ok(()) => println!("library: cache written in {:?}", t0.elapsed()),
                         Err(e) => eprintln!("library: cache not written: {e}"),
+                    }
+                    if let Some((proxy, es_systems)) = ask {
+                        let n = pocket_ui::library::all_systems(&es_systems).map_or(0, |c| pocket_ui::library::unread_count(&c));
+                        let _ = proxy.send_event(UserEvent::LibraryUnread { count: n, rose: false });
                     }
                 });
             }
@@ -164,6 +191,9 @@ impl App {
         let (proxy, data_dir, es_systems, key) = (self.proxy.clone(), self.data_dir.clone(), self.es_systems.clone(), self.library_ui.key.clone());
         // What is on screen, or about to be (a list still waiting to be swapped in).
         let shown = self.library_ui.pending.clone().unwrap_or_else(|| self.systems.clone());
+        // Games the player copied, or an empty shelf: count what the shelf leaves unread (never the plain start read).
+        let look_for_unread = shown.is_empty() || !matches!(why, "after the start" | "after the game the start began" | "games recognised");
+        let seen = self.library_ui.unread_seen.clone();
         let spawned = std::thread::Builder::new().name("library-scan".into()).spawn(move || {
             let t0 = Instant::now();
             let result = library_cache::rescan(&data_dir, &es_systems, &shown, key.as_ref());
@@ -172,6 +202,14 @@ impl App {
                 Rescan::Same => println!("library: read again ({why}) in {took:?}, nothing changed"),
                 Rescan::Changed { systems: fresh, .. } => println!("library: read again ({why}) in {took:?}: {}", library_cache::difference(&shown, fresh)),
                 Rescan::Failed(e) => eprintln!("library: reading again ({why}) failed after {took:?}: {e}"),
+            }
+            if look_for_unread {
+                let added = if let Rescan::Changed { systems: fresh, .. } = &result { library_cache::games_added(&shown, fresh) } else { 0 };
+                let n = library::all_systems(&es_systems).map_or(0, |c| library::unread_count(&c));
+                // A rise (or the first look finding some) while nothing arrived: the copy that vanished without a word.
+                let before = seen.swap(n + 1, Ordering::SeqCst);
+                let rose = added == 0 && n > 0 && before < n + 1;
+                let _ = proxy.send_event(UserEvent::LibraryUnread { count: n, rose });
             }
             busy.store(false, Ordering::SeqCst);
             if let Rescan::Changed { systems, key } = result {
@@ -182,6 +220,16 @@ impl App {
             self.library_ui.rescanning.store(false, Ordering::SeqCst);
         }
         spawned.is_ok()
+    }
+
+    /// The count of unread things came in (`library::unread_count`): Home's empty page says it, and a rise with no game
+    /// arrived is told once, where the check is.
+    pub(crate) fn library_unread(&mut self, count: usize, rose: bool) {
+        self.library_ui.unread = Some(count);
+        if rose && self.settings_page.is_none() && self.onboarded {
+            let line = if count == 1 { "1 game file can't be read. Settings › Games › Game check says why." } else { "Some game files can't be read. Settings › Games › Game check says why." };
+            self.toast = Some((line.to_string(), Instant::now()));
+        }
     }
 
     /// A list that waits to be swapped in (`library_rescanned`), if any.
@@ -234,7 +282,7 @@ impl App {
             return;
         }
         let Some(fresh) = self.library_ui.pending.take() else { return };
-        let was = self.items.get(self.sel).map(|i| picked(*i, &self.systems));
+        let was = KeepSelection::note(&self.items, self.sel, &self.systems);
         let home_item = self.home_item.map(|i| picked(i, &self.systems));
         let screen_system = match self.screen {
             Screen::Games(s) => Some(self.systems.get(s).map(|s| s.name.clone())),
@@ -261,10 +309,7 @@ impl App {
         // From EmulationStation for a game shown again in Storage).
         self.gamelist_library_changed();
         self.rebuild();
-        if let Some(at) = was.and_then(|p| find_picked(&p, &self.items, &self.systems)) {
-            self.sel = at;
-            self.prev_sel = at;
-        }
+        was.restore(&self.items, &self.systems, &mut self.sel, &mut self.prev_sel);
         println!("library: the list read again is on the shelf");
         self.request_redraw();
         // New games get their box art the way Add games does.
@@ -302,6 +347,24 @@ mod tests {
         let gone = vec![sys("gb", &["a", "b"]), sys("gba", &["c", "e"])];
         let games_gone: Vec<Item> = (0..2).map(|g| Item::Game(1, g)).collect();
         assert_eq!(find_picked(&picked(Item::Game(1, 1), &old), &games_gone, &gone), None);
+    }
+
+    /// An upload's new list: a game inserted before the selected one moves its number, the selection follows the game.
+    #[test]
+    fn keep_selection_follows_the_game_across_a_new_list() {
+        let old = vec![sys("gb", &["a", "b", "c"])];
+        let new = vec![sys("gb", &["a", "aa", "b", "c"])];
+        let items_old: Vec<Item> = (0..3).map(|g| Item::Game(0, g)).collect();
+        let items_new: Vec<Item> = (0..4).map(|g| Item::Game(0, g)).collect();
+        let (mut sel, mut prev) = (1, 1); // "b"
+        KeepSelection::note(&items_old, sel, &old).restore(&items_new, &new, &mut sel, &mut prev);
+        assert_eq!((sel, prev), (2, 2), "still on b, not on the new aa at 1");
+        // The game is gone: the selection stays where it was.
+        let gone = vec![sys("gb", &["a", "c"])];
+        let items_gone: Vec<Item> = (0..2).map(|g| Item::Game(0, g)).collect();
+        let (mut sel, mut prev) = (1, 0);
+        KeepSelection::note(&items_old, sel, &old).restore(&items_gone, &gone, &mut sel, &mut prev);
+        assert_eq!((sel, prev), (1, 0));
     }
 
     #[test]

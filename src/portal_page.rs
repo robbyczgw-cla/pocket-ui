@@ -310,7 +310,7 @@ impl PortalPage {
             }
             text.draw(&mut band, Face::Title, 37, MARGIN, y, pal().chalk, head);
             y += crate::type_scale::line(37, 14);
-            for part in text.wrap(Face::Body, 28, body, w) {
+            for part in text.wrap_prose(Face::Body, 28, body, w) {
                 text.draw(&mut band, Face::Body, 28, MARGIN, y, pal().dust, &part);
                 y += step;
             }
@@ -324,7 +324,7 @@ impl PortalPage {
                         y += 16;
                     }
                     None => {
-                        for part in text.wrap(Face::Body, 28, "This Pocket's Wi-Fi address couldn't be read.", w) {
+                        for part in text.wrap_prose(Face::Body, 28, "This Pocket's Wi-Fi address couldn't be read.", w) {
                             text.draw(&mut band, Face::Body, 28, MARGIN, y, pal().alert, &part);
                             y += step;
                         }

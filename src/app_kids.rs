@@ -3,7 +3,7 @@
 //! start and Quit. Only less of them: one big case, Left, Right, A. The input goes through `kids_pad` first, and while
 //! the mode is on nothing behind it sees a button.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -20,6 +20,15 @@ use super::{App, MainItem, CANCEL, CONFIRM, FADE, HOST_CORES};
 
 /// The rows of the grown-ups' page.
 const ADULT: [Row; 8] = [Row::More, Row::NewDay, Row::Games, Row::Theme, Row::Limit, Row::Volume, Row::Pin, Row::TurnOff];
+
+/// The grown-ups' rows: "30 more minutes" and "Start today's time again" mean nothing under "No limit", so they are left out.
+fn adult_rows(minutes: Option<u32>) -> &'static [Row] {
+    if minutes.is_some() {
+        &ADULT
+    } else {
+        &ADULT[2..]
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Row {
@@ -421,6 +430,7 @@ impl App {
 
     fn kids_page_press(&mut self, b: Button) {
         let now = Instant::now();
+        let rows = adult_rows(self.kids.cfg.minutes);
         match &mut self.kids.page {
             Page::Pin(gate) => match gate.press(b, &self.kids.cfg.pin, now) {
                 GateOut::Stay => {}
@@ -434,11 +444,11 @@ impl App {
                 }
             },
             Page::Adult(sel) => match b {
-                Button::Up => *sel = (*sel + ADULT.len() - 1) % ADULT.len(),
-                Button::Down => *sel = (*sel + 1) % ADULT.len(),
+                Button::Up => *sel = (*sel + rows.len() - 1) % rows.len(),
+                Button::Down => *sel = (*sel + 1) % rows.len(),
                 x if x == CANCEL => self.kids.page = Page::Shelf,
                 x if x == CONFIRM => {
-                    let row = ADULT[*sel];
+                    let row = rows[*sel % rows.len()];
                     self.kids_adult_row(row);
                 }
                 _ => {}
@@ -620,6 +630,7 @@ impl App {
             }
             let lines = ["No games here yet", "Ask a grown-up to pick some."];
             self.kids_message(c, colours, lines[0], lines[1]);
+            self.kids_grownups_line(c, colours);
             return;
         }
         let sel = self.sel.min(n - 1);
@@ -778,11 +789,20 @@ impl App {
             y += (big_px as f32 * 1.1) as i32;
         }
         y += (20.0 * u) as i32;
-        for l in self.text.wrap_at_most(Face::Body, small_px, small, width, 3) {
+        for l in self.text.wrap_prose_at_most(Face::Body, small_px, small, width, 3) {
             let w = self.text.width(Face::Body, small_px, &l);
             self.kids_words(c, Face::Body, small_px, (c.w - w) / 2, y, colours.ink, colours.top, &l);
             y += (small_px as f32 * 1.3) as i32;
         }
+    }
+
+    /// A small line at the foot of the screens that stop the child: how a grown-up gets back in. Not on the playing shelf.
+    fn kids_grownups_line(&mut self, c: &mut Canvas, colours: Colours) {
+        let u = c.h as f32 / 1080.0;
+        let px = (34.0 * u).round().max(14.0) as u32;
+        let l = self.text.fit(Face::Body, px, "Grown-ups: hold SELECT and START.", c.w - (60.0 * u) as i32);
+        let w = self.text.width(Face::Body, px, &l);
+        self.text.draw(c, Face::Body, px, (c.w - w) / 2, c.h - (40.0 * u) as i32, colours.ink, &l);
     }
 
     fn kids_band(&mut self, c: &mut Canvas, colours: Colours, line: &str) {
@@ -840,6 +860,7 @@ impl App {
         soft_disc(c, cx + r / 2, cy - r / 4, r * 85 / 100, colours.top, 255, (0, 0, c.w, c.h));
         let line = if self.kids.kept_moment { "Your game is saved. It waits for you tomorrow, right where you left it." } else { "Your game waits for you tomorrow." };
         self.kids_message(c, colours, "That's all for today!", line);
+        self.kids_grownups_line(c, colours);
         self.kids_paint_hold(c, colours);
     }
 
@@ -966,13 +987,12 @@ impl App {
         } else if wrong > 0 {
             lines.push("That's not it. Try again.".to_string());
         }
-        if wrong >= kids::WRONG_BEFORE_HELP {
-            lines.push(format!("Forgot it? Put a file called {} on the card and restart.", kids::RESET_FILE));
-        }
+        // From the first look: the grown-up who forgot the PIN should not have to guess wrong three times to learn this.
+        lines.push(format!("Forgot it? Put a file called {} in the top folder of the card's ROCKNIX drive and restart.", kids::RESET_FILE));
         let (spx, mut y) = ((38.0 * u).round() as u32, (810.0 * u) as i32);
         let width = c.w - (100.0 * u) as i32;
         for line in lines {
-            for l in self.text.wrap_at_most(Face::Body, spx, &line, width, 2) {
+            for l in self.text.wrap_prose_at_most(Face::Body, spx, &line, width, 2) {
                 let w = self.text.width(Face::Body, spx, &l);
                 self.text.draw(c, Face::Body, spx, (c.w - w) / 2, y, colours.ink, &l);
                 y += (spx as f32 * 1.3) as i32;
@@ -988,7 +1008,7 @@ impl App {
         self.text.draw(c, Face::Title, (72.0 * u).round() as u32, margin, (130.0 * u) as i32, ink, title);
         let mut y = (196.0 * u) as i32;
         let spx = (34.0 * u).round() as u32;
-        for l in self.text.wrap_at_most(Face::Body, spx, line, c.w - 2 * margin, 3) {
+        for l in self.text.wrap_prose_at_most(Face::Body, spx, line, c.w - 2 * margin, 3) {
             self.text.draw(c, Face::Body, spx, margin, y, ink, &l);
             y += (spx as f32 * 1.35) as i32;
         }
@@ -998,13 +1018,21 @@ impl App {
     fn kids_paint_adult(&mut self, c: &mut Canvas, sel: usize) {
         c.clear(pal().void);
         let u = c.h as f32 / 1080.0;
+        // Picked games that were deleted or moved off the card meanwhile: the child's shelf is shorter, and why shows here.
+        let gone = self.kids.cfg.games.len().saturating_sub(self.kids_items().len());
         let line = if self.kids.ledger.clock_behind(kids::today()) {
-            "The clock is behind the last date it knew, so today's time goes on counting. Start it again here if that's wrong."
+            "The clock is behind the last date it knew, so today's time goes on counting. Start it again here if that's wrong.".to_string()
+        } else if gone == 1 {
+            "1 of the picked games isn't on the card any more.".to_string()
+        } else if gone > 1 {
+            format!("{} of the picked games aren't on the card any more.", gone)
         } else {
-            "For grown-ups. The child's saves and settings stay as they are."
+            "For grown-ups. The child's saves and settings stay as they are.".to_string()
         };
-        let words_end = self.kids_title(c, pal().chalk, "Kids mode", line);
+        let words_end = self.kids_title(c, pal().chalk, "Kids mode", &line);
         let cfg = self.kids.cfg.clone();
+        let rows = adult_rows(cfg.minutes);
+        let sel = sel % rows.len();
         let used = self.kids.ledger.seconds / 60;
         let values = |row: Row| match row {
             Row::More => cfg.minutes.map_or("No limit".to_string(), |m| format!("{used} of {} min today", m + self.kids.ledger.extra_minutes)),
@@ -1016,10 +1044,10 @@ impl App {
         };
         // Under the words however many lines they took, and over the hint bar.
         let rows_y = ((270.0 * u) as i32).max(words_end);
-        let row_h = ((78.0 * u) as i32).min((c.h - (90.0 * u) as i32 - rows_y) / ADULT.len() as i32);
+        let row_h = ((78.0 * u) as i32).min((c.h - (90.0 * u) as i32 - rows_y) / rows.len() as i32);
         let (x, w) = ((72.0 * u) as i32, c.w - (144.0 * u) as i32);
         let label_px = (42.0 * u).round() as u32;
-        for (i, row) in ADULT.iter().enumerate() {
+        for (i, row) in rows.iter().enumerate() {
             let y = rows_y + i as i32 * row_h;
             let selected = i == sel;
             let (fg, dim) = if selected {
@@ -1062,7 +1090,7 @@ impl App {
                 let margin = (72.0 * u) as i32;
                 for line in ["A 4-digit PIN", "5 to 20 games", "Blue or Pink", "A time per day and a loudest volume, if you like"] {
                     c.disc(margin + (10.0 * u) as i32, y - lpx as i32 / 3, (9.0 * u) as i32, pal().label);
-                    for l in self.text.wrap_at_most(Face::Body, lpx, line, c.w - 2 * margin - (40.0 * u) as i32, 2) {
+                    for l in self.text.wrap_prose_at_most(Face::Body, lpx, line, c.w - 2 * margin - (40.0 * u) as i32, 2) {
                         self.text.draw(c, Face::Body, lpx, margin + (40.0 * u) as i32, y, pal().chalk, &l);
                         y += (lpx as f32 * 1.3) as i32;
                     }
@@ -1122,7 +1150,7 @@ impl App {
                     format!("Forgot the PIN? Make a file called {} on the card (a computer or a phone with a card reader will do) and restart. Kids mode goes off, and saves and games stay.", kids::RESET_FILE)
                 };
                 for (line, colour, rows) in [("Hold SELECT and START for 5 seconds, then enter your PIN.", pal().chalk, 3), (forgot.as_str(), pal().dust, 6)] {
-                    for l in self.text.wrap_at_most(Face::Body, lpx, line, width, rows) {
+                    for l in self.text.wrap_prose_at_most(Face::Body, lpx, line, width, rows) {
                         self.text.draw(c, Face::Body, lpx, margin, y, colour, &l);
                         y += (lpx as f32 * 1.35) as i32;
                     }
@@ -1199,7 +1227,7 @@ impl App {
         if library[sel].own_saves {
             let spx = (30.0 * u).round() as u32;
             let mut y = c.h - (240.0 * u) as i32;
-            for l in self.text.wrap_at_most(Face::Body, spx, "Saves only in the game: Stop doesn't keep the moment.", c.w - x - w - (60.0 * u) as i32, 3) {
+            for l in self.text.wrap_prose_at_most(Face::Body, spx, "Saves only in the game: Stop doesn't keep the moment.", c.w - x - w - (60.0 * u) as i32, 3) {
                 self.text.draw(c, Face::Body, spx, x + w + (30.0 * u) as i32, y, pal().dust, &l);
                 y += (spx as f32 * 1.3) as i32;
             }
@@ -1228,7 +1256,7 @@ impl App {
         let u = c.h as f32 / 1080.0;
         let (x, spx) = ((72.0 * u) as i32, (30.0 * u).round() as u32);
         let mut y = y;
-        for l in self.text.wrap_at_most(Face::Body, spx, line, c.w - 2 * x, 2) {
+        for l in self.text.wrap_prose_at_most(Face::Body, spx, line, c.w - 2 * x, 2) {
             self.text.draw(c, Face::Body, spx, x, y, pal().dust, &l);
             y += (spx as f32 * 1.3) as i32;
         }
@@ -1354,9 +1382,11 @@ impl App {
             "adult" => {
                 self.kids_enter();
                 self.kids.ledger.seconds = 1320;
-                // The clock behind the last date known: `kids-adult:0:behind`.
-                if parts.next() == Some("behind") {
-                    self.kids.ledger.day = kids::today() + 40;
+                // The clock behind the last date known: `kids-adult:0:behind`; picked games gone from the card: `:gone`.
+                match parts.next() {
+                    Some("behind") => self.kids.ledger.day = kids::today() + 40,
+                    Some("gone") => self.kids.cfg.games.push(PathBuf::from("/nowhere/Gone Game.gba")),
+                    _ => {}
                 }
                 self.kids.page = Page::Adult(arg.parse().unwrap_or(0));
             }

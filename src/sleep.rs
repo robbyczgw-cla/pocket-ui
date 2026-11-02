@@ -284,7 +284,8 @@ impl Game {
         }
     }
 
-    /// Saves and ends the game before power off; waits until its processes are gone (up to ~25 s).
+    /// Saves and ends the game before power off; waits until its processes are gone (up to ~25 s, longer while it writes,
+    /// `quit::power_off_waits`).
     fn quit_for_power_off(&self) {
         let Some(g) = self.pgid else { return };
         control::resume_game(g);
@@ -304,9 +305,9 @@ impl Game {
                 control::terminate_game(g, false);
             }
         }
-        let end = Instant::now() + Duration::from_secs(25);
+        let since = Instant::now();
         // SAFETY: kill(2) with signal 0 only checks that the process group exists.
-        while Instant::now() < end && unsafe { libc::kill(-g, 0) } == 0 {
+        while crate::quit::power_off_waits(since.elapsed(), unsafe { libc::kill(-g, 0) } == 0, crate::fast_switch::saving_now(g)) {
             std::thread::sleep(Duration::from_millis(200));
         }
     }

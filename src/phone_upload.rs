@@ -941,8 +941,34 @@ fn shown(roots: &Roots, path: &Path) -> String {
         .unwrap_or_else(|_| path.file_name().unwrap_or_default().to_string_lossy().into_owned())
 }
 
+/// A short code for the refusals this page can meet, so that the page can say them in the phone's language
+/// (`assets/phone-upload/app.js`, `reasons`); the English sentence stays as the fallback and for the log.
+fn refusal_code(e: &Refused) -> Option<&'static str> {
+    let m = e.message();
+    Some(match e {
+        Refused::Short => "cut_off",
+        Refused::Exists(_) => "exists",
+        Refused::NoSpace(_) => "no_room",
+        Refused::TooBig(_) if m.starts_with("That disc sheet") => "sheet_big",
+        Refused::TooBig(_) => "too_big",
+        _ if m.starts_with("That file name") => "bad_name",
+        _ if m.starts_with("Saves can't") => "saves",
+        _ if m.starts_with("That is a BIOS file") => "bios",
+        _ if m.starts_with("A name with") => "marker",
+        _ if m.starts_with("A folder with") => "folder_marker",
+        _ if m.starts_with("That system doesn't take") => "wrong_system",
+        _ if m.starts_with("No system takes") => "no_system",
+        _ if m.starts_with("Several systems take") => "choose_system",
+        _ if m.starts_with("That folder name") => "bad_folder",
+        _ if m.ends_with(" is in the way.") => "in_the_way",
+        _ if m.starts_with("This disc sheet names") => "sheet_names",
+        _ if m.starts_with("This page has taken enough") => "enough",
+        _ => return None,
+    })
+}
+
 fn refused(e: Refused) -> Response {
-    Response::json(e.status(), &json!({ "ok": false, "error": e.message() }))
+    Response::json(e.status(), &json!({ "ok": false, "error": e.message(), "code": refusal_code(&e) }))
 }
 
 /// Before a file: where it would go, whether it fits, whether it is there. Makes nothing on the card.
@@ -1339,6 +1365,21 @@ mod tests {
             let (status, body) = env.up(&format!("name={name}&system=psx"), b"x");
             assert_eq!(status, 403, "{name}: {body}");
         }
+    }
+
+    #[test]
+    fn refusals_carry_a_code_for_the_phones_language() {
+        let env = Env::new(IDLE);
+        for (query, code) in [("name=Game.srm&system=psx", "saves"), ("name=scph1001.bin&system=psx", "bios"), ("name=Game.xyz", "no_system"), ("name=Game.gba&system=psx", "wrong_system")] {
+            let (_, body) = env.up(query, b"x");
+            assert!(body.contains(&format!("\"code\":\"{code}\"")), "{query}: {body}");
+        }
+        std::fs::create_dir_all(env.roms.join("gba")).unwrap();
+        std::fs::write(env.roms.join("gba/Keep.gba"), b"old").unwrap();
+        let (_, body) = env.up("name=Keep.gba", b"new");
+        assert!(body.contains("\"code\":\"exists\""), "{body}");
+        assert_eq!(refusal_code(&Refused::Short), Some("cut_off"));
+        assert_eq!(refusal_code(&Refused::Io("x".into())), None, "unknown ones fall back to the English sentence");
     }
 
     #[test]

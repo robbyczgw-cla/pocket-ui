@@ -31,6 +31,67 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+/// While pocket-core writes its exit save this file holds its process id and start time: pocket-ui's Quit and power off don't
+/// stop a writer (`quit::SAVE_LIMIT`).
+const SAVING_FILE: &str = "/tmp/pocket-core.saving";
+
+/// A process's group and start time out of `/proc/<pid>/stat`. The name in it may hold anything: fields count from its last `)`.
+fn group_and_start(stat: &str) -> Option<(i32, u64)> {
+    let fields: Vec<&str> = stat.rsplit_once(')')?.1.split_whitespace().collect();
+    // After the name: state (field 3), ppid, pgrp (5), ... starttime (22).
+    Some((fields.get(2)?.parse().ok()?, fields.get(19)?.parse().ok()?))
+}
+
+/// Whether a mark says what game `pgid` is doing: a process of that group, the very one that wrote it (a pid used again has
+/// another start time). Anything else in the file (empty, damaged, left by a killed game) is no writer.
+fn mark_holds(mark: &str, pgid: i32, stat_of: impl Fn(i32) -> Option<String>) -> bool {
+    let mut words = mark.split_whitespace();
+    let (Some(pid), Some(start)) = (words.next().and_then(|p| p.parse::<i32>().ok()), words.next().and_then(|s| s.parse::<u64>().ok())) else {
+        return false;
+    };
+    pid > 0 && stat_of(pid).as_deref().and_then(group_and_start) == Some((pgid, start))
+}
+
+fn proc_stat(pid: i32) -> Option<String> {
+    std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()
+}
+
+/// pocket-core: the exit save begins (`true`) or is done.
+pub fn saving(begins: bool) {
+    let file = Path::new(SAVING_FILE);
+    if begins {
+        publish_saving(file);
+    } else {
+        forget_own_saving(file);
+    }
+}
+
+/// The whole mark appears at once (a temporary file put in place): a reader sees it complete or not at all.
+fn publish_saving(file: &Path) {
+    let me = std::process::id() as i32;
+    if let Some((_, start)) = proc_stat(me).as_deref().and_then(group_and_start) {
+        let _ = crate::fsutil::replace_file(file, format!("{me} {start}").as_bytes());
+    }
+}
+
+/// Only the writer takes its mark away, and only its own. A mark a killed game left names a dead process: no reader counts it,
+/// and the next writer's replaces it.
+fn forget_own_saving(file: &Path) {
+    let me = std::process::id().to_string();
+    if std::fs::read_to_string(file).is_ok_and(|mark| mark.split_whitespace().next() == Some(me.as_str())) {
+        let _ = std::fs::remove_file(file);
+    }
+}
+
+/// pocket-ui: game `pgid` is writing its exit save now. Only looks: empty, damaged or another's is simply no mark.
+pub fn saving_now(pgid: i32) -> bool {
+    saving_at(Path::new(SAVING_FILE), pgid)
+}
+
+fn saving_at(file: &Path, pgid: i32) -> bool {
+    std::fs::read_to_string(file).is_ok_and(|mark| mark_holds(&mark, pgid, proc_stat))
+}
+
 /// Environment variable with the number of the descriptor pocket-core writes [`SAVED`] into.
 pub const HANDOFF_FD: &str = "POCKET_HANDOFF_FD";
 /// The line pocket-core writes once its exit save is complete and nothing of it touches shared state any more.
@@ -334,6 +395,21 @@ pub fn wait_ended(pgid: i32, timeout: Duration) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_saving_mark_counts_only_for_the_process_that_wrote_it_in_this_game() {
+        // pid, (name), state, ppid, pgrp, ... with 22 as starttime: a name with blanks and brackets doesn't shift them.
+        let stat = |pgrp: i32, start: u64| format!("41 (pocket (core) x) S 1 {pgrp} 41 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 {start} 0 0");
+        let live = |pgrp, start| move |pid: i32| (pid == 41).then(|| stat(pgrp, start));
+        assert!(mark_holds("41 777", 40, live(40, 777)));
+        assert!(!mark_holds("41 777", 39, live(40, 777)), "another game's group");
+        assert!(!mark_holds("41 777", 40, live(40, 778)), "the pid used again by another process");
+        assert!(!mark_holds("42 777", 40, live(40, 777)), "the writer is gone");
+        for bad in ["", " ", "41", "-1 777", "0 777", "abc 777", "41 abc", "../1 777"] {
+            assert!(!mark_holds(bad, 40, |_| Some(stat(40, 777))), "{bad:?}");
+        }
+    }
+
     use crate::testutil::TestDir;
     use std::path::PathBuf;
 
@@ -494,5 +570,34 @@ mod tests {
         assert_eq!(unsafe { libc::fcntl(fd, libc::F_GETFD) } & libc::FD_CLOEXEC, libc::FD_CLOEXEC);
         cmd.spawn().unwrap().wait().unwrap();
         h.watch(0, || {});
+    }
+
+    #[test]
+    fn a_reader_never_takes_away_a_mark_and_a_writer_publishes_it_whole() {
+        let d = crate::testutil::TestDir::new("saving-mark");
+        let file = d.join("saving");
+        let me = std::process::id() as i32;
+        let (group, _) = group_and_start(&proc_stat(me).unwrap()).unwrap();
+        // What the old writer showed between its open and its write: an empty file. The reader leaves it.
+        std::fs::write(&file, "").unwrap();
+        assert!(!saving_at(&file, group));
+        assert!(file.exists(), "not unlinked under the writer");
+        std::fs::write(&file, "12").unwrap();
+        assert!(!saving_at(&file, group), "a partial mark is no mark");
+        assert!(file.exists());
+        // A dead process's mark: ignored, still there, and replaced by the next writer.
+        std::fs::write(&file, "2147483646 99").unwrap();
+        assert!(!saving_at(&file, group));
+        assert!(file.exists());
+        // Another's mark isn't this writer's to remove.
+        forget_own_saving(&file);
+        assert!(file.exists());
+        publish_saving(&file);
+        assert!(saving_at(&file, group));
+        assert!(!saving_at(&file, group + 1), "another game's group");
+        let left: Vec<_> = std::fs::read_dir(&d).unwrap().flatten().map(|e| e.file_name()).collect();
+        assert_eq!(left, ["saving"], "no temporary file left");
+        forget_own_saving(&file);
+        assert!(!file.exists() && !saving_at(&file, group));
     }
 }

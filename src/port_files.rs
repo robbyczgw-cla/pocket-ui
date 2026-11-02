@@ -577,7 +577,7 @@ impl FilesPage {
             format!("{} needs files from your own copy of the game. pocket-ui doesn't download them.", self.title)
         };
         let mut y = 176;
-        for l in text.wrap(Face::Body, 28, &lead, w).iter().take(2) {
+        for l in text.wrap_prose(Face::Body, 28, &lead, w).iter().take(2) {
             text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, l);
             y += crate::type_scale::line(28, 10);
         }
@@ -628,7 +628,7 @@ impl FilesPage {
             };
             let folder = self.share_dir.replace('/', "\\");
             let lines = [first, format!("Then put {what} into games-roms\\{PORTS_SHARE_NAME}\\{folder}.")];
-            let wrapped: Vec<String> = lines.iter().flat_map(|l| text.wrap(Face::Body, 24, l, w)).take(3).collect();
+            let wrapped: Vec<String> = lines.iter().flat_map(|l| text.wrap_prose(Face::Body, 24, l, w)).take(3).collect();
             for l in wrapped {
                 text.draw(c, Face::Body, 24, MARGIN, y + 40, pal().chalk, &l);
                 y += 34;
@@ -679,7 +679,7 @@ pub fn inst_lines(text: &mut Text, inst: &str, w: i32) -> Vec<String> {
             }
             continue;
         }
-        for line in text.wrap(Face::Body, 24, para, w) {
+        for line in text.wrap_prose(Face::Body, 24, para, w) {
             let mut rest = line.as_str();
             while text.width(Face::Body, 24, rest) > w {
                 // The longest start of `rest` that fits, at least one character.

@@ -226,6 +226,14 @@ fn inline(src: &str, bold: bool, italic: bool, out: &mut Vec<Span>) {
                             }
                             out.push(s);
                         }
+                        // The device can't open a link: an outside address is shown as text to type on a phone.
+                        let target: String = chars[cl + 2..e].iter().collect();
+                        if let Some(shown) = target.strip_prefix("https://").or_else(|| target.strip_prefix("http://")) {
+                            let shown = shown.trim_end_matches('/');
+                            if !inner.contains(shown) {
+                                out.push(Span { text: format!(" ({shown})"), bold, italic, kind: Kind::Text });
+                            }
+                        }
                     }
                     i = e + 1;
                 }
@@ -1605,6 +1613,15 @@ mod tests {
     }
 
     #[test]
+    fn an_outside_link_shows_its_address_as_text() {
+        let s = spans("see [ROCKNIX explains it](https://rocknix.org/play/add-games/) first");
+        assert_eq!(texts(&s), "see ROCKNIX explains it (rocknix.org/play/add-games) first");
+        assert_eq!(s[1].kind, Kind::Link);
+        assert_eq!(s[2].kind, Kind::Text, "the address is plain text, not a second link");
+        assert_eq!(texts(&spans("[rocknix.org](https://rocknix.org/)")), "rocknix.org", "not twice when the words are the address");
+    }
+
+    #[test]
     fn inline_markup_bold_italic_code_links_and_images() {
         let s = spans("a **b** *c* `d e` [link text](playing.md#looks) tail");
         assert_eq!(texts(&s), "a b c d e link text tail");
@@ -1633,7 +1650,7 @@ mod tests {
                 ..Span::default()
             }
         );
-        // A link inside bold stays a bold link; the address is never shown.
+        // A link inside bold stays a bold link; an inside address is never shown.
         let s = spans("**[install guide](../INSTALL.md)**");
         assert_eq!(
             s,

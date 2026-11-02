@@ -223,3 +223,19 @@ fn typed_text_is_painted_as_typed() {
     assert!(!s.visible.iter().any(|v| v == "Unbekannt"), "{:?}", s.visible);
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+/// Every row that opens a page says so when it is selected: Kids mode's row showed nothing at its right end (the size
+/// sweep, 2026-11-02), while Updates, Storage and the others show ">".
+#[test]
+fn the_selected_kids_mode_row_shows_that_it_opens_a_page() {
+    let tmp = std::env::temp_dir().join(format!("pocketui-settings-kids-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+    std::fs::write(tmp.join("none.cfg"), "<systemList></systemList>").unwrap();
+    let stub = wayland(&tmp);
+    for lang in ["en", "de", "es"] {
+        let s = shot(&tmp, &stub, "settings:5:4", lang, "1280x720", "normal", false);
+        assert!(s.visible.iter().any(|v| v.trim() == ">"), "{lang}: no \">\" on the selected Kids mode row: {:?}", s.visible);
+    }
+    let _ = std::fs::remove_dir_all(&tmp);
+}

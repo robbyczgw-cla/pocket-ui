@@ -40,9 +40,11 @@ const ART: &[(&str, &[u8])] = &[
     ("pc", include_bytes!("../assets/systems/pc.png")),
     ("ports", include_bytes!("../assets/systems/ports.png")),
     ("ps2", include_bytes!("../assets/systems/ps2.png")),
+    ("ps3", include_bytes!("../assets/systems/ps3.png")),
     ("psp", include_bytes!("../assets/systems/psp.png")),
     ("psvita", include_bytes!("../assets/systems/psvita.png")),
     ("psx", include_bytes!("../assets/systems/psx.png")),
+    ("saturn", include_bytes!("../assets/systems/saturn.png")),
     ("scummvm", include_bytes!("../assets/systems/scummvm.png")),
     ("sega32x", include_bytes!("../assets/systems/sega32x.png")),
     ("segacd", include_bytes!("../assets/systems/segacd.png")),
@@ -55,6 +57,7 @@ const ART: &[(&str, &[u8])] = &[
     ("vectrex", include_bytes!("../assets/systems/vectrex.png")),
     ("virtualboy", include_bytes!("../assets/systems/virtualboy.png")),
     ("wii", include_bytes!("../assets/systems/wii.png")),
+    ("wiiu", include_bytes!("../assets/systems/wiiu.png")),
     ("wonderswan", include_bytes!("../assets/systems/wonderswan.png")),
     ("xbox", include_bytes!("../assets/systems/xbox.png")),
 ];
@@ -86,6 +89,11 @@ const ALIASES: &[(&str, &str)] = &[
 fn slot(system: &str) -> Option<usize> {
     let id = ALIASES.iter().find(|(alias, _)| *alias == system).map_or(system, |(_, id)| *id);
     ART.iter().position(|(name, _)| *name == id)
+}
+
+/// A system's own name for its picture: an alias's hardware (`sfc` is `snes`), else the name it came with.
+pub fn canonical(system: &str) -> &str {
+    ALIASES.iter().find(|(alias, _)| *alias == system).map_or(system, |(_, id)| id)
 }
 
 /// The embedded picture for a system id, aliases included; None means the card stays plain.
@@ -223,6 +231,8 @@ mod tests {
         "nds",
         "gamecube",
         "wii",
+        "wiiu",
+        "ps3",
         "3ds",
         "pico-8",
         "ports",

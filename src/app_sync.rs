@@ -13,7 +13,7 @@ use pocket_ui::sync_page::{Action, Event, SyncPage, ROWS};
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL};
 
 /// How long the notice after a game stays on Home.
 const NOTE_FOR: Duration = Duration::from_secs(6);
@@ -323,11 +323,7 @@ impl App {
         self.paint_sync_details(c, &page, top + visible as i32 * row + 14);
 
         let a = if page.row() == pocket_ui::sync_page::Row::Versions { "Open" } else { "Switch" };
-        let hints_at = self.nu_hints(c, &[("B", "Back"), ("A", a)]);
-        let x = pad + NU_BTN_PAD;
-        let desc = self.text.fit(Face::Body, NU_SMALL, page.describe(page.row()), hints_at - 24 - x);
-        self.text
-            .draw(c, Face::Body, NU_SMALL, x, c.h - pad - NU_PILL / 2 + pocket_ui::type_scale::mid(NU_SMALL), pal().text, &desc);
+        self.nu_foot(c, &[("B", "Back"), ("A", a)], page.describe(page.row()), pal().text);
         self.sync.page = Some(page);
     }
 
@@ -370,7 +366,7 @@ impl App {
             let bottom = c.h - NU_PAD - NU_PILL - 10 - if page.ip.is_none() { step + 10 } else { 0 };
             for l in lines {
                 let room = if y > bottom { 0 } else { ((bottom - y) / step + 1) as usize };
-                for line in self.text.wrap_at_most(Face::Body, 26, l, right - left, room) {
+                for line in self.text.wrap_prose_at_most(Face::Body, 26, l, right - left, room) {
                     self.text.draw(c, Face::Body, 26, left, y, pal().dust, &line);
                     y += step;
                 }

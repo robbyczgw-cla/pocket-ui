@@ -93,6 +93,23 @@ fn every_screen_says_what_it_is_about() {
     }
 }
 
+/// "30 more minutes today" and "Start today's time again" only mean something with a daily limit.
+#[test]
+fn the_grown_up_page_leaves_out_the_time_rows_under_no_limit() {
+    let card = Card::new();
+    let file = card.data().join("data/kids.json");
+    let mut kids: serde_json::Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+    kids["minutes"] = serde_json::json!(45);
+    std::fs::write(&file, kids.to_string()).unwrap();
+    let limited = card.screen("kids-adult", false);
+    assert!(limited.contains("30 more minutes today") && limited.contains("Start today's time again"), "{limited}");
+    kids["minutes"] = serde_json::Value::Null;
+    std::fs::write(&file, kids.to_string()).unwrap();
+    let open = card.screen("kids-adult", false);
+    assert!(!open.contains("30 more minutes today") && !open.contains("Start today's time again"), "{open}");
+    assert!(open.contains("Games") && open.contains("Time per day") && open.contains("Turn off Kids mode"), "{open}");
+}
+
 #[test]
 fn a_game_that_left_the_card_is_gone_from_the_shelf_and_an_empty_shelf_says_so() {
     let card = Card::new();

@@ -58,7 +58,7 @@ Volume level above it, which is shared.
 ## Sleep and power
 
 > **Status:** waking from deep sleep has been timed on a Mini V2: the screen and the game are back well under a
-> second. Deep sleep uses about 5% of the battery an hour (measured over 5½ hours on a Mini V2). **Power off**,
+> second. Deep sleep uses a few percent of the battery an hour (about 5% measured over 5½ hours on a Mini V2, about 2.6% on an RG35XX SP). **Power off**,
 > **Restart**, **Restart pocket-ui**, **Switch off after sleeping** and the power button set to **Screen off** have
 > not been tried on a real device yet. Save your game before you put the device away until this note is gone.
 
@@ -75,7 +75,7 @@ Sleep works in two steps, each with its own time in Settings → System → **Sl
 - **Power off** (in the power menu) saves and closes the running game first. The next start of pocket-ui opens
   that game again.
 - **Switch off after sleeping.** Off unless you turn it on: a sleeping Pocket stays asleep until you wake it, as on
-  other handhelds. Deep sleep still uses about 5% of the battery an hour, so a full battery would be empty after a day
+  other handhelds. Deep sleep still uses a few percent of the battery an hour, so a full battery can be empty after a day or two
   in a bag. If you would rather it switched itself off, Settings → System → **Sleep & power** sets the time: 1 h, 3 h
   or 8 h. After that long asleep (3 hours is about 14% of the battery) the Pocket saves the game and switches itself
   off, as Power off does, with the screen dark. When you switch it on again, the game opens where you left it,

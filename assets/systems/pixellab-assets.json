@@ -888,6 +888,40 @@
    ],
    "source": "Wikimedia Commons File:PlayStation-Vita-1101-FL.jpg (https://commons.wikimedia.org/wiki/File:PlayStation-Vita-1101-FL.jpg), 1280 px thumbnail",
    "result": "assets/systems/psvita.png"
+  },
+  "pd_ps3": {
+   "system": "ps3",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-11-02",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    845
+   ],
+   "output_size": [
+    256,
+    169
+   ],
+   "source": "Wikimedia Commons File:Sony-PlayStation-PS3-Slim-Console-FL.jpg (https://commons.wikimedia.org/wiki/File:Sony-PlayStation-PS3-Slim-Console-FL.jpg), 1280 px thumbnail, lettering painted over on the photo first",
+   "result": "assets/systems/ps3.png"
+  },
+  "pd_wiiu": {
+   "system": "wiiu",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-11-02",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    865
+   ],
+   "output_size": [
+    256,
+    173
+   ],
+   "source": "Wikimedia Commons File:Nintendo-Wii-U-Console-FL.jpg (https://commons.wikimedia.org/wiki/File:Nintendo-Wii-U-Console-FL.jpg), 1280 px thumbnail, lettering painted over on the photo first",
+   "result": "assets/systems/wiiu.png"
   }
  }
 }

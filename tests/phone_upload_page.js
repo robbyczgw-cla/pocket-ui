@@ -15,7 +15,7 @@ class Node_ {
   all(tag, out = []) { for (const c of this.children) { if (c.tag === tag) out.push(c); c.all(tag, out); } return out; }
 }
 
-function page(systems) {
+function page(systems, language = "en") {
   const byId = {};
   const get = (id) => (byId[id] = byId[id] || new Node_("div", id));
   get("data").textContent = JSON.stringify({ systems, saves: ["srm"], disc: ["cue", "bin", "gdi", "raw", "iso"], prefer: { gdi: "dreamcast" } });
@@ -38,7 +38,7 @@ function page(systems) {
   }
   const sandbox = {
     document: { getElementById: get, querySelectorAll: () => [], createElement: (t) => new Node_(t), documentElement: {} },
-    navigator: { language: "en", userAgent: "test" },
+    navigator: { language, userAgent: "test" },
     location: { pathname: "/code/" },
     XMLHttpRequest: Xhr,
     FileReader: Reader,
@@ -50,6 +50,7 @@ function page(systems) {
   };
   vm.runInNewContext(fs.readFileSync(process.argv[2], "utf8"), sandbox);
   return {
+    sandbox,
     sent,
     list: get("list"),
     pick(id, files) {
@@ -64,7 +65,13 @@ function page(systems) {
       sel.fire("change");
     },
     row(name) { return this.list.children.find((li) => li.children[0].textContent === name); },
-    settle: () => new Promise((done) => setTimeout(done, 40)),
+    // Until nothing more is sent for a while (a fixed wait was too short on a loaded build machine).
+    async settle() {
+      for (let last = -1; last !== this.sent.length; ) {
+        last = this.sent.length;
+        await new Promise((done) => setTimeout(done, 40));
+      }
+    },
   };
 }
 
@@ -150,6 +157,24 @@ const DISCS = [
       "name=track01.bin&size=2&system=dreamcast&dir=Game",
       "name=track01.bin&size=2&system=saturn&dir=Game",
     ]);
+  }
+  // The words follow the phone's language: German, Spanish, English for everything else; a missing line shows as undefined.
+  {
+    const words = {};
+    for (const lang of ["de", "es-MX", "es", "en-US", "fr", ""]) {
+      const p = page(DISCS, lang);
+      p.pick("files", [file("Sonic.bin"), file("Game.srm")]);
+      await p.settle();
+      const lines = [p.row("Sonic.bin").children[1].textContent, p.row("Game.srm").children[1].textContent];
+      assert.ok(lines.every((l) => l && !l.includes("undefined")), lang + ": " + lines);
+      words[lang] = lines.join(" | ");
+    }
+    assert.strictEqual(words.es, words["es-MX"]);
+    assert.strictEqual(words["en-US"], words.fr);
+    assert.ok(words.de.includes("Spielstände") && words.es.includes("partidas") && words["en-US"].includes("Saves"), JSON.stringify(words));
+    assert.notStrictEqual(words.de, words.es);
+    const es = page(DISCS, "es");
+    assert.strictEqual(es.sandbox.document.documentElement.lang, "es");
   }
   console.log("ok");
 })().catch((e) => {

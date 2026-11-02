@@ -41,6 +41,9 @@ fn release_out(dir: &Path) -> PathBuf {
     std::fs::write(out.join(format!("pocket-ui-{VERSION}-rp-mini-v2.img.xz")), vec![7u8; 50_000]).unwrap();
     std::fs::write(out.join(format!("pocket-ui-{VERSION}-rp-mini-v2.txt")), b"notes of the image").unwrap();
     std::fs::write(out.join("NOTES.txt"), b"Faster menus.").unwrap();
+    // The Ports scripts, named with spaces as the build writes them.
+    std::fs::write(out.join("Install pocket-ui.sh"), b"#!/bin/sh\n# installer\n").unwrap();
+    std::fs::write(out.join("Uninstall pocket-ui.sh"), b"#!/bin/sh\n# uninstaller\n").unwrap();
     out
 }
 
@@ -135,6 +138,12 @@ fn builds_a_signed_list_that_names_the_files_of_the_github_release() {
     }
     let sums = std::fs::read_to_string(site.join("github/SHA256SUMS")).unwrap();
     assert!(sums.contains(&format!("{}  pocket-ui-{VERSION}-aarch64.tar.gz", app.sha256)), "{sums}");
+    // GitHub dots the spaces of an asset's name: the scripts are listed and summed under the names it will give them.
+    for name in ["Install.pocket-ui.sh", "Uninstall.pocket-ui.sh"] {
+        assert!(assets.lines().any(|l| l.ends_with(&format!("/{name}")) && Path::new(l).is_file()), "{name} in {assets}");
+        assert!(sums.lines().any(|l| l.ends_with(&format!("  {name}"))), "{name} in {sums}");
+    }
+    assert!(!sums.contains(" pocket-ui.sh") && !sums.contains("  Install pocket"), "no name with a space: {sums}");
     let next = std::fs::read_to_string(site.join("NEXT-STEPS.txt")).unwrap();
     assert!(next.contains(&format!("gh release create v{VERSION} --repo owner/pocket-ui")), "{next}");
     assert!(next.contains("--check"), "{next}");

@@ -413,7 +413,9 @@ watch_fan() {
 # Processes of group $1, without zombies; with $2 = spare, not runemu.sh itself.
 group_members() {
   for stat in /proc/[0-9]*/stat; do
-    s=$(cat "$stat" 2>/dev/null) || continue
+    # `read`, not `cat`: no process per entry. On a busy host (thousands of processes; the gate's server) a scan of
+    # forks took minutes and the launcher tests stalled in it.
+    read -r s 2>/dev/null <"$stat" || continue
     rest=${s##*) }
     # state ppid pgrp ...
     # shellcheck disable=SC2086
@@ -422,8 +424,10 @@ group_members() {
     pid=${pid%/stat}
     [ "$1" = Z ] && continue
     [ "$3" = "$group" ] || continue
-    if [ "$spare" = spare ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = runemu.sh ]; then
-      continue
+    if [ "$spare" = spare ]; then
+      comm=
+      read -r comm 2>/dev/null <"/proc/$pid/comm"
+      [ "$comm" = runemu.sh ] && continue
     fi
     echo "$pid"
   done

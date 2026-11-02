@@ -205,7 +205,8 @@ impl MotionUi {
             let new: Vec<(String, String)> = hints.iter().map(|(k, l)| (k.to_string(), l.to_string())).collect();
             let old = std::mem::replace(&mut self.hints, new);
             // The first hints of a page come with the page.
-            if !old.is_empty() && motion::allowed(Kind::Fade) {
+            // A snapshot is a picture at rest: its frames come milliseconds apart, so a fade would show both hint sets.
+            if !old.is_empty() && motion::allowed(Kind::Fade) && !std::env::args().any(|a| a == "--snapshot") {
                 self.old_hints = old;
                 self.hints_at = Some(now);
                 motion::keep_alive(motion::end_of(now, HINTS));

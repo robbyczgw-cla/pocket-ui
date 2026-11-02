@@ -315,6 +315,10 @@ for SH in $SHELLS; do
     inst --check
     rc=$?
     check "$SH: the $experimental passes as experimental, without an option" '[ $rc = 0 ] && said "device: $experimental, experimental" && said "Report a problem"'
+    case "$experimental" in
+      'AYN Odin 2 Mini') check "$SH: the Odin 2 Mini's note says the project played on it, not 'untested'" 'said "has played on this model" && ! said "hasn'"'"'t been tested"' ;;
+      *) check "$SH: the $experimental's note says it is untested" 'said "hasn'"'"'t been tested on one yet"' ;;
+    esac
   done
   # ROCKNIX's H700 image: exactly the Anbernic models pocket-ui has a profile for.
   for h700 in 'Anbernic RG28XX' 'Anbernic RG35XX 2024' 'Anbernic RG35XX Plus' 'Anbernic RG35XX H' 'Anbernic RG35XX Pro' 'Anbernic RG35XX SP' 'Anbernic RG40XX H' 'Anbernic RG40XX V' 'Anbernic RG34XX' 'Anbernic RG34XX-SP' 'Anbernic RG-SP'; do
@@ -324,6 +328,10 @@ for SH in $SHELLS; do
     inst --check
     rc=$?
     check "$SH: the $h700 (H700 image) passes as experimental, without an option" '[ $rc = 0 ] && said "ROCKNIX 20261001 for H700" && said "device: $h700, experimental" && said "Report a problem"'
+    case "$h700" in
+      'Anbernic RG35XX Plus'|'Anbernic RG35XX SP') check "$SH: the $h700's note says the project played on it" 'said "has played on this model"' ;;
+      *) check "$SH: the $h700's note says it is untested" 'said "hasn'"'"'t been tested on one yet"' ;;
+    esac
   done
   make_root
   sed -i 's/SM8250/H700/' "$r/etc/os-release"

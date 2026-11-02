@@ -17,7 +17,7 @@ use pocket_ui::system_ctl::SharedHw;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL};
 
 /// How often the open page looks at the devices.
 const POLL_EVERY: Duration = Duration::from_secs(2);
@@ -424,12 +424,8 @@ impl App {
         } else if page.can_forget() {
             hints.push(("X", "Forget"));
         }
-        let hints_at = self.nu_hints(c, &hints);
-        let x = pad + NU_BTN_PAD;
-        let desc = self.text.fit(Face::Body, NU_SMALL, &page.describe(page.row()), hints_at - 24 - x);
         let color = if page.confirm_forget.is_some() { pal().alert } else { pal().text };
-        self.text
-            .draw(c, Face::Body, NU_SMALL, x, c.h - pad - NU_PILL / 2 + pocket_ui::type_scale::mid(NU_SMALL), color, &desc);
+        self.nu_foot(c, &hints, &page.describe(page.row()), color);
     }
 
     /// Below the list: what is going on, or what to do.

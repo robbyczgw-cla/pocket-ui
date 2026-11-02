@@ -14,7 +14,7 @@ use pocket_ui::tailscale_page::{Action, Event, Row, TailscalePage, View, ROWS};
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL};
 
 /// How often the open page asks Tailscale how it is.
 const POLL_EVERY: Duration = Duration::from_secs(2);
@@ -292,11 +292,7 @@ impl App {
 
         self.paint_tailscale_details(c, page, top + ROWS.len() as i32 * row + 14);
 
-        let hints_at = self.nu_hints(c, &[("B", "Back"), ("A", if page.row() == Row::Switch { "Switch" } else { "Open" })]);
-        let x = pad + NU_BTN_PAD;
-        let desc = self.text.fit(Face::Body, NU_SMALL, page.describe(page.row()), hints_at - 24 - x);
-        self.text
-            .draw(c, Face::Body, NU_SMALL, x, c.h - pad - NU_PILL / 2 + pocket_ui::type_scale::mid(NU_SMALL), pal().text, &desc);
+        self.nu_foot(c, &[("B", "Back"), ("A", if page.row() == Row::Switch { "Switch" } else { "Open" })], page.describe(page.row()), pal().text);
     }
 
     /// Below the list: the status, and what to do or what the Pocket is called.
@@ -342,7 +338,7 @@ impl App {
             }
             y = below;
             let note = "Tailscale only sets up the network. To log in with SSH, switch on Remote access too.";
-            for l in self.text.wrap(Face::Body, 24, note, right - left) {
+            for l in self.text.wrap_prose(Face::Body, 24, note, right - left) {
                 self.text.draw(c, Face::Body, 24, left, y, pal().dust, &l);
                 y += pocket_ui::type_scale::line(24, 8);
             }
@@ -351,7 +347,7 @@ impl App {
         y = below;
         // What a press could not do without a network: said calmly, in the page's own colour, not as an error.
         if let Some(note) = page.note {
-            for line in self.text.wrap(Face::Body, 26, note, right - left) {
+            for line in self.text.wrap_prose(Face::Body, 26, note, right - left) {
                 self.text.draw(c, Face::Body, 26, left, y, pal().text, &line);
                 y += pocket_ui::type_scale::line(26, 8);
             }
@@ -374,7 +370,7 @@ impl App {
             ],
         };
         for l in lines {
-            for line in self.text.wrap(Face::Body, 26, l, right - left) {
+            for line in self.text.wrap_prose(Face::Body, 26, l, right - left) {
                 self.text.draw(c, Face::Body, 26, left, y, pal().dust, &line);
                 y += pocket_ui::type_scale::line(26, 8);
             }

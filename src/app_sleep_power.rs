@@ -141,14 +141,14 @@ impl App {
         let step = pocket_ui::type_scale::line(NU_SMALL, 12);
         let hints_top = c.h - pad - NU_PILL - 8;
         if pocket_ui::device::current().screen_off_only() {
-            for line in self.text.wrap(Face::Body, NU_SMALL, pocket_ui::sleep_settings::NO_SLEEP, width) {
+            for line in self.text.wrap_prose(Face::Body, NU_SMALL, pocket_ui::sleep_settings::NO_SLEEP, width) {
                 self.text.draw(c, Face::Body, NU_SMALL, left, ly, pal().dust, &line);
                 ly += step;
             }
             ly += 12;
         }
         let room = ((hints_top - ly) / step + 1).max(1) as usize;
-        for line in self.text.wrap_at_most(Face::Body, NU_SMALL, config.explain(page.row()), width, room) {
+        for line in self.text.wrap_prose_at_most(Face::Body, NU_SMALL, config.explain(page.row()), width, room) {
             self.text.draw(c, Face::Body, NU_SMALL, left, ly, pal().text, &line);
             ly += step;
         }

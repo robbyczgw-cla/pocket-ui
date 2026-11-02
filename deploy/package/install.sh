@@ -24,8 +24,10 @@ R=${POCKETUI_INSTALL_ROOT:-}
 TESTED_ROCKNIX="20261001"
 MODEL_WANTED="Retroid Pocket Mini V2"
 # The Mini V2's siblings on the same ROCKNIX SM8250 image, as their device trees name them (src/device.rs): pocket-ui
-# knows them, nobody on the project has tested on one.
+# knows them. The project has played on the Odin 2 Mini (below); the others have not been tried.
 MODELS_EXPERIMENTAL="Retroid Pocket 5|Retroid Pocket 5 Visionox|Retroid Pocket Flip2|Retroid Pocket Flip2 Visionox|Retroid Pocket Mini|Retroid Pocket 6|Retroid Pocket 6 TOP-DPAD|Retroid Pocket Nova|AYN Odin 2|AYN Odin 2 Mini|AYN Odin 2 Portal"
+# Experimental models the project has played on (docs/DEVICES.md, the 🎮 rows): the note says so.
+MODELS_PLAYED="AYN Odin 2 Mini|Anbernic RG35XX Plus|Anbernic RG35XX SP"
 # The Anbernic models of ROCKNIX's H700 image that pocket-ui has a profile for (src/device.rs H700_BOARDS; a test keeps the
 # two in step), and the one that has a profile but is held back (720x720 draws too slowly on the H700's Cortex-A53 yet).
 MODELS_H700="Anbernic RG28XX|Anbernic RG35XX 2024|Anbernic RG35XX Plus|Anbernic RG35XX H|Anbernic RG35XX Pro|Anbernic RG35XX SP|Anbernic RG40XX H|Anbernic RG40XX V|Anbernic RG34XX|Anbernic RG34XX-SP|Anbernic RG-SP"
@@ -89,7 +91,7 @@ dev=$(field HW_DEVICE "$OSR") arch=$(field HW_ARCH "$OSR") ver=$(field OS_VERSIO
 # real contract and still blocks); an older one is asked to update first.
 case $ver in *[!0-9]* | '') vernum=0 ;; *) vernum=$ver ;; esac
 if [ "$ver" = "$TESTED_ROCKNIX" ]; then
-  ok "ROCKNIX $ver for $dev (Mini V2 tested; other devices experimental)"
+  ok "ROCKNIX $ver for $dev (played on: Mini V2, Odin 2 Mini, RG35XX Plus; other devices experimental)"
 elif [ "$vernum" -gt "$TESTED_ROCKNIX" ] 2>/dev/null; then
   ok "ROCKNIX $ver for $dev"
   note "tested with ROCKNIX $TESTED_ROCKNIX; your ROCKNIX is newer. pocket-ui's compatibility check passed, so it goes ahead"
@@ -115,7 +117,10 @@ fi
 if [ "$model" = "$MODEL_WANTED" ]; then
   ok "device: $model"
 elif [ $experimental = 1 ]; then
-  note "device: $model, experimental: pocket-ui hasn't been tested on one yet. Most things should work; if something doesn't, Settings -> System -> About -> Report a problem"
+  case "|$MODELS_PLAYED|" in
+    *"|$model|"*) note "device: $model, experimental: the project has played on this model, but not everything is proven there. If something doesn't work, Settings -> System -> About -> Report a problem" ;;
+    *) note "device: $model, experimental: pocket-ui hasn't been tested on one yet. Most things should work; if something doesn't, Settings -> System -> About -> Report a problem" ;;
+  esac
 elif [ $ANY_DEVICE = 1 ]; then
   note "device: ${model:-unknown}, not the $MODEL_WANTED; allowed by --allow-other-device"
 else

@@ -209,7 +209,19 @@ pub struct BrokenDisc {
 pub fn look_at_folder(system: &str, dir: &Path, exts: &[String]) -> (usize, Vec<BrokenDisc>) {
     let mut broken = Vec::new();
     let games = if crate::hostsys::folders_are_games(system) { scan_flat_into(dir, exts, &mut broken) } else { scan_into(dir, exts, &mut broken) };
-    (games.len(), broken)
+    (games.iter().filter(|g| !crate::hostsys::not_a_game(system, &g.path)).count(), broken)
+}
+
+/// How many things the shelf leaves out unread: disc sheets with a file missing and folders in `roms` that no system
+/// reads (what Add games and Game check list). Reads every ROM folder: on a thread only.
+pub fn unread_count(catalog: &[SysInfo]) -> usize {
+    let mut broken: Vec<BrokenDisc> = Vec::new();
+    for s in catalog {
+        broken.extend(look_at_folder(&s.id, &s.path, &s.extensions).1);
+    }
+    broken.sort_by(|a, b| a.sheet.cmp(&b.sheet));
+    broken.dedup();
+    broken.len() + roms_root(catalog).map_or(0, |roms| stray_folders(&roms, catalog).len())
 }
 
 /// A folder in `roms` that is no system's folder, so nothing in it is read.
@@ -403,11 +415,9 @@ fn default_core(sys: roxmltree::Node) -> (Option<String>, Option<String>) {
 /// The games of a system's ROM folder: `scan`, except that a system whose game folders pocket-core starts itself
 /// (DOS, ScummVM: `hostsys::folder_games`) is read flat.
 fn scan_for(system: &str, dir: &Path, exts: &[String]) -> Vec<Game> {
-    if crate::hostsys::folders_are_games(system) {
-        scan_flat(dir, exts)
-    } else {
-        scan(dir, exts)
-    }
+    let mut games = if crate::hostsys::folders_are_games(system) { scan_flat(dir, exts) } else { scan(dir, exts) };
+    games.retain(|g| !crate::hostsys::not_a_game(system, &g.path));
+    games
 }
 
 /// `scan_flat` plus one level of subfolders, the way ES-DE and RetroArch read a folder per game. A subfolder with an
@@ -1126,6 +1136,22 @@ mod tests {
         assert_eq!((n, broken), (1, Vec::new()), "the sheet is the one game, nothing missing");
     }
 
+    /// Journey fix 2: what the shelf leaves out is counted, so a copy that vanished without a word can be pointed at.
+    #[test]
+    fn unread_things_are_counted_for_the_rescan() {
+        let roms = TestDir::new("unread-count");
+        let psx = roms.join("psx");
+        std::fs::create_dir_all(&psx).unwrap();
+        std::fs::create_dir_all(roms.join("Sega Genesis")).unwrap();
+        std::fs::write(psx.join("Lost.cue"), "FILE \"Lost.bin\" BINARY\n  TRACK 01 MODE2/2352\n").unwrap();
+        std::fs::write(roms.join("Sega Genesis/Sonic.md"), b"x").unwrap();
+        let sys = |id: &str, folder: &str, ext: &str| SysInfo { id: id.into(), name: id.into(), folder: folder.into(), path: roms.join(folder), extensions: vec![ext.into(), "cue".into()] };
+        let catalog = vec![sys("psx", "psx", "bin"), sys("megadrive", "megadrive", "md")];
+        assert_eq!(super::unread_count(&catalog), 2, "the cue without its bin and the folder no system reads");
+        std::fs::write(psx.join("Lost.bin"), b"x").unwrap();
+        assert_eq!(super::unread_count(&catalog), 1, "the disc is whole now");
+    }
+
     #[test]
     fn a_disc_whose_track_file_is_missing_is_left_out_and_reported() {
         let dir = disc_dir(
@@ -1266,5 +1292,33 @@ mod tests {
         let catalog = vec![SysInfo { id: "gba".into(), name: "Game Boy Advance".into(), folder: "roms/gba".into(), path: dir.join("gba"), extensions: exts }];
         let strays: Vec<String> = super::stray_folders(&dir, &catalog).into_iter().map(|s| s.name).collect();
         assert_eq!(strays, Vec::<String>::new());
+    }
+
+    /// ROCKNIX writes an empty Splore.png into pico-8 at every boot (its autostart `010-pico8`); start_pico8.sh turns
+    /// that name into PICO-8's game browser, which needs the official program. Without it, it is no game.
+    #[test]
+    fn rocknixs_splore_is_no_game_until_pico8_is_installed() {
+        let t = TestDir::new("splore");
+        let roms = t.join("roms");
+        let pico = roms.join("pico-8");
+        std::fs::create_dir_all(&pico).unwrap();
+        std::fs::write(pico.join("Splore.png"), b"").unwrap();
+        let cfg = t.join("es_systems.cfg");
+        std::fs::write(&cfg, format!("<systemList><system><name>pico-8</name><fullname>PICO-8</fullname><path>{}</path><extension>.p8 .png</extension><command>true</command></system></systemList>", pico.display())).unwrap();
+        let exts = vec!["p8".to_string(), "png".to_string()];
+        assert!(super::load(&cfg).unwrap().is_empty(), "a card with only Splore has no system, so the page says 'No games yet'");
+        assert_eq!(super::count_games("pico-8", &pico, &exts), 0);
+        assert_eq!(super::look_at_folder("pico-8", &pico, &exts).0, 0);
+        // Real carts stay, and so does a game that is only called Splore.
+        std::fs::write(pico.join("Celeste.p8.png"), b"cart").unwrap();
+        std::fs::write(pico.join("Splore.p8"), b"cart").unwrap();
+        let names = |v: Vec<crate::library::System>| v.into_iter().flat_map(|s| s.games).map(|g| g.path.file_name().unwrap().to_string_lossy().into_owned()).collect::<Vec<_>>();
+        assert_eq!(names(super::load(&cfg).unwrap()), ["Celeste.p8.png", "Splore.p8"]);
+        assert_eq!(super::count_games("pico-8", &pico, &exts), 2);
+        // With the official PICO-8 in place, Splore is its game browser as before.
+        std::fs::write(pico.join("pico8_64"), b"x").unwrap();
+        assert_eq!(super::count_games("pico-8", &pico, &exts), 3);
+        assert!(names(super::load(&cfg).unwrap()).contains(&"Splore.png".to_string()));
+        assert_eq!(super::look_at_folder("pico-8", &pico, &exts).0, 3);
     }
 }

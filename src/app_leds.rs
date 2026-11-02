@@ -141,7 +141,7 @@ impl App {
             Row::Brightness => "How bright both sticks glow.",
         };
         let (left, mut y) = (pad + NU_BTN_PAD, top + rows.len() as i32 * row + 44);
-        for line in self.text.wrap(Face::Body, NU_SMALL, desc, c.w - 4 * pad) {
+        for line in self.text.wrap_prose(Face::Body, NU_SMALL, desc, c.w - 4 * pad) {
             self.text.draw(c, Face::Body, NU_SMALL, left, y, pal().text, &line);
             y += pocket_ui::type_scale::line(NU_SMALL, 12);
         }

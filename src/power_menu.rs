@@ -76,8 +76,8 @@ impl Choice {
     pub fn hint(self, ctx: Context) -> &'static str {
         match self {
             Choice::Sleep if crate::device::current().screen_off_only() => crate::sleep_settings::NO_SLEEP,
-            Choice::Sleep if ctx.game => "Saves the game. The power button wakes it.",
-            Choice::Sleep => "The power button wakes it.",
+            Choice::Sleep if ctx.game => "Saves the game. The power button wakes it. Uses a few percent of the battery an hour.",
+            Choice::Sleep => "The power button wakes it. Uses a few percent of the battery an hour.",
             Choice::Restart if ctx.ram_booted => "Started from a computer: this goes back to Android.",
             Choice::Restart if ctx.game => "Saves the game, then restarts the Pocket.",
             Choice::Restart => "Restarts the whole Pocket.",

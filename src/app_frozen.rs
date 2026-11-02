@@ -30,13 +30,36 @@ impl App {
         Some(frozen::Game { system: r.system.clone(), path: r.path.clone(), emulator, core, mark: r.frozen.clone() })
     }
 
+    /// The other installed games of this system with its file name, hidden ones too: they share its states.
+    pub(crate) fn same_name_games(&self, system: &str, path: &Path) -> Vec<PathBuf> {
+        let shown = self.systems.iter().filter(|s| s.name == system).flat_map(|s| s.games.iter()).map(|g| g.path.as_path());
+        // Asked only for a hidden game of this name; a system that can't be told counts as this one, the safe side.
+        let in_system = |p: &Path| {
+            let all = pocket_ui::library::all_systems(&self.es_systems).unwrap_or_default();
+            all.iter().find(|s| s.id == system).is_none_or(|s| p.starts_with(&s.path))
+        };
+        frozen::twins(path, shown, self.library.hidden_games(), in_system)
+    }
+
+    /// Another game shares this one's states, and the moment on the card can't be shown to be this one's. Only the emulators
+    /// that name their states after the file.
+    fn shared_moment_not_own(&self, system: &str, path: &Path, emulator: &str) -> bool {
+        let others = self.same_name_games(system, path);
+        if others.is_empty() || !matches!(emulator, "pocket-core" | "retroarch") {
+            return false;
+        }
+        let recent = |p: &Path| self.recents.list.iter().find(|r| r.path == p);
+        let own = recent(path).map(|r| (r.last_played, r.frozen.is_some()));
+        !frozen::shared_moment_is_own(own, others.iter().map(|p| recent(p).map(|r| r.last_played)))
+    }
+
     /// Reads again which games stand open: on a thread, the answer comes as an event.
     pub(crate) fn frozen_refresh(&mut self) {
         if !wanted() {
             FROZEN_GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             return self.frozen_got(Vec::new());
         }
-        let games: Vec<frozen::Game> = self.recents.list.iter().filter(|r| self.recent_visible(r)).filter_map(|r| self.frozen_game(r)).collect();
+        let games: Vec<frozen::Game> = self.recents.list.iter().filter(|r| self.recent_visible(r)).filter_map(|r| self.frozen_game(r)).filter(|g| !self.shared_moment_not_own(&g.system, &g.path, &g.emulator)).collect();
         let proxy = self.proxy.clone();
         let gen = FROZEN_GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
         std::thread::spawn(move || {
@@ -91,14 +114,21 @@ impl App {
     /// shelf for an emulator that takes longer to come up.
     pub(crate) fn frozen_at_launch(&mut self, system: &str, path: &Path, emulator: &str, core: &str, env: &mut Vec<(&'static str, String)>) {
         self.frozen_wait = None;
-        if !wanted() {
+        // With the shelf's Frozen games off too: a start doesn't load a state made for another file or another patch.
+        if !frozen::available() {
             return;
         }
         let mark = self.recents.list.iter().find(|r| r.path == path).and_then(|r| r.frozen.clone());
         let game = frozen::Game { system: system.into(), path: path.into(), emulator: emulator.into(), core: core.into(), mark };
-        let shown = self.is_frozen_path(path);
+        let shown = wanted() && self.is_frozen_path(path);
         let hosted = emulator == "pocket-core";
-        let note = match frozen::at_launch(&game, shown) {
+        let at = match self.shared_moment_not_own(system, path, emulator) {
+            // RetroArch loads what it finds: all there is to do is to say so.
+            true if hosted && frozen::resume_files(&game).iter().any(|f| f.exists()) => AtLaunch::Fresh(frozen::SHARED),
+            true => AtLaunch::Note(frozen::SHARED),
+            false => frozen::at_launch(&game, shown),
+        };
+        let note = match at {
             AtLaunch::Normal => {
                 // pocket-core is there in a moment; a big emulator takes as long as it takes, and says that it is on it.
                 if shown && !hosted && standalone::auto_states(system, emulator, core, path).is_some() {
@@ -120,7 +150,8 @@ impl App {
         if hosted {
             env.push((frozen::NOTE_ENV, note.into()));
         } else {
-            self.toast = Some((note.into(), Instant::now()));
+            // A notice, not a toast: these are sentences, and a toast is one line for a moment.
+            self.notice = Some(super::Notice::new(note));
         }
     }
 
@@ -179,7 +210,7 @@ impl App {
 pub(crate) const FROZEN: &str = "Frozen";
 
 /// Eight dots round a point, one of them lit, the two behind it fading.
-fn spinner(c: &mut Canvas, cx: i32, cy: i32, turn: i32) {
+pub(crate) fn spinner(c: &mut Canvas, cx: i32, cy: i32, turn: i32) {
     const DOTS: [(i32, i32); 8] = [(0, -12), (8, -8), (12, 0), (8, 8), (0, 12), (-8, 8), (-12, 0), (-8, -8)];
     for (i, (dx, dy)) in DOTS.iter().enumerate() {
         let behind = (turn - i as i32).rem_euclid(8);

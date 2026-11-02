@@ -519,7 +519,7 @@ impl App {
             let q = self.text.fit(Face::Title, 37, &format!("No game matches “{}”", page.kb.text.trim()), width);
             self.text.draw(c, Face::Title, 37, MARGIN, LIST_TOP + 60, pal().chalk, &q);
             let mut y = LIST_TOP + 106 + pocket_ui::type_scale::grow(28);
-            for line in self.text.wrap_at_most(Face::Body, 28, NO_MATCH, width, 2) {
+            for line in self.text.wrap_prose_at_most(Face::Body, 28, NO_MATCH, width, 2) {
                 self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &line);
                 y += pocket_ui::type_scale::line(28, 10);
             }
@@ -856,7 +856,7 @@ mod tests {
         text.set_translate(false);
         for s in [NO_MATCH, de.as_ref()] {
             // As painted: wrapped to the page's width (1240 less the margins), two lines at most, nothing left over.
-            let lines = text.wrap(Face::Body, 28, s, 1240 - 2 * MARGIN);
+            let lines = text.wrap_prose(Face::Body, 28, s, 1240 - 2 * MARGIN);
             assert!(lines.len() <= 2, "{s:?} takes {} lines", lines.len());
         }
     }

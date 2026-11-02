@@ -69,10 +69,10 @@ impl Notice {
         let clear = c.w - 2 * (MARGIN + CORNER);
         let report = self.report;
         let mut wrapped = |max: i32| {
-            let mut lines = text.wrap(Face::Body, 30, &self.text, max - 64);
+            let mut lines = text.wrap_prose(Face::Body, 30, &self.text, max - 64);
             let own = lines.len();
             if report {
-                lines.extend(text.wrap(Face::Body, 30, REPORT_HINT, max - 64));
+                lines.extend(text.wrap_prose(Face::Body, 30, REPORT_HINT, max - 64));
             }
             (lines, own)
         };

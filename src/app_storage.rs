@@ -356,11 +356,12 @@ impl App {
         let Some(open) = self.card.as_ref() else { return };
         let (proxy, es, data) = (self.proxy.clone(), self.es_systems.clone(), self.data_dir.clone());
         let (system, path) = (open.system.clone(), open.path.clone());
+        let shared = !self.same_name_games(&system, &path).is_empty();
         self.storage.plan = None;
         std::thread::spawn(move || {
             let protected = protected_folders(&es, &data);
             let states = PathBuf::from(pocket_ui::slots::STATES_DIR);
-            let plan = game_files::plan(&system, &path, &Places { states: &states, data: &data, protected: &protected });
+            let plan = game_files::plan(&system, &path, &Places { states: &states, data: &data, protected: &protected, shared });
             let _ = proxy.send_event(UserEvent::Storage(Event::Planned(path, plan)));
         });
     }
@@ -503,7 +504,7 @@ impl App {
             };
             self.text.draw(c, Face::Title, 37, pad + NU_BTN_PAD, top + 60 + type_scale::grow(37), pal().text, head);
             let mut y = top + 110 + type_scale::grow(37) + type_scale::grow(NU_SMALL);
-            for line in self.text.wrap(Face::Body, NU_SMALL, line, right - pad - 2 * NU_BTN_PAD).into_iter().take(2) {
+            for line in self.text.wrap_prose(Face::Body, NU_SMALL, line, right - pad - 2 * NU_BTN_PAD).into_iter().take(2) {
                 self.text.draw(c, Face::Body, NU_SMALL, pad + NU_BTN_PAD, y, pal().quiet, &line);
                 y += type_scale::line(NU_SMALL, 12);
             }
@@ -548,7 +549,7 @@ impl App {
         self.text.draw(c, Face::Title, 44, left, y0 + 58 + type_scale::grow(44) / 2, color, &head);
         let mut y = y0 + 108 + type_scale::grow(44) + type_scale::grow(NU_SMALL) / 2;
         for text in lines {
-            for line in self.text.wrap(Face::Body, NU_SMALL, &text, width).into_iter().take(3) {
+            for line in self.text.wrap_prose(Face::Body, NU_SMALL, &text, width).into_iter().take(3) {
                 if y > y0 + DETAILS_H - 10 {
                     break;
                 }

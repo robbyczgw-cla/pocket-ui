@@ -138,7 +138,7 @@ impl App {
         // The last line's baseline may sit up to a line above the hints' top, as on Sleep & power.
         let room = ((hints_top - ly) / step + 1).max(1) as usize;
         let help = if self.about.sel == 0 { report::ROW_HELP } else { ES_HELP };
-        for line in self.text.wrap_at_most(Face::Body, NU_SMALL, help, width, room) {
+        for line in self.text.wrap_prose_at_most(Face::Body, NU_SMALL, help, width, room) {
             self.text.draw(c, Face::Body, NU_SMALL, left, ly, pal().quiet, &line);
             ly += step;
         }
@@ -183,7 +183,7 @@ impl App {
             if fit == 0 {
                 break;
             }
-            let lines = self.text.wrap_at_most(Face::Body, small, p, inner, fit);
+            let lines = self.text.wrap_prose_at_most(Face::Body, small, p, inner, fit);
             left_h -= lines.len() as i32 * line_h + 14;
             wrapped.push((lines, *colour));
         }

@@ -1,39 +1,30 @@
 # Getting started
 
-This page takes you from an empty microSD card to your first game. You need a computer once, to write the card.
+This page takes you from a ROCKNIX card to your first game in pocket-ui. You need a computer once, to copy files to the card.
 
 > **Already play on ROCKNIX or Android?** [Coming from ROCKNIX or Android](coming-from.md) says what happens to your
 > saves, states, favourites and settings.
 
-> **Status:** the SD card image builds and passes its offline checks and was started once on a fresh card on a
-> Mini V2 (2026-10-27; that start found a Wi-Fi bug in the first-start setup, now fixed), but a full first start as a
-> new player has not been repeated with the fixed build, and it is not published. The [install guide](../INSTALL-DUAL-BOOT.md) has the details and the manual way that
-> was used on the test device.
-
 > **Other Retroid devices.** pocket-ui is made and tested on the **Retroid Pocket Mini V2**. The **Retroid Pocket 5**,
 > **Retroid Pocket Flip 2** (Snapdragon 865) and the first **Retroid Pocket Mini** run the same ROCKNIX system and are
-> supported as **experimental**: pocket-ui knows them, but hasn't been tested on one yet. The SD card image below is
-> for the Mini V2 only. On the others, see [Other Retroid devices](#other-retroid-devices).
+> supported as **experimental**: pocket-ui knows them, but hasn't been tested on one yet. The two-file card install
+> below is for the Mini V2 only. On the others, see [Other Retroid devices](#other-retroid-devices).
 
 > **Anbernic handhelds (H700).** The **RG28XX**, **RG35XX** (2024, Plus, H, Pro, SP), **RG40XX** (H, V), **RG34XX**,
-> **RG34XX-SP** and **RG-SP** run ROCKNIX's H700 image and are supported as **experimental**. The SD card image below is
+> **RG34XX-SP** and **RG-SP** run ROCKNIX's H700 image and are supported as **experimental**. The two-file card install below is
 > for the Mini V2 only. See [Anbernic H700 handhelds](#anbernic-h700-handhelds-experimental).
 
-## 1. Write the SD card
+## 1. Put pocket-ui on the card
 
-1. Get the SD card image, `pocket-ui-<version>-rp-mini-v2.img.xz`.
-   <!-- TODO: link the download once the image is published. Until then it is built with scripts/make-image.sh
-   (docs/SD-IMAGE.md). -->
-2. Write it to a microSD card of 8 GB or more with **balenaEtcher** or **Raspberry Pi Imager** (in Imager: "Use
-   custom"). Both read the `.xz` file directly. Everything on the SD card is erased.
+Download from the release page that pocketui.xyz links to and pick one way:
 
-The SD card holds two parts: a small one with the system files (readable on any computer, with the notes in
-`pocket-ui-info/README.txt`) and STORAGE for pocket-ui, your games and your saves. STORAGE grows to fill the SD card at
-the first start.
+- **Ports installer**, when ROCKNIX is already on your card: section 2 below.
+- **Fresh card, two files**: right below.
+- **Over SSH**: the [install guide](../INSTALL-DUAL-BOOT.md).
 
-The SD card contains no games and no BIOS files. Add only games and BIOS files you own.
+pocket-ui contains no games and no BIOS files; add only ones you own. A ready-made SD card image is built but not published ([install guide](../INSTALL-DUAL-BOOT.md)).
 
-### Already have the official ROCKNIX on a card? Two files
+### Fresh card: two files
 
 If you flashed the official ROCKNIX image yourself, you can add pocket-ui from your computer, without Wi-Fi and without
 any command line:
@@ -77,8 +68,8 @@ wrong" in the [install guide](../INSTALL-DUAL-BOOT.md). The guide also has the w
 already use, with no computer commands: copy the one file **Install pocket-ui.sh** into the `roms/ports` folder of the
 card (switch on Samba in ROCKNIX's Network Settings, then open `\\<device name or IP>` on Windows or `smb://<device name or IP>` on a Mac and use the games share; [ROCKNIX explains it](https://rocknix.org/play/add-games/)), open **Ports** in EmulationStation (restart its list once: Start, Game Settings, Update Gamelists) and start
 **Install pocket-ui**. The screen shows what it checks and installs; if something does not fit, it says what, changes
-nothing and **Close** takes you back to EmulationStation. To remove pocket-ui again, start **Uninstall pocket-ui** in
-Ports (the installer leaves it there).
+nothing and **Close** takes you back to EmulationStation. To remove pocket-ui again, open EmulationStation (in pocket-ui: Settings → Help & tools → About → Open
+EmulationStation…, or hold SELECT and START), then start **Ports → Uninstall pocket-ui** (the installer leaves it there).
 
 If pocket-ui is not installed, ROCKNIX's own menu (EmulationStation) appears instead. If pocket-ui keeps stopping, it
 goes back to the last version that worked, then to a [safe mode](safe-mode.md) page; EmulationStation only opens by
@@ -86,7 +77,8 @@ itself if pocket-ui cannot start at all.
 
 ## 3. First start
 
-The first time pocket-ui runs, it walks you through a short setup. **START skips any step.** You can
+The first time pocket-ui runs, it walks you through a short setup. **START skips a step** (on a keyboard it means
+Connect or Next: B goes back, then START skips). You can
 open every step again later from **Settings** (press START on the Home screen).
 Each step says "Step n of 7" at the top right.
 
@@ -111,7 +103,7 @@ Each step says "Step n of 7" at the top right.
    the pictures for the games already on the SD card then download by themselves in the background, as chosen, unless
    you chose Off; this page shows the progress. See [Extras](extras.md#cover-art).
 7. **Add your games.** A tile per system with its folder, and a switch for file sharing. See below.
-8. **You're all set.** It counts the games already on the SD card ("Your 16 games are on the shelf."). Press A ("Go to
+8. **You're all set.** It counts the games already on the SD card ("Your 16 games are on the shelf."). With a skipped time zone and nothing to guess from, it says the clock is on UTC. Press A ("Go to
    your games") to reach Home.
 
 After a restart or a flat battery in the middle, the setup opens again at the step it had reached.
@@ -284,7 +276,7 @@ many.
   types it takes, and whether it needs a BIOS: "Not needed", the files it needs and whether they are in
   `roms/bios` (in red while one is missing), or, for systems pocket-ui knows nothing about, that a BIOS would go
   into `roms/bios`.
-- The game counts are read when the page opens.
+- The game counts are read when the page opens and again on a button press.
 - **Ways to copy games.** Down from the last row of tiles reaches a row with **File sharing** and **USB file transfer**
   (only what your handheld has): Left/Right choose, A switches, or tap. Details: [Second card and USB cable](copy-games.md).
 
@@ -380,8 +372,8 @@ and Zink on the real GPU still need a tester. Mini and Portal menus start with X
 ## Anbernic H700 handhelds (experimental)
 
 pocket-ui runs on the Anbernic handhelds that ROCKNIX's **H700 image** supports. All of them are **experimental**:
-pocket-ui knows each model (screen, buttons, what it has), but it has only been tested on a computer, not on a real
-handheld yet. If something doesn't work, Settings → Help & tools → About → Report a problem saves a file to attach to a
+pocket-ui knows each model (screen, buttons, what it has). The **RG35XX Plus** has been played on a real handheld; the other
+models have only been tested on a computer so far. If something doesn't work, Settings → Help & tools → About → Report a problem saves a file to attach to a
 report. The **RG CubeXX** (square 720×720 screen) is **not supported yet**: pocket-ui draws that screen too slowly on
 this processor for now, and the installers say so and change nothing.
 

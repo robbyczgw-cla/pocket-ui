@@ -588,7 +588,7 @@ impl App {
         let mid = top + room.1 / 2;
         self.text.draw(c, Face::Title, 37, (c.w - hw) / 2, mid, pal().text, &head);
         let mut y = mid + type_scale::line(NU_SMALL, 18);
-        for l in self.text.wrap(Face::Body, NU_SMALL, line, w).into_iter().take(2) {
+        for l in self.text.wrap_prose(Face::Body, NU_SMALL, line, w).into_iter().take(2) {
             let lw = self.text.width(Face::Body, NU_SMALL, &l);
             self.text.draw(c, Face::Body, NU_SMALL, (c.w - lw) / 2, y, pal().quiet, &l);
             y += type_scale::line(NU_SMALL, 12);
@@ -612,7 +612,7 @@ impl App {
         let b1 = y + 60 + type_scale::px(50) as i32 + type_scale::px(28) as i32;
         self.text.draw(c, Face::Body, 28, x, b1, pal().dust, &what);
         let mut by = b1 + type_scale::line(28, 14);
-        for l in self.text.wrap(Face::Body, 28, "It is taken off the SD card for good.", w).into_iter().take(2) {
+        for l in self.text.wrap_prose(Face::Body, 28, "It is taken off the SD card for good.", w).into_iter().take(2) {
             self.text.draw(c, Face::Body, 28, x, by, pal().chalk, &l);
             by += type_scale::line(28, 8);
         }

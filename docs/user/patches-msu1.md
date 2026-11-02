@@ -50,6 +50,9 @@ next to one, the game does not start and the shelf says so. Patch those on a com
 
 ### Saves and achievements
 
+- A save state belongs to the game as it was patched then. After you add, replace or remove a patch the game starts fresh,
+  and until your next Quit the old moment is still in the pause menu under Load. A patch is known by its name, size and
+  time: copied back with a new time it counts as new, once.
 - The save belongs to the game file's name, as in RetroArch. A patched game and its original in the same folder,
   with the same name, share **one save**. To keep them apart, patch on a computer and give the new file a name of its
   own (Way 2 below).

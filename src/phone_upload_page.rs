@@ -47,7 +47,7 @@ pub const HELP: &str = "Not encrypted: someone else on this Wi-Fi could see the 
 pub fn layout(text: &mut Text, help: &str, w: i32, h: i32) -> (Vec<String>, i32, i32) {
     let width = w - 2 * MARGIN;
     let bottom = h - crate::kit::PAD - crate::kit::PILL - 20;
-    let lines = text.wrap(Face::Body, 24, help, width);
+    let lines = text.wrap_prose(Face::Body, 24, help, width);
     let help_top = bottom - lines.len() as i32 * (px(24) + 8);
     let q = (help_top - QR_TOP - 24).min(w * 42 / 100).min(620);
     (lines, help_top, q)
@@ -242,7 +242,7 @@ impl PhonePage {
             let head = text.fit(Face::Title, 37, head, w);
             text.draw(c, Face::Title, 37, x, top + 50, pal().chalk, &head);
             let mut y = top + 50 + px(24) + 18;
-            for l in text.wrap(Face::Body, 24, line, w).iter().take(3) {
+            for l in text.wrap_prose(Face::Body, 24, line, w).iter().take(3) {
                 text.draw(c, Face::Body, 24, x, y, pal().dust, l);
                 y += l24;
             }
@@ -271,7 +271,7 @@ impl PhonePage {
         let list_top = head_y + 14;
         if st.files.is_empty() {
             let line = if st.connected { "Pick games on the phone; they show up here as they arrive." } else { "Open the camera on your phone and point it at the code." };
-            for (i, l) in text.wrap(Face::Body, 24, line, w).iter().take(2).enumerate() {
+            for (i, l) in text.wrap_prose(Face::Body, 24, line, w).iter().take(2).enumerate() {
                 text.draw(c, Face::Body, 24, x, list_top + px(24) + i as i32 * l24, pal().dust, l);
             }
             return;

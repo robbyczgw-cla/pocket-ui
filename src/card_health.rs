@@ -97,6 +97,43 @@ pub fn games_drive() -> bool {
     *ON_IT.get_or_init(|| std::fs::read_to_string("/proc/mounts").is_ok_and(|m| roms_on_games_drive(&m)))
 }
 
+/// Whether `/storage/roms` comes from the STORAGE partition of another flashed image (a second card that still holds ROCKNIX
+/// or pocket-ui: its small ext4 p2, a few dozen MB, is what the shelf then reads). `label_of` gives a device's label. Two
+/// flashed cards carry the same labels, so "STORAGE and not the running system's /storage" covers that case too.
+pub fn roms_on_system_image(mounts: &str, label_of: impl Fn(&str) -> Option<String>) -> bool {
+    let of = |point: &str| mounts.lines().rev().find_map(|l| {
+        let f: Vec<&str> = l.split_whitespace().collect();
+        (f.len() >= 2 && f[1] == point && f[0].starts_with('/')).then(|| f[0].to_string())
+    });
+    let (Some(storage), Some(roms)) = (of("/storage"), of("/storage/roms")) else { return false };
+    roms != storage && label_of(&roms).is_some_and(|l| l == "STORAGE")
+}
+
+static IMAGE_CARD_FORCED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// For a snapshot of the pages with such a card in.
+pub fn set_image_card(on: bool) {
+    IMAGE_CARD_FORCED.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// [`roms_on_system_image`] of this start, read once (labels from `/dev/disk/by-label`): pages ask while painting.
+pub fn image_card() -> bool {
+    static ON_IT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    IMAGE_CARD_FORCED.load(std::sync::atomic::Ordering::Relaxed)
+        || *ON_IT.get_or_init(|| {
+            let label_of = |dev: &str| {
+                let want = std::fs::canonicalize(dev).ok()?;
+                std::fs::read_dir("/dev/disk/by-label").ok()?.flatten().find_map(|e| {
+                    (std::fs::canonicalize(e.path()).ok()? == want).then(|| e.file_name().to_string_lossy().replace("\\x20", " "))
+                })
+            };
+            std::fs::read_to_string("/proc/mounts").is_ok_and(|m| roms_on_system_image(&m, label_of))
+        })
+}
+
+/// What Add games and Home's "No games yet" say then.
+pub const IMAGE_CARD_NOTE: &str = "The second card holds a system image, so only its small space is used. Take it out, or format it for games.";
+
 /// "mmcblk0p2" from "/dev/mmcblk0p2".
 fn device_name(dev: &str) -> &str {
     dev.rsplit('/').next().unwrap_or(dev)
@@ -184,6 +221,23 @@ mod tests {
         assert!(!on("/dev/mmcblk1p1 /storage/roms exfat rw 0 0\n"), "a card in the second slot");
         assert!(!on("/dev/mmcblk0p3 /storage/roms ext4 rw 0 0\n"), "not the exFAT drive this card makes");
         assert!(!roms_on_games_drive(""), "nothing readable");
+    }
+
+    #[test]
+    fn a_second_card_that_holds_a_system_image_is_spotted_by_the_label_of_its_roms() {
+        let stor = "/dev/mmcblk0p2 /storage ext4 rw 0 0\n";
+        let label = |dev: &str| match dev {
+            "/dev/mmcblk0p2" | "/dev/mmcblk1p2" => Some("STORAGE".to_string()),
+            "/dev/mmcblk1p1" => Some("GAMES".to_string()),
+            _ => None,
+        };
+        let on = |rest: &str| roms_on_system_image(&format!("{stor}{rest}"), label);
+        assert!(on("/dev/mmcblk1p2 /storage/games-external ext4 rw 0 0\n/dev/mmcblk1p2 /storage/roms ext4 rw 0 0\n"), "a flashed card's STORAGE");
+        assert!(!on("/dev/mmcblk1p1 /storage/roms exfat rw 0 0\n"), "a games card");
+        assert!(!on("/dev/mmcblk0p2 /storage/roms ext4 rw 0 0\n"), "bound from the running system's STORAGE");
+        assert!(!on(""), "no separate mount");
+        assert!(!on("/dev/mmcblk2p1 /storage/roms ext4 rw 0 0\n"), "no label");
+        assert!(!roms_on_system_image("", label), "nothing readable");
     }
 
     #[test]

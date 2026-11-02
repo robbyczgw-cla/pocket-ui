@@ -1474,8 +1474,8 @@ Sleep after	Suspender tras
 Hours	Horas
 Never sleep	Nunca suspender
 Switch off after sleeping	Apagar tras suspender
-After this long asleep on battery, the Pocket saves the game and switches off.	Tras este tiempo suspendido con batería, el Pocket guarda el juego y se apaga.
-The Pocket stays asleep until you wake it.	El Pocket sigue suspendido hasta que lo despiertes.
+After this long asleep on battery, the Pocket saves the game and switches off. Sleeping uses a few percent of the battery an hour.	Tras este tiempo suspendido con batería, el Pocket guarda el juego y se apaga. Suspendido gasta unos pocos por ciento de batería por hora.
+The Pocket stays asleep until you wake it. Sleeping uses a few percent of the battery an hour.	El Pocket sigue suspendido hasta que lo despiertes. Suspendido gasta unos pocos por ciento de batería por hora.
 Switched off after {n} h asleep to save the battery.	Apagado tras {n} h suspendido para ahorrar batería.
 Sleep & power	Suspensión y encendido
 When the screen goes off and the device sleeps, and the power button.	Cuándo se apaga la pantalla y el dispositivo se suspende, y el botón de encendido.
@@ -1496,8 +1496,8 @@ Saves the game and puts the Pocket to sleep. Press the power button again to wak
 Only the screen goes dark: the game and its sound keep running. Any button turns it back on.	Solo se oscurece la pantalla: el juego y su sonido siguen. Cualquier botón la enciende de nuevo.
 Hold it for about a second: Sleep, Restart, Power off and Restart pocket-ui.	Mantenlo pulsado un segundo: Suspender, Reiniciar, Apagar y Reiniciar pocket-ui.
 Holding it also puts the Pocket to sleep. The power menu is still in the quick settings, under Power….	Mantenerlo pulsado también suspende el Pocket. El menú de encendido sigue en los ajustes rápidos, en Encendido….
-Saves the game. The power button wakes it.	Guarda el juego. El botón de encendido lo despierta.
-The power button wakes it.	El botón de encendido lo despierta.
+Saves the game. The power button wakes it. Uses a few percent of the battery an hour.	Guarda el juego. El botón de encendido lo despierta. Gasta unos pocos por ciento de batería por hora.
+The power button wakes it. Uses a few percent of the battery an hour.	El botón de encendido lo despierta. Gasta unos pocos por ciento de batería por hora.
 Started from a computer: this goes back to Android.	Iniciado desde un PC: esto vuelve a Android.
 Saves the game, then restarts the Pocket.	Guarda el juego y reinicia el Pocket.
 Restarts the whole Pocket.	Reinicia todo el Pocket.
@@ -1829,7 +1829,7 @@ Fan outside games	Ventilador fuera de juegos
 Smooth fan	Ventilador suave
 How fast the processor may run while you play.	Hasta qué velocidad puede ir el procesador mientras juegas.
 How early the fan starts while you play.	Cuándo arranca el ventilador mientras juegas.
-The fan on the shelf, in the lists and in Settings. While the Pocket sleeps it keeps the system's own cooling.	El ventilador en el estante, las listas y Ajustes. Mientras el Pocket está suspendido, mantiene la refrigeración del sistema.
+The fan on the shelf, in the lists and in Settings. While the Pocket sleeps it keeps the system's own cooling.	Ventilador en estante, listas y Ajustes. Suspendido, usa la refrigeración del sistema.
 How the fan changes its speed.	Cómo cambia de velocidad el ventilador.
 Battery: about half speed, which is enough for Game Boy and NES. The battery lasts longer.	Batería: casi media velocidad, suficiente para Game Boy y NES. La batería dura más.
 Auto: the system speeds up and slows down as the game needs it.	Auto: el sistema acelera y frena según lo que pida el juego.
@@ -2182,7 +2182,7 @@ Name of the hidden network	Nombre de la red oculta
 This can take up to a minute.	Esto puede tardar hasta un minuto.
 Remote access	Acceso remoto
 Log in to this Pocket from a computer on the same Wi-Fi, with SSH.	Entra a este Pocket por SSH desde un PC en la misma red Wi-Fi.
-It stays on until you turn it off. It turns itself off when the Pocket restarts.	Se queda activado hasta que lo desactives. Al reiniciar se desactiva solo.
+It stays on until you turn it off or the Pocket restarts.	Se queda activado hasta que lo desactives o el Pocket se reinicie.
 Switching remote access{s}	Cambiando acceso remoto{s}
 Remote access is on.	El acceso remoto está activado.
 Always on: this is a developer device (dev-ssh).	Siempre activado: es un dispositivo de desarrollo (dev-ssh).
@@ -2590,7 +2590,7 @@ The update list isn't signed by us. Nothing was changed.	La lista de actualizaci
 The download is larger than announced. Nothing was installed.	La descarga es más grande de lo anunciado. No se instaló nada.
 Download failed. Check Wi-Fi.	Falló la descarga. Revisa el Wi-Fi.
 The update address has to start with https://. Nothing was changed.	La dirección de actualización debe empezar por https://. No se cambió nada.
-The update server has no update list right now. Try again later.	El servidor de actualizaciones no tiene lista ahora mismo. Inténtalo más tarde.
+No updates published yet. A new version installs like the first one; your games and settings stay.	Aún no hay actualizaciones publicadas. Una versión nueva se instala igual que la primera; tus juegos y ajustes se quedan.
 The update server sent an address that isn't https. Nothing was changed.	El servidor de actualizaciones envió una dirección que no es https. No se cambió nada.
 The update file isn't on the server. Nothing was installed.	El archivo de actualización no está en el servidor. No se instaló nada.
 The update list names a file that isn't on https. Nothing was installed.	La lista de actualizaciones nombra un archivo que no está en https. No se instaló nada.
@@ -3410,7 +3410,8 @@ Code: every browser needs a code, yours too.	Código: todos los navegadores nece
 {t} · 1 filter	{t} · 1 filtro
 Max: CPU and GPU at full speed, smoothest, but warmer and uses more battery. Auto: the system decides (ROCKNIX's own setting for this system). Battery: lower top speeds, light games only.	Max: CPU y GPU a toda velocidad, lo más fluido, pero más caliente y con más gasto de batería. Auto: decide el sistema (el ajuste propio de ROCKNIX para este sistema). Batería: velocidades máximas más bajas, solo juegos ligeros.
 Brightness, volume, Wi-Fi, Bluetooth, performance, fan and power.	Brillo, volumen, Wi-Fi, Bluetooth, rendimiento, ventilador y encendido.
-A choice saved in the pause menu for a console or a game (Options › Extras), or for a port on its card, wins over these. Games: performance covers games with a pause menu and PortMaster ports; with Smooth fan, Games: fan covers every game.	Una elección guardada en el menú de pausa para una consola o un juego (Opciones › Extras), o para un port en su ficha, manda sobre estas. Juegos: rendimiento cubre los juegos con menú de pausa y los ports de PortMaster; con Ventilador suave, Juegos: ventilador cubre todos los juegos.
+A choice saved in the pause menu (Options › Extras) wins over these. Games: performance covers games with a pause menu and ports; with Smooth fan, Games: fan covers every game.	Una elección guardada en el menú de pausa (Opciones › Extras) manda sobre estas. Juegos: rendimiento cubre los juegos con menú de pausa y ports; con Ventilador suave, Juegos: ventilador cubre todos los juegos.
+and more	y más
 ≈{n} ms, {t} ahead	~{n} ms, {t} adelantado
 Bilinear textures (forced, not sprites)	Texturas bilineales (forzadas, sin sprites)
 Battery: the processor's top speeds are held at about half. Cooler, quieter, and the battery lasts longer; a demanding port may stutter.	Batería: las velocidades máximas del procesador se quedan en la mitad aproximadamente. Más fresco, más silencioso, y la batería dura más; un port exigente puede dar tirones.
@@ -3463,7 +3464,7 @@ Starter pack	Pack inicial
 A few free games to start with, downloaded to your SD card.	Unos pocos juegos gratis para empezar, descargados a tu tarjeta SD.
 Get the starter pack	Conseguir el pack inicial
 Get a few free games to start playing right away.	Consigue unos juegos gratis para empezar a jugar ya.
-Or copy your own into /storage/roms/<system>. Settings › Games › Add games shows where.	O copia los tuyos en /storage/roms/<sistema>. Ajustes › Juegos › Añadir juegos muestra dónde.
+Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing, USB).	O copia los tuyos: Ajustes › Juegos › Añadir juegos muestra las formas (móvil, compartir archivos, USB).
 Needs Wi-Fi. Connect in Settings › Connections › Wi-Fi first.	Necesita Wi-Fi. Conéctate antes en Ajustes › Conexiones › Wi-Fi.
 {n} small games, free to share, from their authors.	{n} juegos pequeños, gratis, de sus autores.
 Get all games	Conseguir todos los juegos
@@ -4068,6 +4069,7 @@ Your last five games stand a little open. A goes straight back to the moment you
 Remember where I quit is off: a Quit freezes nothing new. Moments from before and from sleep stay.	Recordar al salir está desactivado: Salir no congela nada nuevo. Los momentos de antes y de la suspensión se quedan.
 Going back to your moment…	Volviendo a tu momento…
 Couldn't go back to that moment: started fresh	No se pudo volver a ese momento: empezó de cero
+Another game has this file name and shares its save states. Saving here can overwrite its saves. Rename one to keep them apart	Otro juego tiene el mismo nombre de archivo y comparte sus estados. Guardar aquí puede sobrescribir los suyos. Cambia el nombre de uno para separarlos
 Its saved moment is gone: started fresh	Su momento guardado ya no existe: empezó de cero
 Started fresh: its saved moment belongs to its other emulator	Empezó de cero: su momento guardado pertenece a su otro emulador
 The game's file changed: started fresh. The moment is still under Load	El archivo del juego cambió: empezó de cero. El momento sigue en Cargar
@@ -4215,7 +4217,7 @@ Copy games with a USB cable. Windows and Linux open it by themselves; a Mac need
 USB file transfer is on. Connect a computer: your games are under Roms.	La transferencia por USB está activada. Conecta un ordenador: tus juegos están en Roms.
 USB file transfer didn't start. Take out what's in the USB port and try again.	La transferencia por USB no se ha iniciado. Quita lo que haya en el puerto USB y vuelve a intentarlo.
 Your games card came out. Put it back to play: your games and saves are on it. A game that was running couldn't save after that moment.	Se ha sacado tu tarjeta de juegos. Vuelve a ponerla para jugar: tus juegos y partidas guardadas están en ella. Un juego en marcha no ha podido guardar desde ese momento.
-Games card found. Reading its games.	Tarjeta de juegos encontrada. Leyendo sus juegos.
+Games card found. While it's in, only its games show; your other games come back when you take it out.	Tarjeta de juegos encontrada. Mientras esté puesta, solo se ven sus juegos; los demás vuelven al sacarla.
 Games card in	Tarjeta de juegos puesta
 Your games are read from your games card. To add more, put that card in your computer and copy them into its roms folder.	Tus juegos se leen de tu tarjeta de juegos. Para añadir más, pon esa tarjeta en tu ordenador y cópialos en su carpeta roms.
 A folder with ".{s}" in its name can't be used. Rename it first.	No se puede usar una carpeta con ".{s}" en el nombre. Cámbiale el nombre primero.
@@ -4295,7 +4297,7 @@ For grown-ups	Para adultos
 Enter your PIN.	Introduce tu PIN.
 Too many tries. Wait {n} seconds.	Demasiados intentos. Espera {n} segundos.
 That's not it. Try again.	No es ese. Inténtalo otra vez.
-Forgot it? Put a file called {s} on the card and restart.	¿Lo olvidaste? Pon un archivo llamado {s} en la tarjeta y reinicia.
+Forgot it? Put a file called {s} in the top folder of the card's ROCKNIX drive and restart.	¿Lo olvidaste? Pon un archivo llamado {s} en la carpeta principal de la unidad ROCKNIX de la tarjeta y reinicia.
 D-PAD	CRUCETA
 Numbers	Números
 Kids mode	Modo infantil
@@ -4363,5 +4365,17 @@ For grown-ups: hold SELECT and START for 5 seconds.	Para adultos: mantén SELECT
 No limit	Sin límite
 This game won't start right now. Press a button to pick another one.	Este juego no arranca ahora. Pulsa un botón para elegir otro.
 {n} hidden	{n} ocultos
-{n} hidden	Ocultos: {n}
 This device has no Wi-Fi, so the downloads aren't available.	Este dispositivo no tiene Wi-Fi, así que las descargas no están disponibles.
+Splore is PICO-8's game browser, not a game, and it needs the PICO-8 program from lexaloffle.com in roms/pico-8. Your own PICO-8 games work without it.	Splore es el explorador de juegos de PICO-8, no un juego, y necesita el programa PICO-8 de lexaloffle.com en roms/pico-8. Tus propios juegos de PICO-8 funcionan sin él.
+The clock is on UTC. Set your time zone in Settings › System › Time.	El reloj va en UTC. Elige tu zona horaria en Ajustes › Sistema › Hora.
+Forgot it? Put a file called {s} on the card and restart.	¿Lo olvidaste? Pon un archivo llamado {s} en la tarjeta y reinicia.
+Grown-ups: hold SELECT and START.	Adultos: mantén pulsados SELECT y START.
+1 of the picked games isn't on the card any more.	1 de los juegos elegidos ya no está en la tarjeta.
+{n} of the picked games aren't on the card any more.	{n} de los juegos elegidos ya no están en la tarjeta.
+1 game file can't be read. Settings › Games › Game check says why.	1 archivo de juego no se puede leer. Ajustes › Juegos › Revisión de juegos dice por qué.
+Some game files can't be read. Settings › Games › Game check says why.	Algunos archivos de juego no se pueden leer. Ajustes › Juegos › Revisión de juegos dice por qué.
+Some game files in your ROM folders can't be read. Settings › Games › Game check says why.	Algunos archivos de juego de tus carpetas ROM no se pueden leer. Ajustes › Juegos › Revisión de juegos dice por qué.
+Still saving…	Sigue guardando…
+This one takes a while. Still saving, don't switch off.	Esto tarda un poco. Sigue guardando, no apagues.
+Closing the game…	Cerrando el juego…
+The second card holds a system image, so only its small space is used. Take it out, or format it for games.	La segunda tarjeta contiene una imagen del sistema, así que solo se usa su poco espacio. Sácala o fórmatela para juegos.

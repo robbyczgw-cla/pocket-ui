@@ -18,7 +18,7 @@ use pocket_ui::touch::Area;
 use pocket_ui::web::{self, Edit, NowPlaying, Prefs, Shared};
 use pocket_ui::web_page::{self, Action, Paired, View, WebPage, ROWS};
 
-use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL};
 
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "Web companion";
@@ -261,6 +261,8 @@ impl App {
         if self.web.library_pending.is_some() && self.running.is_none() && self.card.is_none() && (self.screen == super::Screen::Home && self.settings_page.is_none() || matches!(self.settings_page, Some(SettingsPage::List(_) | SettingsPage::Web))) {
             if let Some(web::Systems(systems)) = self.web.library_pending.take() {
                 println!("web: new games from an upload");
+                // The same game stays selected: the new list's numbers may mean another one (as `library_apply_pending`).
+                let was = super::app_library::KeepSelection::note(&self.items, self.sel, &self.systems);
                 self.systems = Arc::unwrap_or_clone(systems);
                 // The next start shows them from the cache (`library_cache`), written on a thread.
                 pocket_ui::library_cache::store_soon(&self.data_dir, &self.es_systems, self.systems.clone());
@@ -269,6 +271,7 @@ impl App {
                 self.find_library_changed();
                 self.covers.clear();
                 self.rebuild();
+                was.restore(&self.items, &self.systems, &mut self.sel, &mut self.prev_sel);
                 self.auto_covers("games uploaded");
             }
         }
@@ -606,7 +609,7 @@ impl App {
                 self.text.draw(c, Face::Title, 44, left, y, pal().alert, "Not listening");
                 y += 44;
                 let why = format!("{} It tries again every 30 seconds.", page.problem.as_deref().unwrap_or_default());
-                for l in self.text.wrap(Face::Body, 26, &why, width) {
+                for l in self.text.wrap_prose(Face::Body, 26, &why, width) {
                     self.text.draw(c, Face::Body, 26, left, y, pal().dust, &l);
                     y += pocket_ui::type_scale::line(26, 8);
                 }
@@ -614,7 +617,7 @@ impl App {
             (None, true) => {
                 self.text.draw(c, Face::Title, 44, left, y, pal().dust, "Waiting for Tailscale");
                 y += 44;
-                for l in self.text.wrap(Face::Body, 26, "It listens only on the Tailscale network. Switch Tailscale on and sign in (Settings › Connections › Tailscale).", width) {
+                for l in self.text.wrap_prose(Face::Body, 26, "It listens only on the Tailscale network. Switch Tailscale on and sign in (Settings › Connections › Tailscale).", width) {
                     self.text.draw(c, Face::Body, 26, left, y, pal().dust, &l);
                     y += pocket_ui::type_scale::line(26, 8);
                 }
@@ -622,7 +625,7 @@ impl App {
             (None, false) => {
                 self.text.draw(c, Face::Title, 44, left, y, pal().dust, "Off");
                 y += 44;
-                for l in self.text.wrap(Face::Body, 26, "Nothing listens while it is off. Switch it on, and the address to open shows here.", width) {
+                for l in self.text.wrap_prose(Face::Body, 26, "Nothing listens while it is off. Switch it on, and the address to open shows here.", width) {
                     self.text.draw(c, Face::Body, 26, left, y, pal().dust, &l);
                     y += pocket_ui::type_scale::line(26, 8);
                 }
@@ -634,7 +637,7 @@ impl App {
         } else {
             "Only over Tailscale, and every browser needs a code, yours too. Pauses while a game runs."
         };
-        for l in self.text.wrap(Face::Body, 24, note, width) {
+        for l in self.text.wrap_prose(Face::Body, 24, note, width) {
             self.text.draw(c, Face::Body, 24, left, y, pal().quiet, &l);
             y += pocket_ui::type_scale::line(24, 8);
         }
@@ -643,9 +646,7 @@ impl App {
             web_page::Row::Pair | web_page::Row::Browsers => "Open",
             _ => "Change",
         };
-        let hints_at = self.nu_hints(c, &[("B", "Back"), ("A", a_label)]);
-        let desc = self.text.fit(Face::Body, NU_SMALL, page.describe(page.row()), hints_at - 24 - left);
-        self.text.draw(c, Face::Body, NU_SMALL, left, c.h - pad - NU_PILL / 2 + pocket_ui::type_scale::mid(NU_SMALL), pal().text, &desc);
+        self.nu_foot(c, &[("B", "Back"), ("A", a_label)], page.describe(page.row()), pal().text);
     }
 
     /// The code in large digits beside a QR code of the address with the code in it (the page pairs by itself).
@@ -681,7 +682,7 @@ impl App {
         let left_txt = self.text.fit(Face::Body, 24, &left_txt, width);
         self.text.draw(c, Face::Body, 24, tx, y, pal().dust, &left_txt);
         y += 34;
-        for l in self.text.wrap(Face::Body, 24, "Five wrong tries and the code is gone.", width) {
+        for l in self.text.wrap_prose(Face::Body, 24, "Five wrong tries and the code is gone.", width) {
             self.text.draw(c, Face::Body, 24, tx, y, pal().dust, &l);
             y += pocket_ui::type_scale::line(24, 8);
         }
@@ -714,11 +715,8 @@ impl App {
         }
         self.hits.list(sel, page.browsers.len(), 0.0, row as f32);
         let hints: &[(&str, &str)] = if confirm { &[("B", "Keep"), ("A", "Revoke")] } else { &[("B", "Back"), ("A", "Revoke")] };
-        let hints_at = self.nu_hints(c, hints);
-        let left = pad + NU_BTN_PAD;
         let desc = if confirm { "That browser will need a new code." } else { "A revoked browser needs a new code." };
-        let desc = self.text.fit(Face::Body, NU_SMALL, desc, hints_at - 24 - left);
-        self.text.draw(c, Face::Body, NU_SMALL, left, c.h - pad - NU_PILL / 2 + pocket_ui::type_scale::mid(NU_SMALL), pal().text, &desc);
+        self.nu_foot(c, hints, desc, pal().text);
     }
 
     /// pocket-ui ends: the server stops first (its sockets close at once).

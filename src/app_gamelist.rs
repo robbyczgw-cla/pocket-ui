@@ -295,7 +295,7 @@ impl App {
         self.text.draw(c, Face::Title, 44, left, y0 + 58, color, &head);
         let mut y = y0 + 108;
         for text in lines {
-            for line in self.text.wrap(Face::Body, NU_SMALL, &text, width).into_iter().take(4) {
+            for line in self.text.wrap_prose(Face::Body, NU_SMALL, &text, width).into_iter().take(4) {
                 if y > y0 + DETAILS_H - 10 {
                     break;
                 }

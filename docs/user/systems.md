@@ -122,6 +122,8 @@ starts from the beginning each time. Games that save on their own (high scores, 
 If you put the official PICO-8 for Linux (`pico8_64`) into `roms/pico-8/aarch64` (or `roms/pico-8`), PICO-8
 games start with it, as ROCKNIX does, with Continue, Options, Quick settings and Quit only in the pause menu. Without it, a cart that
 doesn't start on the own host goes to RetroArch's FAKE-08.
+The empty "Splore" entry that ROCKNIX puts into `roms/pico-8` at every boot is PICO-8's game browser, not a game: it shows
+on the shelf (and counts) only when the official PICO-8 is there. The file stays where it is.
 
 Pause menu: Continue, Save, Load, Options, Quick settings and Quit, with Achievements when you are signed in to
 RetroAchievements. ScummVM, PICO-8 and TIC-80 have no save states, so their Quit has no moment to keep. See

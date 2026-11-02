@@ -38,12 +38,17 @@ Hold **SELECT and START for 5 seconds** on the shelf or in the pause menu; a bar
 
 - **30 more minutes today**, and **Start today's time again**
 - **Games**, **Colours**, **Time per day**, **Loudest volume**, **New PIN**
+
+If games you picked were deleted or moved off the card meanwhile, the page says so ("2 of the picked games aren't on the card any more."): the child's shelf is shorter by that many.
+
+On the screens that stop your child ("That's all for today!" and an empty shelf), a small line reminds you: "Grown-ups: hold SELECT and START."
 - **Turn off Kids mode**: everything is as it was before.
 
 ### If you forgot the PIN
 
-Put a file called `kids-mode-off.txt` on the card and restart. A computer or a phone with a card reader can write it to the card's first
-partition; on a handheld with Wi-Fi, the file share's games folder works too. Kids mode goes off and forgets the PIN. Games, saves and settings stay.
+The PIN page says this from the first look. Put a file called `kids-mode-off.txt` in the top folder of the card's ROCKNIX drive and
+restart. A computer or a phone with a card reader can write it to the card's first partition; on a handheld with Wi-Fi, the file
+share's games folder works too, if file sharing is already on (a locked-out grown-up can't turn it on). Kids mode goes off and forgets the PIN. Games, saves and settings stay.
 
 ## Good to know
 

@@ -32,6 +32,9 @@ const TOAST_FOR: Duration = Duration::from_millis(1600);
 const NOTE_FOR: Duration = Duration::from_secs(6);
 /// The widest a message gets before it goes on to a second line (the save warning, a long German note).
 const WRAP_AT: i32 = 1000;
+/// A panel narrower than this has the messages in `SMALL_FONT`.
+const SMALL_VIEW: u32 = 800;
+const SMALL_FONT: u32 = 22;
 const FPS_EVERY: Duration = Duration::from_millis(500);
 /// How long the frame around the game takes to fade in at the start (`Overlay::draw_veil`); pocket-ui's launch fade
 /// is as long.
@@ -329,6 +332,8 @@ struct Piece {
 }
 
 pub struct Overlay {
+    /// The screen's width, as `draw` last had it: what a message is laid out for (`paint_pill_on`).
+    view_w: u32,
     program: glow::Program,
     rect: Option<glow::UniformLocation>,
     tex: Option<glow::UniformLocation>,
@@ -412,6 +417,7 @@ impl Overlay {
             let unlock = piece(Anchor::TopCenter)?;
             let strip = piece(Anchor::TopLeft)?;
             Ok(Overlay {
+                view_w: 1240,
                 rect: gl.get_uniform_location(program, "rect"),
                 tex: gl.get_uniform_location(program, "tex"),
                 alpha: gl.get_uniform_location(program, "alpha"),
@@ -432,6 +438,7 @@ impl Overlay {
 
     /// Draws whatever the HUD currently shows. Cheap when nothing does.
     pub fn draw(&mut self, gl: &glow::Context, hud: &mut Hud, view_w: u32, view_h: u32) {
+        self.view_w = view_w;
         let toast = hud.toast_text().to_string();
         let fps = if hud.show_fps { hud.fps_text.clone() } else { String::new() };
         let osd_text = hud.osd_text().to_string();
@@ -645,7 +652,7 @@ impl Overlay {
             osd::paint(&mut c, &mut self.text, 0, 0, &data, PILL);
             (osd::W, osd::H, buf)
         } else {
-            paint_pill(&mut self.text, text)
+            paint_pill_on(&mut self.text, text, self.view_w)
         };
         upload(gl, &mut self.pieces[i], w, h, &buf);
         self.pieces[i].text = text.to_string();
@@ -655,16 +662,24 @@ impl Overlay {
 /// A message in its dark pill: one line, or a rounded box of several when it is wider than `WRAP_AT` (the save
 /// warning). Returns width, height and pixels (`KEY` is transparent).
 pub fn paint_pill(text: &mut Text, msg: &str) -> (i32, i32, Vec<u32>) {
-    let lines = if text.width(Face::Body, FONT, msg) > WRAP_AT { text.wrap(Face::Body, FONT, msg, WRAP_AT) } else { vec![msg.to_string()] };
-    let line_h = FONT as i32 * 13 / 10;
-    let w = lines.iter().map(|l| text.width(Face::Body, FONT, l)).max().unwrap_or(0) + 2 * PAD_X;
-    let h = FONT as i32 + (lines.len() as i32 - 1) * line_h + 2 * PAD_Y;
+    paint_pill_on(text, msg, 1240)
+}
+
+/// [`paint_pill`] for a screen `view_w` wide: pocket-core draws in the panel's own pixels, so a small panel gets a smaller
+/// type and lines that stay on it.
+pub fn paint_pill_on(text: &mut Text, msg: &str, view_w: u32) -> (i32, i32, Vec<u32>) {
+    let font = if view_w < SMALL_VIEW { SMALL_FONT } else { FONT };
+    let wrap_at = WRAP_AT.min(view_w as i32 - 2 * MARGIN - 2 * PAD_X);
+    let lines = if text.width(Face::Body, font, msg) > wrap_at { text.wrap_prose(Face::Body, font, msg, wrap_at) } else { vec![msg.to_string()] };
+    let line_h = font as i32 * 13 / 10;
+    let w = lines.iter().map(|l| text.width(Face::Body, font, l)).max().unwrap_or(0) + 2 * PAD_X;
+    let h = font as i32 + (lines.len() as i32 - 1) * line_h + 2 * PAD_Y;
     let mut buf = vec![KEY; (w * h) as usize];
     let mut c = Canvas::new(&mut buf, w as u32, h as u32);
     let radius = if lines.len() > 1 { 26 } else { h / 2 };
     c.round_rect(0, 0, w, h, radius, PILL);
     for (i, l) in lines.iter().enumerate() {
-        text.draw(&mut c, Face::Body, FONT, PAD_X, PAD_Y + FONT as i32 * 4 / 5 + i as i32 * line_h, 0xffffff, l);
+        text.draw(&mut c, Face::Body, font, PAD_X, PAD_Y + font as i32 * 4 / 5 + i as i32 * line_h, 0xffffff, l);
     }
     (w, h, buf)
 }

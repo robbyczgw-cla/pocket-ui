@@ -1,11 +1,13 @@
 // "Send from your phone" (src/phone_upload.rs): picks files, asks the Pocket where each goes, sends them one or two at
-// a time. Nothing is fetched from anywhere else; the words follow the phone's language (German or English).
+// a time. Nothing is fetched from anywhere else; the words follow the phone's language (German, Spanish or English).
 "use strict";
 
 (function () {
   var data = JSON.parse(document.getElementById("data").textContent);
   var base = "/" + location.pathname.split("/")[1] + "/";
-  var de = (navigator.language || "").toLowerCase().indexOf("de") === 0;
+  var lang = (navigator.language || "").toLowerCase().slice(0, 2);
+  var de = lang === "de";
+  var es = lang === "es";
   var T = de ? {
     title: "Spiele auf deinen Pocket schicken",
     lead: "Wähle Spieldateien auf diesem Handy. Sie landen direkt im richtigen Ordner auf dem Pocket.",
@@ -27,6 +29,28 @@
     lost: "Die Verbindung zum Pocket ist abgebrochen. Von dieser Datei wurde nichts behalten.",
     summary: function (n, of, skipped) {
       return "Hinzugefügt: " + n + (n === 1 ? " Spiel" : " Spiele") + " von " + of + (skipped ? " (" + skipped + " andere Dateien übersprungen)" : "");
+    }
+  } : es ? {
+    title: "Pasa juegos a tu Pocket",
+    lead: "Elige archivos de juego en este teléfono. Van directo a la carpeta correcta del Pocket.",
+    pick: "Elegir archivos",
+    folder: "Elegir una carpeta",
+    stopped: "El Pocket cerró esta página o se suspendió. Los archivos que iban en camino no se guardaron. Abre «Desde el teléfono» en el Pocket otra vez y escanea el código nuevo.",
+    help: "Solo con el mismo Wi-Fi y solo mientras la página esté abierta en el Pocket. Sin cifrar: otras personas en este Wi-Fi podrían ver el código y los juegos que envías, y cambiarlos por el camino. Úsalo solo en tu Wi-Fi de casa. Nadie puede descargar nada del Pocket así; solo te dice si ya hay un juego con el mismo nombre.",
+    choose: "Elige un sistema…",
+    chooseLine: "Varios sistemas aceptan este archivo. Elige uno:",
+    follows: "Va con ",
+    same: function (n, name) { return "Enviar también " + (n === 1 ? "el otro archivo" : "los otros " + n + " archivos") + " a " + name; },
+    waiting: "Esperando…",
+    checking: "Comprobando…",
+    sending: "Enviando: ",
+    added: "Añadido: ",
+    exists: "Ya está en el Pocket y se queda como está. Para reemplazarlo, bórralo allí primero:",
+    none: "Ningún sistema acepta este tipo de archivo.",
+    save: "Las partidas no se pasan así.",
+    lost: "Se perdió la conexión con el Pocket. De este archivo no se guardó nada.",
+    summary: function (n, of, skipped) {
+      return "Añadido: " + n + (n === 1 ? " juego" : " juegos") + " de " + of + (skipped ? " (" + skipped + (skipped === 1 ? " otro archivo omitido)" : " otros archivos omitidos)") : "");
     }
   } : {
     title: "Add games to your Pocket",
@@ -54,6 +78,9 @@
   if (de) {
     document.documentElement.lang = "de";
     document.title = "pocket-ui: Spiele hinzufügen";
+  } else if (es) {
+    document.documentElement.lang = "es";
+    document.title = "pocket-ui: añadir juegos";
   }
   document.querySelectorAll("[data-t]").forEach(function (el) { el.textContent = T[el.getAttribute("data-t")]; });
 
@@ -259,10 +286,52 @@
     return q;
   }
 
-  // The Pocket's reasons are English; the common ones in the phone's words.
+  // The Pocket sends a short code with each refusal; the sentence in the phone's language is looked up here. Without a
+  // code (or in English) the Pocket's own English sentence is shown.
+  var R = de ? {
+    bad_name: "Dieser Dateiname kann nicht verwendet werden.",
+    saves: "Spielstände werden so nicht übertragen.",
+    bios: "Das ist eine BIOS-Datei. BIOS-Dateien kommen mit der SD-Karte oder dem Web-Begleiter nach roms/bios.",
+    marker: "Ein Name mit so einem Teil mittendrin kann so nicht gesendet werden. Benenne die Datei zuerst um.",
+    folder_marker: "Ein Ordner mit so einem Teil im Namen kann nicht verwendet werden. Benenne ihn zuerst um.",
+    wrong_system: "Dieses System nimmt diese Art Datei hier nicht.",
+    no_system: "Kein System nimmt diese Art Datei hier.",
+    choose_system: "Mehrere Systeme nehmen diese Art Datei: Wähle eines.",
+    bad_folder: "Dieser Ordnername kann nicht verwendet werden.",
+    in_the_way: "Ein gleichnamiger Eintrag steht im Weg.",
+    sheet_names: "Diese Disc-Liste nennt Dateien außerhalb ihres Ordners. Sie darf nur Dateien in ihrem eigenen Ordner nennen.",
+    sheet_big: "Diese Disc-Liste ist zu groß.",
+    enough: "Diese Seite hat genug Dateien angenommen. Schließe sie und öffne sie neu für mehr.",
+    exists: "Ist schon auf dem Pocket und bleibt, wie sie ist.",
+    no_room: "Nicht genug Platz auf der SD-Karte.",
+    too_big: "Die Datei ist zu groß für dieses System.",
+    cut_off: "Der Upload wurde abgebrochen. Nichts wurde behalten."
+  } : es ? {
+    bad_name: "Ese nombre de archivo no se puede usar.",
+    saves: "Las partidas no se pasan así.",
+    bios: "Es un archivo BIOS. Los BIOS van a roms/bios con la tarjeta SD o el acompañante web.",
+    marker: "Un nombre con esa parte en medio no se puede enviar así. Renombra el archivo primero.",
+    folder_marker: "Una carpeta con esa parte en el nombre no se puede usar. Renómbrala primero.",
+    wrong_system: "Ese sistema no acepta este tipo de archivo aquí.",
+    no_system: "Ningún sistema acepta este tipo de archivo aquí.",
+    choose_system: "Varios sistemas aceptan este tipo de archivo: elige uno.",
+    bad_folder: "Ese nombre de carpeta no se puede usar.",
+    in_the_way: "Hay algo con ese nombre que estorba.",
+    sheet_names: "Esta lista de discos nombra archivos fuera de su carpeta. Solo puede nombrar archivos de su propia carpeta.",
+    sheet_big: "Esta lista de discos es demasiado grande.",
+    enough: "Esta página ya ha aceptado bastantes archivos. Ciérrala y ábrela de nuevo para más.",
+    exists: "Ya está en el Pocket y se queda como está.",
+    no_room: "No hay espacio en la tarjeta SD.",
+    too_big: "El archivo es demasiado grande para este sistema.",
+    cut_off: "Se cortó la subida. No se guardó nada."
+  } : null;
+
   function reason(x, r) {
+    if (R && r.code && R[r.code]) return R[r.code];
     if (de && x.status === 507) return "Nicht genug Platz auf der SD-Karte. " + (r.error || "");
     if (de && x.status === 413) return "Die Datei ist zu groß. " + (r.error || "");
+    if (es && x.status === 507) return "No hay espacio en la tarjeta SD. " + (r.error || "");
+    if (es && x.status === 413) return "El archivo es demasiado grande. " + (r.error || "");
     return r.error || ("HTTP " + x.status);
   }
 

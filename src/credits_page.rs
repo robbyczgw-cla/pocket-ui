@@ -331,7 +331,7 @@ fn paint_body(c: &mut Canvas, text: &mut Text, d: &CreditsData, sel: Option<usiz
     let w = c.w - 2 * MARGIN;
     let mut y = y0 + 34;
     if let Some(s) = &cr.summary {
-        for line in text.wrap(Face::Body, 28, s, w - 40) {
+        for line in text.wrap_prose(Face::Body, 28, s, w - 40) {
             text.draw(c, Face::Body, 28, x, y, pal().chalk, &line);
             y += crate::type_scale::line(28, 12);
         }
@@ -394,7 +394,7 @@ fn paint_body(c: &mut Canvas, text: &mut Text, d: &CreditsData, sel: Option<usiz
         );
         y += 46;
         for b in &cr.best_selling {
-            for line in text.wrap(Face::Body, 28, &b.text(), w) {
+            for line in text.wrap_prose(Face::Body, 28, &b.text(), w) {
                 text.draw(c, Face::Body, 28, x, y, pal().chalk, &line);
                 y += crate::type_scale::line(28, 12);
             }

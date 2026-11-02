@@ -1762,7 +1762,7 @@ impl App {
             // What the values mean, where that needs saying (Length is a rough guide …), under them when there's room.
             if let Some(note) = f.note().filter(|_| fv.values.len() < visible) {
                 let mut ny = top + fv.values.len() as i32 * pitch + 32;
-                for line in self.text.wrap(Face::Body, 28, note, rw - 24).iter().take(3) {
+                for line in self.text.wrap_prose(Face::Body, 28, note, rw - 24).iter().take(3) {
                     self.text.draw(c, Face::Body, 28, rx + 12, ny, pal().dust, line);
                     ny += pocket_ui::type_scale::line(28, 12);
                 }
@@ -1841,7 +1841,7 @@ impl App {
             if y0 + elsewhere_h <= bottom + 20 {
                 self.text.draw(c, Face::Body, 21, MARGIN, y0 + 10, pal().dust, "Not on this device");
                 let names = p.elsewhere.join(" · ");
-                for (i, line) in self.text.wrap(Face::Body, 28, &names, w).iter().take(2).enumerate() {
+                for (i, line) in self.text.wrap_prose(Face::Body, 28, &names, w).iter().take(2).enumerate() {
                     self.text.draw(c, Face::Body, 28, MARGIN, y0 + 50 + i as i32 * 38, pal().dust, line);
                 }
             }
@@ -2035,7 +2035,7 @@ impl App {
         self.hits.list(sel, SETTINGS_ROWS.len(), 0.0, row as f32);
         let (left, width) = (pad + NU_BTN_PAD, c.w - 2 * (pad + NU_BTN_PAD));
         let mut y = top + SETTINGS_ROWS.len() as i32 * row + 44;
-        for line in self.text.wrap(Face::Body, NU_SMALL, SETTINGS_ROWS[sel].1, width) {
+        for line in self.text.wrap_prose(Face::Body, NU_SMALL, SETTINGS_ROWS[sel].1, width) {
             self.text.draw(c, Face::Body, NU_SMALL, left, y, pal().text, &line);
             y += pocket_ui::type_scale::line(NU_SMALL, 12);
         }

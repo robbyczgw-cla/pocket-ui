@@ -890,7 +890,7 @@ impl Cards {
         }
         let title = text.fit(Face::Title, 67, f.title, c.w - 2 * MARGIN);
         text.draw(c, Face::Title, 67, MARGIN, 160, pal().chalk, &title);
-        for (k, line) in text.wrap(Face::Body, 28, f.line, c.w - 2 * MARGIN).iter().take(2).enumerate() {
+        for (k, line) in text.wrap_prose(Face::Body, 28, f.line, c.w - 2 * MARGIN).iter().take(2).enumerate() {
             text.draw(c, Face::Body, 28, MARGIN, 208 + k as i32 * 38, pal().dust, line);
         }
 
@@ -935,19 +935,19 @@ impl Cards {
             } else {
                 "Changed any time in"
             };
-            for line in text.wrap(Face::Body, 24, later, w) {
+            for line in text.wrap_prose(Face::Body, 24, later, w) {
                 text.draw(c, Face::Body, 24, x, y, pal().dust, &line);
                 y += crate::type_scale::line(24, 10);
             }
         } else {
             y += 30;
-            for line in text.wrap(Face::Body, 24, "Nothing to switch. Find it here:", w) {
+            for line in text.wrap_prose(Face::Body, 24, "Nothing to switch. Find it here:", w) {
                 text.draw(c, Face::Body, 24, x, y, pal().dust, &line);
                 y += crate::type_scale::line(24, 10);
             }
         }
         y += 16;
-        for line in text.wrap(Face::Body, 28, f.place, w).iter().take(3) {
+        for line in text.wrap_prose(Face::Body, 28, f.place, w).iter().take(3) {
             text.draw(c, Face::Body, 28, x, y, pal().chalk, line);
             y += crate::type_scale::line(28, 12);
         }
@@ -1060,7 +1060,12 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize) -> Hits {
             let (on, off) = profile_summary(p);
             let mut v = vec![(format!("On: {}.", on.join(", ")), pal().chalk)];
             if !off.is_empty() {
-                v.push((format!("Off: {}.", off.join(", ")), pal().dust));
+                // Two of them, then "and more": a long list ran off the page on 480 lines.
+                let mut shown: Vec<&str> = off.iter().copied().take(2).collect();
+                if off.len() > 2 {
+                    shown.push("and more");
+                }
+                v.push((format!("Off: {}.", shown.join(", ")), pal().dust));
             }
             v
         }
@@ -1070,7 +1075,7 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize) -> Hits {
     let (step, last) = (crate::type_scale::line(24, 10), c.h - 100 - crate::type_scale::grow(24));
     for (line, colour) in lines {
         let room = ((last - y) / step + 1).max(0) as usize;
-        for l in text.wrap_at_most(Face::Body, 24, &line, width, room) {
+        for l in text.wrap_prose_at_most(Face::Body, 24, &line, width, room) {
             text.draw(c, Face::Body, 24, MARGIN, y, colour, &l);
             y += step;
         }

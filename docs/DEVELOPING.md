@@ -845,6 +845,7 @@ These are meant for development and tests; normal use needs none of them. On a d
 | `POCKETUI_SNAPSHOT_WIFI=1\|0` | `--snapshot`: the status corner as if Wi-Fi were connected (`1`) or not (`0`) (the `--snapshot` table above) |
 | `POCKETUI_SNAPSHOT_USB=1` | `--snapshot`: Settings → Connections has the USB file transfer row on a computer without ROCKNIX's `usbgadget` (`usb_transfer`) |
 | `POCKETUI_SNAPSHOT_GAMES_CARD=1` | `--snapshot`: Add games as with a games card in (`games_card`) |
+| `POCKETUI_SNAPSHOT_IMAGE_CARD=1` | `--snapshot`: Home and Add games as with a flashed system image in the second slot (`card_health::image_card`) |
 | `POCKETUI_SNAPSHOT_GAME=<system>\|<name>\|<file>` | `--snapshot`: the game behind the pause menu and the slot pages (default `gbc\|uCity\|uCity.gbc`); `scripts/readme-shots.sh` sets it |
 | `POCKETUI_SNAPSHOT_FLIP_MS=<ms>` | `--snapshot box:…`: the box's last turn that long after it began, instead of done (`game_box::BoxView::snapshot_settle`) |
 | `POCKETUI_SNAPSHOT_OPEN_MS=<ms>` | `--snapshot box:…`: the game that long into sliding out of its case, instead of out (`game_box::BoxView::snapshot_settle`) |
@@ -916,6 +917,7 @@ These are meant for development and tests; normal use needs none of them. On a d
 
 | Variable | Effect |
 |---|---|
+| `POCKET_TEST_SAVE_DELAY_MS=<ms>` | For a device test of a slow card: pocket-core's exit save takes this much longer (`quit::still_saving`: nothing stops a game while it writes). |
 | `POCKET_CORE_NO_SHORTCUTS=1` | Set by pocket-ui for a Kids Mode game: pocket-core's HOME shortcuts are all off, also after applying the game's settings ([KIDS-MODE.md](KIDS-MODE.md)) |
 | `POCKET_CORE_TRACE=1` | Print every libretro environment call a core makes that pocket-core does not answer; a core's log has no 2 MB limit then |
 | `POCKET_CORE_TEST=1` | The command FIFO also takes test input (`press A 150`, `axis lx 0.8`), `peek <offset>` and `achievement-demo` ([HOST.md](HOST.md)) |

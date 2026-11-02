@@ -1,6 +1,6 @@
 # What each platform has
 
-One table of what a player can use, taken from the code and the docs (0.1.10). "Not seen" means the code has it but nobody has
+One table of what a player can use, taken from the code and the docs (0.1.11). "Not seen" means the code has it but nobody has
 watched it on that platform's real device. ROCKNIX handhelds are the reference: every feature below was seen there, unless its row says otherwise.
 Android was seen on the emulator only; the Steam Deck on one SteamOS session over SSH (docs/STEAMDECK.md).
 

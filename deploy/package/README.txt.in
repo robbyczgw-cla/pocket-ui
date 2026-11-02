@@ -42,6 +42,8 @@ This zip is the way for people who have SSH. Without a terminal, take the single
 If something does not fit (another device, a ROCKNIX older than the tested one, too little space), the screen
 says so in a sentence, nothing on the card is changed, and Close takes you back to EmulationStation.
 Starting it twice is harmless. It uses the same install.sh as below, unchanged.
+If a download from GitHub calls the file "Install.pocket-ui.sh" (it turns spaces into dots), that is the same file and
+works under that name too.
 Alternative with two files: put this zip next to a copy of the small starter "Install pocket-ui.sh"
 (without the package inside) in roms/ports; the starter finds the zip.
 

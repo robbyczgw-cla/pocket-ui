@@ -13,6 +13,8 @@
 //!   disc's serial and can't be told from the file; they stay. Kept unless asked for.
 //! * Its box art, game pictures and kept frame (pocket-ui's own copies) always go with it.
 //!
+//! Two games of one system with one file name share their states and pictures: neither takes them with it (`Places::shared`).
+//!
 //! [`plan`] only looks (sizes included) and runs on a thread; [`delete`] does what a plan says, and refuses a path that
 //! is a system's folder or above it.
 
@@ -83,6 +85,8 @@ pub struct Places<'a> {
     pub states: &'a Path,
     pub data: &'a Path,
     pub protected: &'a [PathBuf],
+    /// Another game of the system has this file name: its states and pictures, named after that alone, are its too.
+    pub shared: bool,
 }
 
 /// What deleting the game `path` of `system` would take, with sizes. Reads a sheet or two and lists two folders: run
@@ -102,8 +106,10 @@ pub fn plan(system: &str, path: &Path, places: &Places) -> Result<Plan, String> 
         }
         plan.saves = saves_of(path).into_iter().map(|p| item(&p)).collect();
     }
-    plan.states = states_of(system, path, places.states).into_iter().map(|p| item(&p)).collect();
-    plan.pictures = pictures_of(system, path, places.data).into_iter().filter(|p| p.exists()).collect();
+    if !places.shared {
+        plan.states = states_of(system, path, places.states).into_iter().map(|p| item(&p)).collect();
+        plan.pictures = pictures_of(system, path, places.data).into_iter().filter(|p| p.exists()).collect();
+    }
     plan.own_folder = own_folder(path, places.protected);
     Ok(plan)
 }
@@ -401,7 +407,7 @@ mod tests {
         t.put("roms/savestates/psx/Saga II.pstate", 50);
         t.put("data/covers/psx/Saga.png", 3);
         let protected = t.protected();
-        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected };
+        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected, shared: false };
         let plan = plan("psx", &m3u, &places).unwrap();
         assert_eq!(plan.game.len(), 5);
         assert_eq!(plan.game_bytes(), 2000 + fs::metadata(&m3u).unwrap().len() + 2 * fs::metadata(t.0.join("roms/psx/Saga/Saga (Disc 1).cue")).unwrap().len());
@@ -432,7 +438,7 @@ mod tests {
         t.put("roms/gba/Tiny.sav", 64);
         t.put("roms/gba/Other.gba", 100);
         let protected = t.protected();
-        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected };
+        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected, shared: false };
         let plan = plan("psx", &cue, &places).unwrap();
         assert_eq!(plan.freed(true), plan.game_bytes() + 8 + 30);
         delete(&plan, true, &protected).unwrap();
@@ -453,7 +459,7 @@ mod tests {
         t.put("roms/dos/Keen/data/LEVEL1.DAT", 300);
         t.put("roms/dos/Keen/SAVEGAM1.sav", 10);
         let protected = t.protected();
-        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected };
+        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected, shared: false };
         let plan = plan("dos", &t.0.join("roms/dos/Keen"), &places).unwrap();
         assert_eq!(plan.game_bytes(), 1210);
         assert_eq!(delete(&plan, false, &protected).unwrap(), 1200);
@@ -467,7 +473,7 @@ mod tests {
         let t = Tree::new("refuse");
         t.put("roms/gba/A.gba", 1);
         let protected = t.protected();
-        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected };
+        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected, shared: false };
         assert!(plan("gba", &t.0.join("roms/gba"), &places).is_err());
         assert!(plan("gba", &t.0.join("roms"), &places).is_err());
         assert!(plan("gba", &t.0.join("roms/gba/Gone.gba"), &places).unwrap_err().contains("no longer"));
@@ -484,5 +490,24 @@ mod tests {
         for p in ["/r/gba/A.gba", "/r/ps2/Game.iso", "/r/psx/C.bin", "/r/bios/scph5501.bin"] {
             assert!(!is_save(Path::new(p)), "{p}");
         }
+    }
+
+    #[test]
+    fn a_game_sharing_its_file_name_takes_no_states_or_pictures_with_it() {
+        let t = Tree::new("shared");
+        let a = t.put("roms/gba/Alpha/Game.gba", 5);
+        t.text("roms/gba/Beta/Game.gba", "other");
+        t.put("roms/gba/Alpha/Game.srm", 8);
+        let (slot, auto, ra) = (t.put("roms/savestates/gba/Game.pstate", 4), t.put("roms/savestates/gba/Game.pstate.auto", 4), t.put("roms/savestates/gba/Game.state", 4));
+        let cover = t.put("data/covers/gba/Game.png", 3);
+        let protected = t.protected();
+        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected, shared: true };
+        let plan = plan("gba", &a, &places).unwrap();
+        assert!(plan.states.is_empty() && plan.pictures.is_empty());
+        assert_eq!(names(&plan.saves), ["Game.srm"], "the battery save beside it is its own");
+        delete(&plan, true, &protected).unwrap();
+        assert!(!a.exists() && !t.has("roms/gba/Alpha/Game.srm"));
+        assert!(slot.exists() && auto.exists() && ra.exists() && cover.exists());
+        assert!(t.has("roms/gba/Beta/Game.gba"));
     }
 }

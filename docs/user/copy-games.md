@@ -33,6 +33,8 @@ Good to know:
 
 - **While the card is in, only its games are on the shelf.** The games on the first card aren't gone; they come back when you take
   the second card out and restart.
+- **A card that still holds a system image doesn't work as a games card.** If you flashed it with pocket-ui or ROCKNIX, only its
+  small space is used. Home and Add games say so; take it out, or format it for games in your computer.
 - **Your saves and states are on that card too**, next to its games (`roms/savestates`). Settings stay on the first card.
 - **Don't pull the card while a game runs.** Quit first, and switch off to take it out. If it comes out anyway: on pocket-ui's own
   host the game says its progress can't be saved, and asks before you quit; ROCKNIX's emulators (N64, PSP, Dreamcast and DS on

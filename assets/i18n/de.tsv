@@ -1467,8 +1467,8 @@ Sleep after	Ruhezustand nach
 Hours	Stunden
 Never sleep	Nie Ruhezustand
 Switch off after sleeping	Nach Ruhezustand ausschalten
-After this long asleep on battery, the Pocket saves the game and switches off.	Nach so langem Ruhezustand ohne Ladekabel speichert der Pocket das Spiel und schaltet sich aus.
-The Pocket stays asleep until you wake it.	Der Pocket bleibt im Ruhezustand, bis du ihn weckst.
+After this long asleep on battery, the Pocket saves the game and switches off. Sleeping uses a few percent of the battery an hour.	Nach so langem Ruhezustand ohne Ladekabel speichert der Pocket das Spiel und schaltet sich aus. Der Ruhezustand braucht pro Stunde ein paar Prozent Akku.
+The Pocket stays asleep until you wake it. Sleeping uses a few percent of the battery an hour.	Der Pocket bleibt im Ruhezustand, bis du ihn weckst. Der Ruhezustand braucht pro Stunde ein paar Prozent Akku.
 Switched off after {n} h asleep to save the battery.	Nach {n} h im Ruhezustand ausgeschaltet, um den Akku zu schonen.
 Sleep & power	Ruhezustand & Ein/Aus
 When the screen goes off and the device sleeps, and the power button.	Wann der Bildschirm ausgeht und das Gerät in den Ruhezustand geht, und die Ein/Aus-Taste.
@@ -1489,8 +1489,8 @@ Saves the game and puts the Pocket to sleep. Press the power button again to wak
 Only the screen goes dark: the game and its sound keep running. Any button turns it back on.	Nur der Bildschirm wird dunkel: Spiel und Ton laufen weiter. Jede Taste schaltet ihn wieder ein.
 Hold it for about a second: Sleep, Restart, Power off and Restart pocket-ui.	Etwa eine Sekunde halten: Ruhezustand, Neu starten, Ausschalten und pocket-ui neu starten.
 Holding it also puts the Pocket to sleep. The power menu is still in the quick settings, under Power….	Halten schickt ihn auch in den Ruhezustand. Das Ein/Aus-Menü gibt es weiter im Schnellmenü unter Ein/Aus ….
-Saves the game. The power button wakes it.	Speichert das Spiel. Die Ein/Aus-Taste weckt ihn.
-The power button wakes it.	Die Ein/Aus-Taste weckt ihn.
+Saves the game. The power button wakes it. Uses a few percent of the battery an hour.	Speichert das Spiel. Die Ein/Aus-Taste weckt ihn. Braucht pro Stunde ein paar Prozent Akku.
+The power button wakes it. Uses a few percent of the battery an hour.	Die Ein/Aus-Taste weckt ihn. Braucht pro Stunde ein paar Prozent Akku.
 Started from a computer: this goes back to Android.	Vom Computer gestartet: Das führt zurück zu Android.
 Saves the game, then restarts the Pocket.	Speichert das Spiel, dann startet der Pocket neu.
 Restarts the whole Pocket.	Startet den ganzen Pocket neu.
@@ -1732,7 +1732,7 @@ Crisp	Klar
 Soft	Weich
 Screen effect	Bildeffekt
 LCD grid imitates a handheld screen, scanlines and CRT a TV.	LCD-Raster ahmt einen Handheld-Bildschirm nach, Scanlines und Röhre einen Fernseher.
-They stay even at every size, Aspect included.	Sie bleiben bei jeder Größe gleichmäßig, auch bei Seitenverhältnis.
+They stay even at every size, Aspect included.	Gleich in jeder Größe, auch bei Seitenverhältnis.
 LCD colours	LCD-Farben
 The colours of the Game Boy Advance's own screen:	Die Farben des Bildschirms des Game Boy Advance:
 softer and darker, as the games were made for.	weicher und dunkler, wie die Spiele dafür gemacht wurden.
@@ -1822,7 +1822,7 @@ Fan outside games	Lüfter außerhalb von Spielen
 Smooth fan	Sanfter Lüfter
 How fast the processor may run while you play.	Wie schnell der Prozessor beim Spielen laufen darf.
 How early the fan starts while you play.	Wie früh der Lüfter beim Spielen anläuft.
-The fan on the shelf, in the lists and in Settings. While the Pocket sleeps it keeps the system's own cooling.	Der Lüfter im Regal, in den Listen und in den Einstellungen. Im Ruhezustand bleibt die Kühlung des Systems.
+The fan on the shelf, in the lists and in Settings. While the Pocket sleeps it keeps the system's own cooling.	Lüfter im Regal, in Listen und Einstellungen. Im Ruhezustand kühlt das System.
 How the fan changes its speed.	Wie der Lüfter sein Tempo ändert.
 Battery: about half speed, which is enough for Game Boy and NES. The battery lasts longer.	Akku: etwa halbes Tempo, genug für Game Boy und NES. Der Akku hält länger.
 Auto: the system speeds up and slows down as the game needs it.	Auto: Das System wird schneller und langsamer, wie das Spiel es braucht.
@@ -1987,7 +1987,7 @@ Power off	Ausschalten
 Restart to boot menu	Neu starten ins Bootmenü
 
 # --- Picture preview
-Whole screen	Ganzer Bildschirm
+Whole screen	Ganzes Bild
 Actual size	Originalgröße
 
 # --- Quick settings
@@ -2175,7 +2175,7 @@ Name of the hidden network	Name des versteckten Netzwerks
 This can take up to a minute.	Das kann bis zu einer Minute dauern.
 Remote access	Fernzugriff
 Log in to this Pocket from a computer on the same Wi-Fi, with SSH.	Melde dich von einem Computer im selben WLAN per SSH auf diesem Pocket an.
-It stays on until you turn it off. It turns itself off when the Pocket restarts.	Er bleibt an, bis du ihn ausschaltest. Beim Neustart schaltet er sich selbst aus.
+It stays on until you turn it off or the Pocket restarts.	Er bleibt an, bis du ihn ausschaltest oder der Pocket neu startet.
 Switching remote access{s}	Fernzugriff wird umgeschaltet{s}
 Remote access is on.	Fernzugriff ist an.
 Always on: this is a developer device (dev-ssh).	Immer an: Das ist ein Entwicklergerät (dev-ssh).
@@ -2240,7 +2240,7 @@ Choose a look	Wähl eine Ansicht
 How the shelf looks, with sample games until yours are on the SD card.	So sieht das Regal aus, mit Beispielspielen, bis deine auf der SD-Karte sind.
 Your shelf, in each look.	Dein Regal, in jeder Ansicht.
 Appearance	Darstellung
-Keep this look	Diese Ansicht behalten
+Keep this look	Behalten
 Saved, out of range	Gespeichert, nicht in Reichweite
 Saved	Gespeichert
 No password	Ohne Passwort
@@ -2583,7 +2583,7 @@ The update list isn't signed by us. Nothing was changed.	Die Update-Liste ist ni
 The download is larger than announced. Nothing was installed.	Der Download ist größer als angekündigt. Nichts wurde installiert.
 Download failed. Check Wi-Fi.	Download fehlgeschlagen. Prüf das WLAN.
 The update address has to start with https://. Nothing was changed.	Die Update-Adresse muss mit https:// beginnen. Nichts wurde geändert.
-The update server has no update list right now. Try again later.	Auf dem Update-Server liegt gerade keine Update-Liste. Versuch es später noch einmal.
+No updates published yet. A new version installs like the first one; your games and settings stay.	Es sind noch keine Updates veröffentlicht. Eine neue Version wird wie die erste installiert; deine Spiele und Einstellungen bleiben.
 The update server sent an address that isn't https. Nothing was changed.	Der Update-Server hat eine Adresse ohne https geschickt. Nichts wurde geändert.
 The update file isn't on the server. Nothing was installed.	Die Update-Datei liegt nicht auf dem Server. Nichts wurde installiert.
 The update list names a file that isn't on https. Nothing was installed.	Die Update-Liste nennt eine Datei ohne https. Nichts wurde installiert.
@@ -3403,7 +3403,8 @@ Code: every browser needs a code, yours too.	Code: Jeder Browser braucht einen C
 {t} · 1 filter	{t} · 1 Filter
 Max: CPU and GPU at full speed, smoothest, but warmer and uses more battery. Auto: the system decides (ROCKNIX's own setting for this system). Battery: lower top speeds, light games only.	Max: CPU und GPU auf vollem Takt, am flüssigsten, wärmer, mehr Akku. Auto: Das System entscheidet (die eigene Einstellung von ROCKNIX für dieses System). Akku: niedrigere Höchsttakte, nur für leichte Spiele.
 Brightness, volume, Wi-Fi, Bluetooth, performance, fan and power.	Helligkeit, Lautstärke, WLAN, Bluetooth, Leistung, Lüfter und Ein/Aus.
-A choice saved in the pause menu for a console or a game (Options › Extras), or for a port on its card, wins over these. Games: performance covers games with a pause menu and PortMaster ports; with Smooth fan, Games: fan covers every game.	Eine im Pausenmenü gespeicherte Wahl für eine Konsole oder ein Spiel (Optionen › Extras) oder für einen Port auf seiner Karte hat Vorrang. Spiele: Leistung gilt für Spiele mit Pausenmenü und PortMaster-Ports; mit Sanftem Lüfter gilt Spiele: Lüfter für jedes Spiel.
+A choice saved in the pause menu (Options › Extras) wins over these. Games: performance covers games with a pause menu and ports; with Smooth fan, Games: fan covers every game.	Eine im Pausenmenü gespeicherte Wahl (Optionen › Extras) hat Vorrang. Spiele: Leistung gilt für Spiele mit Pausenmenü und Ports; mit Sanftem Lüfter gilt Spiele: Lüfter für jedes Spiel.
+and more	und mehr
 ≈{n} ms, {t} ahead	≈{n} ms, {t} voraus
 Bilinear textures (forced, not sprites)	Texturen bilinear (erzwungen, ohne Sprites)
 Battery: the processor's top speeds are held at about half. Cooler, quieter, and the battery lasts longer; a demanding port may stutter.	Akku: Die Höchsttakte des Prozessors bleiben bei etwa der Hälfte. Kühler, leiser, und der Akku hält länger; ein anspruchsvoller Port kann ruckeln.
@@ -3456,7 +3457,7 @@ Starter pack	Startpaket
 A few free games to start with, downloaded to your SD card.	Ein paar kostenlose Spiele zum Anfangen, auf deine SD-Karte geladen.
 Get the starter pack	Startpaket holen
 Get a few free games to start playing right away.	Hol dir ein paar kostenlose Spiele, um sofort loszuspielen.
-Or copy your own into /storage/roms/<system>. Settings › Games › Add games shows where.	Oder kopiere eigene nach /storage/roms/<system>. Einstellungen › Spiele › Spiele hinzufügen zeigt, wohin.
+Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing, USB).	Oder kopiere eigene: Einstellungen › Spiele › Spiele hinzufügen zeigt die Wege (Handy, Dateifreigabe, USB).
 Needs Wi-Fi. Connect in Settings › Connections › Wi-Fi first.	Braucht WLAN. Verbinde dich zuerst unter Einstellungen › Verbindungen › WLAN.
 {n} small games, free to share, from their authors.	{n} kleine Spiele, frei weitergebbar, direkt von ihren Autoren.
 Get all games	Alle Spiele holen
@@ -4113,6 +4114,7 @@ Your last five games stand a little open. A goes straight back to the moment you
 Remember where I quit is off: a Quit freezes nothing new. Moments from before and from sleep stay.	Stelle beim Beenden merken ist aus: Beenden friert nichts Neues ein. Momente von vorher und aus dem Ruhezustand bleiben.
 Going back to your moment…	Zurück in deinen Moment…
 Couldn't go back to that moment: started fresh	Zurück in den Moment ging nicht: neu gestartet
+Another game has this file name and shares its save states. Saving here can overwrite its saves. Rename one to keep them apart	Ein anderes Spiel hat denselben Dateinamen und teilt sich die Speicherstände. Speichern hier kann seine überschreiben. Benenne eines um, um sie zu trennen
 Its saved moment is gone: started fresh	Sein gespeicherter Moment ist weg: neu gestartet
 Started fresh: its saved moment belongs to its other emulator	Neu gestartet: Sein Moment gehört zum anderen Emulator
 The game's file changed: started fresh. The moment is still under Load	Die Spieldatei hat sich geändert: neu gestartet. Der Moment liegt noch unter Laden
@@ -4260,7 +4262,7 @@ Copy games with a USB cable. Windows and Linux open it by themselves; a Mac need
 USB file transfer is on. Connect a computer: your games are under Roms.	USB-Dateiübertragung ist an. Schließ einen Computer an: Deine Spiele liegen unter Roms.
 USB file transfer didn't start. Take out what's in the USB port and try again.	USB-Dateiübertragung ist nicht gestartet. Zieh ab, was am USB-Anschluss steckt, und versuch es noch einmal.
 Your games card came out. Put it back to play: your games and saves are on it. A game that was running couldn't save after that moment.	Deine Spielekarte wurde herausgenommen. Steck sie wieder ein, um zu spielen: Deine Spiele und Spielstände sind darauf. Ein laufendes Spiel konnte ab diesem Moment nicht mehr speichern.
-Games card found. Reading its games.	Spielekarte gefunden. Ihre Spiele werden gelesen.
+Games card found. While it's in, only its games show; your other games come back when you take it out.	Spielekarte gefunden. Solange sie steckt, siehst du nur ihre Spiele; deine anderen Spiele sind wieder da, wenn du sie herausnimmst.
 Games card in	Spielekarte steckt
 Your games are read from your games card. To add more, put that card in your computer and copy them into its roms folder.	Deine Spiele kommen von deiner Spielekarte. Für weitere steck diese Karte in deinen Computer und kopiere sie in ihren Ordner roms.
 Card is read-only: copying won't work	Karte nur lesbar: Kopieren geht nicht
@@ -4296,7 +4298,7 @@ For grown-ups	Für Erwachsene
 Enter your PIN.	Gib deine PIN ein.
 Too many tries. Wait {n} seconds.	Zu viele Versuche. Warte {n} Sekunden.
 That's not it. Try again.	Das war sie nicht. Versuch es noch einmal.
-Forgot it? Put a file called {s} on the card and restart.	Vergessen? Leg eine Datei namens {s} auf die Karte und starte neu.
+Forgot it? Put a file called {s} in the top folder of the card's ROCKNIX drive and restart.	Vergessen? Leg eine Datei namens {s} in den obersten Ordner des ROCKNIX-Laufwerks der Karte und starte neu.
 D-PAD	STEUERKREUZ
 Numbers	Ziffern
 Kids mode	Kindermodus
@@ -4367,3 +4369,16 @@ No limit	Keine Grenze
 This game won't start right now. Press a button to pick another one.	Dieses Spiel startet gerade nicht. Drück eine Taste und such dir ein anderes aus.
 {n} hidden	{n} ausgeblendet
 This device has no Wi-Fi, so the downloads aren't available.	Dieses Gerät hat kein WLAN, deshalb sind die Downloads nicht verfügbar.
+Splore is PICO-8's game browser, not a game, and it needs the PICO-8 program from lexaloffle.com in roms/pico-8. Your own PICO-8 games work without it.	Splore ist der Spielebrowser von PICO-8, kein Spiel, und braucht das PICO-8-Programm von lexaloffle.com in roms/pico-8. Deine eigenen PICO-8-Spiele laufen auch ohne.
+The clock is on UTC. Set your time zone in Settings › System › Time.	Die Uhr geht nach UTC. Stell deine Zeitzone unter Einstellungen › System › Uhrzeit ein.
+Forgot it? Put a file called {s} on the card and restart.	Vergessen? Leg eine Datei namens {s} auf die Karte und starte neu.
+Grown-ups: hold SELECT and START.	Erwachsene: SELECT und START gedrückt halten.
+1 of the picked games isn't on the card any more.	1 der ausgewählten Spiele ist nicht mehr auf der Karte.
+{n} of the picked games aren't on the card any more.	{n} der ausgewählten Spiele sind nicht mehr auf der Karte.
+1 game file can't be read. Settings › Games › Game check says why.	1 Spieldatei kann nicht gelesen werden. Einstellungen › Spiele › Spiele-Check sagt, warum.
+Some game files can't be read. Settings › Games › Game check says why.	Einige Spieldateien können nicht gelesen werden. Einstellungen › Spiele › Spiele-Check sagt, warum.
+Some game files in your ROM folders can't be read. Settings › Games › Game check says why.	Einige Spieldateien in deinen ROM-Ordnern können nicht gelesen werden. Einstellungen › Spiele › Spiele-Check sagt, warum.
+Still saving…	Speichert noch…
+This one takes a while. Still saving, don't switch off.	Das dauert etwas. Es speichert noch, bitte nicht ausschalten.
+Closing the game…	Spiel wird beendet…
+The second card holds a system image, so only its small space is used. Take it out, or format it for games.	Die zweite Karte enthält ein System-Image, deshalb wird nur ihr kleiner Platz genutzt. Nimm sie heraus oder formatiere sie für Spiele.

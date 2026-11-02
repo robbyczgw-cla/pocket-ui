@@ -52,6 +52,8 @@ thumbnail of each was used.
 | wonderswan | https://commons.wikimedia.org/wiki/File:WonderSwan-Black-Left.jpg | Evan-Amos | Public domain | 2026-10-22 |
 | psvita | https://commons.wikimedia.org/wiki/File:PlayStation-Vita-1101-FL.jpg | Evan-Amos | Public domain | 2026-10-29 |
 | xbox | https://commons.wikimedia.org/wiki/File:Xbox-Console-FL.jpg | Evan-Amos | Public domain | 2026-10-28 |
+| ps3 | https://commons.wikimedia.org/wiki/File:Sony-PlayStation-PS3-Slim-Console-FL.jpg | Evan-Amos | Public domain | 2026-11-02 |
+| wiiu | https://commons.wikimedia.org/wiki/File:Nintendo-Wii-U-Console-FL.jpg | Evan-Amos | Public domain | 2026-11-02 |
 
 The first Dreamcast choice, `Dreamcast-Console-Set.jpg`, is CC BY-SA 3.0 on Commons, so the public-domain
 `Sega-Dreamcast-Console-FL.jpg` (console without controller) was used instead.
@@ -86,6 +88,10 @@ lettering on the jewel and on the front plate was painted over, as were the smal
 PixelLab made three conversions (3 credits); the first was kept, the two others are in `assets/pixellab/_check/`.
 
 The `psvita` picture (added 2026-10-29; the first PS Vita, PCH-1000) was made the same way from `PlayStation-Vita-1101-FL.jpg`. The SONY and PS VITA lettering and the PlayStation symbol on the button were painted over on the photo before the conversion. PixelLab made one conversion (1 credit); the rim step (`tools/rim.py`) was applied because the picture is almost entirely dark.
+
+The `ps3` (the slim PS3, console only) and `wiiu` (the Wii U console, standing flat, without the GamePad) pictures (added 2026-11-02) were made the same way. On the photos the "PS3" embossing, SONY and the PlayStation symbol, the Nintendo logo and the "Wii U" lettering were painted over before the conversion (a fill from the plastic round each box). PixelLab made one conversion each (2 credits); the rim step (`tools/rim.py`) was applied because both are almost entirely dark, and `tools/fix.py` filled a black patch the conversion left on the PS3's top.
+`saturn` (added 2026-11-02) is the shut console of the Saturn rig (`assets/media/rig/saturn`: base, lid and front parts composed, 255 colours), no conversion of its own.
+
 
 What was changed in every picture above:
 

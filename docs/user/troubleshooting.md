@@ -2,10 +2,8 @@
 
 ## Known limits
 
-**The SD card image is not published.** It builds and passes its offline checks and was started once on a fresh
-card on a Mini V2 (2026-10-27, which found a Wi-Fi bug in the first-start setup, since fixed); a complete first start
-as a new player has not been repeated. The test device was set up by hand (see [Getting started](getting-started.md#1-write-the-sd-card) and
-the [install guide](../INSTALL-DUAL-BOOT.md)). Tested on one device only.
+**The ready-made SD card image is not published.** The ways that exist today are the Ports installer, the two-file card
+install and the SSH package ([Getting started](getting-started.md#1-put-pocket-ui-on-the-card)). Tested on one device mainly.
 
 **Which system starts is a setting of Retroid's start menu.** With **Boot mode: Loader** the Pocket starts pocket-ui
 from the SD card, with **Boot mode: Android** it starts Android (see
@@ -107,6 +105,12 @@ then A again).
 **I want my saves back, or I have to flash the card again.**
 Settings → System → Backup & reset → Back up saves, then copy the folder `backup/pocket-ui-saves` to a computer: flashing erases it
 with the rest of the card. Afterwards copy it back to the same place and restore it on the same page. What is newer on the card stays.
+
+**"Another game has this file name": two games share save states.**
+Save states are named after the game's file, so two games of one system with the same file name in different folders share them: the
+moment you quit at, the save slots and Earlier. A game only continues on its own when it was the last of them you played and each of the others is in your recent games, and
+deleting one leaves the shared states on the card. Saving in a slot or quitting one of them can still overwrite what the other saved
+there. To keep them apart, rename one of the files. In-game saves lie beside each game and aren't shared.
 
 **My device does not show up in the Bluetooth search.**
 It has to be in pairing mode while the search runs: most controllers flash their light fast then. A controller that

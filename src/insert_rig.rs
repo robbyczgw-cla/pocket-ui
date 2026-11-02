@@ -453,6 +453,36 @@ mod tests {
         }
     }
 
+    /// How far a rig's medium sits from the console's own middle, art pixels across (in its own axes): the console's outline
+    /// runs from this much to that in the rows its picture has them.
+    fn off_body_centre(system: &str) -> f32 {
+        let f = files(system, Game::Disc).expect(system);
+        let b = crate::system_art::decode(&f.base).expect("base");
+        let s = f.rig.seat;
+        let det = cross(s.u, s.v);
+        let across = |p: V| cross(p, s.v) / det * s.u.0.hypot(s.u.1);
+        let (mut lo, mut hi) = (f32::MAX, f32::MIN);
+        for y in 0..b.h {
+            for x in 0..b.w {
+                if b.px[(y * b.w + x) as usize] >> 24 == 255 {
+                    let a = across((x as f32, y as f32));
+                    lo = lo.min(a);
+                    hi = hi.max(a);
+                }
+            }
+        }
+        across(s.at) - (lo + hi) / 2.0
+    }
+
+    #[test]
+    fn a_handheld_s_cartridge_is_on_the_console_s_middle() {
+        // The GBA's stood 17.5 art pixels (35 on the screen) to the left of its console.
+        for system in ["gba", "gb"] {
+            let off = off_body_centre(system);
+            assert!(off.abs() <= 2.0, "{system}: {off:.1} art pixels off the console's middle");
+        }
+    }
+
     /// All of a rig's pictures in memory at once, at the size they are held.
     fn bytes_held(f: &Files) -> usize {
         let px = |d: &Option<Cow<'static, [u8]>>, k: usize| d.as_ref().and_then(|d| crate::system_art::decode(d)).map_or(0, |s| (s.w * s.h) as usize * 4 * k);
@@ -473,6 +503,11 @@ mod tests {
                 Mech::Lid(_) => assert!(f.top.is_some() && f.under.is_some(), "{}", r.0[0]),
                 Mech::Tray(_) => assert!(f.top.is_some(), "{}", r.0[0]),
                 Mech::Fixed => {}
+            }
+            // A lid's underside is plastic: the photo's white backdrop showed as a pale blade when it stood open.
+            if let Some(under) = f.under.as_ref().and_then(|d| crate::system_art::decode(d)) {
+                let white = under.px.iter().filter(|p| **p >> 24 == 255 && (0..3).all(|k| (**p >> (8 * k) & 0xff) > 225)).count();
+                assert!(white * 100 <= under.px.iter().filter(|p| **p >> 24 == 255).count(), "{}: {white} white pixels on its lid's underside", r.0[0]);
             }
             // It lies inside the picture (a tray's: all the way out).
             let s = f.rig.seat;

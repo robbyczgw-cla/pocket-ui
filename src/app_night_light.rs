@@ -201,7 +201,7 @@ impl App {
             lines.push(("Here it warms the menus and the games pocket-core runs, not RetroArch or the other emulators.".to_string(), pal().dust));
         }
         for (text, color) in lines {
-            for line in self.text.wrap(Face::Body, NU_SMALL, &text, width) {
+            for line in self.text.wrap_prose(Face::Body, NU_SMALL, &text, width) {
                 self.text.draw(c, Face::Body, NU_SMALL, left, y, color, &line);
                 y += pocket_ui::type_scale::line(NU_SMALL, 12);
             }

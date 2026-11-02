@@ -65,7 +65,7 @@ impl App {
     /// words, wrapped below the pill. Returns where the rows may start.
     pub(crate) fn paint_save_trouble_line(&mut self, c: &mut Canvas, trouble: Trouble) -> i32 {
         let (x, max) = (NU_PAD + NU_BTN_PAD, c.w - 2 * (NU_PAD + NU_BTN_PAD) - 28);
-        let lines = self.text.wrap(Face::Body, NU_SMALL, trouble.line(), max);
+        let lines = self.text.wrap_prose(Face::Body, NU_SMALL, trouble.line(), max);
         // At the size painted (Settings → Text size, `type_scale`).
         let px = pocket_ui::type_scale::px(NU_SMALL) as i32;
         let line_h = px * 4 / 3;
@@ -93,11 +93,12 @@ impl App {
     }
 }
 
-/// Snapshot "game-save-warning[:full|:unwritable]": what pocket-core shows over the game while saves fail, its line in
+/// Snapshot "game-save-warning[:full|:unwritable]" (and "game-twin-note", `frozen::SHARED`): what pocket-core shows over the
+/// game while saves fail, its line in
 /// the pill `overlay::paint_pill` paints (the same function pocket-core draws with), at the bottom of the game's picture
 /// (`background`, else a grey stand-in). Returns the pixels, or None for another state.
 pub(crate) fn game_warning_snapshot(state: &str, background: Option<Image>, w: u32, h: u32, text: &mut pocket_ui::text::Text) -> Option<Vec<u32>> {
-    let rest = state.strip_prefix("game-save-warning")?;
+    let rest = if state == "game-twin-note" { state } else { state.strip_prefix("game-save-warning")? };
     // pocket-core draws it, at the design's sizes whatever Settings → Text size says.
     let _fixed = pocket_ui::type_scale::fixed();
     let trouble = if rest.contains("unwritable") { Trouble::Unwritable } else { Trouble::Full };
@@ -107,7 +108,9 @@ pub(crate) fn game_warning_snapshot(state: &str, background: Option<Image>, w: u
         let (iw, ih) = img.fit(w as i32, h as i32);
         c.blit_scaled(&img, (w as i32 - iw) / 2, (h as i32 - ih) / 2, iw, ih);
     }
-    let (pw, ph, pill) = pocket_ui::overlay::paint_pill(text, trouble.line());
+    let line = if state == "game-twin-note" { pocket_ui::frozen::SHARED } else { trouble.line() };
+    let (pw, ph, pill) = pocket_ui::overlay::paint_pill_on(text, line, w);
+    println!("pill={pw}x{ph}");
     // As the overlay draws it: bottom centre, 24 px up, 82 % opaque, the key colour transparent.
     let (x0, y0) = ((w as i32 - pw) / 2, h as i32 - 24 - ph);
     for y in 0..ph {

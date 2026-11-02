@@ -107,6 +107,64 @@ pub fn over_drive(game: Game, sw: f32, k: f32) -> f32 {
     (sw * 0.16).clamp(46.0 * k, 90.0 * k) * game.mm().1 / 120.0
 }
 
+/// Where the medium goes on a system's picture (`assets/systems`): `x`, `y` as parts of the picture, what stands on the
+/// picture beside the console (a pad, a cable) left out by `body`, the console's share of its width. Measured on the
+/// pictures, whose consoles are turned and rarely in their middle.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SlotAt {
+    pub x: f32,
+    pub y: Option<f32>,
+    pub body: f32,
+}
+
+/// `(system, x, y, body)`; y 0 keeps its form factor's own line (`paint_plain`).
+const SLOTS: &[(&str, f32, f32, f32)] = &[
+    ("nes", 0.56, 0.34, 0.72),
+    ("snes", 0.66, 0.22, 0.60),
+    ("n64", 0.73, 0.24, 0.62),
+    ("megadrive", 0.70, 0.28, 0.60),
+    ("gb", 0.58, 0.10, 1.0),
+    ("gbc", 0.62, 0.08, 1.0),
+    ("gba", 0.55, 0.10, 1.0),
+    ("nds", 0.57, 0.07, 1.0),
+    ("3ds", 0.60, 0.07, 1.0),
+    ("psp", 0.48, 0.40, 1.0),
+    ("mastersystem", 0.62, 0.20, 0.92),
+    ("pcengine", 0.74, 0.33, 0.52),
+    ("supergrafx", 0.39, 0.17, 0.75),
+    ("sega32x", 0.50, 0.22, 1.0),
+    ("atari2600", 0.55, 0.23, 0.80),
+    ("atari7800", 0.55, 0.29, 1.0),
+    ("atarijaguar", 0.48, 0.20, 1.0),
+    ("colecovision", 0.77, 0.30, 1.0),
+    ("intellivision", 0.48, 0.29, 1.0),
+    ("neogeo", 0.55, 0.19, 1.0),
+    ("sg-1000", 0.61, 0.16, 0.90),
+    ("virtualboy", 0.57, 0.05, 0.85),
+    ("fds", 0.42, 0.30, 1.0),
+    ("psx", 0.68, 0.29, 0.62),
+    ("ps2", 0.55, 0.15, 0.50),
+    ("gamecube", 0.70, 0.23, 0.50),
+    ("neocd", 0.60, 0.33, 0.70),
+    ("3do", 0.55, 0.40, 0.75),
+    ("xbox", 0.37, 0.60, 1.0),
+    ("wii", 0.15, 0.10, 0.50),
+    ("ps3", 0.45, 0.72, 1.0),
+    ("wiiu", 0.25, 0.58, 1.0),
+    ("saturn", 0.45, 0.30, 1.0),
+    // The crate of games: where a system without a picture of its own puts its medium (`STAND_IN`).
+    ("ports", 0.50, 0.40, 0.80),
+];
+
+/// What stands in for the console of a system without a picture: the crate of games, its medium goes into it.
+pub const STAND_IN: &str = "ports";
+
+/// Where the medium goes on `system`'s picture; a picture not listed has its console in its middle.
+pub fn slot_of(system: &str) -> SlotAt {
+    let id = if crate::system_art::get(system).is_some() { crate::system_art::canonical(system) } else { STAND_IN };
+    SLOTS.iter().find(|s| s.0 == id).map_or(SlotAt { x: 0.5, y: None, body: 1.0 }, |s| SlotAt { x: s.1, y: Some(s.2), body: s.3 })
+}
+
 /// A rig's pictures, ready to paint: the console's at screen size, what moves at its own (drawn through a map).
 pub struct Rigged {
     pub rig: ir::Rig,
@@ -152,6 +210,11 @@ fn enlarged(p: Pic, n: i32) -> Pic {
     Pic { w, h, px }
 }
 
+/// How much of the case still shows, 1-0: it fades while the medium leaves it.
+fn case_shown(st: cabinet::Insert) -> f32 {
+    1.0 - ((st.carry - 0.3) / 0.4).clamp(0.0, 1.0)
+}
+
 /// The case going into the console while the game starts.
 pub struct Scene {
     pub system: String,
@@ -184,6 +247,11 @@ impl Scene {
     pub fn fade_at(&self, elapsed: Duration) -> f32 {
         let p = (elapsed.saturating_sub(cabinet::fade_delay(self.cozy)).as_secs_f32() / FADE.as_secs_f32()).min(1.0);
         self.rig_fade(p)
+    }
+
+    /// How much of the case still shows, `elapsed` after A: what it casts on the page goes with it.
+    pub fn case_shown(&self, elapsed: Duration) -> f32 {
+        case_shown(cabinet::insert_at(elapsed, self.cozy))
     }
 
     /// The fade `p` as it shows with this scene's rig.
@@ -242,26 +310,35 @@ impl Scene {
         } else {
             c.round_rect(sx, sy, sw, sh, px(16), mix(0x2c2c30, 0x000000, ((1.0 - st.rise) * 200.0) as u32));
         }
-        // The slot: a handheld's at its top edge, a console's on its top, a disc drive's in its middle.
+        // The slot where the picture has it (`slot_of`); else a handheld's at its top edge, a console's on its top, a disc
+        // drive's in its middle.
+        let at = sprite.as_ref().map_or(SlotAt { x: 0.5, y: None, body: 1.0 }, |_| slot_of(&system));
         let slot_y = sy
-            + match ff {
-                FormFactor::HandheldCart | FormFactor::CardBox => sh / 14,
-                FormFactor::ConsoleCart => sh / 3,
-                _ => sh * 2 / 5,
-            };
-        let slot_cx = c.w / 2;
+            + at.y.map_or_else(
+                || match ff {
+                    FormFactor::HandheldCart | FormFactor::CardBox => sh / 14,
+                    FormFactor::ConsoleCart => sh / 3,
+                    _ => sh * 2 / 5,
+                },
+                |y| (y * sh as f32) as i32,
+            );
+        let slot_cx = sx + (at.x * sw as f32) as i32;
+        // The console's own width: what the medium is sized by, the picture may hold its pad as well.
+        let bw = sw as f32 * at.body;
         let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
         let (fx, fy, fw, fh) = (from.0 as f32, from.1 as f32, from.2 as f32, from.3 as f32);
         // The game slides out of its case (from behind it, to its right), the case fades, the game goes to the console
         // and in.
-        let case_fade = 256 - (((st.carry - 0.3) / 0.4).clamp(0.0, 1.0) * 256.0) as u32;
+        let case_fade = 256 - ((1.0 - case_shown(st)) * 256.0) as u32;
         let out = (st.carry / 0.35).min(1.0);
         let fly = ((st.carry - 0.35) / 0.65).clamp(0.0, 1.0);
         let clip_bottom = if fly > 0.5 { slot_y } else { c.h };
         use crate::playful::Loader;
-        let draw_game: Box<dyn Fn(&mut Canvas)> = if game.is_round() && playful && game_pic.is_some() && matches!(loader, Loader::Tray | Loader::Lid) {
+        // The crate standing in for a console has no tray or lid: the disc just goes in.
+        let own_picture = crate::system_art::get(&system).is_some();
+        let draw_game: Box<dyn Fn(&mut Canvas)> = if game.is_round() && playful && own_picture && game_pic.is_some() && matches!(loader, Loader::Tray | Loader::Lid) {
             let r0 = game.size_beside(medium, from.3).1 as f32 / 2.0;
-            let r1 = over_drive(game, sw as f32, k);
+            let r1 = over_drive(game, bw, k);
             // The plastic around the drive, for its tray or lid; the console's top edge, for the lid.
             let body = sprite
                 .as_ref()
@@ -287,7 +364,7 @@ impl Scene {
         } else if game.is_round() {
             // As large as the real disc beside its case.
             let r0 = game.size_beside(medium, from.3).1 as f32 / 2.0;
-            let r1 = over_drive(game, sw as f32, k);
+            let r1 = over_drive(game, bw, k);
             let start = (fx + fw / 2.0 + out * fw * 0.55, fy + fh / 2.0);
             let end = (slot_cx as f32, slot_y as f32 - r1);
             let r = lerp(r0, r1, fly);
@@ -314,7 +391,7 @@ impl Scene {
             let (gw, gh) = (pic.w as f32, pic.h as f32);
             // The cartridge shrinks onto the slot and sinks in, partly: it stays out of its slot as it does in the real
             // console. A game card goes in all the way.
-            let end_w = (sw as f32 * if game == Game::Card { 0.2 } else { 0.36 }).clamp(if game == Game::Card { 60.0 * k } else { 90.0 * k }, 230.0 * k);
+            let end_w = (bw * if game == Game::Card { 0.2 } else { 0.36 }).clamp(if game == Game::Card { 60.0 * k } else { 90.0 * k }, 230.0 * k);
             let end_h = end_w * gh / gw.max(1.0);
             let depth = match (game, ff) {
                 (Game::Card, _) => 1.0,
@@ -356,8 +433,9 @@ impl Scene {
         // It is in: the slot lights up for a moment, in the label's colour lifted towards white.
         if st.glow > 0.0 {
             let light = mix(tint, crate::palette::scheme().lamp, 170);
-            art::glow(c, slot_cx, slot_y, (sw / 3).max(px(90)), (sh / 5).max(px(40)), light, st.glow * 0.8);
-            art::glow(c, slot_cx, slot_y, (sw / 8).max(px(36)), (sh / 14).max(px(14)), 0xffffff, st.glow * 0.7);
+            let bw = bw as i32;
+            art::glow(c, slot_cx, slot_y, (bw / 3).max(px(90)), (sh / 5).max(px(40)), light, st.glow * 0.8);
+            art::glow(c, slot_cx, slot_y, (bw / 8).max(px(36)), (sh / 14).max(px(14)), 0xffffff, st.glow * 0.7);
         }
     }
 
@@ -395,7 +473,7 @@ impl Scene {
         };
 
         // Behind the case while it comes out, in front once it is on its way.
-        let case_fade = 256 - (((st.carry - 0.3) / 0.4).clamp(0.0, 1.0) * 256.0) as u32;
+        let case_fade = 256 - ((1.0 - case_shown(st)) * 256.0) as u32;
         let flying = pose.fly > 0.0;
         if rig.behind && flying {
             draw_medium(c);
@@ -686,6 +764,23 @@ mod tests {
                 assert!(left >= 0.0 && right <= w as f32, "{system} {n} on {w}x{h}: the medium hangs off the side {left}..{right}");
             }
         }
+    }
+
+    #[test]
+    fn the_plain_animation_aims_at_the_console_not_at_the_picture_s_middle() {
+        // The console stands at the right of its pad on these pictures: its slot is too.
+        for system in ["nes", "snes", "n64", "megadrive", "pcengine", "psx", "gamecube"] {
+            let at = slot_of(system);
+            let sprite = crate::system_art::get(system).expect(system);
+            // Something of the console is under the slot, and the column above the slot is what shows the medium.
+            let (x, y) = ((at.x * sprite.w as f32) as u32, (at.y.unwrap() * sprite.h as f32) as u32);
+            assert!(sprite.px[(y * sprite.w + x) as usize] >> 24 == 255, "{system}: nothing there at {x},{y}");
+            assert!(at.x > 0.55, "{system}: {at:?}");
+        }
+        // An alias finds its hardware; a system without a picture of its console keeps the middle.
+        assert_eq!(slot_of("sfc"), slot_of("snes"));
+        assert_eq!(slot_of("nosuchsystem"), slot_of(STAND_IN));
+        assert!(crate::system_art::get(STAND_IN).is_some());
     }
 
     #[test]

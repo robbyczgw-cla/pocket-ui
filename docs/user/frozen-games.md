@@ -26,11 +26,14 @@ until then. A game that can't be frozen stands as a normal case:
 - **The game now runs on another emulator or core:** its moment belongs to the old one. The start says so and begins fresh; the old moment stays under Load. This holds after a game on another emulator or core you played in between.
 - **The game's file changed** (a new copy or a different version, judged by what is in the file, also the tracks of a `.cue` or `.m3u`; copying the card alone changes nothing): a moment of another file isn't loaded. The start says so and
   begins fresh; until your next Quit the moment is still in the pause menu under Load.
+- **A soft patch was added, replaced or removed** ([patches](patches-msu1.md)): the same, because the patched game is another game to its moment.
+- **Another game has the same file name** (in another folder of the system): they share save states, see [troubleshooting](troubleshooting.md). A moment the other game may have written isn't loaded, and the start says so.
 - **The moment is gone** (you deleted it, or a card was swapped): the start says so and begins fresh. In-game saves are never
   touched by any of this.
 - **The emulator refuses the moment** (after an update of its core): the same, "Couldn't go back to that moment".
 
-Settings → System → **Frozen games** switches it off: every case is closed and starts as before. With
+Settings → System → **Frozen games** switches it off: every case is closed and starts as before; a game whose file, patch or emulator changed
+still doesn't load the old moment. With
 [Remember where I quit](settings.md#remember-where-i-quit) off, a Quit freezes nothing new and the switch's line says so; moments
 from before and from sleep still stand open, and A goes back to those. Motion off: the game is simply out, and the spinner's dots
 stand still.

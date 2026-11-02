@@ -337,7 +337,7 @@ impl App {
         let [what, choice] = page.describe(page.row());
         let desc_step = pocket_ui::type_scale::line(NU_SMALL, 12);
         let wrapped = [(what.as_str(), pal().dust), (choice.as_str(), pal().text)]
-            .map(|(t, color)| (self.text.wrap(Face::Body, NU_SMALL, t, width), color));
+            .map(|(t, color)| (self.text.wrap_prose(Face::Body, NU_SMALL, t, width), color));
         // Where the descriptions would end, to place the readout.
         let y_full = y + wrapped.iter().map(|(l, _)| l.len() as i32 * desc_step + 6).sum::<i32>() + 14;
         // The readout, in a panel above the hints; the note takes the room left above it (with larger text it may
@@ -377,7 +377,7 @@ impl App {
         let step = pocket_ui::type_scale::line(24, 8);
         // As many lines as leave the panel (12 px under them) clear of the hints.
         let room = ((hints_top - 8 - panel_h - 12 - y) / step).max(0) as usize;
-        for line in self.text.wrap_at_most(Face::Body, 24, PRECEDENCE_NOTE, width, room) {
+        for line in self.text.wrap_prose_at_most(Face::Body, 24, PRECEDENCE_NOTE, width, room) {
             self.text.draw(c, Face::Body, 24, left, y, pal().quiet, &line);
             y += step;
         }
@@ -385,11 +385,30 @@ impl App {
         pocket_ui::kit::panel(c, pad, panel_y, right - pad, panel_h);
         let (px, label_w) = (pad + NU_BTN_PAD, pocket_ui::type_scale::wide(210, 26));
         self.text.draw(c, Face::Body, 24, px, panel_y + 36, pal().dust, "Now");
-        let col_w = (right - NU_BTN_PAD - px) / cols;
+        // Side by side (a 960-line screen), the short readings (Hottest, Battery draw) stand in the left column and
+        // the long ones (the fan's, the CPU's) in the right one, which takes all the room the left one leaves; equal
+        // halves cut both ("Little 1.80 · Big 1.29 · Prime 1…").
+        let total = right - NU_BTN_PAD - px;
+        // The widest label of each column, and where the right column starts.
+        let labels = |app: &mut App, names: [&str; 2]| names.iter().map(|l| app.text.width(Face::Body, 26, l)).max().unwrap_or(0) + 24;
+        let (lab_left, lab_right) = (labels(self, ["Hottest", "Battery draw"]), labels(self, ["Fan", "CPU"]));
+        let left_w = if cols > 1 {
+            let value = ["Unknown", "99.9 °C", "99.9 W"].iter().map(|v| self.text.width(Face::Title, 32, v)).max().unwrap_or(0);
+            lab_left + value + 36
+        } else {
+            total
+        };
         for (i, (label, value)) in lines.into_iter().enumerate() {
-            let (cx, ly) = (px + (i as i32 % cols) * col_w, panel_y + head + 30 + (i as i32 / cols) * line_h);
+            // One column: the four under each other. Two: Hottest and Battery draw (0, 3), then Fan and CPU (1, 2).
+            let (col, row) = if cols > 1 { [(0, 0), (1, 0), (1, 1), (0, 1)][i] } else { (0, i as i32) };
+            let (cx, room, label_w) = match (cols > 1, col) {
+                (false, _) => (px, total, label_w),
+                (true, 0) => (px, left_w, lab_left),
+                _ => (px + left_w, total - left_w, lab_right),
+            };
+            let ly = panel_y + head + 30 + row * line_h;
             self.text.draw(c, Face::Body, 26, cx, ly, pal().dust, label);
-            let value = self.text.fit(Face::Title, 32, &value, col_w - label_w - if cols > 1 { 24 } else { 0 });
+            let value = self.text.fit(Face::Title, 32, &value, room - label_w - if cols > 1 { 12 } else { 0 });
             self.text.draw(c, Face::Title, 32, cx + label_w, ly + 2, pal().chalk, &value);
         }
 

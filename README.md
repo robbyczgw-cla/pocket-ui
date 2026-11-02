@@ -7,19 +7,20 @@
 
 **Your whole game collection on one calm shelf, and your handheld ready in a blink.**
 
+<p align="center">
+  <img src="docs/media/home-cabinet.png" width="80%" alt="The Cabinet: games on a bookcase with an old TV, a plant and a trophy that grew with your play time">
+</p>
+
 pocket-ui is a controller-first home screen and game player for **Retroid Pocket, AYN Odin 2 and Anbernic RG35XX handhelds**, running on
 [ROCKNIX](https://rocknix.org). Press A and you are playing, right where you left off. Every system, from Game Boy to
 PlayStation 2, gets the same small pause menu with save slots, pictures and a step back in time. Games show up with
 box art, their own card and facts, and a Curator that knows what you own and what you have not touched yet.
 
-Version **0.1.10** is out as a public alpha: [download it](../../releases/tag/v0.1.10),
-[watch the trailer](https://pocketui.xyz) and see more at **[pocketui.xyz](https://pocketui.xyz)**.
+Free and open source. Version **0.1.11** is out as a public alpha: [download it](../../releases/tag/v0.1.11),
+[watch the trailer](https://pocketui.xyz) and see more at **[pocketui.xyz](https://pocketui.xyz)**. [Install](#get-it) takes about five minutes if ROCKNIX is already on your card.
 
 <p align="center">
   <img src="docs/media/home.png" width="49%" alt="Home on the Shelf: the last game, favourites, Curator and the systems">
-  <img src="docs/media/home-cabinet.png" width="49%" alt="The Cabinet: games on a bookcase with an old TV, a plant and a trophy that grew with your play time">
-</p>
-<p align="center">
   <img src="docs/media/cases.png" width="49%" alt="Games as discs, cartridge boxes and cases">
   <img src="docs/media/game-card.png" width="49%" alt="A game's card with facts, play time and notes">
 </p>
@@ -27,13 +28,12 @@ Version **0.1.10** is out as a public alpha: [download it](../../releases/tag/v0
   <img src="docs/media/cozy-extras.png" width="49%" alt="Cozy extras: every little touch has its own switch">
   <img src="docs/media/theme.png" width="49%" alt="Look: colours, font and more, as rows">
 </p>
-
-The pictures are rendered from the code with made-up data (`pocket-ui --snapshot`, see
-[docs/DEVELOPING.md](docs/DEVELOPING.md)); more are in [docs/media](docs/media/README.md).
+<p align="center"><sub>Pictures rendered from the code with made-up data (<code>pocket-ui --snapshot</code>, see
+<a href="docs/DEVELOPING.md">docs/DEVELOPING.md</a>); more in <a href="docs/media/README.md">docs/media</a>.</sub></p>
 
 ## What it feels like
 
-- **Instant.** The shelf appears within tens of milliseconds, and a game starts from the picture of where you left it.
+- **Fast.** The shelf's first frame is up about 55 ms after pocket-ui starts (on the Mini V2, see [docs/MEASURED.md](docs/MEASURED.md)), and a game starts from the picture of where you left it.
 - **Every game in its case.** Real cases, cartridge boxes and printed discs on the Shelf and the Cabinet: a PlayStation
   jewel case, a Game Boy Advance cartridge, a GameCube mini disc with your game's cover on it. Stickers you put on
   them (Completed, 100 %, Favourite, Game of the year), and on the Cabinet a little old TV that shows the selected game.
@@ -51,19 +51,25 @@ The pictures are rendered from the code with made-up data (`pocket-ui --snapshot
   GameCube, Wii and 3DS run on their own emulators behind the same menu. PortMaster games install from the Extras page and start from pocket-ui.
 - **Web companion** on your own tailnet: library, what is playing, favourites, ratings, uploads.
 - **Looks after itself.** Wi-Fi (even hotel sign-in pages), Bluetooth pads and headphones, sleep and power, signed
-  updates with a way back. English, German and Spanish.
+  updates with a way back (none published yet: a new version installs like the first one, games and settings stay). English, German and Spanish.
 - **Private.** No accounts, no tracking. It goes online for box art, game info and the downloads you ask for.
 
 ## Get it
 
-Download from the [v0.1.10 release](../../releases/tag/v0.1.10) and pick one way.
+**Not for you after all? In pocket-ui: Settings → Help & tools → About → Open EmulationStation…, then Ports → Uninstall pocket-ui. Your games, saves and ROCKNIX settings stay untouched.**
+
+- Already have ROCKNIX on your card? → **Ports installer** (5 minutes, you can undo it).
+- New card? → **Fresh card**.
+- Like terminals? → **Over SSH**.
+
+Download from the [v0.1.11 release](../../releases/tag/v0.1.11) and pick one way.
 Checksums are in `SHA256SUMS`.
 
 | Way | When | What to do |
 |---|---|---|
-| **Ports installer** | ROCKNIX is already on your card | Unzip [pocket-ui-0.1.10-ports-installer.zip](../../releases/download/v0.1.10/pocket-ui-0.1.10-ports-installer.zip) into `roms/ports` (the games share of ROCKNIX's file sharing: switch on Samba in ROCKNIX's Network Settings, then open `\\<device name or IP>` on Windows or `smb://<device name or IP>` on a Mac; [ROCKNIX explains it](https://rocknix.org/play/add-games/)), then in EmulationStation open **Ports → Install pocket-ui**. To go back: **Ports → Uninstall pocket-ui** |
-| **Fresh card** | New card, nothing on it yet | New to ROCKNIX on the Mini V2? Set it up once with [ROCKNIX's own guide](https://rocknix.org/devices/retroid/retroid-pocket-mini/) (flashing the card plus its one-time bootloader step), then come back. With ROCKNIX 20261001 or newer on the card, copy the two files from [pocket-ui-0.1.10-rocknix-card.zip](../../releases/download/v0.1.10/pocket-ui-0.1.10-rocknix-card.zip) onto the card's `ROCKNIX` partition and boot. It installs on the second start |
-| **Over SSH** | You like a terminal | Unzip [pocket-ui-0.1.10-rocknix-install.zip](../../releases/download/v0.1.10/pocket-ui-0.1.10-rocknix-install.zip) in `/storage`, run `sh install.sh --check`, then `sh install.sh` |
+| **Ports installer** | ROCKNIX is already on your card | Unzip [pocket-ui-0.1.11-ports-installer.zip](../../releases/download/v0.1.11/pocket-ui-0.1.11-ports-installer.zip) into `roms/ports` (the games share of ROCKNIX's file sharing: switch on Samba in ROCKNIX's Network Settings, then open `\\<device name or IP>` on Windows or `smb://<device name or IP>` on a Mac; [ROCKNIX explains it](https://rocknix.org/play/add-games/)), then in EmulationStation open **Ports → Install pocket-ui**. To go back: **Ports → Uninstall pocket-ui** |
+| **Fresh card** | New card, nothing on it yet | New to ROCKNIX on the Mini V2? Set it up once with [ROCKNIX's own guide](https://rocknix.org/devices/retroid/retroid-pocket-mini/) (flashing the card plus its one-time bootloader step), then come back. With ROCKNIX 20261001 or newer on the card, copy the two files from [pocket-ui-0.1.11-rocknix-card.zip](../../releases/download/v0.1.11/pocket-ui-0.1.11-rocknix-card.zip) onto the card's `ROCKNIX` partition and boot. It installs on the second start |
+| **Over SSH** | You like a terminal | Unzip [pocket-ui-0.1.11-rocknix-install.zip](../../releases/download/v0.1.11/pocket-ui-0.1.11-rocknix-install.zip) in `/storage`, run `sh install.sh --check`, then `sh install.sh` |
 
 pocket-ui replaces exactly one thing: the program ROCKNIX's `essway` service starts. Remove it and stock ROCKNIX with
 EmulationStation is back; your games, saves and ROCKNIX settings stay where they are. Android on the internal storage
@@ -94,7 +100,7 @@ The details behind the alpha label, from [docs/STATUS.md](docs/STATUS.md):
 - Measured or checked on the Mini V2: the shelf and its speed, pocket-core up to Nintendo DS and Dreamcast, the pause
   menu with save slots and options, PlayStation 2 and GameCube, run-ahead, cover art, Wi-Fi setup, file sharing, UI
   sounds, waking from deep sleep, Smooth fan, Curator and play history, the web companion over a real tailnet, signed
-  app updates with automatic rollback, and the fresh-card install.
+  app updates with automatic rollback (tested with a local list; none published yet), and the fresh-card install.
 - Built and tested in the virtual device or in tests, still waiting for more real-device time: touch, Bluetooth pads,
   Wii and 3DS, the newest picture effects and frames, the night light, RetroAchievements, Syncthing between two
   devices, the Store and the starter pack. Battery drain of a long sleep is not measured yet.
@@ -106,49 +112,10 @@ The details behind the alpha label, from [docs/STATUS.md](docs/STATUS.md):
 
 ## What it does
 
-The [user guide](docs/user/index.md) describes each of these; it is also the manual on the device. How far each
-feature has been proven is in [docs/STATUS.md](docs/STATUS.md).
-
-- **The shelf:** Home shows your last game, recent games, favourites, Curator and systems. Five looks (Shelf,
-  Minimal, Split, Cards, Cabinet), dark, light or automatic, with motion you can reduce or switch off; cover art from
-  the libretro thumbnail collection, console pages, play-time tracking.
-- **Finding games:** a search over every game as you type, forgiving of accents and typos, and an L2/R2 letter jump
-  in every list.
-- **Your library and Curator:** a card per game with offline facts (Wikidata), play status and notes; the Lens
-  (filters with live counts), smart shelves, your own stickers, Echoes ("more like this" from your own games) and
-  the versions of a game you own on several systems.
-- **pocket-core, our own libretro host** ([docs/HOST.md](docs/HOST.md)) for Game Boy, Game Boy Color, Game Boy
-  Advance, NES, SNES, Mega Drive, Master System, Game Gear, SG-1000, PC Engine, WonderSwan, Atari 2600,
-  PlayStation, Nintendo 64, PSP, Dreamcast, Nintendo DS, Saturn (with its BIOS), DOS, ScummVM, PICO-8 and TIC-80.
-  It uses the same cores as RetroArch.
-- **Pause menu on HOME:** Continue, Save and Load with 8 slots and previews (plus the state of the last quit and
-  the one before a load), Options (picture scaling, sharpness and screen effects, screen frames with a live power
-  light, the core's own options, button remapping, shortcuts, fast-forward, rewind, run-ahead, cheats, rumble),
-  quick settings, one Quit (whether it keeps the moment is a setting), RetroAchievements, and Pixel Path, which grades how a game's picture
-  and sound reach you. Settings can be saved per console or per game.
-- **PlayStation 2, GameCube, Wii and 3DS** run on ARMSX2, Dolphin and Azahar with the same pause menu for Save,
-  Load, Options and Quit ([docs/BIG-EMULATORS.md](docs/BIG-EMULATORS.md)). Other systems start with ROCKNIX's
-  default emulator.
-- **Fast:** the shelf's first frame comes tens of milliseconds after start, a game starts from the picture of where
-  you left it, Settings → Playing → On start can go straight back into the last game, and the switcher hands over between two
-  pocket-core games as soon as the first has saved. A speed guard measures it ([docs/LATENCY.md](docs/LATENCY.md)).
-- **Safety net:** a game that pocket-core cannot start runs through RetroArch from then on. Saves are written
-  through temporary files, settings are replaced atomically, the launcher restarts a crashed UI, and a nearly empty
-  battery saves the game and switches off.
-- **First-start setup** with Wi-Fi, a gamepad keyboard, cover art and PortMaster games.
-- **Touch screen** on the shelf, lists, Settings, the search and the game switcher; the bottom screen in Nintendo DS
-  games.
-- **System:** menu sounds (their own volume), optional menu haptics, quick settings, sleep, a battery page with time
-  left, stick LEDs, Settings → Playing → Performance & fan, time zone, Bluetooth controllers, and Wi-Fi that reconnects by
-  itself.
-- **Sync and network:** saves and states kept in step with Syncthing (paused while a game runs), Tailscale with a QR
-  sign-in, PC streaming with Moonlight. File sharing (Samba) shows everything under `roms`, with a per-device
-  password. SSH is off by default and, when switched on, shows a random password on the screen
-  ([docs/SECURITY-HARDENING.md](docs/SECURITY-HARDENING.md)).
-- **Updates:** signed app updates installed live, with an automatic way back. System updates that could touch
-  the bootloader are refused ([docs/UPDATES.md](docs/UPDATES.md)).
-- **Dual boot next to Android:** a boot chain from the SD card leaves Android and its partitions untouched
-  ([docs/INSTALL-DUAL-BOOT.md](docs/INSTALL-DUAL-BOOT.md)).
+Everything it does, with how far each part has been proven, is in the [user guide](docs/user/index.md) (also the
+manual on the device) and in [docs/STATUS.md](docs/STATUS.md). The player is pocket-core, our own libretro host
+([docs/HOST.md](docs/HOST.md)); PlayStation 2, GameCube, Wii and 3DS run on their own emulators behind the same pause menu
+([docs/BIG-EMULATORS.md](docs/BIG-EMULATORS.md)).
 
 ## More ways to install
 
@@ -188,9 +155,6 @@ Linux or macOS computer, and `scripts/vdev.sh` starts a virtual Mini V2 in Docke
 | Installing next to Android | [docs/INSTALL-DUAL-BOOT.md](docs/INSTALL-DUAL-BOOT.md) |
 | Developers | [docs/DEVELOPING.md](docs/DEVELOPING.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Everything else | [docs/README.md](docs/README.md): an index of all documents |
-
-The documents name commits of the private development history (for example in STATUS.md); the public repository
-starts with release 0.1.0, so those references don't resolve here.
 
 ## Contributing
 

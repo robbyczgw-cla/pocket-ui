@@ -183,6 +183,9 @@ const AFTER_FIRST_FRAME_AT_LATEST: Duration = Duration::from_secs(2);
 /// Frames go on this long after a fade, so that its last one is drawn at the end (the launch picture at full strength,
 /// not left at 95 % over the shelf).
 const LAST_FADE_FRAME: Duration = Duration::from_millis(50);
+/// A Quit's wait shows a spinner from here on, and from `SAVE_WAIT_SLOW` says it goes on (`paint_saving_wait`).
+const SAVE_WAIT_SHOWN: Duration = Duration::from_secs(1);
+const SAVE_WAIT_SLOW: Duration = Duration::from_secs(4);
 const REPEAT_DELAY: Duration = Duration::from_millis(300);
 const REPEAT_EVERY: Duration = Duration::from_millis(70);
 
@@ -330,6 +333,9 @@ enum UserEvent {
     /// The folders were read again and the list differs from the one on screen (`app_library`); the cache holds it
     /// for the key.
     LibraryRescanned(Vec<System>, Option<pocket_ui::library_cache::Key>),
+    /// How many things in the ROM folders the shelf leaves unread, counted after a rescan; `rose` when that is news
+    /// and no game arrived (`app_library`).
+    LibraryUnread { count: usize, rose: bool },
     /// The picture went to a TV through USB-C, or back to the panel (`app_display_out`).
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     Display(Option<pocket_ui::display_out::Tv>),
@@ -2691,7 +2697,7 @@ impl App {
             // Centred under the window, as wide as the screen leaves on both sides of its middle, on a second line
             // if it is wider (larger text).
             let room = 2 * (c.w - 8 - (ox + hw / 2 + r));
-            for (k, line) in self.text.wrap(Face::Body, NU_SMALL, &note, room).iter().take(2).enumerate() {
+            for (k, line) in self.text.wrap_prose(Face::Body, NU_SMALL, &note, room).iter().take(2).enumerate() {
                 let w = self.text.width(Face::Body, NU_SMALL, line);
                 self.text.draw(c, Face::Body, NU_SMALL, ox + (hw + 2 * r - w) / 2, note_y + k as i32 * pocket_ui::type_scale::line(NU_SMALL, 8), 0xcccccc, line);
             }
@@ -2705,6 +2711,7 @@ impl App {
                 "Saving and quitting…"
             };
             self.text.draw_right(c, Face::Body, NU_FONT, c.w - pad - NU_BTN_PAD, c.h / 2, 0xcccccc, msg);
+            self.paint_saving_wait(c);
             return;
         }
         // The emulator saves only inside the game (`pause_saves`): said where the player decides, beside Continue,
@@ -2737,7 +2744,7 @@ impl App {
     /// A line beside the pause menu's rows, right-aligned at the middle of the screen; a long one (German, a long
     /// emulator line) is wrapped into the right half instead of running into the rows.
     fn menu_note(&mut self, c: &mut Canvas, note: &str) {
-        let lines = self.text.wrap(Face::Body, NU_SMALL, note, c.w / 2 - NU_PAD);
+        let lines = self.text.wrap_prose(Face::Body, NU_SMALL, note, c.w / 2 - NU_PAD);
         let line_h = NU_SMALL as i32 * 4 / 3;
         let top = c.h / 2 - (lines.len() as i32 - 1) * line_h / 2;
         for (i, line) in lines.iter().enumerate() {
@@ -2894,7 +2901,15 @@ impl App {
             Some("") | None => &[("B", "Back"), ("A", "Choose")],
             Some(_) => PICTURE_HINTS,
         };
-        let desc_lines = if self.picture_page(c.w, c.h).is_some() && preview::small_screen(c.h) { preview::SMALL_SCREEN_LINES } else { 5 };
+        // Five lines, more when the list leaves room above them: a long explanation (German, Spanish) ends in "…" only
+        // when it must.
+        let step = pocket_ui::type_scale::line(NU_SMALL, 10);
+        let spare = (pocket_ui::kit::footer_baseline(c.h) - (top + visible as i32 * row) - NU_SMALL as i32 - 12) / step + 1;
+        let desc_lines = if self.picture_page(c.w, c.h).is_some() {
+            if preview::small_screen(c.h) { preview::SMALL_SCREEN_LINES } else { 5 }
+        } else {
+            (spare.max(5) as usize).min(8)
+        };
         pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, hints, &desc, desc_lines, pal().text);
     }
 
@@ -2925,6 +2940,12 @@ impl App {
     /// Draws the button hints at the bottom right; returns where their pill starts.
     fn nu_hints(&mut self, c: &mut Canvas, hints: &[(&str, &str)]) -> i32 {
         app_rescue::paint_hints(c, &mut self.text, &mut self.hits, hints)
+    }
+
+    /// `nu_hints` and the selected row's line at the bottom left in `color`: a line that doesn't fit beside the pill
+    /// goes on a second line next to it (`kit::footer`), not into a "…".
+    fn nu_foot(&mut self, c: &mut Canvas, hints: &[(&str, &str)], desc: &str, color: u32) {
+        pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, hints, desc, 2, color);
     }
 
     /// (system id, ROM path) of every game in the library.
@@ -3505,7 +3526,7 @@ impl App {
         draws.truncate(2);
         // When the screen goes off and the Pocket sleeps is set elsewhere now: one line says where.
         // (Not on the Steam Deck: SteamOS sets that, and the row is not there.)
-        let pointer = if pocket_ui::device::current().host_owned() { Vec::new() } else { self.text.wrap(Face::Body, NU_SMALL, SLEEP_SETTINGS_POINTER, c.w - 4 * pad) };
+        let pointer = if pocket_ui::device::current().host_owned() { Vec::new() } else { self.text.wrap_prose(Face::Body, NU_SMALL, SLEEP_SETTINGS_POINTER, c.w - 4 * pad) };
         let (draw_step, desc_step) = (pocket_ui::type_scale::line(NU_SMALL, 14), pocket_ui::type_scale::line(NU_SMALL, 10));
         // Everything under the graph, from its bottom edge to the pointer's last line, and the hint bar's top: the
         // graph gives up height when Large text needs it (it stays at least `MIN_GRAPH`).
@@ -3975,7 +3996,7 @@ impl App {
             return false;
         }
         self.setup.as_ref().is_some_and(|s| s.animating()) || (self.marquee.animating() && (self.running.is_none() || self.switcher.is_some())) || self.switcher.as_ref().is_some_and(|s| s.animating()) ||
-        self.kids_animating() || self.pull_moving(Instant::now()) || self.motion_animating(Instant::now()) || self.toast.as_ref().is_some_and(|(_, t)| t.elapsed() < TOAST) || self.sync_note_active() || self.tailscale_animating() || self.bluetooth_animating() || self.tools_animating() || self.game_check_animating() || self.pc_streaming_animating() || self.backup_animating() || (self.updates.restart_at.is_some() && self.running.is_none()) || self.notice.as_ref().is_some_and(Notice::active) || self.launch_at.is_some_and(|t| t.elapsed() < FADE + self.cabinet.launch_delay() + LAST_FADE_FRAME) || (self.theme == Theme::Cabinet && self.running.is_none() && self.cabinet.animating(Instant::now())) || (self.theme == Theme::Shelf && self.running.is_none() && self.shelf_media_animating(Instant::now())) || self.stream_message_due() || self.exit_since.is_some() || self.sys.animating(Instant::now()) || (self.manual.moving() && self.settings_page == Some(SettingsPage::Manual)) || self.appearance_animating() || self.card.as_ref().is_some_and(|o| o.card.boxed.as_ref().is_some_and(|b| b.animating(Instant::now()))) || self.find_animating() || self.boot_fade.active()
+        self.quit.is_some() || self.kids_animating() || self.pull_moving(Instant::now()) || self.motion_animating(Instant::now()) || self.toast.as_ref().is_some_and(|(_, t)| t.elapsed() < TOAST) || self.sync_note_active() || self.tailscale_animating() || self.bluetooth_animating() || self.tools_animating() || self.game_check_animating() || self.pc_streaming_animating() || self.backup_animating() || (self.updates.restart_at.is_some() && self.running.is_none()) || self.notice.as_ref().is_some_and(Notice::active) || self.launch_at.is_some_and(|t| t.elapsed() < FADE + self.cabinet.launch_delay() + LAST_FADE_FRAME) || (self.theme == Theme::Cabinet && self.running.is_none() && self.cabinet.animating(Instant::now())) || (self.theme == Theme::Shelf && self.running.is_none() && self.shelf_media_animating(Instant::now())) || self.stream_message_due() || self.exit_since.is_some() || self.sys.animating(Instant::now()) || (self.manual.moving() && self.settings_page == Some(SettingsPage::Manual)) || self.appearance_animating() || self.card.as_ref().is_some_and(|o| o.card.boxed.as_ref().is_some_and(|b| b.animating(Instant::now()))) || self.find_animating() || self.boot_fade.active()
     }
 
     fn openness(&self, i: usize) -> f32 {
@@ -3998,6 +4019,28 @@ impl App {
     /// Cozy or Quick: the player's choice, else the look's own (`Animations::default_for`).
     fn animations_in_use(&self) -> pocket_ui::settings::Animations {
         self.animations.unwrap_or_else(|| pocket_ui::settings::Animations::default_for(self.theme))
+    }
+
+    /// A Quit that takes longer than a second shows it is working.
+    pub(crate) fn paint_saving_wait(&mut self, c: &mut Canvas) {
+        let Some(waited) = self.quit.as_ref().map(|q| q.waited(Instant::now())).filter(|w| *w >= SAVE_WAIT_SHOWN) else { return };
+        let turn = if pocket_ui::motion::level() == pocket_ui::motion::Motion::Off { 0 } else { (waited.as_millis() / 125) as i32 };
+        // pocket-core says when it writes; a game past that is closing. The big emulators don't say: the time does.
+        let run = self.running.as_ref();
+        let closing = run.is_some_and(|r| r.hosted() && !r.pgid.is_some_and(pocket_ui::fast_switch::saving_now));
+        let word = if closing {
+            "Closing the game…"
+        } else if waited >= SAVE_WAIT_SLOW {
+            "This one takes a while. Still saving, don't switch off."
+        } else {
+            "Still saving…"
+        };
+        let px = 28;
+        let word = self.text.fit(Face::Body, px, word, c.w - 120);
+        let w = self.text.width(Face::Body, px, &word);
+        let (x, y) = ((c.w - w + 44) / 2, c.h - 40);
+        app_frozen::spinner(c, x - 28, y - 10, turn);
+        self.text.draw(c, Face::Body, px, x, y, pal().chalk, &word);
     }
 
     fn cozy(&self) -> bool {
@@ -4301,7 +4344,10 @@ impl App {
             let msg = self.load_error.clone().unwrap_or_else(|| "No games yet".into());
             let dy = pocket_ui::ui_art::above_words(c, pocket_ui::ui_art::Art::NoGames, MARGIN, false, EMPTY_ART_TOP, 300, 50);
             self.text.draw(c, Face::Title, 50, MARGIN, 300 + dy, pal().chalk, &msg);
-            self.text.draw(c, Face::Body, 28, MARGIN, 350 + dy, pal().dust, "Copy games into /storage/roms/<system> and restart.");
+            let hint = if pocket_ui::card_health::image_card() { pocket_ui::card_health::IMAGE_CARD_NOTE } else { "Copy games into /storage/roms/<system> and restart." };
+            for (i, line) in self.text.wrap_prose(Face::Body, 28, hint, c.w - 2 * MARGIN).iter().enumerate() {
+                self.text.draw(c, Face::Body, 28, MARGIN, 350 + dy + i as i32 * 38, pal().dust, line);
+            }
             return;
         }
 
@@ -4474,7 +4520,7 @@ impl App {
             None => false,
         };
         // Split has room under the name: a panel's line takes two lines before it is cut.
-        let panel_lines = panel.map(|p| self.text.wrap_at_most(Face::Body, 28, &p.line, pw, 2));
+        let panel_lines = panel.map(|p| self.text.wrap_prose_at_most(Face::Body, 28, &p.line, pw, 2));
         // Box art, then the game running and its title screen fading in turn (`app_pictures`).
         let preview = (px + 24, top + 24, pw - 48, 420 - short - 48);
         if !shown && !self.paint_preview(c, item, preview, mix(color, bg, 90)) {
@@ -4835,14 +4881,16 @@ fn snapshot(app: &mut App, args: &[String]) {
     }
     // "game-save-warning[:unwritable]": pocket-core's line over the game while saves fail (`app_save_trouble`).
     let background = args.get(2).and_then(|p| image::load_image(std::path::Path::new(p)));
-    if let Some(buf) = app_save_trouble::game_warning_snapshot(state, background, w, h, &mut app.text) {
-        write_png(&buf, w, h, out);
+    // pocket-core draws in the panel's own pixels, not on the shelf's canvas.
+    let (gw, gh) = if state == "game-twin-note" { snapshot_panel_dims() } else { (w, h) };
+    if let Some(buf) = app_save_trouble::game_warning_snapshot(state, background, gw, gh, &mut app.text) {
+        write_png(&buf, gw, gh, out);
         return;
     }
     // "notice:<several|password|packing|checksum|incomplete|empty|none>": Home with the card a zip pocket-core refused leaves
     // (`archive::message`), "notice:bios" the card for a game that didn't start (`fallback::not_started_notice`; "bios-segacd"
     // for one whose missing BIOS is known),
-    // "notice:switched-off" the start after a switch-off after sleeping (`app_auto_off`), "notice:patch-<version|damaged|
+    // "notice:twin" RetroArch's start of a game sharing its file name (`frozen::SHARED`), "notice:switched-off" the start after a switch-off after sleeping (`app_auto_off`), "notice:patch-<version|damaged|
     // big|kind>" a patch next to the game that pocket-core refused (`softpatch::message`).
     if let Some(kind) = state.strip_prefix("notice:") {
         // A trailing ":toast" also raises the small toast, so its place under the card is rendered.
@@ -4859,6 +4907,7 @@ fn snapshot(app: &mut App, args: &[String]) {
                 Some("Sega CD needs a BIOS file in roms/bios: bios_CD_U.bin, bios_CD_E.bin or bios_CD_J.bin"),
             ),
             "switched-off" => pocket_ui::auto_off::Note { hours: 3, brightness: None }.text(),
+            "twin" => pocket_ui::frozen::SHARED.to_string(),
             k => pocket_ui::archive::message(k, "Sonic The Hedgehog (USA, Europe).zip"),
         }));
         if toast {
@@ -5550,6 +5599,8 @@ fn snapshot(app: &mut App, args: &[String]) {
             None => last,
         };
         app.prev_sel = app.sel;
+        // At rest: the front's turn (220 ms) and the lift (120 ms) are over, as in every other look's snapshot.
+        app.moved_at = Instant::now() - Duration::from_secs(2);
     }
     // "switcher": the game switcher on the shelf, with the recent games of POCKETUI_DATA's recents.json.
     if state == "switcher" {
@@ -6132,6 +6183,7 @@ impl App {
             UserEvent::SlideScene(generation, index, scene) => self.slideshow_scene(generation, index, scene),
             UserEvent::Online => self.auto_covers("online after boot"),
             UserEvent::LibraryRescanned(systems, key) => self.library_rescanned(systems, key),
+            UserEvent::LibraryUnread { count, rose } => self.library_unread(count, rose),
             UserEvent::UsbTransfer { wanted_on, status } => self.usb_transfer_switched(wanted_on, status),
             UserEvent::GamesCard(change) => self.games_card_changed(change),
             UserEvent::Display(tv) => self.display_changed(tv),
@@ -6529,6 +6581,10 @@ impl ApplicationHandler<UserEvent> for App {
 
         // A game that ignored Quit: SIGTERM at the deadline, SIGKILL two seconds later.
         if let (Some(q), Some(g)) = (self.quit.as_mut(), self.running.as_ref().and_then(|r| r.pgid)) {
+            // Never a writer: a killed exit save is a lost moment, and the card can be slow for reasons of its own.
+            if pocket_ui::fast_switch::saving_now(g) {
+                q.still_saving(now);
+            }
             if let Some(sig) = q.due(now) {
                 control::terminate_game(g, sig == quit::Signal::Kill);
             }

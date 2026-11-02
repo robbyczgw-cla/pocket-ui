@@ -477,13 +477,21 @@ pub fn display_aspect(system: &str, base_w: u32, base_h: u32, reported: f32) -> 
     reported
 }
 
-/// Files with a listed extension that are no game: DOSBox Pure's own saves (`<game>.pure.zip`, next to the game).
+/// Files with a listed extension that are no game: DOSBox Pure's own saves (`<game>.pure.zip`, next to the game), and
+/// ROCKNIX's own empty "Splore" picture in `pico-8` (written at every boot; start_pico8.sh turns the name into PICO-8's
+/// game browser) while the official PICO-8 program is not there to start.
 pub fn not_a_game(system: &str, path: &Path) -> bool {
-    system == "pc"
-        && path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .is_some_and(|n| n.to_ascii_lowercase().ends_with(".pure.zip"))
+    let name = path.file_name().and_then(|n| n.to_str());
+    match system {
+        "pc" => name.is_some_and(|n| n.to_ascii_lowercase().ends_with(".pure.zip")),
+        "pico-8" => is_splore(path) && !path.parent().and_then(Path::parent).is_some_and(pico8_installed),
+        _ => false,
+    }
+}
+
+/// ROCKNIX's "Splore" entry of `pico-8`: a picture named Splore, whatever the extension's case.
+pub fn is_splore(path: &Path) -> bool {
+    path.file_stem().is_some_and(|s| s.eq_ignore_ascii_case("splore")) && path.extension().is_some_and(|e| e.eq_ignore_ascii_case("png"))
 }
 
 /// Whether the folders of this system are games that pocket-core starts (`folder_games`), so the shelf must not also

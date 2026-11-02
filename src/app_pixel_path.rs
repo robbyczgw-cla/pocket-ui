@@ -406,7 +406,7 @@ impl App {
         // For the snapshot checks of Settings → Text size: the page under the sheet is darkened, not read.
         pocket_ui::text::boxes::covered();
         let (w, inner) = (c.w - 2 * (NU_PAD + 40), 48);
-        let lines = self.text.wrap(Face::Body, 30, &s.about, w - 2 * inner);
+        let lines = self.text.wrap_prose(Face::Body, 30, &s.about, w - 2 * inner);
         let lines: Vec<String> = lines.into_iter().take(12).collect();
         // Every line a little lower with larger text: the heading, the value, the paragraph's lines.
         let (g1, g2, g3, step) = (pocket_ui::type_scale::grow(38), pocket_ui::type_scale::grow(28), pocket_ui::type_scale::grow(30), pocket_ui::type_scale::line(30, 12));
