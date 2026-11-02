@@ -2625,5 +2625,30 @@
   {
    "op": "specks"
   }
+ ],
+ "c64": [
+  {
+   "op": "specks"
+  }
+ ],
+ "atari800": [
+  {
+   "op": "specks"
+  }
+ ],
+ "atari5200": [
+  {
+   "op": "specks"
+  }
+ ],
+ "amiga": [
+  {
+   "op": "specks"
+  }
+ ],
+ "zxspectrum": [
+  {
+   "op": "specks"
+  }
  ]
 }

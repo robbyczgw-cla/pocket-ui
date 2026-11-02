@@ -14,30 +14,22 @@ Next to this image, on @RELEASE_URL@ :
   pocket-ui-@VERSION@-source.tar.gz
       pocket-ui, pocket-core and pocket-splash, and the scripts that build this image
       (scripts/make-image-family.sh, scripts/image/, deploy/).
-  rocknix-@ROCKNIX_TAG@-distribution.tar.xz
-      ROCKNIX's build system at tag @ROCKNIX_TAG@ (commit @ROCKNIX_COMMIT@): every package's
-      recipe, the kernel configuration and all patches, and the scripts that put SYSTEM and KERNEL
-      together ("make docker-SM8550" builds them).
-  rocknix-@ROCKNIX_TAG@-SM8550-sources.tar.xz.part-00, -01, ...
-      Every source archive and source checkout that ROCKNIX's SM8550 build fetches (Linux 7.2,
-      BusyBox, glibc, systemd, RetroArch, the emulators and the rest), as ROCKNIX's own scripts/get
-      downloads them. Join the parts with "cat rocknix-*-sources.tar.xz.part-* > sources.tar.xz".
-      packages.txt lists the packages. There is no source for DraStic (closed source, passed on unchanged as
-      ROCKNIX does; see the README's Licences section).
-  SOURCE-SHA256SUMS
-      Checksums of all of the above.
 
-The same source is also public at:
+The rest of the source is public, at the exact versions on this card:
   ROCKNIX:    https://github.com/ROCKNIX/distribution/tree/@ROCKNIX_TAG@
+              tag @ROCKNIX_TAG@, commit @ROCKNIX_COMMIT@. Every package's recipe (where its source
+              comes from), the kernel configuration, all patches, and the scripts that put SYSTEM
+              and KERNEL together ("make docker-SM8550" builds them).
   pocket-ui:  @POCKET_UI_SOURCE@
+
+There is no source for DraStic (closed source, passed on unchanged as ROCKNIX does; see the README's Licences section).
 
 
 Written offer
 -------------
 
-For at least three years after we last distribute this image, we offer to give anyone who asks a
-complete machine-readable copy of the corresponding source code of every GPL- or LGPL-licensed program
-on this card, for no more than our cost of physically performing the distribution: as a download, or on
-a storage medium if you ask for one. To ask, open an issue titled "Source request" at
-@ISSUES_URL@ and name this image: pocket-ui @VERSION@, @IMAGE_NAME@.img.xz.
+For at least three years from the release of this image, anyone can get the complete corresponding
+source code of the GPL- and LGPL-licensed software on this card, for no charge beyond the cost of
+providing it. To ask, open an issue titled "Source request" at @ISSUES_URL@ and name this image:
+pocket-ui @VERSION@, @IMAGE_NAME@.img.xz.
 This offer is valid for anyone who has this information.

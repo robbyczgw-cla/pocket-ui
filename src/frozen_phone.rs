@@ -295,6 +295,20 @@ mod tests {
     }
 
     #[test]
+    fn the_phone_copy_has_no_patches_so_the_patch_field_never_closes_a_case() {
+        let (_d, rom, b, _auto) = played("patches");
+        assert_eq!(read_mark(&b).unwrap().patches, Some(0), "a mark made now records none");
+        assert_eq!(stand_open(&[candidate(&rom, &b, "k")]), ["k"]);
+        // A mark from before the field (0.1.9 and 0.1.10 phones) is not held against anything.
+        let now = read_mark(&b).unwrap();
+        let old = format!(r#"{{"emulator":"pocket-core","core":"mgba","rom_bytes":{},"rom_mtime":{},"rom_hash":{}}}"#, now.rom_bytes, now.rom_mtime, now.rom_hash);
+        std::fs::write(mark_path(&b), old).unwrap();
+        assert_eq!(read_mark(&b).unwrap().patches, None);
+        assert_eq!(stand_open(&[candidate(&rom, &b, "k")]), ["k"]);
+        assert_eq!(at_start(&b, &rom, "mgba", true), Start { resume: true, note: vec![] });
+    }
+
+    #[test]
     fn a_copy_that_is_gone_stands_closed() {
         let (_d, rom, b, _auto) = played("copy");
         std::fs::remove_file(&rom).unwrap();

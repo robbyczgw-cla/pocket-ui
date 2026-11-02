@@ -26,6 +26,9 @@ const MAX_BIOS_BYTES: u64 = 128 << 20;
 #[cfg(not(target_os = "android"))]
 const MAX_ENTRIES: usize = 50_000;
 
+/// What the green result says when the look at files stopped at `MAX_ENTRIES` (`Report::capped`).
+pub const CAPPED_SUMMARY: &str = "First 50,000 files checked";
+
 /// What a finding is about; the page's first list, in this order.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum Group {
@@ -98,6 +101,8 @@ pub struct Report {
     pub ready: usize,
     /// Findings beyond `MAX_PER_GROUP`, per group.
     pub more: Vec<(Group, usize)>,
+    /// A folder had more than `MAX_ENTRIES` entries, so the look at files stopped there: "All good" would claim too much.
+    pub capped: bool,
 }
 
 impl Report {
@@ -123,6 +128,7 @@ impl Report {
     pub fn summary(&self) -> String {
         let n: usize = self.groups().iter().filter(|(g, _)| *g != Group::Tips).map(|(_, n)| n).sum();
         match n {
+            0 if self.capped => CAPPED_SUMMARY.to_string(),
             0 => "All good".to_string(),
             1 => "1 thing to fix".to_string(),
             n => format!("{n} things to fix"),
@@ -262,6 +268,17 @@ fn zeros_inside(files: &dyn Files, path: &Path, len: u64) -> bool {
     (1..=SPOTS).all(|i| all_zero(len / (SPOTS + 1) * i, SPOT))
 }
 
+/// The first `MAX_ENTRIES` entries of a folder; `capped` is set when there were more.
+#[cfg(not(target_os = "android"))]
+fn read_capped(dir: &Path, capped: &mut bool) -> Vec<std::fs::DirEntry> {
+    let mut it = std::fs::read_dir(dir).into_iter().flatten().flatten();
+    let first: Vec<_> = it.by_ref().take(MAX_ENTRIES).collect();
+    if it.next().is_some() {
+        *capped = true;
+    }
+    first
+}
+
 /// The sentences that name the place games are copied to, and what else differs between the two.
 pub struct Words {
     pub copy_again: &'static str,
@@ -279,6 +296,8 @@ pub struct Words {
 pub struct Findings {
     list: Vec<Finding>,
     counts: HashMap<Group, usize>,
+    /// A folder was longer than `MAX_ENTRIES` (`read_capped`).
+    pub capped: bool,
 }
 
 impl Findings {
@@ -295,7 +314,7 @@ impl Findings {
         let order = |g: Group| Group::ALL.iter().position(|a| *a == g).unwrap_or(0);
         self.list.sort_by_cached_key(|f| (order(f.group), f.name.to_lowercase()));
         let more = Group::ALL.iter().filter_map(|g| self.counts.get(g).filter(|n| **n > MAX_PER_GROUP).map(|n| (*g, n - MAX_PER_GROUP))).collect();
-        Report { findings: self.list, total, ready, more }
+        Report { findings: self.list, total, ready, more, capped: self.capped }
     }
 }
 
@@ -621,6 +640,9 @@ impl Run<'_> {
             n += 1;
             self.step(n)?;
             let ext = extension(&path);
+            if n > MAX_ENTRIES {
+                self.found.capped = true;
+            }
             if n > MAX_ENTRIES || !all.contains(&ext) || not_a_game_file(&path, &ext) || crate::library::computer_litter(&file_of(&path)) {
                 continue;
             }
@@ -642,7 +664,7 @@ impl Run<'_> {
             let mut deeper = Vec::new();
             self.look_at_files(info, catalog, exts, &sub, &mut deeper)?;
             for dir in deeper {
-                let holds = std::fs::read_dir(&dir).into_iter().flatten().flatten().take(MAX_ENTRIES).map(|e| e.path()).find(|p| p.is_file() && exts.contains(&extension(p)) && !matches!(extension(p).as_str(), "zip" | "7z") && !crate::library::computer_litter(&file_of(p)));
+                let holds = read_capped(&dir, &mut self.found.capped).into_iter().map(|e| e.path()).find(|p| p.is_file() && exts.contains(&extension(p)) && !matches!(extension(p).as_str(), "zip" | "7z") && !crate::library::computer_litter(&file_of(p)));
                 if let Some(file) = holds {
                     let place = Some(self.shown(&file));
                     self.add(Finding {
@@ -661,7 +683,7 @@ impl Run<'_> {
     }
 
     fn look_at_files(&mut self, info: &SysInfo, catalog: &[SysInfo], exts: &[String], dir: &Path, subs: &mut Vec<PathBuf>) -> Option<()> {
-        for (n, entry) in std::fs::read_dir(dir).into_iter().flatten().flatten().take(MAX_ENTRIES).enumerate() {
+        for (n, entry) in read_capped(dir, &mut self.found.capped).into_iter().enumerate() {
             self.step(n)?;
             let path = entry.path();
             let name = entry.file_name().to_string_lossy().into_owned();
@@ -876,7 +898,7 @@ fn owner<'a>(catalog: &'a [SysInfo], ext: &str, popular: &[&str]) -> Option<&'a 
     popular.iter().find_map(|id| catalog.iter().filter(takes).find(|s| s.id == *id)).or_else(|| catalog.iter().find(takes))
 }
 
-fn not_a_game_file(path: &Path, ext: &str) -> bool {
+pub(crate) fn not_a_game_file(path: &Path, ext: &str) -> bool {
     crate::archive::is_clutter(ext) || NOT_GAMES.contains(&ext) || crate::game_files::is_save(path)
 }
 
@@ -980,6 +1002,7 @@ pub fn demo(all_good: bool) -> Report {
                 fix: None,
             }],
             more: Vec::new(),
+            capped: false,
         };
     }
     let f = |group, name: &str, system: &str, what: &str, todo: &str, place: Option<&str>, fix| Finding {
@@ -995,6 +1018,7 @@ pub fn demo(all_good: bool) -> Report {
         total: 214,
         ready: 186,
         more: Vec::new(),
+        capped: false,
         findings: vec![
             f(Group::Bios, "Sega CD", "Sega CD", "Sega CD: BIOS missing.", "Sega CD needs a BIOS file in roms/bios: bios_CD_U.bin, bios_CD_E.bin or bios_CD_J.bin. BIOS files come from your own console. Copy them into the bios folder over file sharing (Settings › Games › Add games).", None, None),
             f(Group::Bios, "scph5501.bin", "PlayStation", "Wrong BIOS: its checksum differs from the file with this name.", "Games may not start or may crash. Copy your own console's scph5501.bin again.", Some("roms/bios/scph5501.bin"), None),
@@ -1120,6 +1144,29 @@ mod tests {
         let r = c.report();
         assert_eq!(r.findings, Vec::new());
         assert_eq!((r.total, r.ready), (1, 1));
+    }
+
+    /// Release review 0.1.12: a folder longer than the look at files reads is not "All good".
+    #[test]
+    fn a_folder_past_the_cap_is_not_all_good() {
+        let c = Card::new("capped");
+        c.put("snes/Chrono Trigger (USA).sfc", b"game");
+        let r = c.report();
+        assert!(!r.capped);
+        assert_eq!(r.summary(), "All good");
+        let notes = c.roms().join("snes/notes");
+        std::fs::create_dir_all(&notes).unwrap();
+        for i in 0..=MAX_ENTRIES {
+            std::fs::write(c.roms().join(format!("snes/notes/n{i}.txt")), b"x").unwrap();
+        }
+        // The folder of the system itself is long too.
+        for i in 0..=MAX_ENTRIES {
+            std::fs::write(c.roms().join(format!("snes/n{i}.txt")), b"x").unwrap();
+        }
+        let r = c.report();
+        assert!(r.capped);
+        assert_eq!(r.summary(), CAPPED_SUMMARY);
+        assert_eq!(CAPPED_SUMMARY, "First 50,000 files checked");
     }
 
     #[test]

@@ -372,8 +372,11 @@ pub fn paint_history(c: &mut Canvas, text: &mut Text, page: &HistoryPage, names:
     text.draw(c, Face::Title, 67, MARGIN, 160, p.chalk, &title);
     // On a screen with fewer than 1080 lines (the Mini V1's 960) the chart gives up most of the difference, so the
     // five most played games still end above the hints (docs/DEVICES.md).
-    let short = (1080 - c.h).max(0) * 2 / 3;
-    let (cx, cy, cw, ch) = (MARGIN + 72, 256, c.w - 2 * MARGIN - 72, 196 - short);
+    // On 768 lines the chart is 84 px high from 240 and the five slimmer rows start at 394, so the labels stay apart and
+    // the fifth row ends above the hints.
+    let on_768 = crate::kit::short_screen(c.h);
+    let short = if on_768 { 154 } else { (1080 - c.h).max(0) * 2 / 3 };
+    let (cx, cy, cw, ch) = if on_768 { (MARGIN + 72, 240, c.w - 2 * MARGIN - 72, 84) } else { (MARGIN + 72, 256, c.w - 2 * MARGIN - 72, 196 - short) };
     let Some(s) = page.summary.as_ref() else {
         text.draw(c, Face::Body, 28, MARGIN, 208, p.dust, "Counting…");
         c.rect(cx, cy + ch, cw, 2, p.pick(0x26262a, 0xdcd6ca));
@@ -404,6 +407,7 @@ pub fn paint_history(c: &mut Canvas, text: &mut Text, page: &HistoryPage, names:
     if !s.games.is_empty() {
         text.draw(c, Face::Body, 21, lx, top, p.dust, "Most played");
         let (row, gap) = (crate::type_scale::row(64, 37), 8);
+        let (row, gap) = if on_768 { (row * 3 / 4, 6) } else { (row, gap) };
         for (i, g) in s.games.iter().take(ROWS).enumerate() {
             let y = top + 20 + i as i32 * (row + gap);
             let selected = i == page.sel;
@@ -432,7 +436,7 @@ pub fn paint_history(c: &mut Canvas, text: &mut Text, page: &HistoryPage, names:
         let lines = text.wrap_prose(Face::Body, 28, &line, fw);
         let step = crate::type_scale::line(28, 10);
         let need = 30 + lines.len().min(2) as i32 * step;
-        if y + need > c.h - 120 {
+        if y + need > if on_768 { c.h - 84 } else { c.h - 120 } {
             break;
         }
         text.draw(c, Face::Body, 21, fx, y, p.dust, &head);

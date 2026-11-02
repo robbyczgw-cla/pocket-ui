@@ -564,6 +564,8 @@ impl App {
 
     fn paint_web_list(&mut self, c: &mut Canvas, page: &WebPage) {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
+        // On a short screen (768 lines) the address, its explanation and the note keep their place above the footer.
+        let row = if pocket_ui::kit::short_screen(c.h) { row * 4 / 5 } else { row };
         self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         for (i, r) in ROWS.iter().enumerate() {

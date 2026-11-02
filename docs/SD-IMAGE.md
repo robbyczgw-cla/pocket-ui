@@ -64,7 +64,7 @@ them on (below, "SYSTEM without a few files"); every other file in it is ROCKNIX
 8. The notes get ROCKNIX's `LICENSE.md` and `licenses/` folder from the tag (a sparse git clone, checked against
    the pinned commit, cached next to the ROCKNIX image), `deploy/image/firmware-licences/` and the source offer
    (`deploy/image/SOURCE-OFFER.txt.in`). `--source` and `--release-url` set where the notes say pocket-ui's source
-   and the source archives are; for the public image: the public repository's release commit and release page.
+   tarball and the issues page of the written offer are; for the public image: the public repository's release commit and release page.
 
 ### SYSTEM without a few files
 
@@ -307,8 +307,8 @@ as on the H700. The only other finds are the libretro cores, ReGBA's open GBA BI
 **Open before publishing: firmware without a stated licence.** The Odin's sound and battery firmware (`qcom/sm8550/ayn`) and a
 few more files come from ROCKNIX's `extra-firmware` repository, which has no licence file. On the Mini V2 such files could
 simply go; these handhelds can't work without them. `deploy/image/firmware-licences-sm8550/README.txt` lists each file. The
-check also proves every firmware the model's device tree names is still in SYSTEM. Also open: the source bundle
-(`scripts/image/rocknix-source.sh OUT --device SM8550`).
+check also proves every firmware the model's device tree names is still in SYSTEM. The source needs no bundle: the offer
+points to ROCKNIX's repository at the tag (see the GPL source section).
 
 ## Offline check (`scripts/check-image.sh`)
 
@@ -372,20 +372,20 @@ The notes (`pocket-ui-info/README.txt` on the card, and `pocket-ui-<version>-rp-
 - **Firmware:** `pocket-ui-info/firmware-licences/` (see "SYSTEM without a few files").
 - **No BIOS files and no ROMs** of our own; the one BIOS file in ROCKNIX's SYSTEM is ReGBA's GPL replacement.
 
-### GPL source: hosted next to the image, plus a written offer
+### GPL source: pocket-ui's tarball, pointers and a written offer
 
-Chosen route (2026-10-28): **we host the complete corresponding source ourselves**, as release assets next to the
-image, and the card carries a **written offer** (GPLv2 §3(b), GPLv3 §6(b)) as a second way, valid three years, asked
-for through the repository's issues. `pocket-ui-info/SOURCE-OFFER.txt` lists the files:
+Chosen route (changed 2026-11-02, before 0.1.12): **no big source bundles are uploaded.** ROCKNIX, Knulli
+and pocknix publish no source archives with their releases either. Next to the image stays only
+`pocket-ui-<version>-source.tar.gz` (the `git archive` of the public release commit, which GitHub also gives for every
+tag: pocket-ui, pocket-core, pocket-splash and the scripts that build the image, `scripts/make-image*.sh`,
+`scripts/image/`, `deploy/`). Everything else is a pointer in `pocket-ui-info/SOURCE-OFFER.txt` and the notes: ROCKNIX's
+repository at the exact tag and commit (every package's recipe, the kernel configuration, all patches), Debian's snapshot
+page of the GRUB source (Mini V2), and ReGBA's `bios/` at its commit. The card carries a **written offer** (GPLv2 §3(b),
+GPLv3 §6(b)): for at least three years from the image's release, anyone can get the complete corresponding source of the
+GPL and LGPL software on the card, on request through the repository's issues, for no charge beyond the cost of providing
+it. The licence texts on the card stay as they are.
 
-| File | Made by | What |
-|---|---|---|
-| `pocket-ui-<version>-source.tar.gz` | `scripts/image/source-bundle.sh` (`git archive` of the public release commit) | pocket-ui, pocket-core, pocket-splash and the image scripts |
-| `rocknix-20261001-distribution.tar.xz` | `scripts/image/rocknix-source.sh` | ROCKNIX's build tree at the tag: package recipes, kernel config, all patches |
-| `rocknix-20261001-SM8250-sources.tar.xz.part-NN`, `packages.txt` | `scripts/image/rocknix-source.sh` | every source archive and checkout (without git history) of the SM8250 build: the package list of ROCKNIX's own `scripts/genbuildplan.py --build image` for `ARCH=aarch64` and `ARCH=arm` (the Makefile's `SM8250` target builds both), fetched with ROCKNIX's `scripts/get` (the input of `make src-pkg`, without building anything) |
-| `regba-bios-source.tar.gz` | `source-bundle.sh` | ReGBA's `bios/` at `7f37905`, checked against the BIOS md5 |
-| `grub2_2.12-9+deb13u2.dsc`, `.orig.tar.xz`, `.debian.tar.xz` | `source-bundle.sh` | Debian's GRUB source, checked against the `.dsc` |
-| `SOURCE-SHA256SUMS` | `source-bundle.sh` | |
+The scripts that made the bundles stay in the repository for the day an offer is taken up, or a bundle is wanted again:
 
 ```sh
 scripts/image/rocknix-source.sh ~/pocket-review/rocknix-source-20261001      # once per ROCKNIX tag
@@ -393,15 +393,13 @@ scripts/image/source-bundle.sh OUT --version 0.1.1 --rocknix-source ~/pocket-rev
   --pocket-ui ../public-011 <public release commit>
 ```
 
-First run (2026-10-28, on the build machine): 654 packages, about 85 minutes to fetch, 34 GB as fetched (git checkouts with their
-history); packed without `.git` and xz-compressed. Packages whose source `scripts/get` cannot fetch end in
-`failed.txt`; `source-bundle.sh` refuses to run unless each one is in its `NOT_ON_CARD` list with a reason (today only
-`rocknix-abl`, whose release asset changed upstream and which is removed from SYSTEM). Not covered by `scripts/get`:
-files a package downloads during its own build (in SYSTEM: the ReGBA BIOS, whose source is added separately, and the
-DOOM shareware, which is removed). Others found by `grep -E '(curl|wget) '` over the packages of the SM8250 plan, not in
-the bundle yet (open point; the written offer covers them): `portmaster` (`PortMaster.zip`, `compat.tar.gz`),
-`mangohud` and `xemu-sa` (meson subproject tarballs), `wine` (`winetricks`, a script), and data files without code
-(`ppsspp-sa` cheat database, `rpcs3-sa` config database, `armsx2-sa` patches).
+They write `rocknix-<tag>-distribution.tar.xz`, `rocknix-<tag>-<family>-sources.tar.xz.part-NN`, `packages.txt`,
+`regba-bios-source.tar.gz`, the GRUB `.dsc` with its tarballs and `SOURCE-SHA256SUMS`. The first run (2026-10-28) fetched 654
+packages in about 85 minutes, 34 GB as fetched, packed without `.git` and xz-compressed. Packages whose source
+`scripts/get` cannot fetch end in `failed.txt`; `source-bundle.sh` refuses to run unless each one is in its `NOT_ON_CARD`
+list with a reason (today only `rocknix-abl`, which is removed from SYSTEM). Files a package downloads during its own build
+(`portmaster`, `mangohud`, `xemu-sa`, `wine`'s `winetricks`, data files without code) are not in such a bundle; with the
+offer asked for, they would be fetched then. The existing bundles stay where they are.
 
 Open points:
 

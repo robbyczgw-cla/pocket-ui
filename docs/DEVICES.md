@@ -367,7 +367,7 @@ What pocket-ui does about what is missing (`Device::has_fan`, `has_touch`, `has_
   no rule for *remove*: the dead mount stays until a new card or a restart. `games_card::watch` (poll on the mount table and on
   `/dev`, no wake-ups) makes the shelf read again, or say the card is out. pocket-core's saves then fail at `write_atomic`'s
   fsync and `save_trouble` says so; ROCKNIX's standalone emulators can't, the notice afterwards is all there is.
-- **USB file transfer** (`usb_transfer.rs`, all three images): `umtprd` is in each SYSTEM, the gadget is prepared at every start by
+- **USB file transfer** (`usb_transfer.rs`, all three images): **retired, not offered to players** (no tile on Add games, no row in Settings → Connections; `usb_transfer::RETIRED`): nobody completed a real transfer, and a Mac depends on OpenMTP, never shown to see the device. The code stays, unused; a start switches off a transfer left on by an earlier version (`usb_transfer::retire`). What was checked: `umtprd` is in each SYSTEM, the gadget is prepared at every start by
   autostart `081-usbgadget`, off by default, `usbgadget file_transfer` / `disabled`, storage `/storage/roms`, FunctionFS. H700:
   `usb@5100000` `dr_mode = "otg"`, musb, `CONFIG_USB_CONFIGFS_F_FS`, and ROCKNIX rebinds after sleep
   (`sleep.d/post/005-usbgadget`). SM8250: `dr_mode = "otg"`, `usb-role-switch`; SM8550: role switch; TCPM owns the role on both,

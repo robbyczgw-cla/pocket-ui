@@ -121,7 +121,7 @@ START on a PortMaster port's card ([Performance & fan](performance.md#portmaster
 | How do you like to play? | Up / Down: Simple, Enthusiast, Choose for yourself. A: take it. B: back to the look. START: skip, everything stays as it is. |
 | Feature cards (Choose for yourself, Settings → Help & tools → Tour, New in this version) | Up / Down: On, Off, Later. A: take the choice, next card. L1 / R1 or Left / Right: previous / next card without choosing. B: back a card (first start) or close (Tour, new cards). START: skip the rest. |
 | Wi-Fi | Up / Down: choose a network. A: connect. X: scan again. |
-| On-screen keyboard | D-pad: move. A: type. B: delete (back to the list when empty). X: Shift. Y: symbols. START: connect. |
+| On-screen keyboard | D-pad: move. A: type. B: delete (back to the list when empty). L1: empty the field. X: Shift. Y: symbols. START: connect. |
 | Extras | Up / Down: choose. A: download (cover art) or browse (PortMaster). On Pictures, A or Left / Right: the next choice (Box art, Box art and screenshots, Off). |
 | PortMaster games | Up / Down: move. L1 / R1: page. Left / Right: Ready to play or Bring your own game files. A: install or remove. X: how to copy a game's files. B: back. |
 | Copy your game files | Up / Down: scroll. X: turn file sharing on or off (from Extras). A or B: back. |

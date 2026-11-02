@@ -268,7 +268,7 @@ impl App {
                 y += art_h + 28;
             }
             let base = y + 54;
-            let head = self.text.fit(Face::Title, 67, "All good", c.w - 2 * left);
+            let head = self.text.fit(Face::Title, 67, if report.capped { game_check::CAPPED_SUMMARY } else { "All good" }, c.w - 2 * left);
             self.text.draw(c, Face::Title, 67, left, base, pal().text, &head);
             self.text.draw(c, Face::Body, 36, left, base + pocket_ui::type_scale::line(36, 18), pal().text, &ready);
             if tips {

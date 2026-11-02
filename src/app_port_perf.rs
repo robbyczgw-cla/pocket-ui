@@ -228,6 +228,8 @@ impl App {
     fn paint_port_perf_page(&mut self, c: &mut Canvas, page: &PortPerfPage) {
         c.clear(pal().void);
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
+        // Slimmer rows on a short screen (768 lines), so the explanation and the note under them end above the hints.
+        let row = if pocket_ui::kit::short_screen(c.h) { row * 4 / 5 } else { row };
         self.sheet_header(c, "Performance & fan");
         let sub = self.text.fit(Face::Body, 28, &page.title, c.w - 2 * pad - 2 * NU_BTN_PAD - 330);
         self.text.draw(c, Face::Body, 28, pad + NU_BTN_PAD, pad + 104, pal().dust, &sub);

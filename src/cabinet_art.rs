@@ -813,6 +813,10 @@ pub fn plain_label(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i
     let ink = ink_on(mix(look.color, 0x000000, 60));
     // Printed on the cover: its size follows the case, not Settings → Text size.
     let _fixed = crate::type_scale::fixed();
+    // A game's name as it is, word for word: split over two lines, each is measured and painted as a string of its own,
+    // and "Sonic Adventure" read "Sonic Aventura" in Spanish (new-player walk 2026-11-02).
+    let translating = text.translating();
+    text.set_translate(translating && !crate::i18n::is_name(title));
     // A sixth of the label, or smaller until the name fits in two lines (never a lone word of it on a line of its
     // own), at the sizes the app paints anyway: a front made in a frame draws no letters of its own
     // (tests/shelf_moves.rs). A name too long even then ends in "…".
@@ -884,6 +888,7 @@ pub fn plain_label(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i
             break;
         }
     }
+    text.set_translate(translating);
 }
 
 /// `title` on two lines of about the same width, at most `max` wide ("Gran" over "Turismo 4", not "Gran Turismo" over

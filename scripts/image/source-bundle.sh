@@ -1,5 +1,6 @@
 #!/bin/sh
-# The source archives that go next to the SD card image (deploy/image/SOURCE-OFFER.txt.in lists them for players).
+# Source archives for answering a written source request. Not uploaded with the images since 0.1.12 (project decision):
+# deploy/image/SOURCE-OFFER.txt.in points to ROCKNIX's repository at the tag instead; only pocket-ui's own tarball is next to the image.
 #
 #   scripts/image/source-bundle.sh OUT --version V --rocknix-source DIR --pocket-ui GIT_DIR REF
 #     OUT               output directory (about 10 GB, most of it ROCKNIX's sources)

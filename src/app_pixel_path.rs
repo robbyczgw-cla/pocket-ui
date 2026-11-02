@@ -328,7 +328,10 @@ impl App {
         // The dot, the value and its line move up by half of what a row gave up, and the line closer to the value;
         // with larger text there is no room for that, and only the selected stage keeps its line, where it was.
         let tight = row < full && pocket_ui::type_scale::grow(28) > 0;
-        let (lift, line_dy) = if tight { (0, 40) } else { ((full - row) / 2, 40 - (full - row) / 2) };
+        // On 768 lines (rows 59 px) a value and its line don't fit in a row at all: the rows show the values, and the
+        // selected stage's line is read under them, above the last seconds of play.
+        let cramped = row < 70;
+        let (lift, line_dy) = if tight || cramped { (0, 40) } else { ((full - row) / 2, 40 - (full - row) / 2) };
         let (dot_x, name_x, value_x) = (pad + 34, pad + 74, pad + 74 + pocket_ui::type_scale::wide(162, 28));
         let Some(path) = path else {
             self.text.draw(c, Face::Body, 30, name_x, top + 60, 0x9a978f, "Reading the path…");
@@ -353,25 +356,47 @@ impl App {
             let base = cy + 11;
             self.text.draw(c, Face::Body, 28, name_x, base, 0xaaa79f, s.kind.name());
             // The grade at 26 and 24 px from the value: the longest German values still fit beside "Beeinträchtigt".
-            let grade_w = self.text.width(Face::Body, 26, s.grade.name());
+            // With larger text it goes under the stage's name instead, and the value gets the whole line: its colour is
+            // the dot's, the word is there for those who can't tell colours apart.
+            let large = pocket_ui::type_scale::grow(28) > 0;
+            let grade_w = if large { 0 } else { self.text.width(Face::Body, 26, s.grade.name()) };
             if s.grade != Grade::Unknown {
-                self.text.draw_right(c, Face::Body, 26, right - NU_BTN_PAD, base - 2, colour, s.grade.name());
+                if large {
+                    let word = self.text.fit(Face::Body, 22, s.grade.name(), value_x - name_x - 16);
+                    self.text.draw(c, Face::Body, 22, name_x, base + line_dy, colour, &word);
+                } else {
+                    self.text.draw_right(c, Face::Body, 26, right - NU_BTN_PAD, base - 2, colour, s.grade.name());
+                }
             }
-            let value = self.text.fit(Face::Body, 32, &s.value, right - NU_BTN_PAD - grade_w - 24 - value_x);
+            let value = self.text.fit(Face::Body, 32, &s.value, right - NU_BTN_PAD - grade_w - if large { 0 } else { 24 } - value_x);
             self.text.draw(c, Face::Body, 32, value_x, base, 0xffffff, &value);
-            if !s.line.is_empty() && (!tight || i == sel) {
+            if !s.line.is_empty() && (!tight || i == sel) && !cramped {
                 let line = self.text.fit(Face::Body, 28, &s.line, right - NU_BTN_PAD - value_x);
                 self.text.draw(c, Face::Body, 28, value_x, base + line_dy, 0x9a978f, &line);
             }
         }
 
         // The last seconds of play (the game is paused behind the menu).
-        let live_base = top + 7 * row + 26 + pocket_ui::type_scale::grow(28);
+        let mut live_base = top + 7 * row + 26 + pocket_ui::type_scale::grow(28);
+        if cramped {
+            if let Some(s) = path.stages.get(sel).filter(|s| !s.line.is_empty()) {
+                let line = self.text.fit(Face::Body, 28, &s.line, right - NU_BTN_PAD - name_x);
+                self.text.draw(c, Face::Body, 28, name_x, live_base, 0x9a978f, &line);
+                live_base += 40;
+            }
+        }
         let live = path.live.clone().unwrap_or_else(|| match path.overall {
             Grade::Unknown => "Pixel Path follows games that pocket-core runs.".to_string(),
             _ => "Nothing measured yet: play a few seconds first.".to_string(),
         });
-        let live = self.text.fit(Face::Body, 28, &live, right - NU_BTN_PAD - name_x);
+        // Too long (larger text, German): whole figures go from the end, not half of one ("· 0 Au…"); the stages
+        // above say the same in full.
+        let room = right - NU_BTN_PAD - name_x;
+        let mut parts: Vec<&str> = live.split(" · ").collect();
+        while parts.len() > 2 && self.text.width(Face::Body, 28, &parts.join(" · ")) > room {
+            parts.pop();
+        }
+        let live = self.text.fit(Face::Body, 28, &parts.join(" · "), room);
         self.text.draw(c, Face::Body, 28, name_x, live_base, 0xcccccc, &live);
 
         let over = self.menu.as_ref().and_then(|m| m.settings.as_ref()).filter(|_| !managed).map(over_game);

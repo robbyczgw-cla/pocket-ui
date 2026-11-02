@@ -230,9 +230,15 @@ impl App {
         self.running.as_ref().is_some_and(|r| r.emulator == "pocket-core" || pocket_ui::standalone::kids_keeps_moment(&r.system, &r.emulator, &r.core, &r.path) == Some(true))
     }
 
+    /// The starter pack's page is open over Kids Mode's picker (`FlowOut::Starter`).
+    pub(crate) fn kids_adding(&self) -> bool {
+        self.kids.adding.is_some()
+    }
+
     /// Add games closed: the flow goes on, with what is on the card now.
     fn kids_back_from_adding(&mut self) {
-        if self.setup.is_none() {
+        // Add games is the setup's page, the starter pack Settings' (`FlowOut::Starter`).
+        if self.setup.is_none() && self.settings_page.is_none() {
             if let Some(flow) = self.kids.adding.take() {
                 self.kids.flow = Some(self.kids_with_library(flow));
             }
@@ -240,15 +246,13 @@ impl App {
     }
 
     /// The first start is over and the mode takes the screen. Games copied during it wait to be picked first, or the
-    /// child's shelf would stay empty.
+    /// child's shelf would stay empty. No games at all: the grown-up, who is still holding it, gets the page that adds
+    /// them, not the child's "ask a grown-up" (new-player walk 2026-11-02).
     fn kids_enter_after_setup(&mut self) {
         self.kids_enter();
         if self.kids.cfg.games.is_empty() {
             let flow = Flow::single(Stage::Games { sel: 0 }, self.kids.cfg.clone(), Vec::new());
-            let flow = self.kids_with_library(flow);
-            if !flow.library.is_empty() {
-                self.kids.flow = Some(flow);
-            }
+            self.kids.flow = Some(self.kids_with_library(flow));
         }
     }
 
@@ -273,6 +277,11 @@ impl App {
             FlowOut::Stay => {}
             FlowOut::Back => self.kids.flow = None,
             // Over Add games the App's own pages take the buttons and the screen (`kids_pad`, `kids_paint`).
+            // The starter pack's page (B comes back, `from_home`), over the flow, which waits in `adding`.
+            FlowOut::Starter => {
+                self.kids.adding = self.kids.flow.take();
+                self.settings_page = self.open_starter(true);
+            }
             FlowOut::AddGames => {
                 self.kids.adding = self.kids.flow.take();
                 self.setup = Some(self.new_setup().only(pocket_ui::setup::Only::Games));
@@ -301,7 +310,7 @@ impl App {
     /// The buttons while the mode is on or its flow is open. True: nothing else sees this event.
     pub(crate) fn kids_pad(&mut self, pe: &PadEvent) -> bool {
         if self.kids.adding.is_some() {
-            if self.setup.is_some() {
+            if self.setup.is_some() || self.settings_page.is_some() {
                 return false;
             }
             self.kids_back_from_adding();
@@ -576,11 +585,15 @@ impl App {
 
     /// True when the mode painted the frame.
     pub(crate) fn kids_paint(&mut self, c: &mut Canvas) -> bool {
+        // The starter pack's page was left: the picker is back before the next press, with the games it brought.
+        if self.kids.adding.is_some() && self.setup.is_none() && self.settings_page.is_none() {
+            self.kids_back_from_adding();
+        }
         if self.kids.flow.is_some() {
             self.kids_paint_flow(c);
             return true;
         }
-        if !self.kids.entered || (self.kids.adding.is_some() && self.setup.is_some()) {
+        if !self.kids.entered || (self.kids.adding.is_some() && (self.setup.is_some() || self.settings_page.is_some())) {
             return false;
         }
         match self.kids.page {
@@ -1036,6 +1049,7 @@ impl App {
         let used = self.kids.ledger.seconds / 60;
         let values = |row: Row| match row {
             Row::More => cfg.minutes.map_or("No limit".to_string(), |m| format!("{used} of {} min today", m + self.kids.ledger.extra_minutes)),
+            Row::Games if cfg.games.len() == 1 => "1 game".to_string(),
             Row::Games => format!("{} games", cfg.games.len()),
             Row::Theme => cfg.theme.name().to_string(),
             Row::Limit => limit_label(cfg.minutes),
@@ -1139,7 +1153,9 @@ impl App {
                 self.paint_hint_row(c, &[("D-PAD", "Choose"), ("A", "Next"), ("B", "Back")]);
             }
             Stage::Ready => {
-                self.kids_title(c, pal().chalk, "Ready", "Hand it over any time. To get back in:");
+                // Nothing on the card yet: there's nothing to hand over until the next steps have brought games.
+                let no_games = self.kids.flow.as_ref().is_some_and(|f| f.library.is_empty());
+                self.kids_title(c, pal().chalk, "Ready", if no_games { "Next you add games, then pick them. To get back in later:" } else { "Hand it over any time. To get back in:" });
                 let mut y = (330.0 * u) as i32;
                 let lpx = (44.0 * u).round() as u32;
                 let margin = (72.0 * u) as i32;
@@ -1183,10 +1199,11 @@ impl App {
             n => Some(format!("{n} games aren't offered: RetroArch and PortMaster have menus of their own a child could reach.")),
         };
         if library.is_empty() {
+            let starter = flow.offers_starter();
             let (line, hints): (&str, &[(&str, &str)]) = if follows {
                 ("The next steps show how to add them. You pick the games for your child right after that.", &[("A", "Go on"), ("B", "Back")])
             } else {
-                ("Add some first: you pick the games for your child right after.", &[("A", "Add games"), ("START", "Later"), ("B", "Back")])
+                ("Add some first: you pick the games for your child right after.", if starter { &[("A", "Add games"), ("X", "Starter pack"), ("START", "Later"), ("B", "Back")] } else { &[("A", "Add games"), ("START", "Later"), ("B", "Back")] })
             };
             self.kids_title(c, pal().chalk, "No games to pick yet", line);
             if let Some(l) = left_out_line {

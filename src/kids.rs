@@ -284,6 +284,8 @@ pub enum FlowOut {
     Done,
     /// No game to pick yet: the grown-up wants Add games first, and comes back here.
     AddGames,
+    /// The same page, X: the starter pack (free games) is a download away; the flow waits here and comes back.
+    Starter,
 }
 
 pub struct Flow {
@@ -301,6 +303,11 @@ pub struct Flow {
 }
 
 impl Flow {
+    /// The page with no games offers the starter pack (X), where the first start isn't about to show Add games anyway.
+    pub fn offers_starter(&self) -> bool {
+        self.library.is_empty() && !self.setup_follows && !crate::starter::games().is_empty()
+    }
+
     pub fn new(draft: Config, library: Vec<Pick>) -> Flow {
         Flow { stage: Stage::Welcome, draft, library, single: false, full: false, left_out: 0, setup_follows: false }
     }
@@ -383,6 +390,7 @@ impl Flow {
                         }
                     }
                     Button::East if !self.setup_follows => return FlowOut::AddGames,
+                    Button::North if n == 0 && self.offers_starter() => return FlowOut::Starter,
                     Button::East | Button::Start if self.can_leave_games() => return self.after(Stage::Theme),
                     Button::South => return back(self, Stage::Welcome),
                     _ => {}
@@ -572,9 +580,16 @@ mod tests {
         let mut flow = Flow::single(Stage::Games { sel: 0 }, Config::default(), library(0));
         assert_eq!(flow.press(Button::East), FlowOut::AddGames);
         assert_eq!(flow.press(Button::Start), FlowOut::Done);
+        // X: the starter pack, once; the page is left as it is and comes back.
+        let mut flow = Flow::single(Stage::Games { sel: 0 }, Config::default(), library(0));
+        assert_eq!(flow.press(Button::North), FlowOut::Starter);
+        assert!(matches!(flow.stage, Stage::Games { .. }));
+        let mut flow = Flow::single(Stage::Games { sel: 0 }, Config::default(), library(2));
+        assert_eq!(flow.press(Button::North), FlowOut::Stay, "with games there is nothing to get");
         let mut flow = Flow::new(Config::default(), library(0));
         flow.setup_follows = true;
         flow.stage = Stage::Games { sel: 0 };
+        assert_eq!(flow.press(Button::North), FlowOut::Stay, "the first start shows the way itself");
         assert_eq!(flow.press(Button::East), FlowOut::Stay);
         assert_eq!(flow.stage, Stage::Theme);
 

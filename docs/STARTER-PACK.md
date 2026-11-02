@@ -2,8 +2,9 @@
 
 A card with no games shows an empty shelf, which is a poor first minute. The starter pack offers a handful of **free
 homebrew games** to download at once, so a new player can play straight away (Recalbox does the same). It is the page
-Settings → Games → **Starter pack**, and on Home while no system has a game: **No games yet** with **Get the starter pack**
-(A). The user's view is in [Getting started](user/getting-started.md#nothing-on-the-sd-card-yet-the-starter-pack).
+Settings → Games → **Starter pack**, and on Home while no system has a game: **No games yet** with **Get the starter pack** (A), **Add games** (X: the Add games page, online or offline) and **Look around** (B: the empty shelf in the chosen look with a line saying so, `StarterUi::looking_around`, only until the next start or until games appear; A there brings the hint back; no Curator rows or recents stand on it, in the Cabinet look too)
+(A; offline with a Wi-Fi chip the button reads "Connect to Wi-Fi" and opens the Wi-Fi page, the pack is there on return). Kids Mode's
+"No games to pick yet" page has X for the same page (`FlowOut::Starter`, the flow waits in `Kids::adding`). The user's view is in [Getting started](user/getting-started.md#nothing-on-the-sd-card-yet-the-starter-pack).
 
 > **Status** (ledger: [STATUS.md](STATUS.md)): built and tested offline (unit tests, snapshots, the virtual device, where all nine games were downloaded and placed). Not yet run on the Mini V2 itself.
 

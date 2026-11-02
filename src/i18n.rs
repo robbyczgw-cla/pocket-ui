@@ -671,6 +671,8 @@ pub struct Cache {
     seen: FastMap<Box<str>, Option<Arc<str>>>,
     /// Strings that are translated already (`is_translated`), until they are painted.
     translated: FastMap<Box<str>, ()>,
+    /// Lines of a wrapped game name (`name_line`), until they are painted.
+    name_lines: FastMap<Box<str>, ()>,
     /// How many strings ran the table's patterns (their first sight): the benchmark of Settings' first frame counts
     /// the ones that frame made.
     patterned: usize,
@@ -695,6 +697,11 @@ impl Cache {
             // A name learned since: what was made of a string before it may have been made of a name.
             self.seen.clear();
             self.names_seen = names_seen;
+        }
+        // A line of a wrapped name that is a word of the table too ("Adventure"): the name's, this once.
+        if !self.name_lines.is_empty() && self.name_lines.remove(s).is_some() {
+            record(s, None);
+            return Tr::Same(s);
         }
         if let Some(t) = table.exact(s) {
             // A language on its own is shown in its own name (Settings → Language, the welcome step): "English".
@@ -768,6 +775,16 @@ impl Cache {
     /// one. Painted next, it is drawn as it is. Without this its first sight ran every pattern of the table over it to
     /// find that none changes it (0.3 ms for a sentence on the build computer, a frame's worth on the Mini V2, for
     /// each line of Settings' categories).
+    pub fn name_line(&mut self, s: &str) {
+        if current() == Lang::En {
+            return;
+        }
+        if self.name_lines.len() >= CACHE_LIMIT {
+            self.name_lines.clear();
+        }
+        self.name_lines.insert(s.into(), ());
+    }
+
     pub fn is_translated(&mut self, s: &str) {
         let lang = current();
         if lang == Lang::En {

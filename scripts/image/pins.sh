@@ -78,9 +78,9 @@ P2_SIZE=65536
 # models differ in exactly one file, the FAT root's dtb.img (a copy of device_trees/<model>.dtb).
 # Checked by hand on 2026-10-30, see docs/SD-IMAGE.md "H700".
 # ---------------------------------------------------------------------------------------------------------------
-# The DDR4 image. The RG35XX Plus reads vdd-dram = 1.1 V = DDR4 (checked on the author's unit), and the owner's RG28XX
-# booted this image (2026-10-31). The RG35XX SP is expected to be DDR4 too (ROCKNIX's pages say LPDDR4) but that is NOT
-# confirmed on a unit: a wrong RAM type does not boot (the U-Boot at 8 KiB of the card cannot start the RAM), the card is not harmed.
+# The DDR4 image. The RG35XX Plus reads vdd-dram = 1.1 V = DDR4 (checked on the author's unit). A real RG35XX SP and a
+# real RG28XX both booted this image with the DDR4 U-Boot (2026-11-01; the RG28XX also on 2026-10-31). A wrong RAM type
+# does not boot (the U-Boot at 8 KiB of the card cannot start the RAM), the card is not harmed.
 H700_IMG=ROCKNIX-H700.aarch64-20261001-DDR4.img
 H700_URL=https://github.com/ROCKNIX/distribution/releases/download/20261001/ROCKNIX-H700.aarch64-20261001-DDR4.img.gz
 H700_GZ_SHA256=cd070faf05754b77a3f8687e4add5e00fc7d261518d8fc95dea188f2ef9eb9d4

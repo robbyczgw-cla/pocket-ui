@@ -17,9 +17,9 @@ const TREE: [(&str, &[&str]); 7] = [
     ("Sound & feel", &["Animations", "Playful cases", "Old-TV switch-on", "Motion", "Sounds", "Case sounds", "Haptics", "LEDs"]),
     ("Playing", &["On start", "Remember where I quit", "Buttons", "Over the game", "Screen frames", "Performance & fan", "Battery", "RetroAchievements"]),
     ("Games", &["Add games", "Game check", "Starter pack", "Pictures & extras", "From EmulationStation", "Screenshots", "Curator", "PC streaming"]),
-    ("Connections", &["Wi-Fi", "Bluetooth", "USB file transfer", "Tailscale", "Sync", "Remote access (SSH)", "Web companion"]),
+    ("Connections", &["Wi-Fi", "Bluetooth", "Tailscale", "Sync", "Remote access (SSH)", "Web companion"]),
     ("System", &["Language", "Time", "Sleep & power", "Frozen games", "Kids mode", "Updates", "Storage", "Backup & reset"]),
-    ("Help & tools", &["Tour", "Manual", "Tools", "Report a problem", "About"]),
+    ("Help & tools", &["How you like to play", "Tour", "Manual", "Tools", "Report a problem", "About"]),
 ];
 
 struct Stub(std::process::Child, PathBuf);
@@ -71,7 +71,7 @@ const LINES: [&str; 7] = [
     "Wi-Fi, Bluetooth, USB file transfer, Tailscale, Sync, remote access, web companion.",
     "Language, time, sleep & power, frozen games, kids mode, updates, storage, backup & reset.",
     // With the Store, as the German table has it; a test run has no catalog, so its part is left out (below).
-    "Tour, manual, tools, Store, report a problem, about.",
+    "How you like to play, Tour, manual, tools, Store, report a problem, about.",
 ];
 
 /// What one snapshot painted: the visible strings and the text-box faults (`E` cut, `O` overlapping).
@@ -88,7 +88,6 @@ fn shot(tmp: &Path, stub: &Option<Stub>, state: &str, lang: &str, size: &str, te
     let (visible, boxes) = (tmp.join(format!("{name}.txt")), tmp.join(format!("{name}.tsv")));
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
     cmd.args(["--snapshot", state, tmp.join(format!("{name}.png")).to_str().unwrap()])
-        .env("POCKETUI_SNAPSHOT_USB", "1")
         .env("POCKETUI_MOCK", "1")
         .env("POCKETUI_LANG", lang)
         .env("POCKETUI_TEXT_SIZE", text)
@@ -136,7 +135,8 @@ fn every_choice_is_a_row_and_shows_whole() {
                     failed.push(format!("{lang} {size} {text}: the categories don't show {cat:?}: {:?}", page.visible));
                 }
             }
-            let line = tr(LINES[g]).replace(", Store,", ",");
+            // Not in a test run: the Store (no catalog) and USB file transfer (retired, `usb_transfer::RETIRED`).
+            let line = tr(LINES[g]).replace(", Store,", ",").replace(", USB-Dateiübertragung,", ",").replace(", Transferencia por USB,", ",").replace(", USB file transfer,", ",");
             // Wrapped at spaces: the painted lines one after another are the whole line.
             if !page.visible.join(" ").contains(&line) || page.visible.iter().any(|v| v.ends_with('…')) {
                 failed.push(format!("{lang} {size} {text} category {g}: its line {line:?} isn't shown whole: {:?}", page.visible));

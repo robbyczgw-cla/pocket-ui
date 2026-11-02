@@ -26,6 +26,10 @@ Install
 3. The first start shows some text on a dark screen and restarts once by itself while the card is set up: don't switch
    off. If it does lose power, just switch it on again: it carries on from where it stopped.
    Then pocket-ui's first-start setup opens: look, Wi-Fi, extras.
+#if GAMES
+   Right after flashing, your computer shows no GAMES drive yet: it appears only after this first start on the
+   handheld. Don't flash the card again because of it.
+#endif
 4. To go back to the handheld's own system, switch off, take this card out and put the original card back into the
    first slot (TF1): the handheld's own system lives on that card, not inside the handheld. Keep it safe.
 
@@ -140,13 +144,13 @@ Firmware inside SYSTEM (usr/lib/kernel-overlays/base/lib/firmware): Realtek Wi-F
 Linux kernel (KERNEL): GNU GPL version 2. The device tree (dtb.img) is ROCKNIX's, unchanged.
 
 U-Boot (on the card before the first partition, and usr/share/bootloader in SYSTEM): GNU GPL version 2 or later,
-  with Arm Trusted Firmware (BSD 3-clause); built by ROCKNIX, source in the archives next to the image.
+  with Arm Trusted Firmware (BSD 3-clause); built by ROCKNIX, source in ROCKNIX's repository at the tag below.
 
 DraStic (usr/config/drastic in SYSTEM): the Nintendo DS emulator DraStic by Exophase (https://www.drastic-ds.com/) is
   closed-source software. It is passed on unchanged, as ROCKNIX does, on the basis of the author's 2017 forum
   statement that there is "no real harm" in distributing it (usr/config/drastic/LICENSE.pdf, and ROCKNIX's
   pocket-ui-info/rocknix-licenses/licenses/DRASTIC.pdf). That is a tolerance, not a formal licence, and no source
-  code for it exists next to the image. Credit: Exophase. We remove it from the image on request of the author.
+  code for it exists. Credit: Exophase. We remove it from the image on request of the author.
   Its BIOS replacement (drastic_bios_arm7.bin, drastic_bios_arm9.bin) is open: Gilead Kutnick, BSD licence, text in
   usr/config/drastic/system/drastic_bios_readme.txt.
 
@@ -161,9 +165,11 @@ pocket-ui and pocket-core
 Source code
 -----------
 
-The complete source code of everything on this card that is under the GNU GPL or LGPL is offered next to
-this image: @RELEASE_URL@ (files ending in -source...). See pocket-ui-info/SOURCE-OFFER.txt for the list
-and for our written offer to send it to you.
+pocket-ui's source and the scripts that build this image are next to the image on @RELEASE_URL@
+(pocket-ui-@VERSION@-source.tar.gz); the rest of the source is public at the links below. For at least three
+years from the release of this image, anyone can ask for the complete corresponding source code of the GNU GPL
+and LGPL software on this card, for no charge beyond the cost of providing it: open an issue at the project's
+GitHub page. See pocket-ui-info/SOURCE-OFFER.txt.
 
 ROCKNIX @ROCKNIX_TAG@, including the kernel and its patches:
   https://github.com/ROCKNIX/distribution/tree/@ROCKNIX_TAG@

@@ -72,6 +72,17 @@ pub fn page(name: &str) -> Option<&'static str> {
     PAGES.iter().find(|(n, _)| *n == name).map(|(_, md)| *md)
 }
 
+/// The page of the manual a link points at: `playing.md`, `playing.md#looks`, `./playing.md`; `None` for an outside
+/// address, a file that is not a page here (README, a picture) or a bare `#anchor`.
+fn page_of_link(target: &str) -> Option<usize> {
+    if target.contains("://") {
+        return None;
+    }
+    let file = target.split('#').next()?.trim_start_matches("./");
+    let name = file.strip_suffix(".md")?;
+    PAGES.iter().position(|(n, _)| *n == name)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Kind {
     #[default]
@@ -88,6 +99,8 @@ pub struct Span {
     pub bold: bool,
     pub italic: bool,
     pub kind: Kind,
+    /// For a link to another page of the manual: that page (an index of `PAGES`).
+    pub page_link: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -141,6 +154,7 @@ fn push_text(out: &mut Vec<Span>, text: &mut String, bold: bool, italic: bool) {
             bold,
             italic,
             kind: Kind::Text,
+            ..Span::default()
         }),
     }
 }
@@ -171,6 +185,7 @@ fn inline(src: &str, bold: bool, italic: bool, out: &mut Vec<Span>) {
                         bold,
                         italic,
                         kind: Kind::Code,
+                        ..Span::default()
                     });
                     i = e + 1;
                 }
@@ -220,18 +235,20 @@ fn inline(src: &str, bold: bool, italic: bool, out: &mut Vec<Span>) {
                     } else {
                         let mut linked = Vec::new();
                         inline(&inner, bold, italic, &mut linked);
+                        let target: String = chars[cl + 2..e].iter().collect();
+                        let to_page = page_of_link(&target);
                         for mut s in linked {
                             if s.kind == Kind::Text {
                                 s.kind = Kind::Link;
+                                s.page_link = to_page;
                             }
                             out.push(s);
                         }
-                        // The device can't open a link: an outside address is shown as text to type on a phone.
-                        let target: String = chars[cl + 2..e].iter().collect();
+                        // A link to a page of the manual opens it (A, tap); an outside address is shown as text to type on a phone.
                         if let Some(shown) = target.strip_prefix("https://").or_else(|| target.strip_prefix("http://")) {
                             let shown = shown.trim_end_matches('/');
                             if !inner.contains(shown) {
-                                out.push(Span { text: format!(" ({shown})"), bold, italic, kind: Kind::Text });
+                                out.push(Span { text: format!(" ({shown})"), bold, italic, kind: Kind::Text, ..Span::default() });
                             }
                         }
                     }
@@ -251,6 +268,7 @@ fn inline(src: &str, bold: bool, italic: bool, out: &mut Vec<Span>) {
                         bold,
                         italic,
                         kind: Kind::Link,
+                        ..Span::default()
                     });
                     i = e + 1;
                 }
@@ -306,6 +324,7 @@ fn chipify(spans: Vec<Span>, ctx: Ctx) -> Vec<Span> {
                 bold: true,
                 italic: s.italic,
                 kind: Kind::Chip,
+                ..Span::default()
             });
             continue;
         }
@@ -350,6 +369,7 @@ fn chipify(spans: Vec<Span>, ctx: Ctx) -> Vec<Span> {
                     bold: s.bold,
                     italic: s.italic,
                     kind: Kind::Chip,
+                    ..Span::default()
                 });
             } else {
                 plain.push_str(&run);
@@ -635,6 +655,14 @@ pub enum Item {
         color: u32,
         radius: i32,
     },
+    /// Where a link to another page lies (not painted itself): the words of one line of it, one box.
+    Link {
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        page: usize,
+    },
     /// The Controls picture (`controls_picture`), `k` times its pixels, in a box `w` wide and `h` high.
     Controls {
         x: i32,
@@ -649,7 +677,7 @@ impl Item {
     fn span(&self) -> (i32, i32) {
         match self {
             Item::Text { y, px, .. } => (y - sz(*px) as i32, y + sz(*px) as i32 / 3),
-            Item::Chip { y, h, .. } | Item::Rect { y, h, .. } | Item::Controls { y, h, .. } => (*y, y + h),
+            Item::Chip { y, h, .. } | Item::Rect { y, h, .. } | Item::Link { y, h, .. } | Item::Controls { y, h, .. } => (*y, y + h),
         }
     }
 }
@@ -693,6 +721,8 @@ enum Piece {
         px: u32,
         color: u32,
         kind: Kind,
+        /// A link to another page of the manual.
+        page: Option<usize>,
     },
     Chip {
         label: String,
@@ -763,6 +793,7 @@ fn tokens(spans: &[Span], st: Style, text: &mut Text) -> Vec<Tok> {
                     px: st.px,
                     color,
                     kind: s.kind,
+                    page: s.page_link,
                 },
                 w,
                 space: pending && !out.is_empty(),
@@ -789,6 +820,7 @@ fn break_long(tok: Tok, max: i32, text: &mut Text) -> Vec<Tok> {
         px,
         color,
         kind,
+        page,
     } = tok.piece.clone()
     else {
         return vec![tok];
@@ -806,6 +838,7 @@ fn break_long(tok: Tok, max: i32, text: &mut Text) -> Vec<Tok> {
                     px,
                     color,
                     kind,
+                    page,
                 },
                 w,
                 space: false,
@@ -821,6 +854,7 @@ fn break_long(tok: Tok, max: i32, text: &mut Text) -> Vec<Tok> {
             px,
             color,
             kind,
+            page,
         },
         w,
         space: false,
@@ -886,6 +920,8 @@ fn emit(lines: Vec<Vec<(i32, Tok)>>, x0: i32, mut y: i32, px: u32, text: &mut Te
     let lh = line_height(px);
     for line in lines {
         let base = y + (lh + (sz(px) * 0.7) as i32) / 2;
+        // The box of the link the previous word belonged to (its Text item comes after it, so `items.last_mut()` can't find it).
+        let mut prev_link: Option<usize> = None;
         for (dx, t) in line {
             let x = x0 + dx;
             match t.piece {
@@ -907,7 +943,21 @@ fn emit(lines: Vec<Vec<(i32, Tok)>>, x0: i32, mut y: i32, px: u32, text: &mut Te
                     px,
                     color,
                     kind,
+                    page,
                 } => {
+                    if let Some(page) = page {
+                        // One box for the words of a link on a line.
+                        let h = line_height(px);
+                        match prev_link.and_then(|i| items.get_mut(i)) {
+                            Some(Item::Link { x: lx, y: ly, w: lw, page: lp, .. }) if *lp == page && *ly == base - h + 12 && x - (*lx + *lw) < 40 => *lw = x + t.w - *lx,
+                            _ => {
+                                prev_link = Some(items.len());
+                                items.push(Item::Link { x, y: base - h + 12, w: t.w, h, page });
+                            }
+                        }
+                    } else {
+                        prev_link = None;
+                    }
                     match kind {
                         Kind::Code => items.push(Item::Rect {
                             x: x - 6,
@@ -1127,6 +1177,7 @@ pub fn layout(blocks: &[Block], text: &mut Text, width: i32) -> Laid {
                             px: 28,
                             color: code_color(),
                             kind: Kind::Text,
+                            page: None,
                         },
                         space: false,
                     }];
@@ -1206,6 +1257,7 @@ pub fn paint(laid: &Laid, text: &mut Text, c: &mut Canvas, x: i32, top: i32, scr
                 crate::kit::key_cap(c, text, (x + ix, y + oy, *w, *h), label, small, y + oy + h / 2 + (sz(small) * 0.35) as i32, (p.chip, p.pill));
             }
             Item::Controls { x: ix, y, w, k, .. } => controls_picture(c, text, x + ix, y + oy, *w, *k),
+            Item::Link { .. } => {}
             Item::Rect { x: ix, y, w, h, color, radius } => {
                 // Whole rectangles keep their corners; one cut by the band is clipped to it (it can be tall).
                 let (y0, y1) = ((y + oy).max(top), (y + oy + h).min(top + view_h));
@@ -1381,6 +1433,12 @@ pub struct Reader {
     /// What the velocity has not scrolled yet (fractions of a pixel).
     carry: f32,
     last: Option<Instant>,
+    /// The links to other pages in the view, as painted last: (x, y, w, h, page).
+    links: Vec<(i32, i32, i32, i32, usize)>,
+    /// Which of them A opens.
+    focus: usize,
+    /// Where a link was followed from: (page, scroll), so that B goes back there first.
+    came_from: Vec<(usize, i32)>,
 }
 
 /// One press of Up or Down: a couple of lines.
@@ -1406,6 +1464,65 @@ impl Reader {
             vel: 0.0,
             carry: 0.0,
             last: None,
+            links: Vec::new(),
+            focus: 0,
+            came_from: Vec::new(),
+        }
+    }
+
+    /// Whether a link to another page is in view (A opens the marked one, X marks the next).
+    pub fn has_links(&self) -> bool {
+        !self.links.is_empty()
+    }
+
+    /// X: the next link in view gets the mark.
+    pub fn next_link(&mut self) {
+        if !self.links.is_empty() {
+            self.focus = (self.focus + 1) % self.links.len();
+        }
+    }
+
+    /// A: opens the marked link. False when none is in view.
+    pub fn open_link(&mut self) -> bool {
+        match self.links.get(self.focus.min(self.links.len().saturating_sub(1))) {
+            Some(&(.., page)) => {
+                self.go_to(page);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// A tap at (x, y) on a link opens it. False when none is there.
+    pub fn tap_link(&mut self, x: f32, y: f32) -> bool {
+        let hit = self.links.iter().find(|(lx, ly, w, h, _)| x >= *lx as f32 && x < (lx + w) as f32 && y >= *ly as f32 && y < (ly + h) as f32).map(|l| l.4);
+        hit.map(|page| self.go_to(page)).is_some()
+    }
+
+    fn go_to(&mut self, page: usize) {
+        if page == self.page {
+            return;
+        }
+        self.came_from.push((self.page, self.scroll()));
+        self.page = page;
+        self.scroll[page] = 0;
+        self.focus = 0;
+        self.vel = 0.0;
+        self.carry = 0.0;
+    }
+
+    /// B: back to the page a link was followed from. False when there is none (B leaves the manual).
+    pub fn back_from_link(&mut self) -> bool {
+        match self.came_from.pop() {
+            Some((page, scroll)) => {
+                self.page = page;
+                self.scroll[page] = scroll;
+                self.focus = 0;
+                self.vel = 0.0;
+                self.carry = 0.0;
+                true
+            }
+            None => false,
         }
     }
 
@@ -1481,7 +1598,20 @@ impl Reader {
         let height = self.laid[page].as_ref().map_or(0, |(_, l)| l.height);
         let max = (height - h).max(0);
         self.scroll[page] = self.scroll[page].clamp(0, max);
+        self.links.clear();
         if let Some((_, laid)) = &self.laid[page] {
+            let oy = top - self.scroll[page];
+            for it in &laid.items {
+                if let Item::Link { x: lx, y: ly, w: lw, h: lh, page } = *it {
+                    if ly + oy >= top && ly + lh + oy <= top + h {
+                        self.links.push((x + lx, ly + oy, lw, lh, page));
+                    }
+                }
+            }
+            // The link A opens has a frame behind it.
+            if let Some(&(lx, ly, lw, lh, _)) = self.links.get(self.focus.min(self.links.len().saturating_sub(1))) {
+                c.round_rect(lx - 6, ly, lw + 12, lh - 4, 10, crate::palette::pal().chip);
+            }
             paint(laid, text, c, x, top, self.scroll[page], h);
         }
         if max > 0 {
@@ -1531,6 +1661,36 @@ mod tests {
     }
 
     // ---- the parser ----------------------------------------------------------------------------------------
+
+    #[test]
+    fn a_link_to_a_page_opens_it_and_b_goes_back() {
+        assert_eq!(page_of_link("playing.md#looks"), PAGES.iter().position(|(n, _)| *n == "playing"));
+        assert_eq!(page_of_link("./playing.md"), page_of_link("playing.md"));
+        assert_eq!(page_of_link("https://example.org/playing.md"), None);
+        assert_eq!(page_of_link("../INSTALL.md"), None);
+        assert_eq!(page_of_link("#looks"), None);
+        let mut r = Reader::new();
+        r.links = vec![(0, 0, 10, 10, 3), (20, 0, 10, 10, 5)];
+        r.next_link();
+        assert!(r.open_link());
+        assert_eq!(r.page, 5);
+        assert!(r.back_from_link());
+        assert_eq!(r.page, 0);
+        assert!(!r.back_from_link(), "nothing left to go back to: B leaves the manual");
+        assert!(r.tap_link(2.0, 2.0));
+        assert_eq!(r.page, 3);
+        assert!(!r.tap_link(500.0, 2.0));
+    }
+
+    /// Release review 0.1.12: a link of several words is one stop for X, not one per word.
+    #[test]
+    fn a_link_of_several_words_is_one_box() {
+        let mut text = Text::new();
+        let laid = layout(&parse("[Getting started](getting-started.md), [Playing games](playing.md).\n"), &mut text, 1200);
+        let boxes: Vec<usize> = laid.items.iter().filter_map(|i| if let Item::Link { page, .. } = i { Some(*page) } else { None }).collect();
+        assert_eq!(boxes.len(), 2, "{boxes:?}");
+        assert_ne!(boxes[0], boxes[1]);
+    }
 
     #[test]
     fn headings_have_their_level_and_inline_markup() {
@@ -1647,9 +1807,11 @@ mod tests {
             Span {
                 text: "link text".into(),
                 kind: Kind::Link,
+                page_link: PAGES.iter().position(|(n, _)| *n == "playing"),
                 ..Span::default()
             }
         );
+        assert!(PAGES.iter().any(|(n, _)| *n == "playing"));
         // A link inside bold stays a bold link; an inside address is never shown.
         let s = spans("**[install guide](../INSTALL.md)**");
         assert_eq!(
@@ -1834,7 +1996,7 @@ mod tests {
             .iter()
             .map(|i| match i {
                 Item::Text { x, px, face, text: t, .. } => x + text.width(*face, *px, t),
-                Item::Chip { x, w, .. } | Item::Rect { x, w, .. } | Item::Controls { x, w, .. } => x + w,
+                Item::Chip { x, w, .. } | Item::Rect { x, w, .. } | Item::Link { x, w, .. } | Item::Controls { x, w, .. } => x + w,
             })
             .max()
             .unwrap_or(0)
@@ -1903,7 +2065,7 @@ mod tests {
             assert!(l.height < 30_000, "{name}: {}", l.height);
             assert!(
                 l.items.iter().all(|i| match i {
-                    Item::Text { y, .. } | Item::Chip { y, .. } | Item::Rect { y, .. } | Item::Controls { y, .. } => *y >= 0 && *y <= l.height + 4,
+                    Item::Text { y, .. } | Item::Chip { y, .. } | Item::Rect { y, .. } | Item::Link { y, .. } | Item::Controls { y, .. } => *y >= 0 && *y <= l.height + 4,
                 }),
                 "{name}: items inside the document"
             );

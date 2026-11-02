@@ -22,7 +22,7 @@ sha256 8a27bfc081bafed8c24dd70fab0d96f098e5a0bfcd08d3da672595f225ab8993)
   1ab34236cbd7434b889a28f5bc3ce530 regulatory.db.p7s                 wireless-regdb-LICENSE
 
 Display panel files (ROCKNIX's own: projects/ROCKNIX/packages/linux-firmware/kernel-firmware/extra-firmware/panels/
-in the distribution repository at the tag, so they are in rocknix-20261001-distribution.tar.xz). Each is 387 to 557
+in the distribution repository at the tag, so they are at that tag). Each is 387 to 557
 bytes: the start-up command list of one Anbernic screen, written with the "panel firmware generator" that goes with
 the kernel's generic MIPI panel driver (ROCKNIX patch 0110, by Hironori Kikuchi). The repository states no separate
 licence for them; ROCKNIX's licence for files it wrote is GNU GPL version 2 (pocket-ui-info/rocknix-licenses/). We
@@ -45,5 +45,5 @@ them on in binary form with the licence text included.
 
 Not firmware but binary: usr/share/bootloader/H700_DDR3_u-boot-sunxi-with-spl.bin, H700_DDR4_u-boot-sunxi-with-spl.bin
 and bl31.bin are built by ROCKNIX from U-Boot (GNU GPL version 2 or later), Arm Trusted Firmware (BSD 3-clause) and
-ROCKNIX's h700-suspend-stub; their source is in the source archives next to the image (packages u-boot-DDR3,
-u-boot-DDR4, atf, h700-suspend-stub in packages.txt). The DDR4 file is also what sits on the card at 8 KiB.
+ROCKNIX's h700-suspend-stub; their source is in ROCKNIX's repository at the tag (packages u-boot-DDR3,
+u-boot-DDR4, atf, h700-suspend-stub). The DDR4 file is also what sits on the card at 8 KiB.

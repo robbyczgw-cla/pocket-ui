@@ -65,6 +65,11 @@ pub(crate) struct StarterUi {
     from_home: bool,
     /// Games added by the job that runs or ran last.
     added: usize,
+    /// `--snapshot starter-home:wifi-off`: Home as it is on a handheld that is not online (the mock always is).
+    demo_offline: Option<bool>,
+    /// B on Home's hint: the player looks around the empty shelf. Only this run; the hint is back on the next start while the
+    /// card has no games, and gone for good when games appear (`rebuild`).
+    pub(crate) looking_around: bool,
 }
 
 /// A row of the page.
@@ -117,8 +122,14 @@ impl StarterUi {
 }
 
 /// What a job that added `n` games says at its end.
-fn added_text(n: usize) -> String {
-    if n == 1 { "Added 1 game. B shows your shelf.".to_string() } else { format!("Added {n} games. B shows your shelf.") }
+fn added_text(n: usize, kids: bool) -> String {
+    match (n, kids) {
+        (1, false) => "Added 1 game. B shows your shelf.".to_string(),
+        (_, false) => format!("Added {n} games. B shows your shelf."),
+        // Kids Mode's picker waits behind this page: B goes back to it, not to a shelf.
+        (1, true) => "Added 1 game. B goes back to pick games.".to_string(),
+        (_, true) => format!("Added {n} games. B goes back to pick games."),
+    }
 }
 
 fn short_system(id: &str) -> &'static str {
@@ -136,7 +147,18 @@ fn short_system(id: &str) -> &'static str {
 impl App {
     /// Whether Home shows the starter pack's hint: the card has no games at all (and the list could be read).
     pub(crate) fn starter_home(&self) -> bool {
-        self.screen == Screen::Home && self.load_error.is_none() && self.systems.is_empty() && !starter::games().is_empty()
+        self.screen == Screen::Home && self.load_error.is_none() && self.systems.is_empty() && !starter::games().is_empty() && !self.starter.looking_around
+    }
+
+    /// Home on a card with no games after B on the hint: the shelf in the chosen look, empty on purpose, with a line saying so.
+    pub(crate) fn empty_home_around(&self) -> bool {
+        self.screen == Screen::Home && self.load_error.is_none() && self.systems.is_empty() && !starter::games().is_empty() && self.starter.looking_around
+    }
+
+    /// Whether Home's one button is "Connect to Wi-Fi": the games come over the internet and this handheld has a Wi-Fi
+    /// chip and no network. Without a chip the pack's page says what is missing.
+    pub(crate) fn starter_home_offline(&self) -> bool {
+        self.starter.demo_offline.unwrap_or_else(|| pocket_ui::device::current().has_wifi() && pocket_ui::wifi::ip().is_none())
     }
 
     /// Settings → Games → Starter pack (`from_home`: opened by A on Home's hint).
@@ -252,7 +274,7 @@ impl App {
                 self.starter.busy = None;
                 let added = self.starter.added;
                 if added > 0 && !self.starter.message.as_ref().is_some_and(|m| m.1) {
-                    self.starter.message = Some((added_text(added), false));
+                    self.starter.message = Some((added_text(added, self.kids_adding()), false));
                 }
                 if added > 0 {
                     // Once more, in case the first read was still running when the last game arrived.
@@ -312,10 +334,44 @@ impl App {
         Some(SettingsPage::Starter)
     }
 
-    /// A on Home's hint (the card has no games): the page, with B coming back to Home.
+    /// Buttons on Home's hint (the card has no games): A the starter pack, X Add games, B look around. On the empty shelf
+    /// after B (`empty_home_around`), A brings the hint back.
     pub(crate) fn starter_home_press(&mut self, b: Button) -> bool {
-        if b == CONFIRM && self.starter_home() && self.settings_page.is_none() {
-            self.settings_page = self.open_starter(true);
+        if self.settings_page.is_some() || self.setup.is_some() {
+            return false;
+        }
+        if self.empty_home_around() {
+            if b == CONFIRM {
+                self.starter.looking_around = false;
+                self.rebuild();
+                return true;
+            }
+            return false;
+        }
+        if !self.starter_home() {
+            return false;
+        }
+        if b == CONFIRM {
+            if self.starter_home_offline() {
+                // Not online: the Wi-Fi page first; Home with its pack hint is there when B comes back.
+                self.setup = Some(self.new_setup().only(pocket_ui::setup::Only::Wifi));
+            } else {
+                self.settings_page = self.open_starter(true);
+            }
+            return true;
+        }
+        // Kids Mode has its own page for an empty card; its Home is not looked around.
+        if self.kids_live() {
+            return false;
+        }
+        if b == Button::North {
+            // The player's own games: the Add games page (phone, file sharing), online or not; B comes back here.
+            self.setup = Some(self.new_setup().only(pocket_ui::setup::Only::Games));
+            return true;
+        }
+        if b == CANCEL {
+            self.starter.looking_around = true;
+            self.rebuild();
             return true;
         }
         false
@@ -338,7 +394,7 @@ impl App {
         } else if pocket_ui::card_health::games_drive() {
             "Or copy your own: put the card in your computer and copy them to the GAMES drive."
         } else {
-            "Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing, USB)."
+            "Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing)."
         };
         for line in self.text.wrap_prose(Face::Body, 28, own, max_w) {
             self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &line);
@@ -357,26 +413,43 @@ impl App {
             // A job is running (the page was left meanwhile): say so, calmly, instead of offering it again.
             self.text.draw(c, Face::Body, 32, MARGIN, y + 36, pal().chalk, &text);
         } else {
-            let label = "Get the starter pack";
+            let offline = self.starter_home_offline();
+            let label = if offline { "Connect to Wi-Fi" } else { "Get the starter pack" };
             let w = self.text.width(Face::Body, 34, label) + 2 * NU_BTN_PAD;
             let h = 72;
             c.round_rect(MARGIN, y, w, h, h / 2, pal().select);
             self.text.draw(c, Face::Body, 34, MARGIN + NU_BTN_PAD, y + h / 2 + 12, pal().ink, label);
             self.hits.button(Area::new(MARGIN, y, w, h), CONFIRM);
+            // The player's own games, one press away (X): beside the first button when it fits, else under it.
+            let own_label = "Add games";
+            let own_w = self.text.width(Face::Body, 34, own_label) + 2 * NU_BTN_PAD;
+            let (ox, oy) = if MARGIN + w + 20 + own_w <= c.w - MARGIN { (MARGIN + w + 20, y) } else { (MARGIN, y + h + 16) };
+            c.round_rect(ox, oy, own_w, h, h / 2, pal().spine);
+            self.text.draw(c, Face::Body, 34, ox + NU_BTN_PAD, oy + h / 2 + 12, pal().chalk, own_label);
+            self.hits.button(Area::new(ox, oy, own_w, h), Button::North);
+            let h = if oy > y { h * 2 + 16 } else { h };
             // Said before anyone tries: the games come over the internet.
             let note = if pocket_ui::wifi::ip().is_none() && !pocket_ui::device::current().has_wifi() {
                 "Needs a network, and this handheld has no Wi-Fi.".to_string()
-            } else if pocket_ui::wifi::ip().is_none() {
-                "Needs Wi-Fi. Connect in Settings › Connections › Wi-Fi first.".to_string()
+            } else if offline {
+                "Free games come over Wi-Fi. The starter pack waits here.".to_string()
             } else {
                 format!("{} small games, free to share, from their authors.", starter::games().len())
             };
-            self.text.draw(c, Face::Body, 24, MARGIN, y + h + 44, pal().dust, &note);
+            // Wrapped like the message below: a long note runs off the right edge in German.
+            let (mut ny, mut extra) = (y + h + 44, 0);
+            for (i, line) in self.text.wrap_prose(Face::Body, 24, &note, max_w).iter().enumerate() {
+                self.text.draw(c, Face::Body, 24, MARGIN, ny, pal().dust, line);
+                ny += pocket_ui::type_scale::line(24, 10);
+                if i > 0 {
+                    extra += pocket_ui::type_scale::line(24, 10);
+                }
+            }
             if let Some((m, true)) = &self.starter.message {
                 let m = m.clone();
                 // Wrapped like the lines above: one long line runs off the right edge
                 // (German, Large text, 1280x800; monkey run 2026-10-30, seed 8).
-                let mut my = y + h + 90;
+                let mut my = y + h + 90 + extra;
                 for line in self.text.wrap_prose(Face::Body, 26, &m, max_w) {
                     self.text.draw(c, Face::Body, 26, MARGIN, my, pal().alert, &line);
                     my += pocket_ui::type_scale::line(26, 10);
@@ -385,8 +458,33 @@ impl App {
         }
         if with_hints {
             // Not offered again while it is under way.
-            let hints: &[(&str, &str)] = if self.starter.busy.is_some() { &[("START", "Settings")] } else { &[("A", "Get the starter pack"), ("START", "Settings")] };
+            let first = if self.starter_home_offline() { "Connect to Wi-Fi" } else { "Get the starter pack" };
+            // Not offered again while it is under way.
+            let hints: &[(&str, &str)] = if self.starter.busy.is_some() {
+                &[("X", "Add games"), ("B", "Look around"), ("START", "Settings")]
+            } else {
+                &[("A", first), ("X", "Add games"), ("B", "Look around"), ("START", "Settings")]
+            };
             self.paint_hint_row(c, hints);
+        }
+    }
+
+    /// B on Home's hint: the look's own shelf with nothing on it, a line saying why, and A to bring the hint back.
+    pub(crate) fn paint_empty_home_around(&mut self, c: &mut Canvas, with_hints: bool) {
+        match self.theme {
+            crate::Theme::Shelf => self.paint_empty_shelf(c),
+            crate::Theme::Minimal | crate::Theme::Split | crate::Theme::Cards | crate::Theme::Cabinet => {}
+        }
+        let dy = pocket_ui::ui_art::above_words(c, pocket_ui::ui_art::Art::NoGames, MARGIN, false, EMPTY_ART_TOP, 300, 50);
+        self.text.draw(c, Face::Title, 50, MARGIN, 300 + dy, pal().chalk, "No games yet");
+        let max_w = c.w - 2 * MARGIN;
+        let mut y = 350 + dy;
+        for line in self.text.wrap_prose(Face::Body, 28, "Press A for the starter pack and the ways to add your own games.", max_w) {
+            self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &line);
+            y += 38;
+        }
+        if with_hints {
+            self.paint_hint_row(c, &[("A", "Show the starter pack"), ("START", "Settings")]);
         }
     }
 
@@ -409,6 +507,7 @@ impl App {
                 Row::All if !self.starter.scanned => ("Get all games".to_string(), Marker::None),
                 Row::All if rows.len() == 1 => ("Nothing to get here".to_string(), Marker::None),
                 Row::All if missing.is_empty() => ("All games are on your SD card".to_string(), Marker::None),
+                Row::All if missing.len() == 1 => ("Get the last game".to_string(), Marker::Text(starter::size_label(missing.iter().map(|g| g.file.size).sum()))),
                 Row::All => (format!("Get all {} games", missing.len()), Marker::Text(starter::size_label(missing.iter().map(|g| g.file.size).sum()))),
                 Row::Game(g) => {
                     let marker = if busy_id.as_deref() == Some(g.id.as_str()) {
@@ -484,12 +583,20 @@ impl App {
         let mut parts = state.split(':');
         match parts.next() {
             Some("starter-home") => {
+                // Online unless the state says otherwise: the snapshot suite must not depend on the machine's Wi-Fi.
+                self.starter.demo_offline = Some(false);
                 self.systems.clear();
                 self.screen = Screen::Home;
                 self.rebuild();
                 match parts.next() {
                     Some("busy") => self.starter_fake_busy(),
                     Some("offline") => self.starter.message = Some((Failure::Offline.message(), true)),
+                    Some("wifi-off") => self.starter.demo_offline = Some(true),
+                    // B pressed: the empty shelf in the chosen look.
+                    Some("around") => {
+                        self.starter.looking_around = true;
+                        self.rebuild();
+                    }
                     _ => {}
                 }
                 true
@@ -504,11 +611,11 @@ impl App {
                 self.starter.sel = parts.next().and_then(|n| n.parse().ok()).unwrap_or(0);
                 match parts.next() {
                     Some("busy") => self.starter_fake_busy(),
-                    Some("there") => {
+                    Some("there" | "there-kids") => {
                         for g in starter::games().iter().take(3) {
                             self.starter.there.insert(g.id.clone(), true);
                         }
-                        self.starter.message = Some((added_text(3), false));
+                        self.starter.message = Some((added_text(3, state.contains("kids")), false));
                     }
                     Some("offline") => self.starter.message = Some((Failure::Offline.message(), true)),
                     Some("failed") => self.starter.message = Some((Failure::Damaged.message(), true)),

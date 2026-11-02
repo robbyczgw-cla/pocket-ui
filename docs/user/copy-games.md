@@ -1,6 +1,6 @@
-# Second card and USB cable
+# Second card
 
-Two ways to copy games without Wi-Fi.
+A way to copy games without Wi-Fi.
 
 ## One note on some systems
 
@@ -12,11 +12,11 @@ without the note are ones where games normally run fine; a handheld pocket-ui do
 ## The ways on Add games
 
 Settings → Games → **Add games** (and the first start's last step) has a row of tiles under the grid, one for each way your
-handheld can take games: **File sharing** and **USB file transfer**. Press Down from the last row of systems (or tap), choose with
+handheld can take games: **File sharing** and **From your phone**. Press Down from the last row of systems (or tap), choose with
 Left and Right, and press A to switch the one you chose on or off. Each tile says **On** or **Off**; the right side shows
-the address and password of file sharing, or how USB works. Without a connection, A on **File sharing** takes you to the Wi-Fi
+the address and password of file sharing. Without a connection, A on **File sharing** takes you to the Wi-Fi
 page. X still switches file sharing from anywhere on the page, and B goes back. A handheld without Wi-Fi has no file sharing
-tile, one without USB transfer has no USB tile, and a Steam Deck has neither (its games go in through Desktop Mode). A second card
+or phone tile, and a Steam Deck has neither (its games go in through Desktop Mode). A second card
 and the GAMES drive are not switches: the page says how they work on your handheld.
 
 ## With a second SD card
@@ -42,15 +42,3 @@ Good to know:
   The shelf tells you the card is out. Put it back, and it reads the card again.
 - The hidden files a Mac or Windows leaves on a card (`._Game.gba`, `.Spotlight-V100`, `.Trashes`, `.fseventsd`, `System Volume
   Information`) are never shown as games.
-
-## With a USB cable
-
-The **USB file transfer** tile on Add games (Settings → Games → Add games) and the row in Settings → Connections are the same switch: whichever you use, both show the same state. It turns the handheld into a drive for your computer (MTP, as an Android phone). It is off
-until you turn it on, stays on across restarts until you turn it off, and the row says **Off**, **On** or **Connected**.
-
-1. Turn it on, and connect the handheld to the computer with a USB data cable. On a handheld with two USB ports, use the one marked OTG.
-2. - **Windows, Linux:** it appears by itself in Explorer or the file manager.
-   - **Mac:** Finder doesn't show such devices. Install the free app [OpenMTP](https://openmtp.ganeshrvel.com) and open it.
-3. Open **Roms** and copy your games into the folder of their system. Turn the row off when you're done; the shelf then reads the folders again.
-
-This shows the whole `roms` folder, `bios` and `savestates` included, as Wi-Fi file sharing does. Charging goes on as usual.

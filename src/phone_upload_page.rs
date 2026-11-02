@@ -249,7 +249,7 @@ impl PhonePage {
             text.draw(c, Face::Body, 24, x, y + 8, pal().chalk, "A opens it again with a new code.");
             return;
         }
-        let label = text.fit(Face::Body, 24, "Or type this address", w);
+        let label = text.fit(Face::Body, 24, "Or type this, a computer works too", w);
         text.draw(c, Face::Body, 24, x, top + px(24), pal().dust, &label);
         // The address is typed letter by letter: smaller rather than cut.
         let size = [37, 30, 24].into_iter().find(|s| text.width(Face::Title, *s, &short) <= w).unwrap_or(24);

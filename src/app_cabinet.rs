@@ -586,7 +586,8 @@ impl App {
 
     /// The shelves, made again when something on them changed.
     fn cabinet_shelves(&mut self) {
-        let curator = self.cabinet_curator_keys();
+        // Looking around an empty card (`app_starter`): no Curator shelf, which needs games to mean anything.
+        let curator = if self.empty_home_around() { Vec::new() } else { self.cabinet_curator_keys() };
         if curator != self.cabinet.curator_keys {
             self.cabinet.dirty = true;
         }
@@ -2256,6 +2257,17 @@ impl App {
     /// Shelf: every entry stands on one shelf as its case's spine (`media`), the same light and baseline for all,
     /// only the case's shape changing; the selected one rises out of the row and is shown large above the shelf,
     /// turned to its front with the cover, its name and what is known about it beside it.
+    /// The Shelf look with nothing on it: just its board along the bottom, empty on purpose (`paint_empty_home_around`).
+    pub(crate) fn paint_empty_shelf(&mut self, c: &mut Canvas) {
+        let lay = shelf_layout(c.w, c.h, TALLEST);
+        let view = lay.right - lay.left;
+        let board = self.shelf_board(view + 32, lay.board_h);
+        art::blit(c, &board, lay.left - 16, lay.floor, 256, (0, c.h));
+        if pal().void != 0 {
+            art::soft_shadow(c, lay.left - 16, lay.floor + lay.board_h, view + 32, 10, 12, 0.5, (0, c.h));
+        }
+    }
+
     pub(crate) fn paint_shelf(&mut self, c: &mut Canvas) {
         self.shelf_media_poll();
         self.room_sync();

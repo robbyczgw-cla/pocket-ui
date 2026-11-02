@@ -28,6 +28,11 @@ You need:
 No SSH, no `fastboot` on a computer, no unlocked bootloader. [I] for the bootloader: the boot mode is a menu
 entry in Retroid's own fastboot menu, seen so far only on an unlocked device.
 
+**Which Mini V2 this is for.** The card is for a Mini V2 that still has Retroid's own bootloader, checked on the Android
+firmware `RPMiniV2_V1.0.0.275_20260407`. ROCKNIX's own guide replaces Android's bootloader with its ABL; nobody has
+tried this card on a Mini V2 that has it, and Retroid's boot-mode menu may not exist there. Do not follow ROCKNIX's
+bootloader steps for this card; with ROCKNIX's bootloader installed, install pocket-ui on that ROCKNIX as a package instead.
+
 1. **Write the card.** Open balenaEtcher or Raspberry Pi Imager (in Imager: "Use custom"), choose the `.img.xz`
    file (both read `.xz` directly), choose the card, write. Let the tool verify the write.
 2. **Put the card into the switched-off device.**

@@ -54,6 +54,11 @@ thumbnail of each was used.
 | xbox | https://commons.wikimedia.org/wiki/File:Xbox-Console-FL.jpg | Evan-Amos | Public domain | 2026-10-28 |
 | ps3 | https://commons.wikimedia.org/wiki/File:Sony-PlayStation-PS3-Slim-Console-FL.jpg | Evan-Amos | Public domain | 2026-11-02 |
 | wiiu | https://commons.wikimedia.org/wiki/File:Nintendo-Wii-U-Console-FL.jpg | Evan-Amos | Public domain | 2026-11-02 |
+| c64 | https://commons.wikimedia.org/wiki/File:Commodore-64-Computer-FL.jpg | Evan-Amos | Public domain | 2026-11-02 |
+| atari800 | https://commons.wikimedia.org/wiki/File:Atari-800-Computer-FL.jpg | Evan-Amos | Public domain | 2026-11-02 |
+| atari5200 | https://commons.wikimedia.org/wiki/File:Atari-5200-4-Port-Console-FL.jpg | Evan-Amos | Public domain | 2026-11-02 |
+| amiga | https://commons.wikimedia.org/wiki/File:Amiga_500_Plus_(white_background).jpg | Sernot (it.wikipedia), retouched by Ubcule | Public domain | 2026-11-02 |
+| zxspectrum | https://commons.wikimedia.org/wiki/File:ZX_Spectrum_Plus2_(retouched).jpg | StuartBrady ("Photographed by StuartBrady. Public domain.", his upload comment of 2005-12-30), retouched by Ubcule | Public domain | 2026-11-02 |
 
 The first Dreamcast choice, `Dreamcast-Console-Set.jpg`, is CC BY-SA 3.0 on Commons, so the public-domain
 `Sega-Dreamcast-Console-FL.jpg` (console without controller) was used instead.
@@ -92,6 +97,8 @@ The `psvita` picture (added 2026-10-29; the first PS Vita, PCH-1000) was made th
 The `ps3` (the slim PS3, console only) and `wiiu` (the Wii U console, standing flat, without the GamePad) pictures (added 2026-11-02) were made the same way. On the photos the "PS3" embossing, SONY and the PlayStation symbol, the Nintendo logo and the "Wii U" lettering were painted over before the conversion (a fill from the plastic round each box). PixelLab made one conversion each (2 credits); the rim step (`tools/rim.py`) was applied because both are almost entirely dark, and `tools/fix.py` filled a black patch the conversion left on the PS3's top.
 `saturn` (added 2026-11-02) is the shut console of the Saturn rig (`assets/media/rig/saturn`: base, lid and front parts composed, 255 colours), no conversion of its own.
 
+
+The computers (added 2026-11-02): `c64`, `atari800`, `atari5200`, `amiga` (an Amiga 500 Plus, also standing for the CD32 and the other Amigas) and `zxspectrum` (the +2). The brand lettering on the photos (Commodore, Atari, AMIGA, Sinclair, ZX Spectrum, Datacorder) was painted over on the photo before the conversion, by a fill from the plastic round each shape (limited to the object), and `tools/rim.py` was applied to the dark ones. PixelLab made one conversion each (5 credits). The ZX Spectrum came out navy and was desaturated to grey after the conversion. Checked against the Commons file pages and their histories on 2026-11-02: the three Evan Amos photos carry his own `PD-self`; the Amiga's original is Sernot's own work (`PD-user-it`, moved from it.wikipedia) and the white-background file only removes the background; the ZX Spectrum's original was uploaded by StuartBrady on 2005-12-30 with the comment "Photographed by StuartBrady. Public domain." (Commons marks the author "assumed" only because the file has no formal author field), and Ubcule's retouched version builds on it. There is no picture of an arcade cabinet: the one tried (a CC0 illustration, `Arcade_cabinet.png`, from the aggregator publicdomainq) has no named author, the aggregator's own page tags it "AI" and shows a Sega Astro City cabinet, and its Commons licence review is still open, so it could not be shown to be free to publish and was taken out before 0.1.12. MAME, FinalBurn Neo, CPS, NAOMI and the other arcade systems show the plain card and put their game into the crate, until a clearly public-domain photo is found. Not made, for want of a clearly public-domain photo of the plain machine: MSX, Atari ST, Amstrad CPC (the Commons photos are CC BY or CC BY-SA, or show a shelf of other things).
 
 What was changed in every picture above:
 

@@ -7,7 +7,7 @@
 #     --bin-dir      take pocket-ui, pocket-core and pocket-splash from DIR instead of building them (must answer --version V)
 #     --source       where the notes say pocket-ui's source is (default: "the pocket-ui repository, commit <HEAD>");
 #                    for a public image the public repository and its tag or commit
-#     --release-url  the page the source archives sit on, for the notes and SOURCE-OFFER.txt
+#     --release-url  the release page of the source tarball, for the notes and SOURCE-OFFER.txt
 #                    (https://github.com/<owner>/pocket-ui/releases/tag/vV; its issues page is where the offer
 #                    says to ask; without it the notes name both in words and check-image.sh fails the offer)
 #     --out          output directory (default build/image, gitignored)

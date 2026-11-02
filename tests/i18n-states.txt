@@ -36,6 +36,7 @@ setup:look
 setup:look:L
 setup:play
 setup:play:d
+setup:play-later
 setup:wifi
 setup:wifi-timeout
 setup:wifi-connecting
@@ -321,10 +322,12 @@ game-check:detail:4
 game-check:detail:6
 starter-home
 starter-home:busy
+starter-home:wifi-off
 starter
 starter:2
 starter:1:busy
 starter:0:there
+starter:0:there-kids
 starter:3:offline
 starter:0:failed
 tour

@@ -15,7 +15,6 @@ Settings → **Connections**. Networks, controllers, and reaching the Pocket fro
 |---|---|
 | **Wi-Fi** | Connect to a network, switch between saved ones, forget one, join a hidden network, set the Wi-Fi country. See [Getting started](getting-started.md#4-connect-to-wi-fi) |
 | **Bluetooth** | Pair a controller, headphones or a speaker and see what is connected. See [Bluetooth](bluetooth.md) |
-| **USB file transfer** | Copy games with a USB cable, off until you turn it on; shows Off, On or Connected. Windows and Linux open it by themselves, a Mac needs the OpenMTP app. Only on handhelds where it can work. See [With a USB cable](copy-games.md#with-a-usb-cable) |
 | **Tailscale** | Reach the Pocket from your other devices over a private network, even away from home. See [Tailscale](remote.md) |
 | **Sync** | Keep saves and save states in step with your other devices with Syncthing, and, if you like, your favourites, notes and play history too. See [Sync](sync.md) |
 | **Remote access (SSH)** | Log in from a computer. See [Remote access](#remote-access-ssh) |
@@ -178,12 +177,13 @@ Settings → **Help & tools**. The Tour, this guide, ROCKNIX's tools, the bug re
 
 | Entry | What it holds |
 |---|---|
+| **How you like to play** | The first start's question again: Simple, Enthusiast or Choose for yourself (the cards). The row shows where the switches stand now. See [Getting started](getting-started.md#how-do-you-like-to-play) |
 | **Tour** | Every feature on a card, with a small picture of what it does: switch it on or off, or put it off. See [Features and the Tour](tour.md) |
 | **Manual** | This guide, on the device. See [Manual](#manual) |
 | **Tools** | ROCKNIX's tools without its old menu: the emulators' own settings, RetroArch's menu, gamepad test and calibration, file manager, terminal, and tools installed from a store. See [Tools](#tools) |
 | **Store** | Emulators, frames, themes and tools. Shown only on a device that has a store set up; there is no public store yet, so you will not see this row. See [Store](extras.md#store) |
-| **Report a problem** | One press saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)) and shows where it is. The same row is in About, and in the dialog of SELECT + START held, where you look when something has just gone wrong |
-| **About** | Version, the system underneath (on the SD card image "pocket-ui OS 0.1.11 · built on ROCKNIX 20261001 (SM8250)", on a ROCKNIX card with pocket-ui added just the ROCKNIX version), number of games, free space, network address, battery, where the logs are kept, and where the licence texts are (a Licences row when the page has the room: `/storage/pocket-ui/licences`: pocket-ui's licence, the credits, the licences of the programs it is built from and of its fonts; they come with the install package and the SD card image); on a Retroid Pocket 5, Flip 2 or first Mini also which one it is, marked experimental ([Getting started](getting-started.md#other-retroid-devices)). Two rows: **Report a problem** saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)); **Open EmulationStation…** opens ROCKNIX's own menu, after a warning ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)) |
+| **Report a problem** | Opens About with this row selected; A there saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)) and shows where it is. The same row is in About, and in the dialog of SELECT + START held, where you look when something has just gone wrong |
+| **About** | Version, the system underneath (on the SD card image "pocket-ui OS 0.1.12 · built on ROCKNIX 20261001 (SM8250)", on a ROCKNIX card with pocket-ui added just the ROCKNIX version), number of games, free space, network address, battery, where the logs are kept, and where the licence texts are (a Licences row when the page has the room: `/storage/pocket-ui/licences`: pocket-ui's licence, the credits, the licences of the programs it is built from and of its fonts; they come with the install package and the SD card image); on a Retroid Pocket 5, Flip 2 or first Mini also which one it is, marked experimental ([Getting started](getting-started.md#other-retroid-devices)). Two rows: **Report a problem** saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)); **Open EmulationStation…** opens ROCKNIX's own menu, after a warning ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)) |
 
 ### Manual
 
@@ -195,11 +195,12 @@ you run. The pages are the ones listed on the first page; the title line shows w
 | D-pad Up / Down, or either stick | Scroll. Held, it goes on by itself; a stick scrolls faster the further you push it. |
 | D-pad Left / Right | Scroll a screen up / down. |
 | L1 / R1 | Previous / next page. After the last page comes the first. |
-| B | Back to Settings. |
+| A, X | When a link to another page is on the screen, it has a frame: A opens it, X moves the frame to the next link. |
+| B | Back to the page a link came from; with none, back to Settings. |
 
 A swipe on the touch screen scrolls as well. Every page remembers where you were until pocket-ui restarts.
 Button names in the text are drawn like the buttons in the hint bar at the bottom of the screen, pictures are
-left out, and a link shows only its words. On the first-start screens "Welcome" and "You're all set", SELECT opens
+left out. A link to another page can be opened (A, or a tap); a link to a web address shows the address after its words. On the first-start screens "Welcome" and "You're all set", SELECT opens
 the manual and B comes back to that screen.
 
 ### Tools

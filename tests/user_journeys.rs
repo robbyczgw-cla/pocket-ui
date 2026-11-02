@@ -408,6 +408,57 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         assert!(!frame.contains("EmulationStation"), "{frame}");
     }
 
+    /// New-player walk 2026-11-02: a parent with no games, through "For a child" at the first start. The setup ends with
+    /// the page that adds games, for the grown-up still holding it, not with the child's "ask a grown-up".
+    #[test]
+    fn a_first_start_for_a_child_with_no_games_ends_where_games_are_added() {
+        let mut d = Driver::start("kids-first", false, |tmp, _| {
+            std::fs::remove_file(tmp.join("gb/Tobu Tobu Girl (World).gb")).unwrap();
+            std::fs::remove_file(tmp.join("segacd/Pocket CD Demo (USA).cue")).unwrap();
+        });
+        d.sees("Welcome to your Pocket");
+        d.send("a");
+        d.sees("Choose a look");
+        d.send("a");
+        d.sees("How do you like to play?");
+        for _ in 0..3 {
+            d.send("down");
+        }
+        d.send("a");
+        d.sees("Set it up for a child");
+        d.send("a");
+        d.sees("Pick a PIN");
+        for _ in 0..4 {
+            d.send("a");
+        }
+        d.sees("Once more");
+        for _ in 0..4 {
+            d.send("a");
+        }
+        let empty = d.sees("No games to pick yet");
+        assert!(empty.contains("The next steps show how to add them"), "{empty}");
+        d.send("a");
+        d.sees("Blue or Pink?");
+        d.send("a");
+        d.sees("How long per day?");
+        d.send("a");
+        d.sees("How loud at most?");
+        d.send("a");
+        let ready = d.sees("Next you add games, then pick them.");
+        assert!(!ready.contains("Hand it over"), "{ready}");
+        d.send("a");
+        for page in ["Time zone", "Extras", "Add your games", "You're all set"] {
+            d.send("start");
+            d.sees(page);
+        }
+        d.send("a");
+        let last = d.sees("No games to pick yet");
+        assert!(last.contains("Add games"), "{last}");
+        // Later: then the child's shelf, which says who to ask.
+        d.send("start");
+        d.sees("No games here yet");
+    }
+
     /// Kids Mode on an empty card, with the real buttons' way through: the child's shelf says so; a grown-up holds SELECT and
     /// START, enters the PIN, goes to Games, is sent to Add games and comes back; turning the mode off brings the normal shelf.
     #[test]
@@ -794,8 +845,9 @@ true
             assert!(!refused.contains("Connected"), "{refused}");
             let profiles = std::fs::read_dir(ui.card.tmp.join("bin/profiles")).unwrap().count();
             assert_eq!(profiles, 0, "no refused profile left for iwd to retry or for the list to offer as saved");
-            // Back to the list: the network wants its password, it isn't "Saved" nor "Connecting…".
-            ui.send("b");
+            assert!(refused.contains("qqqqqqqq"), "what was typed stays, to be corrected: {refused}");
+            // Back to the list: the eight letters, then out. The network wants its password, it isn't "Saved" nor "Connecting…".
+            ui.send(&"b\n".repeat(9));
             let list = ui.sees("Neighbour");
             assert!(!list.contains("Connecting") && !list.contains("Saved") && !list.contains("Connected"), "{list}");
         }
@@ -969,6 +1021,33 @@ true
         assert!(!home.contains("Splore") && !home.contains("PICO-8"), "{home}");
     }
 
+    /// New-player walk 2026-11-02: offline with a Wi-Fi chip, A on the empty Home opens the Wi-Fi page (one press, not twelve),
+    /// and B comes back to the same Home with the pack waiting.
+    #[test]
+    fn an_empty_home_offline_sends_a_to_the_wifi_page_and_b_comes_back() {
+        let mut ui = Driver::start("starter-wifi", true, |tmp, cmd| {
+            for f in ["gb/Tobu Tobu Girl (World).gb", "segacd/Pocket CD Demo (USA).cue", "segacd/Pocket CD Demo (USA).bin"] {
+                std::fs::remove_file(tmp.join(f)).unwrap();
+            }
+            let bin = tmp.join("offline-bin");
+            std::fs::create_dir(&bin).unwrap();
+            executable(&bin.join("ip"), "#!/bin/sh\nexit 0\n");
+            cmd.env("PATH", format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default()));
+        });
+        let home = ui.sees("No games yet");
+        assert!(home.contains("Connect to Wi-Fi") && !home.contains("Get the starter pack"), "{home}");
+        ui.send("a");
+        let mut page = String::new();
+        ui.wait(|d| {
+            page = d.frame();
+            !page.contains("No games yet")
+        });
+        assert!(page.contains("Wi-Fi") && page.contains("Wi-Fi country"), "A opens the Wi-Fi page: {page}");
+        ui.send("b");
+        let back = ui.sees("No games yet");
+        assert!(back.contains("Connect to Wi-Fi"), "B comes back to Home with the pack waiting: {back}");
+    }
+
     /// A card with no games is not an empty screen: it says so, offers the starter pack, and says what is missing when
     /// the Pocket is offline.
     #[test]
@@ -987,7 +1066,9 @@ true
             cmd.env("PATH", format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default()));
         });
         let home = ui.sees("No games yet");
-        assert!(home.contains("Get the starter pack") && home.contains("Settings › Games › Add games shows the ways"), "{home}");
+        // Offline with a Wi-Fi chip, the one button leads to Wi-Fi first (new-player walk 2026-11-02); the pack waits on Home.
+        assert!(home.contains("Connect to Wi-Fi") && !home.contains("Get the starter pack") && home.contains("Settings › Games › Add games shows the ways"), "{home}");
+        // The pack's own page, from Settings → Games → Starter pack, still says when the Pocket is offline.
 
         // Hold the real starter-scan at its config read. The headless driver has completed startup and skips the
         // device startup jobs, so opening this FIFO belongs to that scan. This forces the slow-worker interleaving
@@ -997,7 +1078,7 @@ true
         std::fs::remove_file(&config).unwrap();
         let fifo = std::ffi::CString::new(config.to_str().unwrap()).unwrap();
         assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
-        ui.send("a");
+        ui.send("start\ndown\ndown\ndown\na\ndown\ndown\na");
         let loading = ui.sees("Looking at your SD card…");
         assert!(loading.contains("Starter pack"), "the header alone is visible before Confirm is accepted: {loading}");
         let mut fd = -1;
@@ -1020,6 +1101,85 @@ true
         ui.sees("The Pocket isn't online");
         assert!(ui.card.tmp.join("offline-bin/ip.calls").is_file(), "the real network check used the child fixture");
         assert!(!ui.card.tmp.join("offline-bin/curl.calls").exists(), "offline refuses before trying a download");
+    }
+
+    /// A Driver on a card with no games, in this look.
+    fn empty_card(name: &str, look: &str) -> Driver {
+        let look = look.to_string();
+        Driver::start(name, true, move |tmp, _| {
+            for f in ["gb/Tobu Tobu Girl (World).gb", "segacd/Pocket CD Demo (USA).cue", "segacd/Pocket CD Demo (USA).bin"] {
+                std::fs::remove_file(tmp.join(f)).unwrap();
+            }
+            std::fs::write(tmp.join("data/settings.json"), format!(r#"{{"onboarded":true,"motion":"off","art":"off","theme":"{look}"}}"#)).unwrap();
+        })
+    }
+
+    /// Empty-card Home (new-player walk 2026-11-02): a second action, Add games (X), beside the starter pack. It opens
+    /// the Add games page and B comes back to the hint; the first button and the way back are still there.
+    #[test]
+    fn an_empty_home_offers_add_games_as_a_second_action() {
+        let mut ui = empty_card("empty-add", "shelf");
+        let home = ui.sees("No games yet");
+        // Offline (this test card has no network) the first button leads to Wi-Fi; the second one works either way.
+        assert!((home.contains("Get the starter pack") || home.contains("Connect to Wi-Fi")) && home.contains("Add games") && home.contains("Look around"), "{home}");
+        ui.send("x");
+        let page = ui.sees("Add your games");
+        assert!(!page.contains("No games yet"), "{page}");
+        ui.send("b");
+        let back = ui.sees("No games yet");
+        assert!(back.contains("Add games") && back.contains("Look around"), "B comes back to the hint: {back}");
+    }
+
+    /// B steps past the hint: in every look the empty Home says so, nothing the pad can press crashes or opens a dead
+    /// end, A brings the hint back, START still opens Settings and B leaves it again.
+    #[test]
+    fn looking_around_an_empty_home_works_in_every_look() {
+        for look in ["shelf", "minimal", "split", "cards", "cabinet"] {
+            let mut ui = empty_card(&format!("empty-around-{look}"), look);
+            ui.sees("Look around");
+            ui.send("b");
+            let around = ui.sees("Press A for the starter pack");
+            assert!(around.contains("No games yet") && !around.contains("Look around"), "{look}: {around}");
+            // Every button of the pad, twice; Home stays Home and says the same thing.
+            ui.send("up\ndown\nleft\nright\nl1\nr1\nl2\nr2\nx\ny\nup\ndown");
+            ui.send("select\nselect");
+            let after = ui.sees("Press A for the starter pack");
+            assert!(after.contains("No games yet"), "{look}: {after}");
+            // Settings opens from here and B comes back to the same empty Home.
+            ui.send("start");
+            ui.wait(|d| !d.frame().contains("Press A for the starter pack"));
+            ui.send("b");
+            let home = ui.sees("Press A for the starter pack");
+            assert!(home.contains("No games yet"), "{look}: {home}");
+            // A brings the hint back, B puts it away again.
+            ui.send("a");
+            ui.sees("Look around");
+            ui.send("b");
+            ui.sees("Press A for the starter pack");
+        }
+    }
+
+    /// Games arrive while the hint is away (or while it shows): the shelf is back, with them, and the hint is gone.
+    #[test]
+    fn games_appearing_end_the_empty_home() {
+        let mut ui = empty_card("empty-games", "minimal");
+        ui.sees("Look around");
+        ui.send("b");
+        ui.sees("Press A for the starter pack");
+        // Copied over file sharing while the player looked around; the Add games page (from Settings) reads the card again.
+        std::fs::create_dir_all(ui.card.tmp.join("gb")).unwrap();
+        std::fs::write(ui.card.tmp.join("gb/Tobu Tobu Girl (World).gb"), vec![0u8; 32768]).unwrap();
+        ui.send("start");
+        ui.wait(|d| !d.frame().contains("Press A for the starter pack"));
+        ui.send("b");
+        ui.sees("Press A for the starter pack");
+        ui.send("a");
+        ui.sees("Look around");
+        ui.send("x");
+        ui.sees("Add your games");
+        ui.send("b");
+        let shelf = ui.sees("Game Boy");
+        assert!(!shelf.contains("No games yet") && !shelf.contains("Look around"), "{shelf}");
     }
 
     /// Delete from the SD card: the card's last row, the sheet, two A presses; the file is gone and the screen says so.

@@ -135,6 +135,7 @@ pub mod overlay;
 pub mod standalone;
 pub mod emu_settings;
 pub mod fallback;
+pub mod first_game;
 pub mod emu_choice;
 pub mod emu_choice_page;
 pub mod cheats;

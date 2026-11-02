@@ -170,7 +170,7 @@ file by file in [assets/media/rig/SOURCES.md](assets/media/rig/SOURCES.md).
 The pixel-art console pictures in `assets/systems/` (compiled into pocket-ui by `src/system_art.rs`) are
 described in full, file by file, in [assets/systems/SOURCES.md](assets/systems/SOURCES.md). In short:
 
-- **Photos:** 36 photographs by Evan Amos on Wikimedia Commons, each marked **public domain** on its Commons file
+- **Photos:** 36 photographs by Evan Amos (and, from 2026-11-02, public-domain photos of an Amiga 500 Plus and a ZX Spectrum +2, see SOURCES.md) on Wikimedia Commons, each marked **public domain** on its Commons file
   page (licence read from the Commons API and the file pages on 2026-10-22, for the last 15 on 2026-10-27).
 - **Conversion:** each photo was converted to pixel art with [PixelLab](https://www.pixellab.ai)
   (`image-to-pixelart`), then cut out and cleaned with our own scripts in `assets/systems/tools/`. Every logo,

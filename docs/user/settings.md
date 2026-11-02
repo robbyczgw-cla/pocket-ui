@@ -18,9 +18,9 @@ Screen frames and the like change with A or Left/Right, right in the list.
 | **Sound & feel** | Animations, Playful cases, Old-TV switch-on, Motion, Sounds, Case sounds, Haptics, LEDs. See [Sound & feel](#sound--feel) |
 | **Playing** | On start, Remember where I quit, Buttons, Over the game, Screen frames, Performance & fan, Battery, RetroAchievements. See [Playing](#playing) |
 | **Games** | Add games, Game check, Starter pack, Pictures & extras, From EmulationStation, Screenshots, Curator, PC streaming. See [Games](#games) |
-| **Connections** | Wi-Fi, Bluetooth, USB file transfer, Tailscale, Sync, Remote access (SSH), Web companion. See [Connections](settings-system.md#connections) |
+| **Connections** | Wi-Fi, Bluetooth, Tailscale, Sync, Remote access (SSH), Web companion. See [Connections](settings-system.md#connections) |
 | **System** | Language, Time, Sleep & power, Frozen games, Kids mode, Updates, Storage, Backup & reset. See [System](settings-system.md#system) |
-| **Help & tools** | Tour, Manual, Tools, Store (only on a device with a store set up), Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
+| **Help & tools** | How you like to play, Tour, Manual, Tools, Store (only on a device with a store set up), Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
 
 The second half of Settings, [Connections, System and Help & tools](settings-system.md), has its own page.
 

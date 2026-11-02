@@ -518,7 +518,8 @@ const SETTINGS_GROUPS: [(&str, &str, &[SettingsRow]); 7] = [
         (app_storage::SETTINGS_NAME, Opens::Storage, "What takes up space on the SD card, and what can go."),
         (app_backup::SETTINGS_NAME, Opens::Backup, "Save your saves, states and pocket-ui's settings to the SD card, restore them, or start afresh."),
     ]),
-    ("Help & tools", "Tour, manual, tools, Store, report a problem, about.", &[
+    ("Help & tools", "How you like to play, Tour, manual, tools, Store, report a problem, about.", &[
+        ("How you like to play", Opens::Setup(Only::Play), "Simple, Enthusiast or your own choice of the extras."),
         ("Tour", Opens::Tour, "Every feature on a card, with a picture: switch it on or off."),
         ("Manual", Opens::Manual, "The user guide, on the device."),
         (app_tools::SETTINGS_NAME, Opens::Tools, "Emulator menus, RetroArch, gamepad test and calibration, terminal."),
@@ -1266,6 +1267,11 @@ impl App {
 
     /// Home's list: the recent games, Favorites, PC streaming, the systems.
     fn home_items(&self) -> Vec<Item> {
+        // Looking around a card with no games (`app_starter`): nothing to continue, star or search. Only apps such as PC
+        // streaming stand on the shelf, when they are on.
+        if self.empty_home_around() {
+            return Item::with_apps(Vec::new(), self.streaming && self.streaming_on);
+        }
         // Settings > Look > Systems on the shelf: a hidden system's card and its recent games stay off Home.
         let recents = self.recents.list.iter().enumerate().filter(|(_, r)| self.recent_visible(r)).map(|(i, _)| i);
         let systems = shelf::visible_systems(self.systems.iter().map(|s| s.name.as_str()), &self.hidden);
@@ -1276,6 +1282,10 @@ impl App {
     }
 
     fn rebuild(&mut self) {
+        // Games arrived: the empty card's hint is over for good (`app_starter`).
+        if !self.systems.is_empty() {
+            self.starter.looking_around = false;
+        }
         self.items = match self.screen {
             Screen::Home if self.kids_live() => self.kids_items(),
             Screen::Home => self.home_items(),
@@ -2613,10 +2623,17 @@ impl App {
                 .or(disc_chip)
                 .or(earlier_chip)
                 .map(|name| {
-                    if i == sel && (steps(row) || row == MainItem::Disc) {
-                        format!("‹ {name} ›")
+                    let arrows = i == sel && (steps(row) || row == MainItem::Disc);
+                    // Not under the preview window at the right (half the screen): "Antes de cargar" in Spanish ran
+                    // beneath it on 1024x768. The window's caption says it in full.
+                    let beside = !quitting && matches!(item, MainItem::Save | MainItem::Load | MainItem::Earlier);
+                    let room = if beside { c.w - pad - (c.w / 2 + 24) - 16 - (pad + NU_BTN_PAD + label_w + NU_SMALL as i32 / 2) - NU_BTN_PAD } else { i32::MAX / 2 };
+                    let full = if arrows { format!("‹ {name} ›") } else { name.clone() };
+                    // Whole when it fits; else the name alone, cut short (the arrows are in the hint bar's "Estado").
+                    if self.text.width(Face::Body, NU_FONT, &full) <= room {
+                        full
                     } else {
-                        name
+                        self.text.fit(Face::Body, NU_FONT, &name, room.max(0))
                     }
                 });
             let chip_w = chip.as_ref().map_or(0, |t| NU_SMALL as i32 / 2 + self.text.width(Face::Body, NU_FONT, t));
@@ -3472,7 +3489,9 @@ impl App {
                     lines.push(("Licences", "/storage/pocket-ui/licences".to_string()));
                 }
                 let fit = fit_for(lines.len());
-                let row = row.min(fit).max(row * 3 / 4);
+                // At least three quarters of the row's height, five eighths on 768 lines with the Device row, where the
+                // two rows and a line of help under the facts would otherwise lie on the hints.
+                let row = row.min(fit).max(row * 5 / 8);
                 for (i, (name, value)) in lines.iter().enumerate() {
                     let base = top + i as i32 * row + row / 2 + pocket_ui::type_scale::mid(font);
                     let name_w = self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().dust, name);
@@ -3529,14 +3548,15 @@ impl App {
         let pointer = if pocket_ui::device::current().host_owned() { Vec::new() } else { self.text.wrap_prose(Face::Body, NU_SMALL, SLEEP_SETTINGS_POINTER, c.w - 4 * pad) };
         let (draw_step, desc_step) = (pocket_ui::type_scale::line(NU_SMALL, 14), pocket_ui::type_scale::line(NU_SMALL, 10));
         // Everything under the graph, from its bottom edge to the pointer's last line, and the hint bar's top: the
-        // graph gives up height when Large text needs it (it stays at least `MIN_GRAPH`).
-        const MIN_GRAPH: i32 = 140;
+        // graph gives up height when Large text needs it (it stays at least `min_graph`).
+        // (100 on a short screen, 768 lines, where a pointer of two lines would otherwise lie on the hints.)
+        let min_graph: i32 = if pocket_ui::kit::short_screen(c.h) { 100 } else { 140 };
         let under = 80 + 12 + draws.len() as i32 * draw_step + 60 + (pointer.len() as i32 - 1).max(0) * desc_step + desc_step / 2;
         let hints_top = c.h - pad - NU_PILL - 8;
 
         // The graph, with room for the % labels on its left and the hours under it.
         let (gx, gy) = (left + 100, top + 130);
-        let (gw, gh) = (right - gx, (hints_top - under - gy).clamp(MIN_GRAPH, 300));
+        let (gw, gh) = (right - gx, (hints_top - under - gy).clamp(min_graph, 300));
         battery::paint_graph(c, &mut self.text, samples, now, hours, (gx, gy, gw, gh));
         let below = gy + gh + 80;
         if let Some(s) = &current {
@@ -3589,7 +3609,11 @@ impl App {
         self.text.draw(c, Face::Body, NU_SMALL, x, pad + 56, pal().dust, &place);
         let (sel, len) = self.manual.touch_rows();
         self.hits.list(sel, len, 0.0, manual::STEP as f32);
-        self.nu_hints(c, &[("L1", "Previous"), ("R1", "Next"), ("B", "Back")]);
+        if self.manual.has_links() {
+            self.nu_hints(c, &[("A", "Open link"), ("X", "Next link"), ("L1", "Previous"), ("R1", "Next"), ("B", "Back")]);
+        } else {
+            self.nu_hints(c, &[("L1", "Previous"), ("R1", "Next"), ("B", "Back")]);
+        }
     }
 
     /// Input while the manual is open: Up/Down and the stick scroll (held: faster), Left/Right a screen,
@@ -3598,6 +3622,12 @@ impl App {
         let now = Instant::now();
         match pe {
             PadEvent::Button { button, pressed: true, .. } => match button {
+                // A link to another page was followed: B goes back to where it was.
+                b if b == CANCEL && self.manual.back_from_link() => self.manual.set_velocity(0.0, now),
+                b if b == CONFIRM => {
+                    self.manual.open_link();
+                }
+                Button::North => self.manual.next_link(),
                 b if b == CANCEL => {
                     self.manual.set_velocity(0.0, now);
                     self.manual_hold = None;
@@ -4325,6 +4355,11 @@ impl App {
             self.paint_starter_home(c, with_hints);
             return;
         }
+        // B on that hint: the look's own shelf, empty on purpose, with a line saying so (`app_starter`).
+        if self.empty_home_around() && self.items.is_empty() {
+            self.paint_empty_home_around(c, with_hints);
+            return;
+        }
         if self.items.is_empty() {
             // A Curator list with nothing on it (yet) says so in its own words.
             if let Some((head, line)) = self.curator_empty_text() {
@@ -4560,6 +4595,12 @@ impl App {
         let place = self.screen_title();
         self.paint_top_line(c, place.as_deref(), pal().chalk);
         let center = c.w / 2;
+        // 1080 lines are laid out from y=150: the cards (460 high), then the name 110 below them, the meta line 160 and the
+        // headline 206. A shorter screen (1024x768) starts higher and makes the cards lower so that the lines stay above
+        // the hints (`kh`, down to 0.6).
+        let top = if c.h < 1000 { 100 } else { 150 };
+        let kh = ((c.h - 100 - top - 222) as f32 / 460.0).clamp(0.6, 1.0);
+        let slot = (460.0 * kh).round() as i32;
         // Cards within reach of the glide, farthest first so the selected one lies on top. Each takes its size,
         // shade and place from how far it is from the middle; the one in the middle is lifted a little (3 % larger,
         // a soft shadow on paper).
@@ -4572,9 +4613,9 @@ impl App {
             let card = self.items[i];
             let (t, sys, side, _) = self.describe(card);
             let lerp = |a: f32, b: f32| (a + (b - a) * near).round() as i32;
-            let (w, h) = (lerp(340.0 * 1.03, 270.0), lerp(460.0 * 1.03, 370.0));
+            let (w, h) = (lerp(340.0 * 1.03, 270.0), (lerp(460.0 * 1.03, 370.0) as f32 * kh).round() as i32);
             let x = center + (d * 330.0).round() as i32 - w / 2;
-            let y = 150 + (460 - h) / 2;
+            let y = top + (slot - h) / 2;
             let color = stripe(&sys);
             self.hits.row(Area::new(x, y, w, h), i);
             pocket_ui::game_card::lift_shadow(c, x + 8, y + h, w - 16, ((1.0 - near) * pal().t as f32) as u8);
@@ -4599,7 +4640,7 @@ impl App {
             // in five sizes between the two resting ones (each is made once and kept).
             let q = (near * 4.0).round() / 4.0;
             let qlerp = |a: f32, b: f32| (a + (b - a) * q).round() as i32;
-            let (aw_max, ah_max) = (qlerp(340.0 * 1.03, 270.0) - 40, qlerp(460.0 * 1.03, 370.0) - 64 - 80);
+            let (aw_max, ah_max) = (qlerp(340.0 * 1.03, 270.0) - 40, (qlerp(460.0 * 1.03, 370.0) as f32 * kh) as i32 - 64 - 80);
             let art = self.system_art(card, aw_max, ah_max);
             if let Some(art) = &art {
                 let (aw, ah) = (art.w as i32, art.h as i32);
@@ -4640,19 +4681,19 @@ impl App {
         self.hits.list(self.sel, self.items.len(), 330.0, 150.0);
         let fav = self.is_favorite(item);
         let tw = self.title_width(Face::Title, 67, &title, fav).min(c.w - 2 * MARGIN);
-        self.draw_title(c, Face::Title, 67, center - tw / 2, 720, c.w - 2 * MARGIN, pal().text, &title, true, fav);
+        self.draw_title(c, Face::Title, 67, center - tw / 2, top + slot + 110, c.w - 2 * MARGIN, pal().text, &title, true, fav);
         let meta = self.text.fit(Face::Body, 28, &meta, c.w - 2 * MARGIN);
         let mw = self.text.width(Face::Body, 28, &meta);
-        self.text.draw(c, Face::Body, 28, center - mw / 2, 770, pal().chalk, &meta);
+        self.text.draw(c, Face::Body, 28, center - mw / 2, top + slot + 160, pal().chalk, &meta);
         if self.is_frozen_item(item) {
             // The word in the top corner of the card in the middle.
-            self.paint_frozen_word(c, center + 165, 150 + 34, 0xffffff);
+            self.paint_frozen_word(c, center + 165, top + 34, 0xffffff);
         }
         // A system with a fact sheet: one more line, its headline ("Sega · 1998 · sixth generation").
         if let Some(headline) = self.console_headline(item) {
             let headline = self.text.fit(Face::Body, 28, &headline, c.w - 2 * MARGIN);
             let hw = self.text.width(Face::Body, 28, &headline);
-            self.text.draw(c, Face::Body, 28, center - hw / 2, 816, pal().chalk, &headline);
+            self.text.draw(c, Face::Body, 28, center - hw / 2, top + slot + 206, pal().chalk, &headline);
         }
     }
 
@@ -4955,6 +4996,8 @@ fn snapshot(app: &mut App, args: &[String]) {
             "extras" => setup.only(Only::Extras),
             // "How do you like to play?" (keys: d down, a); "card=<feature id>": Choose yourself at that card (keys d, a, b, r).
             "play" => setup.at_play(),
+            // Settings › Help & tools › How you like to play: without "For a child".
+            "play-later" => setup.only(Only::Play),
             _ if step.starts_with("card=") => setup.at_card(&step["card=".len()..]),
             // Settings > Wi-Fi with made-up networks, saved ones among them (keys: d down, a, y forget, x scan).
             "wifi" => setup.only(Only::Wifi).with_wifi_demo(),
@@ -6219,8 +6262,13 @@ impl App {
                     self.pictures_changed();
                     self.look_previews = None;
                 }
+                let before_wifi = self.setup.as_ref().is_some_and(|s| !s.past_wifi());
                 if let Some(setup) = self.setup.as_mut() {
                     setup.on_event(e);
+                }
+                // The first start's Wi-Fi step went on by itself after a connection: same as START there.
+                if before_wifi && self.setup.as_ref().is_some_and(|s| s.past_wifi()) {
+                    self.auto_covers("after the Wi-Fi step");
                 }
             }
             // The manual also opens over the first-start setup (SELECT) and closes back to it; it takes its own input.
@@ -7073,6 +7121,9 @@ fn main() {
         pocket_ui::startup::after_first_frame("seed-volume", move || hw.seed_volume());
     }
     pocket_ui::startup::mark("settings+hw");
+    // USB file transfer is retired (`usb_transfer::RETIRED`): one switched on before this version is switched off.
+    #[cfg(target_os = "linux")]
+    std::thread::spawn(pocket_ui::usb_transfer::retire);
     // ROCKNIX leaves the GPU overclocked to 925 MHz when nobody chose a speed; heavy PS2 games froze the device.
     #[cfg(target_os = "linux")]
     std::thread::spawn(pocket_ui::system_ctl::cap_gpu_if_unset);

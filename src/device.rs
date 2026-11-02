@@ -90,6 +90,15 @@ impl Model {
         self != Model::MiniV2
     }
 
+    /// The project has played on it (🎮 in docs/DEVICES.md): the first start doesn't call it untested.
+    pub fn played_on(self) -> bool {
+        match self {
+            Model::MiniV2 | Model::Odin2Mini => true,
+            Model::H700(b) => matches!(b.key, "rg35xx-plus" | "rg35xx-sp"),
+            _ => false,
+        }
+    }
+
     /// The Flip 2's hall sensor: `SW_LID` on a `gpio-keys` device (docs/SLEEP.md "Lid").
     pub fn has_lid(self) -> bool {
         match self {
@@ -385,6 +394,21 @@ mod tests {
 
     /// The Steam Deck is an x86 PC: DMI says Valve / Jupiter (LCD) or Galileo (OLED), the override names it, and no other
     /// device is host-owned.
+    /// New-player walk 2026-11-02: the welcome called an RG35XX SP untested while docs/DEVICES.md has played on it.
+    #[test]
+    fn the_handhelds_the_project_has_played_on_are_the_ones_docs_devices_says() {
+        assert!(Model::MiniV2.played_on() && Model::Odin2Mini.played_on());
+        assert!(!Model::Pocket5.played_on());
+        let of = |tree: &[u8]| identify("", tree).model.expect("known").played_on();
+        assert!(of(b"anbernic,rg35xx-sp\0allwinner,sun50i-h700\0"));
+        assert!(of(b"anbernic,rg35xx-plus\0allwinner,sun50i-h700\0"));
+        assert!(!of(b"anbernic,rg28xx\0allwinner,sun50i-h700\0"));
+        let doc = include_str!("../docs/DEVICES.md");
+        for name in ["Retroid Pocket Mini V2", "AYN Odin 2 Mini", "Anbernic RG35XX Plus", "Anbernic RG35XX SP"] {
+            assert!(doc.lines().any(|l| l.starts_with("| 🎮") && l.contains(name)), "{name}");
+        }
+    }
+
     #[test]
     fn the_steam_deck_is_told_by_dmi_and_owns_nothing_of_the_handhelds() {
         let dir = TestDir::new("device-deck");

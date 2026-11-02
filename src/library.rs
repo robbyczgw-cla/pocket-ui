@@ -221,7 +221,61 @@ pub fn unread_count(catalog: &[SysInfo]) -> usize {
     }
     broken.sort_by(|a, b| a.sheet.cmp(&b.sheet));
     broken.dedup();
-    broken.len() + roms_root(catalog).map_or(0, |roms| stray_folders(&roms, catalog).len())
+    broken.len() + misfiled_count(catalog) + roms_root(catalog).map_or(0, |roms| stray_folders(&roms, catalog).len())
+}
+
+/// Game files the shelf leaves out because of where or what they are: a file type another system takes (a `.gba` in
+/// `snes`), and a game two or more folders down (only one level of subfolders is read). The same two cases Game check
+/// names (`game_check::wrong_file`, `loose_files`), counted without its detail. Folders per game (DOS, ScummVM, ports)
+/// and emulator data folders are left alone. Reads each system folder and two levels of subfolders: on a thread only.
+pub fn misfiled_count(catalog: &[SysInfo]) -> usize {
+    let mut seen: std::collections::HashSet<&Path> = Default::default();
+    let mut n = 0;
+    for s in catalog {
+        if !seen.insert(s.path.as_path()) || crate::hostsys::folders_are_games(&s.id) || s.id == "ports" {
+            continue;
+        }
+        let mine: Vec<&str> = catalog.iter().filter(|o| o.path == s.path).flat_map(|o| o.extensions.iter().map(String::as_str)).collect();
+        let takes_elsewhere = |ext: &str| !mine.contains(&ext) && catalog.iter().any(|o| o.path != s.path && o.extensions.iter().any(|e| e == ext));
+        // The folder and one level below it: wrong types. Two levels below: any file the system does take.
+        let mut subs: Vec<PathBuf> = Vec::new();
+        let mut look = |dir: &Path, mut subs: Option<&mut Vec<PathBuf>>, deep: bool| {
+            for e in fs::read_dir(dir).into_iter().flatten().flatten() {
+                let name = e.file_name().to_string_lossy().into_owned();
+                if computer_litter(&name) {
+                    continue;
+                }
+                let Ok(kind) = e.file_type() else { continue };
+                let path = e.path();
+                if kind.is_dir() {
+                    if !name.starts_with('_') && !crate::game_check::DATA_FOLDERS.contains(&name.to_lowercase().as_str()) {
+                        if let Some(subs) = subs.as_mut() {
+                            subs.push(path);
+                        }
+                    }
+                    continue;
+                }
+                let ext = path.extension().and_then(|x| x.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
+                let hit = if deep { mine.contains(&ext.as_str()) && !matches!(ext.as_str(), "zip" | "7z") } else { takes_elsewhere(&ext) && !crate::game_check::not_a_game_file(&path, &ext) };
+                if hit {
+                    n += 1;
+                    // A folder too deep is one thing, however many games it holds.
+                    if deep {
+                        break;
+                    }
+                }
+            }
+        };
+        look(&s.path, Some(&mut subs), false);
+        let mut deeper: Vec<PathBuf> = Vec::new();
+        for sub in &subs {
+            look(sub, Some(&mut deeper), false);
+        }
+        for dir in &deeper {
+            look(dir, None, true);
+        }
+    }
+    n
 }
 
 /// A folder in `roms` that is no system's folder, so nothing in it is read.
@@ -1150,6 +1204,30 @@ mod tests {
         assert_eq!(super::unread_count(&catalog), 2, "the cue without its bin and the folder no system reads");
         std::fs::write(psx.join("Lost.bin"), b"x").unwrap();
         assert_eq!(super::unread_count(&catalog), 1, "the disc is whole now");
+    }
+
+    /// Journey fix 2, rest: a file type another system takes, and a game too many folders deep, count as unread too.
+    #[test]
+    fn a_wrong_file_type_and_a_too_deep_game_are_counted_as_unread() {
+        let roms = TestDir::new("unread-misfiled");
+        let snes = roms.join("snes");
+        std::fs::create_dir_all(snes.join("Collection/Hacks")).unwrap();
+        std::fs::create_dir_all(snes.join("media")).unwrap();
+        std::fs::create_dir_all(roms.join("gba")).unwrap();
+        std::fs::write(snes.join("Fine.sfc"), b"x").unwrap();
+        std::fs::write(snes.join("Notes.txt"), b"x").unwrap();
+        std::fs::write(snes.join("Fine.srm"), b"x").unwrap();
+        std::fs::write(snes.join("media/Fine.gba"), b"x").unwrap();
+        let sys = |id: &str, ext: &str| SysInfo { id: id.into(), name: id.into(), folder: id.into(), path: roms.join(id), extensions: vec![ext.into()] };
+        let catalog = vec![sys("snes", "sfc"), sys("gba", "gba")];
+        assert_eq!(super::misfiled_count(&catalog), 0, "a game, notes, a save and a scraper's folder are nothing to report");
+        std::fs::write(snes.join("Wrong.gba"), b"x").unwrap();
+        assert_eq!(super::misfiled_count(&catalog), 1, "a GBA game in the SNES folder");
+        std::fs::write(snes.join("Collection/Hacks/Deep.sfc"), b"x").unwrap();
+        std::fs::write(snes.join("Collection/Hacks/Deeper.sfc"), b"x").unwrap();
+        assert_eq!(super::misfiled_count(&catalog), 2, "plus the folder two levels down, once");
+        std::fs::write(snes.join("Collection/Right.sfc"), b"x").unwrap();
+        assert_eq!(super::misfiled_count(&catalog), 2, "one level down is read, so it is no trouble");
     }
 
     #[test]

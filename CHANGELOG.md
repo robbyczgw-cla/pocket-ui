@@ -5,20 +5,71 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-11-02
+
 ### Added
 
+- Commodore 64, Amiga, ZX Spectrum, Atari 800 and 5200 have their own picture on the shelf card
+  and front, and the game goes into the right place when it starts, instead of the crate of games.
 - SD card image: Settings → Help & tools → About names the system, "pocket-ui OS 0.1.9 · built on ROCKNIX 20261001
   (SM8250)" (on a ROCKNIX card with pocket-ui added, the ROCKNIX version). The device is called "pocket-ui" on the
   network, in Bluetooth and Tailscale, and EmulationStation's ROCKNIX update check is off.
 
 ### Changed
 
+- USB file transfer (MTP) is no longer offered: no tile on Add games, no row in Settings → Connections, and the manual's "With a USB cable" part is gone. Nobody had completed a real transfer with it, and a Mac depends on OpenMTP, which was never shown to see the device. One that was switched on before this version is switched off at the start. The code stays, unused. Add games still offers File sharing and the phone page, plus the second card and the GAMES drive where they exist.
+- RG28XX card: the first start's games step says the GAMES drive appears after this first start (switch off, card in a computer), and the README and docs/user/games-drive.md say that a computer shows no GAMES drive right after flashing, so there is no reason to flash again.
+- SD card images: the big ROCKNIX source bundles are no longer uploaded next to the image (ROCKNIX, Knulli and pocknix publish none either). The card's SOURCE-OFFER.txt points to ROCKNIX's repository at the exact tag and commit and to the pocket-ui source (`pocket-ui-<version>-source.tar.gz`), and offers the complete source of the GPL and LGPL software on the card for at least three years from the image's release, on request through GitHub issues, for no more than the cost of providing it.
+- Home with no games has a second button, **Add games** (X; also with no network), next to the starter pack, and B (**Look around**) puts the hint away:
+  the shelf in your look stays empty with "No games yet", A brings the hint back. The hint returns at the next start while the card is empty and
+  is gone once games appear.
+- First start: once a Wi-Fi connection works, the setup shows "Connected to …" for a moment and goes on to the time zone by
+  itself (one press fewer). A failed connection stays on the page; B from the time zone comes back and stays; Settings is unchanged.
+- Mini V2 card README and INSTALL-DUAL-BOOT.md: the steps are for a Mini V2 with Retroid's own bootloader (firmware RPMiniV2_V1.0.0.275_20260407); with ROCKNIX's bootloader the card is untried, install the package instead.
+- Home with no games, offline: the one button reads "Connect to Wi-Fi" and A opens the Wi-Fi page (one press instead of twelve to find it);
+  the starter pack waits on Home when B comes back.
+- Kids Mode's "No games to pick yet" page offers the starter pack with X, and comes back to the picker with the games.
+- Settings → Help & tools → How you like to play: the first start's profile question again in one page, instead of 27 Tour cards.
+- First start on a handheld with no Wi-Fi chip (RG28XX, RG35XX 2024): the Wi-Fi and Extras pages, which had nothing to choose, are
+  left out. Five steps instead of seven; B and a restart in the middle follow the shorter way.
 - SD card image: ROCKNIX updates are no longer installed on the card. At every start the boot hook moves any system
   update pocket-ui did not check (from EmulationStation's menu, the network share or copied by hand) to
   `/storage/.update-refused` and starts as usual; nothing there is deleted ([docs/SD-IMAGE.md](docs/SD-IMAGE.md)).
+- On-device Manual: a link to another page of the guide opens that page (A on the framed link, X for the next link, or a tap; B goes back to where it came from). Links to a web address already showed the address.
 
 ### Fixed
 
+- Manual (pause menu): the one-time note that HOME opens the menu is said only for the first game on pocket-ui's own host, not in RetroArch, standalone emulators or Android; the page now says so.
+- Game check: when a folder had more than 50,000 entries and the check stopped at the first 50,000, it no longer says "All good"; it says "First 50,000 files checked".
+- First start, Extras: at 1280x800 with Large text the note under the rows no longer touches the hint bar (the rows stand a little closer). Large text at 1024x768 is still tight there.
+- Manual: a link of several words is one stop for X (it moved word by word before).
+- First start, "For a child" on a handheld without Wi-Fi: after Kids Mode's setup it goes on to the time zone like the other play styles (no Wi-Fi page, steps numbered 4 and 5 of 5).
+- Wi-Fi password: after a refused password the keyboard keeps what was typed (B fixes a letter); L1 now empties the field in one press, so
+  leaving for the network list is L1, B instead of one B per letter.
+- Android: a GBA or NES game comes back to its moment after Quit. The state it wrote was refused as the wrong size ("430144 of 528448 bytes") and the next start began fresh; the player now reads mGBA's and Nestopia's shorter states, as the handhelds do.
+- Starting a game on a C64, Amiga, ZX Spectrum, Atari 800, MSX, Atari ST, Amstrad CPC or an arcade system (MAME, FinalBurn Neo, CPS, NAOMI) no
+  longer shows a disc going in (those games come on floppies, tape or boards, which have no picture here): the case fades and the machine lights up.
+  Amiga OCS/ECS and AGA use the Amiga's picture.
+- 1024x768 screens: the Cards look keeps its game name and facts above the hints (the cards are lower there), and the on-screen keyboard's rows and its last row fit the screen instead of running over the hints and off the right edge.
+- Settings → System → Report a problem only opens About with the row selected; the file is written when A is pressed there (before, merely landing on the row wrote a file into the games share).
+- Android (0.1.11-android.1): the shared fixes of 0.1.10 and 0.1.11 come along (inserts on the console's middle, Light's case shadow, wrapped sentences, German and Spanish wording, patch-aware Frozen marks); a test pins that the phone's marks and older ones still stand open.
+
+- Quick launch animation: a handheld's cartridge sinks behind the console's own outline, so on a tilted picture its corners no
+  longer overlap the top edge; the slot bar is the console's own surface darkened, not black (it showed as a black stripe on a PlayStation's lid).
+- The first game on a card says how to get out: "HOME opens the menu: save, load, quit." Nothing did before.
+- First start: the last page ("You're all set") says "In a game, HOME opens the menu: save, load, quit." too, in English, German and Spanish (not in Kids Mode); a first game in RetroArch or another emulator has no line over it.
+- For a child, with no games on the card: the first start ends on the page that adds games, not on the child's "ask a
+  grown-up", and the Ready page no longer says it can be handed over.
+- A handheld the project has played on (Odin 2 Mini, RG35XX Plus and SP) is no longer called untested at the first start.
+- A device without Wi-Fi: the first start no longer promises Wi-Fi or a clock that sets itself.
+- Extras and "You're all set" count the games on the card: "no games yet" stood there with six games on it.
+- Add games with more than two wrong folders says how many and where to look, not a line of names cut off before the advice.
+- A game's name on two lines stays its name: "Sonic Adventure" was "Sonic Aventura" on its case in Spanish.
+- "1 Spiele", "Alle 1 Spiele holen" and their English and Spanish twins.
+- Add games and the phone page say a computer's browser works too.
+- A refused Wi-Fi password stays in the field, so one wrong letter doesn't mean typing it all again.
+- Large text: Pixel Path shows each stage's grade under its name, so the values have the whole line, and the last seconds of play lose whole figures from the end instead of half of one; the Look step's lines about Animations, Motion and Appearance fit in German and Spanish; the selected row on Sync keeps its pill at 480 lines.
+- A copied game the shelf leaves out because its file type belongs to another system, or because it lies more than one folder deep, now counts like a disc missing a file: the "can't be read" note after a rescan and Home's "No games yet" mention it, and point to Game check.
 - SD card images: a build without a model (Mini V2) no longer gets GAMES drive files.
 - SD card image: a card over about 36 GB (the 64 GB card an RG35XX SP comes with, for one) no longer ends in "Filesystem
   corruption has been detected" and a black screen after the first start's resize. Cards flashed with an earlier image
@@ -32,6 +83,8 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 - Tour and first-start cards on the Steam Deck: none for Haptics, Sync, Tailscale, Tools or Performance & fan.
 - Steam Deck: no idle timers, suspend, power-key hold or low-battery power-off of ours any more; SteamOS owns sleep and the
   power button (the Settings rows were hidden, but the timers still ran and would have suspended after 4 minutes).
+- 1024x768 screens: About keeps its two rows and their help above the hints, the first start's look step fits its rows above the hints (smaller preview), and Settings → Curator's rows leave room for their explanation.
+- 1024x768 screens, more pages: Extras, "How do you like to play?", the feature cards, Search (reason over the keys), Tailscale, Web companion, RetroAchievements, Time, Battery, per-port Performance & fan, Pair a PC and History keep their lines above the hints and off each other; the pause menu's slot name no longer runs under the preview.
 
 ## [0.1.11] - 2026-11-02
 

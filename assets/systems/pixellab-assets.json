@@ -922,6 +922,91 @@
    ],
    "source": "Wikimedia Commons File:Nintendo-Wii-U-Console-FL.jpg (https://commons.wikimedia.org/wiki/File:Nintendo-Wii-U-Console-FL.jpg), 1280 px thumbnail, lettering painted over on the photo first",
    "result": "assets/systems/wiiu.png"
+  },
+  "pd_c64": {
+   "system": "c64",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-11-02",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    684
+   ],
+   "output_size": [
+    256,
+    137
+   ],
+   "source": "Wikimedia Commons File:Commodore-64-Computer-FL.jpg (https://commons.wikimedia.org/wiki/File:Commodore-64-Computer-FL.jpg), 1280 px thumbnail, Evan Amos, public domain; lettering painted over on the photo first",
+   "result": "assets/systems/c64.png"
+  },
+  "pd_atari800": {
+   "system": "atari800",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-11-02",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    811
+   ],
+   "output_size": [
+    256,
+    162
+   ],
+   "source": "Wikimedia Commons File:Atari-800-Computer-FL.jpg (https://commons.wikimedia.org/wiki/File:Atari-800-Computer-FL.jpg), 1280 px thumbnail, Evan Amos, public domain; lettering painted over on the photo first",
+   "result": "assets/systems/atari800.png"
+  },
+  "pd_atari5200": {
+   "system": "atari5200",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-11-02",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    785
+   ],
+   "output_size": [
+    256,
+    157
+   ],
+   "source": "Wikimedia Commons File:Atari-5200-4-Port-Console-FL.jpg (https://commons.wikimedia.org/wiki/File:Atari-5200-4-Port-Console-FL.jpg), 1280 px thumbnail, Evan Amos, public domain; lettering painted over on the photo first",
+   "result": "assets/systems/atari5200.png"
+  },
+  "pd_amiga": {
+   "system": "amiga",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-11-02",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    884
+   ],
+   "output_size": [
+    256,
+    177
+   ],
+   "source": "Wikimedia Commons File:Amiga_500_Plus_(white_background).jpg (https://commons.wikimedia.org/wiki/File:Amiga_500_Plus_(white_background).jpg), 1280 px thumbnail, public domain; lettering painted over on the photo first",
+   "result": "assets/systems/amiga.png"
+  },
+  "pd_zxspectrum": {
+   "system": "zxspectrum",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-11-02",
+   "seed": null,
+   "text_guidance_scale": 8.0,
+   "input_size": [
+    1280,
+    474
+   ],
+   "output_size": [
+    256,
+    95
+   ],
+   "source": "Wikimedia Commons File:ZX_Spectrum_Plus2_(retouched).jpg (https://commons.wikimedia.org/wiki/File:ZX_Spectrum_Plus2_(retouched).jpg), 1280 px thumbnail, public domain; lettering painted over on the photo first",
+   "result": "assets/systems/zxspectrum.png"
   }
  }
 }

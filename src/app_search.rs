@@ -38,7 +38,12 @@ const LIST_TOP: i32 = 208;
 const KB_FROM_BOTTOM: i32 = 1080 - 612;
 
 fn kb_top(h: i32) -> i32 {
-    h - KB_FROM_BOTTOM
+    // A short screen (768 lines) has lower keys, and the keyboard ends where it did: more room for what is above it.
+    h - KB_FROM_BOTTOM + 5 * (KEY_H - key_h(h))
+}
+/// The height of a key: 66, 58 on a short screen.
+fn key_h(h: i32) -> i32 {
+    if pocket_ui::kit::short_screen(h) { 58 } else { KEY_H }
 }
 const KEY_H: i32 = 66;
 const KEY_GAP: i32 = 8;
@@ -510,18 +515,23 @@ impl App {
             // A magnifying glass by an empty box (`ui_art`), right of the words: the keyboard may take the room below.
             let k = pocket_ui::ui_art::empty_scale(c.h);
             let (aw, ah) = pocket_ui::ui_art::size(pocket_ui::ui_art::Art::Search, k);
-            let width = if LIST_TOP + 16 + ah <= bottom && aw * 3 < width {
+            let width = if LIST_TOP + 16 + ah <= bottom && aw * 3 < width && !(typing && pocket_ui::kit::short_screen(c.h)) {
                 pocket_ui::ui_art::paint(c, pocket_ui::ui_art::Art::Search, c.w - MARGIN - aw, LIST_TOP + 16, k);
                 width - aw - 40
             } else {
                 width
             };
             let q = self.text.fit(Face::Title, 37, &format!("No game matches “{}”", page.kb.text.trim()), width);
-            self.text.draw(c, Face::Title, 37, MARGIN, LIST_TOP + 60, pal().chalk, &q);
-            let mut y = LIST_TOP + 106 + pocket_ui::type_scale::grow(28);
-            for line in self.text.wrap_prose_at_most(Face::Body, 28, NO_MATCH, width, 2) {
-                self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &line);
-                y += pocket_ui::type_scale::line(28, 10);
+            // Over the keyboard of a short screen (768 lines) the heading stands higher and the reason is set smaller, so
+            // that its two lines stay above the keys.
+            let over_keys = typing && pocket_ui::kit::short_screen(c.h);
+            self.text.draw(c, Face::Title, 37, MARGIN, LIST_TOP + if over_keys { 44 } else { 60 }, pal().chalk, &q);
+            let mut y = LIST_TOP + if over_keys { 82 } else { 106 } + pocket_ui::type_scale::grow(28);
+            let font = if over_keys { 24 } else { 28 };
+            let step = pocket_ui::type_scale::line(font, 10);
+            for line in self.text.wrap_prose_at_most(Face::Body, font, NO_MATCH, width, 2) {
+                self.text.draw(c, Face::Body, font, MARGIN, y, pal().dust, &line);
+                y += step;
             }
         } else {
             self.paint_hits(c, page, bottom);
@@ -645,7 +655,7 @@ impl App {
         let width = c.w - 2 * MARGIN;
         let key_w = (width - KEY_GAP * 9) / 10;
         for (r, row) in page.kb.rows().iter().enumerate() {
-            let y = kb_top(c.h) + r as i32 * (KEY_H + KEY_GAP);
+            let (y, key_h) = (kb_top(c.h) + r as i32 * (key_h(c.h) + KEY_GAP), key_h(c.h));
             let widths: Vec<i32> = row
                 .iter()
                 .map(|k| match k {
@@ -658,7 +668,7 @@ impl App {
             let mut x = (c.w - total) / 2;
             for (col, key) in row.iter().enumerate() {
                 let on = r == page.kb.row && col == page.kb.col;
-                c.rect(x, y, widths[col], KEY_H, if on { pal().label } else { pal().spine });
+                c.rect(x, y, widths[col], key_h, if on { pal().label } else { pal().spine });
                 let (label, face, px) = match key {
                     Key::Char(ch) => (ch.to_string(), Face::Title, 37),
                     Key::Special(Special::Space) => ("Space".to_string(), Face::Body, 24),
@@ -666,8 +676,8 @@ impl App {
                     Key::Special(_) => ("Results".to_string(), Face::Body, 24),
                 };
                 let lw = self.text.width(face, px, &label);
-                self.text.draw(c, face, px, x + (widths[col] - lw) / 2, y + KEY_H / 2 + pocket_ui::type_scale::base(12, px), if on { pal().ink } else { pal().chalk }, &label);
-                self.find.keys.push((Area::new(x, y, widths[col], KEY_H), r, col));
+                self.text.draw(c, face, px, x + (widths[col] - lw) / 2, y + key_h / 2 + pocket_ui::type_scale::base(12, px), if on { pal().ink } else { pal().chalk }, &label);
+                self.find.keys.push((Area::new(x, y, widths[col], key_h), r, col));
                 x += widths[col] + KEY_GAP;
             }
         }

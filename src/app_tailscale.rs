@@ -303,10 +303,13 @@ impl App {
         // The state in a panel, as Performance & fan's readout (`kit::panel`): with the address, the name and the
         // devices while connected.
         let connected_rows = snap.status.as_ref().filter(|_| snap.state() == State::Connected).map_or(0, |s| if s.peers_total > 0 { 3 } else { 2 });
-        let panel_h = 104 + pocket_ui::type_scale::grow(44) + connected_rows * 50;
+        // The facts in the panel stand 40 px apart on a short screen (768 lines), so the note under it clears the footer.
+        let step = if pocket_ui::kit::short_screen(c.h) { 40 } else { 50 };
+        let short = pocket_ui::kit::short_screen(c.h);
+        let panel_h = if short { 96 } else { 104 } + pocket_ui::type_scale::grow(44) + connected_rows * step;
         pocket_ui::kit::panel(c, NU_PAD, y0 - 10, c.w - 2 * NU_PAD, panel_h);
         // What follows the panel starts this far under it.
-        let below = y0 - 10 + panel_h + 40;
+        let below = y0 - 10 + panel_h + if short { 24 } else { 40 };
         self.text.draw(c, Face::Body, 24, left, y0 + 20, pal().dust, "Status");
         let (status, color) = match (&page.error, page.busy) {
             (Some(e), _) => (self.text.fit(Face::Title, 37, e, right - left), pal().alert),
@@ -321,7 +324,7 @@ impl App {
         };
         self.text.draw(c, Face::Title, 44, left, y0 + 64, color, &status);
 
-        let mut y = y0 + 110 + pocket_ui::type_scale::grow(44);
+        let mut y = y0 + if short { 102 } else { 110 } + pocket_ui::type_scale::grow(44);
         let status = snap.status.as_ref().filter(|_| snap.state() == State::Connected);
         if let Some(s) = status {
             let label_w = 190;
@@ -329,7 +332,7 @@ impl App {
                 app.text.draw(c, Face::Body, 26, left, y, pal().dust, name);
                 let value = app.text.fit(Face::Title, 37, value, right - left - label_w);
                 app.text.draw(c, Face::Title, 37, left + label_w, y + 2, pal().chalk, &value);
-                y += 50;
+                y += step;
             };
             line(self, c, "Address", s.ipv4().unwrap_or("(none yet)"));
             line(self, c, "Name", if s.dns_name.is_empty() { &s.hostname } else { &s.dns_name });

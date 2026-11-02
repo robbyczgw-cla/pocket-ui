@@ -40,10 +40,23 @@ pub fn offered_at(root: &Path) -> bool {
     [USBGADGET, UMTPRD, GADGET].iter().all(|p| root.join(p).exists())
 }
 
+/// USB file transfer is not offered for now: nobody has completed a real transfer with it, and a Mac depends on OpenMTP, which
+/// was never shown to see the device. No tile on Add games, no row in Settings → Connections. The code that starts and stops
+/// the gadget stays, unused, so it can come back by turning this off ([`retire`] is what makes sure it is off meanwhile).
+const RETIRED: bool = true;
+
 /// Whether this device has the row (read once).
 pub fn offered() -> bool {
     static OFFERED: OnceLock<bool> = OnceLock::new();
-    *OFFERED.get_or_init(|| std::env::var_os("POCKETUI_SNAPSHOT_USB").is_some() || (!crate::device::current().host_owned() && offered_at(Path::new("/"))))
+    *OFFERED.get_or_init(|| !RETIRED && (std::env::var_os("POCKETUI_SNAPSHOT_USB").is_some() || (!crate::device::current().host_owned() && offered_at(Path::new("/")))))
+}
+
+/// At the start while the transfer is retired: one that was switched on before an update is switched off, since no row is left
+/// to do it. ROCKNIX remembers the choice across restarts, so this is only needed once. Call it on a thread (about a second).
+pub fn retire() {
+    if RETIRED && status() != Status::Off {
+        let _ = set(false);
+    }
 }
 
 /// What the USB controller says, below `root`. No controller (the port is host right now): off.
@@ -95,6 +108,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(&r);
         std::fs::create_dir_all(&r).unwrap();
         r
+    }
+
+    #[test]
+    fn the_transfer_is_retired_and_no_row_or_tile_is_offered() {
+        assert!(!offered(), "no tile on Add games, no row in Settings → Connections");
     }
 
     #[test]

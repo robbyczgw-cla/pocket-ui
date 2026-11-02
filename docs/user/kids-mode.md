@@ -9,7 +9,8 @@ At the first start, choose **For a child** on "How do you like to play?". Later:
 
 1. **A PIN**, four digits, twice. It is for you, not for your child.
 2. **The games**, 5 to 20 (fewer if the card has fewer). A picks, START goes on. No games on the card yet? Add games comes
-   first, and you pick right after.
+   first, and you pick right after; if none arrive, the first start ends on the page that adds them. That page also has **X: Starter pack**, a handful of free games
+   (Wi-Fi needed); B comes back to the games to pick.
 3. **Blue or Pink.**
 4. **How long per day**: 30 minutes to 2 hours, or no limit.
 5. **How loud at most**: the volume keys stop there. Good for small ears and headphones.
@@ -55,6 +56,6 @@ share's games folder works too, if file sharing is already on (a locked-out grow
 - **The day's time and the clock:** a handheld that loses its clock doesn't start a new day by that: the time goes on counting from the last
   date it knew. If that isn't what you want, use **Start today's time again**.
 - **Saves are shared:** your child plays with the same saves as you.
-- **File sharing and the USB cable** stay as you left them. Your child can't reach their pages, but anyone on your Wi-Fi with the password can still copy files.
+- **File sharing** stays as you left them. Your child can't reach their pages, but anyone on your Wi-Fi with the password can still copy files.
 - **The PIN stops accidents, not a determined kid.** Pulling the card gets past it.
 - **Not on the Steam Deck** (Steam's own button can't be closed) and not in the Android app.

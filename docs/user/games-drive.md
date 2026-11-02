@@ -1,7 +1,9 @@
 # The GAMES drive
 
 The ready-to-flash RG28XX card, 16 GB or bigger, makes a drive called **GAMES** at its first start, because this handheld
-has no Wi-Fi for file sharing. No Wi-Fi, no second card, no app:
+has no Wi-Fi for file sharing. Right after flashing, your computer shows no GAMES drive yet: it appears after the first
+start on the handheld (the first-start setup says so too), so don't flash the card again because of it. No Wi-Fi, no second
+card, no app:
 
 1. Switch the handheld off and put the card in your Mac or Windows PC. **GAMES** shows up like a USB stick.
 2. Drag your games into its `roms` folder, each into the folder of its system: `roms/gba`, `roms/snes` and so on. The
@@ -28,5 +30,4 @@ Good to know:
 
 On all other cards, and on a smaller RG28XX card, the `roms` folder is on the card's STORAGE part, which uses the Linux file
 system ext4. Windows and macOS can't write to that without extra software: use file sharing, a second card on a handheld
-that has a second slot ([With a second SD card](copy-games.md#with-a-second-sd-card)), or a USB cable
-([With a USB cable](copy-games.md#with-a-usb-cable)).
+that has a second slot ([With a second SD card](copy-games.md#with-a-second-sd-card)).

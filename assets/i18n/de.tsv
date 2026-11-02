@@ -1532,7 +1532,7 @@ A soft tick as you move.	Ein sanftes Tippen beim Bewegen.
 Animations	Animationen
 Cozy	Gemütlich
 Quick	Schnell
-Cozy: watch your game slide into the console.	Gemütlich: Sieh zu, wie dein Spiel in die Konsole rutscht.
+Cozy: watch your game slide into the console.	Gemütlich: Spiel rutscht in die Konsole.
 Quick: straight into the game.	Schnell: direkt ins Spiel.
 Cozy: watch your game slide into the console. Quick: straight into the game.	Gemütlich: Sieh zu, wie dein Spiel in die Konsole rutscht. Schnell: direkt ins Spiel.
 Box	Box
@@ -3457,7 +3457,7 @@ Starter pack	Startpaket
 A few free games to start with, downloaded to your SD card.	Ein paar kostenlose Spiele zum Anfangen, auf deine SD-Karte geladen.
 Get the starter pack	Startpaket holen
 Get a few free games to start playing right away.	Hol dir ein paar kostenlose Spiele, um sofort loszuspielen.
-Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing, USB).	Oder kopiere eigene: Einstellungen › Spiele › Spiele hinzufügen zeigt die Wege (Handy, Dateifreigabe, USB).
+Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing).	Oder kopiere eigene: Einstellungen › Spiele › Spiele hinzufügen zeigt die Wege (Handy, Dateifreigabe).
 Needs Wi-Fi. Connect in Settings › Connections › Wi-Fi first.	Braucht WLAN. Verbinde dich zuerst unter Einstellungen › Verbindungen › WLAN.
 {n} small games, free to share, from their authors.	{n} kleine Spiele, frei weitergebbar, direkt von ihren Autoren.
 Get all games	Alle Spiele holen
@@ -4030,7 +4030,7 @@ Sound & feel	Klang & Gefühl
 Animations, playful cases, old-TV switch-on, motion, sounds, case sounds, haptics, LEDs.	Animationen, verspielte Hüllen, Alter-Fernseher-Effekt, Bewegung, Töne, Hüllen-Geräusche, Haptik, LEDs.
 On start, quit, buttons, over the game, frames, performance, battery, achievements.	Start, Beenden, Tasten, im Spiel, Rahmen, Leistung, Akku, RetroAchievements.
 Help & tools	Hilfe & Werkzeuge
-Tour, manual, tools, Store, report a problem, about.	Tour, Handbuch, Werkzeuge, Store, Problem melden, Info.
+How you like to play, Tour, manual, tools, Store, report a problem, about.	Wie du am liebsten spielst, Tour, Handbuch, Werkzeuge, Store, Problem melden, Info.
 Shelf, Cabinet, Minimal, Cards or Split, with a live preview.	Regal, Schrank, Minimal, Karten oder Geteilt, mit Live-Vorschau.
 Dark, Light, or Automatic by the time of day.	Dunkel, Hell oder automatisch nach Tageszeit.
 The colours of every page. Left/right: the next set.	Die Farben jeder Seite. Links/rechts: die nächsten.
@@ -4075,7 +4075,7 @@ Files that were on their way were not kept.	Dateien, die noch unterwegs waren, w
 Closed: someone was guessing	Geschlossen: Jemand hat geraten
 Too many tries without the right code came over the Wi-Fi.	Über das WLAN kamen zu viele Versuche ohne den richtigen Code.
 A opens it again with a new code.	A öffnet sie erneut mit einem neuen Code.
-Or type this address	Oder diese Adresse eintippen
+Or type this, a computer works too	Oder das eintippen, geht auch am Computer
 Receiving 1 file	1 Datei kommt an
 Receiving {n} files	{n} Dateien kommen an
 Added: 1 game	Hinzugefügt: 1 Spiel
@@ -4139,6 +4139,7 @@ Copy games into their system's folder (Settings › Games › Add games) or get 
 1 game ready	1 Spiel startklar
 {n} games ready	{n} Spiele startklar
 All good	Alles gut
+First 50,000 files checked	Die ersten 50.000 Dateien geprüft
 {n} of {n2} games ready	{n} von {n2} Spielen startklar
 And {n} more. Fix these first, then check again.	Und {n} weitere. Behebe erst diese und prüfe dann erneut.
 Hide this copy	Diese Kopie ausblenden
@@ -4271,7 +4272,7 @@ Connect to Wi-Fi	Mit dem WLAN verbinden
 Turn on USB file transfer	USB-Dateiübertragung einschalten
 Turn off USB file transfer	USB-Dateiübertragung ausschalten
 Switching{s}	Wird umgeschaltet{s}
-Same Wi-Fi as your phone	Selbes WLAN wie dein Handy
+Or a computer's browser, same Wi-Fi	Oder im Browser am Computer, selbes WLAN
 
 # Console sales figures (data/consoles.json)
 {n} million	{n} Millionen
@@ -4382,3 +4383,21 @@ Still saving…	Speichert noch…
 This one takes a while. Still saving, don't switch off.	Das dauert etwas. Es speichert noch, bitte nicht ausschalten.
 Closing the game…	Spiel wird beendet…
 The second card holds a system image, so only its small space is used. Take it out, or format it for games.	Die zweite Karte enthält ein System-Image, deshalb wird nur ihr kleiner Platz genutzt. Nimm sie heraus oder formatiere sie für Spiele.
+HOME opens the menu: save, load, quit.	HOME: Menü, Speichern, Beenden.
+No Wi-Fi here, so the clock doesn't set itself.	Kein WLAN hier, die Uhr stellt sich also nicht selbst.
+A few short steps: a look you like, how you like to play, your time zone, your games.	Ein paar kurze Schritte: deine Ansicht, wie du spielst, deine Zeitzone, deine Spiele.
+Next you add games, then pick them. To get back in later:	Als Nächstes kommen Spiele drauf, dann suchst du sie aus. So kommst du später wieder hinein:
+Get the last game	Das letzte Spiel holen
+{n} folders without a system. Settings › Games › Game check says where their games go.	{n} Ordner ohne System. Einstellungen › Spiele › Spiele-Check sagt, wohin ihre Spiele gehören.
+Open link	Link öffnen
+Next link	Nächster Link
+Free games come over Wi-Fi. The starter pack waits here.	Kostenlose Spiele kommen übers WLAN. Das Startpaket wartet hier.
+How you like to play	Wie du am liebsten spielst
+Simple, Enthusiast or your own choice of the extras.	Einfach, Enthusiast oder deine eigene Auswahl der Extras.
+Added 1 game. B goes back to pick games.	1 Spiel hinzugefügt. B geht zurück zur Auswahl.
+Added {n} games. B goes back to pick games.	{n} Spiele hinzugefügt. B geht zurück zur Auswahl.
+Look around	Umsehen
+Show the starter pack	Startpaket zeigen
+Press A for the starter pack and the ways to add your own games.	Mit A kommst du zum Startpaket und zu den Wegen, eigene Spiele hinzuzufügen.
+After this first start, switch off, put the card in a computer and copy games into the drive called GAMES.	Nach diesem ersten Start ausschalten, die Karte in einen Computer stecken und Spiele in das Laufwerk namens GAMES kopieren.
+In a game, HOME opens the menu: save, load, quit.	Im Spiel öffnet HOME das Menü: Speichern, Laden, Beenden.

@@ -152,6 +152,12 @@ const SLOTS: &[(&str, f32, f32, f32)] = &[
     ("ps3", 0.45, 0.72, 1.0),
     ("wiiu", 0.25, 0.58, 1.0),
     ("saturn", 0.45, 0.30, 1.0),
+    // Computers (2026-11-02): where the game's door or port is on each picture.
+    ("c64", 0.80, 0.30, 1.0),
+    ("atari800", 0.48, 0.28, 1.0),
+    ("atari5200", 0.50, 0.30, 1.0),
+    ("amiga", 0.90, 0.42, 1.0),
+    ("zxspectrum", 0.77, 0.25, 1.0),
     // The crate of games: where a system without a picture of its own puts its medium (`STAND_IN`).
     ("ports", 0.50, 0.40, 0.80),
 ];
@@ -163,6 +169,18 @@ pub const STAND_IN: &str = "ports";
 pub fn slot_of(system: &str) -> SlotAt {
     let id = if crate::system_art::get(system).is_some() { crate::system_art::canonical(system) } else { STAND_IN };
     SLOTS.iter().find(|s| s.0 == id).map_or(SlotAt { x: 0.5, y: None, body: 1.0 }, |s| SlotAt { x: s.1, y: Some(s.2), body: s.3 })
+}
+
+/// Systems whose games come on a medium pocket-ui has no picture of (floppy disk, tape) or on none (an arcade board):
+/// their start shows no medium going in, a false disc would be wrong. The case fades and the machine lights up.
+pub fn lights_up_only(system: &str) -> bool {
+    // The CD32 has the Amiga's picture but its games are discs.
+    system != "amigacd32"
+        && matches!(
+            crate::system_art::canonical(system),
+            "arcade" | "c64" | "c128" | "c16" | "vic20" | "pet" | "amiga" | "amiga500" | "amiga1200" | "zxspectrum" | "zx81" | "msx" | "msx2" | "atarist"
+                | "atari800" | "amstradcpc" | "x68000" | "x1" | "pc-8800" | "pc-9800" | "bbcmicro" | "apple2" | "dragon" | "trs-80"
+        )
 }
 
 /// A rig's pictures, ready to paint: the console's at screen size, what moves at its own (drawn through a map).
@@ -194,6 +212,20 @@ impl Rigged {
             }
         }
         Some(Rigged { rig: f.rig, base, over, top: f.top.and_then(|d| pic(&d)), under: f.under.and_then(|d| pic(&d)), scale: blocks as f32 })
+    }
+}
+
+/// The console's picture at (`x`, `y`) painted again over the screen rows `rows`, solid pixels only: what the medium
+/// sinks behind is the console's outline, whatever its tilt.
+fn paint_over(c: &mut Canvas, sp: &crate::system_art::Sprite, (x, y): (i32, i32), rows: (i32, i32)) {
+    for row in rows.0.max(y).max(0)..rows.1.min(y + sp.h as i32).min(c.h) {
+        let src = &sp.px[((row - y) as u32 * sp.w) as usize..][..sp.w as usize];
+        for (i, &p) in src.iter().enumerate() {
+            let col = x + i as i32;
+            if p >> 24 == 255 && col >= 0 && col < c.w {
+                c.buf[(row * c.w + col) as usize] = p & 0xffffff;
+            }
+        }
     }
 }
 
@@ -332,11 +364,28 @@ impl Scene {
         let case_fade = 256 - ((1.0 - case_shown(st)) * 256.0) as u32;
         let out = (st.carry / 0.35).min(1.0);
         let fly = ((st.carry - 0.35) / 0.65).clamp(0.0, 1.0);
-        let clip_bottom = if fly > 0.5 { slot_y } else { c.h };
+        // A handheld's slot is its top edge, which a tilted picture slopes: the medium sinks behind the console's own
+        // outline there (the console is painted over its lower part again, below), not behind a straight line.
+        let behind_edge = at.y.is_some_and(|y| y <= 0.12) && matches!(ff, FormFactor::HandheldCart | FormFactor::CardBox) && fly > 0.5;
+        let band = sh / 6;
+        let clip_bottom = if behind_edge { slot_y + band } else if fly > 0.5 { slot_y } else { c.h };
+        // The slot's bar is the console's own surface a good deal darker, not black: on a PlayStation's lid it reads as a
+        // seam, on a dark console as the opening.
+        let bar = sprite
+            .as_ref()
+            .and_then(|sp| {
+                let (x, y) = (((slot_cx - sx).max(0) as u32).min(sp.w - 1), ((slot_y - sy).max(0) as u32).min(sp.h - 1));
+                let p = sp.px[(y * sp.w + x) as usize];
+                (p >> 24 > 200).then(|| mix(p & 0xffffff, 0x0c0c0d, 170))
+            })
+            .unwrap_or(0x0c0c0d);
         use crate::playful::Loader;
         // The crate standing in for a console has no tray or lid: the disc just goes in.
         let own_picture = crate::system_art::get(&system).is_some();
-        let draw_game: Box<dyn Fn(&mut Canvas)> = if game.is_round() && playful && own_picture && game_pic.is_some() && matches!(loader, Loader::Tray | Loader::Lid) {
+        let draw_game: Box<dyn Fn(&mut Canvas)> = if lights_up_only(&system) {
+            // No medium of its own to show: nothing flies, the case fades and the machine lights up.
+            Box::new(|_: &mut Canvas| {})
+        } else if game.is_round() && playful && own_picture && game_pic.is_some() && matches!(loader, Loader::Tray | Loader::Lid) {
             let r0 = game.size_beside(medium, from.3).1 as f32 / 2.0;
             let r1 = over_drive(game, bw, k);
             // The plastic around the drive, for its tray or lid; the console's top edge, for the lid.
@@ -370,7 +419,7 @@ impl Scene {
             let r = lerp(r0, r1, fly);
             let (x, y) = (lerp(start.0, end.0, fly), lerp(start.1, end.1, fly) + st.sink * 2.0 * r1);
             if st.rise > 0.4 {
-                c.round_rect(slot_cx - r1 as i32 - px(10), slot_y - px(4), 2 * r1 as i32 + px(20), px(9), px(4), 0x0c0c0d);
+                c.round_rect(slot_cx - r1 as i32 - px(10), slot_y - px(4), 2 * r1 as i32 + px(20), px(9), px(4), bar);
             }
             if let Some(pic) = game_pic {
                 // The printed disc, scaled to its size on the way (a UMD keeps its shell's shape).
@@ -404,7 +453,7 @@ impl Scene {
             let (w, h) = (lerp(gw, end_w, fly), lerp(gh, end_h, fly));
             let (cx, cy) = (lerp(start.0, end.0, fly), lerp(start.1, end.1, fly) + st.sink * end_h * depth);
             if st.rise > 0.4 {
-                c.round_rect(slot_cx - end_w as i32 / 2 - px(8), slot_y - px(4), end_w as i32 + px(16), px(9), px(4), 0x0c0c0d);
+                c.round_rect(slot_cx - end_w as i32 / 2 - px(8), slot_y - px(4), end_w as i32 + px(16), px(9), px(4), bar);
             }
             if playful {
                 // Pushed in, it seats: flatter and wider for a moment with the click, then back out a hair (a game card
@@ -429,6 +478,9 @@ impl Scene {
         }
         if fly > 0.0 {
             draw_game(c);
+            if let (true, Some(sp)) = (behind_edge, sprite) {
+                paint_over(c, sp, (sx, sy), (slot_y - band, slot_y + band));
+            }
         }
         // It is in: the slot lights up for a moment, in the label's colour lifted towards white.
         if st.glow > 0.0 {
@@ -781,6 +833,59 @@ mod tests {
         assert_eq!(slot_of("sfc"), slot_of("snes"));
         assert_eq!(slot_of("nosuchsystem"), slot_of(STAND_IN));
         assert!(crate::system_art::get(STAND_IN).is_some());
+    }
+
+    #[test]
+    fn every_slot_is_on_its_console_and_the_computers_have_one() {
+        // Every picture with a listed slot has something of its console under the slot point; the Amiga CD32 finds its
+        // hardware by alias.
+        for (system, ..) in SLOTS {
+            let at = slot_of(system);
+            let sprite = crate::system_art::get(system).unwrap_or_else(|| panic!("{system}: no picture"));
+            let (x, y) = ((at.x * sprite.w as f32) as u32, (at.y.unwrap() * sprite.h as f32) as u32);
+            assert!(sprite.px[(y.min(sprite.h - 1) * sprite.w + x.min(sprite.w - 1)) as usize] >> 24 == 255, "{system}: nothing there at {x},{y}");
+        }
+        for system in ["c64", "atari800", "atari5200", "amiga", "zxspectrum"] {
+            assert!(SLOTS.iter().any(|s| s.0 == system), "{system}: no slot");
+        }
+        for (alias, own) in [("amigacd32", "amiga"), ("amiga500", "amiga"), ("amiga1200", "amiga")] {
+            assert_eq!(slot_of(alias), slot_of(own), "{alias}");
+        }
+    }
+
+    #[test]
+    fn a_medium_sinks_behind_the_outline_of_a_tilted_console_not_a_straight_line() {
+        // A console whose top edge slopes (left column starts at row 1, right at row 2): painting it over the rows a medium
+        // was drawn in hides the medium below each column's edge, and leaves it where the picture is clear.
+        let sp = Sprite { w: 2, h: 5, px: vec![0, 0, 0xff112233, 0, 0xff112233, 0xff112233, 0xff112233, 0xff112233, 0xff112233, 0xff112233] };
+        let mut buf = vec![0x00ff00u32; 10];
+        let mut c = Canvas::new(&mut buf, 2, 5);
+        paint_over(&mut c, &sp, (0, 0), (0, 5));
+        let col = |x: usize| (0..5).map(|y| buf[y * 2 + x] == 0x112233).collect::<Vec<_>>();
+        assert_eq!(col(0), vec![false, true, true, true, true]);
+        assert_eq!(col(1), vec![false, false, true, true, true]);
+    }
+
+    #[test]
+    fn the_arcade_sets_have_no_picture_and_fall_back_to_the_crate() {
+        // No cabinet picture could be shown to be free to publish (assets/systems/SOURCES.md): the card stays plain and
+        // the game goes into the crate, with no medium.
+        for system in ["arcade", "mame", "fbneo", "cps2", "naomi"] {
+            assert!(crate::system_art::get(system).is_none(), "{system}");
+            assert_eq!(slot_of(system), slot_of(STAND_IN), "{system}");
+            assert!(lights_up_only(system), "{system}");
+        }
+    }
+
+    #[test]
+    fn computers_and_arcade_sets_show_no_false_disc() {
+        for system in ["c64", "amiga", "zxspectrum", "atari800", "msx", "mame", "fbneo", "cps2", "naomi", "arcade"] {
+            assert!(lights_up_only(system), "{system}");
+        }
+        // Real cartridges and discs keep their medium.
+        for system in ["atari5200", "atari7800", "psx", "nes", "amigacd32", "neogeo", "dreamcast"] {
+            assert!(!lights_up_only(system), "{system}");
+        }
     }
 
     #[test]

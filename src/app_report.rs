@@ -1,6 +1,6 @@
 //! Part of the pocket-ui binary: Settings → System → About's rows, "Report a problem" and "Open EmulationStation…",
-//! and the sheet that says where the report went (`pocket_ui::report`). One press writes the zip on a thread of its
-//! own; the sheet says "Writing the report…" until it is done, then the file's name, where it is, and what was left
+//! and the sheet that says where the report went (`pocket_ui::report`). A on the row writes the zip on a thread of its
+//! own (the Settings row only opens the page, the question of SELECT + START held writes at once); the sheet says "Writing the report…" until it is done, then the file's name, where it is, and what was left
 //! out, or why it could not be written.
 
 use std::sync::{Arc, Mutex};
@@ -55,11 +55,11 @@ impl App {
         Some(SettingsPage::About)
     }
 
-    /// The "Report a problem" row: About carries the result, and B goes back to that row, not to About's.
+    /// The "Report a problem" row: About with that row selected, and B goes back to the row, not to About's. Nothing is
+    /// written until A is pressed there: a file in the games share from a stray press (the monkey test's) is no help to anyone.
     pub(crate) fn open_report(&mut self) -> Option<SettingsPage> {
         let page = self.open_about();
         self.about.back_to = Some(report::ROW);
-        self.write_report();
         page
     }
 

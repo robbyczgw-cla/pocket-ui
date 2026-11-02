@@ -12,10 +12,14 @@ pub struct Sprite {
 const ART: &[(&str, &[u8])] = &[
     ("3do", include_bytes!("../assets/systems/3do.png")),
     ("3ds", include_bytes!("../assets/systems/3ds.png")),
+    ("amiga", include_bytes!("../assets/systems/amiga.png")),
     ("atari2600", include_bytes!("../assets/systems/atari2600.png")),
+    ("atari5200", include_bytes!("../assets/systems/atari5200.png")),
     ("atari7800", include_bytes!("../assets/systems/atari7800.png")),
     ("atarijaguar", include_bytes!("../assets/systems/atarijaguar.png")),
     ("atarilynx", include_bytes!("../assets/systems/atarilynx.png")),
+    ("atari800", include_bytes!("../assets/systems/atari800.png")),
+    ("c64", include_bytes!("../assets/systems/c64.png")),
     ("colecovision", include_bytes!("../assets/systems/colecovision.png")),
     ("dreamcast", include_bytes!("../assets/systems/dreamcast.png")),
     ("fds", include_bytes!("../assets/systems/fds.png")),
@@ -60,6 +64,7 @@ const ART: &[(&str, &[u8])] = &[
     ("wiiu", include_bytes!("../assets/systems/wiiu.png")),
     ("wonderswan", include_bytes!("../assets/systems/wonderswan.png")),
     ("xbox", include_bytes!("../assets/systems/xbox.png")),
+    ("zxspectrum", include_bytes!("../assets/systems/zxspectrum.png")),
 ];
 
 /// Other ROCKNIX names for the same hardware.
@@ -84,6 +89,23 @@ const ALIASES: &[(&str, &str)] = &[
     ("pico8", "pico-8"),
     ("wiiware", "wii"),
     ("n3ds", "3ds"),
+    // Arcade boards and sets share one id; no picture of a cabinet is shipped (none could be shown to be free to publish),
+    // so these cards stay plain until one is.
+    ("mame", "arcade"),
+    ("fbn", "arcade"),
+    ("fbneo", "arcade"),
+    ("cps1", "arcade"),
+    ("cps2", "arcade"),
+    ("cps3", "arcade"),
+    ("naomi", "arcade"),
+    ("atomiswave", "arcade"),
+    ("st-v", "arcade"),
+    ("triforce", "arcade"),
+    ("segamodel3", "arcade"),
+    ("daphne", "arcade"),
+    ("amigacd32", "amiga"),
+    ("amiga500", "amiga"),
+    ("amiga1200", "amiga"),
 ];
 
 fn slot(system: &str) -> Option<usize> {
@@ -240,6 +262,11 @@ mod tests {
         "scummvm",
         "tic-80",
         "streaming",
+        "amiga",
+        "atari5200",
+        "atari800",
+        "c64",
+        "zxspectrum",
     ];
 
     #[test]

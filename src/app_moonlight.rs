@@ -287,14 +287,16 @@ impl App {
             Some(pin) => {
                 let pc = p.host.clone().unwrap_or_else(|| "your PC".into());
                 let head = self.text.fit(Face::Body, 34, &format!("Type this PIN on {pc}"), width);
-                self.text.draw(c, Face::Body, 34, left, 250, pal().text, &head);
+                // The label is smaller on a short screen (768 lines), so the three lines under it stay above the hints.
+                let (digits, head_y, by, bh, gap) = if pocket_ui::kit::short_screen(c.h) { (150, 230, 256, 176, 46) } else { (200, 250, 300, 260, 70) };
+                self.text.draw(c, Face::Body, 34, left, head_y, pal().text, &head);
                 // The digits apart, as they are typed, on a paper label.
                 let spaced: String = pin.chars().map(|d| d.to_string()).collect::<Vec<_>>().join(" ");
-                let w = self.text.width(Face::Title, 200, &spaced);
-                let (bx, by, bw, bh) = ((c.w - w) / 2 - 60, 300, w + 120, 260);
+                let w = self.text.width(Face::Title, digits, &spaced);
+                let (bx, bw) = ((c.w - w) / 2 - 60, w + 120);
                 c.round_rect(bx, by, bw, bh, 28, pal().label);
-                self.text.draw(c, Face::Title, 200, (c.w - w) / 2, by + 205, pal().ink, &spaced);
-                let mut y = by + bh + 70;
+                self.text.draw(c, Face::Title, digits, (c.w - w) / 2, by + bh * 205 / 260, pal().ink, &spaced);
+                let mut y = by + bh + gap;
                 for line in [
                     "Sunshine: its web page (https://localhost:47990 on the PC), the PIN tab.".to_string(),
                     "GeForce Experience: the box it shows on the PC.".to_string(),

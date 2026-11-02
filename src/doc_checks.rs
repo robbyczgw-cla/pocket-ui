@@ -263,8 +263,10 @@ fn the_settings_table_lists_every_settings_row_in_order() {
         doc, code,
         "docs/user/settings.md, \"Open Settings\": one row per category of main.rs SETTINGS_GROUPS, in its order"
     );
+    // USB file transfer is retired (`usb_transfer::RETIRED`): its row is in the code, not in the guide.
+    let guide_has = |o: &super::Opens| !matches!(o, super::Opens::UsbTransfer) || pocket_ui::usb_transfer::offered();
     for (row, (name, _, entries)) in open.iter().zip(super::SETTINGS_GROUPS.iter()) {
-        for (entry, _, _) in entries.iter() {
+        for (entry, _, _) in entries.iter().filter(|e| guide_has(&e.1)) {
             assert!(row[1].contains(entry), "docs/user/settings.md, \"Open Settings\": the row of {name} names {entry}");
         }
     }
@@ -273,11 +275,11 @@ fn the_settings_table_lists_every_settings_row_in_order() {
     for (name, _, entries) in super::SETTINGS_GROUPS.iter() {
         let name = name.trim_end_matches('\u{200b}');
         let doc: Vec<String> = first_table(&section(&md, name)).iter().map(|r| bold(&r[0])).collect();
-        let code: Vec<&str> = entries.iter().map(|s| s.0).collect();
+        let code: Vec<&str> = entries.iter().filter(|s| guide_has(&s.1)).map(|s| s.0).collect();
         assert_eq!(doc, code, "docs/user/settings.md, \"{name}\": one row per entry of the category in main.rs SETTINGS_GROUPS, in its order");
         all.extend(doc);
     }
-    let code: Vec<&str> = super::SETTINGS.iter().map(|s| s.0).collect();
+    let code: Vec<&str> = super::SETTINGS.iter().filter(|s| guide_has(&s.1)).map(|s| s.0).collect();
     assert_eq!(all, code, "docs/user/settings.md: every row of main.rs SETTINGS, in its order");
 }
 

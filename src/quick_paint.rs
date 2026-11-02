@@ -527,7 +527,9 @@ impl Sys {
                 });
                 let info = [("Local time", local), ("Date", date_label_at(shown)), ("Offset", offset)];
                 for (i, (name, value)) in info.iter().enumerate() {
-                    let base = top + 4 * row() + i as i32 * row() + row() / 2 + crate::type_scale::mid(FONT);
+                    // One free row between the list and the facts; a quarter of one on a short screen, so the facts stay above the footer.
+                    let free = if crate::kit::short_screen(c.h) { row() / 4 } else { row() };
+                    let base = top + 3 * row() + free + i as i32 * row() + row() / 2 + crate::type_scale::mid(FONT);
                     text.draw(c, Face::Body, FONT, PAD + BTN_PAD, base, pal().dust, name);
                     text.draw_right(c, Face::Body, FONT, c.w - PAD - BTN_PAD, base, pal().text, value);
                 }

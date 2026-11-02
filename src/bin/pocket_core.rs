@@ -392,6 +392,10 @@ impl App {
             pocket_ui::startup::mark("first frame");
             let launch = pocket_ui::startup::since_launch_ms().map_or(String::new(), |ms| format!(", {ms:.0} ms after the game was started in pocket-ui"));
             println!("first frame after {:?}{launch} ({} ms)", started.elapsed(), pocket_ui::startup::report(*started));
+            // The very first game on this card: the one thing nothing else says, how to get out.
+            if pocket_ui::first_game::tell_once(&data_dir()) {
+                self.hud.note(pocket_ui::first_game::NOTE);
+            }
         }
         // Instant on: the first frame after a wake is out (`latency.py measure --wake`).
         if std::mem::take(&mut self.woke_frame) {

@@ -12,6 +12,10 @@ pocket-ui (@ISSUES_URL@), not to ROCKNIX.
 Install
 -------
 
+These steps are for a Mini V2 that still has Retroid's own bootloader (checked on the Android firmware
+RPMiniV2_V1.0.0.275_20260407); don't follow ROCKNIX's bootloader steps for this card. If you already installed
+ROCKNIX's bootloader, we haven't tried this card there: install pocket-ui on your ROCKNIX as a package instead.
+
 1. Write pocket-ui-@VERSION@-rp-mini-v2.img.xz to a microSD card with balenaEtcher or Raspberry Pi
    Imager. Both read the .xz file directly. Everything on the card is erased. 8 GB or more.
 2. Put the card into the switched-off device.
@@ -129,9 +133,11 @@ pocket-ui and pocket-core
 Source code
 -----------
 
-The complete source code of everything on this card that is under the GNU GPL or LGPL is offered next to
-this image: @RELEASE_URL@ (files ending in -source...). See pocket-ui-info/SOURCE-OFFER.txt for the list
-and for our written offer to send it to you.
+pocket-ui's source and the scripts that build this image are next to the image on @RELEASE_URL@
+(pocket-ui-@VERSION@-source.tar.gz); the rest of the source is public at the links below. For at least three
+years from the release of this image, anyone can ask for the complete corresponding source code of the GNU GPL
+and LGPL software on this card, for no charge beyond the cost of providing it: open an issue at the project's
+GitHub page. See pocket-ui-info/SOURCE-OFFER.txt.
 
 ROCKNIX @ROCKNIX_TAG@, including the kernel and its patches:
   https://github.com/ROCKNIX/distribution/tree/@ROCKNIX_TAG@

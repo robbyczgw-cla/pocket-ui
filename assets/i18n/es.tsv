@@ -1539,7 +1539,7 @@ A soft tick as you move.	Un tic suave al moverte.
 Animations	Animaciones
 Cozy	Acogedor
 Quick	Rápido
-Cozy: watch your game slide into the console.	Acogedor: mira cómo tu juego entra en la consola.
+Cozy: watch your game slide into the console.	Acogedor: el juego entra en consola.
 Quick: straight into the game.	Rápido: directo al juego.
 Cozy: watch your game slide into the console. Quick: straight into the game.	Acogedor: mira cómo tu juego entra en la consola. Rápido: directo al juego.
 Box	Caja
@@ -2122,8 +2122,8 @@ the core says its states are incomplete	el core dice que sus estados están inco
 
 # --- Looks, appearance, motion, frames
 Reduced	Reducido
-Selections glide, pages slide in.	Selección fluida, páginas con efecto.
-Only fades. Nothing slides or grows.	Solo fundidos. Nada se desliza ni crece.
+Selections glide, pages slide in.	Todo se desliza.
+Only fades. Nothing slides or grows.	Solo fundidos.
 No animation at all.	Sin ninguna animación.
 Handhelds	Portátiles
 Every console	Todas las consolas
@@ -2139,9 +2139,9 @@ Your games in their cases on a wooden shelf. Pull one out to see its cover.	Tus 
 Dark	Oscuro
 Light	Claro
 Automatic	Automático
-Black pages. Uses the least battery.	Páginas negras. Gasta menos batería.
-Paper pages for daylight. Uses more battery.	Páginas de papel para la luz del día. Gasta más batería.
-Light from 07:00, dark from 20:00, local time.	Claro desde las 07:00, oscuro desde las 20:00, hora local.
+Black pages. Uses the least battery.	Negro. Gasta menos batería.
+Paper pages for daylight. Uses more battery.	Claro para el día. Más batería.
+Light from 07:00, dark from 20:00, local time.	Claro de 07:00 a 20:00.
 
 # --- First start: welcome, Wi-Fi
 Forgetting {s}…	Olvidando {s}…
@@ -3464,7 +3464,7 @@ Starter pack	Pack inicial
 A few free games to start with, downloaded to your SD card.	Unos pocos juegos gratis para empezar, descargados a tu tarjeta SD.
 Get the starter pack	Conseguir el pack inicial
 Get a few free games to start playing right away.	Consigue unos juegos gratis para empezar a jugar ya.
-Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing, USB).	O copia los tuyos: Ajustes › Juegos › Añadir juegos muestra las formas (móvil, compartir archivos, USB).
+Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing).	O copia los tuyos: Ajustes › Juegos › Añadir juegos muestra las formas (móvil, compartir archivos).
 Needs Wi-Fi. Connect in Settings › Connections › Wi-Fi first.	Necesita Wi-Fi. Conéctate antes en Ajustes › Conexiones › Wi-Fi.
 {n} small games, free to share, from their authors.	{n} juegos pequeños, gratis, de sus autores.
 Get all games	Conseguir todos los juegos
@@ -4037,7 +4037,7 @@ Sound & feel	Sonido y tacto
 Animations, playful cases, old-TV switch-on, motion, sounds, case sounds, haptics, LEDs.	Animaciones, cajas juguetonas, encendido de tele antigua, movimiento, sonidos, sonidos de caja, vibración, LEDs.
 On start, quit, buttons, over the game, frames, performance, battery, achievements.	Al iniciar, salir, botones, sobre el juego, marcos, rendimiento, batería, RetroAchievements.
 Help & tools	Ayuda y herramientas
-Tour, manual, tools, Store, report a problem, about.	Recorrido, manual, herramientas, Store, informar de un problema, acerca de.
+How you like to play, Tour, manual, tools, Store, report a problem, about.	Cómo te gusta jugar, Recorrido, manual, herramientas, Store, informar de un problema, acerca de.
 Shelf, Cabinet, Minimal, Cards or Split, with a live preview.	Estante, Vitrina, Minimalista, Tarjetas o Dividida, con vista previa en vivo.
 Dark, Light, or Automatic by the time of day.	Oscuro, Claro o Automático según la hora del día.
 The colours of every page. Left/right: the next set.	Los colores de cada página. Izq./Der.: el siguiente conjunto.
@@ -4094,6 +4094,7 @@ Copy games into their system's folder (Settings › Games › Add games) or get 
 1 game ready	1 juego listo
 {n} games ready	{n} juegos listos
 All good	Todo bien
+First 50,000 files checked	Primeros 50.000 archivos revisados
 {n} of {n2} games ready	{n} de {n2} juegos listos
 And {n} more. Fix these first, then check again.	Y {n} más. Arregla primero estos y vuelve a revisar.
 Hide this copy	Ocultar esta copia
@@ -4243,7 +4244,7 @@ Not encrypted: someone else on this Wi-Fi could see the code and the games you s
 Nothing came from the phone for 10 minutes, so the page closed.	No llegó nada del teléfono en 10 minutos, así que la página se cerró.
 Open again	Abrir de nuevo
 Open the camera on your phone and point it at the code.	Abre la cámara del teléfono y apúntala al código.
-Or type this address	O escribe esta dirección
+Or type this, a computer works too	O escribe esto, también en un ordenador
 Phone connected	Teléfono conectado
 Pick games on the phone; they show up here as they arrive.	Elige juegos en el teléfono; aparecen aquí según llegan.
 Receiving 1 file	Recibiendo 1 archivo
@@ -4277,7 +4278,7 @@ Connect to Wi-Fi	Conectar a Wi-Fi
 Turn on USB file transfer	Activar transferencia por USB
 Turn off USB file transfer	Desactivar transferencia por USB
 Switching{s}	Cambiando{s}
-Same Wi-Fi as your phone	Mismo Wi-Fi que tu teléfono
+Or a computer's browser, same Wi-Fi	O el navegador de un ordenador, mismo Wi-Fi
 Get started	Empezar
 Shelf above	Estante de arriba
 Shelf below	Estante de abajo
@@ -4379,3 +4380,21 @@ Still saving…	Sigue guardando…
 This one takes a while. Still saving, don't switch off.	Esto tarda un poco. Sigue guardando, no apagues.
 Closing the game…	Cerrando el juego…
 The second card holds a system image, so only its small space is used. Take it out, or format it for games.	La segunda tarjeta contiene una imagen del sistema, así que solo se usa su poco espacio. Sácala o fórmatela para juegos.
+HOME opens the menu: save, load, quit.	HOME: menú para guardar y salir.
+No Wi-Fi here, so the clock doesn't set itself.	Aquí no hay Wi-Fi, así que el reloj no se ajusta solo.
+A few short steps: a look you like, how you like to play, your time zone, your games.	Unos pocos pasos: una vista que te guste, cómo te gusta jugar, tu zona horaria, tus juegos.
+Next you add games, then pick them. To get back in later:	Ahora añade juegos y luego elígelos. Para volver a entrar más tarde:
+Get the last game	Conseguir el último juego
+{n} folders without a system. Settings › Games › Game check says where their games go.	{n} carpetas sin sistema. Ajustes › Juegos › Revisión de juegos dice adónde van sus juegos.
+Open link	Abrir enlace
+Next link	Siguiente enlace
+Free games come over Wi-Fi. The starter pack waits here.	Los juegos gratis llegan por Wi-Fi. El pack inicial te espera aquí.
+How you like to play	Cómo te gusta jugar
+Simple, Enthusiast or your own choice of the extras.	Simple, Entusiasta o tu propia elección de extras.
+Added 1 game. B goes back to pick games.	1 juego añadido. B vuelve a la selección.
+Added {n} games. B goes back to pick games.	{n} juegos añadidos. B vuelve a la selección.
+Look around	Echa un vistazo
+Show the starter pack	Mostrar el pack inicial
+Press A for the starter pack and the ways to add your own games.	Pulsa A para el pack inicial y las formas de añadir tus propios juegos.
+After this first start, switch off, put the card in a computer and copy games into the drive called GAMES.	Tras este primer inicio, apaga, pon la tarjeta en un ordenador y copia los juegos en la unidad llamada GAMES.
+In a game, HOME opens the menu: save, load, quit.	En un juego, HOME abre el menú: guardar, cargar, salir.

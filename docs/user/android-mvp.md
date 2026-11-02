@@ -20,7 +20,7 @@ Options, Screenshot and Quit. With touch the menu is made of large buttons: one 
 choose one of eight manual slots; Options shows each setting with arrows to change it and scrolls by dragging. With a controller the
 menu is a list (A chooses, B continues, L/R choose the slot).
 GBA and SNES also have on-screen L/R shoulder buttons.
-Quit writes a separate auto state; the next start continues there. Android Home suspends/saves and returns to a
+Quit writes a separate auto state; the next start continues there. Quit closes the game only after that state is written, however long the phone takes, and a write is never half done. Two games with one file name in different folders keep their own states on the phone. Android Home suspends/saves and returns to a
 paused game. Keep the app installed: its saves, states and screenshots are private app data and uninstalling deletes
 them. Export/backup UI is still open work. ROM-folder permission does not expose another emulator's private saves.
 

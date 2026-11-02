@@ -20,7 +20,7 @@ Start at [user/index.md](user/index.md).
 | [user/index.md](user/index.md) | The first page: what pocket-ui is and does, what it leaves alone, the list of pages |
 | [user/getting-started.md](user/getting-started.md) | Preparing the card, first start, Wi-Fi, adding games |
 | [user/games-drive.md](user/games-drive.md) | RG28XX card: copying games from a Mac or Windows PC |
-| [user/copy-games.md](user/copy-games.md) | Copying games without Wi-Fi: second card, USB file transfer |
+| [user/copy-games.md](user/copy-games.md) | Copying games without Wi-Fi: the second card |
 | [user/game-check.md](user/game-check.md) | Settings → Games → Game check: will your games start? |
 | [user/coming-from.md](user/coming-from.md) | Coming from ROCKNIX or Android: what happens to saves, states, favourites and settings, what needs a copy, what does not come over |
 | [user/playing.md](user/playing.md) | Home, finding a game, the looks, console pages, starting a game, the game switcher, continuing, menu sounds |

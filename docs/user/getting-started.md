@@ -80,7 +80,7 @@ itself if pocket-ui cannot start at all.
 The first time pocket-ui runs, it walks you through a short setup. **START skips a step** (on a keyboard it means
 Connect or Next: B goes back, then START skips). You can
 open every step again later from **Settings** (press START on the Home screen).
-Each step says "Step n of 7" at the top right.
+Each step says "Step n of 7" at the top right (five on a handheld with no Wi-Fi chip, which skips Wi-Fi and Extras).
 
 1. **Welcome.** Under the cartridge and your handheld, press A to begin. Left/Right choose the language, **English**, **Deutsch** or **Español**: the screen
    changes at once, and the choice is kept ([Language](language.md)). It starts on the system language
@@ -103,7 +103,7 @@ Each step says "Step n of 7" at the top right.
    the pictures for the games already on the SD card then download by themselves in the background, as chosen, unless
    you chose Off; this page shows the progress. See [Extras](extras.md#cover-art).
 7. **Add your games.** A tile per system with its folder, and a switch for file sharing. See below.
-8. **You're all set.** It counts the games already on the SD card ("Your 16 games are on the shelf."). With a skipped time zone and nothing to guess from, it says the clock is on UTC. Press A ("Go to
+8. **You're all set.** A line tells you that in a game, HOME opens the menu (save, load, quit); Kids Mode leaves it out. It counts the games already on the SD card ("Your 16 games are on the shelf."). With a skipped time zone and nothing to guess from, it says the clock is on UTC. Press A ("Go to
    your games") to reach Home.
 
 After a restart or a flat battery in the middle, the setup opens again at the step it had reached.
@@ -174,8 +174,8 @@ Settings → Connections → **Wi-Fi**, or the Wi-Fi step of the first start.
    If the first row says **This network wants a sign-in**, the network (a hotel, a train) wants its page done
    first: see [Hotel and train Wi-Fi](hotel-wifi.md).
 2. Choose a network and press A ("Connect").
-   A on the network you are connected to gets a tick and "Connected to Home. Press START for the next step." under the
-   title. A network one search missed stays listed until three searches in a row miss it.
+   In the first start, a network that connects shows "Connected to Home" and the setup goes on by itself; B from the
+   next step comes back and stays. A on the connected network gets a tick and "Press START for the next step."
 3. For a network with a password, type it on the on-screen keyboard:
    - D-pad: move between keys
    - A: type the selected key
@@ -187,8 +187,8 @@ Settings → Connections → **Wi-Fi**, or the Wi-Fi step of the first start.
    The password is shown in plain text while you type.
 4. Connecting can take up to a minute. The result appears under the title, for example
    "That network is out of range. Scan again." or "The network took too long to respond. Try again." When the network
-   refuses the password, the keyboard opens again, empty, with "Wrong password. Try again." above the keys; the refused
-   password isn't kept, so the next one you type is the one tried. B goes back to the list.
+   refuses the password, the keyboard opens again with what you typed and "Wrong password. Try again." above the keys:
+   B takes letters off the end, L1 empties the field, START tries again. The network doesn't keep the refused one. On the list, B goes back.
 
 If the Pocket is already connecting to the network you chose, it waits for that connection (up to 50 seconds) instead of
 starting again. Choosing a different network leaves the previous one first; a newly typed password replaces an old
@@ -228,20 +228,19 @@ system starts. If the connection drops while pocket-ui runs, it reconnects by it
 
 ### Nothing on the SD card yet: the starter pack
 
-A card with no games shows **No games yet** on Home, and under it **Get the starter pack** (A). It is a handful of small games
-that their authors share for anyone to play, from Game Boy to Super Nintendo, Mega Drive and GBA. You can also open
-it from Settings → Games → **Starter pack**.
+A card with no games shows **No games yet** on Home, with **Get the starter pack** (A) and **Add games** (X) for your own. The pack is
+a handful of small games that their authors share for anyone to play, from Game Boy to Super Nintendo, Mega Drive and GBA. You can
+also open it from Settings → Games → **Starter pack**.
 
-1. Connect to Wi-Fi first (Home says "Needs Wi-Fi" while the Pocket is offline).
-2. Press A on **Get the starter pack**. The page lists the games with their system and size; **Get all** takes every
-   one, A on a game takes just that one.
-3. Each game downloads with a progress bar, is checked, and is put into its system's folder (for example
-   `roms/gb`). B leaves the page while it runs; the games appear on the shelf when it is done.
+1. Offline, Home's button says **Connect to Wi-Fi** (A opens the Wi-Fi page; B comes back here).
+2. Press A on **Get the starter pack**. **Get all** takes every game, A on a game takes just that one. Each is checked and put into
+   its system's folder (for example `roms/gb`); B leaves the page while it runs, and the games appear on the shelf when it is done.
 
-Nothing is added without your A, a file that is already there is never replaced, and nothing is written when the
-SD card is short of space or the download is damaged. If the Pocket is offline, the page says so; try again once Wi-Fi is on.
-Each game's card (X) names its author and licence, and [the credits](../STARTER-PACK.md) list them all. Your own
-games work the same way as before: copy them into the folders below.
+**Add games** works online or not and opens the ways to copy your own. **Look around** (B) puts the hint away and shows the empty
+shelf in your look; A brings it back, START opens Settings. The hint returns at the next start while the card is empty.
+
+Nothing is added without your A, and a file that is already there is never replaced. Each game's card (X) names its author and
+licence; [the credits](../STARTER-PACK.md) list them all.
 
 Games go into the `roms` folder, **one folder per system**, for example `roms/gba` for Game Boy
 Advance or `roms/snes` for Super Nintendo. The folder names are the ones ROCKNIX uses; the
@@ -277,8 +276,8 @@ many.
   `roms/bios` (in red while one is missing), or, for systems pocket-ui knows nothing about, that a BIOS would go
   into `roms/bios`.
 - The game counts are read when the page opens and again on a button press.
-- **Ways to copy games.** Down from the last row of tiles reaches a row with **File sharing** and **USB file transfer**
-  (only what your handheld has): Left/Right choose, A switches, or tap. Details: [Second card and USB cable](copy-games.md).
+- **Ways to copy games.** Down from the last row of tiles reaches a row with **File sharing** and the phone page
+  (only what your handheld has): Left/Right choose, A switches, or tap. Details: [Second card](copy-games.md).
 
 ### Over Wi-Fi (file sharing)
 
@@ -309,8 +308,7 @@ The ready-to-flash RG28XX card, 16 GB or bigger, has a **GAMES** drive: put the 
 in ([The GAMES drive](games-drive.md)). On other cards, use file sharing, or a second card on a handheld with a second
 slot: Windows and macOS can't write to the card's STORAGE part.
 
-Without Wi-Fi there's also a second card on a handheld with two slots, or a USB cable with
-Settings → Connections → **USB file transfer**: [Second card and USB cable](copy-games.md).
+Without Wi-Fi there's also a second card on a handheld with two slots: [Second card](copy-games.md).
 
 ### Coming from EmulationStation
 
@@ -342,7 +340,8 @@ work, but nobody has tried pocket-ui on one yet.
   says, start it once, then add pocket-ui with the install package for an existing ROCKNIX card (the
   [install guide](../INSTALL-DUAL-BOOT.md#install-on-a-rocknix-card-you-already-use) has the steps). It recognises
   these devices and says they are experimental.
-- **What you see.** The first start says once that pocket-ui hasn't been tested on your device; Settings → Help & tools →
+- **What you see.** The first start says once that pocket-ui hasn't been tested on your device, unless the project has
+  played on it ([DEVICES](../DEVICES.md)); Settings → Help & tools →
   About shows the device with "(experimental)". Everything else is the same as on the Mini V2. On the Pocket 5's and
   Flip 2's wider screen, Settings and the Shelf look sit in a column in the middle; on the Flip 2, closing the lid
   puts it to sleep.

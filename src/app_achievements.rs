@@ -295,10 +295,12 @@ impl App {
             y += pocket_ui::type_scale::line(44, 8);
         }
         y = y.max(panel_top + panel_h + 40);
+        // A short screen (768 lines) sets the three paragraphs smaller so that they end above the footer.
+        let about = if pocket_ui::kit::short_screen(c.h) { 24 } else { 28 };
         for p in page::ABOUT {
-            for line in self.text.wrap_prose(Face::Body, 28, p, width) {
-                self.text.draw(c, Face::Body, 28, left, y, pal().dust, &line);
-                y += pocket_ui::type_scale::line(28, 10);
+            for line in self.text.wrap_prose(Face::Body, about, p, width) {
+                self.text.draw(c, Face::Body, about, left, y, pal().dust, &line);
+                y += pocket_ui::type_scale::line(about, 10);
             }
             y += 14;
         }

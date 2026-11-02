@@ -308,8 +308,10 @@ impl App {
             let name = r.label();
             if i == page.sel {
                 let w = self.text.width(Face::Body, font, name) + 2 * NU_BTN_PAD;
-                c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, pal().band);
-                c.round_rect(pad, y + 4, w, row - 8, (row - 8) / 2, pal().select);
+                // On a 480-line screen the rows are 24 px apart: the pill keeps 2 px above and below, not 4.
+                let m = if row < 40 { 2 } else { 4 };
+                c.round_rect(pad, y + m, right - pad, row - 2 * m, (row - 2 * m) / 2, pal().band);
+                c.round_rect(pad, y + m, w, row - 2 * m, (row - 2 * m) / 2, pal().select);
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, name);
             } else {
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, name);

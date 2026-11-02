@@ -125,6 +125,12 @@ impl App {
                 None => {}
             }
         }
+        // The manual: a tap on a link to another page opens it.
+        if let Some(Gesture::Tap { x, y }) = gesture.filter(|_| self.settings_page == Some(crate::SettingsPage::Manual)) {
+            if self.manual.tap_link(x, y) {
+                return self.request_redraw();
+            }
+        }
         match gesture {
             Some(Gesture::Tap { x, y }) => match self.hits.tap(x, y) {
                 TapAction::Nothing => {}

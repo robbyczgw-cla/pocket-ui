@@ -204,6 +204,39 @@ fn save_preview_notes_stay_above_the_hints_on_native_and_small_outputs() {
     }
 }
 
+/// Native 1024x768 is shorter than the pages' design (960 and more): the sweep of 2026-11-02 found these pages with a
+/// string lying on the hints or on the text above it. In English, German and Spanish none of them may do so any more.
+#[test]
+fn pages_found_overlapping_at_1024x768_keep_their_lines_apart() {
+    let tmp = tempfile::tempdir().unwrap();
+    fake_library(tmp.path());
+    let stub = wayland(tmp.path());
+    std::fs::write(tmp.path().join("data/sounds.json"), r#"{"on":false,"volume":0}"#).unwrap();
+    let states = [
+        "setup:extras", "setup:extras:da", "setup:play", "setup:card=lens", "tailscale:connected", "web:off", "web:waiting",
+        "achievements:offline", "sys:time-wrong-wifi", "search:none:qqqq", "curator:history", "curator:history:year",
+        "battery:3:samples", "port-perf:own", "port-perf:busy", "pc-streaming:pin", "slot-undo",
+    ];
+    for lang in ["en", "de", "es"] {
+        for state in states {
+            let boxes = tmp.path().join("pages.box");
+            let png = tmp.path().join("pages.png");
+            let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+            cmd.args(["--snapshot", state, png.to_str().unwrap()])
+                .env("POCKETUI_MOCK", "1").env("POCKETUI_SOUND_QUANTUM", "0")
+                .env("POCKETUI_ES_SYSTEMS", tmp.path().join("es_systems.cfg"))
+                .env("POCKETUI_DATA", tmp.path().join("data"))
+                .env("POCKETUI_SNAPSHOT_SIZE", "1024x768").env("POCKETUI_TEXT_SIZE", "normal")
+                .env("POCKETUI_LANG", lang).env("POCKETUI_TEXT_BOXES", &boxes);
+            if let Some(s) = &stub { cmd.env("WAYLAND_DISPLAY", &s.path); }
+            let out = cmd.output().unwrap();
+            assert!(out.status.success(), "{state} {lang}: {}", String::from_utf8_lossy(&out.stderr));
+            let overlaps: Vec<String> = std::fs::read_to_string(&boxes).unwrap().lines().filter(|l| l.starts_with("O\t")).map(str::to_string).collect();
+            assert!(overlaps.is_empty(), "{state} {lang}: {overlaps:?}");
+        }
+    }
+}
+
 /// Hiding a label keeps its key and the space between keys: the final START must remain inside the output.
 #[test]
 fn shelf_hint_keys_stay_on_screen_when_the_last_labels_are_hidden() {

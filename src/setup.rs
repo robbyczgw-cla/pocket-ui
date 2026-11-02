@@ -37,6 +37,8 @@ pub enum SetupEvent {
     /// USB file transfer was switched on Add games (`Setup::switch_usb`): what the controller says now.
     Usb { wanted_on: bool, status: crate::usb_transfer::Status },
     Connected { ssid: String, result: Result<(), String> },
+    /// First start: `ADVANCE_AFTER` has passed since a connection made here worked (`Setup::advance`); `gen` says which.
+    Advance { gen: u64 },
     /// What the connected network does with a plain web request (`net_check::probe`, and `net_check::recheck` every
     /// 15 s while the page shows a sign-in), with the sign-in page's address.
     Network(net_check::Check),
@@ -147,6 +149,9 @@ fn share_now() -> ShareNow {
 /// trying for six minutes on a fresh card, 2026-10-27; a good one takes a few seconds, DHCP at most 45).
 const CONNECT_STUCK: std::time::Duration = std::time::Duration::from_secs(60);
 
+/// First start: how long "Connected to …" shows before the setup goes on to the time zone by itself.
+const ADVANCE_AFTER: std::time::Duration = std::time::Duration::from_millis(1200);
+
 /// The Wi-Fi of a setup that was not given the panel's (`Setup::with_net`).
 #[cfg(not(test))]
 fn default_net(hw: &SharedHw) -> Arc<NetState> {
@@ -171,6 +176,8 @@ pub enum Only {
     Wifi,
     Extras,
     Games,
+    /// Settings › Help & tools › How you like to play: the first start's question again, without the first start.
+    Play,
     /// Remote access over SSH; only opened from Settings, not part of the first start.
     Remote,
 }
@@ -179,6 +186,13 @@ pub enum Only {
 /// docs/STEAMDECK.md): there the first start goes on to the extras.
 fn network_step() -> Step {
     if crate::device::current().host_owned() { Step::Extras { sel: 0 } } else { Step::Wifi }
+}
+
+/// A handheld with no Wi-Fi chip (RG28XX, RG35XX 2024; not the Steam Deck, which skips more): the first start leaves out the
+/// Wi-Fi page ("This device has no Wi-Fi") and the Extras page ("downloads aren't available"), both of which have nothing to choose.
+fn no_wifi_chip() -> bool {
+    let d = crate::device::current();
+    !d.has_wifi() && !d.host_owned()
 }
 
 enum Step {
@@ -308,8 +322,17 @@ impl ZoneStep {
 }
 
 pub struct Setup {
+    /// Whether the last page of the first start says what HOME does (`first_game::told_on_last_page`), read once.
+    home_line: std::cell::Cell<Option<bool>>,
     /// "For a child" was pressed (`take_kids_asked`).
     kids_asked: bool,
+    /// No Wi-Fi chip (`no_wifi_chip`): the first start has no Wi-Fi and Extras pages. A field so tests can set it.
+    no_wifi: bool,
+    /// The password last sent to a network: back in the field if it is refused.
+    typed_password: String,
+    /// Games in the system folders when last counted (`count_games`): `games` is what the shelf knew when this opened,
+    /// and a card that was never read, or a game sent from the phone since, isn't in it.
+    games_counted: Option<usize>,
     step: Step,
     /// Opened straight at Systems on the shelf (`at_shelf_systems`): B there closes the setup, back to the row, instead
     /// of going to the Look step.
@@ -353,6 +376,13 @@ pub struct Setup {
     connecting_since: Option<(String, Instant)>,
     /// The last typed connection was to a hidden network: a refused password asks again the same way.
     connect_hidden: bool,
+    /// First start: a connect was started on this page and has not ended yet. Only such a connect moves the setup on by
+    /// itself; coming back to the Wi-Fi step with B never does, even when Wi-Fi is connected.
+    advance_armed: bool,
+    /// First start: the network just connected here and the time (`ADVANCE_AFTER`) before the step goes on; any press or
+    /// leaving the page ends it. `advance_gen` tells the answer of an older wait from this one.
+    advance_pending: Option<String>,
+    advance_gen: u64,
     sel: usize,
     scanning: bool,
     /// Last Wi-Fi result shown under the title; `true` marks an error.
@@ -703,7 +733,7 @@ pub const LOOK_PREVIEW: (i32, i32) = (620, 470);
 pub fn look_preview(screen: (i32, i32)) -> (i32, i32) {
     let tall = if crate::type_scale::grow(28) > 0 { 420 } else { LOOK_PREVIEW.1 };
     let (w, h) = (screen.0.max(1), screen.1.max(1));
-    let ph = (tall - (1080 - h).max(0)).max(200);
+    let ph = (tall - (1080 - h).max(0)).max(140);
     (ph * w / h, ph)
 }
 
@@ -815,7 +845,7 @@ impl Setup {
             Way::Sharing if self.ip.is_none() => ("File sharing", "Connect to Wi-Fi first".to_string(), false),
             Way::Sharing => ("File sharing", "Off".to_string(), false),
             Way::Phone if self.ip.is_none() => ("From your phone", "Connect to Wi-Fi first".to_string(), false),
-            Way::Phone => ("From your phone", "Same Wi-Fi as your phone".to_string(), false),
+            Way::Phone => ("From your phone", "Or a computer's browser, same Wi-Fi".to_string(), false),
             Way::Usb if self.usb_busy => ("USB file transfer", format!("Switching{dots}"), self.usb_status() != crate::usb_transfer::Status::Off),
             Way::Usb => ("USB file transfer", self.usb_status().label().to_string(), self.usb_status() != crate::usb_transfer::Status::Off),
         }
@@ -1000,6 +1030,7 @@ impl Setup {
                 Some(_) => SHARE_OFF,
                 None if crate::card_health::image_card() => crate::card_health::IMAGE_CARD_NOTE,
                 None if crate::games_card::in_use() => GAMES_CARD_WAY,
+                None if self.only.is_none() && crate::card_health::games_drive() => GAMES_DRIVE_FIRST_WAY,
                 None => offline_way(crate::card_health::games_drive(), d.has_second_card_slot(), d.has_wifi()).1,
             };
             for (i, l) in text.wrap_prose(Face::Body, 24, about, w).iter().take(4).enumerate() {
@@ -1030,6 +1061,9 @@ const SHARE_OFFLINE: &str = "Then a computer on the same network can copy games 
 
 /// Add games without a network, on a card with the GAMES drive (docs/SD-IMAGE.md).
 const GAMES_DRIVE_WAY: &str = "Put the card in your computer and copy games to the GAMES drive, into its roms folder.";
+/// The same in the first start's games step: the drive isn't there until this first start is over (a computer shows no GAMES
+/// right after flashing), so it says when to go and get it.
+const GAMES_DRIVE_FIRST_WAY: &str = "After this first start, switch off, put the card in a computer and copy games into the drive called GAMES.";
 /// Add games without a network and without that drive, on a handheld with a second slot.
 const SECOND_CARD_WAY: &str = "Copy games to a second SD card (over 8 GB) in your computer, into a folder called roms, then put it in the second slot.";
 const OR_SECOND_CARD_WAY: &str = "Or copy games to a second SD card (over 8 GB) in your computer, into a folder called roms, then put it in the second slot.";
@@ -1149,7 +1183,8 @@ fn stage(step: &Step) -> Option<Only> {
         Step::Remote => Some(Only::Remote),
         // Settings > Time is the way to this one on its own.
         // The profiles and the cards are first-start steps; Settings → Tour shows the cards on its own.
-        Step::Welcome | Step::Play { .. } | Step::Cards(_) | Step::Zone(_) | Step::Done => None,
+        Step::Play { .. } | Step::Cards(_) => Some(Only::Play),
+        Step::Welcome | Step::Zone(_) | Step::Done => None,
     }
 }
 
@@ -1158,22 +1193,23 @@ const RECOUNT_AFTER: Duration = Duration::from_secs(3);
 
 /// The steps the first start counts: Welcome, Look, How you like to play, Wi-Fi, Time zone, Extras, Add your games (the
 /// last page, "You're all set", is the end, not a step). A Steam Deck skips Wi-Fi and the time zone: five.
-fn first_steps() -> usize {
-    if crate::device::current().host_owned() { 5 } else { 7 }
+fn first_steps(no_wifi: bool) -> usize {
+    if crate::device::current().host_owned() || no_wifi { 5 } else { 7 }
 }
 
 /// A first-start step's number for "Step n of 7"; `None` for the pages inside a step (keyboards, lists) and after the
 /// last one, which would only crowd their titles.
-fn step_number(step: &Step) -> Option<usize> {
+fn step_number(step: &Step, no_wifi: bool) -> Option<usize> {
     let skipped = if crate::device::current().host_owned() { 2 } else { 0 };
     match step {
         Step::Welcome => Some(1),
         Step::Look => Some(2),
         Step::Play { .. } => Some(3),
         Step::Wifi => Some(4),
-        Step::Zone(z) if matches!(z.view, ZoneView::Card) => Some(5),
+        // No Wi-Fi chip: the time zone is the fourth step and the games the fifth.
+        Step::Zone(z) if matches!(z.view, ZoneView::Card) => Some(if no_wifi { 4 } else { 5 }),
         Step::Extras { .. } => Some(6 - skipped),
-        Step::Games => Some(7 - skipped),
+        Step::Games => Some(if no_wifi { 5 } else { 7 - skipped }),
         _ => None,
     }
 }
@@ -1296,6 +1332,8 @@ pub fn unread_lines(strays: &[library::StrayFolder], broken: &[library::BrokenDi
             Some(folder) => format!("Folder without a system: {}. Its games go in {roms}/{folder}.", one.name),
             None => format!("Folder without a system: {}. The tiles below show the folder names.", one.name),
         }),
+        // More than two don't fit a line, and what to do would be the part cut off: the count and where the rest is said.
+        many if many.len() > 2 => lines.push(format!("{} folders without a system. Settings › Games › Game check says where their games go.", many.len())),
         many => {
             let names: Vec<&str> = many.iter().map(|s| s.name.as_str()).collect();
             let meant: Vec<String> = many.iter().filter_map(|s| s.meant.as_ref()).map(|f| format!("{roms}/{f}")).collect();
@@ -1346,7 +1384,11 @@ impl Setup {
         let net = default_net(&hw);
         Self {
             step: Step::Welcome,
+            home_line: std::cell::Cell::new(None),
             kids_asked: false,
+            no_wifi: no_wifi_chip(),
+            typed_password: String::new(),
+            games_counted: None,
             notify,
             seen_notice: net.snapshot().notice.map_or(0, |n| n.id),
             net,
@@ -1367,6 +1409,9 @@ impl Setup {
             forget: None,
             connecting_since: None,
             connect_hidden: false,
+            advance_armed: false,
+            advance_pending: None,
+            advance_gen: 0,
             sel: 0,
             scanning: false,
             note: None,
@@ -1459,9 +1504,9 @@ impl Setup {
         std::mem::take(&mut self.kids_asked)
     }
 
-    /// Kids Mode's steps are done: the first start goes on with the network.
+    /// Kids Mode's steps are done: the first start goes on like after any play style (no Wi-Fi page without a chip).
     pub fn kids_done(&mut self) {
-        self.step = network_step();
+        self.after_play();
     }
 
     pub fn take_tour(&mut self) -> Option<(Switches, Vec<String>)> {
@@ -1513,6 +1558,10 @@ impl Setup {
             }
             Only::Extras => self.step = Step::Extras { sel: 0 },
             Only::Games => self.go_to_games(),
+            Only::Play => {
+                let now = Profile::of(&self.switches);
+                self.step = Step::Play { sel: self.profiles().iter().position(|p| *p == now).unwrap_or(0) };
+            }
             Only::Remote => {
                 self.look_remote();
                 self.ip = wifi::ip();
@@ -1732,6 +1781,26 @@ impl Setup {
         self.net.set_enabled(true);
     }
 
+    /// First start: a connection started here worked. The page shows "Connected to …" and, after `ADVANCE_AFTER`, the
+    /// setup goes on to the time zone without a press (`SetupEvent::Advance`). Nothing happens when the player has left
+    /// the connecting page, or the connect was not started here.
+    fn connected_here(&mut self, ssid: &str, was_connecting: bool) {
+        let armed = std::mem::take(&mut self.advance_armed);
+        if !(armed && was_connecting && self.only.is_none()) {
+            return;
+        }
+        self.advance_gen += 1;
+        self.advance_pending = Some(ssid.to_string());
+        let (notify, gen) = (self.notify.clone(), self.advance_gen);
+        let started = std::thread::Builder::new().name("wifi-advance".into()).spawn(move || {
+            std::thread::sleep(ADVANCE_AFTER);
+            notify(SetupEvent::Advance { gen });
+        });
+        if started.is_err() {
+            self.advance_pending = None;
+        }
+    }
+
     fn connect(&mut self, ssid: String, psk: Option<String>) {
         self.connect_to(ssid, psk, false);
     }
@@ -1740,6 +1809,8 @@ impl Setup {
         let notify = self.notify.clone();
         let target = ssid.clone();
         self.connect_hidden = hidden;
+        self.advance_armed = self.only.is_none();
+        self.advance_pending = None;
         // After everything asked before it and before anything asked after: not at the same time as a switch of the radio.
         self.watch_net();
         self.net.exclusive("connect", move || {
@@ -1752,6 +1823,8 @@ impl Setup {
     fn connect_saved(&mut self, saved: Saved) {
         let notify = self.notify.clone();
         let ssid = saved.ssid.clone();
+        self.advance_armed = self.only.is_none();
+        self.advance_pending = None;
         self.watch_net();
         self.net.exclusive("connect saved", move || {
             let result = wifi::connect_saved(&saved);
@@ -2118,16 +2191,20 @@ impl Setup {
                         self.portal = false;
                         std::thread::spawn(wifi::rebind_sharing);
                         self.note = Some((format!("Connected to {ssid}"), false));
+                        let was_connecting = matches!(self.step, Step::Connecting { .. });
+                        self.connected_here(&ssid, was_connecting);
                         self.step = Step::Wifi;
                     }
                     // The saved password is no longer right (or the profile lost it): ask for it.
                     Err(e) if wifi::wrong_password(&e) => {
+                        self.advance_armed = false;
                         eprintln!("wifi: connection failed: {e}");
                         self.note = Some(("The saved password didn't work. Type it again.".into(), true));
                         self.step = Step::Password { ssid, kb: Keyboard::default(), hidden: false };
                         return;
                     }
                     Err(e) => {
+                        self.advance_armed = false;
                         self.note = Some((friendly_error(&e), true));
                         self.step = Step::Wifi;
                     }
@@ -2160,6 +2237,18 @@ impl Setup {
                 }
                 // The scan that follows is `NetState::exclusive`'s own: asking again would run it twice.
             }
+            SetupEvent::Advance { gen } => {
+                // Still the same wait, still on the Wi-Fi page, nothing pressed, and nothing to sign in to (the connect
+                // itself worked; the list may not show it yet): on to the time zone, as START would.
+                let up = !self.portal_shown() && !self.radio.is_off();
+                if self.advance_pending.is_some() && gen == self.advance_gen && matches!(self.step, Step::Wifi) && up {
+                    self.advance_pending = None;
+                    self.enter_zone();
+                    self.remember_step(false);
+                } else if gen == self.advance_gen {
+                    self.advance_pending = None;
+                }
+            }
             SetupEvent::Connected { ssid, result } => {
                 if result.is_ok() {
                     net_check::forget();
@@ -2168,13 +2257,21 @@ impl Setup {
                     std::thread::spawn(wifi::rebind_sharing);
                 }
                 let refused = result.as_ref().is_err_and(|e| wifi::wrong_password(e));
+                if result.is_ok() {
+                    let was_connecting = matches!(self.step, Step::Connecting { .. });
+                    self.connected_here(&ssid, was_connecting);
+                } else {
+                    self.advance_armed = false;
+                }
                 self.note = Some(match result {
                     Ok(()) => (format!("Connected to {ssid}"), false),
                     Err(e) => (friendly_error(&e), true),
                 });
-                // A refused password: the keyboard again, empty, with the reason above it (`wifi::connect_with` has
-                // removed the refused profile, so what is typed now is what is tried).
-                self.step = if refused { Step::Password { ssid, kb: Keyboard::default(), hidden: self.connect_hidden } } else { Step::Wifi };
+                // A refused password: the keyboard again with the reason above it (`wifi::connect_with` has removed the
+                // refused profile, so what is typed now is what is tried). What was typed stays: one wrong letter of a
+                // long password shouldn't cost the whole of it again, with a D-pad (new-player walk 2026-11-02).
+                let typed = std::mem::take(&mut self.typed_password);
+                self.step = if refused { Step::Password { ssid, kb: Keyboard { text: typed, ..Keyboard::default() }, hidden: self.connect_hidden } } else { Step::Wifi };
                 // The scan that follows is `NetState::exclusive`'s own: asking again would run it twice.
             }
             SetupEvent::Usb { wanted_on, status } => {
@@ -2225,6 +2322,7 @@ impl Setup {
             SetupEvent::Phone => {}
             SetupEvent::GameCounts(found) => {
                 self.counting = false;
+                self.games_counted = Some(found.games.values().sum());
                 self.strays = found.strays;
                 self.broken = found.broken;
                 if let Some(grid) = &mut self.grid {
@@ -2665,6 +2763,32 @@ impl Setup {
         }
     }
 
+    /// On from the play style: the Wi-Fi page, the time zone where there is no Wi-Fi page, the extras on the Steam Deck.
+    fn after_play(&mut self) {
+        if self.only.is_some() {
+            // Opened from Settings: the answer is all there is to do.
+            self.step = Step::Done;
+        } else if self.no_wifi {
+            self.enter_zone();
+        } else {
+            self.step = network_step();
+        }
+    }
+
+    /// Back from the time zone: the Wi-Fi page, or the play style where there is no Wi-Fi page.
+    fn zone_back(&mut self) {
+        self.step = if self.no_wifi { Step::Play { sel: 0 } } else { Step::Wifi };
+    }
+
+    /// On from the time zone: Extras, or the games where there is no Extras page (no downloads without Wi-Fi).
+    fn after_zone(&mut self) {
+        if self.no_wifi {
+            self.go_to_games();
+        } else {
+            self.step = Step::Extras { sel: 0 };
+        }
+    }
+
     /// Opens the time zone step at once, saying it is looking; what the system and the Wi-Fi chip say (`iw reg get`,
     /// the zoneinfo tree and its tables) is read on a thread (`look_zone`) and swapped in by `SetupEvent::Zone`.
     fn enter_zone(&mut self) {
@@ -2710,8 +2834,8 @@ impl Setup {
         if z.loading {
             // Nothing to confirm or pick yet; leaving works.
             match b {
-                Button::South => self.step = Step::Wifi,
-                Button::Start => self.step = Step::Extras { sel: 0 },
+                Button::South => self.zone_back(),
+                Button::Start => self.after_zone(),
                 _ => {}
             }
             return;
@@ -2788,7 +2912,7 @@ impl Setup {
         z.view = view;
         match next {
             ZoneNext::Stay => {}
-            ZoneNext::Back => self.step = Step::Wifi,
+            ZoneNext::Back => self.zone_back(),
             ZoneNext::Take(zone) => self.leave_zone(zone),
         }
     }
@@ -2804,7 +2928,7 @@ impl Setup {
         let unconfirmed = want.is_none() && matches!(z.guess, Guess::Utc);
         if want.is_none_or(|zone| self.set_zone(&zone)) {
             self.zone_utc = unconfirmed;
-            self.step = Step::Extras { sel: 0 };
+            self.after_zone();
         }
     }
 
@@ -2872,6 +2996,8 @@ impl Setup {
     }
 
     pub fn press(&mut self, b: Button) -> bool {
+        // A press takes the player's hand back: the step no longer goes on by itself.
+        self.advance_pending = None;
         let done = self.press_step(b);
         // Games being copied while the page is open: a press reads the folders again (not a read already under way).
         if matches!(self.step, Step::Games) && !self.counting && self.counted_at.elapsed() >= RECOUNT_AFTER {
@@ -2917,11 +3043,13 @@ impl Setup {
                 self.scan();
             }
             "play" => self.step = Step::Play { sel: 0 },
+            "wifi" | "zone" if self.no_wifi => self.enter_zone(),
             "wifi" => {
                 self.step = Step::Wifi;
                 self.scan();
             }
             "zone" => self.enter_zone(),
+            "extras" if self.no_wifi => self.go_to_games(),
             "extras" => self.step = Step::Extras { sel: 0 },
             "games" => self.go_to_games(),
             _ => {}
@@ -2929,7 +3057,13 @@ impl Setup {
         self
     }
 
+    /// The answers "How do you like to play?" offers here.
+    fn profiles(&self) -> Vec<Profile> {
+        if self.only == Some(Only::Play) { Profile::offered_in_settings() } else { Profile::offered() }
+    }
+
     fn press_step(&mut self, b: Button) -> bool {
+        let profiles = self.profiles();
         // Add games: the row of ways under the grid, and the grid's own keys.
         if matches!(self.step, Step::Games) {
             let used = if self.ways_focus { self.press_ways(b) } else { self.press_grid(b) };
@@ -2982,9 +3116,9 @@ impl Setup {
                 _ => {}
             },
             Step::Play { sel } => match b {
-                Button::Up => *sel = (*sel + Profile::offered().len() - 1) % Profile::offered().len(),
-                Button::Down => *sel = (*sel + 1) % Profile::offered().len(),
-                Button::East => match Profile::offered()[*sel] {
+                Button::Up => *sel = (*sel + profiles.len() - 1) % profiles.len(),
+                Button::Down => *sel = (*sel + 1) % profiles.len(),
+                Button::East => match profiles[*sel] {
                     // Kids Mode's steps open over this one (`app_kids`), which `kids_done` leaves.
                     Profile::Child => self.kids_asked = true,
                     Profile::Choose => {
@@ -2995,11 +3129,12 @@ impl Setup {
                         features::apply(p, &mut self.switches);
                         self.motion = self.switches.motion;
                         self.tour_changed = true;
-                        self.step = network_step();
+                        self.after_play();
                     }
                 },
                 // Skipped: every switch stays as it is.
-                Button::Start => self.step = Step::Wifi,
+                Button::Start => self.after_play(),
+                Button::South if self.only.is_some() => self.step = Step::Done,
                 Button::South => self.step = Step::Look,
                 _ => {}
             },
@@ -3015,24 +3150,26 @@ impl Setup {
                     self.tour_changed = true;
                 }
                 match out {
-                    features::Out::Done => self.step = network_step(),
+                    features::Out::Done => self.after_play(),
                     features::Out::Back => self.step = Step::Play { sel: 2 },
                     features::Out::Stay | features::Out::Changed => {}
                 }
             }
             Step::ShelfSystems { .. } => self.press_shelf(b),
             Step::Wifi => self.press_wifi(b),
-            Step::Password { ssid, kb, hidden } => match kb.press(b) {
+            // L1 empties the field (the refused password stays in it, `a_refused_password_stays...`): leaving is then L1, B.
+            Step::Password { ssid, kb, hidden } => match if b == Button::L1 { kb.text.clear(); Outcome::Editing } else { kb.press(b) } {
                 Outcome::Editing => {}
                 Outcome::Cancelled => self.step = Step::Wifi,
                 // A hidden network may be open: an empty password connects without one.
                 Outcome::Done(psk) if psk.is_empty() && !*hidden => {}
                 Outcome::Done(psk) => {
                     let (ssid, hidden) = (ssid.clone(), *hidden);
+                    self.typed_password = psk.clone();
                     self.connect_to(ssid, (!psk.is_empty()).then_some(psk), hidden);
                 }
             },
-            Step::HiddenName { kb } => match kb.press(b) {
+            Step::HiddenName { kb } => match if b == Button::L1 { kb.text.clear(); Outcome::Editing } else { kb.press(b) } {
                 Outcome::Editing => {}
                 Outcome::Cancelled => self.step = Step::Wifi,
                 Outcome::Done(name) if name.trim().is_empty() => {}
@@ -3148,6 +3285,7 @@ impl Setup {
                 Button::North => self.switch_sharing(),
                 Button::West if crate::phone_upload_page::offered() => self.open_phone(),
                 Button::Start => self.step = Step::Done,
+                Button::South if self.no_wifi => self.enter_zone(),
                 Button::South => self.step = Step::Extras { sel: 0 },
                 _ => {}
             },
@@ -3213,6 +3351,11 @@ impl Setup {
     }
 
     /// Counts the games in every system's folder on a thread; `SetupEvent::GameCounts` brings the numbers.
+    /// How many games are on the card, as well as this page knows.
+    fn games_known(&self) -> usize {
+        self.games_counted.unwrap_or(0).max(self.games.len())
+    }
+
     fn count_games(&mut self) {
         self.counting = true;
         self.counted_at = Instant::now();
@@ -3238,15 +3381,17 @@ impl Setup {
                 let lines = [
                     if crate::device::current().host_owned() {
                         "A few short steps: a look you like, how you like to play, your games."
+                    } else if !crate::device::current().has_wifi() {
+                        "A few short steps: a look you like, how you like to play, your time zone, your games."
                     } else {
                         "A few short steps: a look you like, how you like to play, Wi-Fi, your time zone, your games."
                     },
                     "You can skip any of them and come back later.",
                 ];
                 let mut below = paragraphs(c, text, &lines, 360 + dy);
-                // On one of the Mini V2's siblings nobody on the project has tested: one calm line, once (this step
-                // is only on the first start; docs/DEVICES.md).
-                if let Some(m) = crate::device::current().model.filter(|m| m.experimental()) {
+                // On a handheld nobody on the project has played on: one calm line, once (this step is only on the
+                // first start; docs/DEVICES.md).
+                if let Some(m) = crate::device::current().model.filter(|m| m.experimental() && !m.played_on()) {
                     let name = m.name();
                     let line = if name.starts_with(['A', 'E', 'I', 'O', 'U']) {
                         format!("pocket-ui hasn't been tested on an {} yet. Most things should work; if something doesn't, Settings › Help & tools › Report a problem.", name)
@@ -3264,7 +3409,7 @@ impl Setup {
             // The app paints this step itself, with the previews (`paint_look`); without them, the names.
             Step::Look => self.paint_look(c, text, &[], false),
             Step::Play { sel } => {
-                features::paint_profiles(c, text, *sel);
+                features::paint_profiles(c, text, *sel, &self.profiles());
             }
             Step::ShelfSystems { sel } => self.paint_shelf_systems(c, text, *sel),
             Step::Wifi => {
@@ -3311,12 +3456,25 @@ impl Setup {
                     text.draw(c, Face::Body, 24, MARGIN, 272, if *alert { pal().alert } else { pal().dust }, &msg);
                 }
                 let done = if *hidden { "Connect (empty: open network)" } else { "Connect" };
-                hints(c, text, &[("A", "Type"), ("B", "Delete"), ("X", "Shift"), ("Y", "Symbols"), ("START", done)]);
+                // With something in the field, L1 empties it at once (then B leaves); in an empty one B leaves.
+                let delete = if kb.text.is_empty() { ("B", "Back") } else { ("B", "Delete") };
+                let mut bar = vec![("A", "Type"), delete];
+                if !kb.text.is_empty() {
+                    bar.push(("L1", "Clear"));
+                }
+                bar.extend([("X", "Shift"), ("Y", "Symbols"), ("START", done)]);
+                hints(c, text, &bar);
             }
             Step::HiddenName { kb } => {
                 text.draw(c, Face::Title, 50, MARGIN, 110, pal().chalk, "Name of the hidden network");
                 paint_keyboard_with(c, text, kb, "Next");
-                hints(c, text, &[("A", "Type"), ("B", "Delete"), ("X", "Shift"), ("Y", "Symbols"), ("START", "Next")]);
+                let delete = if kb.text.is_empty() { ("B", "Back") } else { ("B", "Delete") };
+                let mut bar = vec![("A", "Type"), delete];
+                if !kb.text.is_empty() {
+                    bar.push(("L1", "Clear"));
+                }
+                bar.extend([("X", "Shift"), ("Y", "Symbols"), ("START", "Next")]);
+                hints(c, text, &bar);
             }
             Step::Country { sel, list } => self.paint_country(c, text, *sel, list),
             Step::Portal(page) => page.paint(c, text, &dots),
@@ -3383,8 +3541,13 @@ impl Setup {
             }
             Step::Done => {
                 text.draw(c, Face::Title, 67, MARGIN, 300, pal().chalk, "You're all set");
-                let games = done_line(self.games.len());
-                let mut lines = vec![games.as_str(), "Settings › Help & tools › Tour shows every feature again, one card each."];
+                let games = done_line(self.games_known());
+                let mut lines = vec![games.as_str()];
+                // First start only, and not for a child: a first game in RetroArch or another emulator has no line over it.
+                if self.only.is_none() && self.home_line.get().unwrap_or_else(|| { let v = crate::first_game::told_on_last_page(&self.data_dir); self.home_line.set(Some(v)); v }) {
+                    lines.push(crate::first_game::LAST_PAGE_LINE);
+                }
+                lines.push("Settings › Help & tools › Tour shows every feature again, one card each.");
                 if self.zone_utc {
                     lines.push("The clock is on UTC. Set your time zone in Settings › System › Time.");
                 }
@@ -3398,18 +3561,26 @@ impl Setup {
     /// First start only: "Step 3 of 7" at the top right, so a new player knows how long the setup is. The Look step is
     /// painted by the app (`paint_look`, which calls this too); the cards have their own "n of m".
     fn paint_step_count(&self, c: &mut Canvas, text: &mut Text) {
-        if let Some(n) = self.only.is_none().then(|| step_number(&self.step)).flatten() {
-            text.draw_right(c, Face::Body, 28, c.w - MARGIN, 72, pal().dust, &format!("Step {n} of {}", first_steps()));
+        if let Some(n) = self.only.is_none().then(|| step_number(&self.step, self.no_wifi)).flatten() {
+            text.draw_right(c, Face::Body, 28, c.w - MARGIN, 72, pal().dust, &format!("Step {n} of {}", first_steps(self.no_wifi)));
         }
     }
 
     fn paint_extras(&mut self, c: &mut Canvas, text: &mut Text, sel: usize, dots: &str) {
-        text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Extras");
+        // On a short screen (768 lines) the heading, the rows and the note under them stand closer, so that the
+        // note's three lines end above the hint bar.
+        let short = crate::kit::short_screen(c.h);
+        let (head, sub, first, mut gap) = if short { (100, 148, 172, 8) } else { (140, 192, 240, 18) };
+        text.draw(c, Face::Title, 67, MARGIN, head, pal().chalk, "Extras");
+        // Once, for "6 games" on a card the shelf hasn't read yet.
+        if self.games_counted.is_none() && !self.counting {
+            self.count_games();
+        }
         let online = wifi::ip().is_some();
         let d = crate::device::current();
-        text.draw(c, Face::Body, 28, MARGIN, 192, pal().dust, extras_sub(online, d.host_owned(), d.has_wifi()));
+        text.draw(c, Face::Body, 28, MARGIN, sub, pal().dust, extras_sub(online, d.host_owned(), d.has_wifi()));
         let pictures = self.art == Art::Pictures;
-        let covers = extras_status(self.covers, self.covers_running, pictures, self.games.len(), dots);
+        let covers = extras_status(self.covers, self.covers_running, pictures, self.games_known(), dots);
         let ports = if self.ports.is_empty() { "Browse".to_string() } else { format!("{} ready to play", self.tab_count(PortTab::Ready)) };
         let rows = [
             ("Cover art", "Box art for your games, from the free libretro collection.", covers),
@@ -3420,9 +3591,20 @@ impl Setup {
         let width = c.w - 2 * MARGIN;
         // A title and a line under it: taller by their growth with Settings → Text size.
         let (g1, g2) = (crate::type_scale::grow(50), crate::type_scale::grow(24));
-        let h = 132 + g1 + g2;
+        let h = if short { 124 } else { 132 } + g1 + g2;
+        // The note reserves its measured height: with larger text the rows grow, so what is over (down to a
+        // small floor) comes out of the gaps between the rows, instead of running into the hint bar.
+        let note = text.wrap_prose(Face::Body, 24, PICTURES_NOTE, width);
+        let note_off = if short { 24 } else { 26 };
+        let n = extras_rows() as i32;
+        let note_h = (note.len() as i32 - 1) * crate::type_scale::line(24, 10) + 10;
+        let hints_top = c.h - 52 - 9 - crate::type_scale::row(36, 21) / 2 - crate::type_scale::grow(21) / 3 - 4;
+        let over = first + n * (h + gap) + note_off + note_h - hints_top;
+        if over > 0 {
+            gap -= ((over + n - 1) / n).min(gap - 2);
+        }
         for (i, (title, about, status)) in rows.iter().take(extras_rows()).enumerate() {
-            let y = 240 + i as i32 * (h + 18);
+            let y = first + i as i32 * (h + gap);
             let selected = i == sel;
             crate::kit::shelf_row(c, MARGIN, y, width, h, selected);
             // The switch works without Wi-Fi; the downloads and the browser need it.
@@ -3442,8 +3624,8 @@ impl Setup {
             text.draw_right(c, Face::Body, 24, MARGIN + width - 28, y + 58 + g1, dim, status);
         }
         // What the downloads are and where from, whatever is chosen: this step is where it is decided.
-        let mut y = 240 + extras_rows() as i32 * (h + 18) + 26;
-        for l in text.wrap_prose(Face::Body, 24, PICTURES_NOTE, width) {
+        let mut y = first + n * (h + gap) + note_off;
+        for l in note {
             text.draw(c, Face::Body, 24, MARGIN, y, pal().dust, &l);
             y += crate::type_scale::line(24, 10);
         }
@@ -3625,7 +3807,8 @@ impl Setup {
                     text.draw_right(c, Face::Title, 67, MARGIN + width - 40, top + 100, pal().chalk, &timezone::clock_at(now, off));
                     text.draw_right(c, Face::Body, 28, MARGIN + width - 40, top + 156, pal().dust, &timezone::fmt_offset(off));
                 }
-                text.draw(c, Face::Body, 28, MARGIN, top + h + 60, pal().dust, "The clock sets itself from the internet while you're online.");
+                let clock = if crate::device::current().has_wifi() { "The clock sets itself from the internet while you're online." } else { "No Wi-Fi here, so the clock doesn't set itself." };
+                text.draw(c, Face::Body, 28, MARGIN, top + h + 60, pal().dust, clock);
                 text.draw(c, Face::Body, 28, MARGIN, top + h + 104, pal().dust, "Settings › System › Time has the rest.");
                 let yes = if matches!(z.guess, Guess::Utc) { "Keep UTC" } else { "Looks right" };
                 hints(c, text, &[("A", yes), ("X", "Change"), ("START", "Next"), ("B", "Back")]);
@@ -3817,6 +4000,7 @@ impl Setup {
             _ if self.switching == Some(false) => (format!("Turning Wi-Fi off{dots}"), pal().dust),
             (Some((msg, true)), _) => (msg.clone(), pal().alert),
             _ if self.radio.is_off() => ("Wi-Fi is off. Press A to turn it on.".into(), pal().dust),
+            _ if self.advance_pending.is_some() => (format!("Connected to {}", self.advance_pending.as_deref().unwrap_or("")), pal().chalk),
             _ if self.confirming().is_some() => {
                 let e = self.confirming().unwrap();
                 let line = if self.only.is_none() {
@@ -4089,12 +4273,15 @@ pub fn paint_keyboard_shown(c: &mut Canvas, text: &mut Text, kb: &Keyboard, done
     text.set_translate(true);
     c.rect(MARGIN + 32 + w, 166, 4, 52, pal().ink);
 
-    let (gap, key_h, top) = (10, 82, 290);
+    // 82 px keys on 1080 lines; the five rows share what is left above the hints on a screen of fewer (1024x768: 67).
+    let (gap, top) = (10, 290);
+    let key_h = ((c.h - 100 - top - 4 * gap) / 5).clamp(48, 82);
     for (r, row) in kb.rows().iter().enumerate() {
         let y = top + r as i32 * (key_h + gap);
         // Character rows share one key width; the special row gets wider keys.
         let widths: Vec<i32> = if r == 4 {
-            vec![170, 170, 380, 170, 170]
+            // 170/170/380/170/170 shares of the field's width (on 1024 pixels the fixed sizes ran off the edge).
+            [170, 170, 380, 170, 170].iter().map(|w| (width - gap * 4) * w / 1060).collect()
         } else {
             vec![(width - gap * 9) / 10; row.len()]
         };
@@ -4251,6 +4438,21 @@ mod tests {
     fn setup(name: &str, zone: &str, reg: Option<&str>) -> (Setup, Arc<MockHw>) {
         let hw = Arc::new(mock(name, zone, reg));
         (setup_on(hw.clone(), name), hw)
+    }
+
+    /// Release review 0.1.12: "For a child" on a device without a Wi-Fi chip skips the Wi-Fi page like the other profiles.
+    #[test]
+    fn child_without_wifi_skips_the_wifi_page() {
+        let (mut s, _) = setup("child-no-wifi", "UTC", None);
+        s.no_wifi = true;
+        s.step = Step::Play { sel: 3 };
+        assert!(!s.press(Button::East));
+        assert!(s.take_kids_asked());
+        s.kids_done();
+        assert!(matches!(s.step, Step::Zone(_)), "at {}", s.at());
+        assert_eq!(step_number(&s.step, true), Some(4));
+        press(&mut s, &[Button::Start]);
+        assert_eq!(s.at(), "games");
     }
 
     /// Review 2026-11-01: sharing that came back by itself after the page opened: the page kept saying off, and X
@@ -4431,20 +4633,65 @@ mod tests {
     #[test]
     fn the_first_start_counts_its_steps() {
         let (mut s, _hw) = setup("count", "UTC", Some(IW_AT));
-        let mut seen = vec![(s.at(), step_number(&s.step))];
+        let mut seen = vec![(s.at(), step_number(&s.step, false))];
         press(&mut s, &[Button::East, Button::East]);
-        seen.push((s.at(), step_number(&s.step)));
+        seen.push((s.at(), step_number(&s.step, false)));
         press(&mut s, &[Button::Start, Button::Start, Button::Start]);
-        seen.push((s.at(), step_number(&s.step)));
+        seen.push((s.at(), step_number(&s.step, false)));
         press(&mut s, &[Button::Start]);
-        seen.push((s.at(), step_number(&s.step)));
+        seen.push((s.at(), step_number(&s.step, false)));
         let want = [("welcome", Some(1)), ("how you like to play", Some(3)), ("extras", Some(6)), ("games", Some(7))];
         assert_eq!(seen, want.map(|(a, n)| (a.to_string(), n)));
-        assert_eq!(step_number(&Step::Look), Some(2));
-        assert_eq!(step_number(&Step::Wifi), Some(4));
-        assert_eq!(step_number(&Step::Done), None, "the end is not a step");
-        assert_eq!(first_steps(), 7, "a handheld counts seven steps (the Steam Deck five)");
+        assert_eq!(step_number(&Step::Look, false), Some(2));
+        assert_eq!(step_number(&Step::Wifi, false), Some(4));
+        assert_eq!(step_number(&Step::Done, false), None, "the end is not a step");
+        assert_eq!(first_steps(false), 7, "a handheld counts seven steps (the Steam Deck five)");
         assert_eq!(shelf_setup("count-settings").only(Only::Wifi).only, Some(Only::Wifi));
+    }
+
+    /// RG28XX, RG35XX 2024: no Wi-Fi chip, so no Wi-Fi page and no Extras page ("downloads aren't available"): five steps.
+    #[test]
+    fn a_handheld_without_wifi_skips_the_wifi_and_extras_pages() {
+        let (mut s, _hw) = setup("count-nowifi", "UTC", Some(IW_AT));
+        s.no_wifi = true;
+        let mut seen = vec![(s.at(), step_number(&s.step, true))];
+        press(&mut s, &[Button::East, Button::East]);
+        seen.push((s.at(), step_number(&s.step, true)));
+        // A on "Simple": straight to the time zone.
+        press(&mut s, &[Button::East]);
+        assert!(matches!(s.step, Step::Zone(_)), "the zone follows the play style, not the Wi-Fi page: {}", s.at());
+        press(&mut s, &[Button::South]);
+        assert_eq!(s.at(), "how you like to play", "B from the zone goes back to the play style");
+        press(&mut s, &[Button::Start]);
+        assert!(matches!(s.step, Step::Zone(_)), "skipping the play style goes the same way");
+        press(&mut s, &[Button::Start]);
+        seen.push((s.at(), step_number(&s.step, true)));
+        let want = [("welcome", Some(1)), ("how you like to play", Some(3)), ("games", Some(5))];
+        assert_eq!(seen, want.map(|(a, n)| (a.to_string(), n)));
+        press(&mut s, &[Button::South]);
+        assert!(matches!(s.step, Step::Zone(_)), "B from the games goes back to the zone, not to an empty Extras page");
+        assert_eq!(first_steps(true), 5);
+        // Painted at the H700's size, the counter and the pages are there.
+        for (w, h) in [(1240, 1080), (640, 480)] {
+            let mut px = vec![0u32; (w * h) as usize];
+            s.paint(&mut Canvas::new(&mut px, w, h), &mut Text::builtin());
+            assert!(px.iter().any(|p| *p != px[0]), "{w}x{h} is not blank");
+        }
+    }
+
+    #[test]
+    fn a_restart_on_a_removed_page_of_a_handheld_without_wifi_opens_the_next_one() {
+        let name = "resume-nowifi";
+        let dir = std::env::temp_dir().join(format!("pocketui-setup-data-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (saved, opens) in [("wifi", "zone"), ("zone", "zone"), ("extras", "games")] {
+            std::fs::write(dir.join(RESUME_FILE), saved).unwrap();
+            let (mut s, _hw) = setup(name, "UTC", Some(IW_AT));
+            s.no_wifi = true;
+            assert_eq!(s.resume().at(), opens, "a restart saved at {saved}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -4600,6 +4847,48 @@ mod tests {
         let mut s = s.with_switches(Switches::default(), Vec::new());
         press(&mut s, &[Button::East, Button::East, Button::Start]);
         assert!(s.take_tour().is_none(), "skipped: nothing changed, which is what Simple leaves too");
+    }
+
+    /// Settings › Help & tools › How you like to play: the first start's question, answered later in one page.
+    #[test]
+    fn the_play_style_can_be_changed_later_in_one_page_without_the_first_start() {
+        use crate::features::{Profile, Switches};
+        let open = |name: &str, sw: Switches| {
+            let (s, _hw) = setup(name, "UTC", Some(IW_AT));
+            s.with_switches(sw, Vec::new()).only(Only::Play)
+        };
+        // A new device stands at Simple; "For a child" isn't offered (Settings › System › Kids mode is its place).
+        let mut s = open("play-later", Switches::default());
+        assert_eq!(s.at(), "how you like to play");
+        assert_eq!(s.profiles(), [Profile::Simple, Profile::Enthusiast, Profile::Choose]);
+        assert!(matches!(s.step, Step::Play { sel: 0 }));
+        // Down, A: Enthusiast is taken and the page closes (true: the setup ends), no Wi-Fi or zone page follows.
+        press(&mut s, &[Button::Down]);
+        assert!(s.press(Button::East), "A on a profile ends the page");
+        let (sw, _) = s.take_tour().expect("the profile's switches");
+        assert_eq!(Profile::of(&sw), Profile::Enthusiast);
+        // Reopened, it stands on what is set now; B leaves it alone.
+        let mut s = open("play-later-2", sw.clone());
+        assert!(matches!(s.step, Step::Play { sel: 1 }));
+        assert!(s.press(Button::South));
+        assert!(s.take_tour().is_none());
+        // One switch of its own: "Choose for yourself" is where it stands, and A there opens the cards, B comes back.
+        let mut own = Switches::default();
+        own.curator.lens = false;
+        assert_eq!(Profile::of(&own), Profile::Choose);
+        let mut s = open("play-later-3", own);
+        assert!(matches!(s.step, Step::Play { sel: 2 }));
+        assert!(!s.press(Button::East));
+        assert_eq!(s.at(), "feature cards");
+        // START skips the rest of the cards and ends the page, nothing further.
+        assert!(s.press(Button::Start));
+        // Painted at the Mini V2's size and at the H700's: three rows, none cut off the page.
+        for (w, h) in [(1240, 1080), (640, 480)] {
+            let mut px = vec![0u32; (w * h) as usize];
+            let mut s = open("play-later-paint", Switches::default());
+            s.paint(&mut Canvas::new(&mut px, w, h), &mut Text::builtin());
+            assert!(px.iter().any(|p| *p != px[0]), "{w}x{h} is not blank");
+        }
     }
 
     #[test]
@@ -4984,6 +5273,60 @@ mod tests {
         assert!(s.connecting_since.as_ref().is_some_and(|(ssid, t)| ssid == "Office" && *t > long_ago));
     }
 
+    /// New-player walk 2026-11-02: one wrong letter of a long password cost 67 presses, all of them again.
+    #[test]
+    fn a_refused_password_stays_in_the_field_to_be_corrected() {
+        let mut s = wifi_setup("wifi-refused-kept");
+        s.sel = wifi_row(&s, "Neighbour:5G");
+        press(&mut s, &[Button::East]);
+        if let Step::Password { kb, .. } = &mut s.step {
+            kb.text = "sommer-2025".into();
+        }
+        press(&mut s, &[Button::Start]);
+        s.on_event(SetupEvent::Connected {
+            ssid: "Neighbour:5G".into(),
+            result: Err("Error: Connection activation failed: Secrets were required, but not provided.".into()),
+        });
+        assert!(matches!(&s.step, Step::Password { kb, .. } if kb.text == "sommer-2025"), "{:?}", s.at());
+        assert_eq!(s.note, Some(("Wrong password. Try again.".into(), true)));
+        press(&mut s, &[Button::South]);
+        assert!(matches!(&s.step, Step::Password { kb, .. } if kb.text == "sommer-202"), "B takes the last letter off");
+        // Leaving for the list: L1 empties the field, B leaves (two presses, whatever was typed).
+        press(&mut s, &[Button::L1]);
+        assert!(matches!(&s.step, Step::Password { kb, .. } if kb.text.is_empty()), "L1 empties the field");
+        press(&mut s, &[Button::South]);
+        assert_eq!(s.at(), "wifi", "B on an empty field goes back to the list");
+        // The hidden network's name has the same keys.
+        let mut s = wifi_setup("wifi-hidden-clear");
+        s.step = Step::HiddenName { kb: Keyboard { text: "Cafe".into(), ..Keyboard::default() } };
+        press(&mut s, &[Button::L1, Button::South]);
+        assert_eq!(s.at(), "wifi");
+        // The hint bar offers it while there is something to clear, and says Back on an empty field; painted at both sizes.
+        for (w, h) in [(1240, 1080), (640, 480)] {
+            let mut s = wifi_setup("wifi-clear-paint");
+            s.step = Step::Password { ssid: "Neighbour:5G".into(), kb: Keyboard { text: "sommer-2025".into(), ..Keyboard::default() }, hidden: false };
+            let mut px = vec![0u32; (w * h) as usize];
+            s.paint(&mut Canvas::new(&mut px, w, h), &mut Text::builtin());
+            assert!(px.iter().any(|p| *p != px[0]), "{w}x{h} is not blank");
+            s.step = Step::HiddenName { kb: Keyboard { text: "Cafe".into(), ..Keyboard::default() } };
+            s.paint(&mut Canvas::new(&mut px, w, h), &mut Text::builtin());
+            assert!(px.iter().any(|p| *p != px[0]), "{w}x{h} is not blank");
+        }
+    }
+
+    /// New-player walk 2026-11-02: what a card that was never read has isn't in the list the shelf gave at the start.
+    #[test]
+    fn the_games_found_by_counting_are_the_ones_the_pages_speak_of() {
+        let (mut s, _) = setup("games-known", "UTC", None);
+        assert_eq!(s.games_known(), 0);
+        let mut found = Counted::default();
+        found.games.insert("gba".into(), 4);
+        found.games.insert("snes".into(), 2);
+        s.on_event(SetupEvent::GameCounts(found));
+        assert_eq!(s.games_known(), 6);
+        assert_eq!(done_line(s.games_known()), "Your 6 games are on the shelf.");
+    }
+
     #[test]
     fn a_refused_typed_password_brings_the_keyboard_back_with_the_reason() {
         let mut s = wifi_setup("wifi-refused");
@@ -4995,7 +5338,7 @@ mod tests {
             ssid: "Neighbour:5G".into(),
             result: Err("Error: Connection activation failed: Secrets were required, but not provided.".into()),
         });
-        assert!(matches!(&s.step, Step::Password { ssid, kb, hidden: false } if ssid == "Neighbour:5G" && kb.text.is_empty()));
+        assert!(matches!(&s.step, Step::Password { ssid, kb, hidden: false } if ssid == "Neighbour:5G" && kb.text.is_empty()), "nothing was typed in this test");
         assert_eq!(s.note, Some(("Wrong password. Try again.".into(), true)));
         // Another failure is not about the password: back to the list with what happened.
         s.on_event(SetupEvent::Connected { ssid: "Neighbour:5G".into(), result: Err("Error: Timeout expired (45 seconds)".into()) });
@@ -5267,6 +5610,133 @@ mod tests {
         s.on_event(SetupEvent::Forgot { ssid: "Home".into(), result: Ok(()) });
         s.on_event(SetupEvent::CountrySet(Ok(None)));
         assert_eq!(fake.scans_run(), before, "the scan after such an operation is the worker's own (`NetState::exclusive`)");
+    }
+
+    /// A first-start setup on the Wi-Fi step, with the connect of `ssid` under way as the page's own press would have
+    /// left it, and a way to hear the wait's `Advance`.
+    fn connecting_in_first_start(name: &str) -> (Setup, std::sync::mpsc::Receiver<SetupEvent>) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let tx = std::sync::Mutex::new(tx);
+        let mut s = setup(name, "UTC", Some(IW_AT)).0.with_wifi_demo();
+        s.no_wifi = false;
+        s.notify = Arc::new(move |e| {
+            if matches!(e, SetupEvent::Advance { .. }) {
+                let _ = tx.lock().unwrap().send(e);
+            }
+        });
+        s.step = Step::Connecting { ssid: "Home".into() };
+        s.advance_armed = true;
+        (s, rx)
+    }
+
+    fn heard_advance(rx: &std::sync::mpsc::Receiver<SetupEvent>) -> SetupEvent {
+        rx.recv_timeout(std::time::Duration::from_secs(10)).expect("the wait ends with an Advance")
+    }
+
+    #[test]
+    fn first_start_goes_on_to_the_time_zone_by_itself_after_a_connection() {
+        let (mut s, rx) = connecting_in_first_start("wifi-advance-ok");
+        s.on_event(SetupEvent::Connected { ssid: "Home".into(), result: Ok(()) });
+        assert_eq!(s.at(), "wifi", "the page shows the result first");
+        assert_eq!(s.wifi_status("").0, "Connected to Home");
+        s.on_event(heard_advance(&rx));
+        assert_eq!(s.at(), "zone", "on without a press");
+        assert!(s.advance_pending.is_none());
+        // A saved network, connected without its password, the same way.
+        let (mut s, rx) = connecting_in_first_start("wifi-advance-saved");
+        s.on_event(SetupEvent::ConnectedSaved { ssid: "Home".into(), result: Ok(()) });
+        s.on_event(heard_advance(&rx));
+        assert_eq!(s.at(), "zone");
+    }
+
+    #[test]
+    fn first_start_stays_on_wifi_after_a_failed_connection() {
+        let (mut s, rx) = connecting_in_first_start("wifi-advance-fail");
+        s.on_event(SetupEvent::Connected { ssid: "Home".into(), result: Err("Error: Timeout expired (45 seconds)".into()) });
+        assert_eq!(s.at(), "wifi");
+        assert!(s.note.as_ref().is_some_and(|(_, bad)| *bad), "the message stays");
+        assert!(rx.recv_timeout(std::time::Duration::from_millis(1800)).is_err(), "no wait was started");
+        // A refused password: the keyboard again, the typed password kept.
+        let (mut s, _rx) = connecting_in_first_start("wifi-advance-refused");
+        s.typed_password = "sommer-2025".into();
+        s.on_event(SetupEvent::Connected {
+            ssid: "Home".into(),
+            result: Err("Error: Connection activation failed: Secrets were required, but not provided.".into()),
+        });
+        assert!(matches!(&s.step, Step::Password { kb, .. } if kb.text == "sommer-2025"));
+        // A later Connected that was not started here (a stale answer) does not move on either.
+        s.on_event(SetupEvent::Connected { ssid: "Home".into(), result: Ok(()) });
+        assert!(s.advance_pending.is_none());
+    }
+
+    #[test]
+    fn back_from_the_time_zone_does_not_bounce_forward_again() {
+        let (mut s, rx) = connecting_in_first_start("wifi-advance-back");
+        s.on_event(SetupEvent::Connected { ssid: "Home".into(), result: Ok(()) });
+        s.on_event(heard_advance(&rx));
+        assert_eq!(s.at(), "zone");
+        s.zone_back();
+        assert_eq!(s.at(), "wifi");
+        // Connected already, and a list that says so: the player stays in control.
+        s.on_event(SetupEvent::Net);
+        s.on_event(SetupEvent::Advance { gen: s.advance_gen });
+        assert_eq!(s.at(), "wifi");
+        assert!(rx.recv_timeout(std::time::Duration::from_millis(1800)).is_err(), "nothing waits to move on");
+        // And START is still the way on.
+        press(&mut s, &[Button::Start]);
+        assert_eq!(s.at(), "zone");
+    }
+
+    #[test]
+    fn leaving_or_pressing_during_the_connected_moment_cancels_the_move() {
+        // B within the second: back to the play style, and the late Advance finds nothing to do.
+        let (mut s, rx) = connecting_in_first_start("wifi-advance-b");
+        s.on_event(SetupEvent::Connected { ssid: "Home".into(), result: Ok(()) });
+        press(&mut s, &[Button::South]);
+        assert_eq!(s.at(), "how you like to play");
+        s.on_event(heard_advance(&rx));
+        assert_eq!(s.at(), "how you like to play", "not pulled forward later");
+        // Any other press hands the page back too.
+        let (mut s, rx) = connecting_in_first_start("wifi-advance-down");
+        s.on_event(SetupEvent::Connected { ssid: "Home".into(), result: Ok(()) });
+        press(&mut s, &[Button::Down]);
+        s.on_event(heard_advance(&rx));
+        assert_eq!(s.at(), "wifi");
+        // Leaving while the connect is still going (the Connecting page has no way out, but the setup may be moved
+        // by other means): the result arriving on another step is not a connection made here.
+        let (mut s, rx) = connecting_in_first_start("wifi-advance-left");
+        s.step = Step::Play { sel: 0 };
+        s.on_event(SetupEvent::Connected { ssid: "Home".into(), result: Ok(()) });
+        assert!(rx.recv_timeout(std::time::Duration::from_millis(1800)).is_err());
+    }
+
+    #[test]
+    fn a_connection_with_a_sign_in_page_does_not_move_on() {
+        let (mut s, rx) = connecting_in_first_start("wifi-advance-portal");
+        s.on_event(SetupEvent::Connected { ssid: "Home".into(), result: Ok(()) });
+        s.on_event(check(net_check::Net::Portal));
+        s.on_event(heard_advance(&rx));
+        assert_eq!(s.at(), "wifi", "the sign-in row is how it goes on");
+    }
+
+    #[test]
+    fn settings_wifi_page_never_moves_on_by_itself() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let tx = std::sync::Mutex::new(tx);
+        let mut s = wifi_setup("wifi-advance-settings");
+        s.notify = Arc::new(move |e| {
+            if matches!(e, SetupEvent::Advance { .. }) {
+                let _ = tx.lock().unwrap().send(e);
+            }
+        });
+        s.step = Step::Connecting { ssid: "Home".into() };
+        s.advance_armed = true;
+        s.on_event(SetupEvent::Connected { ssid: "Home".into(), result: Ok(()) });
+        assert_eq!(s.at(), "wifi");
+        assert_eq!(s.wifi_status("").0, "Connected to Home", "the note as before");
+        assert!(rx.recv_timeout(std::time::Duration::from_millis(1800)).is_err(), "no wait in Settings");
+        s.on_event(SetupEvent::Advance { gen: 0 });
+        assert_eq!(s.at(), "wifi");
     }
 
     fn wifi_hints_for(s: &Setup) -> Vec<(&'static str, &'static str)> {
@@ -5642,6 +6112,11 @@ mod tests {
             unread_lines(&[stray("Junk", None), stray("Stuff", None)], &[], "roms"),
             ["Folders without a system: Junk, Stuff. The tiles below show the folder names."]
         );
+        // New-player walk 2026-11-02: seven names, cut in the seventh, and what to do cut off with them.
+        assert_eq!(
+            unread_lines(&[stray("GBA ROMS", None), stray("Sega Genesis", Some("megadrive")), stray("Stuff", None)], &[], "roms"),
+            ["3 folders without a system. Settings › Games › Game check says where their games go."]
+        );
     }
 
     #[test]
@@ -5792,6 +6267,26 @@ mod hint_bars {
         }
     }
 
+    /// The first start's games step on a card with the GAMES drive says when the drive is there, in three languages, and
+    /// fits the half of the page it stands in at 640x480 (painted at 1280 wide) in Normal and Large text.
+    #[test]
+    fn the_first_start_says_when_the_games_drive_appears() {
+        assert!(GAMES_DRIVE_FIRST_WAY.contains("GAMES") && GAMES_DRIVE_FIRST_WAY.contains("first start"));
+        let mut text = Text::new();
+        let col_w = (1280 - 2 * MARGIN - 40) / 2;
+        for (lang, table) in [("en", None), ("de", Some(crate::i18n::Lang::De)), ("es", Some(crate::i18n::Lang::Es))] {
+            let line = match table {
+                None => GAMES_DRIVE_FIRST_WAY.to_string(),
+                Some(l) => l.table().and_then(|t| t.translate(GAMES_DRIVE_FIRST_WAY)).unwrap_or_else(|| panic!("{lang}: no line")).into_owned(),
+            };
+            assert!(line.contains("GAMES"), "{lang}: {line}");
+            for px in [24, 30] {
+                let lines = text.wrap_prose(Face::Body, px, &line, col_w);
+                assert!(lines.len() <= 4, "{lang} at {px}: {} lines: {lines:?}", lines.len());
+            }
+        }
+    }
+
     #[test]
     fn extras_offers_a_only_where_it_works() {
         assert_eq!(keys(&extras_hints("Download", false)), ["B", "START"], "offline: nothing to download");
@@ -5810,7 +6305,7 @@ mod hint_bars {
         // The Deck's games go through Desktop Mode.
         assert_eq!(ways_for(true, true, true), []);
         let de = crate::i18n::german();
-        for line in ["File sharing", "USB file transfer", "Connect to Wi-Fi first", "Connect to Wi-Fi", "From your phone", "Same Wi-Fi as your phone", "Turn on USB file transfer", "Turn off USB file transfer", "On", "Off", "Switching…", USB_WAY, USB_FAILED] {
+        for line in ["File sharing", "USB file transfer", "Connect to Wi-Fi first", "Connect to Wi-Fi", "From your phone", "Or a computer's browser, same Wi-Fi", "Turn on USB file transfer", "Turn off USB file transfer", "On", "Off", "Switching…", USB_WAY, USB_FAILED] {
             assert!(de.translate(line).is_some(), "{line} has a German line");
         }
     }

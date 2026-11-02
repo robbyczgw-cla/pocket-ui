@@ -95,6 +95,24 @@ impl Profile {
         Profile::ALL.into_iter().filter(|p| *p != Profile::Child || !crate::device::hides_here("kids")).collect()
     }
 
+    /// Settings › Help & tools › How you like to play: the first start's answers, without Kids Mode (it has its own row).
+    pub fn offered_in_settings() -> Vec<Profile> {
+        Profile::offered().into_iter().filter(|p| *p != Profile::Child).collect()
+    }
+
+    /// The profile the switches stand at: Simple or Enthusiast where they are exactly what it sets, otherwise the
+    /// player's own choice.
+    pub fn of(switches: &Switches) -> Profile {
+        [Profile::Simple, Profile::Enthusiast]
+            .into_iter()
+            .find(|p| {
+                let mut s = switches.clone();
+                apply(*p, &mut s);
+                s == *switches
+            })
+            .unwrap_or(Profile::Choose)
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             Profile::Simple => "Simple",
@@ -894,8 +912,11 @@ impl Cards {
             text.draw(c, Face::Body, 28, MARGIN, 208 + k as i32 * 38, pal().dust, line);
         }
 
-        let (pw, ph) = PREVIEW;
-        let (px, py) = (MARGIN + 8, 300);
+        // On a short screen (768 lines) the preview is smaller and the choices lower-key, so that the card ends above the
+        // hint bar; the column beside the preview gets the width the preview gave up.
+        let short = crate::kit::short_screen(c.h);
+        let (pw, ph) = if short { (360 * PREVIEW.0 / PREVIEW.1, 360) } else { PREVIEW };
+        let (px, py) = (MARGIN + 8, if short { 280 } else { 300 });
         c.round_rect(px - 8, py - 8, pw + 16, ph + 16, 16, pal().keycap);
         if let Some(img) = self.preview(text) {
             c.blit_scaled(img, px, py, pw, ph);
@@ -908,7 +929,7 @@ impl Cards {
         let mut y = py - 8;
         if let Some(sw) = f.switch {
             let now = if (sw.get)(&self.switches) { 0 } else { 1 };
-            let (row, gap) = (88, 14);
+            let (row, gap) = if short { (72, 10) } else { (88, 14) };
             for (k, label) in CHOICES.iter().enumerate() {
                 let selected = k == self.choice;
                 c.rect(x, y, w, row, if selected { pal().label } else { pal().spine });
@@ -929,7 +950,7 @@ impl Cards {
                 hits.choices.push((Area::new(x, y, w, row), k));
                 y += row + gap;
             }
-            y += 30;
+            y += if short { 20 } else { 30 };
             let later = if self.choice == LATER {
                 "Asked again in Settings › Help & tools › Tour. Changed any time in"
             } else {
@@ -1014,35 +1035,37 @@ fn half(px: &[u32], w: usize, h: usize) -> Image {
 
 /// "How do you like to play?": the three profiles as rows, the selected one paper, and under them what it turns on
 /// and off (from the registry, so it can't say anything the switches don't do).
-pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize) -> Hits {
+pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[Profile]) -> Hits {
     c.clear(pal().void);
     let mut hits = Hits { sel, ..Default::default() };
-    text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "How do you like to play?");
+    // A short screen (768 lines) takes the heading and the four rows closer, so the line under them clears the hints.
+    let short = crate::kit::short_screen(c.h);
+    let (head, sub, first, pitch, row_h) = if short { (100, 148, 172, 108, 100) } else { (140, 192, 230, 124, 112) };
+    text.draw(c, Face::Title, 67, MARGIN, head, pal().chalk, "How do you like to play?");
     text.draw(
         c,
         Face::Body,
         28,
         MARGIN,
-        192,
+        sub,
         pal().dust,
         "A starting point for the extras. Every switch stays in Settings.",
     );
     let width = c.w - 2 * MARGIN;
-    let profiles = Profile::offered();
     for (i, p) in profiles.iter().enumerate() {
-        let y = 230 + i as i32 * 124;
+        let y = first + i as i32 * pitch;
         let selected = i == sel;
-        c.rect(MARGIN, y, width, 112, if selected { pal().label } else { pal().spine });
+        c.rect(MARGIN, y, width, row_h, if selected { pal().label } else { pal().spine });
         if selected {
-            crate::game_card::lift_shadow(c, MARGIN, y + 112, width, pal().t);
+            crate::game_card::lift_shadow(c, MARGIN, y + row_h, width, pal().t);
         }
         let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else { (pal().chalk, pal().dust) };
-        text.draw(c, Face::Title, 46, MARGIN + 28, y + 50, fg, p.name());
+        text.draw(c, Face::Title, 46, MARGIN + 28, y + row_h * 50 / 112, fg, p.name());
         let blurb = text.fit(Face::Body, 24, p.blurb(), width - 56);
-        text.draw(c, Face::Body, 24, MARGIN + 28, y + 90, dim, &blurb);
-        hits.choices.push((Area::new(MARGIN, y, width, 112), i));
+        text.draw(c, Face::Body, 24, MARGIN + 28, y + row_h * 90 / 112, dim, &blurb);
+        hits.choices.push((Area::new(MARGIN, y, width, row_h), i));
     }
-    let mut y = 230 + profiles.len() as i32 * 124 + 30;
+    let mut y = first + profiles.len() as i32 * pitch + if short { 22 } else { 30 };
     let p = profiles[sel.min(profiles.len() - 1)];
     let lines: Vec<(String, u32)> = match p {
         Profile::Child => vec![
@@ -1367,7 +1390,7 @@ mod tests {
         c.press(Button::R1);
         let hits = c.paint(&mut Canvas::new(&mut px, w, h), &mut text);
         assert!(hits.choices.is_empty(), "nothing to switch");
-        let hits = paint_profiles(&mut Canvas::new(&mut px, w, h), &mut text, 1);
+        let hits = paint_profiles(&mut Canvas::new(&mut px, w, h), &mut text, 1, &Profile::offered());
         assert_eq!((hits.choices.len(), hits.sel), (4, 1));
     }
 }

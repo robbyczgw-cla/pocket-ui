@@ -136,7 +136,7 @@ DraStic (usr/config/drastic in SYSTEM): the Nintendo DS emulator DraStic by Exop
   closed-source software. It is passed on unchanged, as ROCKNIX does, on the basis of the author's 2017 forum
   statement that there is "no real harm" in distributing it (usr/config/drastic/LICENSE.pdf, and ROCKNIX's
   pocket-ui-info/rocknix-licenses/licenses/DRASTIC.pdf). That is a tolerance, not a formal licence, and no source
-  code for it exists next to the image. Credit: Exophase. We remove it from the image on request of the author.
+  code for it exists. Credit: Exophase. We remove it from the image on request of the author.
   Its BIOS replacement (drastic_bios_arm7.bin, drastic_bios_arm9.bin) is open: Gilead Kutnick, BSD licence, text in
   usr/config/drastic/system/drastic_bios_readme.txt.
 
@@ -151,9 +151,11 @@ pocket-ui and pocket-core
 Source code
 -----------
 
-The complete source code of everything on this card that is under the GNU GPL or LGPL is offered next to
-this image: @RELEASE_URL@ (files ending in -source...). See pocket-ui-info/SOURCE-OFFER.txt for the list
-and for our written offer to send it to you.
+pocket-ui's source and the scripts that build this image are next to the image on @RELEASE_URL@
+(pocket-ui-@VERSION@-source.tar.gz); the rest of the source is public at the links below. For at least three
+years from the release of this image, anyone can ask for the complete corresponding source code of the GNU GPL
+and LGPL software on this card, for no charge beyond the cost of providing it: open an issue at the project's
+GitHub page. See pocket-ui-info/SOURCE-OFFER.txt.
 
 ROCKNIX @ROCKNIX_TAG@, including the kernel and its patches:
   https://github.com/ROCKNIX/distribution/tree/@ROCKNIX_TAG@

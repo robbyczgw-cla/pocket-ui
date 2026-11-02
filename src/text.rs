@@ -645,6 +645,8 @@ impl Text {
 
     fn wrap_with(&mut self, face: Face, px: u32, s: &str, max: i32, no_widow: bool) -> Vec<String> {
         let px = crate::type_scale::px(px);
+        // A game's name stays as it is in pieces too: "Sonic Adventure" on two lines isn't "Sonic" and the word "Adventure".
+        let name = !self.raw && crate::i18n::is_name(s);
         let s = self.translated(s);
         let translated = !self.raw && !matches!(s, crate::i18n::Tr::Same(_));
         let mut lines: Vec<String> = Vec::new();
@@ -679,7 +681,11 @@ impl Text {
             }
         }
         // Lines of a translation are translated already when they are painted.
-        if translated {
+        if name {
+            for l in &lines {
+                self.tr.name_line(l);
+            }
+        } else if translated {
             for l in &lines {
                 self.tr.is_translated(l);
             }

@@ -1,6 +1,6 @@
 # The pause menu (HOME)
 
-**Tap HOME** while playing to pause the game and open the menu. The game stays dimmed in the
+**Tap HOME** while playing to pause the game and open the menu; the first game you start on pocket-ui's own host says so, once (a game in RetroArch or a standalone emulator doesn't, and neither does Android), and so does the last page of the first start: "In a game, HOME opens the menu: save, load, quit." (not in Kids Mode). The game stays dimmed in the
 background; on pocket-ui's own host the menu is there at once and the dimmed game appears behind it a moment
 later. What the menu offers depends on the emulator the system uses (see
 [Systems](systems.md)):

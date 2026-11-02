@@ -2016,6 +2016,9 @@ impl App {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
         self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
+        // On a short screen (768 lines) the rows share what is left above two lines of the explanation and the hints.
+        let step = pocket_ui::type_scale::line(NU_SMALL, 12);
+        let row = row.min((c.h - pad - NU_PILL - 16 - top - 44 - 2 * step) / SETTINGS_ROWS.len() as i32).max(row * 3 / 4);
         let sel = self.curator.settings_sel;
         for (i, (name, _)) in SETTINGS_ROWS.iter().enumerate() {
             let y = top + i as i32 * row;

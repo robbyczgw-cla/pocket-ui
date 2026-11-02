@@ -97,12 +97,12 @@ pub(crate) fn set_store_offered(on: bool) {
 /// Whether Settings has a row for `opens`, with the Store `store`-offered or not. The LEDs row (the lights around the
 /// sticks) is left out on a device without sticks (the H700 handhelds).
 fn shown(opens: Opens, store: bool) -> bool {
-    (!matches!(opens, Opens::UsbTransfer) || pocket_ui::usb_transfer::offered())
-        && shown_on(opens, store, pocket_ui::device::current().has_sticks(), pocket_ui::device::current().host_owned())
+    shown_on(opens, store, pocket_ui::device::current().has_sticks(), pocket_ui::device::current().host_owned())
 }
 
+/// USB file transfer is retired (`usb_transfer::RETIRED`): its row and its part of the Connections line stay out.
 fn shown_on(opens: Opens, store: bool, sticks: bool, host_owned: bool) -> bool {
-    (store || !matches!(opens, Opens::Store)) && !device_key(opens).is_some_and(|k| pocket_ui::device::hides(k, sticks, host_owned))
+    (!matches!(opens, Opens::UsbTransfer) || pocket_ui::usb_transfer::offered()) && (store || !matches!(opens, Opens::Store)) && !device_key(opens).is_some_and(|k| pocket_ui::device::hides(k, sticks, host_owned))
 }
 
 /// The pages a device may lack (`pocket_ui::device::hides`, also behind the Tour cards): the lights around the sticks;
@@ -303,6 +303,7 @@ impl App {
             Opens::SleepPower => page(&self.sleep_power_value()),
             Opens::PerfFan => page(&values::perf_fan(self.perf_prefs().games_performance, self.perf_prefs().games_fan)),
             Opens::Setup(Only::Look) => page(self.theme.name()),
+            Opens::Setup(Only::Play) => pocket_ui::features::Profile::of(&self.switches()).name().to_string(),
             Opens::Colours if i == sel => format!("‹ {} ›", pocket_ui::palette::colours().label()),
             Opens::Colours => pocket_ui::palette::colours().label().to_string(),
             Opens::Font if i == sel => format!("‹ {} ›", pocket_ui::font_style::get().label()),
@@ -838,7 +839,7 @@ mod tests {
         assert_eq!(deck("Sound & feel"), "Animations, playful cases, old-TV switch-on, motion, sounds, case sounds.");
         assert_eq!(deck("Connections"), "Web companion.");
         assert_eq!(deck("System"), "Language, sleep & power, storage, backup & reset.");
-        assert_eq!(deck("Help & tools"), "Tour, manual, report a problem, about.");
+        assert_eq!(deck("Help & tools"), "How you like to play, Tour, manual, report a problem, about.");
         assert_eq!(deck("Playing"), "On start, quit, buttons, over the game, frames, battery, achievements.");
     }
 
