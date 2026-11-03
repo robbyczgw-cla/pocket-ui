@@ -149,6 +149,36 @@
     "Nintendo"
    ]
   },
+  "amiga": {
+   "summary": "Commodore's home computers from 1985, with a Motorola 68000 processor and custom chips for graphics and sound. After Commodore's end in 1994, Escom kept them going for a short while.",
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "Commodore International",
+     "qid": "Q208305",
+     "source": "wikidata:P176"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Escom",
+     "source": "infobox:manufacturer",
+     "match": "Escom AG"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Motorola 68000",
+     "qid": "Q667808",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "Motorola",
+      "qid": "Q259011",
+      "source": "wikidata:P176"
+     }
+    }
+   ]
+  },
   "atari2600": {
    "summary": "Atari's subsidiary Cyan Engineering built the prototype, codenamed Stella, after Nolan Bushnell went looking for a programmable home console. A MOS 6507 processor and the Television Interface Adaptor (TIA) run it.",
    "people": [
@@ -236,6 +266,49 @@
     "Atari, Inc."
    ]
   },
+  "atari5200": {
+   "summary": "Atari's 1982 console, closely related to its 8-bit computers. A MOS 6502 runs it.",
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "Atari, Inc.",
+     "source": "infobox:manufacturer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Atari Corporation",
+     "qid": "Q3627870",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "MOS 6502",
+     "qid": "Q255528",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "MOS Technology",
+      "qid": "Q852174",
+      "source": "wikidata:P176"
+     }
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Atari 2600",
+     "qid": "Q206261",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Atari 7800",
+     "qid": "Q753600",
+     "source": "wikidata:P156"
+    }
+   ]
+  },
   "atari7800": {
    "summary": "Designed for Atari by General Computer Corporation; its MARIA chip draws arcade-style graphics, and it plays almost all 2600 cartridges.",
    "makers": [
@@ -292,6 +365,34 @@
    ],
    "game_makers": [
     "Atari Corporation"
+   ]
+  },
+  "atari800": {
+   "summary": "Atari's computers from 1979, from the 400 and 800 to the XL and XE. A MOS 6502 runs them.",
+   "makers": [
+    {
+     "role": "Manufacturer",
+     "name": "Atari, Inc.",
+     "source": "infobox:manufacturer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Atari Corporation",
+     "source": "infobox:manufacturer"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "MOS 6502",
+     "qid": "Q255528",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "MOS Technology",
+      "qid": "Q852174",
+      "source": "wikidata:P176"
+     }
+    }
    ]
   },
   "atarijaguar": {
@@ -417,6 +518,48 @@
    ],
    "game_makers": [
     "Atari Corporation"
+   ]
+  },
+  "c64": {
+   "summary": "Commodore's 1982 home computer. A MOS 6510 runs it, with the VIC-II for graphics and the SID chip for sound.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Commodore International",
+     "qid": "Q208305",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Commodore International",
+     "qid": "Q208305",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "MOS 6510",
+     "qid": "Q378246",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "MOS Technology",
+      "qid": "Q852174",
+      "source": "wikidata:P176"
+     }
+    },
+    {
+     "role": "Graphics",
+     "name": "VIC-II",
+     "qid": "Q1639225",
+     "source": "wikidata:P527"
+    },
+    {
+     "role": "Sound",
+     "name": "SID",
+     "qid": "Q1337888",
+     "source": "wikidata:P527"
+    }
    ]
   },
   "colecovision": {
@@ -1545,6 +1688,18 @@
     "SNK"
    ]
   },
+  "pc": {
+   "summary": "Microsoft's operating system for the early PC games; those games run here in an emulator, so there are no chips to name.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Microsoft",
+     "qid": "Q2283",
+     "source": "wikidata:P178"
+    }
+   ],
+   "chips": []
+  },
   "pcengine": {
    "summary": "Made by NEC with Hudson Soft. The processor is Hudson Soft's HuC6280, the picture chips its HuC6270 and HuC6260.",
    "makers": [
@@ -1620,6 +1775,17 @@
     "NEC",
     "Hudson Soft"
    ]
+  },
+  "pico-8": {
+   "summary": "A fantasy console from Lexaloffle Games: it exists only as a program, so there are no chips to name.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Lexaloffle Games",
+     "source": "infobox:developer"
+    }
+   ],
+   "chips": []
   },
   "pokemini": {
    "summary": "Made by Nintendo with The Pokémon Company. A small Seiko Epson S1C88 processor runs the games.",
@@ -1737,6 +1903,54 @@
     "Sony Interactive Entertainment"
    ]
   },
+  "ps3": {
+   "summary": "Sony's 2006 console. The Cell processor, developed with Toshiba and IBM, runs it, and the RSX chip from Nvidia draws the picture.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Sony Interactive Entertainment",
+     "qid": "Q18594",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Foxconn",
+     "source": "infobox:manufacturer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Asus",
+     "source": "infobox:manufacturer"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Cell",
+     "qid": "Q863823",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "IBM",
+      "qid": "Q37156",
+      "source": "wikidata:P178"
+     }
+    },
+    {
+     "role": "Graphics",
+     "name": "RSX Reality Synthesizer",
+     "qid": "Q2598676",
+     "source": "wikidata:P2560"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "PlayStation 2",
+     "qid": "Q10680",
+     "source": "wikidata:P155"
+    }
+   ]
+  },
   "psp": {
    "summary": "A handheld from Sony Computer Entertainment, with a processor based on the MIPS R4000. It came in several models, among them the PSP Go.",
    "makers": [
@@ -1812,6 +2026,43 @@
    ],
    "game_makers": [
     "Sony Interactive Entertainment"
+   ]
+  },
+  "psvita": {
+   "summary": "Sony's 2011 handheld. A quad-core ARM Cortex-A9 runs it with a PowerVR graphics chip.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Sony Interactive Entertainment",
+     "qid": "Q18594",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Sony Electronics",
+     "source": "infobox:manufacturer"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "ARM Cortex-A9",
+     "qid": "Q1997451",
+     "source": "wikidata:P880"
+    },
+    {
+     "role": "Graphics",
+     "name": "PowerVR SGX543MP4+",
+     "source": "infobox:graphics"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "PlayStation Portable",
+     "qid": "Q170325",
+     "source": "wikidata:P155"
+    }
    ]
   },
   "psx": {
@@ -1938,6 +2189,17 @@
    "game_makers": [
     "Sega"
    ]
+  },
+  "scummvm": {
+   "summary": "A free program by the ScummVM Team that runs classic adventure games; it is no console and has no chips.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "ScummVM Team",
+     "source": "infobox:developer"
+    }
+   ],
+   "chips": []
   },
   "sega32x": {
    "summary": "Sega's add-on for the Mega Drive, with two SH-2 processors of its own; it was meant to carry players over to the Saturn.",
@@ -2285,6 +2547,18 @@
     }
    ]
   },
+  "tic-80": {
+   "summary": "A fantasy computer by Vadim Grigoruk: it exists only as a program, so there are no chips to name.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Vadim Grigoruk",
+     "source": "infobox:developer",
+     "match": "Vadim Grigoruk (Nesbox)"
+    }
+   ],
+   "chips": []
+  },
   "vectrex": {
    "summary": "Conceived by John Ross at Smith Engineering as a handheld; it became a tabletop console with its own vector screen.",
    "makers": [
@@ -2467,6 +2741,72 @@
     "Nintendo"
    ]
   },
+  "wiiu": {
+   "summary": "Nintendo's 2012 console with the GamePad. An IBM PowerPC chip called Espresso runs it, with the Latte graphics chip.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Nintendo",
+     "qid": "Q8093",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Foxconn",
+     "source": "infobox:manufacturer"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Mitsumi",
+     "source": "infobox:manufacturer"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Espresso",
+     "qid": "Q719867",
+     "source": "wikidata:P880",
+     "maker": {
+      "name": "IBM",
+      "qid": "Q37156",
+      "source": "wikidata:P176"
+     }
+    },
+    {
+     "role": "Graphics",
+     "name": "Latte",
+     "qid": "Q6497036",
+     "source": "wikidata:P2560",
+     "maker": {
+      "name": "Nintendo",
+      "qid": "Q8093",
+      "source": "wikidata:P178"
+     }
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Wii",
+     "qid": "Q8079",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Nintendo Switch",
+     "qid": "Q19610114",
+     "source": "wikidata:P156"
+    }
+   ],
+   "best_selling": [
+    {
+     "title": "Mario Kart 8",
+     "figure": "8.46 million",
+     "source": "infobox:top_game"
+    }
+   ]
+  },
   "wonderswan": {
    "summary": "Bandai's handheld, developed with Gunpei Yokoi's company Koto Laboratory; it was the last hardware he worked on. An NEC V30 MZ runs it.",
    "people": [
@@ -2582,6 +2922,55 @@
    ],
    "game_makers": [
     "Microsoft"
+   ]
+  },
+  "zxspectrum": {
+   "summary": "Sinclair's cheap home computer of 1982. A Z80A processor runs it, a ULA chip draws the picture and a beeper makes the sound.",
+   "makers": [
+    {
+     "role": "Developer",
+     "name": "Sinclair Research",
+     "qid": "Q4409",
+     "source": "wikidata:P178"
+    },
+    {
+     "role": "Manufacturer",
+     "name": "Sinclair Research",
+     "qid": "Q4409",
+     "source": "wikidata:P176"
+    }
+   ],
+   "chips": [
+    {
+     "role": "CPU",
+     "name": "Zilog Z80A",
+     "qid": "Q114405361",
+     "source": "wikidata:P880"
+    },
+    {
+     "role": "Graphics",
+     "name": "ULA",
+     "source": "infobox:graphics"
+    },
+    {
+     "role": "Sound",
+     "name": "Beeper",
+     "source": "infobox:sound"
+    }
+   ],
+   "family": [
+    {
+     "relation": "before",
+     "name": "Sinclair ZX81",
+     "qid": "Q263250",
+     "source": "wikidata:P155"
+    },
+    {
+     "relation": "after",
+     "name": "Sinclair QL",
+     "qid": "Q602253",
+     "source": "wikidata:P156"
+    }
    ]
   }
  },

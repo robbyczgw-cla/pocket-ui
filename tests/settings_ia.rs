@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+include!("common/root.rs");
 
 /// The tree as the player sees it without a store catalog: category, then its rows.
 const TREE: [(&str, &[&str]); 7] = [
@@ -64,7 +64,7 @@ const SLEEP: [&str; 6] = ["Screen off after", "Slideshow before screen off", "Sl
 
 /// The line naming what is in each category, as at the bottom of the categories (the Look key ends with a zero-width mark).
 const LINES: [&str; 7] = [
-    "Look, appearance, colours, font, text size, night light, systems, cozy extras.",
+    "Look, appearance, colours, font, text size, screen colour, night light, systems, extras.",
     "Animations, playful cases, old-TV switch-on, motion, sounds, case sounds, haptics, LEDs.",
     "On start, continue, buttons, over the game, frames, performance, battery, achievements.",
     "Games, game check, starter pack, pictures, EmulationStation, screenshots, Curator, PC.",

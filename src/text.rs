@@ -907,6 +907,11 @@ pub mod boxes {
                 return;
             }
             let cut = x0 < -2 || x1 > c.w + 2;
+            if cut_vertically(y0, y1, c.h) {
+                if let Ok(mut v) = v_cuts().lock() {
+                    v.push((c.buf.as_ptr() as usize, c.w, c.h, s.to_string()));
+                }
+            }
             if let Ok(mut rec) = rec.lock() {
                 rec.push((c.buf.as_ptr() as usize, c.w, (cx0, cy0, cx1, cy1), cut, s.to_string()));
             }
@@ -1033,8 +1038,31 @@ pub mod boxes {
         SIZES.get_or_init(|| Mutex::new(Vec::new()))
     }
 
+    /// Strings whose ink a canvas's top or bottom edge cuts (more than 2 px): the canvas's first pixel, its width and
+    /// height, the string. Only one painted straight into the whole picture is a fault (`V` in `finish`): a list's
+    /// band cuts its rows at its edges on purpose.
+    fn v_cuts() -> &'static Mutex<Vec<(usize, i32, i32, String)>> {
+        static V: OnceLock<Mutex<Vec<(usize, i32, i32, String)>>> = OnceLock::new();
+        V.get_or_init(|| Mutex::new(Vec::new()))
+    }
+
+    /// Ink from `y0` to `y1` in a canvas `h` high: the top or bottom edge cuts it by more than 2 px.
+    pub(super) fn cut_vertically(y0: i32, y1: i32, h: i32) -> bool {
+        y0 < -2 || y1 > h + 2
+    }
+
+    /// Of the strings cut at a canvas's top or bottom, those painted into the picture itself (first pixel `start`,
+    /// `w` × `h`): a list's band or a layer cuts its own rows on purpose, the picture's edge cutting a heading is a fault.
+    pub(super) fn whole_picture_cuts(v: &[(usize, i32, i32, String)], start: usize, w: i32, h: i32) -> Vec<&str> {
+        v.iter().filter(|(at, cw, ch, s)| *at == start && *cw == w && *ch == h && !s.starts_with("‹hints"))
+            .map(|(_, _, _, s)| s.as_str()).collect()
+    }
+
     /// A new picture is painted: what was recorded before is not in it.
     pub fn reset() {
+        if let Ok(mut v) = v_cuts().lock() {
+            v.clear();
+        }
         if let Ok(mut v) = sizes().lock() {
             v.clear();
         }
@@ -1076,14 +1104,14 @@ pub mod boxes {
     /// the two strings for text whose ink runs into another string's by more than 2 px each way, `W` and the word for a short
 /// word torn across lines by a column too narrow for it, `T` and the two for
     /// strings on one line closer than 3 px (they read as one), `E` and the string
-    /// for text cut by the left or right edge of what it was painted into. Strings painted into another buffer (a layer
+    /// for text cut by the left or right edge of what it was painted into, `V` and the string for text the picture's own
+    /// top or bottom edge cuts. Strings painted into another buffer (a layer
     /// mixed in later) are left out.
     pub fn finish(buf: &[u32], w: i32, h: i32) {
         let Some(rec) = record() else { return };
         let Ok(rec) = rec.lock() else { return };
         let start = buf.as_ptr() as usize;
         let end = start + buf.len() * 4;
-        let _ = h;
         let mut placed: Vec<(Rect, bool, &str)> = Vec::new();
         for (at, cw, (x0, y0, x1, y1), cut, s) in rec.iter() {
             if *cw != w || *at < start || *at >= end {
@@ -1134,6 +1162,12 @@ pub mod boxes {
                     // Side by side on one line with less than a space between them: they read as one word.
                     out += &format!("{}\t{first}\t{second}\n", 'T');
                 }
+            }
+        }
+        // Cut by the picture's own top or bottom edge, a heading half off the screen: nothing overlaps there either.
+        if let Ok(v) = v_cuts().lock() {
+            for s in whole_picture_cuts(&v, start, w, h) {
+                out += &format!("{}\t{s}\n", 'V');
             }
         }
         let _ = std::fs::write(path, out);
@@ -1190,6 +1224,17 @@ pub mod boxes {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_heading_half_off_the_top_of_the_picture_is_found_a_bands_cut_row_is_not() {
+        // "Quick settings" painted with its baseline 30 px down in a 50 px face: ink from -18 to 36 (2026-11-03 report).
+        assert!(boxes::cut_vertically(-18, 36, 480));
+        assert!(!boxes::cut_vertically(10, 58, 480), "ink inside the canvas");
+        assert!(!boxes::cut_vertically(-2, 40, 480), "up to 2 px is the glyphs' soft edge");
+        assert!(boxes::cut_vertically(450, 500, 480), "the bottom edge too");
+        let v = vec![(100, 640, 480, "Quick settings".to_string()), (900, 640, 120, "Row".to_string()), (100, 640, 480, "‹hints".to_string())];
+        assert_eq!(boxes::whole_picture_cuts(&v, 100, 640, 480), vec!["Quick settings"], "only the picture's own, no hint bar");
+    }
 
     #[test]
     fn a_long_path_keeps_its_end_and_a_long_title_takes_two_lines() {

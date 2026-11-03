@@ -76,7 +76,7 @@ pub fn clock() -> String {
 }
 
 fn local_tm() -> libc::tm {
-    local_tm_at(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()) as i64)
+    local_tm_at(crate::status_corner::unix_now().unwrap_or(0))
 }
 
 fn local_tm_at(unix: i64) -> libc::tm {

@@ -114,3 +114,9 @@ mod tests {
         assert!(!path.exists(), "removed although the test panicked");
     }
 }
+
+/// The crate's folder as cargo says it when the test runs. `env!("CARGO_MANIFEST_DIR")` is fixed at compile time, so a
+/// test binary reused from a shared build folder would read the files of a copy that is gone.
+pub(crate) fn manifest_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap_or_else(|| env!("CARGO_MANIFEST_DIR").into()))
+}

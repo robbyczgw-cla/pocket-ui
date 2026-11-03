@@ -585,7 +585,7 @@ impl Sys {
 
     pub fn warmth_data(&self) -> Data {
         let r = crate::display::RANGE as f32;
-        Data::new("Colour temperature", self.look.warmth_label(), (self.look.warmth as f32 + r) / (2.0 * r), true)
+        Data::new("Colour", self.look.warmth_label(), (self.look.warmth as f32 + r) / (2.0 * r), true)
     }
 
     // ---- levels --------------------------------------------------------------------------------------
@@ -687,8 +687,14 @@ impl Sys {
     }
 
     fn step_warmth(&mut self, dir: i32, game: Game) -> bool {
+        self.set_warmth(self.look.warmth + dir as i8, game)
+    }
+
+    /// The screen colour at `warmth` (clamped to the range), applied and saved like the SELECT + Vol keys do; Settings →
+    /// Look → Screen colour calls it too. Whether it changed.
+    pub fn set_warmth(&mut self, warmth: i8, game: Game) -> bool {
         let r = crate::display::RANGE;
-        let next = (self.look.warmth + dir as i8).clamp(-r, r);
+        let next = warmth.clamp(-r, r);
         let changed = next != self.look.warmth;
         self.look.warmth = next;
         if changed {
@@ -1982,13 +1988,29 @@ mod tests {
         tap(&mut s, Button::VolDown, &SHELF, now);
         tap(&mut s, Button::VolDown, &SHELF, now);
         assert_eq!(s.look().warmth, -1);
-        assert_eq!(s.osd.as_ref().unwrap().data.value, "Cool 1");
+        assert_eq!(s.osd.as_ref().unwrap().data.value, "Cooler 1");
         for _ in 0..30 {
             tap(&mut s, Button::VolUp, &SHELF, now);
         }
         assert_eq!(s.look().warmth, crate::display::RANGE);
         assert_eq!(Look::load(&s.data_dir).warmth, crate::display::RANGE, "pocket-core reads it from the file");
         assert!(Look::load(&s.data_dir).soft);
+    }
+
+    /// Settings → Look → Screen colour: the same look, the same file and the same range as SELECT + Vol.
+    #[test]
+    fn the_screen_colour_row_sets_the_look_the_keys_set() {
+        let (mut s, _hw) = sys();
+        assert_eq!(s.look().warmth_label(), "Neutral");
+        assert!(s.set_warmth(s.look().warmth + 1, Game::None));
+        assert_eq!((s.look().warmth, s.look().warmth_label().as_str()), (1, "Warmer 1"));
+        assert_eq!(Look::load(&s.data_dir).warmth, 1, "saved at once");
+        assert!(s.set_warmth(-90, Game::None));
+        assert_eq!(s.look().warmth, -crate::display::RANGE, "the same range as the keys");
+        assert_eq!(s.look().warmth_label(), "Cooler 10");
+        assert!(!s.set_warmth(-90, Game::None), "already at the end: nothing changes");
+        assert!(s.set_warmth(0, Game::None) && s.look().is_neutral());
+        assert!(Look::load(&s.data_dir).is_neutral());
     }
 
     #[test]

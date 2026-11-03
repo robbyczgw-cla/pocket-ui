@@ -47,6 +47,10 @@ pub enum Effect {
     Grid,
     Scanlines,
     Crt,
+    /// A halo around bright parts, the picture otherwise clear (`SoftGlow` in the shader: EFFECT 4).
+    SoftGlow,
+    /// Rounded stair-steps on diagonal edges, flat pixel art left sharp (EFFECT 5).
+    Smooth,
 }
 
 /// Options → Picture → Screen orientation: how the player holds the Pocket, for games made for an upright screen
@@ -151,6 +155,8 @@ impl Effect {
             "grid" => Self::Grid,
             "scanlines" => Self::Scanlines,
             "crt" => Self::Crt,
+            "softglow" => Self::SoftGlow,
+            "smooth" => Self::Smooth,
             _ => Self::None,
         }
     }
@@ -174,17 +180,14 @@ pub enum FrameMode {
     /// A thin outline glowing in the console's colour.
     Glow,
     /// The handheld and TV frames of `frames_more.rs` and `frames_tv.rs`; those with finishes take
-    /// them from their own setting (`frame_brick`, `frame_pocket`, `frame_clamshell`, `frame_swan`,
-    /// `frame_watch`).
+    /// them from their own setting (`frame_brick`, `frame_pocket`, `frame_clamshell`). Swan, Watch and
+    /// Goggles are drawn by Auto only (a saved choice of them reads as Auto).
     Brick,
     PocketSlim,
     Clamshell,
     Wide,
     Twin,
     Gloss,
-    Swan,
-    Watch,
-    Goggles,
     Studio,
     PortableTv,
     Woodgrain,
@@ -193,7 +196,8 @@ pub enum FrameMode {
 impl FrameMode {
     pub fn parse(s: &str) -> Self {
         match s {
-            "auto" => Self::Auto,
+            // Swan, Watch and Goggles left the menu: files that name them mean Auto, which draws them for their consoles.
+            "auto" | "swan" | "watch" | "goggles" => Self::Auto,
             "ambient" => Self::Ambient,
             "shell" => Self::Shell,
             "crt" => Self::Crt,
@@ -205,9 +209,6 @@ impl FrameMode {
             "wide" => Self::Wide,
             "twin" => Self::Twin,
             "gloss" => Self::Gloss,
-            "swan" => Self::Swan,
-            "watch" => Self::Watch,
-            "goggles" => Self::Goggles,
             "studio" => Self::Studio,
             "portable-tv" => Self::PortableTv,
             "woodgrain" => Self::Woodgrain,
@@ -228,8 +229,6 @@ pub struct VideoSettings {
     pub frame_brick: crate::bezel::BrickColour,
     pub frame_pocket: crate::bezel::SlimFinish,
     pub frame_clamshell: crate::bezel::ClamFinish,
-    pub frame_swan: crate::bezel::SwanFinish,
-    pub frame_watch: crate::bezel::WatchFinish,
     /// LCD grid with the Game Boy Advance screen's colours (`lcd_colour`; offered for the GBA only, see
     /// `options::applies`).
     pub lcd_colour: bool,
@@ -253,8 +252,6 @@ impl VideoSettings {
             frame_brick: crate::bezel::BrickColour::parse(get("frame_brick")),
             frame_pocket: crate::bezel::SlimFinish::parse(get("frame_pocket")),
             frame_clamshell: crate::bezel::ClamFinish::parse(get("frame_clamshell")),
-            frame_swan: crate::bezel::SwanFinish::parse(get("frame_swan")),
-            frame_watch: crate::bezel::WatchFinish::parse(get("frame_watch")),
             lcd_colour: get("lcd_colour") == "on",
             core_colour: false,
             orientation: Orientation::parse(get("orientation")),
@@ -279,8 +276,6 @@ impl VideoSettings {
             "frame_brick" => self.frame_brick = crate::bezel::BrickColour::parse(value),
             "frame_pocket" => self.frame_pocket = crate::bezel::SlimFinish::parse(value),
             "frame_clamshell" => self.frame_clamshell = crate::bezel::ClamFinish::parse(value),
-            "frame_swan" => self.frame_swan = crate::bezel::SwanFinish::parse(value),
-            "frame_watch" => self.frame_watch = crate::bezel::WatchFinish::parse(value),
             "lcd_colour" => self.lcd_colour = value == "on",
             "orientation" => self.orientation = Orientation::parse(value),
             _ => return false,
@@ -311,9 +306,6 @@ impl VideoSettings {
             FrameMode::Wide => Some(Style::Wide),
             FrameMode::Twin => Some(Style::Twin),
             FrameMode::Gloss => Some(Style::Gloss),
-            FrameMode::Swan => Some(Style::Swan(self.frame_swan)),
-            FrameMode::Watch => Some(Style::Watch(self.frame_watch)),
-            FrameMode::Goggles => Some(Style::Goggles),
             FrameMode::Studio => Some(Style::Studio),
             FrameMode::PortableTv => Some(Style::PortableTv),
             FrameMode::Woodgrain => Some(Style::Woodgrain),
@@ -442,7 +434,13 @@ fn filters((sharpness, effect, _): Variant) -> (u32, u32) {
     // Scanlines and CRT steer the texture unit across a line (crisp) and sample between rows for a 3D core's
     // groups of rows; the CRT's glow reads the mipmaps.
     let mag = if sharpness != Sharpness::Sharp || matches!(effect, Effect::Scanlines | Effect::Crt) { glow::LINEAR } else { glow::NEAREST };
-    let min = if effect == Effect::Crt { glow::LINEAR_MIPMAP_NEAREST } else { mag };
+    let min = if effect == Effect::Crt {
+        glow::LINEAR_MIPMAP_NEAREST
+    } else if effect == Effect::SoftGlow {
+        glow::LINEAR_MIPMAP_LINEAR // a fractional level blends two mip levels: a smooth halo from one fetch
+    } else {
+        mag
+    };
     (mag, min)
 }
 
@@ -643,7 +641,7 @@ impl Renderer {
     pub fn check_variants(&mut self) -> Result<usize, String> {
         let mut n = 0;
         for sharpness in [Sharpness::Sharp, Sharpness::Crisp, Sharpness::Soft] {
-            for effect in [Effect::None, Effect::Grid, Effect::Scanlines, Effect::Crt] {
+            for effect in [Effect::None, Effect::Grid, Effect::Scanlines, Effect::Crt, Effect::SoftGlow, Effect::Smooth] {
                 for lcd in [false, true] {
                     if lcd && effect != Effect::Grid {
                         continue;
@@ -888,13 +886,13 @@ impl Renderer {
         let placement = self.placement(view_w, view_h, aspect, settings);
         let variant = (settings.sharpness, settings.effect, settings.lcd_colours(self.bezel.system()));
         // Sharp samples texels as they are; Soft and the scanline effects need the hardware's bilinear (they
-        // steer where they sample); Crisp fetches texels itself; the CRT's glow reads the mipmaps, made here
+        // steer where they sample); Crisp fetches texels itself; the CRT's and Soft glow's halo read the mipmaps, made here
         // from each new picture (a few µs for a 2D console's picture).
         let filters = filters(variant);
         if placement.is_some() {
             unsafe {
                 self.gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
-                if filters.1 == glow::LINEAR_MIPMAP_NEAREST && self.mips_dirty {
+                if matches!(filters.1, glow::LINEAR_MIPMAP_NEAREST | glow::LINEAR_MIPMAP_LINEAR) && self.mips_dirty {
                     self.gl.generate_mipmap(glow::TEXTURE_2D);
                     self.mips_dirty = false;
                 }
@@ -1185,8 +1183,8 @@ mod tests {
             assert_eq!((s.frame, s.fixed_style("gba")), (mode, None));
         }
         assert!(!s.set("hk_save", "on"), "not a Picture setting");
-        use crate::bezel::{BrickColour, ClamFinish, SlimFinish, SwanFinish, WatchFinish};
-        for (k, v) in [("frame_brick", "yellow"), ("frame_pocket", "clear"), ("frame_clamshell", "cobalt"), ("frame_swan", "skeleton"), ("frame_watch", "silver")] {
+        use crate::bezel::{BrickColour, ClamFinish, SlimFinish};
+        for (k, v) in [("frame_brick", "yellow"), ("frame_pocket", "clear"), ("frame_clamshell", "cobalt")] {
             assert!(s.set(k, v), "{k}");
         }
         for (v, style) in [
@@ -1196,9 +1194,6 @@ mod tests {
             ("wide", Style::Wide),
             ("twin", Style::Twin),
             ("gloss", Style::Gloss),
-            ("swan", Style::Swan(SwanFinish::Skeleton)),
-            ("watch", Style::Watch(WatchFinish::Silver)),
-            ("goggles", Style::Goggles),
             ("studio", Style::Studio),
             ("portable-tv", Style::PortableTv),
             ("woodgrain", Style::Woodgrain),

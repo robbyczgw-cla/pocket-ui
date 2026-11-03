@@ -20,6 +20,10 @@
 //! - **LCD grid**: a gap at the start of each pixel, a fixed share of the pixel (so it grows with the scale), drawn
 //!   by how much of each output pixel it covers, in linear light. Optional for the Game Boy Advance: its screen's
 //!   colours (Pokefan531's public-domain GBA profile, darkened less than the original).
+//! - **Soft glow**: a halo from the blurred copy (the mipmaps, one lookup at a fractional level) where it is brighter
+//!   than the pixel, scaled by the blur; otherwise the picture as it is.
+//! - **Smooth pixels**: one-texel stair-steps of diagonal edges (found in the 3x3 neighbours) get a half-texel chamfer,
+//!   one output pixel wide at any scale; everything else stays as it is.
 //! - **Crisp**: flat texels with a one-pixel blend where they meet, blended in (approximately) linear light, so a
 //!   bright pixel on a dark ground keeps its weight whatever its phase on the screen.
 
@@ -43,6 +47,14 @@ pub const MASK: f32 = 0.12;
 pub const HALO: f32 = 0.07;
 pub const HALO_LINES: f32 = 28.0;
 
+/// Soft glow: the height in texels of the blurred copy's mip level (each of its texels 1/32 of the picture's height),
+/// and how much of the light spilling from the blur into darker pixels is added (see `soft_glow`).
+pub const SOFT_GLOW_LINES: f32 = 32.0;
+pub const SOFT_GLOW_GAIN: f32 = 0.8;
+
+/// Smooth pixels: how far apart (encoded, largest channel) two colours may be to count as the same.
+pub const SMOOTH_TOL: f32 = 0.02;
+
 /// LCD grid: the gap's share of a pixel, how dark it is (share of light it takes, linear), the brightness given
 /// back inside the cell, and the scales (output pixels per game pixel) over which it fades in.
 pub const LCD_GAP: f32 = 0.18;
@@ -65,6 +77,7 @@ pub fn defines() -> String {
         "#define GAMMA {}\n#define BEAM_DARK {}\n#define BEAM_BRIGHT {}\n#define SCAN_FADE_LO {}\n#define SCAN_FADE_HI {}\n\
          #define BEAM_EDGE {}\n#define MASK {}\n#define HALO {}\n#define HALO_LINES {}\n\
          #define LCD_GAP {}\n#define LCD_DARK {}\n#define LCD_GAIN {}\n#define LCD_FADE_LO {}\n#define LCD_FADE_HI {}\n\
+         #define SOFT_GLOW_LINES {}\n#define SOFT_GLOW_GAIN {}\n#define SMOOTH_TOL {}\n\
          #define GBA_GAMMA {}\n#define GBA_DARKEN {}\n#define GBA_LUM {}\n#define GBA_MATRIX mat3({}, {}, {}, {}, {}, {}, {}, {}, {})\n",
         f(GAMMA),
         f(BEAM_DARK),
@@ -80,6 +93,9 @@ pub fn defines() -> String {
         f(LCD_GAIN),
         f(LCD_FADE.0),
         f(LCD_FADE.1),
+        f(SOFT_GLOW_LINES),
+        f(SOFT_GLOW_GAIN),
+        f(SMOOTH_TOL),
         f(GBA_GAMMA),
         f(GBA_DARKEN),
         f(GBA_LUM),
@@ -203,6 +219,20 @@ pub fn lcd_transmission(cx: f32, cy: f32, scale: f32) -> f32 {
     let cover = cx + cy - cx * cy;
     let fade = smoothstep(LCD_FADE.0, LCD_FADE.1, scale);
     1.0 + fade * (LCD_GAIN - 1.0 - LCD_DARK * cover * LCD_GAIN)
+}
+
+/// Soft glow of one channel: the picture's linear light `c` plus the halo of the blurred copy's linear light `blur`:
+/// what the blur has more than the pixel, times the blur (bright surroundings glow more).
+pub fn soft_glow(c: f32, blur: f32) -> f32 {
+    c + SOFT_GLOW_GAIN * (blur - c).max(0.0) * blur
+}
+
+/// Smooth pixels: weight (0..1) of the neighbour's colour for an output pixel whose signed distance to the texel's
+/// cutting diagonal is `s` texels (positive on the corner's side), at `scale` x/y output pixels per texel: a ramp one
+/// output pixel wide.
+pub fn smooth_weight(s: f32, scale: [f32; 2]) -> f32 {
+    let len = (1.0 / (scale[0] * scale[0]) + 1.0 / (scale[1] * scale[1])).sqrt();
+    (s / len + 0.5).clamp(0.0, 1.0)
 }
 
 /// Game Boy Advance screen colours of an encoded game colour, in linear light (`GAMMA`).
@@ -415,6 +445,24 @@ mod tests {
         // Pure red picks up some green and blue: the GBA screen's colours were less saturated.
         let r = gba_colour([1.0, 0.0, 0.0]);
         assert!(r[1] > 0.1 && r[2] > 0.15, "{r:?}");
+    }
+
+    #[test]
+    fn soft_glow_only_fills_darker_pixels_beside_bright_ones() {
+        assert_eq!(soft_glow(0.5, 0.5), 0.5, "a flat area is untouched");
+        assert_eq!(soft_glow(0.8, 0.3), 0.8, "a bright pixel in a dim surrounding is not lifted");
+        assert!(soft_glow(0.0, 0.25) > 0.03, "dark beside white takes a halo");
+        assert!(soft_glow(0.2, 0.25) < 0.2 + 0.02, "two similar mid-tones barely change");
+        assert!(soft_glow(0.0, 1.0) > soft_glow(0.0, 0.5) * 3.0, "the brighter the surroundings, the stronger");
+    }
+
+    #[test]
+    fn smooth_cut_is_one_output_pixel_wide_at_any_scale() {
+        for scale in [2.0f32, 3.875, 4.15, 5.0] {
+            let one_px = 1.0 / scale / std::f32::consts::SQRT_2; // distance a pixel step along a diagonal covers
+            assert_eq!(smooth_weight(0.0, [scale, scale]), 0.5);
+            assert!((smooth_weight(one_px, [scale, scale]) - 1.0).abs() < 1e-5 && smooth_weight(-one_px, [scale, scale]) < 1e-5);
+        }
     }
 
     #[test]

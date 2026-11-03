@@ -746,7 +746,6 @@ impl Bluetooth for MockBluetooth {
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
-    use std::path::Path;
 
     const DEVICES: &str = include_str!("fixtures/bluetoothctl-devices.txt");
     const PAIRED: &str = include_str!("fixtures/bluetoothctl-devices-paired.txt");
@@ -1032,7 +1031,7 @@ mod tests {
     /// A shell script in place of `bluetoothctl`: answers from the fixtures and logs its arguments.
     fn fake_bluetoothctl(name: &str, script: &str) -> (TestDir, PathBuf, PathBuf) {
         let dir = TestDir::new(&format!("bt-{name}"));
-        let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/fixtures");
+        let fixtures = crate::testutil::manifest_dir().join("src/fixtures");
         let log = dir.join("calls");
         let body = format!("#!/bin/sh\nF={}\necho \"$*\" >> {}\n{script}\n", fixtures.display(), log.display());
         let prog = dir.join("bluetoothctl");

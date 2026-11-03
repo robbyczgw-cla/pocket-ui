@@ -327,6 +327,7 @@ fn card(c: &mut Canvas, text: &mut Text, focus: usize) {
         broken: None,
         favorite: false,
         saves: None,
+        continue_at: None,
         links: Vec::new(),
         plain: false,
         rows: vec![

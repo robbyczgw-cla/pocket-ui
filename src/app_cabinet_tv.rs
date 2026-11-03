@@ -76,7 +76,7 @@ impl TvState {
 /// The TV's scale for a screen `w` x `h` with `room` px of showcase above the board: None where it is left out.
 pub(crate) fn tv_scale(w: i32, h: i32, room: i32) -> Option<f32> {
     let t = cabinet_tv::template();
-    let want = (h as f32 * SHARE).min(room as f32 - 12.0);
+    let want = (h as f32 * SHARE * super::app_cabinet::show_grow(room)).min(room as f32 - 12.0);
     let f = want / t.body.h as f32;
     let f = if f >= 2.0 { f.floor() } else { f };
     // Never more than a quarter of the width: the case out of the shelf needs the rest.

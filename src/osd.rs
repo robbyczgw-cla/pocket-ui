@@ -173,8 +173,8 @@ mod tests {
 
     #[test]
     fn wire_text_roundtrips_and_rejects_junk() {
-        let d = Data::new("Colour temperature", "Warm 3", 0.65, true);
-        assert_eq!(Data::from_wire(&d.to_wire()), Some(Data::new("Colour temperature", "Warm 3", 0.65, true)));
+        let d = Data::new("Colour", "Warmer 3", 0.65, true);
+        assert_eq!(Data::from_wire(&d.to_wire()), Some(Data::new("Colour", "Warmer 3", 0.65, true)));
         assert_eq!(Data::from_wire("Volume|45%|0.450|0").unwrap().value, "45%");
         assert!(Data::from_wire("nonsense").is_none());
         assert!(Data::from_wire("a|b|notanumber|0").is_none());
@@ -191,12 +191,12 @@ mod tests {
     #[test]
     fn the_bar_starts_after_its_label_whatever_the_name() {
         let mut text = Text::new();
-        for (label, value) in [("Colour temperature", "Warm 4"), ("Farbtemperatur", "Warm 4"), ("Brightness", "60%"), ("A very long made-up setting name", "Cooler 10")] {
+        for (label, value) in [("Colour", "Warmer 4"), ("Farbe", "Wärmer 4"), ("Brightness", "60%"), ("A very long made-up setting name", "Cooler 10")] {
             let d = Data::new(label, value, 0.5, true);
             let (shown, label_col, value_col) = layout(&mut text, &d);
             assert!(text.width(Face::Body, FONT, &shown) < label_col, "{label}: the bar would start under the label");
             assert!(W - 2 * PAD - label_col - value_col >= MIN_BAR, "{label}: the bar keeps a usable length");
-            if label == "Colour temperature" {
+            if label == "Colour" {
                 assert_eq!(shown, label, "a name that fits is never cut");
             }
         }

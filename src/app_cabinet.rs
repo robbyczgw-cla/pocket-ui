@@ -42,9 +42,20 @@ fn scene_bottom(h: i32) -> i32 {
 /// The cabinet's top board and its plinth.
 const TOP_H: i32 = 40;
 const PLINTH_H: i32 = 56;
+/// The least of the next shelf that looks in under the last whole one (less is a sliver: the plinth closes the cabinet
+/// instead), and the band over which it fades into the hints' ground.
+const PEEK_MIN: i32 = 72;
+const PEEK_FADE: i32 = 40;
 /// The largest a case's front is shown: what fits between the title and the tallest shelf's top.
 const SHOW_W: f32 = 400.0;
 const SHOW_H: f32 = 354.0;
+const SHOW_GROW: f32 = 1.4;
+
+/// How much bigger than the base size a showcase with `room` lines is used (the case, and the TV beside it): by the room's
+/// share over `SHOW_H`, at most `SHOW_GROW`.
+pub(crate) fn show_grow(room: i32) -> f32 {
+    (room as f32 / SHOW_H).clamp(1.0, SHOW_GROW)
+}
 
 /// The least a case is shown at, against the scale it would get by itself: a small box (GBA) is never shown so small that
 /// its cover is hard to see.
@@ -55,21 +66,23 @@ const SHOW_LEAST: f32 = 0.6;
 /// needs), so they keep their real sizes to each other (a PS2 case taller than a GBA box), but never under `SHOW_LEAST`
 /// of the case's own.
 fn show_scale(m: Medium, room: i32) -> f32 {
+    // A shelf with more room over it (a short shelf, or a taller screen) shows its cases bigger.
+    let g = show_grow(room);
     let own = |m: Medium| {
         let s = m.size();
-        (SHOW_W / s.front as f32).min(SHOW_H / s.front_h as f32)
+        (SHOW_W * g / s.front as f32).min(SHOW_H * g / s.front_h as f32)
     };
     let common = Medium::ALL.into_iter().map(own).fold(f32::MAX, f32::min);
     let s = m.size();
-    common.max(own(m) * SHOW_LEAST).clamp(1.2, 2.1).min(room.max(40) as f32 / s.front_h as f32)
+    common.max(own(m) * SHOW_LEAST).clamp(1.2, 2.1 * g).min(room.max(40) as f32 / s.front_h as f32)
 }
 
 /// The showcase over the selected shelf (Alex's photo, 2026-10-28: a case held up in front of the shelf above hid
 /// the spines of two shelves): from the title down to the cabinet's top board, as high as the case out of the shelf
 /// needs, so the selected shelf stands whole right under it. `pitch`: the selected shelf with its board.
 /// (room for the case, top of the selected shelf).
-fn showcase(h: i32, m: Medium, pitch: i32) -> (i32, i32) {
-    let room = scene_bottom(h) - pitch - TOP_H - SCENE_TOP - 24;
+fn showcase(h: i32, m: Medium, pitch: i32, extra: i32) -> (i32, i32) {
+    let room = scene_bottom(h) - pitch - TOP_H - SCENE_TOP - 24 + extra;
     let k = show_scale(m, room);
     let need = (m.size().front_h as f32 * k).round() as i32;
     (room, SCENE_TOP + 12 + need + 12 + TOP_H)
@@ -1190,6 +1203,43 @@ impl App {
 
     // ---- painting ----------------------------------------------------------------------------------------
 
+    /// Where the showcase ends for the selected shelf `cs`, as the screen's room allows (the Mini V2 photo, 2026-11-03: a
+    /// 170-line strip of nothing under a shelf whose next one did not fit whole): (room for the case, top of the
+    /// selected shelf, whether the next shelf's top looks in at the bottom). The rows under the showcase fit whole
+    /// down to `scene_bottom` less the plinth; what is left over first makes the case and the TV bigger (up to what
+    /// `show_scale` allows), then the next shelf looks in from below, or, on the last one, the cabinet moves down.
+    fn cabinet_plan(&self, h: i32, cs: usize, m: Medium) -> (i32, i32, bool) {
+        let cab = &self.cabinet.cab;
+        let bottom = scene_bottom(h);
+        // The last shelf that fits whole under `top`, and whether another one is below it.
+        let stack = |top: i32| {
+            let (mut lowest, mut more) = (0, false);
+            for s in cs..cab.shelves.len() {
+                let end = cab.y(s) - cab.y(cs) + top + cab.pitch(s);
+                if end > bottom {
+                    more = true;
+                    break;
+                }
+                lowest = end;
+            }
+            (lowest, more)
+        };
+        let (room, top) = showcase(h, m, cab.pitch(cs), 0);
+        let (lowest, _) = stack(top);
+        if lowest <= top {
+            // The selected shelf alone is taller than the room (a tiny screen).
+            return (room, top, false);
+        }
+        let (room, top1) = showcase(h, m, cab.pitch(cs), (bottom - PLINTH_H - lowest).max(0));
+        let (lowest, more) = stack(top1);
+        let rest = bottom - lowest;
+        if more && rest >= PEEK_MIN {
+            (room, top1, true)
+        } else {
+            (room, top1 + (rest - PLINTH_H).max(0), false)
+        }
+    }
+
     pub(crate) fn paint_cabinet(&mut self, c: &mut Canvas) {
         let started = Instant::now();
         let cpu_started = thread_cpu();
@@ -1219,7 +1269,8 @@ impl App {
         let cab_w = c.w - 2 * CAB_X;
         let view = cab_w - 2 * art::WALL;
         let inner_x = CAB_X + art::WALL;
-        let (room, top) = showcase(c.h, self.cabinet.cab.shelves[cs].cases[ci].medium, self.cabinet.cab.pitch(cs));
+        let medium = self.cabinet.cab.shelves[cs].cases[ci].medium;
+        let (room, top, peek) = self.cabinet_plan(c.h, cs, medium);
         self.cabinet.show_room = room;
         if !self.cabinet.placed || !pocket_ui::motion::allowed(pocket_ui::motion::Kind::Move) {
             self.cabinet.show_top.jump(top as f32);
@@ -1262,7 +1313,9 @@ impl App {
         if cut {
             lowest = scene_bottom(c.h);
         }
-        let clip = (show_bottom, lowest);
+        // Room left under the last whole shelf: the next one's top looks in (it fades out at the hints), no plinth.
+        let peek = peek && !cut;
+        let clip = (show_bottom, if peek { scene_bottom(c.h) } else { lowest });
         let floor_y = show_bottom + self.cabinet.cab.shelves[cs].height + 3;
 
         // The cabinet's top board and plinth, at its ends.
@@ -1279,7 +1332,7 @@ impl App {
         // The top board closes the cabinet under the showcase, the plinth under the last whole shelf in view: the
         // cabinet always stands whole.
         art::blit(c, &top_board, CAB_X, show_bottom - TOP_H, 256, (0, c.h));
-        if !cut {
+        if !cut && !peek {
             art::blit(c, &plinth, CAB_X, lowest, 230, (0, scene_bottom(c.h)));
         }
 
@@ -1343,6 +1396,9 @@ impl App {
         // A shelf taller than the room is cut: it fades out over the hints' edge.
         if cut {
             art::fade_band_to(c, lowest - 34, lowest, pal().void);
+        }
+        if peek {
+            art::fade_band_to(c, scene_bottom(c.h) - PEEK_FADE, scene_bottom(c.h), pal().void);
         }
 
         // The TV on the top board, showing the selected game (`app_cabinet_tv`); the cases out of the shelf keep clear of it.

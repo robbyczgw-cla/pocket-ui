@@ -15,7 +15,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+include!("common/root.rs");
 
 /// scripts/wayland-stub.py, while it runs.
 struct Stub {

@@ -75,7 +75,7 @@ description, then the facts (year, developer, publisher, genre, players, reviews
 rating, achievements), the system's name at the foot. Without a description from Wikipedia or your gamelist the
 English card shows a sentence made of the facts; in German the back leaves it out, since the facts under it say the same. What isn't there yet gets a plain place of its own: a dark
 screen with the console and "No picture yet", "No description yet", or the line that the game isn't in the offline
-list.
+list. Under "No description yet" a line says why: "No Wikipedia article for this game" when there is none (it stays that way), or "Offline: the description comes with Wi-Fi" when the game has an article that isn't loaded yet (it arrives on its own with the next connection).
 
 ## Stickers on the case
 
@@ -132,7 +132,8 @@ them off; the values are then only shown.
   differently from your file, "Listed as" shows its name, so you can see what the card is about.
 - **Your game**: status, your rating (five stars, or "None. Press Y" before you give one), time played and number
   of sessions, when you last played, your note, **Save slots** on the game's memory card or cartridge (games on
-  pocket-ui's own host, as in the [pause menu](pause-menu.md#save-slots-where-i-quit-and-before-load)), and how many of
+  pocket-ui's own host, as in the [pause menu](pause-menu.md#save-slots-where-i-quit-and-before-load)), "Continue: 2 h ago"
+  when the game is waiting where you quit (under the slots, or on its own row for a game without them), and how many of
   the game's achievements you unlocked when it has some on RetroAchievements ([Achievements](achievements.md)).
   **Battery** says how long the charge you have now lasts in this game and how much of it the game uses an hour
   ("About 3 h 20 min left, 18% an hour"), from the same measurements as the pause menu (see

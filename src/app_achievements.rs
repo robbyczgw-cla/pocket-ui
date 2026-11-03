@@ -241,13 +241,11 @@ impl App {
             search: kb.search,
         };
         let done = if typing == Typing::User { "Next" } else { "Sign in" };
-        pocket_ui::setup::paint_keyboard_with(c, &mut self.text, &shown, done);
         let note = match typing {
             Typing::User => "Your user name on retroachievements.org.",
             Typing::Password => "Sent once to sign in, never kept. The Pocket keeps only the sign-in key.",
         };
-        let note = self.text.fit(Face::Body, 24, note, c.w - 2 * MARGIN);
-        self.text.draw(c, Face::Body, 24, MARGIN, 790, pal().dust, &note);
+        pocket_ui::setup::paint_keyboard_noted(c, &mut self.text, &shown, done, note);
         pocket_ui::setup::hints(
             c,
             &mut self.text,

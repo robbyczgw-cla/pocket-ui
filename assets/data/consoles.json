@@ -91,6 +91,35 @@
    ]
   },
   {
+   "id": "amiga",
+   "name": "Amiga",
+   "maker": "Commodore",
+   "kind": "home",
+   "released": {
+    "NA": "1985-07-23"
+   },
+   "discontinued": "1996",
+   "units_sold": {
+    "value": 4910000,
+    "note": "Wikipedia infobox: approx. 4.91 million, all models; Commodore stopped in 1994, Escom and QuikPak went on in small numbers until 1996."
+   },
+   "cpu": "Motorola 68000 series",
+   "gpu": "Custom chipset (Agnus, Denise, Paula)",
+   "predecessor": "Commodore 128, Commodore 64",
+   "summary": "Commodore's family of home computers, launched in 1985 with custom chips for graphics and sound. It became a favourite for games, demos and music, and the CD32 was a game console built on it.",
+   "lines": {
+    "headline": "Commodore · 1985 · home computer",
+    "released": "1985 NA",
+    "ended": "1996",
+    "inside": "Motorola 68000 series · custom chips",
+    "sold": "about 4.91 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Amiga",
+    "https://www.wikidata.org/wiki/Q100047"
+   ]
+  },
+  {
    "id": "atari2600",
    "name": "Atari 2600",
    "aka": [
@@ -132,6 +161,41 @@
    ]
   },
   {
+   "id": "atari5200",
+   "name": "Atari 5200",
+   "maker": "Atari",
+   "kind": "home",
+   "generation": 2,
+   "released": {
+    "NA": "1982-10"
+   },
+   "discontinued": "1984",
+   "units_sold": {
+    "value": 1000000,
+    "note": "Wikipedia infobox: 1 million (cited); no as-of date."
+   },
+   "launch_price": {
+    "NA": "US$299.95"
+   },
+   "cpu": "MOS 6502C, 1.79 MHz",
+   "memory": "16 KB RAM",
+   "media": "ROM cartridge",
+   "predecessor": "Atari 2600",
+   "successor": "Atari 7800",
+   "summary": "Atari's 1982 console, built on the same chips as its 8-bit computers. It had analog controllers that were hard to keep working, and it ended after about two years.",
+   "lines": {
+    "headline": "Atari · 1982 · second generation",
+    "released": "1982 NA",
+    "ended": "1984",
+    "inside": "MOS 6502C 1.79 MHz · 16 KB",
+    "sold": "1 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Atari_5200",
+    "https://www.wikidata.org/wiki/Q743222"
+   ]
+  },
+  {
    "id": "atari7800",
    "name": "Atari 7800",
    "aka": [
@@ -163,6 +227,42 @@
    "sources": [
     "https://en.wikipedia.org/wiki/Atari_7800",
     "https://www.wikidata.org/wiki/Q753600"
+   ]
+  },
+  {
+   "id": "atari800",
+   "name": "Atari 8-bit family",
+   "aka": [
+    "Atari 400/800",
+    "Atari XL/XE"
+   ],
+   "maker": "Atari",
+   "kind": "home",
+   "released": {
+    "NA": "1979-11"
+   },
+   "discontinued": "1992",
+   "units_sold": {
+    "value": 4000000,
+    "note": "Wikipedia infobox: 4 million (cited); no as-of date."
+   },
+   "launch_price": {
+    "NA": "US$550 (Atari 400), US$1000 (Atari 800)"
+   },
+   "cpu": "MOS 6502B or 6502 SALLY",
+   "gpu": "256 colours, 8 sprites, raster interrupts",
+   "successor": "Atari ST",
+   "summary": "Atari's line of home computers from 1979, from the 400 and 800 to the XL and XE models. They had colour graphics with sprites and four sound channels, and ran many games.",
+   "lines": {
+    "headline": "Atari · 1979 · home computer",
+    "released": "1979 NA",
+    "ended": "1992",
+    "inside": "MOS 6502B · 256 colours",
+    "sold": "4 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Atari_8-bit_family",
+    "https://www.wikidata.org/wiki/Q249075"
    ]
   },
   {
@@ -234,6 +334,40 @@
    "sources": [
     "https://en.wikipedia.org/wiki/Atari_Lynx",
     "https://www.wikidata.org/wiki/Q753657"
+   ]
+  },
+  {
+   "id": "c64",
+   "name": "Commodore 64",
+   "maker": "Commodore Business Machines",
+   "kind": "home",
+   "released": {
+    "NA": "1982-08"
+   },
+   "discontinued": "1994",
+   "units_sold": {
+    "value": 12500000,
+    "note": "Wikipedia infobox: 12.5 – 17 million; estimates differ."
+   },
+   "launch_price": {
+    "NA": "US$595"
+   },
+   "cpu": "MOS 6510 or 8500, about 1 MHz",
+   "gpu": "VIC-II, 320×200, 16 colours",
+   "memory": "64 KB RAM, 20 KB ROM",
+   "predecessor": "VIC-20",
+   "successor": "Commodore 128",
+   "summary": "Commodore's 1982 home computer with 64 KB of memory, a sprite graphics chip and the SID sound chip. Its games, music and demos still have a large following.",
+   "lines": {
+    "headline": "Commodore · 1982 · home computer",
+    "released": "1982 NA",
+    "ended": "1994",
+    "inside": "MOS 6510 · VIC-II · SID",
+    "sold": "12.5 – 17 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Commodore_64",
+    "https://www.wikidata.org/wiki/Q99775"
    ]
   },
   {
@@ -958,6 +1092,28 @@
    ]
   },
   {
+   "id": "pc",
+   "name": "MS-DOS",
+   "aka": [
+    "DOS",
+    "IBM PC compatibles"
+   ],
+   "maker": "Microsoft",
+   "kind": "software",
+   "released": {
+    "WW": "1981-08"
+   },
+   "summary": "Not a console but the operating system of the early PC games, from 1981. Its games run here in an emulator, and you bring the game files.",
+   "lines": {
+    "headline": "Microsoft · 1981 · PC games",
+    "released": "1981"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/MS-DOS",
+    "https://www.wikidata.org/wiki/Q47604"
+   ]
+  },
+  {
    "id": "pcengine",
    "name": "PC Engine",
    "aka": [
@@ -1000,6 +1156,26 @@
     "https://necretro.org/PC_Engine",
     "https://necretro.org/TurboGrafx-16",
     "https://www.wikidata.org/wiki/Q1057377"
+   ]
+  },
+  {
+   "id": "pico-8",
+   "name": "PICO-8",
+   "maker": "Lexaloffle Games",
+   "kind": "fantasy",
+   "released": {
+    "WW": "2015-04"
+   },
+   "display": "128×128, 16 colours",
+   "summary": "A fantasy console: a make-believe handheld that exists only as a program, with a small 128×128 screen and 16 colours. Its limits are set so that anyone can make a game and share it.",
+   "lines": {
+    "headline": "Lexaloffle · 2015 · fantasy console",
+    "released": "2015",
+    "inside": "128×128 · 16 colours"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/PICO-8",
+    "https://www.wikidata.org/wiki/Q28456260"
    ]
   },
   {
@@ -1088,6 +1264,46 @@
    ]
   },
   {
+   "id": "ps3",
+   "name": "PlayStation 3",
+   "maker": "Sony",
+   "kind": "home",
+   "generation": 7,
+   "released": {
+    "JP": "2006-11-11",
+    "NA": "2006-11-17",
+    "EU": "2007-03-23"
+   },
+   "discontinued": "2017",
+   "units_sold": {
+    "value": 87400000,
+    "note": "Wikipedia infobox: 87.4 million (cited); no as-of date."
+   },
+   "launch_price": {
+    "NA": "US$499.99 (20 GB), US$599.99 (60 GB)",
+    "JP": "¥49,980 (20 GB), ¥60,000 (60 GB)",
+    "EU": "€599.99 (60 GB)"
+   },
+   "cpu": "Cell Broadband Engine, 3.2 GHz",
+   "gpu": "RSX Reality Synthesizer, 500 MHz",
+   "memory": "256 MB XDR, 256 MB GDDR3 (graphics)",
+   "media": "Blu-ray, DVD, CD",
+   "predecessor": "PlayStation 2",
+   "successor": "PlayStation 4",
+   "summary": "Sony's 2006 console with a Cell processor and a Blu-ray drive built in. It has a Blu-ray drive built in and runs the PlayStation Network.",
+   "lines": {
+    "headline": "Sony · 2006 · seventh generation",
+    "released": "2006 JP/NA · 2007 EU",
+    "ended": "2017",
+    "inside": "Cell 3.2 GHz · RSX",
+    "sold": "87.4 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/PlayStation_3",
+    "https://www.wikidata.org/wiki/Q10683"
+   ]
+  },
+  {
    "id": "psp",
    "name": "PlayStation Portable",
    "aka": [
@@ -1135,6 +1351,44 @@
     "https://web.archive.org/web/2012/http://www.scei.co.jp/corporate/data/bizdatausa_e.html",
     "https://www.playstation.com/en-us/playstation-history/2000-ps2-psp/",
     "https://www.wikidata.org/wiki/Q170325"
+   ]
+  },
+  {
+   "id": "psvita",
+   "name": "PlayStation Vita",
+   "maker": "Sony",
+   "kind": "handheld",
+   "generation": 8,
+   "released": {
+    "JP": "2011-12-17",
+    "NA": "2012-02-15",
+    "EU": "2012-02-22"
+   },
+   "discontinued": "2019",
+   "units_sold": {
+    "value": 14100000,
+    "note": "Wikipedia infobox: 14.1 million (estimate); Sony has published no figures since 2012."
+   },
+   "launch_price": {
+    "NA": "US$249.99"
+   },
+   "cpu": "ARM Cortex-A9 MPCore, four cores",
+   "gpu": "PowerVR SGX543MP4+",
+   "memory": "512 MB RAM, 128 MB video RAM",
+   "media": "Game card",
+   "display": "5-inch OLED or LCD touch screen, 960×544",
+   "predecessor": "PlayStation Portable",
+   "summary": "Sony's 2011 handheld with a large OLED touch screen, a rear touch pad and two analog sticks. It ran full console-style games, and Sony stopped making it in 2019.",
+   "lines": {
+    "headline": "Sony · 2011 · eighth generation",
+    "released": "2011 JP · 2012 NA/EU",
+    "ended": "2019",
+    "inside": "ARM Cortex-A9 ×4 · PowerVR SGX543MP4+",
+    "sold": "14.1 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/PlayStation_Vita",
+    "https://www.wikidata.org/wiki/Q188808"
    ]
   },
   {
@@ -1230,6 +1484,24 @@
     "https://segaretro.org/Sega_Saturn",
     "https://web.archive.org/web/20180712005640/https://sega.jp/history/hard/segasaturn/index.html",
     "https://www.wikidata.org/wiki/Q200912"
+   ]
+  },
+  {
+   "id": "scummvm",
+   "name": "ScummVM",
+   "maker": "ScummVM Team",
+   "kind": "software",
+   "released": {
+    "WW": "2001-10-08"
+   },
+   "summary": "Not a console but a free program that runs classic adventure games on new hardware, first those of the SCUMM engine, now many more. You bring the game files you own.",
+   "lines": {
+    "headline": "ScummVM Team · 2001 · game engines",
+    "released": "2001"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/ScummVM",
+    "https://www.wikidata.org/wiki/Q145568"
    ]
   },
   {
@@ -1442,6 +1714,26 @@
    ]
   },
   {
+   "id": "tic-80",
+   "name": "TIC-80",
+   "maker": "Vadim Grigoruk (Nesbox)",
+   "kind": "fantasy",
+   "released": {
+    "WW": "2017-03-22"
+   },
+   "display": "240×136, 16 colours",
+   "summary": "A free, open-source fantasy computer: a make-believe machine that exists only as a program, with a small 240×136 screen and 16 colours. Games are written in a few simple languages and shared as small cartridges.",
+   "lines": {
+    "headline": "Nesbox · 2017 · fantasy computer",
+    "released": "2017",
+    "inside": "240×136 · 16 colours"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/TIC-80",
+    "https://www.wikidata.org/wiki/Q56473777"
+   ]
+  },
+  {
    "id": "vectrex",
    "name": "Vectrex",
    "maker": "General Consumer Electronics, later Milton Bradley",
@@ -1558,6 +1850,46 @@
    ]
   },
   {
+   "id": "wiiu",
+   "name": "Wii U",
+   "maker": "Nintendo",
+   "kind": "home",
+   "generation": 8,
+   "released": {
+    "NA": "2012-11-18",
+    "EU": "2012-11-30",
+    "JP": "2012-12-08"
+   },
+   "discontinued": "2017-01-31",
+   "units_sold": {
+    "value": 13560000,
+    "as_of": "2019-12-31",
+    "note": "Wikipedia infobox: 13.56 million as of 31 December 2019 (cited)."
+   },
+   "launch_price": {
+    "NA": "US$299 (Basic), US$349 (Deluxe)",
+    "JP": "¥26,250 (Basic), ¥31,500 (Deluxe)"
+   },
+   "cpu": "IBM PowerPC \"Espresso\", 1.24 GHz, three cores",
+   "gpu": "AMD Radeon-based \"Latte\", 550 MHz",
+   "memory": "2 GB DDR3",
+   "media": "Wii U Optical Disc",
+   "predecessor": "Wii",
+   "successor": "Nintendo Switch",
+   "summary": "Nintendo's 2012 console with a GamePad controller that has its own touch screen. It played Wii games too, and it sold far fewer than the Wii.",
+   "lines": {
+    "headline": "Nintendo · 2012 · eighth generation",
+    "released": "2012 NA/EU/JP",
+    "ended": "2017",
+    "inside": "PowerPC Espresso 1.24 GHz · Latte",
+    "sold": "13.56 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/Wii_U",
+    "https://www.wikidata.org/wiki/Q56942"
+   ]
+  },
+  {
    "id": "wonderswan",
    "name": "WonderSwan",
    "aka": [
@@ -1641,6 +1973,40 @@
    "sources": [
     "https://en.wikipedia.org/wiki/Xbox_(console)",
     "https://www.wikidata.org/wiki/Q132020"
+   ]
+  },
+  {
+   "id": "zxspectrum",
+   "name": "ZX Spectrum",
+   "maker": "Sinclair Research",
+   "kind": "home",
+   "released": {
+    "UK": "1982-04-23",
+    "EU": "1984"
+   },
+   "discontinued": "1992",
+   "units_sold": {
+    "value": 5000000,
+    "note": "Wikipedia infobox: 5 million (cited); no as-of date."
+   },
+   "cpu": "Zilog Z80A, 3.5 MHz",
+   "gpu": "ULA",
+   "memory": "16 KB, 48 KB or 128 KB",
+   "media": "Compact Cassette, ZX Microdrive, 3-inch disk (Spectrum +3)",
+   "display": "256×192, 15 colours",
+   "predecessor": "ZX81",
+   "successor": "QL, Sinclair PC200",
+   "summary": "Sinclair's cheap home computer from 1982 with a rubber keyboard and games on cassette. It started a large British games scene.",
+   "lines": {
+    "headline": "Sinclair · 1982 · home computer",
+    "released": "1982 UK · 1984 EU",
+    "ended": "1992",
+    "inside": "Z80A 3.5 MHz · ULA",
+    "sold": "5 million"
+   },
+   "sources": [
+    "https://en.wikipedia.org/wiki/ZX_Spectrum",
+    "https://www.wikidata.org/wiki/Q23882"
    ]
   }
  ],

@@ -223,13 +223,79 @@ pub fn is_frozen(g: &Game, files: &[PathBuf]) -> bool {
 /// at the card, and for GameCube and 3DS reads the game file's header.
 #[cfg(not(target_os = "android"))]
 pub fn scan(games: &[Game]) -> Vec<PathBuf> {
-    games.iter().filter(|g| is_frozen(g, &resume_files(g))).take(MOST).map(|g| g.path.clone()).collect()
+    scan_timed(games).into_iter().map(|m| m.0).collect()
+}
+
+/// A game that stands open and when its moment was written (Unix seconds; None when the file's time can't be read).
+pub type Moment = (PathBuf, Option<u64>);
+
+/// [`is_frozen`] and, for a game that stands open, the time of the file a start would load: the first that exists, as
+/// `resume_files` lists them (the one the core takes, not the newest of them). None for a game that stands closed.
+pub fn open_moment(g: &Game, files: &[PathBuf]) -> Option<Moment> {
+    if !is_frozen(g, files) {
+        return None;
+    }
+    let at = files.iter().find(|f| f.exists()).and_then(|f| std::fs::metadata(f).and_then(|m| m.modified()).ok()).and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs());
+    Some((g.path.clone(), at))
+}
+
+/// What the shelf's reads last found, for the card's "Continue" line: the open case's read (normal looks) and Easy's and the
+/// big shelf's (that look). Only the active look's read counts, and none while a newer one is out, so the card never shows
+/// an older state as current. It holds no files and does no work: the card asks it each time it is painted.
+#[derive(Default)]
+pub struct MomentReads {
+    shelf: Vec<Moment>,
+    shelf_out: bool,
+    big: Vec<Moment>,
+    big_out: bool,
+}
+
+impl MomentReads {
+    /// A new read of the open case's games starts (or it won't, `false`: nothing is open then).
+    pub fn shelf_started(&mut self, runs: bool) {
+        self.shelf_out = runs;
+        if !runs {
+            self.shelf.clear();
+        }
+    }
+    pub fn shelf_got(&mut self, list: Vec<Moment>) {
+        self.shelf = list;
+        self.shelf_out = false;
+    }
+    pub fn big_started(&mut self) {
+        self.big_out = true;
+    }
+    pub fn big_got(&mut self, list: Vec<Moment>) {
+        self.big = list;
+        self.big_out = false;
+    }
+    /// When the moment a start of `path` would load was written, in the read of the look that is on; None while that look's
+    /// read is out, and for a game it doesn't list.
+    pub fn time(&self, big_look: bool, path: &Path) -> Option<u64> {
+        let (list, out) = if big_look { (&self.big, self.big_out) } else { (&self.shelf, self.shelf_out) };
+        if out {
+            return None;
+        }
+        list.iter().find(|m| m.0 == path).and_then(|m| m.1)
+    }
+}
+
+/// [`scan`] with each moment's time: what the card's "Continue" line takes from the shelf's own read, so it adds no file access.
+#[cfg(not(target_os = "android"))]
+pub fn scan_timed(games: &[Game]) -> Vec<Moment> {
+    games.iter().filter_map(|g| open_moment(g, &resume_files(g))).take(MOST).collect()
+}
+
+/// [`moments`] with each moment's time (Easy's and the big shelf's read).
+#[cfg(not(target_os = "android"))]
+pub fn moments_timed(games: &[Game]) -> Vec<Moment> {
+    games.iter().filter_map(|g| open_moment(g, &resume_files(g))).collect()
 }
 
 /// Every game of `games` the next start would resume, without [`MOST`]'s limit: what Easy's word and open case say.
 #[cfg(not(target_os = "android"))]
 pub fn moments(games: &[Game]) -> Vec<PathBuf> {
-    games.iter().filter(|g| is_frozen(g, &resume_files(g))).map(|g| g.path.clone()).collect()
+    moments_timed(games).into_iter().map(|m| m.0).collect()
 }
 
 /// What `launch` does differently for a game with a moment it can't go back to. Everything else is the normal start.
@@ -325,9 +391,67 @@ mod tests {
         assert_eq!(scan(&games).len(), MOST);
         assert_eq!(moments(&games).len(), 6);
         assert!(!moments(&games).contains(&games[6].path));
+        // The card takes its line from those reads: the sixth moment is not in the shelf's five, but in Easy's read; the
+        // seventh game (no state) is in neither. The big shelf offers a moment without a recent game too.
+        let (shelf, all) = (scan_timed(&games), moments_timed(&games));
+        let mut reads = MomentReads::default();
+        reads.shelf_got(shelf);
+        reads.big_got(all);
+        assert!(reads.time(false, &games[5].path).is_none(), "not among the shelf's five");
+        assert!(reads.time(true, &games[5].path).is_some(), "the sixth moment, from the big shelf's read");
+        assert!(reads.time(true, &games[6].path).is_none() && reads.time(false, &games[6].path).is_none());
     }
 
     use crate::testutil::TestDir;
+
+    /// An open card follows the shelf's reads: a read that is out shows nothing instead of the old time, and each look has its own.
+    #[test]
+    fn the_cards_line_follows_late_answers_and_the_looks_own_read() {
+        let p = PathBuf::from("/roms/Game.gba");
+        let mut r = MomentReads::default();
+        r.shelf_got(vec![(p.clone(), Some(100))]);
+        assert_eq!(r.time(false, &p), Some(100));
+        // After a Quit: a new read starts, the card is open; the old time is no longer shown.
+        r.shelf_started(true);
+        assert_eq!(r.time(false, &p), None, "a read is out: no old state as current");
+        r.shelf_got(vec![(p.clone(), Some(200))]);
+        assert_eq!(r.time(false, &p), Some(200), "the answer reaches the open card");
+        // A new moment appearing, and one going away (Continue where I quit off, after a Load).
+        r.shelf_started(true);
+        r.shelf_got(Vec::new());
+        assert_eq!(r.time(false, &p), None, "no moment any more: no line");
+        // Easy/big: its own read decides, whatever the open case's read still holds.
+        r.shelf_got(vec![(p.clone(), Some(100))]);
+        r.big_got(Vec::new());
+        assert_eq!(r.time(true, &p), None, "the big shelf's new state, not the old shelf entry");
+        assert_eq!(r.time(false, &p), Some(100));
+        r.big_started();
+        r.big_got(vec![(p.clone(), Some(300))]);
+        assert_eq!(r.time(true, &p), Some(300));
+        r.big_started();
+        assert_eq!(r.time(true, &p), None, "big read out");
+        assert_eq!(r.time(false, &p), Some(100), "the other look is not held up by it");
+    }
+
+    #[test]
+    fn the_cards_continue_time_is_of_the_file_a_start_loads_and_only_for_a_waiting_moment() {
+        let (_d, rom, state) = setup("moment-time");
+        let taken = _d.join("Game.pstate.taken");
+        let g = game("pocket-core", "mgba", rom.clone(), None);
+        let files = vec![state.clone(), taken.clone()];
+        assert_eq!(open_moment(&g, &files), None, "no moment, no line");
+        let stamp = |f: &Path, ago: u64| {
+            let t = std::time::SystemTime::now() - std::time::Duration::from_secs(ago);
+            std::fs::File::create(f).unwrap().set_modified(t).unwrap();
+            t.duration_since(UNIX_EPOCH).unwrap().as_secs()
+        };
+        // Both there (a restore, a sync): the start takes the first, so its time is the one shown, though the other is newer.
+        let (first, _) = (stamp(&state, 7200), stamp(&taken, 60));
+        assert_eq!(open_moment(&g, &files), Some((rom.clone(), Some(first))));
+        // Made by another core: the start would not take it, so the card does not promise it.
+        let mark = Mark::new("pocket-core", "gpsp", &rom, None);
+        assert_eq!(open_moment(&game("pocket-core", "mgba", rom, mark), &files), None);
+    }
 
     fn game(emulator: &str, core: &str, path: PathBuf, mark: Option<Mark>) -> Game {
         Game { system: "gba".into(), path, emulator: emulator.into(), core: core.into(), mark }

@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::process::Command;
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+include!("common/root.rs");
 
 struct Stub(std::process::Child);
 
@@ -356,7 +356,7 @@ fn a_cover_read_on_the_thread_reaches_the_big_case() {
     let stem = Path::new(first["path"].as_str().unwrap()).file_stem().unwrap().to_str().unwrap().to_string();
     let dir = card.path().join("data/covers").join(first["system"].as_str().unwrap());
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::copy(Path::new(ROOT).join("assets/media/3ds-front.png"), dir.join(format!("{stem}.png"))).unwrap();
+    std::fs::copy(Path::new(&ROOT).join("assets/media/3ds-front.png"), dir.join(format!("{stem}.png"))).unwrap();
     let shown = card.show("big-thread");
     assert!(shown.stdout.contains("big-cover ready=true"), "{}", shown.stdout);
 }

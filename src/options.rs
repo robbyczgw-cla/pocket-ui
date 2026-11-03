@@ -63,8 +63,8 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "effect",
                 name: "Screen effect",
-                desc: "LCD grid imitates a handheld screen, scanlines and CRT a TV.\nThey stay even at every size, Aspect included.",
-                choices: &[c("none", "None"), c("grid", "LCD grid"), c("scanlines", "Scanlines"), c("crt", "CRT")],
+                desc: "LCD grid imitates a handheld screen, scanlines and CRT a TV.\nSoft glow adds a halo around bright parts; Smooth pixels rounds slanted edges.\nThey stay even at every size, Aspect included.",
+                choices: &[c("none", "None"), c("grid", "LCD grid"), c("scanlines", "Scanlines"), c("crt", "CRT"), c("softglow", "Soft glow"), c("smooth", "Smooth pixels")],
                 default: 0,
                 shown_when: None,
             },
@@ -80,21 +80,18 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "frame",
                 name: "Screen frame",
-                desc: "Fills the space around the picture. Auto suits the console.\nAmbient glows with the game's colours; Glow is a thin light in its colour.\nShell to Goggles are handhelds, CRT to Woodgrain are TVs, Arcade a cabinet.\nTwin, two screens with a hinge, is offered for the Nintendo DS.",
+                desc: "Fills the space around the picture. Auto suits the console.\nAmbient glows with the game's colours; Glow is a thin light in its colour.\nDMG to PSP: handhelds, each for its console. CRT to Woodgrain: TVs. Arcade: a cabinet.",
                 choices: &[
                     c("none", "None"),
                     c("auto", "Auto"),
                     c("ambient", "Ambient"),
-                    c("shell", "Shell"),
-                    c("brick", "Brick"),
-                    c("pocket", "Pocket slim"),
-                    c("clamshell", "Clamshell"),
-                    c("wide", "Wide"),
-                    c("twin", "Twin"),
-                    c("gloss", "Gloss"),
-                    c("swan", "Swan"),
-                    c("watch", "Watch"),
-                    c("goggles", "Goggles"),
+                    c("brick", "DMG"),
+                    c("pocket", "GB Pocket"),
+                    c("shell", "GBC"),
+                    c("wide", "GBA"),
+                    c("clamshell", "GBA SP"),
+                    c("twin", "DS"),
+                    c("gloss", "PSP"),
                     c("crt", "CRT"),
                     c("studio", "Studio monitor"),
                     c("portable-tv", "Portable TV"),
@@ -107,8 +104,8 @@ pub const GROUPS: &[Group] = &[
             },
             Setting {
                 key: "frame_colour",
-                name: "Shell colour",
-                desc: "The colour of the handheld shell around the screen.\nClear purple, atomic purple and glacier blue are see-through.",
+                name: "GBC colour",
+                desc: "The colour of the Game Boy Color shell around the screen.\nClear purple, atomic purple and glacier blue are see-through.",
                 choices: &[
                     c("grey", "Classic grey"),
                     c("indigo", "Indigo"),
@@ -131,43 +128,27 @@ pub const GROUPS: &[Group] = &[
             },
             Setting {
                 key: "frame_brick",
-                name: "Brick colour",
-                desc: "The colour of the brick-shaped handheld. Clear is see-through.\nIts power light shows the battery: red at 20%, blinking at 5%.",
+                name: "DMG colour",
+                desc: "The colour of the original Game Boy. Clear is see-through.\nIts power light shows the battery: red at 20%, blinking at 5%.",
                 choices: &[c("grey", "Grey"), c("clear", "Clear"), c("red", "Red"), c("yellow", "Yellow"), c("green", "Green"), c("black", "Black")],
                 default: 0,
                 shown_when: Some(("frame", "brick")),
             },
             Setting {
                 key: "frame_pocket",
-                name: "Pocket finish",
-                desc: "Brushed silver metal or clear plastic.\nIts power light shows the battery: red at 20%, blinking at 5%.",
+                name: "GB Pocket finish",
+                desc: "The Game Boy Pocket: brushed silver metal or clear plastic.\nIts power light shows the battery: red at 20%, blinking at 5%.",
                 choices: &[c("silver", "Brushed silver"), c("clear", "Clear")],
                 default: 0,
                 shown_when: Some(("frame", "pocket")),
             },
             Setting {
                 key: "frame_clamshell",
-                name: "Clamshell finish",
-                desc: "The paint of the opened clamshell.\nIts power light, in the hinge, shows the battery.",
+                name: "GBA SP finish",
+                desc: "The paint of the opened Game Boy Advance SP.\nIts power light, in the hinge, shows the battery.",
                 choices: &[c("platinum", "Platinum"), c("cobalt", "Cobalt"), c("flame", "Flame red"), c("graphite", "Graphite")],
                 default: 0,
                 shown_when: Some(("frame", "clamshell")),
-            },
-            Setting {
-                key: "frame_swan",
-                name: "Swan finish",
-                desc: "Pastel plastic, or a see-through skeleton.",
-                choices: &[c("pastel", "Pastel"), c("skeleton", "Skeleton")],
-                default: 0,
-                shown_when: Some(("frame", "swan")),
-            },
-            Setting {
-                key: "frame_watch",
-                name: "Watch finish",
-                desc: "The brushed metal of the faceplate.",
-                choices: &[c("gold", "Gold"), c("silver", "Silver")],
-                default: 0,
-                shown_when: Some(("frame", "watch")),
             },
             // How the Pocket is held (`video::Orientation`): the picture turns on the panel, the Pocket's D-pad and
             // sticks with it.
@@ -379,10 +360,31 @@ impl Group {
     }
 }
 
-/// Whether `value` of `setting` is offered for `system`. Twin draws the Nintendo DS's two stacked
-/// screens, so it is offered for the DS only. A saved value is kept either way.
+/// The console family each console-shaped frame draws: the Game Boy family (DMG, GB Pocket, GBC), the
+/// Game Boy Advance (GBA, GBA SP), the Nintendo DS (DS; its two stacked screens) and the PSP.
+fn frame_systems(value: &str) -> Option<&'static [&'static str]> {
+    match value {
+        "brick" | "pocket" | "shell" => Some(&["gb", "gbh", "gbc", "gbch"]),
+        "wide" | "clamshell" => Some(&["gba", "gbah", "gbav"]),
+        "twin" => Some(&["nds"]),
+        "gloss" => Some(&["psp"]),
+        _ => None,
+    }
+}
+
+/// Whether `value` of `setting` is offered for `system`: a console's own frame only for that console.
+/// A saved value is kept either way.
 pub fn offered(setting: &Setting, value: &str, system: &str) -> bool {
-    !(setting.key == "frame" && value == "twin" && system != "nds")
+    setting.key != "frame" || frame_systems(value).is_none_or(|systems| systems.contains(&system))
+}
+
+/// Values that were once choices and are read as another: the Swan, Watch and Goggles frames left the list
+/// (Auto still draws them for WonderSwan, Game & Watch and Virtual Boy), so a file that has one means Auto.
+fn current_value<'a>(key: &str, value: &'a str) -> &'a str {
+    match (key, value) {
+        ("frame", "swan" | "watch" | "goggles") => "auto",
+        _ => value,
+    }
 }
 
 /// Whether a setting means anything for `system`: run-ahead only for the light systems, Earlier only with save states.
@@ -468,8 +470,8 @@ impl GameSettings {
         let find = |v: &str| setting.choices.iter().position(|c| c.value == v);
         self.values
             .get(setting.key)
-            .and_then(|v| find(v))
-            .or_else(|| self.globals.get(setting.key).and_then(|v| find(v)))
+            .and_then(|v| find(current_value(setting.key, v)))
+            .or_else(|| self.globals.get(setting.key).and_then(|v| find(current_value(setting.key, v))))
             .or_else(|| console_default(&self.system, setting.key).and_then(find))
             .unwrap_or(setting.default)
     }
@@ -690,19 +692,18 @@ mod tests {
         let values: Vec<&str> = frame.choices.iter().map(|c| c.value).collect();
         assert_eq!(
             values,
-            ["none", "auto", "ambient", "shell", "brick", "pocket", "clamshell", "wide", "twin", "gloss", "swan", "watch", "goggles", "crt", "studio", "portable-tv", "woodgrain", "arcade", "glow"]
+            ["none", "auto", "ambient", "brick", "pocket", "shell", "wide", "clamshell", "twin", "gloss", "crt", "studio", "portable-tv", "woodgrain", "arcade", "glow"]
         );
         // Every value means a frame to pocket-core, and every finish is one its frame knows.
         for v in &values {
             assert!(*v == "none" || crate::video::FrameMode::parse(v) != crate::video::FrameMode::None, "{v}");
         }
-        use crate::bezel::{BrickColour, ClamFinish, SlimFinish, SwanFinish, WatchFinish};
+        use crate::bezel::{BrickColour, ClamFinish, SlimFinish};
         let finishes = |key: &str| setting(key).unwrap().choices.iter().map(|c| c.value).collect::<Vec<_>>();
         assert_eq!(finishes("frame_brick"), BrickColour::ALL.iter().map(|f| f.value()).collect::<Vec<_>>());
         assert_eq!(finishes("frame_pocket"), SlimFinish::ALL.iter().map(|f| f.value()).collect::<Vec<_>>());
         assert_eq!(finishes("frame_clamshell"), ClamFinish::ALL.iter().map(|f| f.value()).collect::<Vec<_>>());
-        assert_eq!(finishes("frame_swan"), SwanFinish::ALL.iter().map(|f| f.value()).collect::<Vec<_>>());
-        assert_eq!(finishes("frame_watch"), WatchFinish::ALL.iter().map(|f| f.value()).collect::<Vec<_>>());
+        assert!(setting("frame_swan").is_none() && setting("frame_watch").is_none(), "Swan and Watch have no finish rows");
         let scaling: Vec<&str> = setting("scaling").unwrap().choices.iter().map(|c| c.value).collect();
         assert_eq!(scaling, ["native", "integer-smaller", "aspect", "fullscreen"]);
         let colours: Vec<&str> = setting("frame_colour").unwrap().choices.iter().map(|c| c.value).collect();
@@ -728,11 +729,11 @@ mod tests {
         assert_eq!(keys(&s), ["scaling", "sharpness", "effect", "frame", "frame_colour", "orientation"]);
         s.values.insert("frame".into(), "crt".into());
         assert_eq!(keys(&s), ["scaling", "sharpness", "effect", "frame", "frame_tv", "orientation"]);
-        for (frame, sub) in [("brick", "frame_brick"), ("pocket", "frame_pocket"), ("clamshell", "frame_clamshell"), ("swan", "frame_swan"), ("watch", "frame_watch")] {
+        for (frame, sub) in [("brick", "frame_brick"), ("pocket", "frame_pocket"), ("clamshell", "frame_clamshell")] {
             s.values.insert("frame".into(), frame.into());
             assert_eq!(keys(&s), ["scaling", "sharpness", "effect", "frame", sub, "orientation"], "{frame}");
         }
-        for frame in ["wide", "twin", "gloss", "goggles", "studio", "portable-tv", "woodgrain"] {
+        for frame in ["wide", "twin", "gloss", "studio", "portable-tv", "woodgrain"] {
             s.values.insert("frame".into(), frame.into());
             assert_eq!(keys(&s).len(), 5, "{frame} has no sub-choice");
         }
@@ -773,19 +774,37 @@ mod tests {
     }
 
     #[test]
-    fn twin_is_offered_for_the_nintendo_ds_only() {
+    fn console_frames_are_offered_for_their_console_only() {
         let dir = TestDir::new("twin");
         let frame = setting("frame").unwrap();
+        // Walking right through the list from None shows only what the console may have.
         let walk = |system: &str| {
             let mut s = GameSettings::load(&dir, system, Path::new("x.rom"));
-            s.values.insert("frame".into(), "wide".into());
-            s.step(frame, 1);
-            let right = s.values["frame"].clone();
-            s.step(frame, -1);
-            (right, s.values["frame"].clone())
+            let mut seen = vec![];
+            loop {
+                s.step(frame, 1);
+                if s.values["frame"] == "none" {
+                    break;
+                }
+                seen.push(s.values["frame"].clone());
+            }
+            seen.retain(|v| ["brick", "pocket", "shell", "wide", "clamshell", "twin", "gloss"].contains(&v.as_str()));
+            seen
         };
-        assert_eq!(walk("nds"), ("twin".to_string(), "wide".to_string()));
-        assert_eq!(walk("gba"), ("gloss".to_string(), "wide".to_string()), "skipped both ways");
+        assert_eq!(walk("nds"), ["twin"]);
+        assert_eq!(walk("gba"), ["wide", "clamshell"]);
+        assert_eq!(walk("gb"), ["brick", "pocket", "shell"]);
+        assert_eq!(walk("gbc"), ["brick", "pocket", "shell"]);
+        assert_eq!(walk("psp"), ["gloss"]);
+        assert!(walk("snes").is_empty() && walk("psx").is_empty());
+        // Swan, Watch and Goggles left the list: a saved one reads as Auto, in the menu and for pocket-core.
+        let mut s = GameSettings::load(&dir, "wonderswan", Path::new("x.ws"));
+        for old in ["swan", "watch", "goggles"] {
+            s.values.insert("frame".into(), old.into());
+            assert_eq!(frame.choices[s.index(frame)].value, "auto", "{old}");
+            assert_eq!(s.effective()["frame"], "auto", "{old}");
+            assert!(crate::video::VideoSettings::from_values(&s.effective()).fixed_style("wonderswan").is_none());
+        }
         // Old and hand-made settings files keep working: a saved Twin elsewhere stays as it is.
         let mut s = GameSettings::load(&dir, "gba", Path::new("x.gba"));
         s.values.insert("frame".into(), "twin".into());

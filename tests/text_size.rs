@@ -5,6 +5,7 @@
 //! must show
 //! - no string whose ink runs into another string's (`O`) or into a hint bar,
 //! - no two strings on one line closer than a space (`T`: they would read as one word),
+//! - no string cut by the top or bottom edge of the picture itself (`V`: a heading half off the screen),
 //! - no string cut by the left or right edge of what it is painted into (`E`; a list's band cutting its rows at the
 //!   top and bottom while they scroll is fine, and so is what a page marks as cut on purpose).
 //!
@@ -17,10 +18,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+include!("common/root.rs");
 
 fn states() -> Vec<(bool, String)> {
-    std::fs::read_to_string(Path::new(ROOT).join("tests/i18n-states.txt"))
+    std::fs::read_to_string(Path::new(&ROOT).join("tests/i18n-states.txt"))
         .expect("tests/i18n-states.txt")
         .lines()
         .map(str::trim)
@@ -89,6 +90,64 @@ fn fake_library(dir: &Path) {
     assert!(status.success(), "curator-fake-library.py failed");
 }
 
+/// Renders every job `(name, size, lang, safe, state)` (at `picture`, "WxH", when given) and returns the lines of the
+/// text record, `state (size, lang): line`, of those starting with `only` (all of them when empty), plus a line for each
+/// state that didn't render.
+fn render_all(tmp: &Path, bin: &Path, stub: Option<&Stub>, jobs: Vec<(String, &'static str, &'static str, bool, String)>, picture: Option<&str>, only: &str) -> Vec<String> {
+    let (tmp, bin, stub) = (tmp.to_path_buf(), bin.to_path_buf(), stub.map(|s| s.path.clone()));
+    let picture = picture.map(str::to_string);
+    let only = only.to_string();
+    let work = Arc::new(Mutex::new(jobs));
+    let found = Arc::new(Mutex::new(Vec::new()));
+    let threads: Vec<_> = (0..std::thread::available_parallelism().map_or(4, |n| n.get().min(8)))
+        .map(|_| {
+            let (work, found, tmp, bin, stub, picture, only) = (work.clone(), found.clone(), tmp.clone(), bin.clone(), stub.clone(), picture.clone(), only.clone());
+            std::thread::spawn(move || loop {
+                let Some((name, size, lang, safe, state)) = work.lock().unwrap().pop() else { break };
+                // Its own copy of the data folder: some states write into it, and they run side by side.
+                let data = tmp.join(format!("data-{name}"));
+                copy_dir(&tmp.join("data"), &data);
+                let (png, boxes) = (tmp.join(format!("{name}.png")), tmp.join(format!("{name}.box")));
+                let mut cmd = Command::new(&bin);
+                if safe {
+                    cmd.arg("--safe");
+                }
+                if let Some(path) = &stub {
+                    cmd.env("WAYLAND_DISPLAY", path);
+                }
+                if let Some(p) = &picture {
+                    cmd.env("POCKETUI_SNAPSHOT_SIZE", p);
+                }
+                let out = cmd
+                    .args(["--snapshot", &state, png.to_str().unwrap()])
+                    .env("POCKETUI_MOCK", "1")
+                    .env("POCKETUI_LANG", lang)
+                    .env("POCKETUI_TEXT_SIZE", size)
+                    .env("POCKETUI_TEXT_BOXES", &boxes)
+                    .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
+                    .env("POCKETUI_DATA", &data)
+                    .output()
+                    .expect("run pocket-ui");
+                let mut found = found.lock().unwrap();
+                if !out.status.success() || !png.exists() {
+                    found.push(format!("{state} ({size}, {lang}) didn't render: {}", String::from_utf8_lossy(&out.stderr)));
+                    continue;
+                }
+                match std::fs::read_to_string(&boxes) {
+                    Ok(text) => found.extend(text.lines().filter(|l| !l.is_empty() && l.starts_with(only.as_str())).map(|l| format!("{state} ({size}, {lang}): {}", l.replace('\t', " | ")))),
+                    Err(_) => found.push(format!("{state} ({size}, {lang}): no record of the painted text (does its snapshot end in write_png?)")),
+                }
+                let _ = std::fs::remove_dir_all(&data);
+            })
+        })
+        .collect();
+    for t in threads {
+        t.join().unwrap();
+    }
+    let found = found.lock().unwrap().clone();
+    found
+}
+
 #[test]
 fn in_medium_and_large_text_no_string_runs_into_another_or_off_its_room() {
     let _tmp_guard = tempfile::tempdir().unwrap();
@@ -117,59 +176,31 @@ fn in_medium_and_large_text_no_string_runs_into_another_or_off_its_room() {
             }
         }
     }
-    let work = Arc::new(Mutex::new(jobs));
-    let found = Arc::new(Mutex::new(Vec::new()));
-    let threads: Vec<_> = (0..std::thread::available_parallelism().map_or(4, |n| n.get().min(8)))
-        .map(|_| {
-            let (work, found, tmp, bin, stub) = (work.clone(), found.clone(), tmp.clone(), bin.clone(), stub.as_ref().map(|s| s.path.clone()));
-            std::thread::spawn(move || loop {
-                let Some((name, size, lang, safe, state)) = work.lock().unwrap().pop() else { break };
-                // Its own copy of the data folder: some states write into it, and they run side by side.
-                let data = tmp.join(format!("data-{name}"));
-                copy_dir(&tmp.join("data"), &data);
-                let (png, boxes) = (tmp.join(format!("{name}.png")), tmp.join(format!("{name}.box")));
-                let mut cmd = Command::new(&bin);
-                if safe {
-                    cmd.arg("--safe");
-                }
-                if let Some(path) = &stub {
-                    cmd.env("WAYLAND_DISPLAY", path);
-                }
-                let out = cmd
-                    .args(["--snapshot", &state, png.to_str().unwrap()])
-                    .env("POCKETUI_MOCK", "1")
-                    .env("POCKETUI_LANG", lang)
-                    .env("POCKETUI_TEXT_SIZE", size)
-                    .env("POCKETUI_TEXT_BOXES", &boxes)
-                    .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
-                    .env("POCKETUI_DATA", &data)
-                    .output()
-                    .expect("run pocket-ui");
-                let mut found = found.lock().unwrap();
-                if !out.status.success() || !png.exists() {
-                    found.push(format!("{state} ({size}, {lang}) didn't render: {}", String::from_utf8_lossy(&out.stderr)));
-                    continue;
-                }
-                match std::fs::read_to_string(&boxes) {
-                    Ok(text) => found.extend(text.lines().filter(|l| !l.is_empty()).map(|l| format!("{state} ({size}, {lang}): {}", l.replace('\t', " | ")))),
-                    Err(_) => found.push(format!("{state} ({size}, {lang}): no record of the painted text (does its snapshot end in write_png?)")),
-                }
-                let _ = std::fs::remove_dir_all(&data);
-            })
-        })
-        .collect();
-    for t in threads {
-        t.join().unwrap();
-    }
+    let mut found = render_all(&tmp, &bin, stub.as_ref(), jobs, None, "");
     drop(stub);
-    let mut found = found.lock().unwrap().clone();
     found.sort();
     assert!(
         found.is_empty(),
-        "{} problems with Settings → Text size → Medium and Large (O: runs into another string or a hint bar, T: touches the string beside it, E: cut by the edge):\n{}",
+        "{} problems with Settings → Text size → Medium and Large (O: runs into another string or a hint bar, T: touches the string beside it, E: cut by the side edge, V: cut by the top or bottom edge):\n{}",
         found.len(),
         found.join("\n")
     );
+}
+
+/// 1024x768 is the shortest screen with a big type: in Large text no heading, line or choice may be
+/// cut by the picture's top or bottom edge (`V`: Leave's four choices, the status picker's heading, a keyboard's note
+/// were off the picture). The other findings of that size are the size sweep's (scripts/size-sweep.sh).
+#[test]
+fn at_1024x768_in_large_text_nothing_is_cut_by_the_top_or_bottom_of_the_picture() {
+    let tmp = tempfile::tempdir().unwrap();
+    fake_library(tmp.path());
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
+    let stub = wayland(tmp.path());
+    let jobs: Vec<_> = states().into_iter().enumerate().map(|(i, (safe, state))| (format!("brick-{i}"), "large", "en", safe, state)).collect();
+    let mut found = render_all(tmp.path(), &bin, stub.as_ref(), jobs, Some("1024x768"), "V\t");
+    drop(stub);
+    found.sort();
+    assert!(found.is_empty(), "{} strings cut by the top or bottom of a 1024x768 picture in Large text:\n{}", found.len(), found.join("\n"));
 }
 
 /// Native 1024x768 outputs do not use the H700's larger logical canvas. A two-line save note must still clear the keys.

@@ -310,6 +310,19 @@ alone and merged into the file with `scripts/build-gamedb.py --only xbox --merge
 byte for byte, so its versions are grouped among Xbox games only. Six of its genres were new and are in `genre_map`
 now, also in `curatordb.bin`'s vocabulary (`scripts/build-curatordb.py vocab`: that section only, the labels byte for
 byte); Xbox games have no feel tags until the next labelling run.
+Since 2026-11-03 it has 15 more systems that had no facts: Neo Geo (board and AES), Neo Geo CD, Amiga (with the CD32), C64,
+Atari Jaguar, 3DO, ColecoVision, Intellivision, Vectrex, ZX Spectrum, Atari 5200, Atari 800 (the 8-bit family), PS3, PS Vita
+and Wii U, 11,480 entries (platform items in `SYSTEMS` of `scripts/build-gamedb.py`, merged with `--only … --merge`, the
+other 36 sections byte for byte). `gamedb.bin` grew from 948 KB to 1.39 MB. They have no feel tags. Arcade (MAME/FBNeo) is
+left out: Wikidata files most arcade games under "arcade video game machine", not a board, and the ROM names are short
+codes the matching can't read. DOS/PC, PICO-8, TIC-80 and ScummVM have next to no Wikidata games. A query too heavy for one
+request (HTTP 500/504) is asked again in batches of games, like a cut-off answer.
+Also 2026-11-03: the system added on 2026-10-29 (1,066 entries) got feel tags, 843 entries. Of its 835 better-known games 658
+were already tagged under another system, so those keep their tags; the other 184 (and the chaff that fell on it) were
+labelled by Luna (5 batches, `label`, labels in the cache) and everything was written with
+`scripts/build-curatordb.py write --systems <system> --merge`, which makes or replaces only that section and keeps
+every other section and the vocabulary byte for byte, so it needs none of the old label cache. `curatordb.bin` grew from
+233 KB to 248 KB. The 72 Wikidata genres the 15 new systems brought were mapped in `genre_map` (`curator-tags.json`, tags unchanged, then `build-curatordb.py vocab`), which `curatordb::tests::the_vocabulary_maps_every_wikidata_genre` demands. None of its games was cross-checked by a second family except those already checked elsewhere (23 entries).
 
 Unique games tagged: 9292; entries: 13412; tags per entry: 6.6
 Confidence: {1: 423, 2: 5252, 3: 3617}

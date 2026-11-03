@@ -298,6 +298,17 @@ pub fn core_states_vary(core_id: &str) -> bool {
     matches!(core_id, "mgba" | "nestopia")
 }
 
+/// Flycast's state size moves while a game runs: 53217183 bytes right after the start, 36439543 in the state written at
+/// quit (Virtua Tennis 2, 2026-11-03), so the quit moment and every slot were refused as "wrong size" (since 0.1.0). Its
+/// states are handed over padded with zeros to the size now (`Core::pad_short_states`), but only from this many bytes:
+/// real Flycast states are tens of MB. The minimum and the check of a RASTATE container's section lengths protect memory;
+/// they do not tell a cut-off state, another game's or a damaged one from a good one (Flycast's own header decides).
+pub const PADDED_STATE_MIN: usize = 1 << 20;
+
+pub fn core_pads_short_states(core_id: &str) -> bool {
+    core_id == "flycast"
+}
+
 /// The systems pocket-core started with (the handhelds and the two Nintendo home consoles) and their cores: pocket-ui's
 /// `HOST_CORES` (src/main.rs) is this list.
 pub const HANDHELD_CORES: &[(&str, &str)] = &[("gb", "gambatte"), ("gbc", "gambatte"), ("gba", "mgba"), ("nes", "nestopia"), ("snes", "snes9x")];
@@ -932,5 +943,6 @@ mod tests {
         assert!(core_states_vary("mgba"), "mGBA's states grow with the game's save data (GBA resume)");
         assert!(core_states_vary("nestopia"), "Nestopia's states differ by 9 bytes from moment to moment (NES resume)");
         assert!(!core_states_vary("gambatte") && !core_states_vary("snes9x"));
+        assert!(core_pads_short_states("flycast") && !core_pads_short_states("ppsspp") && !core_pads_short_states("melondsds"));
     }
 }

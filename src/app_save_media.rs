@@ -147,8 +147,18 @@ impl App {
 
 impl App {
     /// ":saves" on a card: its save slots with 1, 3 and 6 filled, the newest two days old; ":saves=none" all empty
-    /// (the snapshot has no `/storage`, so a card finds none by itself); ":end" with it: a box's back at its end.
+    /// (the snapshot has no `/storage`, so a card finds none by itself); ":continue" the "Continue" line under them (":noslots": none), from a made-up read of the shelf; ":end" with it: a box's back at its end.
     pub(crate) fn card_saves_snapshot(&mut self, state: &str) {
+        // ":continue": a moment waiting, written two hours ago (the card's "Continue" line, `frozen::moment_time`).
+        // The shelf's read stands in as a made-up result (the snapshot has no moment on a card); the card's own lookup
+        // (`frozen_moment_time`) does the rest, as when it opens.
+        if let Some(path) = self.card.as_ref().filter(|_| state.split(':').any(|p| p == "continue")).map(|o| o.path.clone()) {
+            self.moment_reads.shelf_got(vec![(path, Some(pocket_ui::recents::now_secs() - 2 * 3600 - 60))]);
+        }
+        // ":noslots": a game without save slots (RetroArch's, a standalone emulator's).
+        if let Some(open) = self.card.as_mut().filter(|_| state.split(':').any(|p| p == "noslots")) {
+            open.card.data.saves = None;
+        }
         let Some(case) = state.split(':').find_map(|p| p.strip_prefix("saves").map(|r| r.trim_start_matches('='))) else { return };
         let Some(open) = self.card.as_mut() else { return };
         let system = open.system.clone();

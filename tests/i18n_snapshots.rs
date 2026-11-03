@@ -14,10 +14,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+include!("common/root.rs");
 
 fn states() -> Vec<(bool, String)> {
-    std::fs::read_to_string(Path::new(ROOT).join("tests/i18n-states.txt"))
+    std::fs::read_to_string(Path::new(&ROOT).join("tests/i18n-states.txt"))
         .expect("tests/i18n-states.txt")
         .lines()
         .map(str::trim)
@@ -38,7 +38,7 @@ fn states() -> Vec<(bool, String)> {
 
 /// keep.txt: exact names and `re:` patterns (a small subset: `^`, `$`, `.*`, literal text; see `keep_match`).
 fn keep() -> (HashSet<String>, Vec<String>) {
-    let text = std::fs::read_to_string(Path::new(ROOT).join("assets/i18n/keep.txt")).expect("assets/i18n/keep.txt");
+    let text = std::fs::read_to_string(Path::new(&ROOT).join("assets/i18n/keep.txt")).expect("assets/i18n/keep.txt");
     let mut exact = HashSet::new();
     let mut patterns = Vec::new();
     for line in text.lines() {
@@ -101,7 +101,7 @@ fn english_data() -> Vec<String> {
     }
     let mut out = Vec::new();
     for f in ["assets/data/consoles.json", "assets/data/console-credits.json"] {
-        let text = std::fs::read_to_string(Path::new(ROOT).join(f)).expect(f);
+        let text = std::fs::read_to_string(Path::new(&ROOT).join(f)).expect(f);
         walk(&serde_json::from_str(&text).expect(f), &mut out);
     }
     out
@@ -266,7 +266,7 @@ fn every_string_is_translated_or_a_name(lang: &'static str) {
                     .output()
                     .expect("run pocket-ui");
                 if !out.status.success() || !tmp.join(format!("{i}.png")).exists() {
-                    failed.lock().unwrap().push(format!("{state}: {}", String::from_utf8_lossy(&out.stderr)));
+                    failed.lock().unwrap().push(format!("{state}: status={}, png={}\nstderr: {}\nstdout: {}", out.status, tmp.join(format!("{i}.png")).exists(), String::from_utf8_lossy(&out.stderr), String::from_utf8_lossy(&out.stdout)));
                 }
             })
         })

@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+include!("common/root.rs");
 
 struct Stub {
     path: PathBuf,
@@ -83,7 +83,7 @@ fn screen(tmp: &Path, stub: &Option<Stub>, cfg: &Path, state: &str, lang: &str, 
         cmd.env("XDG_RUNTIME_DIR", tmp).env("WAYLAND_DISPLAY", &s.path);
     }
     let out = cmd.output().expect("pocket-ui runs");
-    assert!(out.status.success(), "{state}: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(out.status.success(), "{state}: status={}\nstderr: {}\nstdout: {}", out.status, String::from_utf8_lossy(&out.stderr), String::from_utf8_lossy(&out.stdout));
     let shown = std::fs::read_to_string(visible).unwrap_or_default();
     let faults = std::fs::read_to_string(boxes).unwrap_or_default().lines().filter(|l| l.starts_with(['O', 'T', 'E'])).map(str::to_string).collect();
     (shown.lines().collect::<Vec<_>>().join(" "), faults)

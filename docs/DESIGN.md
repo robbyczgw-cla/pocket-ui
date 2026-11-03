@@ -215,7 +215,7 @@ for the new size (its layouts are kept per width and size).
 **Checked by measuring, not by eye.** `POCKETUI_TEXT_SIZE=medium` or `large` overrides the setting for a snapshot, and
 `POCKETUI_TEXT_BOXES=<file>` makes the text painter record where each string's ink went (`text::boxes`). The snapshot
 writes one line for text that runs into another string or into a hint bar (`O`), for two strings on one line closer than
-a space (`T`) and for text cut by the left or right edge of what it is painted into (`E`). `tests/text_size.rs` renders
+a space (`T`) and for text cut by the left or right edge of what it is painted into (`E`) or by the picture's own top or bottom edge (`V`: a heading half off the screen). `tests/text_size.rs` renders
 every state of `tests/i18n-states.txt` in Medium and in Large, English and German, and fails on any line. Pages mark what is covered
 (a dialog, a sheet), painted over (Up next's card), covered by an overlay of their own (the letter an L2/R2 jump shows
 over the list) or cut on purpose (the Cards look's neighbours).
@@ -735,8 +735,11 @@ Two rows of Settings → Look → Cozy extras, both on from the start, Shelf loo
   spines of two shelves, the bottom row was cut by the hints, the cover was cropped): the cabinet's top board sits
   right over the selected shelf, and the room between the title and that board is the showcase, as high as the case
   out of the shelf needs. Under the selected shelf come the next ones as far as they fit whole, then the plinth; no
-  shelf is cut by the hints (only one taller than the whole room is, fading out). The board glides with the cabinet
-  when the room changes (`show_top`).
+  shelf is cut by the hints (only one taller than the whole room is, fading out). Room left under the last whole shelf
+  is used (`cabinet_plan`, Mini V2 photo 2026-11-03: a 170-line empty strip): first the showcase grows, the case and the
+  TV up to 1.4 times their base size (`show_grow`); what is still left lets the top of the next shelf look in at the
+  bottom, fading into the hints' ground (at least 72 lines, else the plinth closes the cabinet); on the last shelf the
+  plinth sits at the bottom. The board glides with the cabinet when the room changes (`show_top`).
 - **Selecting** pulls the case out and turns it to show its cover (240 ms; the last one goes back in 160 ms
   from wherever it had got to, so holding a direction never waits). Out, it stands in the showcase on the top
   board, above its own slot as far as the screen lets it: nothing of the shelves is under it. It is never taller

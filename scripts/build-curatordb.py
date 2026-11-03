@@ -6,6 +6,9 @@
     scripts/build-curatordb.py cross [--library LIST] [--sample N]  label a sample again with the other model family
     scripts/build-curatordb.py import --model claude FILE...        add hand/second-family labels (compact lines, see `import_labels`)
     scripts/build-curatordb.py write                                write assets/curatordb.bin from the cache
+    scripts/build-curatordb.py write --systems xbox --merge         only these systems, added to (or replaced in) the file as it
+                                                                    is: every other section kept byte for byte, a game another
+                                                                    section has keeps those tags (needs no old cache)
     scripts/build-curatordb.py vocab                                only the vocabulary section again (a genre_map change,
                                                                     no new tags): every label section kept byte for byte
     scripts/build-curatordb.py report                               coverage, agreement and example tag sets
@@ -680,6 +683,63 @@ def write(games, labels, v):
     print(f"{sum(len(x) for x in by_system.values())} entries in {len(by_system)} systems, {len(data) / 1e3:.0f} KB -> {OUT}", file=sys.stderr)
 
 
+def write_merge(games, labels, v, systems):
+    """`write --systems xbox --merge`: the sections of `systems` made or replaced in assets/curatordb.bin, every other
+    section (and the vocabulary) kept byte for byte. A game that another section already has (the same QID on
+    another system) keeps those tags, so one game reads the same everywhere; the others come from the labels in the
+    cache. Needs no cache of the systems already shipped."""
+    b = OUT.read_bytes()
+    end = b.index(b"\n\n")
+    header = b[:end].decode().split("\n")
+    assert header[0] == "PCDB1", f"{OUT}: not a PCDB1 file"
+    body = end + 2
+    old = [(n, b[body + int(o):body + int(o) + int(ln)]) for n, o, ln in (l.split() for l in header[1:])]
+    order = {t["id"]: i for i, t in enumerate(v["tags"])}
+    shipped = {}
+    for n, blob in old:
+        if n in systems or n == "_vocab":
+            continue
+        for line in zlib.decompress(blob).decode().splitlines():
+            shipped.setdefault(line.split("\t")[0], line.split("\t"))
+    new = {}
+    for system in systems:
+        rows = []
+        for q, g in games.items():
+            if system not in g["systems"]:
+                continue
+            if q in shipped:
+                c = shipped[q] + [""] * 8
+                tags = {t: int(w) for t, w in (x.split(":") for x in c[1].split(",") if x)}
+                e = {"tags": tags, "checked": c[7] == "1", "confidence": int(c[6] or 1)}
+                tags = system_tags(e, system)
+                cells = [q, ",".join(f"{t}:{w}" for t, w in sorted(tags.items(), key=lambda kv: order[kv[0]])), *c[2:6], c[6], c[7]]
+            elif q in labels and not (g["sitelinks"] < MIN_SITELINKS and labels[q]["confidence"] < 2):
+                e = labels[q]
+                tags = system_tags(e, system)
+                if not tags and e["confidence"] < 2:
+                    continue
+                cells = [q, ",".join(f"{t}:{w}" for t, w in sorted(tags.items(), key=lambda kv: order[kv[0]])),
+                         e.get("length") or "", e.get("session") or "", e.get("difficulty") or "",
+                         {True: "1", False: "0"}.get(e.get("text_heavy"), ""), str(e["confidence"]), "1" if e.get("checked") else ""]
+            else:
+                continue
+            rows.append("\t".join(cells))
+        new[system] = zlib.compress(("\n".join(sorted(rows)) + "\n").encode(), 9)
+        print(f"{system}: {len(rows)} entries", file=sys.stderr)
+    sections = [(n, new.pop(n, blob)) for n, blob in old] + sorted(new.items())
+    blobs, header, offset = [], ["PCDB1"], 0
+    for name, blob in sections:
+        header.append(f"{name} {offset} {len(blob)}")
+        blobs.append(blob)
+        offset += len(blob)
+    data = ("\n".join(header) + "\n\n").encode() + b"".join(blobs)
+    tmp = OUT.with_suffix(".tmp")
+    tmp.write_bytes(data)
+    tmp.replace(OUT)
+    kept = sum(1 for n, _ in old if n != "_vocab" and n not in systems)
+    print(f"merged: {kept} other sections kept, {len(data) / 1e3:.0f} KB -> {OUT}", file=sys.stderr)
+
+
 # ---------------------------------------------------------------- main
 
 def main():
@@ -691,6 +751,7 @@ def main():
     ap.add_argument("--limit", type=int, help="only the first N games of the scope")
     ap.add_argument("--sample", type=int, default=300, help="games for the cross-check")
     ap.add_argument("--systems", help="only games on these systems (comma-separated)")
+    ap.add_argument("--merge", action="store_true", help="`write`: only --systems, added to (or replaced in) the file as it is")
     args = ap.parse_args()
     v = vocab()
     if args.command == "vocab":
@@ -736,6 +797,10 @@ def main():
         b = label(other, sample, games, v, parallel=2)
         a = load_cache("luna")
         print("agreement:", json.dumps(agreement(a, b, sample)))
+    elif args.command == "write" and args.merge:
+        if not args.systems:
+            raise SystemExit("`write --merge` needs --systems")
+        write_merge(games, final_labels(games, v), v, args.systems.split(","))
     elif args.command == "write":
         write(games, final_labels(games, v), v)
     elif args.command == "report":

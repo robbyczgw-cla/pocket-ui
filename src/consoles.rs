@@ -250,6 +250,7 @@ fn region_word(code: &str) -> Option<&'static str> {
         "BR" => "Brazil",
         "CHL" => "Chile",
         "CN" => "China",
+        "WW" => "Worldwide",
         _ => return None,
     })
 }
@@ -581,10 +582,14 @@ mod tests {
     const IDS: &[&str] = &[
         "3do",
         "3ds",
+        "amiga",
         "atari2600",
+        "atari5200",
         "atari7800",
+        "atari800",
         "atarijaguar",
         "atarilynx",
+        "c64",
         "colecovision",
         "dreamcast",
         "fds",
@@ -602,29 +607,37 @@ mod tests {
         "neogeo",
         "nes",
         "ngpc",
+        "pc",
         "pcengine",
+        "pico-8",
         "pokemini",
         "ps2",
+        "ps3",
         "psp",
+        "psvita",
         "psx",
         "saturn",
+        "scummvm",
         "sega32x",
         "segacd",
         "sg-1000",
         "snes",
         "supergrafx",
+        "tic-80",
         "vectrex",
         "virtualboy",
         "wii",
+        "wiiu",
         "wonderswan",
         "xbox",
+        "zxspectrum",
     ];
 
     #[test]
-    fn the_file_loads_with_all_39_consoles() {
+    fn the_file_loads_with_all_51_consoles() {
         let f: File = serde_json::from_str(DATA).expect("consoles.json parses");
-        assert_eq!(f.systems.len(), 39);
-        assert_eq!(all().len(), 39);
+        assert_eq!(f.systems.len(), 51);
+        assert_eq!(all().len(), 51);
         assert!(license().is_some_and(|l| l.contains("Wikidata")));
         for c in all() {
             assert!(!c.name.is_empty(), "{}", c.id);
@@ -668,9 +681,6 @@ mod tests {
             "wonderswancolor",
             "n3ds",
             "ports",
-            "pico-8",
-            "scummvm",
-            "pc",
             "",
             "NES",
         ] {
@@ -736,6 +746,7 @@ mod tests {
         assert_eq!(region_name("NA"), "North America");
         assert_eq!(region_name("EU/AU"), "Europe, Australia");
         assert_eq!(region_name("CHL/BR"), "Chile, Brazil");
+        assert_eq!(region_name("WW"), "Worldwide");
         assert_eq!(region_codes("UK/IE/IT/AU"), "UK, IE, IT, AU");
         assert_eq!(region_name("XX"), "XX");
         let sms = for_system("mastersystem").unwrap();
@@ -902,5 +913,32 @@ mod tests {
         let one = vec!["Emotion Engine 295 MHz · GS".to_string()];
         let (t, px) = pick_value(&one, 200, 28, 24, w);
         assert!(t.ends_with('…') && w(&t, 24) <= 200 && px == 24, "{t}");
+    }
+
+    #[test]
+    fn the_computers_late_consoles_and_fantasy_systems_have_a_page() {
+        for (system, id, headline) in [
+            ("amiga", "amiga", "Commodore · 1985 · home computer"),
+            ("c64", "c64", "Commodore · 1982 · home computer"),
+            ("zxspectrum", "zxspectrum", "Sinclair · 1982 · home computer"),
+            ("ps3", "ps3", "Sony · 2006 · seventh generation"),
+            ("psvita", "psvita", "Sony · 2011 · eighth generation"),
+            ("wiiu", "wiiu", "Nintendo · 2012 · eighth generation"),
+            ("pico-8", "pico-8", "Lexaloffle · 2015 · fantasy console"),
+            ("tic-80", "tic-80", "Nesbox · 2017 · fantasy computer"),
+            ("scummvm", "scummvm", "ScummVM Team · 2001 · game engines"),
+            ("pc", "pc", "Microsoft · 1981 · PC games"),
+        ] {
+            let c = for_system(system).unwrap_or_else(|| panic!("{system}: no page"));
+            assert_eq!(c.id, id);
+            assert_eq!(c.lines.headline.as_deref(), Some(headline), "{system}");
+            assert!(c.summary.as_deref().is_some_and(|s| s.len() > 40), "{system}: summary");
+            assert!(c.sources.iter().any(|s| s.contains("wikipedia.org")) && c.sources.iter().any(|s| s.contains("wikidata.org")));
+        }
+        // Not a console: released worldwide, nothing the file doesn't know is made up.
+        let pico = for_system("pico-8").unwrap();
+        assert_eq!(pico.releases(), vec![("WW".to_string(), "2015-04".to_string())]);
+        assert!(pico.units_sold.is_none() && pico.launch_price.is_empty() && pico.cpu.is_none());
+        assert_eq!(pico.display.as_deref(), Some("128×128, 16 colours"));
     }
 }

@@ -11,8 +11,9 @@ use std::path::{Path, PathBuf};
 
 use pocket_ui::manual;
 
-fn root() -> &'static Path {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+/// As cargo says it when the test runs (not `env!`: a binary reused from a shared build folder would read a gone copy).
+fn root() -> PathBuf {
+    PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap_or_else(|| env!("CARGO_MANIFEST_DIR").into()))
 }
 
 fn read(rel: &str) -> String {

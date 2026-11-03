@@ -2,11 +2,12 @@
 // Variants are picked by the host with defines inserted after the version line (`video.rs`), followed by the
 // constants of `picture_fx.rs` (GAMMA, BEAM_*, MASK, HALO*, LCD_*, GBA_*):
 //   SHARPNESS n  0 sharp (NEAREST), 1 crisp, 2 soft (LINEAR)
-//   EFFECT n     0 none, 1 LCD grid, 2 scanlines, 3 CRT
+//   EFFECT n     0 none, 1 LCD grid, 2 scanlines, 3 CRT, 4 soft glow, 5 smooth pixels
 //   LCD_COLOUR   the Game Boy Advance screen's colours (with EFFECT 1)
 // Every effect works from the picture's own pixel and line positions, so it stays locked to the game at any
 // scale, and mixes light in linear light (decode, mix, encode). One pass:
-//   none, sharp/soft: 1 tap; crisp: 4 texel fetches; LCD: as its sharpness; scanlines: 2 taps; CRT: 3 taps.
+//   none, sharp/soft: 1 tap; crisp: 4 texel fetches; LCD: as its sharpness; scanlines: 2 taps; CRT: 3 taps;
+//   soft glow: its sharpness's taps + 1 (a mip level blend); smooth pixels: 9 nearest fetches (Crisp: + 4).
 precision highp float;
 uniform mediump sampler2D tex;
 uniform vec2 src;     // source size in texels
@@ -33,7 +34,7 @@ vec3 enc(vec3 c) { return sqrt(clamp(c, 0.0, 1.0)); }
 // Flat texels, a ramp one output pixel wide around their edge; exactly 0 or 1 at whole-number scales.
 vec2 crisp_w(vec2 t, vec2 s) { return clamp((t - 0.5) * max(s, vec2(1.0)) + 0.5, 0.0, 1.0); }
 
-#if EFFECT < 2
+#if EFFECT < 2 || EFFECT >= 4
 // The game's colour at this pixel, encoded, by sharpness.
 vec3 base() {
 #if SHARPNESS == 1
@@ -51,7 +52,8 @@ vec3 base() {
     vec3 bot = mix(lin(c01), lin(c11), w.x);
     return sw(enc(mix(top, bot, w.y)));
 #else
-    return sw(texture(tex, v).rgb);
+    // Level 0: the Soft glow's texture has mipmaps, which a plain lookup would pick when the picture is shrunk.
+    return sw(textureLod(tex, v, 0.0).rgb);
 #endif
 }
 #endif
@@ -87,6 +89,55 @@ vec3 beam(vec3 e, float d, float h) {
 }
 #endif
 
+#if EFFECT == 4
+// Soft glow: a halo from a blurred copy of the picture (a fractional mip level: two levels blended by the
+// texture unit). Only where the blur is brighter than the picture itself (light spilling into darker pixels, so
+// bright areas stay as they are) and scaled by the blur (the brighter the surroundings, the more: a dark detail
+// beside a mid-tone gets none), added in linear light.
+vec3 soft_glow() {
+    vec3 c = lin(base());
+    float lod = max(log2(src.y / SOFT_GLOW_LINES), 0.0);
+    vec3 b = lin(sw(textureLod(tex, v, lod).rgb));
+    return enc(c + SOFT_GLOW_GAIN * max(b - c, 0.0) * b);
+}
+#endif
+
+#if EFFECT == 5
+bool same(vec3 a, vec3 b) {
+    vec3 d = abs(a - b);
+    return max(d.r, max(d.g, d.b)) < SMOOTH_TOL;
+}
+// Smooth pixels: a one-texel stair-step of a diagonal edge, seen in the eight neighbours: the texel P is on the
+// edge's dark side, two of its neighbours (a corner's two sides) are one colour and differ from the two opposite
+// sides, and the two texels along the edge's direction are P's own colour. The half of P on the corner's side
+// of its diagonal then takes the corner's colour, cut one output pixel wide whatever the scale, in linear light.
+// Flat areas, straight edges, one-texel lines, rectangle corners and dither never match, so they stay as they
+// are; longer slopes are left alone too. One pass: 8 nearest fetches around P's own.
+vec3 smooth_pixels() {
+    vec2 p = v * src;
+    vec2 f = fract(p);
+    ivec2 a = ivec2(p), m = ivec2(src) - 1;
+#define NB(dx, dy) sw(texelFetch(tex, clamp(a + ivec2(dx, dy), ivec2(0), m), 0).rgb)
+    vec3 pc = NB(0, 0);
+    vec3 n = NB(0, -1), e = NB(1, 0), s = NB(0, 1), w = NB(-1, 0);
+    vec3 nw = NB(-1, -1), ne = NB(1, -1), sw_ = NB(-1, 1), se = NB(1, 1);
+#undef NB
+#if SHARPNESS == 0
+    vec3 c = lin(pc);
+#else
+    vec3 c = lin(base());
+#endif
+    float len = length(1.0 / scale);  // change of a diagonal's distance (texels) per output pixel
+    bool d1 = same(nw, pc) && same(se, pc);   // the edge runs from top left to bottom right through P
+    bool d2 = same(ne, pc) && same(sw_, pc);  // ... from top right to bottom left
+    if (d1 && same(n, e) && !same(n, w) && !same(e, s) && !same(n, pc)) c = mix(c, lin(n), clamp((f.x - f.y - 0.5) / len + 0.5, 0.0, 1.0));
+    if (d2 && same(n, w) && !same(n, e) && !same(w, s) && !same(n, pc)) c = mix(c, lin(n), clamp((0.5 - f.x - f.y) / len + 0.5, 0.0, 1.0));
+    if (d1 && same(s, w) && !same(s, e) && !same(w, n) && !same(s, pc)) c = mix(c, lin(s), clamp((f.y - f.x - 0.5) / len + 0.5, 0.0, 1.0));
+    if (d2 && same(s, e) && !same(s, w) && !same(e, n) && !same(s, pc)) c = mix(c, lin(s), clamp((f.x + f.y - 1.5) / len + 0.5, 0.0, 1.0));
+    return enc(c);
+}
+#endif
+
 void main() {
 #if EFFECT == 0
     o = vec4(base(), 1.0);
@@ -104,6 +155,10 @@ void main() {
     float fade = smoothstep(LCD_FADE_LO, LCD_FADE_HI, min(scale.x, scale.y));
     c *= 1.0 + fade * (LCD_GAIN - 1.0 - LCD_DARK * cover * LCD_GAIN);
     o = vec4(enc(c), 1.0);
+#elif EFFECT == 4
+    o = vec4(soft_glow(), 1.0);
+#elif EFFECT == 5
+    o = vec4(smooth_pixels(), 1.0);
 #else
     // Scanlines in the picture's line space: line k's centre at y = k, this pixel between lines k0 and k0 + 1.
     float y = v.y * lines - 0.5;

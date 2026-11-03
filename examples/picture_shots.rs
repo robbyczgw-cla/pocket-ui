@@ -390,8 +390,8 @@ fn give(r: &mut Renderer, scene: &Scene) {
 fn cases(scene: &str) -> Vec<(&'static str, &'static str, &'static str)> {
     let mut v = Vec::new();
     let effects: &[&str] = match scene {
-        "gba" | "gb" | "nds" => &["none", "grid"],
-        _ => &["none", "scanlines", "crt"],
+        "gba" | "gb" | "nds" => &["none", "grid", "softglow", "smooth"],
+        _ => &["none", "scanlines", "crt", "softglow", "smooth"],
     };
     let scalings: &[&str] = match scene {
         "nds" | "n64" => &["aspect"],
@@ -444,7 +444,18 @@ fn time(frames: u32) {
         let wall = t0.elapsed().as_secs_f32() * 1000.0 / frames as f32;
         (wall, r.gpu_timer_report().unwrap_or_else(|| "no timer query".into()))
     };
-    const EFFECTS: [(&str, &str); 6] = [("sharp", "none"), ("crisp", "none"), ("soft", "none"), ("sharp", "scanlines"), ("sharp", "crt"), ("crisp", "crt")];
+    const EFFECTS: [(&str, &str); 10] = [
+        ("sharp", "none"),
+        ("crisp", "none"),
+        ("soft", "none"),
+        ("sharp", "scanlines"),
+        ("sharp", "crt"),
+        ("crisp", "crt"),
+        ("sharp", "softglow"),
+        ("crisp", "softglow"),
+        ("sharp", "smooth"),
+        ("crisp", "smooth"),
+    ];
     for (scene, scaling) in [(snes(), "native"), (ps1(), "aspect"), (n64(), "aspect")] {
         give(&mut r, &scene);
         for (sharp, effect) in EFFECTS {

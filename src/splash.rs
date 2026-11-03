@@ -1154,7 +1154,7 @@ mod tests {
     /// run; this test runs everywhere.
     #[test]
     fn the_units_keys_are_ones_systemd_knows() {
-        let unit = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/deploy/pocket-splash.service")).unwrap();
+        let unit = std::fs::read_to_string(crate::testutil::manifest_dir().join("deploy/pocket-splash.service")).unwrap();
         let known: &[(&str, &[&str])] = &[
             ("Unit", &["Description", "DefaultDependencies", "Conflicts", "Before", "After", "Wants", "Requires", "ConditionPathExists", "ConditionFileIsExecutable", "ConditionFileNotEmpty", "ConditionKernelCommandLine"]),
             ("Service", &["Type", "ExecStart", "ExecStartPre", "TimeoutStopSec", "TimeoutStartSec", "Restart", "RestartSec", "StandardOutput", "StandardError", "RemainAfterExit"]),

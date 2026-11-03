@@ -13,8 +13,8 @@ Settings opens on seven categories (Look, Sound & feel, Playing, Games, Connecti
 |---|---|
 | D-pad Up / Down | Move. The list wraps around at the ends. |
 | HOME | Back to Home from wherever you are in Settings (the categories, a list, About, Battery, Lights, Night light, Cozy extras, Sleep & power, Curator). Pages with something under way (an update or a download, a sign-in, a pairing, a clean-up, a button being remapped) keep it: B goes back there. On Home and the shelf HOME still opens the quick settings. |
-| A | On a category: open its list. In the list: open. On Appearance, Colours, Font, Text size, Motion, Animations, Sounds, Haptics, On start, Continue where I quit, Over the game, Screen frames and Language: switch. On Buttons: open its page. |
-| D-pad Left / Right | On Sounds: how loud. On Appearance, Colours, Font, Text size, Motion, Animations, On start, Over the game, Screen frames and Language: switch. On the Buttons page: A or Left / Right switch the selected row, Button layout or Button symbols. |
+| A | On a category: open its list. In the list: open. On Screen colour: back to Neutral. On Appearance, Colours, Font, Text size, Motion, Animations, Sounds, Haptics, On start, Continue where I quit, Over the game, Screen frames and Language: switch. On Buttons: open its page. |
+| D-pad Left / Right | On Sounds: how loud. On Screen colour, Appearance, Colours, Font, Text size, Motion, Animations, On start, Over the game, Screen frames and Language: switch. On the Buttons page: A or Left / Right switch the selected row, Button layout or Button symbols. |
 | B | In a category's list: back to the categories, the one you came from selected. On the categories: back to where you came from (the shelf, or a system's game list). |
 
 A page of Settings (Wi-Fi, Tools, Battery and the others below) goes back with B to its category's list, even when
@@ -186,7 +186,7 @@ These work on the shelf, in quick settings and in games. A bar at the top of the
 | Vol+ / Vol- | Volume |
 | START + Vol+ / Vol- | Brightness, in steps of 5%, never below 5% |
 | HOME + Vol+ / Vol- | Brightness (ROCKNIX does the change, pocket-ui shows the bar) |
-| SELECT + Vol+ / Vol- | Colour temperature, warmer or colder. There is no setting page for it |
+| SELECT + Vol+ / Vol- | Colour: Vol+ goes warmer (more yellow-red), Vol- goes cooler (more blue). The bar shows **Cooler 1…10**, **Neutral** or **Warmer 1…10**; if the screen looks yellowish, press SELECT + Vol- a few times. The same setting as Settings → Look → **Screen colour** (Left/Right there, A for Neutral) |
 
 RetroArch games and the standalone emulators get no bar; the changes still apply. The colour temperature reaches
 RetroArch, PlayStation 2, GameCube and PortMaster games only when the screen supports it system-wide.

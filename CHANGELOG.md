@@ -5,6 +5,31 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ## [Unreleased]
 
+## [0.1.14] - 2026-11-03
+
+### Added
+
+- Settings → Look → Screen colour: the screen's white from Cooler 10 to Warmer 10 as a row of its own, the same setting as SELECT + Vol. Left/Right change it at once, A goes back to Neutral.
+
+- Two more **Screen effects** (Options → Picture): **Soft glow** puts a soft halo around bright parts and leaves the rest clear (no lines, no mask), and **Smooth pixels** rounds one-pixel stair-steps on slanted edges while flat pixels and pixel art stay sharp. Both are one pass in the existing picture shader, even at every size.
+
+- Game facts (year, developer, genre, players, and the Wikipedia text once online) for 15 more systems: Neo Geo, Neo Geo CD, Amiga, C64, ZX Spectrum, Atari Jaguar, Atari 5200, Atari 800, 3DO, ColecoVision, Intellivision, Vectrex, PS3, PS Vita and Wii U.
+
+- Console pages (X on a system, with Credits & links) for the Amiga, C64, ZX Spectrum, Atari 5200, Atari 8-bit family, PS3, PS Vita and Wii U, and short pages for PICO-8, TIC-80, ScummVM and DOS that say what they are: not consoles but programs. Each fact names its source (Wikipedia, Wikidata).
+
+### Changed
+
+- The game's full card says when a moment is waiting where you quit ("Continue: 2 h ago", under Save slots, or as its own row for games without slots), by the same checks as the open case on the shelf. Nothing is shown without one.
+- Screen frames (Options → Picture → Screen frame) carry the names of the consoles they draw: Brick is **DMG**, Pocket slim **GB Pocket**, Shell **GBC**, Wide **GBA**, Clamshell **GBA SP**, Twin **DS**, Gloss **PSP**; their colour rows are renamed to match ("DMG colour", …). A frame shaped like one console is offered for that console's games only. Swan, Watch and Goggles are gone from the list (Auto still draws them for WonderSwan, Game & Watch and Virtual Boy; a game that had one chosen now uses Auto). Saved settings stay valid.
+- Echoes (More like this), the Lens and Up next now also know the feel of about 840 games on one more system, which had no tags before.
+- A game card without a description now says why: "No Wikipedia article for this game" (nothing to wait for), or "Offline: the description comes with Wi-Fi" (it comes with the next connection). English, German and Spanish; before, the card said nothing or an English error word.
+
+### Fixed
+
+- Cabinet: on a short shelf the empty strip under the shelf is used. The case and the TV beside it are shown bigger, and where room is still left the top of the next shelf looks in from below.
+- Game info finds more of your games: "Mega Man X 2" and "Mega Man X 3" are no longer read as "Mega Man 10 2", and a Game Boy Color game filed in the Game Boy folder is found by its exact name first ("Link's Awakening DX" no longer shows the plain Link's Awakening).
+- Dreamcast comes back to its moment and loads from Save slots again. Flycast's state is smaller at Quit (36 MB) than the size it reports at the next start (53 MB), so the file was refused as "the wrong size" and the game started fresh. Such a state now goes to the core padded to the full size. A save that fails because the state grew meanwhile is tried once more.
+
 ## [0.1.13] - 2026-11-03
 
 ### Added

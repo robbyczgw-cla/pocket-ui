@@ -46,33 +46,96 @@ pub(crate) fn paint_dialog(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, d
     c.shade_rect(0, 0, c.w, c.h, pal().void, 215);
     // For the snapshot checks of Settings → Text size: the page under the dialog is dimmed, not read.
     pocket_ui::text::boxes::covered();
-    let (row, font, small) = (pocket_ui::type_scale::row(66, 36), 36u32, NU_SMALL);
-    let line_h = pocket_ui::type_scale::line(small, 12);
-    let choices = d.choices();
-    // Lay out first, to centre the sheet: 980 wide, or as wide as the screen when its words need more lines than the
-    // room above the hints takes (640x480 with Large text in a wider font).
-    let layout = |text: &mut Text, w: i32| {
+    // On a screen too short for all of it (1024x768: Leave's four paragraphs and four choices) the dialog
+    // tightens its spacing and shows a window of the choices; the text size steps down for it only when even that
+    // leaves less than three choices, and goes back after.
+    let size = pocket_ui::type_scale::get();
+    let plan = plan_dialog(c, text, d, size);
+    pocket_ui::type_scale::set(plan.size);
+    paint_dialog_planned(c, text, hits, d, &plan);
+    pocket_ui::type_scale::set(size);
+    // The page's own hints go, as under Curator's sheets: only the dialog's are left to read and to touch.
+    c.rect(0, c.h - NU_PAD - NU_PILL - 12, c.w, NU_PAD + NU_PILL + 12, pal().void);
+    paint_hints(c, text, hits, &[("A", "Choose"), ("B", "Cancel")]);
+}
+
+/// How a dialog is laid out: the spacing (`tight` or the design's), the choices shown, the text size.
+struct DialogPlan {
+    size: pocket_ui::type_scale::TextSize,
+    tight: bool,
+    w: i32,
+    paragraphs: Vec<Vec<String>>,
+    row: i32,
+    small: u32,
+    line_h: i32,
+    /// The sheet's height, with only `visible` choices.
+    h: i32,
+    visible: usize,
+}
+
+/// (top padding, title to body, after a paragraph, body to choices, below the choices), the design's and the tight ones.
+const DIALOG_GAPS: [(i32, i32, i32, i32, i32); 2] = [(48, 26, 14, 16, 36), (32, 16, 8, 10, 24)];
+
+fn plan_dialog(c: &Canvas, text: &mut Text, d: &Dialog, current: pocket_ui::type_scale::TextSize) -> DialogPlan {
+    use pocket_ui::type_scale::TextSize;
+    let avail = c.h - NU_PILL - 2 * NU_PAD;
+    let n = d.choices().len();
+    let plan = |text: &mut Text, size: TextSize, tight: bool, w: i32| {
+        pocket_ui::type_scale::set(size);
+        let g = DIALOG_GAPS[tight as usize];
+        let (row, small) = if tight { (pocket_ui::type_scale::row(56, 36), 26u32) } else { (pocket_ui::type_scale::row(66, 36), NU_SMALL) };
+        let line_h = pocket_ui::type_scale::line(small, if tight { 6 } else { 12 });
         let paragraphs: Vec<Vec<String>> = d.body().iter().map(|p| text.wrap_prose(Face::Body, small, p, w - 2 * 48 - 28)).collect();
-        let body_h: i32 = paragraphs.iter().map(|p| p.len() as i32 * line_h + 14).sum();
-        (paragraphs, 48 + 58 + 26 + body_h + 16 + choices.len() as i32 * row + 36)
+        let body_h: i32 = paragraphs.iter().map(|p| p.len() as i32 * line_h + g.2).sum();
+        let fixed = g.0 + 58 + g.1 + body_h + g.3 + g.4;
+        let visible = (((avail - fixed) / row).max(1) as usize).min(n);
+        DialogPlan { size, tight, w, paragraphs, row, small, line_h, h: fixed + visible as i32 * row, visible }
     };
+    // 980 wide, or as wide as the screen when its words need more lines than the room above the hints takes (640x480
+    // with Large text in a wider font).
     let mut w = 980.min(c.w - 2 * NU_PAD);
-    let (mut paragraphs, mut h) = layout(text, w);
-    if h > c.h - NU_PILL - 2 * NU_PAD && c.w - 2 * NU_PAD > w {
+    let mut p = plan(text, current, false, w);
+    if p.visible < n && c.w - 2 * NU_PAD > w {
         w = c.w - 2 * NU_PAD;
-        (paragraphs, h) = layout(text, w);
+        p = plan(text, current, false, w);
     }
+    if p.visible == n {
+        return p;
+    }
+    let sizes: &[TextSize] = match current {
+        TextSize::Large => &[TextSize::Large, TextSize::Medium, TextSize::Normal],
+        TextSize::Medium => &[TextSize::Medium, TextSize::Normal],
+        TextSize::Normal => &[TextSize::Normal],
+    };
+    let mut best = None;
+    for &size in sizes {
+        let t = plan(text, size, true, w);
+        let ok = t.visible >= n.min(3);
+        best = Some(t);
+        if ok {
+            break;
+        }
+    }
+    pocket_ui::type_scale::set(current);
+    best.unwrap_or(p)
+}
+
+fn paint_dialog_planned(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, d: &Dialog, p: &DialogPlan) {
+    let choices = d.choices();
+    let g = DIALOG_GAPS[p.tight as usize];
+    let (row, font, small, line_h) = (p.row, 36u32, p.small, p.line_h);
+    let w = p.w;
     let x = (c.w - w) / 2;
     let inner = w - 2 * 48;
-    let y = ((c.h - NU_PILL - NU_PAD - h) / 2).max(NU_PAD);
+    let y = ((c.h - NU_PILL - NU_PAD - p.h) / 2).max(NU_PAD);
     // A sheet like Curator's and the game card's pickers (`kit::sheet`).
-    pocket_ui::kit::sheet(c, x, y, w, h);
+    pocket_ui::kit::sheet(c, x, y, w, p.h);
     let left = x + 48;
-    let mut ty = y + 48 + 46;
+    let mut ty = y + g.0 + 46;
     text.draw(c, Face::Title, 50, left, ty, pal().chalk, d.title());
-    ty += 26;
+    ty += g.1;
     let warn = matches!(d.kind, DialogKind::Leave | DialogKind::OpenEs);
-    for (i, lines) in paragraphs.iter().enumerate() {
+    for (i, lines) in p.paragraphs.iter().enumerate() {
         let is_warning = warn && i > 0;
         if is_warning {
             c.round_rect(left, ty + 10, 8, lines.len() as i32 * line_h - 4, 4, pal().alert);
@@ -82,18 +145,18 @@ pub(crate) fn paint_dialog(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, d
             ty += line_h;
             text.draw(c, Face::Body, small, left + 28, ty, colour, line);
         }
-        ty += 14;
+        ty += g.2;
     }
-    ty += 16;
-    for (i, choice) in choices.iter().enumerate() {
-        let ry = ty + i as i32 * row;
-        paint_row(c, text, (left, ry, inner, row), font, choice.label(), i == d.sel);
-        hits.row(Area::new(left, ry, inner, row), i);
+    ty += g.3;
+    // The window of the choices that fit, the selection near its middle (as Quick settings' list).
+    let first = if choices.len() <= p.visible { 0 } else { d.sel.saturating_sub(p.visible / 2).min(choices.len() - p.visible) };
+    for (k, choice) in choices.iter().enumerate().skip(first).take(p.visible) {
+        let ry = ty + (k - first) as i32 * row;
+        paint_row(c, text, (left, ry, inner, row), font, choice.label(), k == d.sel);
+        hits.row(Area::new(left, ry, inner, row), k);
     }
+    pocket_ui::kit::scrollbar(c, ty, p.visible as i32 * row, first, p.visible, choices.len());
     hits.list(d.sel, choices.len(), 0.0, row as f32);
-    // The page's own hints go, as under Curator's sheets: only the dialog's are left to read and to touch.
-    c.rect(0, c.h - NU_PAD - NU_PILL - 12, c.w, NU_PAD + NU_PILL + 12, pal().void);
-    paint_hints(c, text, hits, &[("A", "Choose"), ("B", "Cancel")]);
 }
 
 /// The rescue page.

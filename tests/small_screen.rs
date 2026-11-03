@@ -12,11 +12,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+include!("common/root.rs");
 const SIZE: &str = "640x480";
 
 fn states() -> Vec<(bool, String)> {
-    std::fs::read_to_string(Path::new(ROOT).join("tests/i18n-states.txt"))
+    std::fs::read_to_string(Path::new(&ROOT).join("tests/i18n-states.txt"))
         .expect("tests/i18n-states.txt")
         .lines()
         .map(str::trim)

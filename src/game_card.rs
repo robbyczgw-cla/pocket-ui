@@ -30,6 +30,8 @@ const BODY_BOTTOM_GAP: i32 = 100;
 const LINE: i32 = 40;
 /// The status picker's row after the five statuses: the player's rating, set with left and right.
 const RATING_ROW: usize = Status::ALL.len();
+/// The room a picker keeps above its first row for the heading (a 60 px title in Large text, baseline 36 px above the row).
+const HEADING_ROOM: i32 = 100;
 /// The picker's row "Wrong game? Choose another".
 const CHOOSE_ROW: usize = RATING_ROW + 1;
 /// Its last row, for games whose pictures come from the collection: "Wrong pictures? Look up again" (`rom_id`).
@@ -975,6 +977,20 @@ impl Card {
             text.draw(c, Face::Body, 28, rx + rkey, ry, if filled { pal().chalk } else { pal().dust }, &value);
             ry += row();
         }
+        // A waiting moment, as the shelf's open case and the pause menu's "Where I quit" know it: one quiet line under the
+        // slots; a game without slots (RetroArch, a standalone emulator) gets it as a row of its own, in the same place.
+        if let Some(at) = d.continue_at {
+            let ago = crate::recents::ago(at);
+            if d.saves.is_some() {
+                let line = text.fit(Face::Body, 28, &format!("Continue: {ago}"), rw - rkey);
+                text.draw(c, Face::Body, 28, rx + rkey, ry - 6, pal().dust, &line);
+            } else {
+                text.draw(c, Face::Body, 28, rx, ry, pal().dust, "Continue");
+                let line = text.fit(Face::Body, 28, &ago, rw - rkey);
+                text.draw(c, Face::Body, 28, rx + rkey, ry, pal().chalk, &line);
+            }
+            ry += row();
+        }
         if let Some((speed, hint)) = &d.port {
             text.draw(c, Face::Body, 28, rx, ry, pal().dust, "Speed");
             let speed = text.fit(Face::Body, 28, speed, rw - rkey);
@@ -1066,19 +1082,11 @@ impl Card {
 
         // About: the Wikipedia lead when there is one, else a sentence made of the facts.
         let about: Option<(String, Option<String>, u32)> = match &d.summary {
-            Summary::Wikipedia { text: t, title } => Some((t.clone(), Some(format!("Text: Wikipedia, “{title}”, CC BY-SA 4.0")), pal().chalk)),
-            Summary::Loading => Some((
-                d.sentence.clone().unwrap_or_default(),
-                Some("Loading the description from Wikipedia…".into()),
-                pal().chalk,
-            )),
-            Summary::Unavailable(why) => Some((
-                d.sentence.clone().unwrap_or_default(),
-                Some(format!("No description from Wikipedia: {why}")),
-                pal().chalk,
-            )),
-            Summary::Gamelist(t) => Some((t.clone(), Some("From your EmulationStation gamelist".into()), pal().chalk)),
+            Summary::Wikipedia { text: t, .. } | Summary::Gamelist(t) => Some((t.clone(), d.summary.note(), pal().chalk)),
+            // This card is the second view (SELECT); a game with no article and no sentence has nothing to say here, the
+            // info page and the box back say "No Wikipedia article for this game" (`Summary::note`).
             Summary::None => d.sentence.clone().map(|s| (s, None, pal().chalk)),
+            _ => Some((d.sentence.clone().unwrap_or_default(), d.summary.note(), pal().chalk)),
         };
         if let Some((body, credit, color)) = about {
             // A heading in Title 37 like the console page's; the room for its taller capitals is taken from under it,
@@ -1277,14 +1285,25 @@ impl Card {
     /// The status choices over the dimmed card, as a short shelf.
     fn paint_picker(&self, c: &mut Canvas, text: &mut Text, sel: usize, stars: u8) {
         c.shade_rect(0, 0, c.w, c.h, pal().void, 225);
-        let (w, row, gap) = (type_scale::wide(620, 37), type_scale::row(72, 37), 8);
+        let (w, mut row, gap) = (type_scale::wide(620, 37), type_scale::row(72, 37), 8);
         let x = (c.w - w) / 2;
         // The five statuses, the rating a little apart, then quieter, "Wrong game? Choose another" and "Wrong pictures?
         // Look up again".
-        let (extra_gap, extra_h) = (18, type_scale::row(60, 28));
+        let (extra_gap, mut extra_h) = (18, type_scale::row(60, 28));
         let quiet = if self.data.look_up { 2 } else { 1 };
-        let total = (Status::ALL.len() as i32 + 1) * (row + gap) - gap + 2 * extra_gap + quiet * extra_h;
-        let top = (c.h - 100 - total) / 2 + 60;
+        let rows_h = |row: i32, extra_h: i32| (Status::ALL.len() as i32 + 1) * (row + gap) - gap + 2 * extra_gap + quiet * extra_h;
+        let mut total = rows_h(row, extra_h);
+        // On a short screen (1024x768 in Large text) the rows give up height, down to what their type needs,
+        // so the heading stays on the picture: room above the first row for it, and the hint bar below.
+        let room = c.h - 100 - HEADING_ROOM;
+        if total > room {
+            let fixed = rows_h(0, 0);
+            let (min_row, min_extra) = (type_scale::px(37) as i32 + 14, type_scale::px(28) as i32 + 14);
+            let k = (room - fixed) as f32 / (total - fixed) as f32;
+            (row, extra_h) = (((row as f32 * k) as i32).max(min_row), ((extra_h as f32 * k) as i32).max(min_extra));
+            total = rows_h(row, extra_h);
+        }
+        let top = ((c.h - 100 - total) / 2 + 60).max(HEADING_ROOM);
         // A black sheet under the heading and the rows, so nothing of the card runs through them.
         sheet(c, x - 48, top - 120, w + 96, total + 168);
         text.draw(c, Face::Title, 50, x, top - 36, pal().chalk, "Status and rating");
@@ -1472,6 +1491,7 @@ mod tests {
             broken: None,
             favorite: false,
             saves: None,
+            continue_at: None,
             links: Vec::new(),
             plain: false,
         }

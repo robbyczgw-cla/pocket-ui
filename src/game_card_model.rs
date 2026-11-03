@@ -44,6 +44,25 @@ pub enum Summary {
     Gamelist(String),
 }
 
+impl Summary {
+    /// The line under (or instead of) the description that says why there is none, or where it is from; None when
+    /// the text speaks for itself. A game without an article and a game whose text is only not here yet (no Wi-Fi) read
+    /// differently: the one stays without, the other gets it with the next connection.
+    pub fn note(&self) -> Option<String> {
+        Some(match self {
+            Summary::Wikipedia { title, .. } => format!("Text: Wikipedia, “{title}”, CC BY-SA 4.0"),
+            Summary::Gamelist(_) => "From your EmulationStation gamelist".into(),
+            Summary::Loading => "Loading the description from Wikipedia…".into(),
+            Summary::None => "No Wikipedia article for this game".into(),
+            Summary::Unavailable(why) => match why.as_str() {
+                "offline" | "no curl" => "Offline: the description comes with Wi-Fi".into(),
+                "no article" | "no text" => "No Wikipedia article for this game".into(),
+                why => format!("No description from Wikipedia: {why}"),
+            },
+        })
+    }
+}
+
 /// A game of the library shown under "More by" or "Other games in".
 #[derive(Clone, Debug, PartialEq)]
 pub struct RelatedGame {
@@ -122,6 +141,9 @@ pub struct CardData {
     /// Its save slots in pocket-core, shown on their save medium (`save_media`); None where pocket-core doesn't keep
     /// its states (another emulator's game, a system without states).
     pub saves: Option<CardSaves>,
+    /// When the moment a start would continue from was written (Unix seconds), under "Save slots": None without a
+    /// waiting moment (`frozen::moment_time`).
+    pub continue_at: Option<u64>,
     /// The facts that lead to the player's other games: (index into `facts`, where it leads), in the facts' order.
     /// A fact without one is plain text, never a way into an empty list (`app_connections`).
     pub links: Vec<(usize, CardLink)>,

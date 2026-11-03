@@ -2347,6 +2347,182 @@
   "パチンコ": [
    "tabletop",
    "casino"
-  ]
+  ],
+  "2.5D platform game": [
+   "platformer"
+  ],
+  "3D computer graphics software": [],
+  "Metroidbrainia": [
+   "puzzle",
+   "metroidvania"
+  ],
+  "Minecraft clone": [],
+  "Pong": [
+   "arcade",
+   "sports"
+  ],
+  "Western video game": [],
+  "action anime and manga": [],
+  "airdasher": [],
+  "alchemy game": [
+   "puzzle"
+  ],
+  "alternate reality game": [],
+  "arena football": [
+   "sports",
+   "team-sports",
+   "football"
+  ],
+  "augmented reality": [],
+  "automobile simulation game": [
+   "simulation",
+   "vehicle-sim"
+  ],
+  "bat-and-ball game": [
+   "sports"
+  ],
+  "black comedy video game": [],
+  "blackjack video game": [
+   "tabletop",
+   "casino"
+  ],
+  "cave flyer": [
+   "shmup"
+  ],
+  "climate fiction": [],
+  "crossword video game": [
+   "puzzle",
+   "logic-puzzle"
+  ],
+  "crying game": [],
+  "educational game": [
+   "educational"
+  ],
+  "educational software": [
+   "educational"
+  ],
+  "electronic game": [],
+  "emergent gameplay": [],
+  "first-person adventure": [
+   "adventure"
+  ],
+  "fumblecore": [],
+  "game creation system": [],
+  "game of skill": [],
+  "graphics software": [],
+  "handball video game": [
+   "sports",
+   "team-sports"
+  ],
+  "heavy metal music": [],
+  "helicopter simulation game": [
+   "simulation",
+   "flight-sim"
+  ],
+  "hunting action": [
+   "action",
+   "fishing-hunting"
+  ],
+  "interactive art": [],
+  "jigsaw puzzle": [
+   "puzzle"
+  ],
+  "judo video game": [
+   "sports",
+   "individual-sports"
+  ],
+  "looter shooter": [
+   "shooter",
+   "loot"
+  ],
+  "massively multiplayer online first-person shooter": [
+   "shooter",
+   "fps"
+  ],
+  "military education and training": [
+   "educational"
+  ],
+  "miniature golf": [
+   "sports",
+   "individual-sports"
+  ],
+  "mixed martial arts video game": [
+   "fighting"
+  ],
+  "motorcycle simulation game": [
+   "racing",
+   "motorbike-racing"
+  ],
+  "multiplayer online battle arena": [
+   "strategy"
+  ],
+  "news": [],
+  "parody video game": [],
+  "retrofuturistic video game": [],
+  "roguelite": [
+   "roguelike"
+  ],
+  "rolling platformer": [
+   "platformer"
+  ],
+  "romantic comedy": [],
+  "sailing simulator": [
+   "simulation",
+   "vehicle-sim"
+  ],
+  "satirical video game": [],
+  "scrolling": [],
+  "self-reflexive video game": [],
+  "serious game": [
+   "educational"
+  ],
+  "ship personification": [],
+  "side view": [],
+  "snakes and ladders / chutes and ladders video game": [
+   "tabletop",
+   "board-game"
+  ],
+  "soulslike": [
+   "rpg",
+   "action-rpg"
+  ],
+  "soulsvania": [
+   "rpg",
+   "action-rpg",
+   "metroidvania"
+  ],
+  "strategic game": [
+   "strategy"
+  ],
+  "superbike racing video game": [
+   "racing",
+   "motorbike-racing"
+  ],
+  "tabletop game": [
+   "tabletop"
+  ],
+  "tabletop role-playing game": [
+   "rpg"
+  ],
+  "text adventure": [
+   "adventure"
+  ],
+  "text-based video game": [
+   "adventure"
+  ],
+  "tile-based game": [],
+  "trade simulation game": [
+   "simulation",
+   "management"
+  ],
+  "transport puzzle": [
+   "puzzle"
+  ],
+  "vertical platformer": [
+   "platformer"
+  ],
+  "video game about pirates": [],
+  "video game music": [],
+  "virtual world": []
  }
 }

@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+include!("common/root.rs");
 
 struct Stub {
     path: PathBuf,
@@ -92,7 +92,7 @@ fn shot(tmp: &Path, stub: Option<&Stub>, state: &str, size: &str) -> String {
         .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
         .output()
         .unwrap();
-    assert!(out.status.success() && png.exists(), "{state}: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(out.status.success() && png.exists(), "{state}: status={}, png={}\nstderr: {}\nstdout: {}", out.status, png.exists(), String::from_utf8_lossy(&out.stderr), String::from_utf8_lossy(&out.stdout));
     std::fs::read_to_string(transcript).expect("the render must record its text")
 }
 
@@ -325,7 +325,9 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
                 if condition(self) {
                     return;
                 }
-                assert!(self.child.try_wait().unwrap().is_none(), "UI exited: {}", self.log());
+                if let Some(status) = self.child.try_wait().unwrap() {
+                    panic!("UI exited ({status}): {}", self.log());
+                }
                 std::thread::sleep(Duration::from_millis(5));
             }
             panic!(
@@ -817,6 +819,26 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         assert!(again.contains("This game has its own settings."), "{again}");
     }
 
+    /// The frames are named after the consoles they draw (DMG, GB Pocket, GBC …), a console's own frames come only with it,
+    /// and each name and its finish row stand whole on the page, none cut short.
+    #[test]
+    fn this_game_frame_names_are_whole_and_belong_to_the_console() {
+        let mut ui = Driver::new("frame-names", true);
+        ui.sees("Game Boy");
+        ui.send("a\nx");
+        ui.sees("START");
+        ui.send("start\ndown\ndown\ndown");
+        // Game Boy: none, then Auto, Ambient, the three Game Boys, then the TVs; no GBA, DS or PSP between.
+        for (name, row) in [("Auto", None), ("Ambient", None), ("DMG", Some("DMG colour")), ("GB Pocket", Some("GB Pocket finish")), ("GBC", Some("GBC colour")), ("CRT", Some("TV cabinet"))] {
+            ui.send("right");
+            let page = ui.sees(&format!("\u{2039} {name} \u{203a}"));
+            if let Some(row) = row {
+                assert!(page.contains(row), "{row} is missing under {name}: {page}");
+            }
+            assert!(!page.contains('\u{2026}'), "{name}: something is cut short: {page}");
+        }
+    }
+
     /// Every `send` is its own open/write/close on the FIFO. The UI must lose none of them and never hand the writer a
     /// "Broken pipe" in between (the FIFO used to reach EOF after each writer and was reopened; flaky under load).
     #[test]
@@ -889,8 +911,8 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         tap(&mut ui, 0);
         tap(&mut ui, 0);
         ui.sees("Systems on the shelf");
-        tap(&mut ui, 7);
-        tap(&mut ui, 7);
+        tap(&mut ui, 8);
+        tap(&mut ui, 8);
         ui.sees("TV on the cabinet");
         tap(&mut ui, 1);
         tap(&mut ui, 1);
@@ -1699,6 +1721,8 @@ true
         ui.send("x");
         let page = ui.sees("None. Press Y");
         assert!(page.contains("Tobu Tobu Girl") && page.contains("Details") && page.contains("No description yet."), "{page}");
+        // And why: a homebrew game has no article, which is not the same as having no Wi-Fi yet.
+        assert!(page.contains("No Wikipedia article for this game"), "{page}");
         assert!(!page.contains("Turn over"), "the info page, not the box: {page}");
         ui.send("select");
         ui.sees("Hide or delete");
@@ -1961,6 +1985,19 @@ fn the_info_page_says_how_many_slots_hold_a_save_and_says_so_when_none_do() {
     assert!(text.contains("Save slots") && text.contains("3 of 8") && text.contains("2 days ago"), "{text}");
     let text = card.shot("info:split:gb:tobu:saves=none", "normal");
     assert!(text.contains("Save slots") && text.contains("All empty"), "an empty medium says so: {text}");
+}
+
+/// The full card (X from a list) says under "Save slots" that a moment waits, and says nothing when none does, in German too.
+#[test]
+fn the_full_card_says_when_a_moment_waits_under_the_save_slots() {
+    let card = Card::new("card-continue");
+    let text = card.shot("curator:card:gb:tobu:saves:continue", "normal");
+    assert!(text.contains("Save slots") && text.contains("Continue: 2 h ago"), "{text}");
+    let text = card.shot("curator:card:gb:tobu:saves", "normal");
+    assert!(text.contains("Save slots") && !text.contains("Continue"), "no moment, no line: {text}");
+    // A game without slots (RetroArch, a standalone emulator): the same words as a row of "Your game".
+    let text = card.shot("curator:card:gb:tobu:noslots:continue", "normal");
+    assert!(!text.contains("Save slots") && text.contains("Continue") && text.contains("2 h ago"), "{text}");
 }
 
 /// The line about two games of one file name, on the smallest panel, in every language: over a pocket-core game and as RetroArch's

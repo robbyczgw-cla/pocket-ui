@@ -686,7 +686,7 @@ impl App {
     /// A toast over the search ("Added to Favourites"), as on the shelf.
     fn paint_toast(&mut self, c: &mut Canvas) {
         if let Some((msg, at)) = self.toast.clone() {
-            if at.elapsed() < super::TOAST {
+            if super::toast_age(at) < super::TOAST {
                 let w = self.text.width(Face::Body, 28, &msg) + 48;
                 c.round_rect(c.w / 2 - w / 2, 36, w, 52, 26, KEYCAP);
                 self.text.draw(c, Face::Body, 28, c.w / 2 - w / 2 + 24, 72, CHALK, &msg);

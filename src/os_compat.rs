@@ -1200,7 +1200,7 @@ pub(crate) mod tests {
     /// The real thing, when it has been built and the virtual device's SYSTEM is there (docs/VIRTUAL-DEVICE.md).
     #[test]
     fn the_aarch64_build_reads_as_elf_when_present() {
-        let bin = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/aarch64-unknown-linux-gnu/release/pocket-ui");
+        let bin = crate::testutil::manifest_dir().join("target/aarch64-unknown-linux-gnu/release/pocket-ui");
         let Ok(data) = std::fs::read(&bin) else { return };
         let e = parse_elf(&data).unwrap();
         assert!(e.needed.iter().any(|n| n == "libc.so.6"), "{e:?}");
@@ -1211,7 +1211,7 @@ pub(crate) mod tests {
 
     /// The rows of the contract's data file: (kind, label, code, path, argument).
     pub(crate) fn contract_rows() -> Vec<[String; 5]> {
-        let text = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/rocknix-contract.txt")).unwrap();
+        let text = std::fs::read_to_string(crate::testutil::manifest_dir().join("scripts/rocknix-contract.txt")).unwrap();
         text.lines()
             .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
             .map(|l| {
@@ -1286,7 +1286,7 @@ pub(crate) mod tests {
     /// docs/ROCKNIX-CONTRACT.md lists every row of the data: a table line per promise, the systems and cores by name.
     #[test]
     fn the_rocknix_contract_doc_lists_every_row() {
-        let doc = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/ROCKNIX-CONTRACT.md")).unwrap();
+        let doc = std::fs::read_to_string(crate::testutil::manifest_dir().join("docs/ROCKNIX-CONTRACT.md")).unwrap();
         for r in contract_rows() {
             match r[0].as_str() {
                 "src" => {}
@@ -1300,7 +1300,7 @@ pub(crate) mod tests {
     /// The shell script itself on a tiny made-up root (about a second): every kind of check, ok and broken.
     #[test]
     fn the_rocknix_contract_script_passes_its_self_test() {
-        let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/test-rocknix-contract.sh");
+        let script = crate::testutil::manifest_dir().join("scripts/test-rocknix-contract.sh");
         let out = std::process::Command::new("sh").arg(&script).output().unwrap();
         assert!(out.status.success(), "{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     }

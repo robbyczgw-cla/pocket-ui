@@ -27,8 +27,11 @@ use serde::{Deserialize, Serialize};
 
 /// Steps each way from neutral.
 pub const RANGE: i8 = 10;
-/// Kelvin per step: +10 = 3500 K (candle-warm), -10 = 9500 K (cool).
+/// Kelvin per step towards warm: +10 = 3500 K (candle-warm).
 pub const KELVIN_PER_STEP: i32 = 300;
+/// Kelvin per step towards cool: -10 = 11500 K. Cooler steps are bigger because a bluer white is a smaller change
+/// for the eye than the same kelvin the other way, and the Mini V2's AMOLED leans yellow (Alex, 2026-11-03).
+pub const KELVIN_PER_COOL_STEP: i32 = 500;
 pub const NEUTRAL_KELVIN: i32 = 6500;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
@@ -81,7 +84,7 @@ impl Look {
     }
 
     pub fn kelvin(&self) -> i32 {
-        NEUTRAL_KELVIN - self.warmth as i32 * KELVIN_PER_STEP
+        kelvin_of(self.warmth)
     }
 
     /// Nothing to apply.
@@ -143,12 +146,12 @@ impl Look {
         }
     }
 
-    /// Name for the value on screen: "Warm 3", "Cool 2", "Neutral".
+    /// Name for the value on screen: "Warmer 3", "Cooler 2", "Neutral".
     pub fn warmth_label(&self) -> String {
         match self.warmth {
             0 => "Neutral".into(),
-            w if w > 0 => format!("Warm {w}"),
-            w => format!("Cool {}", -w),
+            w if w > 0 => format!("Warmer {w}"),
+            w => format!("Cooler {}", -w),
         }
     }
 
@@ -159,6 +162,12 @@ impl Look {
             c => format!("{c}"),
         }
     }
+}
+
+/// The white point of a step: warm steps are 300 K, cool steps 500 K each.
+pub fn kelvin_of(warmth: i8) -> i32 {
+    let w = warmth as i32;
+    NEUTRAL_KELVIN - if w > 0 { w * KELVIN_PER_STEP } else { w * KELVIN_PER_COOL_STEP }
 }
 
 /// Multipliers (0..=1, at most one channel at 1) that move the panel's white from 6500 K to `kelvin`.
@@ -289,7 +298,7 @@ mod tests {
     fn kelvin_follows_the_steps() {
         assert_eq!(look(0, 0).kelvin(), 6500);
         assert_eq!(look(10, 0).kelvin(), 3500);
-        assert_eq!(look(-10, 0).kelvin(), 9500);
+        assert_eq!(look(-10, 0).kelvin(), 11500);
     }
 
     #[test]
@@ -352,10 +361,22 @@ mod tests {
     }
 
     #[test]
+    fn cooler_steps_reach_further_than_warmer_ones_and_old_values_stay_valid() {
+        assert_eq!(look(0, 0).kelvin(), 6500);
+        assert_eq!(look(10, 0).kelvin(), 3500, "warm side unchanged");
+        assert_eq!(look(-10, 0).kelvin(), 11500);
+        let (n, c1, c10) = (look(0, 0).gains(), look(-1, 0).gains(), look(-10, 0).gains());
+        assert_eq!(n, [1.0; 3]);
+        assert!(c1[0] < 1.0 && c10[0] < c1[0] && c10[1] < c1[1], "cooler takes red and green, never the blue: {c1:?} {c10:?}");
+        assert_eq!(c10[2], 1.0);
+        assert_eq!(Look::clamped(Look { warmth: -90, ..look(0, 0) }).warmth, -crate::display::RANGE);
+    }
+
+    #[test]
     fn labels() {
         assert_eq!(look(0, 0).warmth_label(), "Neutral");
-        assert_eq!(look(3, 0).warmth_label(), "Warm 3");
-        assert_eq!(look(-2, 0).warmth_label(), "Cool 2");
+        assert_eq!(look(3, 0).warmth_label(), "Warmer 3");
+        assert_eq!(look(-2, 0).warmth_label(), "Cooler 2");
         assert_eq!(look(0, 4).contrast_label(), "+4");
         assert_eq!(look(0, -4).contrast_label(), "-4");
     }

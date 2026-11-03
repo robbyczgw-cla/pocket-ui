@@ -6,7 +6,7 @@ use std::process::Command;
 
 #[test]
 fn each_file_goes_to_its_own_system_and_tracks_go_with_their_sheet() {
-    let root = env!("CARGO_MANIFEST_DIR");
+    let root = &std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let out = match Command::new("node").arg(format!("{root}/tests/phone_upload_page.js")).arg(format!("{root}/assets/phone-upload/app.js")).output() {
         Ok(out) => out,
         Err(e) => {

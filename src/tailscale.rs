@@ -1128,18 +1128,23 @@ mod tests {
 
     #[test]
     fn a_hanging_tailscale_or_systemctl_costs_a_bounded_wait() {
-        let (t, dir) = tools("hang", "sleep 30");
+        // The stand-ins sleep for ten minutes and the configured timeouts are 0.4 to 1.5 s. What is asserted is that the
+        // call comes back by its timeout and not when the program ends: each is held to its timeout plus a slack that a
+        // loaded machine (every process start slow, the suite's other tests running) can't use up, but that is nowhere
+        // near the hang (the default action timeout alone is 30 s).
+        const SLACK: Duration = Duration::from_secs(12);
+        let (t, dir) = tools("hang", "exec sleep 600");
         std::fs::write(dir.join("active"), "").unwrap();
         let t0 = Instant::now();
         let s = snapshot(&t);
-        assert!(t0.elapsed() < Duration::from_secs(5), "waited {:?}", t0.elapsed());
+        assert!(t0.elapsed() < 2 * t.timeouts.status + SLACK, "waited {:?}", t0.elapsed());
         assert_eq!(s.state(), State::Starting);
         assert!(s.error.is_some());
         // systemctl hanging: also cut off.
-        script(Path::new(&t.systemctl), "sleep 30");
+        script(Path::new(&t.systemctl), "exec sleep 600");
         let t0 = Instant::now();
         let _ = snapshot(&t);
-        assert!(t0.elapsed() < Duration::from_secs(5), "waited {:?}", t0.elapsed());
+        assert!(t0.elapsed() < 2 * t.timeouts.status + SLACK, "waited {:?}", t0.elapsed());
         let mut t2 = t.clone();
         t2.timeouts.action = Duration::from_millis(400);
         let t0 = Instant::now();
@@ -1147,7 +1152,7 @@ mod tests {
         assert!(logout(&t2).is_err());
         assert!(set_hostname(&t2, "x").is_err());
         assert!(disable(&t2).is_err());
-        assert!(t0.elapsed() < Duration::from_secs(6), "waited {:?}", t0.elapsed());
+        assert!(t0.elapsed() < 4 * t2.timeouts.action + 4 * SLACK, "waited {:?}", t0.elapsed());
     }
 
     #[test]

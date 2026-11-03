@@ -31,16 +31,16 @@ are now, in two views side by side:
 
 - **Whole screen**: the full screen, made smaller. Shows the size, the position and the frame.
 - **Actual size**: a piece from the middle of the screen at its real size. Shows scanlines, the LCD
-  grid and the CRT mask exactly as in the game.
+  grid, the CRT mask and Smooth pixels exactly as in the game.
 
-The preview is drawn again after every change. If it cannot be drawn, it says "No preview". With Large text the
-list shows three or four settings at a time and moves along as you go up and down, so the preview stays large.
+The preview is drawn again after every change, or says "No preview". With Large text the list shows three or four
+settings at a time and scrolls, so the preview stays large.
 
 ### Screen scaling
 
 | Choice | What it looks like |
 |---|---|
-| **Integer** | Integer scaling: scaled by a whole number, so every game pixel is the same size: the sharpest picture, with black borders. Game Boy 7× (1120 × 1008), Game Boy Advance 5× (1200 × 800), NES and SNES 4× (about 1170 × 896 and 1195 × 896). The whole number is the largest one whose width still fits the screen, in the shape the emulator reports; so a NES picture that reports 240 lines in 4:3 would be 3× (960 × 720), while the 224 lines it normally shows are 4×. |
+| **Integer** | Integer scaling: scaled by a whole number, so every game pixel is the same size: the sharpest picture, with black borders. Game Boy 7× (1120 × 1008), Game Boy Advance 5× (1200 × 800), NES and SNES 4× (about 1170 × 896 and 1195 × 896). The whole number is the largest one whose width still fits the screen, in the shape the emulator reports. |
 | **Integer, smaller** | One whole number smaller than Integer, so every pixel is still the same size and a screen frame has room: Game Boy 6× (960 × 864), Game Boy Advance 4× (960 × 640), NES and SNES 3× (about 880 × 672 and 896 × 672). |
 | **Aspect** | As large as fits, in the console's own shape. Bigger, but pixels are no longer all the same size. |
 | **Fullscreen** | Fills the screen and stretches the pixels. |
@@ -61,10 +61,11 @@ list shows three or four settings at a time and moves along as you go up and dow
 | **LCD grid** | Thin dark gaps between the pixels, like a handheld's screen. They grow with the picture: about a pixel of the screen at Game Boy and Game Boy Advance sizes, fainter on the smaller DS screens. |
 | **Scanlines** | The picture's rows drawn like a TV's beam: thin rows with dark gaps in dark parts, rows that close up in bright parts. Colours stay as bright as without the effect. |
 | **CRT** | Scanlines, plus a very fine colour mask (too fine to see at arm's length) and a soft glow around bright parts, like an old TV. No curved screen. |
+| **Soft glow** | A soft halo around bright parts; the rest stays clear. Dark writing on a bright box gets a little lighter. |
+| **Smooth pixels** | Rounds one-pixel stair-steps on slanted edges. Flat pixels, straight edges, thin lines and dithering stay sharp. |
 
-All three stay even at every size, Aspect included: no row or column is thicker than the next. Scanlines need about
-three screen pixels per row of the game; on pictures with more rows (some PlayStation menus in 480 lines) they fade
-out, as they did on a TV. For 3D consoles that draw sharper than the original (Nintendo 64 at twice its lines),
+The effects stay even at every size, Aspect included. Scanlines need about three screen pixels per row of the game;
+on pictures with more rows (some PlayStation menus in 480 lines) they fade out, as they did on a TV. For 3D consoles that draw sharper than the original (Nintendo 64 at twice its lines),
 scanlines follow the console's own lines.
 
 **LCD colours** (Game Boy Advance, shown while LCD grid is chosen): **On** shows the colours of the Game Boy Advance's
@@ -79,16 +80,13 @@ screen's colours from the emulator already.
 | **None** | Black around the picture. |
 | **Auto** | A frame around the picture that suits the console (see below). |
 | **Ambient** | The space around the picture glows softly in the game's own colours, like a TV with ambient light. It follows the game smoothly as the scene changes. |
-| **Shell** | The screen lens in a handheld's body. Pick its colour under **Shell colour** (shown while Shell is chosen): classic grey, indigo, clear purple, atomic purple, black, white or glacier blue. The clear ones are see-through. |
-| **Brick** | A brick-shaped handheld: darker glass around the screen with one large rounded corner, two thin coloured lines above the picture and a power light beside it. **Brick colour**: grey, clear, red, yellow, green or black. |
-| **Pocket slim** | A slimmer handheld with tighter glass. **Pocket finish**: brushed silver or clear. |
-| **Clamshell** | An opened clamshell's lid with the hinge along the bottom. **Clamshell finish**: platinum, cobalt, flame red or graphite. |
-| **Wide** | A landscape handheld with rounded sides, shoulder buttons peeking over its top corners and a small speaker grille. |
-| **Twin** | Two screens with a hinge between them and speaker slits beside the top screen. Offered for the Nintendo DS only; see below. |
-| **Gloss** | A piano-black wide body with oval ends and a soft diagonal sheen. |
-| **Swan** | A minimal handheld. **Swan finish**: pastel or a see-through skeleton. |
-| **Watch** | A brushed metal faceplate around a small screen window, like an old single-game handheld. **Watch finish**: gold or silver. |
-| **Goggles** | A black visor with red trim, for red-on-black pictures. |
+| **DMG** | The first Game Boy: darker glass around the screen with one large rounded corner, two thin coloured lines above the picture and a power light beside it. **DMG colour**: grey, clear, red, yellow, green or black. Offered for Game Boy and Game Boy Color games. |
+| **GB Pocket** | The slimmer Game Boy Pocket, with tighter glass. **GB Pocket finish**: brushed silver or clear. Offered for Game Boy and Game Boy Color games. |
+| **GBC** | The Game Boy Color's shell around the screen. Pick its colour under **GBC colour** (shown while GBC is chosen): classic grey, indigo, clear purple, atomic purple, black, white or glacier blue. The clear ones are see-through. Offered for Game Boy and Game Boy Color games. |
+| **GBA** | The Game Boy Advance: a landscape handheld with rounded sides, shoulder buttons peeking over its top corners and a small speaker grille. Offered for Game Boy Advance games. |
+| **GBA SP** | The Game Boy Advance SP, opened: the lid with the hinge along the bottom. **GBA SP finish**: platinum, cobalt, flame red or graphite. Offered for Game Boy Advance games. |
+| **DS** | The Nintendo DS: two screens with a hinge between them and speaker slits beside the top screen. Offered for the Nintendo DS only; see below. |
+| **PSP** | The PSP: a piano-black wide body with oval ends and a soft diagonal sheen. Offered for PSP games only. |
 | **CRT** | An old TV: the picture behind curved dark glass, in a cabinet of dark plastic or wood (**TV cabinet**, shown while CRT is chosen). |
 | **Studio monitor** | A grey professional monitor with flat glass and a row of small knobs and buttons below. |
 | **Portable TV** | A small portable TV with a telescopic antenna and a tuning dial. |
@@ -97,7 +95,10 @@ screen's colours from the emulator already.
 | **Glow** | A thin rounded line around the picture, glowing in the console's colour from the shelf. |
 
 The colour or finish of a frame is a row of its own under **Screen frame**, shown while that frame
-is chosen.
+is chosen. A frame shaped like one console is offered for that console's games only, so the list stays short; a
+frame saved for another console keeps working.
+
+Swan, Watch and Goggles are no longer in the list; **Auto** still draws them for WonderSwan, Game & Watch and Virtual Boy.
 
 A frame needs space around the picture, so it appears only with Integer, Integer smaller and Aspect
 scaling. Fullscreen fills the screen and leaves no space for one. The frame sits
@@ -106,28 +107,28 @@ At Integer the space is narrow on some consoles (Game Boy Advance: 20 pixels lef
 **Integer, smaller** gives every frame space, and details such as speaker grilles, knobs and the
 antenna only appear where there is space for them.
 
-**The power light.** Brick, Pocket slim, Clamshell, Wide, Gloss and Swan have a small power light
+**The power light.** DMG, GB Pocket, GBA SP, GBA, PSP and Auto's WonderSwan frame have a small power light
 that shows the battery: green above 20%, red at 20% and below, blinking slowly at 5% and below.
 It flashes briefly when you save a state (to a slot, or the automatic one).
 
-**Twin and the Nintendo DS.** Twin fits the DS with its two screens stacked, as games start. The
+**DS and the Nintendo DS.** DS fits the DS with its two screens stacked, as games start. The
 hinge sits beside the screens where they touch, and exactly in the gap between them when the
 emulator leaves one (its screen gap option). With the screens side by side or one screen alone,
-Twin shows the plain screen lens instead.
+DS shows the plain screen lens instead.
 
 For Auto, pocket-ui picks one of its own frames for the console:
 
 | Console | Auto |
 |---|---|
-| Game Boy | Brick, grey |
-| Game Boy Color | Pocket slim, clear |
-| Game Boy Advance | Wide |
-| Nintendo DS | Twin |
-| PSP | Gloss |
-| WonderSwan | Swan, pastel |
-| WonderSwan Color | Swan, skeleton |
-| Game & Watch | Watch, gold |
-| Virtual Boy | Goggles |
+| Game Boy | DMG, grey |
+| Game Boy Color | GB Pocket, clear |
+| Game Boy Advance | GBA |
+| Nintendo DS | DS |
+| PSP | PSP |
+| WonderSwan | A minimal handheld, pastel |
+| WonderSwan Color | A minimal handheld, see-through skeleton |
+| Game & Watch | A brushed gold faceplate |
+| Virtual Boy | A black visor with red trim |
 | Atari 2600, Atari 7800 | Woodgrain |
 | Game Gear, Neo Geo Pocket (Color), Lynx, Pokemon mini | **Handheld**: a dark screen lens around a recessed screen, with a small power light where there is room for it |
 | Every other console | **Monitor**: a graphite surround with rounded corners |

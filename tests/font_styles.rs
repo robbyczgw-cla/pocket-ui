@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+include!("common/root.rs");
 
 /// scripts/wayland-stub.py, while it runs.
 struct Stub {
@@ -66,7 +66,7 @@ fn fake_library(dir: &Path) {
 }
 
 fn risk_states() -> Vec<(bool, String)> {
-    let all = std::fs::read_to_string(Path::new(ROOT).join("tests/i18n-states.txt")).expect("tests/i18n-states.txt");
+    let all = std::fs::read_to_string(Path::new(&ROOT).join("tests/i18n-states.txt")).expect("tests/i18n-states.txt");
     let safe: std::collections::HashSet<&str> = all.lines().map(str::trim).filter_map(|l| l.strip_prefix("safe ")).collect();
     include_str!("layout-risk-states.txt")
         .lines().map(str::trim).filter(|s| !s.is_empty() && !s.starts_with('#'))
@@ -182,7 +182,7 @@ fn home_png(tmp: &Path, stub: &Option<Stub>, name: &str, settings: &str, font: O
     if let Some(files) = theme {
         std::fs::create_dir_all(data.join("fonts")).unwrap();
         for (to, from) in files {
-            std::fs::copy(Path::new(ROOT).join("assets/fonts").join(from), data.join("fonts").join(to)).unwrap();
+            std::fs::copy(Path::new(&ROOT).join("assets/fonts").join(from), data.join("fonts").join(to)).unwrap();
         }
     }
     let png = tmp.join(format!("{name}.png"));

@@ -26,7 +26,7 @@ From these every game gets a **work**: the QID of the work it is a version of, s
 several systems (or filed as an edition item for one system) groups together. See `resolve_works`.
 
 Politeness (https://www.mediawiki.org/wiki/Wikimedia_APIs/Rate_limits): one request at a time, a pause
-between requests, User-Agent `pocket-ui-gamedb/0.1`, and a 429/503 makes the script wait as long as the
+between requests, User-Agent `pocket-ui-gamedb/0.1`, and a 429/500/503 makes the script wait as long as the
 server asks (Retry-After) before trying again. A query the endpoint keeps cutting off is asked again in
 batches of games. Answers are cached in ~/.cache/pocket-gamedb, so a second run only writes the file.
 
@@ -99,6 +99,23 @@ SYSTEMS = {
     "pokemini": ["Q1759168"],
     # Added 2026-10-29 with hakuX (docs/XBOX.md), merged into the file of 2026-10-23 (--merge).
     "xbox": ["Q132020"],  # Xbox (the first one)
+    # Added 2026-11-03 for the systems that had no facts at all, merged into the file (--merge). The ids are the ROCKNIX
+    # folder names. DOS/PC, PICO-8, TIC-80 and ScummVM are left out: Wikidata has next to no games filed under them.
+    "neogeo": ["Q1054350", "Q64428080"],  # Neo Geo (board and console), Neo Geo AES
+    "neocd": ["Q2703883"],
+    "amiga": ["Q100047", "Q695161"],  # Commodore Amiga, Amiga CD32
+    "c64": ["Q99775"],
+    "atarijaguar": ["Q650601"],
+    "3do": ["Q229429"],
+    "colecovision": ["Q1046862"],
+    "intellivision": ["Q1061441"],
+    "vectrex": ["Q767631"],
+    "zxspectrum": ["Q23882"],
+    "atari5200": ["Q743222"],
+    "atari800": ["Q249075"],  # Atari 8-bit family
+    "ps3": ["Q10683"],
+    "psvita": ["Q188808"],
+    "wiiu": ["Q56942"],
 }
 
 FIELDS = ["qid", "label", "year", "developers", "publishers", "genres", "series", "modes", "players", "scores", "aliases", "enwiki", "sitelinks", "redump",
@@ -177,7 +194,9 @@ def sparql(query, cutoff_tries=8):
             with urllib.request.urlopen(req, timeout=120) as r:
                 return json.load(r)["results"]["bindings"]
         except urllib.error.HTTPError as e:
-            if e.code in (429, 503, 502, 504):
+            if e.code in (500, 504) and attempt + 1 >= cutoff_tries < 8:
+                raise CutOff()  # too heavy for one request: the caller asks again in batches of games
+            if e.code in (429, 500, 502, 503, 504):
                 retry = e.headers.get("Retry-After")
                 delay = int(retry) if retry and retry.isdigit() else 30 * (attempt + 1)
                 print(f"  server says {e.code}, waiting {delay} s", file=sys.stderr)

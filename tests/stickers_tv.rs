@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+include!("common/root.rs");
 /// The first SNES game on its shelf (`games:0`).
 const CHRONO: &str = "Chrono Trigger (USA)";
 
@@ -109,7 +109,7 @@ fn shot(tmp: &Path, lib: &Path, data: &Path, stub: &Option<Stub>, state: &str, l
         .env("POCKETUI_DATA", data)
         .output()
         .expect("run pocket-ui");
-    assert!(out.status.success() && png.exists(), "{state} at {size}: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(out.status.success() && png.exists(), "{state} at {size}: status={}, png={}\nstderr: {}\nstdout: {}", out.status, png.exists(), String::from_utf8_lossy(&out.stderr), String::from_utf8_lossy(&out.stdout));
     let mut reader = png::Decoder::new(std::fs::File::open(&png).unwrap()).read_info().unwrap();
     let mut buf = vec![0; reader.output_buffer_size()];
     let info = reader.next_frame(&mut buf).unwrap();

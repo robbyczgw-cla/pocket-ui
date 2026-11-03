@@ -609,16 +609,24 @@ fn forced_quantum_of(line: &str) -> Option<u32> {
     line.split("value:'").nth(1)?.split('\'').next()?.parse().ok()
 }
 
+/// The monitor belongs to its reader thread. Otherwise a quiet PipeWire graph leaves an orphan
+/// after a snapshot exits, including any build-lock descriptors that process inherited.
+fn quantum_watch_command(program: &std::ffi::OsStr) -> std::process::Command {
+    let mut cmd = std::process::Command::new(program);
+    cmd.args(["-m", "-n", "settings", "0", "clock.force-quantum"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
+    #[cfg(target_os = "linux")]
+    crate::control::die_with_parent(&mut cmd);
+    cmd
+}
+
 /// Follows `clock.force-quantum` into `FORCED_QUANTUM`, whoever changes it: pocket-core for its game, the shelf,
 /// ROCKNIX's wake script, a standalone emulator. `pw-metadata -m` prints the value at once and every change after,
 /// blocking in between (no polling). When it ends (PipeWire restarted) the value is unknown until it runs again.
 fn watch_quantum(tell: SyncSender<Q>) {
     let _ = std::thread::Builder::new().name("ui-sound-graph".into()).spawn(move || loop {
-        let child = std::process::Command::new("pw-metadata")
-            .args(["-m", "-n", "settings", "0", "clock.force-quantum"])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .spawn();
+        let child = quantum_watch_command(std::ffi::OsStr::new("pw-metadata")).spawn();
         let Ok(mut child) = child else {
             // No PipeWire tools (a desktop without them): unknown, so the longer buffer, which is right everywhere.
             return;
@@ -1215,6 +1223,56 @@ mod tests {
         assert_eq!(forced_quantum_of("update: id:0 key:'clock.quantum' value:'1024' type:''"), None, "another key");
         assert_eq!(forced_quantum_of("Found \"settings\" metadata 29"), None);
         assert_eq!(forced_quantum_of("update: id:0 key:'clock.force-quantum' value:'' type:''"), None, "removed");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_quantum_monitor_dies_with_its_reader_and_releases_its_lock() {
+        use std::os::fd::AsRawFd;
+        use std::os::unix::process::{CommandExt, ExitStatusExt};
+        let dir = TestDir::new("quantum-monitor-owner");
+        let helper = dir.join("metadata");
+        crate::testutil::write_executable(&helper, "#!/bin/sh\nexec sleep 30\n");
+        let lock_path = dir.join("build.lock");
+        let path = std::ffi::CString::new(lock_path.to_str().unwrap()).unwrap();
+        let (child_tx, child_rx) = sync_channel(1);
+        let (stop_tx, stop_rx) = sync_channel(1);
+        let owner = std::thread::spawn(move || {
+            let mut cmd = quantum_watch_command(helper.as_os_str());
+            // Simulate an inherited build lock only in this child. An inheritable descriptor
+            // in the test process could leak through an unrelated test's concurrent fork.
+            unsafe {
+                cmd.pre_exec(move || {
+                    let fd = libc::open(path.as_ptr(), libc::O_CREAT | libc::O_RDWR, 0o600);
+                    if fd < 0 || libc::flock(fd, libc::LOCK_EX) != 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    Ok(())
+                });
+            }
+            child_tx.send(cmd.spawn().unwrap()).unwrap();
+            stop_rx.recv().unwrap();
+        });
+        let mut child = child_rx.recv().unwrap();
+        let probe = std::fs::File::open(lock_path).unwrap();
+        // SAFETY: probe owns a live descriptor; flock only changes its advisory lock.
+        let held = unsafe { libc::flock(probe.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0;
+        stop_tx.send(()).unwrap();
+        owner.join().unwrap();
+        let until = Instant::now() + Duration::from_secs(5);
+        let status = loop {
+            if let Some(status) = child.try_wait().unwrap() { break Some(status); }
+            if Instant::now() >= until {
+                let _ = child.kill();
+                let _ = child.wait();
+                break None;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert!(held, "the live monitor must hold the simulated inherited lock");
+        assert_eq!(status.and_then(|s| s.signal()), Some(libc::SIGTERM), "the monitor must end with its reader");
+        // SAFETY: same descriptor as above; the monitor has exited and must have released its copy.
+        assert_eq!(unsafe { libc::flock(probe.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) }, 0);
     }
 
     /// A system for the quantum thread: no Bluetooth, and a log of what was set, with whether the buffer had been

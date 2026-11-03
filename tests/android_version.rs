@@ -3,7 +3,7 @@
 
 #[test]
 fn the_manifest_code_is_derived_from_its_name() {
-    let manifest = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/android/AndroidManifest.xml")).unwrap();
+    let manifest = std::fs::read_to_string(format!("{}/android/AndroidManifest.xml", std::env::var("CARGO_MANIFEST_DIR").unwrap())).unwrap();
     let attr = |key: &str| manifest.split(&format!("android:{key}=\"")).nth(1).and_then(|r| r.split('"').next()).unwrap_or_default().to_string();
     let (name, code) = (attr("versionName"), attr("versionCode").parse::<u64>().expect("versionCode"));
     let (version, build) = name.split_once("-android.").expect("versionName is <version>-android.<build>");

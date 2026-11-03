@@ -192,6 +192,8 @@ impl App {
             favorite: self.favorites.contains(path),
             // Its save slots on their medium (`save_media`): a few file checks, pocket-core's games only.
             saves: game_card::CardSaves::of(system, path, stripe(system)),
+            // Set when painted, from the shelf's latest read (`paint_card`).
+            continue_at: None,
             // The facts that lead to the player's other games (`show_card`, `app_connections`).
             links: Vec::new(),
             plain: false,
@@ -502,6 +504,11 @@ impl App {
 
     pub(crate) fn paint_card(&mut self, c: &mut Canvas) {
         let Some(item) = self.card.as_ref().map(|o| o.item) else { return };
+        // "Continue" follows the shelf's reads while the card is open (`MomentReads`): nothing while a new read is out.
+        let at = self.card.as_ref().and_then(|o| self.frozen_moment_time(&o.path));
+        if let Some(open) = self.card.as_mut() {
+            open.card.data.continue_at = at;
+        }
         let pictures = self.card_pictures(item, c.w);
         let corner = self.status_corner();
         if self.card.as_ref().is_some_and(|o| o.card.boxed.is_some()) {
@@ -545,7 +552,7 @@ impl App {
     /// A toast over the card's top line.
     fn paint_card_toast(&mut self, c: &mut Canvas) {
         if let Some((msg, at)) = self.toast.clone() {
-            if at.elapsed() < super::TOAST {
+            if super::toast_age(at) < super::TOAST {
                 use pocket_ui::text::Face;
                 // The line takes the place of the system's name and the clock while it shows, so a long one ("Found 3
                 // pictures for …", `app_identify`) is not read across them; a long game name is shortened to the screen.

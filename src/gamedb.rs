@@ -166,6 +166,7 @@ pub(crate) fn canonical(system: &str) -> &str {
         "megacd" => "segacd",
         "sg1000" => "sg-1000",
         "n3ds" => "3ds",
+        "amigacd32" => "amiga",
         other => other,
     }
 }
@@ -199,6 +200,14 @@ fn system_names(system: &str) -> &'static [&'static str] {
         "atari2600" => &["Atari 2600"],
         "atarilynx" => &["Lynx"],
         "xbox" => &["Xbox video game", "Xbox"],
+        "ps3" => &["PlayStation 3", "PS3"],
+        "wiiu" => &["Wii U"],
+        "amiga" => &["Amiga"],
+        "c64" => &["Commodore 64"],
+        "zxspectrum" => &["ZX Spectrum"],
+        "neogeo" => &["Neo Geo", "Arcade"],
+        "atarijaguar" => &["Jaguar"],
+        "3do" => &["3DO"],
         _ => &[],
     }
 }
@@ -288,9 +297,12 @@ impl GameDb {
     /// Color, ...) when the system itself has none.
     pub fn lookup(&mut self, system: &str, stem: &str) -> Option<GameInfo> {
         let id = canonical(system);
-        std::iter::once(id)
-            .chain(related_systems(id).iter().copied())
-            .find_map(|s| self.system(s)?.find(stem).cloned())
+        let systems = || std::iter::once(id).chain(related_systems(id).iter().copied());
+        // An exact name in a related system ("Link's Awakening DX" in the Game Boy Color list) beats a close
+        // one in the system itself ("Link's Awakening").
+        systems()
+            .find_map(|s| self.system(s)?.find_exact(stem).cloned())
+            .or_else(|| systems().find_map(|s| self.system(s)?.find_close(stem).cloned()))
     }
 
     /// The entry `qid` among the games of `system` and its related systems.
@@ -397,12 +409,18 @@ fn words(name: &str) -> Vec<String> {
             _ => plain.extend(ch.to_lowercase().map(fold)),
         }
     }
-    let mut out: Vec<String> = plain
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| !w.is_empty())
-        .map(|w| {
+    let split: Vec<&str> = plain.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
+    let mut out: Vec<String> = split
+        .iter()
+        .enumerate()
+        .map(|(i, &w)| {
+            // "Mega Man X 2" is "Mega Man X2", not "Mega Man 10 2": an X before a number is a letter.
+            let letter_x = w == "x" && split.get(i + 1).is_some_and(|n| n.bytes().all(|b| b.is_ascii_digit()));
             let n = ["ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"].iter().position(|r| *r == w);
-            n.map_or_else(|| w.to_string(), |n| (n + 2).to_string())
+            match n {
+                Some(n) if !letter_x => (n + 2).to_string(),
+                _ => w.to_string(),
+            }
         })
         .collect();
     if out.len() > 1 && ["the", "a", "an"].contains(&out[0].as_str()) {
@@ -569,6 +587,11 @@ impl SystemDb {
     /// Yellow Version - Special Pikachu Edition"), a ROM without the subtitle Wikidata has, and finally
     /// the same words with one more in the ROM's name ("Donkey Kong 1 - Country"), never a sequel number.
     pub fn find(&self, stem: &str) -> Option<&GameInfo> {
+        self.find_exact(stem).or_else(|| self.find_close(stem))
+    }
+
+    /// The exact passes of [`find`](Self::find): the whole title, without "Version", the first parts.
+    fn find_exact(&self, stem: &str) -> Option<&GameInfo> {
         let stem = crate::library::strip_inner_ext(stem);
         let name = crate::library::display_name(crate::covers::strip_release_number(stem));
         let segments: Vec<&str> = name.split(" - ").collect();
@@ -590,6 +613,17 @@ impl SystemDb {
             if let Some(g) = self.full.get(&lean_key(&part)).and_then(|ids| self.one(ids)) {
                 return Some(g);
             }
+        }
+        None
+    }
+
+    /// The looser passes of [`find`](Self::find): a numbered title without its subtitle, one word more or less.
+    fn find_close(&self, stem: &str) -> Option<&GameInfo> {
+        let stem = crate::library::strip_inner_ext(stem);
+        let name = crate::library::display_name(crate::covers::strip_release_number(stem));
+        let w = words(&name);
+        if w.is_empty() {
+            return None;
         }
         // "Crash Bandicoot 2" for "Crash Bandicoot 2: Cortex Strikes Back"; only a numbered title, since a
         // bare series name ("Bomberman") is not "Bomberman: Panic Bomber".
@@ -1093,5 +1127,67 @@ Q5\tTetris\t1989\tNintendo R&D1\t\t\t\t\t\t\t\t\t1\t\n";
             info: Some(g("Q1")),
         }];
         assert_eq!(related(g("Q1"), m2, &lonely), Related::default());
+    }
+
+    #[test]
+    fn a_number_set_apart_the_dx_and_the_color_version_find_their_game() {
+        let mut db = GameDb::embedded();
+        let label = |db: &mut GameDb, sys: &str, stem: &str| db.lookup(sys, stem).map(|g| g.label);
+        for (sys, stem, want) in [
+            // "X 2" is "X2": the X is no Roman ten.
+            ("snes", "Mega Man X 2", "Mega Man X2"),
+            ("snes", "Mega Man X 3", "Mega Man X3"),
+            ("snes", "Mega Man X2 (USA)", "Mega Man X2"),
+            ("snes", "Mega Man X 1", "Mega Man X"),
+            // Games filed in the Game Boy folder that Wikidata lists for the Game Boy Color.
+            ("gb", "Pokemon-Gold Version", "Pokémon Gold"),
+            ("gb", "Pokemon-Crystal Version", "Pokémon Crystal"),
+            ("gb", "Legend of Zelda,The-Oracle of Ages", "The Legend of Zelda: Oracle of Ages"),
+            ("gb", "Legend of Zelda,The-Oracle of Seasons", "The Legend of Zelda: Oracle of Seasons"),
+            ("gb", "Super Mario Bros. Deluxe (USA, Europe) (Rev 2)", "Super Mario Bros. Deluxe"),
+            // The exact name in the related system beats the close one in the system itself.
+            (
+                "gb",
+                "Legend of Zelda, The - Link's Awakening DX (USA, Europe) (Rev 2) (SGB Enhanced) (GB Compatible)",
+                "The Legend of Zelda: Link's Awakening DX",
+            ),
+            ("gb", "Legend of Zelda, The - Link's Awakening (USA, Europe) (Rev 2)", "The Legend of Zelda: Link's Awakening"),
+            ("gba", "Mother 1+2 (patched) (patched)", "Mother 1 + 2"),
+            ("snes", "R-Type III (USA)", "R-Type III: The Third Lightning"),
+            ("snes", "Alien 3 (USA)", "Alien 3"),
+            // Final Fantasy X is still Final Fantasy 10.
+            ("ps2", "Final Fantasy X (USA)", "Final Fantasy X"),
+        ] {
+            assert_eq!(label(&mut db, sys, stem).as_deref(), Some(want), "{sys}/{stem}");
+        }
+        // No wrong game for what Wikidata does not know.
+        assert_eq!(label(&mut db, "snes", "Mega Man X 9"), None);
+    }
+
+    #[test]
+    fn the_computers_and_late_consoles_have_facts() {
+        let mut db = GameDb::embedded();
+        for (sys, stem, want) in [
+            ("neogeo", "Metal Slug - Super Vehicle-001", "Metal Slug"),
+            ("neocd", "Art of Fighting (USA)", "Art of Fighting"),
+            ("amiga", "Lemmings", "Lemmings"),
+            ("amigacd32", "Lemmings", "Lemmings"),
+            ("c64", "Boulder Dash", "Boulder Dash"),
+            ("zxspectrum", "Manic Miner", "Manic Miner"),
+            ("atari5200", "Pac-Man", "Pac-Man"),
+            ("atari800", "Star Raiders", "Star Raiders"),
+            ("atarijaguar", "Tempest 2000", "Tempest 2000"),
+            ("3do", "Gex", "Gex"),
+            ("colecovision", "Donkey Kong", "Donkey Kong"),
+            ("intellivision", "Beamrider", "Beamrider"),
+            ("vectrex", "MineStorm", "MineStorm"),
+            ("ps3", "Demon's Souls", "Demon's Souls"),
+            ("psvita", "Persona 4 Golden", "Persona 4"),
+            ("wiiu", "Super Mario 3D World", "Super Mario 3D World"),
+        ] {
+            let hit = db.lookup(sys, stem);
+            println!("{sys:12} {stem:34} -> {}", hit.as_ref().map_or("-", |g| g.label.as_str()));
+            assert!(hit.is_some_and(|g| g.label.starts_with(want)), "{sys}/{stem}");
+        }
     }
 }

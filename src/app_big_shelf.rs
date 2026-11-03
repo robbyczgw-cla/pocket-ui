@@ -310,9 +310,10 @@ impl App {
         }
         let games = self.big_game_list();
         self.big.moments_read += 1;
+        self.moment_reads.big_started();
         let (proxy, read) = (self.proxy.clone(), self.big.moments_read);
         std::thread::spawn(move || {
-            let _ = proxy.send_event(super::UserEvent::BigMoments(read, pocket_ui::frozen::moments(&games)));
+            let _ = proxy.send_event(super::UserEvent::BigMoments(read, pocket_ui::frozen::moments_timed(&games)));
         });
     }
 
@@ -333,9 +334,10 @@ impl App {
         games
     }
 
-    pub(crate) fn big_moments_got(&mut self, read: u64, list: Vec<PathBuf>) {
+    pub(crate) fn big_moments_got(&mut self, read: u64, list: Vec<pocket_ui::frozen::Moment>) {
         if read == self.big.moments_read {
-            self.big.moments = list;
+            self.big.moments = list.iter().map(|m| m.0.clone()).collect();
+            self.moment_reads.big_got(list);
             self.request_redraw();
         }
     }

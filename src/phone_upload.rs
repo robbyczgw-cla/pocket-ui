@@ -233,6 +233,9 @@ pub struct Config {
 
 struct Inner {
     cfg: Config,
+    // Per-server capacity fixture: no process-wide environment or shared disk measurements.
+    #[cfg(test)]
+    capacity: Mutex<Option<(Option<u64>, u64)>>,
     token: String,
     /// "address:port" as the browser must name it in Host.
     authority: String,
@@ -349,6 +352,8 @@ impl Server {
         listener.set_nonblocking(true)?;
         let inner = Arc::new(Inner {
             cfg,
+            #[cfg(test)]
+            capacity: Mutex::new(None),
             token: new_token()?,
             authority: addr.to_string(),
             stop: AtomicBool::new(false),
@@ -915,7 +920,16 @@ fn room_for(inner: &Inner, plan: &Plan, len: u64) -> Result<(), Refused> {
         return Err(Refused::TooBig(format!("{} files are at most {} here.", plan.sys.name, crate::ports::size_label(plan.max))));
     }
     let probe = inner.cfg.roots.roms.join(".probe");
-    files::fits(&probe, len, plan.max)?;
+    #[cfg(test)]
+    let capacity = *inner.capacity.lock().unwrap();
+    #[cfg(test)]
+    let fits = match capacity {
+        Some((free, reserved)) => files::room(free, reserved, len, plan.max),
+        None => files::fits(&probe, len, plan.max),
+    };
+    #[cfg(not(test))]
+    let fits = files::fits(&probe, len, plan.max);
+    fits?;
     if free_entries(&inner.cfg.roots.roms).is_some_and(|n| n < INODE_RESERVE) {
         return Err(Refused::NoSpace("The SD card has no room for more files.".into()));
     }
@@ -1407,12 +1421,17 @@ mod tests {
         let (status, body) = env.post(&format!("/{t}/check?name=Big.gba&size={}", CART + 1), b"");
         assert_eq!(status, 413, "{body}");
         assert!(body.contains("64 MB"), "{body}");
-        // A disc larger than the card holds (or than any disc, where the card has more than 9 GB free).
-        let free = files::free_space(&env.roms).unwrap();
-        let big = free.saturating_sub(files::RESERVE) + 1;
-        let want = if big <= files::MAX_ROM { 507 } else { 413 };
-        let (status, body) = env.post(&format!("/{t}/check?name=Big.chd&system=psx&size={big}"), b"");
-        assert_eq!(status, want, "{body}");
+        // Fixed capacity belongs to this server. Sampling the shared filesystem twice races
+        // every concurrent writer (and every reservation in another upload test).
+        *env.server().inner.capacity.lock().unwrap() = Some((Some(files::RESERVE + 1024), 0));
+        let (status, body) = env.post(&format!("/{t}/check?name=Big.chd&system=psx&size=1025"), b"");
+        assert_eq!(status, 507, "{body}");
+        let (status, body) = env.up("name=Big.chd&system=psx", &[0; 1025]);
+        assert_eq!(status, 507, "{body}");
+        // Exact boundary succeeds at preflight, and the system maximum is checked first.
+        assert_eq!(env.post(&format!("/{t}/check?name=Fits.chd&system=psx&size=1024"), b"").0, 200);
+        let (status, body) = env.post(&format!("/{t}/check?name=Big.chd&system=psx&size={}", files::MAX_ROM + 1), b"");
+        assert_eq!(status, 413, "{body}");
         // The upload itself checks again: the phone announces more than fits and sends nothing.
         let mut s = TcpStream::connect(env.server().addr()).unwrap();
         s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
@@ -1446,7 +1465,10 @@ mod tests {
         wait_for(|| env.leftovers().len() == 1);
         assert_eq!(env.leftovers().len(), 1, "the file arrives under a temporary name");
         drop(s);
-        wait_for(|| env.leftovers().is_empty());
+        // Removal happens inside receive(), before the server publishes its terminal status.
+        // Wait for that publication as well, rather than racing the worker after unlink.
+        wait_for(|| env.server().status().files.first().is_some_and(|f| matches!(f.state, FileState::Failed(_))));
+        assert!(env.leftovers().is_empty());
         assert!(!env.roms.join("gba/Half.gba").exists());
         let st = env.server().status();
         assert!(matches!(st.files[0].state, FileState::Failed(_)) && st.added == 0);

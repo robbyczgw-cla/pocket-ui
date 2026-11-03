@@ -208,6 +208,20 @@ const MANUAL_HELD: f32 = 900.0;
 const EXIT_HOLD: Duration = Duration::from_secs(1);
 const RECENTS_ON_HOME: usize = 6;
 const TOAST: Duration = Duration::from_millis(1200);
+
+/// Set by `--snapshot`: a snapshot is a settled picture, so a toast in it has a fixed age.
+static SNAPSHOT_RUN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// How old a toast that appeared at `at` is when it is painted. In a snapshot always the same, settled in and not yet
+/// fading out: on a loaded machine the wall clock between putting it up and painting it can pass `TOAST`, and the
+/// picture (and the text a test reads from it) lost the toast.
+pub(crate) fn toast_age(at: Instant) -> Duration {
+    if SNAPSHOT_RUN.load(std::sync::atomic::Ordering::Relaxed) {
+        Duration::from_millis(300)
+    } else {
+        at.elapsed()
+    }
+}
 /// Animations draw at most this often (60 Hz).
 const FRAME: Duration = Duration::from_micros(16_667);
 
@@ -235,9 +249,9 @@ enum UserEvent {
     LaunchPicture(Option<pocket_ui::launch_picture::Prepared>),
     /// The recent games that stand open now (`frozen::scan`).
     /// The generation of the read (`frozen_refresh`), what stands open.
-    Frozen(u64, Vec<PathBuf>),
+    Frozen(u64, Vec<pocket_ui::frozen::Moment>),
     /// Every game with a usable moment, for Easy (`app_big_shelf`).
-    BigMoments(u64, Vec<PathBuf>),
+    BigMoments(u64, Vec<pocket_ui::frozen::Moment>),
     /// Applying PS2, GameCube, Wii or 3DS options by a restart: the resume state was written (or not).
     OptionsSaved(bool),
     Setup(SetupEvent),
@@ -357,6 +371,8 @@ enum CoversEvent {
 #[derive(Clone, Copy)]
 enum Opens {
     Setup(Only),
+    /// Warmer or cooler screen colour, as SELECT + Vol (`Sys::set_warmth`).
+    ScreenColour,
     Store,
     /// Free games to download (`app_starter`).
     Starter,
@@ -456,18 +472,19 @@ const EMPTY_ART_TOP: i32 = 110;
 type SettingsRow = (&'static str, Opens, &'static str);
 
 /// Settings in categories (the flat list of 27 rows was too long, Alex 2026-10-23; seven short ones since 2026-10-30,
-/// at most 8 rows a list, every choice a row of its own, no choice only on a button): a category's name,
+/// at most 9 rows a list, every choice a row of its own, no choice only on a button): a category's name,
 /// the line naming what is in it, its rows in their order. START opens the categories, A a category's list
 /// (`app_settings_groups.rs`). A new row is one line in its category; `SETTINGS` follows by itself.
 const SETTINGS_GROUPS: [(&str, &str, &[SettingsRow]); 7] = [
     // "Look" with a zero-width mark: the same word as its first row in English, a different one in German (Aussehen,
     // the row Ansicht); the German table looks strings up whole (`i18n`), and the mark is painted as nothing.
-    (LOOK_CATEGORY, "Look, appearance, colours, font, text size, night light, systems, cozy extras.", &[
+    (LOOK_CATEGORY, "Look, appearance, colours, font, text size, screen colour, night light, systems, extras.", &[
         ("Look", Opens::Setup(Only::Look), "Shelf, Easy, Minimal, Split, Cards or Cabinet, with a live preview."),
         ("Appearance", Opens::Appearance, "Dark, Light, or Automatic by the time of day."),
         ("Colours", Opens::Colours, "The colours of every page. Left/right: the next set."),
         ("Font", Opens::Font, "The type of every screen: Barlow, Pixel or Rounded."),
         ("Text size", Opens::TextSize, "Larger text on every screen, fewer rows on a page."),
+        ("Screen colour", Opens::ScreenColour, "Cooler or warmer white, the same as SELECT + Vol. Left/right: change. A: Neutral."),
         (app_night_light::SETTINGS_NAME, Opens::NightLight, "Warmer, less blue colours in the evening."),
         ("Systems on the shelf", Opens::ShelfSystems, "Which systems are on Home. Their games stay either way."),
         (app_cozy_extras::SETTINGS_NAME, Opens::CozyExtras, "The cabinet's TV, stickers, printed discs and more: each on or off."),
@@ -1274,6 +1291,8 @@ struct App {
     launch_picture: Option<pocket_ui::launch_picture::Prepared>,
     /// The games that stand open (`app_frozen`), newest first.
     frozen: Vec<PathBuf>,
+    /// When each of those moments was written, from the same read (`frozen_got_timed`): the card's "Continue" line.
+    moment_reads: pocket_ui::frozen::MomentReads,
     /// The running game's auto state as it was before its session closed (`App::frozen_note_session`).
     frozen_auto: Option<PathBuf>,
     /// A big emulator is loading the moment of a frozen game, since then: the spinner.
@@ -3269,6 +3288,10 @@ impl App {
                     self.set_text_size(pocket_ui::type_scale::get().next());
                     Some(SettingsPage::List(sel))
                 }
+                Opens::ScreenColour => {
+                    self.set_screen_colour(0);
+                    Some(SettingsPage::List(sel))
+                }
                 Opens::Tour => {
                     self.open_tour();
                     Some(SettingsPage::List(sel))
@@ -3336,6 +3359,11 @@ impl App {
             (Some(SettingsPage::List(sel)), Button::Left | Button::Right) if matches!(SETTINGS[sel].1, Opens::TextSize) => {
                 let now = pocket_ui::type_scale::get();
                 self.set_text_size(if b == Button::Left { now.previous() } else { now.next() });
+                Some(SettingsPage::List(sel))
+            }
+            (Some(SettingsPage::List(sel)), Button::Left | Button::Right) if matches!(SETTINGS[sel].1, Opens::ScreenColour) => {
+                let now = self.sys.look().warmth;
+                self.set_screen_colour(now + if b == Button::Left { -1 } else { 1 });
                 Some(SettingsPage::List(sel))
             }
             (Some(SettingsPage::Store), b) => {
@@ -3491,7 +3519,7 @@ impl App {
                 // Values that need a process or a file are read on a thread (`app_settings_groups`).
                 self.settings_values_refresh(&rows);
                 // The hints first: where their pill starts says how much room a description has beside it.
-                let hints_at = self.nu_hints(c, &[("B", "Back"), ("A", if matches!(SETTINGS[sel].1, Opens::Haptics | Opens::Extra(_) | Opens::Sounds | Opens::OnStart | Opens::RememberQuit | Opens::Animations | Opens::Appearance | Opens::Colours | Opens::Font | Opens::Motion | Opens::Frames | Opens::OverGame | Opens::Language | Opens::TextSize) { "Switch" } else { "Open" })]);
+                let hints_at = self.nu_hints(c, &[("B", "Back"), ("A", if matches!(SETTINGS[sel].1, Opens::ScreenColour) { "Neutral" } else if matches!(SETTINGS[sel].1, Opens::Haptics | Opens::Extra(_) | Opens::Sounds | Opens::OnStart | Opens::RememberQuit | Opens::Animations | Opens::Appearance | Opens::Colours | Opens::Font | Opens::Motion | Opens::Frames | Opens::OverGame | Opens::Language | Opens::TextSize) { "Switch" } else { "Open" })]);
                 // The selected row's line at the bottom; the category keeps room over the hints when one of its rows needs
                 // it (`app_settings_groups::desc_room`).
                 let lines: Vec<&str> = rows.iter().map(|&i| self.settings_row_desc(i)).collect();
@@ -3796,6 +3824,14 @@ impl App {
 
     /// Settings → Look → Text size: the next frame is painted at `size` (the text painter scales every size,
     /// `pocket_ui::type_scale`), and it is kept. The new size's glyphs are drawn ahead on a thread, as at the start.
+    /// Settings → Look → Screen colour: the same look as SELECT + Vol, applied and saved at once (`Sys::set_warmth`).
+    fn set_screen_colour(&mut self, warmth: i8) {
+        let game = self.sys_ctx().game;
+        if self.sys.set_warmth(warmth, game) {
+            self.request_redraw();
+        }
+    }
+
     fn set_text_size(&mut self, size: pocket_ui::type_scale::TextSize) {
         pocket_ui::type_scale::set(size);
         self.text.prewarm();
@@ -4581,13 +4617,13 @@ impl App {
         }
         let notice_bottom = if let Some(n) = &self.notice { n.paint(c, &mut self.text) } else { 0 };
         if let Some((name, at)) = self.toast.clone() {
-            if at.elapsed() < TOAST {
+            if toast_age(at) < TOAST {
                 // Comes down into place and fades in and out (`motion::paint_toast`). Below a notice
                 // card when one is up: both sat at the top and garbled each other (monkey 2026-10-30).
                 let top = if notice_bottom > 0 { notice_bottom + 12 } else { 36 };
                 let w = self.text.width(Face::Body, 28, &name) + 48;
                 let text = &mut self.text;
-                pocket_ui::motion::paint_toast(c, at, Instant::now(), Some(TOAST), (c.w / 2 - w / 2, top, w, 52), 20.0, |c, dy| {
+                pocket_ui::motion::paint_toast(c, at, at + toast_age(at), Some(TOAST), (c.w / 2 - w / 2, top, w, 52), 20.0, |c, dy| {
                     c.round_rect(c.w / 2 - w / 2, top + dy, w, 52, 26, KEYCAP);
                     text.draw(c, Face::Body, 28, c.w / 2 - w / 2 + 24, top + 36 + dy, CHALK, &name);
                 });
@@ -4996,6 +5032,8 @@ fn snapshot(app: &mut App, args: &[String]) {
     // Snapshots are settled pictures: use the same decoder and scaler synchronously, as before covers
     // moved to the picture worker. Live frames keep drawing while that worker reads an image.
     app.pictures.sync = true;
+    SNAPSHOT_RUN.store(true, std::sync::atomic::Ordering::Relaxed);
+    pocket_ui::status_corner::freeze_clock();
     // A `:device=` at the end was settled at the start (`device::snapshot_state`); the state is what is before it.
     let state = args.first().map(|s| pocket_ui::device::snapshot_state(s).0.to_string());
     let (Some(state), Some(out)) = (state.as_ref(), args.get(1)) else {
@@ -6413,7 +6451,7 @@ impl App {
             UserEvent::BigMoments(gen, list) => self.big_moments_got(gen, list),
             UserEvent::Frozen(gen, list) => {
                 if gen == self.frozen_generation() {
-                    self.frozen_got(list);
+                    self.frozen_got_timed(list);
                 }
                 self.request_redraw();
             }
@@ -7535,6 +7573,7 @@ fn main() {
         button_layout: settings.button_layout,
         launch_picture: None,
         frozen: Vec::new(),
+        moment_reads: Default::default(),
         frozen_auto: None,
         frozen_wait: None,
         find: Default::default(),

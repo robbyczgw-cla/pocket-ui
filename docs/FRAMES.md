@@ -1,10 +1,12 @@
 # Screen frames and the live picture preview
 
 ## Screen frame (Options → Picture → Screen frame)
-- **None / Auto / Ambient / Shell / Brick / Pocket slim / Clamshell / Wide / Twin / Gloss / Swan /
-  Watch / Goggles / CRT / Studio monitor / Portable TV / Woodgrain / Arcade / Glow** (values `none auto
-  ambient shell brick pocket clamshell wide twin gloss swan watch goggles crt studio portable-tv woodgrain
-  arcade glow`). Every frame but None is drawn behind the picture whenever the picture leaves room around
+- **None / Auto / Ambient / DMG / GB Pocket / GBC / GBA / GBA SP / DS / PSP / CRT / Studio monitor /
+  Portable TV / Woodgrain / Arcade / Glow** (values `none auto ambient brick pocket shell wide clamshell twin
+  gloss crt studio portable-tv woodgrain arcade glow`; the values are the old internal names, so saved settings
+  stay valid: only the names on screen changed, 2026-11-03). Swan, Watch and Goggles left the list, with their
+  finish rows: Auto still draws them (`bezel::style_for`), and a saved `swan`, `watch` or `goggles` reads as
+  `auto` (`options::current_value`, `FrameMode::parse`). Every frame but None is drawn behind the picture whenever the picture leaves room around
   it: Integer (`native`), Integer smaller (`integer-smaller`) and Aspect scaling. Fullscreen and Aspect
   screen fill the panel and never get a frame, so stretching to the full screen stays one setting away.
 - Sub-choices appear under the frame only while they mean something (`Setting::shown_when`,
@@ -12,18 +14,18 @@
 
   | Frame | Key | Values |
   |---|---|---|
-  | Shell | `frame_colour` | `grey indigo clear-purple atomic-purple black white glacier` |
+  | GBC (`shell`) | `frame_colour` | `grey indigo clear-purple atomic-purple black white glacier` |
   | CRT | `frame_tv` | `plastic wood` |
-  | Brick | `frame_brick` | `grey clear red yellow green black` |
-  | Pocket slim | `frame_pocket` | `silver clear` |
-  | Clamshell | `frame_clamshell` | `platinum cobalt flame graphite` |
-  | Swan | `frame_swan` | `pastel skeleton` |
-  | Watch | `frame_watch` | `gold silver` |
+  | DMG (`brick`) | `frame_brick` | `grey clear red yellow green black` |
+  | GB Pocket (`pocket`) | `frame_pocket` | `silver clear` |
+  | GBA SP (`clamshell`) | `frame_clamshell` | `platinum cobalt flame graphite` |
 
   The Picture page keeps room for one sub-choice row, so the live preview doesn't jump. Unknown or
   missing values are the first one (`bezel::finish!`), so settings files from before keep working.
-- **Twin** is offered for `nds` only: `options::offered`, which `GameSettings::step` skips past for
-  other consoles (a saved `twin` elsewhere is kept and draws the lens).
+- A frame shaped like one console is offered for that console only (`options::frame_systems`, `options::offered`,
+  which `GameSettings::step` skips past): DMG, GB Pocket and GBC for `gb`/`gbc` (and their `h` variants), GBA and
+  GBA SP for `gba` (`gbah`, `gbav`), DS (`twin`) for `nds`, PSP (`gloss`) for `psp`. A saved value elsewhere is kept
+  (the DS frame draws the lens when the screens aren't stacked).
 - Like every Picture setting they are kept per console and per game, and pocket-core applies them
   live (`set <key> <value>`, `VideoSettings::set`).
 - Defaults (the owner's choice, 2026-10-23): None on every console, and no screen effect either — a clean picture out of the box.
@@ -46,11 +48,11 @@ designs: generic shapes, materials, lines, grilles, hinges, knobs and dials afte
 classic handhelds and TVs, but no logos, lettering, brand names or exact outlines. Auto picks one per
 console (or an installed pack, which still wins); the others are chosen in the menu and ignore packs.
 Code: `src/bezel.rs` (Handheld, Monitor, layout, Auto, the GL layer), `src/frames.rs` (Shell, CRT,
-Arcade, Glow), `src/frames_more.rs` (the handhelds: Brick to Goggles), `src/frames_tv.rs` (Studio
+Arcade, Glow), `src/frames_more.rs` (the handhelds: Brick (DMG) to Goggles), `src/frames_tv.rs` (Studio
 monitor, Portable TV, Woodgrain), `src/frame_led.rs` (the live power light), `src/ambient.rs` (Ambient).
 
-**Auto** (`bezel::style_for`): gb → Brick (grey), gbc → Pocket slim (clear), gba → Wide, nds → Twin,
-psp → Gloss, wonderswan → Swan (pastel), wonderswancolor → Swan (skeleton), gameandwatch → Watch (gold),
+**Auto** (`bezel::style_for`): gb → Brick/DMG (grey), gbc → Pocket slim/GB Pocket (clear), gba → Wide/GBA, nds → Twin/DS,
+psp → Gloss/PSP, wonderswan → Swan (pastel), wonderswancolor → Swan (skeleton), gameandwatch → Watch (gold),
 virtualboy → Goggles, atari2600 / atari7800 → Woodgrain, gamegear / ngp(c) / lynx / pokemini → Handheld,
 everything else → Monitor. Before 2026-10-23 Auto drew Handheld for gb, gbc, gba, wonderswan(color) and
 virtualboy; explicit choices are stored as their own values and are not affected.

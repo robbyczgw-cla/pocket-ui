@@ -27,7 +27,7 @@ fn five_systems_remain_reachable_below_the_visible_cabinet() {
     fs::write(root.join("es_systems.cfg"), xml).unwrap();
     let socket = tmp.path().join("wayland");
     let _stub = if cfg!(target_os = "linux") {
-        let child = Command::new("python3").args(["-I", concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/wayland-stub.py")]).arg(&socket).spawn().unwrap();
+        let child = Command::new("python3").args(["-I", &format!("{}/scripts/wayland-stub.py", std::env::var("CARGO_MANIFEST_DIR").unwrap())]).arg(&socket).spawn().unwrap();
         let stub = Stub(child);
         for _ in 0..200 { if socket.exists() { break; } std::thread::sleep(Duration::from_millis(10)); }
         assert!(socket.exists());

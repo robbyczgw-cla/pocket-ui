@@ -1791,7 +1791,7 @@ fn frame_tools(args: &[String]) -> bool {
             v.set("scaling", args.get(5).map_or("native", String::as_str));
             v.set("frame", args.get(6).map_or("auto", String::as_str));
             if let Some(sub) = args.get(7) {
-                for key in ["frame_colour", "frame_tv", "frame_brick", "frame_pocket", "frame_clamshell", "frame_swan", "frame_watch"] {
+                for key in ["frame_colour", "frame_tv", "frame_brick", "frame_pocket", "frame_clamshell"] {
                     v.set(key, sub);
                 }
             }
@@ -1986,6 +1986,9 @@ fn main() {
     // GBA and the other HOST_CORES systems have no `HostSystem`: the core decides (`hostsys::core_states_vary`).
     if host.is_none_or(|h| !h.states_vary) && hostsys::core_states_vary(&core_options::core_id(core_so)) {
         core.states_vary_in_size();
+    }
+    if hostsys::core_pads_short_states(&core_options::core_id(core_so)) {
+        core.pad_short_states(hostsys::PADDED_STATE_MIN);
     }
     if host.is_some_and(|h| h.analog) {
         println!("player 1: {}", core.use_analog_pad());

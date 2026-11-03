@@ -14,7 +14,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+include!("common/root.rs");
 const METROID: &str = "Super Metroid (Japan, USA) (En,Ja).sfc";
 /// A PS2 game: its "100 %" sticker is not on the SNES row the snapshots show.
 const BURNOUT: &str = "Burnout 3 - Takedown (USA).iso";

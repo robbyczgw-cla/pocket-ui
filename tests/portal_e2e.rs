@@ -19,7 +19,7 @@ use pocket_ui::pad::Button;
 use pocket_ui::portal::{Failure, Outcome, Rules, Session};
 use pocket_ui::portal_form::{Ask, SignIn, State};
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+include!("common/root.rs");
 
 struct Standin {
     child: Child,
@@ -36,7 +36,7 @@ impl Standin {
         let (port_file, log) = (dir.join("port"), dir.join("log"));
         let mut child = Command::new("python3")
             .arg("-I")
-            .arg(Path::new(ROOT).join("scripts/portal-standin.py"))
+            .arg(Path::new(&ROOT).join("scripts/portal-standin.py"))
             .args([mode, &format!("{ROOT}/testdata/portal"), &port_file.to_string_lossy(), &log.to_string_lossy()])
             .spawn()
             .ok()?;

@@ -52,19 +52,35 @@ impl App {
         !frozen::shared_moment_is_own(own, others.iter().map(|p| recent(p).map(|r| r.last_played)))
     }
 
+    /// When the moment a start of this game would continue from was written, if the shelf's own read found one: the open
+    /// case's (`frozen_refresh`), or Easy's and the big shelf's (`big_moments_refresh`) while that look is on. Nothing is
+    /// read here: a game that read doesn't list, or hasn't listed yet, has no line.
+    pub(crate) fn frozen_moment_time(&self, path: &Path) -> Option<u64> {
+        self.moment_reads.time(self.big_on(), path)
+    }
+
     /// Reads again which games stand open: on a thread, the answer comes as an event.
     pub(crate) fn frozen_refresh(&mut self) {
         self.big_moments_refresh();
         if !wanted() {
             FROZEN_GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.moment_reads.shelf_started(false);
             return self.frozen_got(Vec::new());
         }
+        self.moment_reads.shelf_started(true);
         let games: Vec<frozen::Game> = self.recents.list.iter().filter(|r| self.recent_visible(r)).filter_map(|r| self.frozen_game(r)).filter(|g| !self.shared_moment_not_own(&g.system, &g.path, &g.emulator)).collect();
         let proxy = self.proxy.clone();
         let gen = FROZEN_GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
         std::thread::spawn(move || {
-            let _ = proxy.send_event(UserEvent::Frozen(gen, frozen::scan(&games)));
+            let _ = proxy.send_event(UserEvent::Frozen(gen, frozen::scan_timed(&games)));
         });
+    }
+
+    /// The answer of a read: the open games and the times of their moments.
+    pub(crate) fn frozen_got_timed(&mut self, list: Vec<frozen::Moment>) {
+        let paths = list.iter().map(|m| m.0.clone()).collect();
+        self.moment_reads.shelf_got(list.clone());
+        self.frozen_got(paths);
     }
 
     pub(crate) fn frozen_got(&mut self, list: Vec<PathBuf>) {

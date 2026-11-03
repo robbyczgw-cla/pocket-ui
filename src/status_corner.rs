@@ -293,11 +293,25 @@ pub fn format_clock(unix: i64, hour: i32, minute: i32) -> Option<String> {
     (unix >= TIME_SET_AFTER).then(|| format!("{hour:02}:{minute:02}"))
 }
 
+static FROZEN_NOW: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
+
+/// A snapshot is one moment: from here on every clock of this process says the time it is now, however long the
+/// painting takes. Without it a snapshot that crosses a minute (any one, a loaded machine makes it likely) paints
+/// "13:52" and then "13:53" in the same place, and the text check finds one clock painted over another.
+pub fn freeze_clock() {
+    let _ = FROZEN_NOW.set(SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64));
+}
+
+/// Seconds since 1970: the real time, or the frozen moment of a snapshot (`freeze_clock`).
+pub fn unix_now() -> Option<i64> {
+    FROZEN_NOW.get().copied().or_else(|| SystemTime::now().duration_since(UNIX_EPOCH).ok().map(|d| d.as_secs() as i64))
+}
+
 /// Local time as "13:28" (24 hours, as everywhere in pocket-ui), None while the clock was never set. Worked out at
 /// most once a second: a zone chosen in Settings shows within that second.
 pub fn clock() -> Option<String> {
     static KEPT: Mutex<Option<(i64, Option<String>)>> = Mutex::new(None);
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs() as i64;
+    let now = unix_now()?;
     let mut kept = KEPT.lock().unwrap_or_else(|e| e.into_inner());
     if let Some((_, s)) = kept.as_ref().filter(|(at, _)| *at == now) {
         return s.clone();

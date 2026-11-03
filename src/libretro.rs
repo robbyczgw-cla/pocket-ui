@@ -828,6 +828,8 @@ pub struct Core {
     taken: Option<(Resume, PathBuf)>,
     /// How often `save_quick` asked for the state size, and the ms it took (`take_size_queries`).
     size_queries: std::cell::Cell<(u32, f32)>,
+    /// A shorter state of at least this many bytes is padded with zeros to the core's size now (`pad_short_states`).
+    pad_min: Option<usize>,
 }
 
 type VoidFn = unsafe extern "C" fn();
@@ -860,6 +862,34 @@ pub enum Resume {
     /// (written later in a session that crashed, or by RetroArch or a standalone emulator). The game
     /// starts fresh from that save instead.
     SaveIsNewer,
+}
+
+/// RetroArch's state container, which Flycast also unpacks: "RASTATE" and 1, then sections of a 4-byte name, a u32 length and
+/// the data, each padded to 8 bytes; the core takes the length of its "MEM " section on trust. True when `data` is no such
+/// container, or when every section it names lies inside the real bytes of the file (not the zero padding that follows
+/// them in the buffer handed to the core) and a MEM section is there.
+fn rastate_sections_fit(data: &[u8]) -> bool {
+    if !data.starts_with(b"RASTATE\x01") {
+        return true;
+    }
+    let mut at = 8usize;
+    while data.len() - at > 8 {
+        let name = &data[at..at + 4];
+        let size = u32::from_le_bytes([data[at + 4], data[at + 5], data[at + 6], data[at + 7]]) as usize;
+        at += 8;
+        if size > data.len() - at {
+            return false;
+        }
+        if name == b"MEM " {
+            return true;
+        }
+        let aligned = (size + 7) & !7;
+        if aligned > data.len() - at {
+            return false;
+        }
+        at += aligned;
+    }
+    false
 }
 
 impl Core {
@@ -978,6 +1008,7 @@ impl Core {
                 no_states: false,
                 taken: None,
                 size_queries: Default::default(),
+                pad_min: None,
             };
             core.read_sram();
             core.read_rtc();
@@ -1086,7 +1117,9 @@ impl Core {
         self.saver.trouble()
     }
 
-    /// Snapshot of the whole emulated machine (libretro serialize).
+    /// Snapshot of the whole emulated machine (libretro serialize). A core that refuses because its state grew since
+    /// `retro_serialize_size` was asked (Flycast measures and writes in two stops) is asked again once with the new size,
+    /// instead of losing the save.
     pub fn save_state(&self) -> Option<Vec<u8>> {
         if self.no_states {
             return None;
@@ -1095,6 +1128,14 @@ impl Core {
             let size: Symbol<unsafe extern "C" fn() -> usize> = self.lib.get(b"retro_serialize_size").ok()?;
             let save: Symbol<unsafe extern "C" fn(*mut c_void, usize) -> bool> = self.lib.get(b"retro_serialize").ok()?;
             let mut buf = vec![0u8; size()];
+            if !buf.is_empty() && save(buf.as_mut_ptr() as *mut c_void, buf.len()) {
+                return Some(buf);
+            }
+            let again = size();
+            if again == buf.len() {
+                return None;
+            }
+            buf = vec![0u8; again];
             (!buf.is_empty() && save(buf.as_mut_ptr() as *mut c_void, buf.len())).then_some(buf)
         }
     }
@@ -1103,6 +1144,16 @@ impl Core {
     /// handed to it, as RetroArch hands every state file whatever its length.
     pub fn states_vary_in_size(&self) {
         SHARED.with_borrow_mut(|s| s.serialization_quirks |= QUIRK_CORE_VARIABLE_SIZE);
+    }
+
+    /// The core's state size moves between the moment a state is written and the next start (Flycast: 53217183 bytes
+    /// right after the start, 36439543 in the state written at quit): a state of `min` bytes or more that is shorter than
+    /// the size now is handed over padded with zeros to that size, with the full length as its size, so that whatever
+    /// the core reads stays inside the buffer. That protects memory, not the game: a cut-off state longer than `min`, one
+    /// of another game or a damaged one is not recognised (the core's own checks and its version/RAM header decide).
+    /// A RetroArch container ("RASTATE\1") must have every section length inside the real file bytes (`rastate_sections_fit`).
+    pub fn pad_short_states(&mut self, min: usize) {
+        self.pad_min = Some(min);
     }
 
     /// No saving, loading or rewinding from here on, whatever the core offers (`hostsys::HostSystem::no_states`).
@@ -1140,7 +1191,8 @@ impl Core {
 
     /// Loads a state (libretro unserialize). One shorter than the core's state size (an empty or cut-off file,
     /// a state of another core version) is refused before the core sees it: many cores read their full size
-    /// whatever length they are given. Cores whose states vary in size check that themselves. The error
+    /// whatever length they are given. Cores whose states vary in size check that themselves; Flycast's get padded
+    /// (`pad_short_states`). The error
     /// says why, short enough for a toast.
     pub fn load_state(&self, data: &[u8]) -> Result<(), String> {
         self.load_state_reached(data).map_err(|(_, why)| why)
@@ -1162,9 +1214,24 @@ impl Core {
             if data.is_empty() {
                 return refused("the file is empty".into());
             }
-            if data.len() < expected && !variable {
-                return refused(format!("wrong size ({} of {expected} bytes)", data.len()));
-            }
+            let padded;
+            let data = if data.len() < expected && !variable {
+                match self.pad_min {
+                    Some(min) if data.len() >= min => {
+                        if !rastate_sections_fit(data) {
+                            return refused("the state is damaged".into());
+                        }
+                        let mut buf = Vec::with_capacity(expected);
+                        buf.extend_from_slice(data);
+                        buf.resize(expected, 0);
+                        padded = buf;
+                        padded.as_slice()
+                    }
+                    _ => return refused(format!("wrong size ({} of {expected} bytes)", data.len())),
+                }
+            } else {
+                data
+            };
             if load(data.as_ptr() as *const c_void, data.len()) {
                 Ok(())
             } else {
@@ -2524,10 +2591,18 @@ void retro_run(void) {
 int stub_av_run(void) { return av_run; }
 int stub_av_state(void) { return av_state; }
 static bool variable_size;
-size_t retro_serialize_size(void) { return sizeof state; }
-bool retro_serialize(void *d, size_t n) { av_state = ask_av(); if (n < sizeof state) return false; memcpy(d, state, sizeof state); return true; }
+/* Flycast: the size it reports moves with the machine (53 MB at the start, 36 MB at quit), and a state that grew since the
+   size was asked is refused by retro_serialize. */
+static size_t extra, asked_extra;
+void stub_size_grows(void) { extra = 40; }
+void stub_grows_after_asked(void) { asked_extra = 40; }
+size_t retro_serialize_size(void) { size_t n = sizeof state + extra; if (asked_extra) { extra = asked_extra; asked_extra = 0; } return n; }
+bool retro_serialize(void *d, size_t n) { av_state = ask_av(); if (n < sizeof state + extra) return false; memset(d, 0, n); memcpy(d, state, sizeof state); return true; }
 /* Trusts the size, as many cores do; only a core with states of varying size reads fewer bytes. */
-bool retro_unserialize(const void *d, size_t n) { av_state = ask_av(); memcpy(state, d, variable_size && n < sizeof state ? n : sizeof state); return true; }
+static size_t last_n, calls_n;
+size_t stub_last_unserialize_len(void) { return last_n; }
+size_t stub_unserialize_calls(void) { return calls_n; }
+bool retro_unserialize(const void *d, size_t n) { last_n = n; calls_n++; av_state = ask_av(); memcpy(state, d, variable_size && n < sizeof state ? n : sizeof state); return true; }
 /* Test hooks. */
 typedef void (*log_t)(unsigned, const char *, ...);
 void stub_log(unsigned level, const char *long_text) {
@@ -2936,6 +3011,82 @@ void stub_frame(unsigned w, unsigned h, size_t pitch, unsigned bpp) {
         unsafe { hook::<unsafe extern "C" fn()>(&core, "stub_variable_size")() };
         assert_eq!(core.serialization_quirks(), QUIRK_CORE_VARIABLE_SIZE);
         assert_eq!(core.load_state(&state[..40]), Ok(()));
+    }
+
+    /// Flycast's state size moves (53 MB at the start, 36 MB at quit): a shorter state of a core that pads goes to the core in
+    /// a buffer of the size now, zero-filled, with that size as its length; one under the minimum is refused unseen.
+    #[test]
+    fn a_shorter_state_of_a_padding_core_gets_a_full_buffer() {
+        let _l = globals();
+        let stub = Stub::new("padded");
+        let mut core = stub.load();
+        fn calls(c: &Core) -> usize {
+            unsafe { hook::<unsafe extern "C" fn() -> usize>(c, "stub_unserialize_calls")() }
+        }
+        fn last(c: &Core) -> usize {
+            unsafe { hook::<unsafe extern "C" fn() -> usize>(c, "stub_last_unserialize_len")() }
+        }
+        let state = core.save_state().unwrap();
+        assert_eq!(state.len(), 80);
+        unsafe { hook::<unsafe extern "C" fn()>(&core, "stub_size_grows")() };
+        assert_eq!(core.state_size(), Some(120));
+        assert_eq!(core.load_state(&state), Err("wrong size (80 of 120 bytes)".into()), "an ordinary core refuses it");
+        assert_eq!(calls(&core), 0);
+        core.pad_short_states(40);
+        assert_eq!(core.load_state(&state), Ok(()), "a state from the smaller machine loads");
+        assert_eq!((calls(&core), last(&core)), (1, 120), "the core was given the full size");
+        assert_eq!(core.load_state(&state[..40]), Ok(()), "the minimum itself");
+        assert_eq!(last(&core), 120);
+        for n in [0, 1, 8, 39] {
+            assert!(core.load_state(&state[..n]).is_err(), "{n} bytes are under the minimum");
+        }
+        assert_eq!(calls(&core), 2, "the core never saw those");
+        assert_eq!(core.load_state(&[state.as_slice(), &[0; 80]].concat()), Ok(()), "longer: for the core to judge");
+        assert_eq!(last(&core), 160);
+    }
+
+    /// A RetroArch container ("RASTATE") whose MEM section claims more than the file holds would make Flycast read past its
+    /// buffer, padding or not: refused before the core is called.
+    #[test]
+    fn a_rastate_with_a_section_longer_than_the_file_is_refused() {
+        let _l = globals();
+        let stub = Stub::new("rastate");
+        let mut core = stub.load();
+        fn calls(c: &Core) -> usize {
+            unsafe { hook::<unsafe extern "C" fn() -> usize>(c, "stub_unserialize_calls")() }
+        }
+        let section = |name: &[u8; 4], claimed: u32, real: usize| {
+            let mut v = b"RASTATE\x01".to_vec();
+            v.extend_from_slice(name);
+            v.extend_from_slice(&claimed.to_le_bytes());
+            v.extend(std::iter::repeat_n(7u8, real));
+            v
+        };
+        unsafe { hook::<unsafe extern "C" fn()>(&core, "stub_size_grows")() };
+        core.pad_short_states(40);
+        assert!(rastate_sections_fit(b"not a container"));
+        assert!(rastate_sections_fit(&section(b"MEM ", 64, 64)));
+        assert!(rastate_sections_fit(&[section(b"ACHV", 5, 8), section(b"MEM ", 40, 40)[8..].to_vec()].concat()), "an aligned section before MEM");
+        assert!(!rastate_sections_fit(&section(b"MEM ", 65, 64)), "MEM claims more than the file holds");
+        assert!(!rastate_sections_fit(&section(b"MEM ", u32::MAX, 64)));
+        assert!(!rastate_sections_fit(&section(b"ACHV", 100, 64)), "a section before MEM runs off the end");
+        assert!(!rastate_sections_fit(&section(b"ACHV", 4, 4)), "no MEM section");
+        assert!(!rastate_sections_fit(b"RASTATE\x01"));
+        assert_eq!(core.load_state(&section(b"MEM ", 1 << 20, 64)), Err("the state is damaged".into()));
+        assert_eq!(calls(&core), 0, "the core never saw it");
+        assert_eq!(core.load_state(&section(b"MEM ", 64, 64)), Ok(()), "a sound container goes in padded");
+        assert_eq!(calls(&core), 1);
+    }
+
+    /// Flycast measures the size and writes in two stops: a state that grew in between is asked for again once.
+    #[test]
+    fn a_state_that_grew_since_the_size_was_asked_is_saved_after_all() {
+        let _l = globals();
+        let stub = Stub::new("grew");
+        let core = stub.load();
+        unsafe { hook::<unsafe extern "C" fn()>(&core, "stub_grows_after_asked")() };
+        let state = core.save_state().expect("the second try has the new size");
+        assert_eq!(state.len(), 120);
     }
 
     /// B16: the core's log lines are printf-style with any arguments (strings, doubles, more than six); a

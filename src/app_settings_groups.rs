@@ -285,6 +285,8 @@ impl App {
             Opens::Language => pocket_ui::i18n::current().name().to_string(),
             Opens::TextSize if i == sel => format!("‹ {} ›", pocket_ui::type_scale::get().label()),
             Opens::TextSize => pocket_ui::type_scale::get().label().to_string(),
+            Opens::ScreenColour if i == sel => format!("‹ {} ›", self.sys.look().warmth_label()),
+            Opens::ScreenColour => self.sys.look().warmth_label(),
             Opens::Tour => self.tour_list_value(),
             Opens::Sounds if i == sel && self.sound.on => format!("‹ {} ›", self.sound.label()),
             Opens::Sounds => self.sound.label(),
@@ -642,12 +644,12 @@ mod tests {
                 assert_eq!(group_of(row), g);
             }
         }
-        // Short lists: the point of the categories. Seven categories, eight rows at most
-        // (2026-10-30): a list is never longer than one page, also with Large text.
+        // Short lists: the point of the categories. Seven categories, nine rows at most
+        // (2026-10-30, nine since Screen colour): a list is never longer than one page, also with Large text.
         assert!(SETTINGS_GROUPS.len() <= 7, "at most seven categories");
-        assert!(SETTINGS_GROUPS.iter().all(|c| (4..=8).contains(&c.2.len())), "every category holds 4 to 8 rows");
+        assert!(SETTINGS_GROUPS.iter().all(|c| (4..=9).contains(&c.2.len())), "every category holds 4 to 9 rows");
         let large_row = pocket_ui::type_scale::grown_in(pocket_ui::type_scale::TextSize::Large, 36) as i32 - 36;
-        assert!(8 * (66 + large_row * 6 / 5) <= 1080 - 268, "eight Large rows fit on the page");
+        assert!(9 * (66 + large_row * 6 / 5) <= 1080 - 268, "nine Large rows fit on the page");
         let mut seen = std::collections::BTreeSet::new();
         assert!(SETTINGS.iter().all(|r| seen.insert(r.0)), "no row twice: settings_row finds rows by name");
     }
@@ -701,7 +703,7 @@ mod tests {
     /// page were the only way to some), and each is in one place.
     #[test]
     fn every_choice_has_one_row_of_its_own() {
-        for name in ["Look", "Appearance", "Colours", "Font", "Text size", "Systems on the shelf", "Animations", "Motion", "Buttons", "Language"] {
+        for name in ["Look", "Appearance", "Colours", "Font", "Text size", "Screen colour", "Systems on the shelf", "Animations", "Motion", "Buttons", "Language"] {
             assert_eq!(SETTINGS.iter().filter(|r| r.0 == name).count(), 1, "{name}: one row");
         }
         let opens: Vec<String> = SETTINGS.iter().map(|r| match r.1 {

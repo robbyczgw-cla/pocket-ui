@@ -1076,7 +1076,7 @@ mod tests {
     /// every package matching its entry and passing the unpack checks.
     #[test]
     fn test_catalog_is_signed_numbered_and_complete() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("store/test-catalog");
+        let dir = crate::testutil::manifest_dir().join("store/test-catalog");
         let json = std::fs::read(dir.join("catalog.json")).unwrap();
         let sig = std::fs::read_to_string(dir.join("catalog.json.sig")).unwrap();
         let cat = verify_catalog(&json, &sig, &PUBLIC_KEY).unwrap();

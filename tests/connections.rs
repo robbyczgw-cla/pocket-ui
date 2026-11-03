@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+include!("common/root.rs");
 
 struct Stub {
     path: PathBuf,
@@ -61,7 +61,7 @@ fn shot(tmp: &Path, stub: Option<&Stub>, state: &str, size: &str, lang: &str, te
         cmd.env("WAYLAND_DISPLAY", &s.path);
     }
     let out = cmd.output().unwrap();
-    assert!(out.status.success() && png.exists(), "{state} at {size}: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(out.status.success() && png.exists(), "{state} at {size}: status={}, png={}\nstderr: {}\nstdout: {}", out.status, png.exists(), String::from_utf8_lossy(&out.stderr), String::from_utf8_lossy(&out.stdout));
     (std::fs::read_to_string(&visible).unwrap_or_default(), std::fs::read_to_string(&boxes).unwrap_or_default())
 }
 

@@ -1728,7 +1728,7 @@ mod tests {
 
     #[test]
     fn the_launchers_shell_hand_back_carries_out_a_note_the_engine_wrote() {
-        let script = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/deploy/run-pocket-ui.sh")).unwrap();
+        let script = std::fs::read_to_string(crate::testutil::manifest_dir().join("deploy/run-pocket-ui.sh")).unwrap();
         let start = script.find("fan_handback() {").expect("fan_handback in the launcher");
         let end = start + script[start..].find("\n}\n").unwrap() + 3;
         let func = &script[start..end];

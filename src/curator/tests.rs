@@ -471,14 +471,22 @@ fn budget(what: &str, took: Duration, max: Duration) {
 fn speed_index_build_lens_keypress_and_echoes_for_5000_games() {
     // Everything below runs on this one thread: the budgets count its CPU time, which another test or a build on the
     // same machine can't stretch (catalog and index print the wall clock as well).
-    let (t, c) = (Instant::now(), thread_cpu());
-    let cat = big_catalog(5000);
-    let built = thread_cpu() - c;
-    println!("catalog, wall clock: {:?}", t.elapsed());
-    let (t, c) = (Instant::now(), thread_cpu());
-    let ix = Index::build(cat.clone(), big_user(&cat));
-    let indexed = thread_cpu() - c;
-    println!("index, wall clock: {:?}", t.elapsed());
+    // The best of three: CPU time still grows when another core shares the cache or the clock drops (one run in a
+    // loaded gate took 221 ms for 200), which says nothing about the code; a slow build is slow in all three.
+    let (mut built, mut indexed) = (Duration::MAX, Duration::MAX);
+    let mut ix = None;
+    for _ in 0..3 {
+        let (t, c) = (Instant::now(), thread_cpu());
+        let made = big_catalog(5000);
+        built = built.min(thread_cpu() - c);
+        println!("catalog, wall clock: {:?}", t.elapsed());
+        let (t, c) = (Instant::now(), thread_cpu());
+        let index = Index::build(made.clone(), big_user(&made));
+        indexed = indexed.min(thread_cpu() - c);
+        println!("index, wall clock: {:?}", t.elapsed());
+        ix = Some(index);
+    }
+    let ix = ix.unwrap();
     budget("catalog for 5,000 games (features already made)", built, Duration::from_millis(200));
     budget("index for 5,000 games", indexed, Duration::from_millis(50));
     assert_eq!(ix.len(), 5000);

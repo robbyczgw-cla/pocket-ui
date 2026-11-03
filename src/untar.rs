@@ -441,7 +441,7 @@ pub(crate) mod tests {
     /// The packages in store/test-catalog, made by macOS tar on the build machine, pass.
     #[test]
     fn test_catalog_packages_pass() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("store/test-catalog/packages");
+        let dir = crate::testutil::manifest_dir().join("store/test-catalog/packages");
         let mut seen = 0;
         for e in std::fs::read_dir(dir).unwrap().flatten() {
             if e.file_name().to_string_lossy().ends_with(".tar.gz") {

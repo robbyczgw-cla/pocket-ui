@@ -59,7 +59,7 @@ fn throwaway_key(dir: &Path) -> (PathBuf, [u8; 32]) {
 }
 
 fn run(args: &[&str]) -> Output {
-    let root = env!("CARGO_MANIFEST_DIR");
+    let root = &std::env::var("CARGO_MANIFEST_DIR").unwrap();
     Command::new("sh")
         .arg(Path::new(root).join("scripts/release-channel.sh"))
         .args(args)

@@ -4324,6 +4324,22 @@ pub fn paint_keyboard_with(c: &mut Canvas, text: &mut Text, kb: &Keyboard, done:
 /// `paint_keyboard_with`, its field showing `shown` instead of the text (a sign-in page's password as dots,
 /// `portal_form`).
 pub fn paint_keyboard_shown(c: &mut Canvas, text: &mut Text, kb: &Keyboard, done: &str, shown: &str) {
+    paint_keyboard_room(c, text, kb, done, shown, 0);
+}
+
+/// `paint_keyboard_with` and a line of explanation under the keys, in the dim colour: at 790 px on a 1080-line screen,
+/// right under the keys on a shorter one (1024x768, where the keys give up 40 px for it; at 790 it was off the picture).
+pub fn paint_keyboard_noted(c: &mut Canvas, text: &mut Text, kb: &Keyboard, done: &str, note: &str) {
+    let short = c.h < 900;
+    let reserve = if short { 40 } else { 0 };
+    paint_keyboard_room(c, text, kb, done, &kb.text, reserve);
+    let note = text.fit(Face::Body, 24, note, c.w - 2 * MARGIN);
+    let y = if short { c.h - 100 - reserve + 30 } else { 790 };
+    text.draw(c, Face::Body, 24, MARGIN, y, pal().dust, &note);
+}
+
+/// The keyboard, leaving `reserve` px above the hints free of keys.
+fn paint_keyboard_room(c: &mut Canvas, text: &mut Text, kb: &Keyboard, done: &str, shown: &str, reserve: i32) {
     let width = c.w - 2 * MARGIN;
     // Text field with a caret; the Wi-Fi password is shown, it is typed on a handheld nobody else reads.
     c.rect(MARGIN, 150, width, 84, pal().label);
@@ -4336,7 +4352,7 @@ pub fn paint_keyboard_shown(c: &mut Canvas, text: &mut Text, kb: &Keyboard, done
 
     // 82 px keys on 1080 lines; the five rows share what is left above the hints on a screen of fewer (1024x768: 67).
     let (gap, top) = (10, 290);
-    let key_h = ((c.h - 100 - top - 4 * gap) / 5).clamp(48, 82);
+    let key_h = ((c.h - 100 - reserve - top - 4 * gap) / 5).clamp(48, 82);
     for (r, row) in kb.rows().iter().enumerate() {
         let y = top + r as i32 * (key_h + gap);
         // Character rows share one key width; the special row gets wider keys.
@@ -4507,7 +4523,7 @@ mod tests {
     /// A zoneinfo folder with a few zones and the two tables (`testdata/zoneinfo`; empty zone files are enough for the
     /// lists). Read-only, so every test shares it.
     fn zoneinfo() -> std::path::PathBuf {
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/zoneinfo")
+        crate::testutil::manifest_dir().join("testdata/zoneinfo")
     }
 
     /// A setup on a mock device whose zone and Wi-Fi regulatory domain are as given.

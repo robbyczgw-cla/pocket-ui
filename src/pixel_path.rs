@@ -315,6 +315,8 @@ pub fn effect_value(e: crate::video::Effect) -> &'static str {
         Effect::Grid => "grid",
         Effect::Scanlines => "scanlines",
         Effect::Crt => "crt",
+        Effect::SoftGlow => "softglow",
+        Effect::Smooth => "smooth",
     }
 }
 
@@ -338,9 +340,6 @@ pub fn frame_value(v: &crate::video::VideoSettings) -> &'static str {
         FrameMode::Wide => "wide",
         FrameMode::Twin => "twin",
         FrameMode::Gloss => "gloss",
-        FrameMode::Swan => "swan",
-        FrameMode::Watch => "watch",
-        FrameMode::Goggles => "goggles",
         FrameMode::Studio => "studio",
         FrameMode::PortableTv => "portable-tv",
         FrameMode::Woodgrain => "woodgrain",
@@ -861,6 +860,8 @@ fn effect_name(effect: &str) -> Option<&'static str> {
         "grid" => Some("LCD grid"),
         "scanlines" => Some("Scanlines"),
         "crt" => Some("CRT"),
+        "softglow" => Some("Soft glow"),
+        "smooth" => Some("Smooth pixels"),
         _ => None,
     }
 }
@@ -870,6 +871,8 @@ fn effect_about(effect: &str) -> &'static str {
     match effect {
         "grid" => "A thin dark gap between the game's pixels, a fixed share of each pixel, so it grows with the scale: it looks like a handheld's screen. It adds to the picture rather than taking away.",
         "scanlines" => "Each line of the picture is drawn as a TV's beam: thin with dark gaps in dark parts, closed in bright ones, and every line keeps its light. It looks like a TV, not like the console's own pixels.",
+        "softglow" => "A soft halo around the bright parts of the picture; the rest stays as clear as without the effect. No lines, no mask.",
+        "smooth" => "Rounds one-pixel stair-steps on slanted edges; flat pixels and straight edges stay as sharp as they were. It changes the pixel art a little rather than only showing it bigger.",
         _ => "Scanlines like a TV's beam, a fine colour mask too small to see at arm's length and a soft glow around bright parts, mixed in linear light; no curved screen. It looks like a TV, not like the console's own pixels.",
     }
 }
@@ -882,7 +885,7 @@ fn frame_name(frame: &str) -> Option<&'static str> {
         "crt" => Some("TV frame"),
         "arcade" => Some("Arcade bezel"),
         "glow" => Some("Glow frame"),
-        "brick" | "pocket" | "clamshell" | "wide" | "twin" | "gloss" | "swan" | "watch" | "goggles" => Some("Handheld frame"),
+        "brick" | "pocket" | "clamshell" | "wide" | "twin" | "gloss" => Some("Handheld frame"),
         "studio" | "portable-tv" | "woodgrain" => Some("TV frame"),
         _ => None,
     }
@@ -908,7 +911,7 @@ fn look_stage(r: &Report) -> Stage {
         grade = Grade::Enhanced;
         let mut c = Vec::new();
         if l.warmth != 0 {
-            let k = crate::display::NEUTRAL_KELVIN - l.warmth as i32 * crate::display::KELVIN_PER_STEP;
+            let k = crate::display::kelvin_of(l.warmth);
             c.push(format!("{} {k} K", if l.warmth > 0 { "warmer," } else { "cooler," }));
         }
         if l.contrast != 0 {

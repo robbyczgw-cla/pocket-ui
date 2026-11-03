@@ -1156,13 +1156,21 @@ mod tests {
         assert_eq!(r.summary(), "All good");
         let notes = c.roms().join("snes/notes");
         std::fs::create_dir_all(&notes).unwrap();
+        // The cap counts directory entries, not distinct inodes or file contents. Link the
+        // same ignored note: 100,002 allocated files consumed the shared test filesystem's
+        // free inodes/blocks and made unrelated upload tests report a full card. Keep the
+        // real production limit and both real oversized directories without that footprint.
+        // One seed per directory also stays below ext4's per-inode hardlink limit.
+        let seed = c.roms().join("note-seed.txt");
+        let other_seed = c.roms().join("other-note-seed.txt");
+        std::fs::write(&seed, b"x").unwrap();
+        std::fs::write(&other_seed, b"x").unwrap();
         for i in 0..=MAX_ENTRIES {
-            std::fs::write(c.roms().join(format!("snes/notes/n{i}.txt")), b"x").unwrap();
+            std::fs::hard_link(&seed, notes.join(format!("n{i}.txt"))).unwrap();
+            std::fs::hard_link(&other_seed, c.roms().join(format!("snes/n{i}.txt"))).unwrap();
         }
-        // The folder of the system itself is long too.
-        for i in 0..=MAX_ENTRIES {
-            std::fs::write(c.roms().join(format!("snes/n{i}.txt")), b"x").unwrap();
-        }
+        std::fs::remove_file(seed).unwrap();
+        std::fs::remove_file(other_seed).unwrap();
         let r = c.report();
         assert!(r.capped);
         assert_eq!(r.summary(), CAPPED_SUMMARY);

@@ -825,13 +825,12 @@ pub(crate) fn about(d: &CardData) -> (Option<String>, Option<String>) {
         let first = t.split_inclusive(['.', '!', '?']).next().unwrap_or(t).trim().to_string();
         return (Some(first).filter(|f| !f.is_empty()), None);
     }
-    let (about, credit) = match &d.summary {
-        Summary::Wikipedia { text: t, title } => (Some(t.clone()), Some(format!("Text: Wikipedia, “{title}”, CC BY-SA 4.0"))),
-        Summary::Loading => (d.sentence.clone(), Some("Loading the description from Wikipedia…".to_string())),
-        Summary::Unavailable(why) => (d.sentence.clone(), Some(format!("No description from Wikipedia: {why}"))),
-        Summary::Gamelist(t) => (Some(t.clone()), Some("From your EmulationStation gamelist".to_string())),
-        Summary::None => (d.sentence.clone(), None),
+    let about = match &d.summary {
+        Summary::Wikipedia { text: t, .. } | Summary::Gamelist(t) => Some(t.clone()),
+        _ => d.sentence.clone(),
     };
+    // The short card has no line for a game that simply has no article.
+    let credit = d.summary.note().filter(|_| !(d.plain && d.summary == Summary::None));
     // The sentence made of the facts (`game_card::sentence`) is English only, and the facts under it say the same in
     // the player's language: in any other language the back has no description then rather than an English one.
     let made_up = matches!(d.summary, Summary::None | Summary::Loading | Summary::Unavailable(_));
@@ -875,6 +874,23 @@ mod tests {
         assert_eq!(about(&d), (Some("A kart race.".to_string()), None));
     }
 
+    #[test]
+    fn no_article_and_offline_say_different_things() {
+        let credit = |summary: Summary, plain: bool| about(&CardData { plain, summary, ..Default::default() }).1;
+        // A game without an article: it says so, instead of a blank.
+        assert_eq!(credit(Summary::None, false).as_deref(), Some("No Wikipedia article for this game"));
+        assert_eq!(credit(Summary::Unavailable("no article".into()), false), credit(Summary::None, false));
+        // A game with an article but no Wi-Fi yet: the text comes later.
+        for why in ["offline", "no curl"] {
+            assert_eq!(credit(Summary::Unavailable(why.into()), false).as_deref(), Some("Offline: the description comes with Wi-Fi"));
+        }
+        assert_eq!(credit(Summary::Unavailable("timeout".into()), false).as_deref(), Some("No description from Wikipedia: timeout"));
+        // The short card (Easy, Kids) leaves the line out for a plain game without an article.
+        assert_eq!(credit(Summary::None, true), None);
+        // The description text is not touched: the facts' sentence is English only, so another language shows none.
+        let d = CardData { sentence: Some("A game.".into()), summary: Summary::None, ..Default::default() };
+        assert_eq!(about(&d).0.is_some(), crate::i18n::current() == crate::i18n::Lang::En);
+    }
 
     #[test]
     fn every_medium_has_a_box_and_every_template_has_room_for_its_band() {

@@ -3,7 +3,7 @@ use std::process::Command;
 
 #[test]
 fn h700_entrypoint_matches_the_device_profiles() {
-    let source = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/docker/vdev/entrypoint.sh")).unwrap();
+    let source = std::fs::read_to_string(format!("{}/docker/vdev/entrypoint.sh", std::env::var("CARGO_MANIFEST_DIR").unwrap())).unwrap();
     let start = source.find("SOC=qcom,sm8250\n").expect("profile defaults");
     let end = source[start..].find("\nexport VDEV_SCREEN=").expect("end of device selection") + start;
     let script = format!(

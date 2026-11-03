@@ -250,13 +250,11 @@ impl App {
                     pocket_ui::tailscale_page::Typing::Hostname => "Name on your tailnet",
                 };
                 self.text.draw(c, Face::Title, 50, MARGIN, 110, pal().chalk, heading);
-                pocket_ui::setup::paint_keyboard_with(c, &mut self.text, kb, "Done");
                 let note = match typing {
                     pocket_ui::tailscale_page::Typing::AuthKey => "A key made in the Tailscale admin console (under Keys). It is not kept on the Pocket.",
                     pocket_ui::tailscale_page::Typing::Hostname => "Letters, digits and hyphens. The Pocket will answer to this name on your other devices.",
                 };
-                let note = self.text.fit(Face::Body, 24, note, c.w - 2 * MARGIN);
-                self.text.draw(c, Face::Body, 24, MARGIN, 790, pal().dust, &note);
+                pocket_ui::setup::paint_keyboard_noted(c, &mut self.text, kb, "Done", note);
                 pocket_ui::setup::hints(
                     c,
                     &mut self.text,

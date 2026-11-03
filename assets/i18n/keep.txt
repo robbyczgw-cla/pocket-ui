@@ -8,6 +8,8 @@
 re:.* · \d$
 # The game card's row of the screenshots, "Screenshots (5)": the German word is the same (src/app_gallery.rs)
 re:^Screenshots \(\d\)$
+# Screen colour's middle: the German word is the same, the English table line keeps the other languages (Spanish: Neutro)
+re:^‹ Neutral ›$
 re:^/
 re:^…/
 re:^v\d
@@ -115,6 +117,15 @@ re:^RetroArch ·
 re:^pocket-core · 
 
 # Systems
+PlayStation 3
+PS3
+Wii U
+Amiga
+Commodore 64
+ZX Spectrum
+Neo Geo
+Jaguar
+3DO
 Game Boy
 Game Boy Color
 Game Boy Advance
@@ -331,6 +342,8 @@ PICO-8
 # src/curator/echoes.rs: Studio names (Echoes)
 Nintendo Entertainment Analysis & Development
 Nintendo EAD
+Japan Studio
+Polyphony Digital
 Nintendo Research & Development 1
 Nintendo R&D1
 Nintendo Research & Development 2

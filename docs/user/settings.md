@@ -14,7 +14,7 @@ Screen frames and the like change with A or Left/Right, right in the list.
 
 | Category | What is in it |
 |---|---|
-| **Look** | Look, Appearance, Colours, Font, Text size, Night light, Systems on the shelf, Cozy extras. See [Look](#look) |
+| **Look** | Look, Appearance, Colours, Font, Text size, Screen colour, Night light, Systems on the shelf, Cozy extras. See [Look](#look) |
 | **Sound & feel** | Animations, Playful cases, Old-TV switch-on, Motion, Sounds, Case sounds, Haptics, LEDs. See [Sound & feel](#sound--feel) |
 | **Playing** | On start, Continue where I quit, Buttons, Over the game, Screen frames, Performance & fan, Battery, RetroAchievements. See [Playing](#playing) |
 | **Games** | Add games, Game check, Starter pack, Pictures & extras, From EmulationStation, Screenshots, Curator, PC streaming. See [Games](#games) |
@@ -44,6 +44,7 @@ Settings → **Look**. How pocket-ui looks. Every choice has a row of its own; t
 | **Colours** | The colours of every page: Warm, Indigo Cube, Grey Brick, Green X or Blue Station. A or Left/Right switches it. See [Colours and font](theme.md) |
 | **Font** | The type of every screen: Barlow, Pixel or Rounded. A or Left/Right switches it. See [Colours and font](theme.md#font) |
 | **Text size** | **Normal** (the default), **Medium** or **Large**: larger text on every screen, fewer rows on a page. A or Left/Right switches it. See [Text size](#text-size) |
+| **Screen colour** | The screen's white: **Cooler 10** … **Neutral** … **Warmer 10**. Left/Right changes it, you see it at once; A goes back to Neutral. The same setting as [SELECT + Vol](controls-settings.md#volume-and-brightness-keys), so the two always agree |
 | **Night light** | Warmer, less blue colours in the evening, in the menus and in games: **Off** (the default), **On** or **Scheduled**, with a strength. See [Night light](night-light.md) |
 | **Systems on the shelf** | Which systems are on Home, a tick each. The row says "1 hidden" (or 2, 3...) while a system with games is off the shelf: this is the way back. See [Systems on the shelf](#systems-on-the-shelf) |
 | **Cozy extras** | The little touches you see, each on or off on its own: the TV on the cabinet, stickers, printed discs, the memory card in the pause menu, light by time of day, decorations, game connections, Rediscover. See [Cozy extras](#cozy-extras) |
@@ -317,7 +318,7 @@ one yourself. A or Left/Right switches it.
 - **Handhelds**: the handhelds (Game Boy, Game Boy Advance, Game Gear and the others) start with frame Auto, the home
   consoles with None.
 - **Every console**: every console starts with frame Auto. The home consoles get the monitor surround, the Nintendo DS
-  its Twin frame.
+  its DS frame.
 
 A frame saved for a console or a game in the pause menu (Options → Picture, then Save changes) stays as it is either
 way. The choice applies from the next game you start.

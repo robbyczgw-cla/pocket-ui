@@ -824,6 +824,7 @@ Your games	Tus juegos
 {s}, last {t}	{s}, último {t}
 Played	Jugado
 Save slots	Ranuras
+Continue: {t}	Continuar: {t}
 All empty	Todas vacías
 BIOS	BIOS
 Family	Familia
@@ -876,6 +877,7 @@ South Korea	Corea del Sur
 Brazil	Brasil
 Chile	Chile
 China	China
+Worldwide	En todo el mundo
 As of {t}.	Datos de {t}.
 As of {t}. {t2}	Datos de {t}. {t2}
 {n} million	{n} millones
@@ -984,8 +986,8 @@ Put on	Poner
 
 # --- Display warmth
 Neutral	Neutro
-Warm {n}	Cálido {n}
-Cool {n}	Frío {n}
+Warmer {n}	Más cálido {n}
+Cooler {n}	Más frío {n}
 Normal	Normal
 
 # --- Runs on: emulators and RetroArch settings
@@ -1398,6 +1400,7 @@ Dropped	Abandonado
 # --- Save states (pocket-core)
 the core has no states	el core no tiene estados
 the file is empty	el archivo está vacío
+the state is damaged	el estado está dañado
 wrong size ({n} of {m} bytes)	tamaño incorrecto ({n} de {m} bytes)
 the core refused it	el core lo rechazó
 no save states here	aquí no hay estados guardados
@@ -1628,8 +1631,8 @@ Stream	Streaming
 Last game	Último juego
 
 # --- Options: Picture, Extras, Shortcuts (pocket-core games). Descriptions are drawn line by line.
-Shell colour	Color de carcasa
-The colour of the handheld shell around the screen.	El color de la carcasa de la portátil alrededor de la pantalla.
+GBC colour	Color de GBC
+The colour of the Game Boy Color shell around the screen.	El color de la carcasa de la Game Boy Color alrededor de la pantalla.
 Clear purple, atomic purple and glacier blue are see-through.	Morado transparente, morado atómico y azul glaciar son translúcidos.
 Classic grey	Gris clásico
 Indigo	Índigo
@@ -1641,28 +1644,24 @@ TV cabinet	Carcasa de TV
 The cabinet of the CRT frame: dark plastic or wood veneer.	La carcasa del marco CRT: plástico oscuro o chapa de madera.
 Dark plastic	Plástico oscuro
 Wood	Madera
-Brick colour	Color del ladrillo
-The colour of the brick-shaped handheld. Clear is see-through.	El color de la portátil en forma de ladrillo. Transparente es translúcido.
+DMG colour	Color de DMG
+The colour of the original Game Boy. Clear is see-through.	El color de la Game Boy original. Transparente es translúcido.
 Its power light shows the battery: red at 20%, blinking at 5%.	Su luz de encendido muestra la batería: roja al 20 %, parpadea al 5 %.
 Grey	Gris
 Red	Rojo
 Yellow	Amarillo
-Pocket finish	Acabado Pocket
-Brushed silver metal or clear plastic.	Metal plateado cepillado o plástico transparente.
+GB Pocket finish	Acabado de GB Pocket
+The Game Boy Pocket: brushed silver metal or clear plastic.	La Game Boy Pocket: metal plateado cepillado o plástico transparente.
 Brushed silver	Plata cepillada
-Clamshell finish	Acabado de la plegable
-The paint of the opened clamshell.	La pintura de la plegable abierta.
+GBA SP finish	Acabado de GBA SP
+The paint of the opened Game Boy Advance SP.	La pintura de la Game Boy Advance SP abierta.
 Its power light, in the hinge, shows the battery.	Su luz de encendido, en la bisagra, muestra la batería.
 Platinum	Platino
 Cobalt	Cobalto
 Flame red	Rojo llama
 Graphite	Grafito
-Swan finish	Acabado Swan
-Pastel plastic, or a see-through skeleton.	Plástico pastel o un esqueleto translúcido.
 Pastel	Pastel
 Skeleton	Esqueleto
-Watch finish	Acabado de reloj
-The brushed metal of the faceplate.	El metal cepillado de la placa frontal.
 Gold	Oro
 Silver	Plata
 Hold HOME and press another button while you play.	Mantén pulsado HOME y pulsa otro botón mientras juegas.
@@ -1739,6 +1738,7 @@ Crisp	Definido
 Soft	Suave
 Screen effect	Efecto de pantalla
 LCD grid imitates a handheld screen, scanlines and CRT a TV.	Rejilla LCD imita la pantalla de una portátil, líneas de barrido y CRT una TV.
+Soft glow adds a halo around bright parts; Smooth pixels rounds slanted edges.	Brillo suave añade un halo alrededor de las partes brillantes; Píxeles suaves redondea los bordes inclinados.
 They stay even at every size, Aspect included.	Se mantienen uniformes en cualquier tamaño, también en Proporción.
 LCD colours	Colores LCD
 The colours of the Game Boy Advance's own screen:	Los colores de la propia pantalla de la Game Boy Advance:
@@ -1747,22 +1747,20 @@ Left out while the emulator's own colour correction is on.	Se omite mientras la 
 LCD grid	Rejilla LCD
 Scanlines	Líneas de barrido
 CRT	CRT
+Soft glow	Brillo suave
+Smooth pixels	Píxeles suaves
 Screen frame	Marco de pantalla
 Fills the space around the picture. Auto suits the console.	Llena el espacio alrededor de la imagen. Auto se adapta a la consola.
 Ambient glows with the game's colours; Glow is a thin light in its colour.	Ambiental: colores del juego. Resplandor: luz fina de su color.
-Shell to Goggles are handhelds, CRT to Woodgrain are TVs, Arcade a cabinet.	De Carcasa a Visor son portátiles, de CRT a Madera son TVs, Arcade una máquina.
-Twin, two screens with a hinge, is offered for the Nintendo DS.	Doble, dos pantallas con bisagra, se ofrece para la Nintendo DS.
+DMG to PSP: handhelds, each for its console. CRT to Woodgrain: TVs. Arcade: a cabinet.	De DMG a PSP: portátiles, cada una para su consola. De CRT a Madera: TVs. Arcade: una máquina.
 Ambient	Ambiental
-Shell	Carcasa
-Brick	Ladrillo
-Pocket slim	Pocket delgada
-Clamshell	Plegable
-Wide	Ancha
-Twin	Doble
-Gloss	Brillo
-Swan	Swan
-Watch	Reloj
-Goggles	Visor
+DMG	DMG
+GB Pocket	GB Pocket
+GBC	GBC
+GBA	GBA
+GBA SP	GBA SP
+DS	DS
+PSP	PSP
 Studio monitor	Monitor de estudio
 Portable TV	TV portátil
 Woodgrain	Madera
@@ -2004,7 +2002,6 @@ Restarting to the boot menu…	Reiniciando al menú de arranque…
 Restarting…	Reiniciando…
 Search: {s}	Buscar: {s}
 Time zone: {s}	Zona horaria: {s}
-Colour temperature	Temperatura de color
 Left and right change it. On the shelf and in games: START + Vol+ or Vol-.	Izquierda y derecha la cambian. En el estante y en juegos: START + Vol+ o Vol-.
 Left and right change it. Vol+ and Vol- work everywhere.	Izquierda y derecha la cambian. Vol+ y Vol- funcionan en todas partes.
 A turns Wi-Fi on or off. While it is off, file sharing and updates don't work.	A activa o desactiva Wi-Fi. Mientras está desactivado, compartir archivos y actualizaciones no funcionan.
@@ -3503,6 +3500,8 @@ This Pocket has none of the systems the pack's games are for.	Este Pocket no tie
 A thin dark gap between the game's pixels, a fixed share of each pixel, so it grows with the scale: it looks like a handheld's screen. It adds to the picture rather than taking away.	Un fino hueco oscuro entre los píxeles del juego, una parte fija de cada píxel, así que crece con la escala: se parece a la pantalla de una portátil. Añade a la imagen en vez de quitarle.
 Each line of the picture is drawn as a TV's beam: thin with dark gaps in dark parts, closed in bright ones, and every line keeps its light. It looks like a TV, not like the console's own pixels.	Cada línea de la imagen se dibuja como el haz de una tele: fina con huecos oscuros en las zonas oscuras, cerrada en las claras, y cada línea conserva su luz. Se parece a una tele, no a los píxeles propios de la consola.
 Scanlines like a TV's beam, a fine colour mask too small to see at arm's length and a soft glow around bright parts, mixed in linear light; no curved screen. It looks like a TV, not like the console's own pixels.	Líneas de barrido como el haz de una tele, una fina máscara de color demasiado pequeña para verse a un brazo de distancia y un suave resplandor alrededor de las partes brillantes, mezclados en luz lineal; sin pantalla curva. Se parece a una tele, no a los píxeles propios de la consola.
+A soft halo around the bright parts of the picture; the rest stays as clear as without the effect. No lines, no mask.	Un halo suave alrededor de las partes brillantes de la imagen; el resto queda tan nítido como sin efecto. Sin líneas ni máscara.
+Rounds one-pixel stair-steps on slanted edges; flat pixels and straight edges stay as sharp as they were. It changes the pixel art a little rather than only showing it bigger.	Redondea los escalones de un píxel en los bordes inclinados; los píxeles planos y los bordes rectos siguen igual de nítidos. Cambia un poco el pixel art en vez de solo mostrarlo más grande.
 LCD grid, GBA colours	Rejilla LCD, colores GBA
 The colours are the Game Boy Advance screen's: darker and softer, as the games were made for.	Los colores son los de la pantalla de la Game Boy Advance: más oscuros y suaves, para los que se hicieron los juegos.
 {s} didn't start. The file may be damaged, or the system needs a BIOS file (Settings › Games › Add games).	{s} no se inició. El archivo puede estar dañado, o el sistema necesita un archivo BIOS (Ajustes › Juegos › Añadir juegos).
@@ -4030,7 +4029,7 @@ From your save	De tu partida
 Font	Fuente
 # Settings in seven categories (2026-10-30). The Look category's key ends with a zero-width mark.
 Look​	Aspecto
-Look, appearance, colours, font, text size, night light, systems, cozy extras.	Vista, apariencia, colores, fuente, tamaño de texto, luz nocturna, sistemas, extras acogedores.
+Look, appearance, colours, font, text size, screen colour, night light, systems, extras.	Vista, apariencia, colores, fuente, texto, color de pantalla, luz nocturna, sistemas, extras.
 Sound & feel	Sonido y tacto
 Animations, playful cases, old-TV switch-on, motion, sounds, case sounds, haptics, LEDs.	Animaciones, cajas juguetonas, encendido de tele antigua, movimiento, sonidos, sonidos de caja, vibración, LEDs.
 On start, continue, buttons, over the game, frames, performance, battery, achievements.	Al iniciar, continuar, botones, sobre el juego, marcos, rendimiento, batería, RetroAchievements.
@@ -4433,3 +4432,9 @@ Options › Save changes	Opciones › Guardar cambios
 Picked now, it puts every extra back as pocket-ui ships it, also On start and Screen frames.	Elegido ahora, deja todos los extras como los trae pocket-ui, también Al iniciar y Marcos de pantalla.
 Open means your moment is waiting	Abierta significa que tu momento te espera
 Quit keeps no moment: the next start is fresh, and the older moment stays under Load.	Salir no guarda ningún momento: el próximo inicio es nuevo y el momento anterior queda en Cargar.
+Action role-playing game	Videojuego de rol de acción
+Kart racing game	Videojuego de carreras de karts
+No Wikipedia article for this game	Sin artículo de Wikipedia para este juego
+Offline: the description comes with Wi-Fi	Sin conexión: la descripción llega con el Wi-Fi
+Screen colour	Color de pantalla
+Cooler or warmer white, the same as SELECT + Vol. Left/right: change. A: Neutral.	Blanco más frío o más cálido, igual que SELECT + Vol. Izquierda/derecha: cambiar. A: Neutro.

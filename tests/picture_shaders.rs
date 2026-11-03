@@ -57,7 +57,7 @@ fn draw(r: &mut Renderer, system: &str, f: &Frame, aspect: f32, s: &VideoSetting
 fn every_variant_compiles_and_links() {
     let Some((mut r, h)) = renderer() else { return };
     let n = r.check_variants().unwrap_or_else(|e| panic!("on {}: {e}", h.renderer));
-    assert_eq!(n, 3 * 4 + 3, "3 sharpnesses × 4 effects, and the LCD grid with GBA colours");
+    assert_eq!(n, 3 * 6 + 3, "3 sharpnesses × 6 effects, and the LCD grid with GBA colours");
 }
 
 #[test]
@@ -262,3 +262,51 @@ fn scanlines_turn_with_the_picture() {
     let spread = down.iter().cloned().fold(0.0, f32::max) - down.iter().cloned().fold(9.0, f32::min);
     assert!(spread < 0.02, "each line is even along its length: {down:?}");
 }
+
+#[test]
+fn smooth_pixels_round_a_stair_and_leave_flat_areas_and_straight_edges_alone() {
+    let Some((mut r, _h)) = renderer() else { return };
+    // SNES 256×224 at Integer (4×, from x 108, y 92): the left half dark with a one-texel stair going up to the
+    // right (a 45° edge), and a straight vertical edge further right.
+    let (dark, light) = (0x202020u32, 0xe0e0e0u32);
+    let f = frame(256, 224, |x, y| {
+        let stair = x as i32 - 100 >= y as i32 - 100;
+        if x >= 200 { dark } else if stair { light } else { dark }
+    });
+    let plain = draw(&mut r, "snes", &f, 256.0 / 224.0, &settings(&[("frame", "none"), ("effect", "none")]));
+    let smooth = draw(&mut r, "snes", &f, 256.0 / 224.0, &settings(&[("frame", "none"), ("effect", "smooth")]));
+    let (x0, y0) = (108u32, 92u32);
+    let px = |s: &Shot, tx: u32, ty: u32, dx: u32, dy: u32| s.at(x0 + tx * 4 + dx, y0 + ty * 4 + dy)[1];
+    // Texel (99, 100) is a dark step of the stair, light above and to its right: its upper-right corner (a triangle with legs of half a texel) takes that
+    // light, its lower-left corner stays dark, the cut running through the middle.
+    assert!(px(&smooth, 99, 100, 3, 0) > 0.5 && px(&plain, 99, 100, 3, 0) < 0.2, "upper right: lit by the neighbours");
+    assert!(px(&smooth, 99, 100, 0, 3) < 0.2, "lower left stays dark");
+    // Flat areas and the straight edge are identical.
+    for (tx, ty) in [(30, 150), (150, 40), (199, 120), (200, 120), (230, 10)] {
+        for (dx, dy) in [(0, 0), (3, 3), (1, 2)] {
+            let (a, b) = (px(&plain, tx, ty, dx, dy), px(&smooth, tx, ty, dx, dy));
+            assert!((a - b).abs() < 2.0 / 255.0, "texel {tx},{ty}+{dx},{dy}: {a} vs {b}");
+        }
+    }
+    // On the stair the picture changed somewhere inside the texel.
+    let changed = (0..4).flat_map(|dy| (0..4).map(move |dx| (dx, dy))).filter(|&(dx, dy)| (px(&plain, 99, 100, dx, dy) - px(&smooth, 99, 100, dx, dy)).abs() > 0.1).count();
+    assert!((2..=6).contains(&changed), "{changed} of 16 pixels changed in the stair's texel");
+}
+
+#[test]
+fn soft_glow_lights_the_dark_next_to_bright_and_keeps_far_dark_and_flat_grey() {
+    let Some((mut r, _h)) = renderer() else { return };
+    // A white square in the middle of black, and a flat dark grey: below the knee. Square texels (aspect 256:224).
+    let sq = frame(256, 224, |x, y| if (96..160).contains(&x) && (64..160).contains(&y) { 0xffffff } else { 0x000000 });
+    let plain = draw(&mut r, "snes", &sq, 256.0 / 224.0, &settings(&[("frame", "none"), ("effect", "none")]));
+    let glow = draw(&mut r, "snes", &sq, 256.0 / 224.0, &settings(&[("frame", "none"), ("effect", "softglow")]));
+    // Just outside the square (1.5 texels from its edge): lit; far away (corner of the picture): black.
+    let (x, y) = (108 + 160 * 4 + 6, 92 + 112 * 4);
+    assert!(plain.at(x, y)[1] < 0.01 && glow.at(x, y)[1] > 0.05, "halo: {} vs {}", plain.at(x, y)[1], glow.at(x, y)[1]);
+    assert!(glow.at(108 + 4, 92 + 4)[1] < 0.01, "far corner stays black");
+    let grey = frame(256, 224, |_, _| 0x333333);
+    let g = draw(&mut r, "snes", &grey, 256.0 / 224.0, &settings(&[("frame", "none"), ("effect", "softglow")]));
+    let p = draw(&mut r, "snes", &grey, 256.0 / 224.0, &settings(&[("frame", "none"), ("effect", "none")]));
+    assert!((g.at(600, 500)[1] - p.at(600, 500)[1]).abs() < 2.0 / 255.0, "a dark flat grey is untouched");
+}
+

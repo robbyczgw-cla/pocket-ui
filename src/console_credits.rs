@@ -407,7 +407,9 @@ mod tests {
             let cr = for_system(&c.id).unwrap_or_else(|| panic!("{}: no credits", c.id));
             assert!(cr.summary.is_some(), "{}: summary", c.id);
             assert!(!cr.makers.is_empty(), "{}: makers", c.id);
-            assert!(!cr.chips.is_empty(), "{}: chips", c.id);
+            // A fantasy console or a program (PICO-8, ScummVM, DOS) has no chips to name.
+            let no_chips = matches!(c.kind.as_deref(), Some("fantasy" | "software"));
+            assert!(no_chips || !cr.chips.is_empty(), "{}: chips", c.id);
             assert!(cr.sources.wikidata.starts_with("https://www.wikidata.org/wiki/Q"), "{}", c.id);
             assert!(cr.sources.wikipedia.starts_with("https://en.wikipedia.org/wiki/"), "{}", c.id);
             assert!(cr.sources.wikidata.ends_with(&cr.qid), "{}", c.id);

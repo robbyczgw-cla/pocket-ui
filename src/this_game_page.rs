@@ -376,14 +376,15 @@ mod tests {
     #[test]
     fn the_frames_sub_choice_comes_and_goes_with_the_frame() {
         let dir = TestDir::new("tg-sub");
-        let mut p = page(&dir, "gba");
+        // GBC is a Game Boy frame: offered for the Game Boy family only.
+        let mut p = page(&dir, "gbc");
         select(&mut p, "frame");
         let frame = options::setting("frame").unwrap();
         let shell = frame.choices.iter().position(|c| c.value == "shell").unwrap();
         while p.settings.as_ref().unwrap().index(frame) != shell {
             p.press(Button::Right, CONFIRM, CANCEL);
         }
-        assert!(p.rows().contains(&Row::Setting("frame_colour")), "Shell offers its colour");
+        assert!(p.rows().contains(&Row::Setting("frame_colour")), "GBC offers its colour");
         p.press(Button::Right, CONFIRM, CANCEL);
         assert!(!p.rows().contains(&Row::Setting("frame_colour")));
     }

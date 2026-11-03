@@ -276,6 +276,17 @@ it on the CPU for a few µs and Pixel Path shows them; a GPU copy would do it tw
 (1.7 px stripes at GBA 5× cost a third of the light and can't be seen at this density), a DMG-specific light grid,
 curvature.
 
+**Soft glow and Smooth pixels** (2026-11-03, saved values `softglow`, `smooth`; `Effect::SoftGlow`/`Smooth`, EFFECT 4/5 in the shader, constants and CPU reference in `picture_fx.rs`; both work on top of the chosen Screen sharpness, and neither applies the LCD colours).
+
+| Effect | What it does | Taps per pixel |
+|---|---|---|
+| **Soft glow** | A halo from a blurred copy of the picture (the texture's mipmaps, made when a new picture came, as for the CRT; the minification filter is `LINEAR_MIPMAP_LINEAR`, so the fractional level `log2(height / 32)` blends two levels in one instruction). Added in linear light as `GAIN * max(blur - c, 0) * blur`: only where the blur is brighter than the pixel itself (light spilling into darker pixels, so bright areas and flat areas stay unchanged) and stronger the brighter the surroundings (`SOFT_GLOW_GAIN` 0.8). Known by design: small dark detail inside a bright box (dark text on white) is lifted a little, as with any bloom. | 1 (Sharp; Crisp 4) + 1 mip lookup |
+| **Smooth pixels** | Finds one-texel stair-steps of a diagonal edge in the 3x3 neighbours of the texel P: two neighbours forming a corner share one colour and differ from the two opposite sides, and the two texels along the edge's direction have P's colour. Then a triangle with legs of half a texel in that corner (the line through the midpoints of the two sides: area-neutral, so lines at 45° come out straight) takes the corner's colour, its edge one output pixel wide at any scale and phase (`picture_fx::smooth_weight`), mixed in linear light. Flat areas, straight edges, 1-texel lines, rectangle corners and dither never match; slopes longer than one step are left alone (a looser rule, plain EPX, put bumps on text and round shapes). Colours count as equal within `SMOOTH_TOL` (2 % of the range). | 9 nearest fetches (Sharp; Crisp 9 + 4) |
+
+*Licence.* Both are written from scratch. Smooth pixels follows the idea of the EPX/Scale2x family (corner rules from the neighbours' equality, published as an algorithm by Eric Johnston, 1992), not the code of any shader; libretro's `advanced-aa` (the model asked for) is copyright guest(r), **GPL v2 or later**, and is *not* used or copied. Soft glow is a plain mipmap bloom (the CRT's glow, reused), nothing taken from Flatten-Glow either.
+
+*Cost on the host* (llvmpipe, `picture_shots --time 60`, a busy shared computer, wall time per picture): SNES 4×, Sharp: none 3.5 ms, Scanlines 8.5, CRT 10.4, **Soft glow 9.0, Smooth pixels 7.7**; PS1 Aspect: Scanlines 7.6, CRT 9.8, **Soft glow 8.6, Smooth pixels 9.4**. On the CPU rasteriser they rank between Scanlines and CRT; on a GPU the fetches matter more than the ALU: Soft glow is the CRT's mip lookup without its scanline maths (the cheapest of the glows), Smooth pixels adds 9 cached nearest fetches. The GPU measurement on the H700 (Mali G31) and a GE8300 handheld: `POCKET_CORE_GPU_TIMER=1` and read the `gpu picture:` lines, or `picture_shots --time` there (the table now has both effects for Sharp and Crisp). The framebuffer `pocket-fb --gl` path draws with this very `video::Renderer` and shader and passes the `effect` value through as text, so both effects work there without a change; its own `Renderer::warm` compiles the two new variants when the setting arrives.
+
 **Cost.** Measured on the host (`cargo run --release --example picture_shots -- --time 300`, llvmpipe on 10 CPU
 threads, a busy shared host, the best of three runs, wall time per picture including the clear of 1240×1080; the
 old shaders measured the same way before the change with 60 pictures):
@@ -1441,6 +1452,16 @@ set it (or a single entry) to false and they go back to their default emulator.
   stream of the given length, so `hostsys::core_states_vary` now lists `nestopia` next to `mgba`: shorter states are
   handed over. After the change 13 of 13 starts resumed (NES, Famicom, FDS), and the picture after resuming equals the one at quit
   (difference 0.0).
+- **Flycast's state size moves** (Dreamcast, NAOMI, Atomiswave): `retro_serialize_size` says 53217183 bytes right after
+  the start and the state written at quit was 36439543 (Virtua Tennis 2, 2026-11-03), so the quit moment and every slot were
+  refused as "wrong size" (since 0.1.0). `hostsys::core_pads_short_states` lists `flycast`: a state of at least
+  `PADDED_STATE_MIN` (1 MiB; real ones are tens of MB) that is shorter than the size now goes to the core in a buffer of that
+  size, the rest zeros, and the full buffer length as its size, so nothing the core reads lies outside it. Files under the
+  minimum stay refused, and so does a RetroArch container (`RASTATE`) whose section lengths do not fit the real file. This protects
+  memory only: a cut-off state over 1 MiB, another game's or a damaged one is not recognised by pocket-ui (Flycast's own header and RAM
+  size decide). No other core is on the list: PPSSPP ignores the length it is given, melonDS DS wants its exact size. The state
+  files themselves are unchanged (raw, as before). A state that grew between `retro_serialize_size` and `retro_serialize`
+  is saved with a second try.
 - **SuperGrafx.** `exts: pce, sgx, zip`: HuCards. CD images (`.cue`, `.ccd`, `.chd`) in the same folder need a System
   Card (`syscard3.pce`) and stay with RetroArch, as `roms/pcenginecd` does. A `.pce` runs in PC Engine mode, an `.sgx`
   in SuperGrafx mode (the state doubles, 78 → 167 KB: the second VDC). 59.82 Hz like the PC Engine.
@@ -1957,6 +1978,9 @@ the Pocket's motor at the same time, and the Players page (A on each controller)
   standalone game (RetroArch, hakuX) runs at ROCKNIX's 1024, so its pause menu played broken, and the stream stayed
   open on the shelf while clicks came less than 2 s apart, without the shelf's 256 ever being asked for: "all menu
   sounds distorted for a while" after an Xbox game. Now:
+  - **Monitor lifetime.** On Linux the metadata monitor ends with its reader thread (`control::die_with_parent`).
+    A snapshot or UI exit must not leave a quiet monitor running and holding inherited descriptors, such as a build-slot
+    lock. The regression test uses a private helper and lock; it needs no running PipeWire.
   - **What is seen decides.** A thread (`ui_sound::watch_quantum`) runs `pw-metadata -m -n settings 0
     clock.force-quantum`, which prints the value and every change after it, whoever makes it (pocket-core, the shelf,
     ROCKNIX's wake script); it blocks in between, no polling. 10 ms only while the graph is seen forced to 256 or less
