@@ -482,6 +482,7 @@ slot-save
 slot-load
 slot-auto
 slot-undo
+slot-restart
 slot-empty
 slot-one
 slot-earlier
@@ -646,6 +647,10 @@ curator:home:shelf:sticker
 curator:home:split
 curator:home:split:favorites
 curator:home:cards
+curator:home:shelf:justplay
+curator:home:split:justplay
+curator:home:cards:justplay
+curator:home:cabinet:justplay
 curator:cabinet:ddr
 curator:hub
 curator:options
@@ -792,6 +797,18 @@ info:shelf:ps2:revenge:rd
 
 # Kids Mode (docs/KIDS-MODE.md): the child's screens, the grown-up's flow, the door in front of safe mode. The games are in
 # scripts/curator-fake-library.py's kids.json, with the mode off.
+big-shelf
+big-jump
+big-failed:2
+big-failed:2:bios
+big-frozen
+big-pause:forgets
+big-pause:port-asked
+big-pause
+big-pause:stop
+big-pause:more
+big-pause:more-open
+big-pause:retroarch
 kids-shelf
 kids-shelf:2
 kids-hold

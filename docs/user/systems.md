@@ -120,7 +120,7 @@ button and B the O button. On TIC-80 a tap on the screen is the mouse. Neither h
 emulators' states don't keep the game itself, so Save and Load in the pause menu only say so, and a game
 starts from the beginning each time. Games that save on their own (high scores, progress) still do.
 If you put the official PICO-8 for Linux (`pico8_64`) into `roms/pico-8/aarch64` (or `roms/pico-8`), PICO-8
-games start with it, as ROCKNIX does, with Continue, Options, Quick settings and Quit only in the pause menu. Without it, a cart that
+games start with it, as ROCKNIX does, with Continue, Options and Quit only in the pause menu. Without it, a cart that
 doesn't start on the own host goes to RetroArch's FAKE-08.
 The empty "Splore" entry that ROCKNIX puts into `roms/pico-8` at every boot is PICO-8's game browser, not a game: it shows
 on the shelf (and counts) only when the official PICO-8 is there. The file stays where it is.
@@ -206,11 +206,11 @@ PlayStation 2 runs on ARMSX2, GameCube and Wii on Dolphin, 3DS on Azahar, all RO
 emulators.
 
 Pause menu: Continue, Save, Load, Options, Quick settings, Quit (it follows Settings → Playing →
-[Remember where I quit](settings.md#remember-where-i-quit)).
+[Continue where I quit](settings.md#continue-where-i-quit)).
 
-- **Save** and **Load** use the emulator's own slots 1 to 8, plus Auto and Before load (on 3DS: Azahar's one quick
+- **Save** and **Load** use the emulator's own slots 1 to 8, plus Where I quit and Before load (on 3DS: Azahar's one quick
   slot, the one ROCKNIX's HOME + R1 and HOME + L1 use). See
-  [Save slots](pause-menu.md#save-slots-auto-and-before-load).
+  [Save slots](pause-menu.md#save-slots-where-i-quit-and-before-load).
 - **Options** sets resolution, renderer, aspect ratio and more for the game; see
   [Options](options-big.md).
 - **Quit** saves the moment, then closes the emulator ("Saving and quitting…"). This takes a few

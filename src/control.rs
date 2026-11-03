@@ -20,7 +20,7 @@ pub fn quit_retroarch() -> bool {
     sent && swaymsg(&format!(r#"[app_id="{RETROARCH_APP_ID}"] focus"#))
 }
 
-/// pocket-core's command for the pause menu's Quit with Settings > Remember where I quit off: the battery save, no
+/// pocket-core's command for the pause menu's Quit with Settings > Continue where I quit off: the battery save, no
 /// new auto-resume state.
 pub const QUIT_WITHOUT_SAVING: &str = "quit nosave";
 

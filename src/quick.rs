@@ -898,6 +898,11 @@ impl Sys {
         }
     }
 
+    /// HOME was used for something else (it left a Settings page for Home): its release is no tap that opens the panel.
+    pub fn cancel_home_tap(&mut self) {
+        self.home_tap = false;
+    }
+
     /// Opens the panel. Nothing is read here: the device's rows were found on a thread at the start
     /// (`quick_profiles::caps`), the choices and the game are in memory.
     fn open_quick(&mut self, now: Instant) {

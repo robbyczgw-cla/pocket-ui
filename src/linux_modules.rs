@@ -26,6 +26,7 @@ pub mod players_page;
 pub mod touch;
 pub mod frozen;
 pub mod kids;
+pub mod big_shelf;
 // Android's files for Frozen games: on Linux only so the gate tests its rules.
 #[cfg(test)]
 pub(crate) mod frozen_phone;

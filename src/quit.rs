@@ -40,7 +40,7 @@ pub enum Saver {
     Other,
 }
 
-/// Whether the pause menu's Quit can leave out the resume state (Settings > Remember where I quit off; `main.rs`
+/// Whether the pause menu's Quit can leave out the resume state (Settings > Continue where I quit off; `main.rs`
 /// `quit_leaves_out_resume`): where Quit writes a resume state and a quit can leave it out while the in-game saves
 /// are still written. pocket-core skips its auto state (`quit nosave`),
 /// the standalone emulators skip the save step and shut down as always. Not RetroArch: with ROCKNIX's

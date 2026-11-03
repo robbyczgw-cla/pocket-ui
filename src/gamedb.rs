@@ -701,7 +701,7 @@ pub fn top_scores(info: &GameInfo, max: usize) -> Vec<String> {
     s.into_iter().take(max).map(|(by, v)| score_text(by, v)).collect()
 }
 
-/// "1 player", "1–4 players", or from the game modes "Single-player", "Multiplayer".
+/// "1 player", "1–4 players", or from the game modes "1 player or more", "2 players or more": one form.
 pub fn players_text(info: &GameInfo) -> Option<String> {
     if let Some(p) = &info.players {
         return Some(match p.split_once('-') {
@@ -710,18 +710,15 @@ pub fn players_text(info: &GameInfo) -> Option<String> {
             None => format!("{p} players"),
         });
     }
-    // In this order, whatever order the file has them in.
-    let known = [
-        ("single-player video game", "Single-player"),
-        ("cooperative video game", "Co-op"),
-        ("multiplayer video game", "Multiplayer"),
-    ];
-    let modes: Vec<&str> = known
-        .iter()
-        .filter(|(m, _)| info.modes.iter().any(|x| x == m))
-        .map(|(_, shown)| *shown)
-        .collect();
-    (!modes.is_empty()).then(|| modes.join(", "))
+    // From the modes the catalogue knows, in the same form as a number of players: one line never reads three ways.
+    let has = |mode: &str| info.modes.iter().any(|m| m == mode);
+    let many = has("multiplayer video game") || has("cooperative video game");
+    match (has("single-player video game"), many) {
+        (true, true) => Some("1 player or more".to_string()),
+        (true, false) => Some("1 player".to_string()),
+        (false, true) => Some("2 players or more".to_string()),
+        (false, false) => None,
+    }
 }
 
 #[cfg(test)]
@@ -1029,7 +1026,7 @@ Q1800173\tSecret of Mana\t1993\t\t\t\t\t\t\t\tSeiken Densetsu 2\t\t50\t\n";
         assert_eq!(players_text(&with(Some("1"), &[])).as_deref(), Some("1 player"));
         // The file lists modes alphabetically; single-player comes first on the card.
         let modes = with(None, &["multiplayer video game", "single-player video game"]);
-        assert_eq!(players_text(&modes).as_deref(), Some("Single-player, Multiplayer"));
+        assert_eq!(players_text(&modes).as_deref(), Some("1 player or more"));
         assert_eq!(players_text(&with(None, &["massively multiplayer online game"])), None);
     }
 

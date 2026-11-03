@@ -212,7 +212,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "hk_ff",
                 name: "Fast-forward",
-                desc: "HOME + R2 turns fast-forward on and off.\nThe speed is set under Extras.",
+                desc: "HOME + R2 turns fast-forward on and off.\nThe speed is set under Speed, rumble, fan.",
                 choices: &[c("on", "HOME + R2"), c("off", "Off")],
                 default: 0,
                 shown_when: None,
@@ -220,7 +220,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "hk_rewind",
                 name: "Rewind",
-                desc: "Hold HOME + L2 to play backwards.\nRewind itself is switched on under Extras.",
+                desc: "Hold HOME + L2 to play backwards.\nRewind itself is switched on under Speed, rumble, fan.",
                 choices: &[c("on", "HOME + L2"), c("off", "Off")],
                 default: 0,
                 shown_when: None,
@@ -245,7 +245,7 @@ pub const GROUPS: &[Group] = &[
         ],
     },
     Group {
-        name: "Extras",
+        name: "Speed, rumble, fan",
         desc: "Settings you rarely need.",
         settings: &[
             Setting {
@@ -743,7 +743,7 @@ mod tests {
         s.values.insert("effect".into(), "grid".into());
         assert_eq!(keys(&s), ["scaling", "sharpness", "effect", "lcd_colour", "frame", "orientation"], "LCD colours under the LCD grid");
         assert_eq!(picture.visible(Some(&snes)).len(), 5);
-        let extras = GROUPS.iter().find(|g| g.name == "Extras").unwrap();
+        let extras = GROUPS.iter().find(|g| g.name == "Speed, rumble, fan").unwrap();
         assert_eq!(extras.max_rows(None), extras.settings.len());
     }
 
@@ -798,7 +798,7 @@ mod tests {
     #[test]
     fn run_ahead_is_offered_for_light_systems_only_and_starts_off() {
         let dir = TestDir::new("runahead-rows");
-        let extras = GROUPS.iter().find(|g| g.name == "Extras").unwrap();
+        let extras = GROUPS.iter().find(|g| g.name == "Speed, rumble, fan").unwrap();
         let has = |sys: &str| extras.visible(Some(&GameSettings::load(&dir, sys, Path::new("x.rom")))).iter().any(|s| s.key == "run_ahead");
         for sys in ["nes", "snes", "gb", "gbc", "gba", "megadrive", "mastersystem", "gamegear", "pcengine"] {
             assert!(has(sys), "{sys}");

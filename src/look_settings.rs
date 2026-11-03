@@ -9,10 +9,14 @@ pub enum Theme {
     Split,
     Cards,
     Cabinet,
+    /// "Easy": one big game at a time (`big_shelf`).
+    Big,
 }
 
 impl Theme {
-    pub const ALL: [Theme; 5] = [Theme::Shelf, Theme::Minimal, Theme::Split, Theme::Cards, Theme::Cabinet];
+    pub const ALL: [Theme; 6] = [Theme::Shelf, Theme::Big, Theme::Minimal, Theme::Split, Theme::Cards, Theme::Cabinet];
+    /// What a phone offers: Easy has no screen there yet.
+    pub const PHONE: [Theme; 5] = [Theme::Shelf, Theme::Minimal, Theme::Split, Theme::Cards, Theme::Cabinet];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -21,6 +25,7 @@ impl Theme {
             Theme::Split => "Split",
             Theme::Cards => "Cards",
             Theme::Cabinet => "Cabinet",
+            Theme::Big => "Easy",
         }
     }
 
@@ -32,6 +37,7 @@ impl Theme {
             Theme::Split => "List on the left, details on the right.",
             Theme::Cards => "Big cards you flip through sideways.",
             Theme::Cabinet => "Your games in their cases on a wooden shelf. Pull one out to see its cover.",
+            Theme::Big => "One big game at a time, simple menus.",
         }
     }
 }

@@ -3,7 +3,9 @@
 # Curator's made-up library, and what the painter noticed there:
 #   OUT/<size>-<look>-<text>-<lang>.problems   one line per state and finding: the text-box record (O: runs into
 #       another string or the hint bar, T: touches the string beside it, E: cut by the edge; tests/text_size.rs)
-#       and the i18n record's C (cut short with "…") and X (drawn past the right edge)
+#       and the i18n record's C (cut short with "…"), X (drawn past the right edge) and W (a word broken inside)
+#       and the layout audit (src/text.rs `layout_audit`, nothing overlaps there): N (a column of three or more
+#       one- or two-character strings, a value wrapped letter by letter), S (letters painted under 14 px)
 #   OUT/<size>-<look>-<text>-<lang>.md5        the pictures' checksums, one line per state (for "the Mini V2's pictures
 #       didn't change": run once before and once after a change at 1240x1080 and compare the two files)
 #   OUT/<size>-<look>-<text>-<lang>/*.png       only with KEEP=1 (the pictures, for contact sheets)
@@ -56,7 +58,7 @@ rm -rf "$data" && mkdir -p "$WORK/d" && cp -R "$WORK/lib-$look/data" "$data"
 if [ -n "$DEVICE" ]; then export POCKETUI_DEVICE="$DEVICE"; fi
 # shellcheck disable=SC2086
 POCKETUI_MOCK=1 POCKETUI_LANG=$lang POCKETUI_TEXT_SIZE=$text POCKETUI_SNAPSHOT_SIZE=$size \
-  POCKETUI_TEXT_BOXES="$dir/$name.box" POCKETUI_I18N_MISSES="$dir/$name.tsv" \
+  POCKETUI_TEXT_BOXES="$dir/$name.box" POCKETUI_LAYOUT_AUDIT="$dir/$name.audit" POCKETUI_I18N_MISSES="$dir/$name.tsv" \
   POCKETUI_ES_SYSTEMS="$WORK/lib-$look/es_systems.cfg" POCKETUI_DATA="$data" \
   "$BIN" $safe --snapshot "$state" "$dir/$name.png" >/dev/null 2>&1 || echo "failed: $line" >"$dir/$name.failed"
 rm -rf "$data"
@@ -80,7 +82,7 @@ for look in $LOOKS; do
             continue
           fi
           [ -f "$dir/$name.png" ] && printf '%s\t%s\n' "$(md5sum <"$dir/$name.png" | cut -d' ' -f1)" "$line" >>"$OUT/$tag.md5"
-          { cat "$dir/$name.box" 2>/dev/null; grep '^[CX]	' "$dir/$name.tsv" 2>/dev/null; } | sed "s|^|$line	|" >>"$OUT/$tag.problems" || true
+          { cat "$dir/$name.box" "$dir/$name.audit" 2>/dev/null; grep '^[CXW]	' "$dir/$name.tsv" 2>/dev/null; } | sed "s|^|$line	|" >>"$OUT/$tag.problems" || true
         done <"$WORK/states"
         if [ "$KEEP" = 1 ]; then
           rm -rf "${OUT:?}/$tag" && mkdir -p "$OUT/$tag" && mv "$dir"/*.png "$OUT/$tag/" 2>/dev/null || true

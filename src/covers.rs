@@ -226,10 +226,6 @@ pub fn fetch_index_in(playlist: &str, remote_dir: &str) -> Vec<String> {
     curl_listing(&url).map(|b| parse_index(&String::from_utf8_lossy(&b))).unwrap_or_default()
 }
 
-/// Downloads the box art for one game to `dest`; true when a cover is now on disk.
-pub fn download(playlist: &str, name: &str, dest: &Path) -> bool {
-    download_from(playlist, "Named_Boxarts", name, dest, &[], &|_| true)
-}
 
 /// Downloads one picture of the collection to `dest` (written as `.part` first, moved into place only when
 /// `accept` likes it). `extra` are more curl options (a size limit). True when the file is on disk.
@@ -278,7 +274,12 @@ pub struct Scraped {
     pub found: usize,
     /// The games it looked up (found or not); the rest were left for later.
     pub looked_up: Vec<PathBuf>,
+    /// It gave up because the server didn't answer `GIVE_UP_AFTER` times in a row, not because games have no art.
+    pub unreachable: bool,
 }
+
+/// Failed requests in a row after which a run stops: a server that is down would otherwise cost a minute per game.
+pub const GIVE_UP_AFTER: usize = 3;
 
 /// Downloads missing box art for `games` (system id, ROM path). Games without a match are noted in
 /// `covers/<system>/.missing` and skipped next time. `progress(done, total, found)` runs after each game.
@@ -294,10 +295,24 @@ pub fn todo<'a>(data_dir: &Path, games: &'a [(String, PathBuf)]) -> Vec<&'a (Str
 
 /// `scrape`, checking `stop` before each game (a game was started): it ends after the cover it is on.
 pub fn scrape_until(data_dir: &Path, games: &[(String, PathBuf)], progress: impl Fn(usize, usize, usize), stop: impl Fn() -> bool) -> Scraped {
+    scrape_from(&crate::game_pictures::Libretro, data_dir, games, progress, stop)
+}
+
+/// `scrape_until` against any `Remote` (replaced in the tests). Only the collection's listing lacking a game marks it
+/// as without a cover; a server that doesn't answer, an error page or a broken file leaves it for the next run.
+pub(crate) fn scrape_from(
+    remote: &dyn crate::game_pictures::Remote,
+    data_dir: &Path,
+    games: &[(String, PathBuf)],
+    progress: impl Fn(usize, usize, usize),
+    stop: impl Fn() -> bool,
+) -> Scraped {
+    use crate::game_pictures::{Fetched, Kind};
     let todo = todo(data_dir, games);
     let total = todo.len();
-    let (mut done, mut found) = (0, 0);
+    let (mut done, mut found, mut failures) = (0, 0, 0);
     let mut looked_up = Vec::new();
+    let mut unreachable = false;
     let mut index: Option<(String, Vec<String>)> = None;
     // The proper names the games' checksums gave (`rom_id`), worked out before the download.
     let names = crate::rom_id::known(data_dir, games);
@@ -312,22 +327,35 @@ pub fn scrape_until(data_dir: &Path, games: &[(String, PathBuf)], progress: impl
         let missing = std::fs::read_to_string(&missing_file).unwrap_or_default();
         if !missing.lines().any(|l| l == stem) {
             if index.as_ref().is_none_or(|(p, _)| p != list) {
-                index = Some((list.to_string(), fetch_index(list)));
+                index = Some((list.to_string(), remote.index(list, Kind::Box)));
             }
             let list_names = &index.as_ref().unwrap().1;
             match pick(stem, names.get(rom).map(String::as_str), list_names) {
-                Some(name) if download(list, name, &cover_path(data_dir, sys, rom)) => found += 1,
+                Some(name) => match remote.download(list, Kind::Box, name, &cover_path(data_dir, sys, rom)) {
+                    Fetched::Got => {
+                        failures = 0;
+                        found += 1;
+                    }
+                    // The name came from the collection's own listing, so the file is there: a failure is the
+                    // network or a broken file, never "no cover". It is asked for again on the next run.
+                    Fetched::Unusable | Fetched::Failed => failures += 1,
+                },
                 // An empty index means the catalog didn't load; don't mark the game as missing then.
-                _ if !list_names.is_empty() => {
+                None if list_names.is_empty() => failures += 1,
+                None => {
+                    failures = 0;
                     let _ = crate::fsutil::write_atomic(&missing_file, format!("{missing}{stem}\n").as_bytes());
                 }
-                _ => {}
             }
         }
         done += 1;
         progress(done, total, found);
+        if failures >= GIVE_UP_AFTER {
+            unreachable = true;
+            break;
+        }
     }
-    Scraped { found, looked_up }
+    Scraped { found, looked_up, unreachable }
 }
 
 #[cfg(test)]
@@ -434,5 +462,67 @@ mod tests {
         let html = r#"<a href="Tetris%20%28World%29.png">x</a><a href="../">up</a>"#;
         assert_eq!(parse_index(html), vec!["Tetris (World)".to_string()]);
         assert_eq!(normalize("Pokémon - Gelbe Edition (Germany) [S]"), "pokémongelbeedition");
+    }
+
+    /// A made-up collection for the run: what its listing and its downloads answer.
+    struct Server {
+        listing: Vec<String>,
+        answer: crate::game_pictures::Fetched,
+        asked: std::cell::Cell<usize>,
+    }
+
+    impl crate::game_pictures::Remote for Server {
+        fn index(&self, _: &str, _: crate::game_pictures::Kind) -> Vec<String> {
+            self.listing.clone()
+        }
+        fn download(&self, _: &str, _: crate::game_pictures::Kind, _: &str, dest: &Path) -> crate::game_pictures::Fetched {
+            self.asked.set(self.asked.get() + 1);
+            if self.answer == crate::game_pictures::Fetched::Got {
+                std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
+                std::fs::write(dest, b"png").unwrap();
+            }
+            self.answer
+        }
+    }
+
+    fn run(listing: &[&str], answer: crate::game_pictures::Fetched, stems: &[&str]) -> (crate::testutil::TestDir, Server, Scraped) {
+        let d = crate::testutil::TestDir::new("cover-retry");
+        let games: Vec<(String, PathBuf)> = stems.iter().map(|s| ("gba".to_string(), PathBuf::from(format!("/storage/roms/gba/{s}.gba")))).collect();
+        let server = Server { listing: index(listing), answer, asked: Default::default() };
+        let out = scrape_from(&server, &d, &games, |_, _, _| {}, || false);
+        (d, server, out)
+    }
+
+    fn missing_list(d: &Path) -> String {
+        std::fs::read_to_string(d.join("covers/gba/.missing")).unwrap_or_default()
+    }
+
+    #[test]
+    fn a_server_that_does_not_answer_marks_nothing_as_missing_and_the_run_gives_up() {
+        use crate::game_pictures::Fetched::Failed;
+        // Unreachable: the listing is empty. Timeout / 500 / partial file: the listing loads, the download fails.
+        let (d, server, out) = run(&[], Failed, &["A", "B", "C", "D", "E", "F"]);
+        assert_eq!(missing_list(&d), "", "offline is not 'no cover'");
+        assert!(out.unreachable && out.looked_up.len() == GIVE_UP_AFTER, "no retry storm: {} looked up", out.looked_up.len());
+        assert_eq!(server.asked.get(), 0);
+        let (d, server, out) = run(&["A (USA)", "B (USA)", "C (USA)", "D (USA)", "E (USA)"], Failed, &["A (USA)", "B (USA)", "C (USA)", "D (USA)", "E (USA)"]);
+        assert_eq!(missing_list(&d), "", "a 500 or a timeout is not 'no cover'");
+        assert!(out.unreachable && out.found == 0);
+        assert_eq!(server.asked.get(), GIVE_UP_AFTER, "three tries, then it stops asking");
+    }
+
+    #[test]
+    fn a_broken_file_is_asked_for_again_later_not_remembered() {
+        let (d, _, out) = run(&["A (USA)"], crate::game_pictures::Fetched::Unusable, &["A (USA)"]);
+        assert_eq!(missing_list(&d), "");
+        assert!(!out.unreachable, "one bad file is not an outage");
+    }
+
+    #[test]
+    fn only_a_game_the_loaded_listing_lacks_is_remembered_as_without_a_cover() {
+        let (d, _, out) = run(&["A (USA)"], crate::game_pictures::Fetched::Got, &["A (USA)", "Zzzz Qqqq Xxxx (USA)"]);
+        assert_eq!(out.found, 1);
+        assert_eq!(missing_list(&d), "Zzzz Qqqq Xxxx (USA)\n", "the collection's 404 is remembered");
+        assert!(!out.unreachable);
     }
 }

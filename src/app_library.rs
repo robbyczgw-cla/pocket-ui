@@ -283,6 +283,7 @@ impl App {
         }
         let Some(fresh) = self.library_ui.pending.take() else { return };
         let was = KeepSelection::note(&self.items, self.sel, &self.systems);
+        let in_front = self.big_in_front();
         let home_item = self.home_item.map(|i| picked(i, &self.systems));
         let screen_system = match self.screen {
             Screen::Games(s) => Some(self.systems.get(s).map(|s| s.name.clone())),
@@ -310,6 +311,7 @@ impl App {
         self.gamelist_library_changed();
         self.rebuild();
         was.restore(&self.items, &self.systems, &mut self.sel, &mut self.prev_sel);
+        self.big_keep_part(in_front);
         println!("library: the list read again is on the shelf");
         self.request_redraw();
         // New games get their box art the way Add games does.

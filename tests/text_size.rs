@@ -183,7 +183,7 @@ fn save_preview_notes_stay_above_the_hints_on_native_and_small_outputs() {
     for dimensions in ["1024x768", "640x480"] {
         for size in ["normal", "large"] {
             for lang in ["en", "de"] {
-                for state in ["slot-save:psx", "slot-load:snes", "slot-auto", "slot-undo"] {
+                for state in ["slot-save:psx", "slot-load:snes", "slot-auto", "slot-undo", "slot-restart"] {
                     let boxes = tmp.path().join("preview.box");
                     let png = tmp.path().join("preview.png");
                     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
@@ -334,9 +334,9 @@ fn the_text_size_in_settings_json_is_used_and_shown_on_its_row() {
     let large = shot(r#"{"onboarded": true, "text_size": "large"}"#, "large");
     assert!(large.contains("O\tSchriftgröße") && large.contains("Groß ›"), "Large chosen:\n{large}");
     let medium = shot(r#"{"onboarded": true, "text_size": "medium"}"#, "medium");
-    assert!(medium.contains("O\tSchriftgröße") && medium.contains("Mittel ›") && !medium.contains("Groß"), "Medium chosen:\n{medium}");
+    assert!(medium.contains("O\tSchriftgröße") && medium.contains("Mittel ›") && !medium.contains("Groß ›"), "Medium chosen:\n{medium}");
     let normal = shot(r#"{"onboarded": true}"#, "normal");
-    assert!(normal.contains("O\tSchriftgröße") && !normal.contains("Groß"), "nothing chosen: Normal\n{normal}");
+    assert!(normal.contains("O\tSchriftgröße") && !normal.contains("Groß ›"), "nothing chosen: Normal\n{normal}");
     drop(stub);
 }
 

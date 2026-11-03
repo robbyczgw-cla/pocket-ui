@@ -26,6 +26,8 @@ pub const MAX_BYTES: u64 = 3_000_000;
 /// Which picture of a game.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum Kind {
+    /// The box art (`covers`); not one of the pictures in `ALL`.
+    Box,
     /// The game running.
     Snap,
     /// The title screen.
@@ -38,6 +40,7 @@ impl Kind {
     /// The folder in the data directory.
     pub fn folder(self) -> &'static str {
         match self {
+            Kind::Box => "covers",
             Kind::Snap => "snaps",
             Kind::Title => "titles",
         }
@@ -46,6 +49,7 @@ impl Kind {
     /// The directory of the collection.
     pub fn remote(self) -> &'static str {
         match self {
+            Kind::Box => "Named_Boxarts",
             Kind::Snap => "Named_Snaps",
             Kind::Title => "Named_Titles",
         }
@@ -66,6 +70,12 @@ fn missing_file(data_dir: &Path, kind: Kind, system: &str) -> PathBuf {
 /// The games a `.missing` list of this kind names, by ROM stem.
 pub fn listed_missing(data_dir: &Path, kind: Kind, system: &str) -> HashSet<String> {
     std::fs::read_to_string(missing_file(data_dir, kind, system)).unwrap_or_default().lines().map(str::to_string).collect()
+}
+
+fn is_png(file: &Path) -> bool {
+    use std::io::Read;
+    let mut head = [0u8; 8];
+    std::fs::File::open(file).and_then(|mut f| f.read_exact(&mut head)).is_ok() && head == *b"\x89PNG\r\n\x1a\n"
 }
 
 /// A downloaded file is kept only when it is a PNG whose size may be decoded.
@@ -121,7 +131,9 @@ impl Remote for Libretro {
         let unusable = std::cell::Cell::new(false);
         let accept = |f: &Path| {
             let ok = acceptable(f);
-            unusable.set(!ok);
+            // Only a real PNG the app won't decode (absurdly large) is the collection's doing; anything else (a login
+            // page with status 200, half a file) is the network's and is asked for again.
+            unusable.set(!ok && is_png(f));
             ok
         };
         let max = MAX_BYTES.to_string();
@@ -140,6 +152,8 @@ pub struct Scraped {
     pub found: usize,
     /// The games it looked at (found or not); the rest were left for later.
     pub looked_up: Vec<PathBuf>,
+    /// It gave up: `covers::GIVE_UP_AFTER` requests in a row got no answer.
+    pub unreachable: bool,
 }
 
 fn note_missing(data_dir: &Path, kind: Kind, system: &str, stem: &str) {
@@ -160,7 +174,8 @@ pub fn scrape_until(
     stop: impl Fn() -> bool,
 ) -> Scraped {
     let total = games.len();
-    let (mut done, mut found) = (0, 0);
+    let (mut done, mut found, mut failures) = (0, 0, 0);
+    let mut unreachable = false;
     let mut looked_up = Vec::new();
     // The listing of the playlist being worked through, per kind: games come system by system.
     let mut index: HashMap<Kind, (String, Vec<String>)> = HashMap::new();
@@ -183,20 +198,27 @@ pub fn scrape_until(
             let list_names = &index[&kind].1;
             match covers::pick(stem, names.get(rom).map(String::as_str), list_names) {
                 Some(name) => match remote.download(list, kind, name, &dest) {
-                    Fetched::Got => found += 1,
+                    Fetched::Got => {
+                        found += 1;
+                        failures = 0;
+                    }
                     Fetched::Unusable => note_missing(data_dir, kind, sys, stem),
-                    Fetched::Failed => {}
+                    Fetched::Failed => failures += 1,
                 },
                 // An empty listing means it didn't load; don't mark the game as missing then.
                 None if !list_names.is_empty() => note_missing(data_dir, kind, sys, stem),
-                None => {}
+                None => failures += 1,
+            }
+            if failures >= covers::GIVE_UP_AFTER {
+                unreachable = true;
+                break 'games;
             }
         }
         looked_up.push(rom.clone());
         done += 1;
         progress(done, total, found);
     }
-    Scraped { found, looked_up }
+    Scraped { found, looked_up, unreachable }
 }
 
 /// What `run_until` got through.
@@ -209,12 +231,14 @@ pub struct Outcome {
     /// How many games each part had to do (the progress counts both).
     pub covers_total: usize,
     pub pictures_total: usize,
+    /// The server didn't answer; the run gave up and the rest waits for the next start.
+    pub unreachable: bool,
 }
 
 impl Outcome {
-    /// A game cut it short.
+    /// A game cut it short (not the server: that run is not taken up again until the next start).
     pub fn stopped(&self) -> bool {
-        self.covers_looked_up.len() < self.covers_total || self.pictures_looked_up.len() < self.pictures_total
+        !self.unreachable && (self.covers_looked_up.len() < self.covers_total || self.pictures_looked_up.len() < self.pictures_total)
     }
 }
 
@@ -233,13 +257,14 @@ pub fn run_until(
     let pictures_total = pictures.len();
     let total = covers_total + pictures_total;
     let first = covers::scrape_until(data_dir, covers_for, |done, _, found| progress(done, total, found), &stop);
-    let mut out = Outcome { found: first.found, covers_looked_up: first.looked_up, pictures_looked_up: Vec::new(), covers_total, pictures_total };
-    if out.covers_looked_up.len() < covers_total {
+    let mut out = Outcome { found: first.found, covers_looked_up: first.looked_up, pictures_looked_up: Vec::new(), covers_total, pictures_total, unreachable: first.unreachable };
+    if out.unreachable || out.covers_looked_up.len() < covers_total {
         return out;
     }
     let second = scrape_until(remote, data_dir, pictures, |done, _, found| progress(covers_total + done, total, first.found + found), stop);
     out.found += second.found;
     out.pictures_looked_up = second.looked_up;
+    out.unreachable = second.unreachable;
     out
 }
 
@@ -344,6 +369,23 @@ mod tests {
         assert!(fake.asked.borrow().contains(&"Named_Titles Mega Man & Bass (USA)".to_string()), "{:?}", fake.asked.borrow());
         // Kept under the file's own stem, like every picture.
         assert!(path(&d, Kind::Snap, "gba", &rom).ends_with("snaps/gba/mmb.png"));
+    }
+
+    #[test]
+    fn a_login_page_instead_of_a_picture_counts_as_no_answer_not_as_missing() {
+        let d = dir("portal");
+        let page = d.join("page.part");
+        std::fs::write(&page, "<html>Sign in to the Wi-Fi</html>").unwrap();
+        assert!(!acceptable(&page) && !is_png(&page), "not a PNG: the network's doing, asked for again (Fetched::Failed)");
+        let big = d.join("big.part");
+        std::fs::write(&big, png_header(100, 50_000_000)).unwrap();
+        assert!(!acceptable(&big) && is_png(&big), "a real PNG nobody will decode: the collection's, remembered");
+        // And a run that got no usable answer leaves the lists empty.
+        let games = vec![game("gba", "Advance Wars (USA)")];
+        let mut fake = Fake::new(&["Advance Wars (USA)"]);
+        fake.online = false;
+        scrape_until(&fake, &d, &games, |_, _, _| {}, || false);
+        assert_eq!(missing(&d, &games, &HashSet::new()), games);
     }
 
     #[test]

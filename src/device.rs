@@ -371,7 +371,7 @@ pub fn snapshot_state(state: &str) -> (&str, Option<Device>) {
 pub fn hides(key: &str, sticks: bool, host_owned: bool) -> bool {
     match key {
         "leds" => !sticks,
-        "haptics" | "usb_transfer" | "sync" | "tailscale" | "tools" | "perf_fan" | "radios" | "time" | "updates" | "store" | "frozen_games" | "kids" => host_owned,
+        "haptics" | "usb_transfer" | "sync" | "tailscale" | "tools" | "perf_fan" | "radios" | "time" | "updates" | "store" | "kids" => host_owned,
         _ => false,
     }
 }

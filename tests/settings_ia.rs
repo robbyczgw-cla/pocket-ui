@@ -15,10 +15,10 @@ const ROOT: &str = env!("CARGO_MANIFEST_DIR");
 const TREE: [(&str, &[&str]); 7] = [
     ("Look", &["Look", "Appearance", "Colours", "Font", "Text size", "Night light", "Systems on the shelf", "Cozy extras"]),
     ("Sound & feel", &["Animations", "Playful cases", "Old-TV switch-on", "Motion", "Sounds", "Case sounds", "Haptics", "LEDs"]),
-    ("Playing", &["On start", "Remember where I quit", "Buttons", "Over the game", "Screen frames", "Performance & fan", "Battery", "RetroAchievements"]),
+    ("Playing", &["On start", "Continue where I quit", "Buttons", "Over the game", "Screen frames", "Performance & fan", "Battery", "RetroAchievements"]),
     ("Games", &["Add games", "Game check", "Starter pack", "Pictures & extras", "From EmulationStation", "Screenshots", "Curator", "PC streaming"]),
     ("Connections", &["Wi-Fi", "Bluetooth", "Tailscale", "Sync", "Remote access (SSH)", "Web companion"]),
-    ("System", &["Language", "Time", "Sleep & power", "Frozen games", "Kids mode", "Updates", "Storage", "Backup & reset"]),
+    ("System", &["Language", "Time", "Sleep & power", "Kids mode", "Updates", "Storage", "Backup & reset"]),
     ("Help & tools", &["How you like to play", "Tour", "Manual", "Tools", "Report a problem", "About"]),
 ];
 
@@ -66,10 +66,10 @@ const SLEEP: [&str; 6] = ["Screen off after", "Slideshow before screen off", "Sl
 const LINES: [&str; 7] = [
     "Look, appearance, colours, font, text size, night light, systems, cozy extras.",
     "Animations, playful cases, old-TV switch-on, motion, sounds, case sounds, haptics, LEDs.",
-    "On start, quit, buttons, over the game, frames, performance, battery, achievements.",
+    "On start, continue, buttons, over the game, frames, performance, battery, achievements.",
     "Games, game check, starter pack, pictures, EmulationStation, screenshots, Curator, PC.",
     "Wi-Fi, Bluetooth, USB file transfer, Tailscale, Sync, remote access, web companion.",
-    "Language, time, sleep & power, frozen games, kids mode, updates, storage, backup & reset.",
+    "Language, time, sleep & power, kids mode, updates, storage, backup & reset.",
     // With the Store, as the German table has it; a test run has no catalog, so its part is left out (below).
     "How you like to play, Tour, manual, tools, Store, report a problem, about.",
 ];
@@ -234,8 +234,40 @@ fn the_selected_kids_mode_row_shows_that_it_opens_a_page() {
     std::fs::write(tmp.join("none.cfg"), "<systemList></systemList>").unwrap();
     let stub = wayland(&tmp);
     for lang in ["en", "de", "es"] {
-        let s = shot(&tmp, &stub, "settings:5:4", lang, "1280x720", "normal", false);
+        let s = shot(&tmp, &stub, "settings:5:3", lang, "1280x720", "normal", false);
         assert!(s.visible.iter().any(|v| v.trim() == ">"), "{lang}: no \">\" on the selected Kids mode row: {:?}", s.visible);
+    }
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// Walk 2026-11-02: Continue where I quit said "Quit keeps the moment for the next start." also while it was Off.
+#[test]
+fn the_line_under_continue_where_i_quit_says_what_off_does() {
+    let tmp = std::env::temp_dir().join(format!("pocketui-settings-remember-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+    std::fs::write(tmp.join("none.cfg"), "<systemList></systemList>").unwrap();
+    let stub = wayland(&tmp);
+    for (forget, want, not) in [(false, "Quit keeps the moment for the next start.", "Quit keeps no moment"), (true, "Quit keeps no moment: the next start is fresh", "Quit keeps the moment for the next start.")] {
+        let data = tmp.join(format!("data-{forget}"));
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(data.join("settings.json"), format!(r#"{{"onboarded": true, "forget_where_quit": {forget}}}"#)).unwrap();
+        let visible = tmp.join(format!("{forget}.txt"));
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+        cmd.args(["--snapshot", "settings:2:1", tmp.join(format!("{forget}.png")).to_str().unwrap()])
+            .env("POCKETUI_MOCK", "1")
+            .env("POCKETUI_LANG", "en")
+            .env("POCKETUI_VISIBLE_TEXT", &visible)
+            .env("POCKETUI_DATA", &data)
+            .env("POCKETUI_ES_SYSTEMS", tmp.join("none.cfg"));
+        if let Some(s) = &stub {
+            cmd.env("WAYLAND_DISPLAY", &s.1);
+        }
+        assert!(cmd.output().expect("run pocket-ui").status.success());
+        let v = std::fs::read_to_string(&visible).unwrap();
+        let flat = v.replace('\n', " ");
+        assert!(flat.contains("Continue where I quit"), "the Playing page: {v}");
+        assert!(flat.contains(want) && !flat.contains(not), "forget={forget}: {v}");
     }
     let _ = std::fs::remove_dir_all(&tmp);
 }

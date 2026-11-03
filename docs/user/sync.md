@@ -21,7 +21,7 @@ Each row of Settings → Connections → **Sync** is a folder:
 | **PS2 memory cards** | `/storage/roms/ps2` (only the cards) | `Mcd001.ps2` and `Mcd002.ps2`, the two memory cards every PlayStation 2 game saves on. Your PS2 games are **not** shared |
 | **GameCube & Wii saves** | two folders: `/storage/roms/bios/GC` (only the cards) and Dolphin's Wii save data | The GameCube memory cards (`MemoryCardA.USA.raw` and so on, or the `.gci` files of each game) and the save data of each Wii game. Not the GameCube BIOS next to the cards, not the games |
 | **3DS saves** | `/storage/roms/3ds/azahar/sdmc/Nintendo 3DS` (only save data) | The save data and extra data of each 3DS game. Not the games, nor any updates or downloadable content installed there |
-| **Library data** | `/storage/.config/pocket-ui/library-sync` | Your favourites, play status, notes, ratings, stickers, hidden games, smart shelves and play history, so a second Pocket (or this one after a fresh SD card) knows them too. See [Library data](#library-data). **Off by default** |
+| **Library data** | `/storage/.config/pocket-ui/library-sync` | Your favourites, play status, notes, ratings, labels, hidden games, smart shelves and play history, so a second Pocket (or this one after a fresh SD card) knows them too. See [Library data](#library-data). **Off by default** |
 | **BIOS files** | `/storage/roms/bios` | BIOS files. They are copyrighted: share them only between devices that are yours. **Off by default** |
 
 Every row but **Library data** and **BIOS files** is on by default.
@@ -142,7 +142,7 @@ Sync page says **Nothing waiting**.
 ## Library data
 
 Saves tell a game where you were. **Library data** carries what you said about your games: the stars of your
-favourites, the play status, notes and ratings, your stickers, the games you hid, your smart shelves and your play
+favourites, the play status, notes and ratings, your labels, the games you hid, your smart shelves and your play
 history. Switch the row on on every Pocket that should share them, and share the folder **Pocket library data** with
 those devices in Syncthing, as in [Pair a computer](#pair-a-computer). On a second Pocket the folder belongs at the
 same place, `/storage/.config/pocket-ui/library-sync`; a computer only passes it on and can keep it anywhere.
@@ -169,7 +169,7 @@ same place, `/storage/.config/pocket-ui/library-sync`; a computer only passes it
   again. Changes made while it was off go over when you switch it back on.
 
 Not shared: the recent games list, "Wrong game? Choose another", the preferred versions, Options and cheats of each
-game, and the order of your stickers and shelves (new ones go at the end). How it works inside is in
+game, and the order of your labels and shelves (new ones go at the end). How it works inside is in
 [SYNC-CURATION.md](../SYNC-CURATION.md).
 
 ## The web interface is protected

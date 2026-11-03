@@ -203,6 +203,9 @@ described file by file in [assets/ui-art/SOURCES.md](assets/ui-art/SOURCES.md). 
   PixelLab (`create-image-pixflux`) from text prompts alone, no input image; the prompts and seeds are in
   `assets/ui-art/pixellab-assets.json`. PixelLab's terms as above: the user owns what is created and may
   distribute it for any purpose.
+- **Made from photographs:** Just Play's emblem (`emblem-justplay.png`): Evan Amos's Atari 5200 cartridge photo (public
+  domain on Wikimedia Commons, Atari label painted over) and a CC0 photo of dice (Ready Elements), converted with
+  PixelLab `image-to-pixelart`; file pages and licences in SOURCES.md.
 - **Drawn for this project:** the handhelds (`tools/draw_devices.py`, from their published proportions, no photo
   traced, no logos) and the Settings icons (`tools/draw_icons.py`).
 - **pocket-ui's mark** (`logo.png`, the cartridge): PixelLab `create-image-pixflux` from a text prompt alone, then

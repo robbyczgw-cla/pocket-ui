@@ -396,7 +396,7 @@ mod tests {
         v.press(Button::Down);
         assert_eq!(v.press(Button::West), ListOut::None, "a remake is not a version to prefer");
         assert_eq!(v.hints(), [("A", "Play"), ("B", "Back")]);
-        let mut s = Sheet { title: "Stickers".into(), rows: vec![("Couch co-op".into(), Some(true)), ("New sticker…".into(), None)], sel: 0, single: false, adjust: None };
+        let mut s = Sheet { title: "Stickers & labels".into(), rows: vec![("Couch co-op".into(), Some(true)), ("New label…".into(), None)], sel: 0, single: false, adjust: None };
         assert_eq!(s.hints()[0], ("A", "Take off"));
         s.press(Button::Down);
         s.press(Button::Down);

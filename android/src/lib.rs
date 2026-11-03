@@ -287,12 +287,6 @@ impl App {
     fn frozen_refresh(&mut self) {
         let Some(lib) = &self.ui.library else { return };
         self.ui.frozen_stale = false;
-        if !self.ui.prefs.extras.frozen_games {
-            self.frozen = None;
-            log::info!("frozen games standing open: 0");
-            self.ui.frozen_got(Vec::new());
-            return;
-        }
         let prefs = &self.ui.prefs;
         let mut played: Vec<(u64, &Game)> = lib.games.iter().filter(|g| g.missing.is_empty()).filter_map(|g| Some((*prefs.played.get(&g.key)?, g))).collect();
         played.sort_by_key(|(at, _)| std::cmp::Reverse(*at));

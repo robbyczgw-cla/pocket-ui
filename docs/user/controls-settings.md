@@ -12,7 +12,8 @@ Settings opens on seven categories (Look, Sound & feel, Playing, Games, Connecti
 | Button | What it does |
 |---|---|
 | D-pad Up / Down | Move. The list wraps around at the ends. |
-| A | On a category: open its list. In the list: open. On Appearance, Colours, Font, Text size, Motion, Animations, Sounds, Haptics, On start, Remember where I quit, Over the game, Screen frames and Language: switch. On Buttons: open its page. |
+| HOME | Back to Home from wherever you are in Settings (the categories, a list, About, Battery, Lights, Night light, Cozy extras, Sleep & power, Curator). Pages with something under way (an update or a download, a sign-in, a pairing, a clean-up, a button being remapped) keep it: B goes back there. On Home and the shelf HOME still opens the quick settings. |
+| A | On a category: open its list. In the list: open. On Appearance, Colours, Font, Text size, Motion, Animations, Sounds, Haptics, On start, Continue where I quit, Over the game, Screen frames and Language: switch. On Buttons: open its page. |
 | D-pad Left / Right | On Sounds: how loud. On Appearance, Colours, Font, Text size, Motion, Animations, On start, Over the game, Screen frames and Language: switch. On the Buttons page: A or Left / Right switch the selected row, Button layout or Button symbols. |
 | B | In a category's list: back to the categories, the one you came from selected. On the categories: back to where you came from (the shelf, or a system's game list). |
 
@@ -109,7 +110,7 @@ START on a PortMaster port's card ([Performance & fan](performance.md#portmaster
 | D-pad Up / Down, or either stick | Scroll. Held, it goes on by itself. |
 | D-pad Left / Right | Scroll a screen. |
 | L1 / R1 | Previous / next page. |
-| B | Back to Settings → System (or to the first-start screen it was opened from with SELECT). |
+| B | Back to Settings → Help & tools (or to the first-start screen it was opened from with SELECT). |
 
 ## During setup and in setup pages
 
@@ -118,7 +119,7 @@ START on a PortMaster port's card ([Performance & fan](performance.md#portmaster
 | Most steps | START: skip to the next step. B: back one step. A step opened from Settings returns to its category's list instead. SELECT on "Welcome" and "You're all set" opens the [manual](settings-system.md#manual). |
 | Welcome | Left / Right: the language, English or Deutsch, used at once ([Language](language.md)). A: start. |
 | Choose a look | Left / Right: change. Y: appearance (Dark, Light, Automatic). A: keep this look. In the first start R1: text size (Normal, Medium, Large), B: back to Welcome. Opened from Settings instead R1: motion (Full, Reduced, Off), and X: Systems on the shelf. |
-| How do you like to play? | Up / Down: Simple, Enthusiast, Choose for yourself. A: take it. B: back to the look. START: skip, everything stays as it is. |
+| How do you like to play? | Up / Down: The shelf, Easy, Enthusiast, Choose for yourself. A: take it. B: back to the look. START: skip, everything stays as it is. |
 | Feature cards (Choose for yourself, Settings → Help & tools → Tour, New in this version) | Up / Down: On, Off, Later. A: take the choice, next card. L1 / R1 or Left / Right: previous / next card without choosing. B: back a card (first start) or close (Tour, new cards). START: skip the rest. |
 | Wi-Fi | Up / Down: choose a network. A: connect. X: scan again. |
 | On-screen keyboard | D-pad: move. A: type. B: delete (back to the list when empty). L1: empty the field. X: Shift. Y: symbols. START: connect. |
@@ -132,16 +133,16 @@ START on a PortMaster port's card ([Performance & fan](performance.md#portmaster
 
 The touch screen works next to the buttons; it never does anything a button can't.
 
-On the shelf, the game lists, Settings, the search and the game switcher:
+On the shelf, the game lists, Settings, the search and Recent games:
 
 | Touch | What it does |
 |---|---|
 | Tap a row (or card) | Select it. Tap the selected one again to open or play it. |
 | Swipe up / down | Scroll the list: the selection follows the finger by whole rows. The list stops at its ends. In the manual the page follows the finger. |
-| Swipe left / right | On the Cards look and in the game switcher: previous / next card. In the Cabinet: along the shelf (up / down: to another shelf). |
+| Swipe left / right | On the Cards look and in Recent games: previous / next card. In the Cabinet: along the shelf (up / down: to another shelf). |
 | Tap a button hint at the bottom (A, B, X, Y, SELECT, START) | The same as pressing that button. START opens Settings. |
 | Tap a key of the search's keyboard | Type it. |
-| Tap a Curator row on a game's card (Echoes, Versions, Stickers) | Select it. Tap it again to open it. |
+| Tap a Curator row on a game's card (Echoes, Versions, Stickers & labels) | Select it. Tap it again to open it. |
 | Tap Up next on the shelf | Play that game, as A does. |
 
 In a game, pocket-ui ignores the touch screen and the game gets it:

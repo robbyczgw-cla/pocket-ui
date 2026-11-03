@@ -5,6 +5,42 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-11-03
+
+### Added
+
+- The Easy look (Settings → Look → Look): only your games, one at a time, for someone with a handful of them. Left and Right choose, A plays or resumes, X opens the game's card, HOME opens the quick settings, and in a game gives Continue, Save & quit and More. The first start offers it as its own row. It is calm: the case, name and buttons are smaller than in Kids Mode, More is a row like Continue and Quit, nothing is drawn over the game (no FPS or CPU numbers, whatever Over the game says), and there is no game switcher. An open case says once what open means.
+- **Just Play** (prototype): one row on Home, right above Continue, and A starts a game picked for you: one you started and
+  haven't finished first, then a starred one you never played, then any unplayed one; the game you played last is left
+  out, hidden games never come up, and games on systems this handheld runs slowly come up less. No card, no question. It
+  goes with Settings → Games → Curator → Lens & smart shelves and is not in Kids Mode.
+
+### Changed
+
+- Just Play's case on the Cabinet and the Shelf shows a picture: a game cartridge with a play triangle and two dice, in the pixel-art style of the other cases, instead of a plain grey case with its name.
+- Console pages on a 1024 px screen: the Launch price and Hardware columns had 250 px, and "US$99.99" ran one character a line down the page. The second column now starts where the console's picture does, a label column gives way to a long value, and a value that still doesn't fit goes under its label. A short word torn across lines is now also reported by the text-size sweep (`W`).
+- The game that stands out of an open case reads as meant: it comes out further beside the front (about half its width, and the name starts clear of it), and the strip above a spine is a little taller. The first time an open case is on screen one line says what it means, "Open means your moment is waiting" (English, German, Spanish; once, never in Kids Mode).
+- Up next after a game (off by default, on with Enthusiast): **X** plays the suggestion, no longer A. A stays with the game the shelf is on, so a press of A right after a game continues that game and no longer starts another one.
+- Help in German and Spanish says it is English: the Manual row reads "Handbuch (Englisch)" and "Manual (en inglés)"; the way back from the manual is named Help & tools (the manual said System).
+- The first start's profile **Simple** is **The shelf** ("Your games on a shelf, as it comes."): in the first start, in Settings → Help & tools → How you like to play and in the manual, en/de/es. From Help & tools the page now says honestly what it does later: it puts every extra back as pocket-ui ships it, also On start and Screen frames (it is not the same as skipping then).
+- Pause menu: the **Quick settings** row is gone (START opens them from any row, as its hint says); Options pages have a title ("Options", "Options › Picture" …) so you know where you are after two levels; Settings → Look no longer shows a key without its word at the end of its hint bar (R1 and L1 still work there; their rows are in Sound & feel).
+- "Stickers" meant two things. Your own tags for games (Couch co-op) are now **Labels** in Curator, the Lens, the tour, the Settings row, the phone page and the manual; **Stickers** are the ones on the case. The card's row that holds both reads **Stickers & labels**. Saved labels and smart shelves are unchanged.
+- "Extras" meant four things: the first start's page is **Pictures & extras** like its Settings row, its first row **Box art** (it said Cover art, and Box art under it), the pictures note no longer names the libretro collection or counts KB, and the pause menu's Options group is **Speed, rumble, fan** (Extras). English, German, Spanish and the manual.
+- The list of recent games has one name, **Recent games**: the shelf's SELECT hint, the screen's title (it said Recently played, and Switch game from a game), the pause menu's SELECT hint (it said Games) and the manual (it said game switcher).
+- HOME in Settings goes back to Home (it did nothing). Pages with something under way (an update, a download, a sign-in, a pairing, a clean-up, a button being remapped) keep HOME to themselves. On Home and the shelf HOME still opens the quick settings, in a game the pause menu.
+- Pause menu: the Quit row says **Save & quit** while it keeps the moment, with "Next time, A continues from this moment." beside it. With Continue where I quit off (or nothing to save) it stays **Quit** with its own line.
+- Game switcher: A says **Continue** only where a moment is waiting (the same check as the shelf's open cases) and **Play** otherwise, instead of promising Resume for every game. X **Remove** is gone: it took the game off the list and with it the play time it had counted.
+- One word for going back to where you left off: **Continue**. A on a game with a waiting moment says Continue (it said Resume), the setting is **Continue where I quit** (Remember where I quit), Load's first stop is **Where I quit** (Auto), and the tour card is "Continue your last game". English, German and Spanish; the manual says the same.
+- Frozen games is gone as a switch and as a word: Settings → System has no Frozen games row, the word on the cases is **Continue**, and the manual page is now **Continue**. An open case always means a moment is waiting. An old setting that switched it off is ignored (treated as on); the save rules did not change. Android has no row either.
+- Pause menu → Load has a last stop, **From the start**, on pocket-ui's own host: the game begins again and nothing else changes; its own saves and the moment on the card stay until the next Save & quit replaces it.
+- Remember where I quit off: the older moment is no longer the next start (the game starts as it would without one); it stays under Load as Auto until a Quit saves a new one. Applies to pocket-ui's own host; PlayStation 2, GameCube, Wii and 3DS are unchanged.
+
+### Fixed
+
+- Cabinet shows the selected shelf’s position and up/down arrows, so systems outside the visible shelves are easier to find.
+- Box art: a picture server that did not answer (offline, a timeout, an error page, a broken file) no longer marks games as "has no cover" for good; they are asked for again at the next start. A run gives up after three failed requests in a row instead of waiting a minute per game, and Settings → Extras → Cover art says "Couldn't reach the picture server. Try again later."
+- On a 1024x768 screen the first start's language line no longer ends in "Settin…": the sentence goes under the row, whole.
+
 ## [0.1.12] - 2026-11-02
 
 ### Added
@@ -103,6 +139,9 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
   German and Spanish. After a skipped time zone with nothing to go on, the last first-start page says the clock is on UTC.
 - The page you open on your phone for "From your phone" speaks Spanish too (after German and English), by the phone's
   language like the device.
+- SD card image: Settings → Help & tools → About names the system, "pocket-ui OS 0.1.9 · built on ROCKNIX 20261001
+  (SM8250)" (on a ROCKNIX card with pocket-ui added, the ROCKNIX version). The device is called "pocket-ui" on the
+  network, in Bluetooth and Tailscale, and EmulationStation's ROCKNIX update check is off.
 
 ### Changed
 

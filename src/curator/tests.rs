@@ -983,3 +983,226 @@ fn a_macs_and_windows_litter_never_reaches_the_curator() {
     assert_eq!(names, ["Metroid Fusion"]);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ---- Just Play (justplay.rs) -------------------------------------------------------------------------------------
+
+fn offer_all() -> justplay::Offer<'static> {
+    justplay::Offer { allowed: &|_| true, heavy: &|_| false }
+}
+
+/// `n` Just Play presses with seeds 0..n on a player who starts everything.
+fn just_plays(ix: &Index, offer: &justplay::Offer, n: u64) -> Vec<(usize, justplay::Why)> {
+    (0..n).map(|s| ix.just_play(&mut surprise::Rng::new(s), offer, &mut |_| true).unwrap()).collect()
+}
+
+#[test]
+fn just_play_takes_an_unfinished_game_first_and_never_a_finished_one_while_others_wait() {
+    let ix = index(&CuratorDbFeel);
+    // The player: Gran Turismo 4 is Playing, Chrono Trigger has play time though Not started. Both are unfinished.
+    let gt4 = find(&ix, "Gran Turismo 4", "ps2");
+    let chrono = ix.preferred(find(&ix, "Chrono Trigger", "snes"));
+    // Gran Turismo 4 was played last, so while Chrono Trigger waits it is the pick, every time.
+    for (g, why) in just_plays(&ix, &offer_all(), 300) {
+        assert_eq!((g, why), (chrono, justplay::Why::Unfinished), "{}", ix.game(g).name);
+    }
+    // With the last game out of the picture (it may be offered again) both unfinished games come up, nothing else.
+    let ix = index_with(|p| {
+        p.recents.insert(path("psp", "Lumines (USA).iso"), (p.now - 60, 60));
+        p.meta.entry(path("psp", "Lumines (USA).iso").to_string_lossy().into_owned()).or_default().status = Status::Completed;
+    });
+    let picked: HashSet<usize> = just_plays(&ix, &offer_all(), 300).into_iter().inspect(|(_, why)| assert_eq!(*why, justplay::Why::Unfinished)).map(|(g, _)| g).collect();
+    assert_eq!(picked, HashSet::from([gt4, chrono]));
+}
+
+#[test]
+fn just_play_without_history_takes_a_starred_game_then_any_unplayed_one() {
+    let cat = catalog(&CuratorDbFeel);
+    // No history at all: everything is unplayed, nothing starred.
+    let blank = Index::build(cat.clone(), user_state(&cat, &Player::default()));
+    for (g, why) in just_plays(&blank, &offer_all(), 100) {
+        assert_eq!(why, justplay::Why::Unplayed, "{}", blank.game(g).name);
+    }
+    // One starred game, nothing played: that one, every time.
+    let mut p = Player::default();
+    p.favorites.insert(path("snes", "Super Metroid (Japan, USA) (En,Ja).sfc"));
+    let ix = Index::build(cat.clone(), user_state(&cat, &p));
+    let metroid = find(&ix, "Super Metroid", "snes");
+    for (g, why) in just_plays(&ix, &offer_all(), 50) {
+        assert_eq!((g, why), (metroid, justplay::Why::Favorite));
+    }
+}
+
+#[test]
+fn just_play_with_every_game_finished_still_plays_one_and_never_guesses_completion_from_time() {
+    // Every game Completed: no reasonable alternative, so a finished one is picked (not an error).
+    let ix = index_with(|p| {
+        for (_, files) in LIBRARY {
+            let _ = files;
+        }
+        for (s, files) in LIBRARY {
+            for f in *files {
+                p.meta.entry(path(s, f).to_string_lossy().into_owned()).or_default().status = Status::Completed;
+            }
+        }
+        p.favorites.clear();
+    });
+    for (_, why) in just_plays(&ix, &offer_all(), 50) {
+        assert_eq!(why, justplay::Why::Other);
+    }
+    // Hours of play on a Not started game are unfinished, not finished; a Completed game with little time is finished.
+    let ix = index_with(|p| {
+        p.meta.entry(path("snes", "Super Metroid (Japan, USA) (En,Ja).sfc").to_string_lossy().into_owned()).or_default().secs = 90 * 3600;
+    });
+    let metroid = find(&ix, "Super Metroid", "snes");
+    assert!(just_plays(&ix, &offer_all(), 200).iter().any(|(g, _)| *g == metroid), "90 hours and not marked finished: unfinished");
+}
+
+#[test]
+fn just_play_leaves_dropped_games_to_the_end_and_picks_each_work_once_by_its_preferred_version() {
+    let ix = index(&CuratorDbFeel);
+    let pokemon = find(&ix, "Pokemon - Emerald Version", "gba");
+    assert!(just_plays(&ix, &offer_all(), 500).iter().all(|(g, _)| *g != pokemon), "dropped, with unfinished games waiting");
+    // Chrono Trigger owned three times is one work: only its preferred version ever comes up, even when all are unplayed.
+    let cat = catalog(&CuratorDbFeel);
+    let blank = Index::build(cat.clone(), user_state(&cat, &Player::default()));
+    let versions: Vec<usize> = ["snes", "psx", "nds"].iter().map(|s| find(&blank, "Chrono Trigger", s)).collect();
+    let came: HashSet<usize> = just_plays(&blank, &offer_all(), 3000).into_iter().map(|(g, _)| g).filter(|g| versions.contains(g)).collect();
+    assert_eq!(came, HashSet::from([blank.preferred(versions[0])]));
+}
+
+#[test]
+fn just_play_avoids_the_game_played_last_when_there_is_anybody_else() {
+    // Gran Turismo 4 was the last game played and is the only unfinished one: an unplayed one is better than a repeat.
+    let ix = index_with(|p| {
+        let chrono = path("nds", "Chrono Trigger (USA) (En,Fr).nds");
+        p.meta.entry(path("nds", "Chrono Trigger (USA) (En,Fr).nds").to_string_lossy().into_owned()).or_default().secs = 0;
+        p.recents.remove(&chrono);
+        p.recents.insert(path("ps2", "Gran Turismo 4 (USA).iso"), (p.now - 600, 30 * 3600));
+    });
+    let gt4 = find(&ix, "Gran Turismo 4", "ps2");
+    assert!(just_plays(&ix, &offer_all(), 300).iter().all(|(g, _)| *g != gt4));
+    // Only one game offered: the repeat is better than nothing.
+    let only = justplay::Offer { allowed: &|g| g == gt4, heavy: &|_| false };
+    assert_eq!(just_plays(&ix, &only, 10).iter().map(|(g, _)| *g).collect::<HashSet<_>>(), HashSet::from([gt4]));
+}
+
+#[test]
+fn just_play_never_offers_hidden_games_and_says_so_when_nothing_is_left() {
+    let ix = index(&CuratorDbFeel);
+    let (gt4, chrono) = (find(&ix, "Gran Turismo 4", "ps2"), ix.preferred(find(&ix, "Chrono Trigger", "snes")));
+    let hide = justplay::Offer { allowed: &|g| g != gt4 && ix.catalog.work_of[g] != ix.catalog.work_of[chrono], heavy: &|_| false };
+    for (g, why) in just_plays(&ix, &hide, 300) {
+        assert_ne!(why, justplay::Why::Unfinished, "both unfinished games are hidden: {}", ix.game(g).name);
+        assert!(g != gt4 && ix.catalog.work_of[g] != ix.catalog.work_of[chrono]);
+    }
+    let nothing = justplay::Offer { allowed: &|_| false, heavy: &|_| false };
+    assert_eq!(ix.just_play(&mut surprise::Rng::new(1), &nothing, &mut |_| true), Err(justplay::Miss::NoGames));
+    // An empty library.
+    let empty = Index::build(Arc::new(Catalog::build(Vec::new(), Vec::new())), UserState::default());
+    assert_eq!(empty.just_play(&mut surprise::Rng::new(1), &offer_all(), &mut |_| true), Err(justplay::Miss::NoGames));
+}
+
+#[test]
+fn just_play_skips_games_that_do_not_start_and_gives_up_after_a_few_tries() {
+    let ix = index(&CuratorDbFeel);
+    let gt4 = find(&ix, "Gran Turismo 4", "ps2");
+    // The file of Gran Turismo 4 is gone: the other unfinished game comes, every time.
+    for s in 0..100 {
+        let (g, why) = ix.just_play(&mut surprise::Rng::new(s), &offer_all(), &mut |g| g != gt4).unwrap();
+        assert_ne!(g, gt4);
+        assert_eq!(why, justplay::Why::Unfinished);
+    }
+    // Nothing starts: asked at most TRIES times, then a clear miss, no loop.
+    let mut asked = 0;
+    let r = ix.just_play(&mut surprise::Rng::new(1), &offer_all(), &mut |_| {
+        asked += 1;
+        false
+    });
+    assert_eq!(r, Err(justplay::Miss::NothingStarts));
+    assert!(asked <= justplay::TRIES, "{asked} checks");
+}
+
+#[test]
+fn just_play_is_deterministic_and_prefers_not_to_throw_a_slow_system_at_a_press() {
+    let ix = index(&CuratorDbFeel);
+    let a: Vec<_> = (0..20).map(|_| ()).map(|_| ix.just_play(&mut surprise::Rng::new(7), &offer_all(), &mut |_| true).unwrap()).collect();
+    assert!(a.windows(2).all(|w| w[0] == w[1]), "same seed, same pick");
+    // Nobody has played anything: PS2 and GameCube (slow here) are 15 of 66 games but come up far less than that.
+    let cat = catalog(&CuratorDbFeel);
+    let blank = Index::build(cat.clone(), user_state(&cat, &Player::default()));
+    let slow = |g: usize| matches!(blank.game(g).system.as_str(), "ps2" | "gamecube");
+    let heavy = justplay::Offer { allowed: &|_| true, heavy: &slow };
+    let n_slow = |o: &justplay::Offer| just_plays(&blank, o, 3000).into_iter().filter(|(g, _)| slow(*g)).count();
+    assert!(n_slow(&heavy) * 3 < n_slow(&offer_all()) * 2, "slow systems are picked less: {} vs {}", n_slow(&heavy), n_slow(&offer_all()));
+    // An unfinished slow game is still taken: somebody chose it.
+    let ix = index(&CuratorDbFeel);
+    let all_slow = justplay::Offer { allowed: &|_| true, heavy: &|_| true };
+    assert!(just_plays(&ix, &all_slow, 50).iter().all(|(_, w)| *w == justplay::Why::Unfinished));
+}
+
+#[test]
+fn just_play_is_instant_for_10000_games() {
+    let cat = big_catalog(10_000);
+    let ix = Index::build(cat.clone(), big_user(&cat));
+    let heavy = |g: usize| g % 20 == 3;
+    let offer = justplay::Offer { allowed: &|g| g % 97 != 0, heavy: &heavy };
+    let mut took = Vec::new();
+    for s in 0..30 {
+        let c = thread_cpu();
+        let r = ix.just_play(&mut surprise::Rng::new(s), &offer, &mut |_| true);
+        took.push(thread_cpu() - c);
+        assert!(r.is_ok());
+    }
+    took.sort();
+    println!("just play, 10,000 games: median {:?}, worst {:?}", took[15], took[29]);
+    budget("Just Play for 10,000 games (90th percentile)", took[27], Duration::from_millis(15));
+}
+
+#[test]
+fn just_play_brings_the_open_game_played_last_back_before_a_dropped_or_completed_one() {
+    // Two games: A is Playing and was played last, B was put away. A repeat beats B, in every seed.
+    let cat = catalog(&CuratorDbFeel);
+    let (a, b) = (path("snes", "Super Metroid (Japan, USA) (En,Ja).sfc"), path("snes", "EarthBound (USA).sfc"));
+    let (ia, ib) = (cat.games.iter().position(|g| g.path == a).unwrap(), cat.games.iter().position(|g| g.path == b).unwrap());
+    for put_away in [Status::Dropped, Status::Completed] {
+        let mut p = Player { now: 1100, ..Default::default() };
+        p.meta.insert(a.to_string_lossy().into_owned(), GameMeta { status: Status::Playing, status_set: true, secs: 600, ..Default::default() });
+        p.meta.insert(b.to_string_lossy().into_owned(), GameMeta { status: put_away, status_set: true, ..Default::default() });
+        p.recents.insert(a.clone(), (1000, 600));
+        let ix = Index::build(cat.clone(), user_state(&cat, &p));
+        let only = justplay::Offer { allowed: &|g| g == ia || g == ib, heavy: &|_| false };
+        for (g, why) in just_plays(&ix, &only, 100) {
+            assert_eq!((g, why), (ia, justplay::Why::Unfinished), "{put_away:?}");
+        }
+    }
+}
+
+#[test]
+fn just_play_takes_the_second_version_when_the_preferred_one_does_not_start() {
+    // Chrono Trigger on three systems: the preferred version is broken, another one starts; nothing else is offered.
+    let ix = index(&CuratorDbFeel);
+    let versions: Vec<usize> = ["snes", "psx", "nds"].iter().map(|s| find(&ix, "Chrono Trigger", s)).collect();
+    let pref = ix.preferred(versions[0]);
+    let only = justplay::Offer { allowed: &|g| versions.contains(&g), heavy: &|_| false };
+    for s in 0..50 {
+        let (g, _) = ix.just_play(&mut surprise::Rng::new(s), &only, &mut |g| g != pref).unwrap();
+        assert!(versions.contains(&g) && g != pref);
+    }
+    // All three broken: asked once each, then the miss.
+    let mut asked = Vec::new();
+    let r = ix.just_play(&mut surprise::Rng::new(1), &only, &mut |g| {
+        asked.push(g);
+        false
+    });
+    assert_eq!(r, Err(justplay::Miss::NothingStarts));
+    assert_eq!(asked.len(), 3);
+}
+
+/// Walk 2026-11-02: "Stickers" meant two things. The player's own tags are Labels everywhere; Stickers are the ones
+/// on the case (and the card's row that holds both says so).
+#[test]
+fn the_players_own_tags_are_labels_and_never_stickers() {
+    assert_eq!(Facet::Stickers.label(), "Labels");
+    // What a saved smart shelf stores is not a word the player reads: it stays.
+    assert_eq!(Facet::Stickers.id(), "stickers");
+}

@@ -78,6 +78,12 @@ fn left_w(w: i32, side: i32) -> i32 {
 
 /// The player's own lines: what the box's back says under "Your game", and a note when there is one.
 fn your_rows(d: &CardData) -> Vec<(&'static str, Val)> {
+    if d.plain {
+        return match d.played {
+            Some((last, secs)) => vec![("Played", Val::Text(crate::recents::duration(secs))), ("Last", Val::Text(crate::recents::ago(last)))],
+            None => vec![("Played", Val::Quiet("Not yet"))],
+        };
+    }
     // The status first, across the column: its mark says what it is, and "Wird gespielt" needs the room.
     let mut rows = vec![("", Val::Status(d.status))];
     rows.push(match d.played {
@@ -114,6 +120,12 @@ fn your_rows(d: &CardData) -> Vec<(&'static str, Val)> {
 
 /// The facts at the right: the box back's, year and system aside (they are in the line under the title).
 fn facts(d: &CardData) -> Vec<(&'static str, String)> {
+    if d.plain {
+        // Where the sentence is English only and none is on hand (`game_box::about`): the genre says what kind of game it is.
+        let no_sentence = crate::game_box::about(d).0.is_none();
+        let genre = d.facts.iter().find(|(k, _)| *k == "Genre").filter(|_| no_sentence).cloned();
+        return genre.into_iter().chain(d.players.clone().map(|p| ("Players", p))).collect();
+    }
     let mut f: Vec<(&str, String)> = d.facts.clone();
     f.extend(d.players.clone().map(|p| ("Players", p)));
     f.extend(d.scores.clone().map(|s| ("Reviews", s)));
@@ -209,7 +221,9 @@ impl InfoView {
         // The facts, one line each, the key in Dust.
         let facts = facts(d);
         self.link_rects = vec![(0, 0, 0, 0); d.links.len()];
-        if facts.is_empty() {
+        if facts.is_empty() && d.plain {
+            // Nothing known: nothing said.
+        } else if facts.is_empty() {
             for l in text.wrap_prose_at_most(Face::Body, 28, "Not in the offline game list, so there are no facts to show.", tw, 2) {
                 text.draw(c, Face::Body, 28, tx, ty, pal().dust, &l);
                 ty += type_scale::line(28, 8);
@@ -380,6 +394,7 @@ fn paint_about(c: &mut Canvas, text: &mut Text, d: &CardData, (x, w): (i32, i32)
                 y += type_scale::line(28, 12);
             }
         }
+        None if d.plain => {}
         None => {
             let l = text.fit(Face::Body, 28, "No description yet.", w);
             text.draw(c, Face::Body, 28, x, y, pal().dust, &l);

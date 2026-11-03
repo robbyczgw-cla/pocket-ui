@@ -436,7 +436,7 @@ fn clean_name(name: &str) -> String {
     let name: String = name.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(STICKER_MAX).collect();
     let name = name.trim().to_string();
     if name.is_empty() {
-        "Sticker".to_string()
+        "Label".to_string()
     } else {
         name
     }
@@ -640,7 +640,7 @@ mod tests {
         assert_eq!(again.stickers().len(), 1);
         let mut m = again;
         assert_eq!(m.add_sticker("   ").unwrap(), bed + 1, "ids are never reused while a higher one exists");
-        assert_eq!(m.stickers().last().unwrap().name, "Sticker");
+        assert_eq!(m.stickers().last().unwrap().name, "Label");
     }
 
     #[test]

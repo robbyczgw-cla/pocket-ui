@@ -111,9 +111,9 @@ impl App {
                 }
             };
         }
-        // The Minimal, Cards and Split looks show the info page (`game_info`); Shelf and Cabinet the box (`game_box`)
+        // The Minimal, Cards, Split and Big looks show the info page (`game_info`); Shelf and Cabinet the box (`game_box`)
         // unless SELECT chose the page last time.
-        if matches!(self.theme, Theme::Minimal | Theme::Cards | Theme::Split) {
+        if matches!(self.theme, Theme::Minimal | Theme::Cards | Theme::Split | Theme::Big) {
             open.card.show_info();
         } else if self.game_box {
             open.card.boxed = Some(pocket_ui::game_box::BoxView::new());
@@ -194,6 +194,7 @@ impl App {
             saves: game_card::CardSaves::of(system, path, stripe(system)),
             // The facts that lead to the player's other games (`show_card`, `app_connections`).
             links: Vec::new(),
+            plain: false,
         };
         // RetroAchievements: what is known, and a lookup in the background when that is old (`app_achievements`).
         data.achievements = self.card_achievements(system, path);

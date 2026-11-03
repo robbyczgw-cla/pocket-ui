@@ -1004,6 +1004,16 @@ mod tests {
         assert_eq!(t.translate("Wi-Fi on Settings").as_deref(), Some("Einstellungen: Wi-Fi"));
     }
 
+    /// Walk 2026-11-02: the menus were German and the manual English without a word. The row says so, in both languages.
+    #[test]
+    fn the_manual_is_named_as_english_in_german_and_spanish() {
+        let de = table(include_str!("../assets/i18n/de.tsv"));
+        let es = table(include_str!("../assets/i18n/es.tsv"));
+        assert!(de.translate("Manual").is_some_and(|m| m.contains("Englisch")), "{:?}", de.translate("Manual"));
+        assert!(es.translate("Manual").is_some_and(|m| m.contains("inglés")), "{:?}", es.translate("Manual"));
+        assert!(es.translate("The user guide, on the device.").is_some_and(|m| m.contains("inglés")));
+    }
+
     #[test]
     fn two_sentences_split_where_the_first_ends() {
         let t = table("Soft blends pixels.\tWeich mischt Pixel.\nAt {n}× whole it would be sharp.\tBei ganzen {n}× wäre es scharf.\nDrawn {n} times as large. {t} {t2}\t{n}-mal so groß. {t} {t2}\nSet to {t}\tAuf {t} gestellt\n");
@@ -1016,7 +1026,7 @@ mod tests {
 
     #[test]
     fn a_long_list_is_translated_part_by_part() {
-        let names = ["Lens", "Echoes", "Up next", "Versions", "Stickers", "Pixel Path", "Frames", "Last game", "Motion", "Sounds", "Haptics", "LEDs"];
+        let names = ["Lens", "Echoes", "Up next", "Versions", "Labels", "Pixel Path", "Frames", "Last game", "Motion", "Sounds", "Haptics", "LEDs"];
         let mut src = String::from("On: {t}.\tAn: {t}.\n{t}, {t2}\t{t}, {t2}\n");
         for (i, n) in names.iter().enumerate() {
             src.push_str(&format!("{n}\tW{i}\n"));

@@ -233,6 +233,7 @@ impl App {
                 label: match kind {
                     Kind::Snap => "In the game",
                     Kind::Title => "Title screen",
+                    Kind::Box => "Box art",
                 },
                 size: picture_loader::fitted(w, h, bw, bh),
                 image: self.picture(&file, bw, bh),

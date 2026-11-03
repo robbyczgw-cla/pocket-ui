@@ -123,7 +123,6 @@ fn device_key(opens: Opens) -> Option<&'static str> {
         Opens::Kids => "kids",
         Opens::Updates => "updates",
         Opens::Store => "store",
-        Opens::Extra(pocket_ui::cozy_extras::Extra::FrozenGames) => "frozen_games",
         _ => return None,
     })
 }
@@ -146,7 +145,7 @@ pub(crate) fn row_line(i: usize) -> &'static str {
     if pocket_ui::device::current().host_owned() {
         match SETTINGS[i].1 {
             Opens::Setup(Only::Games) => return "Where each system's games go.",
-            Opens::Setup(Only::Extras) => return "Cover art and game pictures.",
+            Opens::Setup(Only::Extras) => return "Box art and game pictures.",
             Opens::SleepPower => return "A slideshow of your games when the Deck sits idle.",
             _ => {}
         }
@@ -257,6 +256,9 @@ fn typed_value(opens: Opens, wifi: &Option<values::Wifi>) -> bool {
     matches!(opens, Opens::Setup(Only::Wifi)) && matches!(wifi, Some(values::Wifi::Connected(Some(_))))
 }
 
+/// The line under Continue where I quit while it is Off.
+const REMEMBER_OFF_LINE: &str = "Quit keeps no moment: the next start is fresh, and the older moment stays under Load.";
+
 impl App {
     /// The value at the right of `SETTINGS[i]` (`sel`: the selected row, whose switches show ‹ ›), at most `room`
     /// pixels wide. Nothing here reads a file or starts a process.
@@ -338,6 +340,8 @@ impl App {
     pub(crate) fn settings_row_desc(&self, i: usize) -> &'static str {
         match SETTINGS[i].1 {
             Opens::Extra(e) => self.extra_row_line(e, row_line(i)),
+            // Off says what Off does (it kept saying "Quit keeps the moment", walk 2026-11-02).
+            Opens::RememberQuit if !self.remember_quit => REMEMBER_OFF_LINE,
             _ => row_line(i),
         }
     }
@@ -562,10 +566,11 @@ mod tests {
             for row in SETTINGS.iter() {
                 lines.push(tr(row.2));
             }
-            for note in [Needs::Sounds, Needs::CozyFull, Needs::MotionFull, Needs::RememberQuit].map(Needs::note) {
+            for note in [Needs::Sounds, Needs::CozyFull, Needs::MotionFull].map(Needs::note) {
                 lines.push(tr(note));
             }
-            let deck_lines = ["Where each system's games go.", "Cover art and game pictures.", "A slideshow of your games when the Deck sits idle."];
+            lines.push(tr(REMEMBER_OFF_LINE));
+            let deck_lines = ["Where each system's games go.", "Box art and game pictures.", "A slideshow of your games when the Deck sits idle."];
             lines.extend(deck_lines.iter().map(|l| tr(l)));
         }
         for size in [TextSize::Normal, TextSize::Medium, TextSize::Large] {
@@ -840,7 +845,7 @@ mod tests {
         assert_eq!(deck("Connections"), "Web companion.");
         assert_eq!(deck("System"), "Language, sleep & power, storage, backup & reset.");
         assert_eq!(deck("Help & tools"), "How you like to play, Tour, manual, report a problem, about.");
-        assert_eq!(deck("Playing"), "On start, quit, buttons, over the game, frames, battery, achievements.");
+        assert_eq!(deck("Playing"), "On start, continue, buttons, over the game, frames, battery, achievements.");
     }
 
     /// The Help & tools line names the Store only while the row is there. (The device default in a test run is "no

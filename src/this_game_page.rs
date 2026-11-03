@@ -62,7 +62,7 @@ pub enum Action {
 }
 
 /// The pause menu's groups listed, in this order (each whole: an empty list means every setting of the group).
-const GROUPS: [(&str, &[&str]); 3] = [("Picture", &[]), ("Extras", &[]), ("Shortcuts", &[])];
+const GROUPS: [(&str, &[&str]); 3] = [("Picture", &[]), ("Speed, rumble, fan", &[]), ("Shortcuts", &[])];
 
 /// What a Picture row says besides its own text: there is no running game to show it on.
 pub const PICTURE_HINT: &str = "You see it when the game starts. In the pause menu, Options > Picture shows it live.";
@@ -125,7 +125,7 @@ impl ThisGamePage {
         match row {
             Row::Setting(key) => {
                 let (Some(setting), Some(s)) = (options::setting(key), self.settings.as_ref()) else { return Default::default() };
-                // Rewind and Over the game are in Extras and Shortcuts both: the shortcut says so.
+                // Rewind and Over the game are in Speed, rumble, fan and Shortcuts both: the shortcut says so.
                 let shortcut = options::GROUPS.iter().any(|g| g.name == "Shortcuts" && g.settings.iter().any(|x| x.key == key));
                 let name = if shortcut { format!("Shortcut: {}", setting.name) } else { setting.name.to_string() };
                 (name, setting.choices[s.index(setting)].label.to_string(), setting.desc.to_string())

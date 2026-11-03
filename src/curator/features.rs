@@ -95,7 +95,7 @@ impl Facet {
             Facet::Era => "Era",
             Facet::Setting => "Setting",
             Facet::Mood => "Mood",
-            Facet::Stickers => "Stickers",
+            Facet::Stickers => "Labels",
             Facet::Favourites => "Favourites",
         }
     }

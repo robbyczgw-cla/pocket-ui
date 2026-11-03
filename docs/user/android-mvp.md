@@ -80,7 +80,7 @@ covers and pictures, controls, and ready. Continue advances, Back returns, and S
 for later. If you close the app or return from the folder picker, setup resumes where you left it.
 Settings → First start opens the guide again. You can finish without games or a network connection.
 
-Choose English, German or Spanish, one of the five looks, Cozy or Quick animations, and dark or light pages.
+Choose English, German or Spanish, one of the looks, Cozy or Quick animations, and dark or light pages.
 Choose your ROM folder through Android's own picker and allow read access. Choosing another folder
 adds it to your library; existing folder permissions stay in place. An empty folder is harmless:
 choose another one or skip and add games later in Settings. Your ROM files stay in their folders.
@@ -116,7 +116,7 @@ and small Select/Start pills. They are see-through, sit beside the picture in la
 tick when pressed if your phone's touch vibration is on, and hide while you play with a controller.
 
 
-Frozen games are here too: your last five games stand a little open and Resume goes straight back to the moment you left. See [Frozen games](frozen-games.md#on-an-android-phone).
+Continue is here too: your last five games stand a little open and Continue goes straight back to the moment you left. See [Continue](continue.md#on-an-android-phone).
 
 Version 0.1.6-android.8 adds the rest of the Cozy extras (see below). Version 0.1.6-android.7 brought the newer look of pocket-ui: real cases and cartridges, stickers, the TV on the Cabinet,
 new colour sets and the new logo. Settings has new rows: Colours (five sets), Font (Barlow, Pixel, Rounded), Motion

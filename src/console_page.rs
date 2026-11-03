@@ -322,15 +322,34 @@ pub(crate) fn heading(c: &mut Canvas, text: &mut Text, x: i32, y: i32, s: &str) 
 /// A label/value row; the value wraps in its column. Returns the y of the next row.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn row(c: &mut Canvas, text: &mut Text, x: i32, key_w: i32, w: i32, y: i32, label: &str, value: &str) -> i32 {
-    // The label column is as wide as its labels need at the text size in use.
-    let key_w = crate::type_scale::wide(key_w, 28);
+    let (key_w, lines, stacked) = row_layout(text, key_w, w, label, value);
     text.draw(c, Face::Body, 28, x, y, pal().dust, label);
-    let lines = text.wrap_prose(Face::Body, 28, value, w - key_w);
+    let (vx, vy) = if stacked { (x + 24, y + value_line()) } else { (x + key_w, y) };
     let n = lines.len().max(1) as i32;
     for (i, line) in lines.iter().enumerate() {
-        text.draw(c, Face::Body, 28, x + key_w, y + i as i32 * value_line(), pal().chalk, line);
+        text.draw(c, Face::Body, 28, vx, vy + i as i32 * value_line(), pal().chalk, line);
     }
-    y + row_step() + (n - 1) * value_line()
+    y + row_step() + (n - 1) * value_line() + if stacked { value_line() } else { 0 }
+}
+
+/// Where a row's value goes: the label column's width, the value's lines, and whether it is stacked under its label. The
+/// label column is as wide as its labels need at the text size in use, but never so wide that the value's longest word
+/// no longer fits beside it (a price torn one character a line down a strip beside "North America", a Game Boy
+/// Advance page, 2026-11-03): the column gives way, and when even that is not enough the value goes under its label.
+pub(crate) fn row_layout(text: &mut Text, key_w: i32, w: i32, label: &str, value: &str) -> (i32, Vec<String>, bool) {
+    let mut key_w = crate::type_scale::wide(key_w, 28);
+    // The value as it is shown (translated), measured word by word without counting the words as shown strings.
+    let shown = text.wrap_prose(Face::Body, 28, value, i32::MAX / 4).join(" ");
+    let longest = shown.split_whitespace().map(|word| text.width_plain(Face::Body, 28, word)).max().unwrap_or(0);
+    if w - key_w < longest {
+        let label_w = text.width(Face::Body, 28, label) + 16;
+        key_w = (w - longest).max(label_w).min(key_w);
+    }
+    if w - key_w < longest {
+        // Not even beside the label alone: under it, a little in.
+        return (0, text.wrap_prose(Face::Body, 28, value, w - 24), true);
+    }
+    (key_w, text.wrap_prose(Face::Body, 28, value, w - key_w), false)
 }
 
 /// Small print under a row, in Dust.
@@ -357,7 +376,9 @@ fn region_label(text: &mut Text, key: &str, key_w: i32) -> String {
 /// page; drawn at `y0` (negative when scrolled). Returns the height.
 fn paint_body(c: &mut Canvas, text: &mut Text, d: &PageData, art: Option<&Sprite>, look: Look, y0: i32) -> i32 {
     let con = d.console;
-    let (lx, rx) = (MARGIN, RIGHT_X);
+    // The second column starts where the console's picture does when the page is narrower than its design (a 1024 px screen's
+    // 1024 px): at RIGHT_X a strip 250 px wide was left for the hardware and the prices.
+    let (lx, rx) = (MARGIN, RIGHT_X.min(c.w - MARGIN - ART_W));
     let lw = rx - 28 - lx;
     let rw = c.w - MARGIN - rx;
     // Right column: the console on its colour (a system without a picture has no box), then the hardware and the
@@ -563,6 +584,50 @@ mod tests {
         let mut text = Text::new();
         let hits = page.paint(&mut Canvas::new(&mut px, w as u32, h as u32), &mut text, None, Some(&crate::status_corner::Corner::battery_only("64%")), Look::plain());
         (px, hits)
+    }
+
+    /// A 1024 px screen's Game Boy Advance page, 2026-11-03: "US$99.99" one character a line down a strip beside "North America".
+    /// No console's hardware, launch price or release may tear a word across lines, at any width the page meets and any
+    /// text size, in any column (`row_layout` gives the label column way, then stacks the value under its label).
+    #[test]
+    fn no_row_of_any_console_tears_a_word_whatever_the_width_and_the_text_size() {
+        use crate::type_scale::{self, TextSize};
+        let mut text = Text::builtin();
+        text.set_translate(false);
+        for size in [TextSize::Normal, TextSize::Medium, TextSize::Large] {
+            type_scale::set(size);
+            for w in [1024, 1152, 1240, 1440, 1920] {
+                let rx = RIGHT_X.min(w - MARGIN - ART_W);
+                let (lw, rw) = (rx - 28 - MARGIN, w - MARGIN - rx);
+                for con in consoles::all() {
+                    let mut rows: Vec<(i32, i32, String, String)> = Vec::new();
+                    for (k, v) in con.hardware() {
+                        rows.push((150, rw, k.to_string(), v));
+                    }
+                    for (region, price) in &con.launch_price {
+                        let label = region_label(&mut text, region, 230);
+                        rows.push((230, rw, label, price.to_string()));
+                    }
+                    for (region, date) in con.releases() {
+                        let label = region_label(&mut text, &region, 200);
+                        rows.push((200, lw, label, consoles::readable_date(&date)));
+                    }
+                    for (key_w, room, label, value) in rows {
+                        let (_, lines, _) = row_layout(&mut text, key_w, room, &label, &value);
+                        let got: Vec<&str> = lines.iter().flat_map(|l| l.split_whitespace()).collect();
+                        let want: Vec<&str> = value.split_whitespace().collect();
+                        assert_eq!(got, want, "{} at {w} px, {size:?}: {label:?} = {value:?} broke a word: {lines:?}", con.name);
+                    }
+                }
+            }
+        }
+        type_scale::set(TextSize::Normal);
+        // The strip of the console photo on a 1024 px screen: 252 px beside a 230 px label column left 22 px for the price.
+        let mut text = Text::builtin();
+        text.set_translate(false);
+        assert!(text.wrap_prose(Face::Body, 28, "US$99.99", 22).len() > 3, "that was the fault: a character a line");
+        let (_, lines, _) = row_layout(&mut text, 230, 252, "North America", "US$99.99");
+        assert_eq!(lines, ["US$99.99"], "the label column gives way and the price stays on one line");
     }
 
     #[test]

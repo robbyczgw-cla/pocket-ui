@@ -4,6 +4,14 @@
 
 use crate::pad::Button;
 
+/// The name of Home's one-press entry, in one place (a rename is this line, `assets/i18n` and the docs). `feat/big-shelf`
+/// calls a whole look by this name; Alex decides which keeps it.
+pub const JUST_PLAY: &str = "Just Play";
+/// Its line under the name.
+pub const JUST_PLAY_LINE: &str = "Less browsing. More playing.";
+/// Its short text where a look has room for one word or two (Split's panel, a card, a spine).
+pub const JUST_PLAY_SIDE: &str = "One press";
+
 /// One entry of the shelf, the lists of a system or Favorites.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Item {
@@ -35,6 +43,9 @@ pub enum Item {
     /// Curator → Rediscover (`app_connections`): the games played a year ago today and those not played for a year; in
     /// the Curator list while there are any.
     Rediscover,
+    /// "Just Play" on Home (`with_just_play`): A starts a suitable game at once, nothing to choose (docs/CURATOR.md
+    /// "Just Play", `Index::just_play`). Not a Curator row: it opens nothing and goes with the Curator switch.
+    JustPlay,
     /// "Search", the first row of Home in the list looks (`with_search`): opens the game search (`search_page`).
     Search,
 }
@@ -82,9 +93,19 @@ impl Item {
         items
     }
 
+    /// Puts "Just Play" right above Continue (after Curator and Search on top of the list looks; first on the cabinet's
+    /// Continue shelf, one case left of the last game), when `on`. Home still opens on the row after it (`first_row`).
+    pub fn with_just_play(mut items: Vec<Item>, on: bool) -> Vec<Item> {
+        if on && !items.contains(&Item::JustPlay) {
+            let at = items.iter().take_while(|i| matches!(i, Item::Curator | Item::Search)).count();
+            items.insert(at, Item::JustPlay);
+        }
+        items
+    }
+
     /// The row a list opens on: the one after the rows on top of Home (Curator, Search), else the first.
     pub fn first_row(items: &[Item]) -> usize {
-        let top = items.iter().take_while(|i| matches!(i, Item::Curator | Item::Search)).count();
+        let top = items.iter().take_while(|i| matches!(i, Item::Curator | Item::Search | Item::JustPlay)).count();
         if top < items.len() {
             top
         } else {
@@ -211,6 +232,23 @@ mod tests {
                 assert_eq!(items.last(), Some(&Item::System(2)), "{theme:?}: the last system ends the list");
             }
         }
+    }
+
+    #[test]
+    fn just_play_stands_right_above_continue_and_home_still_opens_on_continue() {
+        let home = Item::home([0usize, 1].into_iter(), true, 0..3);
+        // List looks: Curator, Search, Just Play, then Continue.
+        let list = Item::with_just_play(Item::with_search(Item::with_curator(home.clone(), vec![Item::Curator], true), true), true);
+        assert_eq!(&list[..3], &[Item::Curator, Item::Search, Item::JustPlay]);
+        assert_eq!(list[Item::first_row(&list)], Item::Recent(0), "Home opens on Continue, Just Play is one press up");
+        assert_eq!(Item::with_just_play(list.clone(), true), list, "not twice");
+        // The cabinet has no top rows: Just Play is its first case, Home opens on the one after it.
+        let cab = Item::with_just_play(home.clone(), true);
+        assert_eq!((cab[0], cab[Item::first_row(&cab)]), (Item::JustPlay, Item::Recent(0)));
+        // Off (Curator's switch, Kids Mode): nothing changes.
+        assert_eq!(Item::with_just_play(home.clone(), false), home);
+        // A card with nothing else on Home: it opens on the row after Just Play, or on it when it is alone.
+        assert_eq!(Item::first_row(&[Item::JustPlay]), 0);
     }
 
     #[test]

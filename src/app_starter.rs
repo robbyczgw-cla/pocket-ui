@@ -473,7 +473,7 @@ impl App {
     pub(crate) fn paint_empty_home_around(&mut self, c: &mut Canvas, with_hints: bool) {
         match self.theme {
             crate::Theme::Shelf => self.paint_empty_shelf(c),
-            crate::Theme::Minimal | crate::Theme::Split | crate::Theme::Cards | crate::Theme::Cabinet => {}
+            crate::Theme::Minimal | crate::Theme::Split | crate::Theme::Cards | crate::Theme::Cabinet | crate::Theme::Big => {}
         }
         let dy = pocket_ui::ui_art::above_words(c, pocket_ui::ui_art::Art::NoGames, MARGIN, false, EMPTY_ART_TOP, 300, 50);
         self.text.draw(c, Face::Title, 50, MARGIN, 300 + dy, pal().chalk, "No games yet");

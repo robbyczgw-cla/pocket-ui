@@ -123,6 +123,57 @@ impl Drop for Card {
     }
 }
 
+/// New-player walk 2026-11-02: the list of recent games had five names. The button, the screen and the pause menu's hint say
+/// one: Recent games.
+#[test]
+fn the_list_of_recent_games_has_one_name() {
+    let card = Card::new("recent-games");
+    for size in ["normal", "large"] {
+        let switcher = card.shot("switcher", size);
+        assert!(switcher.contains("Recent games"), "{size}: {switcher}");
+        assert!(!switcher.contains("Recently played") && !switcher.contains("Switch game"), "{size}: {switcher}");
+        let pause = card.shot("menu:pocket-core", size);
+        assert!(pause.contains("Recent games"), "{size}: the pause menu's SELECT hint: {pause}");
+        assert!(!pause.contains("Games\n") || pause.contains("Recent games"), "{size}: {pause}");
+    }
+}
+
+/// New-player walk 2026-11-02: the pause menu had two ways to the quick settings (a row and START), and its Options pages
+/// did not say where you were.
+#[test]
+fn the_pause_menu_has_one_way_to_the_quick_settings_and_its_options_pages_have_titles() {
+    let card = Card::new("pause-options");
+    for size in ["normal", "large"] {
+        let main = card.shot("menu:pocket-core", size);
+        assert_eq!(main.matches("Quick settings").count(), 1, "{size}: START's hint is the one way: {main}");
+        for (state, title) in [
+            ("options", "Options"),
+            ("picture", "Options \u{203a} Picture"),
+            ("extras", "Options \u{203a} Speed, rumble, fan"),
+            ("shortcuts", "Options \u{203a} Shortcuts"),
+            ("save", "Options \u{203a} Save changes"),
+        ] {
+            let page = card.shot(state, size);
+            assert!(page.lines().any(|l| l.trim() == title), "{size} {state}: the title {title:?}: {page}");
+        }
+    }
+}
+
+/// The first start's profile "Simple" was neither simple nor the same as skipping once changed later: it is The shelf, with a
+/// line of what it gets, and from Help & tools it says what it sets back.
+#[test]
+fn the_default_profile_is_the_shelf_and_says_what_picking_it_later_does() {
+    let card = Card::new("profile-shelf");
+    for size in ["normal", "large"] {
+        let first = card.shot("setup:play", size);
+        assert!(first.contains("The shelf") && first.contains("Your games on a shelf, as it comes."), "{size}: {first}");
+        assert!(!first.contains("Simple") && !first.contains("Picked now"), "{size}: the first start: nothing to set back yet: {first}");
+        let later = card.shot("setup:play-later", size);
+        assert!(later.contains("The shelf") && later.contains("Picked now") && later.contains("On start"), "{size}: {later}");
+        assert!(!later.contains("Simple"), "{size}: {later}");
+    }
+}
+
 #[test]
 fn a_typo_still_finds_the_game() {
     let card = Card::new("typo");
@@ -383,6 +434,25 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         assert!(!shelf.contains("Please ask a grown-up"), "{shelf}");
     }
 
+    /// New-player walk 2026-11-02: HOME did nothing in Settings. It now leaves for Home from the plain pages, and keeps
+    /// out of a page that has something under way (the Updates page while it checks or downloads).
+    #[test]
+    fn home_in_settings_goes_home_unless_something_is_under_way() {
+        let mut d = Driver::new("home-in-settings", true);
+        d.sees("Game Boy");
+        d.send("start");
+        d.sees("Sound & feel");
+        // Two levels down: a category's list.
+        d.send("a");
+        d.sees("Appearance");
+        d.send("home");
+        let shelf = d.sees("Game Boy");
+        assert!(!shelf.contains("Sound & feel") && !shelf.contains("Appearance"), "HOME leaves Settings for Home: {shelf}");
+        // Quick settings are still HOME's on the shelf itself.
+        d.send("home");
+        d.sees("Brightness");
+    }
+
     /// A game moved to RetroArch before the mode went on (`fallback.json`): it isn't started there.
     #[test]
     fn a_childs_game_routed_to_retroarch_does_not_start() {
@@ -421,7 +491,7 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         d.sees("Choose a look");
         d.send("a");
         d.sees("How do you like to play?");
-        for _ in 0..3 {
+        for _ in 0..4 {
             d.send("down");
         }
         d.send("a");
@@ -447,7 +517,7 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         let ready = d.sees("Next you add games, then pick them.");
         assert!(!ready.contains("Hand it over"), "{ready}");
         d.send("a");
-        for page in ["Time zone", "Extras", "Add your games", "You're all set"] {
+        for page in ["Time zone", "Pictures & extras", "Add your games", "You're all set"] {
             d.send("start");
             d.sees(page);
         }
@@ -591,6 +661,93 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         assert!(!text.contains("Ghost") && !text.contains("README"), "{text}");
     }
 
+    /// Seen on a device: Y on Easy's shelf moved the selection to the favourite's copy in front.
+    #[test]
+    fn a_star_in_just_play_leaves_the_game_where_it_stands() {
+        let mut ui = Driver::start("just-play-star", true, |tmp, _| {
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"motion":"off","art":"off","theme":"big"}"#).unwrap();
+        });
+        ui.sees("Quick settings");
+        ui.send("right");
+        let before = ui.sees(" of ");
+        let place = before.lines().find(|l| l.contains(" of ")).unwrap().to_string();
+        ui.send("y");
+        ui.sees("Added to Favourites");
+        let after = ui.frame();
+        assert!(after.contains(&place), "still {place}: {after}");
+        std::thread::sleep(Duration::from_secs(2));
+        let later = ui.frame();
+        assert!(later.contains(&place), "still {place} when all has settled: {later}");
+    }
+
+    /// Quick settings are HOME's on Easy's shelf, as on Home in the other looks; B does nothing there and no hint names it.
+    #[test]
+    fn on_the_easy_shelf_home_opens_quick_settings_and_b_does_nothing() {
+        let mut ui = Driver::start("easy-home", true, |tmp, _| {
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"motion":"off","art":"off","theme":"big"}"#).unwrap();
+        });
+        let shelf = ui.sees("Quick settings");
+        assert!(shelf.contains("HOME") && !shelf.lines().any(|l| l == "B"), "{shelf}");
+        ui.send("b");
+        std::thread::sleep(Duration::from_millis(500));
+        let after = ui.frame();
+        assert!(after.contains("Details") && after.contains("Favourite"), "B leaves the shelf alone: {after}");
+        ui.send("home");
+        let quick = ui.sees("Brightness");
+        assert!(!quick.contains("Favourite"), "{quick}");
+        ui.send("b");
+        ui.sees("Favourite");
+    }
+
+    /// Easy has no game switcher, on purpose: SELECT on its shelf, and HOME + SELECT or SELECT in the pause screen in
+    /// a game, do nothing. The other looks keep all three (docs/BIG-SHELF.md "No game switcher").
+    #[test]
+    fn just_play_has_no_game_switcher_and_the_other_looks_keep_theirs() {
+        for (look, switcher) in [("big", false), ("shelf", true)] {
+            let mut ui = Driver::start(&format!("switcher-{look}"), true, |tmp, _| {
+                std::fs::write(tmp.join("data/settings.json"), format!(r#"{{"onboarded":true,"motion":"off","art":"off","theme":"{look}"}}"#)).unwrap();
+            });
+            ui.sees("Settings");
+            // SELECT on the shelf.
+            ui.send("select");
+            if switcher {
+                ui.sees("Nothing played yet");
+                ui.send("b");
+                ui.wait(|d| !d.frame().contains("Nothing played yet"));
+            } else {
+                std::thread::sleep(Duration::from_millis(600));
+                let text = ui.frame();
+                assert!(!text.contains("Nothing played yet") && !text.contains("No recent games"), "{text}");
+                assert!(text.contains("Quick settings"), "still the shelf: {text}");
+            }
+            // A game, then the pause screen and SELECT there.
+            ui.send(if switcher { "a\na" } else { "a" });
+            ui.wait(|d| matches!(std::fs::read_to_string(d.card.tmp.join("run-game.started")).as_deref(), Ok("started\n")));
+            ui.send("home");
+            ui.sees("Continue");
+            ui.send("select");
+            if switcher {
+                ui.sees("Now playing");
+            } else {
+                std::thread::sleep(Duration::from_millis(600));
+                let text = ui.frame();
+                assert!(!text.contains("Now playing") && text.contains("Continue"), "{text}");
+            }
+            // HOME held and SELECT pressed in the running game: back to the game first.
+            ui.send(if switcher { "b\nb" } else { "a" });
+            ui.wait(|d| !d.frame().contains("Continue"));
+            ui.send("homedown\nselect");
+            if switcher {
+                ui.sees("Now playing");
+            } else {
+                std::thread::sleep(Duration::from_millis(600));
+                let text = ui.frame();
+                assert!(!text.contains("Now playing") && !text.contains("Continue"), "nothing opened: {text}");
+            }
+            ui.send("homeup");
+        }
+    }
+
     #[test]
     fn start_a_mock_game_and_quit_back_to_the_library() {
         let mut ui = Driver::new("play-and-quit", true);
@@ -606,7 +763,7 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         let mut shelf = String::new();
         ui.wait(|d| {
             shelf = d.frame();
-            shelf.contains("Tobu Tobu Girl") && !shelf.contains("Quit") && !shelf.contains("Resume")
+            shelf.contains("Tobu Tobu Girl") && !shelf.contains("Quit") && !shelf.contains("Continue")
         });
         assert!(shelf.contains("Game Boy"), "{shelf}");
         // The stand-in has no core command pipe/window; the ordinary bounded Quit escalation ends it.
@@ -697,7 +854,7 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         ui.send(&format!("tap 0.5 {:.4}", row(2)));
         ui.frame();
         ui.send(&format!("tap 0.5 {:.4}", row(2)));
-        let text = ui.sees("Remember where I quit");
+        let text = ui.sees("Continue where I quit");
         assert!(!text.contains("Systems on the shelf"), "the Look list (the row that was selected) did not open: {text}");
     }
 
@@ -960,6 +1117,167 @@ true
         ui.send("a");
         let text = ui.sees("is empty");
         assert!(text.contains("Empty Demo") && !text.contains("BIOS"), "the notice names the game and the real reason: {text}");
+    }
+
+    /// Just Play (docs/CURATOR.md): A on its row starts exactly one game from Home, nothing else in between. The card is
+    /// the default one (Curator on, no history); the index is made on a thread, so A is pressed until a game is on its way.
+    fn just_play_press(ui: &mut Driver) {
+        let started = ui.card.tmp.join("run-game.started");
+        for _ in 0..60 {
+            ui.send("a");
+            let until = Instant::now() + Duration::from_millis(250);
+            while Instant::now() < until {
+                if started.exists() || ui.log().contains("curator: just play") || ui.log().contains("just play found no game") {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+        panic!("Just Play never answered:\n{}", ui.log());
+    }
+
+    /// Home takes buttons after a failed start: down moves off the row (the notice covers the screen's text for its 8
+    /// seconds, so the frame shows the system once it has gone). A game that started and ended puts Home back on its
+    /// first row, a start that never happened leaves it on Just Play: down lands on a system either way.
+    fn home_answers(ui: &mut Driver) {
+        ui.send("down");
+        ui.wait(|d| {
+            let text = d.frame();
+            (text.contains("Game Boy") || text.contains("Sega CD")) && !text.contains("didn't start")
+        });
+    }
+
+    fn launches(ui: &Driver) -> usize {
+        ui.log().lines().filter(|l| l.starts_with("launch ") && l.contains("(emulator")).count()
+    }
+
+    #[test]
+    fn one_press_on_just_play_starts_exactly_one_game() {
+        let mut ui = Driver::new("just-play", true);
+        ui.sees("Game Boy");
+        // Home opens on the first system; Just Play is the row right above Continue (one press up).
+        ui.send("up");
+        let row = ui.sees("Just Play");
+        assert!(row.contains("Less browsing. More playing."), "{row}");
+        just_play_press(&mut ui);
+        ui.wait(|d| d.card.tmp.join("run-game.started").exists());
+        std::thread::sleep(Duration::from_millis(500));
+        assert_eq!(launches(&ui), 1, "{}", ui.log());
+        assert!(ui.log().contains("curator: just play"), "{}", ui.log());
+        assert!(!ui.log().contains("fallback"), "{}", ui.log());
+    }
+
+    /// A game whose file is gone is passed over; when every file is gone it says so, starts nothing and Home stays usable.
+    #[test]
+    fn just_play_passes_over_a_missing_file_and_says_so_when_none_is_left() {
+        let mut ui = Driver::new("just-play-missing", true);
+        ui.sees("Game Boy");
+        ui.send("up");
+        ui.sees("Just Play");
+        std::fs::remove_file(ui.card.tmp.join("gb/Tobu Tobu Girl (World).gb")).unwrap();
+        just_play_press(&mut ui);
+        ui.wait(|d| d.card.tmp.join("run-game.started").exists());
+        assert_eq!(launches(&ui), 1, "{}", ui.log());
+        assert!(ui.log().contains("just play Pocket CD Demo") || ui.log().contains("segacd"), "the Sega CD game, not the missing one: {}", ui.log());
+        assert!(!ui.log().contains("Tobu Tobu Girl (World).gb (emulator"), "{}", ui.log());
+
+        let mut ui = Driver::new("just-play-none", true);
+        ui.sees("Game Boy");
+        ui.send("up");
+        ui.sees("Just Play");
+        std::fs::remove_file(ui.card.tmp.join("gb/Tobu Tobu Girl (World).gb")).unwrap();
+        std::fs::remove_file(ui.card.tmp.join("segacd/Pocket CD Demo (USA).cue")).unwrap();
+        just_play_press(&mut ui);
+        let text = ui.sees("None of the games tried would start");
+        assert!(text.contains("files may be gone"), "says why: {text}");
+        std::thread::sleep(Duration::from_millis(600));
+        assert!(!ui.card.tmp.join("run-game.started").exists() && launches(&ui) == 0, "{}", ui.log());
+        home_answers(&mut ui);
+    }
+
+    /// A start that fails (no emulator to run, or one that exits at once) ends in a plain notice, one start, no retry, and
+    /// Home is as it was.
+    #[test]
+    fn just_play_with_no_emulator_says_what_happened_and_does_not_retry() {
+        for (name, spawn_fails) in [("just-play-exits", false), ("just-play-no-emulator", true)] {
+            let mut ui = Driver::start(name, true, |tmp, _| {
+                if spawn_fails {
+                    let _ = std::fs::remove_file(tmp.join("run-game"));
+                } else {
+                    let _ = std::fs::remove_file(tmp.join("run-game"));
+                    executable(&tmp.join("run-game"), "#!/bin/sh\nprintf x >> \"$0.starts\"\nexit 1\n");
+                }
+            });
+            ui.sees("Game Boy");
+            ui.send("up");
+            ui.sees("Just Play");
+            just_play_press(&mut ui);
+            let text = ui.sees("didn't start");
+            assert!(text.contains("Pocket CD Demo") || text.contains("Tobu Tobu Girl"), "{name}: the notice names the game: {text}");
+            std::thread::sleep(Duration::from_secs(1));
+            assert_eq!(launches(&ui), 1, "{name}: one start, no retry loop\n{}", ui.log());
+            home_answers(&mut ui);
+        }
+    }
+
+    /// The review's case: the one game in progress belongs to a system whose emulator core is not on this device, and an
+    /// unplayed game is there. Just Play passes over the first (no start, no changed emulator choice) and starts the other.
+    #[test]
+    fn just_play_skips_a_game_whose_emulator_core_is_missing() {
+        let mut ui = Driver::start("just-play-route", true, |tmp, _| {
+            add_system(tmp, "gba", "Game Boy Advance", ".gba", &["Broken Route (World).gba"]);
+            let cfg = tmp.join("es_systems.cfg");
+            let text = std::fs::read_to_string(&cfg).unwrap().replace(
+                "<extension>.gba</extension>",
+                "<extension>.gba</extension><emulators><emulator name=\"retroarch\"><cores><core default=\"true\">sol_missing</core></cores></emulator></emulators>",
+            );
+            std::fs::write(&cfg, text).unwrap();
+            let game = tmp.join("gba/Broken Route (World).gba");
+            let lib = serde_json::json!({"version": 2, "games": {game.to_string_lossy(): {"status": "playing", "status_set": true, "sessions": 2, "secs": 3600}}});
+            std::fs::write(tmp.join("data/library.json"), lib.to_string()).unwrap();
+        });
+        ui.sees("Game Boy");
+        ui.send("up");
+        ui.sees("Just Play");
+        just_play_press(&mut ui);
+        ui.wait(|d| d.card.tmp.join("run-game.started").exists());
+        assert_eq!(launches(&ui), 1, "{}", ui.log());
+        assert!(!ui.log().contains("Broken Route"), "the game with no core is not started: {}", ui.log());
+        assert!(ui.log().contains("just play"), "{}", ui.log());
+    }
+
+    /// With Curator's Lens switch off Home has no Just Play row (Settings → Curator is where Curator's parts go off).
+    #[test]
+    fn just_play_goes_with_the_curator_switch() {
+        let mut ui = Driver::start("just-play-off", true, |tmp, _| {
+            std::fs::write(tmp.join("data/curator.json"), r#"{"lens":false}"#).unwrap();
+        });
+        ui.sees("Game Boy");
+        ui.send("up");
+        // Search is the row above the systems, nothing between.
+        let home = ui.sees("Find any game by its name");
+        assert!(!home.contains("Just Play"), "{home}");
+    }
+
+    /// Kids Mode has its own start: no Just Play row there.
+    #[test]
+    fn just_play_is_not_in_kids_mode() {
+        let mut d = kids_card_with_failing_game("just-play-kids", |_| {});
+        let shelf = d.sees("Tobu Tobu Girl");
+        assert!(!shelf.contains("Just Play"), "{shelf}");
+    }
+
+    /// Easy plays the game in front with A: no Just Play row there, and none after moving through its shelf.
+    #[test]
+    fn just_play_is_not_on_easy() {
+        let mut ui = Driver::start("just-play-easy", true, |tmp, _| {
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"motion":"off","art":"off","theme":"big"}"#).unwrap();
+        });
+        let first = ui.sees("Quick settings");
+        assert!(!first.contains("Just Play"), "{first}");
+        ui.send("right");
+        let next = ui.sees(" of ");
+        assert!(!next.contains("Just Play"), "{next}");
     }
 
     /// Settings → Games → Game check on a card with the usual slips: a copy of a game and no BIOS for Sega CD. It runs,

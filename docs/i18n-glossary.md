@@ -211,7 +211,7 @@ Extras, Sticker(s), Home, FPS, CPU, "Pocket" ("el Pocket", masculine); Little, B
 | Options (a game's); Picture, Shortcuts | Opciones; Imagen, Atajos | |
 | Over the game | Sobre el juego | what pocket-core draws over a game |
 | Screen frame(s); frames | Marco(s) de pantalla; marcos | |
-| Moment; Frozen, Frozen games | Momento; Congelado, Juegos congelados | |
+| Moment; Continue | Momento; Continuar | An open case means a moment is waiting; the word Frozen is gone from the player's words |
 | Runs on | Funciona con | |
 | Achievements | Logros | |
 | Smart shelf | Estante inteligente | |

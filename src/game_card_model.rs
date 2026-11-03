@@ -125,6 +125,8 @@ pub struct CardData {
     /// The facts that lead to the player's other games: (index into `facts`, where it leads), in the facts' order.
     /// A fact without one is plain text, never a way into an empty list (`app_connections`).
     pub links: Vec<(usize, CardLink)>,
+    /// Opened from Easy: only the picture, the sentence, year, players and time played, and nothing to change here.
+    pub plain: bool,
 }
 
 /// A game's save slots as the card shows them, read-only.

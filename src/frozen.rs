@@ -1,6 +1,6 @@
 //! **Frozen games** (docs/user/playing.md "Frozen games"): the last games with a moment to go back to stand a little open
 //! on the shelf, and A on one is back in that moment without a word in between. Nothing here runs or keeps a game: it is
-//! the moment Quit or sleep already wrote (`states`, Settings > Remember where I quit), the recent games and the normal
+//! the moment Quit or sleep already wrote (`states`, Settings > Continue where I quit), the recent games and the normal
 //! start, which loads it as it always does. So there is no new way to load a state, and nothing new on the card but a
 //! few words beside the game in `recents.json` ([`Mark`]).
 //!
@@ -226,6 +226,12 @@ pub fn scan(games: &[Game]) -> Vec<PathBuf> {
     games.iter().filter(|g| is_frozen(g, &resume_files(g))).take(MOST).map(|g| g.path.clone()).collect()
 }
 
+/// Every game of `games` the next start would resume, without [`MOST`]'s limit: what Easy's word and open case say.
+#[cfg(not(target_os = "android"))]
+pub fn moments(games: &[Game]) -> Vec<PathBuf> {
+    games.iter().filter(|g| is_frozen(g, &resume_files(g))).map(|g| g.path.clone()).collect()
+}
+
 /// What `launch` does differently for a game with a moment it can't go back to. Everything else is the normal start.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AtLaunch {
@@ -299,6 +305,28 @@ pub fn available() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The sixth game with a moment: it stands open for Easy, the others' limit of five stays theirs.
+    #[test]
+    fn every_usable_moment_counts_past_the_five_that_stand_open() {
+        let d = tempfile::tempdir().unwrap();
+        let games: Vec<Game> = (0..7)
+            .map(|i| {
+                let (rom, auto) = (d.path().join(format!("{i}.iso")), d.path().join(format!("{i}.state")));
+                std::fs::write(&rom, b"game").unwrap();
+                // The last one has no state on the card.
+                if i < 6 {
+                    std::fs::write(&auto, b"state").unwrap();
+                }
+                let mark = Mark::new("emu", "core", &rom, Some(auto));
+                Game { system: "ps2".into(), path: rom, emulator: "emu".into(), core: "core".into(), mark }
+            })
+            .collect();
+        assert_eq!(scan(&games).len(), MOST);
+        assert_eq!(moments(&games).len(), 6);
+        assert!(!moments(&games).contains(&games[6].path));
+    }
+
     use crate::testutil::TestDir;
 
     fn game(emulator: &str, core: &str, path: PathBuf, mark: Option<Mark>) -> Game {
@@ -312,6 +340,21 @@ mod tests {
         std::fs::write(&rom, b"rom").unwrap();
         let state = d.join("Game.pstate.auto");
         (d, rom, state)
+    }
+
+    /// Continue where I quit is off: a Quit leaves the older moment at `slots::retry_auto_path` (`Core::keep_resume_point`),
+    /// where Load finds it and no start takes it. So the shelf must not stand the game open for it, nor say Continue.
+    #[cfg(not(target_os = "android"))]
+    #[test]
+    fn a_moment_left_for_load_is_not_a_waiting_moment() {
+        let g = game("pocket-core", "mgba", PathBuf::from("/storage/roms/gba/Game.gba"), None);
+        let files = resume_files(&g);
+        let auto = crate::slots::auto_path(&crate::slots::base("gba", "Game"));
+        assert!(files.contains(&auto) && files.contains(&crate::slots::taken_auto_path(&auto)), "what a start takes: {files:?}");
+        assert!(!files.contains(&crate::slots::retry_auto_path(&auto)), "what Load lists and no start takes: {files:?}");
+        // Load still lists it as Where I quit.
+        let set = crate::states::StateSet::pocket_core(&crate::slots::base("gba", "Game"));
+        assert!(set.auto.contains(&crate::slots::retry_auto_path(&auto)));
     }
 
     #[test]

@@ -1254,21 +1254,30 @@ impl Core {
         [MEMORY_SAVE_RAM, MEMORY_RTC].map(|id| memory_of(&mut self.lib, id).map(|m| m.to_vec()))
     }
 
-    /// Quit without saving (the pause menu's "Quit without saving"; the battery save is written as on every
-    /// exit, `write_sram` first): no new auto-resume state, so the state this session resumed from goes back to
-    /// `auto` and the next start continues from the last saving quit again, as often as the player quits this
-    /// way. Nothing is put back when a state was written in the session since (before a sleep): that is the
-    /// newer resume point. A state that lost to a newer battery save (`Resume::SaveIsNewer`) is dropped instead:
-    /// it would lose again at every start. Its time is kept, so `resume` still sees a battery save written in
-    /// this session as the newer one and doesn't roll it back.
+    /// Quit without saving (the pause menu's "Quit" with Continue where I quit off; the battery save is written as on
+    /// every exit, `write_sram` first): no new auto-resume state, and the one this session resumed from is not the next
+    /// start's either: it moves to `slots::retry_auto_path`, where nothing starts from it but Load still lists it as
+    /// Auto, so the next start is as if no moment had been kept. Nothing is moved when a state was written in the
+    /// session since (before a sleep): that is the newer resume point. A state that lost to a newer battery save
+    /// (`Resume::SaveIsNewer`) is dropped instead: it would lose again at every start. Its time is kept, so `resume`
+    /// still sees a battery save written in this session as the newer one and doesn't roll it back.
     pub fn keep_resume_point(&mut self, auto: &Path) {
         let Some((how, taken)) = self.taken.take() else { return };
         if auto.exists() || !taken.exists() {
             return;
         }
         match how {
+            // The older moment is not the next start's (Continue where I quit is off: the game starts as it would
+            // without one), but it stays for Load, under the name a state given up on has (`StateSet::pocket_core`).
             Resume::Resumed | Resume::ResumedAgain => {
-                let _ = std::fs::rename(&taken, auto);
+                let retry = crate::slots::retry_auto_path(auto);
+                if taken != retry {
+                    // If this fails the state stays where it was and the next start may continue from it, as before: an
+                    // inconvenience, never a loss.
+                    if let Err(e) = std::fs::rename(&taken, &retry) {
+                        eprintln!("quit without saving: couldn't park {} for Load only: {e}", taken.display());
+                    }
+                }
             }
             Resume::SaveIsNewer => {
                 let _ = std::fs::remove_file(&taken);
@@ -1276,6 +1285,11 @@ impl Core {
             }
             Resume::NoState | Resume::Failed => {}
         }
+    }
+
+    /// From the start: the console's reset button. The battery save stays as it is.
+    pub fn restart(&self) {
+        self.reset();
     }
 
     /// retro_reset: the console's reset button.
@@ -2229,13 +2243,22 @@ bool retro_unserialize(const void *d, size_t n) {
         set_sram(&mut core, b"SAVE-B");
         g.quit_without_saving(core);
         assert_eq!(g.saved(), "SAVE-B", "the battery save is written as on every exit");
-        // Session 3: the older state from session 1 must not bring back A, on disk or in the game.
+        // Session 3: the older moment from session 1 is not the start, so A is not brought back, on disk or in the game.
         let (mut core, r) = g.start();
-        assert_eq!(r, Resume::SaveIsNewer, "the auto state is older than the in-game save of session 2");
-        assert_eq!((position(&core), sram(&mut core).as_str()), (0, "SAVE-B"), "a fresh start with the newer save");
+        assert_eq!((r, position(&core), sram(&mut core).as_str()), (Resume::NoState, 0, "SAVE-B"), "a fresh start with the newer save");
         core.write_sram().unwrap();
-        assert_eq!(g.saved(), "SAVE-B", "the battery save on disk is rolled back");
-        // Quitting without saving again drops the state that lost: it would lose (and say so) at every start.
+        assert_eq!(g.saved(), "SAVE-B");
+    }
+
+    #[test]
+    fn quit_without_saving_drops_a_state_that_lost_to_a_newer_in_game_save() {
+        let _l = globals();
+        let g = Game::new("nosave-lost", "srm");
+        first_session(&g);
+        put_battery_save(&g, b"SAVE-B", 30);
+        let (core, r) = g.start();
+        assert_eq!(r, Resume::SaveIsNewer, "the auto state is older than the in-game save");
+        // It would lose (and say so) at every start, so it is not kept at all, not even for Load.
         g.quit_without_saving(core);
         assert!(!g.state.exists() && !g.taken().exists() && !g.retry().exists());
         let (mut core, r) = g.start();
@@ -2243,30 +2266,40 @@ bool retro_unserialize(const void *d, size_t n) {
     }
 
     #[test]
-    fn quit_without_saving_resumes_from_the_last_saving_quit() {
+    fn quit_without_saving_leaves_the_older_moment_for_load_not_for_the_next_start() {
         let _l = globals();
         let g = Game::new("nosave", "srm");
         first_session(&g);
-        // Two sessions in a row end without saving: both times the next start is where session 1 quit.
-        for _ in 0..2 {
-            let (mut core, r) = g.start();
-            assert_eq!(r, Resume::Resumed);
-            assert_eq!((position(&core), sram(&mut core).as_str()), (5, "SAVE-A"));
-            play(&core, 20);
-            g.quit_without_saving(core);
-            assert!(g.state.exists() && !g.taken().exists() && !g.retry().exists());
-            assert_eq!(g.saved(), "SAVE-A");
-        }
-        // A saving quit after that moves the resume point on.
+        // Session 2 continues from session 1's quit, plays on and quits without saving.
+        let (mut core, r) = g.start();
+        assert_eq!((r, position(&core), sram(&mut core).as_str()), (Resume::Resumed, 5, "SAVE-A"));
+        play(&core, 20);
+        g.quit_without_saving(core);
+        assert!(!g.state.exists() && !g.taken().exists(), "nothing for the next start to take");
+        assert!(g.retry().exists(), "the older moment stays on the card");
+        assert_eq!(g.saved(), "SAVE-A");
+        // Load still lists it as Auto, with its picture's place, and it is the moment of session 1.
+        let set = crate::states::StateSet::pocket_core(&g.dir.join("Game"));
+        assert_eq!(set.path(crate::states::Target::Auto), Some(g.retry().as_path()));
+        assert!(set.load_targets().contains(&crate::states::Target::Auto));
+        // Session 3 starts as the game does without a moment, and Load brings the old one back.
+        let (core, r) = g.start();
+        assert_eq!((r, position(&core)), (Resume::NoState, 0));
+        core.load_state(&std::fs::read(g.retry()).unwrap()).unwrap();
+        assert_eq!(position(&core), 5, "the moment of session 1");
+        // A second quit without saving changes nothing about it; a saving quit replaces it as any Auto is replaced.
+        g.quit_without_saving(core);
+        assert!(g.retry().exists() && !g.state.exists());
         let (core, _) = g.start();
         play(&core, 2);
         g.quit(core);
+        assert!(g.state.exists() && !g.retry().exists());
         let (core, r) = g.start();
-        assert_eq!((r, position(&core)), (Resume::Resumed, 7));
+        assert_eq!((r, position(&core)), (Resume::Resumed, 2));
     }
 
     #[test]
-    fn quit_without_saving_after_a_crash_keeps_the_state_tried_again() {
+    fn quit_without_saving_after_a_crash_leaves_the_state_tried_again_for_load() {
         let _l = globals();
         let g = Game::new("nosave-again", "srm");
         first_session(&g);
@@ -2275,9 +2308,50 @@ bool retro_unserialize(const void *d, size_t n) {
         let (core, r) = g.start();
         assert_eq!(r, Resume::ResumedAgain);
         g.quit_without_saving(core);
-        // The state loaded fine this time: it is the resume point again, not a last try.
+        // It was in the retry place already: it stays there, and the next start is fresh.
+        assert!(g.retry().exists() && !g.state.exists() && !g.taken().exists());
         let (core, r) = g.start();
+        assert_eq!((r, position(&core)), (Resume::NoState, 0));
+    }
+
+    #[test]
+    fn from_the_start_only_restarts_and_the_moment_on_disk_stays_until_the_next_quit() {
+        let _l = globals();
+        let g = Game::new("start-over", "srm");
+        first_session(&g);
+        let (mut core, r) = g.start();
         assert_eq!((r, position(&core)), (Resume::Resumed, 5));
+        play(&core, 20);
+        set_sram(&mut core, b"SAVE-B");
+        core.write_sram().unwrap();
+        let before: Vec<_> = std::fs::read_dir(&g.dir).unwrap().map(|e| e.unwrap().file_name()).collect();
+        core.restart();
+        assert_eq!(position(&core), 0, "the game begins again");
+        assert_eq!(sram(&mut core), "SAVE-B", "its own save stays");
+        let after: Vec<_> = std::fs::read_dir(&g.dir).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(before, after, "no file written, none removed");
+        // Playing on and quitting replaces the waiting moment, as it always does.
+        play(&core, 3);
+        g.quit(core);
+        let (core, r) = g.start();
+        assert_eq!((r, position(&core)), (Resume::Resumed, 3));
+    }
+
+    #[test]
+    fn a_parking_that_fails_keeps_todays_behaviour_for_that_start_and_loses_nothing() {
+        let _l = globals();
+        let g = Game::new("nosave-obstructed", "srm");
+        first_session(&g);
+        let (mut core, r) = g.start();
+        assert_eq!(r, Resume::Resumed);
+        play(&core, 20);
+        // Something is in the way of the retry name, so the rename fails.
+        std::fs::create_dir_all(g.retry()).unwrap();
+        core.write_sram().unwrap();
+        core.keep_resume_point(&g.state);
+        assert!(g.taken().exists(), "the moment is still there");
+        let (core, r) = g.start();
+        assert_eq!((r, position(&core)), (Resume::ResumedAgain, 5), "as before this change, for that one start");
     }
 
     #[test]

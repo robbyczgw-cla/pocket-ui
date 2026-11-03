@@ -16,10 +16,10 @@ Screen frames and the like change with A or Left/Right, right in the list.
 |---|---|
 | **Look** | Look, Appearance, Colours, Font, Text size, Night light, Systems on the shelf, Cozy extras. See [Look](#look) |
 | **Sound & feel** | Animations, Playful cases, Old-TV switch-on, Motion, Sounds, Case sounds, Haptics, LEDs. See [Sound & feel](#sound--feel) |
-| **Playing** | On start, Remember where I quit, Buttons, Over the game, Screen frames, Performance & fan, Battery, RetroAchievements. See [Playing](#playing) |
+| **Playing** | On start, Continue where I quit, Buttons, Over the game, Screen frames, Performance & fan, Battery, RetroAchievements. See [Playing](#playing) |
 | **Games** | Add games, Game check, Starter pack, Pictures & extras, From EmulationStation, Screenshots, Curator, PC streaming. See [Games](#games) |
 | **Connections** | Wi-Fi, Bluetooth, Tailscale, Sync, Remote access (SSH), Web companion. See [Connections](settings-system.md#connections) |
-| **System** | Language, Time, Sleep & power, Frozen games, Kids mode, Updates, Storage, Backup & reset. See [System](settings-system.md#system) |
+| **System** | Language, Time, Sleep & power, Kids mode, Updates, Storage, Backup & reset. See [System](settings-system.md#system) |
 | **Help & tools** | How you like to play, Tour, Manual, Tools, Store (only on a device with a store set up), Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
 
 The second half of Settings, [Connections, System and Help & tools](settings-system.md), has its own page.
@@ -39,7 +39,7 @@ Settings → **Look**. How pocket-ui looks. Every choice has a row of its own; t
 
 | Entry | What it holds |
 |---|---|
-| **Look** | Shelf, Cabinet, Minimal, Cards or Split, each a live preview of your own shelf. See [Choose a look](#choose-a-look) |
+| **Look** | Shelf, Easy, Minimal, Split, Cards or Cabinet, each a live preview of your own shelf. See [Choose a look](#choose-a-look) |
 | **Appearance** | **Dark** (the default), **Light** or **Automatic**. A or Left/Right switches it. See [Appearance](#appearance) |
 | **Colours** | The colours of every page: Warm, Indigo Cube, Grey Brick, Green X or Blue Station. A or Left/Right switches it. See [Colours and font](theme.md) |
 | **Font** | The type of every screen: Barlow, Pixel or Rounded. A or Left/Right switches it. See [Colours and font](theme.md#font) |
@@ -52,7 +52,7 @@ Settings → **Look**. How pocket-ui looks. Every choice has a row of its own; t
 
 Settings → Look → **Look** is the first start's look step: a scaled-down picture of your shelf in each look, drawn by
 the shelf itself with a few of your systems and one game (with its box art when it has one; on an SD card without
-games, a built-in set of "Sample game"s). Left/Right or Up/Down switch between the five looks, and the shelf
+games, a built-in set of "Sample game"s). Left/Right or Up/Down switch between the six looks, and the shelf
 behind Settings takes the look at once; A keeps the one shown. See [Playing](playing.md#looks) for what each look
 does. Under the preview are the [appearance](#appearance), the [motion](#motion) and the [animations](#animations)
 in use. The hint bar names the shortcuts on this page: **Y** switches the appearance, **R1** the motion, **L1** the
@@ -186,13 +186,12 @@ not others. Up/Down move, A (or Left/Right) switches the selected one **On** or 
 kept across restarts. The line under the list says what the selected one does and in which looks you see it. Reset
 settings (System → Backup & reset) puts them back as they start. The extras you hear or that move are entries of
 [Sound & feel](#sound--feel) (Playful cases, Old-TV switch-on, Case sounds); the slideshow before the screen goes off
-is in System → [Sleep & power](quick-settings.md#sleep--power-settings), and [Frozen games](#frozen-games) has its own row in
-System.
+is in System → [Sleep & power](quick-settings.md#sleep--power-settings).
 
 | Extra | What it does | Start |
 |---|---|---|
 | **TV on the cabinet** | A small old TV on top of the cabinet shows the selected game. Cabinet look only | On |
-| **Stickers on cases** | Your stickers on the cases. Off hides them on the shelf and the box; they stay on the game and on its card's Stickers row. Shelf and Cabinet looks only | On |
+| **Stickers on cases** | Your stickers on the cases. Off hides them on the shelf and the box; they stay on the game and on its card's Stickers & labels row. Shelf and Cabinet looks only | On |
 | **Printed discs** | Discs printed with their cover's art and title. Off: a plain disc in its console's colour. Shelf and Cabinet looks only | On |
 | **Memory card in the pause menu** | Save and Load in the pause menu show the game's whole memory card or cartridge with its blocks instead of the slim row of blocks. The info page and the box's back always show it | Off |
 | **Light by time of day** | The room's light follows your Pocket's clock: cool and bright in the morning, warm in the evening with the lamp glowing, dim at night. Very gentle: covers and text keep their colours. Shelf and Cabinet looks only | On |
@@ -221,7 +220,7 @@ Settings → **Playing**. What happens when you start and quit, the buttons, how
 | Entry | What it holds |
 |---|---|
 | **On start** | What you see when the Pocket starts: **Home** (the default) or **Last game**, straight back into the game you played last. A or Left/Right switches it. See [On start](#on-start) |
-| **Remember where I quit** | Whether the pause menu's Quit keeps the moment you are at for the next start: **On** (the default) or **Off**, only the game's own saves. A switches it. See [Remember where I quit](#remember-where-i-quit) |
+| **Continue where I quit** | Whether the pause menu's Quit keeps the moment you are at for the next start: **On** (the default) or **Off**, only the game's own saves. A switches it. See [Continue where I quit](#continue-where-i-quit) |
 | **Buttons** | Which face button confirms in pocket-ui's menus, and how the buttons look in the hints, with a picture of the four buttons. See [Buttons](#buttons) |
 | **Over the game** | The frame rate, the sensors or Pixel Path's line over every game, or nothing (the default). See [Over the game](#over-the-game) |
 | **Screen frames** | Where a game gets a frame when you haven't chosen one: **Off** (the default), **Handhelds** or **Every console**. A or Left/Right switches it. See [Screen frames](#screen-frames) |
@@ -245,34 +244,25 @@ device shut down unexpectedly, or after an update of pocket-ui.
 A game you left by **Power off** in the power menu opens again at the next start whatever this setting says,
 as described under [Sleep and power](quick-settings.md#sleep-and-power).
 
-### Remember where I quit
+### Continue where I quit
 
-Settings → Playing → **Remember where I quit** decides what the pause menu's **Quit** does with the moment you are at. A
+Settings → Playing → **Continue where I quit** decides what the pause menu's **Quit** does with the moment you are at. A
 switches it.
 
 - **On**, the default: Quit saves the moment ("Saving and quitting…"). The next start of the game, and
   **Last game** under [On start](#on-start), continue from there.
 - **Off**: Quit writes only the game's own saves (its save feature, memory cards) and leaves the moment out
-  ("Quitting…"). The next start continues from the moment of your last Quit with the switch on, or of the last
-  sleep, as if this session had not happened. The details per emulator are in
-  [The pause menu](pause-menu.md#the-pause-menu-home).
+  ("Quitting…"). On pocket-ui's own host the next start is as if no moment had been kept; the older moment stays
+  under **Load** as **Where I quit**, until a Quit saves a new one. On PlayStation 2, GameCube, Wii and 3DS the next start still
+  continues from the moment of your last Quit with the switch on. A moment saved by sleep counts as that last Quit. The
+  details per emulator are in [The pause menu](pause-menu.md#the-pause-menu-home).
 
 This is how NextUI and MinUI quit: their in-game menu has one Quit that writes the game's own saves, and they keep a
 moment to resume only when the device sleeps or switches off. With the switch off, the Pocket does the same.
 
-### Frozen games
-
-Settings → System → **Frozen games** (on at the start; A switches it) lets your last five games with a saved moment stand
-a little open on the shelf, and A on one goes straight back to that moment. It takes nothing new: only the moment that
-[Remember where I quit](#remember-where-i-quit) and sleep already keep. How it looks and what it can't do:
-[Frozen games](frozen-games.md#frozen-games).
-
-With Remember where I quit off, a Quit freezes nothing new, and this row says so. Moments from before and from sleep still
-show, and A goes back to those.
-
 The switch applies to pocket-ui's own host and to PlayStation 2, GameCube, Wii and 3DS. **RetroArch games still save
 the moment on Quit** with the switch off: ROCKNIX sets RetroArch to save on every exit, and RetroArch has no way to
-leave it out. Sleep, Power off and the [game switcher](playing.md#game-switcher) always keep the moment, whatever
+leave it out. Sleep, Power off and [Recent games](playing.md#recent-games) always keep the moment, whatever
 the switch says.
 
 ### Buttons
@@ -315,8 +305,8 @@ combined freely. The explanations under a list still name the keys by their lett
 
 Settings → Playing → **Over the game**: what is drawn over every game while you play, **Off** (the default),
 **FPS**, **FPS + sensors** or **Pixel Path**; what each shows is in [Over the game](pause-menu.md#over-the-game). Right
-or A goes on, Left goes back. A console or game with its own choice under Options → Extras keeps it, and **HOME + Y**
-switches to the next level while you play.
+or A goes on, Left goes back. A console or game with its own choice under Options → Speed, rumble, fan keeps it, and **HOME + Y**
+switches to the next level while you play. The [Easy](easy.md) look never draws any of it, whatever this says, and leaves the setting alone.
 
 ### Screen frames
 
@@ -346,10 +336,10 @@ Settings → **Games**. Getting games and what runs them onto the Pocket, and th
 | **Add games** | A tile per system with its folder, file types and BIOS needs, file sharing, sending games from your phone (Y), and folders or disc games it can't read. See [Getting started](getting-started.md#the-systems-grid) and [From your phone](phone-upload.md) |
 | **Game check** | "Will my games start?": goes through your card and says, in plain words, what is missing and what to do. Only looks; it can hide a duplicate from the shelf when you press A. See [Getting started](game-check.md) |
 | **Starter pack** | A handful of free games to download when the SD card has none: pick one or take them all. Also offered on Home while the SD card is empty. See [Getting started](getting-started.md#nothing-on-the-sd-card-yet-the-starter-pack) |
-| **Pictures & extras** | Cover art, the Pictures choice (Box art, Box art and screenshots or Off) and PortMaster games. See [Pictures and extras](extras.md) |
+| **Pictures & extras** | Box art, the Pictures choice (Box art, Box art and screenshots or Off) and PortMaster games. See [Pictures and extras](extras.md) |
 | **From EmulationStation** | The favourites and ratings in your EmulationStation `gamelist.xml` files: A adds the favourites to Favourites or uses the ratings as My rating, without changing a thing in EmulationStation. Says "No gamelist" when there is none. See [Your EmulationStation gamelists](library.md#your-emulationstation-gamelists) |
 | **Screenshots** | The pictures you took with HOME + A, newest first, in groups by day, with a small picture each. A opens one full screen, X deletes it. The value at the right is how many there are; with none the page says how to take one. See [Looking at your screenshots](playing.md#looking-at-your-screenshots) |
-| **Curator** | The Lens and smart shelves, stickers, Echoes, Up next, versions and play history, each on or off. See [Curator](#curator) |
+| **Curator** | The Lens and smart shelves, labels, Echoes, Up next, versions and play history, each on or off. See [Curator](#curator) |
 | **PC streaming** | Pair a gaming PC for Moonlight on the Pocket itself, see the paired PCs, stream one of their games. See [PC streaming](pc-streaming.md) |
 
 ### Curator
@@ -359,14 +349,14 @@ row; the line under the list says what it does. Changes apply at once.
 
 | Row | Default | What it does |
 |---|---|---|
-| **Lens & smart shelves** | On | The Curator row on Home, with the Lens, and your pinned smart shelves |
+| **Lens & smart shelves** | On | The Curator row on Home, with the Lens, and your pinned smart shelves; also [Just Play](curator.md#just-play) on Home |
 | **Echoes on the game card** | On | "More like this" on every card |
-| **Up next after a game** | Off | When you quit a game you played for a minute or more, one line on the shelf suggests a game of yours like it. A plays it, any other button puts it away; it goes by itself after a few seconds. See [Up next](curator.md#up-next) |
+| **Up next after a game** | Off | When you quit a game you played for a minute or more, one line on the shelf suggests a game of yours like it. X plays it, any other button puts it away (A is the shelf's own); it goes by itself after a few seconds. See [Up next](curator.md#up-next) |
 | **Merge versions in mixed lists** | On | A game you own on several systems shows once in Favourites, smart shelves and Echoes, and starts its preferred version |
-| **Stickers** | On | The card's Stickers row, stickers in the Curator list and pinned stickers on Home |
+| **Labels** | On | The card's Stickers & labels row, labels in the Curator list and pinned labels on Home |
 | **Games not on this device in Echoes** | Off | Echoes also names a few games you don't have. Names only |
 | **Pixel Path in the pause menu** | Off | Adds Pixel Path to the pause menu: how a game's picture and sound reach you, stage by stage, graded in colour. See [Pixel Path](pause-menu.md#pixel-path). The line beside the picture while you play is [Over the game](#over-the-game) → Pixel Path, which doesn't need this switch |
 | **Play history** | On | Curator → History and the Year in review: what you played this week, month and year. Kept on this Pocket only. Off: nothing new is recorded, and what was recorded stays. See [Play history](curator.md#play-history) |
 
-Switching a part off hides it; your smart shelves, stickers and preferred versions stay and come back when you
+Switching a part off hides it; your smart shelves, labels and preferred versions stay and come back when you
 switch it on again.

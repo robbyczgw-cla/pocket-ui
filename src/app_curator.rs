@@ -48,6 +48,25 @@ const UP_NEXT_AFTER: std::time::Duration = std::time::Duration::from_secs(60);
 /// How long Up next stays on the shelf when nothing is pressed; then it goes, and A is the shelf's again.
 pub(crate) const UP_NEXT_SHOWN: std::time::Duration = std::time::Duration::from_secs(8);
 
+/// What a button does while Up next shows: (plays the suggestion, the press is used up). X plays it, B puts it away; any
+/// other button puts it away and does what it always does, A included: it continues the game the shelf is on.
+fn up_next_press(b: Button) -> (bool, bool) {
+    (b == Button::North, b == Button::North || b == CANCEL)
+}
+
+#[cfg(test)]
+mod up_next_tests {
+    use super::*;
+
+    #[test]
+    fn only_x_plays_the_suggestion_and_a_stays_the_shelfs() {
+        assert_eq!(up_next_press(Button::North), (true, true), "X plays it");
+        assert_eq!(up_next_press(CANCEL), (false, true), "B puts it away");
+        assert_eq!(up_next_press(CONFIRM), (false, false), "A: the suggestion goes, the shelf's own A follows");
+        assert_eq!(up_next_press(Button::Down), (false, false), "anything else: away, and it moves");
+    }
+}
+
 /// News from the index thread.
 pub(crate) enum Event {
     /// A new index; `gen` is the library generation its catalog was made from. `up_next`: the suggestion after the
@@ -210,11 +229,11 @@ fn feel_source() -> Box<dyn curator::FeelSource + Send> {
 
 /// Settings → Curator's rows: the switch, its name, what it does.
 pub(crate) const SETTINGS_ROWS: [(&str, &str); 8] = [
-    ("Lens & smart shelves", "The Curator row on Home: combine filters, and keep a filter as a smart shelf that updates itself."),
+    ("Lens & smart shelves", "The Curator row and Just Play on Home: combine filters, and keep a filter as a smart shelf that updates itself."),
     ("Echoes on the game card", "More like this: games you own that play alike, each with a short reason."),
-    ("Up next after a game", "When you quit a game you played for a while, one line on the shelf suggests a game of yours like it. A plays it; any other button puts it away. Nothing starts by itself."),
+    ("Up next after a game", "When you quit a game you played for a while, one line on the shelf suggests a game of yours like it. X plays it; any other button puts it away. Nothing starts by itself."),
     ("Merge versions in mixed lists", "A game you own on several systems shows once in Favourites, smart shelves and Echoes, and starts the version you prefer."),
-    ("Stickers", "Your own labels for games, such as Couch co-op. Put them on from the game card; pin one to see it on Home."),
+    ("Labels", "Your own labels for games, such as Couch co-op. Put them on from the game card; pin one to see it on Home."),
     ("Games not on this device in Echoes", "Echoes also names a few games you don't have, from the offline game list. Names only."),
     // Its line over the game is Settings > Playing > Over the game since 2026-10-25 (`over_game`).
     ("Pixel Path in the pause menu", "How a game's picture and sound reach you, stage by stage, graded in colour, in the pause menu of every game. The line beside the picture is under Settings › Playing › Over the game."),
@@ -377,9 +396,11 @@ impl App {
                 // And an open Credits & links its games by the console's makers (`app_console`).
                 self.credits_refresh();
                 let item = self.items.get(self.sel).copied();
+                let big = self.big_live();
                 self.rebuild();
-                // Home's rows may have moved by one (a count, merged Favorites): stay on the same entry.
-                if let Some(at) = item.and_then(|it| self.items.iter().position(|i| *i == it)) {
+                // Home's rows may have moved by one (a count, merged Favorites): stay on the same entry. Easy's
+                // `rebuild` does that itself: a favourite stands twice, and this would take the first.
+                if let Some(at) = item.filter(|_| !big).and_then(|it| self.items.iter().position(|i| *i == it)) {
                     self.sel = at;
                     self.prev_sel = at;
                 }
@@ -566,24 +587,26 @@ impl App {
         self.curator.up_next.as_ref().filter(|u| u.at.elapsed() < UP_NEXT_SHOWN && self.up_next_room())
     }
 
-    /// A button on the shelf while Up next shows: A plays it, B puts it away; anything else puts it away and goes on
-    /// as usual (true: the press is used up).
+    /// A button on the shelf while Up next shows: X plays it, B puts it away; anything else puts it away and goes on
+    /// as usual (true: the press is used up). A is the shelf's own the whole time (it continues the game the shelf is on, as
+    /// the player expects straight after a game); it was the suggestion's, and A is the button most likely still being
+    /// pressed as a game ends (walk 2026-11-02).
     pub(crate) fn curator_up_next_press(&mut self, b: Button) -> bool {
         let Some(up) = self.up_next_shown().cloned() else {
             self.curator.up_next = None;
             return false;
         };
         self.curator.up_next = None;
-        if b == CONFIRM {
+        let (play, used) = up_next_press(b);
+        if play {
             if let Item::Game(s, g) = up.item {
                 if let Some(game) = self.systems.get(s).and_then(|sys| sys.games.get(g)) {
                     let (system, name, path) = (self.systems[s].name.clone(), game.name.clone(), game.path.clone());
                     self.launch(system, name, path);
                 }
             }
-            return true;
         }
-        b == CANCEL
+        used
     }
 
     /// The loop's next wake-up for Up next: a frame per refresh while it slides in, then when it goes by itself
@@ -649,9 +672,9 @@ impl App {
             let line = text.fit(Face::Body, 28, &format!("{short} · {}", up.reason), tw);
             text.draw(c, Face::Body, 28, tx, y + 116 + g1 + g2 + g3, pal().label_dust, &line);
         });
-        // A tap on it plays it, as A does.
-        self.hits.button(Area::new(x, y, w, h), CONFIRM);
-        self.paint_hint_row(c, &[("A", "Play it"), ("B", "Not now")]);
+        // A tap on it plays it, as X does.
+        self.hits.button(Area::new(x, y, w, h), Button::North);
+        self.paint_hint_row(c, &[("X", "Play it"), ("B", "Not now")]);
         true
     }
 
@@ -749,7 +772,7 @@ impl App {
         }
         Some(match self.curator.index {
             None => ("Getting ready…", "Curator is reading your library. This takes a moment once."),
-            Some(_) if matches!(self.screen, Screen::Sticker(_)) => ("No games with this sticker", "Put it on a game from its card: X, then Stickers."),
+            Some(_) if matches!(self.screen, Screen::Sticker(_)) => ("No games with this label", "Put it on a game from its card: X, then Stickers & labels."),
             Some(_) => ("No games here", "Nothing in your library matches these filters right now."),
         })
     }
@@ -773,15 +796,15 @@ impl App {
                         parts.push(if shelves == 1 { "1 shelf".to_string() } else { format!("{shelves} shelves") });
                     }
                     if stickers > 0 {
-                        parts.push(if stickers == 1 { "1 sticker".to_string() } else { format!("{stickers} stickers") });
+                        parts.push(if stickers == 1 { "1 label".to_string() } else { format!("{stickers} labels") });
                     }
                     if parts.is_empty() { "Lens".to_string() } else { parts.join(" · ") }
                 };
                 // The pick and why (`home_panel::curator`); "Getting ready…" before the index.
                 let meta = match today {
                     Some(t) if t.pick.is_some() => pocket_ui::home_panel::curator(Some(t)).line,
-                    Some(_) if self.history_shown() => "Lens, smart shelves, stickers and your play history".into(),
-                    Some(_) => "Lens, smart shelves and stickers".into(),
+                    Some(_) if self.history_shown() => "Lens, smart shelves, labels and your play history".into(),
+                    Some(_) => "Lens, smart shelves and labels".into(),
                     None => "Getting ready…".into(),
                 };
                 ("Curator".into(), CURATOR_STRIPE.into(), side, meta)
@@ -824,7 +847,7 @@ impl App {
             Item::Sticker(id) => {
                 let Some(s) = self.library.stickers().iter().find(|s| s.id == id) else { return Default::default() };
                 let side = if ready { games(self.curator.sticker_counts.get(&id).copied().unwrap_or(0)) } else { "Getting ready…".into() };
-                let meta = if s.pinned { "Sticker, on Home" } else { "Sticker" };
+                let meta = if s.pinned { "Label, on Home" } else { "Label" };
                 (s.name.clone(), STICKER_STRIPE.into(), side, meta.into())
             }
             Item::History | Item::Review(_) => self.history_describe(item),
@@ -1133,14 +1156,14 @@ impl App {
                     if let Ok(on) = saved {
                         sheet.rows[i].1 = Some(on);
                     }
-                    self.curator_saved(saved.map(|_| ()), &format!("Sticker: {}", sheet.rows[i].0));
+                    self.curator_saved(saved.map(|_| ()), &format!("Label: {}", sheet.rows[i].0));
                     self.curator.touch();
                     Some(Page::Stickers { sheet, path, ids, case, year })
                 }
                 SheetOut::Pick(_) => {
                     let back = Page::Stickers { sheet, path: path.clone(), ids, case, year };
                     let name = self.suggest_sticker_name(&path);
-                    Some(name_page("New sticker", &name, Purpose::NewSticker(path), Some(back)))
+                    Some(name_page("New label", &name, Purpose::NewSticker(path), Some(back)))
                 }
             },
             Page::Options { mut sheet, item, acts } => match sheet.press(b) {
@@ -1232,7 +1255,7 @@ impl App {
                         }
                     }
                 }
-                self.curator_saved(added, "Sticker made");
+                self.curator_saved(added, "Label made");
                 self.curator.touch();
                 back
             }
@@ -1277,7 +1300,7 @@ impl App {
             }
             (Item::Sticker(id), Act::Rename) => {
                 let name = self.library.stickers().iter().find(|s| s.id == id)?.name.clone();
-                Some(name_page("Rename the sticker", &name, Purpose::RenameSticker(id), None))
+                Some(name_page("Rename the label", &name, Purpose::RenameSticker(id), None))
             }
             (_, Act::Pin) => {
                 self.curator_y();
@@ -1292,7 +1315,7 @@ impl App {
             }
             (Item::Sticker(id), Act::Delete) => {
                 let saved = self.curator_delete_sticker(id);
-                self.curator_saved(saved, "Sticker deleted");
+                self.curator_saved(saved, "Label deleted");
                 None
             }
             _ => None,
@@ -1305,6 +1328,65 @@ impl App {
         self.card = None;
         let (sys, game) = (&self.systems[s], &self.systems[s].games[g]);
         self.launch(sys.name.clone(), game.name.clone(), game.path.clone());
+    }
+
+    /// Whether Home offers "Just Play": with the Curator's switch (Settings → Curator → Lens & smart shelves), once the
+    /// shelf has a game, and never in Kids Mode (its own start) or on Easy (A already plays there).
+    pub(crate) fn just_play_on(&self) -> bool {
+        self.curator.prefs.lens && !self.kids_live() && !self.big_on() && self.systems.iter().any(|s| !s.games.is_empty())
+    }
+
+    /// "Just Play" (A on its row of Home): `Index::just_play` picks, the one launch path starts it, nothing in between.
+    /// Hidden games and hidden systems are not offered; a game whose file is gone or empty is passed over (a few tries,
+    /// never a loop); a start that then fails ends as any start does (`game_exited`: a notice, Home as before).
+    pub(crate) fn curator_just_play(&mut self) {
+        if self.kids_live() {
+            return;
+        }
+        let Some(ix) = self.curator.index.clone() else {
+            self.toast = Some(("Getting ready…".into(), Instant::now()));
+            return;
+        };
+        let at = |g: usize| ix.catalog.games.get(g).and_then(|f| Some((f, self.curator_item(g)?)));
+        let allowed = |g: usize| at(g).is_some_and(|(f, _)| !self.library.is_hidden(&f.path) && pocket_ui::shelf::recent_shown(&f.system, &self.hidden));
+        let heavy = |g: usize| ix.catalog.games.get(g).is_some_and(|f| pocket_ui::system_notes::note(&f.system).is_some());
+        // The file, and the route the start would take (the player's own emulator choice is not changed): its emulator and
+        // core must be on this device. A system with no emulator list (nothing to check) and the Deck (Flatpaks) pass.
+        let host = std::path::Path::new(super::host_bin()).exists();
+        let mut startable = |g: usize| {
+            at(g).is_some_and(|(f, _)| {
+                let file_ok = pocket_ui::library_cache::missing_game(&f.name, &f.path).is_none() && pocket_ui::library_cache::empty_game(&f.name, &f.path).is_none();
+                file_ok
+                    && self.systems.iter().find(|s| s.name == f.system).is_some_and(|sys| {
+                        if sys.emulators.is_empty() || pocket_ui::desk::active() {
+                            return true;
+                        }
+                        let (emulator, core) = self.route(sys, Some(&f.path), host);
+                        pocket_ui::emu_choice::installed(&pocket_ui::emu_choice::Runner::new(&emulator, &core), &f.system, |p| p.exists())
+                    })
+            })
+        };
+        let offer = curator::justplay::Offer { allowed: &allowed, heavy: &heavy };
+        let mut rng = Rng::new(clock_seed());
+        let picked = ix.just_play(&mut rng, &offer, &mut startable);
+        let (game, why) = match picked {
+            Ok(p) => p,
+            Err(curator::justplay::Miss::NoGames) => {
+                self.toast = Some(("Nothing to play yet. Add a game first".into(), Instant::now()));
+                return;
+            }
+            Err(curator::justplay::Miss::NothingStarts) => {
+                println!("curator: just play found no game that starts");
+                self.notice = Some(super::Notice::new("None of the games tried would start. Their files may be gone from the card."));
+                return;
+            }
+        };
+        let Some(Item::Game(s, g)) = self.curator_item(game) else { return };
+        let (system, name, path) = (self.systems[s].name.clone(), self.systems[s].games[g].name.clone(), self.systems[s].games[g].path.clone());
+        println!("curator: just play {name} ({system}): {why:?}");
+        // The title for a moment, without holding the start back (it is only painted when the shelf is).
+        self.toast = Some((format!("Starting {name}"), Instant::now()));
+        self.launch(system, name, path);
     }
 
     /// "Surprise me" (A on its entry, Right on the card it opened): a game picked by `Index::surprise`, none shown since the
@@ -1368,7 +1450,7 @@ impl App {
         ["Couch co-op", "Before bed", "On the train", "Play next", "With the kids"]
             .into_iter()
             .find(|n| !taken.contains(&n.to_lowercase()))
-            .unwrap_or("Sticker")
+            .unwrap_or("Label")
             .to_string()
     }
 
@@ -1419,7 +1501,7 @@ impl App {
         }
         // A line of parts, so each sticker's name is translated on its own.
         let line = if on.is_empty() { "None yet. Press A to add one".to_string() } else { on.join(" · ") };
-        rows.push(CuratorRow { kind: RowKind::Stickers, title: "Stickers".into(), line });
+        rows.push(CuratorRow { kind: RowKind::Stickers, title: "Stickers & labels".into(), line });
         rows
     }
 
@@ -1585,10 +1667,10 @@ impl App {
         if self.curator.prefs.stickers {
             rows.extend(self.library.stickers().iter().map(|s| (s.name.clone(), Some(meta.stickers.contains(&s.id)))));
             ids = self.library.stickers().iter().map(|s| s.id).collect();
-            rows.push(("New sticker…".into(), None));
+            rows.push(("New label…".into(), None));
         }
         let goty = CaseKind::ALL.iter().position(|k| *k == CaseKind::Goty);
-        let sheet = Sheet { title: "Stickers".into(), rows, sel: 0, single: false, adjust: goty };
+        let sheet = Sheet { title: "Stickers & labels".into(), rows, sel: 0, single: false, adjust: goty };
         self.curator.page = Some(Page::Stickers { sheet, path: path.to_path_buf(), ids, case, year });
     }
 
@@ -2118,7 +2200,7 @@ impl App {
         // Covers (Home's panels, `app_home_panel`) are decoded on the spot, not on the loader's thread.
         self.pictures.sync = true;
         match what {
-            // "home[:<look>[:<row>]]": Home in a look on the Curator row, or on `favorites`, the first pinned `shelf` or
+            // "home[:<look>[:<row>]]": Home in a look on the Curator row, or on `favorites`, `justplay`, the first pinned `shelf` or
             // `sticker`, or `nofavs` (Favorites whose games are all gone: the row as it would be with none).
             "home" => {
                 if let Some(look) = parts.get(1) {
@@ -2136,6 +2218,7 @@ impl App {
                     "favorites" | "nofavs" => *i == Item::Favorites,
                     "shelf" => matches!(i, Item::SmartShelf(_)),
                     "sticker" => matches!(i, Item::Sticker(_)),
+                    "justplay" => *i == Item::JustPlay,
                     _ => *i == Item::Curator,
                 };
                 if let Some(i) = self.items.iter().position(want) {

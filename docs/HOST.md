@@ -21,7 +21,7 @@ loads it and handles picture, sound and input. RetroArch is the big official fro
   `gbav`) run on pocket-core since 2026-10-23, checked in the virtual device; NAOMI and Atomiswave (`flycast`) are wired
   but not verified ("More systems (2026-10-23)" below).
 - GameCube, Wii, PS2 and 3DS stay on their standalone emulators, all with our pause menu (save slots, Options, Quit
-  following Settings → Playing → Remember where I quit; `docs/BIG-EMULATORS.md`).
+  following Settings → Playing → Continue where I quit; `docs/BIG-EMULATORS.md`).
 - `src/hostsys.rs` lists the systems pocket-core can host (core, BIOS files, pad type, core options). A system is
   routed to pocket-core only when `verified` is set; the others stay on RetroArch until someone has played
   them through and measured them. `POCKET_UI_HOST_ALL=1` (pocket-ui's environment) routes the unverified ones
@@ -910,7 +910,7 @@ Sources: D = `github.com/ROCKNIX/distribution/blob/20261001/projects/ROCKNIX/pac
   default) and the RetroArch keys that differ from `system./global.` (removed otherwise), and removes the game's keys;
   For this game writes only what differs from the console's result; Restore defaults removes the choice and puts the
   RetroArch keys back to the shipped file's values. Choosing pocket-core for a game in `fallback.json` takes it out.
-- **Per emulator**: the pause menu, fast switching, Quit without a resume point (Remember where I quit off), run-ahead and achievements key on the
+- **Per emulator**: the pause menu, fast switching, Quit without a resume point (Continue where I quit off), run-ahead and achievements key on the
   running emulator (`Running::hosted`, `retroarch`, `standalone::active`), which is now whatever was chosen: a GBA
   game set to RetroArch gets RetroArch's menu, quit and resume; one set to standalone NanoBoyAdvance gets the "other
   emulators" menu; ARMSX2/Dolphin/Azahar keep their full support when chosen (`standalone::Emu::detect`).

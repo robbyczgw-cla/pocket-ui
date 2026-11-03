@@ -356,8 +356,12 @@ impl Card {
     }
 
     pub fn press(&mut self, b: Button) -> Out {
+        if self.data.plain && matches!(b, Button::West | Button::North | Button::Select | Button::Start) {
+            return Out::None;
+        }
         // The info page: up and down scroll its description, SELECT shows the full page; the rest as on the page.
-        let links = self.data.links.len();
+        // The short card goes nowhere from its facts.
+        let links = if self.data.plain { 0 } else { self.data.links.len() };
         if let (Mode::View, Some(info)) = (&self.mode, self.info.as_mut()) {
             match b {
                 // Onto the facts that lead to the player's other games first (Connections), then the description.
@@ -622,6 +626,13 @@ impl Card {
                     h.insert(2, ("RIGHT", "Another"));
                 }
                 if self.boxed.as_ref().is_some_and(|b| b.scrollable()) {
+                    h.push(("L1 R1", "Scroll"));
+                }
+                h
+            }
+            Mode::View if self.data.plain => {
+                let mut h = vec![("A", "Play"), ("B", "Back")];
+                if self.info.as_ref().is_some_and(|i| i.scrollable()) {
                     h.push(("L1 R1", "Scroll"));
                 }
                 h
@@ -1462,6 +1473,7 @@ mod tests {
             favorite: false,
             saves: None,
             links: Vec::new(),
+            plain: false,
         }
     }
 
@@ -1489,7 +1501,7 @@ mod tests {
         let mut d = data();
         d.rows = vec![
             CuratorRow { kind: RowKind::Echoes, title: "Echoes".into(), line: "Burnout 3 · Need for Speed · R4".into() },
-            CuratorRow { kind: RowKind::Stickers, title: "Stickers".into(), line: "Couch co-op".into() },
+            CuratorRow { kind: RowKind::Stickers, title: "Stickers & labels".into(), line: "Couch co-op".into() },
         ];
         let mut card = Card::new(d);
         assert_eq!(card.press(Button::Down), Out::None, "before a paint nothing is known to be in view: a scroll");

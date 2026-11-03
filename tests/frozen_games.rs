@@ -1,6 +1,6 @@
 //! Frozen games on the shelf as a player sees them: the recent games of the made-up library (scripts/curator-fake-library.py)
 //! stand open with POCKETUI_SNAPSHOT_FROZEN, in every look, dark and light, English and German: the word or the Resume hint
-//! is there, with Frozen games off none of it is, and a shelf where nothing is frozen shows what it always showed. What may
+//! is there, the word Frozen is nowhere, and a shelf where nothing is frozen shows what it always showed. What may
 //! be frozen at all is `frozen::tests`. Needs python3 (scripts/wayland-stub.py on Linux without a compositor).
 
 use std::path::{Path, PathBuf};
@@ -83,60 +83,37 @@ fn frozen_games_show_in_every_look_and_not_when_switched_off_or_when_there_are_n
         .expect("python3");
     assert!(ok.success());
     let c = Ctx { stub: wayland(&tmp), tmp: tmp.clone(), n: Default::default() };
-    // The row of the first recent game, after Curator and Search on top of Home in every look but the Cabinet.
+    // The row of the first recent game, after Curator, Search and Just Play on top of Home in every look but the Cabinet,
+    // where Just Play is the first case of the Continue shelf.
     for look in ["shelf", "minimal", "split", "cards", "cabinet"] {
-        let state = if look == "cabinet" { "home:0" } else { "home:2" };
-        for (lang, resume, word) in [("en", "Resume", "Frozen"), ("de", "Fortsetzen", "Eingefroren")] {
+        let state = if look == "cabinet" { "home:1" } else { "home:3" };
+        for (lang, resume, word) in [("en", "Continue", "Continue"), ("de", "Fortsetzen", "Fortsetzen")] {
             let (v, faults) = c.shot(look, state, 5, lang, "{}");
             assert!(has(&v, resume), "{look} {lang}: the A hint says it goes on: {v:?}");
+            // The first time an open case is on screen, one line says what it means.
+            let line = if lang == "en" { "Open means your moment is waiting" } else { "Offen heißt" };
+            assert!(has(&v, line), "{look} {lang}: what an open case means is said: {v:?}");
             // The first recent game is "Continue" on the Shelf, where its open case says it.
             if look != "shelf" {
                 assert!(has(&v, word), "{look} {lang}: the word says it's frozen: {v:?}");
             }
             assert!(faults.is_empty(), "{look} {lang}: {faults:?}");
 
-            let (off, _) = c.shot(look, state, 5, lang, r#"{"frozen_games": false}"#);
-            assert!(!has(&off, word), "{look} {lang}: switched off, no word: {off:?}");
+            // There is no switch any more: a saved "frozen_games": false from an older version is ignored, the game stands open.
+            let (old, faults) = c.shot(look, state, 5, lang, r#"{"frozen_games": false}"#);
+            assert!(has(&old, resume), "{look} {lang}: an old setting that was off is treated as on: {old:?}");
+            assert!(faults.is_empty(), "{look} {lang}: {faults:?}");
             let (none, _) = c.shot(look, state, 0, lang, "{}");
-            assert!(!has(&none, word), "{look} {lang}: nothing frozen, no word: {none:?}");
+            // (The Shelf and the Cabinet say "Continue" over the first recent game anyway.)
+            if matches!(look, "minimal" | "split" | "cards") {
+                assert!(!has(&none, word), "{look} {lang}: nothing frozen, no word: {none:?}");
+            }
             assert!(has(&none, if lang == "en" { "Play" } else { "Spielen" }), "{look} {lang}: a normal case plays: {none:?}");
         }
     }
     // A later game of the row, which isn't "Continue": the Shelf says the word over its name.
-    let (v, faults) = c.shot("shelf", "home:3", 5, "en", "{}");
-    assert!(has(&v, "Frozen"), "{v:?}");
+    let (v, faults) = c.shot("shelf", "home:4", 5, "en", "{}");
+    assert!(has(&v, "Continue") && !has(&v, "Frozen"), "{v:?}");
     assert!(faults.is_empty(), "{faults:?}");
-    let _ = std::fs::remove_dir_all(&tmp);
-}
-
-#[test]
-fn the_switch_says_what_remember_where_i_quit_does_to_it() {
-    let tmp = std::env::temp_dir().join(format!("pocketui-frozen-sw-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
-    std::fs::create_dir_all(&tmp).unwrap();
-    let stub = wayland(&tmp);
-    let row = 3; // System's rows: Language, Time, Sleep & power, Frozen games.
-    for (forget, line) in [(false, "stand a little open"), (true, "freezes nothing new")] {
-        let data = tmp.join(format!("data-{forget}"));
-        std::fs::create_dir_all(&data).unwrap();
-        std::fs::write(data.join("settings.json"), format!(r#"{{"onboarded": true, "forget_where_quit": {forget}}}"#)).unwrap();
-        let visible = tmp.join(format!("{forget}.txt"));
-        let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
-        cmd.args(["--snapshot", &format!("settings:5:{row}"), tmp.join(format!("{forget}.png")).to_str().unwrap()])
-            .env("POCKETUI_MOCK", "1")
-            .env("POCKETUI_LANG", "en")
-            .env("POCKETUI_VISIBLE_TEXT", &visible)
-            .env("POCKETUI_DATA", &data)
-            .env("POCKETUI_ES_SYSTEMS", tmp.join("none.cfg"));
-        std::fs::write(tmp.join("none.cfg"), "<systemList></systemList>").unwrap();
-        if let Some(s) = &stub {
-            cmd.env("WAYLAND_DISPLAY", &s.1);
-        }
-        let out = cmd.output().expect("run pocket-ui");
-        assert!(out.status.success());
-        let v = std::fs::read_to_string(&visible).unwrap();
-        assert!(v.contains("Frozen games"), "{v}");
-        assert!(v.contains(line), "forget={forget}: {v}");
-    }
     let _ = std::fs::remove_dir_all(&tmp);
 }

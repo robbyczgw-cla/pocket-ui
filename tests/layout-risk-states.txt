@@ -58,3 +58,6 @@ pixel-path:n64:1:about
 gallery:delete
 gallery:full-delete
 setup:look-systems
+big-shelf
+big-pause:retroarch
+big-pause:more

@@ -32,7 +32,7 @@ use crate::update::newer;
 pub struct Switches {
     pub motion: Motion,
     pub on_start: OnStart,
-    /// Settings › Remember where I quit (settings.json's `forget_where_quit`, the other way round).
+    /// Settings › Continue where I quit (settings.json's `forget_where_quit`, the other way round).
     pub remember_quit: bool,
     pub frames: Frames,
     /// Settings › Playing › Over the game (`over_game`).
@@ -79,7 +79,10 @@ pub enum Pick {
 /// The first start's answer to "How do you like to play?".
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Profile {
+    /// "The shelf": the look and switches as they ship.
     Simple,
+    /// The start settings with the Easy look (`Profile::look`).
+    JustPlay,
     Enthusiast,
     /// The cards, one by one.
     Choose,
@@ -88,7 +91,7 @@ pub enum Profile {
 }
 
 impl Profile {
-    pub const ALL: [Profile; 4] = [Profile::Simple, Profile::Enthusiast, Profile::Choose, Profile::Child];
+    pub const ALL: [Profile; 5] = [Profile::Simple, Profile::JustPlay, Profile::Enthusiast, Profile::Choose, Profile::Child];
 
     /// What this device offers: no "For a child" where the host owns buttons a child can reach (the Steam Deck's Steam button).
     pub fn offered() -> Vec<Profile> {
@@ -115,16 +118,23 @@ impl Profile {
 
     pub fn name(self) -> &'static str {
         match self {
-            Profile::Simple => "Simple",
+            Profile::Simple => "The shelf",
+            Profile::JustPlay => "Easy",
             Profile::Enthusiast => "Enthusiast",
             Profile::Choose => "Choose for yourself",
             Profile::Child => "For a child",
         }
     }
 
+    /// The look this answer comes with.
+    pub fn look(self) -> Option<crate::settings::Theme> {
+        (self == Profile::JustPlay).then_some(crate::settings::Theme::Big)
+    }
+
     pub fn blurb(self) -> &'static str {
         match self {
-            Profile::Simple => "As pocket-ui ships, the same as skipping this step.",
+            Profile::Simple => "Your games on a shelf, as it comes.",
+            Profile::JustPlay => "One big game at a time, simple menus.",
             Profile::Enthusiast => "Suggestions, play statistics, picture details and frames, all on.",
             Profile::Choose => "One card per feature, with a preview: on, off, or later.",
             Profile::Child => "A big, simple shelf with the games you pick, behind your PIN.",
@@ -164,7 +174,7 @@ pub struct Feature {
 impl Feature {
     pub fn pick(&self, p: Profile) -> Pick {
         match p {
-            Profile::Simple => self.simple,
+            Profile::Simple | Profile::JustPlay => self.simple,
             Profile::Enthusiast => self.enthusiast,
             Profile::Choose | Profile::Child => Pick::Keep,
         }
@@ -228,7 +238,7 @@ pub static FEATURES: &[Feature] = &[
         id: "up_next",
         title: "Up next after a game",
         plain: "a next game to try after you quit",
-        line: "When you quit a game, one line on the shelf suggests a game of yours like it. A plays it; nothing starts by itself.",
+        line: "When you quit a game, one line on the shelf suggests a game of yours like it. X plays it; nothing starts by itself.",
         place: "Settings › Games › Curator",
         guide: "curator.md#up-next",
         since: "0.1.0",
@@ -278,11 +288,11 @@ pub static FEATURES: &[Feature] = &[
     },
     Feature {
         id: "stickers",
-        title: "Stickers",
+        title: "Labels",
         plain: "your own labels for games",
         line: "Your own labels for games, such as Couch co-op. Pin one to see it on Home.",
         place: "Settings › Games › Curator",
-        guide: "curator.md#stickers",
+        guide: "curator.md#labels",
         since: "0.1.0",
         switch: Some(Switch {
             get: |s| s.curator.stickers,
@@ -374,8 +384,8 @@ pub static FEATURES: &[Feature] = &[
     },
     Feature {
         id: "last_game",
-        title: "Straight back into your game",
-        plain: "start straight into your last game",
+        title: "Continue your last game",
+        plain: "continue your last game at start",
         line: "When the Pocket starts, the game you played last continues where you left off.",
         place: "Settings › Playing › On start",
         guide: "settings.md#on-start",
@@ -392,11 +402,11 @@ pub static FEATURES: &[Feature] = &[
     Feature {
         // Was "Quit without saving", a pause-menu entry of its own (its id is kept: settings.json's `tour_later`).
         id: "quit_without_saving",
-        title: "Remember where I quit",
+        title: "Continue where I quit",
         plain: "continue where you quit",
         line: "On: Quit keeps the moment and the next start continues there. Off: only the game's own saves stay.",
-        place: "Settings › Playing › Remember where I quit",
-        guide: "settings.md#remember-where-i-quit",
+        place: "Settings › Playing › Continue where I quit",
+        guide: "settings.md#continue-where-i-quit",
         since: "0.1.0",
         switch: Some(Switch { get: |s| s.remember_quit, set: |s, on| s.remember_quit = on }),
         simple: Pick::Keep,
@@ -528,7 +538,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Run-ahead",
         plain: "less input delay in older games",
         line: "The game responds to your buttons a frame or two sooner, on the lighter consoles.",
-        place: "Pause menu › Options › Extras",
+        place: "Pause menu › Options › Speed, rumble, fan",
         guide: "options.md#run-ahead",
         since: "0.1.0",
         switch: None,
@@ -1033,9 +1043,13 @@ fn half(px: &[u32], w: usize, h: usize) -> Image {
 
 // ---- the profiles (the first start) -------------------------------------------------------------------------------
 
+/// Width of the preview beside the profiles on a large screen.
+const PROFILE_PREVIEW_W: i32 = 320;
+
 /// "How do you like to play?": the three profiles as rows, the selected one paper, and under them what it turns on
 /// and off (from the registry, so it can't say anything the switches don't do).
-pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[Profile]) -> Hits {
+/// `later`: opened from Settings → Help & tools, where choosing a way sets its switches over what is there now.
+pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[Profile], later: bool, previews: &[Image]) -> Hits {
     c.clear(pal().void);
     let mut hits = Hits { sel, ..Default::default() };
     // A short screen (768 lines) takes the heading and the four rows closer, so the line under them clears the hints.
@@ -1051,7 +1065,27 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[P
         pal().dust,
         "A starting point for the extras. Every switch stays in Settings.",
     );
-    let width = c.w - 2 * MARGIN;
+    let full = c.w - 2 * MARGIN;
+    // A small live preview beside the rows (the look step's pictures: Easy's case for its row, the shelf for
+    // The shelf and Enthusiast): only where there's room. On a small screen (drawn on 960 lines at 640x480) the rows fill it, so the preview is left out.
+    let (pw, ph) = (PROFILE_PREVIEW_W, PROFILE_PREVIEW_W * c.h / c.w.max(1));
+    let preview = c.w >= 1000 && c.h >= 1000 && previews.len() >= 2;
+    let width = if preview { full - pw - 24 } else { full };
+    if preview {
+        let (px, py) = (c.w - MARGIN - pw, 230);
+        c.round_rect(px - 8, py - 8, pw + 16, ph + 16, 12, pal().keycap);
+        match profiles[sel.min(profiles.len() - 1)] {
+            // Look order: Shelf, Easy, ... (`Theme::ALL`).
+            Profile::JustPlay => c.blit_scaled(&previews[1], px, py, pw, ph),
+            Profile::Simple | Profile::Enthusiast => c.blit_scaled(&previews[0], px, py, pw, ph),
+            // Nothing to show for these two: the choice's own name, not an empty frame.
+            other => {
+                c.rect(px, py, pw, ph, pal().spine);
+                let name = text.fit(Face::Title, 37, other.name(), pw - 24);
+                text.draw(c, Face::Title, 37, px + 12, py + ph / 2, pal().dust, &name);
+            }
+        }
+    }
     for (i, p) in profiles.iter().enumerate() {
         let y = first + i as i32 * pitch;
         let selected = i == sel;
@@ -1082,13 +1116,19 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[P
         _ => {
             let (on, off) = profile_summary(p);
             let mut v = vec![(format!("On: {}.", on.join(", ")), pal().chalk)];
-            if !off.is_empty() {
+            // Not the same as skipping once the first start is over: it sets the switches back (On start and Screen frames
+            // among them, which the Off line only counts as "and more").
+            let back = later && p == Profile::Simple;
+            if !off.is_empty() && !back {
                 // Two of them, then "and more": a long list ran off the page on 480 lines.
                 let mut shown: Vec<&str> = off.iter().copied().take(2).collect();
                 if off.len() > 2 {
                     shown.push("and more");
                 }
                 v.push((format!("Off: {}.", shown.join(", ")), pal().dust));
+            }
+            if back {
+                v.push(("Picked now, it puts every extra back as pocket-ui ships it, also On start and Screen frames.".to_string(), pal().chalk));
             }
             v
         }
@@ -1097,6 +1137,10 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[P
     // docs/DEVICES.md; on 1080 lines everything fits).
     let (step, last) = (crate::type_scale::line(24, 10), c.h - 100 - crate::type_scale::grow(24));
     for (line, colour) in lines {
+        // Five rows on 960 lines leave no room: the rows say enough.
+        if y > last {
+            break;
+        }
         let room = ((last - y) / step + 1).max(0) as usize;
         for l in text.wrap_prose_at_most(Face::Body, 24, &line, width, room) {
             text.draw(c, Face::Body, 24, MARGIN, y, colour, &l);
@@ -1390,7 +1434,7 @@ mod tests {
         c.press(Button::R1);
         let hits = c.paint(&mut Canvas::new(&mut px, w, h), &mut text);
         assert!(hits.choices.is_empty(), "nothing to switch");
-        let hits = paint_profiles(&mut Canvas::new(&mut px, w, h), &mut text, 1, &Profile::offered());
-        assert_eq!((hits.choices.len(), hits.sel), (4, 1));
+        let hits = paint_profiles(&mut Canvas::new(&mut px, w, h), &mut text, 1, &Profile::offered(), false, &[]);
+        assert_eq!((hits.choices.len(), hits.sel), (5, 1));
     }
 }

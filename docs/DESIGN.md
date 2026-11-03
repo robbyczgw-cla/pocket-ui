@@ -76,7 +76,7 @@ whose words are placed already puts the vignette in the free room under them, al
 The search puts it right of the words (the keyboard may take the room below). "Loading…" pages have none.
 
 **Fronts without a cover** are a printed title card: the console (or the box's emblem: Curator's crate of cartridges,
-Surprise me's gift, PC streaming's monitor, a sticker's sheet, Favourites' star on a cushion, the search's and the
+Surprise me's gift, Just Play's cartridge with dice, PC streaming's monitor, a sticker's sheet, Favourites' star on a cushion, the search's and the
 Lens's glass, a smart shelf's row of cartridges, the history's notebook) over the name, both
 centred, the pair a little above the label's middle; the name on two lines of about the same width, never a lone
 word or number on the second (`home`, `curator:hub`, `sys:osd-warmth`).
@@ -560,7 +560,7 @@ neutrals turned warm at the same contrast (see [Design language](#design-languag
 white), the chip `#938E85` (4.7:1 under the pill's letters), the pill `#272523`, its text `#D2CEC6`, and the
 selected name's pill is the label's paper `#ECE9E1` instead of a bluish white.
 
-**Which surfaces follow the appearance:** every full screen of pocket-ui: the five looks (Cabinet turns from
+**Which surfaces follow the appearance:** every full screen of pocket-ui: the six looks (Cabinet turns from
 walnut on black to light oak on paper, same grain and shading; its spines, cases and brass name cards stay),
 game lists, the search and the letter of a jump, the game card and its pickers, the switcher (also over a game: it covers the screen), Settings and its pages (Battery,
 Updates, About, Store, Sync, Manual), quick settings and Time, the first start. **Which stay dark in both:**

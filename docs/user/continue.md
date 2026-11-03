@@ -1,12 +1,19 @@
-# Frozen games
+# Continue
+
+A game you have played comes back where you left it. **A** on it goes straight back to the moment you left, with no
+question and no waiting. Nothing keeps running and nothing extra goes on your card: it is the moment Quit or sleep wrote.
+
+## An open case means a moment is waiting
 
 Your last five games with a saved moment stand a little open on the shelf: on Home's recent row and in their system's row,
 the game peeks out over the case's top, and when you pick one its cartridge, card or disc comes a little out of the side.
-**A** goes straight back to the moment you left, with no question and no waiting. It's the same moment and the same
-start as [Continuing where you left off](playing.md#continuing-where-you-left-off): nothing keeps running and nothing extra goes on
-your card. In the Minimal, Split, Cards and Cabinet looks the word **Frozen** beside the game says the same.
+In the Minimal, Split, Cards and Cabinet looks the word **Continue** beside the game says the same. The first time an open case is on screen, one line says what it means: "Open means your moment is waiting"
+(once, never in Kids Mode).
+Other games with a moment continue the same way when you start them; they just don't stand open.
 
-How fast depends on the emulator. From A until the moment is back on the screen, measured on real games:
+## How fast
+
+It depends on the emulator. From A until the moment is back on the screen, measured on real games:
 
 | System | Mini V2 | RG35XX Plus |
 |---|---|---|
@@ -19,7 +26,7 @@ How fast depends on the emulator. From A until the moment is back on the screen,
 | GameCube | about 18 s | |
 
 PlayStation 2, GameCube, Wii and 3DS boot the game first and take as long as their emulator takes: they show a small spinner
-until then. A game that can't be frozen stands as a normal case:
+until then. A game that can't continue stands as a normal case:
 
 - **No saved moment:** Xbox (until its core has save states), Wii U, PS3, Vita, ports, ScummVM, PICO-8, TIC-80 and other
   emulators without one. A game you haven't quit yet stands closed too. PlayStation 2 games stand open from your next Quit.
@@ -32,18 +39,17 @@ until then. A game that can't be frozen stands as a normal case:
   touched by any of this.
 - **The emulator refuses the moment** (after an update of its core): the same, "Couldn't go back to that moment".
 
-Settings → System → **Frozen games** switches it off: every case is closed and starts as before; a game whose file, patch or emulator changed
-still doesn't load the old moment. With
-[Remember where I quit](settings.md#remember-where-i-quit) off, a Quit freezes nothing new and the switch's line says so; moments
-from before and from sleep still stand open, and A goes back to those. Motion off: the game is simply out, and the spinner's dots
+There is no switch for the open case. A game whose file, patch or emulator changed doesn't load the old moment. With
+[Continue where I quit](settings.md#continue-where-i-quit) off, a Quit keeps no new moment and the switch's line says so; on
+pocket-ui's own host the older moment no longer stands open (it stays under Load), and moments from sleep still do. Motion off: the game is simply out, and the spinner's dots
 stand still.
 
 ## On an Android phone
 
 It works the same way on your phone, out of the box. The last five games you played in pocket-ui's own player stand a little
-open, the line under the name says **Frozen**, and the button says **Resume** (with a controller, **A Resume**). One tap and
-you're back in that moment. The **Frozen games** row in your phone's Settings tab switches it off. Games that open in another app, like RetroArch, can't
-be frozen and stand closed.
+open, the line under the name says **Continue**, and the button says **Continue** (with a controller, **A Continue**). One tap and
+you're back in that moment. Games that open in another app, like RetroArch, can't
+continue this way and stand closed.
 
 - **Home, or switching apps:** your moment is saved on the way out, and the game stands open.
 - **The game was killed while on screen** (a crash, or Force stop): you're back at the last moment that was saved, and the

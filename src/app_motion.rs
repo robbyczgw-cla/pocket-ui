@@ -355,7 +355,8 @@ impl App {
         let rows = std::mem::take(&mut self.motion.rows);
         let Some(t) = self.motion.transition else { return };
         // The page colour, from the right edge half way down (the Split look and the Cards wash have their own).
-        let bg = c.buf[(c.h / 2 * c.w + c.w - 2).max(0) as usize];
+        // Easy has a neighbour's case there, whose colour would flash over the shelf: its own background instead.
+        let bg = if self.big_live() { super::app_big_shelf::page_colour() } else { c.buf[(c.h / 2 * c.w + c.w - 2).max(0) as usize] };
         if !t.apply(c, Instant::now(), bg, &rows) {
             self.motion.transition = None;
         }

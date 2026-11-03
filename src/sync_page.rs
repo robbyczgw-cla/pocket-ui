@@ -322,7 +322,7 @@ mod tests {
     fn library_data_is_off_at_the_start_and_says_what_it_shares() {
         let mut p = page();
         assert_eq!(p.value(Row::Share(Share::Library)), "Not shared", "opt-in");
-        assert_eq!(p.describe(Row::Share(Share::Library)), "Favourites, status, notes, stickers, play history.");
+        assert_eq!(p.describe(Row::Share(Share::Library)), "Favourites, status, notes, labels, play history.");
         go_to(&mut p, Row::Share(Share::Library));
         assert_eq!(p.press(CONFIRM, CONFIRM, CANCEL), Action::SetShare(Share::Library, true));
         assert_eq!(p.value(Row::Share(Share::Library)), "Shared");

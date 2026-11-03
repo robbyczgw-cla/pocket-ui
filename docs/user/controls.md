@@ -21,11 +21,11 @@ puts A at the bottom and B on the right in every menu of pocket-ui; games keep t
 | L1 / R1 | Jump five entries up / down. |
 | L2 / R2 | Jump to the previous / next first letter (on Home: to the first system, then letter by letter through the systems). The letter shows large for a moment. Hold to keep jumping. Like Up and Down, this stops at the ends of the list: R2 in the last letter goes to the last entry. |
 | Up on Continue | **Search**, the row above it: A opens the [search](playing.md#finding-a-game). |
-| A | Play the selected game, or open the selected system, Favourites, Search, Curator, a smart shelf or a sticker. |
+| A | Play the selected game, or open the selected system, Favourites, Search, Curator, a smart shelf or a label. |
 | B | From a system's game list, Favourites or a Curator list, back to where you opened it. |
-| Y | Star the selected game, or unstar it. Starred games are listed under Favourites on Home. On a smart shelf or sticker: pin it to Home, or take it off. |
-| X | Open the selected game's [card](library.md): facts, play status, your note, related games you own. On a system: its [console page](playing.md#console-pages); on a console page: its [Credits & links](playing.md#credits--links). On a smart shelf or sticker: its options (rename, delete …). |
-| SELECT (press and release) | Open the [game switcher](playing.md#game-switcher). |
+| Y | Star the selected game, or unstar it. Starred games are listed under Favourites on Home. On a smart shelf or label: pin it to Home, or take it off. |
+| X | Open the selected game's [card](library.md): facts, play status, your note, related games you own. On a system: its [console page](playing.md#console-pages); on a console page: its [Credits & links](playing.md#credits--links). On a smart shelf or label: its options (rename, delete …). |
+| SELECT (press and release) | Open [Recent games](playing.md#recent-games). |
 | START (press and release) | Open [Settings](controls-settings.md#in-settings), from Home and from a system's game list or Favourites alike. Settings is a button, not an entry of the list. It opens on its categories; B there comes back to the list you came from. START held together with SELECT or a volume key is a combo, not this. |
 | SELECT + START, held for 1 second | Asks what to do: **Cancel**, **Restart pocket-ui** or **Open EmulationStation** (ROCKNIX's own menu, with a warning first; see [Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)). Escape on a keyboard does the same. |
 
@@ -72,7 +72,7 @@ In the list:
 | SELECT | The order of the games: Name, Last played first, Most played first, Best rated first, Oldest first, Shortest first ([Lens](curator.md#lens)). |
 | B | Back. The Lens keeps its picks and order until pocket-ui restarts. |
 
-On a game's card, Down moves onto the Curator rows (Echoes, Versions, Stickers) and A opens them; on the touch
+On a game's card, Down moves onto the Curator rows (Echoes, Versions, Stickers & labels) and A opens them; on the touch
 screen, tap a row to select it and tap it again to open it. On the Echoes page
 A plays and X opens the card; on the Versions page A plays and Y makes a version the preferred one. The card's
 other buttons are in [Your library](library.md#opening-a-card); Y there also sets your [rating](library.md#my-rating) (Left /
@@ -158,10 +158,10 @@ use Options → Controls for that game.
 | Button | What it does |
 |---|---|
 | HOME, tapped | Pause the game and open the pause menu. |
-| HOME + SELECT | Pause the game and open the [game switcher](playing.md#game-switcher). |
+| HOME + SELECT | Pause the game and open [Recent games](playing.md#recent-games). |
 | HOME + A | Take a [screenshot](playing.md#screenshots) of the game. Not a tap: the pause menu does not open. |
 | HOME + another button | Not a tap. On pocket-ui's own host these are the shortcuts below; in RetroArch games they stay RetroArch shortcuts. |
-| SELECT + START, held for 1 second | Quit a game on pocket-ui's own host. It saves the moment first, whatever Settings → Playing → [Remember where I quit](settings.md#remember-where-i-quit) says. |
+| SELECT + START, held for 1 second | Quit a game on pocket-ui's own host. It saves the moment first, whatever Settings → Playing → [Continue where I quit](settings.md#continue-where-i-quit) says. |
 | All other buttons | Go to the game. On pocket-ui's own host you can change what each one presses (Options → Controls). |
 
 Shortcuts on pocket-ui's own host (each can be switched off in Options → Shortcuts):
@@ -172,7 +172,7 @@ Shortcuts on pocket-ui's own host (each can be switched off in Options → Short
 | HOME + L1 | Load the selected slot. |
 | HOME + Left / Right | Previous / next save slot. |
 | HOME + R2 | Fast-forward on / off. |
-| Hold HOME + L2 | Rewind while held (only when Rewind is on under Extras). |
+| Hold HOME + L2 | Rewind while held (only when Rewind is on under Speed, rumble, fan). |
 | HOME + Y | [Over the game](pause-menu.md#over-the-game): the next of Off, FPS, FPS + sensors and Pixel Path, until you quit. |
 | HOME + A | [Screenshot](playing.md#screenshots): a picture of the game, saved to the SD card. "Screenshot saved" shows for a moment. Always the button printed A, whatever [Button layout](settings.md#button-layout) says. |
 
@@ -191,24 +191,23 @@ While HOME is held, the game gets no buttons. See [Options](options.md#shortcuts
 |---|---|
 | D-pad Up / Down | Move. The menu wraps: Up from Continue is Quit. |
 | D-pad Left / Right | On Save or Load: choose the save slot (not with RetroArch, which has one save). |
-| A | Choose. On **Quit**: end the game, keeping the moment or not as Settings → Playing → [Remember where I quit](settings.md#remember-where-i-quit) says. |
+| A | Choose. On **Quit**: end the game, keeping the moment or not as Settings → Playing → [Continue where I quit](settings.md#continue-where-i-quit) says. |
 | B or HOME | Back to the game. In the quick settings opened from this menu: back to this menu. |
 | START | Open the [quick settings](quick-settings.md) (brightness, volume, fan); B there comes back to this menu. |
-| SELECT | Open the game switcher; B there comes back to this menu. |
+| SELECT | Open Recent games; B there comes back to this menu. |
 
 On the **Achievements** page, Up / Down move and L1 / R1 skip five; B goes back to the menu. On **Pixel Path**,
 Up / Down move between the stages, A explains the selected one (A or B closes the explanation), Y shows Pixel Path
 over the game or hides it, B goes back. On **Players**, Up / Down choose a player, A on a controller makes that
 controller the player, B goes back.
 
-## In the game switcher
+## In Recent games
 
 | Button | What it does |
 |---|---|
 | D-pad Left / Right | Previous / next game. Up / Down do the same. |
 | L1 / R1 | First / last game. |
-| A | Resume the selected game. In a game: back to it (the running game) or switch to another one. |
-| X | Take the selected game off the list. Its saves stay. |
+| A | Continue the selected game where a moment is waiting, else play it. In a game: back to it (the running game) or switch to another one. |
 | Y | Star or unstar the selected game. |
 | B, SELECT or HOME | Close the switcher. |
 

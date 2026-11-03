@@ -1,13 +1,13 @@
 # What each platform has
 
-One table of what a player can use, taken from the code and the docs (0.1.12). "Not seen" means the code has it but nobody has
+One table of what a player can use, taken from the code and the docs (0.1.13). "Not seen" means the code has it but nobody has
 watched it on that platform's real device. ROCKNIX handhelds are the reference: every feature below was seen there, unless its row says otherwise.
 Android was seen on the emulator only; the Steam Deck on one SteamOS session over SSH (docs/STEAMDECK.md).
 
 | Feature | ROCKNIX handhelds | Android | Steam Deck |
 |---|---|---|---|
 | Insert animations (the console takes the game) | yes | yes, at the phone's pixels (emulator) | in the code (shared with the handhelds), not seen |
-| Frozen games (A goes straight back to the saved moment) | yes | yes (emulator) | no: the host owns the emulators and their states |
+| Continue (open cases: A goes straight back to the saved moment) | yes | yes (emulator) | no: the host owns the emulators and their states |
 | Kids mode | yes | no: not in scope, the Android app has no such mode | no: Steam's own button can't be closed, so the row and the profile are gone |
 | Game check | yes | yes (emulator); no "hide a twin" fix | in the code, not seen |
 | Second card (copying games without Wi-Fi) | yes, where the handheld has a slot; USB file transfer (MTP) is retired, see [DEVICES.md](DEVICES.md) | no | no |

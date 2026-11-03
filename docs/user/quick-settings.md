@@ -2,7 +2,7 @@
 
 ## Quick settings
 
-Tap **HOME** on the shelf, or choose **Quick settings** in a game's pause menu (the game stays paused and
+Tap **HOME** on the shelf, or press **START** in a game's pause menu (the game stays paused and
 visible behind the panel). Rows, top to bottom:
 
 | Row | Left/Right and A |

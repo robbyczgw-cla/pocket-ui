@@ -514,7 +514,7 @@ impl App {
             self.core.set_player(p, if home { 0 } else { players[p] }, sticks[p]);
         }
         if rewind_held && !self.ex.rewind_was_held && !self.ex.cfg.rewind {
-            self.hud.toast("Rewind is off. Switch it on under Extras.");
+            self.hud.toast("Rewind is off. Switch it on under Speed, rumble, fan.");
         }
         if self.ex.rewind_was_held && !rewind_held && self.ex.rewound > 0 {
             println!("rewound {} frames, {} left in the history", self.ex.rewound, self.ex.rewind.len());
@@ -1051,9 +1051,9 @@ impl App {
         pocket_ui::fast_switch::saving(false);
     }
 
-    /// The pause menu's "Quit without saving": the battery save as on every exit, but no new auto state. The one
-    /// this session resumed from goes back in place (`Core::keep_resume_point`), so the next start continues from
-    /// the last saving quit; one older than the battery save written now doesn't roll it back (`Core::resume`).
+    /// The pause menu's "Quit" with Continue where I quit off: the battery save as on every exit, but no new auto state.
+    /// The one this session resumed from is left for Load, not for the next start (`Core::keep_resume_point`); one
+    /// older than the battery save written now doesn't roll it back (`Core::resume`).
     fn exit_without_saving(&mut self) {
         pocket_ui::fast_switch::saving(true);
         let battery = self.core.write_sram();
@@ -1138,6 +1138,20 @@ impl App {
             }
         };
         self.hud.toast(msg);
+    }
+
+    /// The pause menu's Load → From the start: the game begins again, nothing else. Its own saves stay, and so does the
+    /// moment on disk until the next Save & quit replaces it, as when you play on.
+    fn start_over(&mut self) {
+        self.core.restart();
+        println!("started over");
+        if let Some(a) = self.cheevos.as_mut() {
+            a.reset();
+        }
+        // The history before belongs to another timeline.
+        self.ex.rewind.clear();
+        self.ex.verify.iter_mut().for_each(|v| v.hashes.clear());
+        self.hud.toast("From the start. Save & quit replaces the waiting moment");
     }
 
     /// A state of Earlier (`load earlier3 <time>`). `listed` is the file's time as the pause menu listed it: a state
@@ -1403,6 +1417,8 @@ impl App {
                 }
                 ["save", ..] => self.save_slot(slot_arg(1).unwrap_or(self.slot)),
                 ["load", name @ ("auto" | "undo")] => self.load_named(name),
+                // Load, last stop: the game from its start.
+                ["restart"] => self.start_over(),
                 // "load earlier3 <time>": a state of Earlier as the menu listed it (`pocket_ui::timeline`).
                 ["load", name, listed @ ..] if pocket_ui::timeline::Name::parse(name).is_some() => {
                     self.load_earlier(name, listed.first().and_then(|t| t.parse().ok()));

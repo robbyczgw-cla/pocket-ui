@@ -23,6 +23,12 @@ fn star_room(px: u32) -> i32 {
 }
 
 impl App {
+    /// A starred game's star after a name set in `px`, ending at `x`.
+    pub(crate) fn paint_name_star(c: &mut Canvas, x: i32, baseline: i32, px: u32) {
+        let r = (px as i32 * 3 / 10).max(7);
+        switcher::star(c, x + px as i32 / 5 + r, baseline - px as i32 * 36 / 100, r, STAR);
+    }
+
     /// The Favorites shelf: starred games that are still in the library, by name.
     pub(crate) fn favorite_items(&self) -> Vec<Item> {
         let items = self
@@ -76,6 +82,9 @@ impl App {
 
     /// Heading of a game shelf.
     pub(crate) fn screen_title(&self) -> Option<String> {
+        if self.big_live() {
+            return self.big_title();
+        }
         match self.screen {
             Screen::Home => None,
             Screen::Games(s) => Some(self.systems[s].fullname.clone()),
@@ -137,6 +146,7 @@ impl App {
             self.favorites.contains(path),
             Some(cover),
         )
+        .with_moment(self.is_frozen_path(path))
         .with_frame(&lastframe::frame_path(&self.data_dir, system, path))
     }
 
@@ -148,7 +158,7 @@ impl App {
     pub(crate) fn keep_last_frame(&mut self, run: &super::Running) {
         let started = SystemTime::now() - run.started.elapsed() - Duration::from_secs(2);
         let quit_from_menu = self.menu.as_ref().is_some_and(|m| m.quitting);
-        // A Quit without saving (Settings > Remember where I quit off): the next start goes back to the last saving quit, and so does the picture of it
+        // A Quit without saving (Settings > Continue where I quit off): the next start goes back to the last saving quit, and so does the picture of it
         // kept then (an emulator's own resume preview was not written either).
         if self.menu.as_ref().is_some_and(|m| m.discarding) {
             return;
@@ -268,12 +278,6 @@ impl App {
                     pocket_ui::fast_switch::mark("switcher: quit sent");
                 }
             }
-            Action::Remove(i) => {
-                let path = sw.entries[i].path.clone();
-                sw.remove(i);
-                self.recents.remove(&path);
-                self.rebuild();
-            }
             Action::Favorite(i) => {
                 let e = &sw.entries[i];
                 let (system, name, path) = (e.system.clone(), e.name.clone(), e.path.clone());
@@ -299,7 +303,7 @@ impl App {
         }
         let Some(menu) = self.menu.as_mut() else { return };
         menu.page = Page::Main;
-        // Always the saving Quit, whatever Settings > Remember where I quit says: switching sets a game aside, and the
+        // Always the saving Quit, whatever Settings > Continue where I quit says: switching sets a game aside, and the
         // switcher shows and continues it from where it was left.
         match menu.items().iter().position(|i| *i == super::MainItem::Quit) {
             Some(q) => menu.sel = q,
@@ -323,6 +327,14 @@ impl App {
         }
         if !pressed || button != Button::Select {
             return false;
+        }
+        // Easy has no game switcher, on purpose: HOME + SELECT and SELECT in the pause menu do nothing (and no hint
+        // names them). A HOME held for SELECT is no tap that opens the pause menu either.
+        if self.big_on() {
+            if self.home_down {
+                self.home_tap = false;
+            }
+            return true;
         }
         if self.menu.is_none() && self.home_down {
             // Not a HOME tap: the release must not open the pause menu on its own.

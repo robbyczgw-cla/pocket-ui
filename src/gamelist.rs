@@ -692,7 +692,7 @@ pub fn fill_card(data: &mut crate::game_card::CardData, e: &Entry, wikipedia: bo
 
 /// "2" -> "2 players", "1-4" -> "1–4 players" (the dash `gamedb::players_text` writes, which the German table knows:
 /// "1-2 players" stayed English on a German card), "1" -> "1 player".
-fn players_text(p: &str) -> String {
+pub fn players_text(p: &str) -> String {
     let p = p.trim();
     match p.split_once('-') {
         Some((a, b)) => format!("{}–{} players", a.trim(), b.trim()),

@@ -134,7 +134,7 @@ enum Setting {
     Media,
     FirstStart,
 }
-const SETTINGS: [Setting; 21] = [
+const SETTINGS: [Setting; 20] = [
     Setting::Look,
     Setting::Appearance,
     Setting::Colours,
@@ -149,7 +149,6 @@ const SETTINGS: [Setting; 21] = [
     Setting::Sounds,
     Setting::Extra(pocket_ui::cozy_extras::Extra::CaseSounds),
     Setting::Extra(pocket_ui::cozy_extras::Extra::IdleSlideshow),
-    Setting::Extra(pocket_ui::cozy_extras::Extra::FrozenGames),
     Setting::ButtonSymbols,
     Setting::GameBoy,
     Setting::Folder,
@@ -646,8 +645,8 @@ impl Ui {
             Screen::Settings => {
                 match SETTINGS[self.menu.min(SETTINGS.len() - 1)] {
                     Setting::Look => {
-                        let i = Theme::ALL.iter().position(|t| *t == self.prefs.theme).unwrap_or(0);
-                        self.prefs.theme = Theme::ALL[(i + 1) % Theme::ALL.len()];
+                        let i = Theme::PHONE.iter().position(|t| *t == self.prefs.theme).unwrap_or(0);
+                        self.prefs.theme = Theme::PHONE[(i + 1) % Theme::PHONE.len()];
                         self.cards.clear();
                     }
                     Setting::Appearance => {

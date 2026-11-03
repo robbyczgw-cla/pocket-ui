@@ -16,6 +16,7 @@ use pocket_ui::palette::pal;
 use pocket_ui::shelf::Item;
 use pocket_ui::text::Face;
 
+use super::app_big_shelf::{PAUSE_GAP, PAUSE_ROW, PAUSE_TOP};
 use super::{App, MainItem, CANCEL, CONFIRM, FADE, HOST_CORES};
 
 /// The rows of the grown-ups' page.
@@ -63,7 +64,7 @@ pub(crate) struct Kids {
     over_setup: bool,
     hold_since: Option<Instant>,
     home_tap: bool,
-    stop_selected: bool,
+    pub(crate) stop_selected: bool,
     /// When the time last counted, and when it was last written.
     counted: Option<Instant>,
     saved_at: Option<Instant>,
@@ -227,7 +228,9 @@ impl App {
     }
 
     fn kids_running_keeps_moment(&self) -> bool {
-        self.running.as_ref().is_some_and(|r| r.emulator == "pocket-core" || pocket_ui::standalone::kids_keeps_moment(&r.system, &r.emulator, &r.core, &r.path) == Some(true))
+        // What has no states keeps no moment (ScummVM, PICO-8 and TIC-80 on pocket-core): Kids Mode doesn't offer those.
+        self.menu.as_ref().is_none_or(|m| !m.hosted || m.saves == pocket_ui::pause_saves::Saves::Slots)
+            && self.running.as_ref().is_some_and(|r| r.emulator == "pocket-core" || pocket_ui::standalone::kids_keeps_moment(&r.system, &r.emulator, &r.core, &r.path) == Some(true))
     }
 
     /// The starter pack's page is open over Kids Mode's picker (`FlowOut::Starter`).
@@ -359,26 +362,8 @@ impl App {
             return;
         }
         if self.menu.is_some() {
-            if !pressed {
-                return;
-            }
-            // The time warning: any of the buttons that go on.
-            if self.kids.warning.is_some() {
-                if button == CONFIRM || button == CANCEL || button == Button::Mode {
-                    self.kids.warning = None;
-                    self.resume_game(None);
-                }
-                return;
-            }
-            let quitting = self.menu.as_ref().is_some_and(|m| m.quitting);
-            match button {
-                _ if quitting => {}
-                Button::Up | Button::Down | Button::Left | Button::Right => self.kids.stop_selected = !self.kids.stop_selected,
-                Button::Mode => self.resume_game(None),
-                b if b == CANCEL => self.resume_game(None),
-                b if b == CONFIRM && self.kids.stop_selected => self.kids_stop(),
-                b if b == CONFIRM => self.resume_game(None),
-                _ => {}
+            if pressed {
+                self.kids_pause_press(button);
             }
             return;
         }
@@ -391,6 +376,28 @@ impl App {
         }
     }
 
+    /// Continue or Stop, here and on the Big shelf (`app_big_shelf`).
+    pub(crate) fn kids_pause_press(&mut self, button: Button) {
+        // The time warning: any of the buttons that go on.
+        if self.kids.warning.is_some() {
+            if button == CONFIRM || button == CANCEL || button == Button::Mode {
+                self.kids.warning = None;
+                self.resume_game(None);
+            }
+            return;
+        }
+        let quitting = self.menu.as_ref().is_some_and(|m| m.quitting);
+        match button {
+            _ if quitting => {}
+            Button::Up | Button::Down | Button::Left | Button::Right => self.kids.stop_selected = !self.kids.stop_selected,
+            Button::Mode => self.resume_game(None),
+            b if b == CANCEL => self.resume_game(None),
+            b if b == CONFIRM && self.kids.stop_selected => self.kids_stop(),
+            b if b == CONFIRM => self.resume_game(None),
+            _ => {}
+        }
+    }
+
     /// Stop: the pause menu's own Quit, which keeps the moment.
     fn kids_stop(&mut self) {
         self.kids.warning = None;
@@ -399,7 +406,11 @@ impl App {
         menu.without_saving = false;
         menu.sel = menu.items().iter().position(|i| *i == MainItem::Quit).unwrap_or(menu.sel);
         self.menu_input(CONFIRM);
-        // The card refuses saves (`app_save_trouble`): nothing is thrown away on a child's press, the game goes on.
+        // The card refuses saves (`app_save_trouble`): nothing is thrown away on a child's press, the game goes on. A
+        // grown-up on the Big shelf gets the normal page that asks (`big_pause`).
+        if !self.kids_live() {
+            return;
+        }
         if let Some(m) = self.menu.as_mut().filter(|m| !matches!(m.page, super::Page::Main)) {
             m.page = super::Page::Main;
             self.kids.trouble = true;
@@ -503,7 +514,7 @@ impl App {
         if self.running.is_some() {
             if self.menu.is_some() && !self.menu.as_ref().is_some_and(|m| m.quitting) {
                 self.kids.stop_selected = y > h / 2;
-                self.kids_in_game(CONFIRM, true);
+                self.kids_pause_press(CONFIRM);
             }
             return;
         }
@@ -566,7 +577,8 @@ impl App {
 
     pub(crate) fn kids_animating(&self) -> bool {
         // Covers still being read: the shelf and the setup's game picker (the grown-up's, `kids.flow`) paint them when they arrive.
-        (self.kids.entered || self.kids.flow.is_some()) && self.cabinet.pending > 0
+        self.big_animating()
+            || (self.kids.entered || self.kids.flow.is_some()) && self.cabinet.pending > 0
             || self.kids.entered && (self.kids.hold_since.is_some() || self.moved_at.elapsed() < Duration::from_millis(320) || matches!(&self.kids.page, Page::Pin(g) if g.wait_until.is_some()))
     }
 
@@ -608,7 +620,19 @@ impl App {
         true
     }
 
+    /// A child's Blue or Pink; on the Big shelf the player's own colours.
+    pub(crate) fn kids_colours(&self) -> Colours {
+        if self.kids.entered {
+            self.kids.cfg.theme.colours()
+        } else {
+            super::app_big_shelf::colours()
+        }
+    }
+
     fn kids_background(&mut self, c: &mut Canvas) {
+        if !self.kids.entered {
+            return super::app_big_shelf::paint_background(c);
+        }
         let theme = self.kids.cfg.theme;
         let pic = match &self.kids.background {
             Some((t, w, h, pic)) if *t == theme && *w == c.w && *h == c.h => pic.clone(),
@@ -626,8 +650,6 @@ impl App {
     }
 
     fn kids_paint_shelf(&mut self, c: &mut Canvas) {
-        // The covers are read on the cabinet's thread; nothing else takes them here, and `kids_animating` waits for them.
-        self.cabinet_poll();
         self.kids_background(c);
         let colours = self.kids.cfg.theme.colours();
         let u = c.h as f32 / 1080.0;
@@ -646,17 +668,56 @@ impl App {
             self.kids_grownups_line(c, colours);
             return;
         }
+        let item = self.items[self.sel.min(n - 1)];
+        let below = self.kids_case_row(c, colours, 0.09, (0.58, 0.60));
+        // The name and what A does, big; while the case goes into its console they are out of its way.
+        if self.launch_at.is_none() {
+            self.kids_shelf_name(c, item, below, colours);
+            self.kids_shelf_play(c, item, colours);
+        }
+        // A notice is for a grown-up (the log has it). Right after a press of A it means that game didn't start.
+        if self.notice.take().is_some() && self.kids.launched_at.is_some_and(|t| t.elapsed() < Duration::from_secs(30)) {
+            self.kids.trouble = true;
+        }
+        if self.kids.trouble {
+            self.kids_band(c, colours, "This game won't start. Ask a grown-up.");
+        }
+        self.kids_paint_low_battery(c, colours);
+        self.kids_paint_hold(c, colours);
+
+        // The way into the console, as on the Shelf look, and the fade into the game.
+        if let Some(t) = self.launch_at {
+            let p = (t.elapsed().saturating_sub(self.cabinet.launch_delay()).as_secs_f32() / FADE.as_secs_f32()).min(1.0);
+            self.paint_insert(c, Instant::now());
+            let p = self.cabinet.launch_fade_at(p);
+            c.fade((p * 255.0) as u8);
+            if !self.cabinet_inserting() {
+                self.shelf_relight(c);
+            }
+            if let Some(pic) = self.launch_picture.as_ref() {
+                pocket_ui::launch_picture::paint(c, pic, (p * 255.0) as u8);
+            }
+        }
+    }
+
+    /// The big case with its neighbours and the arrows, the shelf of Kids Mode and of the Big shelf; there must be a game.
+    /// `top` and `room` are parts of the screen. Returns where its room ends.
+    pub(crate) fn kids_case_row(&mut self, c: &mut Canvas, colours: Colours, top: f32, room: (f32, f32)) -> i32 {
+        // The covers read on the thread since the last frame (`kids_animating` repaints while they come).
+        self.cabinet_poll();
+        let n = self.items.len();
+        let u = c.h as f32 / 1080.0;
         let sel = self.sel.min(n - 1);
         let item = self.items[sel];
         let m = self.medium(item);
         let now = Instant::now();
 
         // The neighbours, smaller and behind, slide with the move.
-        let (room_w, room_h) = (c.w as f32 * 0.58, c.h as f32 * 0.60);
+        let (room_w, room_h) = (c.w as f32 * room.0, c.h as f32 * room.1);
         let (fw1, fh1) = media::front_size(m, 1.0);
         let k = (room_w / fw1 as f32).min(room_h / fh1 as f32);
         let (fw, fh) = media::front_size(m, k);
-        let top = (c.h as f32 * 0.09) as i32;
+        let top = (c.h as f32 * top) as i32;
         let fy = top + (room_h as i32 - fh) / 2;
         let fx = (c.w - fw) / 2;
         let moving = self.moved_at.elapsed() < Duration::from_millis(80);
@@ -684,6 +745,10 @@ impl App {
         if let Some(front) = front {
             let inserting = self.cabinet.insert.as_ref().is_some_and(|i| i.item == item);
             if !inserting {
+                // Easy: a frozen game stands a little open (a child's shelf stays as it is).
+                if !self.kids.entered {
+                    self.paint_ajar_game(c, item, m, &front, (fx, fy + rise), (0, c.h));
+                }
                 art::soft_shadow(c, fx + 12, fy + 16 + rise, fw, fh, 28, 0.55, (0, c.h));
                 art::blit(c, &front, fx, fy + rise, 256, (0, c.h));
             }
@@ -695,59 +760,57 @@ impl App {
             arrow(c, (18.0 * u) as i32 + size, ay, size, -1, colours);
             arrow(c, c.w - (18.0 * u) as i32 - size, ay, size, 1, colours);
         }
-        // The name and what A does, big; while the case goes into its console they are out of its way.
-        if self.launch_at.is_none() {
-            self.kids_shelf_words(c, item, top + room_h as i32, colours);
-        }
-        // A notice is for a grown-up (the log has it). Right after a press of A it means that game didn't start.
-        if self.notice.take().is_some() && self.kids.launched_at.is_some_and(|t| t.elapsed() < Duration::from_secs(30)) {
-            self.kids.trouble = true;
-        }
-        if self.kids.trouble {
-            self.kids_band(c, colours, "This game won't start. Ask a grown-up.");
-        }
-        self.kids_paint_low_battery(c, colours);
-        self.kids_paint_hold(c, colours);
-
-        // The way into the console, as on the Shelf look, and the fade into the game.
-        if let Some(t) = self.launch_at {
-            let p = (t.elapsed().saturating_sub(self.cabinet.launch_delay()).as_secs_f32() / FADE.as_secs_f32()).min(1.0);
-            self.paint_insert(c, Instant::now());
-            let p = self.cabinet.launch_fade_at(p);
-            c.fade((p * 255.0) as u8);
-            if !self.cabinet_inserting() {
-                self.shelf_relight(c);
-            }
-            if let Some(pic) = self.launch_picture.as_ref() {
-                pocket_ui::launch_picture::paint(c, pic, (p * 255.0) as u8);
-            }
-        }
+        top + room_h as i32
     }
 
-    /// The game's name under the case, never cut: smaller when it is long, two lines when that isn't enough; then A.
-    fn kids_shelf_words(&mut self, c: &mut Canvas, item: Item, below: i32, colours: Colours) {
+    /// The game's name under the case, never cut: smaller when it is long, two lines when that isn't enough.
+    /// Returns where the last line ends and its baseline.
+    pub(crate) fn kids_shelf_name(&mut self, c: &mut Canvas, item: Item, below: i32, colours: Colours) -> (i32, i32) {
+        self.kids_shelf_name_at(c, item, below, colours, 1.0)
+    }
+
+    /// `kids_shelf_name` with its type and its distance from the case scaled (Easy's calmer shelf).
+    pub(crate) fn kids_shelf_name_at(&mut self, c: &mut Canvas, item: Item, below: i32, colours: Colours, scale: f32) -> (i32, i32) {
         let u = c.h as f32 / 1080.0;
-        let px = |v: f32| (v * u).round() as u32;
+        let px = |v: f32| (v * u * scale).round() as u32;
         let title = self.case_title(item);
         let width = c.w - (80.0 * u) as i32;
         let one_line = [92.0, 80.0, 70.0].into_iter().map(px).find(|p| self.text.width(Face::Title, *p, &title) <= width);
-        let centre = below + (88.0 * u) as i32;
+        let centre = below + (88.0 * u * scale) as i32;
         if let Some(p) = one_line {
             let tw = self.text.width(Face::Title, p, &title);
             self.kids_words(c, Face::Title, p, (c.w - tw) / 2, centre + p as i32 * 34 / 100, colours.ink, colours.top, &title);
+            ((c.w + tw) / 2, centre + p as i32 * 34 / 100)
         } else {
             let p = px(58.0);
             let lines = self.text.wrap_at_most(Face::Title, p, &title, width, 2);
             let step = (p as f32 * 1.08) as i32;
             let mut y = centre - (lines.len() as i32 - 1) * step / 2 + p as i32 * 34 / 100;
+            let mut end = (c.w / 2, y);
             for l in lines {
                 let tw = self.text.width(Face::Title, p, &l);
                 self.kids_words(c, Face::Title, p, (c.w - tw) / 2, y, colours.ink, colours.top, &l);
+                end = ((c.w + tw) / 2, y);
                 y += step;
             }
+            end
         }
-        // A plays: the button, as big as the word.
-        let word = if self.recents.list.iter().any(|r| self.case_rom(item).is_some_and(|p| p == r.path)) { "Keep playing" } else { "Play" };
+    }
+
+    /// What A does on this game.
+    pub(crate) fn kids_play_word(&self, item: Item) -> &'static str {
+        if self.recents.list.iter().any(|r| self.case_rom(item).is_some_and(|p| p == r.path)) {
+            "Keep playing"
+        } else {
+            "Play"
+        }
+    }
+
+    /// A plays: the button, as big as the word.
+    fn kids_shelf_play(&mut self, c: &mut Canvas, item: Item, colours: Colours) {
+        let u = c.h as f32 / 1080.0;
+        let px = |v: f32| (v * u).round() as u32;
+        let word = self.kids_play_word(item);
         let (word_px, r) = (px(62.0), (44.0 * u) as i32);
         let ww = self.text.width(Face::Title, word_px, word);
         let row_y = c.h - (88.0 * u) as i32;
@@ -758,9 +821,10 @@ impl App {
         self.kids_words(c, Face::Title, word_px, x0 + 2 * r + (20.0 * u) as i32, row_y + (word_px as i32) * 34 / 100, colours.ink, colours.top, word);
     }
 
-    fn case_title(&self, item: Item) -> String {
+    pub(crate) fn case_title(&self, item: Item) -> String {
         match item {
             Item::Game(s, g) => self.systems[s].games[g].name.clone(),
+            Item::Recent(i) => self.recents.list[i].name.clone(),
             _ => String::new(),
         }
     }
@@ -768,6 +832,7 @@ impl App {
     fn case_rom(&self, item: Item) -> Option<&Path> {
         match item {
             Item::Game(s, g) => Some(self.systems[s].games[g].path.as_path()),
+            Item::Recent(i) => Some(self.recents.list[i].path.as_path()),
             _ => None,
         }
     }
@@ -791,7 +856,7 @@ impl App {
     }
 
     /// A big line and a calmer one, in the middle of the screen.
-    fn kids_message(&mut self, c: &mut Canvas, colours: Colours, big: &str, small: &str) {
+    pub(crate) fn kids_message(&mut self, c: &mut Canvas, colours: Colours, big: &str, small: &str) {
         let u = c.h as f32 / 1080.0;
         let (big_px, small_px) = ((96.0 * u).round() as u32, (54.0 * u).round() as u32);
         let width = c.w - (120.0 * u) as i32;
@@ -818,7 +883,7 @@ impl App {
         self.text.draw(c, Face::Body, px, (c.w - w) / 2, c.h - (40.0 * u) as i32, colours.ink, &l);
     }
 
-    fn kids_band(&mut self, c: &mut Canvas, colours: Colours, line: &str) {
+    pub(crate) fn kids_band(&mut self, c: &mut Canvas, colours: Colours, line: &str) {
         let u = c.h as f32 / 1080.0;
         let px = (50.0 * u).round() as u32;
         let h = (110.0 * u) as i32;
@@ -934,7 +999,7 @@ impl App {
         self.kids_paint_hold(c, colours);
     }
 
-    fn kids_paint_pause(&mut self, c: &mut Canvas) {
+    pub(crate) fn kids_paint_pause(&mut self, c: &mut Canvas) {
         // The paused game's picture; a backdrop when there is none.
         if self.menu.as_ref().is_some_and(|m| m.frame.is_some()) {
             self.paint_game_behind(c, 0, 200);
@@ -942,45 +1007,87 @@ impl App {
             self.kids_background(c);
             c.fade(90);
         }
-        let colours = self.kids.cfg.theme.colours();
+        let colours = self.kids_colours();
         let u = c.h as f32 / 1080.0;
         let px = |v: f32| (v * u).round() as u32;
         let Some(menu) = self.menu.as_ref() else { return };
         if menu.quitting {
-            self.kids_message(c, colours, "Saving your game…", "");
+            let word = if self.kids.entered || self.big_keeps_moment() { "Saving your game…" } else { "Closing the game…" };
+            self.kids_message(c, colours, word, "");
+            if !self.kids.entered {
+                self.paint_saving_wait(c);
+            }
             return;
         }
         let name = self.running.as_ref().map(|r| r.name.clone()).unwrap_or_default();
-        let name = self.text.fit(Face::Title, px(70.0), &name, c.w - (80.0 * u) as i32);
-        let nw = self.text.width(Face::Title, px(70.0), &name);
-        self.text.draw(c, Face::Title, px(70.0), (c.w - nw) / 2, (150.0 * u) as i32, colours.ink, &name);
-        let (bw, bh) = ((c.w as f32 * 0.66) as i32, (210.0 * u) as i32);
-        let stop = self.kids.stop_selected;
-        for (i, (word, selected)) in [("Continue", !stop), ("Stop", stop)].into_iter().enumerate() {
-            let y = (250.0 * u) as i32 + i as i32 * (bh + (40.0 * u) as i32);
+        let npx = px(if self.big_pause() { 60.0 } else { 70.0 });
+        let name = self.text.fit(Face::Title, npx, &name, c.w - (80.0 * u) as i32);
+        let nw = self.text.width(Face::Title, npx, &name);
+        self.text.draw(c, Face::Title, npx, (c.w - nw) / 2, (if self.big_pause() { 140.0 } else { 150.0 } * u) as i32, colours.ink, &name);
+        // Easy: Continue, Quit and More as three rows of one kind, smaller and with air; a child's two big buttons as they were.
+        let big = self.big_pause();
+        let (bw, bh, top, gap) = if big {
+            ((c.w as f32 * 0.62) as i32, (PAUSE_ROW * u) as i32, PAUSE_TOP * u, PAUSE_GAP * u)
+        } else {
+            ((c.w as f32 * 0.66) as i32, (210.0 * u) as i32, 250.0 * u, 40.0 * u)
+        };
+        let (stop, more) = (self.kids.stop_selected, self.big_more_selected());
+        let mut rows = vec![("Continue", !stop && !more), (self.big_quit_word().unwrap_or("Stop"), stop && !more)];
+        if big {
+            rows.push(("More: saves, brightness, options", more));
+        }
+        for (i, (word, selected)) in rows.into_iter().enumerate() {
+            let y = top as i32 + i as i32 * (bh + gap as i32);
             let x = (c.w - bw) / 2;
-            let (bg, fg) = if selected { (colours.accent, colours.on_accent) } else { (colours.top, colours.ink) };
-            c.round_rect(x, y, bw, bh, (44.0 * u) as i32, bg);
-            let wpx = px(104.0);
+            // Easy's rows are all seen as rows: the unselected ones stand a shade off the background.
+            let rest = if big { colours.shape } else { colours.top };
+            let (bg, fg) = if selected { (colours.accent, colours.on_accent) } else { (rest, colours.ink) };
+            c.round_rect(x, y, bw, bh, (if big { 38.0 } else { 44.0 } * u) as i32, bg);
+            let (icon, gap) = (((if big { 80.0 } else { 116.0 }) * u) as i32, (if big { 30.0 } else { 36.0 } * u) as i32);
+            // A longer word in another language: smaller, never out of its button.
+            let sizes: [f32; 4] = if big { [76.0, 66.0, 58.0, 50.0] } else { [104.0, 88.0, 74.0, 62.0] };
+            let wpx = sizes.into_iter().map(px).find(|p| self.text.width(Face::Title, *p, word) + icon + gap + (40.0 * u) as i32 <= bw).unwrap_or(px(if big { 44.0 } else { 52.0 }));
             let w = self.text.width(Face::Title, wpx, word);
-            let (icon, gap) = ((116.0 * u) as i32, (36.0 * u) as i32);
             let tx = x + (bw - w - icon - gap) / 2;
             let cy = y + bh / 2;
-            if i == 0 {
-                for row in 0..icon {
-                    let half = (row.min(icon - 1 - row)) * 2 / 2;
-                    c.rect(tx, cy - icon / 2 + row, half.max(1) * 2, 1, 0x1f9d3a);
+            match i {
+                0 => {
+                    for row in 0..icon {
+                        let half = (row.min(icon - 1 - row)) * 2 / 2;
+                        c.rect(tx, cy - icon / 2 + row, half.max(1) * 2, 1, 0x1f9d3a);
+                    }
                 }
-            } else {
-                c.round_rect(tx, cy - icon / 2 + icon / 8, icon * 3 / 4, icon * 3 / 4, (12.0 * u) as i32, 0xd9302f);
+                1 => c.round_rect(tx, cy - icon / 2 + icon / 8, icon * 3 / 4, icon * 3 / 4, (12.0 * u) as i32, 0xd9302f),
+                // More: three dots, in the row's own ink.
+                _ => {
+                    let r = (icon / 10).max(2);
+                    for d in 0..3 {
+                        c.disc(tx + icon / 2 + (d - 1) * icon * 3 / 10, cy, r, fg);
+                    }
+                }
             }
             self.text.draw(c, Face::Title, wpx, tx + icon + gap, cy + wpx as i32 * 34 / 100, fg, word);
         }
-        let line = if self.kids_running_keeps_moment() { "It saves by itself. Press A next time to carry on." } else { "Save in the game before you stop." };
+        let line = match self.big_pause_line() {
+            Some(line) => line,
+            None if self.kids_running_keeps_moment() => "It saves by itself. Press A next time to carry on.",
+            None => "Save in the game before you stop.",
+        };
         let spx = px(46.0);
+        if self.big_on() {
+            // Longer sentences in other languages, with larger text: two lines, never cut. Over the hint of START.
+            let lines = self.text.wrap_at_most(Face::Body, spx, line, c.w - (60.0 * u) as i32, 2);
+            let step = (spx as f32 * 1.2) as i32;
+            for (i, l) in lines.iter().enumerate() {
+                let w = self.text.width(Face::Body, spx, l);
+                self.text.draw(c, Face::Body, spx, (c.w - w) / 2, c.h - (135.0 * u) as i32 - (lines.len() - 1 - i) as i32 * step, colours.ink, l);
+            }
+            self.paint_hint_row(c, &[("START", "Quick settings")]);
+        } else {
         let l = self.text.fit(Face::Body, spx, line, c.w - (60.0 * u) as i32);
         let w = self.text.width(Face::Body, spx, &l);
         self.text.draw(c, Face::Body, spx, (c.w - w) / 2, c.h - (72.0 * u) as i32, colours.ink, &l);
+        }
         self.kids_paint_hold(c, colours);
     }
 

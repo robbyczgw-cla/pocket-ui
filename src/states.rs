@@ -158,10 +158,10 @@ pub const ARMSX2_UNDO: u8 = 98;
 /// ARMSX2's states before the autosave moved: Quit wrote slot 0, which is a player's slot 0 too.
 pub const ARMSX2_OLD_AUTO: u8 = 0;
 
-/// The short name in the slot chip: "Auto", "Before load", or the number.
+/// The short name in the slot chip: "Where I quit" (Auto), "Before load", or the number.
 pub fn chip(target: Target) -> String {
     match target {
-        Target::Auto => "Auto".into(),
+        Target::Auto => "Where I quit".into(),
         Target::Undo => "Before load".into(),
         Target::Slot(n) => n.to_string(),
     }
@@ -170,8 +170,8 @@ pub fn chip(target: Target) -> String {
 /// The line under the preview. `ago`: when it was written ("3 min ago"), None for an empty slot; `saving`: it is Save's list.
 pub fn note(target: Target, ago: Option<&str>, saving: bool) -> String {
     match (target, ago) {
-        (Target::Auto, Some(ago)) => format!("Auto · saved when you quit · {ago}"),
-        (Target::Auto, None) => "Auto · saved when you quit · none yet".into(),
+        (Target::Auto, Some(ago)) => format!("Where I quit · {ago}"),
+        (Target::Auto, None) => "Where I quit · none yet".into(),
         (Target::Undo, Some(ago)) => format!("Before load · {ago}"),
         (Target::Undo, None) => "Before load · none".into(),
         (Target::Slot(n), Some(ago)) if saving => format!("Slot {n} · replaces the save from {ago}"),
@@ -272,8 +272,8 @@ mod tests {
 
     #[test]
     fn chips_and_notes_say_what_the_entry_is() {
-        assert_eq!([Target::Auto, Target::Undo, Target::Slot(3)].map(chip), ["Auto", "Before load", "3"]);
-        assert_eq!(note(Target::Auto, Some("3 min ago"), false), "Auto · saved when you quit · 3 min ago");
+        assert_eq!([Target::Auto, Target::Undo, Target::Slot(3)].map(chip), ["Where I quit", "Before load", "3"]);
+        assert_eq!(note(Target::Auto, Some("3 min ago"), false), "Where I quit · 3 min ago");
         assert_eq!(note(Target::Undo, Some("1 min ago"), false), "Before load · 1 min ago");
         assert_eq!(note(Target::Slot(2), Some("2 h ago"), true), "Slot 2 · replaces the save from 2 h ago");
         assert_eq!(note(Target::Slot(2), Some("2 h ago"), false), "Slot 2 · saved 2 h ago");

@@ -394,6 +394,15 @@ fn the_quick_settings_table_lists_every_row_in_order() {
     }
 }
 
+/// The Look row's line says the picker's order: left and right go through them as they are named.
+#[test]
+fn the_look_row_names_the_looks_in_the_pickers_order() {
+    use pocket_ui::settings::Theme;
+    let line = super::SETTINGS.iter().find(|s| s.0 == "Look").expect("the Settings row").2;
+    let at: Vec<usize> = Theme::ALL.iter().map(|t| line.find(t.name()).unwrap_or_else(|| panic!("{} in {line}", t.name()))).collect();
+    assert!(at.windows(2).all(|w| w[0] < w[1]), "{line}");
+}
+
 #[test]
 fn look_appearance_motion_on_start_and_screen_frames_choices_are_described() {
     use pocket_ui::settings::{Appearance, Motion, Theme};
@@ -448,10 +457,10 @@ fn the_pause_menu_table_matches_the_menu_of_each_emulator() {
     use super::MainItem::{self, *};
     use pocket_ui::quit::Saver;
     // Every row of the menu. A new one has to be added here (the match stops compiling) and to the guide.
-    let all = [Continue, Save, Load, Earlier, Disc, Options, Achievements, QuickSettings, PixelPath, Players, Quit];
+    let all = [Continue, Save, Load, Earlier, Disc, Options, Achievements, PixelPath, Players, Quit];
     for item in all {
         match item {
-            Continue | Save | Load | Earlier | Disc | Options | Achievements | QuickSettings | PixelPath | Players | Quit => {}
+            Continue | Save | Load | Earlier | Disc | Options | Achievements | PixelPath | Players | Quit => {}
         }
     }
     let md = read("docs/user/pause-menu.md");
@@ -520,15 +529,15 @@ fn every_option_group_setting_and_choice_is_described() {
         }
     }
     // The Extras table marks each start value in bold.
-    let extras = pocket_ui::options::GROUPS.iter().find(|g| g.name == "Extras").expect("the Extras group");
-    let rows = first_table(&section(&md, "Extras"));
+    let extras = pocket_ui::options::GROUPS.iter().find(|g| g.name == "Speed, rumble, fan").expect("the Speed, rumble, fan group");
+    let rows = first_table(&section(&md, "Speed, rumble, fan"));
     for s in extras.settings {
         let row = rows
             .iter()
             .find(|r| bold(&r[0]) == s.name)
-            .unwrap_or_else(|| panic!("options.md, Extras: a row for {}", s.name));
+            .unwrap_or_else(|| panic!("options.md, Speed, rumble, fan: a row for {}", s.name));
         let start = format!("**{}**", s.choices[s.default].label);
-        assert!(row[1].contains(&start), "options.md, Extras, {}: the start value {start}", s.name);
+        assert!(row[1].contains(&start), "options.md, Speed, rumble, fan, {}: the start value {start}", s.name);
     }
     for name in ["Emulator", "Controls", "Cheats", "Save changes"] {
         assert!(md.contains(&format!("**{name}**")), "docs/user/options.md: the entry **{name}**");
@@ -576,7 +585,7 @@ fn the_tour_table_lists_every_switch_card_and_what_the_profiles_do() {
     let cards: Vec<_> = available().map(|(_, f)| f).filter(|f| f.switch.is_some()).collect();
     let got: Vec<(String, String, String)> = rows.iter().map(|r| (bold(&r[0]), r.get(1).cloned().unwrap_or_default(), r.get(2).cloned().unwrap_or_default())).collect();
     let want: Vec<(String, String, String)> = cards.iter().map(|f| (f.title.to_string(), word(f.simple).to_string(), word(f.enthusiast).to_string())).collect();
-    assert_eq!(got, want, "docs/user/tour.md: one row per switch card of features::FEATURES, in order: | **Title** | Simple | Enthusiast | … |");
+    assert_eq!(got, want, "docs/user/tour.md: one row per switch card of features::FEATURES, in order: | **Title** | The shelf | Enthusiast | … |");
     for f in available().map(|(_, f)| f).filter(|f| f.switch.is_none()) {
         assert!(tour.contains(&format!("**{}**", f.title)), "docs/user/tour.md: the card **{}** (no switch)", f.title);
     }

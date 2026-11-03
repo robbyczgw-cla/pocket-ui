@@ -149,8 +149,7 @@ pocket-ui waits up to 35 seconds for them.
 Continuing works for pocket-ui's own host and for RetroArch. PlayStation 2, GameCube, Wii and 3DS
 continue only when you quit through the pause menu's Quit. Other standalone emulators (for example
 Wii U) start fresh; use the game's own save. A game on the own host continues from the moment you last
-quit it, not from a crash. With Settings → Playing → **Remember where I quit** off, Quit leaves the last moment as it was, on
-purpose (see [Remember where I quit](settings.md#remember-where-i-quit)).
+quit it, not from a crash. With Settings → Playing → **Continue where I quit** off, Quit keeps no new moment, on purpose: the game starts fresh and the older moment stays under Load (see [Continue where I quit](settings.md#continue-where-i-quit)).
 
 **A game now starts with RetroArch instead of pocket-ui's own host.**
 It did not start on the own host once, so pocket-ui switched it to RetroArch (see
@@ -251,8 +250,8 @@ password had gone missing from the system's network settings is repaired at the 
 asked for it again. It works the other way round too: when EmulationStation emptied the system's copy of the
 password, pocket-ui puts it back from the saved network at its next start.
 
-**Cover art found nothing for some games, or the wrong picture.**
-Cartridge games are recognised by their checksum, other games by file name ([Extras](extras.md#cover-art)). For one
+**Box art found nothing for some games, or the wrong picture.**
+Cartridge games are recognised by their checksum, other games by file name ([Extras](extras.md#box-art)). For one
 game, open its card, press Y and choose **Wrong pictures? Look up again**
 ([the game card](library.md#wrong-pictures-look-up-again)): it deletes that game's pictures and looks it up afresh.
 Games without a match are otherwise skipped on later runs. A disc game or a homebrew game the list doesn't know is
@@ -409,7 +408,7 @@ In `/storage/.config/pocket-ui/` on the SD card:
 | `fallback.json` | Games that start with RetroArch because they did not start on the own host |
 | `covers/`, `snaps/`, `titles/` | Cover art, and the screenshots and title screens beside it ([Pictures](extras.md#pictures)) |
 | `favorites.json` | Starred games (if you use Favourites) |
-| `library.json` | Play status, notes, sessions and stickers ([Your library](library.md#where-it-is-kept)) |
+| `library.json` | Play status, notes, sessions and labels ([Your library](library.md#where-it-is-kept)) |
 | `curator.json` | Curator's switches and your smart shelves |
 | `wikipedia/` | Game descriptions loaded from Wikipedia |
 | `retroachievements.json`, `achievements/` | The RetroAchievements sign-in key and what the Pocket keeps for offline play ([Achievements](achievements.md#good-to-know)) |

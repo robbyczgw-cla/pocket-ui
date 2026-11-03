@@ -5,7 +5,6 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
-use pocket_ui::cozy_extras::{self, Extra};
 use pocket_ui::frozen::{self, AtLaunch, Mark};
 use pocket_ui::gfx::Canvas;
 use pocket_ui::palette::*;
@@ -18,9 +17,9 @@ const SPIN_STEP: Duration = Duration::from_millis(125);
 /// It gives up with `standalone`'s wait for the emulator.
 const SPIN_FOR: Duration = Duration::from_secs(120);
 
-/// On the Frozen games switch and available on this device.
+/// Available on this device (there is no switch: an open case always means a moment is waiting).
 fn wanted() -> bool {
-    cozy_extras::on(Extra::FrozenGames) && frozen::available()
+    frozen::available()
 }
 
 impl App {
@@ -43,7 +42,7 @@ impl App {
 
     /// Another game shares this one's states, and the moment on the card can't be shown to be this one's. Only the emulators
     /// that name their states after the file.
-    fn shared_moment_not_own(&self, system: &str, path: &Path, emulator: &str) -> bool {
+    pub(crate) fn shared_moment_not_own(&self, system: &str, path: &Path, emulator: &str) -> bool {
         let others = self.same_name_games(system, path);
         if others.is_empty() || !matches!(emulator, "pocket-core" | "retroarch") {
             return false;
@@ -55,6 +54,7 @@ impl App {
 
     /// Reads again which games stand open: on a thread, the answer comes as an event.
     pub(crate) fn frozen_refresh(&mut self) {
+        self.big_moments_refresh();
         if !wanted() {
             FROZEN_GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             return self.frozen_got(Vec::new());
@@ -69,8 +69,14 @@ impl App {
 
     pub(crate) fn frozen_got(&mut self, list: Vec<PathBuf>) {
         if list != self.frozen {
+            let first = self.frozen.is_empty() && !list.is_empty();
             self.frozen = list;
             self.cabinet_frozen_changed();
+            // The first time an open case is on screen: one line says what it means (once ever, not in Kids Mode).
+            if first && self.running.is_none() && self.setup.is_none() && self.settings_page.is_none() && pocket_ui::first_game::tell_open_case_once(&self.data_dir) {
+                self.toast = Some((pocket_ui::first_game::OPEN_CASE_NOTE.into(), Instant::now()));
+                self.request_redraw();
+            }
         }
     }
 
@@ -207,7 +213,7 @@ impl App {
     }
 }
 
-pub(crate) const FROZEN: &str = "Frozen";
+pub(crate) const FROZEN: &str = "Continue";
 
 /// Eight dots round a point, one of them lit, the two behind it fading.
 pub(crate) fn spinner(c: &mut Canvas, cx: i32, cy: i32, turn: i32) {

@@ -263,6 +263,7 @@ impl App {
                 println!("web: new games from an upload");
                 // The same game stays selected: the new list's numbers may mean another one (as `library_apply_pending`).
                 let was = super::app_library::KeepSelection::note(&self.items, self.sel, &self.systems);
+                let in_front = self.big_in_front();
                 self.systems = Arc::unwrap_or_clone(systems);
                 // The next start shows them from the cache (`library_cache`), written on a thread.
                 pocket_ui::library_cache::store_soon(&self.data_dir, &self.es_systems, self.systems.clone());
@@ -272,6 +273,7 @@ impl App {
                 self.covers.clear();
                 self.rebuild();
                 was.restore(&self.items, &self.systems, &mut self.sel, &mut self.prev_sel);
+                self.big_keep_part(in_front);
                 self.auto_covers("games uploaded");
             }
         }
@@ -319,7 +321,7 @@ impl App {
             }
             Edit::Sticker { path, id, on } => {
                 if !self.library.stickers().iter().any(|s| s.id == id) {
-                    return Err("That sticker is gone.".into());
+                    return Err("That label is gone.".into());
                 }
                 if self.library.get(&path).stickers.contains(&id) != on {
                     io(self.library.toggle_sticker(&path, id).map(|_| ()))?;
@@ -330,7 +332,7 @@ impl App {
             }
             Edit::NewSticker { name, path } => {
                 if name.trim().is_empty() {
-                    return Err("Give the sticker a name.".into());
+                    return Err("Give the label a name.".into());
                 }
                 let id = self.library.add_sticker(&name).map_err(|e| format!("The Pocket could not save it: {e}"))?;
                 if let Some(path) = path {
@@ -344,10 +346,10 @@ impl App {
             }
             Edit::RenameSticker { id, name } => {
                 if !self.library.stickers().iter().any(|s| s.id == id) {
-                    return Err("That sticker is gone.".into());
+                    return Err("That label is gone.".into());
                 }
                 if name.trim().is_empty() {
-                    return Err("Give the sticker a name.".into());
+                    return Err("Give the label a name.".into());
                 }
                 io(self.library.rename_sticker(id, &name))?;
                 self.curator.touch();
@@ -356,7 +358,7 @@ impl App {
             }
             Edit::DeleteSticker { id } => {
                 if !self.library.stickers().iter().any(|s| s.id == id) {
-                    return Err("That sticker is gone.".into());
+                    return Err("That label is gone.".into());
                 }
                 io(self.curator_delete_sticker(id))
             }

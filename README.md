@@ -16,7 +16,7 @@ pocket-ui is a complete, controller-first frontend and game player for **Retroid
 PlayStation 2, gets the same small pause menu with save slots, pictures and a step back in time. Games show up with
 box art, their own card and facts, and a Curator that knows what you own and what you have not touched yet.
 
-Free and open source. Version **0.1.12** is out as a public alpha: [download it](../../releases/tag/v0.1.12),
+Free and open source. Version **0.1.13** is out as a public alpha: [download it](../../releases/tag/v0.1.13),
 [watch the trailer](https://pocketui.xyz) and see more at **[pocketui.xyz](https://pocketui.xyz)**. [Install](#get-it) takes about five minutes if ROCKNIX is already on your card.
 
 <p align="center">
@@ -40,7 +40,7 @@ Free and open source. Version **0.1.12** is out as a public alpha: [download it]
 - **Cozy or Quick.** Cozy opens the case, slides the cartridge in with a click and switches on an old TV; Quick just
   starts. Playful animations, sounds of the cases, light that follows the time of day, a plant that grows with your
   hours and a trophy for your first finished game. Each touch has its own switch (Settings → Look → Cozy extras, and Sound & feel).
-- **Make it yours.** Five looks (Shelf, Minimal, Split, Cards, Cabinet), five colour sets in dark and light, three
+- **Make it yours.** Six looks (Shelf, Easy, Minimal, Split, Cards, Cabinet), five colour sets in dark and light, three
   fonts, and button symbols in Nintendo, Xbox or PlayStation style. An idle slideshow of your games' pictures if you want one.
 - **One pause menu everywhere.** HOME opens Continue, Save and Load with 8 slots and previews (on the memory card of the
   game's own console, if you like), Earlier (step back a few minutes), screen frames and effects (scanlines, CRT, LCD
@@ -62,14 +62,14 @@ Free and open source. Version **0.1.12** is out as a public alpha: [download it]
 - New card? → **Fresh card**.
 - Like terminals? → **Over SSH**.
 
-Download from the [v0.1.12 release](../../releases/tag/v0.1.12) and pick one way.
+Download from the [v0.1.13 release](../../releases/tag/v0.1.13) and pick one way.
 Checksums are in `SHA256SUMS`.
 
 | Way | When | What to do |
 |---|---|---|
-| **Ports installer** | ROCKNIX is already on your card | Unzip [pocket-ui-0.1.12-ports-installer.zip](../../releases/download/v0.1.12/pocket-ui-0.1.12-ports-installer.zip) into `roms/ports` (the games share of ROCKNIX's file sharing: switch on Samba in ROCKNIX's Network Settings, then open `\\<device name or IP>` on Windows or `smb://<device name or IP>` on a Mac; [ROCKNIX explains it](https://rocknix.org/play/add-games/)), then in EmulationStation open **Ports → Install pocket-ui**. To go back: **Ports → Uninstall pocket-ui** |
-| **Fresh card** | New card, nothing on it yet | New to ROCKNIX on the Mini V2? Set it up once with [ROCKNIX's own guide](https://rocknix.org/devices/retroid/retroid-pocket-mini/) (flashing the card plus its one-time bootloader step), then come back. With ROCKNIX 20261001 or newer on the card, copy the two files from [pocket-ui-0.1.12-rocknix-card.zip](../../releases/download/v0.1.12/pocket-ui-0.1.12-rocknix-card.zip) onto the card's `ROCKNIX` partition and boot. It installs on the second start |
-| **Over SSH** | You like a terminal | Unzip [pocket-ui-0.1.12-rocknix-install.zip](../../releases/download/v0.1.12/pocket-ui-0.1.12-rocknix-install.zip) in `/storage`, run `sh install.sh --check`, then `sh install.sh` |
+| **Ports installer** | ROCKNIX is already on your card | Unzip [pocket-ui-0.1.13-ports-installer.zip](../../releases/download/v0.1.13/pocket-ui-0.1.13-ports-installer.zip) into `roms/ports` (the games share of ROCKNIX's file sharing: switch on Samba in ROCKNIX's Network Settings, then open `\\<device name or IP>` on Windows or `smb://<device name or IP>` on a Mac; [ROCKNIX explains it](https://rocknix.org/play/add-games/)), then in EmulationStation open **Ports → Install pocket-ui**. To go back: **Ports → Uninstall pocket-ui** |
+| **Fresh card** | New card, nothing on it yet | New to ROCKNIX on the Mini V2? Set it up once with [ROCKNIX's own guide](https://rocknix.org/devices/retroid/retroid-pocket-mini/) (flashing the card plus its one-time bootloader step), then come back. With ROCKNIX 20261001 or newer on the card, copy the two files from [pocket-ui-0.1.13-rocknix-card.zip](../../releases/download/v0.1.13/pocket-ui-0.1.13-rocknix-card.zip) onto the card's `ROCKNIX` partition and boot. It installs on the second start |
+| **Over SSH** | You like a terminal | Unzip [pocket-ui-0.1.13-rocknix-install.zip](../../releases/download/v0.1.13/pocket-ui-0.1.13-rocknix-install.zip) in `/storage`, run `sh install.sh --check`, then `sh install.sh` |
 
 pocket-ui replaces exactly one thing: the program ROCKNIX's `essway` service starts. Remove it and stock ROCKNIX with
 EmulationStation is back; your games, saves and ROCKNIX settings stay where they are. Android on the internal storage

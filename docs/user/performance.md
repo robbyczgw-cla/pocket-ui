@@ -58,9 +58,9 @@ EmulationStation, that one applies to that game.
 ## Which setting a game uses
 
 A game uses, in this order: what you saved for **this game** in the pause menu, what you saved for **its console**,
-then **Games: performance** and **Games: fan** from this page, then the system's own setting. So the page sets the default for every game, and the pause menu (Options → Extras, then Save changes) makes
+then **Games: performance** and **Games: fan** from this page, then the system's own setting. So the page sets the default for every game, and the pause menu (Options → Speed, rumble, fan, then Save changes) makes
 exceptions for one console or one game. "Restore defaults" in the pause menu goes back to this page's values. See
-[Options](options.md#extras).
+[Options](options.md#speed-rumble-fan).
 
 **Games: performance** applies to the games on pocket-ui's own host (see
 [Systems](systems.md#on-pocket-uis-own-host)), to PortMaster ports (below), and to PlayStation 2, GameCube, Wii and

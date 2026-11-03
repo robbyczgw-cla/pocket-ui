@@ -1,7 +1,7 @@
 # The web companion: your library in a browser
 
 Settings → Connections → **Web companion** lets you open the Pocket's library on your phone or computer: browse and search your
-games, set a game's status, rating, note and stickers, manage stickers and smart shelves, upload games, BIOS files and
+games, set a game's status, rating, note and labels, manage labels and smart shelves, upload games, BIOS files and
 PortMaster files, see your play time and the battery, and look at the Pocket's screen. It works only over
 [Tailscale](remote.md), and it is **off** until you switch it on.
 
@@ -61,15 +61,15 @@ Pocket then.
 ## What you can do
 
 - **Library**: your systems with their games, a search over all games, and a page per game with its box art (a letter
-  tile when there is none), facts from the offline game list, time played, status, your rating, note and stickers.
-  Status, rating (five stars; tap the stars you gave again to take the rating away), note, stickers and favourite
+  tile when there is none), facts from the offline game list, time played, status, your rating, note and labels.
+  Status, rating (five stars; tap the stars you gave again to take the rating away), note, labels and favourite
   change on the Pocket at once, as if you had pressed the buttons there. A game hidden on the Pocket
   ([Hide or delete](library.md#hide-or-delete-a-game)) is not listed; shown again, it is back at the next page.
 - **Screenshots**: a game's page lists the screenshots you took in that game (HOME + A, see
   [Screenshots](playing.md#screenshots)), newest first. Tap one to open it full size. The page only reads them: it
   cannot delete or add any (use the file share for that). They are not available while a game is running.
-- **Shelves**: Favourites, your stickers (rename, delete) and Curator's smart shelves (rename, delete; make them on the
-  Pocket with the Lens). A smart shelf lists its games in the order chosen for it on the Pocket. Deleting a sticker or a shelf never deletes a game.
+- **Shelves**: Favourites, your labels (rename, delete) and Curator's smart shelves (rename, delete; make them on the
+  Pocket with the Lens). A smart shelf lists its games in the order chosen for it on the Pocket. Deleting a label or a shelf never deletes a game.
 - **Upload**:
   - **Games** go into their system's folder, chosen by the file type (with a question when several systems take it).
     A file the system does not take is refused, with the types it does take.

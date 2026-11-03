@@ -820,6 +820,11 @@ fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[Ca
 /// The description and the line that credits it, as the back shows them (and the info page, `game_info`); None when
 /// there is no description to show.
 pub(crate) fn about(d: &CardData) -> (Option<String>, Option<String>) {
+    // The short card: one sentence of the player's own description.
+    if let (true, Summary::Gamelist(t)) = (d.plain, &d.summary) {
+        let first = t.split_inclusive(['.', '!', '?']).next().unwrap_or(t).trim().to_string();
+        return (Some(first).filter(|f| !f.is_empty()), None);
+    }
     let (about, credit) = match &d.summary {
         Summary::Wikipedia { text: t, title } => (Some(t.clone()), Some(format!("Text: Wikipedia, “{title}”, CC BY-SA 4.0"))),
         Summary::Loading => (d.sentence.clone(), Some("Loading the description from Wikipedia…".to_string())),
@@ -863,6 +868,13 @@ fn paint_shot(c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, i32
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_short_card_keeps_one_sentence_of_a_local_description() {
+        let d = CardData { plain: true, summary: Summary::Gamelist("A kart race. Then more about it.".into()), ..Default::default() };
+        assert_eq!(about(&d), (Some("A kart race.".to_string()), None));
+    }
+
 
     #[test]
     fn every_medium_has_a_box_and_every_template_has_room_for_its_band() {

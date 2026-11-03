@@ -204,7 +204,7 @@ impl Share {
             Share::Ps2Cards => "Both PS2 memory cards. Paused while playing.",
             Share::Dolphin => "GameCube cards, Wii saves. Paused while playing.",
             Share::Azahar => "3DS save data. Paused while playing.",
-            Share::Library => "Favourites, status, notes, stickers, play history.",
+            Share::Library => "Favourites, status, notes, labels, play history.",
             Share::Bios => "Copyrighted. Only between your own devices.",
         }
     }

@@ -102,6 +102,8 @@ pub struct Entry {
     /// The game that is running right now (switcher opened in a game).
     pub current: bool,
     pub favorite: bool,
+    /// A moment is waiting for this game (the shelf's open case, `App::is_frozen_path`): A continues it.
+    pub moment: bool,
     /// Resume and slot previews, best first (their size tells `now_playing` the core's frame size).
     shots: Vec<PathBuf>,
     cands: Candidates,
@@ -109,6 +111,12 @@ pub struct Entry {
 }
 
 impl Entry {
+    /// A moment waits for this game: the hint says Continue instead of Play.
+    pub fn with_moment(mut self, moment: bool) -> Self {
+        self.moment = moment;
+        self
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new(system: &str, name: &str, path: &Path, label: String, meta: String, color: u32, favorite: bool, cover: Option<PathBuf>) -> Self {
         let (auto, slots) = previews(&slots::base(system, path.file_stem().and_then(|s| s.to_str()).unwrap_or_default()));
@@ -121,6 +129,7 @@ impl Entry {
             color,
             current: false,
             favorite,
+            moment: false,
             shots: auto.iter().cloned().chain(slots.iter().map(|(p, _)| p.clone())).collect(),
             cands: Candidates {
                 auto,
@@ -544,7 +553,6 @@ pub enum Action {
     Close,
     /// Resume this entry (switch to it in a game).
     Play(usize),
-    Remove(usize),
     Favorite(usize),
 }
 
@@ -662,34 +670,23 @@ impl Switcher {
             // A is on the right face button, B at the bottom, X on top, Y on the left (Nintendo layout).
             Button::East if !self.entries.is_empty() => return Action::Play(self.sel),
             Button::South | Button::Select | Button::Mode => return Action::Close,
-            Button::North if self.entries.get(self.sel).is_some_and(|e| !e.current) => return Action::Remove(self.sel),
             Button::West if !self.entries.is_empty() => return Action::Favorite(self.sel),
             _ => {}
         }
         Action::None
     }
 
-    /// Takes entry `i` off the row.
-    pub fn remove(&mut self, i: usize) {
-        if i < self.entries.len() {
-            self.entries.remove(i);
-        }
-        self.sel = self.sel.min(self.entries.len().saturating_sub(1));
-        self.pos.jump(self.sel as f32);
-    }
-
     /// Button hints for the selected game, for the pill at the bottom right.
     pub fn hints(&self) -> Vec<(&'static str, &'static str)> {
         let Some(e) = self.entries.get(self.sel) else { return vec![("B", "Back")] };
+        // On the shelf the word is the shelf's: Continue where a moment waits (`moment`), else Play.
         let play = match (self.in_game, e.current) {
             (true, true) => "Continue",
             (true, false) => "Switch",
-            _ => "Resume",
+            _ if e.moment => "Continue",
+            _ => "Play",
         };
         let mut h = vec![("B", "Back")];
-        if !e.current {
-            h.push(("X", "Remove"));
-        }
         h.push(("Y", if e.favorite { "Unstar" } else { "Star" }));
         h.push(("A", play));
         h
@@ -709,7 +706,7 @@ impl Switcher {
         self.load_pictures(self.pos());
         self.paint_backdrop(c);
         // Heading pill at the top left, with where in the row we are.
-        let heading = if self.in_game { "Switch game" } else { "Recently played" };
+        let heading = "Recent games";
         let count = if self.entries.len() > 1 {
             format!("{} / {}", self.sel + 1, self.entries.len())
         } else {
@@ -1029,20 +1026,30 @@ mod tests {
         let mut s = Switcher::new(vec![entry("a", true), entry("b", false), entry("c", false)], true);
         assert_eq!(s.input(Button::Left), Action::None);
         assert_eq!(s.sel, 0);
-        assert_eq!(s.input(Button::North), Action::None, "the running game can't be removed");
         assert_eq!(s.input(Button::East), Action::Play(0));
         s.input(Button::Right);
         s.input(Button::Right);
         s.input(Button::Right);
         assert_eq!(s.sel, 2);
-        assert_eq!(s.input(Button::North), Action::Remove(2));
+        assert_eq!(s.input(Button::North), Action::None, "X does nothing in the switcher");
         assert_eq!(s.input(Button::West), Action::Favorite(2));
         assert_eq!(s.input(Button::South), Action::Close);
         assert_eq!(s.input(Button::Select), Action::Close);
-        s.remove(2);
-        assert_eq!((s.sel, s.entries.len()), (1, 2));
         s.switching = true;
         assert_eq!(s.input(Button::East), Action::None, "no input while switching");
+    }
+
+    #[test]
+    fn a_says_continue_only_where_a_moment_waits_and_x_offers_nothing() {
+        let hint = |s: &Switcher, key: &str| s.hints().iter().find(|h| h.0 == key).map(|h| h.1);
+        let mut s = Switcher::new(vec![entry("a", false).with_moment(true), entry("b", false)], false);
+        assert_eq!(hint(&s, "A"), Some("Continue"), "a moment waits: the shelf's word");
+        s.input(Button::Right);
+        assert_eq!(hint(&s, "A"), Some("Play"), "no moment: the game starts, nothing is promised");
+        assert_eq!(hint(&s, "X"), None, "no Remove: it took the play time with it");
+        // In a game: the running one continues, another switches, whatever it has.
+        let s = Switcher::new(vec![entry("a", true), entry("b", false).with_moment(true)], true);
+        assert_eq!(hint(&s, "A"), Some("Continue"));
     }
 
     // ---- pictures ----

@@ -80,7 +80,7 @@ itself if pocket-ui cannot start at all.
 The first time pocket-ui runs, it walks you through a short setup. **START skips a step** (on a keyboard it means
 Connect or Next: B goes back, then START skips). You can
 open every step again later from **Settings** (press START on the Home screen).
-Each step says "Step n of 7" at the top right (five on a handheld with no Wi-Fi chip, which skips Wi-Fi and Extras).
+Each step says "Step n of 7" at the top right (five with no Wi-Fi chip, which skips Wi-Fi and Pictures & extras).
 
 1. **Welcome.** Under the cartridge and your handheld, press A to begin. Left/Right choose the language, **English**, **Deutsch** or **Español**: the screen
    changes at once, and the choice is kept ([Language](language.md)). It starts on the system language
@@ -92,24 +92,24 @@ Each step says "Step n of 7" at the top right (five on a handheld with no Wi-Fi 
    "Sample game". Left/Right (or Up/Down) switch looks, Y switches between Dark, Light and Automatic
    ([Appearance](settings.md#appearance)), L1 between Cozy and Quick animations ("Cozy: watch your game slide into the
    console. Quick: straight into the game.", [Animations](settings.md#animations)), R1 between Normal, Medium and Large
-   text ([Text size](settings.md#text-size)), then A ("Keep this look"). See [Playing](playing.md#looks) for the five looks.
-3. **How do you like to play?** Three ways to start the extras: **Simple**, **Enthusiast** or **Choose for yourself**.
+   text ([Text size](settings.md#text-size)), then A ("Keep this look"). See [Playing](playing.md#looks) for the six looks.
+3. **How do you like to play?** Ways to start: **The shelf**, **Easy**, **Enthusiast** or **Choose for yourself**.
    See below.
 4. **Wi-Fi.** See below.
 5. **Time zone.** pocket-ui suggests one. See below.
-6. **Extras.** Pictures, cover art and PortMaster games. **Pictures** is a choice you see here, **Box art**,
-   **Box art and screenshots** (the default) or **Off**, with a line about where they come from. Cover art
+6. **Pictures & extras.** Box art, pictures and PortMaster games. **Pictures** is a choice you see here, **Box art**,
+   **Box art and screenshots** (the default) or **Off**, with a line about where they come from. Box art
    and PortMaster need Wi-Fi and are optional. Nothing is downloaded before you leave this step: with a connection,
    the pictures for the games already on the SD card then download by themselves in the background, as chosen, unless
-   you chose Off; this page shows the progress. See [Extras](extras.md#cover-art).
+   you chose Off; this page shows the progress. See [Pictures & extras](extras.md#box-art).
 7. **Add your games.** A tile per system with its folder, and a switch for file sharing. See below.
 8. **You're all set.** A line tells you that in a game, HOME opens the menu (save, load, quit); Kids Mode leaves it out. It counts the games already on the SD card ("Your 16 games are on the shelf."). With a skipped time zone and nothing to guess from, it says the clock is on UTC. Press A ("Go to
    your games") to reach Home.
 
 After a restart or a flat battery in the middle, the setup opens again at the step it had reached.
 
-In most steps, B goes back one step. The hint bar at the bottom lists only what works right now: without Wi-Fi the Extras
-step leaves out A ("Download", "Browse"), and Add your games leaves out X (file sharing), because both need a connection.
+In most steps, B goes back one step. The hint bar lists only what works now: without Wi-Fi, Pictures & extras leaves out A and
+Add your games leaves out X (file sharing).
 
 ### How do you like to play?
 
@@ -119,9 +119,10 @@ says what the selected one switches on and off, in everyday words ("On: suggesti
 animations. Off: pick games by mood and length, ..."). The names of the features are on their cards in
 [Settings → Help & tools → Tour](tour.md).
 
-- **Simple**: "As pocket-ui ships, the same as skipping this step." This is the start
-  setting of a new Pocket, nothing more: Lens & smart shelves, Stickers, Echoes, Versions and Motion are on; Up next,
+- **The shelf**: "Your games on a shelf, as it comes." This is the start
+  setting of a new Pocket, nothing more, the same as skipping this step: Lens & smart shelves, Labels, Echoes, Versions and Motion are on; Up next,
   Pixel Path, Echoes beyond this device, frames on every console and going straight back into your game are off.
+- **Easy**: the same start settings with the [Easy](easy.md) look.
 - **Enthusiast**: "Suggestions, play statistics, picture details and frames, all on." All of Curator, Pixel Path in the pause menu (the line over the game stays off), Auto screen frames on every
   console, and On start set to your last game.
 - **Choose for yourself**: one card per feature, each with a small picture of what it does and three rows, **On**, **Off**
@@ -131,10 +132,10 @@ animations. Off: pick games by mood and length, ..."). The names of the features
 - **For a child**: a big, simple shelf with the games you pick, behind your PIN. Its own steps follow, then the rest of the first start
   ([Kids mode](kids-mode.md)). Not on the Steam Deck.
 
-START skips the step and leaves everything as it is, which is the same as Simple. A profile only sets switches that Settings has too, nothing of
-its own: each one stays in its Settings page afterwards, and [Settings → Help & tools → Tour](tour.md) shows the cards again
-whenever you like. The table there lists every card and what Simple and Enthusiast do with it. Menu sounds, haptics
-and the stick lights are left as they are by both.
+START skips the step and leaves everything as it is: the same as The shelf at the first start (picked later from Help & tools, The
+shelf puts every extra back as pocket-ui ships it, On start and Screen frames too). A profile only sets switches that Settings has
+too; each stays on its Settings page, and [Settings → Help & tools → Tour](tour.md) shows the cards again whenever you like. Menu
+sounds, haptics and the stick lights are left as they are.
 
 ### Time zone
 

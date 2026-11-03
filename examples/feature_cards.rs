@@ -58,7 +58,7 @@ fn main() {
             );
         }
         for sel in 0..3 {
-            features::paint_profiles(&mut Canvas::new(&mut buf, w, h), &mut text, sel, &features::Profile::offered());
+            features::paint_profiles(&mut Canvas::new(&mut buf, w, h), &mut text, sel, &features::Profile::offered(), false, &[]);
             write_png(&buf, w, h, &out.join(format!("{name}-profiles-{sel}.png")));
         }
     }

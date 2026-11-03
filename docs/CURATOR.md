@@ -480,6 +480,7 @@ user guide is `docs/user/curator.md#curator`, `settings.md#curator`, `controls.m
 | `src/curator/prefs.rs` | `curator.json`: the switches and the smart shelves (with their order) |
 | `src/curator/sort.rs` | `Order` (Name, Last played, Play time, Rating, Year, Length) and `Index::sorted` / `sort_games`: a list in an order, games without the figure last by name |
 | `src/curator/surprise.rs` | "Surprise me": `Index::surprise` (weighted, seeded draw over works), `surprise_weight`, `surprise_reason`, the generator `Rng` |
+| `src/curator/justplay.rs` | "Just Play": `Index::just_play` (four tiers, last game left out, slow systems ×0.2 in tiers 3–4, at most `TRIES` startability checks), `Offer`, `Why`, `Miss` |
 | `src/curator/today.rs` | What Home's Curator row offers: `Index::today` (the day's pick, a Surprise me draw seeded by the day; the games waiting, `Waiting::Rediscover` or `NotStarted`), on the index thread |
 | `src/home_panel.rs` | The picture side of Home's Curator, Favorites and pinned rows: what it shows (`curator`, `surprise`, `list`), where the covers go (`layout`), a line shortened by its parts (`fit_parts`), a title tile's lines (`title_lines`); pure, unit-tested |
 | `src/app_home_panel.rs` | The App's side: the tiles from the index and the favourites, painting from cached covers only, the waiting games giving way to the line |
@@ -663,13 +664,13 @@ Roon Radio goes on after the album; Up next does the same for a game, but only s
 - **Showing it** (`App::paint_up_next`): only while the shelf is on screen with nothing over it (`up_next_room`:
   no card, page, menu, switcher, search, settings, notice). A paper label over the bottom of the shelf in every look
   ("Up next", the box, the name, "PSP · Same series · …"), the shelf fading out under it, and the hint row says
-  "A Play it · B Not now" instead of the shelf's. It slides in like a toast (`motion::paint_toast`) and goes after
+  "X Play it · B Not now" instead of the shelf's. It slides in like a toast (`motion::paint_toast`) and goes after
   8 s (`UP_NEXT_SHOWN`); the loop wakes for that (`curator_up_next_wake`), no frames are drawn in between.
-- **Input** (`App::curator_up_next_press`, the first line of `App::press`): A starts the game, B puts it away, any
-  other button puts it away and goes on as usual. A tap on the label is A. It never starts anything by itself.
+- **Input** (`App::curator_up_next_press`, the first line of `App::press`): X starts the game, B puts it away, any
+  other button (A too) puts it away and goes on as usual. A tap on the label is X. It never starts anything by itself.
 - **Default: off** (since 2026-10-25; it was on). It takes no room until a game ends and says nothing when nothing is
-  alike enough, but for those few seconds A means "play the suggestion", and A is the button most likely still being
-  pressed as a game ends (the same hazard the 600 ms wake guard in `sleep.rs` exists for). So it is an opt-in: the
+  alike enough, but for those few seconds X means "play the suggestion" (it was A until 0.1.12, the button most likely still being
+  pressed as a game ends: the same hazard the 600 ms wake guard in `sleep.rs` exists for). So it is an opt-in: the
   first start's Enthusiast and the Tour's card turn it on. `Prefs::up_next` has `#[serde(default)]` = false, so a
   `curator.json` that has the key keeps its value and only a file from before the key existed gets Off. Settings →
   Games → Curator → Up next after a game (`SETTINGS_ROWS`, row 3).
@@ -793,6 +794,42 @@ Gaps #5 and #6 of the 25 October round ("no sort orders and no personal rating",
   to the Curator list. Before the index or with no games, A on the entry says so in a toast and stays.
 - **Not done**: Surprise me inside an open Lens (picking among its games) was considered and left out: one entry is
   calmer, and the Lens's START with "Last played first" or a rating already answers most "what next" questions.
+
+## Just Play (`feat/one-button-play`, 2026-11-02)
+
+The brief: stop browsing, start playing; one button on Home, no decisions. A prototype on a
+branch of its own; the label is `shelf::JUST_PLAY` (one string: the name, `assets/i18n` and the docs change with it).
+
+- **Where.** `Item::JustPlay`, one more row of Home's list (`Item::with_just_play`, right above Continue: after Curator and
+  Search in the list looks; first on the Cabinet's Continue shelf, where Home still opens on the last game, `first_row`).
+  The same `Item` list serves all five looks, so each paints it as it paints Search: a row (Minimal, Split), a card
+  (Cards, "One press" large, the name under it), a spine with its case above the shelf (Shelf, Cabinet: a case with
+  its name and its own emblem, a cartridge with a play triangle and two dice, `ui_art::Emblem::JustPlay`; not a gift, which
+  read as Surprise me). No setting of its own: `App::just_play_on` is Settings →
+  Games → Curator → Lens & smart shelves, and not Kids Mode (`kids_live`), and once the shelf has a game.
+- **Selection** (`Index::just_play`, pure, `curator/justplay.rs`): each work once, its preferred version (else the first
+  version not hidden). Tiers: 1 Playing or Paused, or NotStarted with play time (`secs > 0` or a last play); 2 NotStarted,
+  starred, no play time; 3 NotStarted, no play time; 4 Completed and Dropped, only when 1–3 have nobody (completion is
+  never guessed from play time). The chance within a tier is `surprise_weight` (the same recency, rating and taste as
+  Surprise me; Completed 1/6, Dropped 1/20), × 0.2 for a system with a `system_notes` caution in tiers 3 and 4. The game
+  with the latest last play is left out while any other candidate is left in tiers 1–3; it comes back before tier 4. Hidden games
+  and games of hidden systems are not offered (`Offer::allowed`). The drawn game is checked with `missing_game` and
+  `empty_game` (the launch path's own checks) and by its route (`App::route`, the player's choice kept: the emulator and
+  core must be on the device, `emu_choice::installed`; not checked for a system with no emulator list or on the Deck); a
+  failed one is dropped (another version of the same work is tried before the work is given up) and the draw repeated,
+  at most `TRIES` = 8 checks, then `Miss::NothingStarts` and a notice. `Miss::NoGames`: a toast. The seed is the clock at each press.
+- **Cost**: O(works) per press and a few `stat`s. 10,000 games on a desktop host: median 0.3 ms, worst 0.6 ms (test
+  `just_play_is_instant_for_10000_games`, budget 15 ms). H700 (Cortex-A53, several times slower per core): estimated 2 to
+  3 ms plus a few card reads: an estimate, not measured.
+- **Launch.** `App::curator_just_play` calls `App::launch`, the one path of A on a game: resume (`frozen`), the emulator
+  and core choices, Cozy/Quick animation, play log, recents. A save shared with a twin follows the existing rules;
+  nothing in the save code changed. A toast with the game's name ("Starting …") shows without holding the start.
+- **Failures**: all by the existing code: missing or empty file (notice, rescan), no emulator or an exit at once
+  (`game_exited`: `never_started`, a notice that names what is missing, `fallback` only for pocket-core as before, never
+  a loop), then Home as before. Tests: `tests/user_journeys.rs` (`just_play_*`).
+- **Both looks**: `feat/big-shelf` names its whole look "Just Play" (`Theme::Big`). If both land, the button is not
+  shown in that look (there A already plays) and one of the two names changes; the label is one string here.
+- **Snapshot**: `curator:home:<look>:justplay`.
 
 ## Curator on Home (`feat/curator-forward`, 2026-10-26)
 

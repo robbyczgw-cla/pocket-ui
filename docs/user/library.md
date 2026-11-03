@@ -15,7 +15,7 @@ text or a long game title.
 
 | Button | On the card |
 |---|---|
-| A | Play the game. On one of the rows under "Your game" (a save with two versions, Echoes, Versions, Stickers, Screenshots) or on Hide or delete: open it. |
+| A | Play the game. On one of the rows under "Your game" (a save with two versions, Echoes, Versions, Stickers & labels, Screenshots) or on Hide or delete: open it. |
 | B | Back to the list, at the same game. |
 | Y | Set the play status, or your [rating](#my-rating) (the row under the statuses). Under them: [Wrong game? Choose another](#wrong-game-choose-another) and [Wrong pictures? Look up again](#wrong-pictures-look-up-again). |
 | X | Write or change your note. |
@@ -30,7 +30,7 @@ In the Minimal, Cards and Split [looks](settings.md) X opens the game's **info p
 to turn over. The box art at the left (a title card with the console when there is none), under it your game: status,
 time played, when you last played, your rating, achievements, **Save slots** ("3 of 8", or "All empty") with the
 slots on the game's memory card or cartridge and when the newest was saved, as in the
-[pause menu](pause-menu.md#save-slots-auto-and-before-load) (games on pocket-ui's own host), a PortMaster port's speed
+[pause menu](pause-menu.md#save-slots-where-i-quit-and-before-load) (games on pocket-ui's own host), a PortMaster port's speed
 and "Update available, in Extras" when there is a newer version. At the right the title, the system and year ("Favourite" when it is one of
 yours), the facts (developer, publisher, genre, series, players, reviews) and the description from Wikipedia or your
 gamelist, with its source under it. A long description scrolls in its place; without one the page says "No
@@ -82,8 +82,8 @@ list.
 Collectors mark their cases, and you can too: five stickers that go on the game's case, slightly crooked as if you put
 them on yourself. **Completed** (a green tick), **100 %** (a gold seal), **Favourite** (a star), **Playing now** and
 **Game of the year** with a year you choose. On the card (or the box, or the info page, then SELECT for the page),
-move down to the **Stickers** row and press A: they are the first five entries of the list, before your own
-[Curator stickers](curator.md#stickers). The list scrolls to fit your screen and text size. A puts one on or takes it off. On Game of the year, Left and Right change its
+move down to the **Stickers & labels** row and press A: they are the first five entries of the list, before your own
+[labels](curator.md#labels). The list scrolls to fit your screen and text size. A puts one on or takes it off. On Game of the year, Left and Right change its
 year first (it starts at the game's release year, or this year when that isn't known); with the sticker on, the new
 year is kept at once. B closes the list.
 
@@ -132,7 +132,7 @@ them off; the values are then only shown.
   differently from your file, "Listed as" shows its name, so you can see what the card is about.
 - **Your game**: status, your rating (five stars, or "None. Press Y" before you give one), time played and number
   of sessions, when you last played, your note, **Save slots** on the game's memory card or cartridge (games on
-  pocket-ui's own host, as in the [pause menu](pause-menu.md#save-slots-auto-and-before-load)), and how many of
+  pocket-ui's own host, as in the [pause menu](pause-menu.md#save-slots-where-i-quit-and-before-load)), and how many of
   the game's achievements you unlocked when it has some on RetroAchievements ([Achievements](achievements.md)).
   **Battery** says how long the charge you have now lasts in this game and how much of it the game uses an hour
   ("About 3 h 20 min left, 18% an hour"), from the same measurements as the pause menu (see
@@ -147,7 +147,7 @@ them off; the values are then only shown.
   before they could sync. The row says "Two versions of this game's save. Choose one…" (or "… of a save state", or
   "… of the memory card" for a PS2 or GameCube card, which every game of that console shares). A on it opens the
   [choice](sync.md#two-versions-of-a-save). Without Syncthing, or with nothing to choose, there is no such row.
-- **Echoes**, **Versions** and **Stickers**, three rows from [Curator](curator.md#curator) (each can be switched off in
+- **Echoes**, **Versions** and **Stickers & labels**, three rows from [Curator](curator.md#curator) (each can be switched off in
   Settings → Games → Curator).
 - **Screenshots (3)**: only on a game you took screenshots of (HOME + A while you play). The row says how many, and when
   the newest was taken ("Newest: Today"). A opens a [gallery](playing.md#looking-at-your-screenshots) of this game's
@@ -247,7 +247,7 @@ text and press START.
 At the very end of a game's card, under everything else, is the row **Hide or delete**. A on it offers two things:
 
 - **Hide from the shelf**: the game stays on the SD card but leaves every list: Home's recent games, its system's list,
-  Favourites, the search, Curator (Lens, smart shelves, stickers, Echoes, Versions, Up next), the game switcher, On start
+  Favourites, the search, Curator (Lens, smart shelves, labels, Echoes, Versions, Up next), Recent games, On start
   and the [web companion](web-companion.md). Good for BIOS test files, demos, the second disc of a game you start from
   its playlist, a version you don't want. The card closes and says where to bring it back: Settings → System → Storage →
   **Hidden games**, where A on a game shows it again. Hiding is kept in `library.json` (below), by the game's path.
@@ -332,7 +332,7 @@ again; a changed file is read again, and deleting the cache file does no harm.
 A PlayStation disc is recognised by the **serial on the disc itself**, not by its file name. pocket-ui reads the
 short boot file in the disc's file system (`SYSTEM.CNF`, whose `BOOT` line says "SLES_556.73") — a few kilobytes at
 the start of the image, never the whole image — and looks that serial up in the list of PlayStation 1 and 2 releases
-(Redump, through libretro-database), the same way a cartridge is recognised by its checksum ([Extras](extras.md#cover-art)).
+(Redump, through libretro-database), the same way a cartridge is recognised by its checksum ([Extras](extras.md#box-art)).
 A file called `SLES_556.73.Something.iso` or `SLUS_209.46.iso` then shows the game's name on the shelf ("Final Fantasy
 VII", "Gran Turismo 4"), gets that game's facts and its box art and pictures. The list is downloaded once for the
 console you have games for, when the Pocket is online (about 4 MB per console), and kept on the SD card.
@@ -363,8 +363,8 @@ sequel number never matches: "Crash Bandicoot 3" is not taken for "Crash Bandico
 
 Two games of one system that would show the same name keep what tells them apart ("Tobu Tobu Girl (Europe)" and
 "Tobu Tobu Girl (World)"). That changes only the name in the lists: the card, box art, play time, favourites and
-notes go by the file, as before. Your recent games (Continue, the list on SELECT and the game switcher), the games
+notes go by the file, as before. Your recent games (Continue and the list on SELECT), the games
 in Play history and the web companion show the same names as the system list.
 
-Curator (Lens, Surprise me, smart shelves, stickers, Echoes, Up next, Versions, play history and the Year in review) has its own page:
+Curator (Lens, Surprise me, smart shelves, labels, Echoes, Up next, Versions, play history and the Year in review) has its own page:
 [Curator](curator.md).

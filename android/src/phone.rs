@@ -64,13 +64,13 @@ impl Ui {
     /// What Play does for the selected game: goes back to its moment when it stands open.
     fn play_word(&self) -> &'static str {
         if self.game().is_some_and(|g| self.is_frozen(&g.key)) {
-            "Resume"
+            "Continue"
         } else {
             "Play"
         }
     }
     /// The primary button of the selected game. Named Play for screen readers and tests whatever it says: the line
-    /// under the name reads out Frozen.
+    /// under the name reads out Continue.
     fn play_pill(&mut self, c: &mut Canvas, text: &mut Text, area: Area) {
         let word = self.play_word();
         self.pill(c, text, area, word, true, Action::Press(Button::East));
@@ -78,10 +78,10 @@ impl Ui {
             region.label = super::tr("Play");
         }
     }
-    /// The line under a game's name: its system, after "Frozen" when it stands open.
+    /// The line under a game's name: its system, after "Continue" when it stands open.
     fn system_line(&self, game: &Game) -> String {
         if self.is_frozen(&game.key) {
-            format!("{} · {}", super::tr("Frozen"), game.system)
+            format!("{} · {}", super::tr("Continue"), game.system)
         } else {
             game.system.to_string()
         }
@@ -896,8 +896,8 @@ impl Ui {
                     pocket_ui::ui_art::paint_tinted(&mut clip, Art::Icon(Icon::Favourites), x + w - self.d(12.0) - 16 * k, y + (h - 16 * k) / 2, k, if selected { pal().ink } else { pal().amber });
                 }
                 if self.frozen.contains(&game.key) {
-                    text.draw_right(&mut clip, Face::Body, self.sp(13.0), x + w - self.d(12.0) - star_w, y + h / 2 + self.d(5.0), fg, "Frozen");
-                    star_w += text.width(Face::Body, self.sp(13.0), "Frozen") + self.d(12.0);
+                    text.draw_right(&mut clip, Face::Body, self.sp(13.0), x + w - self.d(12.0) - star_w, y + h / 2 + self.d(5.0), fg, &super::tr("Continue"));
+                    star_w += text.width(Face::Body, self.sp(13.0), &super::tr("Continue")) + self.d(12.0);
                 }
                 let name = text.fit(Face::Title, self.sp(18.0), &game.name, w - self.d(32.0) - star_w);
                 text.draw(&mut clip, Face::Title, self.sp(18.0), x + self.d(18.0), y + h / 2 - self.d(2.0), fg, &name);

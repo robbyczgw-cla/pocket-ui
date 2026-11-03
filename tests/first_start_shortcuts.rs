@@ -76,7 +76,7 @@ fn sees(screen: &str, what: &str) -> bool {
 fn a_handheld_without_wifi_counts_five_steps_and_goes_from_the_play_style_to_the_zone() {
     let card = Card::new();
     for (lang, zone, steps_of) in [("en", "Time zone", "Step 4 of 5"), ("de", "Zeitzone", "Schritt 4 von 5"), ("es", "Zona horaria", "Paso 4 de 5")] {
-        // Welcome, A, A (the play style), A (Simple): the zone, not Wi-Fi.
+        // Welcome, A, A (the play style), A (The shelf): the zone, not Wi-Fi.
         let page = card.screen("setup:first:aaa:device=rg28xx", lang, "640x480");
         assert!(sees(&page, zone) && sees(&page, steps_of), "{lang}: {page}");
         // A on the zone, then the games: the fifth step.
@@ -100,11 +100,11 @@ fn the_kids_page_with_no_games_offers_the_starter_pack() {
     }
 }
 
-/// D: the profile page opened from Settings: three answers, none "For a child", at 640x480 in all three languages.
+/// D: the profile page opened from Settings: four answers, none "For a child", at 640x480 in all three languages.
 #[test]
-fn the_play_style_page_from_settings_has_three_answers_and_no_child_mode() {
+fn the_play_style_page_from_settings_has_four_answers_and_no_child_mode() {
     let card = Card::new();
-    for (lang, names) in [("en", ["Simple", "Enthusiast", "Choose for yourself"]), ("de", ["Einfach", "Enthusiast", "Selbst wählen"]), ("es", ["Simple", "Entusiasta", "Elige tú"])] {
+    for (lang, names) in [("en", ["The shelf", "Easy", "Enthusiast", "Choose for yourself"]), ("de", ["Das Regal", "Easy", "Enthusiast", "Selbst wählen"]), ("es", ["El estante", "Easy", "Entusiasta", "Elige tú"])] {
         let page = card.screen("setup:play-later", lang, "640x480");
         for name in names {
             assert!(sees(&page, name), "{lang} {name}: {page}");
@@ -113,7 +113,7 @@ fn the_play_style_page_from_settings_has_three_answers_and_no_child_mode() {
     }
     // The row itself: first in Help & tools, with where the switches stand.
     let row = card.screen("settings:6:0", "en", "640x480");
-    assert!(sees(&row, "How you like to play") && sees(&row, "Simple"), "{row}");
+    assert!(sees(&row, "How you like to play") && sees(&row, "The shelf"), "{row}");
 }
 
 /// E: Home with no games, offline: the one button leads to Wi-Fi, and says what waits afterwards. Online: the pack.
@@ -188,7 +188,7 @@ fn the_last_page_of_the_first_start_says_what_home_does() {
         ("de", "Im Spiel öffnet HOME das Menü: Speichern, Laden, Beenden."),
         ("es", "En un juego, HOME abre el menú: guardar, cargar, salir."),
     ] {
-        // Welcome, look, play style, Simple, time zone, games (START): "You're all set" on a handheld without Wi-Fi.
+        // Welcome, look, play style, The shelf, time zone, games (START): "You're all set" on a handheld without Wi-Fi.
         let page = card.screen("setup:first:aaaas:device=rg28xx", lang, "640x480");
         assert!(sees(&page, line), "{lang}: {page}");
         // Settings' Add games is not the first start.

@@ -531,6 +531,13 @@ impl Text {
         self.width_raw(face, px, &s)
     }
 
+    /// The width of `s` exactly as given: not translated, and not counted as a string the page shows (the translation
+    /// checks list what is shown). For measuring a word of a longer string that is drawn whole.
+    pub fn width_plain(&mut self, face: Face, px: u32, s: &str) -> i32 {
+        let px = crate::type_scale::px(px);
+        self.width_raw(face, px, s)
+    }
+
     fn width_raw(&mut self, face: Face, px: u32, s: &str) -> i32 {
         s.chars().map(|ch| self.glyph(face, px, ch).0.advance_width).sum::<f32>().round() as i32
     }
@@ -587,6 +594,7 @@ impl Text {
             pen += m.advance_width;
         }
         ink.record(c, s);
+        boxes::note_px(px, s);
         (pen - x as f32).round() as i32
     }
 
@@ -700,6 +708,7 @@ impl Text {
         }
         let mut out = Vec::new();
         let mut piece = String::new();
+        let mut torn = false;
         for ch in word.chars() {
             let mut next = piece.clone();
             next.push(ch);
@@ -712,12 +721,18 @@ impl Text {
             if cut == piece.len() && word.chars().all(char::is_alphanumeric) && crate::i18n::recording() && self.broken.len() < 512 {
                 self.broken.insert(piece.clone());
             }
+            torn |= cut == piece.len();
             let rest = piece.split_off(cut);
             out.push(std::mem::replace(&mut piece, rest));
             piece.push(ch);
         }
         if !piece.is_empty() {
             out.push(piece);
+        }
+        // A short word torn in the middle is a column with no room (a price down a strip one letter wide), not a path
+        // that is too long: if its pieces are then painted, the size sweep reports it (`boxes`, `W`).
+        if torn && word.chars().count() <= boxes::SHORT_WORD {
+            boxes::broken_word(word, &out);
         }
         out
     }
@@ -857,7 +872,7 @@ pub mod boxes {
     fn record() -> Option<&'static Mutex<Vec<Painted>>> {
         static REC: OnceLock<Option<Mutex<Vec<Painted>>>> = OnceLock::new();
         REC.get_or_init(|| {
-            ["POCKETUI_TEXT_BOXES", "POCKETUI_VISIBLE_TEXT"].iter()
+            ["POCKETUI_TEXT_BOXES", "POCKETUI_VISIBLE_TEXT", "POCKETUI_LAYOUT_AUDIT"].iter()
                 .any(|key| std::env::var_os(key).is_some_and(|p| !p.is_empty()))
                 .then(|| Mutex::new(Vec::new()))
         }).as_ref()
@@ -1001,15 +1016,65 @@ pub mod boxes {
         }
     }
 
+    /// The pixel size `s` was painted at, for the layout audit's `S` (only while a record is on).
+    pub fn note_px(px: u32, s: &str) {
+        if !on() {
+            return;
+        }
+        if let Ok(mut v) = sizes().lock() {
+            if v.len() < 20_000 && !v.iter().any(|(p, t)| *p == px && t == s) {
+                v.push((px, s.to_string()));
+            }
+        }
+    }
+
+    fn sizes() -> &'static Mutex<Vec<(u32, String)>> {
+        static SIZES: OnceLock<Mutex<Vec<(u32, String)>>> = OnceLock::new();
+        SIZES.get_or_init(|| Mutex::new(Vec::new()))
+    }
+
     /// A new picture is painted: what was recorded before is not in it.
     pub fn reset() {
+        if let Ok(mut v) = sizes().lock() {
+            v.clear();
+        }
         if let Some(Ok(mut rec)) = record().map(|r| r.lock()) {
             rec.clear();
+        }
+        if let (Some(_), Ok(mut b)) = (record(), broken().lock()) {
+            b.clear();
+        }
+    }
+
+    /// Words up to this long are never broken in the middle: a column too narrow for them is the fault, not the word
+    /// (a longer one may be a folder or a file name with no break mark).
+    pub const SHORT_WORD: usize = 16;
+
+    /// The short words torn across lines while measuring, with their pieces.
+    type Torn = (String, Vec<String>);
+
+    fn broken() -> &'static Mutex<Vec<Torn>> {
+        static B: OnceLock<Mutex<Vec<Torn>>> = OnceLock::new();
+        B.get_or_init(|| Mutex::new(Vec::new()))
+    }
+
+    /// `word`, short as it is, was torn across lines because its column was too narrow: the picture's record says so
+    /// (`W` and the word), which the size sweep treats like text running into other text (a Game Boy Advance
+    /// page, 2026-11-03: "US$99.99" one character a line down a strip beside the prices).
+    pub fn broken_word(word: &str, pieces: &[String]) {
+        if record().is_none() {
+            return;
+        }
+        if let Ok(mut b) = broken().lock() {
+            if b.len() < 256 && !b.iter().any(|(w, _)| w == word) {
+                b.push((word.to_string(), pieces.to_vec()));
+            }
         }
     }
 
     /// The picture `buf` (`w` × `h`) is done: writes to the file of `POCKETUI_TEXT_BOXES`, one line each, `O` and
-    /// the two strings for text whose ink runs into another string's by more than 2 px each way, `T` and the two for
+    /// the two strings for text whose ink runs into another string's by more than 2 px each way, `W` and the word for a short
+/// word torn across lines by a column too narrow for it, `T` and the two for
     /// strings on one line closer than 3 px (they read as one), `E` and the string
     /// for text cut by the left or right edge of what it was painted into. Strings painted into another buffer (a layer
     /// mixed in later) are left out.
@@ -1038,8 +1103,19 @@ pub mod boxes {
                 .map(|(_, _, s)| *s).collect::<Vec<_>>().join("\n");
             let _ = std::fs::write(path, text);
         }
+        if let Some(path) = std::env::var_os("POCKETUI_LAYOUT_AUDIT") {
+            let _ = std::fs::write(path, layout_audit(&placed));
+        }
         let Some(path) = std::env::var_os("POCKETUI_TEXT_BOXES") else { return };
         let mut out = String::new();
+        // Only a word whose pieces were really painted: a layout that tried a narrower room and took another is no fault.
+        if let Ok(b) = broken().lock() {
+            for (word, pieces) in b.iter() {
+                if pieces.iter().all(|p| placed.iter().any(|(_, _, s)| *s == p.as_str())) {
+                    out += &format!("{}\t{word}\n", 'W');
+                }
+            }
+        }
         for (i, (a, cut, sa)) in placed.iter().enumerate() {
             if *cut {
                 out += &format!("{}\t{sa}\n", 'E');
@@ -1067,6 +1143,47 @@ pub mod boxes {
             let t = s.trim();
             !t.is_empty() && t.chars().all(|c| matches!(c, '.' | ',' | ';' | ':' | '!' | '?' | ')' | '…'))
         }
+    }
+
+    /// Text painted smaller than this (pixels, after the type scale) is reported as `S`.
+    const SMALLEST_PX: u32 = 14;
+
+    /// `POCKETUI_LAYOUT_AUDIT=<file>` (scripts/size-sweep.sh): what the O/T/E record cannot see because nothing overlaps.
+    /// `N` and the strings: three or more strings stacked in one column that are each one or two characters (a value
+    /// wrapped letter by letter, "US$99.99" as `U`/`S`/`$`...); `S`: a string of three or more letters painted
+    /// smaller than `SMALLEST_PX` (a list row cut by its band has little ink left, so the ink's height says nothing).
+    /// A word broken inside is the i18n record's `W`; text cut at a side edge, `E`.
+    fn layout_audit(placed: &[(Rect, bool, &str)]) -> String {
+        let mut out = String::new();
+        let word = |s: &str| s.trim().chars().filter(|c| c.is_alphanumeric() || *c == '$').count();
+        let below = |a: &Rect, b: &Rect| (b.0 - a.0).abs() <= 2 && b.1 >= a.1 && b.1 - a.1 <= (a.3 - a.1) * 2 + 4 && b.1 > a.1;
+        for (a, _, sa) in placed.iter() {
+            let n = sa.trim().chars().count();
+            if sa.starts_with("‹hints") {
+                continue;
+            }
+            if (1..=2).contains(&n) && word(sa) > 0 {
+                // The head of a column: nothing one or two characters wide right above it in the same column.
+                let up = placed.iter().any(|(b, _, sb)| below(b, a) && (1..=2).contains(&sb.trim().chars().count()) && word(sb) > 0);
+                let mut run = vec![*sa];
+                let mut last = *a;
+                if !up {
+                    while let Some((b, _, sb)) = placed.iter().find(|(b, _, sb)| below(&last, b) && (1..=2).contains(&sb.trim().chars().count()) && word(sb) > 0) {
+                        run.push(sb);
+                        last = *b;
+                    }
+                    if run.len() >= 3 {
+                        out += &format!("N\t{}\n", run.join(""));
+                    }
+                }
+            }
+        }
+        if let Ok(v) = sizes().lock() {
+            for (px, t) in v.iter().filter(|(px, t)| *px < SMALLEST_PX && t.chars().filter(|c| c.is_alphabetic()).count() >= 3 && !t.starts_with("‹hints")) {
+                out += &format!("{}\t{px}\t{t}\n", 'S');
+            }
+        }
+        out
     }
 }
 

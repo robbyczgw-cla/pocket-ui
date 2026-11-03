@@ -17,7 +17,7 @@ impl Ui {
                 0,
             )],
             3 => {
-                let mut rows: Vec<_> = Theme::ALL
+                let mut rows: Vec<_> = Theme::PHONE
                     .iter()
                     .enumerate()
                     .map(|(i, t)| (format!("{}{}", if self.prefs.theme == *t { "• " } else { "" }, tr(t.name())), i as u16))
@@ -82,7 +82,7 @@ impl Ui {
                 2 => return Command::Folder,
                 3 => {
                     match action {
-                        0..=4 => self.prefs.theme = Theme::ALL[action as usize],
+                        0..=4 => self.prefs.theme = Theme::PHONE[action as usize],
                         5 => self.prefs.cozy = Some(!self.prefs.cozy.unwrap_or(true)),
                         6 => self.prefs.light = !self.prefs.light,
                         _ => (),
@@ -133,7 +133,7 @@ impl Ui {
     fn setup_chosen(&self, action: u16) -> Option<bool> {
         match self.prefs.onboarding_step.min(6) {
             1 => Some(pocket_ui::i18n::Lang::ALL.get(action as usize) == Some(&pocket_ui::i18n::current())),
-            3 if action < 5 => Some(Theme::ALL.get(action as usize) == Some(&self.prefs.theme)),
+            3 if action < 5 => Some(Theme::PHONE.get(action as usize) == Some(&self.prefs.theme)),
             4 => Some(self.prefs.download_media == Some(action == 0)),
             _ => None,
         }

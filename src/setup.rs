@@ -68,6 +68,8 @@ pub enum SetupEvent {
     /// step opened.
     GameCounts(Counted),
     Covers { done: usize, total: usize, found: usize },
+    /// The run that just ended gave up: the picture server didn't answer (it is tried again at the next start).
+    CoversUnreachable,
     Catalog(Result<Vec<Port>, String>),
     /// `name`: the catalog name of the port, to open its "Copy your game files" page after an install.
     PortDone { name: String, title: String, result: Result<(), String>, installing: bool, updated: bool },
@@ -149,6 +151,8 @@ fn share_now() -> ShareNow {
 /// trying for six minutes on a fresh card, 2026-10-27; a good one takes a few seconds, DHCP at most 45).
 const CONNECT_STUCK: std::time::Duration = std::time::Duration::from_secs(60);
 
+/// More games than this, and the look step says Easy is best with fewer.
+const HANDFUL: usize = 30;
 /// First start: how long "Connected to …" shows before the setup goes on to the time zone by itself.
 const ADVANCE_AFTER: std::time::Duration = std::time::Duration::from_millis(1200);
 
@@ -326,6 +330,10 @@ pub struct Setup {
     home_line: std::cell::Cell<Option<bool>>,
     /// "For a child" was pressed (`take_kids_asked`).
     kids_asked: bool,
+    /// The look previews (Shelf, Easy, ...) for "How do you like to play?": lent by the app while it paints that step.
+    pub play_previews: Vec<Image>,
+    profile_look: Option<usize>,
+    look_before_profile: Option<usize>,
     /// No Wi-Fi chip (`no_wifi_chip`): the first start has no Wi-Fi and Extras pages. A field so tests can set it.
     no_wifi: bool,
     /// The password last sent to a network: back in the field if it is refused.
@@ -448,6 +456,8 @@ pub struct Setup {
     /// Cover art progress: (done, total, found); `None` before the first run.
     covers: Option<(usize, usize, usize)>,
     covers_running: bool,
+    /// The last run found no answer from the picture server (`SetupEvent::CoversUnreachable`).
+    covers_unreachable: bool,
     /// Settings > Games > Extras > Pictures: what is fetched by itself, and whether the last press changed it
     /// (`take_art`).
     art: Art,
@@ -1386,6 +1396,9 @@ impl Setup {
             step: Step::Welcome,
             home_line: std::cell::Cell::new(None),
             kids_asked: false,
+            play_previews: Vec::new(),
+            profile_look: None,
+            look_before_profile: None,
             no_wifi: no_wifi_chip(),
             typed_password: String::new(),
             games_counted: None,
@@ -1453,6 +1466,7 @@ impl Setup {
             games,
             covers: None,
             covers_running: false,
+            covers_unreachable: false,
             art: Art::default(),
             art_changed: false,
             zone_utc: false,
@@ -1725,6 +1739,35 @@ impl Setup {
     /// The theme to preview while the look step is open; the app draws the shelf in it.
     pub fn previewing(&self) -> Option<usize> {
         matches!(self.step, Step::Look).then_some(self.theme)
+    }
+
+    /// The look an answer to "How do you like to play?" asks for since the last time, once; the app takes it.
+    pub fn take_profile_look(&mut self) -> Option<usize> {
+        self.profile_look.take()
+    }
+
+    /// "How do you like to play?" answered (None: skipped). Easy takes its look; another answer after going back puts the
+    /// one from the look step back.
+    fn answer_look(&mut self, p: Option<Profile>) {
+        let wanted = p.and_then(Profile::look).and_then(|t| crate::settings::Theme::ALL.iter().position(|a| *a == t));
+        match (wanted, self.look_before_profile) {
+            (Some(i), before) => {
+                self.look_before_profile = before.or(Some(self.theme));
+                self.theme = i;
+                self.profile_look = Some(i);
+            }
+            (None, Some(before)) => {
+                self.look_before_profile = None;
+                self.theme = before;
+                self.profile_look = Some(before);
+            }
+            (None, None) => {}
+        }
+    }
+
+    /// Whether "How do you like to play?" is open: the app lends it the look previews (`play_previews`).
+    pub fn at_play_step(&self) -> bool {
+        matches!(self.step, Step::Play { .. })
     }
 
     /// The network being brought up has been "Connecting…" for longer than `CONNECT_STUCK`.
@@ -2337,6 +2380,7 @@ impl Setup {
                 self.covers = Some((done, total, found));
                 self.covers_running = done < total;
             }
+            SetupEvent::CoversUnreachable => self.covers_unreachable = true,
             SetupEvent::Catalog(result) => {
                 self.catalog_loading = false;
                 match result {
@@ -2371,6 +2415,7 @@ impl Setup {
             return;
         }
         self.covers_running = true;
+        self.covers_unreachable = false;
         self.covers = Some((0, 0, 0));
         // The automatic download is already on it: the app passes its progress on to this page.
         let Some(claim) = covers::claim() else { return };
@@ -2382,8 +2427,11 @@ impl Setup {
             let wanted = pictures.then(|| game_pictures::missing(&data_dir, &games, &Default::default()));
             let run = game_pictures::run_until(&game_pictures::Libretro, &data_dir, &games, wanted.as_deref(), report, || false);
             // Nothing to do still has to end the run.
-            if games.is_empty() || run.found == 0 {
+            if games.is_empty() || run.found == 0 || run.unreachable {
                 report(1, 1, run.found);
+            }
+            if run.unreachable {
+                notify(SetupEvent::CoversUnreachable);
             }
         });
     }
@@ -3122,10 +3170,12 @@ impl Setup {
                     // Kids Mode's steps open over this one (`app_kids`), which `kids_done` leaves.
                     Profile::Child => self.kids_asked = true,
                     Profile::Choose => {
+                        self.answer_look(Some(Profile::Choose));
                         let cards = Cards::new(features::Mode::First, features::choose_list(), self.switches.clone(), self.later.clone());
                         self.step = Step::Cards(Box::new(cards));
                     }
                     p => {
+                        self.answer_look(Some(p));
                         features::apply(p, &mut self.switches);
                         self.motion = self.switches.motion;
                         self.tour_changed = true;
@@ -3133,7 +3183,10 @@ impl Setup {
                     }
                 },
                 // Skipped: every switch stays as it is.
-                Button::Start => self.after_play(),
+                Button::Start => {
+                    self.answer_look(None);
+                    self.after_play();
+                }
                 Button::South if self.only.is_some() => self.step = Step::Done,
                 Button::South => self.step = Step::Look,
                 _ => {}
@@ -3151,7 +3204,7 @@ impl Setup {
                 }
                 match out {
                     features::Out::Done => self.after_play(),
-                    features::Out::Back => self.step = Step::Play { sel: 2 },
+                    features::Out::Back => self.step = Step::Play { sel: self.profiles().iter().position(|p| *p == Profile::Choose).unwrap_or(0) },
                     features::Out::Stay | features::Out::Changed => {}
                 }
             }
@@ -3409,7 +3462,7 @@ impl Setup {
             // The app paints this step itself, with the previews (`paint_look`); without them, the names.
             Step::Look => self.paint_look(c, text, &[], false),
             Step::Play { sel } => {
-                features::paint_profiles(c, text, *sel, &self.profiles());
+                features::paint_profiles(c, text, *sel, &self.profiles(), self.only == Some(Only::Play), &self.play_previews);
             }
             Step::ShelfSystems { sel } => self.paint_shelf_systems(c, text, *sel),
             Step::Wifi => {
@@ -3571,7 +3624,7 @@ impl Setup {
         // note's three lines end above the hint bar.
         let short = crate::kit::short_screen(c.h);
         let (head, sub, first, mut gap) = if short { (100, 148, 172, 8) } else { (140, 192, 240, 18) };
-        text.draw(c, Face::Title, 67, MARGIN, head, pal().chalk, "Extras");
+        text.draw(c, Face::Title, 67, MARGIN, head, pal().chalk, "Pictures & extras");
         // Once, for "6 games" on a card the shelf hasn't read yet.
         if self.games_counted.is_none() && !self.counting {
             self.count_games();
@@ -3580,10 +3633,14 @@ impl Setup {
         let d = crate::device::current();
         text.draw(c, Face::Body, 28, MARGIN, sub, pal().dust, extras_sub(online, d.host_owned(), d.has_wifi()));
         let pictures = self.art == Art::Pictures;
-        let covers = extras_status(self.covers, self.covers_running, pictures, self.games_known(), dots);
+        let covers = if self.covers_unreachable && !self.covers_running {
+            "Couldn't reach the picture server. Try again later.".to_string()
+        } else {
+            extras_status(self.covers, self.covers_running, pictures, self.games_known(), dots)
+        };
         let ports = if self.ports.is_empty() { "Browse".to_string() } else { format!("{} ready to play", self.tab_count(PortTab::Ready)) };
         let rows = [
-            ("Cover art", "Box art for your games, from the free libretro collection.", covers),
+            ("Box art", "The front of each game's box, from a free collection online.", covers),
             // The choices are drawn as pills in place of the line (`pill_track`), the current one on paper.
             ("Pictures", "", String::new()),
             ("PortMaster games", "PC and indie games from PortMaster: ready to play, or with your own game files.", ports),
@@ -3908,6 +3965,8 @@ impl Setup {
         let (name, blurb) = self.themes[self.theme];
         let base = y + ph + 62 + crate::type_scale::grow(50);
         text.draw(c, Face::Title, 50, MARGIN, base, pal().chalk, name);
+        // Easy on a card with many games: says so, nothing more.
+        let blurb = if crate::settings::Theme::ALL.get(self.theme) == Some(&crate::settings::Theme::Big) && self.games.len() > HANDFUL { "Best with a handful of games" } else { blurb };
         let blurb = text.fit(Face::Body, 28, blurb, c.w - 2 * MARGIN);
         text.draw(c, Face::Body, 28, MARGIN, base + 40 + crate::type_scale::grow(28), pal().dust, &blurb);
         // One mark per theme, the shown one filled.
@@ -4215,13 +4274,15 @@ fn look_hints(settings: bool, has_systems: bool) -> Vec<(&'static str, &'static 
     // the keys that keep the page moving keep theirs (A, B, X and L1 lost theirs at Large text on 1240x1080).
     let mut h = vec![("Left/Right", if settings { "Change" } else { "" }), ("A", "Keep this look")];
     if settings {
-        h.extend([("Y", "Appearance"), ("R1", "Motion")]);
+        // Motion (R1) and Animations (L1) still work here, but their rows are one step back in Sound & feel: the bar keeps
+        // the two keys only this page has, so no key is ever left without its word (a bare "L1" at 1240 px, walk 2026-11-02).
+        h.push(("Y", "Appearance"));
         if has_systems {
             h.push(("X", "Systems on the shelf"));
         }
-    } else {
-        h.extend([("B", "Back"), ("Y", "Appearance"), ("R1", "Text size")]);
+        return h;
     }
+    h.extend([("B", "Back"), ("Y", "Appearance"), ("R1", "Text size")]);
     h.push(("L1", "Animations"));
     h
 }
@@ -4338,7 +4399,22 @@ fn pill_row(c: &mut Canvas, text: &mut Text, top: i32, label: &str, names: &[&st
         text.draw(c, Face::Body, px, x + 20, base, if i == on { pal().ink } else { pal().chalk }, n);
         x += w;
     }
-    let note = text.fit(Face::Body, px, blurb, c.w - MARGIN - x - 28);
+    let room = c.w - MARGIN - x - 28;
+    // The welcome step's one row has the page below it: a note that doesn't fit beside the pills (1024x768, the
+    // Spanish one) goes under the row, whole, rather than "Settin…"
+    // Only where the hint bar stays clear (a page with the "not tested on this device" paragraph is full).
+    if label_w == 0 && text.width(Face::Body, px, blurb) > room {
+        let lines = text.wrap(Face::Body, px, blurb, c.w - 2 * MARGIN);
+        let step = crate::type_scale::line(px, 8);
+        let first = base + h / 2 + 34;
+        if first + (lines.len() as i32 - 1) * step < c.h - 120 {
+            for (i, line) in lines.iter().enumerate() {
+                text.draw(c, Face::Body, px, MARGIN, first + i as i32 * step, pal().dust, line);
+            }
+            return;
+        }
+    }
+    let note = text.fit(Face::Body, px, blurb, room);
     text.draw(c, Face::Body, px, x + 28, base, pal().dust, &note);
 }
 
@@ -4361,9 +4437,9 @@ fn pill_track(c: &mut Canvas, text: &mut Text, x: i32, top: i32, names: &[&str],
     end
 }
 
-/// The Extras page's line about the picture downloads: where from, what is sent, how much room they take (the sizes of
-/// docs/user/extras.md), and what Off does.
-const PICTURES_NOTE: &str = "Pictures come from the free libretro collection: no account is needed, and only a game's name is sent. Box art is about 450 KB a game; screenshots and title screens add 20 to 400 KB. Off downloads nothing by itself.";
+/// The Pictures & extras page's line about the picture downloads: where from, what is sent, and what Off does (the sizes
+/// are in docs/user/extras.md).
+const PICTURES_NOTE: &str = "Pictures come from a free collection online: no account is needed, and only a game's name is sent. Off downloads nothing by itself.";
 
 /// The height of a slim row of pills (the look step's two), 40 px around Body 24.
 fn pill_h() -> i32 {
@@ -4445,7 +4521,7 @@ mod tests {
     fn child_without_wifi_skips_the_wifi_page() {
         let (mut s, _) = setup("child-no-wifi", "UTC", None);
         s.no_wifi = true;
-        s.step = Step::Play { sel: 3 };
+        s.step = Step::Play { sel: 4 };
         assert!(!s.press(Button::East));
         assert!(s.take_kids_asked());
         s.kids_done();
@@ -4782,7 +4858,7 @@ mod tests {
         // Where the pictures come from: a few lines under the rows, never more than the page has room for.
         let lines = Text::builtin().wrap_prose(Face::Body, 24, PICTURES_NOTE, 1240 - 2 * MARGIN);
         assert!((1..=4).contains(&lines.len()), "{} lines", lines.len());
-        assert!(PICTURES_NOTE.contains("libretro") && PICTURES_NOTE.contains("no account") && PICTURES_NOTE.contains("Off"));
+        assert!(PICTURES_NOTE.contains("free collection") && PICTURES_NOTE.contains("no account") && PICTURES_NOTE.contains("Off"));
     }
 
     #[test]
@@ -4814,7 +4890,7 @@ mod tests {
     #[test]
     fn a_profile_sets_the_switches_once_and_goes_on_to_wifi() {
         use crate::features::Switches;
-        for (downs, lens, pixel_path) in [(0, true, false), (1, true, true)] {
+        for (downs, lens, pixel_path) in [(0, true, false), (1, true, false), (2, true, true)] {
             let (s, _hw) = setup(&format!("profile{downs}"), "UTC", Some(IW_AT));
             let mut s = s.with_switches(Switches::default(), Vec::new());
             press(&mut s, &[Button::East, Button::East]);
@@ -4827,6 +4903,35 @@ mod tests {
             assert_eq!((sw.curator.lens, sw.curator.pixel_path, later.len()), (lens, pixel_path, 0));
             assert_eq!(s.motion(), sw.motion, "the look step's motion follows");
             assert!(s.take_tour().is_none(), "once");
+        }
+    }
+
+    #[test]
+    fn the_second_row_is_just_play_and_only_it_changes_the_look() {
+        use crate::features::Switches;
+        assert_eq!(Profile::offered()[..2], [Profile::Simple, Profile::JustPlay]);
+        let (s, _hw) = setup("just-play-row", "UTC", Some(IW_AT));
+        let mut s = s.with_switches(Switches::default(), Vec::new());
+        press(&mut s, &[Button::East, Button::East, Button::Down, Button::East]);
+        assert_eq!(s.at(), "wifi");
+        assert_eq!(s.take_profile_look(), Some(1), "Easy's place among the looks");
+        assert_eq!(crate::settings::Theme::ALL[1], crate::settings::Theme::Big);
+        assert_eq!(s.take_tour().expect("taken").0, Switches::default(), "the start settings otherwise");
+        // Back, and the first row or skipping after all: the look from the look step again.
+        for second in [&[Button::East][..], &[Button::Start][..]] {
+            s.step = Step::Play { sel: 1 };
+            press(&mut s, &[Button::East]);
+            assert_eq!(s.take_profile_look(), Some(1));
+            s.step = Step::Play { sel: 0 };
+            press(&mut s, second);
+            assert_eq!(s.take_profile_look(), Some(0));
+        }
+        // The first row and skipping alone change no look.
+        for (name, keys) in [("shelf-row", &[Button::East, Button::East, Button::East][..]), ("skip-row", &[Button::East, Button::East, Button::Start][..])] {
+            let (s, _hw) = setup(name, "UTC", Some(IW_AT));
+            let mut s = s.with_switches(Switches::default(), Vec::new());
+            press(&mut s, keys);
+            assert_eq!(s.take_profile_look(), None, "{name}");
         }
     }
 
@@ -4860,16 +4965,16 @@ mod tests {
         // A new device stands at Simple; "For a child" isn't offered (Settings › System › Kids mode is its place).
         let mut s = open("play-later", Switches::default());
         assert_eq!(s.at(), "how you like to play");
-        assert_eq!(s.profiles(), [Profile::Simple, Profile::Enthusiast, Profile::Choose]);
+        assert_eq!(s.profiles(), [Profile::Simple, Profile::JustPlay, Profile::Enthusiast, Profile::Choose]);
         assert!(matches!(s.step, Step::Play { sel: 0 }));
-        // Down, A: Enthusiast is taken and the page closes (true: the setup ends), no Wi-Fi or zone page follows.
-        press(&mut s, &[Button::Down]);
+        // Down, Down, A: Enthusiast is taken and the page closes (true: the setup ends), no Wi-Fi or zone page follows.
+        press(&mut s, &[Button::Down, Button::Down]);
         assert!(s.press(Button::East), "A on a profile ends the page");
         let (sw, _) = s.take_tour().expect("the profile's switches");
         assert_eq!(Profile::of(&sw), Profile::Enthusiast);
         // Reopened, it stands on what is set now; B leaves it alone.
         let mut s = open("play-later-2", sw.clone());
-        assert!(matches!(s.step, Step::Play { sel: 1 }));
+        assert!(matches!(s.step, Step::Play { sel: 2 }));
         assert!(s.press(Button::South));
         assert!(s.take_tour().is_none());
         // One switch of its own: "Choose for yourself" is where it stands, and A there opens the cards, B comes back.
@@ -4877,12 +4982,12 @@ mod tests {
         own.curator.lens = false;
         assert_eq!(Profile::of(&own), Profile::Choose);
         let mut s = open("play-later-3", own);
-        assert!(matches!(s.step, Step::Play { sel: 2 }));
+        assert!(matches!(s.step, Step::Play { sel: 3 }));
         assert!(!s.press(Button::East));
         assert_eq!(s.at(), "feature cards");
         // START skips the rest of the cards and ends the page, nothing further.
         assert!(s.press(Button::Start));
-        // Painted at the Mini V2's size and at the H700's: three rows, none cut off the page.
+        // Painted at the Mini V2's size and at the H700's: four rows, none cut off the page.
         for (w, h) in [(1240, 1080), (640, 480)] {
             let mut px = vec![0u32; (w * h) as usize];
             let mut s = open("play-later-paint", Switches::default());
@@ -4896,7 +5001,7 @@ mod tests {
         use crate::features::Switches;
         let (s, _hw) = setup("choose", "UTC", Some(IW_AT));
         let mut s = s.with_switches(Switches::default(), Vec::new());
-        press(&mut s, &[Button::East, Button::East, Button::Down, Button::Down, Button::East]);
+        press(&mut s, &[Button::East, Button::East, Button::Down, Button::Down, Button::Down, Button::East]);
         assert_eq!(s.at(), "feature cards");
         assert!(!s.past_wifi(), "no covers before the Wi-Fi step");
         // The first card (Lens & smart shelves, on): Off, A.
@@ -6235,8 +6340,9 @@ mod hint_bars {
     #[test]
     fn the_first_starts_look_step_names_b() {
         assert_eq!(keys(&look_hints(false, true)), ["Left/Right", "A", "B", "Y", "R1", "L1"], "B goes back to the welcome");
-        assert_eq!(keys(&look_hints(true, true)), ["Left/Right", "A", "Y", "R1", "X", "L1"], "every one also a row of Settings → Look and Sound & feel");
-        assert_eq!(keys(&look_hints(true, false)), ["Left/Right", "A", "Y", "R1", "L1"], "no systems: no X");
+        assert_eq!(keys(&look_hints(true, true)), ["Left/Right", "A", "Y", "X"], "R1 and L1 are rows of Sound & feel, one step back: no bare key on a narrow bar");
+        assert_eq!(keys(&look_hints(true, false)), ["Left/Right", "A", "Y"], "no systems: no X");
+        assert!(look_hints(true, true).iter().all(|(_, label)| !label.is_empty()), "every key on Settings → Look has its word");
         assert_eq!(look_hints(false, false).last(), Some(&("L1", "Animations")));
         assert_eq!(look_hints(false, false)[4], ("R1", "Text size"));
     }

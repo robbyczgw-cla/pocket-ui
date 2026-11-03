@@ -69,10 +69,10 @@ fn xbox_plays_with_the_bottom_button_in_the_switcher() {
     let (mut remap, mut pad) = (Remap::default(), PadState::new(vec![]));
     let x = ButtonLayout::Xbox;
     let mut s = switcher();
-    assert_eq!(s.input(through(x, &mut remap, &mut pad, BOTTOM)), Action::Play(0), "A resumes");
+    assert_eq!(s.input(through(x, &mut remap, &mut pad, BOTTOM)), Action::Play(0), "A plays");
     assert_eq!(s.input(through(x, &mut remap, &mut pad, RIGHT)), Action::Close, "B closes");
     assert_eq!(s.input(through(x, &mut remap, &mut pad, TOP)), Action::Favorite(0), "Y (top) stars");
-    assert_eq!(s.input(through(x, &mut remap, &mut pad, LEFT)), Action::Remove(0), "X (left) removes");
+    assert_eq!(s.input(through(x, &mut remap, &mut pad, LEFT)), Action::None, "X (left) does nothing");
     // The same buttons in the start layout do the opposite.
     let n = ButtonLayout::Nintendo;
     assert_eq!(s.input(through(n, &mut remap, &mut pad, RIGHT)), Action::Play(0));

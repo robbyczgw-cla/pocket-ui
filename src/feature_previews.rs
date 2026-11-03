@@ -328,6 +328,7 @@ fn card(c: &mut Canvas, text: &mut Text, focus: usize) {
         favorite: false,
         saves: None,
         links: Vec::new(),
+        plain: false,
         rows: vec![
             CuratorRow {
                 kind: RowKind::Echoes,
@@ -341,7 +342,7 @@ fn card(c: &mut Canvas, text: &mut Text, focus: usize) {
             },
             CuratorRow {
                 kind: RowKind::Stickers,
-                title: "Stickers".into(),
+                title: "Stickers & labels".into(),
                 line: "Couch co-op · Short sessions".into(),
             },
         ],
@@ -565,7 +566,7 @@ pub fn search(c: &mut Canvas, text: &mut Text) {
 
 const PAUSE_ROWS: [&str; 6] = ["Continue", "Save", "Load", "Options", "Quick settings", "Quit"];
 
-/// Settings › Remember where I quit: the pause menu's one Quit, and what the switch makes of it.
+/// Settings › Continue where I quit: the pause menu's one Quit, and what the switch makes of it.
 pub fn remember_quit(c: &mut Canvas, text: &mut Text) {
     palette::scoped(0, || {
         paused_game(c);
@@ -592,7 +593,7 @@ pub fn run_ahead(c: &mut Canvas, text: &mut Text) {
             ("Fan", "Auto".to_string()),
             ("Run-ahead", "‹ 1 frame ›".to_string()),
         ];
-        list_page(c, text, "Extras", &rows, 6, 160);
+        list_page(c, text, "Speed, rumble, fan", &rows, 6, 160);
         let mut y = 160 + rows.len() as i32 * 66 + 60;
         for line in [
             "The game responds to your buttons 1 or 2 frames sooner.",
@@ -739,7 +740,7 @@ pub fn up_next(c: &mut Canvas, text: &mut Text) {
     text.draw(c, Face::Body, 21, tx, y + 36, pal().label_dust, "Up next");
     text.draw(c, Face::Title, 37, tx, y + 80, pal().ink, "Sample game 2");
     text.draw(c, Face::Body, 28, tx, y + 116, pal().label_dust, "PSP · Same series");
-    hints(c, text, &[("A", "Play it"), ("B", "Not now")]);
+    hints(c, text, &[("X", "Play it"), ("B", "Not now")]);
 }
 
 /// A game at Integer scaling with Pixel Path's line in the band above the picture, placed and painted by

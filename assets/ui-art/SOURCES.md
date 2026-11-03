@@ -46,6 +46,31 @@ borders PixelLab drew. The handheld under the blanket is a generic one with blan
 Licence: PixelLab's terms (read 2026-10-22, see `NOTICE.md`) give the user the copyright in what is created and let
 it be used and distributed for any purpose. The pictures ship with pocket-ui under GPL-2.0-or-later.
 
+## Made from photographs (PixelLab)
+
+| File | What | Photos |
+|---|---|---|
+| `emblem-justplay.png` | Just Play's front on the shelf (2026-11-03): a game cartridge with a big red play triangle on its label and a blue and a green die in front, for "one press, a game picked for you" | the three below |
+
+Made the way `assets/systems` and `assets/media/game` were (see their SOURCES.md): the photos' lettering painted over,
+then PixelLab `image-to-pixelart` (v2, `assets/media/game/tools/pixellab_i2p.py`, default strength, output about 104 px
+on the long side), the backdrop flooded away and every pixel made opaque or clear (`tools/justplay_finish.py`). Three
+candidates were made, one conversion each (the requests with their usage: `pixellab-justplay-log.jsonl`; A the cartridge alone, B the cartridge with dice, C the joystick); B was kept. The prepared
+photos are made by `tools/justplay_prep.py`: the cartridge's Atari label and the logo on its underside are painted
+over (a plain cream label with a red triangle, drawn by the script), the two dice are cut out of the dice photo by
+colour. The joystick (candidate C) was not used, nothing of it ships. The generic cartridge is no console's shell:
+the Atari 5200 cartridge was chosen because its shape carries no Nintendo or other current trademark, and its name
+is gone.
+
+All photos are on Wikimedia Commons; the licence was read from the Commons API (`extmetadata.LicenseShortName`) and
+on each file page on 2026-11-03. The 1280 px thumbnails were used.
+
+| Used for | Commons file page | Author | Licence on Commons | Checked |
+|---|---|---|---|---|
+| the cartridge (A, B) | https://commons.wikimedia.org/wiki/File:Atari-5200-Cartridge.jpg | Evan-Amos | Public domain | 2026-11-03 |
+| the two dice (B) | https://commons.wikimedia.org/wiki/File:Colorful_dices_on_wooden_background_(41903826620).jpg | Ready Elements (Flickr 41903826620) | CC0 | 2026-11-03 |
+| the joystick (C, not shipped) | https://commons.wikimedia.org/wiki/File:Atari-2600-Joystick.jpg | Evan-Amos | Public domain | 2026-11-03 |
+
 ## Drawn for this project
 
 | File | What | Tool |

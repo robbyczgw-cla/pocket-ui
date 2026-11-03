@@ -146,6 +146,10 @@ fn fill_connections(data: &mut CardData, path: &std::path::Path, ix: &connection
 
 impl OpenCard {
     fn refresh_connections(&mut self, ix: &connections::Index, entry: Option<&pocket_ui::gamelist::Entry>) {
+        // Easy's short card has no links to grow.
+        if self.card.data.plain {
+            return;
+        }
         let picked = |link: Option<usize>| {
             link.and_then(|i| self.card.data.links.get(i)).and_then(|(f, _)| self.card.data.facts.get(*f)).cloned()
         };
@@ -455,6 +459,26 @@ mod tests {
             at: (0, i), path: format!("/roms/{i}.gb").into(), name: name.into(),
             values: [vec!["Example Studio".into()], vec![], vec![], vec![]], ..Default::default()
         }
+    }
+
+    #[test]
+    fn the_short_card_gets_no_links_when_the_catalog_arrives_and_ignores_any() {
+        let source_facts = vec![("Developer", "Example Studio".into())];
+        let mut open = OpenCard {
+            card: Card::new(CardData { facts: source_facts.clone(), plain: true, ..Default::default() }),
+            source_facts, item: Item::Game(0, 0), system: "gb".into(), name: "Pocket 2".into(),
+            path: "/roms/0.gb".into(), article: None,
+        };
+        open.card.show_info();
+        let index = connections::Index::build(vec![entry(0, "Pocket 2"), entry(1, "Pocket 3")]);
+        open.refresh_connections(&index, None);
+        assert!(open.card.data.links.is_empty());
+        // And were one there: Down doesn't select it, A plays.
+        fill_connections(&mut open.card.data, std::path::Path::new("/roms/0.gb"), &index);
+        assert!(!open.card.data.links.is_empty());
+        open.card.press(Button::Down);
+        assert_eq!(open.card.info.as_ref().unwrap().link, None);
+        assert_eq!(open.card.press(Button::East), Out::Play);
     }
 
     #[test]

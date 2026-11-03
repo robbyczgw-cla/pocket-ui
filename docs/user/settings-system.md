@@ -55,7 +55,6 @@ card and backups.
 | **Language** | **English**, **Deutsch** or **Español**: menus, hints and messages. See [Language](language.md) |
 | **Time** | Time zone, date and network time. See [Time](#time) |
 | **Sleep & power** | When the screen goes off and the device sleeps, the slideshow before it, when it switches off after sleeping, and what the power button does. The row shows the screen-off time ("2 min"). See [Sleep & power](#sleep--power) |
-| **Frozen games** | Your last five games with a saved moment stand a little open on the shelf, and A goes straight back. On at the start; A switches it. See [Frozen games](frozen-games.md#frozen-games) |
 | **Kids mode** | A big, simple shelf for a child, with a PIN: see [Kids mode](kids-mode.md). Not on the Steam Deck |
 | **Updates** | New versions of pocket-ui and the system. See [Updates](updates.md) |
 | **Storage** | What takes up space on the SD card, what can go, and the games you hid. The row shows the free space ("41.2 GB free"). See [Storage](storage.md) |
@@ -177,13 +176,13 @@ Settings → **Help & tools**. The Tour, this guide, ROCKNIX's tools, the bug re
 
 | Entry | What it holds |
 |---|---|
-| **How you like to play** | The first start's question again: Simple, Enthusiast or Choose for yourself (the cards). The row shows where the switches stand now. See [Getting started](getting-started.md#how-do-you-like-to-play) |
+| **How you like to play** | The first start's question again: The shelf, Easy, Enthusiast or Choose for yourself (the cards). The row shows where the switches stand now. See [Getting started](getting-started.md#how-do-you-like-to-play) |
 | **Tour** | Every feature on a card, with a small picture of what it does: switch it on or off, or put it off. See [Features and the Tour](tour.md) |
 | **Manual** | This guide, on the device. See [Manual](#manual) |
 | **Tools** | ROCKNIX's tools without its old menu: the emulators' own settings, RetroArch's menu, gamepad test and calibration, file manager, terminal, and tools installed from a store. See [Tools](#tools) |
 | **Store** | Emulators, frames, themes and tools. Shown only on a device that has a store set up; there is no public store yet, so you will not see this row. See [Store](extras.md#store) |
 | **Report a problem** | Opens About with this row selected; A there saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)) and shows where it is. The same row is in About, and in the dialog of SELECT + START held, where you look when something has just gone wrong |
-| **About** | Version, the system underneath (on the SD card image "pocket-ui OS 0.1.12 · built on ROCKNIX 20261001 (SM8250)", on a ROCKNIX card with pocket-ui added just the ROCKNIX version), number of games, free space, network address, battery, where the logs are kept, and where the licence texts are (a Licences row when the page has the room: `/storage/pocket-ui/licences`: pocket-ui's licence, the credits, the licences of the programs it is built from and of its fonts; they come with the install package and the SD card image); on a Retroid Pocket 5, Flip 2 or first Mini also which one it is, marked experimental ([Getting started](getting-started.md#other-retroid-devices)). Two rows: **Report a problem** saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)); **Open EmulationStation…** opens ROCKNIX's own menu, after a warning ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)) |
+| **About** | Version, the system underneath (on the SD card image "pocket-ui OS 0.1.13 · built on ROCKNIX 20261001 (SM8250)", on a ROCKNIX card with pocket-ui added just the ROCKNIX version), number of games, free space, network address, battery, where the logs are kept, and where the licence texts are (a Licences row when the page has the room: `/storage/pocket-ui/licences`: pocket-ui's licence, the credits, the licences of the programs it is built from and of its fonts; they come with the install package and the SD card image); on a Retroid Pocket 5, Flip 2 or first Mini also which one it is, marked experimental ([Getting started](getting-started.md#other-retroid-devices)). Two rows: **Report a problem** saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)); **Open EmulationStation…** opens ROCKNIX's own menu, after a warning ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)) |
 
 ### Manual
 

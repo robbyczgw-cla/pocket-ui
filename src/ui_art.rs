@@ -54,6 +54,8 @@ pub enum Emblem {
     Streaming,
     /// Round stickers on a peeled sheet: a sticker's shelf.
     Sticker,
+    /// A game cartridge with a play triangle on its label and two dice in front: Just Play.
+    JustPlay,
 }
 
 /// The Settings categories (`SETTINGS_GROUPS` in main.rs, in that order).
@@ -125,6 +127,7 @@ const FILES: &[(Art, &[u8])] = &[
     (Art::Emblem(Emblem::Surprise), include_bytes!("../assets/ui-art/emblem-surprise.png")),
     (Art::Emblem(Emblem::Streaming), include_bytes!("../assets/ui-art/emblem-streaming.png")),
     (Art::Emblem(Emblem::Sticker), include_bytes!("../assets/ui-art/emblem-sticker.png")),
+    (Art::Emblem(Emblem::JustPlay), include_bytes!("../assets/ui-art/emblem-justplay.png")),
 ];
 
 /// The decoded picture, decoded on first use and kept.
@@ -277,6 +280,18 @@ mod tests {
             assert!(s.w > 0 && s.h > 0, "{art:?}");
             assert!(s.px.iter().all(|p| p >> 24 == 0 || p >> 24 == 0xff), "{art:?}: only clear or solid pixels");
             assert!(s.px.iter().any(|p| p >> 24 == 0) && s.px.iter().any(|p| p >> 24 == 0xff), "{art:?}: a picture on clear");
+        }
+    }
+
+    #[test]
+    fn just_plays_emblem_is_as_big_as_the_other_emblems() {
+        // A case's front without a cover prints its emblem (app_cabinet's `emblem`); a missing or tiny one would leave Just
+        // Play's case as a plain grey card again.
+        let (w, h) = size(Art::Emblem(Emblem::JustPlay), 1);
+        assert!(w >= 80 && h >= 70, "{w}x{h}");
+        for e in [Emblem::Curator, Emblem::Surprise, Emblem::Streaming, Emblem::Sticker] {
+            let (ow, oh) = size(Art::Emblem(e), 1);
+            assert!(w * h * 10 >= ow * oh * 7, "{e:?} {ow}x{oh} against {w}x{h}");
         }
     }
 

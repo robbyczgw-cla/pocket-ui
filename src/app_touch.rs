@@ -64,6 +64,10 @@ impl App {
         if self.kids_live() {
             return self.kids_touch(ev);
         }
+        // The Big look's Continue, Stop or More.
+        if self.big_pause() {
+            return self.big_pause_touch(ev);
+        }
         if let Some(why) = self.touch_blocked() {
             return self.touch_ignored(why);
         }
@@ -133,6 +137,7 @@ impl App {
         }
         match gesture {
             Some(Gesture::Tap { x, y }) => match self.hits.tap(x, y) {
+                TapAction::Nothing if self.big_live() => self.tap_button(el, super::app_big_shelf::tap_button(x, w)),
                 TapAction::Nothing => {}
                 TapAction::Activate => self.tap_button(el, CONFIRM),
                 TapAction::Press(b) => self.tap_button(el, b),
@@ -140,6 +145,11 @@ impl App {
                 TapAction::Presses(b, n) => (0..n).for_each(|_| self.tap_button(el, b)),
                 TapAction::Steps(n) => self.steps(el, n),
             },
+            // On the Big shelf the case follows the finger sideways.
+            Some(Gesture::Scroll { steps, vertical: false }) if self.big_live() => {
+                let button = if steps < 0 { Button::Right } else { Button::Left };
+                (0..steps.unsigned_abs().min(60)).for_each(|_| self.tap_button(el, button));
+            }
             // The list follows the finger: a swipe up shows what is further down, so the selection goes down.
             Some(Gesture::Scroll { steps, .. }) => self.steps(el, self.hits.clamp_steps(-steps)),
             None => {}

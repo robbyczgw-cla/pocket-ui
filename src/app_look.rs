@@ -16,6 +16,16 @@ use super::{stripe, system_short, App, Item, Screen, PULL};
 
 
 impl App {
+    /// The first start's step (not the look step), in the column on a wide screen.
+    pub(crate) fn paint_setup_in_column(&mut self, c: &mut Canvas) {
+        self.in_column(c, |app, c| {
+            if let Some(setup) = app.setup.as_mut() {
+                setup.paint(c, &mut app.text);
+                setup.register_touch(&mut app.hits);
+            }
+        });
+    }
+
     /// One preview per theme (in `Theme::ALL` order), and whether they show the built-in sample.
     pub(crate) fn render_look_previews(&mut self) -> (Vec<Image>, bool) {
         let started = Instant::now();
@@ -44,6 +54,7 @@ impl App {
         let shown_recents = if matches!(first, Item::Recent(_)) { vec![sample.game.clone()] } else { Vec::new() };
         let recents = std::mem::replace(&mut self.recents.list, shown_recents);
         let items = std::mem::replace(&mut self.items, items);
+        let big = std::mem::take(&mut self.big);
         let (sel, prev_sel, screen, theme, moved_at) = (self.sel, self.prev_sel, self.screen, self.theme, self.moved_at);
         let (toast, notice, launch_at) = (self.toast.take(), self.notice.take(), self.launch_at.take());
         let marquee = std::mem::take(&mut self.marquee);
@@ -87,6 +98,7 @@ impl App {
         self.systems = systems;
         self.recents.list = recents;
         self.items = items;
+        self.big = big;
         (self.sel, self.prev_sel, self.screen, self.theme, self.moved_at) = (sel, prev_sel, screen, theme, moved_at);
         (self.toast, self.notice, self.launch_at) = (toast, notice, launch_at);
         self.marquee = marquee;

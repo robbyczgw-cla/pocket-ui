@@ -47,10 +47,10 @@ impl Animations {
         }
     }
 
-    /// Until the player chooses: Cozy for the looks with cases to watch (Shelf, Cabinet), else Quick.
+    /// Until the player chooses: Cozy for the looks with cases to watch (Shelf, Cabinet, Big), else Quick.
     pub fn default_for(theme: Theme) -> Animations {
         match theme {
-            Theme::Shelf | Theme::Cabinet => Animations::Cozy,
+            Theme::Shelf | Theme::Cabinet | Theme::Big => Animations::Cozy,
             _ => Animations::Quick,
         }
     }
@@ -129,11 +129,14 @@ pub struct Settings {
     /// Settings > On start: Home, or the game played last (`on_start`); Home when unset.
     #[serde(default, deserialize_with = "lenient")]
     pub on_start: crate::on_start::OnStart,
-    /// Settings > Remember where I quit, kept as its opposite so that unset (a new device, a settings.json from before
+    /// Settings > Continue where I quit, kept as its opposite so that unset (a new device, a settings.json from before
     /// it) is On: Quit keeps the moment to resume from. Off: Quit writes the in-game saves but no new resume point,
     /// where the emulator can leave it out (`quit::offers_quit_without_saving`; not RetroArch).
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub forget_where_quit: bool,
+    /// Read, never written: Easy began as a switch of this name. `load` turns it into the look.
+    #[serde(default, deserialize_with = "lenient", skip_serializing)]
+    pub big_shelf: bool,
     /// Settings > Playing > Button layout: which face button confirms in pocket-ui's menus (`button_layout`); Nintendo
     /// (A on the right) except Odin 2 Mini/Portal (Xbox) when unset. An explicit saved choice wins.
     #[serde(default, deserialize_with = "lenient")]
@@ -193,6 +196,9 @@ pub struct Settings {
     /// choice is kept here; unset is the box.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub details_page: bool,
+    /// Easy showed its one line about an open case ("Open means your moment is waiting"): once ever, never again.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
+    pub open_case_told: bool,
     /// The cozy extras (Settings → Look → Cozy extras and their rows elsewhere): the switches changed from their start (`cozy_extras`); left out while none
     /// is, and each at its start when unset, so a settings.json from before them keeps every extra as it was.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "crate::cozy_extras::Extras::is_default")]
@@ -225,7 +231,12 @@ impl Settings {
     /// ever written after it ran. Either way it's said on stderr.
     pub fn load(data_dir: &Path) -> Self {
         let path = data_dir.join(FILE);
-        fsutil::read_json_or_backup(&path).unwrap_or_else(|| {
+        fsutil::read_json_or_backup(&path).map(|mut s: Settings| {
+            if std::mem::take(&mut s.big_shelf) {
+                s.theme = Theme::Big;
+            }
+            s
+        }).unwrap_or_else(|| {
             let mut s = Settings::default();
             if path.exists() {
                 eprintln!(
@@ -376,6 +387,7 @@ mod tests {
             appearance: Appearance::Light,
             on_start: crate::on_start::OnStart::Continue,
             forget_where_quit: true,
+            big_shelf: false,
             button_layout: crate::button_layout::ButtonLayout::Xbox,
             prompts: crate::button_prompts::PromptStyle::PlayStation,
             colours: crate::palette::Colours::GreyBrick,
@@ -392,6 +404,7 @@ mod tests {
             animations: Some(Animations::Quick),
             no_launch_animation: false,
             details_page: true,
+            open_case_told: true,
             extras: crate::cozy_extras::Extras { cabinet_tv: false, ..Default::default() },
         }
     }
@@ -472,7 +485,7 @@ mod tests {
     #[test]
     fn animations_follow_the_look_until_chosen_and_the_choice_is_kept() {
         let d = dir("animations");
-        for (theme, cozy) in [(Theme::Shelf, true), (Theme::Cabinet, true), (Theme::Minimal, false), (Theme::Cards, false), (Theme::Split, false)] {
+        for (theme, cozy) in [(Theme::Shelf, true), (Theme::Cabinet, true), (Theme::Minimal, false), (Theme::Cards, false), (Theme::Split, false), (Theme::Big, true)] {
             let want = if cozy { Animations::Cozy } else { Animations::Quick };
             assert_eq!(Animations::default_for(theme), want, "{theme:?}");
             assert_eq!(Settings { theme, animations: None, ..chosen() }.animations_or_default(), want, "{theme:?}: unset follows the look");
@@ -725,6 +738,21 @@ mod tests {
     }
 
     #[test]
+    fn a_saved_big_shelf_switch_becomes_the_big_look_and_goes_with_the_next_save() {
+        let d = tempfile::tempdir().unwrap();
+        let d = d.path();
+        std::fs::write(d.join(FILE), br#"{"theme": "cards", "onboarded": true, "big_shelf": true}"#).unwrap();
+        let s = Settings::load(d);
+        assert_eq!((s.theme, s.big_shelf), (Theme::Big, false));
+        s.save(d);
+        let written = std::fs::read_to_string(d.join(FILE)).unwrap();
+        assert!(!written.contains("big_shelf") && written.contains(r#""theme": "big""#), "{written}");
+        assert_eq!(Settings::load(d).theme, Theme::Big);
+        std::fs::write(d.join(FILE), br#"{"theme": "cards", "onboarded": true, "big_shelf": false}"#).unwrap();
+        assert_eq!(Settings::load(d).theme, Theme::Cards, "switched off: the look it was");
+    }
+
+    #[test]
     fn on_start_is_home_until_chosen_and_survives_a_restart() {
         use crate::on_start::OnStart;
         let d = dir("on-start");
@@ -816,8 +844,9 @@ mod tests {
 
     #[test]
     fn the_cabinet_is_the_fifth_look_and_is_kept() {
-        assert_eq!(Theme::ALL.len(), 5);
-        assert_eq!(Theme::ALL[4], Theme::Cabinet, "after the four there were, so their places in the picker stay");
+        assert_eq!(Theme::ALL.len(), 6);
+        assert_eq!((Theme::ALL[0], Theme::ALL[1]), (Theme::Shelf, Theme::Big), "Easy second, after the shop window");
+        assert_eq!(Theme::ALL[5], Theme::Cabinet);
         assert_eq!(Theme::Cabinet.name(), "Cabinet");
         assert!(!Theme::Cabinet.blurb().is_empty());
         let d = dir("cabinet");

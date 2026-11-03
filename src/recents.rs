@@ -91,7 +91,7 @@ impl Recents {
         self.list.truncate(KEEP);
     }
 
-    /// Takes the game off the list (X in the game switcher) and saves; false if it wasn't on it.
+    /// Takes the game off the list and saves; false if it wasn't on it.
     pub fn remove(&mut self, path: &Path) -> bool {
         let before = self.list.len();
         self.list.retain(|r| r.path != path);

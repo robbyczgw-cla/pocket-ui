@@ -1,12 +1,12 @@
-# Extras
+# Pictures & extras
 
 Settings → Games → **Pictures & extras** (also a step of the first start). The extras are optional and need Wi-Fi;
-without a connection the page says "Connect to Wi-Fi first to use these." The page has three rows: **Cover art**,
+without a connection the page says "Connect to Wi-Fi first to use these." The page has three rows: **Box art**,
 **Pictures** (a choice of three, which works without Wi-Fi) and **PortMaster games**. Under the rows a line says where the
 pictures come from and how much space they take.
 
-This page is about the Extras in Settings. The pause menu has an Extras group of its own, with
-fast-forward, rewind and more; see [Options](options.md#extras).
+This page is about Pictures & extras in Settings. The pause menu has a group of its own for fast-forward, rewind,
+rumble, fan and more; see [Options](options.md#speed-rumble-fan).
 
 ## Starter pack
 
@@ -14,9 +14,9 @@ Settings → Games → **Starter pack** is not an extra of this page, but it wor
 share for anyone to play, downloaded to your SD card with A when you ask. See
 [Getting started](getting-started.md#nothing-on-the-sd-card-yet-the-starter-pack).
 
-## Cover art
+## Box art
 
-"Box art for your games, from the free libretro collection." No account is needed.
+"The front of each game's box, from a free collection online." No account is needed.
 
 ### By itself
 
@@ -34,11 +34,12 @@ again (see below); a game it could not look up because the connection dropped is
 
 ### By hand
 
-1. Select **Cover art** and press A ("Download"). If the automatic download is running, the page shows its
+1. Select **Box art** and press A ("Download"). If the automatic download is running, the page shows its
    progress instead of starting a second one.
 2. pocket-ui looks up every game that has no cover yet (and, with Pictures on Box art and screenshots, no screenshot
    or title screen) and shows its progress, for example "Looking up 3 of 120 covers" ("… pictures" with Pictures on, where a game can have up to three). At the end it reports "Found 42 new covers"
    or "No new covers found" ("pictures" instead of "covers" while Pictures is Box art and screenshots, since both are counted).
+   When the picture server does not answer you see "Couldn't reach the picture server. Try again later." instead; nothing is marked as having no cover, and the games are asked for again at the next start.
 
 Good to know:
 
@@ -82,7 +83,7 @@ Left/Right) moves to the next:
   Pictures that are there stay on the SD card; switching back shows them again. Switching to Box art and screenshots
   starts the download at once when the Pocket is online.
 - **Off**: nothing is downloaded by itself, not box art either, and the same pictures as with Box art are shown.
-  What is on the SD card stays. The **Cover art** row still looks up box art when you press A on it, and a game's
+  What is on the SD card stays. The **Box art** row still looks up box art when you press A on it, and a game's
   "Wrong pictures? Look up again" still works; those are things you ask for. Choosing another value starts the
   download again.
 
@@ -151,7 +152,7 @@ responsive while the card is read. A game without any picture keeps the plain lo
 Installed games appear on Home under the **Ports** system and start like any other game. PortMaster
 itself is prepared automatically the first time you install something.
 
-HOME opens the [pause menu](pause-menu.md#portmaster-ports) over a running port (Continue, Options, Quick settings,
+HOME opens the [pause menu](pause-menu.md#portmaster-ports) over a running port (Continue, Options,
 Quit). Its performance and fan are in Options there, or on its card: X on the port, then START opens **Performance &
 fan** (Battery, Auto or Performance; Very quiet, Quiet, Auto or Cool). A port that keeps a processor core busy all the time is
 pointed out there once, with Battery in one press. See [PortMaster ports](performance.md#portmaster-ports).

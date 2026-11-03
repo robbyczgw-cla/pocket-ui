@@ -7,14 +7,14 @@ later. What the menu offers depends on the emulator the system uses (see
 
 | Emulator | Menu, top to bottom |
 |---|---|
-| pocket-ui's own host | Continue, Save, Load, Earlier, Options, Quick settings, Quit |
-| pocket-ui's own host, signed in to RetroAchievements | Continue, Save, Load, Earlier, Options, Achievements, Quick settings, Quit |
-| pocket-ui's own host, for ScummVM, PICO-8 and TIC-80 (no save states) | Continue, Options, Quick settings, Quit |
-| PlayStation 2 (ARMSX2), GameCube and Wii (Dolphin), 3DS (Azahar) | Continue, Save, Load, Options, Quick settings, Quit |
-| Xbox (hakuX in RetroArch, experimental) | Continue, Options, Quick settings, Quit |
-| RetroArch | Continue, Save, Load, Options, Quick settings, Quit |
-| PortMaster ports | Continue, Options, Quick settings, Quit |
-| Other emulators | Continue, Options, Quick settings, Quit |
+| pocket-ui's own host | Continue, Save, Load, Earlier, Options, Quit |
+| pocket-ui's own host, signed in to RetroAchievements | Continue, Save, Load, Earlier, Options, Achievements, Quit |
+| pocket-ui's own host, for ScummVM, PICO-8 and TIC-80 (no save states) | Continue, Options, Quit |
+| PlayStation 2 (ARMSX2), GameCube and Wii (Dolphin), 3DS (Azahar) | Continue, Save, Load, Options, Quit |
+| Xbox (hakuX in RetroArch, experimental) | Continue, Options, Quit |
+| RetroArch | Continue, Save, Load, Options, Quit |
+| PortMaster ports | Continue, Options, Quit |
+| Other emulators | Continue, Options, Quit |
 
 **Up** from Continue wraps to Quit, and **Down** from Quit to Continue, like every other menu. **START** opens the
 [quick settings](quick-settings.md) from any row of the menu (brightness, volume and fan without walking down to them).
@@ -23,7 +23,7 @@ At the right of the title the menu says how long the battery lasts **in this gam
 left in this game". See [Battery in this game](#battery-in-this-game).
 
 With **Pixel Path in the pause menu** switched on in [Settings → Games → Curator](settings.md#curator), the menu of
-pocket-ui's own host also has **Pixel Path**, right before Quick settings, and so do PS2, GameCube, Wii and 3DS games
+pocket-ui's own host also has **Pixel Path**, right before Quit, and so do PS2, GameCube, Wii and 3DS games
 whose emulator settings can be read ([below](#pixel-path-for-ps2-gamecube-wii-and-3ds)). With two or more controllers connected (the Pocket counts as one), the
 menu of pocket-ui's own host also has **Players**, after Options and Achievements. A game with more than one disc on pocket-ui's
 own host also has **Disc**, right before Options ([below](#changing-discs)). **Earlier** is left out where
@@ -35,8 +35,8 @@ and Quit, where saving is: for example "This emulator keeps its own saves. Save 
 
 - **Continue** returns to the game. B or another tap on HOME does the same.
 - **Save** saves the game's current moment into one of your save slots (1 to 8; see
-  [Save slots](#save-slots-auto-and-before-load)).
-- **Load** goes back to a saved moment: the one from your last quit ("Auto"), the one a Load just
+  [Save slots](#save-slots-where-i-quit-and-before-load)).
+- **Load** goes back to a saved moment: the one from your last quit ("Where I quit"), the one a Load just
   replaced ("Before load"), or one of your slots. It is greyed out and cannot be chosen while the
   selected entry holds nothing to load.
 - **Earlier** (pocket-ui's own host) goes back to a moment the game kept by itself: one every 5 minutes of play, and
@@ -55,34 +55,30 @@ and Quit, where saving is: for example "This emulator keeps its own saves. Save 
   it. See [Players](#players).
 - **Pixel Path** (switched on in Settings → Games → Curator) shows how the game's picture and sound reach you, stage by stage. See
   [Pixel Path](#pixel-path).
-- **Quick settings** opens the panel that HOME opens on the shelf (brightness, volume, Wi-Fi, Bluetooth,
-  performance, fan, power) over the paused game, which stays visible behind it, so you can see a brightness change on
-  the game itself. Performance and Fan there change what every game runs with and apply to this game at once, unless
-  it has its own choice in Options: then the row says "this game: …" and only the default changes. B or HOME goes back
-  to the pause menu. See [Quick settings](quick-settings.md#quick-settings).
-- **Quit** ends the game and takes you back to the shelf. Your in-game saves (the game's own save feature, memory
+- **START**, on any row, opens the [quick settings](quick-settings.md#quick-settings) (the panel HOME opens on the shelf)
+  over the paused game, which stays visible behind it, so you can see a brightness change on the game itself. Performance
+  and Fan there change what every game runs with and apply to this game at once, unless it has its own choice in Options:
+  then the row says "this game: …" and only the default changes. B or HOME goes back to the pause menu.
+- **Quit** (it reads **Save & quit** while it keeps the moment, with "Next time, A continues from this moment." beside it) ends the game and takes you back to the shelf. Your in-game saves (the game's own save feature, memory
   cards) are written on every Quit. Whether Quit also keeps the moment you are at is set in
-  [Settings → Playing → **Remember where I quit**](settings.md#remember-where-i-quit):
+  [Settings → Playing → **Continue where I quit**](settings.md#continue-where-i-quit):
   - **On**, the default: Quit saves the moment first ("Saving and quitting…"), and the next start continues
     from there.
   - **Off**: Quit doesn't save the moment ("Quitting…"; the row says "Doesn't save where you are. In-game saves are
-    kept."). The next start continues from the moment of your last Quit with the switch on, as if this session had
-    not happened. If the device slept during the game, the moment saved before sleeping counts as that last Quit.
-    On pocket-ui's own host, an in-game save made during this session is newer than that moment; the game then
-    starts fresh from the in-game save instead, so the save is never undone. On PlayStation 2, GameCube, Wii and
-    3DS the emulator closes straight away, which is also faster; the next start goes back to the moment of your
-    last saving Quit even if you saved in the game since. The save itself stays on the memory card or in the
-    console's storage; load it from the game's own menu if you need it.
+    kept."). On pocket-ui's own host the next start is as if no moment had been kept, and the older moment stays under
+    **Load** as **Where I quit**. PlayStation 2, GameCube, Wii and 3DS close straight away, which is also faster, and
+    their next start goes back to the moment of your last saving Quit, even if you saved in the game since; the save
+    itself stays on the memory card or in the console's storage. A moment saved before sleeping counts as a saving Quit.
 
   Without Save and Load in the menu (ScummVM, PICO-8, TIC-80, other emulators), Quit keeps no moment: it says
   "Quitting…", and the line beside it says where saving is.
 
   RetroArch games always save the moment on Quit, even with the switch off: ROCKNIX sets RetroArch to save on
   every exit, and RetroArch would load an older moment at the next start without checking for a newer in-game
-  save. Other emulators save nothing on Quit to begin with. The [game switcher](playing.md#game-switcher) always
+  save. Other emulators save nothing on Quit to begin with. [Recent games](playing.md#recent-games) always
   saves the moment of the game it leaves, whatever the switch says, so you can switch back to it.
 
-**SELECT** in the menu opens the [game switcher](playing.md#game-switcher); B there comes back to the menu.
+**SELECT** in the menu opens [Recent games](playing.md#recent-games); B there comes back to the menu.
 
 Holding HOME and pressing another button is not a tap. On pocket-ui's own host these combinations
 are [shortcuts](options.md#shortcuts); in RetroArch games they stay RetroArch's own shortcuts (see
@@ -101,7 +97,7 @@ game with one disc (a single `.cue` or `.chd`) has no Disc row.
 
 The game sees the drive open and close, as on the console. A short note over the game says which disc is in now, for
 example "Disc 2 of 3". If the emulator can't tell which disc is in, the line beside the menu only says which one A
-puts in. Not tried with a real multi-disc game on a Mini V2 yet.
+puts in.
 
 ## Battery in this game
 
@@ -117,11 +113,10 @@ it found (even across restarts). It only says what it measured:
 | "Battery: not enough play to tell yet" | Not played long enough on battery yet |
 | "Charging" | The Pocket is on the charger |
 
-Time asleep, time on the charger and the minute in which a game starts or ends are never counted, and neither is a
-sudden jump of the battery's reading. The longer you play a game, the more its newest play counts: after a change (another
-[Performance](performance.md) setting, an older battery) the time follows within a few hours of play. The game's own
-time left and rate also show on its [card](library.md#what-the-card-shows), and the whole Pocket's in
-[Settings → Playing → Battery](settings-system.md#battery). Without a battery reading of the last minutes the line is left out.
+Time asleep, on the charger or starting and ending a game is never counted. The newest play counts most, so after a change
+(another [Performance](performance.md) setting, an older battery) the time follows within a few hours. The game's own time left
+also shows on its [card](library.md#what-the-card-shows), and the whole Pocket's in
+[Settings → Playing → Battery](settings-system.md#battery).
 
 ## Players
 
@@ -132,20 +127,18 @@ controller Player 2, and so on. When one connects or goes away during a game, a 
 
 **Players** lists Player 1 to 4 and the controller each one has.
 
-- **Up / Down** on any controller selects a player.
-- **A on a controller** makes that controller the selected player. Whoever had that player takes the controller's old
-  place. Then the next player is selected, so everyone presses A on their own controller in turn: one press each.
-- **B** goes back to the pause menu.
+- **Up / Down** selects a player. **A on a controller** makes it the selected player (whoever had that player takes its old
+  place) and selects the next, so everyone presses A once on their own controller. **B** goes back to the menu.
 
-Your choice is kept for the next games. To play on a TV with a controller as Player 1: select Player 1 and press A on
-that controller; the Pocket's own buttons become Player 2. Select Player 1 and press A on the Pocket to change it back.
+Your choice is kept for the next games. To play on a TV with a controller as Player 1, select Player 1 and press A on that
+controller; press A on the Pocket to change it back.
 
 - A controller that goes away during a game leaves its player without a controller. When it comes back it is the same
   player again, unless another controller took that place in the meantime.
 - With all four players taken, another controller waits; the page lists it under "Waiting for a free player".
 - The game decides how many players it has: in a game for one player, Player 2's controller does nothing.
 - Every player's buttons do what [Options → Controls](options.md#controls) sets for the game. Rumble goes to each player's own
-  controller (the Pocket's motor for its own buttons), as strong as Options → Extras → Rumble says.
+  controller (the Pocket's motor for its own buttons), as strong as Options → Speed, rumble, fan → Rumble says.
 - Only games on pocket-ui's own host have this page. RetroArch and the other emulators number the controllers
   themselves, see [Playing together](controls.md#playing-together).
 
@@ -227,7 +220,7 @@ Only one of them shows at a time: Pixel Path's line has the frame rate too.
 
 - Settings → Playing → **Over the game**: what every game starts with (Left/Right or A). See
   [Settings](settings.md#over-the-game).
-- Options → Extras → **Over the game**: for the running game, until you quit.
+- Options → Speed, rumble, fan → **Over the game**: for the running game, until you quit.
   [Save changes](options.md#save-changes) keeps it for this console or this game, like every option, and then it
   wins over Settings.
 - **HOME + Y** while you play switches to the next level at once (Off, FPS, FPS + sensors, Pixel Path, then Off again)
@@ -295,9 +288,9 @@ the Pocket goes to sleep. When the SD card is full, has turned read-only or is f
   row) goes back to the game; B goes back to the menu; **Quit anyway** quits, and tries the save once more on the way
   out. What you did since the last save that reached the SD card is lost then. Free some space first if you can
   ("The SD card is full" in [Troubleshooting](troubleshooting.md#questions)).
-- Sleep, the power-off at a nearly empty battery and the game switcher don't ask: they try the save once and go on, so
+- Sleep, the power-off at a nearly empty battery and switching games from Recent games don't ask: they try the save once and go on, so
   the Pocket never hangs on a full SD card. If the last save failed, the shelf says so once after the game.
-- When Quit or sleep could still save the moment (Auto) although the in-game save failed, the next start continues from
+- When Quit or sleep could still save the moment (Where I quit) although the in-game save failed, the next start continues from
   that moment, and the in-game save in it goes to the SD card as soon as there is space.
 
 ### Games with a clock
@@ -308,7 +301,7 @@ start again, even without the moment saved by Quit. [Sync](sync.md) shares it wi
 with a clock (Pokémon Ruby, Sapphire and Emerald) read the Pocket's own time instead; if theirs is off, check the time
 zone in [Settings → System → Time](settings-system.md#system).
 
-## Save slots, Auto and Before load
+## Save slots, Where I quit and Before load
 
 Every game has **eight save slots** (the 3DS has one, see below) and two states of its own that never
 touch them:
@@ -316,30 +309,34 @@ touch them:
 | | Written by | Where it is |
 |---|---|---|
 | **Slots 1 to 8** | **Save**, and only Save | Save and Load |
-| **Auto** | Quit and sleep (not Quit with **Remember where I quit** off) | Load, first in the list |
-| **Before load** | every Load, just before it | Load, after Auto, until you quit |
+| **Where I quit** | Quit and sleep (not Quit with **Continue where I quit** off; that one leaves the older moment here) | Load, first in the list |
+| **Before load** | every Load, just before it | Load, after Where I quit, until you quit |
 
 With Save selected, press **Left/Right** to choose the slot (the number appears next to it, as
-"‹ 3 ›"). With Load selected, **Left/Right** walks through what can be loaded: Auto, Before load
-(only while there is one), then slots 1 to 8. Load starts on Auto when there is one.
+"‹ 3 ›"). With Load selected, **Left/Right** walks through what can be loaded: Where I quit, Before load
+(only while there is one), then slots 1 to 8, and last **From the start** (pocket-ui's own host). Load starts on Where I quit
+when there is one.
 
-- **Auto** is "Auto · saved when you quit": the moment you left the game, which the next start
-  continues from (see [continuing](playing.md#continuing-where-you-left-off)). It is not one of your slots.
+- **Where I quit** ("Where I quit · today 14:02" under the picture): the moment you left the game, which the next start
+  continues from (not with Continue where I quit off) (see [continuing](playing.md#continuing-where-you-left-off)). It is not one of your slots.
   Sleeping writes it too.
 - **Before load** keeps what you were playing just before a Load replaced it, so a Load you did
   not mean can be undone: Load, then Load again and pick "Before load". It lasts until you quit.
-  A Quit after a Load saves the game as it is then (Auto); Before load is not kept after that.
+  A Quit after a Load saves the game as it is then (Where I quit); Before load is not kept after that.
+- **From the start** (pocket-ui's own host) begins the game again and does nothing else. Its own saves stay, and so does the
+  moment on the card until the next Save & quit replaces it (the line beside it says so); Before load, Earlier and the other
+  slots work as always.
 
 On the right you see:
 
 - the preview of the entry (the picture at the moment it was saved), or "Empty" for an empty slot
 - under it, a slim row of eight small blocks in the plastic of what the game saved to back then (the PlayStation's
   grey card, the PS2's black one, the Dreamcast's white VMU, the GameCube's, a cartridge's own colour): a block with a
-  save shows the game's cover, the ring marks the slot Save or Load is on (no ring while Load is on Auto or Before
+  save shows the game's cover, the ring marks the slot Save or Load is on (no ring while Load is on Where I quit or Before
   load). With Settings → Look → Cozy extras → **Memory card in the pause menu** on (it is off at first), the
   memory card or cartridge itself stands there beside its numbered blocks, as on the game's info page
 - above the keys: "Slot 3 · replaces the save from today 14:02" (on Save), "Slot 3 · saved
-  yesterday 21:10" (on Load), "Slot 3 · empty", "Auto · saved when you quit · today 14:02" or
+  yesterday 21:10" (on Load), "Slot 3 · empty", "Where I quit · today 14:02" or
   "Before load · today 14:05" (real times)
 
 On pocket-ui's own host the slot you used last is remembered for each game, and the
@@ -351,7 +348,7 @@ The slot numbers are the ones the emulators use, so a state saved on the Android
 same slot here. All states are in `roms/savestates/<system>/` on the SD card. The file share leaves that folder out;
 reach it with [Remote access (SSH)](settings-system.md#remote-access-ssh) or keep it in step with [Sync](sync.md).
 
-| | Slots 1 to 8 | Auto | Before load |
+| | Slots 1 to 8 | Where I quit | Before load |
 |---|---|---|---|
 | pocket-ui's own host | `<game>.pstate` (slot 1), `.pstate1` to `.pstate7` | `<game>.pstate.auto` | `<game>.pstate.undo` |
 | PlayStation 2 (ARMSX2) | `<serial> (<CRC>).01.p2s` to `.08.p2s`, ARMSX2's own slots 1 to 8 | `….99.p2s` (slot 99, not in ARMSX2's menus) | `….98.p2s` |
@@ -362,13 +359,13 @@ Each state has a `.png` beside it, its preview. Slots 9 and 10 of ARMSX2 and Dol
 
 Older versions wrote the state of a Quit into ARMSX2's slot 0 and Dolphin's slot 1 (and Save into
 Dolphin's slot 0). The first start after the update moves them: a state that pocket-ui wrote (it has
-a preview picture beside it, which the emulators don't write) goes to Auto, Dolphin's old Save
+a preview picture beside it, which the emulators don't write) goes to Where I quit, Dolphin's old Save
 becomes slot 1. A state without such a picture is yours and stays where it is; nothing is overwritten.
 
 ### The 3DS has one slot
 
 Azahar has a quick slot and no shortcut for any other, so Save and Load use that one slot ("The
-only slot") and the dots are left out. Auto and Before load work as above.
+only slot") and the dots are left out. Where I quit and Before load work as above.
 
 ## Earlier
 
@@ -377,7 +374,7 @@ them, newest first:
 
 - **One every 5 minutes of play**, the last six: half an hour back. Only play counts: time in this menu, asleep or with
   the screen off does not.
-- **Where a session began**: a game that continues from Auto keeps that moment too, for the last three sessions.
+- **Where a session began**: a game that continues from Where I quit keeps that moment too, for the last three sessions.
 
 With Earlier selected, **Left/Right** walk through them; the chip says when ("‹ 12 min ›" ago, "‹ 14:02 ›" for a
 session start today), the picture shows the moment and the line under it what it is: "Earlier · 12 min ago",
@@ -389,7 +386,7 @@ what you were playing becomes **Before load** first, so Load → Before load tak
 - A state that was replaced while the menu was open is not loaded in its place: "That earlier state was just
   replaced. Pick it again."
 
-Turn it on or off under Options → Extras → **Earlier states** ([Options](options.md#extras)), for the console or the game. It
+Turn it on or off under Options → Speed, rumble, fan → **Earlier states** ([Options](options.md#speed-rumble-fan)), for the console or the game. It
 starts On, but Off for N64, PSP, DS, Dreamcast and Saturn: their states are 8 to 40 MB, so a handful would fill the space a
 game has. Off, the row stays while there are earlier states of the game to load.
 
@@ -421,7 +418,7 @@ yet. Save in the game before you quit." Open the menu again once the game runs.
 
 Xbox games (`roms/xbox`, `.iso`) run in RetroArch with the hakuX core, which is experimental. The menu has Continue, Options
 (resolution and screen scaling, applied at the next start),
-Quick settings and Quit, and says "No save states for Xbox games yet: save in the game before you quit." There is no
+Quit, and says "No save states for Xbox games yet: save in the game before you quit." There is no
 Save, Load or Earlier: the core cannot save states yet. The Xbox's own saves in the game work, and they stay on the Pocket
 (not in `roms/xbox`). Quit closes the game cleanly; if it hangs, pocket-ui stops it after about 20 seconds. The Save and Load rows
 appear by themselves when a later core can save states. More in [Systems](systems.md#xbox).
@@ -445,7 +442,7 @@ Continue, Options and Quit: "This emulator keeps its own saves. Save in the game
 emulator to close; if it has not closed after about five seconds, pocket-ui stops it, and anything unsaved is lost.
 
 **Wii U, PlayStation 3 and PlayStation Vita (experimental, AYN Odin 2 family and the other SM8550 handhelds).** Cemu, RPCS3 and Vita3K have no
-save states, so their menu is the same: Continue, Options, Quick settings, Quit, with the line above. HOME opens the
+save states, so their menu is the same: Continue, Options, Quit, with the line above. HOME opens the
 menu over the game, and Continue goes back to it. Quit closes the emulator's window, as its own Exit would, and gives
 it about eight seconds to finish; if it hangs, pocket-ui stops it (and, after five more seconds, ends it), and
 anything not saved in the game is lost. While one of them runs, the pad belongs to the game; only HOME is pocket-ui's.

@@ -166,6 +166,12 @@ pub fn core_missing_named(name: &str, core: &str) -> String {
     format!("{name} didn't start. The {core} core isn't installed: get it in RetroArch (Flatpak) > Online Updater > Core Downloader, or run fetch-cores.sh.")
 }
 
+/// pocket-core's core file is not there on this device (not the Steam Deck, which has its own words above): the game is fine.
+/// Said instead of "the file may be damaged" (2026-11-02: a GBA game was called broken when only the emulator was missing).
+pub fn core_missing_here(name: &str, core: &str) -> String {
+    format!("{name} didn't start. Its emulator, the {core} core, isn't on this device. The game itself is fine.")
+}
+
 /// A Flatpak emulator of the Steam Deck is not installed.
 pub fn flatpak_missing_notice(name: &str, app_id: &str) -> String {
     format!("{name} didn't start. {app_id} isn't installed: install it from Discover (Flatpak).")
@@ -228,6 +234,14 @@ mod tests {
             flatpak_missing_notice("Space Courier", "org.DolphinEmu.dolphin-emu"),
             "Space Courier didn't start. org.DolphinEmu.dolphin-emu isn't installed: install it from Discover (Flatpak)."
         );
+    }
+
+    #[test]
+    fn a_missing_core_is_the_emulator_not_the_game() {
+        let raw = "load /usr/lib/libretro/mgba_libretro.so: /usr/lib/libretro/mgba_libretro.so: cannot open shared object file: No such file or directory";
+        assert_eq!(missing_core_in(raw).as_deref(), Some("mgba"));
+        let said = core_missing_here("Test Game", "mgba");
+        assert!(said.contains("emulator") && said.contains("mgba") && said.contains("game itself is fine") && !said.contains("damaged"), "{said}");
     }
 
     #[test]

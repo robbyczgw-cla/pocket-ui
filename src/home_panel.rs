@@ -69,7 +69,7 @@ pub fn curator(today: Option<CuratorToday>) -> Panel {
             format!("Today: {} · {}", tile.title, reason)
         }
         // No games: Home has no shelf to speak of; the row still says what it is.
-        None => "Lens, smart shelves and stickers".into(),
+        None => "Lens, smart shelves and labels".into(),
     };
     if let Some((kind, n, tiles)) = today.waiting.filter(|(_, n, tiles)| *n > 0 && !tiles.is_empty()) {
         let caption = match kind {
@@ -116,7 +116,7 @@ pub fn list(kind: List, games: Vec<Tile>, line: String, ready: bool) -> Panel {
         let line = match kind {
             List::Favorites => FAVORITES_EMPTY,
             List::SmartShelf => "No games here right now",
-            List::Sticker => "Put it on a game from its card: X, then Stickers",
+            List::Sticker => "Put it on a game from its card: X, then Stickers & labels",
         };
         return Panel { kicker: None, line: line.into(), groups: Vec::new(), getting_ready: false };
     }
@@ -323,7 +323,7 @@ mod tests {
         let empty = |kind| list(kind, Vec::new(), "0 games".into(), true);
         assert_eq!(empty(List::Favorites).line, "Press Y on a game to star it, and it shows here");
         assert_eq!(empty(List::SmartShelf).line, "No games here right now");
-        assert_eq!(empty(List::Sticker).line, "Put it on a game from its card: X, then Stickers");
+        assert_eq!(empty(List::Sticker).line, "Put it on a game from its card: X, then Stickers & labels");
         assert!(empty(List::Favorites).groups.is_empty());
         let waiting = list(List::SmartShelf, vec![tile("A")], "1 game".into(), false);
         assert!(waiting.getting_ready && waiting.line == "Getting ready…");

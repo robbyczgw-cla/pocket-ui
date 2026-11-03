@@ -1151,11 +1151,11 @@ fn latency_stage(r: &Report) -> Stage {
         " Run-ahead is switched on and starts with the game.".to_string()
     } else if !ra.off.is_empty() {
         format!(
-            " {}; it checks itself and stays off for this session (Options › Extras › Run-ahead tries again).",
+            " {}; it checks itself and stays off for this session (Options › Speed, rumble, fan › Run-ahead tries again).",
             ra.off.trim_end_matches('.')
         )
     } else if ra.offered {
-        " Run-ahead (Options › Extras) can take one or two frames off.".to_string()
+        " Run-ahead (Options › Speed, rumble, fan) can take one or two frames off.".to_string()
     } else {
         String::new()
     };

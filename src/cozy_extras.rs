@@ -33,7 +33,7 @@ pub enum Home {
     SoundAndFeel,
     /// A row of Settings → System → Sleep & power, before Screen off after's effect.
     SleepAndPower,
-    /// A row of Settings → System, under Sleep & power: Playing, beside Remember where I quit, has its eight.
+    /// A row of Settings → System, under Sleep & power: Playing, beside Continue where I quit, has its eight.
     System,
 }
 
@@ -70,12 +70,10 @@ pub enum Extra {
     /// Cases that spring, wiggle and lean, and each medium going into its console its own way (`playful`). Its start
     /// follows Animations: on with Cozy, off with Quick, until the player switches it ([`Extras::playful_animations`]).
     Playful,
-    /// The last games with a moment to go back to stand a little open on the shelf (`frozen`, `app_frozen`).
-    FrozenGames,
 }
 
 impl Extra {
-    pub const ALL: [Extra; 13] = [
+    pub const ALL: [Extra; 12] = [
         Extra::CaseSounds,
         Extra::CrtOn,
         Extra::CabinetTv,
@@ -88,7 +86,6 @@ impl Extra {
         Extra::Decorations,
         Extra::IdleSlideshow,
         Extra::Playful,
-        Extra::FrozenGames,
     ];
 
     /// The page's rows, in its order: the things you see on the shelf, the cabinet, the case, the disc and the game
@@ -109,7 +106,6 @@ impl Extra {
         match self {
             Extra::CaseSounds | Extra::CrtOn | Extra::Playful => Home::SoundAndFeel,
             Extra::IdleSlideshow => Home::SleepAndPower,
-            Extra::FrozenGames => Home::System,
             _ => Home::Page,
         }
     }
@@ -129,7 +125,6 @@ impl Extra {
             Extra::Decorations => "decorations",
             Extra::IdleSlideshow => "idle_slideshow",
             Extra::Playful => "playful_animations",
-            Extra::FrozenGames => "frozen_games",
         }
     }
 
@@ -148,7 +143,6 @@ impl Extra {
             Extra::Decorations => "Decorations",
             Extra::IdleSlideshow => "Slideshow before screen off",
             Extra::Playful => "Playful cases",
-            Extra::FrozenGames => "Frozen games",
         }
     }
 
@@ -167,7 +161,6 @@ impl Extra {
             Extra::Decorations => "Little things appear on your shelf the more you play.",
             Extra::IdleSlideshow => "When you put the Pocket down for a while, your games show one after another.",
             Extra::Playful => "Cases spring and wiggle, discs drop into trays, cartridges click in, spines lean as you scroll.",
-            Extra::FrozenGames => "Your last five games stand a little open. A goes straight back to the moment you left.",
         }
     }
 
@@ -178,7 +171,7 @@ impl Extra {
                 Some("Shelf and Cabinet looks only.")
             }
             Extra::CabinetTv => Some("Cabinet look only."),
-            Extra::PauseMemoryCard | Extra::Connections | Extra::Rediscover | Extra::IdleSlideshow | Extra::FrozenGames => None,
+            Extra::PauseMemoryCard | Extra::Connections | Extra::Rediscover | Extra::IdleSlideshow => None,
         }
     }
 
@@ -188,7 +181,6 @@ impl Extra {
             Extra::CaseSounds => Some(Needs::Sounds),
             Extra::CrtOn => Some(Needs::CozyFull),
             Extra::Playful => Some(Needs::MotionFull),
-            Extra::FrozenGames => Some(Needs::RememberQuit),
             _ => None,
         }
     }
@@ -230,8 +222,6 @@ pub enum Needs {
     CozyFull,
     /// Motion on Full.
     MotionFull,
-    /// Settings → Playing → Remember where I quit on.
-    RememberQuit,
 }
 
 impl Needs {
@@ -241,7 +231,6 @@ impl Needs {
             Needs::Sounds => "Silent now: Sounds is off (Sound & feel \u{203a} Sounds).",
             Needs::CozyFull => "Not shown now: it needs Animations on Cozy and Motion on Full (Sound & feel).",
             Needs::MotionFull => "Not shown now: needs Motion on Full (Sound & feel).",
-            Needs::RememberQuit => "Remember where I quit is off: a Quit freezes nothing new. Moments from before and from sleep stay.",
         }
     }
 }
@@ -304,8 +293,6 @@ pub struct Extras {
     /// None until the player switches it: then on with Cozy, off with Quick (`Extra::default_on`); written once chosen.
     #[serde(default, deserialize_with = "lenient_choice", skip_serializing_if = "Option::is_none")]
     pub playful_animations: Option<bool>,
-    #[serde(default = "yes", deserialize_with = "lenient_on", skip_serializing_if = "is_on")]
-    pub frozen_games: bool,
 }
 
 impl Default for Extras {
@@ -329,7 +316,6 @@ impl Extras {
             Extra::TimeOfDayLight => &mut self.time_of_day_light,
             Extra::Decorations => &mut self.decorations,
             Extra::IdleSlideshow => &mut self.idle_slideshow,
-            Extra::FrozenGames => &mut self.frozen_games,
             Extra::Playful => return None,
         })
     }
@@ -377,7 +363,6 @@ impl Extras {
             decorations: false,
             idle_slideshow: false,
             playful_animations: None,
-            frozen_games: false,
         };
         for e in Extra::ALL.into_iter().filter(|e| *e != Extra::Playful) {
             x.set(e, bits & e.bit() != 0);

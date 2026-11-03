@@ -24,7 +24,7 @@ Start at [user/index.md](user/index.md).
 | [user/game-check.md](user/game-check.md) | Settings → Games → Game check: will your games start? |
 | [user/coming-from.md](user/coming-from.md) | Coming from ROCKNIX or Android: what happens to saves, states, favourites and settings, what needs a copy, what does not come over |
 | [user/playing.md](user/playing.md) | Home, finding a game, the looks, console pages, starting a game, the game switcher, continuing, menu sounds |
-| [user/pause-menu.md](user/pause-menu.md) | The pause menu of each emulator, Quit and Settings → Playing → Remember where I quit, Pixel Path, save slots, Auto and Before load |
+| [user/pause-menu.md](user/pause-menu.md) | The pause menu of each emulator, Quit and Settings → Playing → Continue where I quit, Pixel Path, save slots, Auto and Before load |
 | [user/options.md](user/options.md) | Options in a game: picture, screen frames, emulator, controls, cheats, shortcuts, extras, run-ahead, saving them |
 | [user/options-big.md](user/options-big.md) | The Options of PS2, GameCube, Wii and 3DS games |
 | [user/controls.md](user/controls.md) | Every button, screen by screen |
@@ -33,7 +33,7 @@ Start at [user/index.md](user/index.md).
 | [user/settings-system.md](user/settings-system.md) | The entries of Connections and System: Wi-Fi, Tailscale, remote access, time, sleep, backup, the manual |
 | [user/storage.md](user/storage.md) | Settings → System → Storage: what takes the room on the card, the clean-ups, the low-space notice, hidden games |
 | [user/bluetooth.md](user/bluetooth.md) | Settings → Connections → Bluetooth: pairing controllers, headphones and speakers, reconnecting, forgetting |
-| [user/frozen-games.md](user/frozen-games.md) | Frozen games: your last five games stand a little open and A goes straight back; how long each system takes, what can't be frozen |
+| [user/continue.md](user/continue.md) | Continue: an open case means your moment is waiting and A goes straight back; how long each system takes, what can't continue |
 | [user/quick-settings.md](user/quick-settings.md) | Quick settings (HOME), the power menu, sleep, power off and low battery |
 | [user/language.md](user/language.md) | Settings → System → Language: English, German or Spanish, what stays English |
 | [user/night-light.md](user/night-light.md) | Settings → Look → Night light: warmer, less blue colours in the evening, the schedule, the strength, how it fades and where it reaches |
@@ -46,9 +46,10 @@ Start at [user/index.md](user/index.md).
 | [user/systems.md](user/systems.md) | Which systems run on which emulator |
 | [user/arcade.md](user/arcade.md) | Arcade games: the cores, matching romsets, parents and clones, BIOS and CHD files, when a game does not start |
 | [user/patches-msu1.md](user/patches-msu1.md) | Translations and hacks (IPS, BPS, UPS patches), prepatching, RetroArch softpatching, one MSU-1 recipe |
-| [user/extras.md](user/extras.md) | Cover art, game pictures (screenshots and title screens), PortMaster games, the Store |
+| [user/extras.md](user/extras.md) | Box art, game pictures (screenshots and title screens), PortMaster games, the Store |
 | [user/sync.md](user/sync.md) | Syncing saves and states with Syncthing |
 | [user/remote.md](user/remote.md) | Reaching the Pocket from anywhere with Tailscale: switch, QR sign-in, name, what it does to SSH |
+| [user/easy.md](user/easy.md), [BIG-SHELF.md](BIG-SHELF.md) | The Easy look: one big game at a time, for a handful of games |
 | [user/kids-mode.md](user/kids-mode.md), [KIDS-MODE.md](KIDS-MODE.md) | Kids mode: for a grown-up; what is closed and how, the clock, what is left open |
 | [user/phone-upload.md](user/phone-upload.md) | Games from your phone: Add games → Y, the QR code, what it takes and refuses, what plain HTTP on a Wi-Fi means |
 | [user/web-companion.md](user/web-companion.md) | The web companion: switching it on, pairing a browser, what it can do, how it is kept safe |

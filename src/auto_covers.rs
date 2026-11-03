@@ -244,7 +244,7 @@ mod tests {
     fn not_while_the_manual_one_runs() {
         let a = AutoCovers::default();
         let claim = covers::claim().expect("nothing else is scraping");
-        assert_eq!(a.decide(true, false, 3, covers::busy()), Decision::Running, "Extras > Cover art is on it");
+        assert_eq!(a.decide(true, false, 3, covers::busy()), Decision::Running, "Pictures & extras > Box art is on it");
         assert!(covers::claim().is_none(), "one scrape at a time");
         drop(claim);
         assert_eq!(a.decide(true, false, 3, covers::busy()), Decision::Start);

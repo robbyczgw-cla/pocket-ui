@@ -175,7 +175,7 @@ Lens	Lens
 Echoes	Echoes
 Pixel Path	Pixel Path
 Deleted “{s}”	“{s}” borrado
-Sticker deleted	Sticker borrado
+Label deleted	Etiqueta borrada
 Preferred: {s}	Preferida: {s}
 Couch co-op	Cooperativo en el sofá
 Before bed	Antes de dormir
@@ -194,7 +194,7 @@ not played yet	sin jugar aún
 {s} played	{s} de juego
 Release not named in the file	Lanzamiento no indicado en el archivo
 · performance {t}	· rendimiento {t}
-New sticker…	Nuevo sticker…
+New label…	Nueva etiqueta…
 Save	Guardar
 Curator · {t}	Curator · {t}
 Nothing picked yet: every game	Nada elegido aún: todos los juegos
@@ -210,14 +210,14 @@ Preferred	Preferida
 Off >	Desactivado >
 On >	Activado >
 Lens & smart shelves	Lens y estantes inteligentes
-The Curator row on Home: combine filters, and keep a filter as a smart shelf that updates itself.	La fila Curator en Home: combina filtros y guarda un filtro como estante inteligente que se actualiza solo.
+The Curator row and Just Play on Home: combine filters, and keep a filter as a smart shelf that updates itself.	La fila Curator y «Jugar ya» en Home: combina filtros y guarda un filtro como estante inteligente que se actualiza solo.
 Echoes on the game card	Echoes en la ficha del juego
 More like this: games you own that play alike, each with a short reason.	Parecidos a este: juegos tuyos que se juegan parecido, cada uno con un breve motivo.
 Up next after a game	A continuación tras un juego
-When you quit a game you played for a while, one line on the shelf suggests a game of yours like it. A plays it; any other button puts it away. Nothing starts by itself.	Al salir de un juego al que jugaste un rato, una línea del estante sugiere un juego tuyo parecido. A lo inicia; cualquier otro botón lo descarta. Nada se inicia solo.
+When you quit a game you played for a while, one line on the shelf suggests a game of yours like it. X plays it; any other button puts it away. Nothing starts by itself.	Al salir de un juego al que jugaste un rato, una línea del estante sugiere un juego tuyo parecido. X lo inicia; cualquier otro botón lo descarta. Nada se inicia solo.
 Merge versions in mixed lists	Unir versiones en listas mixtas
 A game you own on several systems shows once in Favourites, smart shelves and Echoes, and starts the version you prefer.	Un juego que tienes en varios sistemas aparece una vez en Favoritos, estantes inteligentes y Echoes, y inicia la versión que prefieres.
-Stickers	Stickers
+Labels	Etiquetas
 Your own labels for games, such as Couch co-op. Put them on from the game card; pin one to see it on Home.	Tus propias etiquetas para juegos, como Cooperativo en el sofá. Ponlas desde la ficha del juego; fija una para verla en Home.
 Games not on this device in Echoes	Juegos que no tienes en Echoes
 Echoes also names a few games you don't have, from the offline game list. Names only.	Echoes también nombra algunos juegos que no tienes, de la lista integrada. Solo nombres.
@@ -235,8 +235,8 @@ Not now	Ahora no
 Lens: {t}	Lens: {t}
 Lens: all games	Lens: todos los juegos
 Curator is reading your library. This takes a moment once.	Curator está leyendo tu biblioteca. Tarda un momento, solo la primera vez.
-No games with this sticker	Sin juegos con este sticker
-Put it on a game from its card: X, then Stickers.	Ponlo en un juego desde su ficha: X y luego Stickers.
+No games with this label	Sin juegos con esta etiqueta
+Put it on a game from its card: X, then Stickers & labels.	Ponla en un juego desde su ficha: X y luego Stickers y etiquetas.
 No games here	Sin juegos aquí
 Nothing in your library matches these filters right now.	Nada en tu biblioteca coincide ahora con estos filtros.
 1 game	1 juego
@@ -245,14 +245,14 @@ Nothing in your library matches these filters right now.	Nada en tu biblioteca c
 {n} close matches	{n} coincidencias cercanas
 1 shelf	1 estante
 {n} shelves	{n} estantes
-1 sticker	1 sticker
-{n} stickers	{n} stickers
-Lens, smart shelves and stickers	Lens, estantes inteligentes y stickers
+1 label	1 etiqueta
+{n} labels	{n} etiquetas
+Lens, smart shelves and labels	Lens, estantes inteligentes y etiquetas
 Combine filters; the count follows as you pick	Combina filtros; el recuento cambia al elegir
 Smart shelf, on Home. It updates itself	Estante inteligente, en Home. Se actualiza solo
 Smart shelf. It updates itself	Estante inteligente. Se actualiza solo
-Sticker, on Home	Sticker, en Home
-Sticker	Sticker
+Label, on Home	Etiqueta, en Home
+Label	Etiqueta
 
 # --- My rating, sort orders, Surprise me (Curator)
 Status and rating	Estado y puntuación
@@ -319,7 +319,7 @@ Today: {s}	Hoy: {s}
 {n} to rediscover	{n} por redescubrir
 {n} never played	{n} sin jugar
 Press Y on a game to star it, and it shows here	Pulsa Y en un juego para añadirlo y saldrá aquí
-Put it on a game from its card: X, then Stickers	Ponlo en un juego desde su ficha: X y luego Stickers
+Put it on a game from its card: X, then Stickers & labels	Ponla en un juego desde su ficha: X y luego Stickers y etiquetas
 
 # --- Curator shelves and stickers
 On Home	En Home
@@ -331,14 +331,14 @@ Show on Home	Mostrar en Home
 not saved	sin guardar
 Save the shelf	Guardar estante
 Name the shelf	Nombra el estante
-Sticker: {s}	Sticker: {s}
-New sticker	Nuevo sticker
+Label: {s}	Etiqueta: {s}
+New label	Nueva etiqueta
 Shelf	Estante
 Saved “{s}”. It is on Home	“{s}” guardado. Está en Home
-Sticker made	Sticker creado
+Label made	Etiqueta creada
 Renamed	Renombrado
 Rename the shelf	Renombrar estante
-Rename the sticker	Renombrar sticker
+Rename the label	Renombrar la etiqueta
 
 # --- Runs on
 Save changes · {s}	Guardar cambios · {s}
@@ -726,7 +726,7 @@ Not played yet	Sin jugar aún
 REWIND	RETROCESO
 The graphics couldn't start: {s}	No se pudieron iniciar los gráficos: {s}
 The graphics couldn't start: no EGL configuration.	No se pudieron iniciar los gráficos: sin configuración EGL.
-Rewind is off. Switch it on under Extras.	El retroceso está desactivado. Actívalo en Extras.
+Rewind is off. Switch it on under Speed, rumble, fan.	El retroceso está desactivado. Actívalo en Velocidad, vibración, ventilador.
 In-game save is newer: not resumed	La partida del juego es más reciente: no se reanudó
 Took over the DraStic save	Se importó la partida de DraStic
 Saved to slot {n}	Guardado en la ranura {n}
@@ -1244,7 +1244,7 @@ This controller	Este mando
 One card per feature, with a preview: on, off, or later.	Una tarjeta por función, con vista previa: activar, desactivar o más tarde.
 A Curator row on Home: combine filters, and keep one as a shelf that updates itself.	Una fila Curator en Home: combina filtros y guarda uno como estante que se actualiza solo.
 More like this, on every game card: games you own that play alike, each with a reason.	Parecidos a este, en cada ficha: juegos tuyos que se juegan parecido, cada uno con su motivo.
-When you quit a game, one line on the shelf suggests a game of yours like it. A plays it; nothing starts by itself.	Al salir de un juego, una línea del estante sugiere un juego tuyo parecido. A lo inicia; nada se inicia solo.
+When you quit a game, one line on the shelf suggests a game of yours like it. X plays it; nothing starts by itself.	Al salir de un juego, una línea del estante sugiere un juego tuyo parecido. X lo inicia; nada se inicia solo.
 Echoes beyond this device	Echoes más allá de este dispositivo
 A game you own on several systems shows once in mixed lists and starts the version you prefer.	Un juego que tienes en varios sistemas aparece una vez en listas mixtas e inicia la versión que prefieres.
 Your own labels for games, such as Couch co-op. Pin one to see it on Home.	Tus propias etiquetas para juegos, como Cooperativo en el sofá. Fija una para verla en Home.
@@ -1253,9 +1253,9 @@ One quiet line beside the picture: the emulator, the scale, the frame rate, the 
 Settings › Playing › Over the game	Ajustes › Jugando › Sobre el juego
 Screen frames on every console	Marcos de pantalla en todas las consolas
 Auto frames the picture on the home consoles too, not only on the handhelds.	Auto enmarca la imagen también en las consolas de sobremesa, no solo en las portátiles.
-Straight back into your game	Directo a tu juego
+Continue your last game	Continuar tu último juego
 When the Pocket starts, the game you played last continues where you left off.	Al iniciar el Pocket, el último juego continúa donde lo dejaste.
-Remember where I quit	Recordar al salir
+Continue where I quit	Continuar donde lo dejé
 On: Quit keeps the moment and the next start continues there. Off: only the game's own saves stay.	Activado: Salir guarda el momento y el próximo inicio continúa ahí. Desactivado: solo quedan las partidas del propio juego.
 Motion	Movimiento
 Selections glide and pages slide in. Off shows every press at once, without animation.	Las selecciones se deslizan y las páginas entran con efecto. Desactivado muestra cada pulsación al instante, sin animación.
@@ -1274,7 +1274,7 @@ X on a console page (X on a system on Home)	X en la página de una consola (X en
 Up to four players on pocket-ui's own host: each controller you connect is the next player.	Hasta cuatro jugadores en el host propio de pocket-ui: cada mando que conectas es el siguiente jugador.
 Pause menu (HOME) › Players	Menú de pausa (HOME) › Jugadores
 The game responds to your buttons a frame or two sooner, on the lighter consoles.	El juego responde a tus botones uno o dos fotogramas antes, en las consolas más ligeras.
-Pause menu › Options › Extras	Menú de pausa › Opciones › Extras
+Pause menu › Options › Speed, rumble, fan	Menú de pausa › Opciones › Velocidad, vibración, ventilador
 Which emulator plays a console, or a single game, and RetroArch's own picture settings.	Qué emulador ejecuta una consola, o un solo juego, y los ajustes de imagen de RetroArch.
 START on a game card or a console page	START en una ficha de juego o en la página de una consola
 Sign in once and earn achievements in the games on pocket-ui's own host.	Inicia sesión una vez y gana logros en los juegos del host propio de pocket-ui.
@@ -1289,7 +1289,7 @@ Put off	Aplazar
 Changed any time in	Se cambia en cualquier momento en
 Nothing to switch. Find it here:	Nada que activar. Está aquí:
 Skip the rest	Omitir el resto
-Simple	Simple
+The shelf	El estante
 Enthusiast	Entusiasta
 Choose for yourself	Elige tú
 How do you like to play?	¿Cómo te gusta jugar?
@@ -1308,14 +1308,14 @@ your play time by week and year	tu tiempo de juego por semana y año
 picture and sound details in the pause menu	detalles de imagen y sonido en el menú de pausa
 a line of picture details over every game	una línea de detalles de imagen sobre cada juego
 frames around the picture on every console	marcos en todas las consolas
-start straight into your last game	empezar directo en tu último juego
+continue your last game at start	continuar el último juego al empezar
 continue where you quit	continuar donde saliste
 gentle animations	animaciones suaves
 soft clicks in the menus	clics suaves en los menús
 a light tick as you move	un tic ligero al moverte
 lights around the sticks	luces alrededor de los sticks
 less input delay in older games	menos retardo de entrada en juegos antiguos
-As pocket-ui ships, the same as skipping this step.	Tal como viene pocket-ui, igual que omitir este paso.
+Your games on a shelf, as it comes.	Tus juegos en un estante, tal como viene.
 Suggestions, play statistics, picture details and frames, all on.	Sugerencias, estadísticas de juego, detalles de imagen y marcos, todo activado.
 Take this	Usar este
 Skip	Omitir
@@ -1524,7 +1524,7 @@ A little larger text on every screen.	Texto algo mayor en todas partes.
 Large	Grande
 Connect to a network.	Conéctate a una red.
 Pair a controller or headphones, see what is connected.	Vincula un mando o auriculares, mira qué hay conectado.
-Cover art, game pictures and PortMaster games.	Portadas, imágenes de juegos y juegos de PortMaster.
+Box art, game pictures and PortMaster games.	Portadas, imágenes de juegos y juegos de PortMaster.
 Where each system's games and BIOS files go, and file sharing.	Dónde van los juegos y los archivos BIOS de cada sistema, y compartir archivos.
 Remote access (SSH)	Acceso remoto (SSH)
 Log in from a computer. Turns itself off when the Pocket restarts.	Entra desde un PC. Se desactiva al reiniciar.
@@ -1555,15 +1555,15 @@ A on the right (Nintendo) or bottom (Xbox).	A a la derecha (Nintendo) o abajo (X
 Screen frames	Marcos de pantalla
 Auto frames on the handhelds, or on every console.	Auto enmarca en las portátiles, o en todas las consolas.
 Processor speed and fan, in games and in menus.	Velocidad del procesador y ventilador, en juegos y menús.
-Lens, smart shelves, stickers, Echoes and versions.	Lens, estantes inteligentes, stickers, Echoes y versiones.
+Lens, smart shelves, labels, Echoes and versions.	Lens, estantes inteligentes, etiquetas, Echoes y versiones.
 Time	Hora
 Time zone, date and network time.	Zona horaria, fecha y hora de red.
 Updates	Actualizaciones
 New versions of pocket-ui and the system.	Versiones nuevas de pocket-ui y del sistema.
 Save your saves, states and pocket-ui's settings to the SD card, restore them, or start afresh.	Guarda tus partidas, estados y los ajustes de pocket-ui en la tarjeta SD, recupéralos o empieza de cero.
 Every feature on a card, with a picture: switch it on or off.	Cada función en una tarjeta, con imagen: actívala o desactívala.
-Manual	Manual
-The user guide, on the device.	La guía de usuario, en el dispositivo.
+Manual	Manual (en inglés)
+The user guide, on the device.	La guía de usuario, en el dispositivo, en inglés.
 About	Acerca de
 Saves a file for a bug report, to attach on GitHub.	Guarda un archivo para un informe de error, para adjuntar en GitHub.
 Version, storage and network.	Versión, almacenamiento y red.
@@ -1675,9 +1675,9 @@ HOME + Left and HOME + Right pick the save slot, 1 to 8.	HOME + Izquierda y HOME
 HOME + Left/Right	HOME + Izq./Der.
 Fast-forward	Avance rápido
 HOME + R2 turns fast-forward on and off.	HOME + R2 activa y desactiva el avance rápido.
-The speed is set under Extras.	La velocidad se ajusta en Extras.
+The speed is set under Speed, rumble, fan.	La velocidad se ajusta en Velocidad, vibración, ventilador.
 Hold HOME + L2 to play backwards.	Mantén pulsados HOME + L2 para jugar hacia atrás.
-Rewind itself is switched on under Extras.	El retroceso en sí se activa en Extras.
+Rewind itself is switched on under Speed, rumble, fan.	El retroceso en sí se activa en Velocidad, vibración, ventilador.
 Screenshot	Captura
 HOME + A saves a picture of the game to the SD card.	HOME + A guarda una imagen del juego en la tarjeta SD.
 The pause menu does not open.	El menú de pausa no se abre.
@@ -1843,7 +1843,7 @@ Auto: follows the system's cooling profile, as a smooth curve.	Auto: sigue el pe
 Quiet: the fan starts at {n} °C. The Pocket gets warmer, the fan stays quiet longer.	Silencioso: el ventilador arranca a {n} °C. El Pocket se calienta más, el ventilador se mantiene silencioso más tiempo.
 Cool: the fan starts at {n} °C and spins faster. Cooler to hold, and you hear it more.	Fresco: el ventilador arranca a {n} °C y gira más rápido. Más fresco al sujetarlo, y se oye más.
 Auto: the system's own cooling.	Auto: la refrigeración del propio sistema.
-A choice saved in the pause menu for a console or a game (Options › Extras) wins over these. Games: performance covers games with a pause menu; with Smooth fan, Games: fan covers every game.	Una elección guardada en el menú de pausa para una consola o un juego (Opciones › Extras) manda sobre estas. Juegos: rendimiento cubre los juegos con menú de pausa; con Ventilador suave, Juegos: ventilador cubre todos los juegos.
+A choice saved in the pause menu for a console or a game (Options › Speed, rumble, fan) wins over these. Games: performance covers games with a pause menu; with Smooth fan, Games: fan covers every game.	Una elección guardada en el menú de pausa para una consola o un juego (Opciones › Velocidad, vibración, ventilador) manda sobre estas. Juegos: rendimiento cubre los juegos con menú de pausa; con Ventilador suave, Juegos: ventilador cubre todos los juegos.
 Unknown	Desconocido
 Battery draw	Consumo
 
@@ -1914,7 +1914,7 @@ Run-ahead shows the game {t} ahead. An estimate.	Run-ahead muestra el juego {t} 
 Run-ahead starts when the game goes on.	Run-ahead empieza cuando el juego continúa.
 Button to light, plus the game's own reaction.	Del botón a la luz, más la propia reacción del juego.
 Run-ahead is switched on and starts with the game.	Run-ahead está activado y empieza con el juego.
-Run-ahead (Options › Extras) can take one or two frames off.	Run-ahead (Opciones › Extras) puede quitar uno o dos fotogramas.
+Run-ahead (Options › Speed, rumble, fan) can take one or two frames off.	Run-ahead (Opciones › Velocidad, vibración, ventilador) puede quitar uno o dos fotogramas.
 Slow: the emulator takes most of a refresh.	Lento: el emulador ocupa casi todo un refresco.
 No sound	Sin sonido
 No sound output could be opened.	No se pudo abrir ninguna salida de sonido.
@@ -2210,14 +2210,14 @@ Found {n} new pictures	{n} imágenes nuevas
 Found 1 new picture	1 imagen nueva
 No new pictures found	Sin imágenes nuevas
 No new covers found	Sin portadas nuevas
+Couldn't reach the picture server. Try again later.	No se pudo conectar con el servidor de imágenes. Inténtalo más tarde.
 Browse	Explorar
 {n} ready to play	{n} listos para jugar
-Cover art	Portada
-Box art for your games, from the free libretro collection.	Portadas de tus juegos, de la colección libre de libretro.
+The front of each game's box, from a free collection online.	El frente de la caja de cada juego, de una colección libre en línea.
 Box art and screenshots	Portadas y capturas
 Box art	Portada
 Pictures	Imágenes
-Pictures come from the free libretro collection: no account is needed, and only a game's name is sent. Box art is about 450 KB a game; screenshots and title screens add 20 to 400 KB. Off downloads nothing by itself.	Las imágenes vienen de la colección libre de libretro: no hace falta cuenta y solo se envía el nombre del juego. Cada portada pesa unos 450 KB; las capturas y pantallas de título suman de 20 a 400 KB. Desactivado no descarga nada por sí solo.
+Pictures come from a free collection online: no account is needed, and only a game's name is sent. Off downloads nothing by itself.	Las imágenes vienen de una colección libre en línea, sin cuenta, y solo se envía el nombre de un juego. Con Desactivado no se descarga nada por sí solo.
 PortMaster games	Juegos de PortMaster
 PC and indie games from PortMaster: ready to play, or with your own game files.	Juegos de PC e indie de PortMaster: listos para jugar o con tus propios archivos de juego.
 Download	Descargar
@@ -2332,8 +2332,8 @@ Recent games	Recientes
 
 # --- Slots
 Before load	Antes de cargar
-Auto · saved when you quit · {t}	Auto · guardado al salir · {t}
-Auto · saved when you quit · none yet	Auto · guardado al salir · aún ninguno
+Where I quit · {t}	Donde lo dejé · {t}
+Where I quit · none yet	Donde lo dejé · ninguno
 Before load · {t}	Antes de cargar · {t}
 Before load · none	Antes de cargar · ninguno
 Earlier	Anterior
@@ -2424,8 +2424,6 @@ Update	Actualizar
 
 # --- Game switcher
 Resume	Continuar
-Switch game	Cambiar de juego
-Recently played	Jugado hace poco
 No recent games on the shelf	No hay juegos recientes en el estante
 Nothing played yet	Aún no has jugado nada
 The games you play show up here, ready to pick up where you left off.	Los juegos a los que juegues aparecen aquí, listos para seguir donde los dejaste.
@@ -2451,7 +2449,7 @@ Where you stopped in games. Recommended.	Dónde lo dejaste en los juegos. Recome
 Both PS2 memory cards. Paused while playing.	Las dos tarjetas de memoria de PS2. En pausa mientras juegas.
 GameCube cards, Wii saves. Paused while playing.	Tarjetas de GameCube, partidas de Wii. En pausa mientras juegas.
 3DS save data. Paused while playing.	Datos guardados de 3DS. En pausa mientras juegas.
-Favourites, status, notes, stickers, play history.	Favoritos, estado, notas, stickers, historial de juego.
+Favourites, status, notes, labels, play history.	Favoritos, estado, notas, etiquetas, historial de juego.
 Copyrighted. Only between your own devices.	Con copyright. Solo entre tus propios dispositivos.
 Saves synced	Partidas sincronizadas
 Syncing saves	Sincronizando partidas
@@ -2964,7 +2962,7 @@ The {s}×{s2} picture is drawn {n} times as large and blended to hide the uneven
 The {s}×{s2} picture is drawn {n} times as large and blended to hide the uneven sizes. {t} {t2} Integer under Options › Picture uses it.	La imagen de {s}×{s2} se dibuja {n} veces más grande y se mezcla para ocultar los tamaños irregulares. {t} {t2} Entero en Opciones › Imagen lo usa.
 An estimate from how pocket-core is built, not a camera measurement: {t}, ≈ {s} refreshes or {n} ms. The game's own reaction comes on top of that: most games respond to a button one to three frames later, as they did on the original console. {t2}	Una estimación según cómo está hecho pocket-core, no una medición con cámara: {t}, ~{s} refrescos o {n} ms. A eso se suma la reacción propia del juego: la mayoría responde a un botón de uno a tres fotogramas después, como en la consola original. {t2}
 An estimate from how pocket-core is built, not a camera measurement: {t}, ≈ {s} refreshes or {n} ms. The game's own reaction comes on top of that: most games respond to a button one to three frames later, as they did on the original console. Run-ahead is on: every refresh the emulator runs {t2} further with the buttons as they are and shows that, then goes back, so a press appears {t3} sooner than on the console ({m} ms less).	Una estimación según cómo está hecho pocket-core, no una medición con cámara: {t}, ~{s} refrescos o {n} ms. A eso se suma la reacción propia del juego: la mayoría responde a un botón de uno a tres fotogramas después, como en la consola original. Run-ahead está activado: en cada refresco el emulador avanza {t2} más con los botones como están y muestra eso, y luego vuelve atrás, así que una pulsación aparece {t3} antes que en la consola ({m} ms menos).
-{t}; it checks itself and stays off for this session (Options › Extras › Run-ahead tries again).	{t}; se comprueba solo y queda desactivado en esta sesión (Opciones › Extras › Run-ahead lo intenta de nuevo).
+{t}; it checks itself and stays off for this session (Options › Speed, rumble, fan › Run-ahead tries again).	{t}; se comprueba solo y queda desactivado en esta sesión (Opciones › Velocidad, vibración, ventilador › Run-ahead lo intenta de nuevo).
 , fed {n}% {t} to follow the picture's pace	, alimentado {n} % {t} para seguir el ritmo de la imagen
 
 # --- Settings categories (Settings opens on them)
@@ -2972,14 +2970,14 @@ Look & feel	Aspecto y tacto
 Playing	Jugando
 Connections	Conexiones
 Look, language, text, night light, frames, sounds, LEDs, animations, extras.	Vista, idioma, texto, luz nocturna, marcos, sonidos, LEDs, animaciones, extras.
-On start, quit, buttons, over the game, performance, battery, achievements, Curator.	Al iniciar, salir, botones, sobre el juego, rendimiento, batería, logros, Curator.
+On start, quit, buttons, over the game, performance, battery, achievements, Curator.	Al iniciar, continuar, botones, sobre el juego, rendimiento, batería, logros, Curator.
 Add games, starter pack, extras, screenshots, the Store, tools, PC streaming.	Añadir juegos, pack inicial, extras, capturas, la Store, herramientas, streaming desde PC.
 Add games, starter pack, extras, screenshots, tools, PC streaming.	Añadir juegos, pack inicial, extras, capturas, herramientas, streaming desde PC.
 Wi-Fi, Bluetooth, USB file transfer, Tailscale, Sync, remote access, web companion.	Wi-Fi, Bluetooth, Transferencia por USB, Tailscale, Sync, acceso remoto, compañero web.
 Time, updates, backup and reset, the Tour, the manual, about.	Hora, actualizaciones, copia y restablecer, el Recorrido, el manual, acerca de.
 Web companion	Compañero web
 Your games, play time and uploads in a browser.	Tus juegos, tiempo de juego y subidas en un navegador.
-Lens, smart shelves, stickers, Echoes, versions and play history.	Lens, estantes inteligentes, stickers, Echoes, versiones e historial de juego.
+Lens, smart shelves, labels, Echoes, versions and play history.	Lens, estantes inteligentes, etiquetas, Echoes, versiones e historial de juego.
 !{t} › {t2}	{t} › {t2}
 Motion (R1)	Movimiento (R1)
 No games	Sin juegos
@@ -3135,8 +3133,8 @@ It could not listen: {s}.	No pudo escuchar: {s}.
 games uploaded	juegos subidos
 The web companion is off.	El compañero web está desactivado.
 The Pocket could not save it: {s}	El Pocket no pudo guardarlo: {s}
-That sticker is gone.	Ese sticker ya no existe.
-Give the sticker a name.	Ponle un nombre al sticker.
+That label is gone.	Esa etiqueta ya no existe.
+Give the label a name.	Ponle un nombre a la etiqueta.
 Give the shelf a name.	Ponle un nombre al estante.
 That shelf changed on the Pocket. Reload the page.	Ese estante cambió en el Pocket. Recarga la página.
 Open on your phone or computer	Ábrelo en tu teléfono o PC
@@ -3400,7 +3398,7 @@ Bilinear textures (as the PS2).	Texturas bilineales (como PS2).
 # --- Added with main 6c55b43: Curator's history, Quick settings, ports, web companion
 Curator › History: what you played this week, month and year, and a Year in review. Kept on this Pocket only. Off: nothing new is recorded, and what was recorded stays.	Curator › Historial: lo que jugaste esta semana, este mes y este año, y un Resumen del año. Se guarda solo en este Pocket. Desactivado: no se registra nada nuevo y lo registrado se queda.
 Curator › History: what you played this week, month and year, and a calm Year in review.	Curator › Historial: lo que jugaste esta semana, este mes y este año, y un Resumen del año tranquilo.
-Lens, smart shelves, stickers and your play history	Lens, estantes inteligentes, stickers e historial de juego
+Lens, smart shelves, labels and your play history	Lens, estantes inteligentes, etiquetas e historial de juego
 Your {n}: the games, the hours, the streaks	Tu {n}: los juegos, las horas, las rachas
 !Your {t}: the games, the hours, the streaks	Tu {t}: los juegos, las horas, las rachas
 !{t}, fan {t2}	{t}, ventilador {t2}
@@ -3410,7 +3408,7 @@ Code: every browser needs a code, yours too.	Código: todos los navegadores nece
 {t} · 1 filter	{t} · 1 filtro
 Max: CPU and GPU at full speed, smoothest, but warmer and uses more battery. Auto: the system decides (ROCKNIX's own setting for this system). Battery: lower top speeds, light games only.	Max: CPU y GPU a toda velocidad, lo más fluido, pero más caliente y con más gasto de batería. Auto: decide el sistema (el ajuste propio de ROCKNIX para este sistema). Batería: velocidades máximas más bajas, solo juegos ligeros.
 Brightness, volume, Wi-Fi, Bluetooth, performance, fan and power.	Brillo, volumen, Wi-Fi, Bluetooth, rendimiento, ventilador y encendido.
-A choice saved in the pause menu (Options › Extras) wins over these. Games: performance covers games with a pause menu and ports; with Smooth fan, Games: fan covers every game.	Una elección guardada en el menú de pausa (Opciones › Extras) manda sobre estas. Juegos: rendimiento cubre los juegos con menú de pausa y ports; con Ventilador suave, Juegos: ventilador cubre todos los juegos.
+A choice saved in the pause menu (Options › Speed, rumble, fan) wins over these. Games: performance covers games with a pause menu and ports; with Smooth fan, Games: fan covers every game.	Una elección guardada en el menú de pausa (Opciones › Velocidad, vibración, ventilador) manda sobre estas. Juegos: rendimiento cubre los juegos con menú de pausa y ports; con Ventilador suave, Juegos: ventilador cubre todos los juegos.
 and more	y más
 ≈{n} ms, {t} ahead	~{n} ms, {t} adelantado
 Bilinear textures (forced, not sprites)	Texturas bilineales (forzadas, sin sprites)
@@ -4035,7 +4033,7 @@ Look​	Aspecto
 Look, appearance, colours, font, text size, night light, systems, cozy extras.	Vista, apariencia, colores, fuente, tamaño de texto, luz nocturna, sistemas, extras acogedores.
 Sound & feel	Sonido y tacto
 Animations, playful cases, old-TV switch-on, motion, sounds, case sounds, haptics, LEDs.	Animaciones, cajas juguetonas, encendido de tele antigua, movimiento, sonidos, sonidos de caja, vibración, LEDs.
-On start, quit, buttons, over the game, frames, performance, battery, achievements.	Al iniciar, salir, botones, sobre el juego, marcos, rendimiento, batería, RetroAchievements.
+On start, continue, buttons, over the game, frames, performance, battery, achievements.	Al iniciar, continuar, botones, sobre el juego, marcos, rendimiento, batería, RetroAchievements.
 Help & tools	Ayuda y herramientas
 How you like to play, Tour, manual, tools, Store, report a problem, about.	Cómo te gusta jugar, Recorrido, manual, herramientas, Store, informar de un problema, acerca de.
 Shelf, Cabinet, Minimal, Cards or Split, with a live preview.	Estante, Vitrina, Minimalista, Tarjetas o Dividida, con vista previa en vivo.
@@ -4059,14 +4057,10 @@ Where games go	Dónde van los juegos
 Put games in the folders on the left (EmuDeck's Emulation/roms) or on the SD card. New ones show up the next time pocket-ui starts.	Pon los juegos en las carpetas de la izquierda (Emulation/roms de EmuDeck) o en la tarjeta SD. Los nuevos aparecen en el próximo inicio de pocket-ui.
 One folder per system in Emulation/roms. Copy games there from Desktop Mode.	Una carpeta por sistema en Emulation/roms. Copia los juegos allí desde el Modo Escritorio.
 Where each system's games go.	Dónde van los juegos de cada sistema.
-Cover art and game pictures.	Portadas e imágenes de juegos.
+Box art and game pictures.	Portadas e imágenes de juegos.
 Nothing to rediscover yet	Aún nada que redescubrir
 Games you haven't played for a year, or played a year ago today, show up here.	Los juegos que llevas un año sin jugar, o a los que jugaste hoy hace un año, aparecen aquí.
-Language, time, sleep & power, frozen games, kids mode, updates, storage, backup & reset.	Idioma, hora, suspensión y encendido, juegos congelados, modo infantil, actualizaciones, almacenamiento, copia y restablecer.
-Frozen games	Juegos congelados
-Frozen	Congelado
-Your last five games stand a little open. A goes straight back to the moment you left.	Tus últimos cinco juegos quedan entreabiertos. A vuelve directo al momento en que lo dejaste.
-Remember where I quit is off: a Quit freezes nothing new. Moments from before and from sleep stay.	Recordar al salir está desactivado: Salir no congela nada nuevo. Los momentos de antes y de la suspensión se quedan.
+Language, time, sleep & power, kids mode, updates, storage, backup & reset.	Idioma, hora, suspensión y encendido, modo infantil, actualizaciones, almacenamiento, copia y restablecer.
 Going back to your moment…	Volviendo a tu momento…
 Couldn't go back to that moment: started fresh	No se pudo volver a ese momento: empezó de cero
 Another game has this file name and shares its save states. Saving here can overwrite its saves. Rename one to keep them apart	Otro juego tiene el mismo nombre de archivo y comparte sus estados. Guardar aquí puede sobrescribir los suyos. Cambia el nombre de uno para separarlos
@@ -4380,6 +4374,20 @@ Still saving…	Sigue guardando…
 This one takes a while. Still saving, don't switch off.	Esto tarda un poco. Sigue guardando, no apagues.
 Closing the game…	Cerrando el juego…
 The second card holds a system image, so only its small space is used. Take it out, or format it for games.	La segunda tarjeta contiene una imagen del sistema, así que solo se usa su poco espacio. Sácala o fórmatela para juegos.
+UP/DOWN	ARRIBA/ABAJO
+Easy	Easy
+Next time, A brings you back to this moment.	La próxima vez, A te devuelve a este momento.
+This game keeps only what you save in it.	Este juego solo conserva lo que guardes en él.
+More: saves, brightness, options	Más: partidas, brillo, opciones
+This game didn't start	Este juego no ha arrancado
+Best with a handful of games	Mejor con unos pocos juegos
+Have you saved in the game? A quits.	¿Has guardado en el juego? A sale.
+The game file may be damaged, or a file it needs isn't on the card.	El archivo del juego puede estar dañado, o falta un archivo que necesita en la tarjeta.
+It may need files that aren't on the card.	Puede que falten archivos en la tarjeta.
+1 player or more	1 jugador o más
+2 players or more	2 jugadores o más
+Shelf, Easy, Minimal, Split, Cards or Cabinet, with a live preview.	Estante, Easy, Minimalista, Dividida, Tarjetas o Vitrina, con vista previa en vivo.
+One big game at a time, simple menus.	Un juego grande a la vez, menús sencillos.
 HOME opens the menu: save, load, quit.	HOME: menú para guardar y salir.
 No Wi-Fi here, so the clock doesn't set itself.	Aquí no hay Wi-Fi, así que el reloj no se ajusta solo.
 A few short steps: a look you like, how you like to play, your time zone, your games.	Unos pocos pasos: una vista que te guste, cómo te gusta jugar, tu zona horaria, tus juegos.
@@ -4390,11 +4398,38 @@ Open link	Abrir enlace
 Next link	Siguiente enlace
 Free games come over Wi-Fi. The starter pack waits here.	Los juegos gratis llegan por Wi-Fi. El pack inicial te espera aquí.
 How you like to play	Cómo te gusta jugar
-Simple, Enthusiast or your own choice of the extras.	Simple, Entusiasta o tu propia elección de extras.
+The shelf, Easy, Enthusiast or your own choice of the extras.	El estante, Easy, Entusiasta o tu propia elección de extras.
+The shelf, Enthusiast or your own choice of the extras.	El estante, Enthusiast o tu propia elección de los extras.
 Added 1 game. B goes back to pick games.	1 juego añadido. B vuelve a la selección.
 Added {n} games. B goes back to pick games.	{n} juegos añadidos. B vuelve a la selección.
 Look around	Echa un vistazo
 Show the starter pack	Mostrar el pack inicial
 Press A for the starter pack and the ways to add your own games.	Pulsa A para el pack inicial y las formas de añadir tus propios juegos.
 After this first start, switch off, put the card in a computer and copy games into the drive called GAMES.	Tras este primer inicio, apaga, pon la tarjeta en un ordenador y copia los juegos en la unidad llamada GAMES.
+Just Play	Jugar ya
+Less browsing. More playing.	Menos buscar. Más jugar.
+One press	Un toque
+Nothing to play yet. Add a game first	Aún no hay nada que jugar. Añade un juego primero
+None of the games tried would start. Their files may be gone from the card.	Ninguno de los juegos probados arrancó. Puede que sus archivos ya no estén en la tarjeta.
 In a game, HOME opens the menu: save, load, quit.	En un juego, HOME abre el menú: guardar, cargar, salir.
+{s} didn't start. Its emulator, the {s2} core, isn't on this device. The game itself is fine.	{s} no se inició. Su emulador, el core {s2}, no está en este dispositivo. El juego en sí está bien.
+
+# Load: From the start (the last stop of the Load row, pocket-core)
+From the start	Desde el principio
+Starts over · Quit replaces it	Empieza de nuevo · Salir lo reemplaza
+From the start. Save & quit replaces the waiting moment	Desde el principio. Guardar y salir reemplaza el momento en espera
+Where I quit	Donde lo dejé
+
+# Pause menu: Quit that saves
+Save & quit	Guardar y salir
+Next time, A continues from this moment.	La próxima vez, A continúa desde este momento.
+Speed, rumble, fan	Velocidad, vibración, ventilador
+Stickers & labels	Stickers y etiquetas
+# Pause menu → Options: where you are
+Options › Picture	Opciones › Imagen
+Options › Speed, rumble, fan	Opciones › Velocidad, vibración, ventilador
+Options › Shortcuts	Opciones › Atajos
+Options › Save changes	Opciones › Guardar cambios
+Picked now, it puts every extra back as pocket-ui ships it, also On start and Screen frames.	Elegido ahora, deja todos los extras como los trae pocket-ui, también Al iniciar y Marcos de pantalla.
+Open means your moment is waiting	Abierta significa que tu momento te espera
+Quit keeps no moment: the next start is fresh, and the older moment stays under Load.	Salir no guarda ningún momento: el próximo inicio es nuevo y el momento anterior queda en Cargar.

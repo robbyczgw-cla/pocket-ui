@@ -14,9 +14,31 @@ use crate::rumble::Strength;
 /// Set by pocket-ui for a Kids Mode game (`app_kids`): no HOME shortcut does anything.
 pub const NO_SHORTCUTS: &str = "POCKET_CORE_NO_SHORTCUTS";
 
+/// Set by pocket-ui for a Easy game (`app_big_shelf`): nothing is drawn over the game and HOME + Y does nothing,
+/// whatever Over the game says anywhere. The setting itself is untouched, so another look has it back.
+pub const NO_OVER_GAME: &str = "POCKET_CORE_NO_OVER_GAME";
+
+/// Whether this game may draw its FPS line, sensors or Pixel Path's line (`NO_OVER_GAME`).
+fn over_game_allowed() -> bool {
+    std::env::var_os(NO_OVER_GAME).is_none()
+}
+
 /// What the settings ask for, or nothing in a Kids Mode game: applying the game's settings comes through here as well.
 fn allowed_shortcuts(wanted: Enabled) -> Enabled {
-    if std::env::var_os(NO_SHORTCUTS).is_some() { Enabled::none() } else { wanted }
+    shortcuts_for(wanted, std::env::var_os(NO_SHORTCUTS).is_some(), over_game_allowed())
+}
+
+fn shortcuts_for(wanted: Enabled, none: bool, over_game: bool) -> Enabled {
+    if none {
+        Enabled::none()
+    } else {
+        Enabled { over_game: wanted.over_game && over_game, ..wanted }
+    }
+}
+
+/// The level a game starts or changes to: Off where nothing may be drawn over the game.
+fn level_for(value: &str, allowed: bool) -> Level {
+    if allowed { Level::parse(value) } else { Level::Off }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -91,7 +113,7 @@ impl Settings {
         match key {
             "ff_speed" => self.fast_forward = FastForward::parse(value),
             "rewind" => self.rewind = on,
-            crate::over_game::KEY => self.over_game = Level::parse(value),
+            crate::over_game::KEY => self.over_game = level_for(value, over_game_allowed()),
             "rumble" => self.rumble = Strength::parse(value),
             "performance" => self.performance = Performance::parse(value),
             "fan" => self.fan = Fan::parse(value),
@@ -280,6 +302,21 @@ mod tests {
     }
 
     #[test]
+    fn just_play_draws_nothing_over_the_game_whatever_the_setting_says() {
+        for level in Level::ALL {
+            assert_eq!(level_for(level.value(), true), level, "other looks keep {}", level.label());
+            assert_eq!(level_for(level.value(), false), Level::Off, "Easy: {}", level.label());
+        }
+        let wanted = Enabled::default();
+        assert!(wanted.over_game, "HOME + Y is on by default");
+        assert!(shortcuts_for(wanted, false, true).over_game);
+        let off = shortcuts_for(wanted, false, false);
+        assert!(!off.over_game, "HOME + Y does nothing in Easy");
+        assert_eq!(Enabled { over_game: true, ..off }, wanted, "the other shortcuts stay as they are");
+        assert_eq!(shortcuts_for(wanted, true, true), Enabled::none());
+    }
+
+    #[test]
     fn the_defaults_in_options_rs_are_the_defaults_here() {
         // A fresh install: no settings files at all.
         let dir = TestDir::new("extras-defaults");
@@ -292,7 +329,7 @@ mod tests {
     #[test]
     fn every_extras_and_shortcuts_choice_is_understood() {
         // Each choice of each setting of those two groups must change something or be the default.
-        for g in GROUPS.iter().filter(|g| g.name == "Extras" || g.name == "Shortcuts") {
+        for g in GROUPS.iter().filter(|g| g.name == "Speed, rumble, fan" || g.name == "Shortcuts") {
             for s in g.settings {
                 let mut seen = Vec::new();
                 for c in s.choices {

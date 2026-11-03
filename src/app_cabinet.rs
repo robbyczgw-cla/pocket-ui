@@ -75,10 +75,14 @@ fn showcase(h: i32, m: Medium, pitch: i32) -> (i32, i32) {
     (room, SCENE_TOP + 12 + need + 12 + TOP_H)
 }
 
-/// How far a frozen game's front shows its game: this part of how far the open box has it out, at most these pixels, in
-/// this time.
-const AJAR: f32 = 0.22;
-const AJAR_MOST: i32 = 40;
+/// How far a frozen game stands out beside its front: of its own width out of the case, at most this share of the front's
+/// width (walk 2026-11-02: at 0.22 and 40 px a sliver of it read as a drawing fault, and with the title 48 px from the front
+/// it almost touched the name). The name keeps clear of it by [`AJAR_FRONT`] and its own gap.
+const AJAR: f32 = 0.5;
+const AJAR_FRONT: f32 = 0.45;
+/// Easy: the medium stands this much of the case's width out, whatever the medium is.
+const AJAR_BIG: f32 = 0.17;
+/// The time it takes to slide out with the case's turn.
 const AJAR_IN: Duration = Duration::from_millis(240);
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -566,20 +570,26 @@ impl App {
                 system: "search".into(),
                 rom: PathBuf::new(),
             },
+            // Just Play's box on the Continue shelf, coloured as Curator's boxes are; its emblem is the cartridge with dice.
+            Item::JustPlay => Info {
+                title: pocket_ui::shelf::JUST_PLAY.into(),
+                system: "curator".into(),
+                rom: PathBuf::from("just-play"),
+            },
         }
     }
 
     /// The case a game (or one of Curator's boxes) stands in on the shelf (`media`).
     pub(crate) fn medium(&self, item: Item) -> Medium {
         match item {
-            Item::Streaming | Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => Medium::Keep,
+            Item::Streaming | Item::JustPlay | Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => Medium::Keep,
             _ => Medium::of(&self.case_info(item).system),
         }
     }
 
     fn form_factor(&self, item: Item) -> FormFactor {
         match item {
-            Item::Streaming | Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => FormFactor::DvdCase,
+            Item::Streaming | Item::JustPlay | Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => FormFactor::DvdCase,
             _ => FormFactor::of(&self.case_info(item).system),
         }
     }
@@ -603,7 +613,7 @@ impl App {
         let recent: Vec<Case> = self
             .home_items()
             .into_iter()
-            .filter(|i| matches!(i, Item::Recent(_) | Item::Streaming))
+            .filter(|i| matches!(i, Item::Recent(_) | Item::Streaming | Item::JustPlay))
             .map(|i| case(self, i))
             .collect();
         let favorites: Vec<Case> = self.favorite_items().into_iter().map(|i| case(self, i)).collect();
@@ -635,7 +645,7 @@ impl App {
                 (_, Item::Curator | Item::History | Item::Review(_) | Item::Rediscover) => ShelfKey::Curator,
                 (_, Item::SmartShelf(i)) => ShelfKey::SmartShelf(i),
                 (_, Item::Sticker(id)) => ShelfKey::Sticker(id),
-                (_, Item::Recent(_) | Item::Streaming | Item::Search | Item::Lens | Item::Surprise) => ShelfKey::Continue,
+                (_, Item::Recent(_) | Item::Streaming | Item::Search | Item::JustPlay | Item::Lens | Item::Surprise) => ShelfKey::Continue,
                 (Screen::Favorites, _) | (_, Item::Favorites) => ShelfKey::Favorites,
                 (_, Item::Game(s, _) | Item::System(s)) => ShelfKey::System(s),
             };
@@ -796,7 +806,7 @@ impl App {
     /// A game that needs longer to load than that is not held at all.
     pub(crate) fn launch_animation(&mut self, path: &std::path::Path, hosted: bool) -> Option<Duration> {
         self.cabinet.insert = None;
-        if !matches!(self.theme, super::Theme::Cabinet | super::Theme::Shelf) {
+        if !matches!(self.theme, super::Theme::Cabinet | super::Theme::Shelf) && !self.big_live() {
             return None;
         }
         if self.card.is_some() || self.find.is_open() || self.switcher.is_some() || self.menu.is_some() || self.settings_page.is_some() || self.setup.is_some() {
@@ -848,14 +858,17 @@ impl App {
 
     /// A frozen game's front, shown large: the game inside (the open box's own picture, `box_game`) a little out at its
     /// side, painted before the front. Slides out with the case's turn; with Motion off it is simply there.
-    fn paint_ajar_game(&mut self, c: &mut Canvas, item: Item, m: Medium, front: &Rc<Pic>, (x, y): (i32, i32), clip: (i32, i32)) {
-        if !self.is_frozen_item(item) {
+    pub(crate) fn paint_ajar_game(&mut self, c: &mut Canvas, item: Item, m: Medium, front: &Rc<Pic>, (x, y): (i32, i32), clip: (i32, i32)) {
+        // Easy: every usable moment, whatever the Frozen games extra says (`big_has_moment`).
+        if !(if self.big_on() { self.big_has_moment(item) } else { self.is_frozen_item(item) }) {
             return;
         }
         let Some(game) = self.box_game(item, front) else { return };
         let (gw, gh, out) = pocket_ui::game_box::game_beside(m, (front.w, front.h), Some(&game));
         let at = pocket_ui::motion::progress(pocket_ui::motion::Kind::Move, self.moved_at, Instant::now(), AJAR_IN);
-        let gx = x + front.w - gw + ((out as f32 * AJAR).min(AJAR_MOST as f32) * at) as i32;
+        // Easy's one big case: well out, so an open case shows at a glance, the same for a cartridge, a card and a disc.
+        let reach = if self.big_on() { (front.w as f32 * AJAR_BIG).min(gw as f32 * 0.8) } else { (out as f32 * AJAR).min(front.w as f32 * AJAR_FRONT) };
+        let gx = x + front.w - gw + (reach * at) as i32;
         art::blit(c, &game, gx, y + (front.h - gh) / 2, 256, clip);
     }
 
@@ -1654,10 +1667,28 @@ impl App {
         let (title, _, _, meta) = self.describe(item);
         let fav = self.is_favorite(item);
         self.draw_title(c, Face::Title, 50, MARGIN, 150, c.w - 2 * MARGIN, pal().chalk, &title, true, fav);
-        let meta = self.text.fit(Face::Body, 28, &meta, c.w - 2 * MARGIN);
+        // Whole shelves below the showcase can be off screen even on a large panel. Keep the current
+        // position and both movement directions visible, instead of making the plinth look like the end.
+        let total = self.cabinet.cab.shelves.len();
+        let mut right = c.w - MARGIN;
+        if total > 1 {
+            let position = format!("{} / {}", s + 1, total);
+            let width = self.text.width(Face::Body, 24, &position);
+            self.text.draw_right(c, Face::Body, 24, right - 24, 192, pal().dust, &position);
+            for (x, up, available) in [(right - width - 42, true, s > 0), (right - 8, false, s + 1 < total)] {
+                if available {
+                    for d in 0..7 {
+                        let y = if up { 174 + d } else { 186 - d };
+                        c.rect(x - d, y, 2 * d + 1, 2, pal().dust);
+                    }
+                }
+            }
+            right -= width + 80;
+        }
+        let meta = self.text.fit(Face::Body, 28, &meta, right - MARGIN);
         self.text.draw(c, Face::Body, 28, MARGIN, 192, pal().dust, &meta);
         if self.is_frozen_item(item) {
-            self.paint_frozen_word(c, c.w - MARGIN, 192, pal().chalk);
+            self.paint_frozen_word(c, right, 192, pal().chalk);
         }
     }
 
@@ -1947,7 +1978,7 @@ pub(crate) fn shelf_layout(w: i32, h: i32, tallest: f32) -> ShelfLayout {
 }
 
 /// The picture printed on the front of a box that is not a game (a game shows its console; `ui_art`): Curator's crate
-/// of cartridges, Surprise me's gift (until its pick's cover is read), the monitor of PC streaming, a sticker's sheet,
+/// of cartridges, Surprise me's gift (until its pick's cover is read), Just Play's cartridge and dice, the monitor of PC streaming, a sticker's sheet,
 /// and from the empty pages' vignettes Favourites' star on its cushion, the search's glass, a smart shelf's row of
 /// cartridges and the history's notebook.
 fn emblem(item: Item) -> Option<&'static pocket_ui::system_art::Sprite> {
@@ -1955,6 +1986,7 @@ fn emblem(item: Item) -> Option<&'static pocket_ui::system_art::Sprite> {
     get(match item {
         Item::Curator => Art::Emblem(Emblem::Curator),
         Item::Surprise => Art::Emblem(Emblem::Surprise),
+        Item::JustPlay => Art::Emblem(Emblem::JustPlay),
         Item::Streaming => Art::Emblem(Emblem::Streaming),
         Item::Sticker(_) => Art::Emblem(Emblem::Sticker),
         Item::Favorites => Art::NoFavorites,
@@ -2435,8 +2467,8 @@ impl App {
         self.motion.sel_y = Some(fy);
         self.hits.list(sel, n, pitch, 0.0);
 
-        // Beside it, from its top edge: what it is.
-        let tx = fx + fw + 48;
+        // Beside it, from its top edge: what it is. An open case has its game out beside it: the words start clear of it.
+        let tx = fx + fw + 48 + if self.is_frozen_item(item) { (fw as f32 * AJAR_FRONT) as i32 } else { 0 };
         self.paint_shelf_words(c, item, tx, fy.max(sy), sx + sw - tx, sy + sh);
     }
 

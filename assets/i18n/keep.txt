@@ -541,3 +541,4 @@ roms/Sega Genesis
 Eden
 # The same word in Spanish, so its pattern changes nothing: a device's name with its note (About).
 re:\(experimental\)$
+Some Game (USA).chd

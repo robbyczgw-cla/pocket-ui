@@ -13,7 +13,7 @@ The same settings for one game are on its card without starting it: [This game](
 | **Controls** | Which button does what, and the left stick. |
 | **Cheats** | Cheats from the libretro cheat database. Shown only when it has cheats for the game. |
 | **Shortcuts** | HOME + button combinations while you play. |
-| **Extras** | Fast-forward speed, rewind, what is shown over the game, rumble, performance, fan and run-ahead. |
+| **Speed, rumble, fan** | Fast-forward speed, rewind, what is shown over the game, rumble, performance, fan and run-ahead. |
 | **Runs on** | Which emulator plays this game or this console (see [Runs on](#runs-on)). It has its own Save changes. |
 | **Save changes** | Keeps the settings for this console or this game. |
 
@@ -244,10 +244,10 @@ while you play:
 | **Save state** | HOME + R1 | Save to the selected slot. |
 | **Load state** | HOME + L1 | Load the selected slot. |
 | **Change slot** | HOME + Left / Right | Choose the previous / next slot (1 to 8). |
-| **Fast-forward** | HOME + R2 | Turn fast-forward on or off. The speed is set under [Extras](#extras). |
-| **Rewind** | Hold HOME + L2 | Rewind, for as long as you hold it. Rewind itself has to be switched on under [Extras](#extras). |
+| **Fast-forward** | HOME + R2 | Turn fast-forward on or off. The speed is set under [Speed, rumble, fan](#speed-rumble-fan). |
+| **Rewind** | Hold HOME + L2 | Rewind, for as long as you hold it. Rewind itself has to be switched on under [Speed, rumble, fan](#speed-rumble-fan). |
 | **Screenshot** | HOME + A | Save a [screenshot](playing.md#screenshots) of the game. The pause menu does not open. |
-| **Over the game** | HOME + Y | Switch to the next level of [Over the game](pause-menu.md#over-the-game): Off, FPS, FPS + sensors, Pixel Path. It lasts until you quit or change **Over the game** under Extras. |
+| **Over the game** | HOME + Y | Switch to the next level of [Over the game](pause-menu.md#over-the-game): Off, FPS, FPS + sensors, Pixel Path. It lasts until you quit or change **Over the game** under Speed, rumble, fan. |
 
 A short message over the picture confirms what happened, for example "Saved to slot 3",
 "Loaded slot 3", "Slot 4 (empty)", "Slot 4 is empty" or "Screenshot saved".
@@ -255,9 +255,9 @@ A short message over the picture confirms what happened, for example "Saved to s
 While HOME is held, the game gets no buttons, so a shortcut never presses anything in the game.
 L2 and R2 count as pressed from half-way down. On this page each shortcut can be switched **Off**.
 
-## Extras
+## Speed, rumble, fan
 
-Pause menu → Options → **Extras** ("Settings you rarely need."). Values in bold are the defaults.
+Pause menu → Options → **Speed, rumble, fan** ("Settings you rarely need."). Values in bold are the defaults.
 
 | Setting | Choices | What it does |
 |---|---|---|
@@ -272,7 +272,7 @@ Pause menu → Options → **Extras** ("Settings you rarely need."). Values in b
 
 - Rewind is off by default because keeping the history costs processor time, most on SNES.
   Loading a save clears the history. Holding HOME + L2 while Rewind is off shows "Rewind is off.
-  Switch it on under Extras."
+  Switch it on under Speed, rumble, fan."
 - Performance and Fan apply only while the game runs. The system's own settings come back when you
   quit, even if the game crashed.
 - What a game starts with when you saved nothing for it or its console is set in Settings → Playing →
@@ -375,7 +375,7 @@ presses into a running game.
 | Row | What it holds |
 |---|---|
 | **Screen scaling**, **Screen sharpness**, **Screen effect**, **Screen frame** (with its colour or finish), **Screen orientation** | The [Picture](#picture) settings. A frame's sub-choices show up under it, as in the pause menu. |
-| **Fast-forward speed**, **Rewind**, **Earlier states**, **Over the game**, **Rumble**, **Performance**, **Fan**, **Run-ahead** | The same rows as [Extras](#extras). |
+| **Fast-forward speed**, **Rewind**, **Earlier states**, **Over the game**, **Rumble**, **Performance**, **Fan**, **Run-ahead** | The same rows as [Speed, rumble, fan](#speed-rumble-fan). |
 | **Save state**, **Load state**, **Change slot**, **Fast-forward**, **Rewind**, **Screenshot**, **Over the game** | The [Shortcuts](#shortcuts): which HOME + button does what. |
 | **Controls** | Which button does what, and the left stick ([Controls](#controls)). The page names the buttons the standard way; the pause menu shows the console's own names. |
 | **Runs on** | Which emulator plays this game ([Runs on](#runs-on)). B from there comes back here. |

@@ -968,7 +968,7 @@ pub fn game_top(text: &mut Text, system: &str, rom: &str, w: i32, h: i32, look: 
 
 /// How much of a frozen game shows over its spine at `f` screen pixels a template pixel.
 pub fn ajar_peek(f: f32) -> i32 {
-    (5.0 * f).round() as i32
+    (8.0 * f).round() as i32
 }
 
 /// A frozen game's spine on the shelf: the game out of the case by a little, over its top. Nothing is drawn for it: the

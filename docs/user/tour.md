@@ -16,24 +16,25 @@ picture of its screen, and where it is in Settings.
 
 ## The cards and the profiles
 
-The cards, in their order, and what the first start's profiles set. **Simple is pocket-ui as it ships**: it sets
-exactly the defaults, so pressing START on that step instead gives the same result. Only Up next, Echoes beyond
-this device, Pixel Path, frames and "Straight back into your game" are off by default.
+The cards, in their order, and what the first start's profiles set. **The shelf is pocket-ui as it ships**: it sets
+exactly the defaults, so pressing START on that step at the first start gives the same result. Picked again later, it sets them
+back, including On start and Screen frames. Only Up next, Echoes beyond
+this device, Pixel Path, frames and "Continue your last game" are off by default.
 
-| Card | Simple | Enthusiast | Changed in |
+| Card | The shelf | Enthusiast | Changed in |
 |---|---|---|---|
 | **Lens & smart shelves** | On | On | Settings → Games → Curator |
 | **Echoes** | On | On | Settings → Games → Curator |
 | **Up next after a game** | Off | On | Settings → Games → Curator ([Up next](curator.md#up-next)) |
 | **Echoes beyond this device** | Off | On | Settings → Games → Curator ("Games not on this device in Echoes") |
 | **Versions** | On | On | Settings → Games → Curator ("Merge versions in mixed lists") |
-| **Stickers** | On | On | Settings → Games → Curator |
+| **Labels** | On | On | Settings → Games → Curator |
 | **Play history** | As it is | On | Settings → Games → Curator ([Play history](curator.md#play-history)); on by default |
 | **Pixel Path** | Off | On | Settings → Games → Curator ("Pixel Path in the pause menu") |
 | **Pixel Path over every game** | As it is | As it is | Settings → Playing → [Over the game](settings.md#over-the-game) on Pixel Path ([Pixel Path over the game](pause-menu.md#pixel-path-over-the-game)); Off takes only that level away |
 | **Screen frames on every console** | Off | On | Settings → Playing → [Screen frames](settings.md#screen-frames) |
-| **Straight back into your game** | Off | On | Settings → Playing → [On start](settings.md#on-start) (Last game) |
-| **Remember where I quit** | As it is | As it is | Settings → Playing → [Remember where I quit](settings.md#remember-where-i-quit) |
+| **Continue your last game** | Off | On | Settings → Playing → [On start](settings.md#on-start) (Last game) |
+| **Continue where I quit** | As it is | As it is | Settings → Playing → [Continue where I quit](settings.md#continue-where-i-quit) |
 | **Motion** | On | On | Settings → Sound & feel → [Motion](settings.md#motion) (Off on the card is Motion Off) |
 | **Menu sounds** | As it is | As it is | Settings → Sound & feel → Sounds |
 | **Haptics** | As it is | As it is | Settings → Sound & feel → Haptics |

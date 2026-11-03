@@ -362,7 +362,7 @@ async function gameView(id) {
       } }, s.name);
     }));
   paintChips();
-  const newSticker = h("input", { type: "text", maxlength: String(lib.stickerMax), placeholder: "New sticker", "aria-label": "New sticker" });
+  const newSticker = h("input", { type: "text", maxlength: String(lib.stickerMax), placeholder: "New label", "aria-label": "New label" });
   const addSticker = h("button", {}, "Add");
   addSticker.addEventListener("click", async () => {
     const name = newSticker.value.trim();
@@ -418,7 +418,7 @@ async function gameView(id) {
     h("h3", {}, "Status"), seg,
     h("h3", {}, "My rating"), stars,
     h("h3", {}, "Note"), h("div", { class: "note" }, note, saveNote),
-    h("h3", {}, "Stickers"), lib.stickers.length ? chips : h("p", { class: "quiet small" }, "No stickers yet."), h("div", { class: "note" }, newSticker, addSticker),
+    h("h3", {}, "Labels"), lib.stickers.length ? chips : h("p", { class: "quiet small" }, "No labels yet."), h("div", { class: "note" }, newSticker, addSticker),
     pictures,
     shots,
     versions);
@@ -443,10 +443,10 @@ function shelvesView() {
   view(
     h("h2", {}, "Favourites"),
     h("ul", { class: "shelf" }, h("li", {}, h("a", { class: "spine", href: "#/favorites", stripe: "var(--amber)" }, h("span", { class: "name" }, "Favourites"), h("span", { class: "side" }, String(lib.favorites))))),
-    h("h2", {}, "Stickers"),
+    h("h2", {}, "Labels"),
     lib.stickers.length ? h("ul", { class: "shelf" }, lib.stickers.map((s) => manage("#/sticker/" + s.id, s.name, s.games + (s.pinned ? " · on Home" : ""),
       () => rename(s.name, s.name, lib.stickerMax, (name) => post("/api/stickers/rename", { sticker: s.id, name })),
-      () => del(s.name, () => post("/api/stickers/delete", { sticker: s.id }))))) : h("p", { class: "quiet" }, "Put stickers on games from a game's page, or on the Pocket."),
+      () => del(s.name, () => post("/api/stickers/delete", { sticker: s.id }))))) : h("p", { class: "quiet" }, "Put labels on games from a game's page, or on the Pocket."),
     h("h2", {}, "Smart shelves"),
     lib.shelves.length ? h("ul", { class: "shelf" }, lib.shelves.map((s) => manage("#/shelf/" + s.index, s.name, s.pinned ? "on Home" : "",
       () => rename(s.name, s.name, lib.shelfMax, (name) => post("/api/shelves/rename", { index: s.index, was: s.name, name })),
