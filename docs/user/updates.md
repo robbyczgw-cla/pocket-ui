@@ -2,13 +2,23 @@
 
 Settings → System → **Updates** ("New versions of pocket-ui and the system."). It needs Wi-Fi.
 
-> **No update has been published yet.** Until the first one is, a check ends with "No updates published yet. A new
-> version installs like the first one; your games and settings stay." To update today, run the installer again with
-> the new download ([Getting started](getting-started.md)); it installs over the current version. Without a network it says "Couldn't reach the update server. Check Wi-Fi.", and
-> on a network that wants a sign-in first (a hotel, a train) "Connected, but this network wants a sign-in first. Open
-> Settings › Connections › Wi-Fi." ([Hotel and train Wi-Fi](hotel-wifi.md)).
+New versions of pocket-ui come over Wi-Fi, with one press. Your games, saves and settings stay.
+
+1. Open Settings → System → **Updates**. The page checks by itself.
+2. If a newer version is out, the pocket-ui row says so ("0.2.0, 0.2.1 available") and **Install pocket-ui …** appears. Press A on it.
+3. It downloads, checks the file and restarts by itself ("Installed. Restarting…").
+
+The updates are signed by us and every download is checked (see [What makes it safe](#what-makes-it-safe)); if the new
+version doesn't start, the old one comes back. Without a network the page says "Couldn't reach the update server. Check
+Wi-Fi.", and on a network that wants a sign-in first (a hotel, a train) "Connected, but this network wants a sign-in
+first. Open Settings › Connections › Wi-Fi." ([Hotel and train Wi-Fi](hotel-wifi.md)). If the server has no update list
+at all, a check ends with "No updates published yet. A new version installs like the first one; your games and settings
+stay." You can also install a new version by running the installer again with the new download
+([Getting started](getting-started.md)); it installs over the current version.
 
 ## The Updates page
+
+![Settings → System with the Updates row and the installed version](pictures/updates.webp)
 
 The first time you open the page, pocket-ui checks for updates by itself. The page shows:
 

@@ -369,9 +369,7 @@ impl App {
             let base = y + row / 2 + pocket_ui::type_scale::mid(font);
             let selected = i == sel;
             if selected {
-                let w = self.text.width(Face::Body, font, name) + 2 * NU_BTN_PAD;
-                c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, pal().band);
-                c.round_rect(pad, y + 4, w, row - 8, (row - 8) / 2, pal().select);
+                pocket_ui::kit::selection(c, pad, y, right - pad, row);
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, name);
             } else {
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, name);
@@ -382,7 +380,7 @@ impl App {
                     let room = right - pad - 2 * NU_BTN_PAD - self.text.width(Face::Body, font, name) - 60;
                     let shown = if selected { format!("‹ {value} ›") } else { value.clone() };
                     let shown = self.text.fit(Face::Body, font, &shown, room);
-                    self.text.draw_right(c, Face::Body, font, vx, base, pal().text, &shown);
+                    pocket_ui::kit::row_value(c, &mut self.text, font, vx, base, &shown, selected);
                     if selected {
                         let vw = self.text.width(Face::Body, font, &shown);
                         let aw = self.text.width(Face::Body, font, "‹ ") + 24;
@@ -390,7 +388,9 @@ impl App {
                         self.hits.button(Area::new(vx - aw + 24, y, aw, row), Button::Right);
                     }
                 }
-                None if matches!(page.mode, Mode::List) => self.text.draw_right(c, Face::Body, font, vx, base, pal().text, ">"),
+                None if matches!(page.mode, Mode::List) => {
+                    pocket_ui::kit::row_value(c, &mut self.text, font, vx, base, ">", selected);
+                }
                 None => {}
             }
         }

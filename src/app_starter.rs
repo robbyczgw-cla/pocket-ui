@@ -262,7 +262,7 @@ impl App {
                     }
                     Ok(Outcome::AlreadyThere(_)) => {
                         self.starter.there.insert(id, true);
-                        self.starter.message = Some((format!("{title} is on your SD card already. Nothing was changed."), false));
+                        self.starter.message = Some((format!("{title} is already here. Nothing was changed."), false));
                     }
                     Err(f) => {
                         println!("starter pack: {title}: {f:?}");
@@ -318,13 +318,13 @@ impl App {
                 Some(Row::All) => {
                     let missing = self.starter.missing();
                     if missing.is_empty() {
-                        self.starter.message = Some(("Every game in the pack is on your SD card.".into(), false));
+                        self.starter.message = Some(("Every game in the pack is already here.".into(), false));
                     } else {
                         self.starter_start(missing);
                     }
                 }
                 Some(Row::Game(g)) if self.starter.is_there(g) => {
-                    self.starter.message = Some((format!("{} is on your SD card already.", g.title), false));
+                    self.starter.message = Some((format!("{} is already here.", g.title), false));
                 }
                 Some(Row::Game(g)) => self.starter_start(vec![g]),
                 None => {}
@@ -506,14 +506,14 @@ impl App {
             let (label, marker) = match row {
                 Row::All if !self.starter.scanned => ("Get all games".to_string(), Marker::None),
                 Row::All if rows.len() == 1 => ("Nothing to get here".to_string(), Marker::None),
-                Row::All if missing.is_empty() => ("All games are on your SD card".to_string(), Marker::None),
+                Row::All if missing.is_empty() => ("All games are already here".to_string(), Marker::None),
                 Row::All if missing.len() == 1 => ("Get the last game".to_string(), Marker::Text(starter::size_label(missing.iter().map(|g| g.file.size).sum()))),
                 Row::All => (format!("Get all {} games", missing.len()), Marker::Text(starter::size_label(missing.iter().map(|g| g.file.size).sum()))),
                 Row::Game(g) => {
                     let marker = if busy_id.as_deref() == Some(g.id.as_str()) {
                         Marker::Text(busy_pct.clone())
                     } else if self.starter.is_there(g) {
-                        Marker::Text("On your SD card".into())
+                        Marker::Text("Already here".into())
                     } else {
                         Marker::Text(format!("{} · {}", short_system(&g.system), starter::size_label(g.file.size)))
                     };
@@ -536,7 +536,7 @@ impl App {
         } else if let Some((m, err)) = self.starter.message.clone() {
             vec![(m, if err { pal().alert } else { pal().chalk })]
         } else if !self.starter.scanned {
-            vec![("Looking at your SD card…".to_string(), pal().dust)]
+            vec![("Looking at your games folder…".to_string(), pal().dust)]
         } else {
             match rows.get(sel) {
                 _ if rows.len() == 1 => vec![("This Pocket has none of the systems the pack's games are for.".to_string(), pal().chalk)],

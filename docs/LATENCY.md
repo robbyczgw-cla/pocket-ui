@@ -93,7 +93,8 @@ All times in milliseconds, lower is better. Each pass measures every number seve
 | `start.cold` | pocket-ui started (process spawned) until its first shelf frame. Median of 5 starts per pass. The launcher's own work before it starts pocket-ui is not included |
 | `start.process` | the same from pocket-ui's `main`: `start.cold` minus loading the program |
 | `start.pads` | from pocket-ui's `main` until its pads are open (its `pad-open` trace line): a press from then on counts. It should stay below `start.process`, so that a press as soon as the shelf is there is acted on (see [First press after a start](#first-press-after-a-start)) |
-| `nav.p50`, `nav.p95` | a Down/Up on Home until the frame showing the new selection. 100 moves per pass, up and down the list (`--nav-system gbc`: that system’s games; Cabinet books Right/Left), 150 ms apart (so the 120 ms slide of the previous move has ended) |
+| `nav.p50`, `nav.p95`, `nav.mean`, `nav.p99`, `nav.max` | a Down/Up on Home until the frame showing the new selection. 100 moves per pass, up and down the list (`--nav-system gbc`: that system’s games; Cabinet books Right/Left), 150 ms apart (so the 120 ms slide of the previous move has ended) |
+| `page.p50`, `page.p99`, `page.max` | R1/L1 on Home (five rows at once), only with `--pages N` (the baseline run asks for 20), 150 ms apart; the frame showing the new selection |
 | `open.quick`, `close.quick` | HOME on the shelf until Quick Settings; B until the shelf. the FIFO sends down/up together, so no physical hold duration is included |
 | `open.card`, `open.card_first`, `close.card` | X on the first `--systems` game until its card/box; the first open per process separately (cold image cache); B until the list |
 | `close.pause_menu` | Continue until pocket-ui commits its frame behind the game. This measures the UI hand-off, not a new core frame or the compositor revealing it |
@@ -905,6 +906,26 @@ scripts/vdev.sh down
 The baseline has to come from the CI machine itself (run `--save-baseline` there once), since the virtual device's
 numbers depend on the machine. `scripts/test-latency.sh --vdev` is a faster check that the harness still finds every
 number (one short pass, about 40 s).
+
+## One baseline per device
+
+The baseline run collects the numbers for a before/after table in one go: it runs
+`latency.py` (warm and cold start, shelf moves with mean / p99 / maximum, page changes with R1 / L1, Settings and switcher,
+pause menu, game start, quit), then idle windows read from `/proc` by a helper script (CPU, every thread's
+voluntary and involuntary context switches, `write()` calls, `/proc/PID/io`, RSS, battery power and block-device writes where
+the device has them), the same with UI sounds off, in pocket-ui's own screen-off state, and the frame CPU time of
+`--snapshot bench-shelf:<look>:gbc` (five looks, 300 games) plus `POCKETUI_FRAME_BENCH=1`. A table script
+makes the tables. Notes that matter when reading the numbers:
+
+- A window must stay below pocket-ui's 120 s screen-off timer (default 90 s); each file says `window_state`. The sound thread and the PipeWire
+  data loop end in screen-off, so a window across it mixes two states.
+- `vol_switches_per_s` is the sum of voluntary context switches of all threads (a thread blocking and being woken), not a count of
+  timer wake-ups.
+- The virtual device has no battery and no card: those lines say `only-on-device`, nothing is estimated. Its numbers are for
+  before / after on the same machine, not for the handheld.
+- Failed phases and changed saves return a nonzero exit code. The sound phase restores its original settings on exit, including interruption.
+- Physical runs require a full backup of mutable device data, disabled rumble and a separate mute watcher. The script only compares selected save-file hashes and mutes at phase boundaries; it does not supply those session-wide protections. Use the virtual device until those requirements are met.
+- On a device it holds the device lock per phase, mutes, refuses while a game runs, lists saves with md5 before and after.
 
 ## Files
 

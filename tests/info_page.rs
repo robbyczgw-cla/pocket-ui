@@ -96,7 +96,8 @@ fn minimal_cards_and_split_open_the_info_page_and_nothing_is_cut_off() {
                     let (seen, problems) = shot(tmp.path(), stub.as_ref(), &state, size, lang, text_size);
                     let name = format!("{state} {size} {lang} {text_size}");
                     assert!(seen.contains(title), "{name}: no title\n{seen}");
-                    let (details, played, turn) = if lang == "de" { ("Details", "Gespielt", "Umdrehen") } else { ("Details", "Played", "Turn over") };
+                    // The info page names Y Status; the four-hint bar leaves SELECT Details out (`kit::top_hints`).
+                    let (details, played, turn) = if lang == "de" { ("Status", "Gespielt", "Umdrehen") } else { ("Status", "Played", "Turn over") };
                     assert!(seen.contains(details) && seen.contains(played) && !seen.contains(turn), "{name}: not the info page\n{seen}");
                     // Something visible where a description would be, never a gap.
                     let about = ["Command an army", "description", "Beschreibung"];
@@ -109,7 +110,7 @@ fn minimal_cards_and_split_open_the_info_page_and_nothing_is_cut_off() {
     // The collector's looks keep the box.
     for look in ["shelf", "cabinet"] {
         let (seen, _) = shot(tmp.path(), stub.as_ref(), &format!("info:{look}:gba:advance wars"), "640x480", "en", "normal");
-        assert!(seen.contains("Turn over") && !seen.contains("Details"), "{look}: not the box\n{seen}");
+        assert!(seen.contains("Turn over") && !seen.contains("Status"), "{look}: not the box\n{seen}");
     }
 }
 

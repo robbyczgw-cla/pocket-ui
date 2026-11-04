@@ -18,9 +18,6 @@ use super::{App, UserEvent};
 /// After the first frame the run waits this long, so the start's own reading of the card comes first.
 const START_DELAY: Duration = Duration::from_secs(3);
 
-/// The result line stays this much longer than a plain toast: it can hold a game's whole name.
-const RESULT_EXTRA: Duration = Duration::from_secs(2);
-
 #[derive(Debug)]
 pub(crate) enum IdentifyEvent {
     Done(Identified),
@@ -171,7 +168,7 @@ impl App {
                     self.game_infos.remove(&path);
                     self.show_card(item, system, game, path);
                 }
-                self.toast = Some((outcome.message(), Instant::now() + RESULT_EXTRA));
+                self.toast = Some((outcome.message(), Instant::now()));
                 self.request_redraw();
                 // A run asked for meanwhile, then the covers.
                 if std::mem::take(&mut self.identify.again) {
@@ -247,7 +244,7 @@ impl App {
             "nothing" => Again::NothingFound { name },
             _ => Again::Unreachable,
         };
-        self.toast = Some((outcome.message(), Instant::now() + RESULT_EXTRA));
+        self.toast = Some((outcome.message(), Instant::now()));
     }
 }
 

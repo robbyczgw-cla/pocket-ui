@@ -944,7 +944,7 @@ mod tests {
                 // Words the table translates where they are no name (the Lens's language filter, a Curator tag).
                 .filter(|l| !["English", "‹ English ›", "puzzle"].contains(l))
                 // In keep.txt because they read the same in German, not because they are names.
-                .filter(|l| !(file == "es.tsv" && (*l == "‹ Warm ›" || l.starts_with("Code "))))
+                .filter(|l| !(file == "es.tsv" && (*l == "‹ Warm ›" || *l == "‹ Scanlines ›" || l.starts_with("Code "))))
                 .filter_map(|name| t.translate(name).filter(|g| g != name).map(|g| format!("{name:?} -> {g:?}")))
                 .collect();
             assert!(changed.is_empty(), "{file}: {} names the table changes:\n{}", changed.len(), changed.join("\n"));

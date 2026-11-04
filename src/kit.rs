@@ -45,30 +45,54 @@ pub fn row() -> i32 {
     type_scale::row(ROW, ROW_FONT)
 }
 
+/// At most this many hints in a bar, and in Easy (the looks for a first-time player) this many: a bar is read at a glance.
+pub const MAX_HINTS: usize = 4;
+pub const EASY_HINTS: usize = 3;
+
+/// The priority of each hint (0 is dropped last): A, B, HOME and START first, which every page needs, then the rest in
+/// the order the page lists them.
+fn hint_ranks(hints: &[(&str, &str)]) -> Vec<usize> {
+    hints.iter().enumerate().map(|(i, (k, _))| ["A", "B", "HOME", "START"].iter().position(|f| f == k).unwrap_or(4 + i)).collect()
+}
+
+/// `hints` cut to at most `max`: whole hints, the lowest priority first, the rest in their order (Easy has three).
+pub fn top_hints<'a>(hints: &[(&'a str, &'a str)], max: usize) -> Vec<(&'a str, &'a str)> {
+    let keep = type_scale::hints_that_fit(&vec![0; hints.len()], &hint_ranks(hints), 0, max);
+    hints.iter().zip(keep).filter(|(_, k)| *k).map(|(h, _)| *h).collect()
+}
+
+/// The hints of `hints` that stay (whole, never a key without its word): at most `MAX_HINTS`, and only as many as
+/// fit in `room` pixels, given each one's width.
+fn hints_shown<'a>(hints: &[(&'a str, &'a str)], widths: &[i32], room: i32) -> Vec<(usize, (&'a str, &'a str))> {
+    let keep = type_scale::hints_that_fit(widths, &hint_ranks(hints), room, MAX_HINTS);
+    hints.iter().copied().enumerate().zip(keep).filter(|(_, k)| *k).map(|(h, _)| h).collect()
+}
+
+/// The top edge of the keys of `page_hints` on a screen `h` px high: what a page paints above them stays above this.
+pub fn hint_bar_top(h: i32) -> i32 {
+    h - 52 - 9 - type_scale::row(36, 21) / 2 - type_scale::grow(21) / 3
+}
+
 /// The hint keys at the bottom left of a page of the shelf family (Home and its looks, the game card, console
 /// pages, search, Curator, the first start), as loose keys on the page: a round key cap with the key's name, then its
-/// label in Dust. Labels that don't fit go, last first, and their keys stay (`type_scale::hint_labels_that_fit`).
-/// Returns where each key can be tapped.
+/// label in Dust. Never a key without its word: at most four hints, and when they don't fit whole hints go, the least
+/// needed first (A, B, HOME and START stay longest; `type_scale::hints_that_fit`). Returns where each key can be tapped.
 pub fn page_hints(c: &mut Canvas, text: &mut Text, hints: &[(&str, &str)]) -> Vec<(Area, Button)> {
     let (mut x, base) = (MARGIN, c.h - 52);
     let mut areas = Vec::new();
     // The keys are 36 px around Body 21, taller with larger text (`type_scale`).
     let key_h = type_scale::row(36, 21);
-    let key_top = base - 9 - key_h / 2 - type_scale::grow(21) / 3;
+    let key_top = hint_bar_top(c.h);
     // One letter in a round key, a word in a key as wide as it.
     let widths: Vec<(i32, i32)> = hints.iter().map(|(k, l)| (text.width(Face::Body, 21, button_prompts::shown(k)), text.width(Face::Body, 21, l))).collect();
-    // The 36 px between hints remains even when a label goes. Count it with every key, not with labels that
-    // may be hidden; otherwise each hidden label leaves an unbudgeted gap and can push START off the edge.
-    let shown = type_scale::hint_labels_that_fit(&widths.iter().map(|(kw, lw)| ((kw + 24).max(key_h) + 10 + 36, *lw)).collect::<Vec<_>>(), c.w - MARGIN - 24 + 36);
-    for (k, (key, label)) in hints.iter().enumerate() {
-        let kw = widths[k].0;
-        let key_w = (kw + 24).max(key_h);
+    let whole: Vec<i32> = widths.iter().map(|(kw, lw)| (kw + 24).max(key_h) + 10 + lw + 36).collect();
+    let shown = hints_shown(hints, &whole, c.w - MARGIN - 24 + 36);
+    for (k, (key, label)) in shown {
+        let key_w = (widths[k].0 + 24).max(key_h);
         let start = x;
         key_cap(c, text, (x, key_top, key_w, key_h), key, 21, base - 1, (pal().keycap, pal().chalk));
         x += key_w + 10;
-        if k < shown {
-            x += text.draw(c, Face::Body, 21, x, base, pal().dust, label);
-        }
+        x += text.draw(c, Face::Body, 21, x, base, pal().dust, label);
         x += 36;
         if let Some(b) = hint_button(key) {
             areas.push((Area::new(start - 8, base - 46, x - start - 20, 64), b));
@@ -80,25 +104,24 @@ pub fn page_hints(c: &mut Canvas, text: &mut Text, hints: &[(&str, &str)]) -> Ve
 }
 
 /// The hint keys of the Settings family (Settings and its pages, quick settings, the pause menu, dialogs, safe mode)
-/// in a pill at the bottom right: a chip per key, then its label. Labels that don't fit go, last first, and their keys
-/// stay. Registers each key with `hits`; returns where the pill starts (a description beside it ends 24 px short).
+/// in a pill at the bottom right: a chip per key, then its label. At most four hints; when they don't fit, whole hints
+/// go, the least needed first (`page_hints`). Registers each key with `hits`; returns where the pill starts (a
+/// description beside it ends 24 px short).
 pub fn pill_hints(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, hints: &[(&str, &str)]) -> i32 {
     let gap = (PILL - BUTTON) / 2;
-    let (w, widths) = pill_layout(text, c.w, hints);
+    let (w, shown) = pill_layout(text, c.w, hints);
     let (x0, y0) = (c.w - PAD - w, c.h - PAD - PILL);
     c.round_rect(x0, y0, w, PILL, PILL / 2, pal().pill);
     // For the snapshot checks of Settings → Text size: nothing else may run under the pill.
     crate::text::boxes::area(c, (x0, y0, w, PILL), "‹hints›");
     let mut x = x0 + gap;
-    for ((key, label), (kw, lw)) in hints.iter().zip(widths) {
+    for ((key, label), (kw, lw)) in shown {
         let bw = (kw + 16).max(BUTTON);
         let start = x;
         let base = y0 + PILL / 2 + type_scale::mid(SMALL);
         key_cap(c, text, (x, y0 + gap, bw, BUTTON), key, SMALL, base, (pal().chip, pal().pill));
         x += bw + gap;
-        if lw >= 0 {
-            text.draw(c, Face::Body, SMALL, x, base, pal().soft, label);
-        }
+        text.draw(c, Face::Body, SMALL, x, base, pal().soft, label);
         x += lw + gap * 2;
         if let Some(b) = hint_button(key) {
             hits.button(Area::new(start - gap, y0 - 8, x - start - gap, PILL + 16), b);
@@ -123,18 +146,16 @@ pub fn pill_width(text: &mut Text, screen_w: i32, hints: &[(&str, &str)]) -> i32
     pill_layout(text, screen_w, hints).0
 }
 
-/// The pill's width and each key's (key, label) widths; a label that doesn't fit is -gap wide (left out).
-fn pill_layout(text: &mut Text, screen_w: i32, hints: &[(&str, &str)]) -> (i32, Vec<(i32, i32)>) {
+/// The pill's width and the hints it shows with each key's and label's width (`pill_hints`).
+#[allow(clippy::type_complexity)]
+fn pill_layout<'a>(text: &mut Text, screen_w: i32, hints: &[(&'a str, &'a str)]) -> (i32, Vec<((&'a str, &'a str), (i32, i32))>) {
     let gap = (PILL - BUTTON) / 2;
-    let mut widths: Vec<(i32, i32)> = hints.iter().map(|(k, l)| (text.width(Face::Body, SMALL, button_prompts::shown(k)).max(BUTTON - 16), text.width(Face::Body, SMALL, l))).collect();
-    // Larger text (`type_scale`) or a long translation: labels that don't fit on the line go, last first, and their
-    // keys stay.
-    let shown = type_scale::hint_labels_that_fit(&widths.iter().map(|(kw, lw)| ((kw + 16).max(BUTTON) + gap, lw + gap * 2)).collect::<Vec<_>>(), screen_w - 2 * PAD - gap);
-    for w in widths.iter_mut().skip(shown) {
-        w.1 = -gap;
-    }
-    let inner: i32 = widths.iter().map(|(kw, lw)| (kw + 16).max(BUTTON) + gap + lw + gap * 2).sum();
-    (inner + gap, widths)
+    let widths: Vec<(i32, i32)> = hints.iter().map(|(k, l)| (text.width(Face::Body, SMALL, button_prompts::shown(k)).max(BUTTON - 16), text.width(Face::Body, SMALL, l))).collect();
+    // Larger text (`type_scale`) or a long translation: whole hints that don't fit on the line go.
+    let whole: Vec<i32> = widths.iter().map(|(kw, lw)| (kw + 16).max(BUTTON) + gap + lw + gap * 2).collect();
+    let shown: Vec<((&str, &str), (i32, i32))> = hints_shown(hints, &whole, screen_w - 2 * PAD - gap).into_iter().map(|(i, h)| (h, widths[i])).collect();
+    let inner: i32 = shown.iter().map(|(_, (kw, lw))| (kw + 16).max(BUTTON) + gap + lw + gap * 2).sum();
+    (inner + gap, shown)
 }
 
 /// The foot of a page of the Settings family: the hint pill at the bottom right (`pill_hints`) and the explanation of
@@ -230,31 +251,103 @@ pub fn footer_baseline(screen_h: i32) -> i32 {
     screen_h - PAD - PILL / 2 + type_scale::mid(SMALL)
 }
 
-/// The selection of a Settings-style list at (x, y) in a row `w` x `h`: the band across, and the name's paper pill
-/// `name_w` wide at its left end (the pulled-out label's paper, as everywhere a row is picked). The caller paints the
-/// name in `pal().ink` over the pill.
-pub fn selection(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, name_w: i32) {
-    selection_in(c, x, y, w, h, name_w, pal().band);
+/// The selection of a list row at (x, y), `w` x `h` (docs/DESIGN.md "Lists"): one sheet of the pulled-out label's
+/// paper across the whole row, 4 px in from its top and bottom, lifted off a light page by the label's shadow. It was
+/// a paper pill round the name running into a grey band, which looked half loaded (the visual review 2026-11-04, 2).
+/// Everything on it is `pal().ink`, quieter parts `pal().label_dust`.
+pub fn selection(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32) {
+    let (y, h) = (y + 4, h - 8);
+    c.round_rect(x, y, w, h, h / 2, pal().select);
+    crate::game_card_model::lift_shadow(c, x + h / 2, y + h, w - h, pal().t);
 }
 
-/// `selection` with the band in another colour: the pause menu's pages use the game's system stripe.
-pub fn selection_in(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, name_w: i32, band: u32) {
-    let r = (h - 8) / 2;
-    c.round_rect(x, y + 4, w, h - 8, r, band);
-    c.round_rect(x, y + 4, name_w.min(w), h - 8, r, pal().select);
+/// `selection` with the game's system stripe as a short bar inside its left end, like a case's spine: the pause
+/// menu's pages.
+pub fn selection_striped(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, stripe: u32) {
+    selection(c, x, y, w, h);
+    let bar = (h - 8) / 2;
+    c.round_rect(x + 12, y + h / 2 - bar / 2, 6, bar, 3, stripe);
 }
 
-/// A list row in the Settings style: the name `BTN_PAD` in, on the band and its pill when selected. Returns its text
+/// A list row in the Settings style: the name `BTN_PAD` in, on the selection's paper when selected. Returns its text
 /// baseline.
 pub fn row_label(c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, i32), font: u32, label: &str, selected: bool) -> i32 {
     let base = y + h / 2 + type_scale::mid(font);
     if selected {
-        selection(c, x, y, w, h, text.width(Face::Body, font, label) + 2 * BTN_PAD);
-        text.draw(c, Face::Body, font, x + BTN_PAD, base, pal().ink, label);
-    } else {
-        text.draw(c, Face::Body, font, x + BTN_PAD, base, pal().text, label);
+        selection(c, x, y, w, h);
     }
+    text.draw(c, Face::Body, font, x + BTN_PAD, base, if selected { pal().ink } else { pal().text }, label);
     base
+}
+
+/// A drawn angle in the icons' manner (one colour, round ends): pointing right (`>`) or left (`<`), `h` tall, its
+/// point at `tip` on the line `mid`. Rows and values use it instead of the letters ">" and "‹ ›".
+pub fn chevron(c: &mut Canvas, tip: i32, mid: i32, h: i32, right: bool, color: u32) {
+    angle(c, tip, mid, h, right, color, if right { ">" } else { "<" });
+}
+
+/// `chevron`, recorded for the snapshot checks as `name`: the angle is a mark like the letter it replaces ("›" of a
+/// switch, ">" of a page), and nothing may run into it.
+fn angle(c: &mut Canvas, tip: i32, mid: i32, h: i32, right: bool, color: u32, name: &str) {
+    let r = (h / 12).max(1);
+    let half = (h / 2 - r).max(1);
+    let reach = half * 2 / 3;
+    for k in 0..=half {
+        let dx = reach * k / half;
+        let x = if right { tip - r - dx } else { tip + r + dx };
+        c.disc(x, mid - k, r, color);
+        c.disc(x, mid + k, r, color);
+    }
+    let w = reach + 2 * r + 1;
+    crate::text::boxes::area(c, (if right { tip - w } else { tip }, mid - h / 2, w, h), name);
+}
+
+/// How a row's value reads (`row_value`): its words, and its marks.
+fn value_parts(value: &str) -> (&str, bool, bool) {
+    if let Some(v) = value.strip_prefix("‹ ").and_then(|v| v.strip_suffix(" ›")) {
+        return (v, true, false);
+    }
+    match value.strip_suffix('>') {
+        Some(v) => (v.trim_end(), false, true),
+        None => (value, false, false),
+    }
+}
+
+/// A row's value at the right of a list, its right edge at `right`, on the baseline `base`: "Home net >" (a row that
+/// opens a page) with a drawn angle after the words, "‹ On ›" (the selected row's switch, Left/Right change it)
+/// between two. The angles stand where the letters were, so a finger's areas measured on the string still fit. On the
+/// selected row all of it is ink on the paper; elsewhere the words are `pal().text` and the angle `pal().dust`, so
+/// every row says whether it opens a page before the cursor gets there. Returns the width it took.
+pub fn row_value(c: &mut Canvas, text: &mut Text, font: u32, right: i32, base: i32, value: &str, selected: bool) -> i32 {
+    let colours = if selected { (pal().ink, pal().ink) } else { (pal().text, pal().dust) };
+    row_value_in(c, text, font, right, base, value, colours)
+}
+
+/// `row_value` with the words in `fg` and the angles in `mark`: a list whose paper glides to the selection blends
+/// them as it passes (`app_motion::under`).
+pub fn row_value_in(c: &mut Canvas, text: &mut Text, font: u32, right: i32, base: i32, value: &str, (fg, mark): (u32, u32)) -> i32 {
+    let (words, switch, opens) = value_parts(value);
+    let mid = base - type_scale::mid(font);
+    let px = type_scale::px(font) as i32;
+    let ww = text.width(Face::Body, font, words);
+    if switch {
+        let (lw, rw) = (text.width(Face::Body, font, "‹ "), text.width(Face::Body, font, " ›"));
+        let x = right - rw - ww - lw;
+        let h = px * 9 / 20;
+        angle(c, x + 2, mid, h, false, mark, "‹");
+        text.draw(c, Face::Body, font, x + lw, base, fg, words);
+        angle(c, right - 2, mid, h, true, mark, "›");
+        return lw + ww + rw;
+    }
+    if opens {
+        let aw = text.width(Face::Body, font, " >");
+        let tail = if words.is_empty() { aw - text.width(Face::Body, font, " ") } else { aw };
+        text.draw(c, Face::Body, font, right - tail - ww, base, fg, words);
+        chevron(c, right - 2, mid, px * 11 / 20, true, mark);
+        return ww + tail;
+    }
+    text.draw_right(c, Face::Body, font, right, base, fg, words);
+    ww
 }
 
 /// A row of a shelf-family list (the first start's lists, Settings' pages there, the search's results): a spine-coloured
@@ -359,6 +452,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_hint_bar_shows_at_most_four_whole_hints_and_the_needed_ones_stay() {
+        let shelf = [("A", "Play"), ("HOME", "Quick settings"), ("X", "Details"), ("Y", "Star"), ("SELECT", "Recent games"), ("START", "Settings")];
+        let four = top_hints(&shelf, MAX_HINTS);
+        assert_eq!(four, [("A", "Play"), ("HOME", "Quick settings"), ("X", "Details"), ("START", "Settings")], "Star and Recent games go, whole");
+        let easy = top_hints(&shelf, EASY_HINTS);
+        assert_eq!(easy, [("A", "Play"), ("HOME", "Quick settings"), ("START", "Settings")], "Easy has three");
+        // The pause menu: START (the way to the quick settings) outlasts SELECT.
+        let pause = [("START", "Quick settings"), ("SELECT", "Recent games"), ("B", "Back"), ("A", "OK")];
+        assert_eq!(top_hints(&pause, 3), [("START", "Quick settings"), ("B", "Back"), ("A", "OK")]);
+        let few = [("B", "Back"), ("A", "OK")];
+        assert_eq!(top_hints(&few, MAX_HINTS), few, "nothing goes that fits");
+    }
+
+    #[test]
     fn only_the_native_768_line_screens_are_short() {
         // 1024x768 and its neighbours are painted natively; the small panels (640x480 is painted at 1280x960) and
         // everything from 900 lines up keep the design's spacing.
@@ -383,13 +490,32 @@ mod tests {
     }
 
     #[test]
-    fn a_selected_row_is_paper_with_ink_on_a_band() {
+    fn a_selected_row_is_one_sheet_of_paper() {
         let mut buf = vec![0u32; 600 * 80];
         let mut c = Canvas::new(&mut buf, 600, 80);
-        selection(&mut c, 0, 0, 600, 66, 200);
+        selection(&mut c, 0, 0, 600, 66);
         assert_eq!(buf[33 * 600 + 100], pal().select);
-        assert_eq!(buf[33 * 600 + 400], pal().band);
-        assert_eq!(pal().select, pal().label, "the selected name is on the label's paper");
+        assert_eq!(buf[33 * 600 + 400], pal().select, "no band: the paper runs to the row's end");
+        assert_eq!(pal().select, pal().label, "the selected row is on the label's paper");
+    }
+
+    #[test]
+    fn a_value_names_its_marks() {
+        assert_eq!(value_parts("Home net >"), ("Home net", false, true));
+        assert_eq!(value_parts(">"), ("", false, true));
+        assert_eq!(value_parts("‹ On ›"), ("On", true, false));
+        assert_eq!(value_parts("Off"), ("Off", false, false));
+    }
+
+    #[test]
+    fn an_angle_is_drawn_inside_its_box() {
+        let mut buf = vec![0u32; 40 * 40];
+        let mut c = Canvas::new(&mut buf, 40, 40);
+        chevron(&mut c, 30, 20, 18, true, 1);
+        let lit: Vec<(usize, usize)> = (0..40 * 40).filter(|i| buf[*i] == 1).map(|i| (i % 40, i / 40)).collect();
+        assert!(!lit.is_empty());
+        assert!(lit.iter().all(|(x, y)| (18..=30).contains(x) && (11..=29).contains(y)), "{lit:?}");
+        assert!(lit.iter().any(|(x, y)| *x >= 28 && *y == 20), "the point at the right, on the middle line");
     }
 
     /// The size sweep (1240x1080, German) found "ist." alone on the pill's line under a two-line explanation.

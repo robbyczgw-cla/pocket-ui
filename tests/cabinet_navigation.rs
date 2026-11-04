@@ -1,4 +1,5 @@
-//! Five systems across small and large panels: the Cabinet has more shelves than fit, and Down must reach them all.
+//! Five systems across the real panel sizes: a player can walk to every shelf, open it, and get back to the first,
+//! and always sees which shelf is selected. (No decoration coordinates: those move with the design.)
 use std::{fs, path::PathBuf, process::{Child, Command}, time::Duration};
 
 struct Stub(Child);
@@ -6,8 +7,15 @@ impl Drop for Stub {
     fn drop(&mut self) { let _ = self.0.kill(); let _ = self.0.wait(); }
 }
 
+/// Share of pixels that differ. Clock-like corners may flicker between two paints; a moved selection changes far more.
+fn differing(a: &[u8], b: &[u8]) -> f64 {
+    assert_eq!(a.len(), b.len());
+    a.iter().zip(b).filter(|(x, y)| x != y).count() as f64 / a.len() as f64
+}
+const SAME: f64 = 0.005;
+
 #[test]
-fn five_systems_remain_reachable_below_the_visible_cabinet() {
+fn every_shelf_can_be_reached_opened_and_left_at_every_panel_size() {
     let tmp = tempfile::tempdir().unwrap();
     // An optional persistent directory keeps the same fixture and screenshots for visual review.
     let root = std::env::var_os("POCKETUI_CABINET_EVIDENCE").map(PathBuf::from).unwrap_or_else(|| tmp.path().into());
@@ -36,24 +44,15 @@ fn five_systems_remain_reachable_below_the_visible_cabinet() {
     // Match a simple card: five systems, no recent games, favourites or pinned Curator shelves.
     fs::create_dir_all(root.join("data")).unwrap();
     fs::write(root.join("data/curator.json"), r#"{"lens":false,"stickers":false,"history":false}"#).unwrap();
-    for (panel_w, panel_h, layout_w, layout_h) in [
-        (640usize, 480usize, 1280usize, 960usize), (1024, 768, 1024, 768),
-        (1240, 1080, 1240, 1080), (1920, 1080, 1920, 1080),
-    ] {
-        let sx = |x| x * panel_w / layout_w;
-        let sy = |y| y * panel_h / layout_h;
+    let systems = [("gba", "Game Boy Advance"), ("gbc", "Game Boy Color"), ("nes", "Nintendo Entertainment System"), ("psx", "PlayStation"), ("snes", "Super Nintendo")];
+    for (panel_w, panel_h) in [(640usize, 480usize), (1024, 768), (1240, 1080), (1920, 1080)] {
         let size = format!("{panel_w}x{panel_h}");
         for appearance in ["dark", "light"] {
-            let mut headers = std::collections::HashMap::new();
             fs::write(root.join("data/settings.json"), format!(r#"{{"appearance":"{appearance}","onboarded":true}}"#)).unwrap();
-            for (keys, name, more_below) in [
-                ("", "Game Boy Advance", true), ("d", "Game Boy Color", true),
-                ("dd", "Nintendo Entertainment System", true), ("ddd", "PlayStation", true),
-                ("dddd", "Super Nintendo", false), ("ddddd", "Super Nintendo", false),
-                ("dddduuuu", "Game Boy Advance", true),
-            ] {
+            // Paints the cabinet after the keys and returns what was painted (strings) and the picture's pixels.
+            let run = |keys: &str| -> (String, Vec<u8>) {
                 let record = root.join("painted.tsv");
-                let png = root.join(format!("cabinet-{size}-{appearance}-{}.png", keys.replace(' ', "")));
+                let png = root.join(format!("cabinet-{size}-{appearance}-{keys}.png"));
                 let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
                 cmd.args(["--snapshot", &format!("cabinet:{keys}"), png.to_str().unwrap()])
                     .env("POCKETUI_MOCK", "1").env("POCKETUI_LANG", "de")
@@ -63,27 +62,41 @@ fn five_systems_remain_reachable_below_the_visible_cabinet() {
                 if _stub.is_some() { cmd.env("WAYLAND_DISPLAY", &socket); }
                 let _ = fs::remove_file(&record);
                 let out = cmd.output().unwrap();
-                assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+                assert!(out.status.success(), "{size} {keys}: {}", String::from_utf8_lossy(&out.stderr));
                 let painted = fs::read_to_string(&record).unwrap();
-                assert!(painted.contains(name), "{keys}: selected shelf {name} missing: {painted}");
                 let decoder = png::Decoder::new(std::io::BufReader::new(fs::File::open(png).unwrap()));
                 let mut reader = decoder.read_info().unwrap();
                 assert_eq!((reader.info().width, reader.info().height), (panel_w as u32, panel_h as u32));
                 let mut pixels = vec![0; reader.output_buffer_size()];
-                let info = reader.next_frame(&mut pixels).unwrap();
-                let channels = info.color_type.samples();
-                let pixel = |x: usize, y: usize| &pixels[(y * panel_w + x) * channels..(y * panel_w + x) * channels + 3];
-                // The down arrow on the metadata line reveals shelves below the view and vanishes at the last one.
-                assert_eq!(pixel(sx(layout_w - 80), sy(186)) != pixel(sx(layout_w - 80), sy(168)), more_below, "{keys}: continuation arrow");
-                assert!((sx(layout_w - 184)..sx(layout_w - 96)).any(|x| (sy(172)..sy(193)).any(|y| pixel(x, y) != pixel(x, sy(168)))), "position is painted");
-                // The recorder also saw intermediate frames. Compare the final header on repeated visits to
-                // prove Up returns to the first selection, and Down past the end leaves the last selection intact.
-                let mut header = Vec::new();
-                for y in sy(40)..sy(200) { for x in sx(72)..sx(layout_w - 204) { header.extend_from_slice(pixel(x, y)); } }
-                if let Some(previous) = headers.insert(name, header.clone()) {
-                    assert_eq!(previous, header, "{keys}: final selection must return to {name}");
+                reader.next_frame(&mut pixels).unwrap();
+                (painted, pixels)
+            };
+            let (_, first) = run("");
+            let mut previous = first.clone();
+            for (k, (id, name)) in systems.iter().enumerate() {
+                // Down k times: the shelf is named on the screen, and the picture changed with the move.
+                let keys = "d".repeat(k);
+                let (painted, shown) = run(&keys);
+                assert!(painted.contains(name), "{size} {appearance}: shelf {name} is not shown after {k} Down presses: {painted}");
+                if k > 0 {
+                    assert_ne!(shown, previous, "{size} {appearance}: Down {k} changed nothing on the screen");
                 }
+                previous = shown;
+                // A on that shelf opens it: its game starts (the fixture is empty, so the player is told so by name).
+                let (opened, _) = run(&format!("{keys}a"));
+                assert!(opened.contains(&format!("Fixture {id} kann nicht starten")), "{size} {appearance}: A on {name} did not open it: {opened}");
             }
+            // Down past the last shelf stays on it.
+            let (_, past_end) = run("ddddddd");
+            let (_, last) = run("dddd");
+            // Up all the way is the first shelf again, looking the same however far the player had gone (the cabinet
+            // starts on its Continue entry, so "the first shelf" is what one Down and one Up show).
+            let (_, one_down) = run("d");
+            let (_, first_shelf) = run("du");
+            let (_, back) = run("ddddduuuuu");
+            assert!(differing(&past_end, &last) < SAME, "{size} {appearance}: Down past the end moved the selection");
+            assert!(differing(&back, &first_shelf) < SAME, "{size} {appearance}: Up does not return to the first shelf");
+            assert!(differing(&one_down, &first_shelf) > 10.0 * SAME, "{size} {appearance}: moving one shelf must look different from staying");
         }
     }
 }

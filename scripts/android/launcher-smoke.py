@@ -63,7 +63,7 @@ for appearance in ['Dark','Light']:
     if n is not None:activate(n.get('text'));shot(appearance.lower()+'-curator-facet');key(4)
     key(4);key(109);shot(appearance.lower()+'-quick-settings');key(4)
     choose_game('Libbet and the Magic Floor');tap('Play');time.sleep(2);tap('Pause');shot(appearance.lower()+'-player-pause')
-    activate('Options');shot(appearance.lower()+'-player-options');key(4);activate('Quit');time.sleep(1)
+    activate('Options');shot(appearance.lower()+'-player-options');key(4);activate('Save & quit');time.sleep(1)
     tap('Settings')
 # Check translated settings, media and player menu, then leave the preview in English/dark on the shelf.
 activate('Language ·');shot('de-settings');key(4);shot('de-library');key(99);shot('de-box');key(4)

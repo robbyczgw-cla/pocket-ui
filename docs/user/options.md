@@ -8,19 +8,19 @@ The same settings for one game are on its card without starting it: [This game](
 
 | Entry | What it holds |
 |---|---|
-| **Picture** | Size, sharpness, screen effects, frame and orientation, with a live preview. |
+| **Picture** | Size, look, frame and orientation, with a live preview. |
 | **Emulator** | Settings of the emulator itself, such as colours and palettes. Shown only when the emulator offers settings. |
 | **Controls** | Which button does what, and the left stick. |
 | **Cheats** | Cheats from the libretro cheat database. Shown only when it has cheats for the game. |
 | **Shortcuts** | HOME + button combinations while you play. |
 | **Speed, rumble, fan** | Fast-forward speed, rewind, what is shown over the game, rumble, performance, fan and run-ahead. |
 | **Runs on** | Which emulator plays this game or this console (see [Runs on](#runs-on)). It has its own Save changes. |
-| **Save changes** | Keeps the settings for this console or this game. |
+| **Keep for** | Where your changes stay: **This game** or **This console**. **Restore defaults** below it undoes them. |
 
 Move with Up/Down (the list wraps around at the ends), change a value with Left/Right (A also steps
 to the next value), and go back with B. The line at the bottom explains the selected setting.
-**A change applies to the running game at once** and lasts until you quit. To keep it, use
-[Save changes](#save-changes).
+**A change applies to the running game at once** and stays: it is kept the moment you make it, as in Settings. Where
+it stays is the **Keep for** row ([below](#keep-for)).
 
 ## Picture
 
@@ -31,9 +31,9 @@ are now, in two views side by side:
 
 - **Whole screen**: the full screen, made smaller. Shows the size, the position and the frame.
 - **Actual size**: a piece from the middle of the screen at its real size. Shows scanlines, the LCD
-  grid, the CRT mask and Smooth pixels exactly as in the game.
+  grid, the Old TV mask and Smooth exactly as in the game.
 
-The preview is drawn again after every change, or says "No preview". With Large text the list shows three or four
+The preview is drawn again after every change, or says "No picture". With Large text the list shows three or four
 settings at a time and scrolls, so the preview stays large.
 
 ### Screen scaling
@@ -45,33 +45,38 @@ settings at a time and scrolls, so the preview stays large.
 | **Aspect** | As large as fits, in the console's own shape. Bigger, but pixels are no longer all the same size. |
 | **Fullscreen** | Fills the screen and stretches the pixels. |
 
-### Screen sharpness
+### Look
+
+How the picture looks, in one row. Handhelds get **LCD grid**; TV consoles, arcade and computers get **Scanlines** and
+**Old TV**. **Custom** has them all and opens the rows below. Scaling and Screen frame are rows of their own.
 
 | Choice | What it looks like |
 |---|---|
-| **Sharp** | Hard pixel edges. |
-| **Crisp** | Scales up sharply first, then smooths a little. Hides uneven pixel sizes with Aspect scaling; every pixel keeps its weight. With Integer scaling it is as sharp as Sharp. |
-| **Soft** | Blurs the edges. |
+| **Clean** | Plain pixels, nothing added, all the same size at any scaling. The start of every console. |
+| **Smooth** | Sharp pixels, but stair-steps on slanted edges are rounded off. |
+| **Soft** | The whole picture slightly blurred, no hard pixel squares. |
+| **Bloom** | A clear picture where bright parts glow softly around the edges. |
+| **LCD grid** | Handhelds. Thin dark gaps between the pixels, like a handheld's screen. |
+| **Scanlines** | TV consoles, arcade, computers. Rows like a TV's beam, closing up in bright parts. |
+| **Old TV** | As Scanlines, plus a fine colour mask and a soft glow. Only the picture: the TV around it is a [Screen frame](#screen-frame). |
 
-### Screen effect
+Choosing a Look sets Sharpness and Effect together; nothing else changes. What you saved keeps working: a combination
+that matches a Look shows as that Look, any other (Soft with an effect, an LCD grid on a PlayStation) shows as
+**Custom** with its rows open, and the picture is the same.
 
-| Choice | What it looks like |
-|---|---|
-| **None** | The plain picture. |
-| **LCD grid** | Thin dark gaps between the pixels, like a handheld's screen. They grow with the picture: about a pixel of the screen at Game Boy and Game Boy Advance sizes, fainter on the smaller DS screens. |
-| **Scanlines** | The picture's rows drawn like a TV's beam: thin rows with dark gaps in dark parts, rows that close up in bright parts. Colours stay as bright as without the effect. |
-| **CRT** | Scanlines, plus a very fine colour mask (too fine to see at arm's length) and a soft glow around bright parts, like an old TV. No curved screen. |
-| **Soft glow** | A soft halo around bright parts; the rest stays clear. Dark writing on a bright box gets a little lighter. |
-| **Smooth pixels** | Rounds one-pixel stair-steps on slanted edges. Flat pixels, straight edges, thin lines and dithering stay sharp. |
+A good start: **LCD grid** on handhelds; **Old TV** with Integer scaling on NES, SNES, Mega Drive and PC Engine;
+**Clean**, as they start, on PlayStation, Saturn, Nintendo 64, PSP, Dreamcast and Nintendo DS.
 
-The effects stay even at every size, Aspect included. Scanlines need about three screen pixels per row of the game;
-on pictures with more rows (some PlayStation menus in 480 lines) they fade out, as they did on a TV. For 3D consoles that draw sharper than the original (Nintendo 64 at twice its lines),
-scanlines follow the console's own lines.
+**LCD colours** (Game Boy Advance, shown with the LCD grid): **On** shows the colours of the Game Boy Advance's own
+screen, softer and darker, as the games were made for. Choosing the LCD grid turns it on; turn it off and the Look stays.
+It is left out while the emulator's own colour correction is on (Options → Emulator).
 
-**LCD colours** (Game Boy Advance, shown while LCD grid is chosen): **On** shows the colours of the Game Boy Advance's
-own screen, softer and darker, as the games were made for. It is left out while the emulator's own colour
-correction is on (Options → Emulator), so the colours are never corrected twice. Game Boy Color games get their
-screen's colours from the emulator already.
+### Custom: Sharpness and Effect
+
+Under **Custom** two rows open, a step in. **Sharpness**: **Sharp** hard pixel squares, as the console drew them;
+**Crisp** all pixels the same size at any scaling (the same as Sharp at Integer); **Soft** blurs every pixel edge a
+little. **Effect**: **None**, **LCD grid**, **Scanlines**, **Old TV**, **Bloom** or **Smooth**, every console offered
+all of them.
 
 ### Screen frame
 
@@ -162,7 +167,7 @@ sides. Hold the Pocket turned a quarter, and the picture can be much bigger.
 - Screenshots (HOME + A) keep the game's picture as the emulator makes it, not turned.
 - Some emulators turn the picture themselves: the WonderSwan emulator turns a vertical game upright when you press
   SELECT. pocket-ui shows the picture as the emulator asks, and Screen orientation turns it once more on top.
-- Keep the choice for one game with [Save changes](#save-changes) → For this game.
+- Keep the choice for one game with [Keep for](#keep-for) → This game.
 
 Arcade games run on RetroArch, which has its own way: see [Arcade games](arcade.md#vertical-games).
 
@@ -178,7 +183,7 @@ Every console starts with the look that suits it on this screen:
 | Everything else, handhelds and 2D home consoles included | Integer, Sharp, None, frame None |
 
 Out of the box no console has a screen effect or a frame: a clean picture. Pick an effect or a frame in the pause menu
-(Options → Picture, then Save changes) for one game or a whole console.
+(Options → Picture, with Keep for set to this game or this console) for one game or a whole console.
 
 With **Handhelds** or **Every console** in [Settings → Playing → Screen frames](settings.md#screen-frames), the handhelds or every
 console start with frame **Auto** instead of None. A frame saved for a console or a game stays.
@@ -203,20 +208,18 @@ better.
 
 ## Controls
 
-Pause menu → Options → **Controls**.
+Pause menu → Options → **Controls**; its first line, **Controls card**, draws the buttons ([the card](controls-card.md)).
 
-- **Left stick as D-pad** (On / Off): the left stick works as the D-pad. It is on by default, except
-  for PlayStation, where both sticks go to the game as analogue sticks. Turn it off for games that use
-  an analogue stick.
+- **Left stick as D-pad** (On / Off): on by default, except for PlayStation, where both sticks go to the game
+  as analogue sticks. Turn it off for games that use an analogue stick.
 - Then one line for each button of the Mini V2: A, B, X, Y, L1, R1, L2, R2, L3, R3, Select, Start
   and the four D-pad directions. The value is the console button it presses, by the name the
-  emulator uses; the explanation reads, for example, "A presses A." Left/Right choose another
-  console button, or **None** ("X does nothing in this game."). L3 and R3 mean pressing the left
-  and right stick in.
-- **Reset controls** puts every button back to doing what it says.
+  emulator uses ("A presses A."). Left/Right choose another console button, or **None** ("X does
+  nothing in this game."). L3 and R3 mean pressing the left and right stick in.
+- **Hold to toggle** ([how](easy-to-read.md#hold-to-toggle)) and **Reset controls**, which puts everything back.
 
-When you play together ([Players](pause-menu.md#players)), the layout is the same for every player: a connected
-controller's buttons do what these lines say, by where the button sits (the right face button is A). These lines name the buttons as printed on the Pocket, even when Settings → Playing → Buttons → [**Button layout**](settings.md#button-layout) is Xbox: that setting changes pocket-ui's menus, not games.
+When you play together ([Players](pause-menu.md#players)), the layout is the same for every player: a controller's buttons
+do what these lines say, by where the button sits (the right face button is A). They name the buttons as printed on the Pocket, even when Settings → Playing → Buttons → [**Button layout**](settings.md#button-layout) is Xbox: that changes pocket-ui's menus, not games.
 
 HOME, and SELECT + START held to quit, always work on the real buttons, whatever you change here.
 
@@ -228,7 +231,7 @@ Off; A turns it on or off, L1 and R1 skip five lines, "All off" at the end switc
 remembered for that game, takes effect at once and is back the next time you start the game. The game
 is found by its file name, ignoring the bits in brackets (region and so on): "Contra III - The Alien
 Wars (USA).sfc" finds "Contra III - The Alien Wars". A game whose name the database doesn't know has no
-Cheats page; neither do consoles without cheats in it. Cheats are not part of "Save changes".
+Cheats page; neither do consoles without cheats in it. Cheats are not part of Keep for: they belong to the game.
 
 Some cheat files, mostly for Atari, PC Engine and a few NES games, do not give codes. They name a place in memory and
 a value to write there. pocket-core can't apply those yet. The last line of the page says how many there are ("3 cheats
@@ -249,9 +252,10 @@ while you play:
 | **Rewind** | Hold HOME + L2 | Rewind, for as long as you hold it. Rewind itself has to be switched on under [Speed, rumble, fan](#speed-rumble-fan). |
 | **Screenshot** | HOME + A | Save a [screenshot](playing.md#screenshots) of the game. The pause menu does not open. |
 | **Over the game** | HOME + Y | Switch to the next level of [Over the game](pause-menu.md#over-the-game): Off, FPS, FPS + sensors, Pixel Path. It lasts until you quit or change **Over the game** under Speed, rumble, fan. |
+| **Zoom** | HOME + X | The paused picture larger ([Zoom](easy-to-read.md#zoom)); B goes back into the game. Off by default. |
 
 A short message over the picture confirms what happened, for example "Saved to slot 3",
-"Loaded slot 3", "Slot 4 (empty)", "Slot 4 is empty" or "Screenshot saved".
+"Slot 4 is empty" or "Screenshot saved".
 
 While HOME is held, the game gets no buttons, so a shortcut never presses anything in the game.
 L2 and R2 count as pressed from half-way down. On this page each shortcut can be switched **Off**.
@@ -307,22 +311,18 @@ and the game goes back to where it really is. Jumps and shots start sooner; noth
   doesn't replay exactly". Choosing another value in the menu tries again.
 - Fast-forward and rewind work as before (run-ahead pauses while they run). Save states, the auto-resume state and
   cheats always use the real game, not the frames run ahead.
-- It is saved like the other settings: for this console, for this game, or not at all (Save changes).
+- It is kept like the other settings: for this console or for this game ([Keep for](#keep-for)).
 
-## Save changes
+## Keep for
 
-Options → **Save changes** keeps everything set in Options: Picture, Emulator, Controls, Shortcuts
-and Extras. It offers three choices. The line at the bottom tells you which settings the game uses
-now: "Using this game's settings.", "Using this console's settings." or "Using the defaults."
-
-| Choice | What it does |
-|---|---|
-| **For this console** | Every game on this console starts with these settings. If this game had settings of its own, they are removed. |
-| **For this game** | Only this game uses these settings. |
-| **Restore defaults** | Removes the saved settings for this console and this game. |
+Every change in Options is kept the moment you make it; there is nothing to save. **Keep for** says where it stays:
+**This game** (only this game uses it) or **This console** (every game on this console starts with it). Left, Right or A
+moves between the two and keeps the values in use there at once. It starts on **This game**, or on **This console**
+when the console already has settings of its own. **Restore defaults** removes the saved settings for this console and
+this game; press A twice, any other button takes it back.
 
 A game with its own settings uses only those; later changes for the console do not reach it until
-you save it "For this console" or restore the defaults.
+you move **Keep for** to **This console**, or restore the defaults.
 
 ## Runs on
 
@@ -353,9 +353,9 @@ continue the game where you left off). Rewind and run-ahead are not shown where 
 PSP, Dreamcast, Saturn, 32X and a few more). The values shown are the ones in use, ROCKNIX's own until you change
 them (3:2 for the Game Boy Advance). HOME + R2 turns RetroArch's fast-forward on and off.
 
-**Save changes** works as in Options: **For this console**, **For this game** (only what differs from the console's
+**Save changes** on this page is the one place that still asks: **For this console**, **For this game** (only what differs from the console's
 is kept for the game) or **Restore defaults** (pocket-ui's default emulator and ROCKNIX's settings). Nothing is kept
-until you save; a choice applies the next time the game starts, even when made in the pause menu. If pocket-core
+until you save, because a choice applies the next time the game starts, even when made in the pause menu. If pocket-core
 couldn't start a game (see [Systems](systems.md#when-a-game-does-not-start-on-the-own-host)), the page says so;
 choose pocket-core and save to give it another try.
 
@@ -375,16 +375,16 @@ presses into a running game.
 
 | Row | What it holds |
 |---|---|
-| **Screen scaling**, **Screen sharpness**, **Screen effect**, **Screen frame** (with its colour or finish), **Screen orientation** | The [Picture](#picture) settings. A frame's sub-choices show up under it, as in the pause menu. |
+| **Screen scaling**, **Look** (with Sharpness and Effect under Custom), **Screen frame** (with its colour or finish), **Screen orientation** | The [Picture](#picture) settings. A frame's sub-choices show up under it, as in the pause menu. |
 | **Fast-forward speed**, **Rewind**, **Earlier states**, **Over the game**, **Rumble**, **Performance**, **Fan**, **Run-ahead** | The same rows as [Speed, rumble, fan](#speed-rumble-fan). |
-| **Save state**, **Load state**, **Change slot**, **Fast-forward**, **Rewind**, **Screenshot**, **Over the game** | The [Shortcuts](#shortcuts): which HOME + button does what. |
+| **Save state**, **Load state**, **Change slot**, **Fast-forward**, **Rewind**, **Screenshot**, **Over the game**, **Zoom** | The [Shortcuts](#shortcuts): which HOME + button does what. |
 | **Controls** | Which button does what, and the left stick ([Controls](#controls)). The page names the buttons the standard way; the pause menu shows the console's own names. |
 | **Runs on** | Which emulator plays this game ([Runs on](#runs-on)). B from there comes back here. |
 | **Resolution** and the other rows of the emulator | For PlayStation 2, GameCube, Wii, 3DS and Xbox games: the rows of [their Options](options-big.md). They take effect the next time the game starts. |
 | **Use the console's settings** | Only when the game has settings of its own: takes it off them, so it starts like the other games on its console. |
 
 Left and Right change a value, B goes back to the card. Every change is kept at once as **this game's own** settings,
-exactly what **Save changes → For this game** keeps in the pause menu, so the game starts with it and the pause menu
+exactly what **Keep for → This game** keeps in the pause menu, so the game starts with it and the pause menu
 shows it. The two places read and write the same file; there is nothing to save twice. Picture settings have no
 running game to show them on here: you see them when the game starts, and Options → Picture in the pause menu shows
 them live. A game that RetroArch plays shows its own Runs on only, with a line saying why; one that pocket-core could

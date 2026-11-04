@@ -2,8 +2,9 @@
 
 ## Known limits
 
-**The ready-made SD card image is not published.** The ways that exist today are the Ports installer, the two-file card
-install and the SSH package ([Getting started](getting-started.md#1-put-pocket-ui-on-the-card)). Tested on one device mainly.
+**Ready-made SD card images** for the Retroid Pocket Mini V2 and 13 Anbernic H700 models are on the
+[install page](https://pocketui.xyz/install.html). The other ways are the Ports installer, the two-file card install and the SSH
+package ([Getting started](getting-started.md#1-put-pocket-ui-on-the-card)). Tested on a few devices, most of all the Mini V2.
 
 **Which system starts is a setting of Retroid's start menu.** With **Boot mode: Loader** the Pocket starts pocket-ui
 from the SD card, with **Boot mode: Android** it starts Android (see
@@ -23,8 +24,8 @@ rotated), please report it; developers can rotate the mapping with `POCKETUI_TOU
 **Playing on a TV has not been tried yet.** Nothing has been plugged into a Mini V2 so far; sound follows the TV
 even with headphones in, and sleep leaves the TV on (see [Playing on a TV](playing.md#playing-on-a-tv)).
 
-**System updates are untested on a device**, and no public update source exists yet (see
-[Updates](updates.md)).
+**System updates are untested on a device**, and our own system build is not published yet, so the System row has nothing
+to offer. pocket-ui updates come over Wi-Fi (see [Updates](updates.md)).
 
 **Options, shortcuts and run-ahead exist only on pocket-ui's own host**, and save slots there and on PlayStation 2,
 GameCube, Wii and 3DS. The systems are listed in [Systems](systems.md#on-pocket-uis-own-host).
@@ -80,7 +81,7 @@ was cut off; press A again and it starts that game anew. "Not enough space on th
 SD card: free some space first. A game that is already in its folder is never replaced.
 
 **The SD card is full.**
-A game on pocket-ui's own host then says "Your progress couldn't be saved to the SD card" at the bottom of the screen, and
+A game on pocket-ui's own host then says "Couldn't save: the SD card is full" at the bottom of the screen, and
 Quit asks first ([When your progress can't be saved](pause-menu.md#when-your-progress-cant-be-saved)). Settings
 → System → About shows the free space. Make space from a computer through the file share or
 [Remote access (SSH)](settings-system.md#remote-access-ssh), while the game waits in the pause menu or after quitting: save
@@ -160,7 +161,7 @@ list of these games is `fallback.json` in pocket-ui's data folder.
 **A game starts with a different emulator than before, or doesn't start at all.**
 Someone chose another emulator for it or its console, in pocket-ui or earlier in ROCKNIX's EmulationStation. Press
 START on its card: [Runs on](options.md#runs-on) shows what plays it and where that comes from. "Not installed"
-means ROCKNIX can't start that choice on this Pocket; pick another one, or Save changes → Restore defaults.
+means ROCKNIX can't start that choice on this Pocket; pick another one, or Options → Restore defaults.
 
 **An arcade game does not start, or starts wrong.**
 Arcade ZIPs have to match the core that plays them, and a clone needs its parent ZIP and often a BIOS ZIP such as

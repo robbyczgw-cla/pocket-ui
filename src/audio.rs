@@ -3,7 +3,8 @@
 //!   pulse client at a quantum of at least 1024 frames and about 90 ms of buffering; this way skips it.
 //! - PulseAudio's simple API, as before (POCKET_CORE_AUDIO=pulse, or when ALSA can't be opened).
 //!
-//! The core's samples are resampled to 48 kHz. The ratio is nudged by up to ±0.5 % depending on how
+//! The core's samples are resampled to 48 kHz (windowed sinc, `resample`;
+//! `POCKET_CORE_RESAMPLER=linear` is the old linear interpolation). The ratio is nudged by up to ±0.5 % depending on how
 //! full the buffer is, averaged over about a second (dynamic rate control, as RetroArch does), so audio follows the
 //! 60 Hz video without crackles or growing latency even though a Game Boy runs at 59.73 Hz.
 //!
@@ -161,9 +162,9 @@ pub struct Audio {
     /// The writer plays (`RateControl::step`): false before it starts and during a pause.
     playing: Arc<std::sync::atomic::AtomicBool>,
     flags: Option<Route>,
-    /// Fractional read position into `last` for the linear resampler.
-    pos: f64,
-    last: [i16; 2],
+    /// Core rate to 48 kHz (`resample`); `scratch` is its output before it goes into the queue.
+    resampler: crate::resample::Resampler,
+    scratch: Vec<i16>,
     pub underruns: Arc<Mutex<u64>>,
     /// Seconds after playback start of each underrun (first 1000).
     pub underrun_at: Arc<Mutex<Vec<f32>>>,
@@ -382,8 +383,8 @@ impl Audio {
             rate: RateControl::default(),
             playing,
             flags,
-            pos: 0.0,
-            last: [0, 0],
+            resampler: crate::resample::Resampler::from_env(),
+            scratch: Vec::new(),
             underruns,
             underrun_at,
             server_latency_us,
@@ -421,29 +422,23 @@ impl Audio {
     /// Adds one video frame's worth of core samples (interleaved stereo).
     pub fn push(&mut self, samples: &[i16]) {
         let target = self.target();
-        let mut q = self.queue.lock().unwrap();
-        let fill = q.len() / 2;
+        let fill = self.queue.lock().unwrap().len() / 2;
         let ratio = self.in_rate / OUT_RATE as f64;
         let pushed = samples.len() as f64 / 2.0 / ratio;
         let step = self.rate.step(ratio, fill, target, pushed, self.playing.load(Ordering::Relaxed));
+        // Converted before the queue is locked again: the writer thread must not wait for the filter.
+        self.scratch.clear();
+        self.resampler.process(samples, step, &mut self.scratch);
+        let mut q = self.queue.lock().unwrap();
         // Keep latency bounded if the core ran far ahead (e.g. after a pause).
+        let fill = q.len() / 2;
         if fill > target * 3 {
             let drop = (fill - target) * 2;
             q.drain(..drop);
             // The average would remember the overfull queue for a second.
             self.rate.fill = Some((fill - drop / 2) as f64);
         }
-        for frame in samples.chunks_exact(2) {
-            let next = [frame[0], frame[1]];
-            while self.pos < 1.0 {
-                let t = self.pos;
-                q.push_back((self.last[0] as f64 * (1.0 - t) + next[0] as f64 * t) as i16);
-                q.push_back((self.last[1] as f64 * (1.0 - t) + next[1] as f64 * t) as i16);
-                self.pos += step;
-            }
-            self.pos -= 1.0;
-            self.last = next;
-        }
+        q.extend(self.scratch.iter());
     }
 
     /// Effective rate of the samples pushed per second of real time.

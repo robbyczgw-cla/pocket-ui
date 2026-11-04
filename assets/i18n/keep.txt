@@ -148,6 +148,7 @@ Grey Brick
 Green X
 Blue Station
 ‹ Warm ›
+‹ Scanlines ›
 Barlow
 Pixel
 GBA
@@ -555,3 +556,22 @@ Eden
 # The same word in Spanish, so its pattern changes nothing: a device's name with its note (About).
 re:\(experimental\)$
 Some Game (USA).chd
+
+# A player's own note on the game card, as --snapshot where-was-i shows it (the player's words, never translated)
+Fire temple, key still missing.
+Fire temple: the key behind the waterfall is still missing. Talk to the old man in the village first, he wanted the red herb from the swamp.
+
+# The consoles' own button names (controls card)
+Cross
+Circle
+Square
+Triangle
+Control stick
+C (R2)
+Turbo A
+Turbo B
+Turbo L
+Turbo R
+Z
+HOME
+re:^HOME \+ 

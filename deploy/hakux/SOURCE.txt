@@ -1,16 +1,16 @@
 hakuX core for pocket-ui (Xbox, experimental)
 
 Program:   hakuX, an Xbox emulator by rfandango (GPL-3.0-or-later)
-Port:      Linux / libretro port by portare-ch (PortareOS), https://github.com/rfandango/hakuX/pull/9
-Commit:    2de4e9cd86a47e9ffaf928c36e240a995a279713 (head of PR #9 on 2026-10-29, rebased onto hakuX master with v1.2.0)
-Patches:   none. Our audio relaunch fix (the APU's DSP preference set on every new APU state, so the sound no longer stays silent after a
-           title relaunch, GPL-3.0-or-later) is part of the PR since 77a5871, with its test.
-Source:    https://github.com/rfandango/hakuX/pull/9  (head branch: https://github.com/portare-ch/hakuX)
-             (git fetch https://github.com/rfandango/hakuX.git refs/pull/9/head)
-Built by:  the PR's own tools/native/linux-build.sh in its pinned Debian image (arm64, Clang 19, glibc 2.41), run in an aarch64
-           container on an Apple Silicon Mac; see scripts/build-hakux-core.sh. STRIP=strip, JOBS=3, HAKUX_VERSION=pr9-2de4e9c.
-Package:   hakux-pr9-2de4e9c-aarch64.tar.gz, sha256 234dedee7597031a90dc9ae50b182387030c19deda28a9439e20ca49bbb9ca4f
-Core:      hakux_libretro.so, sha256 8094b97246273ef249b2d461c8bc7251b2d6080a99763a0c6db350c2acaff958 (needs glibc 2.38 at most)
+Port:      Linux / libretro port by portare-ch (PortareOS), hakuX PR #9 (https://github.com/rfandango/hakuX/pull/9), on hakuX 1.3.0
+Fork:      hakuX-Linux, branch linux-1.3.0: that port on hakuX 1.3.0 plus our fixes (among them the APU's DSP preference set on every
+           new APU state, so the sound no longer stays silent after a title relaunch)
+Commit:    035ec48acde326b017a3f6cd4bc888e1633172df
+Patches:   none (our fixes are commits of the fork)
+Source:    https://github.com/robbyczgw-cla/hakuX-Linux  (git fetch https://github.com/robbyczgw-cla/hakuX-Linux.git 035ec48acde326b017a3f6cd4bc888e1633172df)
+Built by:  the fork's own tools/native/linux-build.sh in its pinned Debian image (arm64, Clang 19, glibc 2.41), run in an aarch64
+           container on an Apple Silicon Mac; see scripts/build-hakux-core.sh. STRIP=strip, JOBS=2, HAKUX_VERSION=1.3.0-private.
+Package:   hakux-1.3.0-private-aarch64.tar.gz, sha256 802be3a158dfb3928a8ee848c5a79eba6b4b93b8c1790765c026148cc70d2cbe
+Core:      hakux_libretro.so, sha256 6c1ef935b3048202fce9b3d5efa6e99b423173063106e0ee3bcd6ef738a41cb5 (needs glibc 2.38 at most)
 
 The core is loaded by ROCKNIX's RetroArch (GPL-3.0-or-later), a separate program that pocket-ui starts. Licence texts of hakuX and
-of the parts built into the core (FEX, SDL3, SoftFloat, VulkanMemoryAllocator and others) are in the "licenses" folder beside it.
+of the parts built into the core (FEX, SDL3, SoftFloat, VulkanMemoryAllocator, libslirp and others) are in the "licenses" folder beside it.

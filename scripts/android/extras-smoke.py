@@ -106,7 +106,7 @@ for state in ('On', 'Off'):
     key(22)
     assert any(x.startswith('Save · Slot 2') for x in t + texts()), texts()
     shot('pause-card-' + state.lower())
-    tap('Quit')
+    tap('Save & quit')
     time.sleep(1)
 # Printed discs: the open box of a PSP game (a UMD) shows the disc either way and the page keeps its buttons.
 for state in ('On', 'Off'):

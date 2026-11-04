@@ -1,6 +1,10 @@
 //! A message on the shelf after a game could not start. pocket-core leaves its reason in a file
-//! (a missing BIOS, a ROM set the core rejects); pocket-ui shows it for a few seconds when the game
-//! exits, instead of just dropping back to the shelf without a word.
+//! (a missing BIOS, a ROM set the core rejects); pocket-ui shows it when the game exits, instead of just dropping
+//! back to the shelf without a word.
+//!
+//! The one rule for messages (docs/DESIGN.md, "Messages"): a short confirmation is a toast, which goes by itself
+//! (`toast_len` in main.rs); a notice is for what went wrong or needs a decision, and it stays until A or B (or a tap)
+//! closes it, so a player who looked away still reads the reason.
 
 use std::time::{Duration, Instant};
 
@@ -9,7 +13,10 @@ use crate::palette::*;
 use crate::text::{Face, Text};
 
 pub const ERROR_FILE: &str = "/tmp/pocket-core.error";
-const SHOWN: Duration = Duration::from_secs(8);
+/// How long after it appears a notice asks for frames (nothing moves in it; the first frame is what matters).
+const FRESH: Duration = Duration::from_secs(1);
+/// The last line of every notice: how it goes away.
+pub const CLOSE_HINT: &str = "Press A to close.";
 /// The room the status corner (time, Wi-Fi, battery) takes at the top line's right end, and the place its left end.
 const CORNER: i32 = 300;
 
@@ -52,8 +59,15 @@ impl Notice {
         &self.text
     }
 
+    /// Whether it is up: always, until the shelf drops it (`App::close_notice`).
     pub fn active(&self) -> bool {
-        self.since.elapsed() < SHOWN
+        true
+    }
+
+    /// Whether the shelf has to keep drawing for it: just after it appeared. Nothing moves in it after that, and it
+    /// has no end of its own to be drawn away at.
+    pub fn animating(&self) -> bool {
+        self.since.elapsed() < FRESH
     }
 
     /// A card at the top of the screen, the OSD's surface and corners (`osd`), as wide as the text needs. It stays
@@ -64,8 +78,6 @@ impl Notice {
         if !self.active() {
             return 0;
         }
-        // For the snapshot checks of Settings → Text size: a card over the top of the page while it is up.
-        crate::text::boxes::covered();
         let clear = c.w - 2 * (MARGIN + CORNER);
         let report = self.report;
         let mut wrapped = |max: i32| {
@@ -74,10 +86,12 @@ impl Notice {
             if report {
                 lines.extend(text.wrap_prose(Face::Body, 30, REPORT_HINT, max - 64));
             }
+            lines.push(CLOSE_HINT.to_string());
             (lines, own)
         };
         let (mut lines, mut own) = wrapped(clear);
-        if lines.len() > 1 {
+        // One line of its own (and the closing line) fits between the ends of the top line; more spans the screen.
+        if lines.len() > if report { 1 } else { 2 } {
             (lines, own) = wrapped(c.w - 2 * crate::kit::PAD);
         }
         let mut w = lines.iter().map(|l| text.width(Face::Body, 30, l)).max().unwrap_or(0) + 64;
@@ -88,6 +102,8 @@ impl Notice {
         let (step, grow) = (crate::type_scale::line(30, 12), crate::type_scale::grow(30));
         let h = 52 + grow + lines.len() as i32 * step - 8;
         let (x, y) = (c.w / 2 - w / 2, crate::osd::TOP);
+        // For the snapshot checks of Settings → Text size: what lies under the card is not read; the rest of the page is.
+        crate::text::boxes::covered_since(usize::MAX, c, (x, y, w, h));
         c.round_rect(x, y, w, h, crate::osd::H / 2, SPINE);
         c.rect(x + 16, y + 20, 6, h - 40, ALERT);
         for (i, l) in lines.iter().enumerate() {

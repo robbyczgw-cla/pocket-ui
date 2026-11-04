@@ -14,8 +14,8 @@ include!("common/root.rs");
 /// The tree as the player sees it without a store catalog: category, then its rows.
 const TREE: [(&str, &[&str]); 7] = [
     ("Look", &["Look", "Appearance", "Colours", "Font", "Text size", "Night light", "Systems on the shelf", "Cozy extras"]),
-    ("Sound & feel", &["Animations", "Playful cases", "Old-TV switch-on", "Motion", "Sounds", "Case sounds", "Haptics", "LEDs"]),
-    ("Playing", &["On start", "Continue where I quit", "Buttons", "Over the game", "Screen frames", "Performance & fan", "Battery", "RetroAchievements"]),
+    ("Sound & feel", &["Animations", "Playful cases", "Old-TV switch-on", "Motion", "Zoom in the pause menu", "Sounds", "Case sounds", "Haptics", "LEDs"]),
+    ("Playing", &["On start", "Continue where I quit", "Remind me where I was", "Buttons", "Over the game", "Screen frames", "Performance & fan", "Battery", "RetroAchievements"]),
     ("Games", &["Add games", "Game check", "Starter pack", "Pictures & extras", "From EmulationStation", "Screenshots", "Curator", "PC streaming"]),
     ("Connections", &["Wi-Fi", "Bluetooth", "Tailscale", "Sync", "Remote access (SSH)", "Web companion"]),
     ("System", &["Language", "Time", "Sleep & power", "Kids mode", "Updates", "Storage", "Backup & reset"]),
@@ -65,8 +65,8 @@ const SLEEP: [&str; 6] = ["Screen off after", "Slideshow before screen off", "Sl
 /// The line naming what is in each category, as at the bottom of the categories (the Look key ends with a zero-width mark).
 const LINES: [&str; 7] = [
     "Look, appearance, colours, font, text size, screen colour, night light, systems, extras.",
-    "Animations, playful cases, old-TV switch-on, motion, sounds, case sounds, haptics, LEDs.",
-    "On start, continue, buttons, over the game, frames, performance, battery, achievements.",
+    "Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds, haptics, LEDs.",
+    "On start, continue, where I was, buttons, over the game, frames, performance, battery, achievements.",
     "Games, game check, starter pack, pictures, EmulationStation, screenshots, Curator, PC.",
     "Wi-Fi, Bluetooth, USB file transfer, Tailscale, Sync, remote access, web companion.",
     "Language, time, sleep & power, kids mode, updates, storage, backup & reset.",

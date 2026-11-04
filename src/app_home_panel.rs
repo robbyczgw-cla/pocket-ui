@@ -94,10 +94,6 @@ impl App {
         let faint = mix(ink.under, pal().label_dust, 40);
         for slot in &layout.slots {
             let (x, y, w, sh) = (x0 + slot.x, top + slot.y, slot.w, slot.h);
-            if panel.getting_ready {
-                c.round_rect(x, y, w, sh, 6, faint);
-                continue;
-            }
             let tile = &panel.groups[slot.group].tiles[slot.tile];
             let file = self.cover_file(&tile.system, &tile.rom);
             match file {
@@ -154,31 +150,53 @@ impl App {
         self.text.fit(Face::Body, 28, &line, max)
     }
 
-    /// A game without box art: a tile in its system's colour with its title, as the cabinet's case without a cover.
+    /// A game without box art: a printed title card, as on the shelf (docs/DESIGN.md "Fronts without a cover"): the
+    /// system's stripe on the page's spine colour, the console small over the name, both centred. Where the room can't
+    /// take the name in whole words (a narrow tile at 1024x768), the console alone, never a word cut to "Ne…".
     fn paint_title_tile(&mut self, c: &mut Canvas, tile: &Tile, (x, y, w, h): (i32, i32, i32, i32), dim: Option<u32>) {
         // It stands in for a cover, a picture of a fixed size: its type keeps the design's size (as a case's spine).
         let _fixed = pocket_ui::type_scale::fixed();
-        let colour = mix(stripe(&tile.system), 0x101010, 70);
-        c.round_rect(x, y, w, h, 6, colour);
+        c.round_rect(x, y, w, h, 6, pal().spine);
+        c.rect(x, y, w, (h / 14).clamp(3, 8), stripe(&tile.system));
         // Behind another in a fan only its edge shows: no title to be cut by the one in front.
         if let Some(under) = dim {
             c.shade_rect(x, y, w, h, under, 90);
             return;
         }
-        let step = pocket_ui::type_scale::line(21, 4);
-        let lines = ((h - 24) / step).max(1) as usize;
         // A game's name, painted and measured as it is: never put through the translation table.
         self.text.set_translate(false);
+        let console = super::system_short(&self.systems, &tile.system);
+        let step = pocket_ui::type_scale::line(24, 4);
+        // Rows of room: console + two lines of name, or two lines of name, or (too small for two) the console alone.
+        let rows = (h - 10) / step;
+        let lines = 2;
         let text = std::cell::RefCell::new(&mut self.text);
         let shown = home_panel::title_lines(
             &tile.title,
             w - 16,
             lines,
-            &mut |s| text.borrow_mut().width(Face::Body, 21, s),
-            &mut |s, max| text.borrow_mut().fit(Face::Body, 21, s, max),
+            &mut |s| text.borrow_mut().width(Face::Title, 24, s),
+            &mut |s, max| text.borrow_mut().fit(Face::Title, 24, s, max),
         );
-        for (k, line) in shown.iter().enumerate() {
-            self.text.draw(c, Face::Body, 21, x + 8, y + 12 + step * (k as i32 + 1) - 4, 0xECE9E1, line);
+        // The first word cut to "Ne…" (a tile too narrow for it): the console alone. A long name that goes on past the
+        // second line ends in "…" at a word, as on the shelf.
+        let first = tile.title.split_whitespace().next().unwrap_or("");
+        let whole = rows >= 2 && !shown.is_empty() && self.text.width(Face::Title, 24, first) <= w - 16;
+        let (words, face_px) = if whole { (shown, 24) } else { (vec![console.clone()], 24) };
+        let show_console = whole && rows >= 3 && words.iter().all(|l| *l != console);
+        let block = words.len() as i32 * step + if show_console { step } else { 0 };
+        let mut cy = y + (h - block) * 2 / 5 + step - 6;
+        if show_console {
+            let name = self.text.fit(Face::Body, 21, &console, w - 16);
+            let nw = self.text.width(Face::Body, 21, &name);
+            self.text.draw(c, Face::Body, 21, x + (w - nw) / 2, cy, pal().dust, &name);
+            cy += step;
+        }
+        for line in &words {
+            let line = self.text.fit(Face::Title, face_px, line, w - 8);
+            let lw = self.text.width(Face::Title, face_px, &line);
+            self.text.draw(c, Face::Title, face_px, x + (w - lw) / 2, cy, pal().chalk, &line);
+            cy += step;
         }
         self.text.set_translate(true);
     }

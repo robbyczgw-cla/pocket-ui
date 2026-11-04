@@ -13,6 +13,32 @@ const OPEN_CASE_MARK: &str = "open-case-told";
 /// The line over the shelf the first time a case stands open: what the little out-of-the-case game means.
 pub const OPEN_CASE_NOTE: &str = "Open means your moment is waiting";
 
+/// The lines over Home the first time the highlight lands on the Curator and on Just Play: both names mean nothing to a
+/// newcomer (first-start walk 2026-11-04).
+pub const CURATOR_NOTE: &str = "Curator: pick by mood, length, or what's new to you";
+pub const JUST_PLAY_NOTE: &str = "Just Play: one press, the game you'd like now";
+const CURATOR_MARK: &str = "curator-told";
+const JUST_PLAY_MARK: &str = "just-play-told";
+
+/// Whether the Curator row's line is due (once ever, never to a child). Written here, like the others.
+pub fn tell_curator_once(data_dir: &Path) -> bool {
+    tell_mark(data_dir, CURATOR_MARK)
+}
+
+/// Whether Just Play's line is due.
+pub fn tell_just_play_once(data_dir: &Path) -> bool {
+    tell_mark(data_dir, JUST_PLAY_MARK)
+}
+
+fn tell_mark(data_dir: &Path, name: &str) -> bool {
+    let mark = data_dir.join(name);
+    if mark.exists() || crate::kids::Config::load(data_dir).on {
+        return false;
+    }
+    let _ = std::fs::write(mark, b"");
+    true
+}
+
 /// Whether the first start's last page names HOME: not in Kids Mode (its own small pause menu, a child who can't read it).
 pub fn told_on_last_page(data_dir: &Path) -> bool {
     !crate::kids::Config::load(data_dir).on
@@ -56,6 +82,18 @@ mod tests {
         crate::kids::Config { on: true, ..Default::default() }.save(&kids);
         assert!(!tell_open_case_once(&kids), "Kids Mode");
         assert!(!kids.join("open-case-told").exists(), "and nothing is marked there: the child's mode is not the player's first time");
+    }
+
+    #[test]
+    fn the_curator_and_just_play_lines_are_said_once_each() {
+        let dir = crate::testutil::TestDir::new("curator-told");
+        assert!(tell_curator_once(&dir));
+        assert!(!tell_curator_once(&dir), "never again");
+        assert!(tell_just_play_once(&dir), "Just Play has its own mark");
+        assert!(!tell_just_play_once(&dir));
+        let kids = crate::testutil::TestDir::new("curator-told-kids");
+        crate::kids::Config { on: true, ..Default::default() }.save(&kids);
+        assert!(!tell_curator_once(&kids) && !tell_just_play_once(&kids), "Kids Mode");
     }
 
     #[test]

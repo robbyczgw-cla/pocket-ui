@@ -394,23 +394,21 @@ impl App {
             let selected = i == page.sel;
             let color = if selected { pal().ink } else { pal().text };
             if selected {
-                let w = self.text.width(Face::Body, font, &name) + 2 * NU_BTN_PAD + indent;
-                c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, pal().band);
-                c.round_rect(pad, y + 4, w, row - 8, (row - 8) / 2, pal().select);
+                pocket_ui::kit::selection(c, pad, y, right - pad, row);
             }
             if device.is_some_and(|d| d.is_gamepad()) {
                 gamepad_mark(c, pad + NU_BTN_PAD, y + row / 2, color, if selected { pal().select } else { pal().void });
             }
             self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD + indent, base, color, &name);
             let quiet = device.is_some_and(|d| !d.paired) && !matches!(&page.busy, Some(b) if b.address() == device.map(|d| d.address.as_str()));
-            // Found devices say their kind quietly; on the selected row's band everything is in full colour.
+            // Found devices say their kind quietly; on the selected row everything is ink.
             self.text.draw_right(
                 c,
                 Face::Body,
                 font,
                 right - NU_BTN_PAD,
                 base,
-                if quiet && !selected { pal().dust } else { pal().text },
+                if selected { pal().ink } else if quiet { pal().dust } else { pal().text },
                 &value,
             );
         }

@@ -44,6 +44,20 @@ There is no switch for the open case. A game whose file, patch or emulator chang
 pocket-ui's own host the older moment no longer stands open (it stays under Load), and moments from sleep still do. Motion off: the game is simply out, and the spinner's dots
 stand still.
 
+## Where was I?
+
+Back to a game after more than two weeks: while its moment loads, a quiet card at the bottom of its picture says when you
+played it last ("Last played 3 weeks ago"), how long you have played it, and your note from the
+[game card](library.md) if you wrote one. Nothing asks you anything. On pocket-ui's own host the game stands still at your
+moment for about four seconds, without sound, so you can read it and miss nothing; then it plays on. Any button plays at
+once. A game that loads longer shows the card while it loads and counts that time. Other emulators show it until the game
+is there. A press while the picture is still loading also skips the card. If the picture or moment cannot be loaded,
+the game starts without waiting for the reminder. A game played within the last two weeks, a game that starts fresh and
+Kids Mode show no card. Easy shows only when you played last and your note. Settings → Playing →
+[Remind me where I was](settings.md#remind-me-where-i-was) switches it off.
+
+![Where was I?: last played 3 weeks ago, the play time and your note, over the game](pictures/where-was-i.webp)
+
 ## On an Android phone
 
 It works the same way on your phone, out of the box. The last five games you played in pocket-ui's own player stand a little
@@ -64,4 +78,3 @@ continue this way and stand closed.
 In-game saves (the kind a cartridge keeps, "battery saves") on pocket-ui's own host are written
 every 10 seconds when they change and again when you quit. They are stored in the same place and
 format RetroArch uses, so they work with both.
-

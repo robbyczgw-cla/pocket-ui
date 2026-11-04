@@ -40,7 +40,7 @@ impl Layout {
     pub fn device() -> Layout {
         Layout {
             roms: PathBuf::from(crate::sync::ROMS_DIR),
-            states: PathBuf::from(crate::slots::STATES_DIR),
+            states: crate::slots::states_dir(),
             config: PathBuf::from("/storage/.config"),
             backup: PathBuf::from(BACKUP_DIR),
         }

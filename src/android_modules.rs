@@ -56,6 +56,7 @@ pub mod scaled_layout;
 pub mod touch;
 #[path = "platform/android_route.rs"]
 pub mod audio_route;
+pub mod resample;
 pub mod search;
 
 pub mod document_library;
@@ -71,6 +72,7 @@ pub mod wiki_text;
 
 pub mod libretro;
 pub mod controls;
+pub mod controls_card;
 pub mod core_options;
 pub mod vfs;
 pub mod slots;

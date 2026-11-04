@@ -33,18 +33,21 @@ pub struct Enabled {
     /// HOME + Y, Over the game (`over_game::SHORTCUT_KEY`).
     pub over_game: bool,
     pub screenshot: bool,
+    /// HOME + X, Zoom (`hk_zoom`): off unless switched on. pocket-ui acts on it (the pause menu opens on Zoom, `app_zoom`);
+    /// it is here so that the settings are one set and Kids Mode's `none` covers it.
+    pub zoom: bool,
 }
 
 impl Default for Enabled {
     fn default() -> Self {
-        Enabled { save: true, load: true, slot: true, fast_forward: true, rewind: true, over_game: true, screenshot: true }
+        Enabled { save: true, load: true, slot: true, fast_forward: true, rewind: true, over_game: true, screenshot: true, zoom: false }
     }
 }
 
 impl Enabled {
     /// Kids Mode: nothing but the HOME tap, which is pocket-ui's.
     pub fn none() -> Self {
-        Enabled { save: false, load: false, slot: false, fast_forward: false, rewind: false, over_game: false, screenshot: false }
+        Enabled { save: false, load: false, slot: false, fast_forward: false, rewind: false, over_game: false, screenshot: false, zoom: false }
     }
 }
 

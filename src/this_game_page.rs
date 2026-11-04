@@ -128,13 +128,18 @@ impl ThisGamePage {
                 // Rewind and Over the game are in Speed, rumble, fan and Shortcuts both: the shortcut says so.
                 let shortcut = options::GROUPS.iter().any(|g| g.name == "Shortcuts" && g.settings.iter().any(|x| x.key == key));
                 let name = if shortcut { format!("Shortcut: {}", setting.name) } else { setting.name.to_string() };
-                (name, setting.choices[s.index(setting)].label.to_string(), setting.desc.to_string())
+                (name, setting.choices[s.index(setting)].label.to_string(), options::describe(setting, Some(s)))
             }
             Row::Standalone(i) => self.standalone.as_ref().and_then(|m| m.rows().into_iter().nth(i)).unwrap_or_default(),
             Row::Controls => ("Controls".into(), ">".into(), "Which button does what, and the left stick. The pause menu shows this console's own button names.".into()),
             Row::RunsOn => ("Runs on".into(), if self.subject.runs_on.is_empty() { "Default".into() } else { self.subject.runs_on.clone() }, "Which emulator plays this game or this console: pocket-core, RetroArch or another.".into()),
             Row::Reset => ("Use the console's settings".into(), String::new(), "Takes this game off its own settings: it starts like the other games on this console.".into()),
         }
+    }
+
+    /// Whether a row is drawn a step in: Sharpness and Effect under the Look (Custom).
+    pub fn indented(&self, row: Row) -> bool {
+        matches!(row, Row::Setting(key) if options::setting(key).is_some_and(options::indented))
     }
 
     /// Rows of the Controls page.
@@ -227,8 +232,12 @@ impl ThisGamePage {
         match self.row() {
             Row::Setting(key) => {
                 if let (Some(setting), Some(s)) = (options::setting(key), self.settings.as_mut()) {
-                    s.step(setting, delta);
-                    self.keep();
+                    // Custom opens Sharpness and Effect and changes nothing: no file is written for it.
+                    if s.step(setting, delta).is_empty() {
+                        self.rev += 1;
+                    } else {
+                        self.keep();
+                    }
                 }
             }
             Row::Standalone(i) => {
@@ -344,7 +353,7 @@ mod tests {
         let p = page(&dir, "gba");
         let rows = p.rows();
         let names: Vec<String> = rows.iter().map(|r| p.describe(*r).0).collect();
-        assert_eq!(&names[..3], ["Screen scaling", "Screen sharpness", "Screen effect"]);
+        assert_eq!(&names[..3], ["Screen scaling", "Look", "Screen frame"]);
         for want in ["Screen frame", "Screen orientation", "Over the game", "Performance", "Fan", "Run-ahead", "Fast-forward speed", "Rewind", "Earlier states", "Rumble", "Shortcut: Save state", "Shortcut: Rewind", "Controls", "Runs on"] {
             assert!(names.iter().any(|n| n == want), "{want} is missing: {names:?}");
         }

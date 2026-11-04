@@ -73,3 +73,10 @@ PipeWire has no real-time priority in the container (no rtkit): with several ben
 speaker graph (5 ms cycles) can miss a cycle, which shows as 256 zero frames and the same ERR count in pw-top for the
 recorder (`bench_rec`) as for pocket-core's stream (`*.pwtop.end` next to the recording). Run one case at a time for
 a verdict.
+
+## Resampler alone (no container)
+
+`examples/resampler_bench.rs` runs the linear and the windowed-sinc converter (`src/resample.rs`) over tones, a sweep, noise
+and an impulse at 32768, 32040, 44100 and 48000 Hz and writes raw files; `resampler.py DIR` prints the foreign-line level,
+THD+N, response, latency and CPU tables (numpy). Results: AUDIO-RESAMPLER.md in the review folder.
+`cargo run --release --example resampler_bench -- /tmp/rs-out && python3 -I scripts/audio-bench/resampler.py /tmp/rs-out`

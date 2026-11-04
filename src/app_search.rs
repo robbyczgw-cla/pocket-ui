@@ -31,7 +31,7 @@ const FIELD_Y: i32 = 100;
 const FIELD_H: i32 = 84;
 /// Under "No game matches …": a game that isn't on the SD card is the likelier reason before a typo, which the search
 /// mostly forgives (the first-day run, 2026-10-26, searched "mario kart" on a card without it and was told to spell).
-const NO_MATCH: &str = "It may not be on the SD card. Or check the spelling, or type less of the name.";
+const NO_MATCH: &str = "It may not be in your games folder. Or check the spelling, or type less of the name.";
 /// Where the list starts, and where the keyboard starts while it is shown: measured from the screen's bottom edge,
 /// so the keyboard stays above the hints on a shorter screen (612 on 1080 lines, 492 on the Mini V1's 960).
 const LIST_TOP: i32 = 208;
@@ -374,7 +374,7 @@ impl App {
             Action::Close => self.close_search(),
             Action::Play(hit) => {
                 let Some((system, name, path)) = self.hit_game(hit) else { return };
-                self.launch(system, name, path);
+                self.launch_asking(system, name, path);
             }
             Action::Star(hit) => {
                 let Some((system, name, path)) = self.hit_game(hit) else { return };
@@ -686,7 +686,7 @@ impl App {
     /// A toast over the search ("Added to Favourites"), as on the shelf.
     fn paint_toast(&mut self, c: &mut Canvas) {
         if let Some((msg, at)) = self.toast.clone() {
-            if super::toast_age(at) < super::TOAST {
+            if super::toast_age(at) < super::toast_len(&msg) {
                 let w = self.text.width(Face::Body, 28, &msg) + 48;
                 c.round_rect(c.w / 2 - w / 2, 36, w, 52, 26, KEYCAP);
                 self.text.draw(c, Face::Body, 28, c.w / 2 - w / 2 + 24, 72, CHALK, &msg);
@@ -860,7 +860,7 @@ mod tests {
 
     #[test]
     fn no_match_says_the_game_may_not_be_on_the_card_in_two_lines_at_most() {
-        assert!(NO_MATCH.contains("not be on the SD card"));
+        assert!(NO_MATCH.contains("not be in your games folder"));
         let de = pocket_ui::i18n::german().translate(NO_MATCH).expect("a German line");
         let mut text = pocket_ui::text::Text::new();
         text.set_translate(false);

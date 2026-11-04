@@ -33,7 +33,19 @@ impl Loader {
     pub fn start(done: impl Fn(Key, Option<Image>) + Send + 'static) -> Loader {
         let (tx, rx) = mpsc::channel::<Key>();
         let _ = std::thread::Builder::new().name("pictures".into()).spawn(move || {
-            for key in rx {
+            let mut waiting = Vec::new();
+            loop {
+                if waiting.is_empty() {
+                    let Ok(key) = rx.recv() else { break };
+                    waiting.push(key);
+                }
+                // Drain before every decode: the newest selection goes next. Keep older
+                // jobs so gallery/cache consumers still receive every answer.
+                for key in rx.try_iter() {
+                    waiting.retain(|old| old != &key);
+                    waiting.push(key);
+                }
+                let key = waiting.pop().unwrap();
                 let img = load_fitted(&key);
                 done(key, img);
             }
@@ -70,6 +82,23 @@ mod tests {
         let img = img.expect("valid cover");
         assert_eq!((img.w, img.h), (1, 1));
         assert_eq!(img.px, [0x5f5f5f]);
+    }
+
+    #[test]
+    fn a_new_selection_passes_the_backlog_without_losing_older_answers() {
+        let (tx, rx) = mpsc::channel();
+        let (release, blocked) = mpsc::channel();
+        let loader = Loader::start(move |key, _| {
+            let first = key.1 == 0;
+            tx.send(key.1).unwrap();
+            if first { blocked.recv().unwrap(); }
+        });
+        loader.request(("missing".into(), 0, 1));
+        assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), 0);
+        for i in 1..20 { loader.request(("missing".into(), i, 1)); }
+        release.send(()).unwrap();
+        let got: Vec<_> = (1..20).map(|_| rx.recv_timeout(Duration::from_secs(5)).unwrap()).collect();
+        assert_eq!(got, (1..20).rev().collect::<Vec<_>>());
     }
 
     #[test]

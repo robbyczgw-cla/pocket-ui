@@ -29,6 +29,7 @@ handhelds (no change for any other model; `host_owned()` is false for them).
 | `POCKETUI_HOST_BIN` | path of `pocket-core` (default `/storage/pocket-ui/pocket-core`) |
 | `POCKETUI_RUNEMU` | the `runemu.sh` stand-in (default `/usr/bin/runemu.sh`) |
 | `POCKETUI_CORES` | `:`-separated folders searched for `<core>_libretro.so` after `/storage/cores` |
+| `POCKETUI_STATES` | save states (the launcher uses `<data>/savestates`; SteamOS has no writable `/storage`) |
 
 Build with `--features x11` (`Cargo.toml`): winit/glutin/softbuffer also get an X11 backend, loaded with `dlopen`. On
 a Wayland session winit still takes Wayland first; Game Mode's XWayland is covered by the X11 path. Without the feature
@@ -64,7 +65,7 @@ in the headless runs below. With no X11 build (`--features x11` off) every call 
 
 ## Emulators
 
-* **Libretro systems (NES, SNES, GB/GBC/GBA, Mega Drive, SMS/GG, PC Engine, PS1, N64, NDS):** `pocket-core` loads the core
+* **Libretro systems (NES, SNES, GB/GBC/GBA, Mega Drive, SMS/GG, PC Engine, PS1, N64, NDS, Dreamcast):** `pocket-core` loads the core
   from `POCKETUI_CORES`: the app's `cores/` and `pocket-ui-app/cores` (what `fetch-cores.sh` writes), then RetroArch's Flatpak
   (`~/.var/app/org.libretro.RetroArch/config/retroarch/cores`, and its install folder in `/var/lib/flatpak/app/...` or
   `~/.local/share/flatpak/app/...`; **these paths are from the Flatpak layout, not seen on a Deck**), then a normal install.
@@ -92,7 +93,7 @@ in the headless runs below. With no X11 build (`--features x11` off) every call 
 The Deck app **ships no cores**. It uses RetroArch's Flatpak cores when present, else `fetch-cores.sh` downloads them from the
 libretro buildbot to the player's own machine (nothing of ours is redistributed; the project's rule that its servers never hold
 them stays). Default set, all free-licence: mGBA (MPL-2.0), Gambatte, Nestopia, Gearsystem (GPL-3.0-or-later), melonDS DS, PCSX
-ReARMed, Mupen64Plus-Next, Mednafen PCE Fast (GPL). Gambatte and Mupen64Plus-Next are GPL-2.0-only, the combination question
+ReARMed, Mupen64Plus-Next, Mednafen PCE Fast, Flycast (GPL). Gambatte and Mupen64Plus-Next are GPL-2.0-only, the combination question
 The licence inventory (LICENCES.md, section 9) raises for any distributed binary; downloading them on the player's machine avoids shipping the
 combination, it does not answer the question. `fetch-cores.sh --personal` adds Snes9x and Genesis Plus GX (non-commercial licences,
 "personal use": fine for the player's own copy, never bundled). pocket-core still routes SNES to Snes9x and Mega Drive to Genesis

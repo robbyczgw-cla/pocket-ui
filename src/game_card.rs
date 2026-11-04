@@ -863,7 +863,9 @@ impl Card {
     fn paint_body(&self, c: &mut Canvas, text: &mut Text, y0: i32) -> i32 {
         let d = &self.data;
         let full_w = c.w - 2 * MARGIN;
-        let (lx, rx) = (MARGIN, MARGIN + 610);
+        // The player's column starts 610 px in; on a screen as narrow as the Brick's 1024 the facts keep 450 and "Played" and
+        // the five stars get the room (they were cut at the edge, "3 h 00…").
+        let (lx, rx) = (MARGIN, MARGIN + if c.w < 1100 { 450 } else { 610 });
         let (lw, rw) = (rx - lx - 50, c.w - MARGIN - rx);
         // Label columns as wide as their labels need at the text size in use.
         let key_w = type_scale::wide(170, 28);

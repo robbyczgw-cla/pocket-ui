@@ -55,13 +55,49 @@ pub const HOLD_UNTIL: &str = "POCKET_LAUNCH_HOLD_UNTIL";
 /// pocket-core's window is still to be held back (`HOLD_UNTIL`). A deadline further away than the longest hold pocket-ui
 /// asks for is a mistake, not a hold.
 pub fn held() -> bool {
+    // A slow or broken preview must never buy an invisible reminder four seconds of game time. The UI opts into
+    // this handshake; a core that reaches play before the card is ready simply starts as usual.
+    if hold_still() && std::env::var_os(HOLD_READY).is_some_and(|p| !std::path::Path::new(&p).exists()) {
+        return false;
+    }
     let Some(until) = std::env::var(HOLD_UNTIL).ok().and_then(|v| v.parse::<f64>().ok()) else { return false };
-    let left = until - clock_ms();
-    left > 0.0 && left <= MAX_HOLD_MS
+    held_at(until, clock_ms(), hold_still())
 }
 
-/// The longest hold pocket-ui asks for (Cozy's fade has run by then).
-pub const MAX_HOLD_MS: f64 = 2000.0;
+/// `held` at `now` (`clock_ms`) for a deadline `until`.
+pub fn held_at(until: f64, now: f64, still: bool) -> bool {
+    let left = until - now;
+    // Only a reminder opts into the longer bound. An ordinary launch keeps its original 2 s safety limit.
+    left > 0.0 && left <= if still { MAX_HOLD_MS } else { 2000.0 }
+}
+
+/// pocket-core: whether this refresh runs no frame of the game. Only in a hold that keeps the game still
+/// (`HOLD_STILL`), and only once its moment is loaded (`resume_pending`: a 3D core loads it after its first frames,
+/// which run hidden as in any hold).
+pub fn stands_still(hold: bool, still: bool, resume_pending: bool) -> bool {
+    hold && still && !resume_pending
+}
+
+/// The longest hold pocket-ui asks for: Cozy's fade has run by then, and "Where was I?" has been read (its card after the
+/// launch animation, `where_was_i::SHOWN`).
+pub const MAX_HOLD_MS: f64 = 6000.0;
+
+/// Environment variable: "1" while the hold is "Where was I?"'s, the game stands still at its moment until the hold is
+/// over (no frame run, no sound), so nothing of it is missed while the card is read. Without it the game runs silently
+/// behind the launch animation, as before.
+pub const HOLD_STILL: &str = "POCKET_LAUNCH_HOLD_STILL";
+
+/// Optional file set by pocket-ui once the reminder has a decoded launch picture. Missing: no extra hold.
+pub const HOLD_READY: &str = "POCKET_LAUNCH_HOLD_READY";
+
+pub fn ready_path() -> std::path::PathBuf {
+    skip_path().with_extension("ready")
+}
+
+/// pocket-core: the hold keeps the game still (`HOLD_STILL`).
+pub fn hold_still() -> bool {
+    std::env::var(HOLD_STILL).is_ok_and(|v| v == "1")
+}
 
 /// Environment variable with a path: once it exists the launch animation was skipped and the window stops waiting. A
 /// button pressed before pocket-core has its pads open is seen by pocket-ui alone.
@@ -75,6 +111,7 @@ pub fn skip_path() -> std::path::PathBuf {
 /// Before a game with a hold starts.
 pub fn prepare_skip() {
     let _ = std::fs::remove_file(skip_path());
+    let _ = std::fs::remove_file(ready_path());
 }
 
 /// pocket-ui: the player skipped the launch animation, the window needn't wait.
@@ -269,6 +306,24 @@ impl<T: Send + 'static> std::ops::DerefMut for Later<T> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn where_was_i_holds_after_cozys_animation_and_a_still_hold_waits_for_the_moment() {
+        // The longest hold pocket-ui asks for: Cozy's animation, its fade, then the card's seconds. Accepted, and a
+        // deadline further away is still taken for a mistake.
+        let longest = crate::cabinet::fade_delay(true) + crate::insert_scene::FADE + crate::where_was_i::SHOWN;
+        assert!(held_at(1000.0 + longest.as_secs_f64() * 1000.0, 1000.0, true), "{longest:?}");
+        assert!(!held_at(1000.0 + MAX_HOLD_MS + 1.0, 1000.0, true));
+        assert!(!held_at(999.0, 1000.0, true), "over");
+        assert!(!held_at(1000.0 + longest.as_secs_f64() * 1000.0, 1000.0, false), "without a reminder the old safety limit stays");
+        assert!(held_at(2600.0, 1000.0, false), "Cozy's ordinary 1.6 s deadline still works");
+        // Still only in "Where was I?"'s hold, and only once the moment is in.
+        assert!(stands_still(true, true, false));
+        assert!(!stands_still(true, false, false), "Cozy's hold alone: the game runs silently, as before");
+        assert!(!stands_still(true, true, true), "a 3D core's moment not loaded yet: its first frames run");
+        assert!(!stands_still(false, true, false), "a button or the deadline ended it: the game plays");
+    }
+
     #[test]
     fn the_finger_on_the_start_button_is_no_new_press() {
         let mut before = None;

@@ -10,7 +10,10 @@ network. It has seven parts; each can be switched off in Settings → Games → 
 up space until it has something to show. [Rediscover](#rediscover) has its own switch under Settings → Look → [Cozy extras](settings.md#cozy-extras) and is only there when it has a game.
 
 When pocket-ui starts, Curator reads your library in the background, after the shelf is up and never while a game
-runs. Until it is done (with a large library, a second or two), its rows say **Getting ready…**; nothing waits for it.
+runs. Until it is done (with a large library, a second or two), the Curator rows on Home and in its list stay quiet, without words, and a page you open says **Getting ready…**; nothing waits for it.
+
+The first time the highlight lands on the Curator row on Home, one line says what it is ("Curator: pick by mood, length,
+or what's new to you"), and the same for Just Play ("Just Play: one press, the game you'd like now"). Once each, never in Kids Mode.
 
 ### Lens
 
@@ -111,7 +114,7 @@ you last opened Surprise me.
 
 Its first pick is **today's pick**, the game the Curator row on top of Home names ([Home](playing.md#home)). The
 entry sits in the Curator list: from Home, Up twice (Curator), A, Down, A. It is there while Settings → Games → Curator → **Lens & smart shelves** is on. In its row,
-"From 332 games" says what it picks from; "Getting ready…" until Curator has read your library (A then says so too),
+"From 332 games" says what it picks from; nothing until Curator has read your library (A then says "Getting ready…"),
 and with no games, "No games yet".
 
 ### Smart shelves

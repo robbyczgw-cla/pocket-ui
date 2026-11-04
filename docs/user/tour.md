@@ -1,18 +1,33 @@
 # Features and the Tour
 
-pocket-ui has more than it shows at first, and the extras that change what A does or what is on screen are off until you want them.
-Settings → Help & tools → **Tour** shows them one card at a time, the same cards as the first start's "Choose for yourself"
-([Getting started](getting-started.md#how-do-you-like-to-play)): the feature's name, one line about it, a small
-picture of its screen, and where it is in Settings.
+Settings → Help & tools → **Tour** is **the basics in 7 cards**: what to press to play, to save, to change the screen and
+sound, and to add games, followed by a choice for easier reading. A goes to the next card; on the last card, Up/Down choose On, Off or Later and A applies it and closes. B closes the Tour.
+
+1. **Play, and HOME is the menu**: pick a game and press A; tap HOME in a game for the [pause menu](pause-menu.md).
+2. **Continue where you stopped**: Home opens on the game you played last; quitting keeps the moment ([Home](playing.md#home)).
+3. **Saving**: Save, Load and Earlier are in the pause menu ([Earlier](pause-menu.md#earlier)).
+4. **Quick settings**: HOME on the shelf, START in the pause menu ([Quick settings](quick-settings.md#quick-settings)).
+5. **Add games**: each system's folder on the SD card, or file sharing over Wi-Fi ([Add games](getting-started.md#5-add-games)).
+6. **Settings**: everything on these cards, and everything you meet along the way, can be switched under START › Settings.
+7. **Easy to read**: choose Large text and Reduced motion together, with Zoom in the pause menu ([Easy to read](easy-to-read.md#easy-to-read)).
+
+L1/R1 (or Left/Right) go to the previous or next card. The extras (Curator, frames, Pixel Path and the rest) are not on the
+Tour, apart from Easy to read. Each one tells you what it is the first time you see it, and has its switch in Settings. After an update, [New in this
+version](#new-in-this-version) shows what is new.
+
+## The feature cards
+
+The feature cards, one per extra, come in two places: the first start's "Choose for yourself"
+([Getting started](getting-started.md#how-do-you-like-to-play)) and "New in this version" below. A card is the feature's name,
+one line about it, a small picture of its screen, and where it is in Settings.
 
 - A card with a switch has three rows: **On**, **Off** and **Later**. "Now" marks what is set. Up/Down choose, A takes
   the choice and goes to the next card. On and Off change the same switch as the feature's own Settings page, at once.
-  **Later** changes nothing and keeps the card for later: the Tour row in Settings → Help & tools then says how many you put off
-  ("2 put off").
+  **Later** changes nothing and leaves the feature as it is.
 - A card is only shown on a device that has what it is about, like the Settings rows: no Stick lights on a handheld without sticks;
   on the Steam Deck no Haptics, Sync, Tailscale, Tools or Performance & fan.
 - A card without a switch (Search, Players and the others below) only says where the feature is. A goes on.
-- L1/R1 (or Left/Right) go to the previous or next card without choosing anything. B or START closes the Tour.
+- L1/R1 (or Left/Right) go to the previous or next card without choosing anything. B goes back a card (first start) or puts the cards away (new in this version). START skips the rest.
 
 ## The cards and the profiles
 
@@ -23,22 +38,23 @@ this device, Pixel Path, frames and "Continue your last game" are off by default
 
 | Card | The shelf | Enthusiast | Changed in |
 |---|---|---|---|
-| **Lens & smart shelves** | On | On | Settings → Games → Curator |
-| **Echoes** | On | On | Settings → Games → Curator |
-| **Up next after a game** | Off | On | Settings → Games → Curator ([Up next](curator.md#up-next)) |
-| **Echoes beyond this device** | Off | On | Settings → Games → Curator ("Games not on this device in Echoes") |
-| **Versions** | On | On | Settings → Games → Curator ("Merge versions in mixed lists") |
-| **Labels** | On | On | Settings → Games → Curator |
-| **Play history** | As it is | On | Settings → Games → Curator ([Play history](curator.md#play-history)); on by default |
-| **Pixel Path** | Off | On | Settings → Games → Curator ("Pixel Path in the pause menu") |
-| **Pixel Path over every game** | As it is | As it is | Settings → Playing → [Over the game](settings.md#over-the-game) on Pixel Path ([Pixel Path over the game](pause-menu.md#pixel-path-over-the-game)); Off takes only that level away |
-| **Screen frames on every console** | Off | On | Settings → Playing → [Screen frames](settings.md#screen-frames) |
-| **Continue your last game** | Off | On | Settings → Playing → [On start](settings.md#on-start) (Last game) |
 | **Continue where I quit** | As it is | As it is | Settings → Playing → [Continue where I quit](settings.md#continue-where-i-quit) |
+| **Continue your last game** | Off | On | Settings → Playing → [On start](settings.md#on-start) (Last game) |
 | **Motion** | On | On | Settings → Sound & feel → [Motion](settings.md#motion) (Off on the card is Motion Off) |
+| **Easy to read** | As it is | As it is | Settings → Look → [Text size](settings.md#text-size) and Settings → Sound & feel → [Motion](settings.md#motion) ([Easy to read](easy-to-read.md#easy-to-read)): On is Large text and Reduced motion, Off is Normal text and Full motion; while it is on, the pause menu lists [Zoom](easy-to-read.md#zoom) |
 | **Menu sounds** | As it is | As it is | Settings → Sound & feel → Sounds |
 | **Haptics** | As it is | As it is | Settings → Sound & feel → Haptics |
 | **Stick lights** | As it is | As it is | Settings → Sound & feel → [LEDs](settings.md#leds) (On is Colour, unless Battery was chosen) |
+| **Screen frames on every console** | Off | On | Settings → Playing → [Screen frames](settings.md#screen-frames) |
+| **Echoes** | On | On | Settings → Games → Curator |
+| **Versions** | On | On | Settings → Games → Curator ("Merge versions in mixed lists") |
+| **Labels** | On | On | Settings → Games → Curator |
+| **Up next after a game** | Off | On | Settings → Games → Curator ([Up next](curator.md#up-next)) |
+| **Play history** | As it is | On | Settings → Games → Curator ([Play history](curator.md#play-history)); on by default |
+| **Echoes beyond this device** | Off | On | Settings → Games → Curator ("Games not on this device in Echoes") |
+| **Pixel Path** | Off | On | Settings → Games → Curator ("Pixel Path in the pause menu") |
+| **Pixel Path over every game** | As it is | As it is | Settings → Playing → [Over the game](settings.md#over-the-game) on Pixel Path ([Pixel Path over the game](pause-menu.md#pixel-path-over-the-game)); Off takes only that level away |
+| **Lens & smart shelves** | On | On | Settings → Games → Curator |
 
 Cards without a switch, after those: **Search and the letter jump**, **Console credits**, **Players**, **Run-ahead**, **Runs on**,
 **RetroAchievements**, **Sync**, **Tailscale**, **Tools**, **Cozy extras** (real cases, the memory card, stickers and the other
@@ -50,5 +66,4 @@ The profile **For a child** sets none of these: [Kids mode](kids-mode.md) keeps 
 
 After an update, pocket-ui shows the cards of the features that are new since the version you had, at most three,
 once: when you are on Home with nothing open, even if the Pocket went straight into your last game first. Each has
-its switch, as in the Tour. A takes the choice and goes on, B puts the cards away. They don't come back; the Tour has
-them all. A version without new features shows nothing, and so does the first start of a new Pocket.
+its switch, as on the feature cards above. A takes the choice and goes on, B puts the cards away. They don't come back; every switch is in Settings. A version without new features shows nothing, and so does the first start of a new Pocket.

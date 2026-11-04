@@ -106,3 +106,9 @@ Settings → Game check, from a fresh install through the real picker (clears th
 ```sh
 python3 scripts/android/game-check-smoke.py "$ANDROID_HOME/platform-tools/adb" emulator-5598 android/build/game-check ROMS --lang de --orientation landscape
 ```
+
+The pinned PPSSPP core applies `patches/ppsspp-pause-drain.patch`: pausing drains graphics
+commands until the emulation thread acknowledges the pause, rather than consuming only one
+frame and polling. `cargo test --test ppsspp_pause` exercises the old and patched pause fragments
+with a two-frame readback stub. Rebuild the cores to include it; it does not affect an installed
+ROCKNIX core. Actual GLES/device validation remains necessary.

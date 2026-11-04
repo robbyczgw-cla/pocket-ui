@@ -3,7 +3,8 @@
 //!
 //! * [`parse`] reads the small subset of Markdown the guide uses: headings, paragraphs, bullet and numbered
 //!   lists (nested), block quotes, code blocks, rules and tables, with bold, italic, code and links inside text.
-//!   HTML comments (the guide's TODO notes) are dropped, images show their alt text. Button names become
+//!   HTML comments (the guide's TODO notes) and screenshots on a line of their own (`pictures/`) are dropped, other images
+//!   show their alt text. Button names become
 //!   chips (`Kind::Chip`): the long names (START, SELECT, HOME, L1 ...) wherever they stand in capitals,
 //!   B, X and Y as capital letters on their own, and A (which is also the article) where it is certainly
 //!   the button: in bold, after "press", in a table column headed "Button", at the start of a list item
@@ -21,7 +22,7 @@ use crate::text::{Face, Text};
 
 /// The guide, in reading order: the order of the "Pages" list on its first page (`index.md`). The names are the files
 /// of `docs/user/`; every file there is either here or in `DESKTOP_ONLY` (checked by `doc_checks`, cargo test).
-pub const PAGES: [(&str, &str); 41] = [
+pub const PAGES: [(&str, &str); 44] = [
     ("index", include_str!("../docs/user/index.md")),
     ("getting-started", include_str!("../docs/user/getting-started.md")),
     ("games-drive", include_str!("../docs/user/games-drive.md")),
@@ -29,15 +30,18 @@ pub const PAGES: [(&str, &str); 41] = [
     ("game-check", include_str!("../docs/user/game-check.md")),
     ("phone-upload", include_str!("../docs/user/phone-upload.md")),
     ("kids-mode", include_str!("../docs/user/kids-mode.md")),
+    ("how-to", include_str!("../docs/user/how-to.md")),
     ("coming-from", include_str!("../docs/user/coming-from.md")),
     ("playing", include_str!("../docs/user/playing.md")),
     ("easy", include_str!("../docs/user/easy.md")),
+    ("easy-to-read", include_str!("../docs/user/easy-to-read.md")),
     ("continue", include_str!("../docs/user/continue.md")),
     ("pause-menu", include_str!("../docs/user/pause-menu.md")),
     ("options", include_str!("../docs/user/options.md")),
     ("options-big", include_str!("../docs/user/options-big.md")),
     ("controls", include_str!("../docs/user/controls.md")),
     ("controls-settings", include_str!("../docs/user/controls-settings.md")),
+    ("controls-card", include_str!("../docs/user/controls-card.md")),
     ("settings", include_str!("../docs/user/settings.md")),
     ("settings-system", include_str!("../docs/user/settings-system.md")),
     ("quick-settings", include_str!("../docs/user/quick-settings.md")),
@@ -545,6 +549,12 @@ pub fn parse(md: &str) -> Vec<Block> {
             out.push(Block::Picture(name.to_string()));
             continue;
         }
+        // A screenshot on a line of its own (`docs/user/pictures/`) is for GitHub and the web: the device shows the real
+        // screen, and its alt text would only repeat the words around it.
+        if t.starts_with("![") && t.ends_with(')') && t.contains("](pictures/") && !t[2..].contains("![") {
+            flush_text(&mut cur, &mut out);
+            continue;
+        }
         if t.starts_with('|') && lines.get(i).is_some_and(|l| is_align_row(l)) {
             flush_text(&mut cur, &mut out);
             levels.clear();
@@ -1019,6 +1029,17 @@ fn table(header: &[Vec<Span>], rows: &[Vec<Vec<Span>>], y: i32, width: i32, text
         }
     }
     let avail = width - 2 * pad_x * n as i32;
+    // Words that cannot all stay whole (a path in a narrow panel): the longest columns give way evenly and their
+    // words break (`flow`), so the table never runs past the right edge.
+    if n > 1 && min.iter().sum::<i32>() > avail {
+        let mut order: Vec<usize> = (0..n).collect();
+        order.sort_by_key(|&c| min[c]);
+        let mut left = avail.max(40 * n as i32);
+        for (k, c) in order.iter().enumerate() {
+            min[*c] = min[*c].min(left / (n - k) as i32);
+            left -= min[*c];
+        }
+    }
     if n > 1 {
         for c in 0..n {
             natural[c] = natural[c].min((avail * 36 / 100).max(min[c]));
@@ -1827,6 +1848,9 @@ mod tests {
         // Images: the alt text, in italics, or nothing.
         assert_eq!(texts(&spans("see ![the shelf](shelf.png) here")), "see the shelf here");
         assert_eq!(texts(&spans("x![](a.png)y")), "xy");
+        // A screenshot on its own line is for GitHub: the device leaves it out, the text around it stays.
+        let b = parse("Before.\n\n![The shelf](pictures/shelf.webp)\n\nAfter.");
+        assert_eq!(b, vec![Block::Paragraph(vec![plain("Before.")]), Block::Paragraph(vec![plain("After.")])]);
         // Things that only look like markup stay as they are.
         assert_eq!(texts(&spans("2 * 3 = 6, a_b_c, <address> and 100%")), "2 * 3 = 6, a_b_c, <address> and 100%");
         assert_eq!(texts(&spans("an \\*escaped\\* star")), "an *escaped* star");
@@ -2045,31 +2069,48 @@ mod tests {
         assert!(l.height > 150);
     }
 
+    /// What a player sees at a device's width: nothing of a page runs past the right edge (it would be cut), every
+    /// page has content, and nothing lies outside the document it scrolls through.
     #[test]
     fn every_bundled_page_lays_out_inside_the_screen() {
         let mut text = Text::new();
+        // A few pixels of rounding beside a chip or rule are no clipping: the page keeps 66 px margins each side.
+        const SLACK: i32 = 6;
+        // The page width of 1024x768 (the narrowest layout), 1240x1080, 640x480 (laid out at 1280) and 1920x1080.
+        for width in [892, 1108, 1148, 1788] {
+            for (name, md) in PAGES {
+                let l = layout(&parse(md), &mut text, width);
+                let wide: Vec<String> = l
+                    .items
+                    .iter()
+                    .filter_map(|i| match i {
+                        Item::Text { x, px, face, text: t, .. } if x + text.width(*face, *px, t) > width + SLACK => Some(t.clone()),
+                        _ => None,
+                    })
+                    .collect();
+                assert!(extent(&l, &mut text) <= width + SLACK, "{name} at {width}: {} {wide:?}", extent(&l, &mut text));
+                assert!(!l.items.is_empty() && l.height > 0, "{name} at {width}: an empty page");
+                assert!(
+                    l.items.iter().all(|i| match i {
+                        Item::Text { y, .. } | Item::Chip { y, .. } | Item::Rect { y, .. } | Item::Link { y, .. } | Item::Controls { y, .. } => *y >= 0 && *y <= l.height + 4,
+                    }),
+                    "{name} at {width}: items inside the document"
+                );
+            }
+        }
+    }
+
+    /// Editorial advice, not a renderer limit (the page scrolls): about 30 screens at 1240x1080 still read well.
+    /// playing.md grew past 40 000 and was split into playing, pause-menu and options (2026-10-23). Run by
+    /// `scripts/release-check.sh`; split a page that grows past this, don't raise it.
+    #[test]
+    #[ignore = "release check: sh scripts/release-check.sh"]
+    fn manual_pages_are_not_too_long_for_the_screen() {
+        let mut text = Text::new();
         for (name, md) in PAGES {
             let l = layout(&parse(md), &mut text, 1108);
-            let wide: Vec<String> = l
-                .items
-                .iter()
-                .filter_map(|i| match i {
-                    Item::Text { x, px, face, text: t, .. } if x + text.width(*face, *px, t) > 1110 => Some(t.clone()),
-                    _ => None,
-                })
-                .collect();
-            assert!(extent(&l, &mut text) <= 1108 + 2, "{name}: {} {wide:?}", extent(&l, &mut text));
             assert!(l.height > 600, "{name}: {}", l.height);
-            // Not a renderer limit (the page scrolls), but what still reads well on the 1240x1080 screen: about 30
-            // screens. playing.md grew past 40 000 and was split into playing, pause-menu and options (2026-10-23;
-            // options is the longest at about 26 000). Split a page that grows past this; don't raise it.
             assert!(l.height < 30_000, "{name}: {}", l.height);
-            assert!(
-                l.items.iter().all(|i| match i {
-                    Item::Text { y, .. } | Item::Chip { y, .. } | Item::Rect { y, .. } | Item::Link { y, .. } | Item::Controls { y, .. } => *y >= 0 && *y <= l.height + 4,
-                }),
-                "{name}: items inside the document"
-            );
         }
     }
 

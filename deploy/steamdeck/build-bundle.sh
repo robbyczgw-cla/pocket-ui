@@ -7,12 +7,15 @@ cd "$(dirname "$0")/../.."
 export PATH=$HOME/.cargo/bin:$PATH
 # Build paths out of the binaries (the home folder of whoever builds): scripts/release-rustflags.sh, checked below.
 REMAP_ROOT=$(pwd -P) . scripts/release-rustflags.sh
-if [ "$(uname -s)-$(uname -m)" = Linux-x86_64 ]; then
+# DECK_ZIGBUILD=1 forces the cross-build on Linux too: a build host with a newer glibc than SteamOS (2.41) would
+# otherwise make binaries that do not start on a Deck (docs/STEAMDECK.md, "First real Deck").
+td=${CARGO_TARGET_DIR:-target}
+if [ "$(uname -s)-$(uname -m)" = Linux-x86_64 ] && [ -z "${DECK_ZIGBUILD:-}" ]; then
   nice cargo build --release --features x11 --bin pocket-ui --bin pocket-core
-  bin=target/release
-else # a Mac: cross-build (rustup target add x86_64-unknown-linux-gnu; cargo-zigbuild + zig)
+  bin=$td/release
+else # a Mac, or DECK_ZIGBUILD=1: cross-build (rustup target add x86_64-unknown-linux-gnu; cargo-zigbuild + zig)
   nice cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.38 --features x11 --bin pocket-ui --bin pocket-core
-  bin=target/x86_64-unknown-linux-gnu/release
+  bin=$td/x86_64-unknown-linux-gnu/release
 fi
 sh scripts/check-binary-paths.sh "$bin/pocket-ui" "$bin/pocket-core" || { echo "build-bundle: the binaries carry build paths" >&2; exit 1; }
 b=target/deck-bundle

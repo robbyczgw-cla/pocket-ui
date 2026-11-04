@@ -285,7 +285,7 @@ Files: `src/pixel_path.rs` (the report, the live window, grading, the latency es
   emulator's own colour correction on, ours steps back and the value is plain "LCD grid" (the core's correction is
   listed as before). Crisp keeps its Scale grades (it is now blended in linear light: same grade, evener pixels).
   The overall grade is the worst stage in the order Pristine < Faithful < Enhanced < Compromised. Audio is always
-  resampled (linear, ±0.5 % rate control), so a pocket-core game is at best Faithful overall; stages can be Pristine.
+  resampled (windowed sinc, ±0.5 % rate control), so a pocket-core game is at best Faithful overall; stages can be Pristine.
 - **Latency estimate** (`pixel_path::Latency`), in refreshes: buttons read once at the start of a refresh (0.5 on
   average) + the core's measured time + 1 (swap to the compositor's next vsync) + 0.5 (scan-out to the middle of
   the panel) − run-ahead frames. The game's own reaction comes on top and is said so. Not checked against a
@@ -347,7 +347,7 @@ Files: `src/pixel_live.rs` (the strip: its items, alerts, placement, painting; p
   reads `curator.json` for it. Old values are carried over (`over_game::migrate` for Options files, `adopt_curator`
   for `pixel_live`, only with `pixel_path` on, as it worked).
 - **Turning it on.** Y on the page sends `set over_game pixel` (or back to what it was, `toggle_over_game`) and changes
-  the menu's values, exactly like a change in Options: in effect at once, kept with Save changes. HOME + Y (free:
+  the menu's values, exactly like a change in Options: in effect at once and kept at once (Keep for). HOME + Y (free:
   HOME + R1/L1/Left/Right/R2/L2 are taken, HOME + SELECT is the switcher, HOME + Vol ROCKNIX's brightness, HOME +
   START + Vol its Wi-Fi switch) moves `Extras::over_game` on to the next level for the session, with a toast; a change
   of the option sets it again. Options > Shortcuts > Over the game switches it off.

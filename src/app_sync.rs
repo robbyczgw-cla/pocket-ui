@@ -324,7 +324,7 @@ impl App {
 
         self.paint_sync_details(c, &page, top + visible as i32 * row + 14);
 
-        let a = if page.row() == pocket_ui::sync_page::Row::Versions { "Open" } else { "Switch" };
+        let a = if page.row() == pocket_ui::sync_page::Row::Versions { "Open" } else { "Change" };
         self.nu_foot(c, &[("B", "Back"), ("A", a)], page.describe(page.row()), pal().text);
         self.sync.page = Some(page);
     }

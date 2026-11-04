@@ -97,9 +97,7 @@ impl App {
             let base = y + row / 2 + pocket_ui::type_scale::mid(font);
             let name = r.label();
             if i == sel {
-                let w = self.text.width(Face::Body, font, name) + 2 * NU_BTN_PAD;
-                c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, pal().band);
-                c.round_rect(pad, y + 4, w, row - 8, (row - 8) / 2, pal().select);
+                pocket_ui::kit::selection(c, pad, y, right - pad, row);
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, name);
             } else {
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, name);
@@ -111,7 +109,7 @@ impl App {
             };
             let value = if i == sel { format!("‹ {value} ›") } else { value };
             let vx = right - NU_BTN_PAD;
-            self.text.draw_right(c, Face::Body, font, vx, base, pal().text, &value);
+            pocket_ui::kit::row_value(c, &mut self.text, font, vx, base, &value, i == sel);
             let vw = self.text.width(Face::Body, font, &value);
             // Left of the value: a dot in the colour, or four pips for the brightness.
             match r {
@@ -125,7 +123,7 @@ impl App {
                     let mut x = vx - vw - 20 - (LEVELS.len() as i32 * (pw + gap) - gap);
                     for n in 0..LEVELS.len() {
                         let lit = n <= cfg.level;
-                        c.round_rect(x, base - ph + 4, pw, ph, 4, if lit { pal().text } else { pal().pick(0x4a4a4a, 0xcfc8ba) });
+                        c.round_rect(x, base - ph + 4, pw, ph, 4, if !lit { pal().pick(0x4a4a4a, 0xcfc8ba) } else if i == sel { pal().ink } else { pal().text });
                         x += pw + gap;
                     }
                 }

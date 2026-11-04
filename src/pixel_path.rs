@@ -777,7 +777,7 @@ fn scale_stage(r: &Report) -> Stage {
                 Grade::Faithful,
                 value,
                 format!("Whole {n}×, softened on purpose."),
-                format!("Every pixel of the {dw}×{dh} picture covers {n}×{n} panel pixels, the sharpest the panel can show it. {filter_words} Sharp or Crisp under Options › Picture shows the pixels as they are."),
+                format!("Every pixel of the {dw}×{dh} picture covers {n}×{n} panel pixels, the sharpest the panel can show it. {filter_words} Clean under Options › Picture › Look shows the pixels as they are."),
             ),
             _ => stage(
                 Kind::Scale,
@@ -859,9 +859,9 @@ fn effect_name(effect: &str) -> Option<&'static str> {
     match effect {
         "grid" => Some("LCD grid"),
         "scanlines" => Some("Scanlines"),
-        "crt" => Some("CRT"),
-        "softglow" => Some("Soft glow"),
-        "smooth" => Some("Smooth pixels"),
+        "crt" => Some("Old TV"),
+        "softglow" => Some("Bloom"),
+        "smooth" => Some("Smooth"),
         _ => None,
     }
 }
@@ -1201,7 +1201,7 @@ fn audio_stage(r: &Report) -> Stage {
     };
     let skew = (a.in_rate / a.core_rate.max(1.0) - 1.0) * 100.0;
     let base = format!(
-        "The emulator makes sound at {} Hz; pocket-core resamples it to the {} Hz of the output with linear interpolation{}, and steers a \
+        "The emulator makes sound at {} Hz; pocket-core resamples it to the {} Hz of the output with a windowed-sinc filter{}, and steers a \
          {:.0} ms queue ({:.0} ms in it now) by nudging the rate by up to ±0.5%, so the sound neither runs dry nor drifts behind the \
          picture. After the queue, the output ({}) holds about {:.0} ms more. {} in this session.{}",
         thousands(a.core_rate),
@@ -1735,7 +1735,7 @@ mod tests {
         assert_eq!(path(&r, &k).stages[3].grade, Grade::Enhanced);
         r.look.effect = "crt".into();
         let s = path(&r, &k).stages[3].clone();
-        assert_eq!((s.grade, s.value.as_str(), s.line.as_str()), (Grade::Enhanced, "CRT · Handheld shell around", "CRT drawn over the picture."));
+        assert_eq!((s.grade, s.value.as_str(), s.line.as_str()), (Grade::Enhanced, "Old TV · Handheld shell around", "Old TV drawn over the picture."));
         assert!(s.about.contains("colour mask") && s.about.contains("no curved screen"), "{}", s.about);
         r.look.effect = "grid".into();
         r.look.lcd_colour = true;

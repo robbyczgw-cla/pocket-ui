@@ -186,12 +186,36 @@ fn paint_page(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, page: &RescueP
             lines.push((l, 24, pal().quiet));
         }
     }
-    for l in &w.launcher {
-        lines.push((text.fit(Face::Body, 24, l, width - 2 * 28), 24, pal().dust));
-    }
+    let launcher: Vec<String> = w.launcher.iter().map(|l| text.fit(Face::Body, 24, l, width - 2 * 28)).collect();
+    // On a short screen (1024x768) the five choices must still end above the hint pill: the launcher's older lines give way
+    // first, then the rows get a little less air. With room to spare, the row's explanation keeps two lines below them.
     let head = 46;
-    let panel_h = head + lines.iter().map(|(_, px, _)| pocket_ui::type_scale::line(*px, 12)).sum::<i32>() + 20;
+    let step = pocket_ui::type_scale::line(NU_SMALL, 12);
+    let rows = page.rows();
+    let rows_bottom = c.h - pad - NU_PILL - 16;
     let panel_y = pad + 58 + 48 + 30 + sub_extra;
+    let base_h: i32 = lines.iter().map(|(_, px, _)| pocket_ui::type_scale::line(*px, 12)).sum();
+    let line24 = pocket_ui::type_scale::line(24, 12);
+    let n = rows.len() as i32;
+    let floor = pocket_ui::type_scale::row(50, font);
+    let (mut keep, mut row_h) = (launcher.len(), row);
+    'fit: for wanted_note in [2 * step + 44, 0] {
+        for dropped in 0..=launcher.len() {
+            let panel_h = head + base_h + (launcher.len() - dropped) as i32 * line24 + 20;
+            let room = rows_bottom - wanted_note - (panel_y + panel_h + 24);
+            let h = (room / n.max(1)).min(row);
+            let enough = if wanted_note > 0 { h >= (row - 12).max(floor) } else { h >= floor };
+            if enough || (wanted_note == 0 && dropped == launcher.len()) {
+                (keep, row_h) = (launcher.len() - dropped, h.max(floor).min(row));
+                break 'fit;
+            }
+        }
+    }
+    for l in launcher.iter().skip(launcher.len() - keep) {
+        lines.push((l.clone(), 24, pal().dust));
+    }
+    let row = row_h;
+    let panel_h = head + lines.iter().map(|(_, px, _)| pocket_ui::type_scale::line(*px, 12)).sum::<i32>() + 20;
     pocket_ui::kit::panel(c, pad, panel_y, c.w - 2 * pad, panel_h);
     text.draw(c, Face::Body, 24, left, panel_y + 36, pal().dust, "What happened");
     let mut y = panel_y + head;
@@ -202,7 +226,6 @@ fn paint_page(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, page: &RescueP
 
     // The choices.
     let top = panel_y + panel_h + 24;
-    let rows = page.rows();
     for (i, r) in rows.iter().enumerate() {
         let ry = top + i as i32 * row;
         paint_row(c, text, (pad, ry, c.w - 2 * pad, row), font, &page.label(*r), i == page.sel);
@@ -210,7 +233,7 @@ fn paint_page(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, page: &RescueP
     }
     hits.list(page.sel, rows.len(), 0.0, row as f32);
     // Above the hints; with larger text a paragraph that reaches them ends with "…".
-    let (step, bottom) = (pocket_ui::type_scale::line(NU_SMALL, 12), c.h - pad - NU_PILL - 16);
+    let bottom = c.h - pad - NU_PILL - 16;
     let mut y = top + rows.len() as i32 * row + 44;
     // What was just done (the message) keeps its lines; the row's explanation gives way first.
     let message_h = page.message.as_ref().map_or(0, |m| text.wrap_prose(Face::Body, NU_SMALL, m, width).len() as i32 * step + 12);

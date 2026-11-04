@@ -168,11 +168,15 @@ pub fn hints(selected: Option<Item>, home: bool, starred: bool, system_page: boo
     let mut hints = vec![("A", action)];
     if !home {
         hints.push(("B", "Back"));
+    } else {
+        // HOME opens the quick settings on Home and the shelf (`quick::Sys`).
+        hints.push(("HOME", "Quick settings"));
     }
     if let Some(Item::Recent(_) | Item::Game(..)) = selected {
-        hints.push(("Y", if starred { "Unstar" } else { "Star" }));
-        // X opens the game's card (src/game_card.rs).
+        // X opens the game's card (src/game_card.rs). The bar shows at most four hints (`kit::page_hints`) and drops
+        // from the back of this order: A, B, HOME and START stay, then Details, then Star.
         hints.push(("X", "Details"));
+        hints.push(("Y", if starred { "Unstar" } else { "Star" }));
     }
     if let Some(Item::SmartShelf(_) | Item::Sticker(_)) = selected {
         hints.push(("Y", if starred { "Unpin" } else { "Pin" }));

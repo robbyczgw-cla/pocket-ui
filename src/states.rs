@@ -53,7 +53,8 @@ impl StateSet {
     /// a player coming from the Android app has them; the auto and undo states sit at 99 and 98, which no menu of
     /// ARMSX2 shows (it has 1 to 10) and PINE takes any number for.
     pub fn armsx2(base: &str) -> StateSet {
-        let file = |n: u8| PathBuf::from(format!("/storage/roms/savestates/ps2/{base}.{n:02}.p2s"));
+        let dir = crate::slots::states_dir().join("ps2");
+        let file = |n: u8| dir.join(format!("{base}.{n:02}.p2s"));
         StateSet { auto: vec![file(ARMSX2_AUTO)], undo: file(ARMSX2_UNDO), slots: (1..=8).map(file).collect() }
     }
 
@@ -61,7 +62,7 @@ impl StateSet {
     /// count them. `.s00` is the slot ROCKNIX's hotkeys start on, outside those: states pass through it
     /// (`standalone`), and the auto and undo states are files of ours beside the others.
     pub fn dolphin(system: &str, base: &str) -> StateSet {
-        let dir = Path::new(crate::slots::STATES_DIR).join(system);
+        let dir = crate::slots::states_dir().join(system);
         StateSet {
             auto: vec![dir.join(format!("{base}.pocket-auto"))],
             undo: dir.join(format!("{base}.pocket-undo")),
@@ -72,19 +73,19 @@ impl StateSet {
     /// hakuX in RetroArch: its own state files `<game>.state1` to `.state8`, the auto state RetroArch's `.state.auto` (slot -1)
     /// and "Before load" in slot 98. Only used once the core has save states (`hakux::core_has_states`).
     pub fn hakux(base: &str) -> StateSet {
-        let dir = Path::new(crate::slots::STATES_DIR).join("xbox");
+        let dir = crate::slots::states_dir().join("xbox");
         let file = |slot: i32| crate::hakux::state_file(&dir, base, slot);
         StateSet { auto: vec![file(crate::hakux::AUTO_SLOT)], undo: file(crate::hakux::UNDO_SLOT), slots: (1..=8).map(file).collect() }
     }
 
     /// Dolphin's transit slot (`.s00`).
     pub fn dolphin_transit(system: &str, base: &str) -> PathBuf {
-        Path::new(crate::slots::STATES_DIR).join(system).join(format!("{base}.s00"))
+        crate::slots::states_dir().join(system).join(format!("{base}.s00"))
     }
 
     /// Azahar: one manual slot, its quick slot `<title id>.00.cst`; the others are ours, named after the game file.
     pub fn azahar(title: &str, rom_file: &str) -> StateSet {
-        let dir = Path::new(crate::slots::STATES_DIR).join("3ds");
+        let dir = crate::slots::states_dir().join("3ds");
         StateSet {
             auto: vec![dir.join(format!("{rom_file}.auto.cst"))],
             undo: dir.join(format!("{rom_file}.undo.cst")),
@@ -176,7 +177,9 @@ pub fn note(target: Target, ago: Option<&str>, saving: bool) -> String {
         (Target::Undo, None) => "Before load · none".into(),
         (Target::Slot(n), Some(ago)) if saving => format!("Slot {n} · replaces the save from {ago}"),
         (Target::Slot(n), Some(ago)) => format!("Slot {n} · saved {ago}"),
-        (Target::Slot(n), None) => format!("Slot {n} · empty"),
+        (Target::Slot(n), None) if saving => format!("Slot {n} · empty"),
+        // On Load a grey row says why (first-start walk 2026-11-04).
+        (Target::Slot(n), None) => format!("No save in slot {n} yet"),
     }
 }
 
@@ -277,6 +280,7 @@ mod tests {
         assert_eq!(note(Target::Undo, Some("1 min ago"), false), "Before load · 1 min ago");
         assert_eq!(note(Target::Slot(2), Some("2 h ago"), true), "Slot 2 · replaces the save from 2 h ago");
         assert_eq!(note(Target::Slot(2), Some("2 h ago"), false), "Slot 2 · saved 2 h ago");
-        assert_eq!(note(Target::Slot(2), None, false), "Slot 2 · empty");
+        assert_eq!(note(Target::Slot(2), None, true), "Slot 2 · empty");
+        assert_eq!(note(Target::Slot(2), None, false), "No save in slot 2 yet");
     }
 }

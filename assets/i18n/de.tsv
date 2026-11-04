@@ -289,7 +289,7 @@ shortest first	kürzeste zuerst
 Surprise me	Überrasch mich
 From 1 game	Aus 1 Spiel
 From {n} games	Aus {n} Spielen
-One game picked for you, and why. Right picks another	Ein Spiel für dich, mit Grund. Rechts: ein anderes
+One game picked for you, and why. Right picks another.	Ein Spiel für dich, mit Grund. Rechts: ein anderes.
 No games to pick from yet	Noch keine Spiele zum Aussuchen
 Another	Ein anderes
 Never played	Nie gespielt
@@ -468,7 +468,7 @@ Removed from Favourites	Aus Favoriten entfernt
 Getting the list ready…	Liste wird vorbereitet …
 Any game, by its name	Jedes Spiel, nach Namen
 No game matches “{s}”	Kein Spiel passt zu „{s}“
-It may not be on the SD card. Or check the spelling, or type less of the name.	Vielleicht ist es nicht auf der SD-Karte. Sonst prüf die Schreibweise oder tipp weniger vom Namen.
+It may not be in your games folder. Or check the spelling, or type less of the name.	Vielleicht liegt es nicht in deinem Spielordner. Sonst prüf die Schreibweise oder tipp weniger vom Namen.
 Results	Ergebnisse
 Play	Spielen
 Unstar	Stern weg
@@ -541,7 +541,7 @@ Free: {s} of {s2}, {n} games	Frei: {s} von {s2}, {n} Spiele
 Looking for tools{s}	Suche Tools{s}
 Looking for tools	Suche Tools
 No tools found	Keine Tools gefunden
-ROCKNIX keeps its tools in {s}. X looks again.	ROCKNIX legt seine Tools in {s} ab. X sucht noch einmal.
+There are none on this handheld yet. X looks again.	Auf diesem Handheld gibt es noch keine. X sucht noch einmal.
 Look again	Neu suchen
 Running.	Läuft.
 Running..	Läuft..
@@ -1674,6 +1674,9 @@ Screenshot	Screenshot
 HOME + A saves a picture of the game to the SD card.	HOME + A speichert ein Bild des Spiels auf der SD-Karte.
 The pause menu does not open.	Das Pausenmenü geht dabei nicht auf.
 HOME + A	HOME + A
+HOME + X	HOME + X
+HOME + X shows the paused game's picture larger.	HOME + X zeigt das angehaltene Bild größer.
+B goes back to the game.	B geht zurück ins Spiel.
 HOME + Y cycles through Off, FPS, FPS + sensors	HOME + Y schaltet weiter zwischen Aus, FPS, FPS + Sensoren
 and Pixel Path, until you quit or change Over the game.	und Pixel Path, bis du beendest oder Anzeige im Spiel änderst.
 Settings you rarely need.	Einstellungen, die du selten brauchst.
@@ -1711,7 +1714,6 @@ Quiet	Leise
 Cool	Kühl
 It runs ahead and goes back every frame, so it uses more power.	Es läuft voraus und geht jedes Bild zurück, braucht also mehr Strom.
 1 frame suits most games; 2 only the lighter ones.	1 Bild passt für die meisten Spiele; 2 nur für die leichteren.
-Size, sharpness, screen effects, frame and orientation.	Größe, Schärfe, Bildeffekte, Rahmen und Ausrichtung.
 Screen scaling	Skalierung
 Integer scales by whole numbers (integer scaling): every pixel the same size, the sharpest.	Ganzzahlig skaliert in ganzen Zahlen: jedes Pixel gleich groß, am schärfsten.
 Integer, smaller is one whole step down, leaving room for a frame.	Ganzzahlig, kleiner ist eine ganze Stufe kleiner, mit Platz für einen Rahmen.
@@ -1722,17 +1724,36 @@ Integer, smaller	Ganzzahlig, kleiner
 Aspect	Seitenverhältnis
 Aspect screen	Bildschirmformat
 Fullscreen	Vollbild
-Screen sharpness	Schärfe
-Sharp keeps hard pixel edges.	Scharf behält harte Pixelkanten.
-Crisp scales up sharply first, then smooths a little.	Klar skaliert erst scharf hoch und glättet dann etwas.
-Soft blurs the edges.	Weich zeichnet die Kanten weich.
+Size, look, frame and orientation.	Größe, Ansicht, Rahmen und Ausrichtung.
+How the picture looks. Pick one; Custom opens Sharpness and Effect.	So sieht das Bild aus. Such eins aus; Eigenes öffnet Schärfe und Effekt.
+Clean	Sauber
+Bloom	Bloom
+Old TV	Alter Fernseher
+Sharpness	Schärfe
+Effect	Effekt
+How the edges of the blown-up pixels look.	So sehen die Kanten der vergrößerten Pixel aus.
+What is laid over the picture.	Was über das Bild gelegt wird.
+Hard pixel squares, exactly as the console drew them.	Harte Pixelquadrate, genau wie die Konsole sie gezeichnet hat.
+All pixels the same size at any scaling; at Integer it looks like Sharp.	Alle Pixel gleich groß bei jeder Skalierung; bei Ganzzahlig sieht es aus wie Scharf.
+Blurs every pixel edge a little.	Verwischt jede Pixelkante ein wenig.
+The plain picture, nothing laid over it.	Das reine Bild, nichts darübergelegt.
+Thin dark gaps between the pixels, like a handheld's screen.	Dünne dunkle Lücken zwischen den Pixeln, wie bei einem Handheld-Bildschirm.
+Rows like a TV's beam: dark gaps in dark parts, rows that close up where it's bright.	Zeilen wie der Strahl eines Fernsehers: dunkle Lücken in dunklen Teilen, Zeilen, die sich bei Helligkeit schließen.
+Scanlines plus a faint glow, like an old tube TV. The TV around it is a Screen frame.	Scanlines plus ein leichtes Leuchten, wie bei einem alten Röhrenfernseher. Der Fernseher drumherum ist ein Bildschirmrahmen.
+A soft halo around bright parts; the rest stays clear.	Ein weicher Schein um helle Stellen; der Rest bleibt klar.
+Rounds the stair-steps on slanted edges. Flat pixels and straight edges stay sharp.	Rundet die Treppen an schrägen Kanten ab. Flache Pixel und gerade Kanten bleiben scharf.
+Plain pixels, nothing added, all the same size at any scaling.	Reine Pixel, nichts hinzugefügt, bei jeder Skalierung gleich groß.
+Pixels stay sharp, but stair-steps on slanted edges get rounded off.	Die Pixel bleiben scharf, aber Treppen an schrägen Kanten werden abgerundet.
+The whole picture slightly blurred, no hard pixel squares.	Das ganze Bild leicht verwischt, keine harten Pixelquadrate.
+A clear picture where bright parts glow softly around the edges.	Ein klares Bild, bei dem helle Stellen an den Rändern sanft leuchten.
+Thin lines between the pixels, like a handheld's screen, in the GBA screen's colours.	Dünne Linien zwischen den Pixeln, wie bei einem Handheld-Bildschirm, in den Farben des GBA-Bildschirms.
+Thin lines between the pixels, like a handheld's screen.	Dünne Linien zwischen den Pixeln, wie bei einem Handheld-Bildschirm.
+Dark lines between the rows, like a TV. Fades out in hi-res menus.	Dunkle Linien zwischen den Zeilen, wie bei einem Fernseher. Blasst in hochauflösenden Menüs aus.
+Scanlines plus the glow of a tube TV. The TV around it is a Screen frame.	Scanlines plus das Leuchten eines Röhrenfernsehers. Der Fernseher drumherum ist ein Bildschirmrahmen.
+Pick sharpness and effect yourself in the two rows below.	Wähl Schärfe und Effekt selbst in den zwei Zeilen darunter.
 Sharp	Scharf
 Crisp	Klar
 Soft	Weich
-Screen effect	Bildeffekt
-LCD grid imitates a handheld screen, scanlines and CRT a TV.	LCD-Raster ahmt einen Handheld-Bildschirm nach, Scanlines und Röhre einen Fernseher.
-Soft glow adds a halo around bright parts; Smooth pixels rounds slanted edges.	Weiches Leuchten legt einen Schein um helle Stellen, Glatte Pixel rundet schräge Kanten.
-They stay even at every size, Aspect included.	Gleich in jeder Größe, auch bei Seitenverhältnis.
 LCD colours	LCD-Farben
 The colours of the Game Boy Advance's own screen:	Die Farben des Bildschirms des Game Boy Advance:
 softer and darker, as the games were made for.	weicher und dunkler, wie die Spiele dafür gemacht wurden.
@@ -1740,8 +1761,6 @@ Left out while the emulator's own colour correction is on.	Entfällt, solange di
 LCD grid	LCD-Raster
 Scanlines	Scanlines
 CRT	Röhre
-Soft glow	Weiches Leuchten
-Smooth pixels	Glatte Pixel
 Screen frame	Bildschirmrahmen
 Fills the space around the picture. Auto suits the console.	Füllt den Platz um das Bild. Auto passt zur Konsole.
 Ambient glows with the game's colours; Glow is a thin light in its colour.	Umgebung leuchtet in den Farben des Spiels, Schein ist ein dünnes Licht in seiner Farbe.
@@ -2237,7 +2256,6 @@ Choose a look	Wähl eine Ansicht
 How the shelf looks, with sample games until yours are on the SD card.	So sieht das Regal aus, mit Beispielspielen, bis deine auf der SD-Karte sind.
 Your shelf, in each look.	Dein Regal, in jeder Ansicht.
 Appearance	Darstellung
-Keep this look	Behalten
 Saved, out of range	Gespeichert, nicht in Reichweite
 Saved	Gespeichert
 No password	Ohne Passwort
@@ -2328,7 +2346,7 @@ Before load · {t}	Vorher · {t}
 Before load · none	Vorher · keiner
 Earlier	Früher
 None yet	Noch keiner
-Earlier · none yet · one every 5 min of play	Früher · noch keiner · einer alle 5 min Spielzeit
+Earlier · none yet · keeps a moment every 5 min of play	Früher · noch keiner · hält alle 5 min Spielzeit einen Moment fest
 Earlier · {t}	Früher · {t}
 Earlier · {t} · damaged, can't be loaded	Früher · {t} · beschädigt, lässt sich nicht laden
 Earlier · session start · today {s}	Früher · Sitzungsbeginn · heute {s}
@@ -2357,6 +2375,7 @@ The resume states, Before load and earlier states of 1 game not played for {n} m
 Slot {n} · replaces the save from {t}	Platz {n} · ersetzt den Spielstand von {t}
 Slot {n} · saved {t}	Platz {n} · gespeichert {t}
 Slot {n} · empty	Platz {n} · leer
+No save in slot {n} yet	Kein Spielstand in Platz {n}
 
 # --- Store
 The list of installed packages ({s}) is damaged, so the Store changes nothing{s2}.	Die Liste der installierten Pakete ({s}) ist beschädigt, daher ändert der Store nichts{s2}.
@@ -2685,7 +2704,7 @@ The {s}×{s2} picture is drawn {n} times as large.	Das Bild mit {s}×{s2} wird {
 Every pixel of the {s} picture covers exactly {s2} pixels of the {s3} panel: nothing is blended, nothing is left out, every pixel the same size. {t}	Jedes Pixel des Bildes mit {s} bedeckt genau {s2} Pixel des Panels ({s3}): nichts wird gemischt, nichts fällt weg, jedes Pixel gleich groß. {t}
 Every pixel of the {s} picture covers exactly {s2} pixels of the {s3} panel: nothing is blended, nothing is left out, every pixel the same size.	Jedes Pixel des Bildes mit {s} bedeckt genau {s2} Pixel des Panels ({s3}): nichts wird gemischt, nichts fällt weg, jedes Pixel gleich groß.
 Every pixel of the {s} picture covers {s2} panel pixels, the sharpest the panel can show it. {t}	Jedes Pixel des Bildes mit {s} bedeckt {s2} Pixel des Panels, so scharf, wie das Panel es zeigen kann. {t}
-Sharp or Crisp under Options › Picture shows the pixels as they are.	Scharf oder Klar unter Optionen › Bild zeigt die Pixel, wie sie sind.
+Clean under Options › Picture › Look shows the pixels as they are.	Sauber unter Optionen › Bild › Ansicht zeigt die Pixel, wie sie sind.
 The picture is stretched to fill the {s} panel, so it is drawn {n}% {t} than the game was made: circles become ovals. {t2} Screen scaling under Options › Picture keeps the shape with Integer or Aspect.	Das Bild ist gestreckt, um das Panel ({s}) zu füllen, und daher {n} % {t} gezeichnet, als das Spiel gemacht wurde: Kreise werden zu Ovalen. {t2} Skalierung unter Optionen › Bild behält die Form mit Ganzzahlig oder Seitenverhältnis.
 The console's pixels are not square ({s}): the picture keeps the shape it had on a TV, {n}:1.	Die Pixel der Konsole sind nicht quadratisch ({s}): Das Bild behält die Form, die es auf einem Fernseher hatte, {n}:1.
 The console's pixels are not square ({s} pixels): the picture keeps the shape it had on a TV, {n}:1.	Die Pixel der Konsole sind nicht quadratisch (Pixel {s}): Das Bild behält die Form, die es auf einem Fernseher hatte, {n}:1.
@@ -2695,10 +2714,10 @@ The console's pixels are not square ({s} pixels): the picture keeps the shape it
 {s} runs this game on its own. pocket-ui starts it and draws the pause menu over it, but the picture, the timing and the sound are {s2}'s, and it doesn't tell pocket-ui how it draws them. Pixel Path grades games that pocket-core runs.	{s} führt dieses Spiel selbst aus. pocket-ui startet es und zeichnet das Pausenmenü darüber, aber Bild, Takt und Ton gehören {s2}, und es verrät pocket-ui nicht, wie es sie zeichnet. Pixel Path bewertet Spiele, die pocket-core ausführt.
 An estimate from how pocket-core is built, not a camera measurement: {t}, ≈ {s} refreshes or {n} ms. The game's own reaction comes on top of that: most games respond to a button one to three frames later, as they did on the original console.	Eine Schätzung aus dem Aufbau von pocket-core, keine Kameramessung: {t}, ≈ {s} Bildaufbauten oder {n} ms. Die Reaktion des Spiels kommt dazu: Die meisten Spiele antworten in der Konsole ein bis drei Bilder später auf eine Taste, wie sie es auf ihr taten.
 reading the buttons {s}, the emulator {s2}, waiting for the screen {s3} and the panel drawing down to its middle {s4} refreshes	Tasten lesen {s}, Emulator {s2}, Warten auf den Bildschirm {s3} und das Panel bis zu seiner Mitte {s4} Bildaufbauten
-The emulator makes sound at {n} Hz; pocket-core resamples it to the {m} Hz of the output with linear interpolation{t}, and steers a {k} ms queue ({n2} ms in it now) by nudging the rate by up to ±0.5%, so the sound neither runs dry nor drifts behind the picture. After the queue, the output ({s}) holds about {n3} ms more. {t2} in this session.	Der Emulator erzeugt Ton mit {n} Hz; pocket-core rechnet ihn mit linearer Interpolation auf die {m} Hz der Ausgabe um{t} und regelt einen Puffer von {k} ms (gerade {n2} ms darin), indem es die Rate um bis zu ±0,5 % anpasst, damit der Ton weder abreißt noch hinter dem Bild zurückfällt. Nach dem Puffer hält die Ausgabe ({s}) etwa {n3} ms mehr. {t2} in dieser Sitzung.
-The emulator makes sound at {n} Hz; pocket-core resamples it to the {m} Hz of the output with linear interpolation, and steers a {k} ms queue ({n2} ms in it now) by nudging the rate by up to ±0.5%, so the sound neither runs dry nor drifts behind the picture. After the queue, the output ({s}) holds about {n3} ms more. {t2} in this session.	Der Emulator erzeugt Ton mit {n} Hz; pocket-core rechnet ihn mit linearer Interpolation auf die {m} Hz der Ausgabe um und regelt einen Puffer von {k} ms (gerade {n2} ms darin), indem es die Rate um bis zu ±0,5 % anpasst, damit der Ton weder abreißt noch hinter dem Bild zurückfällt. Nach dem Puffer hält die Ausgabe ({s}) etwa {n3} ms mehr. {t2} in dieser Sitzung.
-The emulator makes sound at {n} Hz; pocket-core resamples it to the {m} Hz of the output with linear interpolation{t}, and steers a {k} ms queue ({n2} ms in it now) by nudging the rate by up to ±0.5%, so the sound neither runs dry nor drifts behind the picture. After the queue, the output ({s}) holds about {n3} ms more. {t2} in this session. The sound goes to Bluetooth headphones or a speaker. Their codec and the radio add a delay of their own that pocket-core can't measure, often 100 to 250 ms, so the sound comes later than on the Pocket's speaker and the numbers here don't include it.	Der Emulator erzeugt Ton mit {n} Hz; pocket-core rechnet ihn mit linearer Interpolation auf die {m} Hz der Ausgabe um{t} und regelt einen Puffer von {k} ms (gerade {n2} ms darin), indem es die Rate um bis zu ±0,5 % anpasst, damit der Ton weder abreißt noch hinter dem Bild zurückfällt. Nach dem Puffer hält die Ausgabe ({s}) etwa {n3} ms mehr. {t2} in dieser Sitzung. Der Ton geht an Bluetooth-Kopfhörer oder einen Bluetooth-Lautsprecher. Deren Codec und die Funkstrecke bringen eine eigene Verzögerung mit, die pocket-core nicht messen kann, oft 100 bis 250 ms. Der Ton kommt deshalb später als über den Lautsprecher des Pocket, und die Zahlen hier enthalten sie nicht.
-The emulator makes sound at {n} Hz; pocket-core resamples it to the {m} Hz of the output with linear interpolation, and steers a {k} ms queue ({n2} ms in it now) by nudging the rate by up to ±0.5%, so the sound neither runs dry nor drifts behind the picture. After the queue, the output ({s}) holds about {n3} ms more. {t2} in this session. The sound goes to Bluetooth headphones or a speaker. Their codec and the radio add a delay of their own that pocket-core can't measure, often 100 to 250 ms, so the sound comes later than on the Pocket's speaker and the numbers here don't include it.	Der Emulator erzeugt Ton mit {n} Hz; pocket-core rechnet ihn mit linearer Interpolation auf die {m} Hz der Ausgabe um und regelt einen Puffer von {k} ms (gerade {n2} ms darin), indem es die Rate um bis zu ±0,5 % anpasst, damit der Ton weder abreißt noch hinter dem Bild zurückfällt. Nach dem Puffer hält die Ausgabe ({s}) etwa {n3} ms mehr. {t2} in dieser Sitzung. Der Ton geht an Bluetooth-Kopfhörer oder einen Bluetooth-Lautsprecher. Deren Codec und die Funkstrecke bringen eine eigene Verzögerung mit, die pocket-core nicht messen kann, oft 100 bis 250 ms. Der Ton kommt deshalb später als über den Lautsprecher des Pocket, und die Zahlen hier enthalten sie nicht.
+The emulator makes sound at {n} Hz; pocket-core resamples it to the {m} Hz of the output with a windowed-sinc filter{t}, and steers a {k} ms queue ({n2} ms in it now) by nudging the rate by up to ±0.5%, so the sound neither runs dry nor drifts behind the picture. After the queue, the output ({s}) holds about {n3} ms more. {t2} in this session.	Der Emulator erzeugt Ton mit {n} Hz; pocket-core rechnet ihn mit einem Windowed-Sinc-Filter auf die {m} Hz der Ausgabe um{t} und regelt einen Puffer von {k} ms (gerade {n2} ms darin), indem es die Rate um bis zu ±0,5 % anpasst, damit der Ton weder abreißt noch hinter dem Bild zurückfällt. Nach dem Puffer hält die Ausgabe ({s}) etwa {n3} ms mehr. {t2} in dieser Sitzung.
+The emulator makes sound at {n} Hz; pocket-core resamples it to the {m} Hz of the output with a windowed-sinc filter, and steers a {k} ms queue ({n2} ms in it now) by nudging the rate by up to ±0.5%, so the sound neither runs dry nor drifts behind the picture. After the queue, the output ({s}) holds about {n3} ms more. {t2} in this session.	Der Emulator erzeugt Ton mit {n} Hz; pocket-core rechnet ihn mit einem Windowed-Sinc-Filter auf die {m} Hz der Ausgabe um und regelt einen Puffer von {k} ms (gerade {n2} ms darin), indem es die Rate um bis zu ±0,5 % anpasst, damit der Ton weder abreißt noch hinter dem Bild zurückfällt. Nach dem Puffer hält die Ausgabe ({s}) etwa {n3} ms mehr. {t2} in dieser Sitzung.
+The emulator makes sound at {n} Hz; pocket-core resamples it to the {m} Hz of the output with a windowed-sinc filter{t}, and steers a {k} ms queue ({n2} ms in it now) by nudging the rate by up to ±0.5%, so the sound neither runs dry nor drifts behind the picture. After the queue, the output ({s}) holds about {n3} ms more. {t2} in this session. The sound goes to Bluetooth headphones or a speaker. Their codec and the radio add a delay of their own that pocket-core can't measure, often 100 to 250 ms, so the sound comes later than on the Pocket's speaker and the numbers here don't include it.	Der Emulator erzeugt Ton mit {n} Hz; pocket-core rechnet ihn mit einem Windowed-Sinc-Filter auf die {m} Hz der Ausgabe um{t} und regelt einen Puffer von {k} ms (gerade {n2} ms darin), indem es die Rate um bis zu ±0,5 % anpasst, damit der Ton weder abreißt noch hinter dem Bild zurückfällt. Nach dem Puffer hält die Ausgabe ({s}) etwa {n3} ms mehr. {t2} in dieser Sitzung. Der Ton geht an Bluetooth-Kopfhörer oder einen Bluetooth-Lautsprecher. Deren Codec und die Funkstrecke bringen eine eigene Verzögerung mit, die pocket-core nicht messen kann, oft 100 bis 250 ms. Der Ton kommt deshalb später als über den Lautsprecher des Pocket, und die Zahlen hier enthalten sie nicht.
+The emulator makes sound at {n} Hz; pocket-core resamples it to the {m} Hz of the output with a windowed-sinc filter, and steers a {k} ms queue ({n2} ms in it now) by nudging the rate by up to ±0.5%, so the sound neither runs dry nor drifts behind the picture. After the queue, the output ({s}) holds about {n3} ms more. {t2} in this session. The sound goes to Bluetooth headphones or a speaker. Their codec and the radio add a delay of their own that pocket-core can't measure, often 100 to 250 ms, so the sound comes later than on the Pocket's speaker and the numbers here don't include it.	Der Emulator erzeugt Ton mit {n} Hz; pocket-core rechnet ihn mit einem Windowed-Sinc-Filter auf die {m} Hz der Ausgabe um und regelt einen Puffer von {k} ms (gerade {n2} ms darin), indem es die Rate um bis zu ±0,5 % anpasst, damit der Ton weder abreißt noch hinter dem Bild zurückfällt. Nach dem Puffer hält die Ausgabe ({s}) etwa {n3} ms mehr. {t2} in dieser Sitzung. Der Ton geht an Bluetooth-Kopfhörer oder einen Bluetooth-Lautsprecher. Deren Codec und die Funkstrecke bringen eine eigene Verzögerung mit, die pocket-core nicht messen kann, oft 100 bis 250 ms. Der Ton kommt deshalb später als über den Lautsprecher des Pocket, und die Zahlen hier enthalten sie nicht.
 No underruns in this session	Keine Aussetzer in dieser Sitzung
 The sound goes to Bluetooth headphones or a speaker. Their codec and the radio add a delay of their own that pocket-core can't measure, often 100 to 250 ms, so the sound comes later than on the Pocket's speaker and the numbers here don't include it.	Der Ton geht an Bluetooth-Kopfhörer oder einen Bluetooth-Lautsprecher. Deren Codec und die Funkstrecke bringen eine eigene Verzögerung mit, die pocket-core nicht messen kann, oft 100 bis 250 ms. Der Ton kommt deshalb später als über den Lautsprecher des Pocket, und die Zahlen hier enthalten sie nicht.
 No gaps. Bluetooth adds its own delay.	Ohne Lücken. Bluetooth bringt eine eigene Verzögerung mit.
@@ -3449,7 +3468,7 @@ Screenshot not saved	Screenshot nicht gespeichert
 
 # --- Starter pack (Settings → Games, Home on a card without games). The games' descriptions come from assets/starter-pack.json.
 Starter pack	Startpaket
-A few free games to start with, downloaded to your SD card.	Ein paar kostenlose Spiele zum Anfangen, auf deine SD-Karte geladen.
+A few free games to start with, downloaded to this handheld.	Ein paar kostenlose Spiele zum Anfangen, auf dieses Gerät geladen.
 Get the starter pack	Startpaket holen
 Get a few free games to start playing right away.	Hol dir ein paar kostenlose Spiele, um sofort loszuspielen.
 Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing).	Oder kopiere eigene: Einstellungen › Spiele › Spiele hinzufügen zeigt die Wege (Handy, Dateifreigabe).
@@ -3457,9 +3476,9 @@ Needs Wi-Fi. Connect in Settings › Connections › Wi-Fi first.	Braucht WLAN. 
 {n} small games, free to share, from their authors.	{n} kleine Spiele, frei weitergebbar, direkt von ihren Autoren.
 Get all games	Alle Spiele holen
 Get all {n} games	Alle {n} Spiele holen
-All games are on your SD card	Alle Spiele sind auf deiner SD-Karte
-On your SD card	Auf deiner SD-Karte
-Looking at your SD card…	SD-Karte wird gelesen …
+All games are already here	Alle Spiele sind schon da
+Already here	Schon da
+Looking at your games folder…	Spielordner wird gelesen …
 Free games their authors share for anyone to play. They come over the internet and are added only when you press A.	Kostenlose Spiele, die ihre Autoren für alle teilen. Sie kommen übers Internet und werden nur mit A hinzugefügt.
 Get all	Alle holen
 Get	Holen
@@ -3469,9 +3488,9 @@ By {s} · {s2}	Von {s} · {s2}
 {s} added.	{s} hinzugefügt.
 Added 1 game. B shows your shelf.	1 Spiel hinzugefügt. B zeigt dein Regal.
 Added {n} games. B shows your shelf.	{n} Spiele hinzugefügt. B zeigt dein Regal.
-Every game in the pack is on your SD card.	Alle Spiele des Pakets sind auf deiner SD-Karte.
-{s} is on your SD card already.	{s} ist schon auf deiner SD-Karte.
-{s} is on your SD card already. Nothing was changed.	{s} ist schon auf deiner SD-Karte. Nichts wurde geändert.
+Every game in the pack is already here.	Alle Spiele des Pakets sind schon da.
+{s} is already here.	{s} ist schon da.
+{s} is already here. Nothing was changed.	{s} ist schon da. Nichts wurde geändert.
 The Pocket isn't online. Connect to Wi-Fi in Settings, then try again.	Der Pocket ist nicht online. Verbinde dich in den Einstellungen mit dem WLAN und versuch es dann noch einmal.
 Not enough space on the SD card: {n} MB free, {m} MB needed.	Nicht genug Platz auf der SD-Karte: {n} MB frei, {m} MB nötig.
 The download is damaged or was changed. Nothing was added.	Der Download ist beschädigt oder wurde verändert. Nichts wurde hinzugefügt.
@@ -3501,8 +3520,8 @@ The colours are the Game Boy Advance screen's: darker and softer, as the games w
 {s} didn't start. It may need files or libraries that aren't installed: reinstall it in Ports, or check log.txt in its folder.	{s} wurde nicht gestartet. Vielleicht fehlen Dateien oder Bibliotheken: Installier es in Ports neu oder sieh in der log.txt in seinem Ordner nach.
 {s} didn't start. {s2} needs a BIOS file in roms/bios: {s3} or {s4}. BIOS files come from your own console.	{s} wurde nicht gestartet. {s2} braucht eine BIOS-Datei in roms/bios: {s3} oder {s4}. BIOS-Dateien stammen von deiner eigenen Konsole.
 {s} didn't start. {s2} needs a BIOS file in roms/bios: {s3}. BIOS files come from your own console.	{s} wurde nicht gestartet. {s2} braucht eine BIOS-Datei in roms/bios: {s3}. BIOS-Dateien stammen von deiner eigenen Konsole.
-Your progress couldn't be saved to the SD card. Free some space; it will try again.	Dein Fortschritt ließ sich nicht auf der SD-Karte speichern. Mach etwas Platz frei; es wird erneut versucht.
-Your progress couldn't be saved: the SD card can't be written to right now. It will try again.	Dein Fortschritt ließ sich nicht speichern: Auf die SD-Karte lässt sich gerade nicht schreiben. Es wird erneut versucht.
+Couldn't save: the SD card is full. Free some space.	Nicht gespeichert: SD-Karte voll. Mach Platz frei.
+Couldn't save to the SD card. Trying again.	Speichern scheitert an der SD-Karte. Wird wiederholt.
 The SD card is full. Quitting now loses what you did since the last save that reached the SD card; that save is kept. Free some space first if you can.	Die SD-Karte ist voll. Beendest du jetzt, geht verloren, was du seit dem letzten Speichern auf der SD-Karte gespielt hast; dieser Spielspeicher bleibt. Mach vorher etwas Platz frei, wenn du kannst.
 The SD card can't be written to. Quitting now loses what you did since the last save that reached the SD card; that save is kept.	Auf die SD-Karte lässt sich nicht schreiben. Beendest du jetzt, geht verloren, was du seit dem letzten Speichern auf der SD-Karte gespielt hast; dieser Spielspeicher bleibt.
 The game's last progress couldn't be saved: the SD card is full. The save before it is kept.	Der letzte Fortschritt des Spiels ließ sich nicht speichern: Die SD-Karte ist voll. Der Spielspeicher davor bleibt.
@@ -3968,7 +3987,7 @@ Stretch / fullscreen	Strecken / Vollbild
 Picture effect	Bildeffekt
 Save settings for	Einstellungen speichern für
 This system	Dieses System
-Smooth	Weich
+Smooth	Geglättet
 Console	Konsole
 CRT TV	Röhren-TV
 after a restart	nach einem Neustart
@@ -4024,8 +4043,8 @@ Font	Schrift
 Look​	Aussehen
 Look, appearance, colours, font, text size, screen colour, night light, systems, extras.	Ansicht, Darstellung, Farben, Schrift, Schriftgröße, Bildschirmfarbe, Nachtlicht, Systeme, Extras.
 Sound & feel	Klang & Gefühl
-Animations, playful cases, old-TV switch-on, motion, sounds, case sounds, haptics, LEDs.	Animationen, verspielte Hüllen, Alter-Fernseher-Effekt, Bewegung, Töne, Hüllen-Geräusche, Haptik, LEDs.
-On start, continue, buttons, over the game, frames, performance, battery, achievements.	Start, Fortsetzen, Tasten, im Spiel, Rahmen, Leistung, Akku, RetroAchievements.
+Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds, haptics, LEDs.	Animationen, verspielte Hüllen, Alter-Fernseher-Effekt, Bewegung, Lupe, Töne, Hüllen-Geräusche, Haptik, LEDs.
+On start, continue, where I was, buttons, over the game, frames, performance, battery, achievements.	Start, Fortsetzen, Erinnern, Tasten, im Spiel, Rahmen, Leistung, Akku, RetroAchievements.
 Help & tools	Hilfe & Werkzeuge
 How you like to play, Tour, manual, tools, Store, report a problem, about.	Wie du am liebsten spielst, Tour, Handbuch, Werkzeuge, Store, Problem melden, Info.
 Shelf, Cabinet, Minimal, Cards or Split, with a live preview.	Regal, Schrank, Minimal, Karten oder Geteilt, mit Live-Vorschau.
@@ -4431,7 +4450,6 @@ Stickers & labels	Sticker & Etiketten
 Options › Picture	Optionen › Bild
 Options › Speed, rumble, fan	Optionen › Tempo, Vibration, Lüfter
 Options › Shortcuts	Optionen › Tastenkürzel
-Options › Save changes	Optionen › Änderungen speichern
 Picked now, it puts every extra back as pocket-ui ships it, also On start and Screen frames.	Jetzt gewählt, stellt es alle Extras so zurück, wie pocket-ui sie mitbringt, auch Beim Start und Bildschirmrahmen.
 Open means your moment is waiting	Offen heißt: Dein Moment wartet
 Quit keeps no moment: the next start is fresh, and the older moment stays under Load.	Beenden hält keinen Moment fest: der nächste Start ist neu, und der ältere Moment bleibt unter Laden.
@@ -4441,3 +4459,76 @@ No Wikipedia article for this game	Kein Wikipedia-Artikel zu diesem Spiel
 Offline: the description comes with Wi-Fi	Offline: Die Beschreibung kommt mit WLAN
 Screen colour	Bildschirmfarbe
 Cooler or warmer white, the same as SELECT + Vol. Left/right: change. A: Neutral.	Kühleres oder wärmeres Weiß, wie bei SELECT + Vol. Links/rechts: ändern. A: Neutral.
+# First-start walk 2026-11-04
+Curator: pick by mood, length, or what's new to you	Curator: Wähle nach Stimmung, Länge oder was dir neu ist
+Just Play: one press, the game you'd like now	Just Play: Ein Druck, das Spiel, das du jetzt magst
+No games here yet. Add a game first	Hier sind noch keine Spiele. Füge zuerst ein Spiel hinzu
+Left as it is for now. Changed any time in	Bleibt vorerst, wie es ist. Jederzeit zu ändern unter
+Play, and HOME is the menu	Spielen, und HOME ist das Menü
+Pick a game and press A. While you play, tap HOME to pause and open the menu: Continue, Save, Load, Quit.	Such ein Spiel aus und drück A. Beim Spielen hält HOME das Spiel an und öffnet das Menü: Fortsetzen, Speichern, Laden, Beenden.
+Tap HOME in a game	HOME im Spiel antippen
+Continue where you stopped	Weiterspielen, wo du aufgehört hast
+Home opens on the game you played last. A continues it, and quitting keeps the moment, so the next start picks it up.	Home öffnet auf dem Spiel, das du zuletzt gespielt hast. A setzt es fort, und Beenden merkt sich den Moment, damit der nächste Start dort weitermacht.
+Saving	Speichern
+Save and Load are in the pause menu. Earlier brings back a moment from before, if a game went wrong.	Speichern und Laden findest du im Pausenmenü. Früher holt einen Moment von vorher zurück, wenn etwas schiefging.
+Pause menu › Save, Load, Earlier	Pausenmenü › Speichern, Laden, Früher
+Brightness, volume, Wi-Fi, Bluetooth, fan and power in one panel, over the shelf and over a game.	Helligkeit, Lautstärke, WLAN, Bluetooth, Lüfter und Strom in einem Feld, über dem Regal und über einem Spiel.
+HOME on the shelf, START in the pause menu	HOME im Regal, START im Pausenmenü
+Games go in each system's folder on the SD card. Add games shows the folders and BIOS files, and can share them over Wi-Fi.	Spiele kommen auf der SD-Karte in den Ordner ihres Systems. „Spiele hinzufügen“ zeigt die Ordner und BIOS-Dateien und kann sie per WLAN freigeben.
+START › Settings › Games › Add games	START › Einstellungen › Spiele › Spiele hinzufügen
+Everything on these cards, and everything you meet along the way, can be switched under START › Settings.	Alles auf diesen Karten und alles, was dir unterwegs begegnet, lässt sich unter START › Einstellungen umschalten.
+START on the shelf	START im Regal
+The basics in 7 cards	Die Grundlagen in 7 Karten
+No picture	Kein Bild
+The basics in 7 cards: playing, saving, quick settings, adding games, easier reading.	Die Grundlagen in 7 Karten: Spielen, Speichern, Schnellmenü, Spiele hinzufügen, leichter lesen.
+menu: Continue, Save, Load, Quit.	Menü: Fortsetzen, Speichern, Laden, Beenden.
+Continue, Save, Load, Quit.	Fortsetzen, Speichern, Laden, Beenden.
+Press A to close.	Mit A schließen.
+Keep for	Behalten für
+This console	Diese Konsole
+Kept for this console.	Für diese Konsole behalten.
+Kept for this game.	Für dieses Spiel behalten.
+Changes show at once and stay for this game. Left or right: every game on this console.	Änderungen gelten sofort und bleiben für dieses Spiel. Links oder rechts: jedes Spiel auf dieser Konsole.
+Changes show at once and stay for every game on this console. Left or right: this game only.	Änderungen gelten sofort und bleiben für jedes Spiel auf dieser Konsole. Links oder rechts: nur dieses Spiel.
+Press A again to restore the defaults. B keeps your settings.	Zum Zurücksetzen noch einmal A drücken. Mit B bleiben deine Einstellungen.
+
+# --- Zoom, Hold to toggle, Easy to read (pause menu, Options → Controls, the Tour)
+Zoom	Lupe
+The picture larger, to read small text. Move with the D-pad.	Das Bild größer, um kleinen Text zu lesen. Mit dem Steuerkreuz verschieben.
+Move	Bewegen
+Hold to toggle	Halten als Umschalter
+Pick a button: one press holds it down, the next lets go.	Wähle eine Taste: Ein Druck hält sie gedrückt, der nächste lässt los.
+For buttons you would hold, like run.	Für Tasten, die man sonst halten müsste, etwa zum Rennen.
+Easy to read	Gut lesbar
+larger text and calmer menus	größere Schrift und ruhigere Menüs
+Larger text, menus that only fade, and Zoom in the pause menu. Switches Text size and Motion together.	Größere Schrift, Menüs blenden nur ein, Lupe im Pausenmenü. Schaltet Schriftgröße und Bewegung zusammen.
+Settings › Look › Text size, Settings › Sound & feel › Motion	Einstellungen › Aussehen › Schriftgröße, Einstellungen › Klang & Gefühl › Bewegung
+{s} held	{s} gehalten
+# --- Where was I? (the card over a moment continued after a long break)
+Remind me where I was	Erinnern, wo ich war
+Zoom in the pause menu	Lupe im Pausenmenü
+Zoom on the pause menu's first page. It is always under Options.	Die Lupe auf der ersten Seite des Pausenmenüs. Unter Optionen ist sie immer da.
+Back after two weeks or more: when you played last, and your note, while the game loads.	Nach zwei Wochen oder mehr: wann du zuletzt gespielt hast und deine Notiz, während das Spiel lädt.
+No reminder after a long break.	Keine Erinnerung nach einer langen Pause.
+Last played {n} weeks ago	Zuletzt vor {n} Wochen gespielt
+Last played {n} months ago	Zuletzt vor {n} Monaten gespielt
+Last played a year ago	Zuletzt vor einem Jahr gespielt
+Last played {n} years ago	Zuletzt vor {n} Jahren gespielt
+{t} played	{t} gespielt
+# Controls card 2026-11-04
+Controls card	Steuerungskarte
+Which button is which on this console, and what HOME does.	Welche Taste bei dieser Konsole welche ist, und was HOME tut.
+Which button of the Pocket does what	Welche Taste des Pocket was tut
+This console's button names show here after your first game on it.	Die Tastennamen dieser Konsole stehen hier nach deinem ersten Spiel darauf.
+D-pad (changed)	Steuerkreuz (geändert)
+Menu	Menü
+Analog stick	Analogstick
+C buttons	C-Tasten
+C mode	C-Modus
+Hold R2 and the face buttons are C buttons.	R2 gedrückt halten: Dann sind die vier Tasten rechts die C-Tasten.
+In colour: what you changed in Options › Controls.	Farbig: was du unter Optionen › Steuerung geändert hast.
+Brighten solar sensor	Solarsensor heller
+Darken solar sensor	Solarsensor dunkler
+
+Brighten Solar Sensor	Solarsensor heller
+Darken Solar Sensor	Solarsensor dunkler

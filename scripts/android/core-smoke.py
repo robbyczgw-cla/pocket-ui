@@ -38,5 +38,5 @@ for r in cases:
  if r['system'] in ('psp','n64'):assert 'Android core renderer: GLES 3' in log,(name,'hardware context missing')
  (out/(name+'.png')).write_bytes(run('exec-out','screencap','-p'));sh('input','keyevent','4');time.sleep(.5)
  labels=[n.get('text') for n in nodes()];assert 'Continue' in labels,(name,'pause missing',labels)
- (out/(name+'-pause.png')).write_bytes(run('exec-out','screencap','-p'));tap('Quit');time.sleep(1)
+ (out/(name+'-pause.png')).write_bytes(run('exec-out','screencap','-p'));tap('Save & quit');time.sleep(1)
  print(name,'QUICK LAUNCH + PAUSE PASS',flush=True)

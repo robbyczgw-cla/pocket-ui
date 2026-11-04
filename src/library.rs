@@ -27,6 +27,19 @@ pub struct System {
 /// keeps its pictures: they are Settings → Games → Screenshots, `gallery.rs`, never games.)
 const NOT_GAMES: &[&str] = &["tools", "music", "moonlight", "imageviewer"];
 
+/// Entries the device brings itself (the Odin's Steam list, PortMaster's own launcher): they are on Home but not the
+/// player's games, so the first-start pages leave them out of "your games" (first-start walk 2026-11-04).
+pub fn supplied_by_device(system_id: &str, path: &Path) -> bool {
+    system_id.eq_ignore_ascii_case("steam")
+        || (system_id.eq_ignore_ascii_case("ports") && path.file_stem().is_some_and(|n| n.eq_ignore_ascii_case("portmaster")))
+}
+
+/// `supplied_by_device` for a path alone (the folder name is the system's): Setup knows its games by path.
+pub fn path_supplied_by_device(path: &Path) -> bool {
+    let folder = path.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str()).unwrap_or("");
+    supplied_by_device(folder, path)
+}
+
 /// Loads every system from `es_systems` that has at least one game, sorted by full name.
 pub fn load(es_systems: &Path) -> Result<Vec<System>, String> {
     load_with(es_systems, None)
@@ -484,9 +497,9 @@ fn scan(dir: &Path, exts: &[String]) -> Vec<Game> {
 
 /// `scan`, adding the disc sheets it left out for a missing file to `broken`.
 fn scan_into(dir: &Path, exts: &[String], broken: &mut Vec<BrokenDisc>) -> Vec<Game> {
-    let mut games = scan_flat_into(dir, exts, broken);
-    let Ok(entries) = fs::read_dir(dir) else { return games };
-    for sub in entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
+    let (files, folders) = scan_entries(dir);
+    let mut games = scan_files(files, exts, broken);
+    for sub in folders {
         let folder = sub.file_name().and_then(|n| n.to_str()).unwrap_or_default();
         if folder.starts_with('_') || computer_litter(folder) {
             continue;
@@ -513,8 +526,29 @@ fn scan_flat(dir: &Path, exts: &[String]) -> Vec<Game> {
 
 /// `scan_flat`, adding the disc sheets it left out for a missing file to `broken`.
 fn scan_flat_into(dir: &Path, exts: &[String], broken: &mut Vec<BrokenDisc>) -> Vec<Game> {
-    let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
-    let files: Vec<PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| p.is_file()).collect();
+    scan_files(scan_entries(dir).0, exts, broken)
+}
+
+/// Classify each entry once. `file_type` uses d_type where available and falls back
+/// to metadata for filesystems without it. Follow symlinks as Path::is_file/is_dir
+/// did, including links to game folders; a broken link is neither.
+fn scan_entries(dir: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    let (mut files, mut folders) = (Vec::new(), Vec::new());
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let Ok(mut kind) = entry.file_type() else { continue };
+            if kind.is_symlink() {
+                let Ok(metadata) = fs::metadata(entry.path()) else { continue };
+                kind = metadata.file_type();
+            }
+            if kind.is_file() { files.push(entry.path()); }
+            else if kind.is_dir() { folders.push(entry.path()); }
+        }
+    }
+    (files, folders)
+}
+
+fn scan_files(files: Vec<PathBuf>, exts: &[String], broken: &mut Vec<BrokenDisc>) -> Vec<Game> {
     let mut games: Vec<Game> = files
         .iter()
         .filter(|p| {
@@ -1072,6 +1106,29 @@ mod tests {
         ];
         assert_eq!(listed, want.map(|(n, p)| (n.to_string(), p.to_string())), "one entry per game: its m3u, or its only disc file, named after the folder");
         assert_eq!(super::count_games("psx", &dir, &exts(&["bin", "cue", "chd", "iso", "m3u", "pbp"])), 5, "Add games counts the same");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn entry_types_keep_file_and_folder_symlinks_and_skip_dangling_links() {
+        use std::os::unix::fs::symlink;
+        let d = TestDir::new("scan-entry-types");
+        let roms = d.join("roms");
+        let target = d.join("target");
+        std::fs::create_dir_all(&roms).unwrap();
+        std::fs::create_dir_all(target.join("Folder/deeper")).unwrap();
+        for p in [roms.join("Plain.gbc"), roms.join(".hidden.gbc"), target.join("File.gbc"),
+                  target.join("Folder/Game.gbc"), target.join("Folder/deeper/Not scanned.gbc")] {
+            std::fs::write(p, b"x").unwrap();
+        }
+        symlink(target.join("File.gbc"), roms.join("Linked file.gbc")).unwrap();
+        symlink(target.join("Folder"), roms.join("Linked folder")).unwrap();
+        symlink(target.join("absent"), roms.join("Broken.gbc")).unwrap();
+        symlink(target.join("Folder"), roms.join("_ignored")).unwrap();
+        let games = super::scan(&roms, &exts(&["gbc"]));
+        assert_eq!(games.iter().map(|g| g.name.as_str()).collect::<Vec<_>>(),
+                   ["Linked file", "Linked folder", "Plain"]);
+        assert_eq!(super::scan_flat(&roms, &exts(&["gbc"])).len(), 2);
     }
 
     #[test]

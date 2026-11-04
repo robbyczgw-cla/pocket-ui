@@ -33,6 +33,15 @@ pub(crate) const CAB_X: i32 = 16;
 /// are measured from the screen's bottom edge, where the hints are: 992 and 800 on the Mini V2's 1080 lines, 872 and
 /// 680 on the Mini V1's 960 (docs/DEVICES.md).
 const SCENE_TOP: i32 = 214;
+/// On a screen under this many lines (1024x768, 1280x800) the title block moves up this much, and the scene with it: the
+/// shelf then sinks less behind the top board (`showcase`).
+const SHORT_H: i32 = media::SHORT_SCREEN_H;
+const SHORT_LIFT: i32 = 18;
+
+/// How far up the title block and the scene start on a screen `h` lines high.
+fn lift(h: i32) -> i32 {
+    if h < SHORT_H { SHORT_LIFT } else { 0 }
+}
 const SCENE_BOTTOM_GAP: i32 = 1080 - 992;
 
 fn scene_bottom(h: i32) -> i32 {
@@ -74,18 +83,33 @@ fn show_scale(m: Medium, room: i32) -> f32 {
     };
     let common = Medium::ALL.into_iter().map(own).fold(f32::MAX, f32::min);
     let s = m.size();
-    common.max(own(m) * SHOW_LEAST).clamp(1.2, 2.1 * g).min(room.max(40) as f32 / s.front_h as f32)
+    // The bounds are in the normal shelf's scale: a smaller shelf (short screens) shows its case as big in pixels.
+    let r = media::SHELF_SCALE / media::shelf_scale();
+    common.max(own(m) * SHOW_LEAST).clamp(1.2 * r, 2.1 * g * r).min(room.max(40) as f32 / s.front_h as f32)
 }
+
+/// The showcase is never smaller than this share of the screen's height (a case needs it to be seen, and the TV beside
+/// it to be there): on a short screen with a tall shelf (1024x768, 1280x800: no scaled layout, `scaled_layout`) the shelf
+/// gives way, not the case (the polish review 2026-11-04: a 40-line chip and no TV on the Brick's 768 lines).
+const SHOW_MIN_SHARE: f32 = 0.2;
+/// How much of the selected shelf may sink behind the top board to make room for it: of its height, so the spines
+/// keep their titles in view.
+const SINK_MAX_SHARE: f32 = 0.45;
 
 /// The showcase over the selected shelf (Alex's photo, 2026-10-28: a case held up in front of the shelf above hid
 /// the spines of two shelves): from the title down to the cabinet's top board, as high as the case out of the shelf
 /// needs, so the selected shelf stands whole right under it. `pitch`: the selected shelf with its board.
-/// (room for the case, top of the selected shelf).
-fn showcase(h: i32, m: Medium, pitch: i32, extra: i32) -> (i32, i32) {
-    let room = scene_bottom(h) - pitch - TOP_H - SCENE_TOP - 24 + extra;
+/// (room for the case, bottom of the top board over the selected shelf, how far the shelf's top sinks behind that
+/// board). Where the room under the title is short of `SHOW_MIN_SHARE` of the height, the shelf sinks behind the board by
+/// the rest (at most `SINK_MAX_SHARE` of it): its spines are cut at the top, the case keeps its room.
+fn showcase(h: i32, m: Medium, pitch: i32, extra: i32) -> (i32, i32, i32) {
+    let base = scene_bottom(h) - pitch - TOP_H - (SCENE_TOP - lift(h)) - 24 + extra;
+    let want = (h as f32 * SHOW_MIN_SHARE).round() as i32;
+    let sink = (want - base).clamp(0, (pitch as f32 * SINK_MAX_SHARE) as i32);
+    let room = base + sink;
     let k = show_scale(m, room);
     let need = (m.size().front_h as f32 * k).round() as i32;
-    (room, SCENE_TOP + 12 + need + 12 + TOP_H)
+    (room, SCENE_TOP - lift(h) + 12 + need + 12 + TOP_H, sink)
 }
 
 /// How far a frozen game stands out beside its front: of its own width out of the case, at most this share of the front's
@@ -1105,7 +1129,7 @@ impl App {
         // 2026-10-28: "Legend of…" at 21 px was not).
         let pic = media::spine_with(&mut self.text, m, 1.0, look, &info.title, 37.0);
         let pic = self.stuck_spine(pic, m, 1.0, &info.rom, key.case);
-        let pic = Rc::new(if key.ajar { ajar_spine(&mut self.text, pic, &info.system, &info.rom, media::SHELF_SCALE, look) } else { pic });
+        let pic = Rc::new(if key.ajar { ajar_spine(&mut self.text, pic, &info.system, &info.rom, media::shelf_scale(), look) } else { pic });
         self.cabinet.made("spine", t0);
         self.cabinet.spines.insert(key, (pic.clone(), frame));
         pic
@@ -1201,14 +1225,25 @@ impl App {
             .clone()
     }
 
+    /// The shelf's scale changed (the screen's height did: HDMI plugged in): the shelves and their pictures are made again.
+    pub(crate) fn cabinet_scale_changed(&mut self) {
+        self.cabinet.dirty = true;
+        self.cabinet.spines.clear();
+        self.cabinet.shown.clear();
+        self.cabinet.labels.clear();
+        self.cabinet.shelf_shown.clear();
+        self.cabinet.walls.clear();
+        self.cabinet.placed = false;
+    }
+
     // ---- painting ----------------------------------------------------------------------------------------
 
     /// Where the showcase ends for the selected shelf `cs`, as the screen's room allows (the Mini V2 photo, 2026-11-03: a
     /// 170-line strip of nothing under a shelf whose next one did not fit whole): (room for the case, top of the
-    /// selected shelf, whether the next shelf's top looks in at the bottom). The rows under the showcase fit whole
-    /// down to `scene_bottom` less the plinth; what is left over first makes the case and the TV bigger (up to what
+    /// selected shelf, how far it sinks behind the top board, whether the next shelf's top looks in at the bottom). The
+    /// rows under the showcase fit whole down to `scene_bottom` less the plinth; what is left over first makes the case and the TV bigger (up to what
     /// `show_scale` allows), then the next shelf looks in from below, or, on the last one, the cabinet moves down.
-    fn cabinet_plan(&self, h: i32, cs: usize, m: Medium) -> (i32, i32, bool) {
+    fn cabinet_plan(&self, h: i32, cs: usize, m: Medium) -> (i32, i32, i32, bool) {
         let cab = &self.cabinet.cab;
         let bottom = scene_bottom(h);
         // The last shelf that fits whole under `top`, and whether another one is below it.
@@ -1224,19 +1259,20 @@ impl App {
             }
             (lowest, more)
         };
-        let (room, top) = showcase(h, m, cab.pitch(cs), 0);
-        let (lowest, _) = stack(top);
-        if lowest <= top {
+        // `top`: where the top board ends; the selected shelf starts `sink` above it.
+        let (room, top, sink) = showcase(h, m, cab.pitch(cs), 0);
+        let (lowest, _) = stack(top - sink);
+        if lowest <= top - sink {
             // The selected shelf alone is taller than the room (a tiny screen).
-            return (room, top, false);
+            return (room, top, sink, false);
         }
-        let (room, top1) = showcase(h, m, cab.pitch(cs), (bottom - PLINTH_H - lowest).max(0));
-        let (lowest, more) = stack(top1);
+        let (room, top1, sink1) = showcase(h, m, cab.pitch(cs), (bottom - PLINTH_H - lowest).max(0));
+        let (lowest, more) = stack(top1 - sink1);
         let rest = bottom - lowest;
         if more && rest >= PEEK_MIN {
-            (room, top1, true)
+            (room, top1, sink1, true)
         } else {
-            (room, top1 + (rest - PLINTH_H).max(0), false)
+            (room, top1 + (rest - PLINTH_H).max(0), sink1, false)
         }
     }
 
@@ -1270,7 +1306,7 @@ impl App {
         let view = cab_w - 2 * art::WALL;
         let inner_x = CAB_X + art::WALL;
         let medium = self.cabinet.cab.shelves[cs].cases[ci].medium;
-        let (room, top, peek) = self.cabinet_plan(c.h, cs, medium);
+        let (room, top, sink, peek) = self.cabinet_plan(c.h, cs, medium);
         self.cabinet.show_room = room;
         if !self.cabinet.placed || !pocket_ui::motion::allowed(pocket_ui::motion::Kind::Move) {
             self.cabinet.show_top.jump(top as f32);
@@ -1278,7 +1314,7 @@ impl App {
             self.cabinet.show_top.set(top as f32, now);
         }
         let show_bottom = self.cabinet.show_top.value(now).round() as i32;
-        let want_y = (self.cabinet.cab.y(cs) - top) as f32;
+        let want_y = (self.cabinet.cab.y(cs) - top + sink) as f32;
         let key = self.cabinet.cab.shelves[cs].key;
         let current_x = self.cabinet.scroll_x.get(&key).map_or(0.0, |t| t.target());
         let want_x = self.cabinet.cab.shelves[cs].scroll_to_show(ci, view, current_x);
@@ -1316,7 +1352,7 @@ impl App {
         // Room left under the last whole shelf: the next one's top looks in (it fades out at the hints), no plinth.
         let peek = peek && !cut;
         let clip = (show_bottom, if peek { scene_bottom(c.h) } else { lowest });
-        let floor_y = show_bottom + self.cabinet.cab.shelves[cs].height + 3;
+        let floor_y = show_bottom - sink + self.cabinet.cab.shelves[cs].height + 3;
 
         // The cabinet's top board and plinth, at its ends.
         if self.cabinet.boards.as_ref().is_none_or(|(page, b, _)| b.w != cab_w || *page != pal().void) {
@@ -1416,7 +1452,7 @@ impl App {
         self.paint_cabinet_title(c, cs, item);
         // Taps are handled by `cabinet_tap`; swipes move by a case sideways and by a shelf up and down.
         let len = self.cabinet.cab.shelves[cs].cases.len();
-        self.hits.row(pocket_ui::touch::Area::new(0, SCENE_TOP, c.w, scene_bottom(c.h) - SCENE_TOP), ci);
+        self.hits.row(pocket_ui::touch::Area::new(0, SCENE_TOP - lift(c.h), c.w, scene_bottom(c.h) - SCENE_TOP + lift(c.h)), ci);
         self.hits.list(ci, len, 44.0, 250.0);
 
         // Pictures not used for a while go.
@@ -1481,7 +1517,7 @@ impl App {
         let games_end = inner_x + shelf_w - cabinet::INSET;
         let right = inner_x + view - 36;
         let mut plan = Vec::new();
-        let bookend = self.room_prop_pic(Prop::Bookend, earned, media::SHELF_SCALE);
+        let bookend = self.room_prop_pic(Prop::Bookend, earned, media::shelf_scale());
         let mut free_from = games_end + 60;
         let mut after = games_end + 2;
         if bookend.h <= room && games_end + 2 + bookend.w <= inner_x + view {
@@ -1492,7 +1528,7 @@ impl App {
         // What was earned, in a row after the bookend: whatever fits whole.
         let deco: Vec<Rc<Pic>> = super::app_room_extras::deco_for(earned, system.as_deref(), awards)
             .into_iter()
-            .map(|p| self.room_prop_pic(p, earned, media::SHELF_SCALE))
+            .map(|p| self.room_prop_pic(p, earned, media::shelf_scale()))
             .collect();
         let widths: Vec<i32> = deco.iter().map(|p| if p.h <= room { p.w } else { 0 }).collect();
         for (i, x) in pocket_ui::room_deco::place(after, right, 22, &widths) {
@@ -1500,7 +1536,7 @@ impl App {
             plan.push((deco[i].clone(), x, false));
         }
         if let Some(prop) = media::Prop::beside(seed, room) {
-            let pic = self.room_prop_pic(prop, earned, media::SHELF_SCALE);
+            let pic = self.room_prop_pic(prop, earned, media::shelf_scale());
             // Somewhere in the free part of the shelf, the same place every time.
             let free = right - pic.w - free_from;
             if free >= 0 && pic.h <= room {
@@ -1567,7 +1603,7 @@ impl App {
         let mut need = media::Prop::Bookend.pic().w + 60 + 36;
         let mut tall = 0;
         for p in super::app_room_extras::deco_for(earned, None, true) {
-            let pic = self.room_prop_pic(p, earned, media::SHELF_SCALE);
+            let pic = self.room_prop_pic(p, earned, media::shelf_scale());
             need += pic.w + 22;
             tall = tall.max(pic.h);
         }
@@ -1722,7 +1758,7 @@ impl App {
         self.paint_top_line(c, Some(&shelf), pal().dust);
         let (title, _, _, meta) = self.describe(item);
         let fav = self.is_favorite(item);
-        self.draw_title(c, Face::Title, 50, MARGIN, 150, c.w - 2 * MARGIN, pal().chalk, &title, true, fav);
+        self.draw_title(c, Face::Title, 50, MARGIN, 150 - lift(c.h), c.w - 2 * MARGIN, pal().chalk, &title, true, fav);
         // Whole shelves below the showcase can be off screen even on a large panel. Keep the current
         // position and both movement directions visible, instead of making the plinth look like the end.
         let total = self.cabinet.cab.shelves.len();
@@ -1730,11 +1766,11 @@ impl App {
         if total > 1 {
             let position = format!("{} / {}", s + 1, total);
             let width = self.text.width(Face::Body, 24, &position);
-            self.text.draw_right(c, Face::Body, 24, right - 24, 192, pal().dust, &position);
+            self.text.draw_right(c, Face::Body, 24, right - 24, 192 - lift(c.h), pal().dust, &position);
             for (x, up, available) in [(right - width - 42, true, s > 0), (right - 8, false, s + 1 < total)] {
                 if available {
                     for d in 0..7 {
-                        let y = if up { 174 + d } else { 186 - d };
+                        let y = if up { 174 + d } else { 186 - d } - lift(c.h);
                         c.rect(x - d, y, 2 * d + 1, 2, pal().dust);
                     }
                 }
@@ -1742,9 +1778,9 @@ impl App {
             right -= width + 80;
         }
         let meta = self.text.fit(Face::Body, 28, &meta, right - MARGIN);
-        self.text.draw(c, Face::Body, 28, MARGIN, 192, pal().dust, &meta);
+        self.text.draw(c, Face::Body, 28, MARGIN, 192 - lift(c.h), pal().dust, &meta);
         if self.is_frozen_item(item) {
-            self.paint_frozen_word(c, right, 192, pal().chalk);
+            self.paint_frozen_word(c, right, 192 - lift(c.h), pal().chalk);
         }
     }
 
@@ -1857,6 +1893,17 @@ impl App {
             settle(self, rest);
             self.launch_animation_snapshot(Duration::from_millis(ms));
         }
+    }
+
+    /// Report the final painted case and shelf for host snapshot outcome checks. Uses the same
+    /// rectangles as touch/launch, so a case clipped out of the picture cannot pass as visible.
+    pub(crate) fn cabinet_snapshot_outcome(&self, h: i32) {
+        let Some((s, _)) = self.cabinet_cursor() else { return };
+        let Some((_, (x, y, w, case_h))) = self.cabinet.last_out else { return };
+        let top = self.cabinet.cab.y(s) - self.cabinet.scroll_y.value(Instant::now()).round() as i32;
+        println!("cabinet-outcome case={x},{y},{w},{case_h} shelf={top},{} showcase={} tv={} hints={}",
+            top + self.cabinet.cab.shelves[s].height, self.cabinet.show_room,
+            self.cabinet.tv.left.is_some(), h - 98);
     }
 
     /// Playful animations in a Shelf snapshot: `POCKETUI_SNAPSHOT_HELD=<steps>:<ms>` paints Right held for `steps`
@@ -2020,7 +2067,8 @@ pub(crate) fn shelf_layout(w: i32, h: i32, tallest: f32) -> ShelfLayout {
     let f = ((content as f32 * 0.42 / TALLEST * 2.0).floor() / 2.0).clamp(1.0, 4.0);
     let board_h = (8.0 * f).round() as i32;
     let floor = bottom - board_h;
-    let lift = (10.0 * f).round() as i32;
+    // 16 template pixels: 10 (30 px at 1080 lines, 12 on 640x480) was too quiet beside cases of one colour.
+    let lift = (16.0 * f).round() as i32;
     let show_bottom = floor - (tallest.min(TALLEST) * f).round() as i32 - lift - 16;
     ShelfLayout {
         f,
@@ -2067,7 +2115,7 @@ pub(crate) fn show_k(lay: &ShelfLayout, m: Medium) -> f32 {
     let common = Medium::ALL.into_iter().map(own).fold(f32::MAX, f32::min);
     let s = common.max(own(m) * SHOW_LEAST);
     let s = if s >= 1.0 { ((s * 2.0).floor() / 2.0).min(SHOW_MAX) } else { s.max(0.2) };
-    s / media::SHELF_SCALE
+    s / media::shelf_scale()
 }
 
 /// The spines' title size at scale `f` for the text size (`media::spine_px` picks the size that fits the label): 30 px
@@ -2207,8 +2255,8 @@ impl App {
             _ => info.title.clone(),
         };
         let t0 = Instant::now();
-        let pic = media::spine_with(&mut self.text, m, f / media::SHELF_SCALE, key.0.look, &title, want);
-        let pic = self.stuck_spine(pic, m, f / media::SHELF_SCALE, &info.rom, key.0.case);
+        let pic = media::spine_with(&mut self.text, m, f / media::shelf_scale(), key.0.look, &title, want);
+        let pic = self.stuck_spine(pic, m, f / media::shelf_scale(), &info.rom, key.0.case);
         let pic = Rc::new(if key.0.ajar { ajar_spine(&mut self.text, pic, &info.system, &info.rom, f, key.0.look) } else { pic });
         self.cabinet.made("standing spine", t0);
         self.cabinet.stand.insert(key, (pic.clone(), frame));
@@ -2462,6 +2510,14 @@ impl App {
                 if shadows {
                     art::soft_shadow(c, x, lay.floor - 4, pic.w, 6, 6, 0.4 * rise as f32 / lay.lift as f32, (0, c.h));
                 }
+                // A strip of light on the board where it stood, in the label's paper: the selection reads even
+                // among cases of one colour and on 480 lines (the visual review 2026-11-04, 4).
+                let alpha = (255.0 * rise as f32 / lay.lift as f32).min(255.0) as u8;
+                for y in lay.floor..lay.floor + (2.0 * lay.f).round() as i32 {
+                    for x in hx..hx + hw {
+                        c.blend(x, y, pal().label, alpha);
+                    }
+                }
             }
             let (hx, hw) = (x.max(lay.left), (x + w).min(lay.right) - x.max(lay.left));
             self.hits.row(Area::new(hx, lay.floor - h - rise, hw, h + rise), i);
@@ -2690,13 +2746,13 @@ impl App {
         }
     }
 
-    /// A prop at the shelf's scale `f` (`Prop::pic` is at `media::SHELF_SCALE`), made once.
+    /// A prop at the shelf's scale `f` (`Prop::pic` is at `media::shelf_scale()`), made once.
     fn prop_pic(&mut self, prop: Prop, f: f32) -> Rc<Pic> {
         let key = (prop, (f * 100.0) as i32);
         if let Some(p) = self.cabinet.shelf_props.get(&key) {
             return p.clone();
         }
-        let p = Rc::new(media::rescaled(prop.pic(), f / media::SHELF_SCALE));
+        let p = Rc::new(media::rescaled(prop.pic(), f / media::shelf_scale()));
         self.cabinet.shelf_props.insert(key, p.clone());
         p
     }
@@ -2744,6 +2800,23 @@ fn fade_cols(c: &mut Canvas, x0: i32, x1: i32, y0: i32, y1: i32) {
 #[cfg(test)]
 mod shelf_tests {
     use super::*;
+
+    /// On every supported size the showcase has its room without the selected shelf sinking behind the top board (its
+    /// spines cut at the top lose the start of their titles), for the tallest shelf of every kind of case, and the room is
+    /// at least what the TV and the case need (`SHOW_MIN_SHARE`).
+    #[test]
+    fn the_showcase_never_cuts_the_spines_on_the_supported_sizes() {
+        // The layout's heights: 640x480 and 720x720 are laid out at 960 and 1280 lines, the others natively.
+        for h in [960, 1280, 768, 1080, 800] {
+            let f = media::shelf_scale_for(h);
+            for m in Medium::ALL {
+                let pitch = (m.template_size().h as f32 * f).round() as i32 + cabinet::HEADROOM + cabinet::BOARD;
+                let (room, _, sink) = showcase(h, m, pitch, 0);
+                assert_eq!(sink, 0, "{m:?} at {h} lines: the shelf would sink {sink} lines behind the board");
+                assert!(room as f32 >= h as f32 * SHOW_MIN_SHARE, "{m:?} at {h} lines: the showcase has {room}");
+            }
+        }
+    }
 
     #[test]
     fn warming_many_box_fronts_without_a_shelf_painter_releases_old_pixels_but_keeps_active_sources() {
@@ -2831,7 +2904,7 @@ mod shelf_tests {
                 let (fw, fh) = media::front_size(m, k);
                 assert!(fh <= lay.show.3 && fw <= lay.show.2 / 2, "{w}x{h} {m:?}: front {fw}x{fh} in {:?}", lay.show);
                 assert!(
-                    k * media::SHELF_SCALE >= lay.f || fh as f32 >= lay.show.3 as f32 * 0.6,
+                    k * media::shelf_scale() >= lay.f || fh as f32 >= lay.show.3 as f32 * 0.6,
                     "{w}x{h} {m:?}: shown smaller than on the shelf"
                 );
             }

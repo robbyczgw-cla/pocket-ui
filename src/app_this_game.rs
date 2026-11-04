@@ -110,10 +110,12 @@ impl App {
 
         // (name, value or ">" for a page, explanation) of every line, and the selected one.
         // `arrows`: Left and Right change the value (not on a row that opens a page).
+        let mut indents: Vec<bool> = Vec::new();
         let (lines, arrows, sel): (Vec<(String, String, String)>, Vec<bool>, usize) = match page.mode {
             Mode::List => {
                 let rows = page.rows();
                 let arrows = rows.iter().map(|r| matches!(r, Row::Setting(_) | Row::Standalone(_))).collect();
+                indents = rows.iter().map(|r| page.indented(*r)).collect();
                 (rows.into_iter().map(|r| page.describe(r)).collect(), arrows, page.sel)
             }
             Mode::Controls(sel) => {
@@ -135,28 +137,28 @@ impl App {
             let base = y + row / 2 + pocket_ui::type_scale::mid(font);
             let selected = k == sel;
             let value_w = if value.is_empty() { 0 } else { self.text.width(Face::Body, font, value) + 60 };
-            let name = self.text.fit(Face::Body, font, name, right - pad - 2 * NU_BTN_PAD - value_w);
+            // Sharpness and Effect stand a step in under the Look (Custom).
+            let step_in = if indents.get(k).copied().unwrap_or(false) { 36 } else { 0 };
+            let name = self.text.fit(Face::Body, font, name, right - pad - 2 * NU_BTN_PAD - value_w - step_in);
             if selected {
-                let w = self.text.width(Face::Body, font, &name) + 2 * NU_BTN_PAD;
-                c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, pal().band);
-                c.round_rect(pad, y + 4, w, row - 8, (row - 8) / 2, pal().select);
-                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, &name);
+                pocket_ui::kit::selection(c, pad, y, right - pad, row);
+                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD + step_in, base, pal().ink, &name);
             } else {
-                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, &name);
+                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD + step_in, base, pal().text, &name);
             }
             if value.is_empty() {
                 continue;
             }
             let vx = right - NU_BTN_PAD;
-            let name_w = self.text.width(Face::Body, font, &name);
+            let name_w = self.text.width(Face::Body, font, &name) + step_in;
             if value == ">" {
-                self.text.draw_right(c, Face::Body, font, vx, base, pal().text, ">");
+                pocket_ui::kit::row_value(c, &mut self.text, font, vx, base, ">", selected);
                 continue;
             }
             let room = right - pad - 2 * NU_BTN_PAD - name_w - 60;
             let shown = if selected && arrows[k] { format!("‹ {value} ›") } else { value.clone() };
             let shown = self.text.fit(Face::Body, font, &shown, room);
-            self.text.draw_right(c, Face::Body, font, vx, base, pal().text, &shown);
+            pocket_ui::kit::row_value(c, &mut self.text, font, vx, base, &shown, selected);
             if selected && arrows[k] {
                 let vw = self.text.width(Face::Body, font, &shown);
                 let aw = self.text.width(Face::Body, font, "‹ ") + 24;

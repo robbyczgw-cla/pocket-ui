@@ -114,7 +114,7 @@ fn an_empty_card_shows_the_starter_pack_and_the_page_speaks_plainly() {
     assert!(has(&failed, "Nichts wurde hinzugefügt"), "{failed:?}");
     // Games on the SD card say so.
     let there = painted(&tmp, &stub, "starter:0:there");
-    assert!(has(&there, "Auf deiner SD-Karte"), "{there:?}");
+    assert!(has(&there, "Schon da"), "{there:?}");
     drop(stub);
 }
 

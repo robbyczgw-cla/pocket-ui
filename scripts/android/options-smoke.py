@@ -18,7 +18,7 @@ def first():return next(n.get('text')for n in tree()if n.get('text')and n.get('t
 before=first();tap(before);changed=first();assert changed!=before,'Core option did not change'
 time.sleep(.5);saved=read('gbc-gambatte');assert saved,'Alternative core options were not written to their own file'
 assert read('gbc')==mgba,'Gambatte overwrote mGBA options'
-shot('gambatte-options-changed');key(4);tap('Quit');time.sleep(1)
+shot('gambatte-options-changed');key(4);tap('Save & quit');time.sleep(1)
 tap('Play');time.sleep(2);tap('Pause');tap('Options')
 assert first()==changed,'Alternative core option did not survive restart'
 assert read('gbc-gambatte')==saved and read('gbc')==mgba
@@ -28,6 +28,6 @@ for _ in range(32):
     if value==before:break
     tap(value)
 else:raise AssertionError('Could not restore the fixture option')
-key(4);tap('Quit');time.sleep(1)
+key(4);tap('Save & quit');time.sleep(1)
 (out/'result.json').write_text(json.dumps({'gambatte_option_survived_restart':True,'mgba_options_unchanged':True,'restored_fixture_option':True},indent=2)+'\n')
 print('Gambatte option persistence and unchanged mGBA options passed.')

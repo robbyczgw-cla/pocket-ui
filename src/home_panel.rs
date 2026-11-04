@@ -8,7 +8,8 @@
 //! - **Favorites, a smart shelf, a sticker**: the first games' covers in a row, standing on one line as cases on a
 //!   shelf do. With no games, words on how to fill it.
 //! - A game without box art is a tile in its system's colour with its title. Before Curator's index is there, faint
-//!   tiles stand where the covers will be, and the line says "Getting ready…".
+//!   nothing stands there, no tiles and no words (a row that says "Getting ready…" or shows empty boxes for
+//!   seconds after every boot looks broken); the panel comes with its data.
 
 use std::path::PathBuf;
 
@@ -39,7 +40,7 @@ pub struct Panel {
     pub line: String,
     /// Left to right.
     pub groups: Vec<Group>,
-    /// Not ready yet: faint tiles where covers will be.
+    /// Not ready yet: nothing is shown.
     pub getting_ready: bool,
 }
 
@@ -60,7 +61,7 @@ pub const MAX_COVERS: usize = 5;
 /// The Curator row: `None` while the index is being made.
 pub fn curator(today: Option<CuratorToday>) -> Panel {
     let Some(today) = today else {
-        return Panel { kicker: Some(CURATOR_KICKER), line: "Getting ready…".into(), groups: Vec::new(), getting_ready: true };
+        return Panel { kicker: Some(CURATOR_KICKER), line: String::new(), groups: Vec::new(), getting_ready: true };
     };
     let mut groups = Vec::new();
     let line = match &today.pick {
@@ -110,12 +111,12 @@ pub const FAVORITES_EMPTY: &str = "Press Y on a game to star it, and it shows he
 /// `ready`: false while Curator's index (which fills shelves and stickers) is being made.
 pub fn list(kind: List, games: Vec<Tile>, line: String, ready: bool) -> Panel {
     if !ready {
-        return Panel { kicker: None, line: "Getting ready…".into(), groups: Vec::new(), getting_ready: true };
+        return Panel { kicker: None, line: String::new(), groups: Vec::new(), getting_ready: true };
     }
     if games.is_empty() {
         let line = match kind {
             List::Favorites => FAVORITES_EMPTY,
-            List::SmartShelf => "No games here right now",
+            List::SmartShelf => "No games here yet",
             List::Sticker => "Put it on a game from its card: X, then Stickers & labels",
         };
         return Panel { kicker: None, line: line.into(), groups: Vec::new(), getting_ready: false };
@@ -201,8 +202,6 @@ const TODAY_W: f32 = 124.0;
 const FAN_W: f32 = 100.0;
 const FAN_STEP: f32 = 34.0;
 const GROUP_GAP: f32 = 28.0;
-/// Faint tiles before the index is there.
-pub const READY_TILES: usize = 3;
 
 /// Lays a panel out in a box at most `max_w` wide and `h` high; `caption_h`: the room a caption takes under its
 /// covers, `measure` its width (a group is as wide as its caption, at least). Groups that don't fit are left out
@@ -214,16 +213,9 @@ pub fn layout(panel: &Panel, max_w: i32, h: i32, caption_h: i32, measure: &mut d
     let cover_h = if captions { h - caption_h } else { h };
     let mut out = Layout::default();
     let mut x = 0;
+    // Not ready: no words and no tiles (a row that shows empty boxes for seconds after every boot looks broken); the
+    // title stands alone, and the panel comes with its data.
     if panel.getting_ready {
-        for i in 0..READY_TILES {
-            let w = px(COVER_W);
-            if x + w > max_w {
-                break;
-            }
-            out.slots.push(Slot { group: 0, tile: i, x, y: h - px(150.0), w, h: px(150.0), dim: true });
-            x += w + px(COVER_GAP);
-        }
-        out.width = (x - px(COVER_GAP)).max(0);
         return out;
     }
     for (gi, g) in panel.groups.iter().enumerate() {
@@ -307,8 +299,8 @@ mod tests {
     fn curator_is_never_a_blank_before_the_index_or_without_games() {
         let p = curator(None);
         assert!(p.getting_ready);
-        assert_eq!(p.line, "Getting ready…");
-        assert_eq!(layout(&p, 480, 176, 30, &mut chars).slots.len(), READY_TILES, "faint tiles where the covers will be");
+        assert_eq!(p.line, "");
+        assert_eq!(layout(&p, 480, 176, 30, &mut chars).width, 0, "nothing where the covers will be");
         let p = curator(Some(CuratorToday { pick: None, waiting: None }));
         assert!(!p.line.is_empty() && p.groups.is_empty() && !p.getting_ready);
         assert_eq!(p.kicker, Some(CURATOR_KICKER), "the row still says what it is");
@@ -322,11 +314,11 @@ mod tests {
         assert_eq!(p.line, "8 games you starred");
         let empty = |kind| list(kind, Vec::new(), "0 games".into(), true);
         assert_eq!(empty(List::Favorites).line, "Press Y on a game to star it, and it shows here");
-        assert_eq!(empty(List::SmartShelf).line, "No games here right now");
+        assert_eq!(empty(List::SmartShelf).line, "No games here yet");
         assert_eq!(empty(List::Sticker).line, "Put it on a game from its card: X, then Stickers & labels");
         assert!(empty(List::Favorites).groups.is_empty());
         let waiting = list(List::SmartShelf, vec![tile("A")], "1 game".into(), false);
-        assert!(waiting.getting_ready && waiting.line == "Getting ready…");
+        assert!(waiting.getting_ready && waiting.line.is_empty());
     }
 
     #[test]

@@ -102,7 +102,7 @@ fn shelf_line(w: i32, h: i32) -> (i32, i32, i32) {
     let bottom = h - 112;
     let f = (((bottom - top).max(200) as f32 * 0.42 / 120.0 * 2.0).floor() / 2.0).clamp(1.0, 4.0);
     let floor = bottom - (8.0 * f).round() as i32;
-    let lift = (10.0 * f).round() as i32;
+    let lift = (16.0 * f).round() as i32;
     let col = if w >= 1600 { (w * 3 / 4).max(1440).min(w) } else { w };
     let x0 = (w - col) / 2;
     (x0 + MARGIN, x0 + col - MARGIN, floor - lift - 12)

@@ -251,7 +251,14 @@ impl App {
         let (proxy, data) = (self.proxy.clone(), self.data_dir.clone());
         self.storage.stale = true;
         std::thread::spawn(move || {
-            let free = storage::free_space(&Roots::device(&data).roms).or_else(|| storage::free_space(&data)).map(|f| f.0);
+            // Under POCKETUI_MOCK (tests, monkey, desktop preview) the free space of the computer says nothing about the
+            // Pocket's card: no warning, unless POCKETUI_FREE_BYTES makes one. A notice stays until it is closed, so a
+            // build machine with a nearly full /tmp would otherwise cover the top of every journey's shelf.
+            let free = if std::env::var_os("POCKETUI_MOCK").is_some() {
+                std::env::var("POCKETUI_FREE_BYTES").ok().and_then(|v| v.trim().parse().ok())
+            } else {
+                storage::free_space(&Roots::device(&data).roms).or_else(|| storage::free_space(&data)).map(|f| f.0)
+            };
             let check = storage::check(free, Warned::load(&data));
             if check != Check::Fine {
                 println!("storage: {check:?} ({why})");
@@ -304,14 +311,14 @@ impl App {
         let saved = self.library.set_hidden(&open.path, true);
         if let Err(e) = &saved {
             eprintln!("library: hidden flag not saved: {e}");
-            self.toast = Some(("Could not save: is the SD card full?".into(), Instant::now()));
+            self.warn("Could not save: is the SD card full?");
             self.card = Some(open);
             return;
         }
         println!("library: {} hidden", open.path.display());
         self.game_left_the_list(&open.path);
-        // A notice, not a toast: long enough to read where to bring it back.
-        self.notice = Some(Notice::new(format!("Hidden: {}. Settings › System › Storage brings it back.", open.name)));
+        // A confirmation with a way back: a toast, which stays for as long as its length asks (`toast_len`).
+        self.toast = Some((format!("Hidden: {}. Settings › System › Storage brings it back.", open.name), Instant::now()));
         self.history_card_closed(&open.path);
     }
 
@@ -319,7 +326,7 @@ impl App {
     fn show_game_again(&mut self, path: &Path) {
         if let Err(e) = self.library.set_hidden(path, false) {
             eprintln!("library: hidden flag not saved: {e}");
-            self.toast = Some(("Could not save: is the SD card full?".into(), Instant::now()));
+            self.warn("Could not save: is the SD card full?");
             return;
         }
         println!("library: {} shown again", path.display());
@@ -360,7 +367,7 @@ impl App {
         self.storage.plan = None;
         std::thread::spawn(move || {
             let protected = protected_folders(&es, &data);
-            let states = PathBuf::from(pocket_ui::slots::STATES_DIR);
+            let states = pocket_ui::slots::states_dir();
             let plan = game_files::plan(&system, &path, &Places { states: &states, data: &data, protected: &protected, shared });
             let _ = proxy.send_event(UserEvent::Storage(Event::Planned(path, plan)));
         });
@@ -419,7 +426,7 @@ impl App {
                 }
                 self.storage.changed();
                 let name = name.unwrap_or_else(|| path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());
-                self.notice = Some(Notice::new(format!("Deleted {name}: {} freed.", storage::size(freed))));
+                self.toast = Some((format!("Deleted {name}: {} freed.", storage::size(freed)), Instant::now()));
                 self.history_card_closed(&path);
             }
         }
@@ -517,14 +524,12 @@ impl App {
             let name = self.text.fit(Face::Body, font, name, right - pad - 2 * NU_BTN_PAD - value_w);
             let selected = i == sel;
             if selected {
-                let w = self.text.width(Face::Body, font, &name) + 2 * NU_BTN_PAD;
-                c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, pal().band);
-                c.round_rect(pad, y + 4, w, row - 8, (row - 8) / 2, pal().select);
+                pocket_ui::kit::selection(c, pad, y, right - pad, row);
             }
             self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, if selected { pal().ink } else { pal().text }, &name);
             let color = match (alert, selected) {
                 (true, false) => pal().alert,
-                (_, true) => pal().text,
+                (_, true) => pal().ink,
                 _ => pal().dust,
             };
             self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, color, value);

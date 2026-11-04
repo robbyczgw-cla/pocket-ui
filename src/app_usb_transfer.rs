@@ -42,7 +42,7 @@ impl App {
         self.usb_busy = false;
         pocket_ui::settings_values::set_usb(status);
         match (wanted_on, status) {
-            (true, Status::Off) => self.toast = Some((USB_FAILED.to_string(), Instant::now())),
+            (true, Status::Off) => self.warn(USB_FAILED),
             (true, _) => self.toast = Some((USB_ON.to_string(), Instant::now())),
             // Whatever the computer copied is on the shelf now.
             (false, _) => {

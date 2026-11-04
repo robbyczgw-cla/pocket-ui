@@ -1107,6 +1107,7 @@ impl DeepSteps for DeepWorker {
     }
 
     fn suspend(&mut self, origin: SuspendOrigin) -> bool {
+        crate::battery_history::flush();
         sync_filesystems();
         let before = SuspendProbe::now();
         let command = suspend_command(&self.sys.suspend_cmd, origin);
@@ -1755,6 +1756,7 @@ impl Sleep {
 
         // The battery per game doesn't count minutes with the game paused in the dark (`battery_games`).
         crate::battery_history::set_asleep(true);
+        crate::battery_history::flush_soon();
         // Nor does Play history: the running game's stretch ends here (`play_log`, a channel send).
         crate::play_log::paused();
     }
@@ -1849,6 +1851,7 @@ impl Sleep {
         // The battery per game doesn't count dark minutes: the screen is most of what a game costs. Play history goes
         // on, the game being played.
         crate::battery_history::set_asleep(true);
+        crate::battery_history::flush_soon();
     }
     /// A game playing behind the dark screen (`screen_off_now`), as the fan and the quick settings need to know.
     pub fn dark_game(&self) -> bool {
@@ -2065,6 +2068,7 @@ impl Sleep {
                 crate::auto_off::write_note(&data_dir, note);
             }
             say(shutdown_text(action));
+            crate::battery_history::flush();
             sync_filesystems();
             // Restart pocket-ui: the system stays up; the app ends and its launcher starts it again.
             if action == PowerAction::RestartUi {

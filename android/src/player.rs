@@ -397,10 +397,9 @@ impl Player {
         // isn't loaded and goes where it can't be lost; the start says so.
         let core_id = pocket_ui::frozen_phone::core_of(Path::new(core_path));
         let start = pocket_ui::frozen_phone::at_start(&base, Path::new(rom), &core_id, frozen);
-        // PPSSPP says 128 MB until its renderer is up and keeps a state for then: a shorter one isn't too short.
-        // mGBA and Nestopia report a size the state they wrote at Quit doesn't always have ("wrong size (430144 of 528448
-        // bytes)"), so a GBA or NES game never resumed (`hostsys::core_states_vary`, which pocket-core uses on the handhelds).
-        if matches!(core_id.as_str(), "ppsspp" | "mgba" | "nestopia") {
+        // Only length-bounded parsers may receive shorter raw states. In particular the
+        // pinned PPSSPP adapter ignores the supplied length; keep its minimum-size guard.
+        if pocket_ui::state_policy::core_states_vary(&core_id) {
             core.states_vary_in_size();
         }
         let resume = if start.resume { core.resume(&pocket_ui::slots::auto_path(&base)) } else { pocket_ui::libretro::Resume::NoState };
@@ -724,7 +723,7 @@ impl Player {
             "Earlier".into(),
             "Options".into(),
             "Screenshot".into(),
-            "Quit".into(),
+            "Save & quit".into(),
         ]
     }
     /// The slot picker's places: the slots, then the kept moments.
@@ -1821,7 +1820,7 @@ fn touch_pause(c: &mut Canvas, text: &mut Text, v: &TouchView) -> TouchOut {
     text.draw(c, Face::Body, 28, EDGE, 140, pal().dust, &message);
     // With the whole memory card the slot picker is taller, to show the medium.
     let (picker_extra, primary_extra) = (if v.card { 38 + 110 } else { 38 }, 16);
-    let labels = ["Continue", "Save", "Load", "Earlier", "Options", "Screenshot", "Quit"];
+    let labels = ["Continue", "Save", "Load", "Earlier", "Options", "Screenshot", "Save & quit"];
     let picker = |c: &mut Canvas, text: &mut Text, out: &mut TouchOut, area: Area| {
         c.round_rect(area.x, area.y, area.w, area.h, 28, pal().pill);
         let zone = 120.min(area.w / 4);

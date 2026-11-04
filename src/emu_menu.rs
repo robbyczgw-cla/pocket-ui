@@ -79,6 +79,12 @@ impl EmuMenu {
         } else {
             settings.values.remove(&stick);
         }
+        let hold = format!("{}{}", controls::KEY_PREFIX, controls::HOLD_KEY);
+        if mapping.hold_toggle != defaults.hold_toggle {
+            settings.values.insert(hold, mapping.hold_value().into());
+        } else {
+            settings.values.remove(&hold);
+        }
         Some(EmuMenu { file, values, mapping, system: system.to_string() })
     }
 
@@ -88,6 +94,11 @@ impl EmuMenu {
         let mapping = Mapping::from_values(system, &settings.values);
         let file = CoreOptionsFile { controls: mapping.to_file(Vec::new()), ..CoreOptionsFile::default() };
         EmuMenu { file, values: HashMap::new(), mapping, system: system.to_string() }
+    }
+
+    /// The controls card (`controls_card`) of the game that runs: the live mapping and the core's own button names.
+    pub fn controls_card(&self, system_name: &str, shortcuts: Option<crate::controls_card::Shortcuts>) -> crate::controls_card::Card {
+        crate::controls_card::build(&crate::controls_card::Input { system: &self.system, system_name, mapping: &self.mapping, core_names: &self.file.controls.targets, shortcuts })
     }
 
     /// Whether the core has anything to show on the Emulator page.
@@ -180,7 +191,20 @@ impl EmuMenu {
         }
     }
 
-    /// Row 0 is the stick, then the Mini V2's buttons in `MENU_ORDER`, then "Reset controls".
+    /// The console buttons Hold to toggle can work on: the face buttons, shoulders, triggers and stick clicks the core
+    /// describes (the standard set when it describes none), in `MENU_ORDER`. Off comes first.
+    fn hold_choices(&self) -> Vec<Option<u8>> {
+        let held = |id: u8| !(2..=7).contains(&id);
+        let mut c = vec![None];
+        if self.file.controls.targets.is_empty() {
+            c.extend(MENU_ORDER.iter().copied().filter(|id| held(*id) && *id < 14).map(Some));
+        } else {
+            c.extend(self.file.controls.targets.iter().map(|t| t.id).filter(|id| held(*id)).map(Some));
+        }
+        c
+    }
+
+    /// Row 0 is the stick, then the Mini V2's buttons in `MENU_ORDER`, then "Hold to toggle" and "Reset controls".
     pub fn control_rows(&self) -> Vec<Row> {
         let mut rows = vec![Row {
             name: "Left stick as D-pad".into(),
@@ -199,12 +223,17 @@ impl EmuMenu {
             };
             rows.push(Row { name: phys.into(), value: name, desc: format!("{desc}{extra}") });
         }
+        rows.push(Row {
+            name: "Hold to toggle".into(),
+            value: self.mapping.hold_toggle.map_or("Off".into(), |id| self.target_name(Some(id))),
+            desc: "Pick a button: one press holds it down, the next lets go.\nFor buttons you would hold, like run.".into(),
+        });
         rows.push(Row { name: "Reset controls".into(), value: String::new(), desc: "Every button does what it says, as it did before any change.".into() });
         rows
     }
 
     pub fn control_count(&self) -> usize {
-        MENU_ORDER.len() + 2
+        MENU_ORDER.len() + 3
     }
 
     pub fn control_step(&mut self, sel: usize, delta: i32, settings: &mut GameSettings) {
@@ -234,6 +263,17 @@ impl EmuMenu {
                 settings.values.insert(format!("{prefix}{key}"), value.to_string());
             }
             control::pocket_core(&format!("ctl {key} {value}"));
+        } else if sel == MENU_ORDER.len() + 1 {
+            let choices = self.hold_choices();
+            let now = choices.iter().position(|c| *c == self.mapping.hold_toggle).unwrap_or(0) as i32;
+            self.mapping.hold_toggle = choices[(now + delta).rem_euclid(choices.len() as i32) as usize];
+            let (key, value) = (controls::HOLD_KEY, self.mapping.hold_value());
+            if self.mapping.hold_toggle == defaults.hold_toggle {
+                settings.values.remove(&format!("{prefix}{key}"));
+            } else {
+                settings.values.insert(format!("{prefix}{key}"), value.to_string());
+            }
+            control::pocket_core(&format!("ctl {key} {value}"));
         } else {
             self.mapping = defaults;
             settings.values.retain(|k, _| !k.starts_with(prefix));
@@ -241,6 +281,7 @@ impl EmuMenu {
                 control::pocket_core(&format!("ctl {} {}", controls::KEYS[id], self.mapping.value_of(id as u8)));
             }
             control::pocket_core(&format!("ctl {} {}", controls::STICK_KEY, on_off(self.mapping.stick_dpad)));
+            control::pocket_core(&format!("ctl {} {}", controls::HOLD_KEY, self.mapping.hold_value()));
         }
     }
 
@@ -408,6 +449,55 @@ mod tests {
         assert_eq!(m.control_rows()[0].value, "Off");
         m.control_step(0, 1, &mut s);
         assert!(!s.values.contains_key("ctl.stick_dpad"));
+    }
+
+    #[test]
+    fn hold_to_toggle_offers_only_buttons_the_console_has_to_hold_and_is_stored_per_game() {
+        let (mut m, mut s) = menu_with(with_controls(), &[]);
+        let hold = m.control_count() - 2;
+        assert_eq!((m.control_rows()[hold].name.as_str(), m.control_rows()[hold].value.as_str()), ("Hold to toggle", "Off"));
+        // A Game Boy has A and B (Start and Select are not held down): Off → A → B → Off.
+        m.control_step(hold, 1, &mut s);
+        assert_eq!(m.control_rows()[hold].value, "A");
+        assert_eq!(s.values["ctl.hold_toggle"], "a");
+        m.control_step(hold, 1, &mut s);
+        assert_eq!((m.control_rows()[hold].value.as_str(), s.values["ctl.hold_toggle"].as_str()), ("B", "b"));
+        m.control_step(hold, 1, &mut s);
+        assert_eq!(m.control_rows()[hold].value, "Off");
+        assert!(!s.values.contains_key("ctl.hold_toggle"), "Off is the default and is not stored");
+        // Left goes the other way round; Reset controls puts it back to Off with the rest.
+        m.control_step(hold, -1, &mut s);
+        assert_eq!(m.control_rows()[hold].value, "B");
+        m.control_step(m.control_count() - 1, 1, &mut s);
+        assert_eq!(m.control_rows()[hold].value, "Off");
+        assert!(s.values.keys().all(|k| !k.starts_with("ctl.")));
+        // A game that is not running: the standard buttons, and its saved choice is shown.
+        s.values.insert("ctl.hold_toggle".to_string(), "y".to_string());
+        let offline = EmuMenu::offline("snes", &s);
+        assert_eq!(offline.control_rows()[offline.control_count() - 2].value, "Y");
+    }
+
+    #[test]
+    fn hold_toggle_can_be_off_for_one_game_while_the_console_keeps_it_on() {
+        let dir = crate::testutil::TestDir::new("hold-settings");
+        let state = dir.join("first.pstate");
+        std::fs::write(&state, b"existing progress").unwrap();
+        let game = Path::new("/roms/gbc/first.gbc");
+        let other = Path::new("/roms/gbc/second.gbc");
+        let mut settings = GameSettings::load(&dir, "gbc", game);
+        let mut menu = EmuMenu::offline("gbc", &settings);
+        let hold = menu.control_count() - 2;
+        assert_eq!(menu.control_rows()[hold].value, "Off");
+        menu.control_step(hold, 1, &mut settings);
+        assert!(settings.save_for_console());
+        let mut settings = GameSettings::load(&dir, "gbc", game);
+        let mut menu = EmuMenu::offline("gbc", &settings);
+        assert_ne!(menu.control_rows()[hold].value, "Off", "the console choice survives reopening");
+        menu.control_step(hold, -1, &mut settings);
+        assert!(settings.save_for_game());
+        assert_eq!(EmuMenu::offline("gbc", &GameSettings::load(&dir, "gbc", game)).control_rows()[hold].value, "Off");
+        assert_ne!(EmuMenu::offline("gbc", &GameSettings::load(&dir, "gbc", other)).control_rows()[hold].value, "Off");
+        assert_eq!(std::fs::read(&state).unwrap(), b"existing progress", "control choices keep saved progress intact");
     }
 
     #[test]

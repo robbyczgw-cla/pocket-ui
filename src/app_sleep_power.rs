@@ -109,9 +109,7 @@ impl App {
             let name = r.label();
             let selected = i == page.sel;
             if selected {
-                let w = self.text.width(Face::Body, font, name) + 2 * NU_BTN_PAD;
-                c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, pal().band);
-                c.round_rect(pad, y + 4, w, row - 8, (row - 8) / 2, pal().select);
+                pocket_ui::kit::selection(c, pad, y, right - pad, row);
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, name);
             } else {
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, name);
@@ -120,7 +118,7 @@ impl App {
             let adjustable = !(pocket_ui::device::current().screen_off_only() && *r == Row::ShortPress);
             let shown = if selected && adjustable { format!("‹ {value} ›") } else { value };
             let vx = right - NU_BTN_PAD;
-            self.text.draw_right(c, Face::Body, font, vx, base, pal().text, &shown);
+            pocket_ui::kit::row_value(c, &mut self.text, font, vx, base, &shown, selected);
             // The arrows of the selected row are buttons of their own for a finger.
             if selected && adjustable {
                 let vw = self.text.width(Face::Body, font, &shown);

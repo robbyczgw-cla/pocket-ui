@@ -41,7 +41,7 @@
 //! now, before the system suspends or powers off); and
 //! `preview <w> <h> [<seq>]` (renders the last frame with the current settings into
 //! `pocket_ui::preview::FILE`, see `src/preview.rs`). `opt <core option key> <value>` and
-//! `ctl <button|stick_dpad> <value>` come from the Emulator and Controls pages, which read
+//! `ctl <button|stick_dpad|hold_toggle> <value>` come from the Emulator and Controls pages, which read
 //! /storage/.config/pocket-ui/core-options/<system>.json; this process rewrites it whenever the
 //! core's options, their visibility or the button layout change.
 //!
@@ -89,6 +89,30 @@ fn data_dir() -> PathBuf {
 }
 
 static TERMINATE: AtomicBool = AtomicBool::new(false);
+
+/// How long the exit save may wait for the core to hand over its state (`retro_serialize_size`/`retro_serialize`). PPSSPP
+/// (its emulation thread) can wait forever for a frame nobody runs any more; a core that is merely slow needs up to ~12 s
+/// for 50 MB states (Odin 2 Mini, Dreamcast and PSP). pocket-ui lets an exit save run for 120 s (`quit::SAVE_LIMIT`) before it would kill the game.
+const CORE_STATE_LIMIT: Duration = Duration::from_secs(20);
+/// The exit save's calls into the core, timed (`pocket_ui::exit_guard`).
+static CORE_CALLS: std::sync::LazyLock<Arc<pocket_ui::exit_guard::CoreCalls>> = std::sync::LazyLock::new(pocket_ui::exit_guard::CoreCalls::new);
+
+/// During the exit save: ends the process if the core doesn't answer within `limit`, instead of leaving the game
+/// unquittable. The battery save is on the card by then. The newest moment already written (a slot, an Earlier state, the
+/// state the session started from) becomes the one the next start resumes from (`slots::resume_from_written`).
+fn spawn_exit_watchdog(limit: Duration, states: PathBuf) {
+    CORE_CALLS.watch(limit, Duration::from_millis(500), move |taken| {
+        let kept = slots::resume_from_written(&states);
+        println!(
+            "exit save: the core did not hand over its state within {} s; no new quit state; fallback: {}",
+            taken.as_secs(),
+            kept.map_or("no promoted state (existing resume rules apply)".to_string(), |p| p.display().to_string())
+        );
+        pocket_ui::fast_switch::saving(false);
+        // Not `exit`: the core's destructors would wait for the same thing.
+        unsafe { libc::_exit(0) };
+    });
+}
 
 extern "C" fn on_sigterm(_: libc::c_int) {
     TERMINATE.store(true, Ordering::SeqCst);
@@ -213,6 +237,9 @@ struct App {
     /// Cozy's launch animation still plays over pocket-ui's shelf: nothing is drawn, so the window stays unmapped
     /// until it is over (`startup::held`), a button cuts it short. The game itself runs, silently.
     hold: bool,
+    /// The hold is "Where was I?"'s (`startup::HOLD_STILL`): the game doesn't run until it is over, once its moment is
+    /// loaded (a 3D core's moment waits for its first frames, `resume_in`, which run as in any hold).
+    hold_still: bool,
     /// The buttons down when the hold was last looked at (`startup::new_press`).
     hold_down: Option<[u16; players::MAX]>,
     /// The old-TV power-on over the game's first 300 ms (`crt_on`): wanted by pocket-ui (Cozy, Motion Full) and not yet
@@ -225,6 +252,8 @@ struct App {
     /// Buttons held when the game resumed (the one that closed the menu); hidden from the core until
     /// released. Per player.
     held_mask: [u16; players::MAX],
+    /// Controls → Hold to toggle: the chosen button stays down between two presses, per player.
+    toggled: [controls::HoldToggle; players::MAX],
     /// Size of the last frame drawn in play, the size previews are rendered at.
     view: (u32, u32),
     /// A command that arrived while waiting during the pause.
@@ -440,13 +469,17 @@ impl App {
     /// Each player's buttons as the console's (the Controls mapping, the left stick as D-pad, buttons still held from
     /// the pause menu hidden until let go) and their sticks, player 1 first (`players::Inputs`). The mapping is the
     /// same for every player.
-    fn read_players(&mut self) -> ([u16; players::MAX], [[i16; 4]; players::MAX]) {
+    fn read_players(&mut self, home: bool) -> ([u16; players::MAX], [[i16; 4]; players::MAX]) {
         let mut buttons = [0; players::MAX];
         let mut sticks = [[0; 4]; players::MAX];
         // Options → Picture → Screen orientation: the Pocket held turned turns its own D-pad and sticks with the
         // picture (a Bluetooth controller isn't turned with it).
         let turn = self.video.orientation.turns();
+        let changed = self.input.take_seat_changes();
         for p in 0..players::MAX {
+            if changed & (1 << p) != 0 {
+                self.toggled[p] = Default::default();
+            }
             let s = self.input.sticks(p);
             let turn = if self.input.is_pocket(p) { turn } else { 0 };
             let (lx, ly) = if self.mapping.stick_dpad { s.left() } else { (0.0, 0.0) };
@@ -454,7 +487,17 @@ impl App {
             // Buttons still held from the pause menu reach the game only after they were let go. With the screen off
             // nothing reaches it: what is held then stays held back until it is let go.
             self.held_mask[p] = if self.dark { raw } else { self.held_mask[p] & raw };
-            buttons[p] = self.mapping.translate(raw & !self.held_mask[p]);
+            let pressed = self.mapping.translate(raw & !self.held_mask[p]);
+            // With the screen off nothing is held for the game either.
+            if self.dark {
+                self.toggled[p].clear();
+            }
+            buttons[p] = if home {
+                self.toggled[p].shortcut(pressed, self.mapping.hold_toggle);
+                0
+            } else {
+                self.toggled[p].apply(pressed, self.mapping.hold_toggle)
+            };
             sticks[p] = if self.dark { [0; 4] } else { controls::turn_sticks(s.analog(!self.mapping.stick_dpad), turn) };
         }
         (buttons, sticks)
@@ -468,8 +511,22 @@ impl App {
             }
             self.inject_release.retain(|(_, t)| *t > now);
         }
+        let (home, rewind_held, actions) = {
+            let mut hk = self.ex.hotkeys.lock().unwrap();
+            (hk.home_held(), hk.rewind_held(), hk.take())
+        };
+        // With the screen off no shortcut acts (a press in a pocket); the game just goes on.
+        let (rewind_held, actions) = if self.dark { (false, Vec::new()) } else { (rewind_held, actions) };
+        // A screenshot only reads the last frame: run-ahead keeps its state.
+        if actions.iter().any(|a| *a != Action::Screenshot) {
+            self.ex.ahead.forget();
+        }
+        for a in actions {
+            self.hotkey(a);
+        }
+        self.screenshot_results();
         // Couch co-op: every player's buttons and sticks; player 1's go with `run`, the others' to their ports below.
-        let (players, sticks) = self.read_players();
+        let (players, sticks) = self.read_players(home);
         let (mapped, analog) = (players[0], sticks[0]);
         // Over when the deadline passed or any button is pressed (pocket-ui skips its animation on the same press).
         // The finger still on the A that started the game ends nothing; a new press does.
@@ -494,20 +551,6 @@ impl App {
         self.core.set_analog(analog);
         self.core.set_pointer(pointer);
         let t0 = Instant::now();
-        let (home, rewind_held, actions) = {
-            let mut hk = self.ex.hotkeys.lock().unwrap();
-            (hk.home_held(), hk.rewind_held(), hk.take())
-        };
-        // With the screen off no shortcut acts (a press in a pocket); the game just goes on.
-        let (rewind_held, actions) = if self.dark { (false, Vec::new()) } else { (rewind_held, actions) };
-        // A screenshot only reads the last frame: run-ahead keeps its state.
-        if actions.iter().any(|a| *a != Action::Screenshot) {
-            self.ex.ahead.forget();
-        }
-        for a in actions {
-            self.hotkey(a);
-        }
-        self.screenshot_results();
         // While HOME is down the buttons belong to the shortcuts, not the game.
         let buttons = if home { 0 } else { mapped };
         for p in 1..players::MAX {
@@ -552,6 +595,8 @@ impl App {
                     }
                 }
             }
+        } else if pocket_ui::startup::stands_still(self.hold, self.hold_still, self.resume_in.is_some()) {
+            // "Where was I?": the game stands at its moment while its card is read; nothing runs, nothing is missed.
         } else {
             let runs = match ff {
                 None => self.frames_due(),
@@ -693,6 +738,11 @@ impl App {
             (_, Some(speed)) => format!("FF {}", speed.label()),
             _ => String::new(),
         };
+        // Hold to toggle: a button latched down says so in the same quiet corner, until it is let go.
+        if let Some(id) = self.toggled[0].held().filter(|_| !self.dark) {
+            let held = format!("{} held", controls::physical_label(id));
+            self.hud.badge = if self.hud.badge.is_empty() { held } else { format!("{} · {held}", self.hud.badge) };
+        }
         if !self.dark && !self.hold {
             self.draw();
         }
@@ -812,7 +862,8 @@ impl App {
     /// Writes a state and its preview image; the preview first so a listed state always has one.
     fn save_to(&self, path: &Path) -> bool {
         let t0 = Instant::now();
-        let Some(data) = self.core.save_state() else { return false };
+        let data = CORE_CALLS.during(|| self.core.save_state());
+        let Some(data) = data else { return false };
         // Latency trace only (`trace::step`): where a slow exit save spends its time.
         pocket_ui::trace::step("save: state serialized");
         if let Some(dir) = path.parent() {
@@ -969,12 +1020,20 @@ impl App {
             self.hud.note(&note);
         }
         if std::env::var_os(pocket_ui::frozen::SKIP_RESUME_ENV).is_some() {
+            if self.hold_still {
+                self.hold = false;
+            }
             let from = if path.exists() { path.clone() } else { slots::taken_auto_path(&path) };
             let _ = std::fs::rename(&from, slots::retry_auto_path(&path));
             println!("not resumed: {} is not for this file", path.display());
             return;
         }
         let resumed = self.core.resume(&path);
+        // A stale preview can outlive its state, or the core can refuse it / keep a newer battery save. A reminder
+        // hold is only for a successfully continued moment, never a fresh boot behind an invisible card.
+        if self.hold_still && !matches!(resumed, Resume::Resumed | Resume::ResumedAgain) {
+            self.hold = false;
+        }
         if matches!(resumed, Resume::Resumed | Resume::ResumedAgain) {
             if let Some(a) = self.cheevos.as_mut() {
                 a.reset();
@@ -1046,7 +1105,14 @@ impl App {
         if let Some(ms) = std::env::var("POCKET_TEST_SAVE_DELAY_MS").ok().and_then(|m| m.parse().ok()) {
             std::thread::sleep(Duration::from_millis(ms));
         }
+        let limit = std::env::var("POCKET_TEST_CORE_STATE_LIMIT_S").ok().and_then(|m| m.parse().ok()).map_or(CORE_STATE_LIMIT, Duration::from_secs);
+        // Other cores may legitimately serialize for longer; standalone emulators
+        // do not use this path at all. Android's native player is separate too.
+        if self.core.name == "PPSSPP" {
+            spawn_exit_watchdog(limit, self.states.clone());
+        }
         self.save_auto();
+        CORE_CALLS.stop();
         slots::clear_undo(&self.states);
         pocket_ui::fast_switch::saving(false);
     }
@@ -1099,6 +1165,7 @@ impl App {
     /// Loads a state file, after keeping what is running now as "Before load" (a Load can be undone, whatever it
     /// brings back; loading "Before load" itself swaps the two, the file being read first).
     fn load_state_file(&mut self, path: &Path, label: &str) {
+        self.toggled.iter_mut().for_each(controls::HoldToggle::clear);
         // The order of it is `slots::load_keeping_undo`'s (tested there).
         let loaded = slots::load_keeping_undo(
             &self.states,
@@ -1143,6 +1210,7 @@ impl App {
     /// The pause menu's Load → From the start: the game begins again, nothing else. Its own saves stay, and so does the
     /// moment on disk until the next Save & quit replaces it, as when you play on.
     fn start_over(&mut self) {
+        self.toggled.iter_mut().for_each(controls::HoldToggle::clear);
         self.core.restart();
         println!("started over");
         if let Some(a) = self.cheevos.as_mut() {
@@ -1347,6 +1415,9 @@ impl App {
             let rest = |prefix: &str| cmd.strip_prefix(prefix).and_then(|r| r.split_once(' ')).map(|(k, v)| (k, v.trim()));
             match words.as_slice() {
                 ["pause"] if !self.paused => {
+                    self.toggled.iter_mut().for_each(controls::HoldToggle::clear);
+                    self.hold = false;
+                    self.crt_on = false;
                     self.paused = true;
                     self.paused_at = Some(Instant::now());
                     self.timeline.stop();
@@ -1373,6 +1444,9 @@ impl App {
                     println!("play resumed");
                 }
                 ["sleep"] if !self.sleeping => {
+                    self.toggled.iter_mut().for_each(controls::HoldToggle::clear);
+                    self.hold = false;
+                    self.crt_on = false;
                     self.sleeping = true;
                     self.timeline.stop();
                     if let Some(a) = &self.audio {
@@ -1381,11 +1455,16 @@ impl App {
                     println!("asleep");
                 }
                 ["screen", "off"] if !self.dark => {
+                    self.toggled.iter_mut().for_each(controls::HoldToggle::clear);
+                    self.hold = false;
+                    self.crt_on = false;
                     self.dark = true;
                     println!("screen off, playing on");
                 }
                 // Also sent after a suspend pocket-ui didn't start itself: the quantum is reset either way.
                 ["wake"] => {
+                    self.hold = false;
+                    self.crt_on = false;
                     if let Some(a) = &self.audio {
                         a.reassert_quantum();
                     }
@@ -1518,7 +1597,7 @@ impl App {
                         self.core.set_option(key, value);
                     }
                 }
-                // "ctl <button> <console button|none>" or "ctl stick_dpad on|off": the Controls page.
+                // "ctl <button> <console button|none>", "ctl stick_dpad on|off" or "ctl hold_toggle <console button|none>": the Controls page.
                 ["ctl", ..] => {
                     if let Some((key, value)) = rest("ctl ") {
                         if self.mapping.set(key, value) {
@@ -1595,7 +1674,11 @@ impl App {
             hw.make_current(&gfx.surface);
         }
         let shot = pocket_ui::preview::shot_from_screen(&rgba, sw, sh);
-        if let Err(e) = pocket_ui::preview::write(Path::new(pocket_ui::preview::SHOT_FILE), seq, &[&shot]) {
+        // Where the game itself is in it (no black borders, no frame): Zoom crops to that.
+        // Keep the picture last: older pocket-ui readers take the last image in a shot.
+        let game = gfx.video.picture(sw, sh, aspect, &self.video).map(|p| pocket_ui::preview::game_rect_image((p.x as u32, p.y as u32, p.w as u32, p.h as u32)));
+        let images: Vec<&pocket_ui::preview::Pixels> = game.iter().chain(std::iter::once(&shot)).collect();
+        if let Err(e) = pocket_ui::preview::write(Path::new(pocket_ui::preview::SHOT_FILE), seq, &images) {
             eprintln!("shot: {e}");
         }
         pocket_ui::trace::step("menu shot written");
@@ -1622,6 +1705,8 @@ impl App {
         }
         // The button that ended the pause (or woke the device) reaches the game only after it was let go.
         self.held_mask = std::array::from_fn(|p| self.input.buttons(p));
+        // Nothing stays held down for the game across a pause (Controls → Hold to toggle).
+        self.toggled.iter_mut().for_each(controls::HoldToggle::clear);
         self.touch.after_pause();
         // The pause is no late frame: restart pacing and the frame-time statistics. Nor is it play (Earlier).
         self.timeline.stop();
@@ -1938,8 +2023,8 @@ fn main() {
     // The user's saved options first (the first match wins), then the ones this system needs.
     let mut options: Vec<(&str, &str)> = saved.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
     options.extend_from_slice(host.map_or(&[][..], |h| h.options));
-    // 3D cores: RetroArch's options beneath all of these (see `retroarch_beneath`).
     let core_so = Path::new(&args[1]);
+    // 3D cores: RetroArch's options beneath all of these (see `retroarch_beneath`).
     // Mesa's threaded context (a driver thread per GL context) costs 3D cores more than it saves here:
     // Flycast, Sonic Adventure 2 89 % → 69 % CPU, PPSSPP 20-26 % → 18 %, Mupen level, frames as
     // steady (docs/HOST.md). Set before any GL context exists; no other thread runs yet.
@@ -1959,10 +2044,16 @@ fn main() {
     };
     let ra = retroarch_beneath(&ra_options, &options);
     options.extend(ra.iter().map(|(k, v)| (k.as_str(), v.as_str())));
+    // Fill missing keys only, below saved game/console and imported RetroArch choices.
+    core_options::add_game_defaults(&mut options, &core_options::core_id(core_so), &rom);
     // ScummVM's ROCKNIX list names the game folder rather than being a game (`hostsys::content_path`).
     let content = hostsys::content_path(&system, &rom);
     if core_options::core_id(core_so) == "scummvm" {
         hostsys::prepare_scummvm(Path::new(BIOS_DIR));
+    }
+    // PPSSPP's atlas, VFPU tables and fonts live in <system dir>/PPSSPP; ROCKNIX ships them only for its standalone PPSSPP.
+    if core_options::core_id(core_so) == "ppsspp" {
+        hostsys::prepare_ppsspp(Path::new(hostsys::PPSSPP_ASSETS_SRC), Path::new(BIOS_DIR));
     }
     let mut core = match Core::load(core_so, &content, Path::new(BIOS_DIR), &save_dir, &options) {
         Ok(c) => c,
@@ -2058,22 +2149,23 @@ fn main() {
     }
     pocket_ui::startup::mark("input");
     let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or("game").to_string();
-    let states = PathBuf::from(format!("/storage/roms/savestates/{system}/{stem}"));
+    let states = pocket_ui::slots::base(&system, &stem);
 
     let (cmd_tx, commands) = std::sync::mpsc::channel();
     #[cfg(target_os = "linux")]
     {
-        const FIFO: &str = "/tmp/pocket-core.cmd";
-        let _ = std::fs::remove_file(FIFO);
+        // Host regression runs get their own FIFO, just like their own states and launch-skip file.
+        let fifo = if std::env::var_os("POCKET_CORE_TEST").is_some() { std::env::temp_dir().join("pocket-core.cmd") } else { PathBuf::from("/tmp/pocket-core.cmd") };
+        let _ = std::fs::remove_file(&fifo);
         // mkfifo(3) rather than the mkfifo program: no process to start before the first frame.
         // SAFETY: the path is a valid C string that lives through the call.
-        let made = std::ffi::CString::new(FIFO).is_ok_and(|c| unsafe { libc::mkfifo(c.as_ptr(), 0o644) } == 0);
+        let made = std::ffi::CString::new(fifo.as_os_str().as_encoded_bytes()).is_ok_and(|c| unsafe { libc::mkfifo(c.as_ptr(), 0o644) } == 0);
         if made {
             // Read-write: we count as a writer ourselves, so the FIFO never hits EOF and always has a
             // reader, and pocket-ui's writes never block.
             std::thread::spawn(move || {
                 use std::io::BufRead;
-                let Ok(f) = std::fs::OpenOptions::new().read(true).write(true).open(FIFO) else { return };
+                let Ok(f) = std::fs::OpenOptions::new().read(true).write(true).open(fifo) else { return };
                 for line in std::io::BufReader::new(f).lines().map_while(Result::ok) {
                     if cmd_tx.send(line).is_err() {
                         return;
@@ -2121,11 +2213,13 @@ fn main() {
         sleeping: false,
         dark: false,
         hold: pocket_ui::startup::held(),
+        hold_still: pocket_ui::startup::hold_still(),
         hold_down: None,
         crt_on: pocket_ui::startup::held() && pocket_ui::crt_on::wanted(),
         crt_started: false,
         woke_frame: false,
         held_mask: [0; players::MAX],
+        toggled: Default::default(),
         view: (0, 0),
         early: None,
         ex,
@@ -2259,3 +2353,7 @@ mod tests {
         assert_eq!(Exit::from_command(&words(pocket_ui::fast_switch::QUIT_FOR_SWITCH)), Some(Exit::Handoff));
     }
 }
+
+#[cfg(test)]
+#[path = "pocket_core/quit_regression.rs"]
+mod psp_quit_regression;

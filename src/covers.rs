@@ -41,6 +41,40 @@ pub fn playlist(system: &str) -> Option<&'static str> {
         "gamecube" => "Nintendo - GameCube",
         "ps2" => "Sony - PlayStation 2",
         "sg-1000" | "sg1000" => "Sega - SG-1000",
+        "xbox" => "Microsoft - Xbox",
+        "3ds" | "n3ds" => "Nintendo - Nintendo 3DS",
+        "wii" => "Nintendo - Wii",
+        "wiiu" => "Nintendo - Wii U",
+        "n64dd" => "Nintendo - Nintendo 64DD",
+        "pokemini" => "Nintendo - Pokemon Mini",
+        "ps3" => "Sony - PlayStation 3",
+        "neogeo" => "SNK - Neo Geo",
+        "neocd" => "SNK - Neo Geo CD",
+        "supergrafx" => "NEC - PC Engine SuperGrafx",
+        "amiga" => "Commodore - Amiga",
+        "amigacd32" => "Commodore - CD32",
+        "c64" => "Commodore - 64",
+        "vic20" => "Commodore - VIC-20",
+        "msx" => "Microsoft - MSX",
+        "msx2" => "Microsoft - MSX2",
+        "3do" => "The 3DO Company - 3DO",
+        "atarijaguar" | "jaguar" => "Atari - Jaguar",
+        "atari5200" => "Atari - 5200",
+        "atari7800" => "Atari - 7800",
+        "atari800" => "Atari - 8-bit Family",
+        "atarist" => "Atari - ST",
+        "colecovision" => "Coleco - ColecoVision",
+        "intellivision" => "Mattel - Intellivision",
+        "vectrex" => "GCE - Vectrex",
+        "odyssey2" => "Magnavox - Odyssey2",
+        "videopac" => "Philips - Videopac+",
+        "channelf" => "Fairchild - Channel F",
+        "supervision" => "Watara - Supervision",
+        "cdi" => "Philips - CD-i",
+        "zxspectrum" => "Sinclair - ZX Spectrum",
+        "dos" => "DOS",
+        "scummvm" => "ScummVM",
+        "tic-80" | "tic80" => "TIC-80",
         _ => return None,
     })
 }
@@ -102,6 +136,21 @@ fn words(name: &str) -> std::collections::BTreeSet<String> {
     plain.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(str::to_string).collect()
 }
 
+/// The words of a name in order, lowercase, without (…) and […] groups.
+fn word_list(name: &str) -> Vec<String> {
+    let mut plain = String::new();
+    let mut depth = 0;
+    for ch in name.chars() {
+        match ch {
+            '(' | '[' => depth += 1,
+            ')' | ']' => depth = (depth - 1).max(0),
+            _ if depth == 0 => plain.extend(ch.to_lowercase()),
+            _ => {}
+        }
+    }
+    plain.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(str::to_string).collect()
+}
+
 /// The cleanest entry when `found` is one game (in one or more regions); `None` when it is several games.
 /// Several games count as one when a single one ranks best: "Cortex Strikes Back (USA)" over the
 /// Japanese "Cortex no Gyakushuu! (Japan)", but not "Red Version (USA)" over "Blue Version (USA)".
@@ -150,6 +199,21 @@ pub fn best_match<'a>(stem: &str, index: &'a [String]) -> Option<&'a str> {
     let main_title = |n: &str| normalize(n.split(" - ").next().unwrap_or(n));
     if let Some(titled) = one_game(index.iter().filter(|n| main_title(n) == key).collect()) {
         return Some(titled);
+    }
+    // "Top Spin" for "Top Spin Tennis (USA)": the name is the start of one game's title (two words at least,
+    // one word more at most, not a sequel).
+    let start: Vec<String> = word_list(stem);
+    if start.len() >= 2 {
+        let longer: Vec<&String> = index
+            .iter()
+            .filter(|n| {
+                let w = word_list(n);
+                w.len() == start.len() + 1 && w.starts_with(&start) && !sequel_word(&w[start.len()])
+            })
+            .collect();
+        if let Some(only) = one_game(longer.clone()).filter(|_| longer.iter().all(|n| normalize(n) == normalize(longer[0]))) {
+            return Some(only);
+        }
     }
     // "Donkey Kong 1 - Country" for "Donkey Kong Country (USA)": every word of the entry is in the name,
     // and the name has at most one word more.
@@ -364,6 +428,45 @@ mod tests {
 
     fn index(names: &[&str]) -> Vec<String> {
         names.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn xbox_and_the_other_disc_and_computer_systems_have_a_playlist() {
+        assert_eq!(playlist("xbox"), Some("Microsoft - Xbox"));
+        assert_eq!(playlist("3ds"), Some("Nintendo - Nintendo 3DS"));
+        assert_eq!(playlist("wii"), Some("Nintendo - Wii"));
+        assert_eq!(playlist("neogeo"), Some("SNK - Neo Geo"));
+        assert_eq!(playlist("zxspectrum"), Some("Sinclair - ZX Spectrum"));
+        assert_eq!(playlist("pico-8"), None);
+    }
+
+    #[test]
+    fn xbox_games_by_their_file_names_find_the_box() {
+        // Names as in the libretro "Microsoft - Xbox" collection; the files are .iso and (Redump) .xiso.iso.
+        let idx = index(&[
+            "Jade Empire (USA)",
+            "Jade Empire - Limited Edition (USA)",
+            "Tom Clancy's - Splinter Cell (USA)",
+            "Tom Clancy's - Splinter Cell - Chaos Theory (USA)",
+            "Tom Clancy's - Splinter Cell - Double Agent (USA)",
+            "Top Spin Tennis (USA)",
+        ]);
+        let stem = |file: &str| Path::new(file).file_stem().unwrap().to_str().unwrap().to_string();
+        let find = |file: &str| best_match(&stem(file), &idx);
+        assert_eq!(find("Jade Empire (USA, Europe) (En,Es,It).iso"), Some("Jade Empire (USA)"));
+        assert_eq!(find("Tom Clancy's Splinter Cell - Chaos Theory (USA, Europe) (En,Fr,De,Es,It).xiso.iso"), Some("Tom Clancy's - Splinter Cell - Chaos Theory (USA)"));
+        assert_eq!(find("Top Spin (USA) (En,Fr,De).xiso.iso"), Some("Top Spin Tennis (USA)"));
+        // The cover is saved under the stem with .xiso, as for every game (`cover_path`).
+        let data = Path::new("/d");
+        assert_eq!(cover_path(data, "xbox", Path::new("/r/xbox/Top Spin (USA).xiso.iso")), Path::new("/d/covers/xbox/Top Spin (USA).xiso.png"));
+    }
+
+    #[test]
+    fn a_title_that_starts_another_game_s_name_needs_that_to_be_the_only_one() {
+        let idx = index(&["Top Spin Tennis (USA)", "Top Spin 2 (USA)", "Mega Man Zero (USA)", "Mega Man Legends (USA)"]);
+        assert_eq!(best_match("Top Spin", &idx), Some("Top Spin Tennis (USA)"));
+        assert_eq!(best_match("Mega Man", &idx), None);
+        assert_eq!(best_match("Top", &idx), None);
     }
 
     #[test]

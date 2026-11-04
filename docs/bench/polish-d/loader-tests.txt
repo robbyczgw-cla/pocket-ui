@@ -1,0 +1,7 @@
+running 4 tests
+test picture_loader::tests::the_size_known_from_the_header_is_the_size_drawn ... ok
+test picture_loader::tests::a_missing_file_comes_back_as_none_and_a_request_is_always_answered ... ok
+test picture_loader::tests::a_new_selection_passes_the_backlog_without_losing_older_answers ... ok
+test picture_loader::tests::the_worker_returns_fitted_pixels_with_the_same_alpha_and_box_filter ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 3064 filtered out; finished in 0.00s

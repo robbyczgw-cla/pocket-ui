@@ -13,8 +13,8 @@ Settings opens on seven categories (Look, Sound & feel, Playing, Games, Connecti
 |---|---|
 | D-pad Up / Down | Move. The list wraps around at the ends. |
 | HOME | Back to Home from wherever you are in Settings (the categories, a list, About, Battery, Lights, Night light, Cozy extras, Sleep & power, Curator). Pages with something under way (an update or a download, a sign-in, a pairing, a clean-up, a button being remapped) keep it: B goes back there. On Home and the shelf HOME still opens the quick settings. |
-| A | On a category: open its list. In the list: open. On Screen colour: back to Neutral. On Appearance, Colours, Font, Text size, Motion, Animations, Sounds, Haptics, On start, Continue where I quit, Over the game, Screen frames and Language: switch. On Buttons: open its page. |
-| D-pad Left / Right | On Sounds: how loud. On Screen colour, Appearance, Colours, Font, Text size, Motion, Animations, On start, Over the game, Screen frames and Language: switch. On the Buttons page: A or Left / Right switch the selected row, Button layout or Button symbols. |
+| A | On a category: open its list. In the list: open. On Screen colour: back to Neutral. On Appearance, Colours, Font, Text size, Motion, Zoom in the pause menu, Animations, Sounds, Haptics, On start, Continue where I quit, Remind me where I was, Over the game, Screen frames and Language: switch. On Buttons: open its page. |
+| D-pad Left / Right | On Sounds: how loud. On Screen colour, Appearance, Colours, Font, Text size, Motion, Zoom in the pause menu, Animations, On start, Over the game, Screen frames and Language: switch. On the Buttons page: A or Left / Right switch the selected row, Button layout or Button symbols. |
 | B | In a category's list: back to the categories, the one you came from selected. On the categories: back to where you came from (the shelf, or a system's game list). |
 
 A page of Settings (Wi-Fi, Tools, Battery and the others below) goes back with B to its category's list, even when
@@ -118,9 +118,10 @@ START on a PortMaster port's card ([Performance & fan](performance.md#portmaster
 |---|---|
 | Most steps | START: skip to the next step. B: back one step. A step opened from Settings returns to its category's list instead. SELECT on "Welcome" and "You're all set" opens the [manual](settings-system.md#manual). |
 | Welcome | Left / Right: the language, English or Deutsch, used at once ([Language](language.md)). A: start. |
-| Choose a look | Left / Right: change. Y: appearance (Dark, Light, Automatic). A: keep this look. In the first start R1: text size (Normal, Medium, Large), B: back to Welcome. Opened from Settings instead R1: motion (Full, Reduced, Off), and X: Systems on the shelf. |
+| Choose a look | Left / Right: change. A: keep this look. In the first start also Y: appearance (Dark, Light, Automatic), R1: text size (Normal, Medium, Large), L1: animations and B: back to Welcome. Opened from Settings there are no shortcut keys: Appearance, Motion, Animations and Systems on the shelf have their own rows. |
 | How do you like to play? | Up / Down: The shelf, Easy, Enthusiast, Choose for yourself. A: take it. B: back to the look. START: skip, everything stays as it is. |
-| Feature cards (Choose for yourself, Settings → Help & tools → Tour, New in this version) | Up / Down: On, Off, Later. A: take the choice, next card. L1 / R1 or Left / Right: previous / next card without choosing. B: back a card (first start) or close (Tour, new cards). START: skip the rest. |
+| Feature cards (Choose for yourself, New in this version) | Up / Down: On, Off, Later. A: take the choice, next card. L1 / R1 or Left / Right: previous / next card without choosing. B: back a card (first start) or close (new cards). START: skip the rest. |
+| Tour (Settings → Help & tools → Tour) | A: next card, the last one closes. L1 / R1 or Left / Right: previous / next card. B: close. The first six cards explain; on Easy to read, Up/Down choose and A applies Large text and Reduced motion. |
 | Wi-Fi | Up / Down: choose a network. A: connect. X: scan again. |
 | On-screen keyboard | D-pad: move. A: type. B: delete (back to the list when empty). L1: empty the field. X: Shift. Y: symbols. START: connect. |
 | Extras | Up / Down: choose. A: download (cover art) or browse (PortMaster). On Pictures, A or Left / Right: the next choice (Box art, Box art and screenshots, Off). |
@@ -213,3 +214,7 @@ Under each entry, a line says what it does.
 In a game, the menu pauses it first, like the pause menu does (the pause menu is open behind it).
 Closing the menu puts the game back; choosing Sleep puts it back and then sleeps, so the game goes on
 after waking.
+
+For Wild Arms XF and Crisis Core in pocket-ui's own PSP host, GPU readbacks are skipped by
+default to avoid an exit-save hang. An explicit Emulator option saved for the game or console
+wins over this default. If effects look wrong, change the readback option in Emulator options.

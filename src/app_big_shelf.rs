@@ -447,15 +447,22 @@ impl App {
         // English parts: the painter translates each as it is drawn (`big_paint`).
         let top = [Some(super::system_label(&self.systems, &system)), year.map(|y| y.to_string()), players].into_iter().flatten().collect::<Vec<_>>();
         // What the game is: the player's own description, else the sentence made of the facts (English only; in
-        // another language the genre alone, which the tables know).
+        // another language the genre alone: as the tables say it, else Curator's word for its kind, which every
+        // language has; "Action game" stood in English on the German Easy look).
         let about = entry.as_ref().map(|e| e.desc.trim().to_string()).filter(|d| !d.is_empty()).or_else(|| {
             let data = data.as_ref()?;
-            if pocket_ui::i18n::current() == pocket_ui::i18n::Lang::En {
+            let lang = pocket_ui::i18n::current();
+            if lang == pocket_ui::i18n::Lang::En {
                 pocket_ui::game_card::sentence(data)
             } else {
-                let genre = data.genres.first()?;
-                let genre = genre.strip_suffix(" video game").unwrap_or(genre);
-                Some(capitalised(genre))
+                let raw = data.genres.first()?;
+                let genre = capitalised(raw.strip_suffix(" video game").unwrap_or(raw));
+                if pocket_ui::i18n::tr_in(lang, &genre) != genre {
+                    return Some(genre);
+                }
+                let vocab = pocket_ui::curatordb::vocabulary();
+                let kind = vocab.genre_tags(raw).first().map(|&t| capitalised(&pocket_ui::i18n::tr_in(lang, &vocab.tag(t).label)));
+                Some(kind.unwrap_or(genre))
             }
         });
         let played = self.recents.list.iter().find(|r| r.path == path).map(|r| {
@@ -593,11 +600,13 @@ impl App {
             self.text.draw(c, Face::Body, px, (c.w - w) / 2, line + (56.0 * u) as i32, pal().chalk, &said);
         }
         let word = if moment { "Continue" } else { "Play" };
-        // Where large text has no room, the labels go from the end and the keys stay.
+        // Easy shows three hints: what plays, the quick settings, Settings. Details, Favourite and the jump between
+        // systems are in the tour and the manual (`kit::top_hints`).
         let mut hints = vec![("A", word), ("HOME", "Quick settings"), ("X", "Details"), ("Y", "Favourite"), ("START", "Settings")];
         if self.big_jumps() {
             hints.push(("UP/DOWN", "Systems"));
         }
+        let hints = pocket_ui::kit::top_hints(&hints, pocket_ui::kit::EASY_HINTS);
         self.paint_hint_row(c, &hints);
     }
 

@@ -1,0 +1,5 @@
+running 1 test
+history samples=62 span_minutes=61 encoded_bytes=46108 elapsed_ms=63.266
+test battery_history::polish_batch_bench::persistence_workload ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3068 filtered out; finished in 0.07s

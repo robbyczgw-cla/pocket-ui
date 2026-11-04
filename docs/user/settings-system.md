@@ -101,6 +101,8 @@ See [Other Retroid devices](getting-started.md#other-retroid-devices).
 
 Settings → System → **Backup & reset**.
 
+![Backup & reset: back up saves or settings, and the backups made so far](pictures/backup.webp)
+
 - **Back up saves** copies your battery saves, save states (all of `savestates`, and the states beside your games), the
   PS2 and GameCube memory cards, Wii and 3DS save data and ScummVM's saves to a folder named after the date and time, in
   `/storage/roms/backup/pocket-ui-saves`. No games and no BIOS files. **A** counts them and shows the size and the free
@@ -155,7 +157,9 @@ Settings → Playing → **Battery** shows the charge now, a time estimate, a gr
 
 pocket-ui reads the battery once a minute for as long as it runs, even while a game is open, and keeps the
 last 48 hours in `battery-history.bin` in its data folder (about 46 kB). What each game used is kept apart, in
-`battery-games.json`, for the pause menu's [Battery in this game](pause-menu.md#battery-in-this-game) and the card. A restart keeps it. A damaged file is
+`battery-games.json`, for the pause menu's [Battery in this game](pause-menu.md#battery-in-this-game) and the card. The minute-by-minute readings appear immediately. They are saved together every ten minutes,
+and before sleep, switching off or a normal exit. A restart keeps them; a sudden loss of power can lose
+the last ten minutes. A damaged file is
 replaced by its backup copy, or the history starts again.
 
 ### RetroAchievements
@@ -177,12 +181,12 @@ Settings → **Help & tools**. The Tour, this guide, ROCKNIX's tools, the bug re
 | Entry | What it holds |
 |---|---|
 | **How you like to play** | The first start's question again: The shelf, Easy, Enthusiast or Choose for yourself (the cards). The row shows where the switches stand now. See [Getting started](getting-started.md#how-do-you-like-to-play) |
-| **Tour** | Every feature on a card, with a small picture of what it does: switch it on or off, or put it off. See [Features and the Tour](tour.md) |
+| **Tour** | The basics in 7 cards: playing and the HOME menu, continuing, saving, quick settings, adding games, Settings, then Easy to read (Large text and Reduced motion). See [Features and the Tour](tour.md) |
 | **Manual** | This guide, on the device. See [Manual](#manual) |
 | **Tools** | ROCKNIX's tools without its old menu: the emulators' own settings, RetroArch's menu, gamepad test and calibration, file manager, terminal, and tools installed from a store. See [Tools](#tools) |
 | **Store** | Emulators, frames, themes and tools. Shown only on a device that has a store set up; there is no public store yet, so you will not see this row. See [Store](extras.md#store) |
 | **Report a problem** | Opens About with this row selected; A there saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)) and shows where it is. The same row is in About, and in the dialog of SELECT + START held, where you look when something has just gone wrong |
-| **About** | Version, the system underneath (on the SD card image "pocket-ui OS 0.1.14 · built on ROCKNIX 20261001 (SM8250)", on a ROCKNIX card with pocket-ui added just the ROCKNIX version), number of games, free space, network address, battery, where the logs are kept, and where the licence texts are (a Licences row when the page has the room: `/storage/pocket-ui/licences`: pocket-ui's licence, the credits, the licences of the programs it is built from and of its fonts; they come with the install package and the SD card image); on a Retroid Pocket 5, Flip 2 or first Mini also which one it is, marked experimental ([Getting started](getting-started.md#other-retroid-devices)). Two rows: **Report a problem** saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)); **Open EmulationStation…** opens ROCKNIX's own menu, after a warning ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)) |
+| **About** | Version, the system underneath (on the SD card image "pocket-ui OS 0.2.0 · built on ROCKNIX 20261001 (SM8250)", on a ROCKNIX card with pocket-ui added just the ROCKNIX version), number of games, free space, network address, battery, where the logs are kept, and where the licence texts are (a Licences row when the page has the room: `/storage/pocket-ui/licences`: pocket-ui's licence, the credits, the licences of the programs it is built from and of its fonts; they come with the install package and the SD card image); on a Retroid Pocket 5, Flip 2 or first Mini also which one it is, marked experimental ([Getting started](getting-started.md#other-retroid-devices)). Two rows: **Report a problem** saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)); **Open EmulationStation…** opens ROCKNIX's own menu, after a warning ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)) |
 
 ### Manual
 

@@ -91,7 +91,9 @@ in the pause menu ([below](#games-on-several-discs)).
 **Nintendo 64, PSP and Dreamcast**: both sticks go to the game as analogue sticks. Game saves are shared
 with the emulators ROCKNIX used for these systems before: RetroArch's N64 saves, the PSP save data in
 `roms/psp/PSP/SAVEDATA` and each Dreamcast game's memory card, so a game saved there continues here and
-the other way round.
+the other way round. The PSP needs no BIOS file: the fonts and tables its menus use (such as the save dialog) come with ROCKNIX, and
+pocket-ui copies the ones missing into `roms/bios/PPSSPP` before a PSP game starts, never replacing a file you put there.
+This happens once; later starts use the files already there.
 
 **Nintendo DS**: both screens are shown one above the other, as large as they fit. R3 switches to side by
 side and to the top screen alone. Touch the bottom screen with a finger, as you would with the stylus; the top screen takes no touch. Or use the right stick
@@ -258,7 +260,7 @@ pocket-ui plays them with **hakuX** in RetroArch; the core is part of the pocket
   (no Save, Load or "continue where I left off"); the rows appear when the core can do it.
 - Not every game runs, and the speed varies; sound effects of some games may be missing. This is a young port. Please report
   what you find.
-- Credits: hakuX by rfandango (GPL-3.0), Linux/libretro port by portare-ch (PortareOS), PR #9 commit 2de4e9c (it includes an audio fix of ours). The licence
+- Credits: hakuX by rfandango (GPL-3.0), Linux/libretro port by portare-ch (PortareOS), built from hakuX-Linux linux-1.3.0 at 035ec48. The licence
   and source link are in `/storage/pocket-ui/licences/NOTICE.md` (Settings → Help & tools → About names the folder).
 
 ## On standalone emulators

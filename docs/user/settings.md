@@ -8,15 +8,18 @@ selected one. Use Up/Down to move and A to open a category: its own short list o
 right and the selected entry's line at the bottom. In that list A opens an entry (or switches it), B goes back to
 the categories with the one you came from selected, and B there comes back to where you were.
 The values ("Home" on Wi-Fi, "Shelf · Dark" on Look, "Auto · Quiet" on Performance & fan: what games run with)
-are short; one that is looked up comes a moment later. Only the selected entry shows its marks: **>** on an entry that
-opens a page, **‹ ›** on a switch. Some entries are switches, not pages: Appearance, Colours, Font, Text size, Motion,
-Screen frames and the like change with A or Left/Right, right in the list.
+are short; one that is looked up comes a moment later. An entry that opens a page ends in a small arrow **>**; one
+without it is a switch: Appearance, Colours, Font, Text size, Motion, Screen frames and the like change with A or
+Left/Right, right in the list, and the selected one shows **‹ ›** round its value. The hint at the bottom says
+**A Open** or **A Change**.
+
+![Settings: Look, Sound & feel, Playing, Games, Connections, System, Help & tools](pictures/settings.webp)
 
 | Category | What is in it |
 |---|---|
 | **Look** | Look, Appearance, Colours, Font, Text size, Screen colour, Night light, Systems on the shelf, Cozy extras. See [Look](#look) |
-| **Sound & feel** | Animations, Playful cases, Old-TV switch-on, Motion, Sounds, Case sounds, Haptics, LEDs. See [Sound & feel](#sound--feel) |
-| **Playing** | On start, Continue where I quit, Buttons, Over the game, Screen frames, Performance & fan, Battery, RetroAchievements. See [Playing](#playing) |
+| **Sound & feel** | Animations, Playful cases, Old-TV switch-on, Motion, Zoom in the pause menu, Sounds, Case sounds, Haptics, LEDs. See [Sound & feel](#sound--feel) |
+| **Playing** | On start, Continue where I quit, Remind me where I was, Buttons, Over the game, Screen frames, Performance & fan, Battery, RetroAchievements. See [Playing](#playing) |
 | **Games** | Add games, Game check, Starter pack, Pictures & extras, From EmulationStation, Screenshots, Curator, PC streaming. See [Games](#games) |
 | **Connections** | Wi-Fi, Bluetooth, Tailscale, Sync, Remote access (SSH), Web companion. See [Connections](settings-system.md#connections) |
 | **System** | Language, Time, Sleep & power, Kids mode, Updates, Storage, Backup & reset. See [System](settings-system.md#system) |
@@ -56,13 +59,12 @@ the shelf itself with a few of your systems and one game (with its box art when 
 games, a built-in set of "Sample game"s). Left/Right or Up/Down switch between the six looks, and the shelf
 behind Settings takes the look at once; A keeps the one shown. See [Playing](playing.md#looks) for what each look
 does. Under the preview are the [appearance](#appearance), the [motion](#motion) and the [animations](#animations)
-in use. The hint bar names the shortcuts on this page: **Y** switches the appearance, **R1** the motion, **L1** the
-animations and **X** opens [Systems on the shelf](#systems-on-the-shelf). Each of
-them also has its own row.
+in use. This page has no shortcut keys: Appearance, Motion, Animations and [Systems on the shelf](#systems-on-the-shelf) each have
+their own row in Settings.
 
 ### Appearance
 
-Settings → Look → **Appearance**; A or Left/Right switches it (on Choose a look, **Y** does too). It applies to every look.
+Settings → Look → **Appearance**; A or Left/Right switches it. It applies to every look.
 
 - **Dark**, the default: black pages. On the Mini V2's OLED screen black pixels are off, so Dark uses the
   least battery.
@@ -101,7 +103,7 @@ Left back to the one before, and the screen shows the new size at once; the choi
 
 With Medium and Large the rows are taller, so a page shows fewer of them and scrolls a little sooner. A name or value that is
 too long for its row ends with "…" and a long text is wrapped, never cut in the middle of a word; where a hint bar has no
-room for every label, the last labels give way and all their buttons, including START, stay on screen. A few things keep their size because they
+room for every hint, whole hints give way (the least needed first; A, B, HOME and START last), never a button without its word. A few things keep their size because they
 belong to a picture of a fixed size: the titles on the cases' spines and the shelf cards in the Cabinet look, the
 pictures on the Tour's cards and the look previews' shrunken screens, and what is drawn over a running game by
 pocket-core (the in-game messages and Pixel Path's line over the game).
@@ -116,7 +118,7 @@ Settings → Look → **Night light** has its own page: [Night light](night-ligh
 
 ### Systems on the shelf
 
-Settings → Look → **Systems on the shelf** (on Choose a look, **X** opens it too). The list has every system that has games, each with a tick
+Settings → Look → **Systems on the shelf** . The list has every system that has games, each with a tick
 box, its console and the number of games. All are ticked by default. When Moonlight is installed, the last row is
 **PC streaming**, unticked by default: tick it to have the [PC streaming](pc-streaming.md) entry on Home.
 
@@ -144,6 +146,7 @@ Settings → **Sound & feel**. What moves, what you hear and what you feel in yo
 | **Playful cases** | Cases spring out and wiggle, each game goes into its console its own way, the open box's disc turns, spines lean as you scroll ([Playing](playing.md#starting-a-game)). Shelf and Cabinet looks only, with Motion on Full. **On with Cozy, Off with Quick** until you switch it. A or Left/Right switches it |
 | **Old-TV switch-on** | The game's picture comes on like an old TV when it starts. Shelf and Cabinet looks only, with Animations on Cozy and Motion on Full. **On** at the start. A or Left/Right switches it |
 | **Motion** | **Full** (the default), **Reduced** or **Off**: how much the menus move. A or Left/Right switches it. See [Motion](#motion) |
+| **Zoom in the pause menu** | Whether the pause menu's first page lists Zoom: **Off** (the default) or **On**. Zoom is always under Options, and listed here too while Easy to read is on. A switches it. See [Zoom in the pause menu](#zoom-in-the-pause-menu) |
 | **Sounds** | Soft clicks in the menus (not the game's volume or the screen brightness: those are on HOME, [Quick settings](quick-settings.md)). A turns them on or off, Left/Right set how loud. See [Playing](playing.md#menu-sounds) |
 | **Case sounds** | Cases click open, cartridges and discs go in with a sound, the old TV hums on. Shelf and Cabinet looks only. Needs Sounds on; the menu sounds are not affected. **On** at the start. A or Left/Right switches it |
 | **Haptics** | A very short tick in the menus as the selection moves. A turns it on or off. Off by default |
@@ -169,8 +172,8 @@ The picture then comes on like an old TV, in a third of a second: dark, a bright
 
 ### Motion
 
-Settings → Sound & feel → **Motion**; A or Left/Right switches it, and on Choose a look **R1**
-does too (the first start keeps the default and has the [text size](#text-size) on R1 instead).
+Settings → Sound & feel → **Motion**; A or Left/Right switches it (the first start keeps the default and has the
+[text size](#text-size) on R1 instead).
 
 - **Full**, the default: the selection glides to the row you move to, lists scroll smoothly, pages slide in,
   the game card rises out of its label, the hints and small messages fade.
@@ -179,6 +182,14 @@ does too (the first start keeps the default and has the [text size](#text-size) 
 
 None of them makes anything slower: a press changes what is selected or opened at once, whichever you choose,
 and pressing again in the middle of a movement takes it straight to the new place. The choice is saved at once.
+
+### Zoom in the pause menu
+
+Settings → Sound & feel → **Zoom in the pause menu**: the [pause menu](pause-menu.md) on pocket-ui's own host lists **Zoom** before
+Quit. **Off** is the default, because the magnifier is a help for small text and most players never need it: then Zoom is a
+row of Options, next to Picture and Controls, and can be a [shortcut](options.md#shortcuts) (HOME + X). While
+[Easy to read](easy-to-read.md#easy-to-read) is on, the row is on the first page whatever this switch says. A switches it.
+See [Zoom](easy-to-read.md#zoom).
 
 ### Cozy extras
 
@@ -222,6 +233,7 @@ Settings → **Playing**. What happens when you start and quit, the buttons, how
 |---|---|
 | **On start** | What you see when the Pocket starts: **Home** (the default) or **Last game**, straight back into the game you played last. A or Left/Right switches it. See [On start](#on-start) |
 | **Continue where I quit** | Whether the pause menu's Quit keeps the moment you are at for the next start: **On** (the default) or **Off**, only the game's own saves. A switches it. See [Continue where I quit](#continue-where-i-quit) |
+| **Remind me where I was** | Back to a game after more than two weeks: when you played it last and your note, while its moment loads. **On** (the default) or **Off**. A switches it. See [Remind me where I was](#remind-me-where-i-was) |
 | **Buttons** | Which face button confirms in pocket-ui's menus, and how the buttons look in the hints, with a picture of the four buttons. See [Buttons](#buttons) |
 | **Over the game** | The frame rate, the sensors or Pixel Path's line over every game, or nothing (the default). See [Over the game](#over-the-game) |
 | **Screen frames** | Where a game gets a frame when you haven't chosen one: **Off** (the default), **Handhelds** or **Every console**. A or Left/Right switches it. See [Screen frames](#screen-frames) |
@@ -260,6 +272,13 @@ switches it.
 
 This is how NextUI and MinUI quit: their in-game menu has one Quit that writes the game's own saves, and they keep a
 moment to resume only when the device sleeps or switches off. With the switch off, the Pocket does the same.
+
+### Remind me where I was
+
+Settings → Playing → **Remind me where I was**: when a game continues its moment and you last played it more than two
+weeks ago, a quiet card shows while the moment loads: when you played it last, how long you have played it, and your note
+from the game card if there is one. The game stands still at that moment for about four seconds, then plays on; any
+button plays at once. **On** is the default; A switches it. See [Where was I?](continue.md#where-was-i).
 
 The switch applies to pocket-ui's own host and to PlayStation 2, GameCube, Wii and 3DS. **RetroArch games still save
 the moment on Quit** with the switch off: ROCKNIX sets RetroArch to save on every exit, and RetroArch has no way to
@@ -320,7 +339,7 @@ one yourself. A or Left/Right switches it.
 - **Every console**: every console starts with frame Auto. The home consoles get the monitor surround, the Nintendo DS
   its DS frame.
 
-A frame saved for a console or a game in the pause menu (Options → Picture, then Save changes) stays as it is either
+A frame saved for a console or a game in the pause menu (Options → Picture, kept for the game or the console) stays as it is either
 way. The choice applies from the next game you start.
 
 ### Performance and fan

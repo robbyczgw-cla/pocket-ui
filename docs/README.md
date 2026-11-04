@@ -21,6 +21,7 @@ Start at [user/index.md](user/index.md).
 | [user/getting-started.md](user/getting-started.md) | Preparing the card, first start, Wi-Fi, adding games |
 | [user/games-drive.md](user/games-drive.md) | RG28XX card: copying games from a Mac or Windows PC |
 | [user/copy-games.md](user/copy-games.md) | Copying games without Wi-Fi: the second card |
+| [user/how-to.md](user/how-to.md) | Short steps: update over Wi-Fi, a game that won't start, pair a controller, back up saves, sync with a second device |
 | [user/game-check.md](user/game-check.md) | Settings → Games → Game check: will your games start? |
 | [user/coming-from.md](user/coming-from.md) | Coming from ROCKNIX or Android: what happens to saves, states, favourites and settings, what needs a copy, what does not come over |
 | [user/playing.md](user/playing.md) | Home, finding a game, the looks, console pages, starting a game, the game switcher, continuing, menu sounds |
@@ -28,6 +29,8 @@ Start at [user/index.md](user/index.md).
 | [user/options.md](user/options.md) | Options in a game: picture, screen frames, emulator, controls, cheats, shortcuts, extras, run-ahead, saving them |
 | [user/options-big.md](user/options-big.md) | The Options of PS2, GameCube, Wii and 3DS games |
 | [user/controls.md](user/controls.md) | Every button, screen by screen |
+| [user/controls-card.md](user/controls-card.md) | The console button drawing, remaps and HOME shortcuts; first start, game card and pause menu |
+| [user/easy-to-read.md](user/easy-to-read.md) | Easy to read (larger text and calmer menus in one switch), the pause menu's Zoom and Controls → Hold to toggle |
 | [user/controls-settings.md](user/controls-settings.md) | The buttons in Settings, during setup, on the touch screen, and the power and volume keys |
 | [user/settings.md](user/settings.md) | How Settings opens, and the entries of Look, Sound & feel, Playing and Games |
 | [user/settings-system.md](user/settings-system.md) | The entries of Connections and System: Wi-Fi, Tailscale, remote access, time, sleep, backup, the manual |
@@ -39,7 +42,7 @@ Start at [user/index.md](user/index.md).
 | [user/night-light.md](user/night-light.md) | Settings → Look → Night light: warmer, less blue colours in the evening, the schedule, the strength, how it fades and where it reaches |
 | [user/theme.md](user/theme.md) | Settings → Look → Colours and Font: the five colour sets and the three fonts |
 | [user/performance.md](user/performance.md) | Settings → Playing → Performance & fan: game defaults, the fan in the menus, Smooth fan, the readout |
-| [user/tour.md](user/tour.md) | The feature cards: Settings → Help & tools → Tour, what the first start's profiles set, "New in this version" |
+| [user/tour.md](user/tour.md) | The Tour (the basics in 6 cards), the feature cards: what the first start's profiles set, "New in this version" |
 | [user/library.md](user/library.md) | The game card, play status, ratings, notes, hiding games and matching your files |
 | [user/curator.md](user/curator.md) | Curator: Lens, smart shelves, stickers, Echoes, Versions, play history and the Year in review |
 | [user/achievements.md](user/achievements.md) | RetroAchievements: signing in, unlocks, the pause menu's list, offline play |

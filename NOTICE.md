@@ -117,7 +117,7 @@ What the table shows:
 | [Dolphin](https://github.com/dolphin-emu/dolphin) | GameCube, Wii | GPL-2.0-or-later |
 | [Azahar](https://github.com/azahar-emu/azahar) | Nintendo 3DS | GPL-2.0-or-later |
 | [RetroArch](https://github.com/libretro/RetroArch) | every system pocket-ui does not host itself | GPL-3.0-or-later |
-| [hakuX](https://github.com/rfandango/hakuX) core (libretro/Linux port, [PR #9](https://github.com/rfandango/hakuX/pull/9)) | Xbox, in RetroArch (`src/hakux.rs`, experimental) | GPL-3.0-or-later (with FEX and other parts under their own licences, texts in `/storage/pocket-ui/hakux/licenses`) |
+| [hakuX](https://github.com/rfandango/hakuX) core (libretro/Linux port by portare-ch, from the [hakuX-Linux](https://github.com/robbyczgw-cla/hakuX-Linux) fork) | Xbox, in RetroArch (`src/hakux.rs`, experimental) | GPL-3.0-or-later (with FEX and other parts under their own licences, texts in `/storage/pocket-ui/hakux/licenses`) |
 | [PortMaster](https://github.com/PortsMaster/PortMaster-GUI) | PC game ports (`src/ports.rs`) | MIT (each port has its own licence) |
 
 Every other emulator ROCKNIX ships (and pocket-ui can start through `runemu.sh`) keeps its own licence; see
@@ -130,11 +130,11 @@ ROCKNIX does. The basis is the author's 2017 forum statement that there is no re
 code to offer. We remove it from the images on the author's request. Its BIOS replacement is BSD-licensed (Gilead
 Kutnick, `usr/config/drastic/system/drastic_bios_readme.txt`).
 
-**Xbox: hakuX by rfandango (GPL-3.0), Linux/libretro port by portare-ch (PortareOS), PR #9 commit
-`2de4e9cd86a47e9ffaf928c36e240a995a279713`** (includes our audio relaunch fix, accepted into the PR) pocket-ui ships the built core (`hakux_libretro.so`, built from that
-commit, unpatched, with the PR's own build scripts) in its own folder, `/storage/pocket-ui/hakux`; it is loaded by ROCKNIX's RetroArch,
+**Xbox: hakuX by rfandango (GPL-3.0), Linux/libretro port by portare-ch (PortareOS), built from hakuX-Linux `linux-1.3.0` at
+`035ec48acde326b017a3f6cd4bc888e1633172df`** (hakuX 1.3.0 with the port and our fixes) pocket-ui ships the built core (`hakux_libretro.so`, built from that
+commit, unpatched, with the fork's own build scripts) in its own folder, `/storage/pocket-ui/hakux`; it is loaded by ROCKNIX's RetroArch,
 a separate GPL-3.0-or-later program that pocket-ui starts, as ARMSX2 or Dolphin are. pocket-ui and the core do not share
-a process. Source of the shipped binary: <https://github.com/rfandango/hakuX/pull/9> at that commit (GPL-3.0-or-later); `SOURCE.txt` beside
+a process. Source of the shipped binary: <https://github.com/robbyczgw-cla/hakuX-Linux> at that commit (GPL-3.0-or-later); `SOURCE.txt` beside
 the core says the same, with the checksums. The licence texts of the core and its parts travel with it.
 
 **How the licences fit together.** pocket-ui is GPL-2.0-or-later, so it can be combined with GPL-2.0 code and,

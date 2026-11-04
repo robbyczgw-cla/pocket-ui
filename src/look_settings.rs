@@ -15,8 +15,8 @@ pub enum Theme {
 
 impl Theme {
     pub const ALL: [Theme; 6] = [Theme::Shelf, Theme::Big, Theme::Minimal, Theme::Split, Theme::Cards, Theme::Cabinet];
-    /// What a phone offers: Easy has no screen there yet.
-    pub const PHONE: [Theme; 5] = [Theme::Shelf, Theme::Minimal, Theme::Split, Theme::Cards, Theme::Cabinet];
+    /// Phone looks, including the single-game Easy view.
+    pub const PHONE: [Theme; 6] = Self::ALL;
 
     pub fn name(self) -> &'static str {
         match self {

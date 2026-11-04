@@ -174,6 +174,7 @@ Shortcuts on pocket-ui's own host (each can be switched off in Options → Short
 | HOME + R2 | Fast-forward on / off. |
 | Hold HOME + L2 | Rewind while held (only when Rewind is on under Speed, rumble, fan). |
 | HOME + Y | [Over the game](pause-menu.md#over-the-game): the next of Off, FPS, FPS + sensors and Pixel Path, until you quit. |
+| HOME + X | [Zoom](easy-to-read.md#zoom): the paused picture larger; B goes back into the game. Off until Options → Shortcuts → Zoom is switched on. |
 | HOME + A | [Screenshot](playing.md#screenshots): a picture of the game, saved to the SD card. "Screenshot saved" shows for a moment. Always the button printed A, whatever [Button layout](settings.md#button-layout) says. |
 
 HOME + A also works in the games of the standalone emulators (PlayStation 2, GameCube, Wii, 3DS) and in PortMaster
@@ -186,6 +187,8 @@ While HOME is held, the game gets no buttons. See [Options](options.md#shortcuts
      RetroArch games too. Until then, use the pause menu's Quit. -->
 
 ## In the pause menu
+
+Not sure which button is which? Options → Controls → **Controls card** draws them ([The controls card](controls-card.md)).
 
 | Button | What it does |
 |---|---|

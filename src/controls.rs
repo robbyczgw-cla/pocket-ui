@@ -6,8 +6,8 @@
 //! remaps. The console's own names for its buttons come from the core (`SET_INPUT_DESCRIPTORS`:
 //! "A", "B", "Select", "D-Pad Up", …); pocket-core hands them to the pause menu in the snapshot file.
 //!
-//! Settings keys in the per-console / per-game files: `ctl.<button>` = `<button>` or `none`, and
-//! `ctl.stick_dpad` = `on` or `off`.
+//! Settings keys in the per-console / per-game files: `ctl.<button>` = `<button>` or `none`,
+//! `ctl.stick_dpad` = `on` or `off`, and `ctl.hold_toggle` = a console button or `none` (see `HoldToggle`).
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicI16, Ordering};
@@ -20,6 +20,8 @@ use crate::pad::{Axis, Button};
 /// Prefix of control keys inside the per-console / per-game settings files.
 pub const KEY_PREFIX: &str = "ctl.";
 pub const STICK_KEY: &str = "stick_dpad";
+/// Hold to toggle (Controls page): the console button a press switches on and a second press off.
+pub const HOLD_KEY: &str = "hold_toggle";
 
 /// Key names by RetroPad id (0..15); the same names are the values a button can be mapped to.
 pub const KEYS: [&str; 16] = ["b", "y", "select", "start", "up", "down", "left", "right", "a", "x", "l", "r", "l2", "r2", "l3", "r3"];
@@ -79,6 +81,9 @@ pub struct ControlsFile {
     pub mapping: BTreeMap<String, String>,
     #[serde(default)]
     pub stick_dpad: bool,
+    /// The console button (RetroPad id) that Hold to toggle works on; None: off.
+    #[serde(default)]
+    pub hold_toggle: Option<u8>,
 }
 
 /// What `retro_input_descriptor` says about one button (player 1, RetroPad only).
@@ -122,11 +127,13 @@ pub fn targets_for(system: &str, described: &[Described]) -> Vec<Target> {
 pub struct Mapping {
     pub target: [Option<u8>; 16],
     pub stick_dpad: bool,
+    /// Hold to toggle: the console button that stays down after a press and lets go at the next one (`HoldToggle`).
+    pub hold_toggle: Option<u8>,
 }
 
 impl Mapping {
     pub fn defaults(system: &str) -> Mapping {
-        Mapping { target: std::array::from_fn(|i| Some(i as u8)), stick_dpad: stick_dpad_default(system) }
+        Mapping { target: std::array::from_fn(|i| Some(i as u8)), stick_dpad: stick_dpad_default(system), hold_toggle: None }
     }
 
     /// The default layout with the `ctl.*` entries of a settings map applied.
@@ -145,6 +152,17 @@ impl Mapping {
         if key == STICK_KEY {
             self.stick_dpad = matches!(value, "on" | "true" | "1");
             return matches!(value, "on" | "off" | "true" | "false" | "1" | "0");
+        }
+        if key == HOLD_KEY {
+            // Only the buttons a game holds down: not the D-pad, Select or Start.
+            self.hold_toggle = match value {
+                "none" => None,
+                v => match key_id(v).filter(|id| !(2..=7).contains(id)) {
+                    Some(id) => Some(id),
+                    None => return false,
+                },
+            };
+            return true;
         }
         let Some(id) = key_id(key) else { return false };
         match value {
@@ -177,6 +195,7 @@ impl Mapping {
             targets,
             mapping: (0..16u8).map(|i| (KEYS[i as usize].to_string(), self.value_of(i).to_string())).collect(),
             stick_dpad: self.stick_dpad,
+            hold_toggle: self.hold_toggle,
         }
     }
 
@@ -186,7 +205,56 @@ impl Mapping {
             m.set(k, v);
         }
         m.stick_dpad = f.stick_dpad;
+        m.hold_toggle = f.hold_toggle.filter(|id| (*id as usize) < KEYS.len() && !(2..=7).contains(id));
         m
+    }
+
+    /// `hold_toggle` as a settings value: a console button's key or `none`.
+    pub fn hold_value(&self) -> &'static str {
+        self.hold_toggle.map_or("none", |id| KEYS[id as usize])
+    }
+}
+
+/// Hold to toggle (Controls page, for people who can't keep a button down, or don't want to): the console button
+/// chosen there is pressed by a press and let go by the next, instead of being held. One per player. A press while the
+/// game isn't running (menu, sleep) is not seen: pocket-core calls `clear` then, so nothing stays pressed.
+#[derive(Default, Clone, Copy, Debug)]
+pub struct HoldToggle {
+    /// Pressed on the pad before (only the chosen button).
+    down: u16,
+    /// Held down for the game now.
+    on: u16,
+}
+
+impl HoldToggle {
+    /// `pressed` are the console buttons the player holds, `chosen` the button Hold to toggle works on. Returns what
+    /// the game gets: everything else as it is, the chosen button as the toggle has it.
+    pub fn apply(&mut self, pressed: u16, chosen: Option<u8>) -> u16 {
+        let mask = chosen.filter(|id| *id < 16).map_or(0, |id| 1u16 << id);
+        // A change of button (or off) lets the old one go.
+        self.on &= mask;
+        let now = pressed & mask;
+        self.on ^= now & !self.down;
+        self.down = now;
+        (pressed & !mask) | self.on
+    }
+
+    /// HOME shortcuts observe physical edges without changing the latch. Releasing HOME before the shortcut
+    /// button must not turn that same press into a new game press.
+    pub fn shortcut(&mut self, pressed: u16, chosen: Option<u8>) {
+        let mask = chosen.filter(|id| *id < 16).map_or(0, |id| 1u16 << id);
+        self.on &= mask;
+        self.down = pressed & mask;
+    }
+
+    /// The button held down for the game now, if any (the badge over the game says so).
+    pub fn held(&self) -> Option<u8> {
+        (self.on != 0).then(|| self.on.trailing_zeros() as u8)
+    }
+
+    /// Lets go of what is held down for the game (a pause, a sleep, a dark screen, a loaded state).
+    pub fn clear(&mut self) {
+        self.on = 0;
     }
 }
 
@@ -335,6 +403,82 @@ impl Sticks {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hold_to_toggle_presses_on_one_press_and_lets_go_on_the_next() {
+        use joypad::{B, UP};
+        let (b, up) = (1u16 << B, 1u16 << UP);
+        let mut h = HoldToggle::default();
+        // Off: nothing changes.
+        assert_eq!(h.apply(b | up, None), b | up);
+        assert_eq!(h.apply(0, None), 0);
+        // On B: a press holds it, also after the finger is up; the other buttons are as they are.
+        assert_eq!(h.apply(b, Some(B as u8)), b);
+        assert_eq!(h.apply(0, Some(B as u8)), b, "held for the game");
+        assert_eq!(h.apply(up, Some(B as u8)), b | up);
+        assert_eq!(h.apply(up | b, Some(B as u8)), up, "the second press lets go");
+        assert_eq!(h.apply(up, Some(B as u8)), up, "and the finger staying down does not press it again");
+        assert_eq!(h.apply(0, Some(B as u8)), 0);
+        // Pressed again, then cleared (a pause): not held on afterwards.
+        assert_eq!(h.apply(b, Some(B as u8)), b);
+        h.clear();
+        assert_eq!(h.apply(0, Some(B as u8)), 0);
+        // The finger down through the clear is no new press; one after it is.
+        assert_eq!(h.apply(b, Some(B as u8)), b);
+        h.clear();
+        assert_eq!(h.apply(b, Some(B as u8)), 0, "still the same press");
+        assert_eq!(h.apply(0, Some(B as u8)), 0);
+        assert_eq!(h.apply(b, Some(B as u8)), b);
+        // Switching the option off, or to another button, lets the old one go.
+        assert_eq!(h.held(), Some(B as u8), "held: the badge says which");
+        assert_eq!(h.apply(0, Some(B as u8)), b);
+        assert_eq!(h.apply(0, None), 0);
+        assert_eq!(h.held(), None, "let go: the badge goes");
+    }
+
+    #[test]
+    fn home_shortcuts_never_latch_and_their_release_does_not_cancel_a_latch() {
+        let b = 1 << joypad::B;
+        let chosen = Some(joypad::B as u8);
+        let mut h = HoldToggle::default();
+        h.shortcut(b, chosen);
+        assert_eq!(h.apply(b, chosen), 0, "HOME released first: still the shortcut press");
+        assert_eq!(h.apply(0, chosen), 0);
+        assert_eq!(h.apply(b, chosen), b, "a new game press latches");
+        h.apply(0, chosen);
+        h.shortcut(b, chosen);
+        h.shortcut(0, chosen);
+        assert_eq!(h.apply(0, chosen), b, "a shortcut cannot release a running button either");
+        h.clear();
+        assert_eq!(h.apply(0, chosen), 0, "a load, restart or pause releases it");
+    }
+
+    #[test]
+    fn old_and_invalid_control_snapshots_cannot_enable_an_invalid_latch() {
+        let mut f: ControlsFile = serde_json::from_str(r#"{"targets":[],"mapping":{}}"#).unwrap();
+        assert_eq!(Mapping::from_file(&f).hold_toggle, None, "old snapshots default to Off");
+        for id in [2, 7, 16, 255] {
+            f.hold_toggle = Some(id);
+            assert_eq!(Mapping::from_file(&f).hold_value(), "none");
+        }
+    }
+
+    #[test]
+    fn hold_to_toggle_is_a_setting_of_a_game_button() {
+        let mut m = Mapping::defaults("snes");
+        assert_eq!((m.hold_toggle, m.hold_value()), (None, "none"));
+        assert!(m.set(HOLD_KEY, "b"));
+        assert_eq!((m.hold_toggle, m.hold_value()), (Some(joypad::B as u8), "b"));
+        assert!(!m.set(HOLD_KEY, "up"), "the D-pad, Select and Start are not held down");
+        assert!(!m.set(HOLD_KEY, "start") && !m.set(HOLD_KEY, "nonsense"));
+        assert_eq!(m.hold_toggle, Some(joypad::B as u8), "a refused value changes nothing");
+        assert!(m.set(HOLD_KEY, "none"));
+        assert_eq!(m.hold_toggle, None);
+        let values: BTreeMap<String, String> = [("ctl.hold_toggle".to_string(), "r".to_string())].into();
+        let from_values = Mapping::from_values("gba", &values);
+        assert_eq!(from_values.hold_toggle, Some(joypad::R as u8));
+        assert_eq!(Mapping::from_file(&from_values.to_file(Vec::new())), from_values, "the snapshot file carries it");
+    }
 
     #[test]
     fn a_turned_pocket_turns_its_d_pad_to_where_the_player_points() {

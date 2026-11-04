@@ -136,13 +136,15 @@ impl App {
     }
 
     /// The card's rows: a save with two versions first (`app_sync_conflicts`), then Echoes, Versions, Stickers
-    /// (`app_curator`), Screenshots (`app_gallery`) and Hide or delete at the end of the card (`app_storage`). The one
+    /// (`app_curator`), Screenshots (`app_gallery`), Controls (`app_controls_card`) and Hide or delete at the end of
+    /// the card (`app_storage`). The one
     /// list for a new card and for every refresh of an open one, so a refresh never drops a row.
     pub(crate) fn card_rows(&self, system: &str, path: &Path) -> Vec<CuratorRow> {
         self.conflict_card_row(system, path)
             .into_iter()
             .chain(self.curator_card_rows(path))
             .chain(self.card_screenshots_row(system, path))
+            .chain(self.card_controls_row(system))
             .chain(std::iter::once(self.card_manage_row()))
             .collect()
     }
@@ -281,7 +283,7 @@ impl App {
             }
             Out::Play => {
                 let open = self.card.take().unwrap();
-                self.launch(open.system, open.name, open.path);
+                self.launch_asking(open.system, open.name, open.path);
             }
             Out::SetStatus(status) => {
                 let path = open.path.clone();
@@ -459,14 +461,13 @@ impl App {
     }
 
     fn card_saved(&mut self, saved: std::io::Result<()>, what: &str) {
-        let msg = match saved {
-            Ok(()) => what.to_string(),
+        match saved {
+            Ok(()) => self.toast = Some((what.to_string(), Instant::now())),
             Err(e) => {
                 eprintln!("library: not saved: {e}");
-                "Could not save: is the SD card full?".to_string()
+                self.warn("Could not save: is the SD card full?");
             }
-        };
-        self.toast = Some((msg, Instant::now()));
+        }
     }
 
     /// Builds the box front, the cartridge and the big cover of the game the player rests on, so the first X finds them
@@ -552,7 +553,7 @@ impl App {
     /// A toast over the card's top line.
     fn paint_card_toast(&mut self, c: &mut Canvas) {
         if let Some((msg, at)) = self.toast.clone() {
-            if super::toast_age(at) < super::TOAST {
+            if super::toast_age(at) < super::toast_len(&msg) {
                 use pocket_ui::text::Face;
                 // The line takes the place of the system's name and the clock while it shows, so a long one ("Found 3
                 // pictures for …", `app_identify`) is not read across them; a long game name is shortened to the screen.

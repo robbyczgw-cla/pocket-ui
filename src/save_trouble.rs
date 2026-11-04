@@ -53,11 +53,12 @@ impl Trouble {
         }
     }
 
-    /// The line over the game and in the pause menu while saves fail.
+    /// The line over the game and in the pause menu while saves fail: one line at 1024x768, so the pause menu's rows
+    /// keep their rhythm under it (taste pass 0.2). It tries again in both cases.
     pub fn line(self) -> &'static str {
         match self {
-            Trouble::Full => "Your progress couldn't be saved to the SD card. Free some space; it will try again.",
-            Trouble::Unwritable => "Your progress couldn't be saved: the SD card can't be written to right now. It will try again.",
+            Trouble::Full => "Couldn't save: the SD card is full. Free some space.",
+            Trouble::Unwritable => "Couldn't save to the SD card. Trying again.",
         }
     }
 

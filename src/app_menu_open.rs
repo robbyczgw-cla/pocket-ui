@@ -35,7 +35,7 @@ use super::{App, UserEvent};
 /// How long a frame waits for the window's full size after pocket-ui put itself in front (it comes in a millisecond).
 const RAISE_WAIT: Duration = Duration::from_millis(100);
 
-/// pocket-ui's window size in front of everything (the largest it has had), and whether it was just put there.
+/// pocket-ui's window size on the shelf, and whether it was just put in front of a game.
 #[derive(Default)]
 pub(crate) struct Raise {
     full: (u32, u32),
@@ -68,6 +68,11 @@ impl MenuShot {
     /// A pause menu has opened with picture `seq` on its way (None: not asked): nothing of an earlier menu is kept.
     pub(crate) fn asked(seq: Option<u32>) -> MenuShot {
         MenuShot { seq, behind: Vec::new() }
+    }
+
+    /// A picture is on its way for the menu that is open.
+    pub(crate) fn is_asked(&self) -> bool {
+        self.seq.is_some()
     }
 }
 
@@ -102,19 +107,23 @@ fn ask(proxy: EventLoopProxy<UserEvent>) -> Option<u32> {
 impl App {
 
     /// The picture came (or didn't, `None`): behind the menu it is, if the menu it was asked for is still open.
-    pub(crate) fn menu_shot_arrived(&mut self, seq: u32, image: Option<preview::Pixels>) {
+    pub(crate) fn menu_shot_arrived(&mut self, seq: u32, image: Option<preview::Shot>) {
         if self.menu_shot.seq != Some(seq) {
             return;
         }
         self.menu_shot = MenuShot::default();
         let Some(image) = image else {
             println!("pause menu: no picture from pocket-core");
+            self.zoom_picture_came(false);
             return;
         };
         pocket_ui::trace::step("menu: picture in");
         let Some(menu) = self.menu.as_mut() else { return };
-        menu.frame = Some(Image { w: image.w, h: image.h, px: image.px });
+        let preview::Shot { pixels, game } = image;
+        menu.frame = Some(Image { w: pixels.w, h: pixels.h, px: pixels.px });
+        menu.game_rect = game;
         self.switcher_now_playing_picture();
+        self.zoom_picture_came(true);
         self.request_redraw();
     }
 
@@ -155,13 +164,17 @@ impl App {
     /// Whether a frame of `w` x `h` should wait: just put in front, and sway's resize to the full size not in yet
     /// (its `Resized` asks for the frame). Notes the full size as it goes.
     pub(crate) fn wait_for_full_size(&mut self, w: u32, h: u32) -> bool {
-        self.raise.wait(w, h, std::time::Instant::now())
+        self.raise.wait(w, h, self.running.is_some(), std::time::Instant::now())
     }
 }
 
 impl Raise {
-    fn wait(&mut self, w: u32, h: u32, now: std::time::Instant) -> bool {
-        if w as u64 * h as u64 > self.full.0 as u64 * self.full.1 as u64 {
+    fn wait(&mut self, w: u32, h: u32, playing: bool, now: std::time::Instant) -> bool {
+        // Before sway configures the output, winit may draw at 800x600 even on a 640x480 panel.
+        // Follow the shelf's actual size, including smaller resizes; a lifetime maximum would make
+        // every pause wait RAISE_WAIT for that provisional size. While playing, keep the full size
+        // across sway's temporary half-width tile until the window is raised again.
+        if !playing || w as u64 * h as u64 > self.full.0 as u64 * self.full.1 as u64 {
             self.full = (w, h);
         }
         match self.since {
@@ -189,9 +202,26 @@ mod tests {
     fn held_frame_is_due_and_then_paints() {
         let t0 = Instant::now();
         let mut raise = Raise { full: (640, 480), since: Some(t0), held: false };
-        assert!(raise.wait(320, 480, t0), "held at the old size");
+        assert!(raise.wait(320, 480, true, t0), "held at the old size");
         assert!(raise.held && raise.since.is_some());
-        assert!(!raise.wait(320, 480, t0 + RAISE_WAIT), "painted once the wait is over");
+        assert!(!raise.wait(320, 480, true, t0 + RAISE_WAIT), "painted once the wait is over");
+        assert!(!raise.held && raise.since.is_none());
+    }
+
+    #[test]
+    fn small_panel_replaces_provisional_startup_size_and_still_waits_for_tiling() {
+        let t0 = Instant::now();
+        let mut raise = Raise::default();
+        assert!(!raise.wait(800, 600, false, t0));
+        assert!(!raise.wait(640, 480, false, t0));
+        assert_eq!(raise.full, (640, 480));
+        raise.since = Some(t0);
+        assert!(!raise.wait(640, 480, true, t0), "first pause needs no resize");
+        assert!(!raise.wait(320, 480, true, t0), "tile behind the game");
+        assert_eq!(raise.full, (640, 480));
+        raise.since = Some(t0);
+        assert!(raise.wait(320, 480, true, t0), "hold the old tile after Continue");
+        assert!(!raise.wait(640, 480, true, t0 + Duration::from_millis(1)));
         assert!(!raise.held && raise.since.is_none());
     }
 
@@ -199,7 +229,7 @@ mod tests {
     fn full_size_frame_is_never_held() {
         let t0 = Instant::now();
         let mut raise = Raise { since: Some(t0), ..Default::default() };
-        assert!(!raise.wait(640, 480, t0));
+        assert!(!raise.wait(640, 480, true, t0));
         assert!(!raise.held);
     }
 }

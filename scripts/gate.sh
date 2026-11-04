@@ -33,6 +33,8 @@ if [ "${1:-}" = --quick ]; then quick=1; shift; fi
 case ${1:-} in --*) echo "usage: scripts/gate.sh [--quick] [worktree]" >&2; exit 2 ;; esac
 dir=${1:-$(cd "$(dirname "$0")/.." && pwd)}
 cd "$dir" || exit 2
+# Refresh source and embedded inputs after rsync, while the remote caller holds the shared target slot lock.
+for input in src tests assets; do [ ! -d "$input" ] || find "$input" -type f -exec touch {} + || exit 1; done
 name=$(basename "$(pwd)")
 T=/tmp/gate-test-$name.log L=/tmp/gate-launcher-$name.log V=/tmp/gate-verify-$name.log C=/tmp/gate-licences-$name.log
 P=/tmp/gate-package-$name.log Q=/tmp/gate-grub-$name.log G=/tmp/gate-image-grub-$name.log F=/tmp/gate-fat-hook-$name.log

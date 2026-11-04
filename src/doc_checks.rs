@@ -458,10 +458,10 @@ fn the_pause_menu_table_matches_the_menu_of_each_emulator() {
     use super::MainItem::{self, *};
     use pocket_ui::quit::Saver;
     // Every row of the menu. A new one has to be added here (the match stops compiling) and to the guide.
-    let all = [Continue, Save, Load, Earlier, Disc, Options, Achievements, PixelPath, Players, Quit];
+    let all = [Continue, Save, Load, Earlier, Disc, Options, Achievements, Zoom, PixelPath, Players, Quit];
     for item in all {
         match item {
-            Continue | Save | Load | Earlier | Disc | Options | Achievements | PixelPath | Players | Quit => {}
+            Continue | Save | Load | Earlier | Disc | Options | Achievements | Zoom | PixelPath | Players | Quit => {}
         }
     }
     let md = read("docs/user/pause-menu.md");
@@ -540,11 +540,11 @@ fn every_option_group_setting_and_choice_is_described() {
         let start = format!("**{}**", s.choices[s.default].label);
         assert!(row[1].contains(&start), "options.md, Speed, rumble, fan, {}: the start value {start}", s.name);
     }
-    for name in ["Emulator", "Controls", "Cheats", "Save changes"] {
+    for name in ["Emulator", "Controls", "Cheats", "Keep for", "Restore defaults"] {
         assert!(md.contains(&format!("**{name}**")), "docs/user/options.md: the entry **{name}**");
     }
-    for choice in super::SAVE_CHANGES {
-        assert!(md.contains(&format!("**{choice}**")), "docs/user/options.md: Save changes → **{choice}**");
+    for choice in ["This game", "This console"] {
+        assert!(md.contains(&format!("**{choice}**")), "docs/user/options.md: Keep for → **{choice}**");
     }
 }
 
@@ -570,6 +570,20 @@ fn every_feature_card_has_a_user_guide_section() {
         let rel = format!("docs/user/{page}");
         assert!(root().join(&rel).exists(), "feature `{}`: {rel} does not exist", f.id);
         assert!(anchors(&read(&rel)).contains(anchor), "feature `{}`: {rel} has no heading for #{anchor}", f.id);
+    }
+}
+
+#[test]
+fn every_tour_basic_has_a_user_guide_section() {
+    for b in pocket_ui::features::BASICS {
+        let (page, anchor) = b.guide.split_once('#').unwrap_or_else(|| panic!("tour card `{}`: guide {:?} is not page.md#anchor", b.id, b.guide));
+        let rel = format!("docs/user/{page}");
+        assert!(root().join(&rel).exists(), "tour card `{}`: {rel} does not exist", b.id);
+        assert!(anchors(&read(&rel)).contains(anchor), "tour card `{}`: {rel} has no heading for #{anchor}", b.id);
+    }
+    let tour = read("docs/user/tour.md");
+    for b in pocket_ui::features::BASICS {
+        assert!(tour.contains(&format!("**{}**", b.title)), "docs/user/tour.md names the Tour card {:?} in bold", b.title);
     }
 }
 
@@ -660,6 +674,7 @@ fn the_documentation_index_lists_every_document() {
 }
 
 #[test]
+#[ignore = "release check: sh scripts/release-check.sh"]
 fn developing_md_names_every_source_module() {
     let layout = section(&read("docs/DEVELOPING.md"), "Repository layout");
     let binaries = section(&read("docs/DEVELOPING.md"), "Building");
@@ -686,6 +701,7 @@ fn developing_md_names_every_source_module() {
 }
 
 #[test]
+#[ignore = "release check: sh scripts/release-check.sh"]
 fn every_environment_variable_is_documented() {
     let env = section(&read("docs/DEVELOPING.md"), "Environment variables");
     let prefix = ["\"", "POCKET"].concat();
@@ -822,6 +838,7 @@ fn the_status_ledger_rows_have_a_known_status_and_no_private_data() {
 /// (2026-10-26) still found "Settings > …" in places. Every line of `src/` with a string in it (comments left out)
 /// and both sides of `de.tsv` are checked.
 #[test]
+#[ignore = "release check: sh scripts/release-check.sh"]
 fn settings_paths_on_the_screen_use_the_glossarys_arrow() {
     // Put together, so this test's own lines don't count.
     let (en, de, es) = (["Settings", " > "].concat(), ["Einstellungen", " > "].concat(), ["Ajustes", " > "].concat());
@@ -954,6 +971,7 @@ fn settings_names(table: Option<&std::collections::HashMap<String, String>>) -> 
 /// both sides of each table has to name a category of main.rs SETTINGS_GROUPS, and a row of that category.
 /// Left out: dated and developer documents, comments in `src/`, this file (it spells bad paths on purpose).
 #[test]
+#[ignore = "release check: sh scripts/release-check.sh"]
 fn every_path_in_settings_names_a_category_and_one_of_its_rows() {
     let en = settings_names(None);
     let mut bad = Vec::new();

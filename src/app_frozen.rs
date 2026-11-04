@@ -134,11 +134,12 @@ impl App {
 
     /// `launch`: what the start does about the game's moment. Goes on the start's environment for pocket-core, on the
     /// shelf for an emulator that takes longer to come up.
-    pub(crate) fn frozen_at_launch(&mut self, system: &str, path: &Path, emulator: &str, core: &str, env: &mut Vec<(&'static str, String)>) {
+    /// True when the moment is left out: the game starts fresh ("Where was I?" shows nothing then, `where_was_i`).
+    pub(crate) fn frozen_at_launch(&mut self, system: &str, path: &Path, emulator: &str, core: &str, env: &mut Vec<(&'static str, String)>) -> bool {
         self.frozen_wait = None;
         // With the shelf's Frozen games off too: a start doesn't load a state made for another file or another patch.
         if !frozen::available() {
-            return;
+            return false;
         }
         let mark = self.recents.list.iter().find(|r| r.path == path).and_then(|r| r.frozen.clone());
         let game = frozen::Game { system: system.into(), path: path.into(), emulator: emulator.into(), core: core.into(), mark };
@@ -150,22 +151,22 @@ impl App {
             true => AtLaunch::Note(frozen::SHARED),
             false => frozen::at_launch(&game, shown),
         };
-        let note = match at {
+        let (note, fresh) = match at {
             AtLaunch::Normal => {
                 // pocket-core is there in a moment; a big emulator takes as long as it takes, and says that it is on it.
                 if shown && !hosted && standalone::auto_states(system, emulator, core, path).is_some() {
                     self.frozen_wait = Some(Instant::now());
                 }
-                return;
+                return false;
             }
-            AtLaunch::Note(note) => note,
+            AtLaunch::Note(note) => (note, false),
             AtLaunch::Fresh(note) => {
                 if hosted {
                     env.push((frozen::SKIP_RESUME_ENV, "1".into()));
                 } else {
                     standalone::skip_next_resume();
                 }
-                note
+                (note, true)
             }
         };
         println!("frozen: {}: {note}", path.display());
@@ -175,6 +176,7 @@ impl App {
             // A notice, not a toast: these are sentences, and a toast is one line for a moment.
             self.notice = Some(super::Notice::new(note));
         }
+        fresh
     }
 
     /// The next spinner step while a big emulator loads the moment, and until when.

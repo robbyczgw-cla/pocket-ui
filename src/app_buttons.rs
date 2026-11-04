@@ -91,7 +91,7 @@ impl App {
         self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         let sel = sel.min(ROWS.len() - 1);
-        let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, &[("B", "Back"), ("A", "Switch")], &desc(ROWS[sel], self.button_layout), 4, pal().text);
+        let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, &[("B", "Back"), ("A", "Change")], &desc(ROWS[sel], self.button_layout), 4, pal().text);
         for (i, r) in ROWS.iter().enumerate() {
             let y = top + i as i32 * row;
             self.hits.row(Area::new(pad, y, right - pad, row), i);
@@ -103,8 +103,7 @@ impl App {
             let vw = self.text.width(Face::Body, font, &shown);
             let name = self.text.fit(Face::Body, font, r.label(), right - pad - 2 * NU_BTN_PAD - vw - 24);
             let base = pocket_ui::kit::row_label(c, &mut self.text, (pad, y, right - pad, row), font, &name, i == sel);
-            let ink = if i == sel { pal().ink } else { pal().text };
-            self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, ink, &shown);
+            pocket_ui::kit::row_value(c, &mut self.text, font, right - NU_BTN_PAD, base, &shown, i == sel);
         }
         self.hits.list(sel, ROWS.len(), 0.0, row as f32);
         self.paint_button_diamond(c, top + ROWS.len() as i32 * row + 16, foot - 16);

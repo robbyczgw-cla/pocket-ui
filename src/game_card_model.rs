@@ -197,6 +197,8 @@ pub enum RowKind {
     SaveVersions,
     /// "Screenshots (3)": the game's own, after Curator's rows (`app_gallery`).
     Screenshots,
+    /// "Controls": the console's controls card (`app_controls_card`), after Screenshots.
+    Controls,
     /// "Hide or delete": the last thing on the card, under everything else (`app_storage`).
     Manage,
 }

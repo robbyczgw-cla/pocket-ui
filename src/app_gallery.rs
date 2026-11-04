@@ -189,9 +189,9 @@ impl App {
                 rows.remove(i);
                 open.card.focus = None;
             }
-            // Before "Hide or delete", the last row.
+            // Before "Controls" and "Hide or delete", the last rows.
             (None, Some(row)) => {
-                let at = rows.iter().position(|r| r.kind == RowKind::Manage).unwrap_or(rows.len());
+                let at = rows.iter().position(|r| matches!(r.kind, RowKind::Controls | RowKind::Manage)).unwrap_or(rows.len());
                 rows.insert(at, row);
                 open.card.focus = None;
             }
@@ -347,7 +347,7 @@ impl App {
             return Some(img);
         };
         debug_assert!(mine);
-        self.request_redraw();
+        if self.pictures.visible.contains(key) { self.request_redraw(); }
         None
     }
 
@@ -359,6 +359,7 @@ impl App {
     }
 
     fn gallery_picture(&mut self, key: &Key, full: bool) -> Option<Option<Rc<Image>>> {
+        self.pictures.visible.insert(key.clone());
         let sync = self.pictures.sync;
         let cache = if full { &mut self.gallery.full } else { &mut self.gallery.thumbs };
         match cache.want(key, if full { FULL_ASKED } else { THUMBS_ASKED }) {

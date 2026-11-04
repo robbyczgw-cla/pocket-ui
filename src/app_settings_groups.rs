@@ -9,11 +9,12 @@
 //! category's list works out the values of its own rows only.
 //!
 //! A row's value (`settings_row_value`): switches show their state, pages a short value ("Home", "Shelf · Dark",
-//! "332 games"); only the selected row adds its marks, ‹ › on a switch and ">" on a page (`settings_values::quiet`),
+//! "332 games"); a page's row ends in a drawn angle on every row, dimmed on the others, and the selected switch adds
+//! its ‹ › (`settings_values::quiet`, `kit::row_value`),
 //! cut with "…" to the room the name leaves. Look, Add games, Battery, Updates and About come from memory; Wi-Fi's
 //! network, Remote access, Time's zone and the paired PCs need a process or a file and come from `settings_values`'
 //! thread (`settings_values_refresh`, when a list with one of them is painted, at most every 5 s); until then the row
-//! shows nothing, or ">" when selected.
+//! shows its angle alone.
 
 use std::ops::Range;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -256,6 +257,9 @@ fn typed_value(opens: Opens, wifi: &Option<values::Wifi>) -> bool {
     matches!(opens, Opens::Setup(Only::Wifi)) && matches!(wifi, Some(values::Wifi::Connected(Some(_))))
 }
 
+/// The line under Remind me where I was while it is Off.
+const REMIND_OFF_LINE: &str = "No reminder after a long break.";
+
 /// The line under Continue where I quit while it is Off.
 const REMEMBER_OFF_LINE: &str = "Quit keeps no moment: the next start is fresh, and the older moment stays under Load.";
 
@@ -273,6 +277,8 @@ impl App {
             Opens::OnStart if i == sel => format!("‹ {} ›", self.on_start.label()),
             Opens::OnStart => self.on_start.label().to_string(),
             Opens::RememberQuit => values::on_off(self.remember_quit).to_string(),
+            Opens::RemindWhere => values::on_off(self.remind_where).to_string(),
+            Opens::ZoomInPause => values::on_off(self.zoom_in_pause).to_string(),
             Opens::Animations if i == sel => format!("‹ {} ›", self.animations_in_use().name()),
             Opens::Animations => self.animations_in_use().name().to_string(),
             Opens::Buttons => page(&self.buttons_list_value()),
@@ -344,6 +350,7 @@ impl App {
             Opens::Extra(e) => self.extra_row_line(e, row_line(i)),
             // Off says what Off does (it kept saying "Quit keeps the moment", walk 2026-11-02).
             Opens::RememberQuit if !self.remember_quit => REMEMBER_OFF_LINE,
+            Opens::RemindWhere if !self.remind_where => REMIND_OFF_LINE,
             _ => row_line(i),
         }
     }
@@ -390,7 +397,7 @@ impl App {
         });
     }
 
-    /// The categories: one bare line each, an icon and the name (">" on the selected one only), and the selected one's
+    /// The categories: one bare line each, an icon, the name and the angle of a row that opens a page, and the selected one's
     /// line naming what is in it at the bottom, as in every list. All seven fit on one page at Large text on 640x480.
     pub(crate) fn paint_settings_groups(&mut self, c: &mut Canvas, sel: usize) {
         c.clear(pal().void);
@@ -413,12 +420,9 @@ impl App {
         // Each category's icon (`ui_art`, one colour, painted in the name's) before its name, which moves right for it.
         let icon_k = 2;
         let indent = 16 * icon_k + 18;
-        let sel_w = self.text.width(Face::Body, font, SETTINGS_GROUPS[sel].0) + 2 * NU_BTN_PAD + indent;
-        let pill_w = self.motion.width_at(app_motion::List::Settings, sel_w, now);
         let mut band = c.rows(top, top + visible as i32 * row);
         let hy = ((hl - first_f) * row as f32).round() as i32;
-        band.round_rect(pad, hy + 4, right - pad, row - 8, (row - 8) / 2, pal().band);
-        band.round_rect(pad, hy + 4, pill_w, row - 8, (row - 8) / 2, pal().select);
+        pocket_ui::kit::selection(&mut band, pad, hy, right - pad, row);
         for (g, k) in app_motion::rows_in_view(first_f, visible, n) {
             let name = SETTINGS_GROUPS[g].0;
             let y = (k * row as f32).round() as i32;
@@ -430,9 +434,7 @@ impl App {
             let ink = mix(pal().text, pal().ink, (app_motion::under(g, hl) * 255.0) as u32);
             pocket_ui::ui_art::paint_tinted(&mut band, pocket_ui::ui_art::Art::Icon(ICONS[g]), pad + NU_BTN_PAD, y + row / 2 - 8 * icon_k, icon_k, ink);
             self.text.draw(&mut band, Face::Body, font, pad + NU_BTN_PAD + indent, base, ink, name);
-            if g == sel {
-                self.text.draw_right(&mut band, Face::Body, font, right - NU_BTN_PAD, base, pal().text, ">");
-            }
+            pocket_ui::kit::row_value_in(&mut band, &mut self.text, font, right - NU_BTN_PAD, base, ">", (ink, mix(pal().dust, pal().ink, (app_motion::under(g, hl) * 255.0) as u32)));
         }
         pocket_ui::kit::scrollbar(c, top, visible as i32 * row, first, visible, n);
         self.hits.list(sel, n, 0.0, row as f32);
@@ -719,6 +721,7 @@ mod tests {
     /// ("quit", "frames", "Bilder & Extras") is in its row's name or the other way round. A row added, moved or
     /// renamed without its line fails here; so does a translated line naming a word its rows don't use.
     #[test]
+    #[ignore = "release check: sh scripts/release-check.sh"]
     fn every_category_line_names_its_rows_in_order() {
         let parts = |line: &str| -> Vec<String> { line.trim_end_matches('.').split(", ").map(|p| p.trim().to_lowercase()).collect() };
         for (store, sticks, deck) in [(true, true, false), (false, true, false), (true, false, false), (false, false, false), (false, false, true)] {
@@ -843,11 +846,11 @@ mod tests {
     #[test]
     fn the_decks_category_lines_name_the_decks_rows() {
         let deck = |name: &str| blurb_with(category(name), false, false, true, str::to_string);
-        assert_eq!(deck("Sound & feel"), "Animations, playful cases, old-TV switch-on, motion, sounds, case sounds.");
+        assert_eq!(deck("Sound & feel"), "Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds.");
         assert_eq!(deck("Connections"), "Web companion.");
         assert_eq!(deck("System"), "Language, sleep & power, storage, backup & reset.");
         assert_eq!(deck("Help & tools"), "How you like to play, Tour, manual, report a problem, about.");
-        assert_eq!(deck("Playing"), "On start, continue, buttons, over the game, frames, battery, achievements.");
+        assert_eq!(deck("Playing"), "On start, continue, where I was, buttons, over the game, frames, battery, achievements.");
     }
 
     /// The Help & tools line names the Store only while the row is there. (The device default in a test run is "no

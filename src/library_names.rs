@@ -192,7 +192,7 @@ pub fn name_extras(stem: &str) -> Vec<String> {
 }
 
 pub fn strip_inner_ext(stem: &str) -> &str {
-    [".nkit", ".NKIT", ".p8"].iter().find_map(|e| stem.strip_suffix(e)).unwrap_or(stem)
+    [".nkit", ".NKIT", ".p8", ".xiso", ".XISO"].iter().find_map(|e| stem.strip_suffix(e)).unwrap_or(stem)
 }
 
 /// `display_name`, for a name that is going to be painted (the recents, the hidden games, the gallery, the history):

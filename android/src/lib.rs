@@ -358,6 +358,7 @@ impl App {
     }
     fn command(&mut self, command: Command) {
         match command {
+            Command::Notice(message) => { bridge("toast", &[&ui::tr(message)]); }
             Command::Launch => {
                 if self.last_launch.is_some_and(|at| at.elapsed() < Duration::from_millis(900)) {
                     return;

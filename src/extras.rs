@@ -124,6 +124,7 @@ impl Settings {
             "hk_rewind" => self.shortcuts.rewind = on,
             crate::over_game::SHORTCUT_KEY => self.shortcuts.over_game = on,
             "hk_shot" => self.shortcuts.screenshot = on,
+            "hk_zoom" => self.shortcuts.zoom = on,
             // "off", "1", "2"; anything else is off.
             "run_ahead" => self.run_ahead = value.parse::<u32>().unwrap_or(0).min(crate::run_ahead::MAX_FRAMES),
             crate::timeline::KEY => self.timeline = on,

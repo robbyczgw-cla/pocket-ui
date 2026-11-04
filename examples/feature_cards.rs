@@ -21,8 +21,8 @@ fn main() {
     let mut buf = vec![0u32; (w * h) as usize];
     for (light, name) in [(0u8, "dark"), (255, "light")] {
         pocket_ui::palette::set_blend(light);
-        let list = features::tour_list();
-        let mut cards = Cards::new(Mode::Tour, list.clone(), Switches::default(), Vec::new());
+        let list: Vec<usize> = features::available().map(|(i, _)| i).collect();
+        let mut cards = Cards::new(Mode::New { version: "0.0.0".into() }, list.clone(), Switches::default(), Vec::new());
         for (k, i) in list.iter().enumerate() {
             cards.show(k);
             let t0 = std::time::Instant::now();

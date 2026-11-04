@@ -75,6 +75,15 @@ impl App {
         let (w, h) = self.screen_size();
         let (x, y) = touch::to_px((ev.x, ev.y), w, h);
         let gesture = self.touch_rec.feed(ev.phase, x, y, std::time::Instant::now(), self.hits.pitch());
+        // This overlay owns its hit map; search, a cabinet or the game card underneath must never take its tap.
+        if self.controls_card_open() {
+            if let Some(Gesture::Tap { x, y }) = gesture {
+                if let TapAction::Press(b) = self.hits.tap(x, y) {
+                    self.tap_button(el, b);
+                }
+            }
+            return;
+        }
         // Add games: a tap on a way selects it, a tap on the selected one does it; its hints are buttons.
         if self.setup.is_some() {
             if let Some(Gesture::Tap { x, y }) = gesture {

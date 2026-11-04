@@ -14,9 +14,24 @@ use crate::image::{self, Image};
 pub const SLOTS: usize = 8;
 pub const STATES_DIR: &str = "/storage/roms/savestates";
 
-/// `/storage/roms/savestates/<system>/<stem>`: the common start of every file of one game.
+/// The folder of every game's states: `STATES_DIR` on the handhelds. `POCKETUI_STATES` moves it where there is no
+/// `/storage` (the Steam Deck launcher points it into pocket-ui's data folder; docs/STEAMDECK.md), so pocket-ui and
+/// pocket-core keep writing beside each other instead of into a folder that does not exist there.
+pub fn states_dir() -> PathBuf {
+    static DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| dir_from(std::env::var("POCKETUI_STATES").ok().as_deref())).clone()
+}
+
+fn dir_from(value: Option<&str>) -> PathBuf {
+    match value.map(str::trim) {
+        Some(v) if !v.is_empty() => PathBuf::from(v),
+        _ => PathBuf::from(STATES_DIR),
+    }
+}
+
+/// `<states>/<system>/<stem>`: the common start of every file of one game.
 pub fn base(system: &str, stem: &str) -> PathBuf {
-    Path::new(STATES_DIR).join(system).join(stem)
+    states_dir().join(system).join(stem)
 }
 
 fn with_suffix(base: &Path, suffix: &str) -> PathBuf {
@@ -127,6 +142,65 @@ pub fn take_battery_unsaved(auto: &Path) -> bool {
     std::fs::remove_file(battery_unsaved_path(auto)).is_ok()
 }
 
+/// The newest state of the game that is already on the card (a slot, Before load, an Earlier or session-start state, the
+/// one this session started from), for an exit that cannot write a new one (`exit_guard`). Empty files don't count.
+pub fn newest_written(base: &Path) -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = (0..SLOTS).map(|n| state_path(base, n)).collect();
+    candidates.push(undo_path(base));
+    // Earlier states exist only where pocket-core's timeline does (not in the Android player).
+    #[cfg(not(target_os = "android"))]
+    candidates.extend(crate::timeline::Name::all().map(|n| crate::timeline::path(base, n)));
+    let auto = auto_path(base);
+    candidates.push(taken_auto_path(&auto));
+    // A retry may be a failed or deliberately retired resume point. Never revive it.
+    candidates
+        .into_iter()
+        .filter_map(|p| {
+            let m = std::fs::metadata(&p).ok().filter(|m| m.is_file() && m.len() > 0)?;
+            Some((m.modified().ok()?, p))
+        })
+        .max_by_key(|(at, _)| *at)
+        .map(|(_, p)| p)
+}
+
+/// An exit save that cannot be written: the newest moment already on the card becomes the auto-resume state (a copy; the
+/// slot stays what it is), unless that is the state the session started from, which the next start finds anyway
+/// (`taken_auto_path`). Returns the file chosen.
+pub fn resume_from_written(base: &Path) -> Option<PathBuf> {
+    let auto = auto_path(base);
+    if auto.exists() {
+        return None;
+    }
+    let from = newest_written(base)?;
+    if from == taken_auto_path(&auto) || from == retry_auto_path(&auto) {
+        return None;
+    }
+    // Open once: the background Earlier writer can atomically replace this path.
+    // Bytes and timestamp must come from the same inode.
+    use std::io::Read;
+    let mut source = std::fs::File::open(&from).ok()?;
+    let modified = source.metadata().ok()?.modified().ok()?;
+    let mut data = Vec::new();
+    source.read_to_end(&mut data).ok()?;
+    if data.is_empty() { return None; }
+    // A stale failure marker must never make an older fallback authoritative.
+    battery_unsaved(&auto, false);
+    crate::fsutil::write_atomic(&auto, &data).ok()?;
+    // A copy is not a new capture. Preserve the clock used by Core::resume when
+    // protecting newer battery saves. Keep the original resume as a fallback.
+    use std::os::unix::fs::OpenOptionsExt;
+    let stamp = std::fs::File::options().write(true).custom_flags(libc::O_NOFOLLOW).open(&auto)
+        .and_then(|f| { f.set_modified(modified)?; f.sync_all() });
+    if stamp.is_err() {
+        let _ = std::fs::remove_file(&auto);
+        return None;
+    }
+    if let Ok(png) = std::fs::read(preview_path(&from)) {
+        let _ = crate::fsutil::replace_file(&preview_path(&auto), &png);
+    }
+    Some(from)
+}
+
 pub fn preview_path(state: &Path) -> PathBuf {
     with_suffix(state, ".png")
 }
@@ -182,6 +256,52 @@ mod tests {
         assert_eq!(taken_auto_path(&auto_path(b)), Path::new("/storage/roms/savestates/gbc/uCity.pstate.auto.taken"));
         assert_eq!(retry_auto_path(&auto_path(b)), Path::new("/storage/roms/savestates/gbc/uCity.pstate.auto.taken.retry"));
         assert_eq!(preview_path(&state_path(b, 2)), Path::new("/storage/roms/savestates/gbc/uCity.pstate2.png"));
+    }
+
+    #[test]
+    fn a_stuck_exit_resumes_from_the_newest_moment_on_the_card() {
+        use std::time::{Duration, SystemTime};
+        let dir = TestDir::new("stuck-exit");
+        let b = dir.join("Game");
+        let put = |p: PathBuf, bytes: &[u8], ago: u64| {
+            std::fs::write(&p, bytes).unwrap();
+            std::fs::File::options().write(true).open(&p).unwrap().set_modified(SystemTime::now() - Duration::from_secs(ago)).unwrap();
+        };
+        // The state this session started from (old), a slot saved in the session, an empty file (doesn't count).
+        put(taken_auto_path(&auto_path(&b)), b"started", 600);
+        put(state_path(&b, 0), b"slot1", 60);
+        put(state_path(&b, 1), b"", 5);
+        put(preview_path(&state_path(&b, 0)), b"png", 60);
+        assert_eq!(newest_written(&b), Some(state_path(&b, 0)));
+        assert_eq!(resume_from_written(&b), Some(state_path(&b, 0)));
+        assert_eq!(std::fs::read(auto_path(&b)).unwrap(), b"slot1");
+        assert_eq!(std::fs::read(preview_path(&auto_path(&b))).unwrap(), b"png");
+        // Both original recovery points stay; a second call changes nothing.
+        assert!(state_path(&b, 0).exists() && taken_auto_path(&auto_path(&b)).exists());
+        assert_eq!(std::fs::metadata(auto_path(&b)).unwrap().modified().unwrap(),
+            std::fs::metadata(state_path(&b, 0)).unwrap().modified().unwrap());
+        assert_eq!(resume_from_written(&b), None);
+    }
+
+    #[test]
+    fn a_stuck_exit_does_not_revive_a_retired_retry_or_temporary_write() {
+        let dir = TestDir::new("stuck-exit-retired");
+        let b = dir.join("Game");
+        std::fs::write(retry_auto_path(&auto_path(&b)), b"retired").unwrap();
+        std::fs::write(dir.join("Game.pstate.123-0.tmp"), b"partial").unwrap();
+        assert_eq!(newest_written(&b), None);
+        assert_eq!(resume_from_written(&b), None);
+    }
+
+    #[test]
+    fn a_stuck_exit_leaves_the_state_the_session_started_from_to_the_next_start() {
+        let dir = TestDir::new("stuck-exit-taken");
+        let b = dir.join("Game");
+        std::fs::write(taken_auto_path(&auto_path(&b)), b"started").unwrap();
+        assert_eq!(resume_from_written(&b), None);
+        assert!(taken_auto_path(&auto_path(&b)).exists() && !auto_path(&b).exists());
+        // Nothing at all: nothing to do.
+        assert_eq!(resume_from_written(&dir.join("Other")), None);
     }
 
     #[test]
@@ -249,6 +369,14 @@ mod tests {
         let before = std::fs::read(undo_path(&b)).unwrap();
         assert_eq!(m.load_file(&b, &dir.join("gone")), Loaded::Unreadable);
         assert_eq!(std::fs::read(undo_path(&b)).unwrap(), before);
+    }
+
+    #[test]
+    fn the_states_folder_moves_only_with_pocketui_states() {
+        assert_eq!(dir_from(None), Path::new("/storage/roms/savestates"), "the handhelds keep their folder");
+        assert_eq!(dir_from(Some("  ")), Path::new("/storage/roms/savestates"), "an empty value moves nothing");
+        assert_eq!(dir_from(Some("/data/pocket-ui/savestates")), Path::new("/data/pocket-ui/savestates"));
+        assert_eq!(states_dir(), Path::new(STATES_DIR), "no variable in the test process");
     }
 
     #[test]

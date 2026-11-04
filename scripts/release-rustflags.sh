@@ -9,7 +9,15 @@ _rr_root=${REMAP_ROOT:-$(cd "$(dirname "${BASH_SOURCE:-$0}")/.." && pwd -P)}   #
 _rr_cargo=${CARGO_HOME:-$HOME/.cargo}
 _rr_rustup=${RUSTUP_HOME:-$HOME/.rustup}
 RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--remap-path-prefix=$_rr_root=/pocket-ui --remap-path-prefix=$_rr_cargo=/cargo --remap-path-prefix=$_rr_rustup=/rustup"
+# A shared target dir outside the tree (a build server's CARGO_TARGET_DIR) is in the binaries too, through the
+# generated code of build scripts there; map it like the rest, or check-binary-paths.sh refuses the result.
+if [ -n "${CARGO_TARGET_DIR:-}" ]; then
+  RUSTFLAGS="$RUSTFLAGS --remap-path-prefix=$CARGO_TARGET_DIR=/target"
+fi
 # The C shim (build.rs, src/log_shim.c) records __FILE__ through the C compiler.
 CFLAGS="${CFLAGS:+$CFLAGS }-ffile-prefix-map=$_rr_root=/pocket-ui"
+if [ -n "${CARGO_TARGET_DIR:-}" ]; then
+  CFLAGS="$CFLAGS -ffile-prefix-map=$CARGO_TARGET_DIR=/target"
+fi
 export RUSTFLAGS CFLAGS
 unset _rr_root _rr_cargo _rr_rustup

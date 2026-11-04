@@ -7,7 +7,7 @@
 set -eu
 dest=${POCKETUI_CORES_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/pocket-ui-app/cores}
 base=https://buildbot.libretro.com/nightly/linux/x86_64/latest
-free="mgba gambatte nestopia gearsystem melondsds pcsx_rearmed mupen64plus_next mednafen_pce_fast"
+free="mgba gambatte nestopia gearsystem melondsds pcsx_rearmed mupen64plus_next mednafen_pce_fast flycast"
 personal="snes9x genesis_plus_gx"
 set -- ${1:+$1}
 list=${CORES:-$free}

@@ -181,7 +181,7 @@ def main():
             tap('Play')
             time.sleep(4)
             back()
-            tap('Quit')
+            tap('Save & quit')
             time.sleep(2.5)
 
         landscape = args.orientation == 'landscape'

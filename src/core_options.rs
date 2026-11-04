@@ -257,8 +257,72 @@ impl Curation {
     }
 }
 
+/// A core option set for single games that are known to need it, with the reason (so the list can grow and be questioned).
+pub struct GameDefault {
+    /// `core_id` of the core.
+    pub core: &'static str,
+    /// Lower case title; compared as words in the ROM file name.
+    pub title: &'static str,
+    pub key: &'static str,
+    pub value: &'static str,
+    pub why: &'static str,
+}
+
+/// Under what the user saved for the game or its console, above the core's own and our curated defaults.
+pub const GAME_DEFAULTS: &[GameDefault] = &[
+    GameDefault {
+        core: "ppsspp",
+        title: "wild arms xf",
+        key: "ppsspp_skip_gpu_readbacks",
+        value: "enabled",
+        why: "Odin 2 Mini 04.11.2026: after Load, every Quit hung (2/2). PPSSPP's emulation thread waits in a framebuffer read-back \
+              for the main thread, which waits in retro_serialize_size for that thread to pause. Without read-backs they never meet.",
+    },
+    GameDefault {
+        core: "ppsspp",
+        title: "crisis core",
+        key: "ppsspp_skip_gpu_readbacks",
+        value: "enabled",
+        why: "Odin 2 Mini 04.11.2026: the Quit after a Load took 36 s (same wait as Wild Arms XF, once it got through). Not yet proven on the device.",
+    },
+];
+
+/// Title IDs from PPSSPP's assets/redump.csv. Match whole IDs, never a numeric prefix.
+const PSP_GAME_IDS: &[(&str, &[&str])] = &[
+    ("wild arms xf", &["ulus10339", "ules01085", "ucas40161"]),
+    ("crisis core", &["ulus10336", "ulus10336gh", "ules01044", "ules01045", "ules01046", "ules01047", "ules01048",
+        "ucas40167", "ucas40272", "uljm05275", "uljm05517"]),
+];
+
+/// File-name matching only: no image I/O on the startup path. Unknown names (including
+/// opaque EBOOT.PBP names) deliberately keep the core's default.
+pub fn game_defaults(core: &str, rom: &Path) -> Vec<(&'static str, &'static str)> {
+    let name = rom.file_stem().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let words: Vec<&str> = name.split(|c: char| !c.is_ascii_alphanumeric()).filter(|s| !s.is_empty()).collect();
+    let title = format!(" {} ", words.join(" "));
+    // Separators inside serials are optional: ULUS-10339 / ULUS_10339 / ULUS10339.
+    let mut serials = words.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    serials.extend(words.windows(2).map(|pair| pair.concat()));
+    GAME_DEFAULTS.iter().filter(|g| g.core == core && (
+        title.contains(&format!(" {} ", g.title)) ||
+        (g.title == "wild arms xf" && (title.contains(" wildarms xf ") || title.contains(" wild arms crossfire "))) ||
+        PSP_GAME_IDS.iter().any(|(t, ids)| *t == g.title && ids.iter().any(|id| {
+            serials.iter().any(|serial| serial.as_str() == *id)
+        }))
+    )).map(|g| (g.key, g.value)).collect()
+}
+
+/// Defaults fill missing keys only. OptionSet collects into a HashMap (last value
+/// wins), so appending a duplicate would override an explicit user choice.
+pub fn add_game_defaults(options: &mut Vec<(&str, &str)>, core: &str, rom: &Path) {
+    for (key, value) in game_defaults(core, rom) {
+        if !options.iter().any(|(k, _)| *k == key) {
+            options.push((key, value));
+        }
+    }
+}
+
 /// Curation by the core's file name without `_libretro.so` (`gambatte`, `mgba`, …).
-///
 /// Checked against the option lists on the device (`pocket-core --dump-options`, 2026-10-21): gambatte,
 /// mgba, nestopia, snes9x, genesis_plus_gx, beetle_pce_fast, pcsx_rearmed, picodrive. Cores that declare
 /// their options only once a game is loaded (fbneo) and the 3D cores are not curated yet.
@@ -916,6 +980,30 @@ mod tests {
         m.insert("scaling".to_string(), "native".to_string());
         m.insert("ctl.a".to_string(), "b".to_string());
         assert_eq!(saved_from(&m), vec![("gambatte_x".to_string(), "1".to_string())]);
+    }
+
+    #[test]
+    fn game_defaults_preserve_user_choice_and_match_filename_variants() {
+        let mut options = vec![("ppsspp_skip_gpu_readbacks", "disabled")];
+        add_game_defaults(&mut options, "ppsspp", Path::new("Wild Arms XF.iso"));
+        assert_eq!(options, vec![("ppsspp_skip_gpu_readbacks", "disabled")]);
+        for name in ["Wild_ARMs_XF.chd", "WildARMs XF.iso", "ULUS-10339.iso", "ULES_01085.cso", "UCAS40161.iso", "Wild Arms - Crossfire.iso",
+            "Crisis_Core_Final_Fantasy_VII.iso", "ULES-01046.iso", "ULJM05275.iso", "game [ULUS-10339].iso"] {
+            assert_eq!(game_defaults("ppsspp", Path::new(name)).len(), 1, "{name}");
+        }
+        for name in ["ULUS103390.iso", "NotWild Arms XF.iso", "Crisis Coreish.iso", "EBOOT.PBP"] {
+            assert!(game_defaults("ppsspp", Path::new(name)).is_empty(), "{name}");
+        }
+    }
+
+    #[test]
+    fn known_hanging_psp_games_skip_read_backs_and_others_do_not() {
+        let wa = game_defaults("ppsspp", Path::new("/storage/roms/psp/Wild Arms XF (USA).chd"));
+        assert_eq!(wa, vec![("ppsspp_skip_gpu_readbacks", "enabled")]);
+        assert_eq!(game_defaults("ppsspp", Path::new("/storage/roms/psp/Crisis Core - Final Fantasy VII (USA).chd")).len(), 1);
+        assert!(game_defaults("ppsspp", Path::new("/storage/roms/psp/Valkyria Chronicles II (USA).chd")).is_empty());
+        assert!(game_defaults("flycast", Path::new("/storage/roms/psp/Wild Arms XF (USA).chd")).is_empty());
+        assert!(GAME_DEFAULTS.iter().all(|g| g.title == g.title.to_lowercase() && !g.why.is_empty()));
     }
 
     #[test]

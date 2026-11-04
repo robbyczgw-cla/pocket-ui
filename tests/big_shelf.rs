@@ -117,9 +117,10 @@ fn zero_one_three_twenty_and_twenty_one_games() {
         let shelf = card.show("big-shelf");
         assert_eq!(games_shown(&shelf.stdout), n);
         let w = &shelf.words;
-        assert!(w.contains("Test Game") && w.contains("Details") && w.contains("Settings") && w.contains("Quick settings") && w.contains("Favourite"), "{n}: {w}");
+        // Easy shows three hints: A, HOME and START; Details, Favourite and the jump are in the tour and the manual.
+        assert!(w.contains("Test Game") && w.contains("Settings") && w.contains("Quick settings"), "{n}: {w}");
+        assert!(!w.contains("Details") && !w.contains("Favourite") && !w.contains("Systems"), "{n}: three hints at most: {w}");
         assert_eq!(w.contains(&format!("1 of {n}")), n > 1, "the place is always there, except with one game: {w}");
-        assert_eq!(w.contains("Systems"), systems.len() > 1, "{n} on {systems:?}: {w}");
         assert!(w.contains("Game Boy Advance") || w.contains("Super Nintendo"), "the game's system in the top line: {w}");
         assert!(!w.contains("Recently played") && !w.contains("Keep playing"), "{w}");
     }
@@ -283,16 +284,16 @@ fn a_failed_start_stays_with_one_thing_to_do_and_no_emulator_on_it() {
 }
 
 #[test]
-fn the_hints_teach_quick_settings_and_favourites_at_640x480() {
+fn the_hints_teach_quick_settings_and_never_show_a_key_without_its_word_at_640x480() {
     let card = Card::new();
-    for (lang, b, y, settings, systems) in [("en", "Quick settings", "Favourite", "Settings", "Systems"), ("de", "Schnellmenü", "Favorit", "Einstellungen", "Systeme"), ("es", "Ajustes rápidos", "Favorito", "Ajustes", "Sistemas")] {
+    for (lang, b, settings) in [("en", "Quick settings", "Settings"), ("de", "Schnellmenü", "Einstellungen"), ("es", "Ajustes rápidos", "Ajustes")] {
         let shelf = card.show_at("big-shelf", "640x480", "normal", lang);
-        // HOME's pill is wider than B's was: in German and Spanish the last label (Systems) goes first, its key stays.
-        let keep = if lang == "en" { vec![b, y, settings, systems] } else { vec![b, y, settings, if lang == "de" { "HOCH/RUNTER" } else { "ARRIBA/ABAJO" }] };
-        for word in keep {
+        // Easy shows three hints, each with its word: A, HOME (the quick settings) and START. Favourite, Details and the jump
+        // between systems are in the tour and the manual, so no key ever stands without its word.
+        for word in [b, settings] {
             assert!(shelf.words.contains(word), "{lang}: {word}: {}", shelf.words);
         }
-        assert!(shelf.words.contains("HOME") && !shelf.words.lines().any(|l| l == "B"), "{lang}: {}", shelf.words);
+        assert!(shelf.words.contains("HOME") && !shelf.words.lines().any(|l| l == "B" || l == "X" || l == "Y"), "{lang}: {}", shelf.words);
         let pause = card.show_at("big-pause", "640x480", "normal", lang);
         assert!(pause.words.contains("START") && pause.words.contains(b), "{lang}: {}", pause.words);
     }
@@ -369,11 +370,11 @@ fn just_play_is_a_look_and_the_old_switch_becomes_it() {
     let mut settings: serde_json::Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
     settings["big_shelf"] = serde_json::json!(true);
     std::fs::write(&file, settings.to_string()).unwrap();
-    assert!(card.show("home").words.contains("Systems"));
+    assert!(card.show("home").words.contains("Quick settings"), "the Easy look shows HOME for the quick settings");
     settings["big_shelf"] = serde_json::json!(false);
     settings["theme"] = serde_json::json!("big");
     std::fs::write(&file, settings.to_string()).unwrap();
-    assert!(card.show("home").words.contains("Systems"));
+    assert!(card.show("home").words.contains("Quick settings"), "the Easy look shows HOME for the quick settings");
     settings["theme"] = serde_json::json!("shelf");
     std::fs::write(&file, settings.to_string()).unwrap();
     assert!(!card.show("home").words.contains("Systems"), "the other looks as ever");

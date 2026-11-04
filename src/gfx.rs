@@ -163,6 +163,33 @@ impl<'a> Canvas<'a> {
         }
     }
 
+    /// Nearest-neighbour blit of the part (sx, sy, sw, sh) of `img` into the rectangle (x, y, w, h): the pause menu's
+    /// Zoom (`zoom`). A part outside the picture is cut to it.
+    pub fn blit_region(&mut self, img: &crate::image::Image, (sx, sy, sw, sh): (u32, u32, u32, u32), x: i32, y: i32, w: i32, h: i32) {
+        let (sw, sh) = (sw.min(img.w.saturating_sub(sx)), sh.min(img.h.saturating_sub(sy)));
+        if sw == 0 || sh == 0 || w <= 0 || h <= 0 {
+            return;
+        }
+        let (c0, c1) = (x.max(0), (x + w).min(self.w));
+        if c0 >= c1 {
+            return;
+        }
+        let cols: Vec<usize> = (c0..c1).map(|col| (sx as u64 + (col - x) as u64 * sw as u64 / w as u64) as usize).collect();
+        let iw = img.w as usize;
+        for dy in 0..h {
+            let row = y + dy;
+            if row < 0 || row >= self.h {
+                continue;
+            }
+            let src_y = (sy as u64 + dy as u64 * sh as u64 / h as u64) as usize;
+            let src = &img.px[src_y * iw..(src_y + 1) * iw];
+            let at = (row * self.w + c0) as usize;
+            for (d, &src_x) in self.buf[at..at + cols.len()].iter_mut().zip(&cols) {
+                *d = src[src_x];
+            }
+        }
+    }
+
     /// One picture fading into another, each at its own place (x, y) and 1:1 (pictures are made in the size they
     /// are drawn): `t` (0-255) of `to`, the rest of `from`; where a picture is not, `bg` shows (the pictures differ
     /// in shape, and the box one leaves behind must not stay). Both `None`: nothing is drawn.
@@ -250,6 +277,26 @@ mod tests {
         assert!(mid != 0xff0000 && mid != 0x0000ff, "halfway is a mix: {mid:06x}");
         // Nothing to draw.
         c.crossfade(None, None, 0, 100);
+    }
+
+    #[test]
+    fn a_region_blit_enlarges_only_that_part() {
+        // 4x4 picture, each pixel its own number; the lower right 2x2 part drawn at 4x4.
+        let img = Image { w: 4, h: 4, px: (0..16).collect() };
+        let mut buf = vec![99u32; 4 * 4];
+        let mut c = Canvas::new(&mut buf, 4, 4);
+        c.blit_region(&img, (2, 2, 2, 2), 0, 0, 4, 4);
+        assert_eq!(c.buf, [10, 10, 11, 11, 10, 10, 11, 11, 14, 14, 15, 15, 14, 14, 15, 15]);
+        // The whole picture is a plain blit; a part sticking out of the picture is cut to it; nothing to draw is nothing.
+        let mut whole = vec![0u32; 16];
+        Canvas::new(&mut whole, 4, 4).blit_region(&img, (0, 0, 4, 4), 0, 0, 4, 4);
+        assert_eq!(whole, img.px);
+        let mut cut = vec![99u32; 16];
+        Canvas::new(&mut cut, 4, 4).blit_region(&img, (3, 3, 4, 4), 0, 0, 4, 4);
+        assert!(cut.iter().all(|p| *p == 15));
+        let mut none = vec![99u32; 16];
+        Canvas::new(&mut none, 4, 4).blit_region(&img, (4, 4, 2, 2), 0, 0, 4, 4);
+        assert!(none.iter().all(|p| *p == 99));
     }
 
     /// `blit_scaled` as it was: a division per pixel, the reference for the faster one.

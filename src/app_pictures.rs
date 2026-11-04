@@ -41,6 +41,8 @@ pub(crate) struct PicturesUi {
     loader: Option<Loader>,
     /// Asked for, not here yet.
     pending: HashSet<Key>,
+    /// Pictures requested by the last painted frame, including cache misses.
+    pub(crate) visible: HashSet<Key>,
     /// Decoded, oldest first: the cache is trimmed from the front.
     loaded: VecDeque<Key>,
     /// The game the preview is on, since when its cycle runs, and when to draw it again.
@@ -53,7 +55,7 @@ pub(crate) struct PicturesUi {
 
 impl PicturesUi {
     pub fn new(wanted: bool) -> Self {
-        PicturesUi { wanted, sizes: HashMap::new(), loader: None, pending: HashSet::new(), loaded: VecDeque::new(), focus: None, since: Instant::now(), wake: None, sync: false }
+        PicturesUi { wanted, sizes: HashMap::new(), loader: None, pending: HashSet::new(), visible: HashSet::new(), loaded: VecDeque::new(), focus: None, since: Instant::now(), wake: None, sync: false }
     }
 
     pub fn wanted(&self) -> bool {
@@ -104,6 +106,7 @@ impl App {
     /// and gives `None` until it is.
     pub(crate) fn picture(&mut self, file: &Path, w: i32, h: i32) -> Option<Rc<Image>> {
         let key: Key = (file.to_path_buf(), w, h);
+        self.pictures.visible.insert(key.clone());
         if let Some(have) = self.covers.get(&key) {
             return have.clone();
         }
@@ -141,8 +144,9 @@ impl App {
             }
         }
         self.covers.insert(key.clone(), img.map(Rc::new));
+        let visible = self.pictures.visible.contains(&key);
         self.pictures.loaded.push_back(key);
-        self.request_redraw();
+        if visible { self.request_redraw(); }
     }
 
     /// Split's preview: box art, then the screenshot, then the title screen, each fading into the next. Paints

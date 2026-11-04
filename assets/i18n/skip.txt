@@ -137,8 +137,15 @@ quit nosave
 exit 0
 no SWAYSOCK
 
+# src/controls_card.rs
+C Buttons Mode
+
 # src/core_options.rs
 VMU A1
+wild arms xf
+Odin 2 Mini 04.11.2026: after Load, every Quit hung (2/2). PPSSPP's emulation thread waits in a framebuffer read-back for the main thread, which waits in retro_serialize_size for that thread to pause. Without read-backs they never meet.
+crisis core
+Odin 2 Mini 04.11.2026: the Quit after a Load took 36 s (same wait as Wild Arms XF, once it got through). Not yet proven on the device.
 
 # src/covers.rs
 Named_Boxarts
@@ -162,6 +169,35 @@ Collection)
 (Switch Online
 (Classic Mini
 (Evercade
+Atari - 5200
+Atari - 8-bit Family
+Atari - Jaguar
+Atari - ST
+Coleco - ColecoVision
+Commodore - 64
+Commodore - Amiga
+Commodore - CD32
+Commodore - VIC-20
+Fairchild - Channel F
+GCE - Vectrex
+Magnavox - Odyssey2
+Mattel - Intellivision
+Microsoft - MSX
+Microsoft - MSX2
+Microsoft - Xbox
+Nintendo - Nintendo 3DS
+Nintendo - Nintendo 64DD
+Nintendo - Pokemon Mini
+Nintendo - Wii
+Nintendo - Wii U
+Philips - CD-i
+Philips - Videopac+
+SNK - Neo Geo
+SNK - Neo Geo CD
+Sinclair - ZX Spectrum
+Sony - PlayStation 3
+The 3DO Company - 3DO
+Watara - Supervision
 
 
 # src/display_out.rs

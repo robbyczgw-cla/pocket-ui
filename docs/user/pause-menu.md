@@ -5,6 +5,8 @@ background; on pocket-ui's own host the menu is there at once and the dimmed gam
 later. What the menu offers depends on the emulator the system uses (see
 [Systems](systems.md)):
 
+![The pause menu over a paused game: Continue, Save, Load, Options, Save & quit](pictures/pause-menu.webp)
+
 | Emulator | Menu, top to bottom |
 |---|---|
 | pocket-ui's own host | Continue, Save, Load, Earlier, Options, Quit |
@@ -23,10 +25,9 @@ At the right of the title the menu says how long the battery lasts **in this gam
 left in this game". See [Battery in this game](#battery-in-this-game).
 
 With **Pixel Path in the pause menu** switched on in [Settings → Games → Curator](settings.md#curator), the menu of
-pocket-ui's own host also has **Pixel Path**, right before Quit, and so do PS2, GameCube, Wii and 3DS games
-whose emulator settings can be read ([below](#pixel-path-for-ps2-gamecube-wii-and-3ds)). With two or more controllers connected (the Pocket counts as one), the
-menu of pocket-ui's own host also has **Players**, after Options and Achievements. A game with more than one disc on pocket-ui's
-own host also has **Disc**, right before Options ([below](#changing-discs)). **Earlier** is left out where
+pocket-ui's own host also has **Pixel Path**, right before Quit, as do PS2, GameCube, Wii and 3DS games
+whose emulator settings can be read ([below](#pixel-path-for-ps2-gamecube-wii-and-3ds)). With two or more controllers connected (the Pocket counts as one), it also has **Players**, after Options and
+Achievements. A game with more than one disc also has **Disc**, right before Options ([below](#changing-discs)). **Earlier** is left out where
 [Earlier states](#earlier) is off and none are kept: N64, PSP, DS, Dreamcast and Saturn games start that way.
 
 Save and Load are only there when they do something. Where the emulator saves only inside the game (ScummVM, PICO-8,
@@ -51,6 +52,7 @@ and Quit, where saving is: for example "This emulator keeps its own saves. Save 
   back, A opens a page or chooses, Left and Right change a value.
 - **Achievements** (own host, signed in to RetroAchievements) lists the game's achievements, locked and
   unlocked, with your progress. See [Achievements](achievements.md#the-pause-menu).
+- **Zoom** (own host, under **Options**) shows the frozen picture larger: [Zoom](easy-to-read.md#zoom).
 - **Players** (pocket-ui's own host, a second controller connected) shows which controller is which player and changes
   it. See [Players](#players).
 - **Pixel Path** (switched on in Settings → Games → Curator) shows how the game's picture and sound reach you, stage by stage. See
@@ -111,7 +113,8 @@ it found (even across restarts). It only says what it measured:
 | "About 4 h left (PS2 games)" | This game hasn't been measured enough yet: the other games of its console stand in |
 | "About 5 h left (all games)" | No game of this console has been measured enough either: all the games you played stand in |
 | "Battery: not enough play to tell yet" | Not played long enough on battery yet |
-| "Charging" | The Pocket is on the charger |
+| "Charging" | The Pocket is on the charger and charging |
+| "Full" | The Pocket is on the charger and the battery is full |
 
 Time asleep, on the charger or starting and ending a game is never counted. The newest play counts most, so after a change
 (another [Performance](performance.md) setting, an older battery) the time follows within a few hours. The game's own time left
@@ -221,7 +224,7 @@ Only one of them shows at a time: Pixel Path's line has the frame rate too.
 - Settings → Playing → **Over the game**: what every game starts with (Left/Right or A). See
   [Settings](settings.md#over-the-game).
 - Options → Speed, rumble, fan → **Over the game**: for the running game, until you quit.
-  [Save changes](options.md#save-changes) keeps it for this console or this game, like every option, and then it
+  [Keep for](options.md#keep-for) says whether it stays for this game or this console, like every option, and then it
   wins over Settings.
 - **HOME + Y** while you play switches to the next level at once (Off, FPS, FPS + sensors, Pixel Path, then Off again)
   and says which, for example "Over the game: FPS". It lasts until you quit or change Over the game in Options. The
@@ -279,8 +282,8 @@ On pocket-ui's own host the game's own save (the in-game save, `<game>.srm`) and
 (`<game>.rtc`, see [below](#games-with-a-clock)) are written to the SD card every 10 seconds, and again when you quit or
 the Pocket goes to sleep. When the SD card is full, has turned read-only or is failing, that can't go through:
 
-- A line stays at the bottom of the game: "Your progress couldn't be saved to the SD card. Free some space; it will try
-  again." (or "the SD card can't be written to right now"). You can keep playing: the save is tried again every 10
+- A line stays at the bottom of the game: "Couldn't save: the SD card is full. Free some space." (or "Couldn't save to
+  the SD card. Trying again." when it can't be written to). You can keep playing: the save is tried again every 10
   seconds, and the line goes away as soon as one gets through.
 - The save already on the SD card stays as it was. A write that fails never damages it.
 - The pause menu shows the same line under the game's name.
@@ -336,7 +339,7 @@ On the right you see:
   load). With Settings → Look → Cozy extras → **Memory card in the pause menu** on (it is off at first), the
   memory card or cartridge itself stands there beside its numbered blocks, as on the game's info page
 - above the keys: "Slot 3 · replaces the save from today 14:02" (on Save), "Slot 3 · saved
-  yesterday 21:10" (on Load), "Slot 3 · empty", "Where I quit · today 14:02" or
+  yesterday 21:10" (on Load), "Slot 3 · empty" (on Save; on Load: "No save in slot 3 yet"), "Where I quit · today 14:02" or
   "Before load · today 14:05" (real times)
 
 On pocket-ui's own host the slot you used last is remembered for each game, and the
@@ -381,7 +384,7 @@ session start today), the picture shows the moment and the line under it what it
 "Earlier · session start · today 14:02". **A** loads it. As with every Load,
 what you were playing becomes **Before load** first, so Load → Before load takes you back.
 
-- With none yet the window says "None yet" and the line "Earlier · none yet · one every 5 min of play".
+- With none yet the window says "None yet" and the line "Earlier · none yet · keeps a moment every 5 min of play".
 - A state that could not be written whole (the SD card was full) says "damaged, can't be loaded"; A does nothing there.
 - A state that was replaced while the menu was open is not loaded in its place: "That earlier state was just
   replaced. Pick it again."
@@ -404,7 +407,7 @@ written. [Storage](storage.md) shows what they take, and its clean-up of old aut
 
 RetroArch has one save per game in the menu. On the right you see its preview and when it was made,
 for example "Replaces the save from today 14:02" or "Saved today 14:02". With no save yet, the preview
-area says "Empty slot".
+area says "Empty".
 
 On PlayStation 2, GameCube, Wii and 3DS, Save and Load close the menu and let the game run, then the
 emulator saves or loads (a slot far up in Dolphin takes a few seconds: its slots are reached with

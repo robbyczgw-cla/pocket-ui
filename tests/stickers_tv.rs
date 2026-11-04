@@ -191,6 +191,39 @@ fn the_cabinet_tv_shows_the_game_and_never_stands_empty() {
     // `cabinet_tv::console_screen`, checked in its unit tests), its warm beige body in view.
     let none = copy(&lib.join("data"), &tmp.join("none"));
     let s = shot(&tmp, &lib, &none, &stub, "shelf:snes:cabinet:games:0", "cabinet", "dark", "1240x1080", "en");
-    let beige = s.count((s.w * 3 / 4, s.h / 6, s.w, s.h / 2), |(r, g, b)| r > 200 && g > 150 && b > 100 && r > b + 40);
+    let beige = s.count((s.w * 3 / 4, s.h / 6, s.w, s.h / 2), |(r, g, b)| r > 200 && g > 150 && b > 100 && i32::from(r) > i32::from(b) + 40);
     assert!(beige > 2000, "the TV without pictures: {beige} pixels of its body");
+}
+
+/// The Cabinet's showcase on every supported size (the polish review 2026-11-04: at 1024x768, the Brick's and the RG DS Plus's
+/// size, a tall shelf left a 40-line chip for the case and no TV): the selected game's case stands whole in the showcase, at
+/// least 15 % of the picture's height, and its TV stands beside it, on a middle shelf and on the last, dark and light.
+#[test]
+fn the_cabinet_shows_case_and_tv_on_every_size() {
+    let _tmp_guard = tempfile::tempdir().unwrap();
+    let tmp = _tmp_guard.path().to_path_buf();
+    let stub = wayland(&tmp);
+    let lib = library(&tmp);
+    // A blue cover for every game of the three systems below: the case's front is the one big blue thing over the shelves.
+    for system in ["snes", "ps2", "xbox"] {
+        for e in std::fs::read_dir(lib.join("roms").join(system)).unwrap().flatten() {
+            let stem = e.path().file_stem().unwrap().to_string_lossy().into_owned();
+            write_png(&lib.join("data/covers").join(system).join(format!("{stem}.png")), 256, 180, [40, 70, 160]);
+        }
+    }
+    let blue = |(r, g, b): (u8, u8, u8)| b > 90 && i32::from(b) > i32::from(r) + 40 && i32::from(b) > i32::from(g) + 20;
+    let beige = |(r, g, b): (u8, u8, u8)| r > 170 && g > 110 && b > 70 && i32::from(r) > i32::from(b) + 40;
+    for size in ["640x480", "720x720", "1024x768", "1240x1080", "1920x1080", "1280x800"] {
+        for (state, appearance) in [("shelf:snes:cabinet:games:0", "dark"), ("shelf:ps2:cabinet:games:0", "light"), ("shelf:xbox:cabinet:games:0", "dark"), ("shelf:snes:cabinet:games:0", "light")] {
+            let data = copy(&lib.join("data"), &tmp.join("data-cabinet"));
+            let s = shot(&tmp, &lib, &data, &stub, state, "cabinet", appearance, size, "en");
+            // The showcase: above the shelves, which start under the title and the case at about a third of the height.
+            let (top, bottom) = (s.h / 8, s.h * 11 / 20);
+            let rows: Vec<i32> = (top..bottom).filter(|&y| s.count((0, y, s.w * 3 / 4, y + 1), blue) > 6).collect();
+            let (first, last) = (rows.first().copied().unwrap_or(0), rows.last().copied().unwrap_or(0));
+            assert!(last - first >= s.h * 15 / 100, "{state} {size} {appearance}: the case is {} lines high in a picture {} high", last - first, s.h);
+            let tv = s.count((s.w * 3 / 4, top, s.w, bottom), beige);
+            assert!(tv > (s.w * s.h) as usize / 1500, "{state} {size} {appearance}: the TV shows {tv} pixels of its body");
+        }
+    }
 }

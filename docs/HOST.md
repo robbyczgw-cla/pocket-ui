@@ -95,7 +95,7 @@ and `bench` / `ra` next to it (see the header of `scripts/syscheck.sh`), then se
   - Others are scheduled by time: PAL games at 50 Hz (PlayStation Europe) get a repeated picture every sixth
     refresh, 75 Hz cores two frames every fourth. Audio keeps the core's own rate then. Checked: Crash
     Bandicoot 2 ran 1800 core frames in 36 s = 50.0 fps, 0 underruns.
-- **Sound**: PulseAudio simple API, loaded with dlopen. Linear resampling to 48 kHz.
+- **Sound**: PulseAudio simple API, loaded with dlopen. Windowed-sinc resampling to 48 kHz (`src/resample.rs`; `POCKET_CORE_RESAMPLER=linear` is the old linear interpolation, emergency only).
   - Base ratio includes the core/display rate skew (59.73 → 60 Hz).
   - ±0.5 % dynamic rate control on top steers the buffer to 40 ms; the server holds another 20 ms.
 - **Input**: evdev (InputPlumber's virtual pad), Nintendo layout. The Mini V2's buttons are numbered like the
@@ -103,7 +103,9 @@ and `bench` / `ra` next to it (see the header of `scripts/syscheck.sh`), then se
   page remaps them per console or game (`ctl.<button>` = a console button or `none`), showing the console's own
   names from `SET_INPUT_DESCRIPTORS` ("A", "Select", "D-Pad Up", …). The left stick presses the D-pad
   (`ctl.stick_dpad`, on by default except for systems with analog sticks, `controls::ANALOG_SYSTEMS`); with it off,
-  both sticks go to the core as analog input. Hold-to-quit (SELECT+START) and the menu's HOME tap always read the
+  both sticks go to the core as analog input. **Hold to toggle** (`ctl.hold_toggle` = one console button or `none`,
+  `controls::HoldToggle`, one per player, applied in `read_players` after the mapping) turns a press of that button into
+  "held until the next press"; it is cleared at every pause, wake, dark screen, state load and restart. HOME shortcut edges are observed without toggling; controller seat changes clear only the affected player’s latch (`Inputs::take_seat_changes`) so no held button survives a disconnect or moves to another player. Hold-to-quit (SELECT+START) and the menu's HOME tap always read the
   physical buttons, whatever the layout. Up to four players, each from their own controller (ports 0-3, the same
   layout for all): see [Players](#players-couch-co-op-srcplayersrs).
   - Mega Drive 6-button: X, Y, L, R reach the core and genesis_plus_gx's default pad type is the one that adapts to
@@ -191,8 +193,8 @@ and `bench` / `ra` next to it (see the header of `scripts/syscheck.sh`), then se
   ("Unrecognized ROM file type"); pcsx_rearmed also uses it for disc images. `seek` returns 0 on success like
   RetroArch's own (pcsx_rearmed treats the new position as an error).
 - **BIOS and failed starts**: `src/hostsys.rs` knows the BIOS files a system needs (Sega CD, PC Engine CD); when
-  one is missing, pocket-core writes the reason to `/tmp/pocket-core.error` and exits, and pocket-ui shows it for
-  8 s as a card at the top of the shelf (`src/notice.rs`). Other failed starts carry the core's own last
+  one is missing, pocket-core writes the reason to `/tmp/pocket-core.error` and exits, and pocket-ui shows it as a
+  card at the top of the shelf (`src/notice.rs`) that stays until A, B or a tap closes it. Other failed starts carry the core's own last
   error line. Checked on the virtual device with a Sega CD game and no BIOS:
   "Sega CD needs a BIOS file in roms/bios: bios_CD_U.bin, bios_CD_E.bin or bios_CD_J.bin".
 - **Core log**: the log callback now formats the core's messages (six integer arguments), so BIOS and file
@@ -244,7 +246,7 @@ core with and without RTC memory, a full card, the note), `save_trouble`, `overl
 
 `src/shaders/video.frag` (one fragment pass, one variant per sharpness × effect, compiled on first use by
 `video::Renderer`), its numbers and their CPU reference in `src/picture_fx.rs` (handed to the shader as `#define`s, so
-they can't drift apart), user guide in [user/options.md](user/options.md#screen-effect). Tuned for this panel: 1240×1080
+they can't drift apart), user guide in [user/options.md](user/options.md#look). Tuned for this panel: 1240×1080
 at about 310 ppi, seen from 25-35 cm, where one pixel is 0.08 mm.
 
 **What was there** (until 2026-10-24): LCD grid (a 1-2 px dark line at each texel's start, darkened in encoded
@@ -276,7 +278,7 @@ it on the CPU for a few µs and Pixel Path shows them; a GPU copy would do it tw
 (1.7 px stripes at GBA 5× cost a third of the light and can't be seen at this density), a DMG-specific light grid,
 curvature.
 
-**Soft glow and Smooth pixels** (2026-11-03, saved values `softglow`, `smooth`; `Effect::SoftGlow`/`Smooth`, EFFECT 4/5 in the shader, constants and CPU reference in `picture_fx.rs`; both work on top of the chosen Screen sharpness, and neither applies the LCD colours).
+**Soft glow and Smooth pixels** (2026-11-03, shown as *Bloom* and *Smooth* since 2026-11-04, saved values `softglow`, `smooth`; `Effect::SoftGlow`/`Smooth`, EFFECT 4/5 in the shader, constants and CPU reference in `picture_fx.rs`; both work on top of the chosen Screen sharpness, and neither applies the LCD colours).
 
 | Effect | What it does | Taps per pixel |
 |---|---|---|
@@ -361,6 +363,27 @@ reference within 2/255; LCD grid and colours; the CRT mask; N64 at 2× gets 240 
 4. Crisp at Aspect (SNES, ScummVM): no uneven columns, pixel weights even.
 5. The pause menu's live preview ("Actual size") shows the same as the game.
 
+## Look (Options → Picture, 2026-11-04)
+
+The Picture page has one row, **Look**, where it had *Screen sharpness* and *Screen effect* (concept and the reviews that shaped it: `PICTURE-OPTIONS-CLARITY.md`, outside the repository). It is **not a saved value**: `look::derive` works the Look out from the values in use, `sharpness` and `effect`; choosing one writes those two keys (`look::Look::canonical`) and `lcd_colour=on` for the Game Boy Advance's LCD grid; nothing named `look` is ever written, sent to pocket-core (`set look` does not exist) or returned by `GameSettings::effective`. The saved strings (`sharp crisp soft`, `none grid scanlines crt softglow smooth`) and their parsers are unchanged; only the labels moved (`crt` is *Old TV*, `softglow` *Bloom*, `smooth` *Smooth*).
+
+| Look | `sharpness` | `effect` |
+|---|---|---|
+| Clean | `crisp` | `none` |
+| Smooth | `crisp` | `smooth` |
+| Soft | `soft` | `none` |
+| Bloom | `crisp` | `softglow` |
+| LCD grid | `sharp` | `grid` (+ `lcd_colour=on` on the GBA) |
+| Scanlines | `crisp` | `scanlines` |
+| Old TV | `crisp` | `crt` |
+| Custom | whatever is saved | whatever is saved |
+
+- **Offered by kind** (`look::kind`): `options::HANDHELDS` plus `nds` and `psp` get LCD grid; everything else gets Scanlines and Old TV. A saved pair the kind does not offer, and every `soft` + effect pair, derives to Custom with Sharpness and Effect open and their values untouched. `sharp` and `crisp` count as one Look when deriving (they differ at fractional scales; the canonical form is written only when a Look is chosen, never on load, render or saving another row).
+- **Which file**: unchanged. A game's file replaces the console's whole (`GameSettings::load`), the Look follows the file in use, and nothing falls back key by key. Save for this console still drops the game's file. Console starts (`console_default`: Aspect + Crisp for 3D, disc, DS, ScummVM; Integer + Sharp otherwise) both show Clean; Restore defaults removes both files and keeps those starts.
+- **Custom** is page state (`GameSettings::custom_open`), not a value: turning the Look to Custom writes nothing and sends nothing; it stays open while the page is open even when Sharpness and Effect come to match a Look, so no row folds away under the cursor; `close_custom` (the page is entered again, Use the console's settings, Restore defaults) works the Look out anew. `GameSettings::step` returns the (key, value) pairs that changed: the pause menu sends each as `set <key> <value>` before the one preview request (pocket-core drains the commands before it renders), the This game page saves once and writes no file for Custom. The rows are indented under the Look (`options::indented`).
+- **Explanation per value** (`options::describe`): the Look's line follows the Look (the GBA's LCD grid says "in the GBA screen's colours" only while LCD colours are on), Sharpness and Effect describe their current value; the room under the list is that of the longest (`Group::descs`). Preview rows are `Group::max_rows` (always shown, the frame's colour, Custom's rows and on the GBA LCD colours).
+- **Where it stops**: Android has its own picture settings (`android/src/picture.rs`: numeric indexes, its own inline shader whose *Smooth* is bilinear, i.e. this page's Soft) and is not changed. The Brick's picture bridge (`brick_picture::keys` on `feat/trimui-brick*`) lists `GROUPS` keys: when that branch merges, `look` must stay out of its transport list (the real parameters `sharpness`/`effect` go over as before), and the Look row belongs next to the other Picture rows that the GPU-less path hides; Old TV and Scanlines carry the effects' existing "heavy" mark. On a CPU-only path (no GL renderer) the old plain picture is all that is promised: hide the row there rather than offer a Look that does nothing. RetroArch and standalone emulators have their own shader and filter settings and are not affected.
+
 ## Screen orientation (2026-10-25)
 
 Options → Picture → **Screen orientation** (`orientation`: `normal`, `left`, `right`; per console or game through Save
@@ -421,12 +444,12 @@ changes like every Picture setting) says how the player holds the Pocket, for ga
    Pocket held D-pad on top: up/down/left/right as seen; the left stick as D-pad too; a PS1 game with analog sticks
    turned likewise. A Bluetooth pad as player 2 is not turned.
 3. `POCKET_CORE_GPU_TIMER=1`: `gpu picture:` the same upright and turned (SNES at Fullscreen with CRT, and at Integer).
-4. Save changes → For this game, quit, start again: still turned; another game of the console is not.
+4. Turn it (Keep for is on This game by default), quit, start again: still turned; another game of the console is not.
 5. A frame (Auto) with Turned left: none shown; Ambient and Glow shown; back to Normal: Auto's frame again.
 
 ## Pause menu features
 Everything below is chosen in pocket-ui's pause menu (HOME tap) and applied to the running pocket-core at once through
-`/tmp/pocket-core.cmd` (`set <key> <value>`); "Save changes" makes the values the console's or the game's.
+`/tmp/pocket-core.cmd` (`set <key> <value>`) and kept at once (`GameSettings::keep`, queued on the card writer): in the game's own file, or in the console's while "Keep for" is on This console. Restore defaults (A twice) removes both files.
 
 **Save slots** (`src/slots.rs`). Eight per game plus the auto-resume state, in `/storage/roms/savestates/<system>/`:
 `<game>.pstate` (slot 1, the file that always existed), `.pstate1` … `.pstate7` (slots 2 to 8), each with a `.png`
@@ -1040,8 +1063,19 @@ system's quiet profile and `/tmp/pocket-core.restore` gone.
   after the pause menu's Save or Restore defaults.
 - **Saves**: save/load from the pause menu work (N64, PSP); previews are read back from the texture.
   Auto-resume waits for 30 presented frames: PPSSPP boots on a thread and hung on a state loaded at frame 1.
-- **System files**: PPSSPP's assets were copied to `/storage/roms/bios/PPSSPP/` (from
-  `/usr/config/ppsspp/assets`; RetroArch uses the same system dir), the Dreamcast BIOS to `bios/dc/`.
+- **System files**: the libretro PPSSPP core reads its assets (`ppge_atlas.zim`, `vfpu/`, `flash0/font/`) directly from
+  `<system dir>/PPSSPP`, i.e. `/storage/roms/bios/PPSSPP/` (not `PPSSPP/assets`); ROCKNIX ships them only for its standalone
+  PPSSPP (`/usr/config/ppsspp/assets`), its libretro package installs just the `.so`. Before loading the core pocket-core
+  fills in what is missing from there (`hostsys::prepare_ppsspp`, like `prepare_scummvm`): file by file through a temporary
+  file and a rename, never replacing a file that is there (custom fonts, an older `compat.ini`), a stat per file once complete,
+  nothing on a system without that folder. These replaceable assets use no fsync/syncfs: per-file fsync took 39 seconds
+  on a slow SD card, and one final syncfs did not improve it. `.pocket-ui-seeded.json` records each copied file's size and
+  identity/mtime; later starts repair missing files and short, unchanged seeded files. Untracked files, destination links
+  and player replacements/edits stay untouched. A missing/unreadable ownership record conservatively preserves existing
+  files. One log line `ppsspp assets: N file(s) ... (M ms)` includes the copy time.
+  Without the files the PSP's system
+  dialogs (saving) stay incomplete and the VFPU falls back to approximations (seen on a fresh Odin). The Dreamcast BIOS is in
+  `bios/dc/`.
 - **No game**: an empty ROM path starts a core without content (Dreamcast BIOS menu).
 - Pictures default to fit + crisp for n64/psp/dreamcast and nds (`console_default`).
 - **Mesa's threaded context is off** for 3D cores (`GALLIUM_THREAD=0`, set by pocket-core before any GL
@@ -1709,7 +1743,7 @@ log says `audio: Cycle buffer (32 ms)` on headphones.
 - **Pause menu**: Options > Cheats (after Controls), list with On/Off, A switches, L1/R1 skip 5, "All off".
   The page stores the switched-on cheats at once in `<data>/cheats/<system>/<game>.json` (`{"on": ["Infinite
   Lives", ...]}`, keyed by name, a second equal name is "name #2"; no file when nothing is on) and sends `cheats` over
-  the command FIFO. Cheats are deliberately not part of Save changes: they belong to the game.
+  the command FIFO. Cheats are deliberately not part of Keep for: they belong to the game.
 - **pocket-core**: at start and on `cheats` it reads that file and calls `retro_cheat_reset`, then
   `retro_cheat_set(i, true, code)` for each switched-on cheat (`Core::set_cheats`); log line `cheats: N on`, and a
   toast "2 cheats on" / "Cheats off". The code string goes to the core unchanged (`+` joins several), exactly what
@@ -1926,7 +1960,7 @@ the Pocket's motor at the same time, and the Players page (A on each controller)
   setup, store, quick settings, switcher) and asks `ui_sound::sound_for`. An overlay that opens gives Menu or
   Switcher, one that closes Back (Confirm with A); otherwise a change after A is Confirm, after B Back, after a
   direction, L1/R1 or a held repeat Nav; no change, no sound. `ui_sound::refuse()` marks a refusal (Load on an
-  empty slot, Save changes that failed) and wins. Vol+/Vol- report `quick::Out::volume_step` when they change the
+  empty slot, a Keep for that failed) and wins. Vol+/Vol- report `quick::Out::volume_step` when they change the
   volume (not with START or SELECT held). Taps arrive as button events and sound the same.
 - **When not**: `ui_sound::allowed` on the state *after* the event: off, volume 0, asleep (`Sleep::state`), or a
   game running without the pause menu up. So starting a game and leaving the pause menu are silent, and nothing

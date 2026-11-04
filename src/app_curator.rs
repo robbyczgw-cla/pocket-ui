@@ -1,7 +1,7 @@
 //! Part of the pocket-ui binary: Curator (docs/CURATOR.md). The engine is `pocket_ui::curator` and the pages' logic
 //! `pocket_ui::curator_page`; this is the App's side:
 //! - the index, built on a thread of its own after the first frame (and again after a change), never while a game
-//!   runs; until it is there the Curator entries say "Getting ready…";
+//!   runs; until it is there the Curator entries show no words (a toast or the page says "Getting ready…" when you press one);
 //! - Home's Curator row, pinned smart shelves and stickers, the Curator list and the lists they open;
 //! - the Lens, the Echoes and Versions pages, the stickers of a game, naming a shelf or sticker;
 //! - the order of the Lens's games and of each smart shelf (SELECT on the Lens, a shelf's options), and "Surprise me"
@@ -391,7 +391,7 @@ impl App {
                         p.clamp(ix);
                     }
                 }
-                // An open card shows its rows from the new index ("Getting ready…" turns into Echoes).
+                // An open card shows its rows from the new index (the Echoes row appears).
                 self.curator_card_refresh();
                 // And an open Credits & links its games by the console's makers (`app_console`).
                 self.credits_refresh();
@@ -522,7 +522,7 @@ impl App {
         if self.theme != pocket_ui::settings::Theme::Cabinet || screen == Screen::Curator || !self.curator_items(screen).is_empty() {
             return false;
         }
-        let msg = if self.curator.index.is_none() { "Getting ready…" } else { "No games here right now" };
+        let msg = if self.curator.index.is_none() { "Getting ready…" } else { "No games here yet" };
         self.toast = Some((msg.into(), Instant::now()));
         true
     }
@@ -602,7 +602,7 @@ impl App {
             if let Item::Game(s, g) = up.item {
                 if let Some(game) = self.systems.get(s).and_then(|sys| sys.games.get(g)) {
                     let (system, name, path) = (self.systems[s].name.clone(), game.name.clone(), game.path.clone());
-                    self.launch(system, name, path);
+                    self.launch_asking(system, name, path);
                 }
             }
         }
@@ -786,7 +786,7 @@ impl App {
                 let (shelves, stickers) = (self.curator.prefs.shelves.len(), if self.curator.prefs.stickers { self.library.stickers().len() } else { 0 });
                 let today = self.curator_today();
                 let side = if !ready {
-                    "Getting ready…".to_string()
+                    String::new()
                 } else if let Some((pick, _)) = today.as_ref().and_then(|t| t.pick.as_ref()) {
                     // The day's pick at the spine's end: Curator says what it has for you before it is opened.
                     format!("Today: {}", pick.title)
@@ -800,17 +800,17 @@ impl App {
                     }
                     if parts.is_empty() { "Lens".to_string() } else { parts.join(" · ") }
                 };
-                // The pick and why (`home_panel::curator`); "Getting ready…" before the index.
+                // The pick and why (`home_panel::curator`); nothing before the index.
                 let meta = match today {
                     Some(t) if t.pick.is_some() => pocket_ui::home_panel::curator(Some(t)).line,
                     Some(_) if self.history_shown() => "Lens, smart shelves, labels and your play history".into(),
                     Some(_) => "Lens, smart shelves and labels".into(),
-                    None => "Getting ready…".into(),
+                    None => String::new(),
                 };
                 ("Curator".into(), CURATOR_STRIPE.into(), side, meta)
             }
             Item::Lens => {
-                let side = self.curator.index.as_ref().map_or("Getting ready…".to_string(), |ix| {
+                let side = self.curator.index.as_ref().map_or(String::new(), |ix| {
                     if self.curator.lens.is_empty() {
                         // Nothing picked: what it looks through, not a blank (Split's panel showed an empty slate).
                         let all = ix.count(&ix.matches(&self.curator.lens), self.curator.prefs.merge_versions);
@@ -823,19 +823,19 @@ impl App {
             }
             Item::Surprise => {
                 // Never a blank where Split shows the figure: what it picks from.
-                let side = self.curator.index.as_ref().map_or("Getting ready…".to_string(), |ix| match ix.catalog.works.len() {
+                let side = self.curator.index.as_ref().map_or(String::new(), |ix| match ix.catalog.works.len() {
                     0 => "No games yet".to_string(),
                     1 => "From 1 game".to_string(),
                     n => format!("From {n} games"),
                 });
                 // The day's pick, which A shows first (`curator_surprise`).
                 let pick = self.curator_today().and_then(|t| t.pick);
-                let meta = pocket_ui::home_panel::surprise(pick, "One game picked for you, and why. Right picks another".into()).line;
+                let meta = pocket_ui::home_panel::surprise(pick, "One game picked for you, and why. Right picks another.".into()).line;
                 ("Surprise me".into(), CURATOR_STRIPE.into(), side, meta)
             }
             Item::SmartShelf(i) => {
                 let Some(s) = self.curator.prefs.shelves.get(i) else { return Default::default() };
-                let side = if ready { games(self.curator.shelf_counts.get(i).copied().unwrap_or(0)) } else { "Getting ready…".into() };
+                let side = if ready { games(self.curator.shelf_counts.get(i).copied().unwrap_or(0)) } else { String::new() };
                 let meta = if s.pinned { "Smart shelf, on Home. It updates itself" } else { "Smart shelf. It updates itself" };
                 // Its order, when it isn't by name: "… · most played first".
                 let meta = match s.order.suffix() {
@@ -846,7 +846,7 @@ impl App {
             }
             Item::Sticker(id) => {
                 let Some(s) = self.library.stickers().iter().find(|s| s.id == id) else { return Default::default() };
-                let side = if ready { games(self.curator.sticker_counts.get(&id).copied().unwrap_or(0)) } else { "Getting ready…".into() };
+                let side = if ready { games(self.curator.sticker_counts.get(&id).copied().unwrap_or(0)) } else { String::new() };
                 let meta = if s.pinned { "Label, on Home" } else { "Label" };
                 (s.name.clone(), STICKER_STRIPE.into(), side, meta.into())
             }
@@ -1017,14 +1017,13 @@ impl App {
     }
 
     fn curator_saved<T>(&mut self, saved: std::io::Result<T>, what: &str) {
-        let msg = match saved {
-            Ok(_) => what.to_string(),
+        match saved {
+            Ok(_) => self.toast = Some((what.to_string(), Instant::now())),
             Err(e) => {
                 eprintln!("curator: not saved: {e}");
-                "Could not save: is the SD card full?".to_string()
+                self.warn("Could not save: is the SD card full?");
             }
-        };
-        self.toast = Some((msg, Instant::now()));
+        }
     }
 
     /// No SD flush on a sticker key press or repeat; only failures need a reply on the UI thread.
@@ -1327,7 +1326,7 @@ impl App {
         let Some(Item::Game(s, g)) = self.curator_item(game) else { return };
         self.card = None;
         let (sys, game) = (&self.systems[s], &self.systems[s].games[g]);
-        self.launch(sys.name.clone(), game.name.clone(), game.path.clone());
+        self.launch_asking(sys.name.clone(), game.name.clone(), game.path.clone());
     }
 
     /// Whether Home offers "Just Play": with the Curator's switch (Settings → Curator → Lens & smart shelves), once the
@@ -1372,7 +1371,7 @@ impl App {
         let (game, why) = match picked {
             Ok(p) => p,
             Err(curator::justplay::Miss::NoGames) => {
-                self.toast = Some(("Nothing to play yet. Add a game first".into(), Instant::now()));
+                self.warn("No games here yet. Add a game first");
                 return;
             }
             Err(curator::justplay::Miss::NothingStarts) => {
@@ -1386,7 +1385,7 @@ impl App {
         println!("curator: just play {name} ({system}): {why:?}");
         // The title for a moment, without holding the start back (it is only painted when the shelf is).
         self.toast = Some((format!("Starting {name}"), Instant::now()));
-        self.launch(system, name, path);
+        self.launch_asking(system, name, path);
     }
 
     /// "Surprise me" (A on its entry, Right on the card it opened): a game picked by `Index::surprise`, none shown since the
@@ -1402,7 +1401,7 @@ impl App {
         let rng = self.curator.rng.get_or_insert_with(|| Rng::new(clock_seed()));
         let pick = today.or_else(|| ix.surprise(rng, &self.curator.surprise_seen));
         let Some((pick, item @ Item::Game(s, g))) = pick.and_then(|p| Some((p.clone(), self.curator_item(p.game)?))) else {
-            self.toast = Some(("No games to pick from yet".into(), Instant::now()));
+            self.warn("No games here yet");
             return;
         };
         self.curator.surprise_seen.push(pick.game);
@@ -1465,7 +1464,8 @@ impl App {
         let game = ix.and_then(|ix| ix.find(path));
         if p.echoes {
             match (ix, game) {
-                (None, _) => rows.push(CuratorRow { kind: RowKind::Echoes, title: "Echoes".into(), line: "Getting ready…".into() }),
+                // Before the index there is nothing to say: the row appears with its data, no placeholder words.
+                (None, _) => {}
                 (Some(ix), Some(g)) => {
                     let e = ix.echoes(g, INLINE);
                     if !e.is_empty() {
@@ -1518,6 +1518,8 @@ impl App {
             RowKind::Manage => self.open_card_manage(),
             // The game's screenshots (`app_gallery`).
             RowKind::Screenshots => self.open_gallery_for_card(),
+            // Which button of the Pocket does what (`app_controls_card`).
+            RowKind::Controls => self.open_controls_card_for_card(),
         }
     }
 
@@ -1719,7 +1721,7 @@ impl App {
 
     fn paint_curator_toast(&mut self, c: &mut Canvas) {
         if let Some((msg, at)) = self.toast.clone() {
-            if super::toast_age(at) < super::TOAST {
+            if super::toast_age(at) < super::toast_len(&msg) {
                 let w = self.text.width(Face::Body, 28, &msg) + 48;
                 c.round_rect(c.w / 2 - w / 2, 36, w, 52, 26, KEYCAP);
                 self.text.draw(c, Face::Body, 28, c.w / 2 - w / 2 + 24, 72, CHALK, &msg);
@@ -2107,15 +2109,13 @@ impl App {
             self.hits.row(Area::new(pad, y, right - pad, row), i);
             let base = y + row / 2 + pocket_ui::type_scale::mid(font);
             if i == sel {
-                let w = self.text.width(Face::Body, font, name) + 2 * NU_BTN_PAD;
-                c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, pal().band);
-                c.round_rect(pad, y + 4, w, row - 8, (row - 8) / 2, pal().select);
+                pocket_ui::kit::selection(c, pad, y, right - pad, row);
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, name);
             } else {
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, name);
             }
             let on = *switch(&mut self.curator.prefs.clone(), i);
-            self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, pal().text, if on { "On" } else { "Off" });
+            self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, if i == sel { pal().ink } else { pal().text }, if on { "On" } else { "Off" });
         }
         self.hits.list(sel, SETTINGS_ROWS.len(), 0.0, row as f32);
         let (left, width) = (pad + NU_BTN_PAD, c.w - 2 * (pad + NU_BTN_PAD));
@@ -2129,7 +2129,7 @@ impl App {
         // Above the hints (with larger text it may be shortened with "…").
         let bottom = c.h - pad - NU_PILL - 16;
         self.text.paragraph(c, Face::Body, 24, (left, y), width, pocket_ui::type_scale::line(24, 8), bottom, pal().quiet, note);
-        self.nu_hints(c, &[("B", "Back"), ("A", "Switch")]);
+        self.nu_hints(c, &[("B", "Back"), ("A", "Change")]);
     }
 
     // ---- haptics, sounds, snapshots ---------------------------------------------------------------------------------
@@ -2255,7 +2255,7 @@ impl App {
                 }
             }
             "ready" => {
-                // As before the index is there: "Getting ready…".
+                // As before the index is there: no placeholder words.
                 self.curator.index = None;
                 self.rebuild();
                 if parts.get(1) == Some(&"lens") {
@@ -2474,7 +2474,7 @@ fn save_states(system: &str, path: &Path) -> usize {
     let base = pocket_ui::slots::base(system, stem);
     let slots = pocket_ui::slots::filled(&base).iter().filter(|f| **f).count();
     let auto = pocket_ui::slots::auto_path(&base).exists() as usize;
-    let retroarch = Path::new(pocket_ui::slots::STATES_DIR).join(system).join(format!("{stem}.state")).exists() as usize;
+    let retroarch = pocket_ui::slots::states_dir().join(system).join(format!("{stem}.state")).exists() as usize;
     slots + auto + retroarch
 }
 

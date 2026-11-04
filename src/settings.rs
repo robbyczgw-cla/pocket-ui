@@ -134,6 +134,14 @@ pub struct Settings {
     /// where the emulator can leave it out (`quit::offers_quit_without_saving`; not RetroArch).
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub forget_where_quit: bool,
+    /// Settings > Playing > Remind me where I was ("Where was I?", `where_was_i`), kept as its opposite so that unset is
+    /// On: a moment continued after more than two weeks shows when it was played last and the game's note.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
+    pub no_where_was_i: bool,
+    /// Settings > Sound & feel > Zoom in the pause menu: the Zoom row sits in the pause menu's main page. Off unless switched on
+    /// (Easy to read shows it too, `features::reading_on`); Zoom is always in Options.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
+    pub zoom_in_pause: bool,
     /// Read, never written: Easy began as a switch of this name. `load` turns it into the look.
     #[serde(default, deserialize_with = "lenient", skip_serializing)]
     pub big_shelf: bool,
@@ -387,6 +395,8 @@ mod tests {
             appearance: Appearance::Light,
             on_start: crate::on_start::OnStart::Continue,
             forget_where_quit: true,
+            no_where_was_i: true,
+            zoom_in_pause: true,
             big_shelf: false,
             button_layout: crate::button_layout::ButtonLayout::Xbox,
             prompts: crate::button_prompts::PromptStyle::PlayStation,
@@ -780,6 +790,24 @@ mod tests {
         assert!(Settings::load(&d).forget_where_quit);
         Settings { forget_where_quit: false, ..chosen() }.save(&d);
         assert!(!std::fs::read_to_string(d.join(FILE)).unwrap().contains("forget_where_quit"), "On is not written");
+        // Remind me where I was: the same way round, On unless switched off.
+        Settings { no_where_was_i: false, ..chosen() }.save(&d);
+        assert!(!Settings::load(&d).no_where_was_i, "unset: On");
+        assert!(!std::fs::read_to_string(d.join(FILE)).unwrap().contains("no_where_was_i"), "On is not written");
+        Settings { no_where_was_i: true, ..chosen() }.save(&d);
+        assert!(Settings::load(&d).no_where_was_i);
+    }
+
+    #[test]
+    fn zoom_in_the_pause_menu_is_off_until_switched_on() {
+        let d = dir("zoom-in-pause");
+        assert!(!Settings::load(&d).zoom_in_pause, "a new device: Off");
+        std::fs::write(d.join(FILE), br#"{"theme": "split", "onboarded": true, "zoom_in_pause": "yes"}"#).unwrap();
+        assert!(!Settings::load(&d).zoom_in_pause, "a value this version doesn't read");
+        Settings { zoom_in_pause: true, ..chosen() }.save(&d);
+        assert!(Settings::load(&d).zoom_in_pause);
+        Settings { zoom_in_pause: false, ..chosen() }.save(&d);
+        assert!(!std::fs::read_to_string(d.join(FILE)).unwrap().contains("zoom_in_pause"), "Off is not written");
     }
 
     #[test]

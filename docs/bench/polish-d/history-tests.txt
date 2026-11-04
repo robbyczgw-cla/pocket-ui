@@ -1,0 +1,19 @@
+running 16 tests
+test battery_history::polish_batch_bench::persistence_workload ... ignored, benchmark owns sampler globals; run separately
+test battery_history::tests::a_clock_that_goes_back_drops_the_samples_from_the_future ... ok
+test battery_history::tests::a_second_sample_in_the_same_minute_replaces_the_first ... ok
+test battery_history::tests::a_clock_that_was_never_set_records_nothing ... ok
+test battery_history::tests::samples_further_apart_than_the_gap_are_split_not_joined ... ok
+test battery_history::tests::each_game_gets_the_stretches_it_ran_on_battery_and_nothing_across_a_change ... ok
+test battery_history::tests::recent_is_a_window_of_the_newest ... ok
+test battery_history::tests::a_light_sleep_between_two_samples_is_nobodys_play ... ok
+test battery_history::tests::what_ran_is_remembered_as_a_short_table_that_cleans_up_after_itself ... ok
+test battery_history::tests::the_first_version_of_the_ring_is_taken_over_once ... ok
+test battery_history::tests::survives_a_restart ... ok
+test battery_history::tests::a_damaged_file_falls_back_to_the_backup_then_to_nothing ... ok
+test battery_history::tests::the_file_is_small_and_capped ... ok
+test battery_history::tests::keeps_48_hours_and_not_a_minute_more ... ok
+test battery_history::tests::the_card_never_reads_the_files_and_an_orderly_exit_leaves_no_temp_file ... ok
+test battery_history::tests::the_sample_after_a_wake_never_holds_up_the_caller ... ok
+
+test result: ok. 15 passed; 0 failed; 1 ignored; 0 measured; 3053 filtered out; finished in 0.20s

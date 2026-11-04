@@ -1833,13 +1833,20 @@ void *retro_get_memory_data(unsigned id) {
     return NULL;
 }
 size_t retro_get_memory_size(unsigned id) { return id == 0 ? sizeof sram : id == 1 ? RTC_SIZE : 0; }
-size_t retro_serialize_size(void) { return sizeof sram + sizeof pos; }
+#ifdef MOVING_SIZE
+static size_t reported = 3 << 20;
+void stub_smaller_state(void) { reported = 2 << 20; }
+#else
+static size_t reported = sizeof sram + sizeof pos;
+#endif
+size_t retro_serialize_size(void) { return reported; }
 bool retro_serialize(void *d, size_t n) {
-    if (n < sizeof sram + sizeof pos) return false;
+    if (n < reported) return false;
+    memset(d, 0, n);
     memcpy(d, sram, sizeof sram); memcpy((char *)d + sizeof sram, pos, sizeof pos); return true;
 }
 bool retro_unserialize(const void *d, size_t n) {
-    if (n != sizeof sram + sizeof pos) return false;
+    if (n != reported) return false;
     /* A state marked 0xEE in pos[1]: the battery save is restored, then the core gives up (SOL-02). */
     memcpy(sram, d, sizeof sram);
     if (((const unsigned char *)d)[sizeof sram + 1] == 0xEE) return false;
@@ -2028,6 +2035,44 @@ bool retro_unserialize(const void *d, size_t n) {
         std::fs::write(g.battery_save(), &bytes).unwrap();
         let (_core, r) = g.start();
         assert_eq!(r, Resume::Resumed);
+    }
+
+    /// Flycast reports a large launch state, saves a smaller machine, then reports the launch size again.
+    /// Exercise the disk resume lifecycle, rather than only accepting a buffer of a different length.
+    #[test]
+    fn dreamcast_continue_restores_the_saved_marker_after_state_size_changes() {
+        let _l = globals();
+        let g = Game::built("moving-size", "srm", &["-DMOVING_SIZE"]);
+        let start = || {
+            let mut core = Core::load(&g.core, &g.rom, &g.dir, &g.dir, &[]).unwrap();
+            if crate::hostsys::core_pads_short_states("flycast") {
+                core.pad_short_states(crate::hostsys::PADDED_STATE_MIN);
+            }
+            core.use_save_extension(g.save_ext);
+            let resume = core.resume(&g.state);
+            (core, resume)
+        };
+        let (mut core, _) = start();
+        assert_eq!(core.state_size(), Some(3 << 20));
+        set_sram(&mut core, b"SAVE-A");
+        play(&core, 37);
+        unsafe { core.lib.get::<unsafe extern "C" fn()>(b"stub_smaller_state").unwrap()() };
+        g.quit(core);
+        let previous = std::fs::read(&g.state).unwrap();
+        assert_eq!(previous.len(), 2 << 20, "the valid quit state is shorter than next launch's size");
+        let (mut core, resume) = start();
+        assert_eq!(core.state_size(), Some(3 << 20), "restart reports the larger launch size again");
+        assert_eq!(resume, Resume::Resumed);
+        assert_eq!((position(&core), sram(&mut core)), (37, "SAVE-A".into()), "Continue restores progress");
+        let mut corrupt = previous.clone();
+        corrupt[65] = 0xEE; // The core rejects this after reading its battery data.
+        assert!(core.load_state(&corrupt).is_err());
+        assert!(core.load_state(&previous[..32]).is_err(), "truncated input is rejected too");
+        assert_eq!(std::fs::read(g.taken()).unwrap(), previous, "failed loads cannot replace the previous Continue moment");
+        drop(core);
+        let (mut core, resume) = start();
+        assert_eq!(resume, Resume::ResumedAgain);
+        assert_eq!((position(&core), sram(&mut core)), (37, "SAVE-A".into()), "Continue still restores the last good moment");
     }
 
     #[test]

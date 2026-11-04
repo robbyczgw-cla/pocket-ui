@@ -70,13 +70,13 @@ pub fn page(value: &str) -> String {
     }
 }
 
-/// A row's value as painted: whole on the selected row; on the others without the marks (`›`-style ">" of a page,
-/// ‹ › of a switch), so only the selected row says what A and Left/Right do (NextUI shows the value alone).
+/// A row's value as painted: whole on the selected row; on the others without a switch's ‹ ›, which only the selected
+/// row has (Left/Right change it there). A page's ">" stays on every row, painted dimmed (`kit::row_value`): whether
+/// a row opens a page or changes in place is seen before the cursor gets there, as on the Switch and the Deck.
 pub fn quiet(value: &str, selected: bool) -> String {
     if selected {
         return value.to_string();
     }
-    let value = value.strip_suffix(">").map_or(value, str::trim_end);
     match value.strip_prefix("‹ ").and_then(|v| v.strip_suffix(" ›")) {
         Some(v) => v.to_string(),
         None => value.to_string(),
@@ -305,10 +305,10 @@ mod tests {
     use crate::testutil::TestDir;
 
     #[test]
-    fn only_the_selected_row_keeps_its_marks() {
+    fn a_page_keeps_its_angle_and_only_the_selected_switch_its_arrows() {
         assert_eq!(quiet("Home net >", true), "Home net >");
-        assert_eq!(quiet("Home net >", false), "Home net");
-        assert_eq!(quiet(">", false), "", "a page with no value yet: nothing");
+        assert_eq!(quiet("Home net >", false), "Home net >");
+        assert_eq!(quiet(">", false), ">", "a page with no value yet: its angle");
         assert_eq!(quiet(">", true), ">");
         assert_eq!(quiet("‹ On ›", false), "On");
         assert_eq!(quiet("Off", false), "Off");

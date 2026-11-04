@@ -106,17 +106,20 @@ pub fn base(design: i32, font: u32) -> i32 {
     design + grow(font) * 7 / 20
 }
 
-/// How many hints of a hint bar, from the first, keep their label in `room` pixels: `parts` are each hint's key (with
-/// the space after it) and label (with the space after it) widths. All of them when they fit, as always in Normal;
-/// otherwise labels go from the last one on and the keys stay: a key alone still says which button does something,
-/// and the bar never runs off the screen or under other text.
-pub fn hint_labels_that_fit(parts: &[(i32, i32)], room: i32) -> usize {
-    let keys: i32 = parts.iter().map(|p| p.0).sum();
-    let mut shown = parts.len();
-    while shown > 0 && keys + parts[..shown].iter().map(|p| p.1).sum::<i32>() > room {
-        shown -= 1;
+/// Which hints of a hint bar stay: `widths` are each hint's whole width (key, label and the spaces), `rank` its priority
+/// (0 goes last). Whole hints go, the lowest priority first (the later one on a tie), until at most `max` are left
+/// and they fit in `room` pixels. A hint keeps its word: a key alone says nothing, so a hint is shown whole or not at
+/// all. The first hint stays even if it alone is too wide.
+pub fn hints_that_fit(widths: &[i32], rank: &[usize], room: i32, max: usize) -> Vec<bool> {
+    let mut keep = vec![true; widths.len()];
+    loop {
+        let (count, total) = keep.iter().zip(widths).filter(|(k, _)| **k).fold((0usize, 0i32), |(n, t), (_, w)| (n + 1, t + w));
+        if count <= 1 || (count <= max && total <= room) {
+            return keep;
+        }
+        let worst = (0..keep.len()).filter(|i| keep[*i]).max_by_key(|i| (rank[*i], *i)).unwrap_or(0);
+        keep[worst] = false;
     }
-    shown
 }
 
 /// Runs `paint` with the design's sizes whatever the setting: for type that belongs to a drawing of a fixed size (a
@@ -177,13 +180,14 @@ mod tests {
     }
 
     #[test]
-    fn hint_labels_go_from_the_last_one_when_the_bar_is_too_wide() {
-        let parts = [(50, 100), (50, 120), (80, 90)];
-        assert_eq!(hint_labels_that_fit(&parts, 490), 3, "all of them fit");
-        assert_eq!(hint_labels_that_fit(&parts, 489), 2);
-        assert_eq!(hint_labels_that_fit(&parts, 400), 2);
-        assert_eq!(hint_labels_that_fit(&parts, 300), 1);
-        assert_eq!(hint_labels_that_fit(&parts, 100), 0, "keys only");
-        assert_eq!(hint_labels_that_fit(&[], 0), 0);
+    fn whole_hints_go_by_rank_when_the_bar_is_too_wide_or_has_too_many() {
+        let (w, rank) = ([100, 120, 90, 80], [0, 1, 2, 3]);
+        assert_eq!(hints_that_fit(&w, &rank, 390, 4), [true; 4], "all of them fit");
+        assert_eq!(hints_that_fit(&w, &rank, 389, 4), [true, true, true, false], "the lowest rank goes, whole");
+        assert_eq!(hints_that_fit(&w, &rank, 220, 4), [true, true, false, false]);
+        assert_eq!(hints_that_fit(&w, &rank, 390, 3), [true, true, true, false], "never more than max");
+        assert_eq!(hints_that_fit(&w, &[0, 3, 1, 2], 390, 3), [true, false, true, true], "by rank, not by place");
+        assert_eq!(hints_that_fit(&w, &rank, 10, 4), [true, false, false, false], "the first stays");
+        assert_eq!(hints_that_fit(&[], &[], 0, 4), Vec::<bool>::new());
     }
 }

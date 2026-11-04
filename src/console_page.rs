@@ -211,6 +211,11 @@ impl Page {
         if self.sources.is_none() && !self.has_credits() {
             h.retain(|(k, _)| *k != "X");
         }
+        // The bar shows four hints at most (`kit::top_hints`). With Credits and Sources START's goes: it is the one that
+        // can be reached another way (a game's card, START → Runs on), and the touch keys of the other two stay.
+        if h.len() > crate::kit::MAX_HINTS {
+            h.retain(|(k, _)| *k != "START");
+        }
         if self.scrollable() {
             h.push(("L1 R1", "Scroll"));
         }

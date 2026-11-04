@@ -26,6 +26,7 @@ SYSTEMS = {
     "pcengine": ("PC Engine", "pce sgx cue chd zip 7z", ["pcengine", "tg16"], "mednafen_pce_fast", None),
     "psx": ("PlayStation", "cue chd pbp m3u iso bin", ["psx"], "pcsx_rearmed", None),
     "nds": ("Nintendo DS", "nds zip 7z", ["nds"], "melonds", None),
+    "dreamcast": ("Dreamcast", "gdi cue chd m3u cdi", ["dreamcast"], "flycast", None),
     "psp": ("PlayStation Portable", "iso cso pbp chd", ["psp"], None, "org.ppsspp.PPSSPP"),
     "ps2": ("PlayStation 2", "iso chd cso bin gz", ["ps2"], None, "net.pcsx2.PCSX2"),
     "gamecube": ("Nintendo GameCube", "iso gcm gcz rvz ciso wbfs", ["gc", "gamecube"], None, "org.DolphinEmu.dolphin-emu"),

@@ -202,13 +202,13 @@ def in_game(seconds=25):
     wait_text('Pause', prefix=False, seconds=seconds)
 
 def pause_menu():
-    if 'Quit' not in texts():
+    if 'Save & quit' not in texts():
         key(4)
-    wait_text('Quit', prefix=False)
+    wait_text('Save & quit', prefix=False)
 
 def quit_game():
     pause_menu()
-    tap('Quit', wait=1)
+    tap('Save & quit', wait=1)
     wait_text('Games')
     time.sleep(1.5)
 
@@ -269,9 +269,9 @@ def phase_flow():
     time.sleep(1.5)
     shot('flow-2-playing')
     key(4)
-    wait_text('Quit', prefix=False)
+    wait_text('Save & quit', prefix=False)
     shot('flow-3-paused')
-    tap('Quit', wait=1)
+    tap('Save & quit', wait=1)
     wait_text('Games')
     time.sleep(2)
     shot('flow-4-stands-open')

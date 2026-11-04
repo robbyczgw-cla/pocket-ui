@@ -143,7 +143,11 @@ assemble() {
   install -m 755 /repo/deploy/run-pocket-ui.sh "$S/storage/run-pocket-ui.sh"
   install -m 644 /repo/deploy/essway-pocket-ui.conf "$S/storage/10-pocket-ui.conf"
   install -m 644 /repo/deploy/pocket-splash.service "$S/storage/pocket-splash.service"
-  install -m 755 /repo/deploy/image/image-defaults.sh "$S/storage/pocket-ui-image-defaults"
+  # The model's hostname on the NAME line (see the file); the checks expect exactly this.
+  HOST=$(image_hostname "${MODEL:-}")
+  sed "s/^NAME=pocket-ui\$/NAME=$HOST/" /repo/deploy/image/image-defaults.sh >"$S/storage/pocket-ui-image-defaults"
+  chmod 755 "$S/storage/pocket-ui-image-defaults"
+  grep -qx "NAME=$HOST" "$S/storage/pocket-ui-image-defaults" || die "image-defaults.sh has no NAME=pocket-ui line to give $HOST"
   chown -R 0:0 "$S"
   find "$S" -exec touch -h -d "@$EPOCH" {} +
 

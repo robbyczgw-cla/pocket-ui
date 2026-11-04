@@ -23,6 +23,7 @@ pub mod pad;
 /// Couch co-op: which controller is player 1 to 4 in pocket-core games, and each player's input.
 pub mod players;
 pub mod players_page;
+pub mod zoom;
 pub mod touch;
 pub mod frozen;
 pub mod kids;
@@ -78,11 +79,13 @@ pub mod port_perf;
 pub mod port_perf_page;
 pub mod audio;
 pub mod audio_route;
+pub mod resample;
 pub mod clock_check;
 pub mod manual_time;
 pub mod libretro;
 pub mod hw_render;
 pub mod options;
+pub mod look;
 pub mod starter;
 pub mod store;
 pub mod update;
@@ -111,6 +114,7 @@ pub mod frame_cache;
 pub mod preview;
 pub mod core_options;
 pub mod controls;
+pub mod controls_card;
 pub mod emu_menu;
 pub mod slots;
 // The pause menu: the Disc row of multi-disc games, and Save and Load only where they do something.
@@ -201,6 +205,7 @@ pub mod case_stickers;
 pub mod cabinet_tv;
 pub mod media;
 pub mod quit;
+pub mod exit_guard;
 pub mod fast_switch;
 pub mod system_art;
 pub mod ui_art;
@@ -265,6 +270,8 @@ pub mod history_page;
 pub mod startup;
 pub mod on_start;
 pub mod launch_picture;
+// "Where was I?": the card over a moment continued after a long break.
+pub mod where_was_i;
 /// RetroAchievements: rcheevos (vendor/rcheevos) for pocket-core games, the account, the files pocket-ui reads.
 pub mod achievements;
 pub mod achievements_page;

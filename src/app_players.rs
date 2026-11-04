@@ -20,7 +20,8 @@ use pocket_ui::text::Face;
 use winit::application::ApplicationHandler;
 use winit::event_loop::ActiveEventLoop;
 
-use super::{stripe, App, MainItem, Page, UserEvent, CANCEL, CONFIRM, DARK, DUST, INK, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{stripe, App, MainItem, Page, UserEvent, CANCEL, CONFIRM, DUST, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use pocket_ui::palette::pal;
 
 /// How often the reader looks at pocket-core's seats while the page is open.
 const LOOK_EVERY: Duration = Duration::from_millis(250);
@@ -197,16 +198,15 @@ impl App {
         menu.page = Page::Players;
     }
 
-    /// Player 1 to 4 as the Options pages' rows (the name in a light pill, a bar in the system's colour out to the
-    /// controller), then what A does for the selected player, and who waits for a seat.
+    /// Player 1 to 4 as the Options pages' rows (the selected one on paper with the system's colour at its start), then
+    /// what A does for the selected player, and who waits for a seat.
     pub(crate) fn paint_players(&mut self, c: &mut Canvas) {
         let Some(page) = self.menu.as_ref().and_then(|m| m.players.as_ref()) else { return };
         let (seats, spare, sel) = (page.seats.clone(), page.spare.clone(), page.sel.min(MAX - 1));
         let accent = self.running.as_ref().map_or(DUST, |r| stripe(&r.system));
         let pad = NU_PAD;
         self.status_pill(c);
-        let head_base = pad + (NU_PILL - 20) / 2 + pocket_ui::type_scale::mid(NU_SMALL);
-        self.text.draw(c, Face::Body, NU_SMALL, pad + NU_BTN_PAD, head_base, 0xcccccc, "Players");
+        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, "Players");
 
         let (row, font) = (pocket_ui::type_scale::row(66, 36), 36u32);
         let top = pad + NU_PILL + 12;
@@ -217,15 +217,14 @@ impl App {
             let name = format!("Player {}", i + 1);
             let name_w = self.text.width(Face::Body, font, &name) + 2 * NU_BTN_PAD;
             if i == sel {
-                c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, accent);
-                c.round_rect(pad, y + 4, name_w, row - 8, (row - 8) / 2, DARK.select);
-                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, INK, &name);
+                pocket_ui::kit::selection_striped(c, pad, y, right - pad, row, accent);
+                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, &name);
             } else {
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, 0xffffff, &name);
             }
             let (value, colour) = match seat {
-                Some(n) => (n.name.clone(), 0xffffff),
-                None => ("No controller".to_string(), if i == sel { 0xffffff } else { 0x9a978f }),
+                Some(n) => (n.name.clone(), if i == sel { pal().ink } else { 0xffffff }),
+                None => ("No controller".to_string(), if i == sel { pal().label_dust } else { 0x9a978f }),
             };
             let value = self.text.fit(Face::Body, font, &value, right - NU_BTN_PAD - (pad + name_w + 40));
             self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, colour, &value);

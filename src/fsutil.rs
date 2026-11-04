@@ -88,6 +88,48 @@ pub fn replace_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
     write_via_temp(path, bytes, false)
 }
 
+/// Copies `from` to `to` unless something is at `to` already: the bytes go to a temporary file beside it, then
+/// `rename_no_replace`, so `to` is whole or absent, and a file that is there (a player's own) is never replaced.
+/// `Ok(true)` when it was copied, `Ok(false)` when `to` existed. Creates the folder.
+pub fn copy_if_absent(from: &Path, to: &Path) -> io::Result<bool> {
+    copy_if_absent_inner(from, to, true)
+}
+
+/// An atomic, no-clobber copy of replaceable bundled assets. No fsync: missing/short seeded files are repaired on
+/// the next start. Never use this for saves or settings.
+pub(crate) fn copy_asset_if_absent(from: &Path, to: &Path) -> io::Result<bool> {
+    copy_if_absent_inner(from, to, false)
+}
+
+fn copy_if_absent_inner(from: &Path, to: &Path, durable: bool) -> io::Result<bool> {
+    if fs::symlink_metadata(to).is_ok() {
+        return Ok(false);
+    }
+    if let Some(dir) = parent_dir(to) {
+        fs::create_dir_all(dir)?;
+    }
+    let (tmp, mut out) = create_temp(to)?;
+    let done = (|| {
+        io::copy(&mut File::open(from)?, &mut out)?;
+        if durable {
+            out.sync_all()?;
+        }
+        drop(out);
+        rename_no_replace(&tmp, to)
+    })();
+    match done {
+        Ok(()) => Ok(true),
+        Err(e) => {
+            let _ = fs::remove_file(&tmp);
+            if e.kind() == io::ErrorKind::AlreadyExists {
+                Ok(false)
+            } else {
+                Err(e)
+            }
+        }
+    }
+}
+
 /// Numbers the temporary files of this process.
 static TEMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
@@ -323,6 +365,10 @@ fn card_writer() {
 
 /// Deletes a file written by [`write_json`] together with its backup. True when the file itself is gone.
 pub fn remove_json(path: &Path) -> bool {
+    // Deletion must follow earlier queued writes just like write_json does.
+    // Otherwise a pending Options change can recreate an override after reset
+    // or after moving its settings to the whole console.
+    settle();
     let _ = fs::remove_file(backup_path(path));
     fs::remove_file(path).is_ok() || !path.exists()
 }
@@ -490,6 +536,21 @@ mod tests {
     use super::*;
     use crate::testutil::TestDir;
     use std::time::Duration;
+
+    #[test]
+    fn copy_if_absent_never_replaces_and_leaves_no_temp_file() {
+        let d = TestDir::new("copy-absent");
+        let (from, to) = (d.join("from"), d.join("a/b/to"));
+        std::fs::write(&from, "new").unwrap();
+        assert!(copy_if_absent(&from, &to).unwrap());
+        assert_eq!(std::fs::read_to_string(&to).unwrap(), "new");
+        std::fs::write(&to, "mine").unwrap();
+        assert!(!copy_if_absent(&from, &to).unwrap());
+        assert_eq!(std::fs::read_to_string(&to).unwrap(), "mine");
+        assert!(copy_if_absent(&d.join("missing"), &d.join("a/other")).is_err());
+        let names: Vec<_> = std::fs::read_dir(d.join("a")).unwrap().flatten().map(|e| e.file_name()).collect();
+        assert_eq!(names.len(), 1, "no temporary file after a failed copy: {names:?}");
+    }
 
     #[test]
     fn checked_writes_report_durable_success_and_io_failure_from_the_writer() {

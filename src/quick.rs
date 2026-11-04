@@ -2968,7 +2968,11 @@ mod tests {
         assert!(p.year >= crate::manual_time::FIRST_YEAR);
         paint_page(&mut s);
         // The player's time, then one minute on with Up on the minute (Left from the year wraps to it).
-        let want = a_sane_time() - a_sane_time() % 60;
+        // Minute fields wrap without carrying into the hour (see manual_time's D-pad test).
+        // A build at :00 made want - 60 land at :59 in the previous hour, so Up could not reach want.
+        // Use :29 -> :30 regardless of the build minute; offline() already fixes the zone to UTC.
+        let sane = a_sane_time();
+        let want = sane - sane.rem_euclid(3600) + 30 * 60;
         let Screen::Time(TimePage::SetClock(p)) = &mut s.screen else { unreachable!() };
         *p = Picker::at(want - 60, 0);
         tap(&mut s, Button::Left, &SHELF, now);

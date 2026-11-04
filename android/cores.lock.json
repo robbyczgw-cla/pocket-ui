@@ -236,6 +236,10 @@
         {
           "path": "android/patches/ppsspp-no-xbrz.patch",
           "sha256": "1d4645c8441dd36d90846d61a003d2cd163d2ae344c0e645c40a8d84ee5390b1"
+        },
+        {
+          "path": "android/patches/ppsspp-pause-drain.patch",
+          "sha256": "c15f329fb49a68a041d2f68fb95adab1a715d4368655c037367fe324037af1f8"
         }
       ],
       "options": [

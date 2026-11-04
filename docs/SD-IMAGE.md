@@ -135,7 +135,7 @@ own mount of `/storage` (`mount_flash`, `mount_sysroot`, `mount_storage`). [V]
   systemd starts, so the drop-in is there when systemd reads its units, and pocket-ui comes up at the very first
   normal start. The seed also holds `.config/autostart/pocket-ui-image-defaults` (`deploy/image/image-defaults.sh`):
   ROCKNIX's autostart runs it once, after `001-setup` has put `system.cfg` in place and before the UI starts; it sets
-  `updates.enabled=0` and `system.hostname=pocket-ui` with ROCKNIX's `set_setting` and deletes itself. (A seeded
+  `updates.enabled=0` and `system.hostname=pocket-<model>` (`pocket-mini-v2`, `pocket-rg35xx-plus`, `pocket-rg35xx-sp`, `pocket-rg28xx`, `pocket-odin2-mini`, ...; `image_hostname` in `scripts/image/pins.sh`, put on the script's `NAME` line by the build, so two handhelds on one network or Tailscale differ; ROCKNIX's own default is the family name) with ROCKNIX's `set_setting` and deletes itself. (A seeded
   `system.cfg` would not survive: `chksysconfig verify` copies all of `/usr/config` over `.config` while
   `retroarch.cfg` is missing.)
 - **The hook stays on the card and guards every start against foreign system updates** (since 0.1.7). It runs before
@@ -449,7 +449,7 @@ which card is in it.
    - `df -h /storage` shows the card's full size.
    - `ls /flash`: `mount-storage.sh` and `post-flash.sh` still there (both run at every start). `cat /flash/fs-resize.log`.
    - `grep -E "^(updates.enabled|system.hostname)=" /storage/.config/system/configs/system.cfg` says `0` and
-     `pocket-ui`; `hostname` says `pocket-ui`; `/storage/.config/autostart/pocket-ui-image-defaults` is gone.
+     the model's name (`pocket-mini-v2`, `pocket-rg35xx-plus`, ...); `hostname` says the same; `/storage/.config/autostart/pocket-ui-image-defaults` is gone.
    - Settings → Help & tools → About, System row: "pocket-ui OS <version> · built on ROCKNIX 20261001 (SM8250)".
    - `ls -la /storage/.config/system.d/essway.service.d/` holds `10-pocket-ui.conf`; `/storage/.config/system.d/`
      holds `pocket-splash.service` and `sysinit.target.wants/pocket-splash.service`; `/storage/.pocket-seed` is gone.

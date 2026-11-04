@@ -77,9 +77,9 @@ tap('Save · Slot 1');shot('player-saved')
 tap('Load · Slot 1');shot('player-loaded')
 tap('Options');shot('player-options');(back() if os.environ.get('ANDROID_TOUCH_ONLY')=='1' else key(97))
 tap('Screenshot');shot('player-screenshot-saved')
-tap('Quit');time.sleep(1);shot('launcher-after-quit')
-confirm();time.sleep(2);shot('player-auto-resumed');back();tap('Quit');time.sleep(1)
-choose_game('Pocket Audio');confirm();time.sleep(22);shot('player-audio-test');back();tap('Quit');time.sleep(1)
+tap('Save & quit');time.sleep(1);shot('launcher-after-quit')
+confirm();time.sleep(2);shot('player-auto-resumed');back();tap('Save & quit');time.sleep(1)
+choose_game('Pocket Audio');confirm();time.sleep(22);shot('player-audio-test');back();tap('Save & quit');time.sleep(1)
 log=shell('logcat','-d');(out/'player-logcat.txt').write_text(log)
 assert 'pocket-core in-app: mGBA' in log and 'player EGL:' in log
 assert 'player state saved:' in log and 'player state loaded:' in log

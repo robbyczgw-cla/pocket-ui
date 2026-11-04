@@ -3,6 +3,8 @@ use super::*;
 const NEXT: u16 = 100;
 const SKIP: u16 = 101;
 const BACK: u16 = 102;
+const ANIMATIONS: u16 = 90;
+const APPEARANCE: u16 = 91;
 
 impl Ui {
     fn setup_items(&self) -> Vec<(String, u16)> {
@@ -24,9 +26,9 @@ impl Ui {
                     .collect();
                 rows.push((
                     format!("{} · {}", tr("Animations"), tr(if self.prefs.cozy.unwrap_or(true) { "Cozy" } else { "Quick" })),
-                    5,
+                    ANIMATIONS,
                 ));
-                rows.push((format!("{} · {}", tr("Appearance"), tr(if self.prefs.light { "Light" } else { "Dark" })), 6));
+                rows.push((format!("{} · {}", tr("Appearance"), tr(if self.prefs.light { "Light" } else { "Dark" })), APPEARANCE));
                 rows
             }
             4 => vec![
@@ -82,10 +84,9 @@ impl Ui {
                 2 => return Command::Folder,
                 3 => {
                     match action {
-                        0..=4 => self.prefs.theme = Theme::PHONE[action as usize],
-                        5 => self.prefs.cozy = Some(!self.prefs.cozy.unwrap_or(true)),
-                        6 => self.prefs.light = !self.prefs.light,
-                        _ => (),
+                        ANIMATIONS => self.prefs.cozy = Some(!self.prefs.cozy.unwrap_or(true)),
+                        APPEARANCE => self.prefs.light = !self.prefs.light,
+                        _ => if let Some(theme) = Theme::PHONE.get(action as usize) { self.prefs.theme = *theme; },
                     }
                     self.cover_changed();
                 }
@@ -133,7 +134,7 @@ impl Ui {
     fn setup_chosen(&self, action: u16) -> Option<bool> {
         match self.prefs.onboarding_step.min(6) {
             1 => Some(pocket_ui::i18n::Lang::ALL.get(action as usize) == Some(&pocket_ui::i18n::current())),
-            3 if action < 5 => Some(Theme::PHONE.get(action as usize) == Some(&self.prefs.theme)),
+            3 if (action as usize) < Theme::PHONE.len() => Some(Theme::PHONE.get(action as usize) == Some(&self.prefs.theme)),
             4 => Some(self.prefs.download_media == Some(action == 0)),
             _ => None,
         }
@@ -288,11 +289,13 @@ impl Ui {
         let half = (rw - col_gap) / 2;
         // Each choice's (column, row, width): the looks two to a row; Animations and Appearance side by side in
         // landscape, each across the column in portrait (their German values need the width).
+        let looks = Theme::PHONE.len() as i32;
+        let look_rows = (looks + 1) / 2;
         let cells: Vec<(i32, i32, i32)> = (0..choices.len() as i32)
-            .map(|n| match (step, n) {
-                (3, 0..=4) => (n % 2, n / 2, half),
-                (3, _) if wide => (n - 5, 3, half),
-                (3, _) => (0, n - 2, rw),
+            .map(|n| match step {
+                3 if n < looks => (n % 2, n / 2, half),
+                3 if wide => (n - looks, look_rows, half),
+                3 => (0, look_rows + n - looks, rw),
                 _ => (0, n, rw),
             })
             .collect();
@@ -389,7 +392,12 @@ fn look_preview(text: &mut Text, theme: Theme, w: i32, h: i32, dp: f32) -> art::
             plastic: art::plastic("gba"),
         };
         let m = Medium::Gba;
-        if matches!(theme, Theme::Minimal | Theme::Split) {
+        if theme == Theme::Big {
+            let (fw, fh) = media::front_size(m, 1.0);
+            let k = (w as f32 * 0.9 / fw as f32).min(h as f32 * 0.95 / fh as f32);
+            let front = media::front(text, m, k, look, "pocket-ui", None, pocket_ui::system_art::get("gba"), "Game Boy Advance");
+            art::blit(&mut c, &front, (w - front.w) / 2, (h - front.h) / 2, 256, (0, h));
+        } else if matches!(theme, Theme::Minimal | Theme::Split) {
             let listw = if theme == Theme::Split { w / 2 } else { w };
             // Rows in dp, like the phone's lists, so the preview reads at the same size.
             let (row, gap) = ((40.0 * dp) as i32, (6.0 * dp) as i32);

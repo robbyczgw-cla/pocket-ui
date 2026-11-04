@@ -224,6 +224,8 @@ pub struct Inputs {
     inner: Mutex<Inner>,
     /// RetroPad bits of each player, before the Controls page's mapping.
     ports: [AtomicU16; MAX],
+    /// Seats whose controller changed since the game last read them (clears per-player button latches).
+    seat_changes: AtomicU8,
     sticks: [Sticks; MAX],
     /// Player 1's buttons pressed by the test command `press` (POCKET_CORE_TEST).
     injected: AtomicU16,
@@ -241,6 +243,7 @@ struct Inner {
     started: bool,
     /// The controllers as of the last roster change, to see who came and who went.
     known: Vec<Controller>,
+    seated: [Option<Controller>; MAX],
     notes: Vec<String>,
     seats_file: Option<PathBuf>,
 }
@@ -249,8 +252,9 @@ impl Inputs {
     /// `order` from `players.json`; `seats_file` is `SEATS_FILE` in pocket-core, None in tests.
     pub fn new(order: Vec<String>, seats_file: Option<PathBuf>) -> Inputs {
         Inputs {
-            inner: Mutex::new(Inner { mux: Mux::default(), seats: Seats::default(), order, started: false, known: Vec::new(), notes: Vec::new(), seats_file }),
+            inner: Mutex::new(Inner { mux: Mux::default(), seats: Seats::default(), order, started: false, known: Vec::new(), seated: Default::default(), notes: Vec::new(), seats_file }),
             ports: Default::default(),
+            seat_changes: AtomicU8::new(0),
             sticks: Default::default(),
             injected: AtomicU16::new(0),
             notes_waiting: AtomicBool::new(false),
@@ -293,7 +297,7 @@ impl Inputs {
         g.seats = Seats::arrange(&g.order, &connected, Mode::Compact);
         g.known = connected;
         g.started = true;
-        self.seated(&g);
+        self.seated(&mut g);
     }
 
     /// The Players page changed the order: everyone exactly where it says.
@@ -303,7 +307,7 @@ impl Inputs {
         g.seats = Seats::arrange(&order, &connected, Mode::Exact);
         g.order = order;
         g.known = connected;
-        self.seated(&g);
+        self.seated(&mut g);
     }
 
     fn roster_changed(&self, g: &mut Inner) {
@@ -334,11 +338,18 @@ impl Inputs {
     }
 
     /// After the seats changed: every player's input again, the rumble targets, the file for the Players page.
-    fn seated(&self, g: &Inner) {
+    fn seated(&self, g: &mut Inner) {
         let pocket = (0..MAX).find(|p| g.seats.get(*p).is_some_and(Controller::is_builtin)).unwrap_or(MAX);
         self.pocket_seat.store(pocket as u8, Ordering::Relaxed);
         for p in 0..MAX {
+            let controller = g.seats.get(p).cloned();
+            let changed = g.seated[p] != controller;
+            g.seated[p] = controller;
             self.store(g, p);
+            if changed {
+                // Publish after the new input, so a cleared latch cannot read the departed pad's press.
+                self.seat_changes.fetch_or(1 << p, Ordering::Release);
+            }
         }
         rumble::set_targets(std::array::from_fn(|p| rumble_target(g.seats.get(p))));
         if let Some(path) = &g.seats_file {
@@ -355,6 +366,12 @@ impl Inputs {
         for (a, v) in Axis::ALL.iter().zip(axes) {
             self.sticks[p].set(*a, v);
         }
+    }
+
+    /// Controllers that disconnected or changed seats since the last read. Even a reconnect between
+    /// two frames releases the former controller's latch; unrelated players keep theirs.
+    pub fn take_seat_changes(&self) -> u8 {
+        self.seat_changes.swap(0, Ordering::AcqRel)
     }
 
     /// RetroPad bits a player holds (before the Controls mapping).
@@ -526,6 +543,30 @@ mod tests {
         assert!(i.take_notes().is_empty());
         i.feed(button(4, Button::West, true), |_| {});
         assert_eq!(i.buttons(2), 1 << joypad::Y);
+    }
+
+    #[test]
+    fn a_latched_button_is_released_when_its_controller_leaves_or_changes_player() {
+        let i = two_players();
+        i.take_seat_changes();
+        let mut held = [controls::HoldToggle::default(); MAX];
+        let chosen = Some(joypad::A as u8);
+        for h in &mut held[..2] {
+            h.apply(1 << joypad::A, chosen);
+            h.apply(0, chosen);
+        }
+        i.feed(PadEvent::Disconnected { source: 2 }, |_| {});
+        // Reconnect before the next frame: a zero raw input alone cannot tell that this happened.
+        i.feed(PadEvent::Connected { source: 3, controller: pad("bt:a") }, |_| {});
+        let changed = i.take_seat_changes();
+        for (p, h) in held.iter_mut().enumerate() {
+            if changed & (1 << p) != 0 { *h = Default::default(); }
+        }
+        assert_eq!(held[0].apply(0, chosen), 1 << joypad::A, "the other player keeps running");
+        assert_eq!(held[1].apply(0, chosen), 0, "no button survives a disconnect");
+        i.reorder(order(&["bt:a", "builtin"]));
+        assert_eq!(i.take_seat_changes() & 3, 3, "both moved seats must release their former player");
+        assert_eq!(i.take_seat_changes(), 0);
     }
 
     #[test]

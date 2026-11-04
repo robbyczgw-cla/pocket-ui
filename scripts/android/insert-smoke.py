@@ -218,7 +218,7 @@ def do_run(name):
     time.sleep(.5)
     sh('input', 'keyevent', '4')
     time.sleep(1)
-    tap('Quit')
+    tap('Save & quit')
     time.sleep(1.5)
 
 
@@ -243,7 +243,7 @@ def do_skip(name):
     print(name, 'skip: tapped %.0f ms after the start' % (stamp('skipped') - stamp('start cozy=true')), flush=True)
     sh('input', 'keyevent', '4')
     time.sleep(1)
-    tap('Quit')
+    tap('Save & quit')
     time.sleep(1.5)
 
 

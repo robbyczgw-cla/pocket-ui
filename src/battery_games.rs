@@ -168,8 +168,10 @@ impl Ledger {
 /// What the pause menu can say about the battery in this game.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Left {
-    /// On the charger (charging or full).
+    /// On the charger and charging.
     Charging,
+    /// On the charger with a full battery: "Charging" would not be true any more (first-start walk 2026-11-04).
+    Full,
     /// Not enough play on battery anywhere yet.
     Measuring,
     /// Seconds until empty at the rate of `basis`.
@@ -184,7 +186,7 @@ const FRESH: u64 = crate::battery_history::GAP;
 pub fn left(rate: Option<Rate>, now: Option<&Sample>, t: u64) -> Option<Left> {
     let s = now.filter(|s| t.saturating_sub(s.t) <= FRESH)?;
     if s.plugged() {
-        return Some(Left::Charging);
+        return Some(if s.capacity >= crate::battery::FULL_FROM { Left::Full } else { Left::Charging });
     }
     Some(match rate {
         Some(r) if r.per_hour > 0.0 => Left::Time {
@@ -228,6 +230,7 @@ impl Left {
     pub fn line(&self, system: &str) -> String {
         match self {
             Left::Charging => "Charging".to_string(),
+            Left::Full => "Full".to_string(),
             Left::Measuring => "Battery: not enough play to tell yet".to_string(),
             Left::Time { secs, basis: Basis::Game } => format!("{} in this game", time_left(*secs)),
             // Not this game's own measurement: whose it is, in brackets.
@@ -251,8 +254,8 @@ pub fn card_line(rate: Option<Rate>, now: Option<&Sample>, t: u64, system: &str)
     Some(match (left(rate, now, t), rate) {
         (Some(Left::Time { secs, basis: Basis::Game }), Some(r)) => format!("{}, {}", time_left(secs), per_hour(&r)),
         (Some(Left::Time { secs, basis }), _) => format!("{}{}", time_left(secs), whose(basis, system)),
-        (Some(Left::Measuring), _) | (Some(Left::Charging), None) => measuring(),
-        (Some(Left::Charging) | None, Some(r)) => {
+        (Some(Left::Measuring), _) | (Some(Left::Charging | Left::Full), None) => measuring(),
+        (Some(Left::Charging | Left::Full) | None, Some(r)) => {
             let rate = if r.per_hour < 1.0 { per_hour(&r) } else { format!("about {}", per_hour(&r)) };
             format!("{}{}", capitalise(&rate), whose(r.basis, system))
         }
@@ -427,7 +430,10 @@ mod tests {
             full: true,
             ..plugged
         };
-        assert_eq!(left(None, Some(&full), T0), Some(Left::Charging));
+        assert_eq!(left(None, Some(&full), T0), Some(Left::Charging), "full at 50 % is charging that stopped early");
+        let topped = Sample { capacity: 100, ..full };
+        assert_eq!(left(None, Some(&topped), T0), Some(Left::Full));
+        assert_eq!(Left::Full.line("SNES"), "Full");
     }
 
     #[test]

@@ -33,7 +33,13 @@ cat >"$T/bin/pidof" <<EOF
 [ -s "$T/pids/\$1" ] || exit 1
 cat "$T/pids/\$1"
 EOF
-chmod +x "$T/bin/ssh" "$T/bin/systemctl" "$T/bin/pidof"
+# wpctl get-volume <sink>: the line in $T/sound (no file = no answer).
+cat >"$T/bin/wpctl" <<EOF
+#!/bin/sh
+[ -f "$T/sound" ] || exit 1
+cat "$T/sound"
+EOF
+chmod +x "$T/bin/ssh" "$T/bin/systemctl" "$T/bin/pidof" "$T/bin/wpctl"
 
 export PATH="$T/bin:$PATH"
 export VERIFY_PROC=$T/proc VERIFY_STORAGE=$T/storage VERIFY_TMP=$T/tmp VERIFY_BUILD_DIR=$T/build VERIFY_WAIT=0
@@ -173,6 +179,27 @@ healthy; rm "$T/storage/.config/system.d/essway.service.d/10-pocket-ui.conf"; ru
 want "no drop-in: the unit is pocketui and a pocket-ui in essway fails" 1 "^FAIL pocket-ui 100 is not in pocketui.service" "^ok   pocketui.service is active"
 echo "0::/system.slice/pocketui.service" >"$T/proc/100/cgroup"; run root@fake
 want "no drop-in: a pocket-ui in pocketui.service passes" 0 "^ok   pocket-ui 100 is in pocketui.service" "^VERIFY: ok$"
+
+# Sound: a deploy must keep the speaker as it was (VERIFY_SOUND_BEFORE comes from dev.sh deploy).
+healthy; echo "Volume: 0.10 [MUTED]" >"$T/sound"; run root@fake
+want "sound without a before value is only reported" 0 "^info sound: muted 0.10" "^VERIFY: ok$"
+VERIFY_SOUND_BEFORE="muted 0.10" run root@fake
+want "muted before and after passes" 0 "^ok   sound: muted 0.10 -> muted 0.10" "^VERIFY: ok$"
+echo "Volume: 0.10" >"$T/sound"; VERIFY_SOUND_BEFORE="muted 0.10" run root@fake
+want "muted before, audible after fails" 1 "^FAIL sound: muted 0.10 -> 0.10" "^VERIFY: FAILED (sound)"
+echo "Volume: 0.45" >"$T/sound"; VERIFY_SOUND_BEFORE="0.45" run root@fake
+want "same volume, not muted passes" 0 "^ok   sound: 0.45 -> 0.45"
+echo "Volume: 0.60" >"$T/sound"; VERIFY_SOUND_BEFORE="0.45" run root@fake
+want "another volume fails" 1 "^FAIL sound: 0.45 -> 0.60" "^VERIFY: FAILED (sound)"
+rm "$T/sound"; run root@fake
+want "no wpctl answer: reported, not a failure" 0 "^info sound: not readable" "^VERIFY: ok$"
+
+# dev.sh's sound_state: `wpctl get-volume` output -> "muted 0.10" / "0.10" / nothing.
+eval "$(sed -n '/^sound_state()/p' "$here/dev.sh")"
+for pair in "Volume: 0.10 [MUTED]|muted 0.10" "Volume: 0.45|0.45" "Volume: 1.00 [MUTED]|muted 1.00" "Could not find|" "|"; do
+  got=$(printf '%s\n' "${pair%%|*}" | sound_state); n=$((n + 1))
+  if [ "$got" = "${pair#*|}" ]; then echo "ok   sound_state '${pair%%|*}'"; else echo "FAIL sound_state '${pair%%|*}': '$got'"; fails=$((fails + 1)); fi
+done
 
 healthy; FAKE_SSH_DOWN=1 run root@fake
 want "ssh down fails with the reason" 1 "^FAIL could not read the device's state over ssh (exit 255).*Connection refused" "^VERIFY: FAILED (ssh)"

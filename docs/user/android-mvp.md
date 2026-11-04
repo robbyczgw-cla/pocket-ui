@@ -145,3 +145,20 @@ list. Choosing a folder from Settings with new games offers the check. Tap a row
 A BIOS is never called missing on Android, because nobody here can know: this app's own player has no system that asks you for
 one, and each emulator app keeps its own in a folder other apps can't read. Which core RetroArch has is out of sight in the same
 way, so that is a tip too. A game's content is not read, so a damaged game with the right size and name is only found when it starts.
+
+## Easy and Just Play
+
+Settings → Look (also in first start) offers Easy: one large game with previous and
+next buttons. Tap Play or Continue to start it; tap its name for Info. On a controller,
+arrows change games, A starts and X opens Info. Games and Quick settings offer Just
+Play: it chooses a game and starts it straight away. Automatic choices use the app's
+bundled player; choose games for other emulator apps yourself.
+
+The pause menu's Save & quit saves your in-game data and a moment before returning
+to the library. If saving fails, the menu stays open with the error. The picture
+choices remain Sharp, Smooth, CRT and Scanlines. Shorter older PSP moments may be
+kept rather than resumed because the bundled emulator cannot safely check their length.
+
+The Games shelf now calls its first row Continue and includes only games whose open
+moment was verified by the Android worker. Recently played external games without
+an internal moment remain on their system shelf. Easy keeps its single-game order.

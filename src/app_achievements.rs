@@ -263,8 +263,7 @@ impl App {
         let base = y + row / 2 + pocket_ui::type_scale::mid(font);
         let name = page.label();
         let w = self.text.width(Face::Body, font, name) + 2 * NU_BTN_PAD;
-        c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, pal().band);
-        c.round_rect(pad, y + 4, w, row - 8, (row - 8) / 2, pal().select);
+        pocket_ui::kit::selection(c, pad, y, right - pad, row);
         self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, name);
         let value = self.text.fit(Face::Body, font, &page.value(), right - pad - 2 * NU_BTN_PAD - w - 40);
         self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, pal().ink, &value);

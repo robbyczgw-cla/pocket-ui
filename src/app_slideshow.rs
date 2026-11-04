@@ -122,6 +122,7 @@ impl App {
             && self.setup.is_none()
             && self.settings_page.is_none()
             && self.card.is_none()
+            && !self.controls_card_open()
             && self.leave.is_none()
             && !self.tour.is_open()
             && !self.sys.is_open()
@@ -155,7 +156,7 @@ impl App {
             // The tests and snapshots (`POCKETUI_MOCK`) point it at a folder of their own.
             states: std::env::var_os("POCKETUI_MOCK")
                 .and_then(|_| std::env::var_os("POCKETUI_SLIDESHOW_STATES"))
-                .map_or_else(|| std::path::PathBuf::from(pocket_ui::slots::STATES_DIR), std::path::PathBuf::from),
+                .map_or_else(pocket_ui::slots::states_dir, std::path::PathBuf::from),
             scraped_pictures: self.pictures.wanted(),
         })
     }

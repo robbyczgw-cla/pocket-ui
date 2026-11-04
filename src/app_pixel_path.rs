@@ -21,6 +21,7 @@ use pocket_ui::pixel_path::{self, Grade, Known, Report};
 use pocket_ui::pixel_path_page::{Action, PixelPathPage};
 use pocket_ui::pixel_standalone::{self, Screen, Setup};
 use pocket_ui::standalone;
+use pocket_ui::palette::pal;
 use pocket_ui::text::Face;
 
 use super::{App, MainItem, Page, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
@@ -196,9 +197,10 @@ impl App {
             match (menu.settings.as_mut(), setting, p.standalone.is_none()) {
                 (Some(s), Some(setting), true) => {
                     let value = p.toggle_over_game(setting.choices[s.index(setting)].value);
-                    // As a change in Options: applied at once, kept with Save changes.
+                    // As a change in Options: applied at once and kept at once.
                     control::pocket_core(&format!("set {} {value}", pocket_ui::over_game::KEY));
                     s.values.insert(setting.key.to_string(), value);
+                    s.keep();
                 }
                 _ => pocket_ui::ui_sound::refuse(),
             }
@@ -302,9 +304,10 @@ impl App {
         self.status_pill(c);
 
         // Heading: "Pixel Path", then the overall grade with its dot.
-        let head_base = pad + (NU_PILL - 20) / 2 + pocket_ui::type_scale::mid(NU_SMALL);
+        // The title in Title 50, as every page's (`sheet_header`); the grade beside it on its baseline.
+        let head_base = pad + 58;
         let x = pad + NU_BTN_PAD;
-        let w = self.text.draw(c, Face::Body, NU_SMALL, x, head_base, 0xcccccc, "Pixel Path");
+        let w = self.text.draw(c, Face::Title, 50, x, head_base, pal().chalk, "Pixel Path");
         if let Some(p) = &path {
             let gx = x + w + 30;
             c.disc(gx + 8, head_base - 10, 8, p.overall.colour());
@@ -368,8 +371,8 @@ impl App {
                     self.text.draw_right(c, Face::Body, 26, right - NU_BTN_PAD, base - 2, colour, s.grade.name());
                 }
             }
-            let value = self.text.fit(Face::Body, 32, &s.value, right - NU_BTN_PAD - grade_w - if large { 0 } else { 24 } - value_x);
-            self.text.draw(c, Face::Body, 32, value_x, base, 0xffffff, &value);
+            let (vpx, value) = self.text.fit_sizes(Face::Body, &[32, 29, 26], &s.value, right - NU_BTN_PAD - grade_w - if large { 0 } else { 24 } - value_x);
+            self.text.draw(c, Face::Body, vpx, value_x, base, 0xffffff, &value);
             if !s.line.is_empty() && (!tight || i == sel) && !cramped {
                 let line = self.text.fit(Face::Body, 28, &s.line, right - NU_BTN_PAD - value_x);
                 self.text.draw(c, Face::Body, 28, value_x, base + line_dy, 0x9a978f, &line);
@@ -430,12 +433,31 @@ impl App {
         c.darken_rect(0, NU_PAD + NU_PILL, c.w, c.h - 2 * (NU_PAD + NU_PILL), 170);
         // For the snapshot checks of Settings → Text size: the page under the sheet is darkened, not read.
         pocket_ui::text::boxes::covered();
-        let (w, inner) = (c.w - 2 * (NU_PAD + 40), 48);
-        let lines = self.text.wrap_prose(Face::Body, 30, &s.about, w - 2 * inner);
-        let lines: Vec<String> = lines.into_iter().take(12).collect();
-        // Every line a little lower with larger text: the heading, the value, the paragraph's lines.
-        let (g1, g2, g3, step) = (pocket_ui::type_scale::grow(38), pocket_ui::type_scale::grow(28), pocket_ui::type_scale::grow(30), pocket_ui::type_scale::line(30, 12));
-        let h = inner + 44 + 20 + 34 + 30 + lines.len() as i32 * step + inner - 10 + g1 + g2 + g3;
+        let w = c.w - 2 * (NU_PAD + 40);
+        // The sheet fits between the clock pill and the hint pill: a long paragraph gets smaller type (30, 27, 24 px) and a
+        // narrower margin before it is cut with "…" (1024x768 shows about ten lines of it).
+        let room = c.h - 2 * (NU_PAD + NU_PILL + 10);
+        let inner = if c.h < 900 { 36 } else { 48 };
+        let (g1, g2) = (pocket_ui::type_scale::grow(38), pocket_ui::type_scale::grow(28));
+        let fixed = |font: u32| inner + 44 + 20 + 34 + 30 + inner - 10 + g1 + g2 + pocket_ui::type_scale::grow(font);
+        let (mut font, mut lines) = (30u32, Vec::new());
+        for f in [30u32, 27, 24] {
+            font = f;
+            lines = self.text.wrap_prose(Face::Body, f, &s.about, w - 2 * inner);
+            let step = pocket_ui::type_scale::line(f, 12);
+            if fixed(f) + lines.len() as i32 * step <= room {
+                break;
+            }
+        }
+        let step = pocket_ui::type_scale::line(font, 12);
+        let max_lines = (((room - fixed(font)) / step).max(1) as usize).min(12);
+        if lines.len() > max_lines {
+            lines.truncate(max_lines);
+            if let Some(last) = lines.last_mut() {
+                *last = self.text.fit(Face::Body, font, &format!("{last}\u{2026}"), w - 2 * inner);
+            }
+        }
+        let h = fixed(font) + lines.len() as i32 * step;
         let (x, y) = (NU_PAD + 40, ((c.h - h) / 2).max(NU_PAD + NU_PILL + 10));
         c.round_rect(x, y, w, h, 28, 0x1a1a1c);
         let colour = s.grade.colour();
@@ -445,11 +467,11 @@ impl App {
         if s.grade != Grade::Unknown {
             self.text.draw_right(c, Face::Body, 28, x + w - inner, base, colour, s.grade.name());
         }
-        let value = self.text.fit(Face::Body, 28, &s.value, w - 2 * inner);
-        self.text.draw(c, Face::Body, 28, x + inner, base + 50 + g2, 0xaaa79f, &value);
-        let mut ly = base + 50 + g2 + 64 + g3;
+        let (vpx, value) = self.text.fit_sizes(Face::Body, &[28, 25, 22], &s.value, w - 2 * inner);
+        self.text.draw(c, Face::Body, vpx, x + inner, base + 50 + g2, 0xaaa79f, &value);
+        let mut ly = base + 50 + g2 + 64 + pocket_ui::type_scale::grow(font);
         for l in &lines {
-            self.text.draw(c, Face::Body, 30, x + inner, ly, 0xd9d6ce, l);
+            self.text.draw(c, Face::Body, font, x + inner, ly, 0xd9d6ce, l);
             ly += step;
         }
     }

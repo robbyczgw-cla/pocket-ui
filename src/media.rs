@@ -91,6 +91,31 @@ impl Template {
 /// a few games still fills the cabinet and the titles on the spines are 30 px.
 pub const SHELF_SCALE: f32 = 2.5;
 
+/// Under this many lines the shelf is drawn smaller (`shelf_scale_for`).
+pub const SHORT_SCREEN_H: i32 = 900;
+/// The template pixel on a screen under `SHORT_SCREEN_H` lines that has no scaled layout (1024x768, 1280x800): the shelf
+/// then leaves room for a case and a TV in the showcase and its spines keep their whole titles.
+pub const SHORT_SHELF_SCALE: f32 = 1.7;
+
+static SCALE_NOW: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(SHELF_SCALE.to_bits());
+
+/// Screen pixels a template pixel on the Cabinet's shelf on a screen `h` lines high.
+pub fn shelf_scale_for(h: i32) -> f32 {
+    if h < SHORT_SCREEN_H { SHORT_SHELF_SCALE } else { SHELF_SCALE }
+}
+
+/// The scale in use (`SHELF_SCALE` unless `set_shelf_scale` said otherwise): every size the shelf and its cases are
+/// drawn at is measured from it.
+pub fn shelf_scale() -> f32 {
+    f32::from_bits(SCALE_NOW.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+/// Sets the scale for a screen `h` lines high; true when it changed (what was made at the old one is stale).
+pub fn set_shelf_scale(h: i32) -> bool {
+    let bits = shelf_scale_for(h).to_bits();
+    SCALE_NOW.swap(bits, std::sync::atomic::Ordering::Relaxed) != bits
+}
+
 /// The template's neutral plastic grey (`draw_media.py`'s GREY).
 const GREY: u32 = 156;
 
@@ -260,7 +285,7 @@ impl Medium {
     /// Its size on the Cabinet's shelf, in screen pixels: the template at `SHELF_SCALE`.
     pub fn size(self) -> Size {
         let t = self.template();
-        let s = |v: i32| (v as f32 * SHELF_SCALE).round() as i32;
+        let s = |v: i32| (v as f32 * shelf_scale()).round() as i32;
         Size {
             spine: s(t.spine.0),
             front: s(t.front.0),
@@ -427,7 +452,7 @@ pub fn spine(text: &mut Text, m: Medium, k: f32, look: Look, title: &str) -> Pic
     // 24 px, or 21 on a narrow label (the Game Boy's, the thin jewel case's): the two sizes the shelf has always used,
     // so a new spine finds its letters drawn already. Bigger (a case out of the shelf) at the nearest size the app
     // paints anyway, never past the label.
-    let (_, _, w, _) = m.template().at(m.template().spine_label, SHELF_SCALE * k);
+    let (_, _, w, _) = m.template().at(m.template().spine_label, shelf_scale() * k);
     let want = (if (w as f32 / k) < 25.0 { 21.0 } else { 24.0 }) * k;
     spine_with(text, m, k, look, title, want)
 }
@@ -454,7 +479,7 @@ pub fn spine_px(w: i32, want: f32) -> u32 {
 pub fn spine_with(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, want: f32) -> Pic {
     let look = spine_print(m).map_or(look, |(paper, band)| Look { color: paper.unwrap_or(look.color), band, ..look });
     let t = m.template();
-    let f = SHELF_SCALE * k;
+    let f = shelf_scale() * k;
     let (spine, _) = m.pics();
     let mut p = scaled(spine, f / t.res as f32, tint_of(m, look));
     card_edge(&mut p, m, f);
@@ -503,13 +528,15 @@ fn card_edge(p: &mut Pic, m: Medium, f: f32) {
 }
 
 /// The printed spine a system's cases share, whatever the game (paper, band; no paper = the cover's own colour): every
-/// box of the system reads the same on the shelf, as real ones do. The US Super Nintendo's grey with its dark band, the
+/// box of the system reads the same on the shelf, as real ones do. The US Super Nintendo's grey with its band in the
+/// system's lilac (a dark one made the grey box look switched off beside the coloured ones, the visual review
+/// 2026-11-04), the
 /// NES's black box, the Game Boy's and the Game Boy Advance's white with their band; the Nintendo 64's art in the
 /// cover's colour with the red block at its top that carries the white logo square (US boxes; `n64_badge`); and the PS2
 /// case's black insert spine.
 fn spine_print(m: Medium) -> Option<(Option<u32>, u32)> {
     match m {
-        Medium::Snes => Some((Some(0xc9c9cd), 0x3a3a40)),
+        Medium::Snes => Some((Some(0xc9c9cd), 0x7a6cb0)),
         Medium::N64 => Some((None, 0xd0101a)),
         Medium::Nes => Some((Some(0x101012), 0xb3141c)),
         Medium::Gb => Some((Some(0xeeeeea), 0x2d2f6e)),
@@ -660,19 +687,19 @@ fn spine_whole(text: &mut Text, face: crate::text::Face, title: &str, thick: i32
 /// The size a case's front is made at for `k` times its shelf size.
 pub fn front_size(m: Medium, k: f32) -> (i32, i32) {
     let t = m.template();
-    let f = SHELF_SCALE * k;
+    let f = shelf_scale() * k;
     ((t.front.0 as f32 * f).round() as i32, (t.front.1 as f32 * f).round() as i32)
 }
 
 /// Where the cover sits on the front made at `k` times the shelf size: (x, y, width, height).
 pub fn label_rect(m: Medium, k: f32) -> (i32, i32, i32, i32) {
-    m.template().at(m.template().front_label, SHELF_SCALE * k)
+    m.template().at(m.template().front_label, shelf_scale() * k)
 }
 
 /// Where a spine made at `k` times its shelf size has its title's label: (x, y, width, height). Above it is the
 /// spine's top, where a case sticker goes (`case_stickers::on_spine`).
 pub fn spine_label_rect(m: Medium, k: f32) -> (i32, i32, i32, i32) {
-    m.template().at(m.template().spine_label, SHELF_SCALE * k)
+    m.template().at(m.template().spine_label, shelf_scale() * k)
 }
 
 /// The front of a case, `k` times its shelf size: the cover (`cover`, already `cabinet_art::cover_fit` to the
@@ -683,10 +710,10 @@ pub fn spine_label_rect(m: Medium, k: f32) -> (i32, i32, i32, i32) {
 pub fn front(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, cover: Option<&Image>, console: Option<&Sprite>, system: &str) -> Pic {
     let (_, tpl) = m.pics();
     let t = m.template();
-    let mut p = scaled(tpl, SHELF_SCALE * k / t.res as f32, tint_of(m, look));
-    card_edge(&mut p, m, SHELF_SCALE * k);
+    let mut p = scaled(tpl, shelf_scale() * k / t.res as f32, tint_of(m, look));
+    card_edge(&mut p, m, shelf_scale() * k);
     if let Some(band) = t.front_band {
-        system_band(text, &mut p, t.at(band, SHELF_SCALE * k), look.band, console, system);
+        system_band(text, &mut p, t.at(band, shelf_scale() * k), look.band, console, system);
     }
     let (lx, ly, lw, lh) = label_rect(m, k);
     match cover {
@@ -703,7 +730,7 @@ pub fn front(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, cover:
         None => art::plain_label(text, &mut p, (lx, ly, lw, lh), look, title, console),
     }
     if m.is_cardboard() {
-        box_wear(&mut p, SHELF_SCALE * k);
+        box_wear(&mut p, shelf_scale() * k);
     } else {
         // The clear sleeve over the cover.
         art::sheen(&mut p, 18);
@@ -2014,13 +2041,13 @@ mod tests {
         let look = Look { color: 0x2a6ab0, band: 0x7a6cb0, plastic: 0x9c99a2 };
         let s = spine(&mut text, Medium::N64, 1.0, look, "Super Mario 64");
         let t = Medium::N64.template();
-        let (bx, by, bw, bh) = t.at(t.band.unwrap(), SHELF_SCALE);
+        let (bx, by, bw, bh) = t.at(t.band.unwrap(), shelf_scale());
         let reds = (by..by + bh).flat_map(|r| (bx..bx + bw).map(move |c| (c, r))).filter(|&(c, r)| {
             let p = s.get(c, r);
             (p >> 16 & 0xff) > 150 && (p >> 8 & 0xff) < 60
         });
         assert!(reds.count() > (bw * bh / 4) as usize, "the red block");
-        let (lx, ly, lw, lh) = t.at(t.spine_label, SHELF_SCALE);
+        let (lx, ly, lw, lh) = t.at(t.spine_label, shelf_scale());
         let blue = (ly..ly + lh).flat_map(|r| (lx..lx + lw).map(move |c| (c, r))).filter(|&(c, r)| {
             let p = s.get(c, r);
             (p & 0xff) > (p >> 16 & 0xff) + 40
@@ -2146,7 +2173,7 @@ mod tests {
         let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2 };
         for m in Medium::ALL {
             let spine = spine(&mut text, m, 1.0, look, "Chrono Trigger");
-            let (x, y, w, h) = m.template().at(m.template().spine_label, SHELF_SCALE);
+            let (x, y, w, h) = m.template().at(m.template().spine_label, shelf_scale());
             let ink = ink_on(spine_print(m).and_then(|(paper, _)| paper).unwrap_or(look.color));
             let inked = (y..y + h).flat_map(|r| (x..x + w).map(move |c| (c, r))).filter(|&(c, r)| spine.get(c, r) & 0xffffff == ink).count();
             assert!(inked > 20, "{m:?}: the title on the spine ({inked} pixels)");

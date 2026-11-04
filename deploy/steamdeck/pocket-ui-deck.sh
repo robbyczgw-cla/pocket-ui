@@ -10,6 +10,9 @@ mkdir -p "$data" "$data/logs"
 export POCKETUI_DEVICE=${POCKETUI_DEVICE:-steamdeck}
 export POCKETUI_DATA=$data
 export POCKETUI_ES_SYSTEMS=$data/es_systems.cfg
+# Save states live with pocket-ui's data here: SteamOS has no writable /storage (the handhelds' states folder).
+export POCKETUI_STATES=${POCKETUI_STATES:-$data/savestates}
+mkdir -p "$POCKETUI_STATES"
 # The Deck's battery is BAT1 (the handhelds' is `battery`): the status corner, Settings > Battery and the low-battery warning read it.
 for b in BAT1 BAT0; do [ -r "/sys/class/power_supply/$b/capacity" ] && { export POCKETUI_BATTERY=${POCKETUI_BATTERY:-/sys/class/power_supply/$b}; break; }; done
 export POCKETUI_HOST_BIN=$here/pocket-core

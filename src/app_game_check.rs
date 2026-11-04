@@ -142,7 +142,7 @@ impl App {
                 }
                 Err(e) => {
                     eprintln!("library: hidden flag not saved: {e}");
-                    self.toast = Some(("Could not save: is the SD card full?".into(), Instant::now()));
+                    self.warn("Could not save: is the SD card full?");
                 }
             },
         }
@@ -350,11 +350,10 @@ impl App {
             let name = self.text.fit(Face::Body, font, name, right - NU_PAD - 2 * NU_BTN_PAD - value_w);
             let selected = i == sel;
             if selected {
-                let w = self.text.width(Face::Body, font, &name) + 2 * NU_BTN_PAD;
-                pocket_ui::kit::selection(c, NU_PAD, y + 4, right - NU_PAD, row - 8, w);
+                pocket_ui::kit::selection(c, NU_PAD, y, right - NU_PAD, row);
             }
             self.text.draw(c, Face::Body, font, NU_PAD + NU_BTN_PAD, base, if selected { pal().ink } else { pal().text }, &name);
-            self.text.draw_right(c, Face::Body, NU_SMALL, right - NU_BTN_PAD, base, if selected { pal().text } else { pal().dust }, &value);
+            self.text.draw_right(c, Face::Body, NU_SMALL, right - NU_BTN_PAD, base, if selected { pal().label_dust } else { pal().dust }, &value);
         }
         self.hits.list(sel, rows.len(), 0.0, row as f32);
     }

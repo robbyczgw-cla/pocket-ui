@@ -407,14 +407,12 @@ impl App {
         let base = y + row / 2 + pocket_ui::type_scale::mid(font);
         let label = self.text.fit(Face::Body, font, label, right - pad - 2 * NU_BTN_PAD - 300);
         if selected {
-            let w = self.text.width(Face::Body, font, &label) + 2 * NU_BTN_PAD;
-            c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, pal().band);
-            c.round_rect(pad, y + 4, w, row - 8, (row - 8) / 2, pal().select);
+            pocket_ui::kit::selection(c, pad, y, right - pad, row);
             self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, &label);
         } else {
             self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, &label);
         }
-        let quiet = if selected { pal().text } else { pal().dust };
+        let quiet = if selected { pal().label_dust } else { pal().dust };
         match marker {
             Marker::None => {}
             Marker::Text(t) => self.text.draw_right(c, Face::Body, NU_SMALL, right - NU_BTN_PAD, base - 2, quiet, &t),

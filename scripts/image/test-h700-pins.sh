@@ -66,4 +66,14 @@ family_pins SM8550
 [ "$FAM_IMG" = "$SM8550_IMG" ] && [ -n "$FAM_FW_SHARED" ] && ok "family_pins gives the family's pins" || bad "family_pins"
 for f in $FAM_FW_SHARED; do [ -s "deploy/image/firmware-licences/$f" ] || bad "shared licence text missing: $f"; done
 sh scripts/make-image-family.sh --family AMD64 >/dev/null 2>&1 && bad "an unknown family was accepted" || ok "an unknown family is refused"
+# Every card gives its handheld its own name on the network (system.hostname): lowercase ASCII, at most 24 characters, never
+# ROCKNIX's default, different on each model, and image-defaults.sh has the one NAME line the build and the checks replace.
+hosts=$(for m in "" $(echo "$H700_MODELS $SM8550_MODELS" | awk 'NF { print $1 }'); do image_hostname "$m"; done)
+bad_host=$(echo "$hosts" | grep -Ev '^[a-z][a-z0-9-]{0,23}$|^$')
+[ -z "$bad_host" ] && ! echo "$hosts" | grep -qix 'rocknix\|sm8250\|sm8550\|h700' && ok "every image has a valid hostname of its own kind" || bad "hostname not valid: $bad_host"
+[ -z "$(echo "$hosts" | sort | uniq -d)" ] && [ "$(image_hostname "")" = pocket-mini-v2 ] && [ "$(image_hostname rg35xx-plus)" = pocket-rg35xx-plus ] \
+  && ok "hostnames are unique: pocket-mini-v2, pocket-rg35xx-plus, ..." || bad "hostnames clash or changed: $(echo $hosts)"
+[ "$(grep -c '^NAME=pocket-ui$' deploy/image/image-defaults.sh)" = 1 ] && grep -q 'set_setting system.hostname "\$NAME"' deploy/image/image-defaults.sh \
+  && ok "image-defaults.sh has one NAME line and sets system.hostname from it" || bad "image-defaults.sh: NAME line"
+sed "s/^NAME=pocket-ui\$/NAME=$(image_hostname rg28xx)/" deploy/image/image-defaults.sh | grep -qx 'NAME=pocket-rg28xx' && ok "the build's sed puts the model's name on the NAME line" || bad "sed does not set NAME"
 exit $fail

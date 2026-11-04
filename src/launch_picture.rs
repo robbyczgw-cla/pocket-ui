@@ -102,7 +102,7 @@ pub fn prepare(data_dir: &Path, system: &str, rom: &Path, hosted: Option<(Scalin
 }
 
 /// `img` at `w` x `h`, nearest neighbour.
-fn scaled(img: &Image, w: u32, h: u32) -> Image {
+pub fn scaled(img: &Image, w: u32, h: u32) -> Image {
     let (w, h) = (w.max(1), h.max(1));
     let mut px = Vec::with_capacity((w * h) as usize);
     for ty in 0..h {

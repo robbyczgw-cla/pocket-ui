@@ -254,15 +254,13 @@ impl Sys {
             let reserve = if value_w > 0 { value_w + 24 } else { 0 } + note_w + if bar_w > 0 { bar_w + 24 } else { 0 };
             let name = text.fit(Face::Body, FONT, &r.name, right - PAD - 2 * BTN_PAD - reserve - if r.current { 30 } else { 0 });
             let dot = if r.current { 30 } else { 0 };
-            let name_w = text.width(Face::Body, FONT, &name) + 2 * BTN_PAD + dot;
             let (fg, name_fg) = if selected {
                 (pal().ink, pal().ink)
             } else {
                 (if r.dim { pal().dust } else { pal().text }, if r.dim { pal().dust } else { pal().text })
             };
             if selected {
-                c.round_rect(PAD, y + 4, right - PAD, row() - 8, (row() - 8) / 2, pal().band);
-                c.round_rect(PAD, y + 4, name_w, row() - 8, (row() - 8) / 2, pal().select);
+                crate::kit::selection(c, PAD, y, right - PAD, row());
             }
             if r.current {
                 c.disc(PAD + BTN_PAD + 8, y + row() / 2, 7, if selected { pal().ink } else { pal().text });
@@ -270,7 +268,11 @@ impl Sys {
             text.draw(c, Face::Body, FONT, PAD + BTN_PAD + dot, base, name_fg, &name);
             let mut vx = right - BTN_PAD;
             if value_w > 0 {
-                text.draw_right(c, Face::Body, FONT, vx, base, if selected { pal().text } else { fg }, &value);
+                if selected || !r.dim {
+                    crate::kit::row_value(c, text, FONT, vx, base, &value, selected);
+                } else {
+                    text.draw_right(c, Face::Body, FONT, vx, base, fg, &value);
+                }
                 if selected && r.arrows {
                     let aw = text.width(Face::Body, FONT, "‹ ") + 24;
                     self.hits.button(Area::new(vx - value_w - 24, y, aw, row()), Button::Left);
@@ -279,9 +281,9 @@ impl Sys {
                 vx -= value_w + 24;
             }
             if let Some(n) = &r.note {
-                // On the selected row's grey band orange would be hard to read: the footer says it there.
+                // On the selected row's paper orange would be hard to read: the footer says it there.
                 let color = match (r.note_own, selected) {
-                    (_, true) => pal().text,
+                    (_, true) => pal().label_dust,
                     (true, false) => pal().amber,
                     (false, false) => pal().dust,
                 };
@@ -289,7 +291,7 @@ impl Sys {
                 vx -= note_w;
             }
             if let Some((frac, centered)) = r.bar {
-                let (fill, track) = if selected { (pal().pick(NAME_PILL, 0x2b2925), pal().pick(0x5f5b55, 0xb3ab9c)) } else { (pal().pick(LABEL, 0x5e5a53), pal().pick(0x3c3a37, 0xd6d0c4)) };
+                let (fill, track) = if selected { (pal().ink, pal().band) } else { (pal().pick(LABEL, 0x5e5a53), pal().pick(0x3c3a37, 0xd6d0c4)) };
                 osd::paint_bar(c, vx - bar_w, y + row() / 2, bar_w, frac, centered, fill, track);
             }
             y += row();

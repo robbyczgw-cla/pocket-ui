@@ -664,7 +664,7 @@ fn clear_undo(s: &Session) {
 
 /// Moves the states an older version wrote where they are now (see `migrate_armsx2_in`, `migrate_dolphin_in`).
 fn migrate(s: &Session, data_dir: &Path) {
-    let (Some(base), dir) = (s.base.as_deref(), Path::new(crate::slots::STATES_DIR).join(&s.system)) else { return };
+    let (Some(base), dir) = (s.base.as_deref(), crate::slots::states_dir().join(&s.system)) else { return };
     if s.emu == Emu::Dolphin {
         migrate_dolphin_in(&dir, base, &data_dir.join("states-v2").join(&s.system).join(base));
     }
@@ -731,7 +731,7 @@ fn resume(mut s: Session, skip_load: bool) {
                     _ => return,
                 }
             }
-            migrate_armsx2_in(Path::new(&format!("{}/ps2", crate::slots::STATES_DIR)), s.base.as_deref().unwrap_or_default());
+            migrate_armsx2_in(&crate::slots::states_dir().join("ps2"), s.base.as_deref().unwrap_or_default());
             clear_undo(&s);
         }
         Emu::Dolphin => {

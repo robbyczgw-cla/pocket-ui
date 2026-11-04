@@ -1,0 +1,12 @@
+scan run=0 games=5000 wall_ms=50.064 cpu_ms=50.056
+cache run=0 games=5000 wall_ms=2.920 cpu_ms=2.925
+scan run=1 games=5000 wall_ms=38.461 cpu_ms=38.450
+cache run=1 games=5000 wall_ms=2.426 cpu_ms=2.407
+scan run=2 games=5000 wall_ms=43.203 cpu_ms=43.205
+cache run=2 games=5000 wall_ms=2.321 cpu_ms=2.324
+scan run=3 games=5000 wall_ms=38.372 cpu_ms=38.295
+cache run=3 games=5000 wall_ms=2.288 cpu_ms=2.290
+scan run=4 games=5000 wall_ms=38.077 cpu_ms=38.080
+cache run=4 games=5000 wall_ms=2.317 cpu_ms=2.308
+scan run=5 games=5000 wall_ms=38.492 cpu_ms=38.493
+cache run=5 games=5000 wall_ms=2.295 cpu_ms=2.298

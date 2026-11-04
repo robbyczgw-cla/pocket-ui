@@ -199,7 +199,7 @@ so main stays buildable for Android. See [android/README.md](../android/README.m
 The dedicated release keystore is outside every checkout, in `~/.local/share/pocket-ui/android-signing/release.jks`;
 its password is a separate private file. Neither is committed. The first debug-signed preview must be uninstalled
 once before installing this identity. Further APKs with this key update normally. Current Android version is
-`0.1.8-android.3`, versionCode 10803 (the build script derives both from Cargo.toml); the source version is 0.1.14.
+`0.1.8-android.3`, versionCode 10803 (the build script derives both from Cargo.toml); the source version is 0.2.0.
 
 `player-smoke.py` uses real SAF, a hash-checked starter homebrew, live UI node bounds, in-app pause/slots/options,
 screenshot, Quit/auto-resume and an original GB audio diagnostic. It does not install a mock emulator receiver.
@@ -427,3 +427,35 @@ ten minutes; while it can run the window keeps the screen on, `PocketActivity.ke
 or found nothing to show, so Android's screen-off time applies again; `scripts/android/extras-smoke.py` with `SLOW=1`),
 Playful animations. Every Cozy extra has a row on a phone. The Linux rows for LEDs, fan, sleep & power, Tailscale,
 web companion, Bluetooth, battery and Store have no Android counterpart and no row. Appearance on Android stays Dark/Light.
+
+## Android refresh for 0.1.14 (branch build)
+
+The shared library is based on main 0.1.14. Settings and the first-start Look step now
+include Easy: one large case, its name and system, previous/next buttons, and direct
+Play or Continue. Controller arrows change games; X or tapping the name opens Info.
+The regular Games page adds Just Play; Quick settings offers it too. It uses the
+shared Curator policy with current stars, completion/playing stickers and session
+history, then the ordinary launch path. Automatic picks are limited to bundled
+cores and nonempty games without known missing disc files; Android still checks the
+SAF document at launch. External emulator apps remain explicit choices.
+
+The pause sheet calls its existing save-and-exit action **Save & quit**, for touch,
+controller and accessibility. Failed saves leave the sheet open. It still saves the
+battery data and automatic moment; this adds no quit-without-saving action.
+
+`src/state_policy.rs` shares the raw-state size exceptions between both players:
+mGBA and Nestopia only. The pinned PPSSPP reader ignores the supplied size, so its
+old Android exception is removed. Shorter PSP states may consequently fail to resume;
+they go through the existing kept-moment recovery instead of bypassing the minimum.
+This is not a repair of the pinned PPSSPP parser or writer. Flycast is not bundled:
+Dreamcast uses an external emulator and has no internal APK state-size exception.
+Main's shared save retry is inherited; no new state format or identity is introduced.
+
+Android retains Sharp, Smooth, CRT and Scanlines, its own GLES shader and procedural
+Console/CRT frames. The newer Linux beam/LCD/glow/colour effects and full frame packs
+are not ported by this refresh. The upcoming Look controls require a separate refresh.
+No device measurements or full Linux feature parity are implied by an APK build.
+
+The Games shelf now calls its first row Continue and includes only games whose open
+moment was verified by the Android worker. Recently played external games without
+an internal moment remain on their system shelf. Easy keeps its single-game order.

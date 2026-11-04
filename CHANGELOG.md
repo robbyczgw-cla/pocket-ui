@@ -3,11 +3,60 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a minor version may change anything).
 
-## [Unreleased]
+## [0.2.0] - 2026-11-05
+
+### Added
+
+- **Zoom** (pocket-ui's own host): the frozen picture of the game 2x larger, 3x with A, moved with the D-pad, B goes back. It uses the picture the menu already shows behind it, so the game does no extra work, and it fits every screen size. It is a row of Pause → Options (next to Picture and Controls) and stays off the pause menu's first page unless Easy to read is on or Settings → Sound & feel → **Zoom in the pause menu** is. Options → Shortcuts → **Zoom** adds HOME + X, off by default: the picture larger at once, B back into the game.
+- **Hold to toggle** on Options → Controls: pick a console button (run, for example) and one press holds it down for the game, the next lets go. Saved per console or per game like the other Controls lines, for every player; nothing stays held across a pause.
+- **Easy to read**, the last card in the Tour (after its six basics): Large text and Reduced motion in one switch (the same two settings as Text size and Motion, which stay in their rows).
+- **Where was I?** Back to a game after more than two weeks, a quiet card on the picture of your moment says when you played it last ("Last played 3 weeks ago"), how long you have played it, and your note from the game card if you wrote one, while the moment loads. It never asks anything. On pocket-ui's own host the game waits at your moment for about four seconds, silent and still, so you can read it and miss nothing; any button plays at once. Easy shows it plainly, Kids Mode not at all. Settings → Playing → **Remind me where I was** switches it off.
+- **The controls card**: a drawing of the Pocket's buttons with what each one is on the console (SNES Y X B A, GBA A B L R, PlayStation Cross Circle Square Triangle with L1 L2 R1 R2, the Nintendo 64's A, B, Z and C buttons on the right stick), your own changes from Options → Controls marked, and the HOME keys (menu, save, load) under it. It comes once at the first start of a console (any button goes on to the game), as the **Controls** row on a game's card, and as the first line of Options → Controls in the pause menu. The names are the emulators' own (read from their button lists) or, for a console that ran before, from its first game; German and Spanish follow.
+
+### Fixed
+
+- PSP: system dialogs like saving now show on a fresh card. pocket-core copies PPSSPP's missing atlas, VFPU tables and fonts from ROCKNIX into `roms/bios/PPSSPP` before a PSP game starts, and never replaces a file you already have there. The replaceable files copy without waiting for an SD flush, avoiding a long first-start pause; later starts repair missing or short seeded files.
+- Options: Restore defaults and Keep for this console wait for pending changes before deleting overrides, so a slow card cannot bring back the old game settings.
+- Options → Controls describes the controls card in fewer words.
+- Polish before 0.2: the pause menu's game name is a plain title, no longer a band that looked like a second selection; the save warning under it is one short line, so the rows keep their spacing at 1024x768; the controls card's shoulder buttons are small labelled pills instead of wide empty-looking fields, and the D-pad and left stick labels share one size; the Easy look names a game's genre in German and Spanish ("Action" instead of "Action game"); "Surprise me" fits on its case at 1024x768; the "Added to Favourites" toast on Home sits at the bottom instead of over the game's name; the Picture page's "Whole screen" caption is never cut; the empty Tools page says it plainly, without a folder path.
+- Controls card: continuing an existing game starts immediately; the once-per-console mark survives interrupted writes, and the first-start card always continues after twelve seconds or a button press.
+- The return reminder skips on an early press, releases a failed picture or resume immediately, and never holds a fresh start because an old preview remains. Pause, sleep and screen off end its launch hold; ordinary launches keep their original safety limit.
+- Playing's category summary includes the reminder and correctly omits performance on Steam Deck.
+- The Tour's cards show the way to a setting whole: on 1024x768 with Large text the German "Easy to read" card cut its two-setting path after three lines and ran into the hint bar. The type of the path now steps down (28, 24, 21 px) and, last, the choices get lower, before anything is cut; the Spanish description of that card fits its two lines.
+- SD card images give their handheld a name of its own on the network (`pocket-mini-v2`, `pocket-rg35xx-plus`, `pocket-rg35xx-sp`, `pocket-rg28xx`, `pocket-odin2-mini`, ...) instead of one shared name, so two handhelds on one network or Tailscale can be told apart.
+- Cabinet on 1024x768 and 1280x800 screens: the chosen case is shown at a proper size again, with the TV beside it. A tall shelf (SNES, PlayStation 2) had left a 40-line chip and no TV; now the shelf is drawn smaller on these two sizes and the title sits a little higher, so the case, the TV and the whole spine titles all fit.
+- **PSP: Quit after Load no longer hangs.** PPSSPP could wait for a frame while pocket-core waited for it to pause, so the exit save never finished (Wild Arms XF, Crisis Core). pocket-core now watches the exit save: if the core has not answered after 20 seconds, the game closes using the newest moment already on the card, and a newer in-game save is still protected when you continue. Those two games also start with GPU read-backs skipped, which avoids the wait; a read-backs choice you made yourself is kept.
+
+### Changed
+
+- The Xbox core (hakuX) now comes from the [hakuX-Linux](https://github.com/robbyczgw-cla/hakuX-Linux) fork, branch `linux-1.3.0` (commit `035ec48`): hakuX 1.3.0 with the Linux/libretro port by portare-ch and our fixes. Source, build recipe and checksums: [docs/XBOX.md](docs/XBOX.md), `hakux/SOURCE.txt`.
+- **The hint bar never shows a key without its word**: at most four hints (Easy three), and where they don't fit whole hints go, the least needed first (A, B, HOME and START last). Home shows HOME for the quick settings; Easy shows A, HOME and START; the pause menu keeps START (the way to the quick settings) and drops SELECT first on a narrow screen.
+- **One rule for messages**: a short confirmation is a toast that stays 2 s at the least and longer with its length; what went wrong ("Could not save: is the SD card full?", a game that did not start) is a card that stays until A, B or a tap closes it ("Press A to close."), over every page of the shelf.
+- **Pause menu → Options has no Save changes page any more.** A change applies to the game and is kept at once, as everywhere else. **Keep for** (this game, this console) says where; **Restore defaults** asks for a second A. Files you saved before keep working. Runs on keeps its own Save changes.
+- **Options → Picture has a Look row** (second, after Screen scaling) instead of Screen sharpness and Screen effect: **Clean · Smooth · Soft · Bloom · LCD grid · Custom** on handhelds and **Clean · Smooth · Soft · Bloom · Scanlines · Old TV · Custom** on TV consoles, arcade and computers. Each Look sets sharpness and effect together; **Custom** opens **Sharpness** and **Effect** below it, with every effect. The effect **CRT** is now called **Old TV**, **Soft glow** **Bloom** and **Smooth pixels** **Smooth**. The line at the bottom explains the Look you chose, not the whole row. The same rows are on a game's card (This game).
+- Nothing you saved changes: the Look is worked out from the saved sharpness and effect when the page opens (Soft with an effect, or a grid on a PlayStation, shows as Custom with its rows open), no new setting is written, no picture changes, and Restore defaults and every console's start are as before. Choosing the LCD grid Look on the Game Boy Advance also turns LCD colours on.
+- Screen frames are unchanged. The manual's Picture chapter and the German and Spanish texts follow; Pixel Path names the effects the same way.
+- Game sound is converted to 48 kHz with a windowed-sinc filter instead of linear interpolation: the mirror images of high notes that the old conversion folded back into the audible range are gone (strongest foreign line under -90 dB, was -5 to -60 dB at 32 kHz cores), and the highs stay level up to 0.45 of the core's rate. About 1 ms more delay, no audible CPU cost. `POCKET_CORE_RESAMPLER=linear` brings the old one back.
+- First start: "Your N games are on the shelf." counts only games you put on the card, not the entries a handheld brings itself (the Steam list of the Odin 2 Mini).
+- The starter pack, search and the Settings page say "already here", "your games folder" and "this handheld" instead of "your SD card", which was wrong on a handheld with internal storage.
+- The pause menu says why a row is grey: "No save in slot 1 yet" on Load, "keeps a moment every 5 min of play" on Earlier. The battery line says "Full" on the charger with a full battery, not "Charging".
+- The Tour (and Choose for yourself) starts with Continue where I quit, Continue your last game, Motion and the menu sounds; the Curator's cards come last.
+- The first page of the manual no longer names a single device.
+- On Home, one line says what the Curator and Just Play are the first time the highlight reaches them.
+- One selection in every list: Settings, quick settings, Options and the other pages mark the selected row with one sheet of paper across the row (it was a paper pill running into a grey band). Over a game the system's colour is a short stripe at its start.
+- The arrows in lists are drawn, not the letters ">" and "‹ ›". An entry that opens a page shows its arrow on every row (quieter when not selected), so pages and switches are told apart at a glance; the hint says **A Open** or **A Change** (was "Switch").
+- Shelf look: the selected case rises higher out of the row and a strip of light marks where it stood, so it stands out among cases of one colour and on 640x480. The grey Super Nintendo boxes have their band in the system's lilac instead of dark grey and no longer look switched off.
+- Page titles over a game (Options and its pages, Players, Pixel Path, "Couldn't save. Quit anyway?") and the game's name in the pause menu are in the same large title type as Settings. The pause menu's items start under its title instead of floating in the middle of the screen.
+- Covers are found for 39 more systems (playlist names for the box-art look-up) and the start of a name matches too.
+- Faster and calmer in the background: the library is scanned once and its folder types are reused, battery history is written in batches and flushed when the handheld sleeps or quits, and the picture you just asked for is drawn before older requests.
+- The pause menu no longer waits when the screen size is only provisional at start on small panels.
+- 1024x768 in Normal text: safe mode's choices, a Pixel Path stage's paragraph, the game card's columns and bare hint keys fit; the manual's tables break words that cannot stay whole, so "coming from" no longer runs past the edge.
 
 ## [0.1.14] - 2026-11-03
 
 ### Added
+
+- Box art for many more systems (3DS, Wii, Wii U, PS3, Neo Geo, Amiga, C64, MSX, 3DO, Jaguar, Atari 5200/7800/800/ST, ColecoVision, Intellivision, Vectrex, ZX Spectrum, DOS, ScummVM and more, plus the Microsoft disc system), and a name that is the start of one game's title ("Top Spin" for "Top Spin Tennis") finds its box. Files ending in `.xiso.iso` match by their game name.
 
 - Settings → Look → Screen colour: the screen's white from Cooler 10 to Warmer 10 as a row of its own, the same setting as SELECT + Vol. Left/Right change it at once, A goes back to Neutral.
 
@@ -26,6 +75,7 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ### Fixed
 
+- 1024x768 (TrimUI Brick) in Normal text: safe mode's five choices end above the hint bar, a Pixel Path stage's paragraph fits between the clock and the hints, the Pixel Path values and the first-start look notes use a slightly smaller type before they end in "…", the game card's "Your game" column has room for its rating and play time, "How do you like to play?" no longer runs its last row under the hints, and the pause menu's and first start's hint bars no longer end in a key without a word. A test keeps this size free of overlaps and cut text.
 - Cabinet: on a short shelf the empty strip under the shelf is used. The case and the TV beside it are shown bigger, and where room is still left the top of the next shelf looks in from below.
 - Game info finds more of your games: "Mega Man X 2" and "Mega Man X 3" are no longer read as "Mega Man 10 2", and a Game Boy Color game filed in the Game Boy folder is found by its exact name first ("Link's Awakening DX" no longer shows the plain Link's Awakening).
 - Dreamcast comes back to its moment and loads from Save slots again. Flycast's state is smaller at Quit (36 MB) than the size it reports at the next start (53 MB), so the file was refused as "the wrong size" and the game started fresh. Such a state now goes to the core padded to the full size. A save that fails because the state grew meanwhile is tried once more.

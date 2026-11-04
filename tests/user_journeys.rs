@@ -132,8 +132,9 @@ fn the_list_of_recent_games_has_one_name() {
         let switcher = card.shot("switcher", size);
         assert!(switcher.contains("Recent games"), "{size}: {switcher}");
         assert!(!switcher.contains("Recently played") && !switcher.contains("Switch game"), "{size}: {switcher}");
+        // The pause menu's SELECT hint is the first to go where the bar is full (Large text: START stays, `kit::top_hints`).
         let pause = card.shot("menu:pocket-core", size);
-        assert!(pause.contains("Recent games"), "{size}: the pause menu's SELECT hint: {pause}");
+        assert!(size == "large" || pause.contains("Recent games"), "{size}: the pause menu's SELECT hint: {pause}");
         assert!(!pause.contains("Games\n") || pause.contains("Recent games"), "{size}: {pause}");
     }
 }
@@ -151,12 +152,40 @@ fn the_pause_menu_has_one_way_to_the_quick_settings_and_its_options_pages_have_t
             ("picture", "Options \u{203a} Picture"),
             ("extras", "Options \u{203a} Speed, rumble, fan"),
             ("shortcuts", "Options \u{203a} Shortcuts"),
-            ("save", "Options \u{203a} Save changes"),
         ] {
             let page = card.shot(state, size);
             assert!(page.lines().any(|l| l.trim() == title), "{size} {state}: the title {title:?}: {page}");
         }
     }
+}
+
+/// Taste pass 2026-11-04: Zoom is a niche help and sat right above Save & quit in every pocket-core game. The pause menu's main
+/// page lists it only for a player who asked (Easy to read, or Settings → Sound & feel → Zoom in the pause menu); everyone can
+/// reach it under Options.
+#[test]
+fn zoom_is_under_options_and_on_the_main_page_only_for_whoever_asked() {
+    let card = Card::new("zoom-place");
+    let data = card.tmp.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    let rows = |text: &str| text.lines().any(|l| l.trim() == "Zoom");
+    // (settings.json, text size, whether the main page lists Zoom)
+    for (json, size, listed) in [
+        (r#"{"onboarded":true}"#, "normal", false),
+        (r#"{"onboarded":true,"zoom_in_pause":true}"#, "normal", true),
+        // Easy to read is Large text and a Motion that isn't Full: either half alone is not it.
+        (r#"{"onboarded":true,"motion":"reduced"}"#, "normal", false),
+        (r#"{"onboarded":true}"#, "large", false),
+        (r#"{"onboarded":true,"motion":"reduced"}"#, "large", true),
+    ] {
+        std::fs::write(data.join("settings.json"), json).unwrap();
+        let main = card.shot("menu:pocket-core", size);
+        assert_eq!(rows(&main), listed, "{json} at {size}: the main page: {main}");
+        let options = card.shot("options", size);
+        assert!(rows(&options), "{json} at {size}: Zoom is always a row of Options: {options}");
+    }
+    // Its shortcut is a row of Options → Shortcuts, off until chosen.
+    let shortcuts = card.shot("shortcuts", "normal");
+    assert!(shortcuts.contains("Zoom") && shortcuts.contains("Off"), "{shortcuts}");
 }
 
 /// The first start's profile "Simple" was neither simple nor the same as skipping once changed later: it is The shelf, with a
@@ -273,8 +302,10 @@ mod fifo {
             let card = Card::new(name);
             let data = card.tmp.join("data");
             std::fs::create_dir_all(&data).unwrap();
+            // An onboarded card has seen this version's "New in" cards (9.9.9: never newer than the build), so a version
+            // bump does not put them over every journey.
             if onboarded {
-                std::fs::write(data.join("settings.json"), r#"{"onboarded":true,"motion":"off","art":"off"}"#).unwrap();
+                std::fs::write(data.join("settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off"}"#).unwrap();
             }
             executable(
                 &card.tmp.join("run-game"),
@@ -399,6 +430,135 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
             let _ = self.child.kill();
             let _ = self.child.wait();
         }
+    }
+
+    fn controls_card_game(name: &str, resume: Option<&str>) -> Driver {
+        Driver::start(name, true, |tmp, cmd| {
+            std::fs::write(tmp.join("gb/Tobu Two.gb"), "game").unwrap();
+            std::fs::write(tmp.join("data/search.json"), r#"{"list":["Tobu"]}"#).unwrap();
+            std::fs::write(tmp.join("data/curator.json"), r#"{"lens":false}"#).unwrap();
+            let host = tmp.join("pocket-core-stand-in");
+            std::fs::write(&host, "").unwrap();
+            let states = tmp.join("states");
+            cmd.env("POCKETUI_HOST_BIN", host).env("POCKETUI_STATES", &states);
+            if let Some(suffix) = resume {
+                std::fs::create_dir_all(states.join("gb")).unwrap();
+                std::fs::write(states.join("gb").join(format!("Tobu Tobu Girl (World).pstate.auto{suffix}")), "resume").unwrap();
+            }
+        })
+    }
+
+    fn ask_for_controls_game(d: &mut Driver) {
+        d.sees("Game Boy");
+        d.send("a");
+        d.sees("Tobu Tobu Girl");
+        d.send("a");
+    }
+
+    #[test]
+    fn controls_card_home_starts_immediately_without_opening_a_shortcut() {
+        let mut d = controls_card_game("controls-home", None);
+        ask_for_controls_game(&mut d);
+        d.sees("Controls · Game Boy");
+        assert!(!d.card.tmp.join("run-game.started").exists(), "no game input while the card is up: the game hasn't started");
+        assert!(std::fs::read_to_string(d.card.tmp.join("data/controls-card-seen")).unwrap().contains("gb\n"), "remember before starting, even if the game fails");
+        let pressed = Instant::now();
+        d.send("home");
+        d.wait(|d| d.card.tmp.join("run-game.started").exists());
+        assert!(pressed.elapsed() < Duration::from_secs(3), "one press must start without waiting for the card's timeout");
+        let text = d.frame();
+        assert!(!text.contains("Brightness") && !text.contains("Controls ·"), "the dismissing HOME is consumed: {text}");
+    }
+
+    #[test]
+    fn controls_card_starts_after_twelve_seconds_even_without_more_input() {
+        let mut d = controls_card_game("controls-timeout", None);
+        ask_for_controls_game(&mut d);
+        d.sees("Controls · Game Boy");
+        // No further frame requests or button events: the card must schedule its own deadline.
+        let started = Instant::now();
+        d.wait(|d| d.card.tmp.join("run-game.started").exists());
+        assert!(started.elapsed() >= Duration::from_secs(10), "give the player time to read the card");
+        assert!(started.elapsed() < Duration::from_secs(15), "the card must not wait for unrelated events");
+    }
+
+    #[test]
+    fn controls_card_never_interrupts_a_resume_after_quit_or_a_crash() {
+        for suffix in ["", ".taken", ".taken.retry"] {
+            let mut d = controls_card_game("controls-resume", Some(suffix));
+            ask_for_controls_game(&mut d);
+            let started = Instant::now();
+            d.wait(|d| d.card.tmp.join("run-game.started").exists());
+            assert!(started.elapsed() < Duration::from_secs(3), "Continue must start immediately ({suffix})");
+            assert!(!d.log().contains("controls card: first start"), "no first-start card over a resume: {}", d.log());
+        }
+    }
+
+    #[test]
+    fn controls_card_tap_cannot_select_a_search_result_underneath() {
+        let mut d = controls_card_game("controls-search-tap", None);
+        d.sees("Game Boy");
+        d.send("up\na");
+        d.sees("Recent searches");
+        d.send("start\na");
+        d.sees("Tobu Two");
+        d.send("a");
+        let card = d.sees("Controls · Game Boy");
+        let chosen = if card.contains("Tobu Two") { "Tobu Two.gb" } else { "Tobu Tobu Girl (World).gb" };
+        // This is another result's row under the overlay. It must dismiss the card, not select that result.
+        let tapped = Instant::now();
+        d.send("tap 0.5 0.35");
+        d.wait(|d| d.card.tmp.join("run-game.started").exists());
+        assert!(tapped.elapsed() < Duration::from_secs(3), "a tap must start immediately, not wait for auto-continue");
+        assert!(d.log().contains(chosen), "the game named on the card must start ({chosen}): {}", d.log());
+    }
+
+    #[test]
+    fn controls_card_also_precedes_a_consoles_first_game_from_just_play() {
+        let mut d = Driver::start("controls-just-play", true, |tmp, cmd| {
+            let cfg = std::fs::read_to_string(tmp.join("es_systems.cfg")).unwrap();
+            let only_gb = cfg.lines().filter(|line| !line.contains("<name>segacd</name>")).collect::<Vec<_>>().join("\n");
+            std::fs::write(tmp.join("es_systems.cfg"), only_gb).unwrap();
+            let host = tmp.join("pocket-core-stand-in");
+            std::fs::write(&host, "").unwrap();
+            cmd.env("POCKETUI_HOST_BIN", host).env("POCKETUI_STATES", tmp.join("states"));
+        });
+        d.sees("Game Boy");
+        d.wait(|d| d.log().contains("curator: 1 games"));
+        d.send("up");
+        d.sees("Just Play");
+        // The row's one-time explanation consumes the first A; the following A plays.
+        d.send("a");
+        if d.frame().contains("Just Play") && !d.log().contains("controls card: first start") {
+            d.send("a");
+        }
+        d.sees("Controls · Game Boy");
+        assert!(!d.card.tmp.join("run-game.started").exists());
+        d.send("a");
+        d.wait(|d| d.card.tmp.join("run-game.started").exists());
+    }
+
+    #[test]
+    fn controls_card_for_a_console_without_names_explains_home_and_accepts_a_tap() {
+        let mut d = Driver::start("controls-unknown-tap", true, |tmp, cmd| {
+            let games = tmp.join("megadrive");
+            std::fs::create_dir_all(&games).unwrap();
+            std::fs::write(games.join("Card Demo.md"), "game").unwrap();
+            std::fs::write(tmp.join("es_systems.cfg"), format!("<systemList><system><name>megadrive</name><fullname>Mega Drive</fullname><path>{}</path><extension>.md</extension><command>true</command></system></systemList>", games.display())).unwrap();
+            let host = tmp.join("pocket-core-stand-in");
+            std::fs::write(&host, "").unwrap();
+            cmd.env("POCKETUI_HOST_BIN", host).env("POCKETUI_STATES", tmp.join("states"));
+        });
+        d.sees("Mega Drive");
+        d.send("a");
+        d.sees("Card Demo");
+        d.send("a");
+        d.sees("This console's button names");
+        assert!(!d.card.tmp.join("run-game.started").exists());
+        let tapped = Instant::now();
+        d.send("tap 0.5 0.5");
+        d.wait(|d| d.card.tmp.join("run-game.started").exists());
+        assert!(tapped.elapsed() < Duration::from_secs(3), "a tap must start immediately, not wait for auto-continue");
     }
 
     /// A Kids Mode card whose one game is the Game Boy one, routed to pocket-core (a stand-in), `run-game` exiting with an error.
@@ -578,7 +738,7 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         let mut ui = Driver::start("live-case-stickers", true, |tmp, cmd| {
             let data = tmp.join("data");
             std::fs::write(tmp.join("gb/Zeta (World).gb"), b"").unwrap();
-            std::fs::write(data.join("settings.json"), r#"{"onboarded":true,"motion":"off","art":"off","theme":"shelf","details_page":true}"#).unwrap();
+            std::fs::write(data.join("settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"shelf","details_page":true}"#).unwrap();
             std::fs::write(data.join("curator.json"), r#"{"lens":false,"echoes":false,"stickers":false,"history":false}"#).unwrap();
             cmd.env("POCKETUI_SNAPSHOT_SIZE", "1240x1080");
         });
@@ -636,7 +796,7 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
     fn sticker_save_errors_reach_the_shelf_after_the_sheet_is_closed() {
         let mut ui = Driver::start("case-sticker-save-error", true, |tmp, _| {
             let data = tmp.join("data");
-            std::fs::write(data.join("settings.json"), r#"{"onboarded":true,"motion":"off","art":"off","theme":"shelf","details_page":true}"#).unwrap();
+            std::fs::write(data.join("settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"shelf","details_page":true}"#).unwrap();
             std::fs::write(data.join("curator.json"), r#"{"lens":false,"echoes":false,"stickers":false,"history":false}"#).unwrap();
             // Atomic replacement cannot rename a file over this directory: deterministic SD-write failure.
             std::fs::create_dir(data.join("library.json")).unwrap();
@@ -667,7 +827,7 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
     #[test]
     fn a_star_in_just_play_leaves_the_game_where_it_stands() {
         let mut ui = Driver::start("just-play-star", true, |tmp, _| {
-            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"motion":"off","art":"off","theme":"big"}"#).unwrap();
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"big"}"#).unwrap();
         });
         ui.sees("Quick settings");
         ui.send("right");
@@ -686,19 +846,19 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
     #[test]
     fn on_the_easy_shelf_home_opens_quick_settings_and_b_does_nothing() {
         let mut ui = Driver::start("easy-home", true, |tmp, _| {
-            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"motion":"off","art":"off","theme":"big"}"#).unwrap();
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"big"}"#).unwrap();
         });
         let shelf = ui.sees("Quick settings");
         assert!(shelf.contains("HOME") && !shelf.lines().any(|l| l == "B"), "{shelf}");
         ui.send("b");
         std::thread::sleep(Duration::from_millis(500));
         let after = ui.frame();
-        assert!(after.contains("Details") && after.contains("Favourite"), "B leaves the shelf alone: {after}");
+        assert!(after.contains("Quick settings") && after.contains("Settings"), "B leaves the shelf alone: {after}");
         ui.send("home");
         let quick = ui.sees("Brightness");
-        assert!(!quick.contains("Favourite"), "{quick}");
+        assert!(!quick.contains("Settings"), "the panel has no shelf hint (\"Quick settings\" is its title): {quick}");
         ui.send("b");
-        ui.sees("Favourite");
+        ui.sees("Settings");
     }
 
     /// Easy has no game switcher, on purpose: SELECT on its shelf, and HOME + SELECT or SELECT in the pause screen in
@@ -707,7 +867,7 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
     fn just_play_has_no_game_switcher_and_the_other_looks_keep_theirs() {
         for (look, switcher) in [("big", false), ("shelf", true)] {
             let mut ui = Driver::start(&format!("switcher-{look}"), true, |tmp, _| {
-                std::fs::write(tmp.join("data/settings.json"), format!(r#"{{"onboarded":true,"motion":"off","art":"off","theme":"{look}"}}"#)).unwrap();
+                std::fs::write(tmp.join("data/settings.json"), format!(r#"{{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"{look}"}}"#)).unwrap();
             });
             ui.sees("Settings");
             // SELECT on the shelf.
@@ -751,6 +911,60 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
     }
 
     #[test]
+    fn a_stale_preview_never_holds_a_fresh_start_for_a_reminder() {
+        for (emulator, state) in [("pocket-core", false), ("pocket-core", true), ("retroarch", false), ("retroarch", true)] {
+            let mut ui = Driver::start("reminder-moment", true, |tmp, cmd| {
+                let cfg = tmp.join("es_systems.cfg");
+                let text = std::fs::read_to_string(&cfg).unwrap().replace("</command>", "</command><emulators><emulator name=\"retroarch\"><cores><core default=\"true\">gambatte</core></cores></emulator></emulators>");
+                std::fs::write(cfg, text).unwrap();
+                let game = tmp.join("gb/Tobu Tobu Girl (World).gb");
+                std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"minimal","motion":"off","art":"off"}"#).unwrap();
+                let recent = serde_json::json!([{"system":"gb", "name":"Tobu Tobu Girl", "path":game,
+                    "last_played": pocket_ui::recents::now_secs() - 23 * 86400, "play_secs":7200}]);
+                std::fs::write(tmp.join("data/recents.json"), recent.to_string()).unwrap();
+                let states = tmp.join("states/gb");
+                std::fs::create_dir_all(&states).unwrap();
+                let suffix = if emulator == "pocket-core" { "pstate.auto" } else { "state.auto" };
+                let auto = states.join(format!("Tobu Tobu Girl (World).{suffix}"));
+                if state {
+                    std::fs::write(&auto, b"moment").unwrap();
+                }
+                let preview = PathBuf::from(format!("{}.png", auto.display()));
+                let mut encoder = png::Encoder::new(std::fs::File::create(preview).unwrap(), 1, 1);
+                encoder.set_color(png::ColorType::Rgb);
+                encoder.write_header().unwrap().write_image_data(&[0x12, 0x34, 0x56]).unwrap();
+                cmd.env("POCKETUI_STATES", tmp.join("states"));
+                cmd.env("TMPDIR", tmp);
+                if emulator == "pocket-core" {
+                    std::fs::write(tmp.join("host"), "").unwrap();
+                    cmd.env("POCKETUI_HOST_BIN", tmp.join("host"));
+                } else {
+                    cmd.env("POCKETUI_HOST_BIN", tmp.join("missing-host"));
+                }
+                // Capture what the actual launch asks the emulator to hold; the stand-in stays alive for the frame.
+                executable(&tmp.join("run-game"), r#"#!/bin/sh
+printf '%s\n' "${POCKET_LAUNCH_HOLD_UNTIL-}" "${POCKET_LAUNCH_HOLD_STILL-}" > "$0.hold"
+printf 'started\n' > "$0.started"
+sleep 30
+"#);
+            });
+            ui.sees("Tobu Tobu Girl");
+            ui.send("a");
+            ui.wait(|d| d.card.tmp.join("run-game.started").exists());
+            let hold = std::fs::read_to_string(ui.card.tmp.join("run-game.hold")).unwrap();
+            assert_eq!(!hold.trim().is_empty(), state && emulator == "pocket-core", "{emulator}, state {state}: {hold:?}");
+            if state {
+                ui.sees("Last played 3 weeks ago");
+                ui.send("volup");
+                ui.wait(|d| !d.frame().contains("Last played"));
+                assert!(ui.card.tmp.join("pocket-launch-skip").exists(), "even a volume key dismisses the reminder and releases the game");
+            } else {
+                assert!(!ui.frame().contains("Last played"), "{emulator}: no reminder on a fresh start");
+            }
+        }
+    }
+
+    #[test]
     fn start_a_mock_game_and_quit_back_to_the_library() {
         let mut ui = Driver::new("play-and-quit", true);
         ui.sees("Game Boy");
@@ -788,12 +1002,13 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         ui.sees("START");
         ui.send("start");
         let page = ui.sees("This game · Game Boy");
-        for row in ["Screen scaling", "Screen sharpness", "Screen frame"] {
+        for row in ["Screen scaling", "Look", "Screen frame"] {
             assert!(page.contains(row), "{row} is missing: {page}");
         }
-        // Scaling, sharpness, effect, then the frame: one to the right is Auto.
-        ui.send("down\ndown\ndown\nright");
-        ui.sees("\u{2039} Auto \u{203a}");
+        // Scaling, look, then the frame: one to the right is Auto.
+        ui.send("down\ndown\nright");
+        // The value between its drawn arrows (`kit::row_value`), recorded as "‹" and "›".
+        ui.sees("\u{2039}\nAuto\n\u{203a}");
         let rom = ui.card.tmp.join("gb/Tobu Tobu Girl (World).gb");
         let data = ui.card.tmp.join("data");
         let file = data.join("game-settings/gb/Tobu Tobu Girl (World).json");
@@ -814,8 +1029,8 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         ui.sees("Game Boy");
         ui.send("x");
         ui.sees("START");
-        ui.send("start\ndown\ndown\ndown");
-        let again = ui.sees("\u{2039} Auto \u{203a}");
+        ui.send("start\ndown\ndown");
+        let again = ui.sees("\u{2039}\nAuto\n\u{203a}");
         assert!(again.contains("This game has its own settings."), "{again}");
     }
 
@@ -827,11 +1042,11 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         ui.sees("Game Boy");
         ui.send("a\nx");
         ui.sees("START");
-        ui.send("start\ndown\ndown\ndown");
+        ui.send("start\ndown\ndown");
         // Game Boy: none, then Auto, Ambient, the three Game Boys, then the TVs; no GBA, DS or PSP between.
         for (name, row) in [("Auto", None), ("Ambient", None), ("DMG", Some("DMG colour")), ("GB Pocket", Some("GB Pocket finish")), ("GBC", Some("GBC colour")), ("CRT", Some("TV cabinet"))] {
             ui.send("right");
-            let page = ui.sees(&format!("\u{2039} {name} \u{203a}"));
+            let page = ui.sees(&format!("\u{2039}\n{name}\n\u{203a}"));
             if let Some(row) = row {
                 assert!(page.contains(row), "{row} is missing under {name}: {page}");
             }
@@ -857,7 +1072,7 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
     #[test]
     fn a_tap_on_settings_over_the_cabinet_is_settings() {
         let mut ui = Driver::start("cabinet-tap", true, |tmp, _| {
-            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"motion":"off","art":"off","theme":"cabinet"}"#).unwrap();
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"cabinet"}"#).unwrap();
         });
         ui.sees("Game Boy");
         ui.send("start");
@@ -1162,6 +1377,8 @@ true
     /// seconds, so the frame shows the system once it has gone). A game that started and ended puts Home back on its
     /// first row, a start that never happened leaves it on Just Play: down lands on a system either way.
     fn home_answers(ui: &mut Driver) {
+        // The notice stays until A or B closes it; then Home answers the D-pad again.
+        ui.send("b");
         ui.send("down");
         ui.wait(|d| {
             let text = d.frame();
@@ -1293,7 +1510,7 @@ true
     #[test]
     fn just_play_is_not_on_easy() {
         let mut ui = Driver::start("just-play-easy", true, |tmp, _| {
-            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"motion":"off","art":"off","theme":"big"}"#).unwrap();
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"big"}"#).unwrap();
         });
         let first = ui.sees("Quick settings");
         assert!(!first.contains("Just Play"), "{first}");
@@ -1419,7 +1636,7 @@ true
         let fifo = std::ffi::CString::new(config.to_str().unwrap()).unwrap();
         assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
         ui.send("start\ndown\ndown\ndown\na\ndown\ndown\na");
-        let loading = ui.sees("Looking at your SD card…");
+        let loading = ui.sees("Looking at your games folder…");
         assert!(loading.contains("Starter pack"), "the header alone is visible before Confirm is accepted: {loading}");
         let mut fd = -1;
         ui.wait(|_| {
@@ -1436,7 +1653,7 @@ true
         let offered = pocket_ui::starter::games().iter().filter(|g| matches!(g.system.as_str(), "gb" | "segacd")).count();
         assert!(offered > 0);
         let ready = ui.sees(&format!("Get all {offered} games"));
-        assert!(!ready.contains("Looking at your SD card"), "Confirm must follow the scan's result: {ready}");
+        assert!(!ready.contains("Looking at your games folder"), "Confirm must follow the scan's result: {ready}");
         ui.send("a");
         ui.sees("The Pocket isn't online");
         assert!(ui.card.tmp.join("offline-bin/ip.calls").is_file(), "the real network check used the child fixture");
@@ -1450,7 +1667,7 @@ true
             for f in ["gb/Tobu Tobu Girl (World).gb", "segacd/Pocket CD Demo (USA).cue", "segacd/Pocket CD Demo (USA).bin"] {
                 std::fs::remove_file(tmp.join(f)).unwrap();
             }
-            std::fs::write(tmp.join("data/settings.json"), format!(r#"{{"onboarded":true,"motion":"off","art":"off","theme":"{look}"}}"#)).unwrap();
+            std::fs::write(tmp.join("data/settings.json"), format!(r#"{{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"{look}"}}"#)).unwrap();
         })
     }
 
@@ -1530,8 +1747,10 @@ true
         let rom = ui.card.tmp.join("gb/Tobu Tobu Girl (World).gb");
         // The game's card (X), turned over (right), its second page (SELECT), down to the last row: Hide or delete.
         ui.send("a\nx\nright\nselect");
-        ui.sees("Hide or delete");
+        // The rows run on past the window (Controls came before it): Down scrolls to the last one.
+        ui.sees("Controls");
         ui.send(&"down\n".repeat(10));
+        ui.sees("Hide or delete");
         ui.send("a");
         ui.sees("Hide from the shelf");
         ui.send("down\na");
@@ -1556,7 +1775,7 @@ true
         std::fs::write(tmp.join("es_systems.cfg"), format!(
             "<systemList><system><name>gb</name><fullname>Game Boy</fullname><path>{}</path><extension>.gb</extension><command>true</command></system></systemList>", games.display()
         )).unwrap();
-        std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"theme":"minimal","motion":"off","art":"off"}"#).unwrap();
+        std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"minimal","motion":"off","art":"off"}"#).unwrap();
         std::fs::write(tmp.join("data/curator.json"), r#"{"lens":false,"stickers":false,"history":false}"#).unwrap();
         let crc = pocket_ui::rom_id::checksums("gb", &known).unwrap().unwrap().crc;
         let dat = format!("game (\n name \"Super Mario Land 2 (USA)\"\n rom ( name \"a.gb\" size 12 crc {crc:08X} )\n)\n");
@@ -1645,7 +1864,8 @@ true
         std::fs::write(&table, format!("{crc:08X}\tTetris (World)\n")).unwrap();
         let lookup = |ui: &mut Driver, prior_results: usize, expected: Option<&str>| {
             ui.send("x");
-            ui.sees("Details");
+            // The card's hint bar shows four hints: Y Status stays, SELECT Details is left out (`kit::top_hints`).
+            ui.sees("Status");
             ui.send("y");
             ui.sees("Wrong pictures? Look up again");
             ui.send(&"down\n".repeat(8));
@@ -1679,7 +1899,7 @@ true
             std::fs::write(tmp.join("es_systems.cfg"), format!(
                 "<systemList><system><name>gb</name><fullname>Game Boy</fullname><path>{}</path><extension>.gb</extension><command>true</command></system></systemList>", games.display()
             )).unwrap();
-            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"theme":"minimal","motion":"off","art":"off"}"#).unwrap();
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"minimal","motion":"off","art":"off"}"#).unwrap();
             std::fs::write(tmp.join("data/curator.json"), r#"{"lens":false,"stickers":false,"history":false}"#).unwrap();
             // The real catalog worker reads its checksum cache. A FIFO holds that read until the card is open;
             // releasing EOF lets the normal worker send its real Built event, with no synchronous snapshot build.
@@ -1713,18 +1933,20 @@ true
     #[test]
     fn x_in_minimal_opens_the_info_page_and_b_returns() {
         let mut ui = Driver::start("info-page", true, |tmp, _| {
-            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"motion":"off","art":"off","theme":"minimal"}"#).unwrap();
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"minimal"}"#).unwrap();
         });
         ui.sees("Game Boy");
         ui.send("a");
         ui.sees("Tobu Tobu Girl");
         ui.send("x");
         let page = ui.sees("None. Press Y");
-        assert!(page.contains("Tobu Tobu Girl") && page.contains("Details") && page.contains("No description yet."), "{page}");
+        assert!(page.contains("Tobu Tobu Girl") && page.contains("Status") && page.contains("No description yet."), "{page}");
         // And why: a homebrew game has no article, which is not the same as having no Wi-Fi yet.
         assert!(page.contains("No Wikipedia article for this game"), "{page}");
         assert!(!page.contains("Turn over"), "the info page, not the box: {page}");
         ui.send("select");
+        ui.sees("Controls");
+        ui.send(&"down\n".repeat(10));
         ui.sees("Hide or delete");
         ui.send("select");
         ui.sees("None. Press Y");
@@ -1741,7 +1963,7 @@ true
     #[test]
     fn x_opens_a_cartridge_games_box_left_turns_it_b_closes_a_starts() {
         let mut ui = Driver::start("box-journey", true, |tmp, _| {
-            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"motion":"off","theme":"shelf"}"#).unwrap();
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","theme":"shelf"}"#).unwrap();
         });
         ui.sees("Game Boy");
         ui.send("a");
@@ -1835,7 +2057,7 @@ true
 
     #[test]
     fn the_idle_slideshow_plays_the_games_pictures_and_a_button_only_takes_you_back() {
-        let mut ui = quiet_shelf("slideshow-back", true, 4000, r#"{"onboarded":true,"motion":"off","extras":{"idle_slideshow":true}}"#);
+        let mut ui = quiet_shelf("slideshow-back", true, 4000, r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","extras":{"idle_slideshow":true}}"#);
         let clockless = |t: String| t.lines().filter(|l| !(l.len() == 5 && l.as_bytes()[2] == b':')).collect::<Vec<_>>().join("\n");
         let shelf = clockless(ui.sees("Settings"));
         // After the quiet time: the game's name and its system, none of the shelf's hints.
@@ -1880,7 +2102,7 @@ true
 
     #[test]
     fn the_idle_slideshow_leaves_a_shelf_without_a_single_picture_alone() {
-        let mut ui = quiet_shelf("slideshow-none", false, 800, r#"{"onboarded":true,"motion":"off","extras":{"idle_slideshow":true}}"#);
+        let mut ui = quiet_shelf("slideshow-none", false, 800, r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","extras":{"idle_slideshow":true}}"#);
         ui.wait(|d| d.log().contains("slideshow: no pictures"));
         let text = ui.frame();
         assert!(text.contains("Settings") && text.contains("Game Boy"), "the shelf is still there: {text}");
@@ -1891,8 +2113,8 @@ true
         // As it starts (the Shelf, then a plain look with pictures all the same): the shelf stays a shelf, however long it
         // is left alone.
         for (name, settings) in [
-            ("slideshow-default-shelf", r#"{"onboarded":true,"motion":"off"}"#),
-            ("slideshow-default-split", r#"{"onboarded":true,"motion":"off","theme":"split"}"#),
+            ("slideshow-default-shelf", r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off"}"#),
+            ("slideshow-default-split", r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","theme":"split"}"#),
         ] {
             let mut ui = quiet_shelf(name, true, 600, settings);
             std::thread::sleep(Duration::from_millis(2500));
@@ -1901,7 +2123,7 @@ true
             assert!(!ui.log().contains("slideshow:"), "{name}: {}", ui.log());
         }
         // Switched on in the page (kept as extras.idle_slideshow): a plain look plays it too.
-        let mut ui = quiet_shelf("slideshow-split-on", true, 600, r#"{"onboarded":true,"motion":"off","theme":"split","extras":{"idle_slideshow":true}}"#);
+        let mut ui = quiet_shelf("slideshow-split-on", true, 600, r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","theme":"split","extras":{"idle_slideshow":true}}"#);
         ui.wait(|d| d.log().contains("slideshow: 1 pictures"));
     }
 }
@@ -1954,7 +2176,7 @@ fn save_and_load_show_the_slim_row_and_with_the_setting_the_memory_card() {
     // Save is on slot 3 and says what it replaces.
     let eight = ["1", "2", "3", "4", "5", "6", "7", "8"];
     let text = card.shot("slot-save:psx", "large");
-    assert!(between(&text, "No preview", "Slot 3").is_empty(), "the slim row draws no text: {text}");
+    assert!(between(&text, "No picture", "Slot 3").is_empty(), "the slim row draws no text: {text}");
     // The save's real time ("today 14:02", "yesterday 23:50"), not "just now"; at Large text the clock may wrap to a line of its own.
     let note = text.replace('\n', " ");
     let when = note.split("Slot 3 · replaces the save from ").nth(1).unwrap_or_default();
@@ -1968,14 +2190,14 @@ fn save_and_load_show_the_slim_row_and_with_the_setting_the_memory_card() {
     // With Memory card in the pause menu: the card beside its eight numbered blocks (slots 1, 3 and 6 show the cover
     // with their number), the same note; a SNES game's Load the cartridge beside its save label.
     let text = card.shot("slot-save:psx:card", "large");
-    assert_eq!(between(&text, "No preview", "Slot 3"), eight, "{text}");
+    assert_eq!(between(&text, "No picture", "Slot 3"), eight, "{text}");
     let boxes = std::fs::read_to_string(card.tmp.join("slot-save-psx-card.boxes")).unwrap();
     assert!(boxes.is_empty(), "the memory card leaves its room or runs into text: {boxes}");
     let text = card.shot("slot-load:snes:card", "normal");
-    assert_eq!(between(&text, "No preview", "Slot 3"), eight, "{text}");
+    assert_eq!(between(&text, "No picture", "Slot 3"), eight, "{text}");
     // An empty slot on a game without a cover.
     let text = card.shot("slot-empty:gba:nocover", "large");
-    assert!(text.contains("Slot 4 · empty"), "{text}");
+    assert!(text.contains("No save in slot 4 yet"), "{text}");
 }
 
 #[test]

@@ -275,22 +275,20 @@ impl App {
             let base = y + row / 2 + pocket_ui::type_scale::mid(font);
             let name = page.label(*r);
             if i == page.sel {
-                let w = self.text.width(Face::Body, font, name) + 2 * NU_BTN_PAD;
-                c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, pal().band);
-                c.round_rect(pad, y + 4, w, row - 8, (row - 8) / 2, pal().select);
+                pocket_ui::kit::selection(c, pad, y, right - pad, row);
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, name);
             } else {
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, name);
             }
             let value = page.value(*r);
             let value = self.text.fit(Face::Body, font, &value, right - pad - 2 * NU_BTN_PAD - 420);
-            self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, pal().text, &value);
+            pocket_ui::kit::row_value(c, &mut self.text, font, right - NU_BTN_PAD, base, &value, i == page.sel);
         }
         self.hits.list(page.sel, ROWS.len(), 0.0, row as f32);
 
         self.paint_tailscale_details(c, page, top + ROWS.len() as i32 * row + 14);
 
-        self.nu_foot(c, &[("B", "Back"), ("A", if page.row() == Row::Switch { "Switch" } else { "Open" })], page.describe(page.row()), pal().text);
+        self.nu_foot(c, &[("B", "Back"), ("A", if page.row() == Row::Switch { "Change" } else { "Open" })], page.describe(page.row()), pal().text);
     }
 
     /// Below the list: the status, and what to do or what the Pocket is called.

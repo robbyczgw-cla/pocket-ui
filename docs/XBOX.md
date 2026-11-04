@@ -2,17 +2,18 @@
 
 Original Xbox games start from the shelf (`roms/xbox`, `.iso`) and are played by **hakuX**, rfandango's Xbox emulator, in
 ROCKNIX's RetroArch. pocket-ui starts RetroArch itself (`src/hakux.rs`) and is its pause menu, as for PS2 and GameCube.
-The spike that preceded this (PR #9 booted Jade Empire in RetroArch on the Mini V2) is in the private notes of 2026-10-28.
+The spike that preceded this (the port of hakuX PR #9 booted Jade Empire in RetroArch on the Mini V2) is in the private notes of 2026-10-28.
 
 ## What is in the box
 
 - **Core**: `hakux_libretro.so` and `hakux_libretro.info` in `/storage/pocket-ui/hakux/` (not in ROCKNIX's libretro folder,
   not in a release folder: an update of pocket-ui leaves them alone), with `licenses/` and `SOURCE.txt`.
-  Built from hakuX PR #9 at `2de4e9cd86a47e9ffaf928c36e240a995a279713`, unpatched (our audio relaunch fix, for Jade
-  Empire's silence after its relaunch into the game, is part of the PR since `77a5871`), with the PR's own tools in an aarch64
-  container (`scripts/build-hakux-core.sh`). Needs glibc 2.38 at most, Vulkan 1.3 (Turnip on the Mini V2).
-- **Attribution**: *Xbox: hakuX by rfandango (GPL-3.0), Linux/libretro port by portare-ch (PortareOS), PR #9 commit
-  2de4e9c (it includes an audio fix of ours).* In `NOTICE.md` (on the device in `/storage/pocket-ui/licences`, Settings → Help & tools → About), `docs/LICENCES.md`
+  Built from [hakuX-Linux](https://github.com/robbyczgw-cla/hakuX-Linux), branch `linux-1.3.0`, at
+  `035ec48acde326b017a3f6cd4bc888e1633172df`, unpatched: hakuX 1.3.0 by rfandango with the Linux/libretro port by portare-ch
+  (hakuX PR #9) and our fixes (among them the audio relaunch fix, for Jade Empire's silence after its relaunch into the game),
+  with the fork's own tools in an aarch64 container (`scripts/build-hakux-core.sh`). Needs glibc 2.38 at most, Vulkan 1.3 (Turnip on the Mini V2).
+- **Attribution**: *Xbox: hakuX by rfandango (GPL-3.0), Linux/libretro port by portare-ch (PortareOS), built from
+  hakuX-Linux linux-1.3.0 at 035ec48.* In `NOTICE.md` (on the device in `/storage/pocket-ui/licences`, Settings → Help & tools → About), `docs/LICENCES.md`
   section 5.2, and the manual. The core is GPL-3.0-or-later and loaded by RetroArch, a separate GPL-3.0-or-later program;
   pocket-ui never loads it. Whoever ships the core ships `SOURCE.txt` (commit, link, checksums) and `licenses/`.
 
@@ -108,9 +109,9 @@ measured: the Odin 2 Mini and the pause menu's Continue with this core.
 
 ## Shipping the core
 
-`scripts/build-hakux-core.sh` builds the package from PR #9's commit plus any patches in `deploy/hakux/patches/` (none today; applied
-with `git am`, committer and date fixed, so a patched commit has the same id everywhere) inside the PR's own Debian image on an
-aarch64 Docker host (`HAKUX_BUILD_HOST`, the MacBook Air), with the PR's pinned dependencies cached in `~/hakux-core-deps`
+`scripts/build-hakux-core.sh` builds the package from the fork's commit (`HAKUX_REPO` can point at a local clone) plus any patches in `deploy/hakux/patches/` (none today; applied
+with `git am`, committer and date fixed, so a patched commit has the same id everywhere) inside the fork's own Debian image on an
+aarch64 Docker host (`HAKUX_BUILD_HOST`, the MacBook Air), with the fork's pinned dependencies cached in `~/hakux-core-deps`
 there; `scripts/hakux-files.sh DIR DEST` copies everything that must travel with the core (both packages use it, so they cannot
 drift):
 `hakux_libretro.so`, the `.info` of `deploy/hakux/` (the one a test pins to "no save states"), `SOURCE.txt`, `BUILD-INFO`, our `patches/` and

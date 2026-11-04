@@ -3,6 +3,8 @@
 Settings → Games → **Game check** answers "will my games start?". It goes through the card, on a quiet thread that
 leaves the shelf alone, and shows either **All good** with how many games are ready, or a short list. A folder with more than 50,000 entries is read only as far as the first 50,000; when nothing was found in those, it says **First 50,000 files checked** instead of All good:
 
+![Game check: how many games are ready, and a row for each kind of problem](pictures/game-check.webp)
+
 | Row | Example | What to do |
 |---|---|---|
 | **BIOS files** | "Sega CD: BIOS missing." with the exact file names; "The BIOS file is in the wrong folder"; "Wrong BIOS: its checksum differs"; "This BIOS file is empty" | Put your own console's file into `roms/bios`, or move or rename it as the line says |

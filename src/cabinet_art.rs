@@ -819,10 +819,11 @@ pub fn plain_label(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i
     text.set_translate(translating && !crate::i18n::is_name(title));
     // A sixth of the label, or smaller until the name fits in two lines (never a lone word of it on a line of its
     // own), at the sizes the app paints anyway: a front made in a frame draws no letters of its own
-    // (tests/shelf_moves.rs). A name too long even then ends in "…".
-    let sizes = [24u32, 28, 30, 37, 44, 50];
+    // (tests/shelf_moves.rs). 18 and 20 only for a long word on a small case ("Überrasch mich" at 1024x768 ended
+    // "Überras…", taste pass 0.2). A name too long even then ends in "…".
+    let sizes = [18u32, 20, 24, 28, 30, 37, 44, 50];
     let max_w = w - w / 6;
-    let mut px = sizes.into_iter().rev().find(|&s| s as i32 <= w / 6).unwrap_or(24);
+    let mut px = sizes.into_iter().rev().find(|&s| s >= 24 && s as i32 <= w / 6).unwrap_or(24);
     let mut lines = text.wrap(Face::Title, px, title, max_w);
     // Smaller also while a word is wider than the label on its own (a wide font: "Favorite" over "n").
     while lines.len() > 2 || !text.words_fit(Face::Title, px, title, max_w) {

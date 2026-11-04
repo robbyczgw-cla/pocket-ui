@@ -48,6 +48,12 @@ METRICS = {
     "step.*": ("ms", "--cold: one step of pocket-ui's start, from its 'first frame after' log line"),
     "nav.p50": ("ms", "shelf move: input -> frame (median)"),
     "nav.p95": ("ms", "shelf move: input -> frame (95th pct)"),
+    "nav.mean": ("ms", "shelf move: input -> frame (mean)"),
+    "nav.p99": ("ms", "shelf move: input -> frame (99th pct)"),
+    "nav.max": ("ms", "shelf move: input -> frame (slowest, the outlier)"),
+    "page.p50": ("ms", "shelf page change (R1/L1): input -> frame (median)"),
+    "page.p99": ("ms", "shelf page change (R1/L1): input -> frame (99th pct)"),
+    "page.max": ("ms", "shelf page change (R1/L1): input -> frame (slowest)"),
     "open.settings": ("ms", "START on the shelf -> Settings frame"),
     "open.switcher": ("ms", "SELECT on the shelf -> switcher frame"),
     "open.quick": ("ms", "HOME on the shelf -> quick settings frame (FIFO down/up, no physical hold)"),
@@ -544,6 +550,22 @@ class Run:
             time.sleep((self.a.gap + random.uniform(-20, 20)) / 1000.0)
         if not self.warm and lat:
             self.samples.setdefault("nav", []).extend(lat)
+        # Page changes (R1 / L1 move five rows): the baseline wants them next to the single moves.
+        if self.a.pages and not self.warm:
+            plat = []
+            direction = "r1"
+            for _ in range(self.a.pages * 3):
+                if len(plat) >= self.a.pages:
+                    break
+                before = self.frame_now()["sel"]
+                t, fr, _ = self.press(direction)
+                if fr["sel"] == before:
+                    direction = "l1" if direction == "r1" else "r1"
+                else:
+                    plat.append((fr["t"] - t) / 1000.0)
+                time.sleep((self.a.gap + random.uniform(-20, 20)) / 1000.0)
+            if plat:
+                self.samples.setdefault("page", []).extend(plat)
         self.settle(0.5)
 
     def menus_on_shelf(self):
@@ -682,6 +704,13 @@ class Run:
             if k == "nav":
                 out["nav.p50"] = percentile(v, 50)
                 out["nav.p95"] = percentile(v, 95)
+                out["nav.mean"] = statistics.mean(v)
+                out["nav.p99"] = percentile(v, 99)
+                out["nav.max"] = max(v)
+            elif k == "page":
+                out["page.p50"] = percentile(v, 50)
+                out["page.p99"] = percentile(v, 99)
+                out["page.max"] = max(v)
             else:
                 out[k] = statistics.median(v)
         return out
@@ -1745,6 +1774,7 @@ def main():
     m.add_argument("--runs", type=int, default=3, help="passes over everything; each number is the median over them")
     m.add_argument("--starts", type=int, default=5, help="cold starts per run")
     m.add_argument("--moves", type=int, default=100, help="shelf moves per run")
+    m.add_argument("--pages", type=int, default=0, help="shelf page changes (R1/L1) per run, timed as page.*; 0 = none (scripts/measure-baseline.sh asks for 20)")
     m.add_argument("--nav-system", default="", help="move in this system's games instead of Home (large-library/cover checks)")
     m.add_argument("--opens", type=int, default=5, help="Settings and switcher opens per run")
     m.add_argument("--cycles", type=int, default=2, help="game cycles per run (launch, pause menu, quit, switch)")

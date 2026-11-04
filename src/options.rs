@@ -12,6 +12,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use crate::look;
+
 pub struct Choice {
     pub value: &'static str,
     pub label: &'static str,
@@ -35,6 +37,9 @@ pub struct Group {
     pub settings: &'static [Setting],
 }
 
+/// The Picture group's Look row: derived, never saved (`look`).
+pub const LOOK: &str = "look";
+
 const fn c(value: &'static str, label: &'static str) -> Choice {
     Choice { value, label }
 }
@@ -42,7 +47,7 @@ const fn c(value: &'static str, label: &'static str) -> Choice {
 pub const GROUPS: &[Group] = &[
     Group {
         name: "Picture",
-        desc: "Size, sharpness, screen effects, frame and orientation.",
+        desc: "Size, look, frame and orientation.",
         settings: &[
             Setting {
                 key: "scaling",
@@ -52,30 +57,50 @@ pub const GROUPS: &[Group] = &[
                 default: 0,
                 shown_when: None,
             },
+            // Not a saved value: the Look worked out from `sharpness` + `effect` (`look::derive`), whose choosing writes both
+            // (`GameSettings::step`). Left out of `effective()` and never sent to pocket-core as "set look".
             Setting {
-                key: "sharpness",
-                name: "Screen sharpness",
-                desc: "Sharp keeps hard pixel edges.\nCrisp scales up sharply first, then smooths a little.\nSoft blurs the edges.",
-                choices: &[c("sharp", "Sharp"), c("crisp", "Crisp"), c("soft", "Soft")],
+                key: LOOK,
+                name: "Look",
+                desc: "How the picture looks. Pick one; Custom opens Sharpness and Effect.",
+                choices: &[
+                    c("clean", "Clean"),
+                    c("smooth", "Smooth"),
+                    c("soft", "Soft"),
+                    c("bloom", "Bloom"),
+                    c("lcd", "LCD grid"),
+                    c("scanlines", "Scanlines"),
+                    c("oldtv", "Old TV"),
+                    c("custom", "Custom"),
+                ],
                 default: 0,
                 shown_when: None,
+            },
+            // Under Look = Custom only. The frame is another row (Screen frame); this is the picture itself.
+            Setting {
+                key: "sharpness",
+                name: "Sharpness",
+                desc: "How the edges of the blown-up pixels look.",
+                choices: &[c("sharp", "Sharp"), c("crisp", "Crisp"), c("soft", "Soft")],
+                default: 0,
+                shown_when: Some((LOOK, "custom")),
             },
             Setting {
                 key: "effect",
-                name: "Screen effect",
-                desc: "LCD grid imitates a handheld screen, scanlines and CRT a TV.\nSoft glow adds a halo around bright parts; Smooth pixels rounds slanted edges.\nThey stay even at every size, Aspect included.",
-                choices: &[c("none", "None"), c("grid", "LCD grid"), c("scanlines", "Scanlines"), c("crt", "CRT"), c("softglow", "Soft glow"), c("smooth", "Smooth pixels")],
+                name: "Effect",
+                desc: "What is laid over the picture.",
+                choices: &[c("none", "None"), c("grid", "LCD grid"), c("scanlines", "Scanlines"), c("crt", "Old TV"), c("softglow", "Bloom"), c("smooth", "Smooth")],
                 default: 0,
-                shown_when: None,
+                shown_when: Some((LOOK, "custom")),
             },
-            // Only for the Game Boy Advance (`applies`): its screen's colours, with the LCD grid.
+            // Only for the Game Boy Advance (`applies`): its screen's colours, with the LCD grid (the Look, or Custom's Effect).
             Setting {
                 key: "lcd_colour",
                 name: "LCD colours",
                 desc: "The colours of the Game Boy Advance's own screen:\nsofter and darker, as the games were made for.\nLeft out while the emulator's own colour correction is on.",
                 choices: &[c("off", "Off"), c("on", "On")],
                 default: 0,
-                shown_when: Some(("effect", "grid")),
+                shown_when: Some((LOOK, "lcd")),
             },
             Setting {
                 key: "frame",
@@ -223,6 +248,15 @@ pub const GROUPS: &[Group] = &[
                 default: 0,
                 shown_when: None,
             },
+            // pocket-ui's own (`app_zoom`): off unless chosen, as Zoom is a niche help.
+            Setting {
+                key: "hk_zoom",
+                name: "Zoom",
+                desc: "HOME + X shows the paused game's picture larger.\nB goes back to the game.",
+                choices: &[c("on", "HOME + X"), c("off", "Off")],
+                default: 1,
+                shown_when: None,
+            },
         ],
     },
     Group {
@@ -331,7 +365,7 @@ pub fn console_default(system: &str, key: &str) -> Option<&'static str> {
 
 impl Group {
     /// The settings shown while the values are `values`: a sub-choice only while the setting it
-    /// belongs to has its value (the shell colour while the frame is Shell).
+    /// belongs to has its value (the shell colour while the frame is Shell, Sharpness and Effect while the Look is Custom).
     pub fn visible(&self, values: Option<&GameSettings>) -> Vec<&Setting> {
         self.settings
             .iter()
@@ -341,23 +375,94 @@ impl Group {
                 Some((key, value)) => {
                     let parent = setting(key).expect("shown_when names a setting");
                     let i = values.map_or(parent.default, |v| v.index(parent));
-                    parent.choices[i].value == value
+                    parent.choices[i].value == value || values.is_some_and(|v| lcd_colours_under_custom(s, v))
                 }
             })
             .collect()
     }
 
     /// The most rows the group shows at once for these values' console: every setting that is always shown, plus
-    /// one sub-choice per setting that has them (a setting's sub-choices belong to different values of it, so never
-    /// two at a time): the frame's colour, and the LCD grid's colours on the GBA.
+    /// the sub-choices of each setting that has them. A setting's sub-choices belong to different values of it, so only
+    /// the largest set shows at a time: the frame's colour, or Sharpness and Effect (and on the GBA the LCD grid's colours)
+    /// under Custom. The preview stays where it is while the Look or the frame changes.
     pub fn max_rows(&self, values: Option<&GameSettings>) -> usize {
         let applying: Vec<&Setting> = self.settings.iter().filter(|s| values.is_none_or(|v| applies(s.key, &v.system))).collect();
         let always = applying.iter().filter(|s| s.shown_when.is_none()).count();
-        let mut parents: Vec<&str> = applying.iter().filter_map(|s| s.shown_when.map(|(k, _)| k)).collect();
-        parents.sort_unstable();
-        parents.dedup();
-        always + parents.len()
+        let mut under: BTreeMap<(&str, &str), usize> = BTreeMap::new();
+        for s in &applying {
+            if let Some(when) = s.shown_when {
+                *under.entry(when).or_default() += 1;
+            }
+            // Custom's Effect = LCD grid shows them too, beside Sharpness and Effect.
+            if s.key == "lcd_colour" {
+                *under.entry((LOOK, "custom")).or_default() += 1;
+            }
+        }
+        let mut largest: BTreeMap<&str, usize> = BTreeMap::new();
+        for ((parent, _), n) in under {
+            let m = largest.entry(parent).or_default();
+            *m = (*m).max(n);
+        }
+        always + largest.values().sum::<usize>()
     }
+
+    /// Every explanation the group can show, for the room the longest needs.
+    pub fn descs(&self) -> Vec<&'static str> {
+        self.settings.iter().flat_map(|s| std::iter::once(s.desc).chain(value_descs(s.key).iter().map(|(_, d)| *d)).chain(extra_descs(s.key))).collect()
+    }
+}
+
+/// LCD colours also show under Look = Custom while Effect is the LCD grid (the GBA's), not only under the LCD grid Look.
+fn lcd_colours_under_custom(s: &Setting, v: &GameSettings) -> bool {
+    s.key == "lcd_colour" && v.look() == look::Look::Custom && v.value_of("effect") == "grid"
+}
+
+/// The explanation for each value of a setting that has one of its own (`describe`); the others have the row's `desc`.
+fn value_descs(key: &str) -> &'static [(&'static str, &'static str)] {
+    match key {
+        "sharpness" => &[
+            ("sharp", "Hard pixel squares, exactly as the console drew them."),
+            ("crisp", "All pixels the same size at any scaling; at Integer it looks like Sharp."),
+            ("soft", "Blurs every pixel edge a little."),
+        ],
+        "effect" => &[
+            ("none", "The plain picture, nothing laid over it."),
+            ("grid", "Thin dark gaps between the pixels, like a handheld's screen."),
+            ("scanlines", "Rows like a TV's beam: dark gaps in dark parts, rows that close up where it's bright."),
+            ("crt", "Scanlines plus a faint glow, like an old tube TV. The TV around it is a Screen frame."),
+            ("softglow", "A soft halo around bright parts; the rest stays clear."),
+            ("smooth", "Rounds the stair-steps on slanted edges. Flat pixels and straight edges stay sharp."),
+        ],
+        _ => &[],
+    }
+}
+
+/// Explanations a row shows besides `value_descs` and its `desc`: the Look's (`look::explain`).
+fn extra_descs(key: &str) -> Vec<&'static str> {
+    if key != LOOK {
+        return Vec::new();
+    }
+    let mut all: Vec<&'static str> = look::ALL.iter().map(|l| look::explain(*l, false)).collect();
+    all.push(look::explain(look::Look::LcdGrid, true));
+    all
+}
+
+/// What the row says about its current value: the Look's and the Custom rows' value explanation, else the row's own `desc`.
+pub fn describe(setting: &Setting, values: Option<&GameSettings>) -> String {
+    if setting.key == LOOK {
+        let look = values.map_or(look::Look::Clean, |v| v.look());
+        let gba_colours = values.is_some_and(|v| v.value_of("lcd_colour") == "on" && applies("lcd_colour", &v.system));
+        return look::explain(look, gba_colours).to_string();
+    }
+    let table = value_descs(setting.key);
+    let current = values.map_or(setting.choices[setting.default].value, |v| setting.choices[v.index(setting)].value);
+    table.iter().find(|(value, _)| *value == current).map_or(setting.desc, |(_, d)| d).to_string()
+}
+
+/// Whether the row is drawn a step in: Sharpness and Effect, which open under Custom (LCD colours, like a frame's colour,
+/// stand at the row's own level).
+pub fn indented(setting: &Setting) -> bool {
+    setting.shown_when == Some((LOOK, "custom"))
 }
 
 /// The console family each console-shaped frame draws: the Game Boy family (DMG, GB Pocket, GBC), the
@@ -375,7 +480,12 @@ fn frame_systems(value: &str) -> Option<&'static [&'static str]> {
 /// Whether `value` of `setting` is offered for `system`: a console's own frame only for that console.
 /// A saved value is kept either way.
 pub fn offered(setting: &Setting, value: &str, system: &str) -> bool {
-    setting.key != "frame" || frame_systems(value).is_none_or(|systems| systems.contains(&system))
+    match setting.key {
+        "frame" => frame_systems(value).is_none_or(|systems| systems.contains(&system)),
+        // LCD grid for the handhelds, Scanlines and Old TV for the rest (`look::kind`).
+        LOOK => look::Look::from_value(value).is_none_or(|l| look::offered(l, Some(system))),
+        _ => true,
+    }
 }
 
 /// Values that were once choices and are read as another: the Swan, Watch and Goggles frames left the list
@@ -420,6 +530,9 @@ pub struct GameSettings {
     /// Settings > Playing > Performance & fan and Settings > Screen frames: what games start with when neither file has a
     /// value (`perf_fan`, `settings::frames`).
     globals: BTreeMap<String, String>,
+    /// The Look row was turned to Custom (or the saved values fit no Look) while this page is open: Sharpness and Effect stay
+    /// open, even if their values come to match a Look. Not saved and not sent to pocket-core; `close_custom` forgets it.
+    custom_open: bool,
 }
 
 impl GameSettings {
@@ -461,12 +574,16 @@ impl GameSettings {
         if over != crate::over_game::Level::Off {
             globals.insert(crate::over_game::KEY.into(), over.value().into());
         }
-        GameSettings { dir, system: system.to_string(), game, values, level, globals }
+        GameSettings { dir, system: system.to_string(), game, values, level, globals, custom_open: false }
     }
 
     /// Index of the current choice for `setting`: saved value (this game's, else this console's), else the default
     /// of Settings > Playing > Performance & fan, else the console's default, else the setting's own.
     pub fn index(&self, setting: &Setting) -> usize {
+        if setting.key == LOOK {
+            let value = self.look().value();
+            return setting.choices.iter().position(|c| c.value == value).unwrap_or(setting.default);
+        }
         let find = |v: &str| setting.choices.iter().position(|c| c.value == v);
         self.values
             .get(setting.key)
@@ -481,13 +598,35 @@ impl GameSettings {
         GROUPS
             .iter()
             .flat_map(|g| g.settings.iter())
+            .filter(|s| s.key != LOOK)
             .map(|s| (s.key.to_string(), s.choices[self.index(s)].value.to_string()))
             .collect()
     }
 
+    /// The value in use of a setting by key ("" for an unknown key).
+    pub fn value_of(&self, key: &str) -> &'static str {
+        setting(key).map_or("", |s| s.choices[self.index(s)].value)
+    }
+
+    /// The Look shown for the values in use: Custom while it is open, else worked out from Sharpness and Effect.
+    pub fn look(&self) -> look::Look {
+        if self.custom_open {
+            look::Look::Custom
+        } else {
+            look::derive(self.value_of("sharpness"), self.value_of("effect"), Some(&self.system))
+        }
+    }
+
+    /// The page is opened again (or the settings were reset): the Look is worked out from the values anew.
+    pub fn close_custom(&mut self) {
+        self.custom_open = false;
+    }
+
     /// Moves `setting` one choice left (-1) or right (+1), wrapping around, past choices that aren't
-    /// offered for this console (`offered`).
-    pub fn step(&mut self, setting: &Setting, delta: i32) {
+    /// offered for this console (`offered`). Returns the (key, value) pairs that changed, to send to the running game:
+    /// one for a setting, the two or three behind a Look (`look::Look::canonical`, and `lcd_colour` on for the GBA's LCD
+    /// grid), none for Custom, which only opens Sharpness and Effect and changes no picture.
+    pub fn step(&mut self, setting: &Setting, delta: i32) -> Vec<(&'static str, String)> {
         let n = setting.choices.len() as i32;
         let mut i = self.index(setting) as i32;
         for _ in 0..n {
@@ -496,7 +635,25 @@ impl GameSettings {
                 break;
             }
         }
-        self.values.insert(setting.key.to_string(), setting.choices[i as usize].value.to_string());
+        let value = setting.choices[i as usize].value;
+        if setting.key == LOOK {
+            let Some((sharpness, effect)) = look::Look::from_value(value).and_then(look::Look::canonical) else {
+                self.custom_open = true;
+                return Vec::new();
+            };
+            self.custom_open = false;
+            let mut changed = vec![("sharpness", sharpness.to_string()), ("effect", effect.to_string())];
+            // Choosing the GBA's LCD grid takes its screen's colours too; they can be turned off after, the Look stays.
+            if effect == "grid" && applies("lcd_colour", &self.system) {
+                changed.push(("lcd_colour", "on".to_string()));
+            }
+            for (k, v) in &changed {
+                self.values.insert((*k).to_string(), v.clone());
+            }
+            return changed;
+        }
+        self.values.insert(setting.key.to_string(), value.to_string());
+        vec![(setting.key, value.to_string())]
     }
 
     fn write(path: &Path, values: &BTreeMap<String, String>) -> bool {
@@ -515,6 +672,25 @@ impl GameSettings {
             self.level = Level::Console;
         }
         ok
+    }
+
+    /// Keeps the values in use where `level` says (the console's file for `Console`, else this game's), after a change in
+    /// the pause menu: every change stays at once, as in Settings. The write goes to the card writer, so the menu does
+    /// not wait for the card.
+    pub fn keep(&mut self) {
+        if self.level == Level::Console {
+            crate::fsutil::write_json_soon(&self.dir.join(format!("{}.json", self.system)), &self.values);
+        } else {
+            crate::fsutil::write_json_soon(&self.game_file(), &self.values);
+            self.level = Level::Game;
+        }
+    }
+
+    /// "Keep for" moved to the other side: from this game to the whole console or back. The values in use are written
+    /// there now. Returns the new level, None when the card refused.
+    pub fn keep_elsewhere(&mut self) -> Option<Level> {
+        let ok = if self.level == Level::Console { self.save_for_game() } else { self.save_for_console() };
+        ok.then_some(self.level)
     }
 
     pub fn save_for_game(&mut self) -> bool {
@@ -544,6 +720,7 @@ impl GameSettings {
         let fresh = GameSettings::load(data_dir, &self.system, rom);
         self.values = fresh.values;
         self.level = fresh.level;
+        self.custom_open = false;
     }
 
     /// Back to the built-in defaults: removes both files for this game's console and the game.
@@ -552,12 +729,13 @@ impl GameSettings {
         crate::fsutil::remove_json(&self.dir.join(format!("{}.json", self.system)));
         self.values.clear();
         self.level = Level::Defaults;
+        self.custom_open = false;
     }
 }
 
 /// The Options of the running game between two visits to the pause menu. A change applies to the game at once
-/// (`set <key> <value>` to pocket-core) and lives for the session; Save changes only writes it down. So the menu, when
-/// it opens again, starts from what the game uses now, not from the files: the row shows the changed value and
+/// (`set <key> <value>` to pocket-core) and is kept at once (`keep`: for this game, or for the console). So the menu, when
+/// it opens again, starts from what the game uses now (the files hold the same): the row shows the changed value and
 /// Left/Right step on from it. A new start of the game begins with a new `Session`, from the saved values.
 #[derive(Default)]
 pub struct Session {
@@ -570,7 +748,7 @@ impl Session {
     /// then this session's values, saved or not.
     pub fn open(&self, data_dir: &Path, system: &str, rom: &Path) -> GameSettings {
         let mut settings = GameSettings::load(data_dir, system, rom);
-        // The level stays the files': it says what Save changes wrote, which the values may have moved on from.
+        // The level stays the files': it says where the changes are kept.
         if let Some(kept) = &self.kept {
             settings.values = kept.clone();
         }
@@ -606,6 +784,68 @@ mod tests {
         other.set_global("performance", "battery");
         assert_eq!(other.effective()["performance"], "battery");
         assert_eq!(perf.choices.iter().map(|c| c.label).collect::<Vec<_>>(), ["Battery", "Auto", "Max"]);
+    }
+
+    #[test]
+    fn pending_changes_cannot_recreate_an_override_after_keep_for_or_reset() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+        for reset in [false, true] {
+            let dir = TestDir::new(if reset { "queued-reset" } else { "queued-console" });
+            let rom = Path::new("/r/gba/Keep.gba");
+            let mut settings = GameSettings::load(&dir, "gba", rom);
+            // A slow card keeps the actual settings write queued until after the
+            // player asks to change its scope or restore the defaults.
+            let (started_tx, started_rx) = mpsc::channel();
+            let (release_tx, release_rx) = mpsc::channel();
+            crate::fsutil::write_json_checked_soon(&dir.join("writer.json"), &0, move |_| {
+                started_tx.send(()).unwrap();
+                let _ = release_rx.recv_timeout(Duration::from_secs(10));
+            }).unwrap();
+            started_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+            settings.values.insert("rumble".into(), "off".into());
+            settings.keep();
+            let (done_tx, done_rx) = mpsc::channel();
+            let change = std::thread::spawn(move || {
+                if reset {
+                    settings.restore_defaults();
+                } else {
+                    assert_eq!(settings.keep_elsewhere(), Some(Level::Console));
+                }
+                let _ = done_tx.send(());
+            });
+            // Give the deletion time to run while the older write is blocked.
+            let _ = done_rx.recv_timeout(Duration::from_millis(100));
+            release_tx.send(()).unwrap();
+            change.join().unwrap();
+            crate::fsutil::settle();
+            let loaded = GameSettings::load(&dir, "gba", rom);
+            assert_eq!(loaded.level, if reset { Level::Defaults } else { Level::Console },
+                "an older queued change must not bring back this game's override");
+            assert_eq!(loaded.own("rumble"), if reset { None } else { Some("off") });
+        }
+    }
+
+    #[test]
+    fn a_change_is_kept_at_once_for_the_game_and_keep_for_moves_it_to_the_console_and_back() {
+        let dir = TestDir::new("keep-for");
+        let rom = Path::new("/r/gba/Keep.gba");
+        let mut s = GameSettings::load(&dir, "gba", rom);
+        assert_eq!(s.level, Level::Defaults);
+        s.values.insert("rumble".into(), "off".into());
+        s.keep();
+        crate::fsutil::settle();
+        assert_eq!(s.level, Level::Game, "the first change is kept for this game");
+        assert_eq!(GameSettings::load(&dir, "gba", rom).own("rumble"), Some("off"));
+        assert_eq!(GameSettings::load(&dir, "gba", Path::new("/r/gba/Other.gba")).own("rumble"), None, "not for the console");
+        assert_eq!(s.keep_elsewhere(), Some(Level::Console));
+        assert_eq!(GameSettings::load(&dir, "gba", Path::new("/r/gba/Other.gba")).own("rumble"), Some("off"), "now every game of the console");
+        s.values.insert("rumble".into(), "on".into());
+        s.keep();
+        crate::fsutil::settle();
+        assert_eq!(GameSettings::load(&dir, "gba", Path::new("/r/gba/Other.gba")).own("rumble"), Some("on"), "kept where Keep for says");
+        assert_eq!(s.keep_elsewhere(), Some(Level::Game));
+        assert_eq!(GameSettings::load(&dir, "gba", rom).level, Level::Game);
     }
 
     #[test]
@@ -724,28 +964,211 @@ mod tests {
         let picture = GROUPS.iter().find(|g| g.name == "Picture").unwrap();
         let keys = |s: &GameSettings| picture.visible(Some(s)).iter().map(|s| s.key).collect::<Vec<_>>();
         let mut s = GameSettings::load(&dir, "gba", Path::new("x.gba"));
-        assert_eq!(keys(&s), ["scaling", "sharpness", "effect", "frame", "orientation"]);
+        assert_eq!(keys(&s), ["scaling", "look", "frame", "orientation"]);
         s.values.insert("frame".into(), "shell".into());
-        assert_eq!(keys(&s), ["scaling", "sharpness", "effect", "frame", "frame_colour", "orientation"]);
+        assert_eq!(keys(&s), ["scaling", "look", "frame", "frame_colour", "orientation"]);
         s.values.insert("frame".into(), "crt".into());
-        assert_eq!(keys(&s), ["scaling", "sharpness", "effect", "frame", "frame_tv", "orientation"]);
+        assert_eq!(keys(&s), ["scaling", "look", "frame", "frame_tv", "orientation"]);
         for (frame, sub) in [("brick", "frame_brick"), ("pocket", "frame_pocket"), ("clamshell", "frame_clamshell")] {
             s.values.insert("frame".into(), frame.into());
-            assert_eq!(keys(&s), ["scaling", "sharpness", "effect", "frame", sub, "orientation"], "{frame}");
+            assert_eq!(keys(&s), ["scaling", "look", "frame", sub, "orientation"], "{frame}");
         }
         for frame in ["wide", "twin", "gloss", "studio", "portable-tv", "woodgrain"] {
             s.values.insert("frame".into(), frame.into());
-            assert_eq!(keys(&s).len(), 5, "{frame} has no sub-choice");
+            assert_eq!(keys(&s).len(), 4, "{frame} has no sub-choice");
         }
-        assert_eq!(picture.visible(None).len(), 5, "defaults: frame None, no sub-choice");
+        assert_eq!(picture.visible(None).len(), 4, "defaults: Look Clean, frame None, no sub-choice");
         let snes = GameSettings::load(&dir, "snes", Path::new("x.sfc"));
-        assert_eq!(picture.max_rows(Some(&snes)), 6, "a frame's colour; LCD colours are the GBA's alone");
-        assert_eq!(picture.max_rows(Some(&s)), 7, "the GBA: and the LCD grid's colours");
+        // Always: scaling, look, frame, orientation; the frame's colour; Sharpness and Effect under Custom.
+        assert_eq!(picture.max_rows(Some(&snes)), 7, "a frame's colour, Custom's two rows; LCD colours are the GBA's alone");
+        assert_eq!(picture.max_rows(Some(&s)), 8, "the GBA: and the LCD grid's colours beside Custom's rows");
         s.values.insert("effect".into(), "grid".into());
-        assert_eq!(keys(&s), ["scaling", "sharpness", "effect", "lcd_colour", "frame", "orientation"], "LCD colours under the LCD grid");
-        assert_eq!(picture.visible(Some(&snes)).len(), 5);
+        assert_eq!(keys(&s), ["scaling", "look", "lcd_colour", "frame", "orientation"], "LCD colours under the LCD grid look");
+        assert_eq!(picture.visible(Some(&snes)).len(), 4);
         let extras = GROUPS.iter().find(|g| g.name == "Speed, rumble, fan").unwrap();
         assert_eq!(extras.max_rows(None), extras.settings.len());
+    }
+
+    fn look_of(s: &GameSettings) -> &'static str {
+        s.value_of(LOOK)
+    }
+
+    fn visible_keys(s: &GameSettings) -> Vec<&'static str> {
+        GROUPS.iter().find(|g| g.name == "Picture").unwrap().visible(Some(s)).iter().map(|s| s.key).collect()
+    }
+
+    /// Every saved pair of sharpness and effect, on a handheld and a TV console: the Look shown, the rows open, and the values
+    /// the picture is drawn with (what `VideoSettings` reads) untouched by showing it.
+    #[test]
+    fn every_saved_pair_shows_a_look_or_custom_and_no_picture_value_changes() {
+        let dir = TestDir::new("look-derive");
+        std::fs::create_dir_all(dir.join("game-settings")).unwrap();
+        let want = |sys: &str, s: &str, e: &str| -> &'static str {
+            match (s, e) {
+                (_, "none") if s != "soft" => "clean",
+                ("soft", "none") => "soft",
+                ("soft", _) => "custom",
+                (_, "smooth") => "smooth",
+                (_, "softglow") => "bloom",
+                (_, "grid") if crate::look::kind(sys) == crate::look::Kind::Handheld => "lcd",
+                (_, "scanlines") if crate::look::kind(sys) == crate::look::Kind::Tv => "scanlines",
+                (_, "crt") if crate::look::kind(sys) == crate::look::Kind::Tv => "oldtv",
+                _ => "custom",
+            }
+        };
+        for sys in ["gb", "gba", "nds", "snes", "psx"] {
+            for sharpness in ["sharp", "crisp", "soft"] {
+                for effect in ["none", "grid", "scanlines", "crt", "softglow", "smooth"] {
+                    std::fs::write(dir.join(format!("game-settings/{sys}.json")), format!(r#"{{"sharpness": "{sharpness}", "effect": "{effect}"}}"#)).unwrap();
+                    let mut s = GameSettings::load(&dir, sys, Path::new("x.rom"));
+                    let before = s.effective();
+                    assert_eq!(look_of(&s), want(sys, sharpness, effect), "{sys} {sharpness}+{effect}");
+                    let keys = visible_keys(&s);
+                    assert_eq!(keys.contains(&"sharpness") && keys.contains(&"effect"), look_of(&s) == "custom", "{sys} {sharpness}+{effect}: Custom opens the rows");
+                    // Only a look shows; nothing is written or changed by reading, painting or opening the page.
+                    s.close_custom();
+                    assert_eq!(s.effective(), before, "{sys} {sharpness}+{effect}");
+                    assert_eq!((before["sharpness"].as_str(), before["effect"].as_str()), (sharpness, effect));
+                    assert!(!before.contains_key(LOOK), "look is no saved value");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn console_starts_show_clean_and_restore_defaults_is_not_crisp() {
+        let dir = TestDir::new("look-starts");
+        for sys in ["gb", "gba", "snes", "nes", "psx", "n64", "nds", "scummvm"] {
+            let s = GameSettings::load(&dir, sys, Path::new("x.rom"));
+            assert_eq!(look_of(&s), "clean", "{sys} starts on Clean, never Custom");
+            assert!(!visible_keys(&s).contains(&"sharpness"), "{sys}");
+        }
+        let mut s = GameSettings::load(&dir, "gb", Path::new("x.gb"));
+        assert_eq!(s.effective()["sharpness"], "sharp");
+        s.step(setting(LOOK).unwrap(), 1);
+        s.step(setting(LOOK).unwrap(), -1);
+        assert_eq!(s.effective()["sharpness"], "crisp", "choosing Clean writes its canonical form");
+        s.restore_defaults();
+        assert_eq!((s.effective()["sharpness"].as_str(), s.effective()["effect"].as_str()), ("sharp", "none"), "Restore defaults keeps the console's own start");
+        assert_eq!(look_of(&s), "clean");
+    }
+
+    #[test]
+    fn choosing_a_look_writes_the_two_keys_and_custom_writes_nothing() {
+        let dir = TestDir::new("look-step");
+        let look = setting(LOOK).unwrap();
+        let mut s = GameSettings::load(&dir, "snes", Path::new("x.sfc"));
+        // Right from Clean: Smooth, Soft, Bloom, (LCD grid is a handheld's, left out), Scanlines, Old TV, Custom.
+        let mut walk = Vec::new();
+        for _ in 0..7 {
+            let changed = s.step(look, 1);
+            walk.push((look_of(&s), changed.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(" ")));
+        }
+        assert_eq!(
+            walk,
+            [
+                ("smooth", "sharpness=crisp effect=smooth".to_string()),
+                ("soft", "sharpness=soft effect=none".into()),
+                ("bloom", "sharpness=crisp effect=softglow".into()),
+                ("scanlines", "sharpness=crisp effect=scanlines".into()),
+                ("oldtv", "sharpness=crisp effect=crt".into()),
+                ("custom", String::new()),
+                ("clean", "sharpness=crisp effect=none".into()),
+            ]
+        );
+        assert_eq!(s.values["effect"], "none");
+        // Custom: nothing is written, the picture stays as it is, the rows open.
+        let mut s = GameSettings::load(&dir, "snes", Path::new("y.sfc"));
+        s.values.insert("sharpness".into(), "crisp".into());
+        s.values.insert("effect".into(), "crt".into());
+        let before = s.values.clone();
+        assert_eq!(look_of(&s), "oldtv");
+        assert!(s.step(look, 1).is_empty(), "Old TV → Custom");
+        assert_eq!((look_of(&s), &s.values), ("custom", &before), "writes nothing, the old look's values stay");
+        assert_eq!(visible_keys(&s), ["scaling", "look", "sharpness", "effect", "frame", "orientation"]);
+        // Edited to match a look, it stays Custom while the page is open: no row folds away under the cursor.
+        let (sharpness, effect) = (setting("sharpness").unwrap(), setting("effect").unwrap());
+        s.step(effect, -1);
+        s.step(effect, -1);
+        s.step(effect, -1);
+        assert_eq!(s.values["effect"], "none");
+        s.step(sharpness, 1);
+        s.step(sharpness, -1);
+        assert_eq!((look_of(&s), s.values["sharpness"].as_str()), ("custom", "crisp"));
+        assert!(visible_keys(&s).contains(&"effect"));
+        // Opened again, the values decide.
+        s.close_custom();
+        assert_eq!(look_of(&s), "clean");
+    }
+
+    #[test]
+    fn the_lcd_grid_look_takes_the_gba_colours_and_keeps_its_name_without_them() {
+        let dir = TestDir::new("look-lcd");
+        let look = setting(LOOK).unwrap();
+        let mut gba = GameSettings::load(&dir, "gba", Path::new("x.gba"));
+        // Clean → Smooth → Soft → Bloom → LCD grid.
+        let changed: Vec<_> = (0..4).flat_map(|_| gba.step(look, 1)).collect();
+        assert_eq!(gba.value_of(LOOK), "lcd");
+        assert_eq!(changed.iter().rev().take(3).map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>(), ["lcd_colour=on", "effect=grid", "sharpness=sharp"]);
+        assert_eq!(visible_keys(&gba), ["scaling", "look", "lcd_colour", "frame", "orientation"]);
+        gba.values.insert("lcd_colour".into(), "off".into());
+        assert_eq!(gba.value_of(LOOK), "lcd", "turning the colours off leaves the Look");
+        assert_eq!(describe(look, Some(&gba)), "Thin lines between the pixels, like a handheld's screen.");
+        gba.values.insert("lcd_colour".into(), "on".into());
+        assert!(describe(look, Some(&gba)).ends_with("in the GBA screen's colours."));
+        // Other consoles have no colours row; a gb has the grid but no lcd_colour.
+        let mut gb = GameSettings::load(&dir, "gb", Path::new("x.gb"));
+        let changed: Vec<_> = (0..4).flat_map(|_| gb.step(look, 1)).collect();
+        assert_eq!(gb.value_of(LOOK), "lcd");
+        assert!(changed.iter().all(|(k, _)| *k != "lcd_colour"));
+        assert!(!visible_keys(&gb).contains(&"lcd_colour"));
+        // Custom with the grid shows the row too, beside Sharpness and Effect.
+        let mut custom = GameSettings::load(&dir, "gba", Path::new("c.gba"));
+        custom.values.insert("effect".into(), "grid".into());
+        custom.values.insert("sharpness".into(), "soft".into());
+        assert_eq!(visible_keys(&custom), ["scaling", "look", "sharpness", "effect", "lcd_colour", "frame", "orientation"]);
+    }
+
+    /// A game's file replaces the console's whole (no key-by-key fallback): the Look follows the file that is used.
+    #[test]
+    fn the_look_follows_the_file_in_use_game_over_console_over_defaults() {
+        let dir = TestDir::new("look-files");
+        std::fs::create_dir_all(dir.join("game-settings/gb")).unwrap();
+        std::fs::write(dir.join("game-settings/gb.json"), br#"{"effect": "grid", "sharpness": "crisp"}"#).unwrap();
+        std::fs::write(dir.join("game-settings/gb/Tetris.json"), br#"{"sharpness": "soft"}"#).unwrap();
+        std::fs::write(dir.join("game-settings/gb/Empty.json"), b"{}").unwrap();
+        let look = |rom: &str| look_of(&GameSettings::load(&dir, "gb", Path::new(rom)));
+        assert_eq!(look("Other.gb"), "lcd", "the console's file");
+        assert_eq!(look("Tetris.gb"), "soft", "the game's file replaces it: soft + the default effect");
+        assert_eq!(look("Empty.gb"), "clean", "an empty game file is still the game's");
+        assert_eq!(look_of(&GameSettings::load(&TestDir::new("look-none"), "psx", Path::new("a.cue"))), "clean");
+    }
+
+    #[test]
+    fn the_custom_rows_describe_their_value_and_the_looks_are_all_described() {
+        let dir = TestDir::new("look-desc");
+        let mut s = GameSettings::load(&dir, "snes", Path::new("x.sfc"));
+        let (sharpness, effect) = (setting("sharpness").unwrap(), setting("effect").unwrap());
+        s.values.insert("sharpness".into(), "crisp".into());
+        assert_eq!(describe(sharpness, Some(&s)), "All pixels the same size at any scaling; at Integer it looks like Sharp.");
+        for _ in 0..4 {
+            s.step(effect, 1);
+        }
+        assert_eq!(s.value_of("effect"), "softglow");
+        assert_eq!(describe(effect, Some(&s)), "A soft halo around bright parts; the rest stays clear.");
+        for sh in sharpness.choices {
+            assert!(value_descs("sharpness").iter().any(|(v, _)| *v == sh.value), "{}", sh.value);
+        }
+        for e in effect.choices {
+            assert!(value_descs("effect").iter().any(|(v, _)| *v == e.value), "{}", e.value);
+        }
+        // Names of the Custom rows, and the labels the player reads (the shader's words are the saved strings).
+        let labels: Vec<_> = effect.choices.iter().map(|c| c.label).collect();
+        assert_eq!(labels, ["None", "LCD grid", "Scanlines", "Old TV", "Bloom", "Smooth"]);
+        assert_eq!(setting(LOOK).unwrap().choices.iter().map(|c| c.value).collect::<Vec<_>>(), look::ALL.iter().map(|l| l.value()).collect::<Vec<_>>());
+        assert!(indented(sharpness) && indented(effect) && !indented(setting(LOOK).unwrap()) && !indented(setting("frame_colour").unwrap()));
+        let picture = GROUPS.iter().find(|g| g.name == "Picture").unwrap();
+        assert!(picture.descs().len() > 15, "every explanation counts for the room under the list");
     }
 
     /// Over the game's Pixel Path level and its shortcut are there for everyone: since 2026-10-25 only the pause menu's
@@ -952,6 +1375,10 @@ mod tests {
                     menu.step(set, delta);
                     let changed = menu.index(set);
                     assert_ne!(before, changed, "{} steps", set.key);
+                    // Custom only opens Sharpness and Effect for this visit; the Look is worked out again when the page opens.
+                    if menu.look() == look::Look::Custom && set.key == LOOK {
+                        continue;
+                    }
                     session.keep(&menu);
                     let mut again = session.open(&dir, "gba", rom);
                     assert_eq!(again.index(set), changed, "{} > {} shows the change when it opens again", group.name, set.name);

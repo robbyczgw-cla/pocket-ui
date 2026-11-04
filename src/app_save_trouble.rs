@@ -62,19 +62,20 @@ impl App {
     }
 
     /// The line under the main page's title while the game's saves fail: a small dot in the alert colour, then the
-    /// words, wrapped below the pill. Returns where the rows may start.
+    /// words, wrapped below the title. Returns where the rows may start.
     pub(crate) fn paint_save_trouble_line(&mut self, c: &mut Canvas, trouble: Trouble) -> i32 {
         let (x, max) = (NU_PAD + NU_BTN_PAD, c.w - 2 * (NU_PAD + NU_BTN_PAD) - 28);
         let lines = self.text.wrap_prose(Face::Body, NU_SMALL, trouble.line(), max);
         // At the size painted (Settings → Text size, `type_scale`).
         let px = pocket_ui::type_scale::px(NU_SMALL) as i32;
         let line_h = px * 4 / 3;
-        let first = NU_PAD + NU_PILL + 26 + px;
+        // Close under the title (it has no pill since 0.2), so the rows keep nearly their normal pitch below.
+        let first = NU_PAD + NU_PILL + px * 2 / 3;
         c.disc(x + 8, first - px * 3 / 10, 8, ALERT);
         for (i, l) in lines.iter().enumerate() {
             self.text.draw(c, Face::Body, NU_SMALL, x + 28, first + i as i32 * line_h, 0xffffff, l);
         }
-        first + (lines.len() as i32 - 1) * line_h + px
+        first + (lines.len() as i32 - 1) * line_h + px / 3
     }
 
     /// Snapshots: "…:save=<full|unwritable>" gives the pause menu the line (the menu: `menu:pocket-core:5:save=full`

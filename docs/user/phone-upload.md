@@ -2,6 +2,8 @@
 
 The quickest way for a few games: send them straight from your phone. Phone and Pocket must be on the same Wi-Fi.
 
+![Add games: the From your phone tile, Y opens it](pictures/add-games.webp)
+
 1. Open Settings → Games → **Add games** (or the "Add your games" step of the first start) and press **Y** ("From your
    phone"). The page **Send from your phone** shows a large QR code and the same address to type: the Pocket's
    Wi-Fi address, a port and a code, such as `…:41234/k7m2qx9p`.

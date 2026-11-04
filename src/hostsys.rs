@@ -295,7 +295,7 @@ fn pico8_installed(roms: &Path) -> bool {
 /// (Nova the Squirrel, virtual device, 2026-10-23; FDS: 177462 of 177471). Nestopia reads a state from a stream of
 /// the given length, so a shorter one is safe too.
 pub fn core_states_vary(core_id: &str) -> bool {
-    matches!(core_id, "mgba" | "nestopia")
+    crate::state_policy::core_states_vary(core_id)
 }
 
 /// Flycast's state size moves while a game runs: 53217183 bytes right after the start, 36439543 in the state written at
@@ -460,6 +460,111 @@ pub fn prepare_scummvm(bios_dir: &Path) {
     if let Some(new) = scummvm_ini(&text, |p| p.is_dir()) {
         if let Err(e) = crate::fsutil::write_atomic(&ini, new.as_bytes()) {
             eprintln!("{}: {e}", ini.display());
+        }
+    }
+}
+
+/// ROCKNIX's standalone PPSSPP ships its assets here; its libretro core package installs only the `.so`.
+pub const PPSSPP_ASSETS_SRC: &str = "/usr/config/ppsspp/assets";
+
+/// The libretro PPSSPP core reads `ppge_atlas.zim`, `vfpu/` and `flash0/` from `<system dir>/PPSSPP` (not
+/// `PPSSPP/assets`). Without them its system dialogs (saving!) stay incomplete and the VFPU falls back to approximations.
+/// This copies what is missing from `src` (ROCKNIX's `/usr/config/ppsspp/assets`) into `<bios_dir>/PPSSPP`, file by
+/// file, each through a temporary file and a rename, and never replaces a file that is there (a player's custom font, an
+/// older `compat.ini`). So an empty folder becomes complete, a half-filled one is repaired and a complete one costs a
+/// stat per file. Does nothing, quietly, when `src` is missing (a system that isn't ROCKNIX). Returns how many files were
+/// copied; one log line says so. These replaceable files never wait for an SD flush. A small ownership record lets
+/// later starts repair missing/short seeded files while keeping untracked files and player replacements.
+pub fn prepare_ppsspp(src: &Path, bios_dir: &Path) -> usize {
+    if !src.is_dir() {
+        return 0;
+    }
+    let dst = bios_dir.join("PPSSPP");
+    let record = dst.join(".pocket-ui-seeded.json");
+    let mut seeded: std::collections::BTreeMap<String, SeededAsset> = std::fs::read(&record).ok()
+        .and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+    let before = seeded.clone();
+    let (mut copied, mut failed) = (0, 0);
+    let started = std::time::Instant::now();
+    seed_dir(src, &dst, Path::new(""), 4, &mut seeded, &mut copied, &mut failed);
+    // Replaceable assets need no durability wait. A missing or short owned file is repaired on the next launch.
+    // Never infer ownership from a matching name or size: untracked files and player replacements stay untouched.
+    if seeded != before {
+        if let Ok(json) = serde_json::to_vec(&seeded) {
+            if let Err(err) = crate::fsutil::replace_file(&record, &json) {
+                eprintln!("ppsspp assets: couldn't record seeded files: {err}");
+            }
+        }
+    }
+    if copied > 0 || failed > 0 {
+        let failed = if failed > 0 { format!(", {failed} failed") } else { String::new() };
+        println!("ppsspp assets: {copied} file(s) from {} into {}{failed} ({} ms)", src.display(), dst.display(), started.elapsed().as_millis());
+    }
+    copied
+}
+
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+struct SeededAsset {
+    bytes: u64,
+    dev: u64,
+    ino: u64,
+    modified: i64,
+    nanos: i64,
+}
+
+impl SeededAsset {
+    fn of(m: &std::fs::Metadata) -> Self {
+        use std::os::unix::fs::MetadataExt;
+        Self { bytes: m.len(), dev: m.dev(), ino: m.ino(), modified: m.mtime(), nanos: m.mtime_nsec() }
+    }
+
+    fn same_file(&self, m: &std::fs::Metadata) -> bool {
+        let now = Self::of(m);
+        self.dev == now.dev && self.ino == now.ino && self.modified == now.modified && self.nanos == now.nanos
+    }
+}
+
+/// `depth` folders down at most. Source links (ROCKNIX fonts) become plain files. Destination links/custom files stay.
+fn seed_dir(from: &Path, to: &Path, relative: &Path, depth: u8, seeded: &mut std::collections::BTreeMap<String, SeededAsset>, copied: &mut usize, failed: &mut usize) {
+    let Ok(entries) = std::fs::read_dir(from) else { return };
+    for e in entries.flatten() {
+        let Ok(source) = std::fs::metadata(e.path()) else { continue };
+        let target = to.join(e.file_name());
+        let relative = relative.join(e.file_name());
+        if source.is_dir() {
+            if depth > 0 {
+                seed_dir(&e.path(), &target, &relative, depth - 1, seeded, copied, failed);
+            }
+        } else if source.is_file() {
+            let key = relative.to_string_lossy().into_owned();
+            if let Ok(m) = std::fs::symlink_metadata(&target) {
+                let ours = m.is_file() && seeded.get(&key).is_some_and(|s| s.same_file(&m));
+                if !ours {
+                    seeded.remove(&key);
+                    continue;
+                }
+                if m.len() >= seeded[&key].bytes {
+                    continue;
+                }
+                // Only the unchanged inode we seeded is repairable. A custom/replaced file is never removed.
+                if std::fs::remove_file(&target).is_err() {
+                    *failed += 1;
+                    continue;
+                }
+            }
+            match crate::fsutil::copy_asset_if_absent(&e.path(), &target) {
+                Ok(true) => {
+                    *copied += 1;
+                    if let Ok(m) = std::fs::symlink_metadata(&target) {
+                        seeded.insert(key, SeededAsset::of(&m));
+                    }
+                }
+                Ok(false) => { seeded.remove(&key); }
+                Err(err) => {
+                    eprintln!("ppsspp assets: {}: {err}", target.display());
+                    *failed += 1;
+                }
+            }
         }
     }
 }
@@ -944,5 +1049,119 @@ mod tests {
         assert!(core_states_vary("nestopia"), "Nestopia's states differ by 9 bytes from moment to moment (NES resume)");
         assert!(!core_states_vary("gambatte") && !core_states_vary("snes9x"));
         assert!(core_pads_short_states("flycast") && !core_pads_short_states("ppsspp") && !core_pads_short_states("melondsds"));
+    }
+
+    /// ROCKNIX's /usr/config/ppsspp/assets as the libretro core wants it in the system folder.
+    fn ppsspp_source(root: &Path) -> std::path::PathBuf {
+        let src = root.join("assets");
+        std::fs::create_dir_all(src.join("vfpu")).unwrap();
+        std::fs::create_dir_all(src.join("flash0/font")).unwrap();
+        for (f, body) in [("ppge_atlas.zim", "atlas"), ("compat.ini", "new compat"), ("vfpu/vfpu_sin_lut8192.dat", "sin"), ("flash0/font/ltn0.pgf", "font")] {
+            std::fs::write(src.join(f), body).unwrap();
+        }
+        src
+    }
+
+    #[test]
+    fn a_short_seeded_asset_is_repaired_but_a_short_custom_font_is_kept() {
+        let d = TestDir::new("ppsspp-short");
+        let (src, bios) = (ppsspp_source(&d), d.join("bios"));
+        let dst = bios.join("PPSSPP");
+        std::fs::create_dir_all(dst.join("flash0/font")).unwrap();
+        std::fs::write(dst.join("flash0/font/ltn0.pgf"), "x").unwrap();
+        assert_eq!(prepare_ppsspp(&src, &bios), 3);
+        let atlas = dst.join("ppge_atlas.zim");
+        let before = std::fs::metadata(&atlas).unwrap().modified().unwrap();
+        // Power loss can leave file metadata but a short body; retain the seeded identity and timestamp.
+        let f = std::fs::File::options().write(true).open(&atlas).unwrap();
+        f.set_len(1).unwrap();
+        f.set_modified(before).unwrap();
+        std::fs::remove_file(dst.join("vfpu/vfpu_sin_lut8192.dat")).unwrap();
+        assert_eq!(prepare_ppsspp(&src, &bios), 2);
+        assert_eq!(std::fs::read_to_string(&atlas).unwrap(), "atlas");
+        assert_eq!(std::fs::read_to_string(dst.join("flash0/font/ltn0.pgf")).unwrap(), "x");
+        assert_eq!(prepare_ppsspp(&src, &bios), 0);
+    }
+
+    #[test]
+    fn a_player_replacing_a_seeded_file_keeps_their_shorter_version() {
+        let d = TestDir::new("ppsspp-replaced");
+        let (src, bios) = (ppsspp_source(&d), d.join("bios"));
+        assert_eq!(prepare_ppsspp(&src, &bios), 4);
+        let font = bios.join("PPSSPP/flash0/font/ltn0.pgf");
+        let custom = d.join("custom-font");
+        std::fs::write(&custom, "x").unwrap();
+        std::fs::rename(custom, &font).unwrap();
+        assert_eq!(prepare_ppsspp(&src, &bios), 0);
+        assert_eq!(std::fs::read_to_string(font).unwrap(), "x");
+    }
+
+    #[test]
+    fn a_fresh_card_gets_psps_atlas_tables_and_fonts_where_the_core_looks() {
+        let d = TestDir::new("ppsspp-seed");
+        let (src, bios) = (ppsspp_source(&d), d.join("bios"));
+        assert_eq!(prepare_ppsspp(&src, &bios), 4);
+        // Contents of assets/ directly in PPSSPP/, not PPSSPP/assets/.
+        for f in ["ppge_atlas.zim", "compat.ini", "vfpu/vfpu_sin_lut8192.dat", "flash0/font/ltn0.pgf"] {
+            assert!(bios.join("PPSSPP").join(f).is_file(), "{f}");
+        }
+        assert_eq!(std::fs::read_to_string(bios.join("PPSSPP/vfpu/vfpu_sin_lut8192.dat")).unwrap(), "sin");
+        assert!(!bios.join("PPSSPP/assets").exists());
+        let left: Vec<_> = walk(&bios).into_iter().filter(|p| p.ends_with(".tmp")).collect();
+        assert!(left.is_empty(), "no temporary files left: {left:?}");
+    }
+
+    fn walk(dir: &Path) -> Vec<String> {
+        let mut out = Vec::new();
+        for e in std::fs::read_dir(dir).unwrap().flatten() {
+            if e.file_type().unwrap().is_dir() {
+                out.extend(walk(&e.path()));
+            } else {
+                out.push(e.path().to_string_lossy().into_owned());
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn a_players_own_psp_file_is_kept_and_a_partial_folder_is_filled_in() {
+        let d = TestDir::new("ppsspp-keep");
+        let (src, bios) = (ppsspp_source(&d), d.join("bios"));
+        std::fs::create_dir_all(bios.join("PPSSPP/flash0/font")).unwrap();
+        std::fs::write(bios.join("PPSSPP/flash0/font/ltn0.pgf"), "my font").unwrap();
+        std::fs::write(bios.join("PPSSPP/compat.ini"), "older compat").unwrap();
+        assert_eq!(prepare_ppsspp(&src, &bios), 2, "atlas and vfpu table were missing");
+        assert_eq!(std::fs::read_to_string(bios.join("PPSSPP/flash0/font/ltn0.pgf")).unwrap(), "my font");
+        assert_eq!(std::fs::read_to_string(bios.join("PPSSPP/compat.ini")).unwrap(), "older compat");
+        assert_eq!(std::fs::read_to_string(bios.join("PPSSPP/ppge_atlas.zim")).unwrap(), "atlas");
+    }
+
+    #[test]
+    fn a_linked_font_in_the_source_arrives_as_a_file() {
+        let d = TestDir::new("ppsspp-link");
+        let (src, bios) = (ppsspp_source(&d), d.join("bios"));
+        std::os::unix::fs::symlink("ltn0.pgf", src.join("flash0/font/ltn1.pgf")).unwrap();
+        assert_eq!(prepare_ppsspp(&src, &bios), 5);
+        let copy = bios.join("PPSSPP/flash0/font/ltn1.pgf");
+        assert!(!std::fs::symlink_metadata(&copy).unwrap().file_type().is_symlink());
+        assert_eq!(std::fs::read_to_string(copy).unwrap(), "font");
+    }
+
+    #[test]
+    fn a_system_without_rocknixs_ppsspp_assets_is_left_alone() {
+        let d = TestDir::new("ppsspp-nosrc");
+        let bios = d.join("bios");
+        assert_eq!(prepare_ppsspp(&d.join("no-such-assets"), &bios), 0);
+        assert!(!bios.exists(), "nothing created");
+    }
+
+    #[test]
+    fn the_second_start_copies_nothing() {
+        let d = TestDir::new("ppsspp-twice");
+        let (src, bios) = (ppsspp_source(&d), d.join("bios"));
+        assert_eq!(prepare_ppsspp(&src, &bios), 4);
+        let before = walk(&bios).len();
+        assert_eq!(prepare_ppsspp(&src, &bios), 0);
+        assert_eq!(walk(&bios).len(), before);
     }
 }

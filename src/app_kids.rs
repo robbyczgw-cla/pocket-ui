@@ -657,12 +657,12 @@ impl App {
         self.cabinet.shelf_lit = None;
         let n = self.items.len();
         if n == 0 {
-            // Three empty places on the shelf, over the words.
-            let (w, h, gap) = ((150.0 * u) as i32, (200.0 * u) as i32, (34.0 * u) as i32);
-            let (x0, y) = ((c.w - 3 * w - 2 * gap) / 2, (150.0 * u) as i32);
-            for i in 0..3 {
-                c.frame(x0 + i * (w + gap), y, w, h, (8.0 * u).max(3.0) as i32, colours.spark);
-            }
+            // The empty shelf of "No games yet" (`ui_art`), 3 times as large, where the moon stands on "That's all
+            // for today": every Kids screen without a game is a picture, a sentence and a smaller one.
+            let art = pocket_ui::ui_art::Art::NoGames;
+            let k = ((3.0 * u).round() as i32).max(1);
+            let (aw, ah) = pocket_ui::ui_art::size(art, k);
+            pocket_ui::ui_art::paint(c, art, (c.w - aw) / 2, ((230.0 * u) as i32 - ah / 2).max(16), k);
             let lines = ["No games here yet", "Ask a grown-up to pick some."];
             self.kids_message(c, colours, lines[0], lines[1]);
             self.kids_grownups_line(c, colours);

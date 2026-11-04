@@ -549,7 +549,8 @@ impl Text {
         let tr = self.translated(s);
         let w = self.draw_raw(c, face, px, x, baseline, color, &tr);
         // For the German snapshot checks (`i18n::note_overflow`; nothing is written unless they run).
-        if x + w > c.w {
+        // A string that starts past the edge is a card waiting off the picture, not a cut one.
+        if x < c.w && x + w > c.w {
             crate::i18n::note_overflow(s);
         }
         w
@@ -822,6 +823,15 @@ impl Text {
     /// is cut on one line ("Game Boy Adv…").
     pub fn title_lines(&mut self, face: Face, px: u32, title: &str, max: i32) -> Vec<String> {
         self.wrap_at_most(face, px, title, max, 2)
+    }
+
+    /// `english` in the first of `sizes` (largest first) it fits into `max` pixels with; in the last one cut short with "…"
+    /// when none does. Layout before cutting: a line a little smaller reads better than one that ends in "…". Returns the
+    /// size to draw it in and the text.
+    pub fn fit_sizes(&mut self, face: Face, sizes: &[u32], english: &str, max: i32) -> (u32, String) {
+        let last = *sizes.last().expect("at least one size");
+        let px = sizes.iter().copied().find(|&px| self.width(face, px, english) <= max).unwrap_or(last);
+        (px, self.fit(face, px, english, max))
     }
 
     /// Shortens `s` with an ellipsis until it fits into `max` pixels.

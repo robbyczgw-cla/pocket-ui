@@ -2,6 +2,8 @@
 
 Settings → Connections → **Bluetooth** pairs game controllers, headphones, speakers and other Bluetooth devices with the Pocket.
 
+![Bluetooth with controllers found nearby](pictures/bluetooth.webp)
+
 | Row | What A does |
 |---|---|
 | **Bluetooth** | Switches Bluetooth on or off. It is the same switch as in the quick settings and takes a few seconds |

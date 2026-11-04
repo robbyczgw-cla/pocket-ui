@@ -98,7 +98,7 @@ fn a_cards_developer_and_series_open_the_players_own_games_and_b_comes_back() {
     assert!(at(&seen, "Burnout 3 - Takedown") < at(&seen, "Burnout Revenge") && at(&seen, "Burnout Revenge") < at(&seen, "Burnout Dominator"), "{seen}");
     // B on the list: the card again, as it was left.
     let (seen, _) = shot(tmp.path(), stub.as_ref(), "info:minimal:ps2:revenge:dab", "1280x720", "en", "normal");
-    assert!(seen.contains("Burnout Revenge") && seen.contains("Details") && !seen.contains("More from"), "back on the card\n{seen}");
+    assert!(seen.contains("Burnout Revenge") && seen.contains("Status") && !seen.contains("More from"), "back on the card\n{seen}");
     // The box's back in the Shelf look: turned over, Down picks the developer.
     let (seen, _) = shot(tmp.path(), stub.as_ref(), "info:shelf:ps2:revenge:rda", "1280x720", "en", "normal");
     assert!(seen.contains("More from Criterion Games"), "from the box's back\n{seen}");
@@ -188,12 +188,12 @@ fn a_connection_follows_a_rescan_and_back_resolves_the_origin_by_path() {
     std::fs::write(tmp.path().join("rescan.cfg"), reordered).unwrap();
     let (seen, _) = shot(tmp.path(), stub.as_ref(), "curator:connection-rescan:ps2:revenge", "640x480", "en", "normal");
     assert!(
-        seen.contains("Burnout Revenge") && seen.contains("Details"),
+        seen.contains("Burnout Revenge") && seen.contains("Status"),
         "same card after both indices move\n{seen}"
     );
     // Drop the entire originating system. The fixture also asserts Home and no stale card after B.
     let gone = cfg.lines().filter(|line| !line.contains("<name>ps2</name>")).collect::<Vec<_>>().join("\n");
     std::fs::write(tmp.path().join("rescan.cfg"), gone).unwrap();
     let (seen, _) = shot(tmp.path(), stub.as_ref(), "curator:connection-rescan:ps2:revenge", "640x480", "en", "normal");
-    assert!(!seen.contains("Details"), "no card for a removed origin\n{seen}");
+    assert!(!seen.contains("Status"), "no card for a removed origin\n{seen}");
 }

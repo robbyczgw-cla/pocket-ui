@@ -6,7 +6,7 @@
 //!   records nothing. Each sample carries what was running (a system id such as "ps2", from a short table
 //!   in the file) so the page can say what a game costs.
 //! * The file (`battery-history.bin`, about 46 kB when full) is written whole through
-//!   `fsutil::write_atomic` once a minute, with a checksum, and a backup (`.bak`) at most every half hour.
+//!   `fsutil::write_atomic` at most every ten minutes (also on sleep, shutdown and exit), with a checksum, and a backup (`.bak`) at most every half hour.
 //!   A file that fails its checks is replaced by the backup, and by nothing when that is bad too; either
 //!   way it is said on stderr and the next sample is written again.
 //! * [`start`] runs the sampler for as long as pocket-ui runs (a game running is no reason to stop: pocket-ui
@@ -28,7 +28,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::battery::{self, Sample, RECORD};
 use crate::battery_games::{self, Key, Ledger};
@@ -49,6 +49,8 @@ const VERSION: u8 = 1;
 const MAX_TAGS: usize = 31;
 /// Before this the clock has not been set (the device has no battery-backed one): such samples would be junk.
 const CLOCK_SET: u64 = 1_700_000_000;
+/// Minimum interval between periodic writes; sleep and exit force any pending data.
+const WRITE_EVERY: Duration = Duration::from_secs(10 * 60);
 /// The backup is renewed when it is older than this.
 const BACKUP_EVERY: Duration = Duration::from_secs(30 * 60);
 
@@ -336,6 +338,9 @@ struct Recorder {
     /// sleep generation ([`GENERATION`]) it was taken in.
     games: Ledger,
     prev: Option<(Sample, Option<Key>, u64)>,
+    dirty: bool,
+    games_dirty: bool,
+    last_write: Instant,
 }
 
 impl Recorder {
@@ -345,6 +350,9 @@ impl Recorder {
             history: History::open(data_dir),
             games: Ledger::load(data_dir),
             prev: None,
+            dirty: false,
+            games_dirty: false,
+            last_write: Instant::now(),
         }
     }
 
@@ -420,19 +428,51 @@ fn ensure_open(data_dir: &Path) {
     RECORDER.lock().unwrap().get_or_insert(rec);
 }
 
-/// pocket-ui is exiting: no sample after this, and a write in progress is waited for (up to two seconds) so its
-/// temporary file is renamed, not left behind.
+/// Ends sampling and persists every accepted sample before an orderly exit.
+/// Shares the writer lock with `record`, including its in-memory update: no sample
+/// can sneak in after the final snapshot. This runs after the UI loop has ended.
 pub fn stop() {
+    let _writing = WRITING.lock().unwrap();
     STOPPED.store(true, std::sync::atomic::Ordering::SeqCst);
-    let end = std::time::Instant::now() + Duration::from_secs(2);
-    while std::time::Instant::now() < end {
-        // Free (or poisoned by a writer that panicked, which writes no more either).
-        if !matches!(WRITING.try_lock(), Err(std::sync::TryLockError::WouldBlock)) {
+    flush_locked(Instant::now(), true);
+}
+
+/// Light sleep asks for a flush without waiting for card I/O on the UI thread.
+pub fn flush_soon() {
+    let _ = std::thread::Builder::new().name("battery-flush".into()).spawn(flush);
+}
+
+/// Persists pending history and per-game totals. Call on a sleep/shutdown worker,
+/// never during painting or navigation. Failed files stay dirty for a later retry.
+pub fn flush() {
+    let _writing = WRITING.lock().unwrap();
+    flush_locked(Instant::now(), true);
+}
+
+/// Caller holds WRITING; clone under the short reader lock, encode and save outside it.
+fn flush_locked(now: Instant, force: bool) {
+    let snapshot = {
+        let mut guard = RECORDER.lock().unwrap();
+        let Some(rec) = guard.as_mut() else { return };
+        if !(rec.dirty || rec.games_dirty) || (!force && now.saturating_duration_since(rec.last_write) < WRITE_EVERY) {
             return;
         }
-        std::thread::sleep(Duration::from_millis(5));
+        rec.last_write = now;
+        (rec.path.clone(), rec.dirty.then(|| rec.history.clone()), rec.games_dirty.then(|| rec.games.clone()))
+    };
+    let (path, history, games) = snapshot;
+    if let Some(history) = history {
+        match write_file(&path, &history.encode()) {
+            Ok(()) => RECORDER.lock().unwrap().as_mut().unwrap().dirty = false,
+            Err(e) => eprintln!("battery: can't write {}: {e}", path.display()),
+        }
     }
-    eprintln!("battery: a history write still runs at the exit");
+    if let Some(games) = games {
+        match games.save(path.parent().unwrap()) {
+            Ok(()) => RECORDER.lock().unwrap().as_mut().unwrap().games_dirty = false,
+            Err(e) => eprintln!("battery: can't write {}: {e}", battery_games::FILE),
+        }
+    }
 }
 
 /// The newest sample, if the sampler runs: what the pause menu's battery line goes by.
@@ -479,12 +519,17 @@ fn read_steady(dir: &Path, t: u64) -> Option<Sample> {
     Some(first)
 }
 
-/// Adds `s` to the history (once the sampler has read it; before that `s` is dropped) and writes the file.
+/// Adds `s` in memory (once loaded) and flushes only when the ten-minute interval is due.
 /// `count_game`: false for a sample after a wake ([`sample_soon`]): the stretch to it spans the sleep, so it ends the
 /// game's run of samples instead of adding to it (and the ledger isn't written on the caller's thread). Samples in
 /// light sleep ([`set_asleep`]) count for no game either.
 /// `generation`: [`GENERATION`] before `s` was read; a sleep change while it was read makes it nobody's.
 fn record(data_dir: &Path, s: Sample, count_game: bool, generation: u64) {
+    record_at(data_dir, s, count_game, generation, Instant::now());
+}
+
+fn record_at(_data_dir: &Path, s: Sample, count_game: bool, generation: u64, tick: Instant) {
+    let _writing = WRITING.lock().unwrap();
     if STOPPED.load(std::sync::atomic::Ordering::SeqCst) {
         return;
     }
@@ -492,27 +537,17 @@ fn record(data_dir: &Path, s: Sample, count_game: bool, generation: u64) {
     let now = GENERATION.load(std::sync::atomic::Ordering::SeqCst);
     let awake = !ASLEEP.load(std::sync::atomic::Ordering::SeqCst);
     let game = GAME.lock().unwrap().clone().filter(|_| count_game && awake && now == generation);
-    let (path, bytes, games) = {
+    {
         let mut guard = RECORDER.lock().unwrap();
         // Not read yet (a wake in the first moments): the sampler reads the files, not whoever called.
         let Some(rec) = guard.as_mut() else { return };
         if !rec.history.push(s, activity.as_deref()) {
             return;
         }
-        let games = rec.feed_games(s, game, now).then(|| rec.games.clone());
-        (rec.path.clone(), rec.history.encode(), games)
-    };
-    let _writing = WRITING.lock().unwrap();
-    // `stop` came while this sample was being put together: nothing more is written (the exit goes on).
-    if STOPPED.load(std::sync::atomic::Ordering::SeqCst) {
-        return;
+        rec.dirty = true;
+        rec.games_dirty |= rec.feed_games(s, game, now);
     }
-    if let Err(e) = write_file(&path, &bytes) {
-        eprintln!("battery: can't write {}: {e}", path.display());
-    }
-    if let Some(Err(e)) = games.map(|g| g.save(data_dir)) {
-        eprintln!("battery: can't write {}: {e}", battery_games::FILE);
-    }
+    flush_locked(tick, false);
 }
 
 /// One sample after a wake, on a thread of its own: the caller (the UI thread, `sleep.rs`) never waits for its three
@@ -856,7 +891,19 @@ mod tests {
         assert_ne!(game_card(&key, "GBA").as_deref(), Some(LOADING));
         let g = GENERATION.load(std::sync::atomic::Ordering::SeqCst);
         record(&d, s(T0, 80), true, g);
-        assert!(d.join(FILE).exists());
+        assert!(!d.join(FILE).exists(), "the first sample stays in memory");
+        assert_eq!(latest().unwrap().capacity, 80);
+        let path = d.join(FILE);
+        let blocked = d.join("not-a-directory");
+        std::fs::write(&blocked, b"block").unwrap();
+        RECORDER.lock().unwrap().as_mut().unwrap().path = blocked.join(FILE);
+        flush();
+        assert!(RECORDER.lock().unwrap().as_ref().unwrap().dirty, "retry a failed write");
+        RECORDER.lock().unwrap().as_mut().unwrap().path = path.clone();
+        flush();
+        assert_eq!(History::load(&path), view());
+        record(&d, s(T0 + 60, 79), false, g);
+        assert_eq!(History::load(&path).samples().len(), 1, "buffered until exit");
         // Review SOL 2026-10-24 #12: the exit waits for a write in progress, and nothing is written after it.
         let writing = std::thread::spawn(|| {
             let _w = WRITING.lock().unwrap();
@@ -895,5 +942,43 @@ mod tests {
 
     fn fsutil_bak(p: &Path) -> PathBuf {
         crate::fsutil::backup_path(p)
+    }
+}
+
+#[cfg(test)]
+mod polish_batch_bench {
+    use super::*;
+    #[test]
+    #[ignore = "benchmark owns sampler globals; run separately"]
+    fn persistence_workload() {
+        let d = crate::testutil::TestDir::new("polish-history-bench");
+        let mut rec = Recorder::open(&d);
+        let t0 = 1_790_000_000 / 60 * 60;
+        for i in 0..2881 {
+            rec.history.push(Sample { t: t0 - (2880-i)*60, capacity: 80, charging: false,
+                full: false, mv: 3900, ma: 500, temp: Some(300), tag: 0 }, None);
+        }
+        let tick = std::time::Instant::now();
+        *RECORDER.lock().unwrap() = Some(rec);
+        let started = std::time::Instant::now();
+        for i in 0..62 {
+            let s = Sample { t: t0 + i*60, capacity: 80, charging: false,
+                full: false, mv: 3900, ma: 500, temp: Some(300), tag: 0 };
+            record_at(&d, s, false, 0, tick + Duration::from_secs(i*60));
+            assert_eq!(latest().unwrap().t, s.t, "published immediately");
+            if i < 10 {
+                assert!(!d.join(FILE).exists());
+            } else {
+                assert_eq!(History::load(&d.join(FILE)).samples().last().unwrap().t,
+                    t0 + (i / 10) * 600, "only ten-minute boundaries write");
+            }
+        }
+        stop();
+        let saved = History::load(&d.join(FILE));
+        assert_eq!(saved.samples().last().unwrap().t, t0 + 61*60);
+        assert_eq!(saved.samples().len(), 2881);
+        assert_eq!(saved, view(), "orderly exit saved every accepted sample");
+        println!("history samples=62 span_minutes=61 encoded_bytes={} elapsed_ms={:.3}",
+            saved.encode().len(), started.elapsed().as_secs_f64()*1000.);
     }
 }

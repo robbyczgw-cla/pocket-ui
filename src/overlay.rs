@@ -794,9 +794,13 @@ mod tests {
         assert_eq!(hud.toast_text(), Trouble::Full.line(), "back after the note, not gone with it");
         hud.save_trouble = None;
         assert_eq!(hud.toast_text(), "");
-        // Two lines inside the screen, not one running off it.
+        // The warning stays inside the screen; a longer line wraps instead of running off it.
         let mut text = Text::new();
-        let (w, h, _) = paint_pill(&mut text, Trouble::Unwritable.line());
+        for t in [Trouble::Full, Trouble::Unwritable] {
+            let (w, _, _) = paint_pill(&mut text, t.line());
+            assert!(w <= WRAP_AT + 2 * PAD_X, "{w}");
+        }
+        let (w, h, _) = paint_pill(&mut text, Trouble::Unwritable.risk());
         assert!(w <= WRAP_AT + 2 * PAD_X && h > FONT as i32 * 2, "{w}x{h}");
         let (_, h1, _) = paint_pill(&mut text, "Saved to slot 2");
         assert_eq!(h1, FONT as i32 + 2 * PAD_Y, "a short note keeps its one line");

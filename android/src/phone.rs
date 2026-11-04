@@ -263,7 +263,7 @@ impl Ui {
             Screen::Library if c.w > c.h && self.shelf_row().is_some() => {
                 let row = self.shelf_row().unwrap();
                 let rows = self.rows.as_ref().unwrap();
-                (tr(rows.title(rows.row_of(row.start).unwrap_or(0))), games_note(row.end - row.start))
+                (tr(if row.key == pocket_ui::cabinet::ShelfKey::Continue { "Continue" } else { rows.title(rows.row_of(row.start).unwrap_or(0)) }), games_note(row.end - row.start))
             }
             Screen::Library => ("Games".to_string(), if self.library.is_some() { self.count_note() } else { String::new() }),
             Screen::Favorites => ("Favourites".into(), self.count_note()),
@@ -454,6 +454,17 @@ impl Ui {
             self.paint_empty_phone(c, text, room);
             return;
         }
+        let mut room = room;
+        if self.screen == Screen::Library && self.prefs.theme != Theme::Big {
+            let h = self.d(TARGET);
+            self.pill(c, text, Area::new(room.margin, room.top, c.w - 2 * room.margin, h),
+                "Just Play", false, Action::JustPlay);
+            room.top += h + self.d(8.0);
+        }
+        if self.prefs.theme == Theme::Big {
+            self.paint_easy_phone(c, text, room, cover);
+            return;
+        }
         let landscape = c.w > c.h;
         let list = matches!(self.prefs.theme, Theme::Minimal | Theme::Split);
         if landscape {
@@ -478,6 +489,34 @@ impl Ui {
                 self.paint_grid(c, text, area, cover);
             }
             self.strip(c, text, room.bottom - strip, strip);
+        }
+    }
+    /// Easy keeps one case and its direct Play/Continue action on screen. Navigation
+    /// uses the existing selection, so touch, controller, return and rotation agree.
+    fn paint_easy_phone(&mut self, c: &mut Canvas, text: &mut Text, room: Room, cover: Option<&Image>) {
+        self.grid_cols = 1;
+        let Some(index) = self.visible.get(self.selected).copied() else { return };
+        let h = self.d(TARGET);
+        let gap = self.d(8.0);
+        let bottom = room.bottom - h - gap;
+        let picture_bottom = bottom - self.d(78.0);
+        let available = (picture_bottom - room.top).max(1);
+        if let Some(pic) = self.front_pic(text, index, true, (c.w - 2 * room.margin, available), cover) {
+            art::blit(c, &pic, (c.w - pic.w) / 2, room.top + (available - pic.h) / 2, 256, (room.top, picture_bottom));
+        }
+        if let Some(game) = self.game().cloned() {
+            let size = self.sp(22.0);
+            let name = text.fit(Face::Title, size, &game.name, c.w - 2 * room.margin);
+            text.draw(c, Face::Title, size, room.margin, picture_bottom + self.d(28.0), pal().chalk, &name);
+            let line = self.system_line(&game);
+            text.draw(c, Face::Body, self.sp(14.0), room.margin, picture_bottom + self.d(52.0), pal().dust, &line);
+            self.target(Area::new(room.margin, picture_bottom, c.w - 2 * room.margin, self.d(64.0)), &game.name, Action::Press(Button::North));
+            let arrow = h;
+            self.pill(c, text, Area::new(room.margin, bottom, arrow, h), "‹", false, Action::Press(Button::Left));
+            self.pill(c, text, Area::new(c.w - room.margin - arrow, bottom, arrow, h), "›", false, Action::Press(Button::Right));
+            let label = self.play_word();
+            self.pill(c, text, Area::new(room.margin + arrow + gap, bottom, c.w - 2 * (room.margin + arrow + gap), h),
+                label, true, Action::Press(Button::East));
         }
     }
     /// How wide the landscape shelf is, beside the panel with the selected game.
@@ -830,7 +869,7 @@ impl Ui {
             self.paint_board(&mut clip, r as usize, base, (tall, lift, board), margin, &light);
             let row = shelves.rows[r as usize];
             let n = row.end - row.start;
-            let title = tr(shelves.title(r as usize));
+            let title = tr(if row.key == pocket_ui::cabinet::ShelfKey::Continue { "Continue" } else { shelves.title(r as usize) });
             let note = games_note(n);
             let note_w = text.width(Face::Body, self.sp(13.0), &note);
             let shown = text.fit(Face::Title, title_size, &title, clip.w - 2 * margin - note_w - self.d(12.0));

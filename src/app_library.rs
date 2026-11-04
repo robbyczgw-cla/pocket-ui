@@ -228,7 +228,7 @@ impl App {
         self.library_ui.unread = Some(count);
         if rose && self.settings_page.is_none() && self.onboarded {
             let line = if count == 1 { "1 game file can't be read. Settings › Games › Game check says why." } else { "Some game files can't be read. Settings › Games › Game check says why." };
-            self.toast = Some((line.to_string(), Instant::now()));
+            self.warn(line);
         }
     }
 

@@ -271,12 +271,10 @@ impl App {
             let name = self.text.fit(Face::Body, font, name, right - pad - 2 * NU_BTN_PAD - value_w);
             let selected = i == page.sel;
             if selected {
-                let w = self.text.width(Face::Body, font, &name) + 2 * NU_BTN_PAD;
-                c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, pal().band);
-                c.round_rect(pad, y + 4, w, row - 8, (row - 8) / 2, pal().select);
+                pocket_ui::kit::selection(c, pad, y, right - pad, row);
             }
             self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, if selected { pal().ink } else { pal().text }, &name);
-            self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, if selected { pal().text } else { pal().dust }, &value);
+            self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, if selected { pal().ink } else { pal().dust }, &value);
         }
         self.hits.list(page.sel, page_mod::ROWS.len(), 0.0, row as f32);
 

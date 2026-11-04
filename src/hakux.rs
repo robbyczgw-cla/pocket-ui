@@ -280,7 +280,7 @@ pub fn prepare(data_dir: &Path, rom: &Path) -> Option<Prepared> {
     let cfg = std::fs::read_to_string(crate::emu_settings::SYSTEM_CFG).unwrap_or_default();
     let picture = picture_of(&cfg, rom.file_name().and_then(|f| f.to_str()).unwrap_or_default());
     crate::fsutil::write_atomic(&data.join("core-options.cfg"), core_options(&picture).as_bytes()).ok()?;
-    let states_dir = Path::new(crate::slots::STATES_DIR).join("xbox");
+    let states_dir = crate::slots::states_dir().join("xbox");
     let port = free_port();
     let config = data.join("pocket-ui.cfg");
     crate::fsutil::write_atomic(&config, appendconfig(&data, &states_dir, port, &picture).as_bytes()).ok()?;

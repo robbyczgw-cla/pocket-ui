@@ -11,8 +11,9 @@ Every list is a shelf of **spines**. In the Shelf look (the default) every game 
 system's real case, seen from the spine: a SNES game's cardboard box, a PlayStation jewel case, a PS2 DVD case. The
 game itself (the cartridge, card or disc) is inside: it comes out when the box is opened and goes into the console when
 the game starts. The selected
-one is **pulled out**: it rises out of the row and is shown large above the shelf, turned to its front with the
-cover. This is the one memorable element; everything around it stays quiet. (The other looks keep the older idea,
+one is **pulled out**: it rises 16 template pixels out of the row, a strip of the label's paper lights the board
+where it stood (so the selection reads among cases of one colour and on 480 lines), and it is shown large above the
+shelf, turned to its front with the cover. This is the one memorable element; everything around it stays quiet. (The other looks keep the older idea,
 a list of spines with an edge stripe.)
 (Socket inspired the physical-media idea; NextUI inspired the flat, minimal list and "continue first".)
 
@@ -25,7 +26,7 @@ brackets show each rule (`pocket-ui --snapshot <state>`, docs/DEVELOPING.md).
 - **The sheet** is where things are set: Settings and its pages, quick settings, the pause menu, dialogs, safe mode.
   It is flat and calm, built for reading (`settings:0:0`, `sys:quick`, `main`).
 - **Where they meet:** the selection is the same paper on both (the pulled-out label's `#ECE9E1`, `select` =
-  `label`; the pause menu's title pill too), the neutrals lean warm like paper and walnut (never blue-grey), and the
+  `label`), the neutrals lean warm like paper and walnut (never blue-grey), and the
   sheet borrows the shelf's pixel art only for things: an empty page's vignette, the handheld, the category icons,
   the emblem on a box that is not a game, the memory card or cartridge the save slots stand on (`slot-save:psx`,
   `slot-load:snes`, `src/save_media.rs`). Text is never pixel art; a physical thing is never a flat drawing.
@@ -39,7 +40,10 @@ through `type_scale` (Text size).
 from the edge (`kit::PAD`), text 36 px inside them (`BTN_PAD`, so 66 px from the edge), rows 66 px around Body 36
 (`kit::row`), pills 90 px high, 12 px from the top pill to the first row, 24 px between a description and the pill.
 The top line of a sheet page: its title in Title 50 at the left, the status corner in its pill at the right, the title
-cut with "…" 24 px short of the pill (`App::sheet_header`).
+cut with "…" 24 px short of the pill (`App::sheet_header`). The pages over a game have the same: Options and its pages,
+Players, Pixel Path, a question such as "Couldn't save. Quit anyway?" (the question is the title), and the pause menu
+has the game's name in Title 50 as a plain title, with no paper under it (a paper band there read as a second
+selection, 0.2); its items start 24 px under the title's line, on the grid (they were centred on the screen).
 
 **Radii.** A pill, a band, a key and a row's selection are round at half their height. A panel (a live readout or
 a state, not a choice: Performance & fan's "Now", safe mode's "What happened", the status of Tailscale and
@@ -51,13 +55,18 @@ OSD's height, clear of the top line's ends or across the whole width, never half
 **Colour roles** (tables under [Appearance](#appearance-dark-and-light-srcpaletters-srcappearancers)): page
 (`void`), surface (`spine` on the shelf, `pill` on the sheet), paper (`label` = `select`: the selection, the
 pulled-out label, the pause title), ink on paper, `text`/`chalk` on the page, `quiet`/`dust` for what explains,
-`band` behind a selected row (a warm grey; over a game the game's system stripe), `amber` for Favourites and
+`band` the track of a slider on a selected row, `amber` for Favourites and
 suggestions, `alert` for what went wrong. Colour that means something comes from content (system stripes, covers),
 never from a UI accent.
 
-**Lists.** One row style per surface. Sheet: the name 36 px in, the value at the right in the row's colour, the
-selection a band across with the name on a paper pill (`kit::selection`, `kit::row_label`), a 4 px scroll bar at
-the right edge when the list is longer than its window (`kit::scrollbar`). Shelf lists (search, the Lens, first
+**Lists.** One row style per surface. Sheet: the name 36 px in, the value at the right, the selection one sheet of
+paper across the whole row with everything on it in ink, the label's lift shadow under it in Light
+(`kit::selection`, `kit::row_label`; over a game the game's system stripe is a short bar inside its left end,
+`kit::selection_striped`). A row that opens a page ends in a drawn angle on every row, Dust on the others and ink on
+the selected one; the selected switch stands between two drawn angles (‹ On ›) that Left/Right turn; the hint says
+**A Open** or **A Change** to match (`kit::row_value`, `kit::chevron`: never the letters ">" or "‹ ›"). Until
+2026-11-04 the selection was a paper pill round the name running into a grey band, and only the selected row showed
+its marks. A 4 px scroll bar at the right edge when the list is longer than its window (`kit::scrollbar`). Shelf lists (search, the Lens, first
 start): spine-coloured rows, the selected one paper with ink, the label's lift shadow in Light. The sheet's lists
 wrap at their ends; the shelf stops at its ends (it is a physical shelf with bookends).
 
@@ -67,8 +76,20 @@ the selected row stands at the bottom left, never under the pill: its last line 
 lines in the column beside the pill, longer ones across the page above (`kit::footer`: `settings:0:0`, `sys:quick`,
 `options`, `picture`). Every page has hints, the pause menu's pages too: B Back first in the pill, then A Open (a
 row that opens a page), A Choose (an action) or "< >" Change (a value). Same word, same action: Back goes up a level,
-Close shuts an overlay (quick settings), Cancel leaves a dialog. Labels go before keys when the line is full; at
-most five keys.
+Close shuts an overlay (quick settings), Cancel leaves a dialog. A key never stands without its word: at most four
+hints (Easy three), and where they don't fit whole hints go, the least needed first (A, B, HOME and START last, then
+the page's order from the front; `kit::top_hints`, `type_scale::hints_that_fit`). On Home that is `A · HOME Quick
+settings · START Settings` plus Details; SELECT and Star are in the manual and the tour. The pause menu keeps START
+(the way to the quick settings) before SELECT.
+
+**Messages.** One rule (`src/app_messages.rs`, `src/notice.rs`, `toast_len` in `src/main.rs`). A short confirmation is a
+**toast**: a pill that goes by itself (on Home at the bottom over the hint line, where it covers no game's name; over
+the search and the quick settings at the top), for 2 s at the least and longer with its length (40 ms a letter, at
+most 6 s), so a sentence is read to its end ("Added to Favourites", "Hidden: … Settings › System › Storage brings it
+back."). What went wrong or needs a decision is a **notice** (`App::warn`): a card with a red stroke that stays until
+A or B (or a tap) closes it, with "Press A to close." as its last line, over every page of the shelf; a second one
+waits behind the first so nothing is pushed away unread. A game that did not start uses the same card. Quick settings
+and the in-game overlay keep their own toast layers.
 
 **Empty pages.** The vignette above the words, left aligned with them on the text column; the heading in Title 37,
 what to do next in Body 30 Quiet, at most three lines (`kit::empty_state`: `gallery:empty`, `tools:empty`). A page
@@ -199,8 +220,8 @@ and its neighbours, the list scrolling with a bar at the right edge) and keeps n
 explanation shows free below; with the 7 rows of a GBA game it would otherwise be a strip about 40 px high. Normal
 shows every row, as before. Where there is no room, text is cut with "…" or wrapped (`Text::fit`,
 `Text::wrap`, `Text::paragraph`, which ends the last line it has room for with "…"), never in the middle of a word without
-it, and a hint bar lets the last labels go and keeps their keys. The loose Shelf-family bar keeps the gaps between
-keys when labels go; its width budget includes those gaps, so the last key stays inside native 1024×768 at Large too.
+it, and a hint bar lets whole hints go (never a label alone), the least needed first. Its width budget includes the
+gaps between hints, so the last key stays inside native 1024×768 at Large too.
 A Settings list's description of the selected row
 sits beside the hint bar on its line; when it does not fit there (German, Large) it takes up to two lines above the
 bar, and the category keeps that room for all its rows, so the list does not move as the selection does. Fixed pictures keep the design's sizes
@@ -299,6 +320,11 @@ logical dimensions and reduction; their text-box findings describe the logical c
   selected), a page a short value and ">" ("Home >", "Shelf · Dark >", "332 games >"), or ">" alone where there is
   nothing to say or the value is still being looked up (`settings_values`). A value takes at most 440 px and the room
   the name leaves, and is cut with "…" past that; the ">" stays.
+- **One rule for an empty or loading view**: never a blank box, never a placeholder that looks broken. A view with
+  nothing to show is a calm picture (`ui_art`) + a heading saying what is missing + one sentence on how it gets filled
+  ("No games here yet.", then the way); Kids Mode shows the same, large (the empty shelf, 3 times). A view that waits has
+  words only when they say what is being done and for how long; a row whose data is not there yet (Curator before its
+  index) is left out, with no tiles and no words.
 - **Empty pages have a picture** (`src/ui_art.rs`, `assets/ui-art`, sources in its SOURCES.md): a small pixel
   vignette above the words, twice its pixels (once on a screen under 900 lines), its bottom 28 px above the heading's
   capitals; the words move down only as far as it needs (`ui_art::above_words`). An empty shelf with a plant (no
@@ -306,7 +332,7 @@ logical dimensions and reduction; their text-box findings describe the logical c
   by an empty box (no match; in search right of the words, the keyboard may take the room below), a market stall (an
   empty store), a radio asleep under a moon (no network: Wi-Fi, Tailscale, a store that can't be reached), a bell and
   an hourglass (a hotel's sign-in), an open blank notebook (no history), a star on a cushion (no favourites, in the
-  Favourites panel). "Getting ready…" and "Loading…" have none. Where a page has no room left the picture is left
+  Favourites panel). A loading page ("Getting ready…", "Loading…") has none; it says in a sentence what it is doing. Where a page has no room left the picture is left
   out, never the words. The same house style as the console pictures: one dark outline pixel, three or four tones a
   material, transparent, warm and muted; each picture is decoded the first time it is painted and kept (a vignette
   costs about 20 µs a frame).
@@ -322,7 +348,7 @@ logical dimensions and reduction; their text-box findings describe the logical c
   lettered as Settings › Playing › Button layout has them (`manual::controls_picture`, from the line of
   `docs/user/controls.md` whose image line points at `pocket-ui:controls`).
 - **Never a blank where a figure goes.** A preview, panel or side text that has nothing to show yet says so in words
-  ("Getting ready…", "Nothing this week", "No PC paired"), and the Lens with nothing picked shows what it looks
+  ("Nothing this week", "No PC paired"; a Curator row before its index shows no words rather than a placeholder that looks broken), and the Lens with nothing picked shows what it looks
   through ("332 games · 18 filters"). Split's panel shows the side text large, so it is never an empty slate.
 - **Launch:** the label stays where it is and the rest of the shelf fades to black, then the game takes over.
   On return, the shelf comes back with the same spine pulled out.
@@ -354,7 +380,7 @@ full beginning. Changing selection or available width resets it; fitting titles 
 | Where | What | Time |
 |---|---|---|
 | Shelf look | the selected spine rises out of the row (the one before goes back), the case above the shelf turns from its spine to its front (`SHELF_TURN`); the shelf glides along under its faded ends, a spine at a time and five on L1/R1 | lift 120 ms, turn 220 ms, glide 220 ms |
-| Minimal, Split, Settings list | the pill / the system-coloured bar / the band glides to the new row, the pill's width follows the name; a name turns to the highlight's text colour as it comes under it; the list scrolls under its edges | ~150 ms |
+| Minimal, Split, Settings list | the pill / the system-coloured bar / the paper glides to the new row, the pill's width follows the name (Minimal, Split); a name and its value turn to the highlight's text colour as they come under it; the list scrolls under its edges | ~150 ms |
 | Cards look | the carousel slides; size, shade and place of every card follow its distance from the middle; the card in the middle is lifted (3 % larger, a soft shadow on paper); the wash behind turns from one card's colour to the next | ~150 ms |
 | Pages | a deeper page (a system's shelf, Settings and its pages, the console page) comes in from 28 px to the right and fades up from the page colour, its list rows one after another (16 ms apart, at most four steps); going back comes in from the left, all at once; the game card rises out of the selected case (the Shelf look) or label; the switcher fades in | 150 ms (+ up to 64 ms) |
 | Curator, Search | Curator's list, the Lens, Echoes, Versions and the search are pages like the others (pushed in, popped back; sheets over the card or the list are not pages); their lists scroll smoothly under their edges (the Lens's values start at rest when another facet is picked), the selected row turns to paper at once | 150 ms |
@@ -436,10 +462,11 @@ centred).
 - **Favourites, pinned smart shelves and stickers**: the first games' covers side by side, 112 px slots 12 apart,
   each standing on the box's foot as a case stands on a shelf (a landscape SNES cover is short, a DVD tall), in the
   list's order. No caption: the line under the name says how many.
-- **A game without box art** is a tile in its system's stripe colour darkened 70 % towards black (the cabinet's
-  coverless case), with its name in Body 21 label paper in whole words, at the design's size in every text size (it
-  is a picture). A cover being decoded is a faint tile (the page mixed 40 % towards label Dust); before Curator's index
-  three of them stand where the covers will be, with "Getting ready…". An empty list says in words how to fill it.
+- **A game without box art** is a printed title card, as on the shelf: the spine colour with the system's stripe on
+  top, the system's short name small (Body 21 Dust) over the name (Title 24 Chalk, centred, two lines), in whole words,
+  at the design's size in every text size (it is a picture). Where the tile is too narrow for the name in whole words
+  (1024x768), the system's name alone, never a word cut to "Ne…". A cover being decoded is a faint tile (the page mixed 40 % towards label Dust); before Curator's index
+  three of them stand where the covers will be, with no words. An empty list says in words how to fill it.
 - **Calm**: nothing moves but the label's own pull; covers come from the image cache and the picture loader's thread
   only, so a panel never decodes on the UI thread. Minimal and Cards show no panel (Cards keeps the spine's line
   large on the card). The Cabinet has its own: Favourites are cases on their shelf, and the Surprise me box has the
@@ -542,7 +569,7 @@ alone would be only 1.1:1 against the page), and pickers get a paper sheet with 
 | alert / on_alert | `#E0705C` / `#151515` | `#A63A28` / `#FFFDF8` | errors; text on an alert band (a row asking to confirm) |
 | text / quiet / soft | `#FFFFFF` / `#AAA79F` / `#D2CEC6` | `#1F1D1A` / `#57534C` / `#3C3A35` | Settings-style lists, pills |
 | pill / chip | `#272523` / `#938E85` | `#E3DED3` / `#5E5A53` | status and hint pills, their key chips, scroll bars, panels |
-| band / select | `#77736B` / `#ECE9E1` | `#CFC8BA` / `#FFFDF8` | selected row of the Settings-style lists (select is the label's paper) |
+| band / select | `#77736B` / `#ECE9E1` | `#CFC8BA` / `#FFFDF8` | select: the selected row of the Settings-style lists (the label's paper); band: a slider's track on it |
 | amber / star | `#D39A2C` / `#F2C14E` | `#8F5E0C` / `#B07A12` | Favourites, "Playing? Press Y", stars |
 | split_bg / split_dim | `#12161B` / `#AAB3BD` | `#ECE7DD` / `#58544D` | Split look |
 
@@ -739,7 +766,12 @@ Two rows of Settings → Look → Cozy extras, both on from the start, Shelf loo
   is used (`cabinet_plan`, Mini V2 photo 2026-11-03: a 170-line empty strip): first the showcase grows, the case and the
   TV up to 1.4 times their base size (`show_grow`); what is still left lets the top of the next shelf look in at the
   bottom, fading into the hints' ground (at least 72 lines, else the plinth closes the cabinet); on the last shelf the
-  plinth sits at the bottom. The board glides with the cabinet when the room changes (`show_top`).
+  plinth sits at the bottom. On a screen under 900 lines that has no scaled
+  layout (1024x768, 1280x800) the shelf is drawn at 1.7 screen pixels a template pixel instead of 2.5
+  (`media::shelf_scale_for`, one runtime scale every shelf size is measured from) and the title block moves up 18 lines
+  (`lift`), so the showcase gets at least 20 % of the height (`SHOW_MIN_SHARE`) for the case and the TV, and the spines
+  keep their whole titles (a unit test checks it for the tallest shelf of every kind of case). Should a shelf still not
+  fit, it sinks behind the top board (`showcase`'s `sink`, at most 45 % of it) rather than the case giving way. The board glides with the cabinet when the room changes (`show_top`).
 - **Selecting** pulls the case out and turns it to show its cover (240 ms; the last one goes back in 160 ms
   from wherever it had got to, so holding a direction never waits). Out, it stands in the showcase on the top
   board, above its own slot as far as the screen lets it: nothing of the shelves is under it. It is never taller

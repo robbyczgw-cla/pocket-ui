@@ -82,8 +82,8 @@ for cid,label,core in cases:
     tap('Load · Slot 2');shot(cid+'-loaded')
     tap('Previous slot');assert any(n.get('text')=='Save · Slot 1'for n in tree()),'Touch slot did not return to slot 1'
     tap('Earlier');shot(cid+'-earlier')
-    tap('Quit');time.sleep(1);shot(cid+'-shelf')
-    tap('Play');time.sleep(2);key(4);tap('Quit');time.sleep(1)
+    tap('Save & quit');time.sleep(1);shot(cid+'-shelf')
+    tap('Play');time.sleep(2);key(4);tap('Save & quit');time.sleep(1)
     log=shell('logcat','-d');(out/'logcat.txt').write_text(log)
     assert 'FATAL EXCEPTION'not in log and 'Fatal signal'not in log
     assert 'player state loaded:'in log and 'resume=Resumed'in log

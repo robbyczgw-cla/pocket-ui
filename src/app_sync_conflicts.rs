@@ -406,10 +406,8 @@ impl App {
             let kind_w = self.text.width(Face::Body, 28, kind);
             let name = self.text.fit(Face::Body, font, &e.title, right - left - kind_w - 40);
             let (fg, side) = if i == p.sel {
-                let w = self.text.width(Face::Body, font, &name) + 2 * NU_BTN_PAD;
-                c.round_rect(x0, ry + 4, c.w - 2 * x0, row - 8, (row - 8) / 2, pal().band);
-                c.round_rect(x0, ry + 4, w, row - 8, (row - 8) / 2, pal().select);
-                (pal().ink, pal().text)
+                pocket_ui::kit::selection(c, x0, ry, c.w - 2 * x0, row);
+                (pal().ink, pal().label_dust)
             } else {
                 (pal().text, pal().dust)
             };

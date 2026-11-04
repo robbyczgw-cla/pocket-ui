@@ -1,0 +1,19 @@
+--- a/libretro/libretro.cpp
++++ b/libretro/libretro.cpp
+@@ -1475,11 +1475,11 @@
+
+       emuThreadState = EmuThreadState::PAUSE_REQUESTED;
+
+-      // Is this safe?
+-      ctx->ThreadFrame(true); // Eat 1 frame
+-
+-      while (emuThreadState != EmuThreadState::PAUSED)
+-         sleep_ms(1, "libretro-pause-poll");
++      // Drain rendering until the emulation thread acknowledges the pause.
++      // One frame is not enough when it is waiting for a synchronous readback.
++      ctx->ThreadFrameUntilCondition([]() -> bool {
++         return emuThreadState == EmuThreadState::PAUSED;
++      });
+    }
+
+ } // namespace Libretro

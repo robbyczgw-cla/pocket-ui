@@ -97,7 +97,7 @@ impl App {
             Some(only) => format!("{}\n{only}", e.blurb()),
             None => e.blurb().to_string(),
         };
-        let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, &[("B", "Back"), ("A", "Switch")], &desc, 4, pal().text);
+        let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, &[("B", "Back"), ("A", "Change")], &desc, 4, pal().text);
         let visible = (((foot - 12 - top) / row).max(1) as usize).min(list.len());
         let first = window_start(sel, visible, list.len());
         for (i, e) in list.iter().enumerate().skip(first).take(visible) {
@@ -109,8 +109,7 @@ impl App {
             let vw = self.text.width(Face::Body, font, &shown);
             let name = self.text.fit(Face::Body, font, e.label(), right - pad - 2 * NU_BTN_PAD - vw - 24);
             let base = pocket_ui::kit::row_label(c, &mut self.text, (pad, y, right - pad, row), font, &name, i == sel);
-            let ink = if i == sel { pal().ink } else { pal().text };
-            self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, ink, &shown);
+            pocket_ui::kit::row_value(c, &mut self.text, font, right - NU_BTN_PAD, base, &shown, i == sel);
         }
         pocket_ui::kit::scrollbar(c, top, visible as i32 * row, first, visible, list.len());
         self.hits.list(sel, list.len(), 0.0, row as f32);

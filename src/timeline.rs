@@ -221,7 +221,7 @@ pub fn chip(e: &Entry, now: u64, tz: i32) -> String {
 
 /// The line under the picture; `None`: the game has none yet.
 pub fn note(e: Option<&Entry>, now: u64, tz: i32) -> String {
-    let Some(e) = e else { return "Earlier · none yet · one every 5 min of play".into() };
+    let Some(e) = e else { return "Earlier · none yet · keeps a moment every 5 min of play".into() };
     if e.damaged() {
         let when = match e.name.kind {
             Kind::Every => crate::recents::ago_from(e.secs(), now),
@@ -1017,7 +1017,7 @@ mod tests {
         let d = Dir::new("calm");
         let base = d.base("gba", "Game");
         assert!(entries(&base).is_empty());
-        assert_eq!(note(None, 1000, 0), "Earlier · none yet · one every 5 min of play");
+        assert_eq!(note(None, 1000, 0), "Earlier · none yet · keeps a moment every 5 min of play");
         // An empty file (the card filled up while it was written): listed, said so, not loadable.
         let p = path(&base, Name { kind: Kind::Every, n: 2 });
         std::fs::write(&p, b"").unwrap();

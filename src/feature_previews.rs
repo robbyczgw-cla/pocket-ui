@@ -92,6 +92,20 @@ fn scene_on_screen(c: &mut Canvas, (sw, sh): (u32, u32)) -> (i32, i32, i32, i32)
     (gx, gy, gw, gh)
 }
 
+/// A made-up game picture of `w` x `h`, as pocket-core's `shot` would give it (the sample scene of the cards at a whole
+/// number scale) and where the game is in it: for the snapshots of the pause menu's Zoom, which has no game behind it.
+pub fn game_shot(w: u32, h: u32) -> (Image, (u32, u32, u32, u32)) {
+    let mut px = vec![0u32; (W * H) as usize];
+    let rect = {
+        let mut c = Canvas::new(&mut px, W as u32, H as u32);
+        c.clear(VOID);
+        scene_on_screen(&mut c, (240, 160))
+    };
+    let (sx, sy) = (w as f32 / W as f32, h as f32 / H as f32);
+    let rect = ((rect.0 as f32 * sx) as u32, (rect.1 as f32 * sy) as u32, (rect.2 as f32 * sx) as u32, (rect.3 as f32 * sy) as u32);
+    (Image { w: W as u32, h: H as u32, px }.resized(w as i32, h as i32), rect)
+}
+
 fn blit_nearest(c: &mut Canvas, img: &Image, x: i32, y: i32, scale: i32) {
     for sy in 0..img.h as i32 {
         for sx in 0..img.w as i32 {
@@ -100,8 +114,8 @@ fn blit_nearest(c: &mut Canvas, img: &Image, x: i32, y: i32, scale: i32) {
     }
 }
 
-/// A list in the style of Settings (and the pause menu): a title, rows of name and value, the selected one on the
-/// band with its pill; `values` right-aligned.
+/// A list in the style of Settings (and the pause menu): a title, rows of name and value, the selected one on paper;
+/// `values` right-aligned, their marks drawn (`kit::row_value`).
 fn list_page(c: &mut Canvas, text: &mut Text, title: &str, rows: &[(&str, String)], sel: usize, top: i32) {
     let (pad, row, font) = (30, 66, 36u32);
     // The status pill, top right.
@@ -116,12 +130,10 @@ fn list_page(c: &mut Canvas, text: &mut Text, title: &str, rows: &[(&str, String
         let base = y + row / 2 + font as i32 * 7 / 20;
         let selected = i == sel;
         if selected {
-            c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, pal().band);
-            let pill = text.width(Face::Body, font, name) + 72;
-            c.round_rect(pad, y + 4, pill, row - 8, (row - 8) / 2, pal().select);
+            crate::kit::selection(c, pad, y, right - pad, row);
         }
         text.draw(c, Face::Body, font, pad + 36, base, if selected { pal().ink } else { pal().text }, name);
-        text.draw_right(c, Face::Body, font, right - 36, base, pal().text, value);
+        crate::kit::row_value(c, text, font, right - 36, base, value, selected);
     }
 }
 
@@ -474,17 +486,28 @@ fn settings_rows(values: &[(&str, &str)]) -> Vec<(&'static str, String)> {
 }
 
 pub fn motion(c: &mut Canvas, text: &mut Text) {
-    // The band has just glided from Sounds down to LEDs: where it was a moment ago, fainter the longer ago.
+    // The paper has just glided from Sounds down to LEDs: where it was a moment ago, fainter the longer ago.
     c.clear(pal().void);
     let (pad, row, top) = (30, 66, 132);
     let right = c.w - pad;
     for (k, amount) in [(5.0f32, 40u32), (5.5, 70), (6.0, 105), (6.5, 145)] {
         let y = top + (k * row as f32) as i32;
-        c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, mix(pal().void, pal().band, amount));
+        c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, mix(pal().void, pal().select, amount / 2));
     }
     let rows = settings_rows(&[("Animations", "Cozy"), ("Motion", "Full"), ("Sounds", "30%"), ("Haptics", "Off"), ("LEDs", "Off >")]);
     list_page(c, text, SETTINGS_TITLE, &rows, 7, top);
     hints(c, text, &[("B", "Back"), ("A", "Open")]);
+}
+
+pub fn easy_to_read(c: &mut Canvas, text: &mut Text) {
+    // Settings → Look as it is with the card on: the type a quarter larger, whatever the text size in use is now.
+    let before = crate::type_scale::get();
+    crate::type_scale::set(crate::settings::TextSize::Large);
+    c.clear(pal().void);
+    let rows: Vec<(&str, String)> = vec![("Appearance", "Dark".into()), ("Colours", "Warm".into()), ("Font", "Barlow".into()), ("Text size", "Large".into()), ("Screen colour", "Neutral".into())];
+    list_page(c, text, "Look", &rows, 3, 132);
+    hints(c, text, &[("B", "Back"), ("A", "Switch")]);
+    crate::type_scale::set(before);
 }
 
 pub fn sounds(c: &mut Canvas, text: &mut Text) {
@@ -499,14 +522,14 @@ pub fn sounds(c: &mut Canvas, text: &mut Text) {
         let h = (v.abs() as i32).max(1);
         c.rect(x0 + x, y0 - h, 1, 2 * h, pal().dust);
     }
-    hints(c, text, &[("B", "Back"), ("A", "Switch"), ("Left/Right", "How loud")]);
+    hints(c, text, &[("B", "Back"), ("A", "Change"), ("Left/Right", "How loud")]);
 }
 
 pub fn haptics(c: &mut Canvas, text: &mut Text) {
     c.clear(pal().void);
     let rows = settings_rows(&[("Animations", "Cozy"), ("Motion", "Full"), ("Sounds", "30%"), ("Haptics", "‹ On ›"), ("LEDs", "Off")]);
     list_page(c, text, SETTINGS_TITLE, &rows, 6, 132);
-    hints(c, text, &[("B", "Back"), ("A", "Switch")]);
+    hints(c, text, &[("B", "Back"), ("A", "Change")]);
 }
 
 pub fn leds(c: &mut Canvas, text: &mut Text) {
@@ -529,12 +552,10 @@ pub fn leds(c: &mut Canvas, text: &mut Text) {
         let y = 560 + i as i32 * row;
         let base = y + row / 2 + 13;
         if i == 0 {
-            c.round_rect(pad, y + 4, c.w - 2 * pad, row - 8, (row - 8) / 2, pal().band);
-            let pill = text.width(Face::Body, 36, name) + 72;
-            c.round_rect(pad, y + 4, pill, row - 8, (row - 8) / 2, pal().select);
+            crate::kit::selection(c, pad, y, c.w - 2 * pad, row);
         }
         text.draw(c, Face::Body, 36, pad + 36, base, if i == 0 { pal().ink } else { pal().text }, name);
-        text.draw_right(c, Face::Body, 36, c.w - pad - 36, base, pal().text, value);
+        crate::kit::row_value(c, text, 36, c.w - pad - 36, base, value, i == 0);
     }
     hints(c, text, &[("B", "Back"), ("Left/Right", "Change")]);
 }
@@ -565,13 +586,22 @@ pub fn search(c: &mut Canvas, text: &mut Text) {
     hints(c, text, &[("A", "Play"), ("L2/R2", "Letter"), ("X", "Details"), ("B", "Back")]);
 }
 
-const PAUSE_ROWS: [&str; 6] = ["Continue", "Save", "Load", "Options", "Quick settings", "Quit"];
+/// The pause menu as 0.1.14 words it when the game keeps its moment (`quit_saves` in main.rs): Load says where it goes,
+/// Quit says it saves.
+const PAUSE_ROWS: [(&str, &str); 6] = [
+    ("Continue", ""),
+    ("Save", "1"),
+    ("Load", "Where I quit"),
+    ("Options", ""),
+    ("Quick settings", ""),
+    ("Save & quit", ""),
+];
 
 /// Settings › Continue where I quit: the pause menu's one Quit, and what the switch makes of it.
 pub fn remember_quit(c: &mut Canvas, text: &mut Text) {
     palette::scoped(0, || {
         paused_game(c);
-        let rows: Vec<(&str, String)> = PAUSE_ROWS.iter().map(|r| (*r, String::new())).collect();
+        let rows: Vec<(&str, String)> = PAUSE_ROWS.iter().map(|(r, v)| (*r, v.to_string())).collect();
         list_page(c, text, "Sample game", &rows, 5, 160);
         let mut y = c.h - 104;
         for line in ["On: the next start continues from this moment.", "Off: only the game's own saves are kept."] {
@@ -655,7 +685,7 @@ pub fn sync(c: &mut Canvas, text: &mut Text) {
         .collect();
     list_page(c, text, "Sync", &rows, 2, 132);
     text.draw(c, Face::Body, 30, 66, 132 + 6 * 66 + 60, pal().text, "Up to date with 2 devices.");
-    hints(c, text, &[("B", "Back"), ("A", "Switch")]);
+    hints(c, text, &[("B", "Back"), ("A", "Change")]);
 }
 
 pub fn tailscale(c: &mut Canvas, text: &mut Text) {
@@ -672,7 +702,7 @@ pub fn tailscale(c: &mut Canvas, text: &mut Text) {
         text.draw(c, Face::Body, 30, 66, y, pal().text, line);
         y += 44;
     }
-    hints(c, text, &[("B", "Back"), ("A", "Switch")]);
+    hints(c, text, &[("B", "Back"), ("A", "Change")]);
 }
 
 pub fn tools(c: &mut Canvas, text: &mut Text) {
@@ -692,7 +722,7 @@ pub fn cozy_extras(c: &mut Canvas, text: &mut Text) {
     c.clear(pal().void);
     let rows: Vec<(&str, String)> = Extra::shown().into_iter().take(9).map(|e| (e.label(), if e.default_on() { "On" } else { "Off" }.to_string())).collect();
     list_page(c, text, "Cozy extras", &rows, 0, 132);
-    hints(c, text, &[("B", "Back"), ("A", "Switch")]);
+    hints(c, text, &[("B", "Back"), ("A", "Change")]);
 }
 
 pub fn perf_fan(c: &mut Canvas, text: &mut Text) {
@@ -828,5 +858,13 @@ mod tests {
         colours.sort();
         colours.dedup();
         assert!(colours.len() > 8);
+    }
+
+    #[test]
+    fn the_pause_preview_says_save_and_quit() {
+        // 0.1.14: with Continue where I quit on, the pause menu's last row is "Save & quit", not "Quit".
+        let last = PAUSE_ROWS.last().unwrap().0;
+        assert_eq!(last, "Save & quit");
+        assert!(PAUSE_ROWS.iter().all(|(r, _)| *r != "Quit"));
     }
 }

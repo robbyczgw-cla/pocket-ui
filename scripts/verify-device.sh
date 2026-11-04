@@ -17,6 +17,9 @@
 #   md5        what runs (/proc/<pid>/exe) is the deployed binary (/storage/pocket-ui/pocket-ui, which follows
 #              current/); and the deployed one is the one built here (target/aarch64-unknown-linux-gnu/release),
 #              unless --no-local (latency.sh: it measures whatever is installed, not necessarily this build)
+#   sound      the default sink's volume and mute, as "muted 0.10" or "0.10" (`wpctl get-volume`). With VERIFY_SOUND_BEFORE
+#              (dev.sh deploy sets it from before the restart) it must be the same: "sound: muted 0.10 -> muted 0.10";
+#              else only reported. A deploy must not make a muted device audible (2026-11-04).
 #   pocket-core  only reported: a game may be running. A pocket-core with a stale binary or the variables above fails.
 # One SSH session for all of it (sshd rate-limits many quick logins). It waits up to VERIFY_WAIT seconds (default 10)
 # for the unit and pocket-ui to come up, since it runs right after a restart.
@@ -59,6 +62,8 @@ echo "unit_state=$st"
 if [ -e "$S/pocket-ui/dev.env" ] || [ -L "$S/pocket-ui/dev.env" ]; then echo dev_env=yes; else echo dev_env=no; fi
 [ -e "$TMP/pocket-ui.es-only" ] && echo es_mark=yes || echo es_mark=no
 cores=$(pidof pocket-core)
+snd=$(wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null); sv=$(echo "$snd" | awk '$1 == "Volume:" { print $2 }')
+case "$snd" in *MUTED*) echo "sound=muted $sv" ;; *) echo "sound=$sv" ;; esac
 echo "ui_pids=$(echo $uis)"
 echo "core_pids=$(echo $cores)"
 facts() { # kind pid
@@ -224,6 +229,16 @@ else
       fi
     fi
   done
+
+  now=$(fact sound)
+  before=${VERIFY_SOUND_BEFORE:-}
+  if [ -z "$before" ]; then
+    info "sound: ${now:-not readable (no wpctl)}"
+  elif [ "$now" = "$before" ]; then
+    ok "sound: $before -> $now"
+  else
+    bad sound "sound: $before -> ${now:-not readable}: the deploy changed what the speaker does; set it back with wpctl set-volume / set-mute @DEFAULT_AUDIO_SINK@"
+  fi
 
   if [ -n "$cores" ]; then
     info "pocket-core is running (pids $cores): a game is on, or one was left behind"

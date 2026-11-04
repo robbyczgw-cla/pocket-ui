@@ -102,7 +102,7 @@ shot('04-player-save-row')
 activate('Continue')
 time.sleep(1)
 key(4)
-activate('Quit')
+activate('Save & quit')
 time.sleep(1)
 # Warm start keeps provider identity and reads the separate automatic state.
 sh('logcat', '-c')
@@ -111,6 +111,6 @@ time.sleep(3)
 log = sh('logcat', '-d')
 assert 'resume=Resumed' in log and 'Android core renderer: GLES 3' in log
 key(4)
-activate('Quit')
+activate('Save & quit')
 assert 'Fatal signal' not in log
 print('X300 landscape/portrait, touch, box, slots, warm return PASS', flush=True)

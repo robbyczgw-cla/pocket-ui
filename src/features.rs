@@ -20,7 +20,7 @@ use crate::leds;
 use crate::on_start::OnStart;
 use crate::pad::Button;
 use crate::palette::*;
-use crate::settings::{Frames, Motion};
+use crate::settings::{Frames, Motion, TextSize};
 use crate::text::{Face, Text};
 use crate::touch::Area;
 use crate::ui_sound;
@@ -31,6 +31,8 @@ use crate::update::newer;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Switches {
     pub motion: Motion,
+    /// Settings › Look › Text size (settings.json's `text_size`).
+    pub text_size: TextSize,
     pub on_start: OnStart,
     /// Settings › Continue where I quit (settings.json's `forget_where_quit`, the other way round).
     pub remember_quit: bool,
@@ -48,6 +50,7 @@ impl Default for Switches {
     fn default() -> Switches {
         Switches {
             motion: Motion::default(),
+            text_size: TextSize::default(),
             on_start: OnStart::default(),
             remember_quit: true,
             frames: Frames::default(),
@@ -58,6 +61,12 @@ impl Default for Switches {
             leds: leds::Config::default(),
         }
     }
+}
+
+/// Whether Easy to read is on: Large text and a Motion that isn't Full. The Tour card's switch, and what puts Zoom
+/// into the pause menu's main page (`app_zoom::zoom_row_on`).
+pub fn reading_on(text_size: TextSize, motion: Motion) -> bool {
+    text_size == TextSize::Large && motion != Motion::Full
 }
 
 /// A feature's switch: on or off, read from and written to `Switches`.
@@ -197,189 +206,22 @@ fn curator(s: &mut Switches) -> &mut Prefs {
 }
 
 /// Every feature, in the order of the cards. The switch cards come first: they are the first start's "Choose
-/// yourself".
+/// yourself". Within each group the order is what a new player needs first (continuing a game, quitting, the feel of
+/// the menus), the Curator's cards last: the first-start walk of 2026-11-04 opened the tour on "Lens & smart shelves".
 pub static FEATURES: &[Feature] = &[
     Feature {
-        id: "lens",
-        title: "Lens & smart shelves",
-        plain: "pick games by mood and length",
-        line: "A Curator row on Home: combine filters, and keep one as a shelf that updates itself.",
-        place: "Settings › Games › Curator",
-        guide: "curator.md#lens",
+        // Was "Quit without saving", a pause-menu entry of its own (its id is kept: settings.json's `tour_later`).
+        id: "quit_without_saving",
+        title: "Continue where I quit",
+        plain: "continue where you quit",
+        line: "On: Quit keeps the moment and the next start continues there. Off: only the game's own saves stay.",
+        place: "Settings › Playing › Continue where I quit",
+        guide: "settings.md#continue-where-i-quit",
         since: "0.1.0",
-        switch: Some(Switch {
-            get: |s| s.curator.lens,
-            set: |s, on| curator(s).lens = on,
-        }),
-        // Simple is the defaults (2026-10-25), and Lens is one of them; pressing START on the profiles gives the same.
-        simple: Pick::On,
-        enthusiast: Pick::On,
-        preview: pv::lens,
-        todo: None,
-    },
-    Feature {
-        id: "echoes",
-        title: "Echoes",
-        plain: "suggestions for similar games",
-        line: "More like this, on every game card: games you own that play alike, each with a reason.",
-        place: "Settings › Games › Curator",
-        guide: "curator.md#echoes",
-        since: "0.1.0",
-        switch: Some(Switch {
-            get: |s| s.curator.echoes,
-            set: |s, on| curator(s).echoes = on,
-        }),
-        simple: Pick::On,
-        enthusiast: Pick::On,
-        preview: pv::echoes,
-        todo: None,
-    },
-    Feature {
-        id: "up_next",
-        title: "Up next after a game",
-        plain: "a next game to try after you quit",
-        line: "When you quit a game, one line on the shelf suggests a game of yours like it. X plays it; nothing starts by itself.",
-        place: "Settings › Games › Curator",
-        guide: "curator.md#up-next",
-        since: "0.1.0",
-        switch: Some(Switch {
-            get: |s| s.curator.up_next,
-            set: |s, on| curator(s).up_next = on,
-        }),
-        // Off by default and in Simple: for a few seconds Up next makes A play the suggestion.
-        simple: Pick::Off,
-        enthusiast: Pick::On,
-        preview: pv::up_next,
-        todo: None,
-    },
-    Feature {
-        id: "echoes_elsewhere",
-        title: "Echoes beyond this device",
-        plain: "suggestions from games you don't own yet",
-        line: "Echoes also names a few games you don't have, from the offline game list. Names only.",
-        place: "Settings › Games › Curator",
-        guide: "curator.md#echoes",
-        since: "0.1.0",
-        switch: Some(Switch {
-            get: |s| s.curator.not_on_device,
-            set: |s, on| curator(s).not_on_device = on,
-        }),
-        simple: Pick::Off,
-        enthusiast: Pick::On,
-        preview: pv::echoes_elsewhere,
-        todo: None,
-    },
-    Feature {
-        id: "versions",
-        title: "Versions",
-        plain: "other versions of a game",
-        line: "A game you own on several systems shows once in mixed lists and starts the version you prefer.",
-        place: "Settings › Games › Curator",
-        guide: "curator.md#versions",
-        since: "0.1.0",
-        switch: Some(Switch {
-            get: |s| s.curator.merge_versions,
-            set: |s, on| curator(s).merge_versions = on,
-        }),
-        simple: Pick::On,
-        enthusiast: Pick::On,
-        preview: pv::versions,
-        todo: None,
-    },
-    Feature {
-        id: "stickers",
-        title: "Labels",
-        plain: "your own labels for games",
-        line: "Your own labels for games, such as Couch co-op. Pin one to see it on Home.",
-        place: "Settings › Games › Curator",
-        guide: "curator.md#labels",
-        since: "0.1.0",
-        switch: Some(Switch {
-            get: |s| s.curator.stickers,
-            set: |s, on| curator(s).stickers = on,
-        }),
-        simple: Pick::On,
-        enthusiast: Pick::On,
-        preview: pv::stickers,
-        todo: None,
-    },
-    Feature {
-        id: "play_history",
-        title: "Play history",
-        plain: "your play time by week and year",
-        line: "Curator › History: what you played this week, month and year, and a calm Year in review.",
-        place: "Settings › Games › Curator",
-        guide: "curator.md#play-history",
-        since: "0.1.0",
-        switch: Some(Switch {
-            get: |s| s.curator.history,
-            set: |s, on| curator(s).history = on,
-        }),
-        // On from the start for everyone: it takes no room until something was played, and never pops up.
+        switch: Some(Switch { get: |s| s.remember_quit, set: |s, on| s.remember_quit = on }),
         simple: Pick::Keep,
-        enthusiast: Pick::On,
-        preview: pv::play_history,
-        todo: None,
-    },
-    Feature {
-        id: "pixel_path",
-        title: "Pixel Path",
-        plain: "picture and sound details in the pause menu",
-        line: "In the pause menu: how a game's picture and sound reach you, stage by stage, graded in colour.",
-        place: "Settings › Games › Curator",
-        guide: "pause-menu.md#pixel-path",
-        since: "0.1.0",
-        switch: Some(Switch {
-            get: |s| s.curator.pixel_path,
-            set: |s, on| curator(s).pixel_path = on,
-        }),
-        simple: Pick::Off,
-        enthusiast: Pick::On,
-        preview: pv::pixel_path,
-        todo: None,
-    },
-    Feature {
-        id: "pixel_path_live",
-        title: "Pixel Path over every game",
-        plain: "a line of picture details over every game",
-        line: "One quiet line beside the picture: the emulator, the scale, the frame rate, the latency, the sound.",
-        place: "Settings › Playing › Over the game",
-        guide: "pause-menu.md#pixel-path-over-the-game",
-        since: "0.1.0",
-        // Over the game's Pixel Path level (below a console's or a game's own choice); Off takes only that level
-        // away, so the FPS line stays where it was chosen. It doesn't need the pause menu's Pixel Path (2026-10-25).
-        switch: Some(Switch {
-            get: |s| s.over_game == crate::over_game::Level::PixelPath,
-            set: |s, on| {
-                use crate::over_game::Level;
-                if on {
-                    s.over_game = Level::PixelPath;
-                } else if s.over_game == Level::PixelPath {
-                    s.over_game = Level::Off;
-                }
-            },
-        }),
-        simple: Pick::Keep,
-        // A line over every game is a choice of its own, not part of a profile (Alex, 2026-10-31, on the RG28XX).
         enthusiast: Pick::Keep,
-        preview: pv::pixel_path_live,
-        todo: None,
-    },
-    Feature {
-        id: "frames",
-        title: "Screen frames on every console",
-        plain: "frames around the picture on every console",
-        line: "Auto frames the picture on the home consoles too, not only on the handhelds.",
-        place: "Settings › Playing › Screen frames",
-        guide: "settings.md#screen-frames",
-        since: "0.1.0",
-        switch: Some(Switch {
-            get: |s| s.frames == Frames::Every,
-            set: |s, on| s.frames = if on { Frames::Every } else { Frames::Off },
-        }),
-        simple: Pick::Off,
-        enthusiast: Pick::On,
-        preview: pv::frames,
+        preview: pv::remember_quit,
         todo: None,
     },
     Feature {
@@ -400,21 +242,6 @@ pub static FEATURES: &[Feature] = &[
         todo: None,
     },
     Feature {
-        // Was "Quit without saving", a pause-menu entry of its own (its id is kept: settings.json's `tour_later`).
-        id: "quit_without_saving",
-        title: "Continue where I quit",
-        plain: "continue where you quit",
-        line: "On: Quit keeps the moment and the next start continues there. Off: only the game's own saves stay.",
-        place: "Settings › Playing › Continue where I quit",
-        guide: "settings.md#continue-where-i-quit",
-        since: "0.1.0",
-        switch: Some(Switch { get: |s| s.remember_quit, set: |s, on| s.remember_quit = on }),
-        simple: Pick::Keep,
-        enthusiast: Pick::Keep,
-        preview: pv::remember_quit,
-        todo: None,
-    },
-    Feature {
         id: "motion",
         title: "Motion",
         plain: "gentle animations",
@@ -430,6 +257,35 @@ pub static FEATURES: &[Feature] = &[
         simple: Pick::On,
         enthusiast: Pick::On,
         preview: pv::motion,
+        todo: None,
+    },
+    Feature {
+        id: "easy_to_read",
+        title: "Easy to read",
+        plain: "larger text and calmer menus",
+        line: "Larger text, menus that only fade, and Zoom in the pause menu. Switches Text size and Motion together.",
+        place: "Settings › Look › Text size, Settings › Sound & feel › Motion",
+        guide: "easy-to-read.md#easy-to-read",
+        since: "0.2.0",
+        // On is Large text and Reduced motion (an Off motion stays Off); off is the design's Normal text and Full motion.
+        switch: Some(Switch {
+            get: |s| reading_on(s.text_size, s.motion),
+            set: |s, on| {
+                if on {
+                    s.text_size = TextSize::Large;
+                    if s.motion == Motion::Full {
+                        s.motion = Motion::Reduced;
+                    }
+                } else {
+                    s.text_size = TextSize::Normal;
+                    s.motion = Motion::Full;
+                }
+            },
+        }),
+        // A choice of its own, not part of a profile: Simple is the defaults, and larger text is for whoever needs it.
+        simple: Pick::Keep,
+        enthusiast: Pick::Keep,
+        preview: pv::easy_to_read,
         todo: None,
     },
     Feature {
@@ -491,6 +347,189 @@ pub static FEATURES: &[Feature] = &[
         todo: None,
     },
     // ---- nothing to switch: where it is ----
+    Feature {
+        id: "frames",
+        title: "Screen frames on every console",
+        plain: "frames around the picture on every console",
+        line: "Auto frames the picture on the home consoles too, not only on the handhelds.",
+        place: "Settings › Playing › Screen frames",
+        guide: "settings.md#screen-frames",
+        since: "0.1.0",
+        switch: Some(Switch {
+            get: |s| s.frames == Frames::Every,
+            set: |s, on| s.frames = if on { Frames::Every } else { Frames::Off },
+        }),
+        simple: Pick::Off,
+        enthusiast: Pick::On,
+        preview: pv::frames,
+        todo: None,
+    },
+    Feature {
+        id: "echoes",
+        title: "Echoes",
+        plain: "suggestions for similar games",
+        line: "More like this, on every game card: games you own that play alike, each with a reason.",
+        place: "Settings › Games › Curator",
+        guide: "curator.md#echoes",
+        since: "0.1.0",
+        switch: Some(Switch {
+            get: |s| s.curator.echoes,
+            set: |s, on| curator(s).echoes = on,
+        }),
+        simple: Pick::On,
+        enthusiast: Pick::On,
+        preview: pv::echoes,
+        todo: None,
+    },
+    Feature {
+        id: "versions",
+        title: "Versions",
+        plain: "other versions of a game",
+        line: "A game you own on several systems shows once in mixed lists and starts the version you prefer.",
+        place: "Settings › Games › Curator",
+        guide: "curator.md#versions",
+        since: "0.1.0",
+        switch: Some(Switch {
+            get: |s| s.curator.merge_versions,
+            set: |s, on| curator(s).merge_versions = on,
+        }),
+        simple: Pick::On,
+        enthusiast: Pick::On,
+        preview: pv::versions,
+        todo: None,
+    },
+    Feature {
+        id: "stickers",
+        title: "Labels",
+        plain: "your own labels for games",
+        line: "Your own labels for games, such as Couch co-op. Pin one to see it on Home.",
+        place: "Settings › Games › Curator",
+        guide: "curator.md#labels",
+        since: "0.1.0",
+        switch: Some(Switch {
+            get: |s| s.curator.stickers,
+            set: |s, on| curator(s).stickers = on,
+        }),
+        simple: Pick::On,
+        enthusiast: Pick::On,
+        preview: pv::stickers,
+        todo: None,
+    },
+    Feature {
+        id: "up_next",
+        title: "Up next after a game",
+        plain: "a next game to try after you quit",
+        line: "When you quit a game, one line on the shelf suggests a game of yours like it. X plays it; nothing starts by itself.",
+        place: "Settings › Games › Curator",
+        guide: "curator.md#up-next",
+        since: "0.1.0",
+        switch: Some(Switch {
+            get: |s| s.curator.up_next,
+            set: |s, on| curator(s).up_next = on,
+        }),
+        // Off by default and in Simple: for a few seconds Up next makes A play the suggestion.
+        simple: Pick::Off,
+        enthusiast: Pick::On,
+        preview: pv::up_next,
+        todo: None,
+    },
+    Feature {
+        id: "play_history",
+        title: "Play history",
+        plain: "your play time by week and year",
+        line: "Curator › History: what you played this week, month and year, and a calm Year in review.",
+        place: "Settings › Games › Curator",
+        guide: "curator.md#play-history",
+        since: "0.1.0",
+        switch: Some(Switch {
+            get: |s| s.curator.history,
+            set: |s, on| curator(s).history = on,
+        }),
+        // On from the start for everyone: it takes no room until something was played, and never pops up.
+        simple: Pick::Keep,
+        enthusiast: Pick::On,
+        preview: pv::play_history,
+        todo: None,
+    },
+    Feature {
+        id: "echoes_elsewhere",
+        title: "Echoes beyond this device",
+        plain: "suggestions from games you don't own yet",
+        line: "Echoes also names a few games you don't have, from the offline game list. Names only.",
+        place: "Settings › Games › Curator",
+        guide: "curator.md#echoes",
+        since: "0.1.0",
+        switch: Some(Switch {
+            get: |s| s.curator.not_on_device,
+            set: |s, on| curator(s).not_on_device = on,
+        }),
+        simple: Pick::Off,
+        enthusiast: Pick::On,
+        preview: pv::echoes_elsewhere,
+        todo: None,
+    },
+    Feature {
+        id: "pixel_path",
+        title: "Pixel Path",
+        plain: "picture and sound details in the pause menu",
+        line: "In the pause menu: how a game's picture and sound reach you, stage by stage, graded in colour.",
+        place: "Settings › Games › Curator",
+        guide: "pause-menu.md#pixel-path",
+        since: "0.1.0",
+        switch: Some(Switch {
+            get: |s| s.curator.pixel_path,
+            set: |s, on| curator(s).pixel_path = on,
+        }),
+        simple: Pick::Off,
+        enthusiast: Pick::On,
+        preview: pv::pixel_path,
+        todo: None,
+    },
+    Feature {
+        id: "pixel_path_live",
+        title: "Pixel Path over every game",
+        plain: "a line of picture details over every game",
+        line: "One quiet line beside the picture: the emulator, the scale, the frame rate, the latency, the sound.",
+        place: "Settings › Playing › Over the game",
+        guide: "pause-menu.md#pixel-path-over-the-game",
+        since: "0.1.0",
+        // Over the game's Pixel Path level (below a console's or a game's own choice); Off takes only that level
+        // away, so the FPS line stays where it was chosen. It doesn't need the pause menu's Pixel Path (2026-10-25).
+        switch: Some(Switch {
+            get: |s| s.over_game == crate::over_game::Level::PixelPath,
+            set: |s, on| {
+                use crate::over_game::Level;
+                if on {
+                    s.over_game = Level::PixelPath;
+                } else if s.over_game == Level::PixelPath {
+                    s.over_game = Level::Off;
+                }
+            },
+        }),
+        simple: Pick::Keep,
+        // A line over every game is a choice of its own, not part of a profile (Alex, 2026-10-31, on the RG28XX).
+        enthusiast: Pick::Keep,
+        preview: pv::pixel_path_live,
+        todo: None,
+    },
+    Feature {
+        id: "lens",
+        title: "Lens & smart shelves",
+        plain: "pick games by mood and length",
+        line: "A Curator row on Home: combine filters, and keep one as a shelf that updates itself.",
+        place: "Settings › Games › Curator",
+        guide: "curator.md#lens",
+        since: "0.1.0",
+        switch: Some(Switch {
+            get: |s| s.curator.lens,
+            set: |s, on| curator(s).lens = on,
+        }),
+        // Simple is the defaults (2026-10-25), and Lens is one of them; pressing START on the profiles gives the same.
+        simple: Pick::On,
+        enthusiast: Pick::On,
+        preview: pv::lens,
+        todo: None,
+    },
     Feature {
         id: "search",
         title: "Search and the letter jump",
@@ -662,6 +701,77 @@ pub fn by_id(id: &str) -> Option<usize> {
     available().find(|(_, f)| f.id == id).map(|(i, _)| i)
 }
 
+/// One of the Tour’s six basic cards, explained without a switch. The reading choice follows these.
+pub struct Basic {
+    /// Stable name, used by the snapshots (`--snapshot tour:<id>`).
+    pub id: &'static str,
+    pub title: &'static str,
+    /// What to know, in one or two sentences.
+    pub text: &'static str,
+    /// Where to press or look.
+    pub place: &'static str,
+    /// Its section in the user guide, `page.md#anchor` (checked by `doc_checks`).
+    pub guide: &'static str,
+}
+
+/// The Tour's six basic cards, in order, before the reading choice.
+pub static BASICS: &[Basic] = &[
+    Basic {
+        id: "play",
+        title: "Play, and HOME is the menu",
+        text: "Pick a game and press A. While you play, tap HOME to pause and open the menu: Continue, Save, Load, Quit.",
+        place: "Tap HOME in a game",
+        guide: "pause-menu.md#save-slots-where-i-quit-and-before-load",
+    },
+    Basic {
+        id: "continue",
+        title: "Continue where you stopped",
+        text: "Home opens on the game you played last. A continues it, and quitting keeps the moment, so the next start picks it up.",
+        place: "Home › Continue",
+        guide: "playing.md#home",
+    },
+    Basic {
+        id: "saving",
+        title: "Saving",
+        text: "Save and Load are in the pause menu. Earlier brings back a moment from before, if a game went wrong.",
+        place: "Pause menu › Save, Load, Earlier",
+        guide: "pause-menu.md#earlier",
+    },
+    Basic {
+        id: "quick",
+        title: "Quick settings",
+        text: "Brightness, volume, Wi-Fi, Bluetooth, fan and power in one panel, over the shelf and over a game.",
+        place: "HOME on the shelf, START in the pause menu",
+        guide: "quick-settings.md#quick-settings",
+    },
+    Basic {
+        id: "add_games",
+        title: "Add games",
+        text: "Games go in each system's folder on the SD card. Add games shows the folders and BIOS files, and can share them over Wi-Fi.",
+        place: "START › Settings › Games › Add games",
+        guide: "getting-started.md#5-add-games",
+    },
+    Basic {
+        id: "settings",
+        title: "Settings",
+        text: "Everything on these cards, and everything you meet along the way, can be switched under START › Settings.",
+        place: "START on the shelf",
+        guide: "settings.md#settings",
+    },
+];
+
+/// The six basics followed by Easy to read. Tour indices after BASICS refer to FEATURES.
+pub fn tour_list() -> Vec<usize> {
+    (0..BASICS.len()).chain(std::iter::once(BASICS.len() + by_id("easy_to_read").expect("reading card"))).collect()
+}
+
+/// The Tour's heading: six basic cards followed by the reading choice.
+pub const TOUR_TITLE: &str = "The basics in 7 cards";
+
+pub fn basic_by_id(id: &str) -> Option<usize> {
+    BASICS.iter().position(|b| b.id == id)
+}
+
 /// Sets every switch the profile has an answer for (Choose: none).
 pub fn apply(profile: Profile, s: &mut Switches) {
     for (_, f) in available() {
@@ -689,11 +799,6 @@ pub fn profile_summary(p: Profile) -> (Vec<&'static str>, Vec<&'static str>) {
 /// The cards of the first start's "Choose for yourself": every feature with a switch.
 pub fn choose_list() -> Vec<usize> {
     available().filter(|(_, f)| f.switch.is_some()).map(|(i, _)| i).collect()
-}
-
-/// The cards of Settings → Tour: every feature.
-pub fn tour_list() -> Vec<usize> {
-    available().map(|(i, _)| i).collect()
 }
 
 /// "New in this version": the features newer than the version last seen (`BASELINE` when none was noted) and not
@@ -735,7 +840,7 @@ pub fn unseen(seen: Option<&str>, current: &str) -> bool {
 pub enum Mode {
     /// The first start's "Choose for yourself": B goes back a card, from the first one back to the profiles.
     First,
-    /// Settings → Tour: B goes back to Settings.
+    /// Settings → Tour: six basics and the reading choice; B goes back to Settings.
     Tour,
     /// After an update: B puts them all away.
     New { version: String },
@@ -812,8 +917,22 @@ impl Cards {
         self.at
     }
 
+    fn feature_index(&self) -> Option<usize> {
+        let i = *self.list.get(self.at)?;
+        if self.mode == Mode::Tour { i.checked_sub(BASICS.len()) } else { Some(i) }
+    }
+
+    /// The feature card shown (the Tour ends with Easy to read after its basics).
     pub fn feature(&self) -> Option<&'static Feature> {
-        self.list.get(self.at).map(|i| &FEATURES[*i])
+        FEATURES.get(self.feature_index()?)
+    }
+
+    /// The basic card shown (the Tour only).
+    pub fn basic(&self) -> Option<&'static Basic> {
+        if self.mode != Mode::Tour {
+            return None;
+        }
+        self.list.get(self.at).and_then(|i| BASICS.get(*i))
     }
 
     pub fn choice(&self) -> usize {
@@ -888,20 +1007,51 @@ impl Cards {
 
     /// The preview of the card shown, painted the first time it is needed (in the appearance in use) and kept.
     fn preview(&mut self, text: &mut Text) -> Option<&Image> {
-        let i = *self.list.get(self.at)?;
+        let i = self.feature_index()?;
         let light = pal().is_light();
         // A picture of the screen at the design's sizes, scaled down onto the card: Text size doesn't change it.
         Some(self.previews.entry((i, light)).or_insert_with(|| crate::type_scale::unscaled(|| render_preview(&FEATURES[i], text, light))))
+    }
+
+    /// A basic card: the title, what to know, and where to press, on the page's own paper. No picture and no switch.
+    fn paint_basic(&self, c: &mut Canvas, text: &mut Text, b: &Basic) -> Hits {
+        let mut hits = Hits::default();
+        text.draw(c, Face::Body, 28, MARGIN, 72, pal().dust, TOUR_TITLE);
+        text.draw_right(c, Face::Body, 28, c.w - MARGIN, 72, pal().dust, &format!("{} of {}", self.at + 1, self.list.len()));
+        let title = text.fit(Face::Title, 67, b.title, c.w - 2 * MARGIN);
+        let lines: Vec<String> = text.wrap_prose(Face::Body, 32, b.text, c.w - 2 * MARGIN).into_iter().take(4).collect();
+        let line_h = crate::type_scale::line(32, 14);
+        let strip_h = crate::type_scale::row(72, 28);
+        // The block (title, words, the strip) stands a little above the middle of the page, as an empty page's does.
+        let block = 80 + 36 + lines.len() as i32 * line_h + 36 + strip_h;
+        let mut y = ((c.h - block) * 2 / 5).max(150) + 80;
+        text.draw(c, Face::Title, 67, MARGIN, y, pal().chalk, &title);
+        y += 36 + line_h;
+        for line in &lines {
+            text.draw(c, Face::Body, 32, MARGIN, y, pal().chalk, line);
+            y += line_h;
+        }
+        // Where, on a paper strip: the one thing to do with a finger or a thumb.
+        y += 8;
+        c.round_rect(MARGIN, y, c.w - 2 * MARGIN, strip_h, 16, pal().keycap);
+        let place = text.fit(Face::Body, 28, b.place, c.w - 2 * MARGIN - 56);
+        text.draw(c, Face::Body, 28, MARGIN + 28, y + strip_h / 2 + crate::type_scale::base(10, 28), pal().chalk, &place);
+        let last = self.at + 1 >= self.list.len();
+        hits.buttons = crate::setup::hints(c, text, &[("A", if last { "Done" } else { "Next" }), ("B", "Close")]);
+        hits
     }
 
     /// The card page. Returns the choice rows and the hint pills for touch.
     pub fn paint(&mut self, c: &mut Canvas, text: &mut Text) -> Hits {
         c.clear(pal().void);
         let mut hits = Hits::default();
+        if let Some(b) = self.basic() {
+            return self.paint_basic(c, text, b);
+        }
         let Some(f) = self.feature() else { return hits };
         let heading = match &self.mode {
             Mode::First => "Choose for yourself".to_string(),
-            Mode::Tour => "Tour".to_string(),
+            Mode::Tour => TOUR_TITLE.to_string(),
             Mode::New { version } => format!("New in pocket-ui {version}"),
         };
         text.draw(c, Face::Body, 28, MARGIN, 72, pal().dust, &heading);
@@ -936,10 +1086,31 @@ impl Cards {
         let w = c.w - MARGIN - x;
         let f = self.feature().expect("shown above");
         let put_off = self.later.iter().any(|l| l == f.id);
-        let mut y = py - 8;
+        let lead = match (f.switch.is_some(), self.choice == LATER) {
+            (false, _) => "Nothing to switch. Find it here:",
+            (true, true) => "Left as it is for now. Changed any time in",
+            (true, false) => "Changed any time in",
+        };
+        // The way to the setting can be long (German, two settings, Large text) and must stay readable whole, above the hint
+        // bar: when it doesn't fit, its type goes 28, 24, 21 px, and last the rows are lower, before anything is cut.
+        let (lead_lines, rows) = (text.wrap_prose(Face::Body, 24, lead, w), if f.switch.is_some() { CHOICES.len() as i32 } else { 0 });
+        let tiers = if short { [(72, 10, 20, 28), (72, 10, 20, 24), (72, 10, 20, 21), (60, 8, 22, 21)] } else { [(88, 14, 30, 28), (88, 14, 30, 24), (88, 14, 30, 21), (60, 8, 22, 21)] };
+        let top = py - 8;
+        let limit = crate::kit::hint_bar_top(c.h) - 8;
+        let mut chosen = None;
+        for (row, gap, extra, font) in tiers {
+            let lines = text.wrap_prose(Face::Body, font, f.place, w);
+            let high = rows * (row + gap) + if rows > 0 { extra } else { 30 } + lead_lines.len() as i32 * crate::type_scale::line(24, 10) + 16
+                + lines.len() as i32 * crate::type_scale::line(font, 12);
+            chosen = Some((row, gap, extra, font, lines));
+            if top + high <= limit {
+                break;
+            }
+        }
+        let (row, gap, extra, font, place_lines) = chosen.expect("tiers is not empty");
+        let mut y = top;
         if let Some(sw) = f.switch {
             let now = if (sw.get)(&self.switches) { 0 } else { 1 };
-            let (row, gap) = if short { (72, 10) } else { (88, 14) };
             for (k, label) in CHOICES.iter().enumerate() {
                 let selected = k == self.choice;
                 c.rect(x, y, w, row, if selected { pal().label } else { pal().spine });
@@ -960,27 +1131,18 @@ impl Cards {
                 hits.choices.push((Area::new(x, y, w, row), k));
                 y += row + gap;
             }
-            y += if short { 20 } else { 30 };
-            let later = if self.choice == LATER {
-                "Asked again in Settings › Help & tools › Tour. Changed any time in"
-            } else {
-                "Changed any time in"
-            };
-            for line in text.wrap_prose(Face::Body, 24, later, w) {
-                text.draw(c, Face::Body, 24, x, y, pal().dust, &line);
-                y += crate::type_scale::line(24, 10);
-            }
+            y += extra;
         } else {
             y += 30;
-            for line in text.wrap_prose(Face::Body, 24, "Nothing to switch. Find it here:", w) {
-                text.draw(c, Face::Body, 24, x, y, pal().dust, &line);
-                y += crate::type_scale::line(24, 10);
-            }
+        }
+        for line in &lead_lines {
+            text.draw(c, Face::Body, 24, x, y, pal().dust, line);
+            y += crate::type_scale::line(24, 10);
         }
         y += 16;
-        for line in text.wrap_prose(Face::Body, 28, f.place, w).iter().take(3) {
-            text.draw(c, Face::Body, 28, x, y, pal().chalk, line);
-            y += crate::type_scale::line(28, 12);
+        for line in &place_lines {
+            text.draw(c, Face::Body, font, x, y, pal().chalk, line);
+            y += crate::type_scale::line(font, 12);
         }
 
         let last = self.at + 1 >= self.list.len();
@@ -1052,9 +1214,10 @@ const PROFILE_PREVIEW_W: i32 = 320;
 pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[Profile], later: bool, previews: &[Image]) -> Hits {
     c.clear(pal().void);
     let mut hits = Hits { sel, ..Default::default() };
-    // A short screen (768 lines) takes the heading and the four rows closer, so the line under them clears the hints.
+    // A short screen (768 lines) takes the heading and the five rows closer, so the last row clears the hints (it ran 14 px
+    // under them at pitch 108).
     let short = crate::kit::short_screen(c.h);
-    let (head, sub, first, pitch, row_h) = if short { (100, 148, 172, 108, 100) } else { (140, 192, 230, 124, 112) };
+    let (head, sub, first, pitch, row_h) = if short { (100, 148, 172, 100, 92) } else { (140, 192, 230, 124, 112) };
     text.draw(c, Face::Title, 67, MARGIN, head, pal().chalk, "How do you like to play?");
     text.draw(
         c,
@@ -1182,6 +1345,21 @@ mod tests {
         }
     }
 
+    /// What the pause menu reads to list Zoom (`app_zoom::zoom_row_on`) is what the Tour card shows as On: turning the card
+    /// on puts Zoom on the main page, turning it off takes it away again.
+    #[test]
+    fn the_reading_card_decides_whether_the_pause_menu_lists_zoom() {
+        let card = FEATURES.iter().find(|f| f.id == "easy_to_read").unwrap().switch.unwrap();
+        let mut s = Switches::default();
+        assert!(!(card.get)(&s) && !reading_on(s.text_size, s.motion), "a new device: no Zoom on the main page");
+        (card.set)(&mut s, true);
+        assert!(reading_on(s.text_size, s.motion) && (card.get)(&s));
+        // Large text alone, or calmer motion alone, is not Easy to read.
+        assert!(!reading_on(TextSize::Large, Motion::Full) && !reading_on(TextSize::Normal, Motion::Reduced));
+        (card.set)(&mut s, false);
+        assert!(!reading_on(s.text_size, s.motion));
+    }
+
     #[test]
     fn ids_are_unique_and_every_entry_is_complete() {
         let mut ids: Vec<&str> = FEATURES.iter().map(|f| f.id).collect();
@@ -1297,8 +1475,11 @@ mod tests {
 
     #[test]
     fn new_cards_are_the_entries_newer_than_the_version_seen_at_most_three_newest_first() {
-        // With every entry at the baseline, an update shows nothing.
-        assert!(due(None, "0.3.0").is_empty());
+        // Easy to read is the only entry newer than the baseline: an update to 0.2.0 or later shows it, once, and nothing before.
+        let easy = by_id("easy_to_read").unwrap();
+        assert_eq!(due(None, "0.3.0"), vec![easy]);
+        assert_eq!(due(Some("0.1.14"), "0.2.0"), vec![easy]);
+        assert!(due(None, "0.1.15").is_empty(), "not in a version before its own");
         assert!(due(Some("0.2.0"), "0.3.0").is_empty());
         assert!(unseen(None, "0.3.0") && unseen(Some("0.2.0"), "0.3.0"));
         assert!(
@@ -1344,7 +1525,7 @@ mod tests {
 
     #[test]
     fn later_is_remembered_until_the_card_is_decided() {
-        let mut c = cards(Mode::Tour, &["stickers", "lens"]);
+        let mut c = cards(Mode::First, &["stickers", "lens"]);
         c.press(Button::Down);
         c.press(Button::Down);
         assert_eq!(c.choice(), LATER);
@@ -1367,13 +1548,13 @@ mod tests {
         assert_eq!(first.press(Button::South), Out::Stay);
         assert_eq!(first.at(), 0);
         assert_eq!(first.press(Button::Start), Out::Done, "START skips the rest");
-        let mut tour = cards(Mode::Tour, &["lens", "echoes"]);
+        let mut tour = Cards::new(Mode::Tour, tour_list(), Switches::default(), Vec::new());
         tour.press(Button::R1);
         assert_eq!(tour.press(Button::South), Out::Done);
         let mut new = cards(Mode::New { version: "0.3.0".into() }, &["lens"]);
         assert_eq!(new.press(Button::South), Out::Done, "B puts them away");
         // Left/Right and L1/R1 stop at the ends.
-        let mut c = cards(Mode::Tour, &["lens", "echoes"]);
+        let mut c = cards(Mode::New { version: "0.3.0".into() }, &["lens", "echoes"]);
         c.press(Button::Left);
         assert_eq!(c.at(), 0);
         c.press(Button::Right);
@@ -1382,13 +1563,50 @@ mod tests {
     }
 
     #[test]
-    fn choose_yourself_is_the_switch_cards_and_the_tour_is_all() {
-        let choose = choose_list();
-        assert!(choose.iter().all(|i| FEATURES[*i].switch.is_some()));
-        assert_eq!(tour_list().len(), available().count());
-        assert!(tour_list().len() > choose.len(), "the tour also shows where the rest is");
-        // The switch cards come first, so the tour starts with what can be changed.
-        assert_eq!(&tour_list()[..choose.len()], &choose[..]);
+    fn choose_yourself_is_the_switch_cards_and_the_tour_has_the_reading_choice() {
+        assert!(choose_list().iter().all(|i| FEATURES[*i].switch.is_some()));
+        assert_eq!(tour_list().len(), BASICS.len() + 1);
+        assert_eq!(TOUR_TITLE, format!("The basics in {} cards", tour_list().len()));
+        let mut ids: Vec<&str> = BASICS.iter().map(|b| b.id).collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), BASICS.len(), "ids are unique");
+        for b in BASICS {
+            assert!(!b.title.is_empty() && b.text.ends_with('.') && !b.place.is_empty(), "{}", b.id);
+            assert!(b.guide.contains(".md#"), "{}: a page and an anchor", b.id);
+        }
+    }
+
+    #[test]
+    fn the_six_basics_lead_to_a_reading_choice_that_applies_both_settings() {
+        let mut text = Text::new();
+        let (w, h) = SCREEN;
+        let mut px = vec![0u32; (w * h) as usize];
+        let mut c = Cards::new(Mode::Tour, tour_list(), Switches::default(), Vec::new());
+        for _ in 0..BASICS.len() - 1 {
+            let hits = c.paint(&mut Canvas::new(&mut px, w, h), &mut text);
+            assert!(hits.choices.is_empty() && hits.buttons.iter().any(|(_, b)| *b == Button::East));
+            c.press(Button::Down);
+            assert_eq!(c.choice(), 0, "Up/Down do nothing here");
+            assert_eq!(c.press(Button::East), Out::Stay);
+        }
+        assert_eq!(c.basic().unwrap().id, "settings");
+        assert_eq!(c.press(Button::East), Out::Stay);
+        assert!(c.take_switches().is_none());
+        assert_eq!(c.feature().unwrap().id, "easy_to_read");
+        let hits = c.paint(&mut Canvas::new(&mut px, w, h), &mut text);
+        assert_eq!(hits.choices.len(), 3, "the reading card can be switched from Tour");
+        c.press(Button::Up); // Off is selected initially; Up chooses On.
+        assert_eq!(c.press(Button::East), Out::Done);
+        let enabled = c.take_switches().unwrap();
+        assert_eq!((enabled.text_size, enabled.motion), (TextSize::Large, Motion::Reduced));
+        assert_eq!(enabled.curator, Switches::default().curator);
+        let mut again = Cards::new(Mode::Tour, tour_list(), enabled, Vec::new());
+        again.show(again.len() - 1);
+        again.press(Button::Down); // On -> Off.
+        again.press(Button::East);
+        let disabled = again.take_switches().unwrap();
+        assert_eq!((disabled.text_size, disabled.motion), (TextSize::Normal, Motion::Full));
     }
 
     #[test]

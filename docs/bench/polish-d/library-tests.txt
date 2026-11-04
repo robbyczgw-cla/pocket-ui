@@ -1,0 +1,35 @@
+running 32 tests
+test document_library::tests::every_system_has_its_id_listed_and_takes_what_the_shelf_lists ... ok
+test document_library::tests::provider_identity_survives_rename_and_disambiguates_providers ... ok
+test document_library::tests::nested_sets_hide_dependencies_and_keep_missing_advice ... ok
+test document_library::tests::a_repaired_disc_is_news_for_the_shelf_though_no_game_came ... ok
+test document_library::tests::a_bios_folder_holds_no_games ... ok
+test library::tests::a_disc_image_a_cue_sheet_points_at_is_not_listed_twice ... ok
+test library::tests::a_cue_written_in_latin1_finds_its_file_with_an_umlaut ... ok
+test library::tests::a_lowercase_file_shows_cased_and_a_gamelist_name_is_kept_as_it_is ... ok
+test library::tests::a_gamelist_names_a_cryptic_file_and_leaves_the_other_names_alone ... ok
+test library::tests::an_article_glued_to_its_title_by_missing_spaces_is_still_moved_to_the_front ... ok
+test library::tests::all_systems_lists_every_game_system_without_games ... ok
+test library::tests::cleans_release_names ... ok
+test library::tests::a_playlist_with_no_disc_that_can_start_is_left_out_and_reported ... ok
+test library::tests::a_disc_whose_track_file_is_missing_is_left_out_and_reported ... ok
+test library::tests::folder_named_games_of_dos_and_scummvm_are_left_to_hostsys ... ok
+test library::tests::entry_types_keep_file_and_folder_symlinks_and_skip_dangling_links ... ok
+test library::tests::a_wrong_file_type_and_a_too_deep_game_are_counted_as_unread ... ok
+test library::tests::title_case_names_a_file_name_without_capitals_and_leaves_every_other_name_alone ... ok
+test library::tests::versions_at_the_end_of_a_name_are_left_out_and_titles_that_only_look_like_one_stay ... ok
+test library::tests::m3u_playlists_hide_their_discs_and_the_tracks_of_those ... ok
+test library::tests::hidden_games_leave_the_list_and_a_system_left_empty_goes_with_them ... ok
+test library::tests::unread_things_are_counted_for_the_rescan ... ok
+test library::tests::rocknixs_splore_is_no_game_until_pico8_is_installed ... ok
+test library::tests::games_of_the_same_name_get_back_what_tells_them_apart_and_the_rest_of_the_list_stays ... ok
+test library::tests::game_folders_one_level_down_are_games ... ok
+test library::tests::moonlights_scripts_are_not_games_on_the_shelf ... ok
+test library::tests::a_cartridge_the_checksum_names_shows_its_proper_title_not_the_typo ... ok
+test library::tests::gdi_sheets_hide_their_tracks_and_a_sheet_the_system_does_not_list_hides_nothing ... ok
+test library::tests::screenshots_are_not_a_system_of_games ... ok
+test library::tests::a_disc_shows_the_title_of_its_serial_and_a_gamelist_name_comes_first ... ok
+test library::tests::folders_of_no_system_are_found_with_the_folder_they_should_be ... ok
+test library::tests::a_macs_and_windows_litter_is_no_game_and_no_stray_folder ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 3038 filtered out; finished in 0.00s

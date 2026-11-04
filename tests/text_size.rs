@@ -91,8 +91,9 @@ fn fake_library(dir: &Path) {
 }
 
 /// Renders every job `(name, size, lang, safe, state)` (at `picture`, "WxH", when given) and returns the lines of the
-/// text record, `state (size, lang): line`, of those starting with `only` (all of them when empty), plus a line for each
-/// state that didn't render.
+/// text record, `state (size, lang): line`, of those whose letter (the first character: O, T, V, E) is in `only` (all of
+/// them when empty), plus the `X` lines of the i18n record (a string drawn past the right edge) when `only` has an X,
+/// plus a line for each state that didn't render.
 fn render_all(tmp: &Path, bin: &Path, stub: Option<&Stub>, jobs: Vec<(String, &'static str, &'static str, bool, String)>, picture: Option<&str>, only: &str) -> Vec<String> {
     let (tmp, bin, stub) = (tmp.to_path_buf(), bin.to_path_buf(), stub.map(|s| s.path.clone()));
     let picture = picture.map(str::to_string);
@@ -107,7 +108,7 @@ fn render_all(tmp: &Path, bin: &Path, stub: Option<&Stub>, jobs: Vec<(String, &'
                 // Its own copy of the data folder: some states write into it, and they run side by side.
                 let data = tmp.join(format!("data-{name}"));
                 copy_dir(&tmp.join("data"), &data);
-                let (png, boxes) = (tmp.join(format!("{name}.png")), tmp.join(format!("{name}.box")));
+                let (png, boxes, misses) = (tmp.join(format!("{name}.png")), tmp.join(format!("{name}.box")), tmp.join(format!("{name}.tsv")));
                 let mut cmd = Command::new(&bin);
                 if safe {
                     cmd.arg("--safe");
@@ -124,6 +125,7 @@ fn render_all(tmp: &Path, bin: &Path, stub: Option<&Stub>, jobs: Vec<(String, &'
                     .env("POCKETUI_LANG", lang)
                     .env("POCKETUI_TEXT_SIZE", size)
                     .env("POCKETUI_TEXT_BOXES", &boxes)
+                    .env("POCKETUI_I18N_MISSES", &misses)
                     .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
                     .env("POCKETUI_DATA", &data)
                     .output()
@@ -134,8 +136,13 @@ fn render_all(tmp: &Path, bin: &Path, stub: Option<&Stub>, jobs: Vec<(String, &'
                     continue;
                 }
                 match std::fs::read_to_string(&boxes) {
-                    Ok(text) => found.extend(text.lines().filter(|l| !l.is_empty() && l.starts_with(only.as_str())).map(|l| format!("{state} ({size}, {lang}): {}", l.replace('\t', " | ")))),
+                    Ok(text) => found.extend(text.lines().filter(|l| !l.is_empty() && (only.is_empty() || l.chars().next().is_some_and(|c| only.contains(c)))).map(|l| format!("{state} ({size}, {lang}): {}", l.replace('\t', " | ")))),
                     Err(_) => found.push(format!("{state} ({size}, {lang}): no record of the painted text (does its snapshot end in write_png?)")),
+                }
+                if only.contains('X') {
+                    if let Ok(text) = std::fs::read_to_string(&misses) {
+                        found.extend(text.lines().filter(|l| l.starts_with("X\t")).map(|l| format!("{state} ({size}, {lang}): {}", l.replace('\t', " | "))));
+                    }
                 }
                 let _ = std::fs::remove_dir_all(&data);
             })
@@ -197,10 +204,27 @@ fn at_1024x768_in_large_text_nothing_is_cut_by_the_top_or_bottom_of_the_picture(
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
     let stub = wayland(tmp.path());
     let jobs: Vec<_> = states().into_iter().enumerate().map(|(i, (safe, state))| (format!("brick-{i}"), "large", "en", safe, state)).collect();
-    let mut found = render_all(tmp.path(), &bin, stub.as_ref(), jobs, Some("1024x768"), "V\t");
+    let mut found = render_all(tmp.path(), &bin, stub.as_ref(), jobs, Some("1024x768"), "V");
     drop(stub);
     found.sort();
     assert!(found.is_empty(), "{} strings cut by the top or bottom of a 1024x768 picture in Large text:\n{}", found.len(), found.join("\n"));
+}
+
+/// The Brick's default: 1024x768 in Normal text. Every state of tests/i18n-states.txt (English) must show no string that
+/// runs into another or into a hint bar (`O`), is cut by the top or bottom of the picture (`V`), is cut by the side edge of
+/// what it is painted into (`E`) or is drawn past the right edge of the picture (`X`). A cut with "…" (`C`) is the
+/// size sweep's to read (scripts/size-sweep.sh): spines and file names are cut on purpose.
+#[test]
+fn at_1024x768_in_normal_text_nothing_overlaps_or_runs_off_the_picture() {
+    let tmp = tempfile::tempdir().unwrap();
+    fake_library(tmp.path());
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
+    let stub = wayland(tmp.path());
+    let jobs: Vec<_> = states().into_iter().enumerate().map(|(i, (safe, state))| (format!("brick-normal-{i}"), "normal", "en", safe, state)).collect();
+    let mut found = render_all(tmp.path(), &bin, stub.as_ref(), jobs, Some("1024x768"), "OVEX");
+    drop(stub);
+    found.sort();
+    assert!(found.is_empty(), "{} problems at 1024x768 in Normal text (O: runs into another string or a hint bar, V: cut by the top or bottom edge, E: cut by the side edge, X: past the right edge):\n{}", found.len(), found.join("\n"));
 }
 
 /// Native 1024x768 outputs do not use the H700's larger logical canvas. A two-line save note must still clear the keys.

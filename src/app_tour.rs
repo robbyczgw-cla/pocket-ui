@@ -1,5 +1,5 @@
 //! Part of the pocket-ui binary: the feature cards outside the first start (`pocket_ui::features`). Settings → Tour
-//! runs every card again; after an update, "New in this version" shows the features newer than the version last
+//! runs six basics and the reading choice; after an update, "New in this version" shows the features newer than the version last
 //! seen, once, over the shelf. The cards change a copy of the App's switches (`features::Switches`), which
 //! `adopt_switches` puts back and saves the way each Settings page does; the first start's cards (`setup.rs`) come
 //! back through the same function. Nothing runs at a normal start: one comparison of two version strings, after
@@ -46,6 +46,7 @@ impl App {
     pub(crate) fn switches(&self) -> Switches {
         Switches {
             motion: pocket_ui::motion::level(),
+            text_size: pocket_ui::type_scale::get(),
             on_start: self.on_start,
             remember_quit: self.remember_quit,
             frames: self.frames,
@@ -64,6 +65,10 @@ impl App {
         if s.motion != pocket_ui::motion::level() {
             pocket_ui::motion::set_level(s.motion);
             settings = true;
+        }
+        if s.text_size != pocket_ui::type_scale::get() {
+            // Kept by `set_text_size` itself (and the glyphs of the new size drawn ahead).
+            self.set_text_size(s.text_size);
         }
         if s.on_start != self.on_start {
             self.on_start = s.on_start;
@@ -108,17 +113,14 @@ impl App {
         }
     }
 
-    /// Settings → Tour: every card, from the first.
+    /// Settings → Tour: six basics and Easy to read, from the first.
     pub(crate) fn open_tour(&mut self) {
         self.tour.cards = Some(Cards::new(Mode::Tour, features::tour_list(), self.switches(), self.tour.later.clone()));
     }
 
-    /// The Tour's value in the Settings list: how many cards were put off.
+    /// The Tour's value in the Settings list.
     pub(crate) fn tour_list_value(&self) -> String {
-        match self.tour.later.iter().filter(|id| features::by_id(id).is_some()).count() {
-            0 => ">".to_string(),
-            n => format!("{n} put off >"),
-        }
+        ">".to_string()
     }
 
     /// Called as the loop goes idle: once per run, on the shelf with nothing over it (not over a game that On start
@@ -134,6 +136,7 @@ impl App {
             || self.menu.is_some()
             || self.switcher.is_some()
             || self.card.is_some()
+            || self.controls_card_open()
             || self.console.is_some()
             || self.curator.page.is_some()
             || self.find.is_open()
@@ -205,7 +208,7 @@ impl App {
         self.tour.cards.as_ref().map(|c| c.mark())
     }
 
-    /// `--snapshot tour[:<card id>[:<keys>]]`: Settings → Tour at that card (the first without one), then the keys
+    /// `--snapshot tour[:<basic id>[:<keys>]]`: Settings → Tour at that card (the first without one), then the keys
     /// (d down, u up, a, b, r R1, l L1); `--snapshot tour-new:<id>[,<id>...]`: "New in this version" with those cards.
     pub(crate) fn tour_snapshot(&mut self, state: &str) -> bool {
         if let Some(ids) = state.strip_prefix("tour-new:") {
@@ -229,7 +232,7 @@ impl App {
         self.open_tour();
         if let (Some(cards), Some(at)) = (
             self.tour.cards.as_mut(),
-            features::tour_list().iter().position(|i| Some(*i) == features::by_id(id)),
+            features::basic_by_id(id).or_else(|| (id == "easy_to_read").then(|| features::tour_list().len() - 1)),
         ) {
             cards.show(at);
         }

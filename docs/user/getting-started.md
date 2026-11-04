@@ -5,24 +5,22 @@ This page takes you from a ROCKNIX card to your first game in pocket-ui. You nee
 > **Already play on ROCKNIX or Android?** [Coming from ROCKNIX or Android](coming-from.md) says what happens to your
 > saves, states, favourites and settings.
 
-> **Other Retroid devices.** pocket-ui is made and tested on the **Retroid Pocket Mini V2**. The **Retroid Pocket 5**,
-> **Retroid Pocket Flip 2** (Snapdragon 865) and the first **Retroid Pocket Mini** run the same ROCKNIX system and are
-> supported as **experimental**: pocket-ui knows them, but hasn't been tested on one yet. The two-file card install
-> below is for the Mini V2 only. On the others, see [Other Retroid devices](#other-retroid-devices).
-
-> **Anbernic handhelds (H700).** The **RG28XX**, **RG35XX** (2024, Plus, H, Pro, SP), **RG40XX** (H, V), **RG34XX**,
-> **RG34XX-SP** and **RG-SP** run ROCKNIX's H700 image and are supported as **experimental**. The two-file card install below is
-> for the Mini V2 only. See [Anbernic H700 handhelds](#anbernic-h700-handhelds-experimental).
+> **Not a Mini V2?** The two-file card install below is for the Mini V2 only. Other Retroid devices: see
+> [Other Retroid devices](#other-retroid-devices); the Anbernic H700 handhelds: see
+> [Anbernic H700 handhelds](#anbernic-h700-handhelds-experimental). Both are supported as **experimental**.
 
 ## 1. Put pocket-ui on the card
 
-Download from the release page that pocketui.xyz links to and pick one way:
+Download from the [install page](https://pocketui.xyz/install.html) and pick one way:
 
+- **Ready-made SD card image**, the easiest: there is one for the Mini V2 and one for each Anbernic H700 model. Write it to
+  a card with balenaEtcher or Raspberry Pi Imager. Writing erases the card; the handheld itself isn't changed. On an
+  H700 handheld put the card in and switch on; on the Mini V2 go on with [section 2](#2-start-pocket-ui).
 - **Ports installer**, when ROCKNIX is already on your card: section 2 below.
 - **Fresh card, two files**: right below.
 - **Over SSH**: the [install guide](../INSTALL-DUAL-BOOT.md).
 
-pocket-ui contains no games and no BIOS files; add only ones you own. A ready-made SD card image is built but not published ([install guide](../INSTALL-DUAL-BOOT.md)).
+pocket-ui contains no games and no BIOS files; add only ones you own.
 
 ### Fresh card: two files
 
@@ -82,6 +80,8 @@ Connect or Next: B goes back, then START skips). You can
 open every step again later from **Settings** (press START on the Home screen).
 Each step says "Step n of 7" at the top right (five with no Wi-Fi chip, which skips Wi-Fi and Pictures & extras).
 
+![The first start: choose the language, then a few short steps](pictures/first-start.webp)
+
 1. **Welcome.** Under the cartridge and your handheld, press A to begin. Left/Right choose the language, **English**, **Deutsch** or **Español**: the screen
    changes at once, and the choice is kept ([Language](language.md)). It starts on the system language
    ROCKNIX was set to. SELECT opens the manual, this guide, on the device (in English); B comes back.
@@ -92,7 +92,7 @@ Each step says "Step n of 7" at the top right (five with no Wi-Fi chip, which sk
    "Sample game". Left/Right (or Up/Down) switch looks, Y switches between Dark, Light and Automatic
    ([Appearance](settings.md#appearance)), L1 between Cozy and Quick animations ("Cozy: watch your game slide into the
    console. Quick: straight into the game.", [Animations](settings.md#animations)), R1 between Normal, Medium and Large
-   text ([Text size](settings.md#text-size)), then A ("Keep this look"). See [Playing](playing.md#looks) for the six looks.
+   text ([Text size](settings.md#text-size)), then A ("Keep"). See [Playing](playing.md#looks) for the six looks.
 3. **How do you like to play?** Ways to start: **The shelf**, **Easy**, **Enthusiast** or **Choose for yourself**.
    See below.
 4. **Wi-Fi.** See below.
@@ -103,7 +103,7 @@ Each step says "Step n of 7" at the top right (five with no Wi-Fi chip, which sk
    the pictures for the games already on the SD card then download by themselves in the background, as chosen, unless
    you chose Off; this page shows the progress. See [Pictures & extras](extras.md#box-art).
 7. **Add your games.** A tile per system with its folder, and a switch for file sharing. See below.
-8. **You're all set.** A line tells you that in a game, HOME opens the menu (save, load, quit); Kids Mode leaves it out. It counts the games already on the SD card ("Your 16 games are on the shelf."). With a skipped time zone and nothing to guess from, it says the clock is on UTC. Press A ("Go to
+8. **You're all set.** A line tells you that in a game, HOME opens the menu (save, load, quit); Kids Mode leaves it out. It counts the games you put on the card ("Your 16 games are on the shelf."), not Steam entries. With a skipped time zone and nothing to guess from, it says the clock is on UTC. Press A ("Go to
    your games") to reach Home.
 
 After a restart or a flat battery in the middle, the setup opens again at the step it had reached.
@@ -116,8 +116,8 @@ Add your games leaves out X (file sharing).
 pocket-ui has more than it shows at first: Curator's Lens and Echoes, Pixel Path, screen frames, going straight back
 into your game, and more. This step sets them in one go. Up/Down choose, A takes it; under the rows the page
 says what the selected one switches on and off, in everyday words ("On: suggestions for similar games, gentle
-animations. Off: pick games by mood and length, ..."). The names of the features are on their cards in
-[Settings → Help & tools → Tour](tour.md).
+animations. Off: pick games by mood and length, ..."). The feature cards are described in
+[Features and the Tour](tour.md).
 
 - **The shelf**: "Your games on a shelf, as it comes." This is the start
   setting of a new Pocket, nothing more, the same as skipping this step: Lens & smart shelves, Labels, Echoes, Versions and Motion are on; Up next,
@@ -127,14 +127,14 @@ animations. Off: pick games by mood and length, ..."). The names of the features
   console, and On start set to your last game.
 - **Choose for yourself**: one card per feature, each with a small picture of what it does and three rows, **On**, **Off**
   and **Later**. Up/Down choose, A takes the choice and shows the next card, B goes back a card, START skips the rest.
-  Later leaves the feature as it is and keeps the card for [Settings → Help & tools → Tour](tour.md).
+  Later leaves the feature as it is.
 
 - **For a child**: a big, simple shelf with the games you pick, behind your PIN. Its own steps follow, then the rest of the first start
   ([Kids mode](kids-mode.md)). Not on the Steam Deck.
 
 START skips the step and leaves everything as it is: the same as The shelf at the first start (picked later from Help & tools, The
 shelf puts every extra back as pocket-ui ships it, On start and Screen frames too). A profile only sets switches that Settings has
-too; each stays on its Settings page, and [Settings → Help & tools → Tour](tour.md) shows the cards again whenever you like. Menu
+too; each stays on its Settings page, and [Settings → Help & tools → Tour](tour.md) explains the basics and offers easier reading in 7 cards whenever you like. Menu
 sounds, haptics and the stick lights are left as they are.
 
 ### Time zone
@@ -263,6 +263,8 @@ Advance or `roms/snes` for Super Nintendo. The folder names are the ones ROCKNIX
 
 ### The systems grid
 
+![Add your games: one tile per system, file sharing and From your phone](pictures/add-games.webp)
+
 Settings → Games → **Add games** (and the "Add your games" step of the first start) shows a tile per system: its
 console, its name and its folder, for example `roms/gba`. A system that already has games shows a tick and how
 many.
@@ -277,8 +279,8 @@ many.
   `roms/bios` (in red while one is missing), or, for systems pocket-ui knows nothing about, that a BIOS would go
   into `roms/bios`.
 - The game counts are read when the page opens and again on a button press.
-- **Ways to copy games.** Down from the last row of tiles reaches a row with **File sharing** and the phone page
-  (only what your handheld has): Left/Right choose, A switches, or tap. Details: [Second card](copy-games.md).
+- **Ways to copy games.** Down from the last row: **File sharing**, **From your phone** (what your
+  handheld has). Left/Right choose, A switches. [Second card](copy-games.md).
 
 ### Over Wi-Fi (file sharing)
 

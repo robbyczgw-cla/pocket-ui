@@ -224,11 +224,13 @@ fn fake_library(dir: &Path) {
 }
 
 #[test]
+#[ignore = "release check: sh scripts/release-check.sh"]
 fn every_string_in_the_german_snapshots_is_translated_or_a_name() {
     every_string_is_translated_or_a_name("de");
 }
 
 #[test]
+#[ignore = "release check: sh scripts/release-check.sh"]
 fn every_string_in_the_spanish_snapshots_is_translated_or_a_name() {
     every_string_is_translated_or_a_name("es");
 }
@@ -349,6 +351,7 @@ fn keep_patterns() {
 /// line, or is a name (keep.txt), or is never painted on its own (skip.txt). This catches strings of pages no
 /// snapshot state shows yet; the test above catches what the script can't see (strings put together at run time).
 #[test]
+#[ignore = "release check: sh scripts/release-check.sh"]
 fn every_string_in_the_source_has_a_german_line_or_is_listed() {
     let out = Command::new("python3")
         .args(["-I", &format!("{ROOT}/scripts/i18n-extract.py"), "--check"])

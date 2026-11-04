@@ -332,32 +332,13 @@ starter:0:there-kids
 starter:3:offline
 starter:0:failed
 tour
-tour:lens
-tour:pixel_path
-tour:frames
-tour:last_game
-tour:quit_without_saving
-tour:motion
-tour:sounds
-tour:haptics
-tour:leds
-tour:search
-tour:console_credits
-tour:players
-tour:run_ahead
-tour:runs_on
-tour:achievements
-tour:sync
-tour:tailscale
-tour:tools
-tour:cozy_extras
-tour:perf_fan
-tour:echoes
-tour:up_next
-tour:echoes_elsewhere
-tour:versions
-tour:stickers
-tour:pixel_path_live
+tour:play
+tour:continue
+tour:saving
+tour:quick
+tour:add_games
+tour:settings
+tour:easy_to_read
 tour-new:lens,echoes
 
 # Settings → System → Sleep & power
@@ -426,6 +407,16 @@ this-game:gba::18
 this-game:psx
 this-game:xbox:emu=hakux
 this-game:xbox
+# The controls card (src/controls_card.rs): per console with the player's changes, a console without names yet, the first start,
+# the game card's Controls row, and Options > Controls in the pause menu.
+controls-card:snes:remap
+controls-card:snes:zoom
+controls-card:psx
+controls-card:n64
+controls-card:gba:first
+controls-card:megadrive
+controls-card-row:snes:chrono
+controls-card-pause
 
 # Search
 search:home
@@ -511,11 +502,14 @@ options
 picture
 picture:0
 picture-gba:3
-picture:4:right
-picture-gba:5:left
+picture:3:right
+picture-gba:4:left
 picture-snes:3
+picture-psx
+picture-custom:3
 shortcuts
 shortcuts:6
+shortcuts:7
 extras
 extras:2
 extras:5
@@ -525,6 +519,8 @@ extras:3:pixel
 save
 emulator
 controls
+controls:1
+controls:18
 cheats
 cheats-more
 cheats-only
@@ -638,6 +634,10 @@ players:promoted
 players:gap
 players:four
 players:five
+zoom-menu
+menu:pocket-core:0:zoomrow
+zoom:2
+zoom:3:left:top
 
 # Curator
 curator:home
@@ -768,7 +768,7 @@ about:device=nova
 about:device=rp6
 setup:first:device=nova
 setup:first:device=rp6
-tour:perf_fan:device=nova
+tour-new:perf_fan:device=nova
 
 # AYN SM8550: different printed layout, same safe screen-off path.
 setup:first:device=odin2mini
@@ -776,7 +776,7 @@ about:device=odin2mini
 about:device=odin2
 about:device=odin2portal
 sleep:device=odin2mini
-tour:perf_fan:device=odin2mini
+tour-new:perf_fan:device=odin2mini
 # The game box (game_box.rs): front, back (no pictures in the made-up library: their places), a scrolled back
 box:gba:advance
 box:gba:advance:r
@@ -844,3 +844,5 @@ kids-flow:volume
 kids-flow:ready
 safe rescue:kids
 safe rescue:kids-pin
+
+tour:easy_to_read

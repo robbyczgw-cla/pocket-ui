@@ -2,6 +2,8 @@
 
 ## Home
 
+![The Shelf look on the Super Nintendo: the selected game's box art over its case on the shelf](pictures/shelf.webp)
+
 Home is one shelf, from left to right (in the Shelf look; the other looks show the same entries as a list, top to
 bottom):
 
@@ -37,8 +39,8 @@ Shelf look, the panel in Split), the other rows show games too:
   the same all day and changes the next day, or when what you played makes another game more likely.
 - **Favourites** and the **smart shelves and labels on Home**: the covers of their first games, side by side. A
   game without box art is a tile in its system's colour with its name. A list with nothing in it says how to fill
-  it ("No games here right now"; for a label, how to put it on a game).
-- Right after the start, until Curator has read your library (a moment, once), these rows say "Getting ready…".
+  it ("No games here yet"; for a label, how to put it on a game). A game without box art is a printed title card: the system's stripe, its name small, the title centred; where a tile is too narrow for the title in whole words, the system name alone.
+- Right after the start, until Curator has read your library (a moment, once), these rows show their title only: no words and no empty boxes.
 
 A game you hid on its card (**Hide or delete** at the end of the card, [Hide or delete a game](library.md#hide-or-delete-a-game))
 is in none of these rows, nor in the search or the switcher; Settings → System → [Storage](storage.md) →
@@ -86,7 +88,7 @@ letter. It is forgiving:
   field then says "close matches" instead of the number of games.
 - What is in brackets ("(USA)", "[!]") and numbers in front of a name ("0902 - ") are not part of the name.
 - Names that start with what you typed come first.
-- When nothing matches, the page says "No game matches" and that the game may not be on the SD card.
+- When nothing matches, the page says "No game matches" and that the game may not be in your games folder.
 
 Each game shows its cover, its name and its system. Press **START** (or **Results** on the keyboard) to go to the
 list: **A** plays the game, **Y** stars it, **X** opens its card, **B** goes back to typing. When you start a
@@ -99,8 +101,8 @@ searched. On the touch screen, tap the keys to type, tap a game to select it and
 ## Looks
 
 The shelf has six looks. Choose one in Settings → Look → **Look**, with a live preview. The look you
-choose is remembered. Each look comes dark or light: **Y** on the same page ([Appearance](settings.md#appearance));
-**R1** there sets how much the menus move ([Motion](settings.md#motion)).
+choose is remembered. Each look comes dark or light: Appearance in Settings ([Appearance](settings.md#appearance)),
+and how much the menus move is [Motion](settings.md#motion).
 
 | Look | What it shows |
 |---|---|
@@ -287,7 +289,8 @@ text) when the data was built; anything that couldn't be checked was left out. T
 
 Select a game and press A ("Play"). The rest of the shelf fades out and the game starts. A game you
 played before fades in from the picture of where you left it, the same picture Recent games shows,
-so you see your place while the emulator starts; then the screen frame around it fades in. When you
+so you see your place while the emulator starts; then the screen frame around it fades in. After a break of more than
+two weeks a quiet card on that picture says when you played last and shows your note, for a few seconds or until a button ([Where was I?](continue.md#where-was-i)). When you
 quit, you come back to where you were; on Home the selection goes back to the top, so your last game
 is ready to continue. Settings → Playing → **On start** can open that game right when the Pocket starts
 ([Settings](settings.md#on-start)).
@@ -409,6 +412,10 @@ hub without it shows nothing.
   Wii this happens about three seconds after the game appears, and Dolphin shows a short message of
   its own; on 3DS about three seconds after the game's title appears.
 - **Other emulators** start fresh. Use the game's own save feature.
+
+If a PSP exit save stops responding for 20 seconds in pocket-ui's own host, the game closes
+using a moment already saved on the card when one is available. Progress after that moment
+cannot be recovered. A newer in-game save is still protected when continuing.
 
 Your last five games with a saved moment also stand a little open on the shelf, and A goes straight back: [Continue](continue.md#continue).
 

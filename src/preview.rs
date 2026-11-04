@@ -19,6 +19,9 @@ use crate::text::{Face, Text};
 
 pub const FILE: &str = "/tmp/pocket-core-preview.bin";
 const MAGIC: &[u8; 8] = b"PCPV0001";
+/// Enough for two 4K images; bound allocations when reading an invalid or stale file.
+const MAX_FILE_BYTES: usize = 128 * 1024 * 1024;
+const MAX_IMAGE_PIXELS: usize = 4096 * 4096;
 
 /// One image of a preview, 0RGB pixels, rows top to bottom.
 #[derive(Clone, PartialEq, Debug)]
@@ -50,20 +53,37 @@ pub fn peek_seq(data: &[u8]) -> Option<u32> {
 }
 
 pub fn decode(data: &[u8]) -> Option<(u32, Vec<Pixels>)> {
+    if data.len() > MAX_FILE_BYTES { return None; }
     let seq = peek_seq(data)?;
     let word = |at: usize| data.get(at..at + 4).map(|b| u32::from_le_bytes(b.try_into().unwrap()));
     let count = word(12)?;
-    let mut at = 16;
+    if count == 0 || count > 8 { return None; }
+    let mut at = 16usize;
     let mut images = Vec::new();
-    for _ in 0..count.min(8) {
+    for _ in 0..count {
         let (w, h) = (word(at)?, word(at + 4)?);
         at += 8;
         let n = (w as usize).checked_mul(h as usize)?;
-        let body = data.get(at..at + n * 4)?;
+        if n == 0 || n > MAX_IMAGE_PIXELS { return None; }
+        let end = at.checked_add(n.checked_mul(4)?)?;
+        let body = data.get(at..end)?;
         images.push(Pixels { w, h, px: body.chunks_exact(4).map(|b| u32::from_le_bytes(b.try_into().unwrap())).collect() });
-        at += n * 4;
+        at = end;
     }
     Some((seq, images))
+}
+
+/// Read the requested file through one open handle, bounded even if an external writer changes it.
+/// A rename after the header cannot substitute another menu's body.
+fn read_requested(file: &Path, seq: u32) -> Option<Vec<Pixels>> {
+    use std::io::Read;
+    let mut f = std::fs::File::open(file).ok()?;
+    let mut head = [0u8; 12];
+    f.read_exact(&mut head).ok()?;
+    if peek_seq(&head) != Some(seq) { return None; }
+    let mut data = head.to_vec();
+    f.take((MAX_FILE_BYTES - head.len() + 1) as u64).read_to_end(&mut data).ok()?;
+    decode(&data).map(|(_, images)| images)
 }
 
 /// Writes atomically (a new temporary file, then rename; `fsutil::replace_file`).
@@ -108,7 +128,7 @@ pub fn from_screen(rgba: &[u8], sw: u32, sh: u32, w: u32, h: u32) -> (Pixels, Pi
 }
 
 /// The pause menu's background picture, `shot <seq>` (`App::write_shot` in pocket-core): the last frame as the screen
-/// shows it, at the screen's full size, as one image in the format above. With it pocket-ui raises the menu at once
+/// shows it, at the screen's full size, as the last image in the format above. Optional game bounds precede it. With it pocket-ui raises the menu at once
 /// instead of first taking a screenshot of the game with grim and waiting for it (docs/ARCHITECTURE.md, the pause
 /// menu); the picture comes in behind the menu a moment later.
 pub const SHOT_FILE: &str = "/tmp/pocket-core-shot.bin";
@@ -117,6 +137,22 @@ pub const SHOT_FILE: &str = "/tmp/pocket-core-shot.bin";
 pub fn shot_from_screen(rgba: &[u8], w: u32, h: u32) -> Pixels {
     let px = rgba.chunks_exact(4).take((w * h) as usize).map(|p| (p[0] as u32) << 16 | (p[1] as u32) << 8 | p[2] as u32).collect();
     Pixels { w, h, px }
+}
+
+/// The game's own rectangle (x, y, w, h) in the screen picture, without the black borders or a screen frame.
+pub type GameRect = (u32, u32, u32, u32);
+
+/// pocket-core: the rectangle before the shot's picture (older readers take the last image), one row of four numbers (Zoom crops to it,
+/// `zoom`). Written in the same file, so it is always the shot's own.
+pub fn game_rect_image(r: GameRect) -> Pixels {
+    Pixels { w: 4, h: 1, px: vec![r.0, r.1, r.2, r.3] }
+}
+
+/// What `wait_for_shot` brings: the picture, and where the game is in it when pocket-core said.
+#[derive(Debug)]
+pub struct Shot {
+    pub pixels: Pixels,
+    pub game: Option<GameRect>,
 }
 
 /// pocket-ui: a number for the next `shot` that no file left by an earlier menu (or an earlier pocket-ui) carries.
@@ -128,14 +164,21 @@ pub fn next_shot_seq() -> u32 {
 
 /// pocket-ui, on a helper thread: waits up to `timeout` for shot `seq` in `file` (the header is polled every
 /// 2 ms, as for the live preview) and reads it. None when it doesn't come.
-pub fn wait_for_shot(file: &Path, seq: u32, timeout: Duration) -> Option<Pixels> {
-    use std::io::Read;
+pub fn wait_for_shot(file: &Path, seq: u32, timeout: Duration) -> Option<Shot> {
     let deadline = Instant::now() + timeout;
     loop {
-        let mut head = [0u8; 12];
-        if std::fs::File::open(file).and_then(|mut f| f.read_exact(&mut head)).is_ok() && peek_seq(&head) == Some(seq) {
-            let (s, mut images) = decode(&std::fs::read(file).ok()?)?;
-            return images.pop().filter(|_| s == seq);
+        if let Some(images) = read_requested(file, seq) {
+            let mut images = images.into_iter();
+            let first = images.next()?;
+            // Picture last keeps old UI readers compatible; also accept the initial picture-first layout.
+            let (pixels, rect) = match images.next() {
+                Some(second) if (first.w, first.h) == (4, 1) => (second, Some(first)),
+                second => (first, second),
+            };
+            let game = rect.filter(|r| (r.w, r.h) == (4, 1))
+                .map(|r| (r.px[0], r.px[1], r.px[2], r.px[3]))
+                .filter(|&(x, y, w, h)| x < pixels.w && y < pixels.h && w > 0 && h > 0 && w <= pixels.w - x && h <= pixels.h - y);
+            return Some(Shot { pixels, game });
         }
         if Instant::now() > deadline {
             return None;
@@ -252,18 +295,10 @@ impl Live {
         }
         self.sent = Some(Instant::now());
         std::thread::spawn(move || {
-            use std::io::Read;
             let deadline = Instant::now() + Duration::from_secs(2);
             loop {
-                // Only the header first: cheap enough to poll every 2 ms.
-                let mut head = [0u8; 12];
-                let ready = std::fs::File::open(FILE).and_then(|mut f| f.read_exact(&mut head)).is_ok() && peek_seq(&head) == Some(seq);
-                if ready {
-                    if let Some((s, images)) = std::fs::read(FILE).ok().and_then(|d| decode(&d)) {
-                        if s == seq {
-                            return deliver(seq, Some(images));
-                        }
-                    }
+                if let Some(images) = read_requested(Path::new(FILE), seq) {
+                    return deliver(seq, Some(images));
                 }
                 if Instant::now() > deadline {
                     return deliver(seq, None);
@@ -309,10 +344,13 @@ impl Live {
 
     /// Captions, two dark panels and the images in them.
     pub fn paint(&self, c: &mut Canvas, text: &mut Text, l: &Layout, caption_color: u32) {
+        // A caption wider than its narrow panel (a tall whole screen once the Look's rows open) runs on over the gap,
+        // and the other caption starts after it: "Whole scre…" was cut (taste pass 0.2). "…" only past the screen.
+        let mut pen = (0, i32::MIN);
         for ((x, y, w, h), caption) in [(l.whole, "Whole screen"), (l.detail, "Actual size")] {
-            // As wide as its panel at most (a narrow whole screen, larger text): cut with "…" past that.
-            let caption = text.fit(Face::Body, CAPTION, caption, w + 2 * INSET - 6);
-            text.draw(c, Face::Body, CAPTION, x - INSET + 6, y - INSET - 14, caption_color, &caption);
+            let cx = if pen.1 == y { (x - INSET + 6).max(pen.0) } else { x - INSET + 6 };
+            let caption = text.fit(Face::Body, CAPTION, caption, c.w - cx - 6);
+            pen = (cx + text.draw(c, Face::Body, CAPTION, cx, y - INSET - 14, caption_color, &caption) + 28, y);
             c.round_rect(x - INSET, y - INSET, w + 2 * INSET, h + 2 * INSET, 18, 0x1a1a1a);
             c.rect(x, y, w, h, 0x000000);
         }
@@ -333,7 +371,7 @@ impl Live {
                 }
             }
             None => {
-                let msg = if self.failed { "No preview" } else { "" };
+                let msg = if self.failed { "No picture" } else { "" };
                 let (x, y, w, h) = l.detail;
                 let tw = text.width(Face::Body, CAPTION, msg);
                 text.draw(c, Face::Body, CAPTION, x + (w - tw) / 2, y + h / 2 + 10, caption_color, msg);
@@ -410,8 +448,68 @@ mod tests {
         assert!(wait_for_shot(&file, b, Duration::from_millis(30)).is_none(), "an older shot is not this menu's");
         assert!(t0.elapsed() < Duration::from_millis(500));
         let got = wait_for_shot(&file, a, Duration::from_millis(30)).expect("the shot");
-        assert_eq!((got.w, got.h, got.px), (shot.w, shot.h, shot.px));
+        assert_eq!((got.pixels.w, got.pixels.h, got.pixels.px), (shot.w, shot.h, shot.px.clone()));
+        assert_eq!(got.game, None, "no rectangle given");
+        // With the game's rectangle as the second image.
+        let c = next_shot_seq();
+        write(&file, c, &[&shot, &game_rect_image((1, 1, 3, 2))]).unwrap();
+        let got = wait_for_shot(&file, c, Duration::from_millis(30)).expect("the shot");
+        assert_eq!((got.pixels.w, got.game), (4, Some((1, 1, 3, 2))));
         let _ = std::fs::remove_file(&file);
+    }
+
+    #[test]
+    fn an_old_shot_reader_still_takes_the_picture_when_game_bounds_are_present() {
+        let dir = crate::testutil::TestDir::new("shot-old-reader");
+        let file = dir.join("shot.bin");
+        let picture = Pixels { w: 4, h: 3, px: vec![0x123456; 12] };
+        let rect = game_rect_image((1, 1, 3, 2));
+        write(&file, 5, &[&rect, &picture]).unwrap();
+        // The pre-Zoom UI did decode(...).images.pop().
+        let (_, mut old_images) = decode(&std::fs::read(&file).unwrap()).unwrap();
+        assert_eq!(old_images.pop().unwrap(), picture);
+        let new = wait_for_shot(&file, 5, Duration::ZERO).unwrap();
+        assert_eq!(new.pixels, picture);
+        assert_eq!(new.game, Some((1, 1, 3, 2)));
+    }
+
+    #[test]
+    fn invalid_shots_and_rectangles_cannot_crash_zoom() {
+        let dir = crate::testutil::TestDir::new("shot-invalid");
+        let file = dir.join("shot.bin");
+        let image = Pixels { w: 4, h: 3, px: vec![0xabcdef; 12] };
+        for rect in [(4, 0, 1, 1), (0, 3, 1, 1), (0, 0, 0, 1), (1, 1, u32::MAX, 2)] {
+            write(&file, 3, &[&image, &game_rect_image(rect)]).unwrap();
+            let shot = wait_for_shot(&file, 3, Duration::ZERO).unwrap();
+            assert_eq!(shot.pixels, image, "a bad crop must still leave the game picture readable");
+            assert_eq!(shot.game, None);
+        }
+        for (w, h) in [(0, 3), (4, 0), (u32::MAX, u32::MAX), (4096, 4097)] {
+            let malformed = encode(3, &[&Pixels { w, h, px: vec![] }]);
+            assert!(decode(&malformed).is_none());
+            std::fs::write(&file, malformed).unwrap();
+            assert!(wait_for_shot(&file, 3, Duration::ZERO).is_none());
+        }
+        let mut too_many = encode(3, &[&image]);
+        too_many[12..16].copy_from_slice(&9u32.to_le_bytes());
+        assert!(decode(&too_many).is_none());
+    }
+
+    #[test]
+    fn a_shot_reader_retries_a_partial_write_until_the_picture_is_complete() {
+        let dir = crate::testutil::TestDir::new("shot-partial");
+        let file = dir.join("shot.bin");
+        let image = Pixels { w: 4, h: 3, px: vec![0x123456; 12] };
+        let bytes = encode(8, &[&image]);
+        std::fs::write(&file, &bytes[..20]).unwrap();
+        std::thread::scope(|scope| {
+            let file = &file;
+            scope.spawn(move || {
+                std::thread::sleep(Duration::from_millis(20));
+                std::fs::write(file, bytes).unwrap();
+            });
+            assert_eq!(wait_for_shot(file, 8, Duration::from_secs(1)).unwrap().pixels, image);
+        });
     }
 
     #[test]
@@ -424,6 +522,30 @@ mod tests {
         assert_eq!(wx, 38);
         assert_eq!(dx + dw + INSET, 1240 - 30, "detail ends at the right margin");
         assert!(dy + dh + INSET <= 877);
+    }
+
+    #[test]
+    fn a_narrow_whole_screen_keeps_its_caption_whole() {
+        // A tall whole screen (taste pass 0.2: "Whole scre…" at 1240x1080 with the Look's rows open): its caption runs
+        // on over the gap, and "Actual size" starts after it, with room between the two.
+        let (w, h) = (1240, 1080);
+        let l = layout(w, 30, 600, 800, (480, 1080));
+        let mut buf = vec![0u32; (w * h) as usize];
+        let mut c = Canvas::new(&mut buf, w as u32, h as u32);
+        Live::default().paint(&mut c, &mut Text::new(), &l, 0xffffff);
+        let (x, y, ww, _) = l.whole;
+        let band = (y - INSET - 14 - 22)..(y - INSET - 14 + 2);
+        let inked: Vec<bool> = (0..w).map(|cx| band.clone().any(|cy| buf[(cy * w + cx) as usize] != 0)).collect();
+        // Runs of ink with gaps under 16 px joined: one caption each.
+        let mut runs: Vec<(i32, i32)> = Vec::new();
+        for cx in (0..w).filter(|&cx| inked[cx as usize]) {
+            match runs.last_mut() {
+                Some(r) if cx - r.1 < 16 => r.1 = cx,
+                _ => runs.push((cx, cx)),
+            }
+        }
+        assert_eq!(runs.len(), 2, "two captions: {runs:?}");
+        assert!(runs[0].1 > x + ww + INSET, "the caption is wider than its panel here, and drawn whole: {runs:?} {l:?}");
     }
 
     #[test]

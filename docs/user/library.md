@@ -15,7 +15,7 @@ text or a long game title.
 
 | Button | On the card |
 |---|---|
-| A | Play the game. On one of the rows under "Your game" (a save with two versions, Echoes, Versions, Stickers & labels, Screenshots) or on Hide or delete: open it. |
+| A | Play the game. On one of the rows under "Your game" (a save with two versions, Echoes, Versions, Stickers & labels, Screenshots, Controls) or on Hide or delete: open it. |
 | B | Back to the list, at the same game. |
 | Y | Set the play status, or your [rating](#my-rating) (the row under the statuses). Under them: [Wrong game? Choose another](#wrong-game-choose-another) and [Wrong pictures? Look up again](#wrong-pictures-look-up-again). |
 | X | Write or change your note. |
@@ -153,6 +153,8 @@ them off; the values are then only shown.
 - **Screenshots (3)**: only on a game you took screenshots of (HOME + A while you play). The row says how many, and when
   the newest was taken ("Newest: Today"). A opens a [gallery](playing.md#looking-at-your-screenshots) of this game's
   screenshots; B comes back to the card.
+- **Controls**: for a console the emulator knows (or one that ran before): which button of the Pocket is which button of
+  the console, and the HOME keys. A opens [the controls card](controls-card.md), B comes back to the card.
 - **Description**: a few sentences from the game's English Wikipedia article (see below). Without a
   connection, a short line made of the facts above. A game with a description in your
   [EmulationStation gamelist](#your-emulationstation-gamelists) shows that one, unless Wikipedia's text is on the

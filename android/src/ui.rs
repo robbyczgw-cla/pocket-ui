@@ -180,6 +180,7 @@ pub enum Screen {
 pub enum Action {
     /// A fact on the open card that leads to the player's other games.
     Link(usize),
+    JustPlay,
     /// The landscape shelf's arrows: the shelf above (-1) or below (1).
     Shelf(i32),
     /// The Game of the year sticker's year, back (-1) or on (1).
@@ -203,6 +204,7 @@ pub struct Region {
     pub action: Action,
 }
 pub enum Command {
+    Notice(&'static str),
     PersistSetup,
     None,
     Launch,
@@ -395,6 +397,7 @@ impl Ui {
         if open != self.frozen {
             self.frozen = open;
             self.cards.clear();
+            self.reshelve();
         }
     }
     pub fn game(&self) -> Option<&Game> {
@@ -436,7 +439,7 @@ impl Ui {
             Screen::Connection => self.connection.as_ref().map(|l| l.games.clone()).unwrap_or_default(),
             Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Quick | Screen::Curator | Screen::Facet | Screen::Box | Screen::Stickers => return,
             _ => {
-                let shelves = (!matches!(self.prefs.theme, Theme::Minimal | Theme::Split)).then(|| shelves_of(lib, &self.prefs)).filter(|s| s.rows.len() > 1);
+                let shelves = (!matches!(self.prefs.theme, Theme::Minimal | Theme::Split | Theme::Big)).then(|| shelves_of(lib, &self.prefs, &self.frozen)).filter(|s| s.rows.len() > 1);
                 self.rows = shelves;
                 self.rows.as_ref().map_or_else(|| (0..lib.games.len()).collect(), |s| s.games.clone())
             }
@@ -494,7 +497,7 @@ impl Ui {
             Screen::Settings => SETTINGS.len(),
             Screen::Extras => PHONE_EXTRAS.len() + 1,
             Screen::GameCheck => self.check_rows().len(),
-            Screen::Quick => 2,
+            Screen::Quick => 3,
             Screen::Stickers => STICKER_ROWS,
             Screen::Curator => 2 + self.facets().len() + self.rediscover_row() as usize,
             Screen::Facet => self.library.as_ref().map_or(2, |l| 2 + l.index.facet(self.facet).values.len()),
@@ -710,6 +713,8 @@ impl Ui {
                 if self.menu == 0 {
                     self.prefs.muted = !self.prefs.muted;
                     Command::Persist
+                } else if self.menu == 1 {
+                    self.just_play()
                 } else {
                     self.navigate(Screen::Settings);
                     Command::None
@@ -1130,6 +1135,40 @@ impl Ui {
                 .map(|t| t.as_secs()),
         });
     }
+    /// The shared choice policy; limit automatic picks to our bundled player. External
+    /// apps remain available through an explicit Play, without probing them on the UI thread.
+    fn just_play(&mut self) -> Command {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+        let seed = now.as_nanos() as u64;
+        let prefs = &self.prefs;
+        let pick = self.library.as_mut().and_then(|lib| {
+            lib.index.user.now = now.as_secs();
+            // The index was made at scan time; choices must see stars, stickers and
+            // sessions changed since then, including the game just returned from.
+            for (game, user) in lib.games.iter().zip(&mut lib.index.user.games) {
+                let case = prefs.stickers_of(&game.key);
+                user.starred = case.favourite;
+                user.status = if case.completed || case.hundred { pocket_ui::library_meta::Status::Completed }
+                    else if case.playing { pocket_ui::library_meta::Status::Playing }
+                    else { pocket_ui::library_meta::Status::NotStarted };
+                user.last_played = prefs.played.get(&game.key).copied();
+                user.secs = prefs.play_secs.get(&game.key).copied().unwrap_or(0);
+            }
+            let allowed = |g: usize| lib.games.get(g).is_some_and(|game| super::bundled_core(game.system_id).is_some());
+            let heavy = |_| false;
+            let mut startable = |g: usize| lib.games.get(g).is_some_and(|game| game.size != 0 && (game.system_id == "psp" || game.size <= 512 << 20) && game.missing.is_empty());
+            lib.index.just_play(&mut pocket_ui::curator::surprise::Rng::new(seed),
+                &pocket_ui::curator::justplay::Offer { allowed: &allowed, heavy: &heavy }, &mut startable).ok()
+        });
+        if let Some((game, _)) = pick {
+            self.navigate(Screen::Library);
+            self.selected = self.visible.iter().position(|i| *i == game).unwrap_or(0);
+            self.follow_selection();
+            Command::Launch
+        } else {
+            Command::Notice("No games to pick from yet")
+        }
+    }
     pub fn tap(&mut self, x: f32, y: f32) -> Command {
         self.touch_mode = true;
         if !self.prefs.onboarding_done {
@@ -1137,6 +1176,7 @@ impl Ui {
         }
         let action = self.regions.iter().rev().find(|r| r.area.contains(x, y)).map(|r| r.action.clone());
         match action {
+            Some(Action::JustPlay) => self.just_play(),
             Some(Action::Tab(screen)) => {
                 if self.screen == screen && Self::list_screen(screen) {
                     // The tab again goes back to the top, as on every phone.
@@ -1410,7 +1450,7 @@ impl Ui {
                 rows.push(row("Back", ""));
                 rows
             }
-            Screen::Quick => vec![row("UI sounds", on_off(!self.prefs.muted)), row("Settings", "")],
+            Screen::Quick => vec![row("UI sounds", on_off(!self.prefs.muted)), row("Just Play", ""), row("Settings", "")],
             Screen::Stickers => {
                 use pocket_ui::case_stickers::Kind;
                 let on = self.game().map(|g| self.prefs.stickers_of(&g.key)).unwrap_or_default();
@@ -1527,10 +1567,10 @@ impl Ui {
 
 /// The rows of the sticker sheet: the stickers, the year, Back.
 const STICKER_ROWS: usize = pocket_ui::case_stickers::Kind::ALL.len() + 2;
-/// The Games page's shelves: the games started last, the favourites, one shelf per system.
-fn shelves_of(lib: &Library, prefs: &Preferences) -> pocket_ui::phone_shelves::Shelves {
+/// Continue holds only verified open moments, newest played first; then favourites and systems.
+fn shelves_of(lib: &Library, prefs: &Preferences, open: &HashSet<String>) -> pocket_ui::phone_shelves::Shelves {
     let games: Vec<(&str, &str)> = lib.games.iter().map(|g| (g.system_id, g.system)).collect();
-    let mut played: Vec<(u64, usize)> = lib.games.iter().enumerate().filter_map(|(i, g)| Some((*prefs.played.get(&g.key)?, i))).collect();
+    let mut played: Vec<(u64, usize)> = lib.games.iter().enumerate().filter(|(_, g)| open.contains(&g.key)).filter_map(|(i, g)| Some((*prefs.played.get(&g.key)?, i))).collect();
     played.sort_by_key(|(at, _)| std::cmp::Reverse(*at));
     let recent: Vec<usize> = played.into_iter().map(|(_, i)| i).collect();
     let favourites: Vec<usize> = lib.games.iter().enumerate().filter(|(_, g)| prefs.favorites.contains(&g.key)).map(|(i, _)| i).collect();

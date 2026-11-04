@@ -177,6 +177,14 @@ has_games_drive() {
   return 1
 }
 
+# The name a card gives its handheld on the network (system.hostname, Tailscale, Bluetooth): "pocket-" and the image's
+# model name, so two handhelds differ (ROCKNIX's default is the family, the same on all of them). The Mini V2 build
+# has no MODEL. Lowercase ASCII, letters, digits and dashes, at most 24 characters (scripts/image/test-h700-pins.sh).
+# image_hostname MODEL
+image_hostname() {
+  echo "pocket-${1:-mini-v2}"
+}
+
 family_pins() {
   for v in IMG URL GZ_SHA256 IMG_SHA256 KERNEL_MD5 SYSTEM_MD5 MODELS SYSTEM_REMOVE SYSTEM_ZIP_REMOVE POCKET_SYSTEM_MD5 FW_SHARED; do
     eval "FAM_$v=\${${1}_$v}"

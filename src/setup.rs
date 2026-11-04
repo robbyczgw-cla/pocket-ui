@@ -1319,7 +1319,7 @@ fn count_catalog(catalog: &[SysInfo]) -> Counted {
     let mut found = Counted::default();
     for s in catalog {
         let (n, broken) = library::look_at_folder(&s.id, &s.path, &s.extensions);
-        if n > 0 {
+        if n > 0 && !library::supplied_by_device(&s.id, &s.path) {
             found.games.insert(s.id.clone(), n);
         }
         found.broken.extend(broken);
@@ -3135,12 +3135,14 @@ impl Setup {
             Step::Look => match b {
                 Button::Left | Button::Up => self.theme = (self.theme + self.themes.len() - 1) % self.themes.len(),
                 Button::Right | Button::Down => self.theme = (self.theme + 1) % self.themes.len(),
-                Button::West => {
+                // Settings > Look has no shortcut keys: Appearance, Motion and Animations have their own rows there
+                // (polish 2026-11-04); the first start's pills are the only place for them, so the keys stay there.
+                Button::West if self.only.is_none() => {
                     let i = Appearance::ALL.iter().position(|a| *a == self.appearance).unwrap_or(0);
                     self.appearance = Appearance::ALL[(i + 1) % Appearance::ALL.len()];
                 }
                 // Cozy or Quick; from the first press the look no longer decides.
-                Button::L1 => {
+                Button::L1 if self.only.is_none() => {
                     self.animations = Some(self.animations_shown().next());
                     self.animations_changed = true;
                 }
@@ -3150,13 +3152,9 @@ impl Setup {
                     self.scan();
                 }
                 Button::South => self.step = Step::Welcome,
-                // Settings > Look only: the first start has no such step.
-                Button::North if self.only == Some(Only::Look) && !self.shelf.is_empty() => self.step = Step::ShelfSystems { sel: 0 },
-                // Settings > Look only, to keep the first start short: Motion, Full / Reduced / Off.
-                Button::R1 if self.only == Some(Only::Look) => self.motion = self.motion.next(),
-                // The first start: the text size instead (in Settings it has its own row under Look), in use
-                // from the next frame on (`type_scale`).
-                Button::R1 => {
+                // The first start: the text size (in Settings it has its own row under Look), in use from the next
+                // frame on (`type_scale`).
+                Button::R1 if self.only.is_none() => {
                     let size = crate::type_scale::get().next();
                     crate::type_scale::set(size);
                     self.text_size_chosen = Some(size);
@@ -3406,7 +3404,8 @@ impl Setup {
     /// Counts the games in every system's folder on a thread; `SetupEvent::GameCounts` brings the numbers.
     /// How many games are on the card, as well as this page knows.
     fn games_known(&self) -> usize {
-        self.games_counted.unwrap_or(0).max(self.games.len())
+        // Only what the player put there: the Odin's Steam entries are not "your games" (first-start walk 2026-11-04).
+        self.games_counted.unwrap_or(0).max(self.games.iter().filter(|(_, p)| !library::path_supplied_by_device(p)).count())
     }
 
     fn count_games(&mut self) {
@@ -3986,7 +3985,7 @@ impl Setup {
             self.paint_text_size(c, text, second);
         }
         self.paint_animations(c, text, second + pill_h() + 15);
-        hints(c, text, &look_hints(self.only == Some(Only::Look), !self.shelf.is_empty()));
+        hints(c, text, &look_hints(self.only == Some(Only::Look), c.w < 1100));
     }
 
     /// The appearance row of the look step: "Appearance", Dark / Light / Automatic with the one in use on a
@@ -4266,24 +4265,22 @@ fn signal_bars(c: &mut Canvas, x: i32, base: i32, signal: u8, color: u32) {
     }
 }
 
-/// The look step's hint bar. Settings → Look: Motion on R1, X for the shelf's systems when there are any. The first
+/// The look step's hint bar. Settings → Look: no shortcut keys, every setting has its own row. The first
 /// start: the text size on R1, and B, which goes back to the welcome (the first-day run, 2026-10-26, found it unnamed).
-fn look_hints(settings: bool, has_systems: bool) -> Vec<(&'static str, &'static str)> {
-    // The first start's bar is full with the Animations key: Left/Right says what it does by being there.
-    // A (and B on the first start) come right after it: on a narrow bar, or at Large text, the labels go last first, and
-    // the keys that keep the page moving keep theirs (A, B, X and L1 lost theirs at Large text on 1240x1080).
-    let mut h = vec![("Left/Right", if settings { "Change" } else { "" }), ("A", "Keep this look")];
+fn look_hints(settings: bool, narrow: bool) -> Vec<(&'static str, &'static str)> {
+    // A key never stands without its word, and the bar shows four hints at most (`kit::page_hints`): the keys that keep
+    // the page moving come first, then what only this page has, and what does not fit is left out whole.
+    let mut h = vec![("Left/Right", "Change"), ("A", "Keep")];
     if settings {
-        // Motion (R1) and Animations (L1) still work here, but their rows are one step back in Sound & feel: the bar keeps
-        // the two keys only this page has, so no key is ever left without its word (a bare "L1" at 1240 px, walk 2026-11-02).
-        h.push(("Y", "Appearance"));
-        if has_systems {
-            h.push(("X", "Systems on the shelf"));
-        }
+        // No shortcut keys here: Appearance, Motion, Animations and Systems on the shelf have their own rows in Settings.
         return h;
     }
-    h.extend([("B", "Back"), ("Y", "Appearance"), ("R1", "Text size")]);
-    h.push(("L1", "Animations"));
+    h.extend([("B", "Back"), ("R1", "Text size"), ("Y", "Appearance")]);
+    // Not on a screen as narrow as the Brick's 1024: there the bar has no room for its word, and a bare "L1" says nothing. The
+    // Animations row is on the page and Left/Right changes it.
+    if !narrow {
+        h.push(("L1", "Animations"));
+    }
     h
 }
 
@@ -4430,8 +4427,9 @@ fn pill_row(c: &mut Canvas, text: &mut Text, top: i32, label: &str, names: &[&st
             return;
         }
     }
-    let note = text.fit(Face::Body, px, blurb, room);
-    text.draw(c, Face::Body, px, x + 28, base, pal().dust, &note);
+    // Smaller type before "…": "Black pages. Uses the least batte…" at 1024 px.
+    let (npx, note) = text.fit_sizes(Face::Body, &[px, 22, 20], blurb, room);
+    text.draw(c, Face::Body, npx, x + 28, base, pal().dust, &note);
 }
 
 /// The choices on a keycap track with the one in use on a paper pill, from (`x`, `top`): `pill_row` without a label and a
@@ -5020,13 +5018,13 @@ mod tests {
         press(&mut s, &[Button::East, Button::East, Button::Down, Button::Down, Button::Down, Button::East]);
         assert_eq!(s.at(), "feature cards");
         assert!(!s.past_wifi(), "no covers before the Wi-Fi step");
-        // The first card (Lens & smart shelves, on): Off, A.
+        // The first card (Continue where I quit, on): Off, A. A player's first card is one they can judge.
         press(&mut s, &[Button::Down, Button::East]);
         let (sw, _) = s.take_tour().expect("a switch changed");
-        assert!(!sw.curator.lens);
-        // The second card: Later.
-        press(&mut s, &[Button::Down, Button::Down, Button::East]);
-        assert_eq!(s.take_tour().map(|(_, l)| l), Some(vec!["echoes".to_string()]));
+        assert!(!sw.remember_quit);
+        // The second card (off at first, so the cursor starts on Off): Later.
+        press(&mut s, &[Button::Down, Button::East]);
+        assert_eq!(s.take_tour().map(|(_, l)| l), Some(vec!["last_game".to_string()]));
         // Back to the first card, then out of the cards to the profiles, Choose yourself selected.
         press(&mut s, &[Button::South, Button::South]);
         assert_eq!(s.at(), "feature cards");
@@ -5433,6 +5431,21 @@ mod tests {
             s.paint(&mut Canvas::new(&mut px, w, h), &mut Text::builtin());
             assert!(px.iter().any(|p| *p != px[0]), "{w}x{h} is not blank");
         }
+    }
+
+    /// First-start walk 2026-11-04: the Odin's nine Steam entries were "Your 9 games are on the shelf" on a card with none.
+    #[test]
+    fn entries_the_device_brings_are_not_your_games() {
+        let steam = |n: &str| ("Steam".to_string(), PathBuf::from(format!("/storage/roms/steam/{n}.steam")));
+        let mut games: Vec<(String, PathBuf)> = (0..9).map(|i| steam(&format!("g{i}"))).collect();
+        games.push(("Ports".into(), PathBuf::from("/storage/roms/ports/PortMaster.sh")));
+        let (mut s, _) = setup("games-steam", "UTC", None);
+        s.games = games;
+        assert_eq!(s.games_known(), 0);
+        assert_eq!(done_line(s.games_known()), "Games show up on the shelf once they're copied.");
+        s.games.push(("Game Boy".into(), PathBuf::from("/storage/roms/gb/Tetris.gb")));
+        assert_eq!(done_line(s.games_known()), "Your game is on the shelf.");
+        assert!(library::supplied_by_device("steam", std::path::Path::new("/x/y.steam")) && !library::supplied_by_device("ports", std::path::Path::new("/x/Celeste.sh")));
     }
 
     /// New-player walk 2026-11-02: what a card that was never read has isn't in the list the shelf gave at the start.
@@ -5906,8 +5919,11 @@ mod tests {
         press(&mut s, &[Button::North]);
         assert_eq!(s.at(), "look", "no selection step in the first start");
 
+        // Settings → Look has no X key any more: the Systems on the shelf row opens the page straight.
         let mut s = shelf_setup("shelf-settings").only(Only::Look);
         assert!(!s.press(Button::North));
+        assert_eq!(s.at(), "look", "no X key on Settings → Look");
+        let mut s = shelf_setup("shelf-settings-row").only(Only::Look).at_shelf_systems();
         assert_eq!(s.at(), "shelf systems");
         assert!(!s.press(Button::Down));
         assert!(!s.press(Button::East), "a tick is not the end of the step");
@@ -5915,8 +5931,7 @@ mod tests {
         assert_eq!(s.take_hidden(), None, "reported once");
         assert!(!s.press(Button::East));
         assert_eq!(s.take_hidden(), Some(Vec::new()), "ticked again");
-        assert!(!s.press(Button::South), "B goes back to the look, Settings stays open");
-        assert_eq!(s.at(), "look");
+        assert!(s.press(Button::South), "B leaves the page that Settings opened straight");
     }
 
     #[test]
@@ -5962,57 +5977,44 @@ mod tests {
     }
 
     #[test]
-    fn y_on_the_look_step_goes_dark_light_automatic_and_keeps_the_look() {
+    fn settings_look_has_no_shortcut_keys_but_the_first_start_keeps_its_own() {
+        // Polish 2026-11-04: Appearance, Motion, Animations and Systems on the shelf have rows in Settings; the page
+        // keeps Left/Right (the look) and A.
         let (s, _) = setup("look-appearance", "UTC", None);
         let mut s = s.with_appearance(Appearance::Light).only(Only::Look);
-        let mark = s.ui_mark();
-        s.press(Button::West);
-        assert_eq!(s.appearance(), Appearance::Auto);
-        assert_ne!(s.ui_mark(), mark, "the row changed: a click sound");
-        s.press(Button::West);
-        assert_eq!(s.appearance(), Appearance::Dark);
-        s.press(Button::West);
-        assert_eq!(s.appearance(), Appearance::Light);
+        let (motion, animations) = (s.motion(), s.animations_shown());
+        for b in [Button::West, Button::R1, Button::L1, Button::North] {
+            s.press(b);
+            assert_eq!((s.appearance(), s.motion(), s.animations_shown(), s.at()), (Appearance::Light, motion, animations, "look".to_string()), "{b:?}");
+        }
+        assert_eq!(s.take_animations(), None, "L1 chose nothing");
         assert_eq!(s.previewing(), Some(0), "the look stays");
         assert!(s.press(Button::East), "A keeps the look and closes the page");
-    }
 
-    #[test]
-    fn r1_on_settings_look_goes_full_reduced_off_and_the_first_start_has_no_such_row() {
-        let (s, _) = setup("look-motion", "UTC", None);
-        let mut s = s.only(Only::Look);
-        assert_eq!(s.motion(), crate::motion::level());
-        let start = s.motion();
-        let mark = s.ui_mark();
-        s.press(Button::R1);
-        assert_eq!(s.motion(), start.next());
-        assert_ne!(s.ui_mark(), mark, "the row changed: a click sound");
-        s.press(Button::R1);
-        s.press(Button::R1);
-        assert_eq!(s.motion(), start, "round again");
-        assert_eq!(s.previewing(), Some(0), "the look stays");
-
-        let (first, _) = setup("look-motion-first", "UTC", None);
-        let mut first = first;
+        // The first start has the pills only on this page: Y appearance, L1 animations, R1 the text size.
+        let (mut first, _) = setup("look-motion-first", "UTC", None);
         first.press(Button::East);
         assert!(first.previewing().is_some(), "on the look step");
+        let before = first.appearance();
+        first.press(Button::West);
+        assert_ne!(first.appearance(), before, "Y changes the appearance in the first start");
         first.press(Button::R1);
-        assert_eq!(first.motion(), crate::motion::level(), "R1 does nothing in the first start");
+        assert_eq!(first.motion(), crate::motion::level(), "R1 is the text size, not the motion");
     }
 
     #[test]
     fn the_last_system_on_the_shelf_keeps_its_tick() {
-        let mut s = shelf_setup("shelf-last").only(Only::Look);
-        press(&mut s, &[Button::North, Button::East, Button::Down, Button::East, Button::Down, Button::East]);
+        let mut s = shelf_setup("shelf-last").only(Only::Look).at_shelf_systems();
+        press(&mut s, &[Button::East, Button::Down, Button::East, Button::Down, Button::East]);
         assert_eq!(s.take_hidden(), Some(vec!["gba".to_string(), "ports".to_string()]));
         assert!(s.shelf_note().is_some(), "says why Super Nintendo stays");
     }
 
     #[test]
     fn pc_streaming_has_its_own_tick_after_the_systems_when_moonlight_is_installed() {
-        let mut s = shelf_setup("shelf-streaming").with_streaming(true, false).only(Only::Look);
+        let mut s = shelf_setup("shelf-streaming").with_streaming(true, false).only(Only::Look).at_shelf_systems();
         // gba, ports, snes, then PC streaming.
-        press(&mut s, &[Button::North, Button::Down, Button::Down, Button::Down, Button::East]);
+        press(&mut s, &[Button::Down, Button::Down, Button::Down, Button::East]);
         assert_eq!(s.take_streaming(), Some(true), "ticked on");
         assert_eq!(s.take_streaming(), None, "reported once");
         assert_eq!(s.take_hidden(), None, "the systems are untouched");
@@ -6022,8 +6024,8 @@ mod tests {
         press(&mut s, &[Button::Up, Button::Up, Button::Up, Button::East, Button::Down, Button::East]);
         assert_eq!(s.take_hidden(), Some(vec!["gba".to_string(), "ports".to_string()]));
 
-        let mut s = shelf_setup("shelf-no-moonlight").with_streaming(false, false).only(Only::Look);
-        press(&mut s, &[Button::North, Button::Down, Button::Down, Button::Down, Button::East]);
+        let mut s = shelf_setup("shelf-no-moonlight").with_streaming(false, false).only(Only::Look).at_shelf_systems();
+        press(&mut s, &[Button::Down, Button::Down, Button::Down, Button::East]);
         assert_eq!(s.take_streaming(), None, "no row without Moonlight: Down stops at Super Nintendo");
         assert_eq!(s.take_hidden(), Some(vec!["snes".to_string()]), "the tick went to Super Nintendo");
     }
@@ -6355,12 +6357,13 @@ mod hint_bars {
 
     #[test]
     fn the_first_starts_look_step_names_b() {
-        assert_eq!(keys(&look_hints(false, true)), ["Left/Right", "A", "B", "Y", "R1", "L1"], "B goes back to the welcome");
-        assert_eq!(keys(&look_hints(true, true)), ["Left/Right", "A", "Y", "X"], "R1 and L1 are rows of Sound & feel, one step back: no bare key on a narrow bar");
-        assert_eq!(keys(&look_hints(true, false)), ["Left/Right", "A", "Y"], "no systems: no X");
-        assert!(look_hints(true, true).iter().all(|(_, label)| !label.is_empty()), "every key on Settings → Look has its word");
+        assert_eq!(keys(&look_hints(false, false)), ["Left/Right", "A", "B", "R1", "Y", "L1"], "B goes back to the welcome; the bar shows the first four");
+        assert_eq!(keys(&look_hints(true, false)), ["Left/Right", "A"], "Settings → Look has no shortcut keys: every one has its own row");
+        assert!(look_hints(true, false).iter().all(|(_, label)| !label.is_empty()), "every key on Settings → Look has its word");
         assert_eq!(look_hints(false, false).last(), Some(&("L1", "Animations")));
-        assert_eq!(look_hints(false, false)[4], ("R1", "Text size"));
+        assert_eq!(look_hints(false, false)[3], ("R1", "Text size"));
+        assert!(look_hints(false, false).iter().all(|(_, label)| !label.is_empty()), "every key of the first start has its word");
+        assert_eq!(keys(&look_hints(false, true)), ["Left/Right", "A", "B", "R1", "Y"], "1024 px wide: no L1");
     }
 
     #[test]

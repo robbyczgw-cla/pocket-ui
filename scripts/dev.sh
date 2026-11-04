@@ -21,6 +21,10 @@ DROPIN=/storage/.config/system.d/essway.service.d/10-pocket-ui.conf
 SPLASH=/storage/.config/system.d/pocket-splash.service
 ES_ONLY=/tmp/pocket-ui.es-only
 
+# The sink's state as "muted 0.10" or "0.10" (empty when wpctl can't say), from `wpctl get-volume`'s
+# "Volume: 0.10 [MUTED]". A deploy keeps it (2026-11-04: a muted device was audible after a deploy).
+sound_state() { awk '$1 == "Volume:" { print (/MUTED/ ? "muted " : "") $2; exit }'; }
+
 case "${1:-}" in
   deploy)
     SOURCE_ROOT=$ROOT
@@ -93,6 +97,8 @@ PYARTIFACT
       echo "usage: dev.sh deploy [--artifact SHA|latest-main]" >&2
       exit 2
     fi
+    # What the speaker is at now (volume and mute), to put back after the restart: a deploy must not change it.
+    SOUND_BEFORE=$(ssh "$HOST" 'wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null' | sound_state || true)
     # Dev builds go into releases/dev, which becomes current; signed releases stay untouched.
     # A running pocket-ui keeps its binary busy: stop it first, in whichever unit it runs.
     # A known good dev build (the launcher's way back, run-pocket-ui.sh) is copied aside first: the new build replaces
@@ -116,8 +122,17 @@ PYARTIFACT
       if [ -f '"$DROPIN"' ]; then systemctl reset-failed essway 2>/dev/null; systemctl restart essway;
       else systemd-run --unit=pocketui /storage/pocket-ui/run-pocket-ui.sh >/dev/null; fi;
       sleep 1.5; cat /var/log/pocket-ui.log'
+    # Put the sound back exactly as it was (volume first, mute last) when the restart changed it.
+    if [ -n "$SOUND_BEFORE" ]; then
+      want_vol=${SOUND_BEFORE#muted }
+      want_mute=0; [ "$SOUND_BEFORE" != "$want_vol" ] && want_mute=1
+      ssh "$HOST" 'now=$(wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null); v=$(echo "$now" | awk "{print \$2}")
+        case "$now" in *MUTED*) m="muted $v" ;; *) m=$v ;; esac
+        [ "$m" = "'"$SOUND_BEFORE"'" ] || { wpctl set-volume @DEFAULT_AUDIO_SINK@ '"$want_vol"'; wpctl set-mute @DEFAULT_AUDIO_SINK@ '"$want_mute"'
+          echo "sound: put back to '"$SOUND_BEFORE"' (the restart left it at $m)"; }'
+    fi
     # Not just "the copy worked": the right binary runs, once, in the unit, with a clean environment (docs/DEVELOPING.md).
-    VERIFY_BUILD_DIR=$BUILD "$SOURCE_ROOT/scripts/verify-device.sh" "$HOST"
+    VERIFY_SOUND_BEFORE=$SOUND_BEFORE VERIFY_BUILD_DIR=$BUILD "$SOURCE_ROOT/scripts/verify-device.sh" "$HOST"
     ;;
   send)
     # One SSH session for the whole sequence: many quick logins trip sshd's rate limit.
