@@ -6,8 +6,7 @@
 </h1>
 
 <p align="center"><b>A free frontend with its own game player for retro handhelds.</b><br>
-Your games on one shelf, press A and you're playing, right where you left off.<br>
-<sub>Built together with AI coding agents, tested by hand on real handhelds. <a href="#how-its-made">How it's made</a></sub></p>
+Your games on one shelf, press A and you're playing, right where you left off.</p>
 
 <p align="center">
   <a href="https://pocketui.xyz"><img src="docs/media/hero.webp" width="620" alt="The shelf: Advance Wars ready to continue, the last games as cases and every console as a spine"></a>
