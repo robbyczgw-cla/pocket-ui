@@ -6,7 +6,8 @@
 </h1>
 
 <p align="center"><b>A free frontend with its own game player for retro handhelds.</b><br>
-Your games on one shelf, press A and you're playing, right where you left off.</p>
+Your games on one shelf, press A and you're playing, right where you left off.<br>
+<sub>Built with AI coding agents, tested by hand on real handhelds. <a href="#how-its-made">How it's made</a></sub></p>
 
 <p align="center">
   <a href="https://pocketui.xyz"><img src="docs/media/hero.webp" width="620" alt="The shelf: Advance Wars ready to continue, the last games as cases and every console as a spine"></a>
@@ -76,7 +77,12 @@ Docker. The dev loop, the tests and the layout of the code are in [docs/DEVELOPI
 [docs/README.md](docs/README.md). See [CONTRIBUTING.md](CONTRIBUTING.md), the [code of conduct](CODE_OF_CONDUCT.md)
 and [SECURITY.md](SECURITY.md).
 
-Made by Robby Czesany with AI coding agents: they write most of the code, Robby decides what gets built and tests it on his own handhelds. Some art starts from public-domain photos run through an AI pixel tool.
+## How it's made
+
+pocket-ui is made by Robby Czesany with AI coding agents (Claude and Codex). The agents write most of the code; Robby
+decides what gets built and how it should look and feel, and tests it on his own handhelds. Every change also passes
+about 3,500 automated tests. Some art starts from public-domain photos run through an AI
+pixel tool. Questions about this are welcome in [Discussions](https://github.com/robbyczgw-cla/pocket-ui/discussions).
 
 ## Licence
 
