@@ -188,8 +188,9 @@ its games go to standalone YabaSanshiro from the start (see above).
 ### Game Boy Advance on H700
 
 On Anbernic H700 handhelds, new Game Boy Advance games use **pocket-core · gpSP** when the update includes it.
-The pause menu, save slots with pictures and Continue stay available. Games with an existing mGBA Continue moment
-keep using mGBA until you start fresh or remove that moment. Choices saved for a game or console take priority.
+The pause menu, save slots with pictures and Continue stay available. An existing mGBA Continue moment keeps
+that game on mGBA; without one, save slots made on mGBA do the same (the newest slot counts), so they still load.
+A game with neither starts on gpSP. Choices saved for a game or console take priority.
 You can choose **pocket-core · mGBA** under [Runs on](options.md#runs-on). Save in the game before changing cores:
 quick saves belong to the core that made them. Under Auto, H700 games use full CPU speed and restore the previous
 profile on exit.

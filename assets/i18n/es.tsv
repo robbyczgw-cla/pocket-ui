@@ -4170,6 +4170,7 @@ It takes {s}.	Admite {s}.
 The game's file changed: started fresh	El archivo del juego cambió: empezó de cero
 Its moment is in slot {n}	Su momento está en la ranura {n}
 All slots are full: its moment is under Load, after the last slot	Todas las ranuras están llenas: su momento está en Cargar, después de la última ranura
+All slots are full: the moment is kept and goes into the first free slot	Todas las ranuras están llenas: el momento se conserva y pasará a la primera ranura libre
 Kept moment {n}	Momento apartado {n}
 Loaded the kept moment	Momento apartado cargado
 A kept moment can only be loaded: pick a slot to save	Un momento apartado solo se puede cargar: elige una ranura para guardar

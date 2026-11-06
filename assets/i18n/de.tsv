@@ -4215,6 +4215,7 @@ It takes {s}.	Es nimmt {s}.
 The game's file changed: started fresh	Die Spieldatei hat sich geändert: neu gestartet
 Its moment is in slot {n}	Der Moment liegt in Slot {n}
 All slots are full: its moment is under Load, after the last slot	Alle Plätze sind voll: Der Moment liegt unter Laden, hinter dem letzten Platz
+All slots are full: the moment is kept and goes into the first free slot	Alle Plätze sind voll: Der Moment bleibt erhalten und kommt in den ersten freien Platz
 Kept moment {n}	Aufgehobener Moment {n}
 Missing disc files: {t}	Es fehlen Disc-Dateien: {t}
 Loaded the kept moment	Aufgehobenen Moment geladen

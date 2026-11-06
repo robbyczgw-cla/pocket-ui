@@ -1978,6 +1978,54 @@ bool retro_unserialize(const void *d, size_t n) {
     }
 
     #[test]
+    fn a_moment_the_core_refuses_is_kept_in_a_free_slot_past_the_next_quit() {
+        // Runs on changed (mGBA's moment, gpSP now), or the core's version: before, it waited as `.taken.retry` and the next
+        // Save & quit removed it (`slots::auto_written`), the only copy of that progress.
+        let _l = globals();
+        let g = Game::new("refused-kept", "srm");
+        first_session(&g);
+        let base = g.dir.join("Game");
+        let foreign = vec![9u8; 200];
+        std::fs::write(&g.state, &foreign).unwrap();
+        std::fs::write(&crate::slots::state_path(&base, 0), b"the player's slot 1").unwrap();
+        let (core, r) = g.start();
+        assert_eq!(r, Resume::Failed);
+        let aside = crate::frozen_phone::set_aside_refused(&base);
+        assert_eq!(aside, Some(crate::frozen_phone::Aside::Slot(1)), "the first free slot; slot 1 stays the player's");
+        g.quit(core);
+        assert_eq!(std::fs::read(crate::slots::state_path(&base, 1)).unwrap(), foreign, "still there after the next quit");
+        assert_eq!(std::fs::read(crate::slots::state_path(&base, 0)).unwrap(), b"the player's slot 1");
+    }
+
+    #[test]
+    fn a_moment_of_another_file_or_emulator_is_kept_and_full_slots_hand_it_on_later() {
+        let _l = globals();
+        let g = Game::new("other-kept", "srm");
+        first_session(&g);
+        let base = g.dir.join("Game");
+        let moment = std::fs::read(&g.state).unwrap();
+        let older = b"older Continue moment";
+        std::fs::write(g.taken(), older).unwrap();
+        std::fs::write(crate::slots::preview_path(&g.state), b"moment picture").unwrap();
+        for n in 0..crate::slots::SLOTS {
+            std::fs::write(crate::slots::state_path(&base, n), format!("slot {n}")).unwrap();
+        }
+        // pocket-ui said this start isn't for that moment (`frozen::SKIP_RESUME_ENV`).
+        assert_eq!(crate::frozen_phone::set_aside_all(&base), Some(crate::frozen_phone::Aside::Kept), "every slot taken");
+        let (core, r) = g.start();
+        assert_eq!(r, Resume::NoState);
+        g.quit(core);
+        assert_eq!(crate::frozen_phone::kept(&base).len(), 2, "both Continue candidates survive the quit");
+        assert_eq!(std::fs::read(crate::slots::preview_path(&crate::frozen_phone::kept(&base)[0])).unwrap(), b"moment picture");
+        std::fs::remove_file(crate::slots::state_path(&base, 3)).unwrap();
+        crate::frozen_phone::restore_kept(&base);
+        assert_eq!(std::fs::read(crate::slots::state_path(&base, 3)).unwrap(), moment, "past the quit, into the slot freed later");
+        assert_eq!(std::fs::read(crate::slots::state_path(&base, 0)).unwrap(), b"slot 0");
+        assert_eq!(std::fs::read(crate::slots::preview_path(&crate::slots::state_path(&base, 3))).unwrap(), b"moment picture");
+        assert_eq!(std::fs::read(&crate::frozen_phone::kept(&base)[0]).unwrap(), older);
+    }
+
+    #[test]
     fn a_state_the_core_gives_up_on_halfway_does_not_bring_back_its_battery_save() {
         // SOL-02 A: the core restored the state's battery save (A) and then refused the rest. The newer one on disk
         // (B) must stay, on disk and in the game.

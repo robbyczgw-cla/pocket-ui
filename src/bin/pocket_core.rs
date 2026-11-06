@@ -1014,18 +1014,23 @@ impl App {
         // "Before load" of a session that didn't end with a Quit (a crash) is gone with it.
         slots::clear_undo(&self.states);
         let path = slots::auto_path(&self.states);
-        // A line from the shelf about this start (`frozen::at_launch`); the state of another file stays for Load, under
-        // the name a state given up on has (`slots::retry_auto_path`).
-        if let Some(note) = std::env::var(pocket_ui::frozen::NOTE_ENV).ok().filter(|n| !n.is_empty()) {
-            self.hud.note(&note);
+        // A moment kept while all slots were full enters the first free slot on the next start.
+        pocket_ui::frozen_phone::restore_kept(&self.states);
+        let note = std::env::var(pocket_ui::frozen::NOTE_ENV).ok().filter(|n| !n.is_empty());
+        if let Some(note) = &note {
+            self.hud.note(note);
         }
         if std::env::var_os(pocket_ui::frozen::SKIP_RESUME_ENV).is_some() {
             if self.hold_still {
                 self.hold = false;
             }
-            let from = if path.exists() { path.clone() } else { slots::taken_auto_path(&path) };
-            let _ = std::fs::rename(&from, slots::retry_auto_path(&path));
-            println!("not resumed: {} is not for this file", path.display());
+            let aside = pocket_ui::frozen_phone::set_aside_all(&self.states);
+            println!("not resumed: {} is not for this file; set aside: {aside:?}", path.display());
+            match (aside, &note) {
+                (Some(a), Some(note)) => self.note_aside(note, a),
+                (Some(a), None) => self.hud.note(pocket_ui::frozen_phone::aside_line_handheld(a)),
+                (None, _) => {}
+            }
             return;
         }
         let resumed = self.core.resume(&path);
@@ -1055,7 +1060,11 @@ impl App {
             Resume::ResumedAgain => println!("loaded {}\nresumed (once more: the last session ended without an exit save)", path.display()),
             Resume::Failed => {
                 println!("couldn't resume from {}", path.display());
-                self.hud.note(pocket_ui::frozen::REFUSED);
+                // A refused raw state is in retry; move it beyond the next Quit's cleanup.
+                match pocket_ui::frozen_phone::set_aside_refused(&self.states) {
+                    Some(a) => self.note_aside(pocket_ui::frozen::REFUSED, a),
+                    None => self.hud.note(pocket_ui::frozen::REFUSED),
+                }
             }
             Resume::SaveIsNewer => {
                 println!("not resumed: the battery save is newer than the resume state of {}", path.display());
@@ -1063,6 +1072,12 @@ impl App {
             }
             Resume::NoState => {}
         }
+    }
+
+    /// One note: each part is translated separately.
+    fn note_aside(&mut self, why: &str, aside: pocket_ui::frozen_phone::Aside) {
+        use pocket_ui::i18n::tr;
+        self.hud.note(format!("{}. {}", tr(why), tr(&pocket_ui::frozen_phone::aside_line_handheld(aside))));
     }
 
     /// The state written on every exit and before a sleep, for instant resume. The battery save goes
@@ -1415,7 +1430,9 @@ impl App {
             let rest = |prefix: &str| cmd.strip_prefix(prefix).and_then(|r| r.split_once(' ')).map(|(k, v)| (k, v.trim()));
             match words.as_slice() {
                 ["audio", "stats"] => {
-                    if let Some(audio) = &self.audio {
+                    if let Some(audio) = &mut self.audio {
+                        // The first request starts the PipeWire sampler (`Audio::observe_pipewire`); games never do.
+                        audio.observe_pipewire();
                         println!("audio sample {}", audio.diagnostics());
                     } else {
                         println!("audio sample {{\"schema\":1,\"available\":false,\"reason\":\"audio stream did not open\"}}");

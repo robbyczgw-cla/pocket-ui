@@ -121,6 +121,9 @@ and `bench` / `ra` next to it (see the header of `scripts/syscheck.sh`), then se
 - **Battery saves**: `roms/<system>/<game>.srm`, the same place and format RetroArch uses (a NES save made by
   RetroArch loads and is written back byte for byte). Written every 10 s when changed (RetroArch's autosave
   interval) and on exit, through a temporary file and a rename.
+- **Skipped/refused Continue moments**: another emulator/game file or a core refusal keeps the raw moment and its
+  preview in the first free slot, with a start note naming it (`frozen_phone`). Full slots keep it beside them under
+  `.kept<N>` until a free slot is available at the next start; Save & quit never removes it.
 - **Cartridge clock** (2026-10-25): a core's non-empty `RETRO_MEMORY_RTC` is kept in `roms/<system>/<game>.rtc`,
   RetroArch's name (`fill_pathname(savefile, ".rtc")`: the `.srm` path with the extension swapped; also beside
   melonDS's `.sav`). Read right after `retro_load_game`, before the first frame, like the battery save; written with
@@ -886,7 +889,10 @@ side: launch resolution, opening, painting, saving). User side: [user/options.md
 
 `h700_gba` supplies bundled ARM64 gpSP for `gba`, `gbah` and `gbav`, with mGBA still offered by Runs on.
 Explicit game/console choices win. Existing raw or compressed Auto/taken moments select mGBA unless their
-header identifies the pinned gpSP BSON format. Owner scanning runs on a worker; an early launch waits for its
+header identifies the pinned gpSP BSON format. Without any Auto/taken moment, the newest save slot
+(`.pstate`, `.pstate1`..`.pstate7`) decides the same way: mGBA states (397,888 bytes) are refused by gpSP
+(425,984 bytes), so existing mGBA slots keep the game on mGBA.
+Owner scanning runs on a worker; an early launch waits for its
 answer. The worker refreshes after exit, including Quit without retaining a moment. No state is migrated or deleted.
 
 Stock ROCKNIX 20261001 gpSP is ELF32 ARM and cannot load in the ELF64 player. `store::core_path` selects the
@@ -1611,7 +1617,10 @@ that missed the bounded shutdown deadline.
   silence, refill-silence chunks, playing starvation, queue-deficit frames and full emitted silence frames, input/resampled/dropped frame counts and
   current phase. Startup polling is not an audible dropout count. Planned silence must not disappear behind a
   zero playing-only count; a writer that never started is not a successful playback test.
-- `pipewire`: verified PID/client-owned playback node IDs and serials, server version, observed ERR increments,
+- `pipewire`: only when asked: the first `audio stats` starts the sampler (`Audio::observe_pipewire`), the tone fixture
+  starts it at once, and `POCKET_CORE_AUDIO_PW=1` from the open. A game without a bench runs none of its helpers
+  (`pw-dump` twice and `pw-top` every 2 s were about 7 processes a second beside every game). Null means not sampled.
+  Verified PID/client-owned playback node IDs and serials, server version, observed ERR increments,
   resets, sample ages/gaps and availability. A missing tool/server/node, older unproven protocol, identity change
   or incomplete sampling yields null client totals with a reason, not zero. ERR includes errors and xruns.
   PipeWire1.2.6 provides follower-specific profiler counts; older pw-top can substitute driver ERR, which is

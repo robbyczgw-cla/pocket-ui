@@ -167,6 +167,11 @@ at the next start, unless Settings → Playing → Continue where I quit is off,
 setting and saves on every exit either way. PlayStation 2, GameCube, Wii and 3DS save and restore through their emulators' own slots
 (`src/states.rs`, `src/standalone.rs`). Other standalone emulators start fresh.
 
+A pocket-core moment skipped because the file/emulator changed, or refused by the core, goes into the first free slot
+with its picture (`frozen_phone::set_aside_all`, `set_aside_refused`), beyond `slots::auto_written` cleanup. With all eight
+slots occupied it is kept as `.pstate.auto.kept<N>`; `restore_kept` moves the oldest into a free slot at the next start.
+The start note names the slot or explains that it is waiting. Existing slots and battery saves stay unchanged.
+
 ## Switching games
 
 A in the game switcher on another game quits the running one the way Quit in the pause menu does and starts the

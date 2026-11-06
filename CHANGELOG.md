@@ -3,7 +3,17 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a minor version may change anything).
 
-## [0.2.3] - Unreleased
+## [0.2.4] - Unreleased
+
+### Fixed
+
+- Continue moments skipped after an emulator or game-file change, or refused by a core, stay in a free slot past the next Save & quit. With every slot full, they wait safely for a free one.
+
+- H700 GBA games without a Continue moment keep using mGBA when their newest save slot belongs to mGBA, so existing slots still load.
+
+- Ordinary games no longer launch periodic PipeWire diagnostic helpers; measurements start them only when requested.
+
+## [0.2.3] - 2026-11-06
 
 ### Fixed
 

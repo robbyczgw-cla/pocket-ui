@@ -90,6 +90,15 @@ fn file_owner(path: &Path, compressed: bool) -> Option<&'static str> {
     }
 }
 
+/// The game's name of a save slot's file (`slots::state_path`: `<stem>.pstate`, `<stem>.pstate1` to `.pstate7`).
+fn slot_stem(name: &str) -> Option<&str> {
+    if let Some(stem) = name.strip_suffix(".pstate") {
+        return Some(stem);
+    }
+    let (stem, n) = name.rsplit_once(".pstate")?;
+    (n.len() == 1 && n.parse::<usize>().is_ok_and(|n| (1..crate::slots::SLOTS).contains(&n))).then_some(stem)
+}
+
 fn scan(root: &Path) -> Owners {
     let mut found = HashMap::new();
     for system in ["gba", "gbah", "gbav"] {
@@ -107,6 +116,17 @@ fn scan(root: &Path) -> Owners {
                 let core = file_owner(&entry.path(), name.contains(".pstate.auto.z")).unwrap_or("mgba");
                 found.insert(key, core);
             }
+        }
+        // No Continue moment: the newest save slot decides (raw `.pstate`, `.pstate1`..`.pstate7`). A player who saved
+        // in slots on mGBA (Continue off, or quit without keeping) would otherwise get gpSP, which refuses every slot
+        // (an mGBA state is 397,888 bytes, gpSP takes only its 425,984: "wrong size"), review 0.3.
+        for entry in &files {
+            let name = entry.file_name();
+            let Some(stem) = name.to_str().and_then(slot_stem) else { continue };
+            let key = (system.to_string(), stem.to_string());
+            if found.contains_key(&key) { continue }
+            let core = file_owner(&entry.path(), false).unwrap_or("mgba");
+            found.insert(key, core);
         }
     }
     found
@@ -176,4 +196,32 @@ mod tests {
         std::fs::remove_file(&old).unwrap();
         assert!(!scan(&d).contains_key(&("gba".into(), "Old".into())), "a fresh start no longer pins mGBA");
     }
+    /// Review 0.3: slots saved on mGBA (0.2) with no Continue moment: the game stays on mGBA, so they still load.
+    /// gpSP refuses them ("wrong size"), and nothing on the shelf says why.
+    #[test]
+    fn mgba_save_slots_keep_a_game_without_continue_on_mgba() {
+        let d = crate::testutil::TestDir::new("gba-slot-owner");
+        let gba = d.join("gba");
+        std::fs::create_dir_all(&gba).unwrap();
+        let at = |p: &Path, secs: u64| {
+            std::fs::File::options().write(true).open(p).unwrap().set_modified(std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(secs)).unwrap();
+        };
+        std::fs::write(gba.join("Emerald.pstate"), b"an mGBA slot 1").unwrap();
+        std::fs::write(gba.join("Emerald.pstate3"), b"an mGBA slot 4").unwrap();
+        std::fs::write(gba.join("Fresh.pstate2"), gpsp_state()).unwrap();
+        let owners = scan(&d);
+        assert_eq!(owners.get(&("gba".into(), "Emerald".into())), Some(&"mgba"), "mGBA's slots still load");
+        assert_eq!(owners.get(&("gba".into(), "Fresh".into())), Some(&"gpsp"));
+        // The newest slot decides; a Continue moment still comes first.
+        std::fs::write(gba.join("Both.pstate"), b"old mGBA slot").unwrap();
+        std::fs::write(gba.join("Both.pstate1"), gpsp_state()).unwrap();
+        at(&gba.join("Both.pstate"), 1_700_000_000);
+        at(&gba.join("Both.pstate1"), 1_700_000_100);
+        assert_eq!(scan(&d).get(&("gba".into(), "Both".into())), Some(&"gpsp"));
+        std::fs::write(gba.join("Emerald.pstate.auto"), gpsp_state()).unwrap();
+        assert_eq!(scan(&d).get(&("gba".into(), "Emerald".into())), Some(&"gpsp"), "Continue first");
+        assert_eq!(slot_stem("Game.pstate8"), None, "eight slots: .pstate to .pstate7");
+        assert_eq!(slot_stem("Game.pstate.auto"), None);
+    }
+
 }

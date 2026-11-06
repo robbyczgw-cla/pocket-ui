@@ -44,6 +44,8 @@ const MAX_SKEW: f64 = 0.005;
 /// (the loop's time constant is target / (MAX_SKEW × 48000), 4 s at 20 ms), so the average is fast enough to follow it.
 const FILL_SMOOTH: f64 = 1.0 / 64.0;
 pub(crate) const CHUNK_FRAMES: usize = 256;
+/// Set (any value): `Audio::open` samples PipeWire from the first moment (`Audio::observe_pipewire`), for the benches.
+pub const PW_STATS_ENV: &str = "POCKET_CORE_AUDIO_PW";
 
 pub(crate) use crate::platform::audio_backend::{Sink, Ring, force_quantum, game_quantum};
 pub use crate::platform::audio_backend::restore_quantum;
@@ -290,8 +292,24 @@ impl Audio {
         let frames = if sink.uses_graph() { configured } else { 0 };
         let route = Some(crate::audio_route::Keeper::spawn(frames));
         let mut audio = Audio::start(sink, in_rate, heavy, route, Sink::open);
-        audio.pw_stats = Some(crate::audio_pw_stats::Collector::start());
+        audio.opened(std::env::var_os(PW_STATS_ENV).is_some());
         Some(audio)
+    }
+
+    /// After `open`: the PipeWire sampler only for a bench that asks (`PW_STATS_ENV`, or `audio stats` later through
+    /// `observe_pipewire`). In every game it ran `pw-dump` twice and `pw-top` every 2 s, about 7 processes a second
+    /// beside the game (vdev, review 0.3), on the H700's A53 cores too.
+    fn opened(&mut self, observe: bool) {
+        if observe {
+            self.observe_pipewire();
+        }
+    }
+
+    /// Starts sampling PipeWire's per-node errors for `diagnostics` (`audio_pw_stats`), once; a no-op when running.
+    pub fn observe_pipewire(&mut self) {
+        if self.pw_stats.is_none() {
+            self.pw_stats = Some(crate::audio_pw_stats::Collector::start());
+        }
     }
 
     /// The writer thread for `sink`, and the queue it plays from. `reopen` opens a new stream when this one fails
@@ -594,6 +612,23 @@ impl Audio {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    /// Review 0.3: every game sampled PipeWire with helper programs every 2 s (about 7 processes a second, `vdev`
+    /// measure in REVIEW-OPUS-0.3-MERGES.md). A game's sound starts none of that unless a bench asks.
+    #[test]
+    fn a_game_starts_no_pipewire_sampler_unless_a_bench_asks() {
+        // This test owns no stream-lifetime counters: the close/join test uses those in parallel.
+        let sink = || Sink::Pulse { _lib: None, stream: std::ptr::NonNull::<c_void>::dangling().as_ptr(), write: paced_write, latency: fake_latency, free: fake_free, observation: Default::default() };
+        let mut audio = Audio::start(sink(), 48000.0, false, None, |_| None);
+        audio.opened(false);
+        assert!(audio.pw_stats.is_none(), "no helper programs beside a game");
+        assert!(audio.diagnostics()["pipewire"].is_null(), "unknown, never zero");
+        audio.observe_pipewire();
+        assert!(audio.pw_stats.is_some(), "`audio stats` starts it");
+        let mut bench = Audio::start(sink(), 48000.0, false, None, |_| None);
+        bench.opened(true);
+        assert!(bench.pw_stats.is_some(), "{PW_STATS_ENV} starts it at the open");
+    }
 
     #[test]
     fn a_late_frame_preserves_the_queued_audio_and_counts_only_missing_frames() {

@@ -32,12 +32,17 @@ until then. A game that can't continue stands as a normal case:
   emulators without one. A game you haven't quit yet stands closed too. PlayStation 2 games stand open from your next Quit.
 - **The game now runs on another emulator or core:** its moment belongs to the old one. The start says so and begins fresh; the old moment stays under Load. This holds after a game on another emulator or core you played in between.
 - **The game's file changed** (a new copy or a different version, judged by what is in the file, also the tracks of a `.cue` or `.m3u`; copying the card alone changes nothing): a moment of another file isn't loaded. The start says so and
-  begins fresh; until your next Quit the moment is still in the pause menu under Load.
+  begins fresh; the old moment is kept in a free slot under Load.
 - **A soft patch was added, replaced or removed** ([patches](patches-msu1.md)): the same, because the patched game is another game to its moment.
 - **Another game has the same file name** (in another folder of the system): they share save states, see [troubleshooting](troubleshooting.md). A moment the other game may have written isn't loaded, and the start says so.
 - **The moment is gone** (you deleted it, or a card was swapped): the start says so and begins fresh. In-game saves are never
   touched by any of this.
 - **The emulator refuses the moment** (after an update of its core): the same, "Couldn't go back to that moment".
+
+On pocket-core, a moment skipped after a file or emulator change, or refused by the core, moves to the first free save
+slot. The start message says which one. It stays there after Save & quit. If all eight slots are full, it is kept aside
+and moves into the first free slot when you next start the game. To load another emulator's moment, switch back to that
+emulator first. Existing slots and in-game saves stay as they were.
 
 There is no switch for the open case. A game whose file, patch or emulator changed doesn't load the old moment. With
 [Continue where I quit](settings.md#continue-where-i-quit) off, a Quit keeps no new moment and the switch's line says so; on

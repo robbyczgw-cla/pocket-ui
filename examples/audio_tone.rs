@@ -27,6 +27,8 @@ fn main() {
         .filter_map(|p| p.split_once(':').and_then(|(a, b)| Some((a.parse().ok()?, b.parse().ok()?))))
         .collect();
     let mut audio = Audio::open(CORE_RATE, false).expect("no audio server");
+    // The tone is a bench: PipeWire's per-node errors from the first moment (games sample only when asked).
+    audio.observe_pipewire();
     audio.set_input_rate(CORE_RATE * REFRESH / CORE_FPS);
     println!("audio_tone: {hz} Hz for {secs} s via {}, pauses {pauses:?}", audio.backend);
     let per_frame = CORE_RATE / CORE_FPS;

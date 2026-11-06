@@ -5,7 +5,8 @@
 //! document's size with the mark ([`stand_open`]); what the file holds is judged in the player, after the copy and before
 //! the core sees a state ([`at_start`]). A moment that isn't loaded goes to a free slot, or behind the slots when all are
 //! taken: Load finds it either way and no later Quit can overwrite it ([`set_aside`]). In-game saves aren't touched by
-//! anything here.
+//! anything here. Handheld pocket-core shares the preservation helpers (`set_aside_all`, `set_aside_refused`,
+//! `restore_kept`) for raw Continue moments it does not load; its paths still come from `slots`.
 
 use std::path::{Path, PathBuf};
 
@@ -21,6 +22,8 @@ const OTHER_EMULATOR: &str = "Started fresh: its saved moment belongs to its oth
 const SAVE_NEWER: &str = "In-game save is newer: not resumed";
 const AGAIN: &str = "The game didn't close normally: back at your last saved moment";
 const FULL: &str = "All slots are full: its moment is under Load, after the last slot";
+/// Handheld Load lists no kept moments: they enter the first free slot at the next start.
+const FULL_HANDHELD: &str = "All slots are full: the moment is kept and goes into the first free slot";
 const STUCK: &str = "Its moment couldn't be moved and stays where it is";
 
 /// `states/<key>/<stem>`, the common start of a game's files (`slots`).
@@ -130,7 +133,7 @@ pub fn kept(base: &Path) -> Vec<PathBuf> {
 }
 
 /// A kept moment moves into a slot as soon as one is free, oldest first.
-fn restore_kept(base: &Path) {
+pub fn restore_kept(base: &Path) {
     let mut free = (0..slots::SLOTS).filter(|i| !slots::state_path(base, *i).exists());
     for moment in kept(base) {
         let Some(slot) = free.next() else { return };
@@ -152,11 +155,39 @@ pub fn set_aside(base: &Path, from: &Path) -> Aside {
     free.map_or(Aside::Kept, Aside::Slot)
 }
 
+/// A handheld's start that doesn't load the moment (`frozen::SKIP_RESUME_ENV`: another file's, another emulator's): every
+/// moment the start would have continued from goes aside. Where the first went, None when there was none.
+pub fn set_aside_all(base: &Path) -> Option<Aside> {
+    let mut first = None;
+    for from in files(base).into_iter().filter(|p| p.is_file()) {
+        let aside = set_aside(base, &from);
+        first.get_or_insert(aside);
+    }
+    first
+}
+
+/// After a handheld's `Core::resume` failed: the raw retry moment the core refused goes aside when it can be
+/// read (another core's, another version's: it may load again elsewhere). One that can't be read stays where `resume` left it.
+pub fn set_aside_refused(base: &Path) -> Option<Aside> {
+    // Released 0.2.x parks every refused raw Continue state here; it has no compressed-state candidates.
+    let moment = slots::retry_auto_path(&slots::auto_path(base));
+    std::fs::read(&moment).ok()?;
+    Some(set_aside(base, &moment))
+}
+
 fn aside_line(aside: Aside) -> String {
     match aside {
         Aside::Slot(i) => format!("Its moment is in slot {}", i + 1),
         Aside::Kept => FULL.into(),
         Aside::Stuck => STUCK.into(),
+    }
+}
+
+/// [`aside_line`] on a handheld (pocket-core), whose Load lists no kept moments.
+pub fn aside_line_handheld(aside: Aside) -> String {
+    match aside {
+        Aside::Kept => FULL_HANDHELD.into(),
+        other => aside_line(other),
     }
 }
 
