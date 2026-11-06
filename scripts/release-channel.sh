@@ -6,6 +6,7 @@
 #                              [--os-tar FILE --os-version V] [--base-url URL] [--allow-foreign-key]
 #     --repo        the public GitHub repository whose release v<version> will hold the files
 #     --version     pocket-ui version (default: from the file names in --in)
+#     --gba-core    pinned ARM64 gpSP build folder (licence and corresponding source included)
 #     --in          the artefacts (default release-out/): bin/pocket-ui and bin/pocket-core (or a ready
 #                   pocket-ui-<v>-aarch64.tar.gz), optional pocket-ui-<v>-rocknix-install.zip,
 #                   pocket-ui-<v>-rp-mini-v2.img.xz, NOTES.txt and store/ (a signed catalog folder)
@@ -32,6 +33,7 @@ OUT=$ROOT/site-updates
 CHANNEL=stable
 KEY=${POCKETUI_SIGNING_KEY:-$HOME/.config/pocket-ui/store-signing.key}
 NOTES=
+GBA_CORE_DIR=
 NOTES_FILE=
 PREVIOUS=
 OS_TAR=
@@ -44,6 +46,7 @@ while [ $# -gt 0 ]; do
     --check) CHECK=$2; shift ;;
     --repo) REPO=$2; shift ;;
     --version) VERSION=$2; shift ;;
+    --gba-core) GBA_CORE_DIR=$2; shift ;;
     --in) IN=$2; shift ;;
     --out) OUT=$2; shift ;;
     --channel) CHANNEL=$2; shift ;;
@@ -166,6 +169,10 @@ else
     install -m 755 "$IN/bin/pocket-splash" "$S/"
     FILES="pocket-ui pocket-core pocket-splash portmaster-setup.sh"
   fi
+  if [ -n "$GBA_CORE_DIR" ]; then
+    sh "$ROOT/scripts/gba-core-files.sh" "$GBA_CORE_DIR" "$S/cores"
+    FILES="$FILES cores"
+  fi
   EPOCH=${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || echo 315532800)}
   # The same bytes for the same files: fixed order, owner and time (GNU tar; another tar packs without them).
   if tar --version 2>/dev/null | grep -q GNU; then
@@ -178,6 +185,10 @@ fi
 X=$(mktemp -d)
 tar -xzf "$GH/$APP" -C "$X" || die "$APP can't be unpacked"
 for b in pocket-ui pocket-core; do [ -f "$X/$b" ] || die "$APP has no $b"; check_binary "$X/$b"; done
+if [ -n "$GBA_CORE_DIR" ]; then
+  sh "$ROOT/scripts/gba-core-files.sh" "$GBA_CORE_DIR" "$X/.expected-cores"
+  diff -r "$X/.expected-cores" "$X/cores" >/dev/null 2>&1 || die "the app archive lacks the verified ARM64 gpSP, licence or source"
+fi
 rm -rf "$X"
 asset "$GH/$APP"
 

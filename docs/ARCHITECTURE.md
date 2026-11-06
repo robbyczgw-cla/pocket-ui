@@ -142,7 +142,8 @@ switches the cache off.
    `emu_choice::resolve`): the player's choice for the game, else for the console, from ROCKNIX's `system.cfg`
    (`<system>["<file>"].emulator/.core`, `<system>.emulator/.core`, the keys EmulationStation writes; read on a thread
    at start, so the launch only looks them up), else the default: pocket-core for a system it hosts
-   (`src/hostsys.rs`, only systems marked `verified`), else es_systems.cfg's default. pocket-core starts as
+   (`src/hostsys.rs`, only systems marked `verified`), else es_systems.cfg's default. H700 GBA uses bundled ARM64 gpSP, while existing mGBA Continue moments
+   keep mGBA (`h700_gba`); explicit choices win. The core travels with each version for OTA rollback. pocket-core starts as
    `pocket-core <core> <rom> --system <name>`; zip files are fine, `.7z` games and games that failed to start on
    pocket-core before (`src/fallback.rs`) go to the next choice down (not a zip that pocket-core refuses with advice: several games, a wrong checksum; `src/archive.rs`; nor a patch next to the game that doesn't apply, which RetroArch would skip and start the original: `src/softpatch.rs`). Everything else starts
    `/usr/bin/runemu.sh <rom> -P<system> --core=<core> --emulator=<emulator>`, which brings ROCKNIX's per-system

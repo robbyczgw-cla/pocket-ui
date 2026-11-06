@@ -1766,6 +1766,7 @@ impl App {
     }
 
     fn game_exited(&mut self, secs: u64, ok: bool) {
+        pocket_ui::h700_gba::preload();
         // Asked to stop (Quit in the menu, or the grace period ran out) is no failure.
         let quit_requested = self.menu.as_ref().is_some_and(|m| m.quitting) || self.quit.is_some();
         // Options applied by a restart: the emulator closed after writing the resume state.

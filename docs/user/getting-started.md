@@ -445,6 +445,7 @@ doesn't change them.
 - **Games.** The consoles ROCKNIX's H700 image ships cores for play in pocket-ui's own player, with its pause menu,
   states and shortcuts. **N64, PSP, Dreamcast and Nintendo DS stay on ROCKNIX's own emulators** (they ask more than
   these processors give). PS2, GameCube, Wii and 3DS are not in ROCKNIX's H700 image, so those systems don't appear.
+  See [Game Boy Advance on H700](systems.md#game-boy-advance-on-h700) for GBA cores and existing Continue moments.
 - **Screen.** pocket-ui draws its normal layout and reduces it to the small screen, so it looks like on the Mini V2,
   only smaller. Small hint text can be hard to read on the 640×480 handhelds; Settings → Look → Text size
   makes it larger.

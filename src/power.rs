@@ -325,6 +325,15 @@ impl Power {
     /// Applies a CPU profile. Returns false when nothing could be written (or the restore note couldn't be, so
     /// nothing was).
     pub fn set_performance(&mut self, mode: Performance) -> bool {
+        self.set_performance_on(mode, crate::device::current().model.is_some_and(|m| m.is_h700()))
+    }
+
+    fn set_performance_on(&mut self, mode: Performance, h700: bool) -> bool {
+        // H700 games bypass runemu.sh: Auto must not inherit a governor that misses frame deadlines.
+        // Preserve the kernel's maximum (no overclock), and journal/restore through the existing lease.
+        let mode = if mode == Performance::Auto && h700 {
+            Performance::Performance
+        } else { mode };
         if mode == Performance::Auto && self.saved.cpu.is_empty() {
             return true; // never touched: nothing to undo
         }
@@ -647,6 +656,20 @@ mod tests {
         assert!(power.restore());
         assert_eq!(f.cpu("policy3", "scaling_governor"), "ondemand");
         assert_eq!((0..9).map(|i| f.trip(i)).collect::<Vec<_>>(), before);
+    }
+
+    #[test]
+    fn h700_auto_reaches_full_clock_without_overclock_and_restores_on_exit() {
+        let f = Fake::new("h700-game");
+        let mut p = f.power();
+        assert!(p.set_performance_on(Performance::Auto, true));
+        assert_eq!(f.cpu("policy0", "scaling_governor"), "performance");
+        assert_eq!(f.cpu("policy0", "scaling_max_freq"), "1804800", "retain the kernel's existing maximum");
+        assert!(f.0.join("restore.json").exists(), "crash recovery is recorded before writes");
+        assert!(p.restore());
+        assert_eq!(f.cpu("policy0", "scaling_governor"), "ondemand");
+        assert_eq!(f.cpu("policy0", "scaling_max_freq"), "1804800");
+        assert!(!f.0.join("restore.json").exists());
     }
 
     #[test]

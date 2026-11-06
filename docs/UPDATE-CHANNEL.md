@@ -104,7 +104,12 @@ On the build machine, from a clean checkout of the release commit. Nothing below
    scripts/make-image.sh --version $V --bin-dir release-out/bin --out release-out     # optional: the SD image
    ```
 
-2. **Check the artefacts** for BIOS files, ROMs and cores (none of them may ship),
+2. **Check the artefacts** for BIOS files, ROMs and unapproved cores. The optional pinned ARM64 gpSP for H700 is
+   staged with `--gba-core BUILD_DIR` on the package and channel scripts; its GPL text, corresponding source and
+   build recipe must accompany it. For these finished packages only, pass
+   `--allowlist deploy/gpsp/release-allowlist.txt` to `scripts/check-release-tree.py`. Keep the source repository
+   core-free and scan it with the default allowlist. `gba-core-files.sh` verifies the exact core SHA256.
+   Then
    and write the release notes into `release-out/NOTES.txt` (shown on the Updates page and on the release page).
 3. **Get the list that is live now**, so that what this release does not replace (a system update) is carried over:
 

@@ -3,6 +3,12 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a minor version may change anything).
 
+## [0.2.1] - 2026-11-06
+
+### Fixed
+
+- Game Boy Advance on Anbernic H700 handhelds uses gpSP in pocket-ui's own player, keeping the pause menu, picture slots and Continue. Existing mGBA Continue moments and saved emulator choices stay with their core. Games use full CPU speed under Auto and restore the previous profile on exit.
+
 ## [0.2.0] - 2026-11-05
 
 ### Added

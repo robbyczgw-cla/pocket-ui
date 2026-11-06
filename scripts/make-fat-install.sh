@@ -6,6 +6,7 @@
 #     --version  pocket-ui version (default: Cargo.toml); the binaries are built with POCKETUI_VERSION=V
 #     --bin-dir  take pocket-ui, pocket-core and pocket-splash from DIR instead of building them (must be that version)
 #     --out      output directory (default build/image, gitignored)
+#     --gba-core DIR pinned ARM64 gpSP build (cores, licence and corresponding source)
 #     --hakux    DIR from `scripts/build-hakux-core.sh`: the seed then carries the Xbox core (pocket-ui/hakux, docs/XBOX.md),
 #                the same files and layout as `make-install-zip.sh --hakux`; without it Xbox games keep ROCKNIX's xemu
 #
@@ -22,6 +23,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 TARGET=aarch64-unknown-linux-gnu
 VERSION=
 BIN_DIR=
+GBA_CORE_DIR=
 HAKUX_DIR=
 OUT=$ROOT/build/image
 while [ $# -gt 0 ]; do
@@ -29,6 +31,7 @@ while [ $# -gt 0 ]; do
     --version) VERSION=$2; shift ;;
     --bin-dir) BIN_DIR=$2; shift ;;
     --out) OUT=$2; shift ;;
+    --gba-core) GBA_CORE_DIR=$2; shift ;;
     --hakux) HAKUX_DIR=$2; shift ;;
     -h | --help) sed -n '2,15p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
@@ -66,6 +69,7 @@ R=$T/pocket-ui/releases/$VERSION
 UNITS=$T/.config/system.d
 mkdir -p "$R" "$T/pocket-ui/licences" "$UNITS/essway.service.d" "$UNITS/sysinit.target.wants"
 install -m 755 "$BIN_DIR/pocket-ui" "$BIN_DIR/pocket-core" "$BIN_DIR/pocket-splash" "$ROOT/deploy/portmaster-setup.sh" "$R/"
+[ -z "$GBA_CORE_DIR" ] || sh "$ROOT/scripts/gba-core-files.sh" "$GBA_CORE_DIR" "$R/cores"
 install -m 755 "$ROOT/deploy/run-pocket-ui.sh" "$T/pocket-ui/run-pocket-ui.sh"
 install -m 755 "$ROOT/deploy/package/uninstall.sh" "$T/pocket-ui/uninstall.sh"
 sh "$ROOT/scripts/licence-files.sh" "$S/lic" || die "the licence texts could not be collected"

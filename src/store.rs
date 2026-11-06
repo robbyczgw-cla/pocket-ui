@@ -57,6 +57,10 @@ pub fn tools_dir(data_dir: &Path) -> PathBuf {
 /// The core file pocket-core should load: one installed into `/storage/cores` wins over the
 /// image's, the same order the `/tmp/cores` overlay gives RetroArch.
 pub fn core_path(core: &str) -> PathBuf {
+    if core == "gpsp" {
+        let bundled = crate::h700_gba::bundled_path();
+        if bundled.is_file() { return bundled }
+    }
     let file = format!("{core}_libretro.so");
     let installed = Path::new(CORES_DIR).join(&file);
     // The Steam Deck app: POCKETUI_CORES is a ':'-separated list of folders (bundled cores, RetroArch's flatpak) searched next.

@@ -94,11 +94,18 @@ fn curator_before_its_index_shows_no_words_on_home_and_a_sentence_on_a_page() {
 #[test]
 fn a_game_without_box_art_is_a_title_card_and_a_narrow_tile_names_its_console_not_a_cut_word() {
     let card = Card::new();
+    // Home's cover is the day's pick, and the pick changes with the date: read which game it is instead of assuming one.
     let wide = card.screen("curator:home", "");
-    assert!(wide.contains("PS2") && wide.contains("Need for"), "the console over the name: {wide}");
+    let title = wide.lines().find_map(|l| l.strip_prefix("Today: ")).and_then(|l| l.split(" · ").next()).expect(&wide);
+    let first_word = title.split_whitespace().next().unwrap();
+    let lines: Vec<&str> = wide.lines().collect();
+    let at = lines.iter().position(|l| *l == first_word).unwrap_or_else(|| panic!("the title card says {title}: {wide}"));
+    let console = lines[at.saturating_sub(1)];
+    assert!(at > 0 && console.len() <= 6 && console.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()), "the console over the name: {wide}");
     let narrow = card.screen("curator:home", "1024x768");
-    assert!(narrow.contains("PS2"), "{narrow}");
-    assert!(!narrow.contains("Ne…") && !narrow.contains("Nee…"), "never a word cut to its first letters: {narrow}");
+    assert!(narrow.lines().any(|l| l == console), "the narrow tile names {console}: {narrow}");
+    let first_letters: Vec<String> = (1..=3.min(first_word.chars().count().saturating_sub(1))).map(|n| format!("{}…", first_word.chars().take(n).collect::<String>())).collect();
+    assert!(!narrow.lines().any(|l| first_letters.iter().any(|c| l.contains(c.as_str()))), "never a word cut to its first letters: {narrow}");
 }
 
 #[test]

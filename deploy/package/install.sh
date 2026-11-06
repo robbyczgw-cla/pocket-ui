@@ -150,6 +150,7 @@ mkdir -p "$STAGE" || die "cannot create $STAGE"
 for f in pocket-ui pocket-core pocket-splash portmaster-setup.sh; do
   cp "$F/$f" "$STAGE/$f" && chmod 755 "$STAGE/$f" || die "cannot copy $f to $STAGE"
 done
+[ ! -d "$F/cores" ] || cp -r "$F/cores" "$STAGE/cores" || die "cannot copy bundled cores"
 for b in pocket-ui pocket-core pocket-splash; do
   got=$("$STAGE/$b" --version 2>&1)
   [ "$got" = "$b $VERSION" ] || die "$b does not run here (it said: '$(printf '%s' "$got" | head -c 200)'); this system lacks what it needs"
@@ -184,6 +185,10 @@ say "== installing"
 REL=$APP/releases/$VERSION
 mkdir -p "$APP/releases" || die "cannot create $APP/releases"
 same_release() {
+  # A core-only package repair must not be mistaken for an already-installed release.
+  if [ -d "$STAGE/cores" ]; then
+    [ -d "$REL/cores" ] && diff -r "$STAGE/cores" "$REL/cores" >/dev/null 2>&1 || return 1
+  elif [ -d "$REL/cores" ]; then return 1; fi
   for f in pocket-ui pocket-core pocket-splash portmaster-setup.sh; do cmp -s "$STAGE/$f" "$REL/$f" || return 1; done
 }
 if [ -d "$REL" ] && same_release; then

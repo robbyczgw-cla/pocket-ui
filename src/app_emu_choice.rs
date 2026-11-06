@@ -40,6 +40,7 @@ pub(crate) struct EmuChoiceUi {
 /// What `resolve_runner` and the page need besides system.cfg.
 struct Inputs {
     pocket_core: Option<&'static str>,
+    pocket_cores: &'static [&'static str],
     file_ok: bool,
     fell_back: bool,
     default_override: Option<(&'static str, &'static str)>,
@@ -60,8 +61,11 @@ impl App {
             .map(|(_, core)| *core)
             .or_else(|| hostsys::route(system, bios))
             .filter(|_| host_bin);
+        let gba = pocket_ui::h700_gba::is_gba(system) && pocket_ui::h700_gba::enabled() && pocket_core.is_some();
+        let pocket_core = if gba { Some(pocket_ui::h700_gba::default_core(system, path)) } else { pocket_core };
         Inputs {
             pocket_core,
+            pocket_cores: if gba { pocket_ui::h700_gba::CORES } else { &[] },
             file_ok,
             fell_back: path.is_some_and(|p| self.fallback.contains(p)),
             // PICO-8 without the official binary: RetroArch's fake08 instead of start_pico8.sh (`hostsys`).
@@ -77,6 +81,7 @@ impl App {
             system: &sys.name,
             emulators: &sys.emulators,
             pocket_core: i.pocket_core,
+            pocket_cores: i.pocket_cores,
             file_ok: i.file_ok,
             fell_back: i.fell_back,
             default_override: i.default_override,
@@ -100,6 +105,7 @@ impl App {
             game: game.and_then(|(name, p)| Some((name.to_string(), p.file_name()?.to_str()?.to_string()))),
             emulators: sys.emulators.clone(),
             pocket_core: i.pocket_core.map(str::to_string),
+            pocket_cores: i.pocket_cores,
             default_override: i.default_override.map(|(e, c)| (e.to_string(), c.to_string())),
             file_ok: i.file_ok,
             fell_back: i.fell_back,

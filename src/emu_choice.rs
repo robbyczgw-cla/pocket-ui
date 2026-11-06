@@ -240,6 +240,8 @@ pub struct Ctx<'a> {
     /// default emulator does without one, and pocket-core installed (`hostsys::route`, `HOST_CORES`). None: pocket-core
     /// is not a choice for this system.
     pub pocket_core: Option<&'a str>,
+    /// Other verified pocket-core choices, e.g. bundled H700 gpSP beside mGBA.
+    pub pocket_cores: &'static [&'static str],
     /// pocket-core takes this game's file (not a 7z, a file type it opens). True for the system as a whole.
     pub file_ok: bool,
     /// pocket-core couldn't start this game before (`fallback.json`): it goes to the next choice down.
@@ -300,7 +302,10 @@ fn chosen(ctx: &Ctx, cfg: &Cfg, emu_key: &str, core_key: &str, base: &Runner) ->
     let emu = cfg.get(emu_key);
     let core = cfg.get(core_key);
     match emu {
-        Some(POCKET_CORE) => ctx.pocket(),
+        Some(POCKET_CORE) => match core.filter(|c| ctx.pocket_cores.contains(c)) {
+            Some(c) if ctx.pocket_core.is_some() => Some(Runner::new(POCKET_CORE, c)),
+            _ => ctx.pocket(),
+        },
         Some(name) => {
             let e = emulator(ctx.emulators, name)?;
             let core = core.filter(|c| e.cores.iter().any(|x| x == c)).unwrap_or_else(|| default_core(e));
@@ -383,6 +388,12 @@ pub fn choices(ctx: &Ctx) -> Vec<Runner> {
     let mut v = Vec::new();
     if let (Some(p), true) = (ctx.pocket(), ctx.file_ok) {
         v.push(p);
+    }
+    if ctx.pocket_core.is_some() && ctx.file_ok {
+        for core in ctx.pocket_cores {
+            let r = Runner::new(POCKET_CORE, core);
+            if !v.contains(&r) { v.push(r); }
+        }
     }
     v.extend(es_pairs(ctx.emulators));
     if let Some((e, c)) = ctx.default_override {
@@ -906,6 +917,7 @@ static CHOICES: RwLock<Option<Arc<Cfg>>> = RwLock::new(None);
 /// Reads system.cfg's emulator and core keys on a thread at start, so neither a launch nor the shelf reads the file
 /// on the UI thread. Logs what it found: a choice made earlier in EmulationStation is honoured from now on.
 pub fn preload() {
+    crate::h700_gba::preload();
     let _ = std::thread::Builder::new().name("emu-choices".into()).spawn(|| {
         let started = std::time::Instant::now();
         let cfg = Arc::new(Cfg::choices_only(&std::fs::read_to_string(SYSTEM_CFG).unwrap_or_default()));
@@ -1061,6 +1073,7 @@ mod tests {
             system,
             emulators: emus,
             pocket_core: pocket,
+            pocket_cores: &[],
             file_ok: true,
             fell_back: false,
             default_override: None,
@@ -1081,6 +1094,24 @@ mod tests {
         assert_eq!(es_default(&emulators("nds")), Some(Runner::new("melonds", "melonds-sa")));
         assert_eq!(es_pairs(&emulators("nds")).len(), 5);
         assert_eq!(es_default(&[]), None);
+    }
+
+    #[test]
+    fn h700_gba_stays_in_our_player_with_both_cores_and_honours_saved_choices() {
+        let gba = emulators("gba");
+        let c = Ctx { pocket_cores: crate::h700_gba::CORES, ..ctx("gba", &gba, Some("gpsp")) };
+        assert_eq!(resolve(&c, &Cfg::default(), Some("Alien Hominid.gba")).runner, Runner::new(POCKET_CORE, "gpsp"));
+        for core in ["mgba", "gpsp"] {
+            assert!(choices(&c).contains(&Runner::new(POCKET_CORE, core)));
+            let cfg = Cfg::parse(&format!("gba.emulator=pocket-core\ngba.core={core}"));
+            assert_eq!(run(&resolve(&c, &cfg, Some("Alien Hominid.gba"))), (POCKET_CORE, core, From::Console));
+            let cfg = Cfg::parse(&format!("gba.emulator=pocket-core\ngba.core=gpsp\ngba[\"Alien Hominid.gba\"].emulator=pocket-core\ngba[\"Alien Hominid.gba\"].core={core}"));
+            assert_eq!(run(&resolve(&c, &cfg, Some("Alien Hominid.gba"))), (POCKET_CORE, core, From::Game));
+        }
+        let legacy = Ctx { pocket_core: Some("mgba"), ..c };
+        assert_eq!(resolve(&legacy, &Cfg::default(), Some("Alien Hominid.gba")).runner, Runner::new(POCKET_CORE, "mgba"));
+        let cfg = Cfg::parse("gba.emulator=retroarch\ngba.core=mgba");
+        assert_eq!(run(&resolve(&legacy, &cfg, Some("Alien Hominid.gba"))), ("retroarch", "mgba", From::Console));
     }
 
     #[test]

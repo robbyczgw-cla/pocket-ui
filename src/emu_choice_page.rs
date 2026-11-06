@@ -22,6 +22,7 @@ pub struct Subject {
     pub emulators: Vec<EsEmulator>,
     /// `emu_choice::Ctx` for the console (pocket-core's core, what stands in for the default).
     pub pocket_core: Option<String>,
+    pub pocket_cores: &'static [&'static str],
     pub default_override: Option<(String, String)>,
     /// pocket-core takes the game's file; pocket-core couldn't start it before (`fallback.json`).
     pub file_ok: bool,
@@ -125,6 +126,7 @@ impl EmuChoicePage {
             system: &s.system,
             emulators: &s.emulators,
             pocket_core: s.pocket_core.as_deref(),
+            pocket_cores: s.pocket_cores,
             file_ok: s.file_ok,
             fell_back,
             default_override: s.default_override.as_ref().map(|(e, c)| (e.as_str(), c.as_str())),
@@ -532,6 +534,7 @@ mod tests {
             game: game.map(|f| (f.trim_end_matches(".gba").to_string(), f.to_string())),
             emulators: gba(),
             pocket_core: Some("mgba".into()),
+            pocket_cores: &[],
             default_override: None,
             file_ok: true,
             fell_back: false,

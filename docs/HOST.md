@@ -878,6 +878,24 @@ what pocket-ui did `grep 'performance:' /var/log/pocket-ui.log`. Smooth fan: `ca
 `src/emu_choice.rs` (model, system.cfg, writer), `src/emu_choice_page.rs` (the page), `src/app_emu_choice.rs` (the App's
 side: launch resolution, opening, painting, saving). User side: [user/options.md](user/options.md#runs-on).
 
+### H700 GBA
+
+`h700_gba` supplies bundled ARM64 gpSP for `gba`, `gbah` and `gbav`, with mGBA still offered by Runs on.
+Explicit game/console choices win. Existing raw or compressed Auto/taken moments select mGBA unless their
+header identifies the pinned gpSP BSON format. Owner scanning runs on a worker; an early launch waits for its
+answer. The worker refreshes after exit, including Quit without retaining a moment. No state is migrated or deleted.
+
+Stock ROCKNIX 20261001 gpSP is ELF32 ARM and cannot load in the ELF64 player. `store::core_path` selects the
+bundled ELF64 core beside the programs (`cores/gpsp_libretro.so`) before system cores. `POCKETUI_GBA_CORE`
+provides a development override without changing device identity. The optional `--gba-core BUILD_DIR` of
+`make-install-zip.sh`, `make-fat-install.sh` and `release-channel.sh` includes the verified core, GPL text,
+corresponding source and build recipe in the version directory. `build-gpsp.sh` documents the ARM64 dynarec and
+cache-sync build; `gba-core-files.sh` refuses a different or 32-bit build. Rollback restores programs and core together.
+
+H700 Auto is explicitly applied at game start and maps to Performance while retaining the kernel's maximum
+frequency. The existing power lease/journal restores governor and limit on exit and after a crash. Battery and Max
+remain explicit choices. This avoids inheriting a low clock from the shelf when bypassing ROCKNIX's runemu.sh.
+
 ### ROCKNIX's mechanism (20261001, read from the source and the image)
 
 Sources: D = `github.com/ROCKNIX/distribution/blob/20261001/projects/ROCKNIX/packages/`, E =

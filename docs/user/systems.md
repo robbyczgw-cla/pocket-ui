@@ -29,7 +29,7 @@ consoles before and after them and to the ones with the same chips that you have
 |---|---|---|
 | Game Boy | `gb`, `gbh` | Gambatte |
 | Game Boy Color | `gbc`, `gbch` | Gambatte |
-| Game Boy Advance | `gba`, `gbah`, `gbav` | mGBA |
+| Game Boy Advance | `gba`, `gbah`, `gbav` | mGBA; [gpSP on H700](#game-boy-advance-on-h700) |
 | NES / Famicom | `nes`, `famicom`, `nesh` | Nestopia |
 | Famicom Disk System | `fds` | Nestopia (needs a BIOS, see below) |
 | SNES / Super Famicom | `snes`, `sfc`, `snesh` | Snes9x |
@@ -184,6 +184,15 @@ on the own host. Choosing pocket-core for it again under [Runs on](options.md#ru
 A missing BIOS file is the exception: RetroArch would need it as well, so pocket-ui does not switch.
 The card names the files it looks for in `roms/bios`. The Saturn is different again: without its BIOS,
 its games go to standalone YabaSanshiro from the start (see above).
+
+### Game Boy Advance on H700
+
+On Anbernic H700 handhelds, new Game Boy Advance games use **pocket-core · gpSP** when the update includes it.
+The pause menu, save slots with pictures and Continue stay available. Games with an existing mGBA Continue moment
+keep using mGBA until you start fresh or remove that moment. Choices saved for a game or console take priority.
+You can choose **pocket-core · mGBA** under [Runs on](options.md#runs-on). Save in the game before changing cores:
+quick saves belong to the core that made them. Under Auto, H700 games use full CPU speed and restore the previous
+profile on exit.
 
 ## On RetroArch
 

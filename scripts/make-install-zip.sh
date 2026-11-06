@@ -8,6 +8,7 @@
 #     --version  pocket-ui version (default: Cargo.toml); the binaries are built with POCKETUI_VERSION=V
 #     --bin-dir  take pocket-ui, pocket-core and pocket-splash from DIR instead of building them (must be that version)
 #     --out      output directory (default build/image, gitignored)
+#     --gba-core DIR pinned ARM64 gpSP build (cores, licence and corresponding source)
 #     --hakux    DIR from `scripts/build-hakux-core.sh` (hakux_libretro.so, BUILD-INFO, licenses/): the package then carries the
 #                Xbox core (hakux/, docs/XBOX.md); without it Xbox games keep ROCKNIX's xemu
 #
@@ -22,6 +23,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 TARGET=aarch64-unknown-linux-gnu
 VERSION=
 BIN_DIR=
+GBA_CORE_DIR=
 HAKUX_DIR=
 OUT=$ROOT/build/image
 while [ $# -gt 0 ]; do
@@ -29,6 +31,7 @@ while [ $# -gt 0 ]; do
     --version) VERSION=$2; shift ;;
     --bin-dir) BIN_DIR=$2; shift ;;
     --out) OUT=$2; shift ;;
+    --gba-core) GBA_CORE_DIR=$2; shift ;;
     --hakux) HAKUX_DIR=$2; shift ;;
     -h | --help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
@@ -67,8 +70,10 @@ mkdir -p "$P/files"
 install -m 755 "$BIN_DIR/pocket-ui" "$BIN_DIR/pocket-core" "$BIN_DIR/pocket-splash" "$ROOT/deploy/portmaster-setup.sh" "$ROOT/deploy/run-pocket-ui.sh" "$P/files/"
 install -m 644 "$ROOT/deploy/essway-pocket-ui.conf" "$P/files/10-pocket-ui.conf"
 install -m 644 "$ROOT/deploy/pocket-splash.service" "$P/files/pocket-splash.service"
+[ -z "$GBA_CORE_DIR" ] || sh "$ROOT/scripts/gba-core-files.sh" "$GBA_CORE_DIR" "$P/files/cores"
 printf '%s\n' "$VERSION" >"$P/files/VERSION"
-(cd "$P/files" && sha256sum pocket-ui pocket-core pocket-splash portmaster-setup.sh run-pocket-ui.sh 10-pocket-ui.conf pocket-splash.service VERSION >SHA256SUMS)
+(cd "$P/files" && sha256sum pocket-ui pocket-core pocket-splash portmaster-setup.sh run-pocket-ui.sh 10-pocket-ui.conf pocket-splash.service VERSION >SHA256SUMS
+ [ ! -d cores ] || find cores -type f | LC_ALL=C sort | xargs sha256sum >>SHA256SUMS)
 install -m 755 "$ROOT/deploy/package/install.sh" "$ROOT/deploy/package/uninstall.sh" "$P/"
 install -m 644 "$ROOT/LICENSE" "$ROOT/NOTICE.md" "$P/"
 # The Xbox core (hakuX, GPL-3.0, docs/XBOX.md) with the texts that must travel with it: install.sh puts it in /storage/pocket-ui/hakux.

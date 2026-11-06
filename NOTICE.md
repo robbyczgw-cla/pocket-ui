@@ -300,6 +300,14 @@ bindings they generate are compiled in.
 
 ## No games, no BIOS
 
-pocket-ui contains no game, no ROM, no BIOS or firmware file, no key and no emulator binary of a third party. The
+The pocket-ui source repository contains no game, ROM, BIOS, firmware dump, key or third-party emulator binary.
+Release packages may include the separately licensed ARM64 gpSP described below, with its corresponding source. The
 source names BIOS files (`src/hostsys.rs`) only so it can tell the user which one is missing; the user supplies
 them. `scripts/check-release-tree.py` enforces this before a release.
+
+## Optional bundled gpSP for H700
+
+The H700 GBA update includes gpSP (GPL-2.0-or-later), revision
+5819380c2ffb0900219d700a382ee68c464ebb99 from https://github.com/libretro/gpsp.
+The release's `cores/gpsp/` folder contains COPYING, the corresponding source, the ARM64 build recipe and the
+instruction-cache synchronization header used by that build. The emulator remains a separate dynamically loaded library.

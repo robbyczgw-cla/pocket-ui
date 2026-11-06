@@ -38,3 +38,5 @@ dosbox_pure|or-later|7f6e8fb|dosbox_pure_libretro.cpp: "either version 2 of the 
 scummvm|v3|292e409|video/avi_decoder.h: "either version 3 of the License, or (at your option) any later version"
 fake08|permissive|814991a|LICENSE.MD: "License: MIT"
 tic80|permissive|7020500|LICENSE: "MIT License"
+
+gpsp|or-later|5819380|COPYING and source file headers: GPL-2.0-or-later; corresponding source accompanies bundled core

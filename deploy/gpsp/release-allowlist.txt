@@ -1,0 +1,10 @@
+# Package-only allowlist; never use this to scan the source repository or its history.
+# gba-core-files.sh separately pins the SHA256 and requires the GPL text and corresponding source.
+cores/gpsp_libretro.so # gpSP GPL-2.0-or-later, libretro/gpsp 5819380c2ffb0900219d700a382ee68c464ebb99
+pocket-ui-*-rocknix-install/files/cores/gpsp_libretro.so # same pinned gpSP, install archive only
+pocket-ui/releases/*/cores/gpsp_libretro.so # same pinned gpSP, card seed only
+
+# gpSP's corresponding source includes the open GPL replacement BIOS, not a firmware dump.
+cores/gpsp/source.tar.gz!bios/open_gba_bios.bin # GPL-2.0 software BIOS from pinned gpSP bios/README.md
+pocket-ui-*-rocknix-install/files/cores/gpsp/source.tar.gz!bios/open_gba_bios.bin # same GPL software BIOS inside corresponding source only
+pocket-ui/releases/*/cores/gpsp/source.tar.gz!bios/open_gba_bios.bin # same GPL software BIOS inside corresponding source only

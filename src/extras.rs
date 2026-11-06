@@ -221,6 +221,9 @@ impl Extras {
         };
         let mut ex = ex;
         ex.apply_settings(cfg);
+        if cfg.performance == Performance::Auto && crate::device::current().model.is_some_and(|m| m.is_h700()) {
+            ex.power.set_performance(Performance::Auto);
+        }
         // Always, Auto too: pocket-ui otherwise goes by Games: fan, which this game may have overridden.
         if let Some(p) = &ex.fan_request {
             crate::fan_curve::request(p, ex.cfg.fan);

@@ -337,19 +337,23 @@ fn settle_governors() {
         return;
     }
     std::thread::spawn(|| {
-        // A clean end: runemu.sh is still putting the governors back for a moment.
-        for _ in 0..8 {
-            std::thread::sleep(Duration::from_secs(1));
-            if emulator_running() || find_pid(None, "runemu.sh").is_some() {
-                return;
-            }
-        }
-        let cfg = std::fs::read_to_string(SYSTEM_CFG).unwrap_or_default();
-        let n = settle_governors_in(Path::new("/"), &cfg);
+        let n = settle_governors_after(Path::new("/"), || std::thread::sleep(Duration::from_secs(1)), || {
+            emulator_running() || find_pid(None, "runemu.sh").is_some()
+        });
         if n > 0 {
             println!("standalone: {n} cpu clusters were left on performance after the game; back to the system's governor");
         }
     });
+}
+
+/// Wait for a clean exit; a game starting during the grace period cancels this cleanup permanently.
+fn settle_governors_after(root: &Path, mut wait: impl FnMut(), mut running: impl FnMut() -> bool) -> usize {
+    for _ in 0..8 {
+        wait();
+        if running() { return 0; }
+    }
+    let cfg = std::fs::read_to_string(root.join(SYSTEM_CFG.trim_start_matches('/'))).unwrap_or_default();
+    settle_governors_in(root, &cfg)
 }
 
 /// Writes the system's governor to every cluster of `root` that is on `performance`; how many were changed.
@@ -846,8 +850,13 @@ fn pids_of(pgid: Option<i32>, name: &str) -> Vec<i32> {
         let stat = std::fs::read_to_string(e.path().join("stat")).ok()?;
         let (comm, rest) = (stat.get(stat.find('(')? + 1..stat.rfind(')')?)?, stat.get(stat.rfind(')')? + 2..)?);
         let group: i32 = rest.split(' ').nth(2)?.parse().ok()?;
-        (comm.starts_with(name) && pgid.is_none_or(|g| g == group)).then_some(pid)
+        // pocket-core's full name fits comm: helpers such as pocket-core-log must not count as a game.
+        (process_name_matches(comm, name) && pgid.is_none_or(|g| g == group)).then_some(pid)
     }).collect()
+}
+
+fn process_name_matches(comm: &str, name: &str) -> bool {
+    if name == "pocket-core" { comm == name } else { comm.starts_with(name) }
 }
 
 /// True once `emu` has written a new version of `path` (not the one `before` stamped) and finished it: the same in two
@@ -1756,10 +1765,15 @@ pub fn quiet_wiimote(profile: &str) -> String {
     defaults::with_quiet_wiimote(profile)
 }
 
-/// One of ARMSX2, Dolphin nogui or Azahar is running (started by us or not).
+/// A hosted or standalone emulator is running (started by us or not).
 pub fn emulator_running() -> bool {
-    [Emu::Armsx2, Emu::Dolphin, Emu::Azahar, Emu::Hakux].iter().any(|e| find_pid(None, e.process()).is_some())
-        || [guest::Guest::Cemu, guest::Guest::Rpcs3, guest::Guest::Vita3k].iter().any(|g| find_pid(None, g.process()).is_some())
+    emulator_running_with(|name| find_pid(None, name).is_some())
+}
+
+fn emulator_running_with(mut running: impl FnMut(&str) -> bool) -> bool {
+    running("pocket-core")
+        || [Emu::Armsx2, Emu::Dolphin, Emu::Azahar, Emu::Hakux].iter().any(|e| running(e.process()))
+        || [guest::Guest::Cemu, guest::Guest::Rpcs3, guest::Guest::Vita3k].iter().any(|g| running(g.process()))
 }
 
 /// A Wii U (Cemu), PS3 (RPCS3) or PS Vita (Vita3K) game is running as a guest (`guest`): Continue and Quit, no states.
@@ -2429,6 +2443,29 @@ mod tests {
         std::fs::write(d.join("sys/devices/system/cpu/cpufreq/policy7/scaling_governor"), "performance\n").unwrap();
         assert_eq!(super::settle_governors_in(&d, ""), 1);
         assert_eq!(gov("policy7").trim(), "ondemand");
+    }
+
+    #[test]
+    fn pocket_core_active_after_ten_seconds_keeps_the_performance_governor() {
+        let d = scratch("hosted-governor");
+        let policy = d.join("sys/devices/system/cpu/cpufreq/policy0");
+        std::fs::create_dir_all(&policy).unwrap();
+        let gov = policy.join("scaling_governor");
+        std::fs::write(&gov, "performance\n").unwrap();
+        let live = ["pocket-core-logd", "pocket-core"];
+        let mut elapsed = Duration::ZERO;
+        // The cleanup's first poll is delayed until ten seconds after the previous game ended.
+        // It must cancel, rather than overwrite the next hosted game's CPU lease.
+        assert_eq!(settle_governors_after(&d, || elapsed += Duration::from_secs(10), || {
+            emulator_running_with(|name| live.iter().any(|comm| process_name_matches(comm, name)))
+        }), 0);
+        assert_eq!(elapsed, Duration::from_secs(10));
+        assert_eq!(std::fs::read_to_string(&gov).unwrap(), "performance\n");
+        // A helper alone is not a game: abandoned performance still returns to the system default.
+        assert_eq!(settle_governors_after(&d, || {}, || {
+            emulator_running_with(|name| process_name_matches("pocket-core-logd", name))
+        }), 1);
+        assert_eq!(std::fs::read_to_string(&gov).unwrap(), "ondemand");
     }
 
     fn scratch(tag: &str) -> crate::testutil::TestDir {
