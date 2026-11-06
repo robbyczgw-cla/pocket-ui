@@ -210,6 +210,7 @@ impl Profiles {
         };
         let choice = match w {
             Which::Performance => match self.prefs.games_performance {
+                Performance::Battery if crate::device::current().model.is_some_and(|m| m.is_h700()) => "Battery: saves in menus and idle. Games keep their normal processor speed on this device.",
                 Performance::Battery => "Battery: about half speed, enough for Game Boy and NES; the battery lasts longer.",
                 Performance::Auto => "Auto: the system decides; for PS2, GameCube and 3DS that is full speed.",
                 Performance::Performance => "Max: full speed all the time. Warmer, and uses more battery.",

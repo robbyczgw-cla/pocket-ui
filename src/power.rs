@@ -329,9 +329,10 @@ impl Power {
     }
 
     fn set_performance_on(&mut self, mode: Performance, h700: bool) -> bool {
-        // H700 games bypass runemu.sh: Auto must not inherit a governor that misses frame deadlines.
+        // H700 games bypass runemu.sh: Auto and Battery keep the existing full-speed game profile.
+        // Battery saves in menus/idle, not by imposing a half-speed cap while audio must meet deadlines.
         // Preserve the kernel's maximum (no overclock), and journal/restore through the existing lease.
-        let mode = if mode == Performance::Auto && h700 {
+        let mode = if h700 && matches!(mode, Performance::Auto | Performance::Battery) {
             Performance::Performance
         } else { mode };
         if mode == Performance::Auto && self.saved.cpu.is_empty() {
@@ -436,6 +437,12 @@ impl Power {
     /// The whole plan (every file, what goes in, what was there) is noted and written to the note first; only then
     /// is sysfs touched, so a crash at any point leaves a note that undoes all of it.
     fn set_guest(&mut self, mode: Performance, battery_caps_all: bool) -> bool {
+        self.set_guest_on(mode, battery_caps_all, crate::device::current().model.is_some_and(|m| m.is_h700()))
+    }
+
+    fn set_guest_on(&mut self, mode: Performance, battery_caps_all: bool, h700: bool) -> bool {
+        // runemu.sh has already chosen the game's governor. H700 Battery retains it and its existing limit.
+        let mode = if h700 && mode == Performance::Battery { Performance::Auto } else { mode };
         let before = self.saved.clone();
         self.note_cpu();
         self.note_gpu();
@@ -670,6 +677,32 @@ mod tests {
         assert_eq!(f.cpu("policy0", "scaling_governor"), "ondemand");
         assert_eq!(f.cpu("policy0", "scaling_max_freq"), "1804800");
         assert!(!f.0.join("restore.json").exists());
+    }
+
+    #[test]
+    fn h700_battery_never_halves_the_clock_of_a_running_game() {
+        let f = Fake::new("h700-battery");
+        let mut p = f.power();
+        assert!(p.set_performance_on(Performance::Auto, true));
+        let max = f.cpu("policy0", "scaling_max_freq");
+        assert!(p.set_performance_on(Performance::Battery, true));
+        assert_eq!(f.cpu("policy0", "scaling_max_freq"), max);
+        assert_eq!(f.cpu("policy0", "scaling_governor"), "performance");
+        assert!(p.restore());
+        assert_eq!(f.cpu("policy0", "scaling_governor"), "ondemand", "menus regain their original governor");
+    }
+
+    #[test]
+    fn h700_guest_battery_keeps_the_emulators_governor_and_limit() {
+        for port in [false, true] {
+            let f = Fake::new("h700-guest-battery");
+            let mut p = f.power();
+            let max = f.cpu("policy0", "scaling_max_freq");
+            assert!(p.set_guest_on(Performance::Battery, port, true));
+            assert_eq!(f.cpu("policy0", "scaling_max_freq"), max);
+            assert_eq!(f.cpu("policy0", "scaling_governor"), "ondemand");
+            assert!(p.restore());
+        }
     }
 
     #[test]

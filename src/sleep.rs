@@ -707,6 +707,7 @@ pub fn set_volume(percent: u32, muted: bool, kick: bool) {
         pactl(&["set-sink-volume", "@DEFAULT_SINK@", &format!("{percent}%")]);
     }
     pactl(&["set-sink-mute", "@DEFAULT_SINK@", if muted { "1" } else { "0" }]);
+    crate::h700_volume::repair();
 }
 
 /// Mutes the default sink; Some(whether it was muted before), None when `pactl` couldn't say.
@@ -722,6 +723,7 @@ fn set_mute(muted: bool) {
         Command::new("pactl").args(["set-sink-mute", "@DEFAULT_SINK@", if muted { "1" } else { "0" }]),
         crate::proc::HELPER,
     );
+    crate::h700_volume::repair();
 }
 
 /// Waits until ROCKNIX's sleep hooks (run by `systemd-sleep` after the kernel resumed, while our

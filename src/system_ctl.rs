@@ -13,6 +13,8 @@
 //! | date and time by hand | `clock_settime` and the RTC's `RTC_SET_TIME` (`manual_time`); network time stays on and wins later |
 //! | power | `systemctl suspend\|poweroff\|reboot` |
 //!
+//! On affected H700 UCM, `h700_volume` also follows the sink to the physical speaker DAC and switches.
+//!
 //! `Hw` is the seam: `RealHw` talks to the system, `MockHw` keeps the values in memory, and `AutoHw` takes
 //! the real one for each control the machine actually has and the mock for the rest. So the virtual device
 //! (no backlight, no radios, no battery, no systemd) still shows a working quick settings panel.
@@ -470,7 +472,9 @@ impl Hw for RealHw {
     }
 
     fn set_volume(&self, pct: u8) {
-        run("volume", &[&pct.min(100).to_string()]);
+        if run("volume", &[&pct.min(100).to_string()]) {
+            crate::h700_volume::changed();
+        }
     }
 
     fn sound(&self) -> Option<crate::audio_route::Sound> {

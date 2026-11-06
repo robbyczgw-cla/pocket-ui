@@ -110,3 +110,7 @@ while Smooth fan does, "full speed, hot" from 78 °C, otherwise the temperature 
 profile in use right now; then the clock of each group of processor cores
 (little, big and prime) and of the graphics processor, and how much power the battery delivers ("On the charger"
 while plugged in). It only reads; nothing on this part can be changed.
+
+On Anbernic H700 handhelds, **Battery** keeps the game's normal processor speed. Power saving stays with menus
+and idle; it does not impose a half-speed game cap. Volume feedback is shown on the shelf and in Quick settings;
+its small overlay is suppressed over running H700 games to keep rendering work out of their frame budget.

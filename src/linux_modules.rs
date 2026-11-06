@@ -79,6 +79,7 @@ pub mod port_perf;
 pub mod port_perf_page;
 pub mod audio;
 pub mod audio_route;
+pub mod h700_volume;
 pub mod resample;
 pub mod clock_check;
 pub mod manual_time;

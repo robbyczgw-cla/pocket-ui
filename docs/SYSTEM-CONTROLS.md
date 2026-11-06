@@ -38,6 +38,15 @@ while the mode is on. `deploy/package/uninstall.sh` removes the block and the mo
 A volume key also ends a HOME tap in a game: HOME + Vol (ROCKNIX's brightness) used to open the pause menu when
 HOME was let go.
 
+### H700 speaker volume
+
+On the affected H616 UCM, `h700_volume::Keeper` also maps the system volume to DAC Playback Volume, caps the
+speaker at a provisional −22.04 dB (DAC 44) and uses physical switches for zero/mute. Headphones retain Line Out attenuation.
+Nonzero changes use a rate-limited DAC ramp with a persistent ALSA handle; H700 game volume overlays and hidden-shelf
+redraws are suppressed. It follows keys, quick settings and sleep/wake from a worker, preserving external edits and conditional exit
+restoration. Hardware readback is eventual, not instantaneous; no acoustic validation has been done yet.
+See [H700-VOLUME.md](H700-VOLUME.md).
+
 ### How the volume keys reach us
 
 `input.service` runs `/usr/bin/input_sense`: one `evtest` per input device. Vol+/Vol- alone call `volume up|down`

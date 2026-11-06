@@ -30,6 +30,11 @@ pub fn game_input_needs_redraw(screen_before: bool, screen_after: bool) -> bool 
     screen_before || screen_after
 }
 
+/// On a constrained game profile, system-key work needs no frame while no UI content is visible.
+pub fn system_input_needs_redraw(quiet_game: bool, visible_before: bool, visible_after: bool) -> bool {
+    !quiet_game || visible_before || visible_after
+}
+
 /// How often a stick's movement is passed on to the UI thread while a game runs and no pocket-ui screen is up.
 pub const STICK_PASS_EVERY_MS: u64 = 500;
 
@@ -62,7 +67,15 @@ impl StickThrottle {
 
     /// Whether `ev` goes on to the UI thread, `now_ms` milliseconds after any fixed start (not 0).
     pub fn pass_at(&self, ev: &PadEvent, now_ms: u64) -> bool {
-        if !self.quiet.load(Ordering::Relaxed) || !matches!(ev, PadEvent::Axis { axis: Axis::LeftX | Axis::LeftY | Axis::RightX | Axis::RightY, .. }) {
+        if !self.quiet.load(Ordering::Relaxed)
+            || !matches!(
+                ev,
+                PadEvent::Axis {
+                    axis: Axis::LeftX | Axis::LeftY | Axis::RightX | Axis::RightY,
+                    ..
+                }
+            )
+        {
             return true;
         }
         let last = self.last_ms.load(Ordering::Relaxed);
@@ -91,7 +104,19 @@ mod tests {
     }
 
     fn button(button: Button) -> PadEvent {
-        PadEvent::Button { source: 0, button, pressed: true }
+        PadEvent::Button {
+            source: 0,
+            button,
+            pressed: true,
+        }
+    }
+
+    #[test]
+    fn quiet_game_volume_work_draws_only_when_a_ui_screen_or_notice_is_visible() {
+        assert!(!system_input_needs_redraw(true, false, false));
+        assert!(system_input_needs_redraw(true, true, false), "closing a panel still draws its last frame");
+        assert!(system_input_needs_redraw(true, false, true), "opening a panel still draws");
+        assert!(system_input_needs_redraw(false, false, false), "other device profiles keep their behavior");
     }
 
     #[test]
@@ -104,7 +129,10 @@ mod tests {
     fn opening_moving_in_and_closing_the_pause_menu_or_the_switcher_do_draw() {
         assert!(game_input_needs_redraw(false, true), "HOME opened it");
         assert!(game_input_needs_redraw(true, true), "a button moved in it");
-        assert!(game_input_needs_redraw(true, false), "it closed: the last frame of the window is the game's turn");
+        assert!(
+            game_input_needs_redraw(true, false),
+            "it closed: the last frame of the window is the game's turn"
+        );
     }
 
     #[test]

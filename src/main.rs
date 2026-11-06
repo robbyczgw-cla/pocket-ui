@@ -1723,7 +1723,7 @@ impl App {
         env.extend(self.perf_fan_game_env().filter(|_| emulator == "pocket-core"));
         pocket_ui::mark!("launch", "{system} {}", path.display());
         // pocket-core games get our display (the overlay); RetroArch, the standalone emulators and apps get ROCKNIX's box.
-        pocket_ui::mako_osd::set_hidden(emulator == "pocket-core");
+        pocket_ui::mako_osd::set_hidden(emulator == "pocket-core" || pocket_ui::mako_osd::quiet_h700_games());
         let pgid = spawn_game(self.proxy.clone(), &system, &emulator, &core, &path, &env);
         // A port: its performance once its own process runs, and the busy-core look (`app_port_perf`, on a thread).
         self.port_perf_started(pgid, &path);
@@ -4335,7 +4335,7 @@ impl App {
             return false;
         }
         self.setup.as_ref().is_some_and(|s| s.animating()) || (self.marquee.animating() && (self.running.is_none() || self.switcher.is_some())) || self.switcher.as_ref().is_some_and(|s| s.animating()) ||
-        self.quit.is_some() || self.kids_animating() || self.pull_moving(Instant::now()) || self.motion_animating(Instant::now()) || self.toast.as_ref().is_some_and(|(m, t)| t.elapsed() < toast_len(m)) || self.sync_note_active() || self.tailscale_animating() || self.bluetooth_animating() || self.tools_animating() || self.game_check_animating() || self.pc_streaming_animating() || self.backup_animating() || (self.updates.restart_at.is_some() && self.running.is_none()) || self.notice.as_ref().is_some_and(Notice::animating) || self.launch_at.is_some_and(|t| t.elapsed() < FADE + self.cabinet.launch_delay() + LAST_FADE_FRAME) || (self.theme == Theme::Cabinet && self.running.is_none() && self.cabinet.animating(Instant::now())) || (self.theme == Theme::Shelf && self.running.is_none() && self.shelf_media_animating(Instant::now())) || self.stream_message_due() || self.exit_since.is_some() || self.sys.animating(Instant::now()) || (self.manual.moving() && self.settings_page == Some(SettingsPage::Manual)) || self.appearance_animating() || self.card.as_ref().is_some_and(|o| o.card.boxed.as_ref().is_some_and(|b| b.animating(Instant::now()))) || self.find_animating() || self.boot_fade.active()
+        self.quit.is_some() || self.kids_animating() || self.pull_moving(Instant::now()) || self.motion_animating(Instant::now()) || self.toast.as_ref().is_some_and(|(m, t)| t.elapsed() < toast_len(m)) || self.sync_note_active() || self.tailscale_animating() || self.bluetooth_animating() || self.tools_animating() || self.game_check_animating() || self.pc_streaming_animating() || self.backup_animating() || (self.updates.restart_at.is_some() && self.running.is_none()) || self.notice.as_ref().is_some_and(Notice::animating) || self.launch_at.is_some_and(|t| t.elapsed() < FADE + self.cabinet.launch_delay() + LAST_FADE_FRAME) || (self.theme == Theme::Cabinet && self.running.is_none() && self.cabinet.animating(Instant::now())) || (self.theme == Theme::Shelf && self.running.is_none() && self.shelf_media_animating(Instant::now())) || self.stream_message_due() || self.exit_since.is_some() || (if self.sys.quiet_game_controls(&self.sys_ctx()) { self.sys.animating_on_screen(Instant::now()) } else { self.sys.animating(Instant::now()) }) || (self.manual.moving() && self.settings_page == Some(SettingsPage::Manual)) || self.appearance_animating() || self.card.as_ref().is_some_and(|o| o.card.boxed.as_ref().is_some_and(|b| b.animating(Instant::now()))) || self.find_animating() || self.boot_fade.active()
     }
 
     fn openness(&self, i: usize) -> f32 {
@@ -6602,6 +6602,7 @@ impl App {
                 self.home_tap = false;
             }
             let ctx = self.sys_ctx();
+            let system_visible_before = self.sys.has_visible_content() || self.menu.is_some() || self.switcher.is_some();
             let out = self.sys.pad(pe, &ctx, Instant::now());
             if out.select_used {
                 self.select_alone = false;
@@ -6612,7 +6613,10 @@ impl App {
                 self.resume_game(None);
             }
             if out.consumed {
-                self.request_redraw();
+                let system_visible_after = self.sys.has_visible_content() || self.menu.is_some() || self.switcher.is_some();
+                if pocket_ui::idle::system_input_needs_redraw(self.sys.quiet_game_controls(&ctx), system_visible_before, system_visible_after) {
+                    self.request_redraw();
+                }
                 return;
             }
         }
@@ -7612,6 +7616,8 @@ fn main() {
     pocket_ui::type_scale::set(text_size_override().unwrap_or(settings.text_size));
     let hw = std::sync::Arc::new(pocket_ui::system_ctl::AutoHw::detect());
     println!("system controls: mocked {:?}", hw.mocked());
+    #[cfg(target_os = "linux")]
+    let h700_volume = pocket_ui::h700_volume::Keeper::start();
     {
         // `pactl`: a program read from the card; after the first frame (`startup::after_first_frame`).
         let hw = hw.clone();
@@ -8019,6 +8025,8 @@ fn main() {
     if app.exit_code == pocket_ui::rescue::OPEN_ES_CODE {
         pocket_ui::rescue::before_es();
     }
+    #[cfg(target_os = "linux")]
+    drop(h700_volume);
     std::process::exit(app.exit_code);
 }
 

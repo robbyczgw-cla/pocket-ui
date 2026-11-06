@@ -241,6 +241,8 @@ pub struct Sys {
     mods: Mods,
     home_tap: bool,
     rocknix_keys: bool,
+    /// H700: leave the game/compositor alone during level-key activity (diagnostic override for A/B).
+    quiet_game_osd: bool,
     vol_held: Option<(Button, Instant, Mode)>,
     /// Vol+ and Vol- as down/up, so a key reported by two input devices counts once.
     vol_down: [bool; 2],
@@ -363,6 +365,7 @@ impl Sys {
             mods: Mods::default(),
             home_tap: false,
             rocknix_keys: crate::fn_keys::rocknix_handles_volume(std::path::Path::new("/")),
+            quiet_game_osd: crate::mako_osd::quiet_h700_games(),
             vol_held: None,
             vol_down: [false; 2],
             held: None,
@@ -500,6 +503,19 @@ impl Sys {
 
     pub fn is_open(&self) -> bool {
         !matches!(self.screen, Screen::Closed)
+    }
+
+    pub fn quiet_game_controls(&self, ctx: &Ctx) -> bool {
+        self.quiet_game_osd && ctx.game != Game::None
+    }
+
+    pub fn has_visible_content(&self) -> bool {
+        self.is_open() || self.osd.is_some() || self.toast.is_some() || self.message.is_some()
+    }
+
+    /// Key timers still run through next_wake; a hidden shelf does not need frames for them.
+    pub fn animating_on_screen(&self, now: Instant) -> bool {
+        self.has_visible_content() && self.animating(now)
     }
 
     /// Anything that needs frames: an OSD, a toast or a message, a key repeating.
@@ -711,6 +727,7 @@ impl Sys {
     /// at once when no pocket-core reads it, so on the shelf this costs one failed `open`.
     fn show(&mut self, d: Data, ctx: &Ctx, now: Instant) {
         let _ = now;
+        if self.quiet_game_controls(ctx) && d.label == "Volume" { return; }
         let line = format!("osd {}", d.to_wire());
         match ctx.game {
             Game::None => {
@@ -804,6 +821,10 @@ impl Sys {
                 self.step_warmth(dir, ctx.game);
                 let d = self.warmth_data();
                 self.show(d, ctx, now);
+            }
+            Mode::Observe(What::Volume) if self.quiet_game_controls(ctx) && !self.is_open() => {
+                // No OSD polling/redraw behind a H700 game. The volume worker coalesces and reads the latest wish.
+                crate::h700_volume::key_activity();
             }
             Mode::Observe(what) => {
                 if first {
@@ -1259,6 +1280,7 @@ impl Sys {
 
     /// Timers: key repeat, polling, storing the brightness, expiring the OSD. True if something changed on screen.
     pub fn tick(&mut self, ctx: &Ctx, now: Instant) -> bool {
+        let visible_before = self.has_visible_content();
         let mut changed = false;
         if let Some((b, next, mode)) = self.vol_held {
             if now >= next {
@@ -1388,7 +1410,8 @@ impl Sys {
         if self.osd.is_some() {
             changed = true;
         }
-        changed
+        changed && crate::idle::system_input_needs_redraw(
+            self.quiet_game_controls(ctx), visible_before, self.has_visible_content())
     }
 }
 
@@ -2549,6 +2572,36 @@ mod tests {
         s.tick(&SHELF, now);
         assert_eq!(s.view.ntp, Some(NtpState::Synced));
         assert!(!s.view.busy_sync);
+    }
+
+    #[test]
+    fn h700_held_volume_changes_sound_without_redrawing_the_hidden_shelf_or_osd() {
+        let (mut s, hw) = sys();
+        s.quiet_game_osd = true;
+        let lines = record_game_osd(&mut s, true);
+        s.set_rocknix_keys(false);
+        let now = Instant::now();
+        hw.set_volume(50);
+        s.levels.volume = Some((50, now));
+        key(&mut s, Button::VolUp, true, &POCKET_CORE, now);
+        assert!(!s.animating_on_screen(now));
+        assert!(!s.tick(&POCKET_CORE, now + REPEAT_DELAY));
+        assert!(hw.volume().unwrap() > 50, "volume still works when its display is suppressed");
+        assert!(sent(&lines).is_empty() && s.osd.is_none());
+        assert!(s.next_wake().is_some(), "held-key work retains a timer, without animation frames");
+        s.show(Data::percent("Volume", 60), &SHELF, now);
+        assert!(s.osd.is_some(), "the shelf retains volume feedback");
+    }
+
+    #[test]
+    fn h700_rocknix_volume_keys_do_not_start_an_osd_poll_loop_over_a_game() {
+        let (mut s, _) = sys();
+        s.quiet_game_osd = true;
+        s.set_rocknix_keys(true);
+        let now = Instant::now();
+        key(&mut s, Button::VolUp, true, &POCKET_CORE, now);
+        assert!(s.observe.is_none());
+        assert!(!s.animating_on_screen(now));
     }
 
     #[test]

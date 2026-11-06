@@ -603,3 +603,13 @@ The [audio path](AUDIO-PATH.md) prepares its downsampling table per core rate wi
 On Linux H700 selects quantum 1024 and the cycle ring/queue (64/48 ms on H700), including the first stream open.
 Other Linux profiles retain quantum 256; Android retains its own stream policy. A late frame drains the valid
 stereo prefix before padding the missing tail. Both silence-frame and missing-frame counters count that actual tail.
+
+The H700 hardware-volume worker (`h700_volume::Keeper`, owned by the UI lifetime) follows system volume/mute
+and the headphone jack after the first frame. It fixes the affected H616 UCM speaker gain with DAC attenuation
+and real mixer mute, preserving external edits and restoring only owned, unchanged settings on exit.
+See [H700-VOLUME.md](H700-VOLUME.md) for its provisional ceiling and hardware-test limits.
+
+On H700 the volume worker ramps the DAC through a persistent ALSA control handle (no per-step processes or PCM
+reopen), while the UI suppresses game volume overlays and hidden-shelf animation/redraw. Battery retains the
+normal game CPU policy instead of a half-speed limit; menu/idle governors still restore. The owner-operated
+OSD A/B uses `POCKETUI_H700_VOLUME_OSD=1`; [H700-VOLUME.md](H700-VOLUME.md) records verification limits.

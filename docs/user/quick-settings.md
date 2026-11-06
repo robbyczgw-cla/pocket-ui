@@ -133,3 +133,12 @@ does nothing else. It never keeps the Pocket awake: the screen still goes off af
 is over with it (with Screen off after 30 s it starts at 15 s). With no pictures yet the shelf just stays. It is Off in every look until you switch it on
 under Settings → System → Sleep & power → **Slideshow before screen off**. Motion Reduced or Off keeps only the cross-fades.
 On a Steam Deck, where SteamOS owns sleep and the power button, Sleep & power has this one row.
+
+On Anbernic H700 handhelds with the affected system audio configuration, speaker volume also adjusts the
+physical DAC, with a reduced maximum. Zero and mute turn off the speaker and DAC output; changes may take a
+short moment. Plugging in headphones keeps the speaker off and uses the headphone volume path. An existing
+hardware mute is kept on startup; changing volume deliberately can bring sound back.
+
+On Anbernic H700 handhelds, **Battery** keeps the game's normal processor speed. Power saving stays with menus
+and idle; it does not impose a half-speed game cap. Volume feedback is shown on the shelf and in Quick settings;
+its small overlay is suppressed over running H700 games to keep rendering work out of their frame budget.

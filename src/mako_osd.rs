@@ -29,6 +29,12 @@ use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+/// Measurement override only: set POCKETUI_H700_VOLUME_OSD=1 before start to retain the old display path.
+pub fn quiet_h700_games() -> bool {
+    crate::device::current().model.is_some_and(|m| m.is_h700())
+        && std::env::var("POCKETUI_H700_VOLUME_OSD").as_deref() != Ok("1")
+}
+
 pub const CONFIG: &str = "/storage/.config/mako/config";
 /// `mako-notify` is what `input_sense` calls; without it there is no box to hide.
 const NOTIFY: &str = "/usr/bin/mako-notify";

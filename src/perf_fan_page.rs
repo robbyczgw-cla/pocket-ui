@@ -177,6 +177,7 @@ impl PerfFanPage {
         };
         let choice = match row {
             Row::GamesPerformance => match self.prefs.games_performance {
+                Performance::Battery if crate::device::current().model.is_some_and(|m| m.is_h700()) => "Battery: saves in menus and idle. Games keep their normal processor speed on this device.".to_string(),
                 Performance::Battery => "Battery: about half speed, which is enough for Game Boy and NES. The battery lasts longer.".to_string(),
                 Performance::Auto => "Auto: the system decides; it speeds up and slows down as the game needs it.".to_string(),
                 Performance::Performance => "Max: full speed all the time, for demanding games. Uses more battery and gets warmer.".to_string(),

@@ -170,7 +170,7 @@ setup, and while the picture is on a TV. Which one it was is in the log (`/var/l
 | Power, short press | Sleep. In a game, the game is saved first and goes on where it was when you wake the device. Press Power again to wake it. Or, when set so, **Screen off**: only the screen goes dark and the game goes on. |
 | Power, held for about a second | Opens the **power menu**. Letting go after that does not also put the device to sleep. Or, when set so, **Sleep** when you let go. The **Power…** row of the [quick settings](quick-settings.md#quick-settings) opens the same menu; B there goes back to the quick settings. |
 | Power, held for many seconds | The device's own forced reset, without saving. pocket-ui leaves it alone: use it only when nothing responds. |
-| Vol+ / Vol- | Volume. With START held: brightness. With SELECT held: colour temperature. |
+| Vol+ / Vol- | Volume (H700 speaker: reduced maximum and physical mute at zero). With START held: brightness. With SELECT held: colour temperature. |
 
 Sleep starts when you let go of the button, not when you press it: that is how a short press is told
 from a held one. A short press never opens a menu, and the press that wakes the device does nothing else.

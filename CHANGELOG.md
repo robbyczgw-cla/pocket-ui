@@ -3,6 +3,16 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a minor version may change anything).
 
+## [0.2.3] - Unreleased
+
+### Fixed
+
+- On H700 with the affected ROCKNIX audio configuration, system volume also controls the speaker DAC,
+  with a reduced maximum and physical mute at zero. Headphones keep their Line Out path; external mixer
+  changes and final mute are preserved. Gain changes ramp without per-step processes; volume overlays and hidden
+  shelf redraws are suppressed during H700 games. Battery retains normal game speed instead of halving the CPU
+  limit. Hardware loudness and timing validation remains pending.
+
 ## [0.2.2] - 2026-11-06
 
 ### Fixed

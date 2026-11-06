@@ -89,6 +89,8 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [BIG-EMULATORS.md](BIG-EMULATORS.md) | Reference | PlayStation 2, GameCube, Wii and 3DS through ARMSX2, Dolphin and Azahar: save slots, Options, measurements |
 | [FRAMES.md](FRAMES.md) | Reference | Screen frames (bezels) and frame packs |
 | [SYSTEM-CONTROLS.md](SYSTEM-CONTROLS.md) | Reference | Volume, brightness, colour temperature, quick settings, time zone |
+| [H700-VOLUME.md](H700-VOLUME.md) | Reference | H616 speaker DAC/mute workaround, headphone routing, ownership, provisional ceiling and hardware-test limits |
+| [ROCKNIX-H700-AUDIO-ISSUE-DRAFT.md](ROCKNIX-H700-AUDIO-ISSUE-DRAFT.md) | Draft, not submitted | Frozen-rootfs UCM finding, observed controls and untested upstream investigation proposal |
 | [SLEEP.md](SLEEP.md) | Reference and design notes | Sleep and power: research, what is built, a device test plan |
 | [DEVICES.md](DEVICES.md) | Design and reference | The Mini V2 and its experimental SM8250 siblings (Pocket 5, Flip 2, Mini V1): how pocket-ui tells them apart, what each gets, layouts at 1920x1080 and 1280x960, safety on untested hardware, installing |
 | [STEAMDECK.md](STEAMDECK.md) | Design and reference | pocket-ui on a Steam Deck (first preparation, run on a PC only): the Deck profile, EmuDeck library, emulators, bundle and Flatpak plan, Add to Steam, what needs real hardware |

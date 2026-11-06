@@ -190,6 +190,7 @@ impl PortPerfPage {
             Row::Performance => [
                 "How fast the processor may run while this port plays. A change applies from the port's next start.".to_string(),
                 match self.choice.performance {
+                    Performance::Battery if crate::device::current().model.is_some_and(|m| m.is_h700()) => "Battery: saves in menus and idle. Games keep their normal processor speed on this device.".to_string(),
                     Performance::Battery => "Battery: the processor's top speeds are held at about half. Cooler, quieter, and the battery lasts longer; a demanding port may stutter.".to_string(),
                     Performance::Auto => "Auto: the system decides; it speeds up and slows down as the port needs it.".to_string(),
                     Performance::Performance => "Max: the big cores and the graphics run at full speed all the time. Uses more battery and gets warmer.".to_string(),

@@ -1104,3 +1104,10 @@ refused under POCKETUI_MOCK
 [Hotkeys]
 Hotkeys
 HOTKEY
+# H700 mixer controls (h700_volume): ALSA control names read and written, never shown
+Speaker Switch
+DAC Playback Volume
+DAC Playback Switch
+Line Out Playback Volume
+Line Out Playback Switch
+Headphone Jack
