@@ -6,17 +6,21 @@
 //! `_s`: the step 0.4 % off, as far as the rate control ever takes it (for 48000 that is the only case that is not
 //! the identity). Cases: tone1000/5000/10000/14000, sweep (log, 20 Hz to 0.49 of the rate), noise, impulse.
 
-use pocket_ui::resample::Resampler;
+#[path = "../src/resample.rs"]
+#[allow(dead_code)]
+mod resample;
+use resample::Resampler;
 use std::io::Write;
 use std::time::Instant;
 
 const OUT: f64 = 48000.0;
-const RATES: [u32; 4] = [32768, 32040, 44100, 48000];
+const RATES: [u32; 6] = [22050, 32040, 32768, 44100, 48000, 65536];
 /// Frames per push: one 60 Hz refresh of a 32 kHz core.
 const CHUNK: usize = 546;
 
 fn run(sinc: bool, rate: f64, skew: f64, input: &[f32]) -> (Vec<i16>, f64) {
     let mut r = Resampler::new(sinc);
+    r.prepare(rate / OUT);
     let step = rate / OUT * (1.0 + skew);
     let (mut out, mut lag, mut n) = (Vec::new(), 0.0, 0);
     let stereo: Vec<i16> = input.iter().flat_map(|&v| { let s = v.round().clamp(-32768.0, 32767.0) as i16; [s, s] }).collect();
@@ -61,6 +65,12 @@ fn main() {
             let tone = (0..n).map(|i| (0.7 * 32767.0 * (2.0 * std::f64::consts::PI * hz * i as f64 / rf).sin()) as f32).collect();
             cases.push((format!("tone{}", hz as u32), tone));
         }
+        if rate == 65536 {
+            for hz in [20000.0, 26000.0, 30000.0] {
+                let tone = (0..n).map(|i| (0.7 * 32767.0 * (2.0 * std::f64::consts::PI * hz * i as f64 / rf).sin()) as f32).collect();
+                cases.push((format!("tone{}", hz as u32), tone));
+            }
+        }
         // Log sweep over 6 s.
         let sn = (rf * 6.0) as usize;
         let (f0, f1) = (20.0f64, 0.49 * rf);
@@ -95,9 +105,4 @@ fn main() {
             writeln!(meta, "{mode} {rate} cpu_ms_per_audio_s {:.3}", best / 60.0 * 1000.0).unwrap();
         }
     }
-    // Core rate above the output's (mGBA's 65536 Hz) for the CPU only.
-    let noise: Vec<f32> = (0..65536 * 60).map(|_| (rnd() * 20000.0) as f32).collect();
-    let t = Instant::now();
-    run(true, 65536.0, 0.001, &noise);
-    writeln!(meta, "sinc 65536 cpu_ms_per_audio_s {:.3}", t.elapsed().as_secs_f64() / 60.0 * 1000.0).unwrap();
 }

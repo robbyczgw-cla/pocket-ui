@@ -3,6 +3,15 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a minor version may change anything).
 
+## [0.2.2] - 2026-11-06
+
+### Fixed
+
+- Game audio uses prepared high-rate filters with ARM64 NEON. When a frame is late, queued samples stay audible
+  and only the missing tail is filled with silence. The first stream opens with the configured cycle buffer.
+- Anbernic H700 audio uses a 1024-frame graph cycle, a 48 ms software queue and a 64 ms PCM buffer for more
+  scheduling margin. Audio diagnostics distinguish queue waits, output errors and unavailable measurements.
+
 ## [0.2.1] - 2026-11-06
 
 ### Fixed

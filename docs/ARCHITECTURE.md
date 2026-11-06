@@ -585,3 +585,21 @@ on-device correctness checks. Android's native player does not use the pocket-co
 these startup defaults. Its pinned PPSSPP build instead applies `ppsspp-pause-drain.patch`, using
 `ThreadFrameUntilCondition` during pause as the upstream stop path does. A ROCKNIX core must
 be rebuilt separately with that patch; a pocket-ui update alone cannot change its pause protocol.
+
+
+## Audio observations
+
+`audio_diagnostics.rs` holds cumulative backend counters shared across stream reopens; the output adapter records
+accepted frames, write timing, silent ALSA recovery/EPIPE, negotiated PCM parameters and signed delay/avail samples.
+`audio.rs` keeps queue phases separate: startup polling, server-prefill silence, intentional pause silence, resume
+refill silence and playing starvation. `audio_pw_stats.rs` samples only PID-owned playback nodes on a background
+worker, checks node identity before/after the profiler output and retains unavailability/gaps explicitly. Its
+bounded shutdown never starts a helper on the calling thread. Diagnostics do not change the resampler or the
+queue/ring targets. `Audio::diagnostics()` exposes live snapshots; teardown writes one JSON session summary.
+
+
+The [audio path](AUDIO-PATH.md) prepares its downsampling table per core rate with headroom for the smoothed
+±0.5 % controller; ordinary pushes only advance a continuous read position. ARM64 evaluates the filter with NEON.
+On Linux H700 selects quantum 1024 and the cycle ring/queue (64/48 ms on H700), including the first stream open.
+Other Linux profiles retain quantum 256; Android retains its own stream policy. A late frame drains the valid
+stereo prefix before padding the missing tail. Both silence-frame and missing-frame counters count that actual tail.

@@ -7,7 +7,8 @@
 //! rate cannot carry (images above half of it) about 100 dB down. A core rate above the output's (65536 Hz)
 //! lowers the cutoff and widens the kernel by the ratio. The position into the input is continuous, so any change of
 //! ratio between pushes is as smooth as the ratio itself: no click, no state to reset. Delay: 36 input samples
-//! (1.1 ms at 32 kHz, 0.55 ms at 65 kHz).
+//! below 48 kHz (1.1 ms at 32 kHz), about 0.75 ms above it. Downsampling uses a prepared polyphase table
+//! with bandwidth reserved for rate control; no coefficient generation occurs at each output sample.
 //!
 //! The other is the linear interpolation pocket-core used before (images at -68 dB); `POCKET_CORE_RESAMPLER=linear`
 //! switches back to it, for an emergency only (no menu entry).
@@ -26,6 +27,13 @@ const BETA: f64 = 11.0;
 const MAX_STEP: f64 = 4.0;
 /// Samples kept in front of the read position: the widest kernel half.
 const KEEP: usize = HALF * MAX_STEP as usize;
+
+/// One low-pass table per core rate. Rate control moves the read position, never the cutoff or coefficients.
+struct WideTable {
+    width: f64,
+    half: usize,
+    rows: Vec<f32>,
+}
 
 struct Tables {
     /// `h(i / PHASES)` for the whole half kernel: sinc times the Kaiser window.
@@ -76,7 +84,9 @@ fn tables() -> &'static Tables {
     })
 }
 
-/// Eight partial sums so the compiler can vectorise.
+/// Eight partial sums on other targets; ARMv8 has NEON on every supported core.
+#[cfg(not(target_arch = "aarch64"))]
+#[inline]
 fn dot(a: &[f32], x: &[f32]) -> f32 {
     let mut acc = [0f32; 8];
     for (a, x) in a.chunks_exact(8).zip(x.chunks_exact(8)) {
@@ -84,7 +94,68 @@ fn dot(a: &[f32], x: &[f32]) -> f32 {
             acc[i] += a[i] * x[i];
         }
     }
+    for (a, x) in a[a.len() / 8 * 8..].iter().zip(&x[a.len() / 8 * 8..]) {
+        acc[0] += a * x;
+    }
     acc.iter().sum()
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline]
+fn dot(a: &[f32], x: &[f32]) -> f32 {
+    use std::arch::aarch64::*;
+    assert!(x.len() >= a.len());
+    // SAFETY: NEON is part of the aarch64 baseline. Each load stays inside the eight-sample prefix;
+    // the remaining (up to seven) taps are handled below with ordinary slice access.
+    unsafe {
+        let mut lo = vdupq_n_f32(0.0);
+        let mut hi = vdupq_n_f32(0.0);
+        let end = a.len() / 8 * 8;
+        for i in (0..end).step_by(8) {
+            lo = vfmaq_f32(lo, vld1q_f32(a.as_ptr().add(i)), vld1q_f32(x.as_ptr().add(i)));
+            hi = vfmaq_f32(hi, vld1q_f32(a.as_ptr().add(i + 4)), vld1q_f32(x.as_ptr().add(i + 4)));
+        }
+        let mut sum = vaddvq_f32(vaddq_f32(lo, hi));
+        for i in end..a.len() {
+            sum += a[i] * x[i];
+        }
+        sum
+    }
+}
+
+impl WideTable {
+    fn new(width: f64) -> Self {
+        let wide = width;
+        let half = (HALF as f64 * wide).ceil() as usize;
+        let t = tables();
+        let mut rows = Vec::with_capacity((PHASES + 1) * 2 * half);
+        for phi in 0..=PHASES {
+            let start = rows.len();
+            for k in 0..2 * half {
+                let u = (phi as f64 / PHASES as f64 + half as f64 - 1.0 - k as f64).abs() / wide * PHASES as f64;
+                let i = u as usize;
+                let w = if i < HALF * PHASES {
+                    t.half[i] + (u - i as f64) as f32 * (t.half[i + 1] - t.half[i])
+                } else {
+                    0.0
+                };
+                rows.push(w);
+            }
+            let sum: f64 = rows[start..].iter().map(|&c| c as f64).sum();
+            rows[start..].iter_mut().for_each(|c| *c = (*c as f64 / sum) as f32);
+        }
+        Self { width, half, rows }
+    }
+
+    fn sample(&self, ch: &[f32], n0: usize, phase: usize, frac: f32) -> f32 {
+        let taps = self.half * 2;
+        let a = &self.rows[phase * taps..][..taps];
+        let b = &self.rows[(phase + 1) * taps..][..taps];
+        let base = n0 + 1 - self.half;
+        let x = &ch[base..base + taps];
+        let (ya, yb) = (dot(a, x), dot(b, x));
+        ya + frac * (yb - ya)
+    }
 }
 
 fn to_i16(v: f32) -> i16 {
@@ -105,6 +176,7 @@ struct Sinc {
     r: Vec<f32>,
     /// Read position in `l` / `r` (input samples).
     pos: f64,
+    wide: Option<WideTable>,
 }
 
 impl Resampler {
@@ -112,7 +184,7 @@ impl Resampler {
     pub fn new(sinc: bool) -> Resampler {
         let sinc = sinc.then(|| {
             tables();
-            Sinc { l: vec![0.0; KEEP], r: vec![0.0; KEEP], pos: KEEP as f64 }
+            Sinc { l: vec![0.0; KEEP], r: vec![0.0; KEEP], pos: KEEP as f64, wide: None }
         });
         Resampler { sinc, pos: 0.0, last: [0, 0] }
     }
@@ -120,6 +192,14 @@ impl Resampler {
     /// The converter the environment asks for: sinc unless `POCKET_CORE_RESAMPLER=linear`.
     pub fn from_env() -> Resampler {
         Resampler::new(std::env::var("POCKET_CORE_RESAMPLER").map_or(true, |v| v != "linear"))
+    }
+
+    /// Prepare the low-pass for a core rate before playback (or a real core-rate change). The 1/32 grid
+    /// includes ±0.5 % rate control headroom. It avoids table allocation on ordinary per-frame nudges.
+    pub fn prepare(&mut self, nominal_step: f64) {
+        if let Some(s) = &mut self.sinc {
+            s.prepare(nominal_step);
+        }
     }
 
     /// Converts `input` (interleaved stereo) and appends the output (interleaved) to `out`.
@@ -144,6 +224,16 @@ impl Resampler {
 }
 
 impl Sinc {
+    fn prepare(&mut self, step: f64) {
+        if step <= 1.02 {
+            return;
+        }
+        let width = ((step.clamp(1.0, MAX_STEP) * 1.005 * 32.0).ceil() / 32.0).min(MAX_STEP);
+        if self.wide.as_ref().is_none_or(|t| t.width != width) {
+            self.wide = Some(WideTable::new(width));
+        }
+    }
+
     fn process(&mut self, input: &[i16], step: f64, out: &mut Vec<i16>) {
         self.l.extend(input.chunks_exact(2).map(|f| f[0] as f32));
         self.r.extend(input.chunks_exact(2).map(|f| f[1] as f32));
@@ -151,7 +241,12 @@ impl Sinc {
         // Up to 2 % over the output's rate (a 48 kHz core, nudged) keeps the fast path: its cutoff is the output's
         // Nyquist, and the 1 % of band between that and the wider one holds nothing.
         let wide = if step <= 1.02 { 1.0 } else { step };
-        let need = (HALF as f64 * wide).ceil() as usize;
+        // Standalone callers can omit prepare. A genuine rate change can rebuild, but the normal ±0.5 %
+        // controller stays inside the prepared table's bandwidth. Never calculate taps per output sample.
+        if wide > 1.0 && self.wide.as_ref().is_none_or(|t| wide > t.width || t.width > wide * 1.04) {
+            self.prepare(wide);
+        }
+        let need = if wide == 1.0 { HALF } else { self.wide.as_ref().unwrap().half };
         let t = tables();
         out.reserve((self.l.len() as f64 / step) as usize * 2 + 2);
         while (self.pos as usize) + need < self.l.len() {
@@ -170,21 +265,13 @@ impl Sinc {
                     out.push(to_i16(ya + fr * (yb - ya)));
                 }
             } else {
-                // Rate above the output's: low-pass at the output's Nyquist, a kernel `wide` times as long.
-                let scale = 1.0 / wide;
-                let lo = (self.pos - HALF as f64 * wide).ceil() as usize;
-                let hi = (self.pos + HALF as f64 * wide).floor() as usize;
-                let (mut yl, mut yr, mut sum) = (0f32, 0f32, 0f32);
-                for j in lo..=hi {
-                    let u = (self.pos - j as f64).abs() * scale * PHASES as f64;
-                    let i = u as usize;
-                    let w = t.half[i] + (u - i as f64) as f32 * (t.half[i + 1] - t.half[i]);
-                    yl += w * self.l[j];
-                    yr += w * self.r[j];
-                    sum += w;
+                let table = self.wide.as_ref().unwrap();
+                let fi = f * PHASES as f64;
+                let phase = fi as usize;
+                let frac = (fi - phase as f64) as f32;
+                for ch in [&self.l, &self.r] {
+                    out.push(to_i16(table.sample(ch, n0, phase, frac)));
                 }
-                out.push(to_i16(yl / sum));
-                out.push(to_i16(yr / sum));
             }
             self.pos += step;
         }
@@ -307,6 +394,54 @@ mod tests {
         let bound = (2.0 * std::f64::consts::PI * 1000.0 / 48000.0f64).powi(2) * 16000.0 * 1.1 + 3.0 + 16000.0 * 0.005 * 0.1;
         let worst = l.windows(3).map(|w| (w[0] - 2.0 * w[1] + w[2]).abs()).fold(0.0, f64::max);
         assert!(worst < bound * 1.5, "second difference {worst} vs {bound}");
+    }
+
+    #[test]
+    fn high_rate_control_uses_one_table_and_keeps_stereo_continuous() {
+        let rate = 65536.0;
+        let mut r = Resampler::new(true);
+        r.prepare(rate / 48000.0);
+        let original = r.sinc.as_ref().unwrap().wide.as_ref().unwrap().rows.as_ptr();
+        let input = tone(1000.0, rate, 2.0, 16000.0);
+        let mut out = Vec::new();
+        for (i, chunk) in input.chunks(2 * 1097).enumerate() {
+            let step = rate / 48000.0 * (1.0 + 0.005 * (i as f64 * 0.7).sin());
+            r.process(chunk, step, &mut out);
+            assert_eq!(original, r.sinc.as_ref().unwrap().wide.as_ref().unwrap().rows.as_ptr(), "DRC rebuilt the table");
+        }
+        assert!(out.chunks_exact(2).all(|f| f[0] == f[1]));
+        let l: Vec<f64> = out.chunks_exact(2).skip(2000).map(|f| f[0] as f64).collect();
+        let worst = l.windows(3).map(|w| (w[0] - 2.0 * w[1] + w[2]).abs()).fold(0.0, f64::max);
+        assert!(worst < 450.0, "rate change clicks: second difference {worst}");
+    }
+
+    #[test]
+    fn every_common_core_rate_survives_small_chunks_and_rate_changes() {
+        for rate in [22050.0, 32040.0, 32768.0, 44100.0, 48000.0, 65536.0, 96000.0, 192000.0] {
+            let step = rate / 48000.0;
+            let input = tone(1000.0, rate, 0.05, 16000.0);
+            let mut r = Resampler::new(true);
+            r.prepare(step);
+            let mut whole = Vec::new();
+            r.process(&input, step, &mut whole);
+            let mut r = Resampler::new(true);
+            r.prepare(step);
+            let mut pieces = Vec::new();
+            for chunk in input.chunks(2 * 7) {
+                r.process(chunk, step, &mut pieces);
+            }
+            assert_eq!(whole, pieces, "chunking changed {rate} Hz");
+            let need = if step <= 1.02 { HALF } else { r.sinc.as_ref().unwrap().wide.as_ref().unwrap().half };
+            assert!((pieces.len() as f64 / 2.0 - (input.len() as f64 / 2.0 - need as f64) / step).abs() < 2.0);
+        }
+        // Some cores change their sample rate at runtime; retained history must stay in bounds.
+        let mut r = Resampler::new(true);
+        let mut out = Vec::new();
+        for rate in [32768.0, 65536.0, 192000.0, 22050.0] {
+            r.prepare(rate / 48000.0);
+            r.process(&vec![0; 1000], rate / 48000.0, &mut out);
+        }
+        assert!(out.iter().all(|&s| s == 0));
     }
 
     #[test]

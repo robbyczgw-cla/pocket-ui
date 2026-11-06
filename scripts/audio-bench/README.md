@@ -7,6 +7,7 @@ GBA game, through `pocket_ui::audio::Audio` (resampler, rate control, ALSA's `pi
 sink that drives the graph on its own timer, and the sink's monitor is recorded and analysed.
 
 ```sh
+export AUDIO_BENCH_BIN=/path/to/prebuilt/aarch64/audio_tone
 scripts/audio-bench/bench.sh            # 60 s per case, results in /tmp/audio-bench, exit 1 on a broken limit
 scripts/audio-bench/bench.sh 600        # the 10-minute run
 BENCH_CASES="bluetooth" scripts/audio-bench/bench.sh 30
@@ -14,7 +15,10 @@ BENCH_CASES="bluetooth" scripts/audio-bench/bench.sh 30
 
 `AUDIO_BENCH_HOST` is the docker host with the vdev base image (an Apple-silicon Mac with colima is aarch64 and fast;
 `local` for this machine if it has the image and is aarch64), from the environment or `scripts/local.env`. This
-machine needs python3 with numpy; the binary is built here with zigbuild.
+machine needs python3 with numpy and a prebuilt aarch64 tone binary.
+`AUDIO_BENCH_BIN` selects a prebuilt binary and does no build. Without it the script stops; set
+`AUDIO_BENCH_BUILD=1` only when you intend to build on this host and have its build slot. That opt-in uses zigbuild,
+four jobs and `CARGO_TARGET_DIR` when set (including when locating the resulting binary).
 
 ## Cases
 
@@ -29,6 +33,32 @@ machine needs python3 with numpy; the binary is built here with zigbuild.
 the driver, S24_32 like the device's speaker). On Bluetooth the case takes `audio_route`'s Bluetooth branch through
 `POCKET_CORE_QUANTUM=0` (no quantum of its own: the same `game_quantum == None`), since the container has no
 Bluetooth link.
+
+## Session diagnostics alongside the waveform
+
+Every case retains its `.tone.log`, `.pwtop`, `.pwtop.end` and `.pwtop.short` beside the WAV, including diagnostic
+evidence from a failed run. `audio_tone` logs `audio sample {JSON}` once per second; its normal `Audio` teardown logs
+`audio session {JSON}`. `session.py CASE.tone.log` extracts the final session unchanged to `.session.json`, the
+one-second snapshots to `.samples.jsonl`, and prints/writes `.diagnostics.json` with the backend, open count,
+negotiated PCM rate/buffer/period, accepted frames, heartbeat age, write gaps/durations, ALSA recoveries and write/query
+EPIPE observations, queue phases and PipeWire coverage. The original log preserves all session records.
+
+The parser reports unavailable data as null. An unopened backend, no accepted frames, a heartbeat older than one
+second, an unverified writer stop or missing session JSON fails the diagnostic check. Startup prefill waits, paused
+silence and refill silence remain separate from playing underruns and missing frames; they do not become playing
+starvation. Successful silent ALSA recovery still counts as a recovery and an observed error. A generic `pw-top` ERR
+column is raw context only: on some versions a follower can display its driver's error count.
+
+A final PipeWire snapshot intentionally covers only verified observations. Its `observed_xruns` can be zero while
+`client_xruns` is null and `final_sample_age_ms` marks the unobserved tail. That remains **partial**, not a session-wide
+zero-error claim. Before the first verified sample even the observed accumulator is reported as null. Unsupported
+ALSA counters on Pulse/Android and failed PCM queries likewise remain explicit. Partial measurement coverage alone
+does not fail the waveform check; known errors and incomplete writer evidence fail the diagnostic check. `bench.sh`
+returns nonzero if artifact collection, session diagnostics or the existing waveform limits fail. Waveform thresholds
+in `analyze.py` are unchanged, and these counters alone do not prove audible quality.
+ALSA history survives fallback or reopening. If any Pulse/Android stream was opened, those historical ALSA values
+cover only the ALSA streams; the session remains partial even if its retained ALSA counters are zero.
+Run the diagnostic fixtures locally with `python3 scripts/audio-bench/test_session.py` (standard library only).
 
 ## UI sounds through a game (off the device)
 
@@ -80,3 +110,38 @@ a verdict.
 and an impulse at 32768, 32040, 44100 and 48000 Hz and writes raw files; `resampler.py DIR` prints the foreign-line level,
 THD+N, response, latency and CPU tables (numpy). Results: AUDIO-RESAMPLER.md in the review folder.
 `cargo run --release --example resampler_bench -- /tmp/rs-out && python3 -I scripts/audio-bench/resampler.py /tmp/rs-out`
+
+
+## Core-rate and pipeline comparisons
+
+`resampler_bench` also covers 22050 and 65536 Hz, including high-rate alias probes. `resampler.py` omits tones
+outside the shared passband and accepts `--out-rate` for a separate 44.1 kHz reference directory. It reports the
+raw measurements without treating a high noise-image band at an exact rational ratio as filter alias rejection.
+`examples/resampler_cost.rs` is a standalone CPU benchmark (see its header): use identical binaries, 1200 frames,
+a fixed measured clock, and report the separate preparation cost. Ordinary ratio changes keep one table.
+
+`retroarch-reference.py SIGNAL_DIR` fetches the pinned ROCKNIX RetroArch implementation and headers with their
+MIT notices into the output directory and compiles a reference library. The H700 config's quality **2** means
+**LOWER** (8-tap Lanczos before downsampling expansion), while **NORMAL** is **3** (16-tap Kaiser). It writes
+`ra-lower` and `ra-normal` files alongside the input signals, plus `retroarch-meta.txt`; pass those mode names to
+`resampler.py`. SIMD mask zero represents ROCKNIX's aarch64 build. Use `--out-rate 44100` in a separate directory
+for the configured H700 rate; 48000 compares filters at the same output rate as pocket-core.
+
+`pipeline-matrix.py OUT --bin /path/to/audio_tone --image IMAGE --seconds 30 --cases h700 bluetooth`
+compares the production profiles and optional buffer experiments in one isolated container, retaining WAVs,
+writer/session counters and failures. It reuses the unchanged `analyze.py` and `session.py` limits. The optional
+`--start-ms` changes only the tone example's first-push delay (default 100 ms); label any slower-host exploration.
+A QEMU run measures the actual userland and filter arithmetic, but its scheduling is not evidence of hardware
+real-time performance. Full audio acceptance still requires physical output and a progressing hardware clock.
+
+`examples/resampler_response.rs` measures a coherent sine-fit gain grid from 0.02 through 0.45 of the smaller
+input/output rate, at nominal and ±0.5% ratios. It reports peak-to-peak passband variation without the random
+band-average uncertainty of the noise test.
+
+For QEMU, `pipeline-matrix.py --recorder-image IMAGE` can run a native `pw-record` against the same ARM PipeWire
+server over a shared Unix socket. The optional image must contain PipeWire tools and libsndfile. Only recording
+moves to that image; the sender, ALSA plugin, graph and output policy remain in the target userland. The original
+all-ARM recordings stay valuable failure evidence: inspect `bench_rec` errors as well as the playback node. A
+recorder with its own xruns cannot establish waveform acceptance, even if playback counters are clean.
+The matrix writes `.capture.json` and returns nonzero when the final raw recorder ERR is positive or its active
+row is unavailable. A zero remains a partial snapshot, never a complete capture-coverage guarantee.

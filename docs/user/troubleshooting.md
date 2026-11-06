@@ -207,6 +207,12 @@ system's own control, which takes over while the Pocket sleeps, while a game has
 EmulationStation set to "custom", and for ten minutes when the system kept changing the fan back (pocket-ui then gives
 way rather than fight over it). `pocket-ui.log` says which, in lines starting with `fan curve:`.
 
+**A game's sound crackles and the game slows down.**
+Try the same scene with another available core or player in the game's **Options → Runs on**. If that plays correctly,
+include both choices, the game and your device in [Report a problem](#report-a-problem). This helps distinguish a
+player timing problem from a game that is too demanding. On H700 handhelds, GBA normally uses gpSP; older Continue
+moments can still use mGBA. Changing the player can require starting the game again; keep your in-game save first.
+
 **The menus make no sound.**
 Settings → Sound & feel → Sounds must be on, and the console's volume must be above 0 and not muted. The clicks never play while
 a game runs, and not while the device sleeps (see [Playing](playing.md#menu-sounds)).

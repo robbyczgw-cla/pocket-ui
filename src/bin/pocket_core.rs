@@ -1400,8 +1400,8 @@ impl App {
     fn handle_commands(&mut self) -> Option<Exit> {
         let cmds: Vec<String> = self.early.take().into_iter().chain(self.commands.try_iter()).collect();
         // Loads, options, cheats, the pause: the game may have changed from outside (`RunAhead::forget`). Pixel Path's
-        // requests only read.
-        if cmds.iter().any(|c| !c.starts_with(pocket_ui::pixel_path::COMMAND)) {
+        // requests and audio diagnostics only read.
+        if cmds.iter().any(|c| !c.starts_with(pocket_ui::pixel_path::COMMAND) && c.trim() != "audio stats") {
             self.ex.ahead.forget();
         }
         // Only the newest preview request is worth drawing; it runs after the settings before it.
@@ -1414,6 +1414,13 @@ impl App {
             // Everything after the key, spaces included (core option values can have them).
             let rest = |prefix: &str| cmd.strip_prefix(prefix).and_then(|r| r.split_once(' ')).map(|(k, v)| (k, v.trim()));
             match words.as_slice() {
+                ["audio", "stats"] => {
+                    if let Some(audio) = &self.audio {
+                        println!("audio sample {}", audio.diagnostics());
+                    } else {
+                        println!("audio sample {{\"schema\":1,\"available\":false,\"reason\":\"audio stream did not open\"}}");
+                    }
+                }
                 ["pause"] if !self.paused => {
                     self.toggled.iter_mut().for_each(controls::HoldToggle::clear);
                     self.hold = false;
@@ -2324,6 +2331,8 @@ fn main() {
         }
         let list: Vec<String> = bursts.iter().map(|(t, n, _)| format!("{t:.1}s×{n}")).collect();
         println!("audio buffered at exit {:.0} ms, underruns at {}", a.buffered_ms(), list.join(" "));
+    } else {
+        println!("audio session {{\"schema\":1,\"available\":false,\"reason\":\"audio stream did not open\"}}");
     }
     pocket_ui::fast_switch::mark("system restored, reported");
     // The core drops first (and writes the battery save), with GL still there for a 3D core, then the window, GL and

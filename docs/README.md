@@ -84,6 +84,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Reference | How pocket-ui fits into ROCKNIX, the processes, the launch flow, switching games, the pause menu, and where each feature lives |
 | [i18n-glossary.md](i18n-glossary.md) | Reference | The German and Spanish interfaces: tone, the terms every page uses, what stays English and why |
 | [HOST.md](HOST.md) | Reference | pocket-core, our libretro host: how it works, systems, measurements |
+| [AUDIO-PATH.md](AUDIO-PATH.md) | Reference | Prepared sinc and NEON, H700 buffering, RetroArch comparisons and measurement limits |
 | [XBOX.md](XBOX.md) | Reference | Xbox through the hakuX core in RetroArch: start, appendconfig, pause menu, licence, device test (experimental) |
 | [BIG-EMULATORS.md](BIG-EMULATORS.md) | Reference | PlayStation 2, GameCube, Wii and 3DS through ARMSX2, Dolphin and Azahar: save slots, Options, measurements |
 | [FRAMES.md](FRAMES.md) | Reference | Screen frames (bezels) and frame packs |

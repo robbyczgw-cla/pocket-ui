@@ -1,8 +1,8 @@
 //! Where the sound goes, the Pocket's speaker or a Bluetooth sink (headphones, a speaker), and the PipeWire quantum
 //! that suits it (docs/HOST.md "Bluetooth audio").
 //!
-//! - pocket-core lowers PipeWire's graph quantum from ROCKNIX's 1024 frames to 256 while a game plays, for a short way
-//!   to the speaker (`audio::GAME_QUANTUM`). A Bluetooth sink (`bluez_output.*`) is a driver of its own in the
+//! - pocket-core normally lowers PipeWire's graph quantum from ROCKNIX's 1024 frames to 256 while a game plays;
+//!   H700 keeps a 1024-frame cycle for scheduling headroom. This gives a short way to the speaker (`audio::GAME_QUANTUM`). A Bluetooth sink (`bluez_output.*`) is a driver of its own in the
 //!   graph (PipeWire's bluez5 `media-sink.c`: `node.driver = true`) and sends A2DP packets whose size has nothing to
 //!   do with the quantum ("the quantum and packet size aren't correlated"); its delay is "packet delay + codec
 //!   internal delay + transport delay" and "doesn't depend on the quantum". So 256 gains nothing there and only makes
@@ -123,6 +123,12 @@ fn bluetooth_name(address: &str) -> Option<String> {
 /// Bluetooth (ROCKNIX's stays) or when it is 0.
 pub fn game_quantum(output: Output, configured: u32) -> Option<u32> {
     (output == Output::Speaker && configured > 0).then_some(configured)
+}
+
+/// A short ALSA ring is allowed only for the small graph cycle it was measured with. A larger
+/// configured quantum (including H700's 512) needs the cycle ring and queue from the first open.
+pub(crate) fn short_quantum(quantum: Option<u32>) -> bool {
+    quantum.is_some_and(|q| q > 0 && q <= SMALL_MAX)
 }
 
 /// The Bluetooth links among the names in `/sys/class/bluetooth` (`hci0:3585`; the adapters themselves, `hci0`, are
@@ -280,7 +286,7 @@ impl<S: System> Router<S> {
         }
         // After it came down (a failed `force` leaves ROCKNIX's). Only a quantum the short buffer holds counts: 10 ms
         // is 480 frames, so POCKET_CORE_QUANTUM=512 gets the cycle's buffer.
-        self.small.store(wanted.is_some_and(|q| q <= SMALL_MAX) && runs, Ordering::Relaxed);
+        self.small.store(short_quantum(wanted) && runs, Ordering::Relaxed);
     }
 
     /// Every `CHECK_EVERY`: follows a Bluetooth sink that came or went.

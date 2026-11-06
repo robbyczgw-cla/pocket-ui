@@ -1,5 +1,7 @@
 //! AAudio output for the existing UI mixer. All blocking writes happen on its worker, never the UI thread.
 use crate::audio::OUT_RATE;
+use crate::audio_diagnostics::{Diagnostics, WriterObservation};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 static MIN_QUEUE_MS: AtomicU32 = AtomicU32::new(0);
 static LOW_LATENCY: AtomicBool = AtomicBool::new(false);
@@ -23,11 +25,7 @@ pub(crate) enum Ring {
 }
 impl Ring {
     pub(crate) fn us(self) -> u32 {
-        if self == Ring::Short {
-            10_000
-        } else {
-            32_000
-        }
+        if self == Ring::Short { 10_000 } else { 32_000 }
     }
 }
 pub fn restore_quantum() {} // No global system audio policy was changed.
@@ -38,10 +36,15 @@ pub(crate) struct Sink {
     xruns: Vec<(usize, i32)>,
     /// With the capture: (capture frame, monotonic ms, AAudio's presented frame, its time in ms), a few a second.
     trace: Vec<(usize, f64, i64, f64)>,
+    observation: WriterObservation,
 }
 // SAFETY: the owning writer thread is the only caller; the stream and its close move together.
 unsafe impl Send for Sink {}
 impl Sink {
+    /// ALSA counters remain explicitly unsupported on Android; writer heartbeat is backend independent.
+    pub(crate) fn observe(&mut self, diagnostics: Arc<Diagnostics>) {
+        self.observation.attach(diagnostics, "android");
+    }
     pub(crate) fn uses_graph(&self) -> bool {
         false
     }
@@ -83,6 +86,7 @@ impl Sink {
             capture,
             xruns: Vec::new(),
             trace: Vec::new(),
+            observation: WriterObservation::default(),
         })
     }
     pub fn name(&self) -> &'static str {
@@ -92,12 +96,23 @@ impl Sink {
         Some(self.ring)
     }
     pub(crate) fn write(&mut self, samples: &[i16]) -> bool {
+        let started = self.observation.begin();
+        let success = self.write_inner(samples);
+        self.observation.finish(started, success);
+        success
+    }
+    fn write_inner(&mut self, samples: &[i16]) -> bool {
         if let Some(capture) = &mut self.capture {
             // Where this write starts in the capture, when, and what AAudio says was presented when (its timestamp):
             // what the launch's sync measurement reads (scripts/android/insert-sync.py).
             if self.trace.len() < 4096 && capture.len() % (OUT_RATE as usize / 25) < samples.len() {
-                let presented = self.stream.timestamp(ndk::audio::Clockid::Monotonic).ok().map_or((-1, 0.0), |t| (t.frame_position, t.time_nanoseconds as f64 / 1e6));
-                self.trace.push((capture.len() / 2, crate::platform::android::monotonic_ms(), presented.0, presented.1));
+                let presented = self
+                    .stream
+                    .timestamp(ndk::audio::Clockid::Monotonic)
+                    .ok()
+                    .map_or((-1, 0.0), |t| (t.frame_position, t.time_nanoseconds as f64 / 1e6));
+                self.trace
+                    .push((capture.len() / 2, crate::platform::android::monotonic_ms(), presented.0, presented.1));
             }
             let n = samples.len().min(OUT_RATE as usize * 60 - capture.len());
             capture.extend_from_slice(&samples[..n]);
@@ -123,6 +138,9 @@ impl Sink {
                 log_error(&format!("AAudio write failed: {wrote}"));
                 return false;
             }
+            if let Some(diagnostics) = &self.observation.diagnostics {
+                diagnostics.accepted_frames(wrote as u64);
+            }
             rest = &rest[wrote as usize * 2..];
         }
         true
@@ -132,7 +150,9 @@ impl Sink {
     pub(crate) fn ahead_us(&mut self) -> u64 {
         // No timestamp yet, in a stream's first moments: its buffer is what it holds ahead by then.
         let Ok(t) = self.stream.timestamp(ndk::audio::Clockid::Monotonic) else {
-            return self.latency_us().max(self.stream.buffer_size_in_frames().max(0) as u64 * 1_000_000 / OUT_RATE as u64);
+            return self
+                .latency_us()
+                .max(self.stream.buffer_size_in_frames().max(0) as u64 * 1_000_000 / OUT_RATE as u64);
         };
         let since_ms = crate::platform::android::monotonic_ms() - t.time_nanoseconds as f64 / 1e6;
         let heard = t.frame_position as f64 + since_ms * OUT_RATE as f64 / 1000.0;

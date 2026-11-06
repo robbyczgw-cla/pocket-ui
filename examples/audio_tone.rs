@@ -6,8 +6,10 @@
 //! 4 s and so on. The tone fades in over 10 ms like a game's first sound; it ends the way a game is quit, through the
 //! pause menu (`pause`, then the audio is dropped). AUDIO_TONE_REFRESH=60.06 runs the "display" 0.1 % fast against the
 //! sound clock (the rate control has to make that up), default 60. The first frame comes 100 ms after `Audio::open`,
-//! as in pocket-core, which opens the sound beside loading the core (its log: "first frame after 102-282 ms").
+//! like pocket-core opening sound beside loading the core (its log: "first frame after 102-282 ms").
+//! AUDIO_TONE_START_MS overrides that first-push wait for a slow test host; the default remains 100 ms.
 
+// AUDIO_TONE_START_MS changes only the benchmark's first-push delay (default 100 ms).
 use pocket_ui::audio::Audio;
 use std::time::{Duration, Instant};
 
@@ -32,9 +34,11 @@ fn main() {
     let (mut owed, mut n, mut paused) = (0.0f64, 0u64, false);
     let refresh: f64 = std::env::var("AUDIO_TONE_REFRESH").ok().and_then(|v| v.parse().ok()).unwrap_or(REFRESH);
     let period = Duration::from_secs_f64(1.0 / refresh);
-    std::thread::sleep(Duration::from_millis(100));
+    let start_ms = std::env::var("AUDIO_TONE_START_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(100);
+    std::thread::sleep(Duration::from_millis(start_ms));
     let t0 = Instant::now();
     let mut next = t0;
+    let mut sample_at = 1.0;
     while t0.elapsed().as_secs_f64() < secs {
         let now = t0.elapsed().as_secs_f64();
         let pause = pauses.iter().any(|&(a, b)| now >= a && now < b);
@@ -54,6 +58,12 @@ fn main() {
                 n += 1;
             }
             audio.push(&frame);
+        }
+        // Diagnostic work belongs to this benchmark, away from normal game/UI threads. Keep the existing
+        // absolute refresh deadlines, waveform and pause schedule while retaining a one-second time series.
+        if now >= sample_at {
+            println!("audio sample {}", audio.diagnostics());
+            sample_at = now.floor() + 1.0;
         }
         next += period;
         if let Some(wait) = next.checked_duration_since(Instant::now()) {

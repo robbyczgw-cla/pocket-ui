@@ -95,9 +95,13 @@ and `bench` / `ra` next to it (see the header of `scripts/syscheck.sh`), then se
   - Others are scheduled by time: PAL games at 50 Hz (PlayStation Europe) get a repeated picture every sixth
     refresh, 75 Hz cores two frames every fourth. Audio keeps the core's own rate then. Checked: Crash
     Bandicoot 2 ran 1800 core frames in 36 s = 50.0 fps, 0 underruns.
-- **Sound**: PulseAudio simple API, loaded with dlopen. Windowed-sinc resampling to 48 kHz (`src/resample.rs`; `POCKET_CORE_RESAMPLER=linear` is the old linear interpolation, emergency only).
-  - Base ratio includes the core/display rate skew (59.73 → 60 Hz).
-  - ±0.5 % dynamic rate control on top steers the buffer to 40 ms; the server holds another 20 ms.
+- **Sound**: ALSA's PipeWire plugin, with PulseAudio simple API as fallback, loaded with dlopen. Windowed-sinc
+  resampling to 48 kHz (`src/resample.rs`; `POCKET_CORE_RESAMPLER=linear` is the emergency fallback).
+  - Base ratio includes the core/display rate skew (59.73 → 60 Hz); ±0.5 % smoothed dynamic rate control follows it.
+  - Queue/PCM targets are 20/10 ms at quantum 256 and 48/32 ms for a larger cycle or Bluetooth. H700 uses
+    quantum 1024 with a 64 ms PCM ring and 48 ms queue, reducing graph wakeups and allowing more scheduling margin.
+  - Downsampling uses a prepared polyphase table with rate-control headroom; ARM64 uses NEON. Late frames consume
+    all available stereo samples and pad only the missing tail. See [Audio path](AUDIO-PATH.md) for measurements.
 - **Input**: evdev (InputPlumber's virtual pad), Nintendo layout. The Mini V2's buttons are numbered like the
   RetroPad, so by default every button presses the console button of the same name. The pause menu's Controls
   page remaps them per console or game (`ctl.<button>` = a console button or `none`), showing the console's own
@@ -1584,6 +1588,40 @@ directly (`scripts/syscheck.sh play naomi flycast <game.zip> ...`; the shelf rou
 `POCKET_UI_HOST_ALL` is pocket-ui's environment, which `dev.env` doesn't set): coin (Select) and start, the buttons, a
 vertical game (rotation), Save / Load / resume, frame rate against standalone Flycast; then set `verified: true` for
 them. Steps in docs/DEVICE-TESTS.md.
+
+## Audio observations
+
+The legacy `audio underruns` number counts only a short software queue during established playback. It never
+counted ALSA recoveries, hardware/graph errors, waiting for the initial prefill or silence while refilling after
+a pause. Historical zero values are not a proof of click-free output. FPS and CPU observations remain separate.
+
+Every opened `Audio` session now ends with `audio session {JSON}` (schema 1); a stream that failed to open is
+explicitly unavailable. `Audio::diagnostics()` returns the same live structure. Send `audio stats` over
+pocket-core's existing command FIFO to log `audio sample {JSON}` without changing game settings, clearing run-ahead
+or pausing; benches can sample PCM delay/avail and writer progress over time. The tone fixture also samples once
+per second. Snapshots are approximate concurrent observations; final `writer_finished=false` exposes a writer
+that missed the bounded shutdown deadline.
+
+- `backend`: stream opens/reopens, calls/accepted frames, last write age, write-gap/duration min/max/latest and
+  sample/failure counts. `alsa` is null on unsupported outputs. ALSA includes every silent recovery, failed
+  recovery, write EPIPE, other write errors, zero/short writes, negotiated rate/buffer/period and signed PCM
+  delay/avail samples (at most once per100ms). Failed queries remain failures, not successful zero delay; query
+  EPIPE observations are separate because they can describe the same physical event as a later write EPIPE.
+- `queue`: startup shortage polling and largest deficit, planned server-prefill silence, intentional pause
+  silence, refill-silence chunks, playing starvation, queue-deficit frames and full emitted silence frames, input/resampled/dropped frame counts and
+  current phase. Startup polling is not an audible dropout count. Planned silence must not disappear behind a
+  zero playing-only count; a writer that never started is not a successful playback test.
+- `pipewire`: verified PID/client-owned playback node IDs and serials, server version, observed ERR increments,
+  resets, sample ages/gaps and availability. A missing tool/server/node, older unproven protocol, identity change
+  or incomplete sampling yields null client totals with a reason, not zero. ERR includes errors and xruns.
+  PipeWire1.2.6 provides follower-specific profiler counts; older pw-top can substitute driver ERR, which is
+  rejected. Sampling cannot certify the unobserved final tail; final snapshots keep observed counts and explicitly
+  mark their partial scope. This does not measure the physical codec, radio or speaker waveform.
+
+Source semantics: [PipeWire1.2.6 profiler](https://gitlab.freedesktop.org/pipewire/pipewire/-/blob/1.2.6/src/modules/module-profiler.c)
+and [pw-top fallback](https://gitlab.freedesktop.org/pipewire/pipewire/-/blob/1.2.6/src/tools/pw-top.c).
+See `scripts/audio-bench/README.md` for recorded waveform and diagnostic evidence; zero counters cannot replace
+the waveform's dropout/click, THD+N and pitch measurements.
 
 ## Audio latency
 PipeWire here runs a fixed 1024-frame quantum (21 ms). `pa_simple_get_latency` reports 85–105 ms inside the

@@ -8,8 +8,8 @@
 //! full the buffer is, averaged over about a second (dynamic rate control, as RetroArch does), so audio follows the
 //! 60 Hz video without crackles or growing latency even though a Game Boy runs at 59.73 Hz.
 //!
-//! The ALSA buffer is sized for the graph's cycle (`Ring`): 10 ms at the speaker's 256, 32 ms at ROCKNIX's 1024 on
-//! Bluetooth. scripts/audio-bench measures the whole path off the device (docs/HOST.md "Bluetooth audio").
+//! The ALSA buffer is sized for the graph's cycle (`Ring`): 10 ms at quantum 256, 32 ms at the larger
+//! Bluetooth cycle, 64 ms on H700. scripts/audio-bench measures the whole path off the device (docs/HOST.md "Bluetooth audio").
 
 use std::collections::VecDeque;
 #[cfg(test)]
@@ -43,7 +43,7 @@ const MAX_SKEW: f64 = 0.005;
 /// on the speaker and ±8 cents on Bluetooth (scripts/audio-bench, 1 kHz tone). The queue itself drifts over seconds
 /// (the loop's time constant is target / (MAX_SKEW × 48000), 4 s at 20 ms), so the average is fast enough to follow it.
 const FILL_SMOOTH: f64 = 1.0 / 64.0;
-const CHUNK_FRAMES: usize = 256;
+pub(crate) const CHUNK_FRAMES: usize = 256;
 
 pub(crate) use crate::platform::audio_backend::{Sink, Ring, force_quantum, game_quantum};
 pub use crate::platform::audio_backend::restore_quantum;
@@ -178,6 +178,69 @@ pub struct Audio {
     /// Tells the writer thread to end (`Drop`), and hears when it has, with the stream closed.
     stop: Arc<std::sync::atomic::AtomicBool>,
     ended: std::sync::mpsc::Receiver<()>,
+    writer_finished: Arc<std::sync::atomic::AtomicBool>,
+    diagnostics: Arc<crate::audio_diagnostics::Diagnostics>,
+    queue_health: Arc<QueueHealth>,
+    pw_stats: Option<crate::audio_pw_stats::Collector>,
+}
+
+/// Queue observations are separate from device xruns. Startup/refill waits and intentional silence must stay
+/// visible even when the old playing-only `underruns` counter is zero.
+#[derive(Default)]
+struct QueueHealth {
+    route_wait_polls: AtomicU64,
+    prefill_waits: AtomicU64,
+    prefill_missing_max: AtomicU64,
+    prefill_silence_chunks: AtomicU64,
+    paused_silence_chunks: AtomicU64,
+    refill_silence_chunks: AtomicU64,
+    playing_underruns: AtomicU64,
+    playing_missing_frames: AtomicU64,
+    input_frames: AtomicU64,
+    resampled_frames: AtomicU64,
+    dropped_frames: AtomicU64,
+    state: AtomicU64,
+}
+
+impl QueueHealth {
+    /// A late core frame must not throw away the audio already available. Like a threaded ALSA FIFO,
+    /// consume the valid prefix and pad only the missing tail, keeping channel pairs in order.
+    fn playing_chunk(&self, queue: &mut VecDeque<i16>, chunk: &mut [i16]) -> usize {
+        let available = queue.len().min(chunk.len());
+        for sample in &mut chunk[..available] {
+            *sample = queue.pop_front().unwrap();
+        }
+        chunk[available..].fill(0);
+        let missing = (chunk.len() - available) / 2;
+        if missing > 0 {
+            self.playing_underruns.fetch_add(1, Ordering::Relaxed);
+            self.playing_missing_frames.fetch_add(missing as u64, Ordering::Relaxed);
+        }
+        missing
+    }
+
+    fn prefill_wait(&self, missing: usize) {
+        self.prefill_waits.fetch_add(1, Ordering::Relaxed);
+        self.prefill_missing_max.fetch_max(missing as u64, Ordering::Relaxed);
+    }
+
+    fn snapshot(&self) -> serde_json::Value {
+        let read = |a: &AtomicU64| a.load(Ordering::Relaxed);
+        serde_json::json!({
+            "state": match read(&self.state) { 0 => "prefill", 1 => "playing", 2 => "paused", 3 => "refill", _ => "stopped" },
+            "prefill_wait_polls": read(&self.prefill_waits),
+            "route_wait_polls": read(&self.route_wait_polls),
+            "prefill_missing_max_frames": read(&self.prefill_missing_max),
+            "prefill_silence_chunks": read(&self.prefill_silence_chunks),
+            "paused_silence_chunks": read(&self.paused_silence_chunks),
+            "refill_silence_chunks": read(&self.refill_silence_chunks),
+            "playing_underruns": read(&self.playing_underruns),
+            "playing_silence_frames": read(&self.playing_missing_frames),
+            "playing_missing_frames": read(&self.playing_missing_frames),
+            "input_frames": read(&self.input_frames), "resampled_frames": read(&self.resampled_frames),
+            "dropped_frames": read(&self.dropped_frames)
+        })
+    }
 }
 
 /// How long `Audio::drop` waits for the writer thread to close the stream; a write blocks for one chunk at most
@@ -189,6 +252,8 @@ impl Drop for Audio {
         // The writer thread used to outlive this (SOL-13): waiting forever for the prefill, or writing silence.
         self.stop.store(true, Ordering::Relaxed);
         let _ = self.ended.recv_timeout(STOP_WAIT);
+        let pw = self.pw_stats.as_mut().map(|s| s.finish());
+        println!("audio session {}", self.diagnostics_value(pw));
         // After the stream has closed, as before: ROCKNIX's quantum back unless `keep_quantum` (the keeper waits).
         drop(self.route.take());
     }
@@ -211,14 +276,22 @@ impl Audio {
     /// Opens a 48 kHz stereo stream; None when no audio server is available. `heavy` (3D cores) gets
     /// the longer queue, `HEAVY_TARGET_MS`.
     pub fn open(in_rate: f64, heavy: bool) -> Option<Audio> {
-        // Short, as on the speaker: the writer opens it again with the longer buffer before it plays if the keeper
-        // finds Bluetooth (or can't lower the quantum), and again whenever that changes.
-        let sink = Sink::open(Ring::Short)?;
+        // Fit a known large cycle at the first open. Opening a 10 ms ring under a configured 512/1024
+        // quantum and then replacing it could xrun during startup, before a single core sample played.
+        // Android keeps its own low-latency stream policy.
+        let configured = game_quantum();
+        #[cfg(target_os = "linux")]
+        let ring = if !crate::audio_route::short_quantum(Some(configured)) { Ring::Cycle } else { Ring::Short };
+        #[cfg(not(target_os = "linux"))]
+        let ring = Ring::Short;
+        let sink = Sink::open(ring)?;
         // The pulse path can't go below 1024 per client anyway; only the native stream gains. The quantum is set on
         // the keeper's thread (it may ask PipeWire for the default sink first), not here: this only starts it.
-        let frames = if sink.uses_graph() { game_quantum() } else { 0 };
+        let frames = if sink.uses_graph() { configured } else { 0 };
         let route = Some(crate::audio_route::Keeper::spawn(frames));
-        Some(Audio::start(sink, in_rate, heavy, route, Sink::open))
+        let mut audio = Audio::start(sink, in_rate, heavy, route, Sink::open);
+        audio.pw_stats = Some(crate::audio_pw_stats::Collector::start());
+        Some(audio)
     }
 
     /// The writer thread for `sink`, and the queue it plays from. `reopen` opens a new stream when this one fails
@@ -238,6 +311,11 @@ impl Audio {
         reopen: fn(Ring) -> Option<Sink>,
     ) -> Audio {
         let backend = sink.name();
+        let diagnostics = Arc::new(crate::audio_diagnostics::Diagnostics::default());
+        sink.observe(diagnostics.clone());
+        let queue_health = Arc::new(QueueHealth::default());
+        let health = queue_health.clone();
+        let writer_diagnostics = diagnostics.clone();
         let queue = Arc::new(Mutex::new(VecDeque::with_capacity(OUT_RATE as usize)));
         let underruns = Arc::new(Mutex::new(0));
         let underrun_at = Arc::new(Mutex::new(Vec::new()));
@@ -246,6 +324,8 @@ impl Audio {
         let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let (ended_tx, ended) = std::sync::mpsc::channel();
         let playing = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let writer_finished = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let finished = writer_finished.clone();
         let (q, u, ua, lat, p, halt, fl, started) =
             (queue.clone(), underruns.clone(), underrun_at.clone(), server_latency_us.clone(), paused.clone(), stop.clone(), flags.clone(), playing.clone());
         let stopped = move || halt.load(Ordering::Relaxed);
@@ -260,6 +340,7 @@ impl Audio {
                 // beside the core's first frames, not in `open`.
                 let t0 = std::time::Instant::now();
                 while fl.as_ref().is_some_and(|f| !f.decided.load(Ordering::Relaxed)) && t0.elapsed() < ROUTE_WAIT {
+                    health.route_wait_polls.fetch_add(1, Ordering::Relaxed);
                     if stopped() {
                         return;
                     }
@@ -272,6 +353,7 @@ impl Audio {
                 let prefill = |sink: &mut Sink| {
                     for _ in 0..200 {
                         let t = std::time::Instant::now();
+                        health.prefill_silence_chunks.fetch_add(1, Ordering::Relaxed);
                         sink.write(&silence);
                         if t.elapsed() > std::time::Duration::from_millis(4) {
                             break;
@@ -283,7 +365,8 @@ impl Audio {
                 let fit = |sink: &mut Sink| {
                     let want = Route::ring(&fl);
                     if sink.ring().is_some_and(|r| r != want) {
-                        if let Some(new) = reopen(want) {
+                        if let Some(mut new) = reopen(want) {
+                            new.observe(writer_diagnostics.clone());
                             println!("audio: {want:?} buffer ({} ms)", want.us() / 1000);
                             *sink = new;
                             prefill(sink);
@@ -296,7 +379,11 @@ impl Audio {
                 fit(&mut sink);
                 // Start playing once the target is buffered: where the rate control holds it (1.5x the target, as
                 // before 2026-10-28, cost a 4-cent glide every start while the excess drained).
-                while q.lock().unwrap().len() < target_for(Route::ring(&fl)) * 2 {
+                loop {
+                    let buffered = q.lock().unwrap().len() / 2;
+                    let target = target_for(Route::ring(&fl));
+                    if buffered >= target { break; }
+                    health.prefill_wait(target - buffered);
                     if stopped() {
                         return;
                     }
@@ -304,6 +391,7 @@ impl Audio {
                 }
                 prefill(&mut sink);
                 started.store(true, Ordering::Relaxed);
+                health.state.store(1, Ordering::Relaxed);
                 let start = std::time::Instant::now();
                 let mut written = 0u64;
                 let mut was_paused = false;
@@ -322,11 +410,13 @@ impl Audio {
                         let pop = |q: &mut VecDeque<i16>, chunk: &mut [i16]| chunk.iter_mut().for_each(|s| *s = q.pop_front().unwrap_or(0));
                         let target = target_for(Route::ring(&fl));
                         if paused {
+                            health.state.store(2, Ordering::Relaxed);
                             if !was_paused && q.len() >= chunk.len() {
                                 pop(&mut q, &mut chunk);
                                 ramp(&mut chunk, true);
                             } else {
                                 chunk.fill(0);
+                                health.paused_silence_chunks.fetch_add(1, Ordering::Relaxed);
                             }
                             was_paused = true;
                             // The rate control starts afresh after the pause (`RateControl::step`): the queue comes
@@ -339,15 +429,15 @@ impl Audio {
                                 ramp(&mut chunk, false);
                                 was_paused = false;
                                 started.store(true, Ordering::Relaxed);
+                                health.state.store(1, Ordering::Relaxed);
                                 // After the pause menu or a wake (`latency.py measure --wake`: the sound is back).
                                 crate::trace::step("audio: playing again");
                             } else {
                                 chunk.fill(0);
+                                health.state.store(3, Ordering::Relaxed);
+                                health.refill_silence_chunks.fetch_add(1, Ordering::Relaxed);
                             }
-                        } else if q.len() >= chunk.len() {
-                            pop(&mut q, &mut chunk);
-                        } else {
-                            chunk.fill(0);
+                        } else if health.playing_chunk(&mut q, &mut chunk) != 0 {
                             *u.lock().unwrap() += 1;
                             let mut at = ua.lock().unwrap();
                             if at.len() < 1000 {
@@ -360,7 +450,10 @@ impl Audio {
                         // The stream is gone (the sound server was restarted, say around a deep sleep): a new one,
                         // instead of a game without sound until it is started again.
                         match reopen_stream(reopen, Route::ring(&fl), &stopped) {
-                            Some(new) => sink = new,
+                            Some(mut new) => {
+                                new.observe(writer_diagnostics.clone());
+                                sink = new;
+                            }
                             None => return,
                         }
                     }
@@ -373,9 +466,16 @@ impl Audio {
                 }
             };
             play();
+            started.store(false, Ordering::Relaxed);
+            health.state.store(4, Ordering::Relaxed);
             drop(sink);
+            // The queue loop can stop before a blocking close returns. Only the closed stream acknowledges
+            // completion; otherwise a timed-out Drop must keep writer_finished=false in the session evidence.
+            finished.store(true, Ordering::Release);
             let _ = ended_tx.send(());
         });
+        let mut resampler = crate::resample::Resampler::from_env();
+        resampler.prepare(in_rate / OUT_RATE as f64);
         Audio {
             queue,
             in_rate,
@@ -383,7 +483,7 @@ impl Audio {
             rate: RateControl::default(),
             playing,
             flags,
-            resampler: crate::resample::Resampler::from_env(),
+            resampler,
             scratch: Vec::new(),
             underruns,
             underrun_at,
@@ -393,7 +493,27 @@ impl Audio {
             route,
             stop,
             ended,
+            writer_finished,
+            diagnostics,
+            queue_health,
+            pw_stats: None,
         }
+    }
+
+    fn diagnostics_value(&self, pw: Option<crate::audio_pw_stats::Snapshot>) -> serde_json::Value {
+        // Observe completion before reading its counters, so the release after close publishes the final writes.
+        let writer_finished = self.writer_finished.load(Ordering::Acquire);
+        serde_json::json!({
+            "schema": 1, "backend": self.diagnostics.snapshot(), "queue": self.queue_health.snapshot(),
+            "pipewire": pw, "playing": self.playing.load(Ordering::Relaxed),
+            "queued_frames": self.queue.lock().unwrap().len() / 2,
+            "writer_finished": writer_finished,
+        })
+    }
+
+    /// Live session counters for benches. Null PipeWire data means no collector, never zero client xruns.
+    pub fn diagnostics(&self) -> serde_json::Value {
+        self.diagnostics_value(self.pw_stats.as_ref().map(|s| s.snapshot()))
     }
 
     /// After the system woke from sleep: ROCKNIX's wake hook (sleep.d/post/003-audio) has put the
@@ -429,12 +549,15 @@ impl Audio {
         // Converted before the queue is locked again: the writer thread must not wait for the filter.
         self.scratch.clear();
         self.resampler.process(samples, step, &mut self.scratch);
+        self.queue_health.input_frames.fetch_add(samples.len() as u64 / 2, Ordering::Relaxed);
+        self.queue_health.resampled_frames.fetch_add(self.scratch.len() as u64 / 2, Ordering::Relaxed);
         let mut q = self.queue.lock().unwrap();
         // Keep latency bounded if the core ran far ahead (e.g. after a pause).
         let fill = q.len() / 2;
         if fill > target * 3 {
             let drop = (fill - target) * 2;
             q.drain(..drop);
+            self.queue_health.dropped_frames.fetch_add(drop as u64 / 2, Ordering::Relaxed);
             // The average would remember the overfull queue for a second.
             self.rate.fill = Some((fill - drop / 2) as f64);
         }
@@ -443,6 +566,7 @@ impl Audio {
 
     /// Effective rate of the samples pushed per second of real time.
     pub fn set_input_rate(&mut self, rate: f64) {
+        self.resampler.prepare(rate / OUT_RATE as f64);
         self.in_rate = rate;
     }
 
@@ -470,6 +594,25 @@ impl Audio {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[test]
+    fn a_late_frame_preserves_the_queued_audio_and_counts_only_missing_frames() {
+        let health = QueueHealth::default();
+        let mut queue = VecDeque::from(vec![100, -100, 200, -200, 300, -300]);
+        let mut chunk = [99; 8];
+        assert_eq!(health.playing_chunk(&mut queue, &mut chunk), 1);
+        assert_eq!(chunk, [100, -100, 200, -200, 300, -300, 0, 0]);
+        assert!(queue.is_empty(), "a late frame left older samples queued");
+        let observed = health.snapshot();
+        assert_eq!(observed["playing_underruns"], 1);
+        assert_eq!(observed["playing_missing_frames"], 1);
+        assert_eq!(observed["playing_silence_frames"], 1);
+        // The next core frame resumes in order; no old audio leaks after the missing tail.
+        queue.extend([400, -400, 500, -500, 600, -600, 700, -700]);
+        assert_eq!(health.playing_chunk(&mut queue, &mut chunk), 0);
+        assert_eq!(chunk, [400, -400, 500, -500, 600, -600, 700, -700]);
+        assert_eq!(health.snapshot()["playing_underruns"], 1);
+    }
 
     // Per test thread: the tests run in parallel, and a drop runs on the thread that owns the sink.
     thread_local! {
@@ -515,6 +658,7 @@ mod tests {
             delay: fake_delay,
             close: fake_close,
             ring: Ring::Short,
+            observation: Default::default(),
         }
     }
 
@@ -532,7 +676,7 @@ mod tests {
     #[test]
     fn dropping_a_pulse_sink_frees_its_stream() {
         let before = freed();
-        let sink = Sink::Pulse { _lib: None, stream: std::ptr::NonNull::<c_void>::dangling().as_ptr(), write: fake_write, latency: fake_latency, free: fake_free };
+        let sink = Sink::Pulse { _lib: None, stream: std::ptr::NonNull::<c_void>::dangling().as_ptr(), write: fake_write, latency: fake_latency, free: fake_free, observation: Default::default() };
         drop(sink);
         assert_eq!(freed(), before + 1);
     }
@@ -547,7 +691,74 @@ mod tests {
     }
 
     fn paced_sink() -> Sink {
-        Sink::Pulse { _lib: None, stream: std::ptr::NonNull::<c_void>::dangling().as_ptr(), write: paced_write, latency: fake_latency, free: counted_free }
+        Sink::Pulse { _lib: None, stream: std::ptr::NonNull::<c_void>::dangling().as_ptr(), write: paced_write, latency: fake_latency, free: counted_free, observation: Default::default() }
+    }
+
+    #[test]
+    fn starving_a_running_writer_and_resuming_without_samples_are_observable() {
+        let wait = |condition: &dyn Fn() -> bool| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+            while !condition() {
+                assert!(std::time::Instant::now() < deadline, "writer did not reach the requested phase");
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+        };
+        let mut audio = Audio::start(paced_sink(), 48000.0, false, None, |_| None);
+        wait(&|| audio.queue_health.prefill_waits.load(Ordering::Relaxed) > 0);
+        assert_eq!(*audio.underruns.lock().unwrap(), 0, "old playing-only count misses startup waits");
+        audio.push(&vec![100; 4800 * 2]);
+        wait(&|| audio.queue_health.playing_underruns.load(Ordering::Relaxed) > 0);
+        audio.pause(true);
+        wait(&|| audio.queue_health.state.load(Ordering::Relaxed) == 2);
+        audio.pause(false);
+        wait(&|| audio.queue_health.refill_silence_chunks.load(Ordering::Relaxed) > 0);
+        let counters = audio.diagnostics();
+        assert!(counters["queue"]["playing_underruns"].as_u64().unwrap() > 0);
+        assert!(counters["queue"]["refill_silence_chunks"].as_u64().unwrap() > 0);
+        assert_eq!(counters["queue"]["state"], "refill");
+        assert!(counters["pipewire"].is_null(), "a fake sink cannot prove client xruns");
+    }
+
+    #[test]
+    fn a_stopped_queue_does_not_claim_a_blocked_stream_has_closed() {
+        use std::sync::atomic::AtomicBool;
+        struct Close {
+            entered: Arc<AtomicBool>,
+            release: Arc<AtomicBool>,
+        }
+        unsafe extern "C" fn blocked_close(stream: *mut c_void) {
+            // The fake stream is owned by this one close callback, just like an opened backend handle.
+            let close = unsafe { Box::from_raw(stream.cast::<Close>()) };
+            close.entered.store(true, Ordering::Release);
+            while !close.release.load(Ordering::Acquire) {
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+        }
+        struct ReleaseOnDrop(Arc<AtomicBool>);
+        impl Drop for ReleaseOnDrop {
+            fn drop(&mut self) { self.0.store(true, Ordering::Release); }
+        }
+        let entered = Arc::new(AtomicBool::new(false));
+        let release = Arc::new(AtomicBool::new(false));
+        let _release_on_panic = ReleaseOnDrop(release.clone());
+        let stream = Box::into_raw(Box::new(Close { entered: entered.clone(), release: release.clone() })).cast();
+        let sink = Sink::Pulse { _lib: None, stream, write: paced_write, latency: fake_latency, free: blocked_close, observation: Default::default() };
+        let audio = Audio::start(sink, 48000.0, false, None, |_| None);
+        audio.stop.store(true, Ordering::Relaxed);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while !entered.load(Ordering::Acquire) {
+            assert!(std::time::Instant::now() < deadline, "stream did not enter close");
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        let closing = audio.diagnostics();
+        assert_eq!(closing["queue"]["state"], "stopped");
+        assert_eq!(closing["writer_finished"], false, "queue stop is not a closed stream");
+        release.store(true, Ordering::Release);
+        while !audio.writer_finished.load(Ordering::Acquire) {
+            assert!(std::time::Instant::now() < deadline, "stream did not finish close");
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        assert_eq!(audio.diagnostics()["writer_finished"], true);
     }
 
     /// SOL-13: the writer thread kept its stream and ran on after `Audio` was dropped, waiting forever for the prefill
@@ -579,14 +790,14 @@ mod tests {
         0
     }
     fn reopen_counted(_: Ring) -> Option<Sink> {
-        Some(Sink::Pulse { _lib: None, stream: std::ptr::NonNull::<c_void>::dangling().as_ptr(), write: counted_write, latency: fake_latency, free: fake_free })
+        Some(Sink::Pulse { _lib: None, stream: std::ptr::NonNull::<c_void>::dangling().as_ptr(), write: counted_write, latency: fake_latency, free: fake_free, observation: Default::default() })
     }
 
     /// Instant on: a stream that fails (the sound server restarted around a deep sleep) is replaced by a new one, and
     /// the game goes on with sound instead of without it until it is started again.
     #[test]
     fn a_failed_stream_is_opened_again() {
-        let broken = Sink::Pulse { _lib: None, stream: std::ptr::NonNull::<c_void>::dangling().as_ptr(), write: failing_write, latency: fake_latency, free: fake_free };
+        let broken = Sink::Pulse { _lib: None, stream: std::ptr::NonNull::<c_void>::dangling().as_ptr(), write: failing_write, latency: fake_latency, free: fake_free, observation: Default::default() };
         let mut audio = Audio::start(broken, 48000.0, false, None, reopen_counted);
         audio.push(&vec![100i16; 48000 / 10 * 2]);
         let t0 = std::time::Instant::now();

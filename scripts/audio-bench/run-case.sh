@@ -19,18 +19,22 @@ esac
 pw-metadata -n settings 0 clock.force-quantum "$Q" >/dev/null
 pw-cli set-param bench_sink ProcessLatency "{ ns = $LAT }" >/dev/null
 rm -f "$OUT.wav"
-pw-record --target bench_sink -P '{ stream.capture.sink = true node.name = bench_rec }' --rate 48000 --channels 2 --format s16 "$OUT.wav" &
-REC=$!
+REC=
+if [ "${BENCH_EXTERNAL_RECORDER:-0}" != 1 ]; then
+    pw-record --target bench_sink -P '{ stream.capture.sink = true node.name = bench_rec }' --rate 48000 --channels 2 --format s16 "$OUT.wav" &
+    REC=$!
+fi
 sleep 0.3
 env $ENV "$@" audio_tone "$SECS" 1000 > "$OUT.tone.log" 2>&1 &
 TONE=$!
 sleep 3
 pw-top -b -n 2 > "$OUT.pwtop" 2>&1 || true
-# The ERR column at the end: xruns of each node over the whole run (a cycle a node missed, played as silence).
+# Raw graph context near the end. A generic follower ERR can inherit its driver's counter;
+# the session collector verifies ownership and counter provenance before attributing client errors.
 (sleep $((${SECS%.*} - 5)); pw-top -b -n 2 > "$OUT.pwtop.end" 2>&1) &
 wait $TONE
 sleep 0.3
-kill -INT $REC; wait $REC 2>/dev/null || true
+if [ -n "$REC" ]; then kill -INT "$REC"; wait "$REC" 2>/dev/null || true; fi
 grep -E 'audio_tone|bench_sink|bench_rec' "$OUT.pwtop.end" | tail -3 > "$OUT.pwtop.short" || true
-echo "$MODE $*: $(tr '\n' ' ' < "$OUT.tone.log")"
+echo "$MODE $*: $(sed -e '/^audio sample /d' -e '/^audio session /d' "$OUT.tone.log" | tr '\n' ' ')"
 cat "$OUT.pwtop.short"

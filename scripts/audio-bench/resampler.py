@@ -3,10 +3,11 @@
 Per core rate and mode: tone lines (strongest foreign line and THD+N, 20 Hz-20 kHz), noise (flatness to 0.45 of the
 core's rate, level of the image band above half of it), sweep (strongest line away from the sweep's own frequency),
 latency. Numbers in dB. The 16-bit input and output set a floor of about -92 dB THD+N (printed as `floor`)."""
+import argparse
 import sys, os, numpy as np
 
 OUT = 48000.0
-RATES = [32768, 32040, 44100, 48000]
+RATES = [22050, 32040, 32768, 44100, 48000, 65536]
 TONES = [1000, 5000, 10000, 14000]
 
 def load(d, name):
@@ -43,6 +44,7 @@ def noise_metrics(x, y, rate):
     fy, py = psd(y, OUT)
     def mean_db(f, p, lo, hi): return 10 * np.log10(np.mean(p[(f >= lo) & (f <= hi)]))
     ref = mean_db(fx, px, 100, 0.2 * rate)
+    rate = min(rate, OUT)
     # response: output density relative to the input's, per band of the input's rate
     resp = {}
     edges = [(0.02, 0.1), (0.1, 0.2), (0.2, 0.3), (0.3, 0.4), (0.4, 0.45)]
@@ -65,7 +67,7 @@ def sweep_metrics(y, rate):
     for i in range(int(0.3 * OUT), len(y) - n, n // 2):
         t = (i + n / 2) / OUT
         f = f0 * np.exp(kk * t)
-        if f > 0.45 * rate:
+        if f > 0.45 * min(rate, OUT):
             break
         spec = np.abs(np.fft.rfft(y[i:i + n] * w)) / w.sum() * 2
         fr = np.fft.rfftfreq(n, 1 / OUT)
@@ -80,7 +82,7 @@ def sweep_metrics(y, rate):
     return worst, at
 
 def latency(d, mode, rate):
-    for line in open(f"{d}/meta.txt"):
+    for line in (open(f"{d}/meta.txt").read() + (open(f"{d}/retroarch-meta.txt").read() if os.path.exists(f"{d}/retroarch-meta.txt") else "")).splitlines():
         p = line.split()
         if p[:3] == [mode, str(rate), "impulse"] and p[2] == "impulse":
             lag = float(p[4])
@@ -93,8 +95,15 @@ def latency(d, mode, rate):
     return lag + delay
 
 def main():
-    d = sys.argv[1]
-    modes = sys.argv[2:] or ["linear", "sinc"]
+    global OUT
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("directory")
+    parser.add_argument("modes", nargs="*")
+    parser.add_argument("--out-rate", type=int, default=48000)
+    args = parser.parse_args()
+    OUT = float(args.out_rate)
+    d = args.directory
+    modes = args.modes or ["linear", "sinc"]
     rng = np.random.default_rng(1)
     # the floor: a perfect sine rounded to 16 bits, same analysis
     n = int(OUT * 3)
@@ -108,6 +117,9 @@ def main():
             for mode in modes:
                 cells = []
                 for t in TONES:
+                    if t > 0.45 * min(rate, OUT):
+                        cells.append("—")
+                        continue
                     s, fs, th, fp, lv = tone_metrics(load(d, f"{mode}_{rate}_tone{t}{suffix}"), t)
                     cells.append(f"{s:.0f} dB @{fs/1000:.1f}k / {th:.0f}")
                 sw, at = sweep_metrics(load(d, f"{mode}_{rate}_sweep{suffix}"), rate)
@@ -124,4 +136,5 @@ def main():
         if "cpu_ms" in line:
             print("-", line.strip())
 
-main()
+if __name__ == "__main__":
+    main()
