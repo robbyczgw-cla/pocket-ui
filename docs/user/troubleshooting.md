@@ -153,10 +153,11 @@ Wii U) start fresh; use the game's own save. A game on the own host continues fr
 quit it, not from a crash. With Settings → Playing → **Continue where I quit** off, Quit keeps no new moment, on purpose: the game starts fresh and the older moment stays under Load (see [Continue where I quit](settings.md#continue-where-i-quit)).
 
 **A game now starts with RetroArch instead of pocket-ui's own host.**
-It did not start on the own host once, so pocket-ui switched it to RetroArch (see
-[Systems](systems.md#when-a-game-does-not-start-on-the-own-host)). To try the own host again, press START on the
-game's card, choose pocket-core under [Runs on](options.md#runs-on) and save it (for this game or this console). The
-list of these games is `fallback.json` in pocket-ui's data folder.
+After a confirmed failure before the first game picture, pocket-ui may try RetroArch once, as long as there are
+no pocket-core moments. The next launch tries pocket-core again. A crash after the game showed a picture keeps
+pocket-core and Continue. Older automatic switches are cleared on update; your own emulator choices stay.
+Check [Runs on](options.md#runs-on) to choose an emulator yourself (see
+[Systems](systems.md#when-a-game-does-not-start-on-the-own-host)).
 
 **A game starts with a different emulator than before, or doesn't start at all.**
 Someone chose another emulator for it or its console, in pocket-ui or earlier in ROCKNIX's EmulationStation. Press
@@ -412,7 +413,7 @@ In `/storage/.config/pocket-ui/` on the SD card:
 | `recents.json` | Recent games and play times |
 | `game-settings/` | The pause menu's Options (picture, emulator, controls, shortcuts, extras) per console and per game |
 | `slots/` | The save slot each game used last |
-| `fallback.json` | Games that start with RetroArch because they did not start on the own host |
+| `fallback.json` | Legacy automatic emulator choices, cleared on update; new retries apply once only |
 | `covers/`, `snaps/`, `titles/` | Cover art, and the screenshots and title screens beside it ([Pictures](extras.md#pictures)) |
 | `favorites.json` | Starred games (if you use Favourites) |
 | `library.json` | Play status, notes, sessions and labels ([Your library](library.md#where-it-is-kept)) |

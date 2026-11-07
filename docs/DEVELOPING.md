@@ -1384,3 +1384,7 @@ for supported behavior and the remaining picture/player differences.
 The pause-menu shot reader (`preview.rs`) accepts older one-image shots and an optional 4×1 game rectangle before the picture (the initial picture-first layout is also accepted), ignores invalid crop bounds, retries incomplete files, and bounds decoding to eight nonempty images, 4096² pixels each and 128 MiB per file. Both preview and shot reads use one open file handle so an atomic rename cannot mix requests.
 
 The controls card remembers each console in `<data>/controls-card-seen` using `fsutil::write_atomic` before showing it; a failed write skips the interruption. Existing auto-resume states (including taken/retry states) consume the first-start mark without showing a card. Its twelve-second deadline participates in the event loop wake-up schedule. The card consumes the dismissing press before HOME/START shortcut handling. `user_journeys` exercises dismissal, an idle timeout and existing resume states with a stand-in game. Overlay taps take priority over the search and game card underneath; Tour and slideshow remain behind the card.
+
+Cartridge-clock regressions live in `libretro.rs` (`clock_regression_*`), `fallback.rs`
+(moment protection and legacy migration) and `fast_switch.rs` (first-frame evidence survives SIGKILL).
+See [HOST.md](HOST.md#failed-starts-and-continue-safety-2026-11-07) for the pipe protocol and temporary retry.

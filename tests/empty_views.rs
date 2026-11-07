@@ -101,7 +101,16 @@ fn a_game_without_box_art_is_a_title_card_and_a_narrow_tile_names_its_console_no
     let lines: Vec<&str> = wide.lines().collect();
     let at = lines.iter().position(|l| *l == first_word).unwrap_or_else(|| panic!("the title card says {title}: {wide}"));
     let console = lines[at.saturating_sub(1)];
-    assert!(at > 0 && console.len() <= 6 && console.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()), "the console over the name: {wide}");
+    // The date can pick Wii U, Game Boy or Mega Drive too: a real console name need not be all-caps.
+    // Check the selected game's actual console, rather than accepting any short uppercase word.
+    let systems = pocket_ui::library::load_shown(&card.dir.path().join("es_systems.cfg"), &card.dir.path().join("data")).unwrap();
+    let right_console = systems.iter().filter(|s| s.games.iter().any(|g| g.name == title)).any(|s| {
+        let common = match s.name.as_str() {
+            "gb" => "Game Boy", "gbc" => "Game Boy Color", "nds" => "DS", "psx" => "PS1", "megadrive" => "Mega Drive", _ => "",
+        };
+        console == s.fullname || console == s.name.to_uppercase() || (!common.is_empty() && console == common)
+    });
+    assert!(at > 0 && right_console, "the correct console over {title}: {wide}");
     let narrow = card.screen("curator:home", "1024x768");
     assert!(narrow.lines().any(|l| l == console), "the narrow tile names {console}: {narrow}");
     let first_letters: Vec<String> = (1..=3.min(first_word.chars().count().saturating_sub(1))).map(|n| format!("{}…", first_word.chars().take(n).collect::<String>())).collect();

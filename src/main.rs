@@ -249,7 +249,7 @@ enum UserEvent {
     Touch(touch::TouchEvent),
     /// `ok`: the game's process ended with exit code 0. `pgid`: its process group, which tells a game that has
     /// handed over already (`app_fast_switch`) from the one running now.
-    GameExited { secs: u64, ok: bool, pgid: Option<i32> },
+    GameExited { secs: u64, ok: bool, pgid: Option<i32>, start: pocket_ui::fallback::StartOutcome, moments: bool },
     /// pocket-core `pgid` has written its exit save and may be replaced (`pocket_ui::fast_switch`).
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     GameSaved { pgid: i32 },
@@ -1765,7 +1765,7 @@ impl App {
         (r.emulator, r.core)
     }
 
-    fn game_exited(&mut self, secs: u64, ok: bool) {
+    fn game_exited(&mut self, secs: u64, ok: bool, start: pocket_ui::fallback::StartOutcome, moments: bool) {
         pocket_ui::h700_gba::preload();
         // Asked to stop (Quit in the menu, or the grace period ran out) is no failure.
         let quit_requested = self.menu.as_ref().is_some_and(|m| m.quitting) || self.quit.is_some();
@@ -1807,7 +1807,7 @@ impl App {
         // session, and when no one else explains it (pocket-core's own reason, the fallback's notice) pocket-ui does.
         // A port's script exits 0 whatever happened, so for ports the exit code doesn't count (`port_never_started`).
         let port = run.system == "ports";
-        let never_started = if port { pocket_ui::fallback::port_never_started(secs, quit_requested) } else { pocket_ui::fallback::never_started(ok, secs, quit_requested) };
+        let never_started = if run.hosted() { !ok && start == pocket_ui::fallback::StartOutcome::NoFrame && !quit_requested } else if port { pocket_ui::fallback::port_never_started(secs, quit_requested) } else { pocket_ui::fallback::never_started(ok, secs, quit_requested) };
         if never_started && port {
             self.notice = Some(Notice::new(pocket_ui::fallback::port_not_started_notice(&run.name)));
         } else if never_started && !run.hosted() {
@@ -1819,25 +1819,27 @@ impl App {
                 self.notice = Some(Notice::new(pocket_ui::fallback::flatpak_missing_notice(&run.name, &run.emulator)));
             }
         }
-        // pocket-core couldn't start this game: remember it and start it with the system's default emulator instead.
+        // A confirmed failed start without pocket-core moments may try the system emulator once.
         // Its core file missing is no fault of the game: no retry with another emulator (there may be none: "emulator , core ", then a
         // message about a damaged file), the emulator is named instead.
         let core_gone = if run.hosted() && !quit_requested { self.notice.as_ref().and_then(|n| pocket_ui::fallback::missing_core_in(n.text())) } else { None };
-        let failed = run.hosted() && core_gone.is_none() && pocket_ui::fallback::should_retry(ok, secs, quit_requested, self.notice.as_ref().map(|n| n.text()));
+        let failed = run.hosted() && core_gone.is_none() && !moments && pocket_ui::fallback::should_retry(ok, start, quit_requested, self.notice.as_ref().map(|n| n.text()));
         // Kids Mode has no next choice: RetroArch's menu is no place for a child, and the failure isn't remembered for the normal shelf.
-        let kids_stopped = failed && self.kids_live();
+        // An unknown start or a crash after a picture still needs the child's safe stop screen. That is
+        // independent of whether the normal shelf would be allowed to retry a confirmed start failure.
+        let kids_stopped = run.hosted() && !ok && !quit_requested && self.kids_live();
         let failed = failed && !kids_stopped;
         if kids_stopped {
             println!("kids mode: stopped, pocket-core couldn't start {} (exit ok {ok}, {secs} s), no fallback here", run.path.display());
             self.kids_stuck();
         }
-        // What starts it from now on: the next choice down (`emu_choice::resolve`), as the retry below.
+        // The immediate retry uses the next choice down (`emu_choice::resolve`); this choice is temporary.
         let default = if failed { self.fallback.add(&run.path); self.systems.iter().find(|s| s.name == run.system).map(|s| self.route(s, Some(&run.path), true).0).unwrap_or_default() } else { String::new() };
         // A system with no other emulator than pocket-core (its core is missing): the next choice is pocket-core again, which
         // failed again, for ever (1,483 starts in two minutes, 2026-10-29). Say what happened instead.
         let retry = failed && default != "pocket-core";
         if retry {
-            println!("pocket-core couldn't start {} (exit ok {ok}, {secs} s): {default} from now on", run.path.display());
+            println!("pocket-core couldn't start {} (exit ok {ok}, {secs} s): {default} for this launch", run.path.display());
             self.notice = Some(Notice::new(pocket_ui::fallback::notice(&default)));
         } else if failed {
             self.fallback.remove(&run.path);
@@ -1911,7 +1913,9 @@ impl App {
             self.prev_sel = self.sel;
         }
         if retry {
+            let path = run.path.clone();
             self.launch(run.system, run.name, run.path);
+            self.fallback.remove(&path);
         }
         let relaunched = reapply.is_some();
         if let Some(mut r) = reapply {
@@ -5350,6 +5354,7 @@ fn snapshot(app: &mut App, args: &[String]) {
             ),
             "switched-off" => pocket_ui::auto_off::Note { hours: 3, brightness: None }.text(),
             "twin" => pocket_ui::frozen::SHARED.to_string(),
+            "fallback" => pocket_ui::fallback::notice("retroarch"),
             k => pocket_ui::archive::message(k, "Sonic The Hedgehog (USA, Europe).zip"),
         }));
         if toast {
@@ -6278,19 +6283,25 @@ fn spawn_game(proxy: EventLoopProxy<UserEvent>, system: &str, emulator: &str, co
     if test_driver_dir().is_some() {
         if let Some(pid) = pgid { println!("test game pid {pid}"); }
     }
-    if let (Some(h), Some(g)) = (handoff, pgid) {
+    let observation = if let (Some(h), Some(g)) = (handoff, pgid) {
         let proxy = proxy.clone();
-        h.watch(g, move || {
+        Some(h.watch(g, move || {
             let _ = proxy.send_event(UserEvent::GameSaved { pgid: g });
-        });
-    }
+        }))
+    } else { None };
+    let hosted = emulator == "pocket-core";
+    let moment_base = pocket_ui::slots::base(system, path.file_stem().and_then(|s| s.to_str()).unwrap_or_default());
     std::thread::spawn(move || {
         let ok = child.ok().and_then(|mut c| c.wait().ok()).is_some_and(|s| s.success());
+        // Drain the launch evidence on the waiter thread, before publishing GameExited. A delayed/broken pipe
+        // is Unknown and cannot trigger fallback. A FRAME already in the pipe survives even SIGKILL.
+        let start = observation.and_then(|rx| rx.recv_timeout(Duration::from_millis(200)).ok()).unwrap_or_default();
+        let moments = hosted && !ok && pocket_ui::fallback::has_moments(&moment_base);
         pocket_ui::fast_switch::mark("game process ended");
         if let Some(g) = pgid {
             pocket_ui::fast_switch::note_ended(g);
         }
-        let _ = proxy.send_event(UserEvent::GameExited { secs: started.elapsed().as_secs(), ok, pgid });
+        let _ = proxy.send_event(UserEvent::GameExited { secs: started.elapsed().as_secs(), ok, pgid, start, moments });
     });
     pgid
 }
@@ -6311,7 +6322,7 @@ fn spawn_app(proxy: EventLoopProxy<UserEvent>, mut cmd: std::process::Command) -
     let pgid = child.as_ref().ok().map(|c| c.id() as i32);
     std::thread::spawn(move || {
         let ok = child.ok().and_then(|mut c| c.wait().ok()).is_some_and(|s| s.success());
-        let _ = proxy.send_event(UserEvent::GameExited { secs: started.elapsed().as_secs(), ok, pgid });
+        let _ = proxy.send_event(UserEvent::GameExited { secs: started.elapsed().as_secs(), ok, pgid, start: Default::default(), moments: false });
     });
     pgid
 }
@@ -6321,7 +6332,7 @@ fn spawn_app(proxy: EventLoopProxy<UserEvent>, _cmd: std::process::Command) -> O
     // Desktop preview: pretend the stream failed to start after two seconds.
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(2));
-        let _ = proxy.send_event(UserEvent::GameExited { secs: 2, ok: false, pgid: None });
+        let _ = proxy.send_event(UserEvent::GameExited { secs: 2, ok: false, pgid: None, start: Default::default(), moments: false });
     });
     None
 }
@@ -6331,7 +6342,7 @@ fn spawn_game(proxy: EventLoopProxy<UserEvent>, _system: &str, _emulator: &str, 
     // Desktop preview: pretend the game ran for two seconds.
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(2));
-        let _ = proxy.send_event(UserEvent::GameExited { secs: 2, ok: true, pgid: None });
+        let _ = proxy.send_event(UserEvent::GameExited { secs: 2, ok: true, pgid: None, start: Default::default(), moments: false });
     });
     None
 }
@@ -6669,9 +6680,9 @@ impl App {
                     return;
                 }
             }
-            UserEvent::GameExited { secs, ok, pgid } => {
+            UserEvent::GameExited { secs, ok, pgid, start, moments } => {
                 if !self.drained(pgid, ok) {
-                    self.game_exited(secs, ok)
+                    self.game_exited(secs, ok, start, moments)
                 }
             }
             UserEvent::GameSaved { pgid } => self.game_saved(pgid),

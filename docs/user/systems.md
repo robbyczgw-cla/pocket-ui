@@ -169,17 +169,24 @@ folder, and hides the single discs. Without an `.m3u` each disc is a game of its
 
 A file name written all in lower case gets capitals on the shelf: "libbet and the magic floor" shows as "Libbet and the Magic Floor". A name with any capital letter is shown as the file has it.
 
+GBA games with a cartridge clock on gpSP follow the handheld's clock, including time while the game is off
+and when loading an older Continue moment or slot. This is the default; an explicit RTC time source choice
+in core options still applies. Set the handheld's time correctly for berries and daily events in Pokémon.
+
 ### When a game does not start on the own host
 
 If pocket-core cannot start a game, a card at the top of the shelf says why for about eight
 seconds.
 
-When the game failed within its first 30 seconds without you quitting it, pocket-ui starts it again
-right away with ROCKNIX's default emulator for that system and says so, for example: "This game didn't
-start on pocket-core, so it runs with RetroArch from now on." (for a Saturn game: "…with YabaSanshiro…", for
-ScummVM "…with ScummVM…", ROCKNIX's standalone ScummVM).
-The game is remembered and starts with that emulator from then on; the other games of that system stay
-on the own host. Choosing pocket-core for it again under [Runs on](options.md#runs-on) gives it another try.
+When pocket-core fails before showing the first game picture, pocket-ui may try ROCKNIX's default emulator
+for that system once (RetroArch for most, YabaSanshiro for Saturn, standalone ScummVM for ScummVM).
+The card says which emulator is being tried. The next launch tries pocket-core again; choose another emulator
+under [Runs on](options.md#runs-on) if you want to keep using it.
+
+A crash after the game has shown a picture keeps pocket-core and Continue. If any pocket-core moments exist
+(Auto, a slot, Before load or Earlier), there is no automatic emulator switch even after a failed start:
+those moments stay reachable through pocket-core. Earlier automatic switches are cleared on update, so games
+switched by an old crash get another try. Your own choices under Runs on still apply.
 
 A missing BIOS file is the exception: RetroArch would need it as well, so pocket-ui does not switch.
 The card names the files it looks for in `roms/bios`. The Saturn is different again: without its BIOS,

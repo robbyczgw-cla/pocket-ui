@@ -215,5 +215,5 @@ fn a_patch_for_another_version_stops_the_start_and_says_why() {
     assert_eq!(err, softpatch::message(softpatch::Refusal::OtherVersion, "Game.bps"));
     assert!(err.starts_with("The patch Game.bps is for another version of the game."), "{err}");
     assert_eq!(s.seen().loads, 0, "the core never got the game");
-    assert!(!pocket_ui::fallback::should_retry(false, 1, false, Some(&err)), "nor RetroArch, which would start the original");
+    assert!(!pocket_ui::fallback::should_retry(false, pocket_ui::fallback::StartOutcome::NoFrame, false, Some(&err)), "nor RetroArch, which would start the original");
 }

@@ -846,3 +846,6 @@ safe rescue:kids
 safe rescue:kids-pin
 
 tour:easy_to_read
+
+# A confirmed failed start may try the system emulator once.
+notice:fallback

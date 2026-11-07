@@ -4532,3 +4532,5 @@ Brighten Solar Sensor	Sensor solar más claro
 Darken Solar Sensor	Sensor solar más oscuro
 
 Battery: saves in menus and idle. Games keep their normal processor speed on this device.	Batería: ahorra en los menús y en reposo. Los juegos mantienen la velocidad normal del procesador en este dispositivo.
+
+This game didn't start on pocket-core, so it runs with {t} for this launch. Next time pocket-core will try again.	El juego no arrancó. Esta vez usará {t}. La próxima lo intentará pocket-core.

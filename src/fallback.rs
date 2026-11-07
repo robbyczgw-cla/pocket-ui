@@ -1,107 +1,66 @@
-//! Safety net for the libretro host: a game pocket-core can't start (the core refuses it, crashes or
-//! the host lacks something it needs) is started again right away through the system's default emulator
-//! (ROCKNIX's RetroArch for most, standalone YabaSanshiro for the Saturn), and
-//! remembered so it goes there directly from then on. Stored in `<data>/fallback.json`.
+//! A failed start may try the system emulator once. No automatic choice survives the retry or a UI restart;
+//! an earlier version's unverified fallback list is retired so it cannot hide Continue moments.
 
-use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::collections::BTreeSet;
+use std::path::Path;
 
-/// pocket-core runs that end this fast with an error count as "didn't start".
-pub const START_WINDOW_SECS: u64 = 30;
-
-/// What the file looked like when pocket-core failed on it: a file copied over later differs.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-struct Stamp {
-    size: u64,
-    mtime_ms: u64,
-}
-
-impl Stamp {
-    fn of(path: &Path) -> Option<Stamp> {
-        let meta = std::fs::metadata(path).ok()?;
-        let mtime_ms = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_millis() as u64;
-        Some(Stamp { size: meta.len(), mtime_ms })
-    }
-}
-
-/// An entry of `fallback.json`: a plain path (written before the stamp existed: kept as it was) or the path with its stamp.
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(untagged)]
-enum Entry {
-    Path(String),
-    Stamped { path: String, size: u64, mtime_ms: u64 },
-}
-
+#[derive(Default)]
 pub struct Fallback {
-    file: PathBuf,
-    games: BTreeMap<String, Option<Stamp>>,
+    games: BTreeSet<String>,
 }
 
 impl Fallback {
-    /// Entries whose file is gone or is another file now (copied over after the failure) are dropped: pocket-core gets a
-    /// new try. Entries without a stamp stay until the player changes the game's emulator. A choice made under
-    /// "Runs on" lives in system.cfg and is not touched here.
     pub fn load(data_dir: &Path) -> Fallback {
         let file = data_dir.join("fallback.json");
-        let entries: Vec<Entry> = crate::fsutil::read_json_or_backup(&file).unwrap_or_default();
-        let total = entries.len();
-        let games: BTreeMap<String, Option<Stamp>> = entries
-            .into_iter()
-            .map(|e| match e {
-                Entry::Path(path) => (path, None),
-                Entry::Stamped { path, size, mtime_ms } => (path, Some(Stamp { size, mtime_ms })),
-            })
-            .filter(|(path, stamp)| match stamp {
-                Some(stamp) => Stamp::of(Path::new(path)) == Some(*stamp),
-                None => true,
-            })
-            .collect();
-        let fallback = Fallback { file, games };
-        if fallback.games.len() != total {
-            fallback.save();
+        // Old entries only prove an error in the first 30 s, possibly AFTER the game had shown frames.
+        // Retire the primary and its recovery copy on the existing card writer, without fsync on the UI thread.
+        if crate::fsutil::read_json_or_backup::<Vec<serde_json::Value>>(&file).is_some_and(|v| !v.is_empty()) {
+            crate::fsutil::write_json_soon(&file, &Vec::<String>::new());
         }
-        fallback
-    }
-
-    fn save(&self) {
-        let entries: Vec<Entry> = self
-            .games
-            .iter()
-            .map(|(path, stamp)| match stamp {
-                Some(stamp) => Entry::Stamped { path: path.clone(), size: stamp.size, mtime_ms: stamp.mtime_ms },
-                None => Entry::Path(path.clone()),
-            })
-            .collect();
-        let _ = crate::fsutil::write_json(&self.file, &entries);
+        Fallback::default()
     }
 
     pub fn contains(&self, rom: &Path) -> bool {
-        self.games.contains_key(&rom.to_string_lossy().into_owned())
+        self.games.contains(rom.to_string_lossy().as_ref())
     }
 
-    /// The player chose pocket-core for the game again ("Runs on"): it gets another try.
     pub fn remove(&mut self, rom: &Path) {
-        if self.games.remove(&rom.to_string_lossy().into_owned()).is_some() {
-            self.save();
-        }
+        self.games.remove(rom.to_string_lossy().as_ref());
     }
 
+    /// Only while resolving and launching the immediate retry. Never written to disk.
     pub fn add(&mut self, rom: &Path) {
-        let stamp = Stamp::of(rom);
-        if self.games.insert(rom.to_string_lossy().into_owned(), stamp) != Some(stamp) {
-            self.save();
-        }
+        self.games.insert(rom.to_string_lossy().into_owned());
     }
 }
 
-/// Whether a pocket-core run that just ended should be retried with RetroArch: it failed, it failed
-/// early, nobody asked it to quit, and the reason isn't something RetroArch would miss as well (a BIOS) or do worse
+/// Positive launch evidence from the per-process pipe. Missing/broken instrumentation is unknown, not a failure.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum StartOutcome {
+    #[default]
+    Unknown,
+    NoFrame,
+    Shown,
+}
+
+/// Includes Auto, crash-recovery copies, manual slots, undo and Earlier: automatic fallback must not hide any of them.
+/// Called on the process waiter after a failed launch, never during drawing or a normal game start.
+pub fn has_moments(base: &Path) -> bool {
+    let set = crate::states::StateSet::pocket_core(base);
+    set.auto.iter().chain(&set.slots).chain(std::iter::once(&set.undo))
+        .any(|p| p.is_file())
+        || !crate::frozen_phone::kept(base).is_empty()
+        || crate::timeline::Name::all().any(|n| crate::timeline::path(base, n).is_file())
+}
+
+/// Whether a pocket-core run that just ended should be retried with RetroArch: it failed before any game frame,
+/// nobody asked it to quit, and the reason isn't something RetroArch would miss as well (a BIOS) or do worse
 /// with (a zip with several games, a damaged one: `archive::is_refusal`; a patch next to the game that doesn't apply,
 /// where RetroArch would start the original: `softpatch::is_refusal`; the player is told what to do instead).
-pub fn should_retry(exit_ok: bool, secs: u64, quit_requested: bool, reason: Option<&str>) -> bool {
+pub fn should_retry(exit_ok: bool, start: StartOutcome, quit_requested: bool, reason: Option<&str>) -> bool {
     let missing_bios = reason.is_some_and(|r| r.to_lowercase().contains("bios"));
     let refused = reason.is_some_and(|r| crate::archive::is_refusal(r) || crate::softpatch::is_refusal(r));
-    !exit_ok && secs < START_WINDOW_SECS && !quit_requested && !missing_bios && !refused
+    !exit_ok && start == StartOutcome::NoFrame && !quit_requested && !missing_bios && !refused
 }
 
 /// A run that ends with an error this soon never got the game on the screen: a damaged file, a missing BIOS.
@@ -178,7 +137,7 @@ pub fn flatpak_missing_notice(name: &str, app_id: &str) -> String {
 }
 
 /// What pocket-ui tells the player when a game goes to the system's default emulator (`emulator`, as in
-/// es_systems.cfg) from now on.
+/// es_systems.cfg) for this launch.
 pub fn notice(emulator: &str) -> String {
     let name = match emulator {
         "retroarch" => "RetroArch",
@@ -187,7 +146,7 @@ pub fn notice(emulator: &str) -> String {
         "pico-8" => "PICO-8",
         _ => "the system's emulator",
     };
-    format!("This game didn't start on pocket-core, so it runs with {name} from now on.")
+    format!("This game didn't start on pocket-core, so it runs with {name} for this launch. Next time pocket-core will try again.")
 }
 
 #[cfg(test)]
@@ -204,20 +163,26 @@ mod tests {
     }
 
     #[test]
-    fn retries_only_early_unrequested_failures() {
-        assert!(should_retry(false, 2, false, None), "crash right at the start");
-        assert!(should_retry(false, 1, false, Some("The core couldn't load this game.")));
-        assert!(!should_retry(true, 2, false, None), "a clean exit");
-        assert!(!should_retry(false, 600, false, None), "a crash after playing a while");
-        assert!(!should_retry(false, 3, true, None), "killed because the player chose Quit");
-        assert!(!should_retry(false, 1, false, Some("Sega CD needs a BIOS file in roms/bios")), "RetroArch needs it too");
+    fn clock_regression_crash_at_seven_seconds_is_not_a_failed_start() {
+        // The device already displayed the game after 0.4 s, then pocket-core was killed at 7 s.
+        assert!(!should_retry(false, StartOutcome::Shown, false, None), "a played game must keep its Continue route");
+    }
+
+    #[test]
+    fn retries_only_confirmed_unrequested_start_failures() {
+        assert!(should_retry(false, StartOutcome::NoFrame, false, None), "crash right at the start");
+        assert!(should_retry(false, StartOutcome::NoFrame, false, Some("The core couldn't load this game.")));
+        assert!(!should_retry(true, StartOutcome::NoFrame, false, None), "a clean exit");
+        assert!(!should_retry(false, StartOutcome::Unknown, false, None), "missing evidence is never a start failure");
+        assert!(!should_retry(false, StartOutcome::NoFrame, true, None), "killed because the player chose Quit");
+        assert!(!should_retry(false, StartOutcome::NoFrame, false, Some("Sega CD needs a BIOS file in roms/bios")), "RetroArch needs it too");
         let zip = crate::archive::extract_rom(Path::new("/nonexistent.zip"), &[]).unwrap_err();
-        assert!(should_retry(false, 1, false, Some(&zip)), "a zip pocket-core can't read at all may open in RetroArch");
+        assert!(should_retry(false, StartOutcome::NoFrame, false, Some(&zip)), "a zip pocket-core can't read at all may open in RetroArch");
         for refused in [
             "Game.zip holds 2 game files. Unpack it on a computer and keep only the one you want.",
             "Game.zip is damaged: the game inside doesn't match its checksum. Copy the file to the SD card again.",
         ] {
-            assert!(!should_retry(false, 1, false, Some(refused)), "the zip's own problem is told, not passed on");
+            assert!(!should_retry(false, StartOutcome::NoFrame, false, Some(refused)), "the zip's own problem is told, not passed on");
         }
     }
 
@@ -302,69 +267,46 @@ mod tests {
 
     #[test]
     fn notice_names_the_emulator_taking_over() {
-        assert_eq!(notice("retroarch"), "This game didn't start on pocket-core, so it runs with RetroArch from now on.");
-        assert_eq!(notice("yabasanshiro"), "This game didn't start on pocket-core, so it runs with YabaSanshiro from now on.");
-        assert_eq!(notice("scummvm-sa"), "This game didn't start on pocket-core, so it runs with ScummVM from now on.");
-        assert_eq!(notice(""),"This game didn't start on pocket-core, so it runs with the system's emulator from now on.");
+        assert_eq!(notice("retroarch"), "This game didn't start on pocket-core, so it runs with RetroArch for this launch. Next time pocket-core will try again.");
+        assert_eq!(notice("yabasanshiro"), "This game didn't start on pocket-core, so it runs with YabaSanshiro for this launch. Next time pocket-core will try again.");
+        assert_eq!(notice("scummvm-sa"), "This game didn't start on pocket-core, so it runs with ScummVM for this launch. Next time pocket-core will try again.");
+        assert_eq!(notice(""),"This game didn't start on pocket-core, so it runs with the system's emulator for this launch. Next time pocket-core will try again.");
     }
 
     #[test]
-    fn remembers_games() {
-        let dir = TestDir::new("fallback");
-        let rom = dir.join("Game.sms");
-        std::fs::write(&rom, b"rom").unwrap();
+    fn fallback_is_only_for_the_immediate_retry_and_old_entries_are_retired() {
+        let dir = TestDir::new("fallback-session");
+        let rom = dir.join("Game.gba");
         let mut f = Fallback::load(&dir);
-        assert!(!f.contains(&rom));
         f.add(&rom);
-        assert!(Fallback::load(&dir).contains(&rom), "kept across restarts");
+        assert!(f.contains(&rom));
+        assert!(!Fallback::load(&dir).contains(&rom), "a restart returns to pocket-core");
         f.remove(&rom);
-        assert!(!Fallback::load(&dir).contains(&rom), "chosen again: another try");
+        assert!(!f.contains(&rom), "next launch tries pocket-core again");
+        for old in [serde_json::json!([rom.to_string_lossy()]),
+            serde_json::json!([{"path":rom.to_string_lossy(), "size":0, "mtime_ms":0}])] {
+            crate::fsutil::write_json(&dir.join("fallback.json"), &old).unwrap();
+            assert!(!Fallback::load(&dir).contains(&rom), "old 30-second guesses cannot hide progress");
+            crate::fsutil::settle();
+            assert_eq!(std::fs::read_to_string(dir.join("fallback.json")).unwrap().trim(), "[]");
+        }
     }
 
     #[test]
-    fn a_game_copied_over_gets_pocket_core_again_at_the_next_start() {
-        let dir = TestDir::new("fallback-recopy");
-        let rom = dir.join("Game.gba");
-        std::fs::write(&rom, vec![0u8; 100]).unwrap();
-        let mut f = Fallback::load(&dir);
-        f.add(&rom);
-        assert!(Fallback::load(&dir).contains(&rom), "same file: stays");
-        std::fs::write(&rom, vec![1u8; 4096]).unwrap();
-        assert!(!Fallback::load(&dir).contains(&rom), "another file: dropped");
-        assert!(!Fallback::load(&dir).contains(&rom), "and the drop is written");
-        assert!(!std::fs::read_to_string(dir.join("fallback.json")).unwrap().contains("Game.gba"));
-    }
-
-    #[test]
-    fn same_size_but_new_mtime_counts_as_another_file() {
-        let dir = TestDir::new("fallback-mtime");
-        let rom = dir.join("Game.gba");
-        std::fs::write(&rom, vec![0u8; 100]).unwrap();
-        let mut f = Fallback::load(&dir);
-        f.add(&rom);
-        let file = std::fs::File::options().write(true).open(&rom).unwrap();
-        file.set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(3600)).unwrap();
-        assert!(!Fallback::load(&dir).contains(&rom));
-    }
-
-    #[test]
-    fn a_game_that_is_gone_is_dropped_and_old_entries_without_a_stamp_stay() {
-        let dir = TestDir::new("fallback-old");
-        let old = dir.join("Old.gba");
-        std::fs::write(&old, b"x").unwrap();
-        let gone = dir.join("Gone.gba");
-        std::fs::write(&gone, b"x").unwrap();
-        let mut f = Fallback::load(&dir);
-        f.add(&gone);
-        std::fs::remove_file(&gone).unwrap();
-        let mut json: Vec<String> = vec![old.to_string_lossy().into_owned(), "/nowhere/Missing.gba".into()];
-        let stamped = std::fs::read_to_string(dir.join("fallback.json")).unwrap();
-        let mut parsed: Vec<serde_json::Value> = serde_json::from_str(&stamped).unwrap();
-        parsed.extend(json.drain(..).map(serde_json::Value::from));
-        std::fs::write(dir.join("fallback.json"), serde_json::to_string(&parsed).unwrap()).unwrap();
-        let f = Fallback::load(&dir);
-        assert!(f.contains(&old), "a plain path from before the stamp keeps working, as today");
-        assert!(f.contains(Path::new("/nowhere/Missing.gba")), "no stamp: nothing to compare");
-        assert!(!f.contains(&gone), "stamped and gone: dropped");
+    fn every_kind_of_pocket_moment_prevents_an_automatic_route_change() {
+        let dir = TestDir::new("fallback-moments");
+        let base = dir.join("Game");
+        assert!(!has_moments(&base));
+        let set = crate::states::StateSet::pocket_core(&base);
+        let auto = crate::slots::auto_path(&base);
+        let kept = [Path::new(&format!("{}.kept0", auto.display())).to_path_buf()];
+        let paths = set.auto.into_iter().chain(set.slots).chain([set.undo]).chain(kept)
+            .chain(crate::timeline::Name::all().map(|n| crate::timeline::path(&base, n)));
+        for path in paths {
+            std::fs::write(&path, b"moment").unwrap();
+            assert!(has_moments(&base), "{} must remain reachable", path.display());
+            assert_eq!(std::fs::read(&path).unwrap(), b"moment");
+            std::fs::remove_file(path).unwrap();
+        }
     }
 }

@@ -92,7 +92,7 @@ The steps and their times are logged as `first frame after … (logs …, event 
 | The type (`Text::new`, a thread) | |
 | The game list: `<data>/library-cache.json` (`src/library_cache.rs`, a thread); without a usable cache es_systems.cfg and every ROM folder (`library::load`) | the shelf |
 | `recents.json`, `favorites.json`, `library.json`, Curator's switches | Continue, the Favorites row, pinned stickers, the Lens and History rows |
-| `fallback.json`, the fan profile, sleep's settings | a game On start continues at once needs them |
+| legacy `fallback.json` (retired on load), the fan profile, sleep's settings | a game On start continues at once needs them |
 
 | After the first frame | How |
 |---|---|
@@ -144,8 +144,10 @@ switches the cache off.
    at start, so the launch only looks them up), else the default: pocket-core for a system it hosts
    (`src/hostsys.rs`, only systems marked `verified`), else es_systems.cfg's default. H700 GBA uses bundled ARM64 gpSP, while existing mGBA Continue moments
    keep mGBA (`h700_gba`); explicit choices win. The core travels with each version for OTA rollback. pocket-core starts as
-   `pocket-core <core> <rom> --system <name>`; zip files are fine, `.7z` games and games that failed to start on
-   pocket-core before (`src/fallback.rs`) go to the next choice down (not a zip that pocket-core refuses with advice: several games, a wrong checksum; `src/archive.rs`; nor a patch next to the game that doesn't apply, which RetroArch would skip and start the original: `src/softpatch.rs`). Everything else starts
+   `pocket-core <core> <rom> --system <name>`; zip files are fine, `.7z` games go to the next choice down.
+   A confirmed failed pocket-core start may retry there once, only before its first game picture and without
+   pocket-core moments (`src/fallback.rs`, `fast_switch::FRAME`). BIOS errors, archives refused with advice
+   (`src/archive.rs`) and patches that do not apply (`src/softpatch.rs`) do not switch emulators. Other emulators use
    `/usr/bin/runemu.sh <rom> -P<system> --core=<core> --emulator=<emulator>`, which brings ROCKNIX's per-system
    settings (setsettings.sh: the RetroArch keys of the "Runs on" page), BIOS paths and CPU handling.
 3. When the game ends, pocket-ui comes back to the same place in the shelf and adds the play time to

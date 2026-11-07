@@ -824,7 +824,7 @@ mod tests {
             let m = message(Refusal::named(kind).unwrap(), "Game.ips");
             assert!(is_refusal(&m), "{m}");
             assert!(m.contains("Game.ips"), "{m}");
-            assert!(!crate::fallback::should_retry(false, 1, false, Some(&m)), "RetroArch would start the original: {m}");
+            assert!(!crate::fallback::should_retry(false, crate::fallback::StartOutcome::NoFrame, false, Some(&m)), "RetroArch would start the original: {m}");
         }
         assert!(!is_refusal("The core couldn't load this game."));
     }

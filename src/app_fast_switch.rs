@@ -118,7 +118,7 @@ impl App {
         let secs = run.started.elapsed().as_secs();
         self.fast.draining.push(Draining { pgid, core, system: run.system.clone(), path: run.path.clone(), quit, saved_at: now });
         (self.fast.handed_over, self.fast.to_next_game) = (true, next_game);
-        self.game_exited(secs, true);
+        self.game_exited(secs, true, pocket_ui::fallback::StartOutcome::Shown, false);
         (self.fast.handed_over, self.fast.to_next_game) = (false, false);
     }
 

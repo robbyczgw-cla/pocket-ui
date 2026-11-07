@@ -407,9 +407,14 @@ impl App {
             self.stats.draw_ms.push(t0.elapsed().as_secs_f32() * 1000.0);
         }
         // Blocks until the next vsync: this paces the whole loop.
-        gfx.surface.swap_buffers(&gfx.context).ok();
-        // Fast switching: when the game became visible (`fast_switch`, once per process).
-        pocket_ui::fast_switch::first_frame();
+        if gfx.video.has_frame() {
+            pocket_ui::fast_switch::presenting_frame();
+        }
+        let swapped = gfx.surface.swap_buffers(&gfx.context).ok();
+        // Only a successfully displayed game picture proves that this launch started.
+        if swapped.is_some() && gfx.video.has_frame() {
+            pocket_ui::fast_switch::first_frame();
+        }
         // The veil starts with the frame: until it is there the bands are black anyway, so it never pops in.
         if self.shown_at.is_none() && gfx.video.has_frame() && !gfx.video.frame_pending() {
             self.shown_at = Some(Instant::now());

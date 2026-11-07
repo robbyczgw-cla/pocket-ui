@@ -347,6 +347,13 @@ pub fn curation(core: &str) -> Curation {
             ],
             only: &[],
         },
+        // Game Boy Advance: gpSP is the default on H700.
+        "gpsp" => Curation {
+            // A cartridge keeps ticking while the game is off, including after loading an old deterministic state.
+            defaults: &[("gpsp_rtc_time_source", "system")],
+            hidden: &[],
+            only: &[],
+        },
         // Game Boy Advance. mGBA also plays Game Boy games, but those run on gambatte here, so the
         // Game Boy palette and model options are left out, as are BIOS choices (the intro is skipped)
         // and frameskip (the host paces frames itself).

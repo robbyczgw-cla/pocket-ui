@@ -615,18 +615,39 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         d.sees("Brightness");
     }
 
-    /// A game moved to RetroArch before the mode went on (`fallback.json`): it isn't started there.
+    /// Without pocket-core installed, the system routes to RetroArch: Kids Mode still cannot start it there.
     #[test]
     fn a_childs_game_routed_to_retroarch_does_not_start() {
         let mut d = kids_card_with_failing_game("kids-routed", |tmp| {
-            let game = tmp.join("gb/Tobu Tobu Girl (World).gb");
-            std::fs::write(tmp.join("data/fallback.json"), serde_json::json!([game]).to_string()).unwrap();
+            std::fs::remove_file(tmp.join("pocket-core-stand-in")).unwrap();
+            let cfg = tmp.join("es_systems.cfg");
+            let text = std::fs::read_to_string(&cfg).unwrap().replace(
+                "<extension>.gb .zip</extension>",
+                "<extension>.gb .zip</extension><emulators><emulator name=\"retroarch\"><cores><core default=\"true\">gambatte</core></cores></emulator></emulators>");
+            std::fs::write(cfg, text).unwrap();
         });
         d.sees("Tobu Tobu Girl");
         d.send("a");
         d.sees("Please ask a grown-up");
         assert!(!d.card.tmp.join("run-game.started").exists(), "{}", d.log());
         assert!(d.log().contains("kids mode: stopped"), "{}", d.log());
+    }
+
+    /// Old automatic guesses are retired in Kids Mode too: the next start tries the safe own host again.
+    #[test]
+    fn an_old_early_crash_does_not_send_a_childs_game_to_retroarch() {
+        let mut d = kids_card_with_failing_game("kids-old-fallback", |tmp| {
+            let game = tmp.join("gb/Tobu Tobu Girl (World).gb");
+            std::fs::write(tmp.join("data/fallback.json"), serde_json::json!([game]).to_string()).unwrap();
+        });
+        d.sees("Tobu Tobu Girl");
+        d.send("a");
+        d.wait(|d| d.card.tmp.join("run-game.started").exists());
+        assert!(d.log().contains("(emulator pocket-core"), "{}", d.log());
+        assert!(!d.log().contains("(emulator retroarch"), "{}", d.log());
+        // Retirement is asynchronous; launching the safe player must not wait for a card write.
+        d.wait(|d| std::fs::read_to_string(d.card.tmp.join("data/fallback.json")).is_ok_and(|s| s.trim() == "[]"));
+        assert_eq!(std::fs::read_to_string(d.card.tmp.join("data/fallback.json")).unwrap().trim(), "[]");
     }
 
     /// The dialog with Open EmulationStation isn't there in Kids Mode, however it is asked for (a keyboard's Escape comes the

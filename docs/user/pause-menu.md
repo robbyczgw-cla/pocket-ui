@@ -298,11 +298,11 @@ the Pocket goes to sleep. When the SD card is full, has turned read-only or is f
 
 ### Games with a clock
 
-Some cartridges have a clock: Pokémon Gold, Silver and Crystal, for example. On pocket-ui's own host that clock is kept
-in `<game>.rtc` beside the in-game save, the file RetroArch uses too, so the time in the game goes on after you quit and
-start again, even without the moment saved by Quit. [Sync](sync.md) shares it with the save. Game Boy Advance games
-with a clock (Pokémon Ruby, Sapphire and Emerald) read the Pocket's own time instead; if theirs is off, check the time
-zone in [Settings → System → Time](settings-system.md#system).
+Cartridge clocks, such as Pokémon Gold, Silver and Crystal, keep time across Quit and **From the start**.
+On pocket-ui's own host, `<game>.rtc` beside the in-game save keeps the clock even without a Quit moment;
+RetroArch uses that file too, and [Sync](sync.md) shares it with the save. GBA clocks on gpSP (Pokémon Ruby,
+Sapphire and Emerald) follow the Pocket's time while closed and after loading an older moment.
+If the time is wrong, check the time zone in [Settings → System → Time](settings-system.md#system).
 
 ## Save slots, Where I quit and Before load
 
@@ -326,7 +326,7 @@ when there is one.
 - **Before load** keeps what you were playing just before a Load replaced it, so a Load you did
   not mean can be undone: Load, then Load again and pick "Before load". It lasts until you quit.
   A Quit after a Load saves the game as it is then (Where I quit); Before load is not kept after that.
-- **From the start** (pocket-ui's own host) begins the game again and does nothing else. Its own saves stay, and so does the
+- **From the start** (pocket-ui's own host) begins the game again and does nothing else. Its own saves and clock stay, as does the
   moment on the card until the next Save & quit replaces it (the line beside it says so); Before load, Earlier and the other
   slots work as always.
 
@@ -453,3 +453,4 @@ Performance in Quick settings and Settings → Playing → Performance & fan app
 
 ScummVM, PICO-8 and TIC-80 on pocket-ui's own host have no save states either. Their menu has no Save or Load and
 says where their saving is, for example "No save states for ScummVM: START opens its own Save and Load".
+

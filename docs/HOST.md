@@ -124,6 +124,12 @@ and `bench` / `ra` next to it (see the header of `scripts/syscheck.sh`), then se
 - **Skipped/refused Continue moments**: another emulator/game file or a core refusal keeps the raw moment and its
   preview in the first free slot, with a start note naming it (`frozen_phone`). Full slots keep it beside them under
   `.kept<N>` until a free slot is available at the next start; Save & quit never removes it.
+- **Reset and wall time** (2026-11-07): `Core::restart` copies live `RETRO_MEMORY_RTC` before `retro_reset`,
+  reacquires its pointer and restores matching-length memory afterwards. ROCKNIX Gambatte resets its RTC base;
+  without restoration the next normal flush would permanently write the reset clock. Cores without RTC memory
+  need no special handling. gpSP's curated `gpsp_rtc_time_source=system` makes GBA clocks follow wall time, also
+  after loading existing deterministic moments; the time-source choice is outside gpSP's state. User choices
+  retain their usual precedence. No core or moment format changes.
 - **Cartridge clock** (2026-10-25): a core's non-empty `RETRO_MEMORY_RTC` is kept in `roms/<system>/<game>.rtc`,
   RetroArch's name (`fill_pathname(savefile, ".rtc")`: the `.srm` path with the extension swapped; also beside
   melonDS's `.sav`). Read right after `retro_load_game`, before the first frame, like the battery save; written with
@@ -951,7 +957,7 @@ Sources: D = `github.com/ROCKNIX/distribution/blob/20261001/projects/ROCKNIX/pac
   emulator (`<system>.emulator=pocket-core`, `.core=<libretro core>`), offered where it hosts the system (`HOST_CORES`,
   `hostsys::route`; installed). The default is pocket-core there, else es_systems.cfg's default (PICO-8 without the
   official binary: RetroArch's fake08, `hostsys::default_emulator`). A pocket-core choice the game can't take (a 7z, a
-  file type pocket-core doesn't open, a game in `fallback.json`) goes to the next level down; `From::Fallback` says
+  file type pocket-core doesn't open, the immediate retry of a confirmed failed start) goes to the next level down; `From::Fallback` says
   so on the page. ES's checks are kept: unknown emulator names and "auto" are no choice, a missing core is the
   emulator's default. One deliberate difference: a game naming only an emulator gets that emulator's default core,
   where ES would pair it with the console's core (an invalid pair).
@@ -971,7 +977,7 @@ Sources: D = `github.com/ROCKNIX/distribution/blob/20261001/projects/ROCKNIX/pac
 - **Saving** (`EmuChoicePage::edits`): For this console writes `<system>.emulator/.core` (removed when it is the
   default) and the RetroArch keys that differ from `system./global.` (removed otherwise), and removes the game's keys;
   For this game writes only what differs from the console's result; Restore defaults removes the choice and puts the
-  RetroArch keys back to the shipped file's values. Choosing pocket-core for a game in `fallback.json` takes it out.
+  RetroArch keys back to the shipped file's values. Choosing pocket-core for the immediate retry of a confirmed failed start takes it out.
 - **Per emulator**: the pause menu, fast switching, Quit without a resume point (Continue where I quit off), run-ahead and achievements key on the
   running emulator (`Running::hosted`, `retroarch`, `standalone::active`), which is now whatever was chosen: a GBA
   game set to RetroArch gets RetroArch's menu, quit and resume; one set to standalone NanoBoyAdvance gets the "other
@@ -1306,8 +1312,7 @@ core reported for ROCKNIX in October 2026 (first released for the Miyoo Mini), i
   with its "Force HLE BIOS" option on. `hostsys` lists them (`SATURN_BIOS`), and the system is marked
   `default_without_bios`: `hostsys::route` sends a Saturn game to pocket-core only when one of them is in
   `roms/bios`, otherwise it stays on standalone YabaSanshiro as before, without an error card. A game pocket-core
-  can't start goes to standalone YabaSanshiro from then on (`fallback.rs`; the card now names the emulator:
-  "…runs with YabaSanshiro from now on").
+  can't start may try standalone YabaSanshiro once, before any game picture and without pocket-core moments (`fallback.rs`).
 - **Picture**: ROCKNIX's build asks for desktop OpenGL (`RETRO_HW_CONTEXT_OPENGL`, compat 3.0), not GLES; it got
   `FD650 / 4.6 (Compatibility Profile) Mesa 26.2.2`, depth + stencil, bottom-left origin, framebuffer 704×512
   (resolution mode "original"). 320×240 at 4:3, 60 Hz (the core always reports NTSC). Picture defaults as for the
@@ -2179,3 +2184,26 @@ virtual device, `POCKET_CORE_TEST=1` and the command `achievement-demo` show an 
 `achievements: signed in as <name>` and `retroachievements.json` holds a token. Start a game with a set (most
 commercial Game Boy and NES games): the log shows `achievements: <rom> hashed in N ms: <md5>`, `[rcheevos] Identified
 game ...`, `achievements: N of M unlocked`, and the "Achievements: N of M" note appears. The pause menu lists them.
+
+## Failed starts and Continue safety (2026-11-07)
+
+`fast_switch::STARTING` confirms support for frame reporting before loading a core; an older binary without
+that handshake remains Unknown. `fast_switch::FRAME` uses the same per-process handoff pipe. pocket-core writes it once after a successful
+swap of an actual game picture (not an empty surface). A screen frame still being prepared does not delay this evidence. The process waiter reads the buffered
+evidence before posting `GameExited`; SIGKILL cannot erase a line already in the pipe. Before the first presentation,
+`PRESENTING` closes the gap between swap and acknowledgement: a kill during that gap is Unknown, never NoFrame.
+No-frame is established
+only by clean pipe completion. A missing pipe, read error or a watcher delayed beyond 200 ms is Unknown and cannot
+trigger automatic fallback. This wait runs on the process waiter, after exit, not on the UI thread.
+
+`fallback::should_retry` requires an error before any frame, no requested quit and no BIOS/archive/patch refusal.
+The waiter also checks Auto (taken/retry), manual slots, undo, Earlier and `.keptN`. Any pocket-core moment
+blocks an automatic switch. The temporary `Fallback` entry routes only the immediate retry and is removed after
+launch; it never persists a new automatic choice. Loading ignores old time-based guesses immediately and queues
+their retirement (primary JSON and backup) on the existing card writer, keeping fsync off the UI thread.
+It does not change system.cfg or moment files. Explicit Runs on choices still win. Kids Mode shows its adult-help screen after an unrequested host error
+even when start evidence is Unknown; that safe stop does not depend on fallback eligibility.
+
+Regression coverage: `clock_regression_*` exercises old gpSP moments via the real host option ABI and a controlled
+clock, and reset/flush/cold-start via an RTC-clearing stub. `fast_switch::tests::a_sigkill_after_a_frame_never_becomes_a_start_failure`
+kills a real child before the pipe reader starts; fallback tests protect every kind of moment and migrate both legacy JSON formats.

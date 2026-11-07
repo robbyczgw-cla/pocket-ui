@@ -1354,9 +1354,17 @@ impl Core {
         }
     }
 
-    /// From the start: the console's reset button. The battery save stays as it is.
-    pub fn restart(&self) {
+    /// From the start: the console's reset button. The battery save and cartridge clock stay as they are.
+    pub fn restart(&mut self) {
+        // ROCKNIX Gambatte resets its RTC base in retro_reset. A real cartridge's clock survives reset.
+        // Copy the live memory (not the last disk flush), and reacquire its pointer after the reset.
+        let rtc = memory_of(&mut self.lib, MEMORY_RTC).map(|m| m.to_vec());
         self.reset();
+        if let (Some(saved), Some(mem)) = (rtc, memory_of(&mut self.lib, MEMORY_RTC)) {
+            if mem.len() == saved.len() {
+                mem.copy_from_slice(&saved);
+            }
+        }
     }
 
     /// retro_reset: the console's reset button.
@@ -1823,7 +1831,12 @@ void retro_get_system_info(struct info *i) { memset(i, 0, sizeof *i); i->name = 
 void retro_get_system_av_info(struct av *a) { memset(a, 0, sizeof *a); a->bw = a->mw = 160; a->bh = a->mh = 144; a->fps = 60; a->rate = 48000; }
 bool retro_load_game(const void *g) { return true; }
 void retro_unload_game(void) {}
-void retro_reset(void) { memset(pos, 0, sizeof pos); }
+void retro_reset(void) {
+    memset(pos, 0, sizeof pos);
+#ifdef RESET_RTC
+    memset(rtc, 0, sizeof rtc); /* ROCKNIX Gambatte loses its cartridge-clock base on reset. */
+#endif
+}
 void retro_run(void) { pos[0]++; }
 void *retro_get_memory_data(unsigned id) {
     if (id == 0) return sram;
@@ -2196,6 +2209,30 @@ bool retro_unserialize(const void *d, size_t n) {
             core.saver.wait();
             assert_eq!(std::fs::read(rtc_file(&g)).unwrap(), b"CLOCK-02");
         }
+    }
+
+    #[test]
+    fn clock_regression_start_over_keeps_the_live_cartridge_clock_and_its_file() {
+        let _l = globals();
+        let g = Game::built("rtc-reset", "srm", &["-DRTC_SIZE=8", "-DRESET_RTC"]);
+        let (mut core, _) = g.start();
+        set_rtc(&mut core, b"CLOCK-01");
+        core.write_sram().unwrap();
+        // Keep the LIVE clock, even if it has changed since the last flush.
+        set_rtc(&mut core, b"CLOCK-02");
+        core.run(0);
+        assert_ne!(position(&core), 0);
+        core.restart();
+        assert_eq!(position(&core), 0, "Start over still resets the console");
+        assert_eq!(core.memory(MEMORY_RTC).unwrap(), b"CLOCK-02", "the cartridge keeps ticking");
+        core.write_sram_in_background();
+        core.saver.wait();
+        assert_eq!(std::fs::read(rtc_file(&g)).unwrap(), b"CLOCK-02", "periodic flush must not persist a reset clock");
+        core.restart();
+        core.write_sram().unwrap();
+        drop(core);
+        let (mut core, _) = g.start();
+        assert_eq!(core.memory(MEMORY_RTC).unwrap(), b"CLOCK-02", "a later cold start keeps the same clock");
     }
 
     #[test]
@@ -2636,7 +2673,7 @@ struct av { unsigned bw, bh, mw, mh; float aspect; double fps, rate; };
 struct var { const char *key, *value; };
 static env_t env;
 static video_t video;
-static struct var vars[] = { { "stub_speed", "Speed; slow|fast|turbo" }, { NULL, NULL } };
+static struct var vars[] = { { "stub_speed", "Speed; slow|fast|turbo" }, { "gpsp_rtc_time_source", "RTC Time Source; deterministic|system" }, { NULL, NULL } };
 void retro_set_environment(env_t f) { env = f; }
 void retro_set_video_refresh(video_t f) { video = f; }
 typedef size_t (*batch_t)(const short *, size_t);
@@ -2696,6 +2733,15 @@ static size_t last_n, calls_n;
 size_t stub_last_unserialize_len(void) { return last_n; }
 size_t stub_unserialize_calls(void) { return calls_n; }
 bool retro_unserialize(const void *d, size_t n) { last_n = n; calls_n++; av_state = ask_av(); memcpy(state, d, variable_size && n < sizeof state ? n : sizeof state); return true; }
+/* gpSP's clock selection: deterministic base is in the moment, time source is a frontend option.
+   The injected wall clock avoids sleeping and crossing a real second in the regression. */
+static unsigned wall_time = 1000;
+void stub_wall_time(unsigned now) { wall_time = now; }
+unsigned stub_cartridge_time(void) {
+    struct var v = { "gpsp_rtc_time_source", NULL };
+    if (env(15, &v) && v.value && !strcmp(v.value, "system")) return wall_time;
+    return state[0];
+}
 /* Test hooks. */
 typedef void (*log_t)(unsigned, const char *, ...);
 void stub_log(unsigned level, const char *long_text) {
@@ -2784,6 +2830,30 @@ void stub_frame(unsigned w, unsigned h, size_t pitch, unsigned bpp) {
     /// Allocates strings of the sizes involved, so freed memory gets reused.
     fn churn() -> Vec<CString> {
         (0..4096).map(|i| CString::new(["XXXX", "YYYYY", "ZZZZZZ"][i % 3]).unwrap()).collect()
+    }
+
+    #[test]
+    fn clock_regression_gpsp_old_deterministic_moment_follows_wall_time() {
+        let _l = globals();
+        let stub = Stub::new("gpsp-clock");
+        let gpsp = stub.dir.join("gpsp_libretro.so");
+        std::fs::copy(&stub.core, &gpsp).unwrap();
+        let old = {
+            let core = Core::load(&gpsp, &stub.dir.join("Game.gba"), &stub.dir, &stub.dir,
+                &[("gpsp_rtc_time_source", "deterministic")]).unwrap();
+            core.save_state().unwrap()
+        };
+        let core = Core::load(&gpsp, &stub.dir.join("Game.gba"), &stub.dir, &stub.dir, &[]).unwrap();
+        unsafe {
+            let now: unsafe extern "C" fn(u32) = hook(&core, "stub_wall_time");
+            let clock: unsafe extern "C" fn() -> u32 = hook(&core, "stub_cartridge_time");
+            now(2000);
+            core.load_state(&old).expect("existing deterministic moment still loads");
+            assert_eq!(clock(), 2000, "Continue includes time while the game was off");
+            now(2600);
+            core.load_state(&old).unwrap();
+            assert_eq!(clock(), 2600, "loading that same slot later cannot freeze the clock again");
+        }
     }
 
     /// B6: libretro lets a core keep the string GET_VARIABLE returned (many compare it with the next one, or

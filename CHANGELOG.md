@@ -3,6 +3,14 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a minor version may change anything).
 
+## [0.2.5] - 2026-11-07
+
+### Fixed
+
+- Pokémon Ruby, Sapphire and Emerald on gpSP keep time while the game is closed, including after loading an older moment.
+- Start over keeps the cartridge clock in Pokémon Gold, Silver and Crystal on Gambatte.
+- A crash after a game has shown a picture keeps pocket-core and Continue. A failed start may try the system emulator once; the next start tries pocket-core again, and existing moments prevent an automatic switch.
+
 ## [0.2.4] - Unreleased
 
 ### Fixed

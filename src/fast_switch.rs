@@ -104,6 +104,12 @@ pub const QUIT_FOR_SWITCH: &str = "quit handoff";
 /// `eglSwapBuffers` for a frame callback a hidden window never gets, and from then on reads no command, the Quit
 /// included. (The screenshot and the `swaymsg` calls before the raise used to leave it time enough.)
 pub const PAUSED: &str = "paused";
+/// The first actual game picture was successfully swapped to the display.
+pub const FRAME: &str = "frame";
+/// Confirms that this host supports first-frame reporting, before it loads the core.
+pub const STARTING: &str = "starting";
+/// First presentation is about to begin: a crash between the swap and FRAME is ambiguous, never NoFrame.
+pub const PRESENTING: &str = "presenting";
 
 /// Cores whose process may still be tearing down while the next game starts: everything they keep is the battery
 /// save pocket-core writes (`retro_get_memory_data`) and the states it writes, and their `retro_unload_game` and
@@ -176,11 +182,24 @@ fn program() -> &'static str {
     })
 }
 
+/// Announced before the first swap containing a game picture, closing the SIGKILL gap before FRAME can be sent.
+pub fn presenting_frame() {
+    static DONE: AtomicBool = AtomicBool::new(false);
+    if !DONE.load(Ordering::Relaxed) && !DONE.swap(true, Ordering::Relaxed) {
+        if let Some(f) = HANDOFF.lock().ok().as_mut().and_then(|h| h.as_mut()) {
+            let _ = f.write_all(format!("{PRESENTING}\n").as_bytes());
+        }
+    }
+}
+
 /// pocket-core: the first frame is on the screen. Logged once per process; one relaxed load per frame after that.
 pub fn first_frame() {
     static DONE: AtomicBool = AtomicBool::new(false);
     if !DONE.load(Ordering::Relaxed) && !DONE.swap(true, Ordering::Relaxed) {
         mark("first frame");
+        if let Some(f) = HANDOFF.lock().ok().as_mut().and_then(|h| h.as_mut()) {
+            let _ = f.write_all(format!("{FRAME}\n").as_bytes());
+        }
     }
 }
 
@@ -195,6 +214,9 @@ pub fn process_start() {
     mark("process start");
     #[cfg(unix)]
     take_handoff_fd();
+    if let Some(f) = HANDOFF.lock().ok().as_mut().and_then(|h| h.as_mut()) {
+        let _ = f.write_all(format!("{STARTING}\n").as_bytes());
+    }
 }
 
 /// Takes the descriptor pocket-ui passed in [`HANDOFF_FD`] and keeps it from the programs pocket-core starts itself.
@@ -248,16 +270,30 @@ pub fn announce_saved() -> bool {
 /// Reads what a pocket-core writes into its hand-over pipe until the pipe closes: true as soon as the line
 /// [`SAVED`] came; false when the pipe closed (or broke) without it, which is what a crash or a kill looks like.
 /// Each [`PAUSED`] on the way calls `paused`.
-pub fn saved_line(r: impl std::io::Read, mut paused: impl FnMut()) -> bool {
-    for l in std::io::BufReader::new(r).lines().map_while(Result::ok) {
+pub fn saved_line(r: impl std::io::Read, paused: impl FnMut()) -> bool {
+    saved_line_with_frame(r, paused, || {}, || {}, || {}).unwrap_or(false)
+}
+
+fn saved_line_with_frame(r: impl std::io::Read, mut paused: impl FnMut(), mut frame: impl FnMut(), mut starting: impl FnMut(), mut presenting: impl FnMut()) -> std::io::Result<bool> {
+    for l in std::io::BufReader::new(r).lines() {
+        let l = l?;
         if l == SAVED {
-            return true;
+            return Ok(true);
         }
         if l == PAUSED {
             paused();
         }
+        if l == FRAME {
+            frame();
+        }
+        if l == STARTING {
+            starting();
+        }
+        if l == PRESENTING {
+            presenting();
+        }
     }
-    false
+    Ok(false)
 }
 
 /// How many [`PAUSED`] lines each game's process group has sent, newest groups last.
@@ -343,14 +379,24 @@ impl Handoff {
     /// After the spawn of process group `pgid`: closes our write end (the child has its own) and calls `on_saved`
     /// from a thread when the child announces its exit save. Nothing is called when the pipe closes without it.
     /// Its pauses are counted for [`wait_paused`].
-    pub fn watch(self, pgid: i32, on_saved: impl FnOnce() + Send + 'static) {
+    pub fn watch(self, pgid: i32, on_saved: impl FnOnce() + Send + 'static) -> std::sync::mpsc::Receiver<crate::fallback::StartOutcome> {
         let Handoff { read, write } = self;
         drop(write);
+        let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            if saved_line(std::fs::File::from(read), || note_paused(pgid)) {
+            let mut supports_frames = false;
+            let mut presenting = false;
+            let result = saved_line_with_frame(std::fs::File::from(read), || note_paused(pgid), || {
+                let _ = tx.send(crate::fallback::StartOutcome::Shown);
+            }, || supports_frames = true, || presenting = true);
+            if matches!(result, Ok(true)) {
                 on_saved();
             }
+            if result.is_ok() && supports_frames && !presenting {
+                let _ = tx.send(crate::fallback::StartOutcome::NoFrame);
+            }
         });
+        rx
     }
 }
 
@@ -556,6 +602,27 @@ mod tests {
         // Generous: the child syncs 800 kB to disk, which waits for every other test's writes on a loaded machine.
         assert_eq!(rx.recv_timeout(Duration::from_secs(120)), Ok(800_000), "the whole new state, not the old one or a part");
         child.wait().unwrap();
+    }
+
+    /// Drain buffered launch evidence even if the child was killed before the pipe watcher ran.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_sigkill_after_a_frame_never_becomes_a_start_failure() {
+        use crate::fallback::{self, StartOutcome};
+        use std::os::unix::process::ExitStatusExt;
+        for (line, expected) in [("starting\npresenting\nframe", StartOutcome::Shown), ("starting\npresenting", StartOutcome::Unknown), ("starting", StartOutcome::NoFrame), ("", StartOutcome::Unknown)] {
+            let mut cmd = std::process::Command::new("python3");
+            cmd.args(["-c", "import os,signal,sys; os.write(int(os.environ['POCKET_HANDOFF_FD']), (sys.argv[1]+'\\n').encode()); os.kill(os.getpid(), signal.SIGKILL)", line]);
+            let pipe = Handoff::attach(&mut cmd).unwrap();
+            let mut child = cmd.spawn().unwrap();
+            let status = child.wait().unwrap();
+            assert_eq!(status.signal(), Some(libc::SIGKILL));
+            // Start reading only AFTER the kill: no scheduling race can lose the first-frame evidence.
+            let observed = pipe.watch(child.id() as i32, || panic!("a killed game did not save"))
+                .recv_timeout(Duration::from_secs(5)).unwrap_or_default();
+            assert_eq!(observed, expected);
+            assert_eq!(fallback::should_retry(false, observed, false, None), expected == StartOutcome::NoFrame);
+        }
     }
 
     /// Only the child gets the write end: a second process started meanwhile can't hold the pipe open.
