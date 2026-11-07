@@ -50,7 +50,37 @@ pub fn state_path(base: &Path, slot: usize) -> PathBuf {
 
 /// The auto-resume state, written on every exit.
 pub fn auto_path(base: &Path) -> PathBuf {
-    with_suffix(base, ".pstate.auto")
+    with_suffix(base, ".pstate.auto.z")
+}
+
+/// Auto, taken after a start, and optionally the retired retry. Newest actual quit wins across a downgrade;
+/// current quits precede crash recovery points. The same order drives Continue, Load and the shelf's preview.
+pub fn auto_candidates(auto: &Path, include_retry: bool) -> Vec<PathBuf> {
+    let mut groups = vec![auto.to_path_buf()];
+    if let Some(old) = crate::state_file::legacy_path(auto) { groups.push(old); }
+    let mut out = Vec::new();
+    for stage in 0..if include_retry { 3 } else { 2 } {
+        let mut paths: Vec<PathBuf> = groups.iter().map(|p| match stage {
+            0 => p.clone(), 1 => taken_auto_path(p), _ => retry_auto_path(p),
+        }).collect();
+        paths.sort_by_key(|p| std::cmp::Reverse(std::fs::metadata(p).and_then(|m| m.modified()).ok()));
+        out.extend(paths);
+    }
+    out
+}
+
+/// The ordinary Auto name of a taken/retry moment; the preview stays there. Keeps non-UTF-8 game names intact.
+pub fn auto_root(path: &Path) -> PathBuf {
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    let bytes = path.as_os_str().as_bytes();
+    let root = bytes.strip_suffix(b".taken.retry").or_else(|| bytes.strip_suffix(b".taken")).unwrap_or(bytes);
+    std::ffi::OsString::from_vec(root.to_vec()).into()
+}
+
+/// Preview names in the same order as actual resume candidates, each namespace only once.
+pub fn auto_previews(auto: &Path) -> Vec<PathBuf> {
+    let mut seen = std::collections::HashSet::new();
+    auto_candidates(auto, false).into_iter().map(|p| preview_path(&auto_root(&p))).filter(|p| seen.insert(p.clone())).collect()
 }
 
 /// "Before load": the state a Load replaced, kept until the next Quit (`clear_undo`).
@@ -87,14 +117,14 @@ pub fn load_keeping_undo(
     load: impl FnOnce(&[u8]) -> Result<(), (bool, String)>,
     back: impl FnOnce(&[u8]),
 ) -> Loaded {
-    let Ok(data) = std::fs::read(state) else { return Loaded::Unreadable };
+    let Ok(data) = crate::state_file::read(state) else { return Loaded::Unreadable };
     let undo = undo_path(base);
     let undo_written = keep(&undo);
     match load(&data) {
         Ok(()) => Loaded::Loaded,
         Err((reached, why)) => {
             if reached && undo_written {
-                if let Ok(before) = std::fs::read(&undo) {
+                if let Ok(before) = crate::state_file::read(&undo) {
                     back(&before);
                 }
             }
@@ -116,8 +146,25 @@ pub fn retry_auto_path(auto: &Path) -> PathBuf {
 
 /// A new auto-resume state `auto` is on disk: the taken ones are history now (and up to 40 MB each).
 pub fn auto_written(auto: &Path) {
-    let _ = std::fs::remove_file(taken_auto_path(auto));
-    let _ = std::fs::remove_file(retry_auto_path(auto));
+    let mut retired = false;
+    for path in [taken_auto_path(auto), retry_auto_path(auto)] {
+        crate::fsutil::crash_point("retiring an older moment");
+        retired |= std::fs::remove_file(&path).is_ok();
+    }
+    // A downgraded player must start from its battery save, never a stale raw quit point. Its own later raw writes
+    // cannot touch the separate compressed moment. Only retire raw Auto after the new durable save succeeded.
+    if let Some(old) = crate::state_file::legacy_path(auto) {
+        for path in [old.clone(), taken_auto_path(&old), retry_auto_path(&old)] {
+            retired |= std::fs::remove_file(path).is_ok();
+        }
+        let _ = std::fs::remove_file(battery_unsaved_path(&old));
+        retired |= std::fs::remove_file(preview_path(&old)).is_ok();
+    }
+    if retired {
+        if let Some(dir) = auto.parent() {
+            if let Ok(dir) = std::fs::File::open(dir) { let _ = dir.sync_all(); }
+        }
+    }
 }
 
 /// An empty file beside the auto-resume state: the exit that wrote it couldn't write the battery save (a full or
@@ -129,6 +176,7 @@ fn battery_unsaved_path(auto: &Path) -> PathBuf {
 /// After the auto-resume state `auto` was written: notes whether the battery save of that exit failed. Best effort
 /// (an empty file needs no room for data); a note that can't be made leaves the old behaviour.
 pub fn battery_unsaved(auto: &Path, unsaved: bool) {
+    crate::fsutil::crash_point("battery note");
     let note = battery_unsaved_path(auto);
     if unsaved {
         let _ = std::fs::File::create(note);
@@ -152,6 +200,7 @@ pub fn newest_written(base: &Path) -> Option<PathBuf> {
     candidates.extend(crate::timeline::Name::all().map(|n| crate::timeline::path(base, n)));
     let auto = auto_path(base);
     candidates.push(taken_auto_path(&auto));
+    if let Some(old) = crate::state_file::legacy_path(&auto) { candidates.push(taken_auto_path(&old)); }
     // A retry may be a failed or deliberately retired resume point. Never revive it.
     candidates
         .into_iter()
@@ -168,11 +217,12 @@ pub fn newest_written(base: &Path) -> Option<PathBuf> {
 /// (`taken_auto_path`). Returns the file chosen.
 pub fn resume_from_written(base: &Path) -> Option<PathBuf> {
     let auto = auto_path(base);
-    if auto.exists() {
+    if crate::state_file::exists(&auto) {
         return None;
     }
     let from = newest_written(base)?;
-    if from == taken_auto_path(&auto) || from == retry_auto_path(&auto) {
+    if from == taken_auto_path(&auto) || from == retry_auto_path(&auto)
+        || crate::state_file::legacy_path(&auto).is_some_and(|old| from == taken_auto_path(&old)) {
         return None;
     }
     // Open once: the background Earlier writer can atomically replace this path.
@@ -182,10 +232,11 @@ pub fn resume_from_written(base: &Path) -> Option<PathBuf> {
     let modified = source.metadata().ok()?.modified().ok()?;
     let mut data = Vec::new();
     source.read_to_end(&mut data).ok()?;
+    data = crate::state_file::unpack(&from, data).ok()?;
     if data.is_empty() { return None; }
     // A stale failure marker must never make an older fallback authoritative.
     battery_unsaved(&auto, false);
-    crate::fsutil::write_atomic(&auto, &data).ok()?;
+    crate::state_file::write(&auto, &data).ok()?;
     // A copy is not a new capture. Preserve the clock used by Core::resume when
     // protecting newer battery saves. Keep the original resume as a fallback.
     use std::os::unix::fs::OpenOptionsExt;
@@ -251,10 +302,10 @@ mod tests {
         assert_eq!(state_path(b, 0), Path::new("/storage/roms/savestates/gbc/uCity.pstate"));
         assert_eq!(state_path(b, 1), Path::new("/storage/roms/savestates/gbc/uCity.pstate1"));
         assert_eq!(state_path(b, 7), Path::new("/storage/roms/savestates/gbc/uCity.pstate7"));
-        assert_eq!(auto_path(b), Path::new("/storage/roms/savestates/gbc/uCity.pstate.auto"));
+        assert_eq!(auto_path(b), Path::new("/storage/roms/savestates/gbc/uCity.pstate.auto.z"));
         assert_eq!(undo_path(b), Path::new("/storage/roms/savestates/gbc/uCity.pstate.undo"));
-        assert_eq!(taken_auto_path(&auto_path(b)), Path::new("/storage/roms/savestates/gbc/uCity.pstate.auto.taken"));
-        assert_eq!(retry_auto_path(&auto_path(b)), Path::new("/storage/roms/savestates/gbc/uCity.pstate.auto.taken.retry"));
+        assert_eq!(taken_auto_path(&auto_path(b)), Path::new("/storage/roms/savestates/gbc/uCity.pstate.auto.z.taken"));
+        assert_eq!(retry_auto_path(&auto_path(b)), Path::new("/storage/roms/savestates/gbc/uCity.pstate.auto.z.taken.retry"));
         assert_eq!(preview_path(&state_path(b, 2)), Path::new("/storage/roms/savestates/gbc/uCity.pstate2.png"));
     }
 
@@ -274,7 +325,7 @@ mod tests {
         put(preview_path(&state_path(&b, 0)), b"png", 60);
         assert_eq!(newest_written(&b), Some(state_path(&b, 0)));
         assert_eq!(resume_from_written(&b), Some(state_path(&b, 0)));
-        assert_eq!(std::fs::read(auto_path(&b)).unwrap(), b"slot1");
+        assert_eq!(crate::state_file::read(&auto_path(&b)).unwrap(), b"slot1");
         assert_eq!(std::fs::read(preview_path(&auto_path(&b))).unwrap(), b"png");
         // Both original recovery points stay; a second call changes nothing.
         assert!(state_path(&b, 0).exists() && taken_auto_path(&auto_path(&b)).exists());

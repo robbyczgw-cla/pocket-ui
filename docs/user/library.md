@@ -4,6 +4,9 @@ pocket-ui is made for a small set of games you actually play. Every game has a *
 page with its box, what is known about it, how much you have played it, where you are with it, and
 what else you own by the same people.
 
+Long selected names scroll to the end and back once, then rest. Reselect the row to read it again. While a menu is
+still, pocket-ui sleeps between real changes such as the clock or battery indicator, including on a second screen.
+
 ## Opening a card
 
 Select a game on the shelf, in a system's list or in Favourites and press **X** (the top face button).
@@ -30,7 +33,7 @@ In the Minimal, Cards and Split [looks](settings.md) X opens the game's **info p
 to turn over. The box art at the left (a title card with the console when there is none), under it your game: status,
 time played, when you last played, your rating, achievements, **Save slots** ("3 of 8", or "All empty") with the
 slots on the game's memory card or cartridge and when the newest was saved, as in the
-[pause menu](pause-menu.md#save-slots-where-i-quit-and-before-load) (games on pocket-ui's own host), a PortMaster port's speed
+[pause menu](pause-menu-saves.md#save-slots-where-i-quit-and-before-load) (games on pocket-ui's own host), a PortMaster port's speed
 and "Update available, in Extras" when there is a newer version. At the right the title, the system and year ("Favourite" when it is one of
 yours), the facts (developer, publisher, genre, series, players, reviews) and the description from Wikipedia or your
 gamelist, with its source under it. A long description scrolls in its place; without one the page says "No
@@ -132,7 +135,7 @@ them off; the values are then only shown.
   differently from your file, "Listed as" shows its name, so you can see what the card is about.
 - **Your game**: status, your rating (five stars, or "None. Press Y" before you give one), time played and number
   of sessions, when you last played, your note, **Save slots** on the game's memory card or cartridge (games on
-  pocket-ui's own host, as in the [pause menu](pause-menu.md#save-slots-where-i-quit-and-before-load)), "Continue: 2 h ago"
+  pocket-ui's own host, as in the [pause menu](pause-menu-saves.md#save-slots-where-i-quit-and-before-load)), "Continue: 2 h ago"
   when the game is waiting where you quit (under the slots, or on its own row for a game without them), and how many of
   the game's achievements you unlocked when it has some on RetroAchievements ([Achievements](achievements.md)).
   **Battery** says how long the charge you have now lasts in this game and how much of it the game uses an hour

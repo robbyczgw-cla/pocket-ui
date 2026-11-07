@@ -23,7 +23,8 @@ of the known good files (size and checksum, the files of your own console); a ga
 game that has the right size and name is only found when it is started.
 
 After Add games with new games the page offers the check ("12 new games"); when games turn up in another way (with the
-SD card in a computer, for example), a short note on Home says where it is.
+SD card in a computer, for example), a short note on Home says where it is. Not for the games you send during the first
+start: the first shelf greets you without it.
 When files were copied that the shelf can't read (a disc without its file, a folder no system reads) and no new game
 turned up with them, the same note says "Some game files can't be read. Settings › Games › Game check says why." On an
 empty Home, "No games yet" says it too.

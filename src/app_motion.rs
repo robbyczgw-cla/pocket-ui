@@ -345,14 +345,14 @@ impl App {
             _ if to.depth() < from.depth() => Enter::Pop,
             _ => Enter::Fade,
         };
-        self.motion.transition = Transition::new(enter, now, 112);
+        self.motion.transition = Transition::new(enter, now, 112); #[cfg(feature = "brick")] pocket_ui::brick_gpu::begin(&mut self.motion.transition);
     }
 
     /// After the page is painted (before the quick settings and the OSD, which stay where they are): the
     /// transition into it, over the finished picture.
     pub(crate) fn motion_after_paint(&mut self, c: &mut Canvas) {
         // The rows were registered by this paint (a crossfade between dark and light paints twice).
-        let rows = std::mem::take(&mut self.motion.rows);
+        let rows = std::mem::take(&mut self.motion.rows); #[cfg(feature = "brick")] pocket_ui::brick_gpu::after_paint(c);
         let Some(t) = self.motion.transition else { return };
         // The page colour, from the right edge half way down (the Split look and the Cards wash have their own).
         // Easy has a neighbour's case there, whose colour would flash over the shelf: its own background instead.
@@ -449,7 +449,7 @@ mod tests {
         assert!(Page::SettingsList(0).depth() > Page::Settings.depth());
         assert!(Page::Sub(std::mem::discriminant(&SettingsPage::About)).depth() > Page::SettingsList(4).depth());
         assert!(Page::Manual.depth() > Page::SettingsList(4).depth());
-        assert!(Page::Setup(3).depth() > Page::SettingsList(0).depth(), "Settings › Look › Look");
+        assert!(Page::Setup(3).depth() > Page::SettingsList(0).depth(), "Settings › Look › Layout");
         assert_eq!(Page::Setup(0).depth(), 0, "the first start");
     }
 

@@ -664,7 +664,7 @@ fn write(job: &Job, caps: Caps) -> Result<u32, Skip> {
     let data: &[u8] = match &job.source {
         Source::State(d) => d,
         Source::Copy(from) => {
-            copied = std::fs::read(from).map_err(|e| Skip::Skipped(format!("{}: {e}", from.display())))?;
+            copied = crate::state_file::read(from).map_err(|e| Skip::Skipped(format!("{}: {e}", from.display())))?;
             &copied
         }
     };
@@ -685,7 +685,7 @@ fn write(job: &Job, caps: Caps) -> Result<u32, Skip> {
     crate::fsutil::replace_file(&target, data).map_err(|e| Skip::Failed(format!("{}: {e}", target.display())))?;
     let png = match &job.picture {
         Picture::Frame(f) => encode_png(f),
-        Picture::File(p) => std::fs::read(p).ok(),
+        Picture::File(p) => std::fs::read(crate::state_file::resolve(p)).ok(),
         Picture::None => None,
     };
     if let Some(png) = png {
@@ -856,16 +856,23 @@ mod tests {
         let d = Dir::new("start");
         let base = d.base("gba", "Game");
         let taken = crate::slots::taken_auto_path(&crate::slots::auto_path(&base));
-        std::fs::write(&taken, b"resumed").unwrap();
+        crate::state_file::write(&taken, b"resumed").unwrap();
         std::fs::write(crate::slots::preview_path(&crate::slots::auto_path(&base)), b"png").unwrap();
         set_age(&taken, 86_400);
         let job = Job { base: base.clone(), kind: Kind::Started, source: Source::Copy(taken.clone()), picture: Picture::File(crate::slots::preview_path(&crate::slots::auto_path(&base))) };
+        // Compare timestamps from this filesystem: its timestamp precision can
+        // be coarser than SystemTime::now(), independently of scheduler load.
+        let marker = d.0.join("copy-clock");
+        std::fs::write(&marker, b"before").unwrap();
+        let before_copy = std::fs::metadata(&marker).unwrap().modified().unwrap();
         write(&job, roomy()).ok().unwrap();
+        std::fs::write(&marker, b"after").unwrap();
+        let after_copy = std::fs::metadata(&marker).unwrap().modified().unwrap();
         let e = entries(&base);
         assert_eq!(e.len(), 1);
         assert_eq!(e[0].name, Name { kind: Kind::Started, n: 1 });
         assert_eq!(std::fs::read(&e[0].path).unwrap(), b"resumed");
-        assert!(e[0].at.elapsed().unwrap() < Duration::from_secs(60), "its time is when the session began, not when the state was saved");
+        assert!(e[0].at >= before_copy && e[0].at <= after_copy, "the copy's timestamp belongs to the copy operation, not yesterday's save");
         assert_eq!(std::fs::read(crate::slots::preview_path(&e[0].path)).unwrap(), b"png");
         assert!(taken.exists(), "the taken state stays for the start's own use");
         // A copy whose file has gone is skipped, quietly.

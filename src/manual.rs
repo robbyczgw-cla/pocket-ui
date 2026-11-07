@@ -22,39 +22,63 @@ use crate::text::{Face, Text};
 
 /// The guide, in reading order: the order of the "Pages" list on its first page (`index.md`). The names are the files
 /// of `docs/user/`; every file there is either here or in `DESKTOP_ONLY` (checked by `doc_checks`, cargo test).
-pub const PAGES: [(&str, &str); 44] = [
+/// On the TrimUI Brick the first page is its own (the card, `Roms/…`, the power key, updates over Wi-Fi) and ROCKNIX's pages are left
+/// out (`BRICK_SKIPS`): the Brick's manual began "for handhelds that run ROCKNIX" (settings walk 06.11.).
+pub const PAGES: &[(&str, &str)] = &[
+    #[cfg(not(feature = "brick"))]
     ("index", include_str!("../docs/user/index.md")),
+    #[cfg(feature = "brick")]
+    ("index", include_str!("../docs/user/brick-index.md.inc")),
+    #[cfg(not(feature = "brick"))]
     ("getting-started", include_str!("../docs/user/getting-started.md")),
+    #[cfg(not(feature = "brick"))]
+    ("other-handhelds", include_str!("../docs/user/other-handhelds.md")),
+    #[cfg(not(feature = "brick"))]
     ("games-drive", include_str!("../docs/user/games-drive.md")),
+    #[cfg(not(feature = "brick"))]
     ("copy-games", include_str!("../docs/user/copy-games.md")),
+    #[cfg(feature = "brick")]
+    ("copy-games", include_str!("../docs/user/brick-copy-games.md.inc")),
     ("game-check", include_str!("../docs/user/game-check.md")),
     ("phone-upload", include_str!("../docs/user/phone-upload.md")),
     ("kids-mode", include_str!("../docs/user/kids-mode.md")),
     ("how-to", include_str!("../docs/user/how-to.md")),
+    #[cfg(not(feature = "brick"))]
     ("coming-from", include_str!("../docs/user/coming-from.md")),
     ("playing", include_str!("../docs/user/playing.md")),
     ("easy", include_str!("../docs/user/easy.md")),
     ("easy-to-read", include_str!("../docs/user/easy-to-read.md")),
     ("continue", include_str!("../docs/user/continue.md")),
     ("pause-menu", include_str!("../docs/user/pause-menu.md")),
+    ("pause-menu-saves", include_str!("../docs/user/pause-menu-saves.md")),
     ("options", include_str!("../docs/user/options.md")),
     ("options-big", include_str!("../docs/user/options-big.md")),
+    #[cfg(not(feature = "brick"))]
     ("controls", include_str!("../docs/user/controls.md")),
+    #[cfg(feature = "brick")]
+    ("controls", include_str!("../docs/user/brick-controls.md.inc")),
     ("controls-settings", include_str!("../docs/user/controls-settings.md")),
     ("controls-card", include_str!("../docs/user/controls-card.md")),
     ("settings", include_str!("../docs/user/settings.md")),
     ("settings-system", include_str!("../docs/user/settings-system.md")),
+    #[cfg(not(feature = "brick"))]
     ("quick-settings", include_str!("../docs/user/quick-settings.md")),
+    #[cfg(feature = "brick")]
+    ("quick-settings", include_str!("../docs/user/brick-quick-settings.md.inc")),
     ("storage", include_str!("../docs/user/storage.md")),
     ("bluetooth", include_str!("../docs/user/bluetooth.md")),
     ("language", include_str!("../docs/user/language.md")),
     ("night-light", include_str!("../docs/user/night-light.md")),
     ("theme", include_str!("../docs/user/theme.md")),
+    #[cfg(not(feature = "brick"))]
     ("performance", include_str!("../docs/user/performance.md")),
+    #[cfg(feature = "brick")]
+    ("performance", include_str!("../docs/user/brick-performance.md.inc")),
     ("tour", include_str!("../docs/user/tour.md")),
     ("library", include_str!("../docs/user/library.md")),
     ("curator", include_str!("../docs/user/curator.md")),
     ("achievements", include_str!("../docs/user/achievements.md")),
+    #[cfg(not(feature = "brick"))]
     ("systems", include_str!("../docs/user/systems.md")),
     ("arcade", include_str!("../docs/user/arcade.md")),
     ("patches-msu1", include_str!("../docs/user/patches-msu1.md")),
@@ -62,8 +86,10 @@ pub const PAGES: [(&str, &str); 44] = [
     ("sync", include_str!("../docs/user/sync.md")),
     ("remote", include_str!("../docs/user/remote.md")),
     ("web-companion", include_str!("../docs/user/web-companion.md")),
+    #[cfg(not(feature = "brick"))]
     ("pc-streaming", include_str!("../docs/user/pc-streaming.md")),
     ("updates", include_str!("../docs/user/updates.md")),
+    #[cfg(not(feature = "brick"))]
     ("safe-mode", include_str!("../docs/user/safe-mode.md")),
     ("hotel-wifi", include_str!("../docs/user/hotel-wifi.md")),
     ("troubleshooting", include_str!("../docs/user/troubleshooting.md")),
@@ -71,6 +97,10 @@ pub const PAGES: [(&str, &str); 44] = [
 
 /// Pages of `docs/user/` that are not in the manual on the device, because they only make sense on a computer.
 pub const DESKTOP_ONLY: &[&str] = &["android-spike", "android-mvp"];
+
+/// Pages of `docs/user/` the TrimUI Brick's manual leaves out: installing and running ROCKNIX, its other handhelds, the GAMES drive,
+/// coming from EmulationStation, ROCKNIX's systems and emulators, its safe mode and PC streaming (not on the Brick).
+pub const BRICK_SKIPS: &[&str] = &["getting-started", "other-handhelds", "games-drive", "coming-from", "systems", "safe-mode", "pc-streaming"];
 
 /// The text of the page called `name` (a file of `docs/user/` without `.md`).
 pub fn page(name: &str) -> Option<&'static str> {
@@ -1497,6 +1527,11 @@ impl Reader {
         !self.links.is_empty()
     }
 
+    /// How many links are in view: X has somewhere to go only with two or more.
+    pub fn links_in_view(&self) -> usize {
+        self.links.len()
+    }
+
     /// X: the next link in view gets the mark.
     pub fn next_link(&mut self) {
         if !self.links.is_empty() {
@@ -1632,7 +1667,7 @@ impl Reader {
             }
             // The link A opens has a frame behind it.
             if let Some(&(lx, ly, lw, lh, _)) = self.links.get(self.focus.min(self.links.len().saturating_sub(1))) {
-                c.round_rect(lx - 6, ly, lw + 12, lh - 4, 10, crate::palette::pal().chip);
+                crate::retro::pill(c, lx - 6, ly, lw + 12, lh - 4, 10, crate::palette::pal().chip);
             }
             paint(laid, text, c, x, top, self.scroll[page], h);
         }
@@ -1708,7 +1743,7 @@ mod tests {
     #[test]
     fn a_link_of_several_words_is_one_box() {
         let mut text = Text::new();
-        let laid = layout(&parse("[Getting started](getting-started.md), [Playing games](playing.md).\n"), &mut text, 1200);
+        let laid = layout(&parse("[The pause menu](pause-menu.md), [Playing games](playing.md).\n"), &mut text, 1200);
         let boxes: Vec<usize> = laid.items.iter().filter_map(|i| if let Item::Link { page, .. } = i { Some(*page) } else { None }).collect();
         assert_eq!(boxes.len(), 2, "{boxes:?}");
         assert_ne!(boxes[0], boxes[1]);

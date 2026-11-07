@@ -510,6 +510,25 @@ pub fn easy_to_read(c: &mut Canvas, text: &mut Text) {
     crate::type_scale::set(before);
 }
 
+pub fn retro_look(c: &mut Canvas, text: &mut Text) {
+    // Settings › Look with Retro chosen, painted in Retro (its type, frames, selection bar and the palette kept for it),
+    // whatever the style in use is now.
+    use crate::font_style::{self, FontStyle};
+    let before = font_style::get();
+    font_style::set(FontStyle::Retro);
+    c.clear(pal().void);
+    let rows: Vec<(&str, String)> = vec![
+        ("Layout", "Shelf".into()),
+        ("Appearance", "Dark".into()),
+        ("Colours", crate::retro::colours().label().into()),
+        ("Style", "Retro".into()),
+        ("Text size", "Normal".into()),
+    ];
+    list_page(c, text, "Look", &rows, 3, 132);
+    hints(c, text, &[("B", "Back"), ("A", "Switch")]);
+    font_style::set(before);
+}
+
 pub fn sounds(c: &mut Canvas, text: &mut Text) {
     c.clear(pal().void);
     let rows = settings_rows(&[("Animations", "Cozy"), ("Motion", "Full"), ("Sounds", "‹ 30% ›"), ("Haptics", "Off"), ("LEDs", "Off")]);
@@ -675,9 +694,8 @@ pub fn achievements(c: &mut Canvas, text: &mut Text) {
 }
 
 pub fn sync(c: &mut Canvas, text: &mut Text) {
-    use crate::sync_page::ROWS;
     c.clear(pal().void);
-    let rows: Vec<(&str, String)> = ROWS
+    let rows: Vec<(&str, String)> = crate::sync_page::rows()
         .iter()
         .take(6)
         .enumerate()

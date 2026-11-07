@@ -13,13 +13,13 @@ include!("common/root.rs");
 
 /// The tree as the player sees it without a store catalog: category, then its rows.
 const TREE: [(&str, &[&str]); 7] = [
-    ("Look", &["Look", "Appearance", "Colours", "Font", "Text size", "Night light", "Systems on the shelf", "Cozy extras"]),
+    ("Look", &["Layout", "Systems on the shelf", "Cozy extras", "Appearance", "Colours", "Style", "Text size", "Night light"]),
     ("Sound & feel", &["Animations", "Playful cases", "Old-TV switch-on", "Motion", "Zoom in the pause menu", "Sounds", "Case sounds", "Haptics", "LEDs"]),
     ("Playing", &["On start", "Continue where I quit", "Remind me where I was", "Buttons", "Over the game", "Screen frames", "Performance & fan", "Battery", "RetroAchievements"]),
     ("Games", &["Add games", "Game check", "Starter pack", "Pictures & extras", "From EmulationStation", "Screenshots", "Curator", "PC streaming"]),
     ("Connections", &["Wi-Fi", "Bluetooth", "Tailscale", "Sync", "Remote access (SSH)", "Web companion"]),
     ("System", &["Language", "Time", "Sleep & power", "Kids mode", "Updates", "Storage", "Backup & reset"]),
-    ("Help & tools", &["How you like to play", "Tour", "Manual", "Tools", "Report a problem", "About"]),
+    ("Help & tools", &["First-start setup", "How you like to play", "Tour", "Manual", "Tools", "Test buttons", "Report a problem", "About"]),
 ];
 
 struct Stub(std::process::Child, PathBuf);
@@ -38,13 +38,8 @@ fn wayland(tmp: &Path) -> Option<Stub> {
     let path = tmp.join("wl");
     let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), path.to_str().unwrap()]).spawn().expect("python3");
     let stub = Stub(child, path);
-    for _ in 0..200 {
-        if stub.1.exists() {
-            return Some(stub);
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-    panic!("scripts/wayland-stub.py didn't start");
+    test_clock::wait_for(|| stub.1.exists(), std::time::Duration::from_secs(2), "Wayland stub listening");
+    Some(stub)
 }
 
 /// The German line of `en` in assets/i18n/de.tsv (the Look category's key ends with a zero-width mark).
@@ -64,14 +59,14 @@ const SLEEP: [&str; 6] = ["Screen off after", "Slideshow before screen off", "Sl
 
 /// The line naming what is in each category, as at the bottom of the categories (the Look key ends with a zero-width mark).
 const LINES: [&str; 7] = [
-    "Look, appearance, colours, font, text size, screen colour, night light, systems, extras.",
+    "Layout, systems, extras, appearance, colours, style, text size, screen colour, night light.",
     "Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds, haptics, LEDs.",
     "On start, continue, where I was, buttons, over the game, frames, performance, battery, achievements.",
     "Games, game check, starter pack, pictures, EmulationStation, screenshots, Curator, PC.",
     "Wi-Fi, Bluetooth, USB file transfer, Tailscale, Sync, remote access, web companion.",
-    "Language, time, sleep & power, kids mode, updates, storage, backup & reset.",
+    "Language, time, sleep & power, second screen, kids mode, updates, storage, backup & reset.",
     // With the Store, as the German table has it; a test run has no catalog, so its part is left out (below).
-    "How you like to play, Tour, manual, tools, Store, report a problem, about.",
+    "First-start setup, how you like to play, Tour, manual, tools, test buttons, Store, report a problem, about.",
 ];
 
 /// What one snapshot painted: the visible strings and the text-box faults (`E` cut, `O` overlapping).
@@ -136,7 +131,9 @@ fn every_choice_is_a_row_and_shows_whole() {
                 }
             }
             // Not in a test run: the Store (no catalog) and USB file transfer (retired, `usb_transfer::RETIRED`).
-            let line = tr(LINES[g]).replace(", Store,", ",").replace(", USB-Dateiübertragung,", ",").replace(", Transferencia por USB,", ",").replace(", USB file transfer,", ",");
+            let line = tr(LINES[g]).replace(", Store,", ",").replace(", USB-Dateiübertragung,", ",").replace(", Transferencia por USB,", ",").replace(", USB file transfer,", ",")
+                // Second screen is only there with two screens (the RG DS Plus), not on the test machine.
+                .replace(", second screen,", ",").replace(", zweiter Bildschirm,", ",").replace(", segunda pantalla,", ",");
             // Wrapped at spaces: the painted lines one after another are the whole line.
             if !page.visible.join(" ").contains(&line) || page.visible.iter().any(|v| v.ends_with('…')) {
                 failed.push(format!("{lang} {size} {text} category {g}: its line {line:?} isn't shown whole: {:?}", page.visible));

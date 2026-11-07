@@ -266,10 +266,11 @@ mod tests {
     }
 
     #[test]
-    fn a_grim_that_hangs_gives_no_picture_instead_of_a_frozen_ui() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_grim_that_hangs_gives_no_picture_instead_of_a_frozen_ui() {
         let t0 = Instant::now();
         assert!(capture_via(&mut sh("sleep 5"), Duration::from_millis(200)).is_none());
-        assert!(t0.elapsed() < Duration::from_secs(2), "waited {:?}", t0.elapsed());
+        assert!(t0.elapsed() < crate::testutil::timeout(Duration::from_secs(2)), "waited {:?}", t0.elapsed());
     }
 
     #[test]

@@ -33,6 +33,7 @@ public class PocketActivity extends NativeActivity {
 
     private SemanticView semantics;
     private native boolean nativeBack();
+    private native void nativeConfigurationChanged();
     private void backRequested(){android.util.Log.i(TAG,"launcher system back");if(!nativeBack())backRequests.incrementAndGet();}
     private final java.util.concurrent.atomic.AtomicInteger backRequests=new java.util.concurrent.atomic.AtomicInteger();
     private volatile String metrics = "1,1,0,0,0,0";
@@ -50,7 +51,8 @@ public class PocketActivity extends NativeActivity {
         if (android.os.Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false);
         window.getDecorView().setOnApplyWindowInsetsListener((view, insets) -> {
             int[] safe=SafeInsets.read(this,insets,false);
-            metrics=getResources().getDisplayMetrics().density+","+getResources().getConfiguration().fontScale+","+safe[0]+","+safe[1]+","+safe[2]+","+safe[3];
+            String next=getResources().getDisplayMetrics().density+","+getResources().getConfiguration().fontScale+","+safe[0]+","+safe[1]+","+safe[2]+","+safe[3];
+            if(!next.equals(metrics)){metrics=next;nativeConfigurationChanged();}
             return insets;
         });
         if(android.os.Build.VERSION.SDK_INT>=33)getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,this::backRequested);
@@ -92,6 +94,8 @@ public class PocketActivity extends NativeActivity {
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);}
     public String insertRehearsal() { return Boolean.toString(getIntent().getBooleanExtra("insertRehearsal",false)); }
     public String diagnosticAudio() { return Boolean.toString(getIntent().getBooleanExtra("diagnosticAudio",false)); }
+    public String batterySaver(){return Boolean.toString(((android.os.PowerManager)getSystemService(POWER_SERVICE)).isPowerSaveMode());}
+    @Override public void onConfigurationChanged(android.content.res.Configuration config){super.onConfigurationChanged(config);getWindow().getDecorView().requestApplyInsets();}
     public String language() { return Locale.getDefault().getLanguage(); }
     public String dataPath() { return getFilesDir().getAbsolutePath(); }
     /** Ordered roots; upgrade the original single-root preference without touching its grant. */

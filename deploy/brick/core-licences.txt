@@ -1,0 +1,5 @@
+# Cores on the Brick's card that ROCKNIX's images do not have (same format as scripts/core-licences.txt; read by scripts/brick-make-card.sh).
+# Checked 2026-11-03 against the pinned commits.
+gpsp|or-later|5819380|main.c, cheats.c, input.c: "either version 2 of the License, or (at your option) any later version"; COPYING is GPLv2
+fceumm|or-later|e0f3086|src/fceu.c: "either version 2 of the License, or (at your option) any later version"; Copying is GPLv2
+yabause|or-later|8926b0c|yabause/src/vidsoft.c: GPL version 2 or later; software renderer, interpreter build

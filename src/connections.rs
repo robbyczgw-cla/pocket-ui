@@ -532,11 +532,11 @@ mod tests {
         let p = PathBuf::from("/roms/12 Qb Quest 2.iso");
         for _ in 0..5 {
             let entries = entries.clone();
-            let t = std::time::Instant::now();
+            let t = crate::testutil::clock::CpuInstant::now();
             let ix = Index::build(entries);
             built = built.min(t.elapsed());
             assert_eq!(ix.derived_series(&p), Some("Qb Quest"));
-            let t = std::time::Instant::now();
+            let t = crate::testutil::clock::CpuInstant::now();
             for kind in Kind::ALL {
                 let _ = ix.link(kind, "Studio 12 Games, Qb Quest, Action", &p);
             }

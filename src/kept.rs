@@ -95,7 +95,7 @@ mod tests {
             Duration::from_secs(5),
             move || {
                 tx.send(std::thread::current().id()).unwrap();
-                release_rx.recv_timeout(Duration::from_secs(5)).expect("caller released the read");
+                release_rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).expect("caller released the read");
                 7
             },
             move || done_tx.send(()).unwrap(),
@@ -103,23 +103,24 @@ mod tests {
         assert!(started, "returned while the read is still blocked");
         assert_eq!(kept.get(), None, "nothing before the first read: the screen shows a placeholder");
         assert!(!kept.refresh(Duration::ZERO, || 8, || {}), "one read at a time");
-        assert_ne!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), caller, "read on another thread");
+        assert_ne!(rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap(), caller, "read on another thread");
         release_tx.send(()).unwrap();
-        done_rx.recv_timeout(Duration::from_secs(5)).expect("notified");
+        done_rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).expect("notified");
         assert_eq!(kept.get(), Some(7));
         assert!(!kept.refresh(Duration::from_secs(5), || 9, || {}), "not due again yet");
         assert!(kept.due(Duration::ZERO, Instant::now()));
     }
 
     #[test]
-    fn notify_only_on_a_change_and_stale_reads_again() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_notify_only_on_a_change_and_stale_reads_again() {
         let kept: Arc<Kept<&'static str>> = Kept::new("kept-test");
         kept.set("On");
         assert!(!kept.due(Duration::from_secs(5), Instant::now()), "a known write counts as a read");
         kept.stale();
         let (tx, rx) = channel();
         assert!(kept.refresh(Duration::from_secs(5), || "On", move || tx.send(()).unwrap()));
-        let until = Instant::now() + Duration::from_secs(5);
+        let until = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
         while kept.reading.load(Ordering::SeqCst) && Instant::now() < until {
             std::thread::sleep(Duration::from_millis(2));
         }

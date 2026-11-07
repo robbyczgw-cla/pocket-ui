@@ -1,0 +1,364 @@
+{
+  "provenance": "Read-only sysfs bitmaps and EVIOCGID/EVIOCGABS, 2026-11-07. Native hidden nodes opened through existing InputPlumber descriptors; no grabs or event injection.",
+  "nodes": [
+    {
+      "name": "sunxi-keyboard",
+      "id": {
+        "bustype": 25,
+        "vendor": 1,
+        "product": 1,
+        "version": 256
+      },
+      "keys": [
+        114,
+        115
+      ],
+      "abs": [],
+      "bitmaps": {
+        "ev_bytes_le": "0300000000000000",
+        "key_bytes_le": "00000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "abs_bytes_le": "0000000000000000"
+      },
+      "expected_keys": [
+        {
+          "code": 114,
+          "physical": "VOL_DOWN",
+          "menu_nintendo": "VOL_DOWN",
+          "menu_xbox": "VOL_DOWN",
+          "retro_mask": 0
+        },
+        {
+          "code": 115,
+          "physical": "VOL_UP",
+          "menu_nintendo": "VOL_UP",
+          "menu_xbox": "VOL_UP",
+          "retro_mask": 0
+        }
+      ]
+    },
+    {
+      "name": "axp2202-pek",
+      "id": {
+        "bustype": 0,
+        "vendor": 0,
+        "product": 0,
+        "version": 0
+      },
+      "keys": [
+        116
+      ],
+      "abs": [],
+      "bitmaps": {
+        "ev_bytes_le": "0300100000000000",
+        "key_bytes_le": "000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "abs_bytes_le": "0000000000000000"
+      },
+      "expected_keys": [
+        {
+          "code": 116,
+          "physical": "POWER",
+          "menu_nintendo": "POWER",
+          "menu_xbox": "POWER",
+          "retro_mask": 0
+        }
+      ]
+    },
+    {
+      "name": "audiocodec sunxi Audio Jack",
+      "id": {
+        "bustype": 0,
+        "vendor": 0,
+        "product": 0,
+        "version": 0
+      },
+      "keys": [
+        114,
+        115,
+        226,
+        582
+      ],
+      "abs": [],
+      "bitmaps": {
+        "ev_bytes_le": "2300000000000000",
+        "key_bytes_le": "00000000000000000000000000000c000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000",
+        "abs_bytes_le": "0000000000000000"
+      },
+      "expected_keys": [
+        {
+          "code": 114,
+          "physical": "VOL_DOWN",
+          "menu_nintendo": "VOL_DOWN",
+          "menu_xbox": "VOL_DOWN",
+          "retro_mask": 0
+        },
+        {
+          "code": 115,
+          "physical": "VOL_UP",
+          "menu_nintendo": "VOL_UP",
+          "menu_xbox": "VOL_UP",
+          "retro_mask": 0
+        },
+        {
+          "code": 226,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 582,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        }
+      ]
+    },
+    {
+      "name": "TRIMUI Player1",
+      "id": {
+        "bustype": 3,
+        "vendor": 1118,
+        "product": 654,
+        "version": 276
+      },
+      "keys": [
+        59,
+        60,
+        114,
+        115,
+        304,
+        305,
+        307,
+        308,
+        310,
+        311,
+        314,
+        315,
+        316,
+        317,
+        318
+      ],
+      "abs": [
+        [
+          0,
+          -32767,
+          32767,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          -32767,
+          32767,
+          0,
+          0,
+          0
+        ],
+        [
+          2,
+          0,
+          255,
+          0,
+          0,
+          0
+        ],
+        [
+          3,
+          -32767,
+          32767,
+          0,
+          0,
+          0
+        ],
+        [
+          4,
+          -32767,
+          32767,
+          0,
+          0,
+          0
+        ],
+        [
+          5,
+          0,
+          255,
+          0,
+          0,
+          0
+        ],
+        [
+          16,
+          -1,
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          17,
+          -1,
+          1,
+          0,
+          0,
+          0
+        ]
+      ],
+      "bitmaps": {
+        "ev_bytes_le": "2b00000000000000",
+        "key_bytes_le": "00000000000000180000000000000c0000000000000000000000000000000000000000000000db7c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "abs_bytes_le": "3f00030000000000"
+      },
+      "expected_keys": [
+        {
+          "code": 59,
+          "physical": "F1",
+          "menu_nintendo": "F1",
+          "menu_xbox": "F1",
+          "retro_mask": 0
+        },
+        {
+          "code": 60,
+          "physical": "F2",
+          "menu_nintendo": "F2",
+          "menu_xbox": "F2",
+          "retro_mask": 0
+        },
+        {
+          "code": 114,
+          "physical": "VOL_DOWN",
+          "menu_nintendo": "VOL_DOWN",
+          "menu_xbox": "VOL_DOWN",
+          "retro_mask": 0
+        },
+        {
+          "code": 115,
+          "physical": "VOL_UP",
+          "menu_nintendo": "VOL_UP",
+          "menu_xbox": "VOL_UP",
+          "retro_mask": 0
+        },
+        {
+          "code": 304,
+          "physical": "SOUTH",
+          "menu_nintendo": "SOUTH",
+          "menu_xbox": "EAST",
+          "retro_mask": 1
+        },
+        {
+          "code": 305,
+          "physical": "EAST",
+          "menu_nintendo": "EAST",
+          "menu_xbox": "SOUTH",
+          "retro_mask": 256
+        },
+        {
+          "code": 307,
+          "physical": "WEST",
+          "menu_nintendo": "WEST",
+          "menu_xbox": "NORTH",
+          "retro_mask": 2
+        },
+        {
+          "code": 308,
+          "physical": "NORTH",
+          "menu_nintendo": "NORTH",
+          "menu_xbox": "WEST",
+          "retro_mask": 512
+        },
+        {
+          "code": 310,
+          "physical": "L1",
+          "menu_nintendo": "L1",
+          "menu_xbox": "L1",
+          "retro_mask": 1024
+        },
+        {
+          "code": 311,
+          "physical": "R1",
+          "menu_nintendo": "R1",
+          "menu_xbox": "R1",
+          "retro_mask": 2048
+        },
+        {
+          "code": 314,
+          "physical": "SELECT",
+          "menu_nintendo": "SELECT",
+          "menu_xbox": "SELECT",
+          "retro_mask": 4
+        },
+        {
+          "code": 315,
+          "physical": "START",
+          "menu_nintendo": "START",
+          "menu_xbox": "START",
+          "retro_mask": 8
+        },
+        {
+          "code": 316,
+          "physical": "MODE",
+          "menu_nintendo": "MODE",
+          "menu_xbox": "MODE",
+          "retro_mask": 0
+        },
+        {
+          "code": 317,
+          "physical": "F1",
+          "menu_nintendo": "F1",
+          "menu_xbox": "F1",
+          "retro_mask": 0
+        },
+        {
+          "code": 318,
+          "physical": "F2",
+          "menu_nintendo": "F2",
+          "menu_xbox": "F2",
+          "retro_mask": 0
+        }
+      ],
+      "expected_axes": [
+        {
+          "code": 0,
+          "axis": "LEFT_X",
+          "hat": null
+        },
+        {
+          "code": 1,
+          "axis": "LEFT_Y",
+          "hat": null
+        },
+        {
+          "code": 2,
+          "axis": "L2",
+          "hat": null
+        },
+        {
+          "code": 3,
+          "axis": "RIGHT_X",
+          "hat": null
+        },
+        {
+          "code": 4,
+          "axis": "RIGHT_Y",
+          "hat": null
+        },
+        {
+          "code": 5,
+          "axis": "R2",
+          "hat": null
+        },
+        {
+          "code": 16,
+          "axis": null,
+          "hat": "HORIZONTAL"
+        },
+        {
+          "code": 17,
+          "axis": null,
+          "hat": "VERTICAL"
+        }
+      ]
+    }
+  ]
+}

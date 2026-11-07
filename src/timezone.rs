@@ -90,6 +90,103 @@ pub fn city_of(zone: &str) -> String {
     }
 }
 
+/// Cities whose German or Spanish name is not the English one, by zone: (zone, German, Spanish). The search finds a zone
+/// by any of them, and the lists show the player's (first-start walk 2026-11-06: "wien" found nothing, and the German
+/// hint itself suggested "vie"). Only the well-known ones; the rest keep the zone's own name in every language.
+const LOCAL_CITIES: &[(&str, &str, &str)] = &[
+    ("Africa/Addis_Ababa", "Addis Abeba", "Adís Abeba"),
+    ("Africa/Algiers", "Algier", "Argel"),
+    ("Africa/Cairo", "Kairo", "El Cairo"),
+    ("Africa/Khartoum", "Khartum", "Jartum"),
+    ("Africa/Tunis", "Tunis", "Túnez"),
+    ("America/Asuncion", "Asunción", "Asunción"),
+    ("America/Bogota", "Bogotá", "Bogotá"),
+    ("America/Havana", "Havanna", "La Habana"),
+    ("America/Los_Angeles", "Los Angeles", "Los Ángeles"),
+    ("America/Mexico_City", "Mexiko-Stadt", "Ciudad de México"),
+    ("America/New_York", "New York", "Nueva York"),
+    ("America/Panama", "Panama", "Panamá"),
+    ("America/Sao_Paulo", "São Paulo", "São Paulo"),
+    ("Asia/Baghdad", "Bagdad", "Bagdad"),
+    ("Asia/Damascus", "Damaskus", "Damasco"),
+    ("Asia/Ho_Chi_Minh", "Ho-Chi-Minh-Stadt", "Ciudad Ho Chi Minh"),
+    ("Asia/Hong_Kong", "Hongkong", "Hong Kong"),
+    ("Asia/Jakarta", "Jakarta", "Yakarta"),
+    ("Asia/Jerusalem", "Jerusalem", "Jerusalén"),
+    ("Asia/Kathmandu", "Kathmandu", "Katmandú"),
+    ("Asia/Kolkata", "Kalkutta", "Calcuta"),
+    ("Asia/Riyadh", "Riad", "Riad"),
+    ("Asia/Seoul", "Seoul", "Seúl"),
+    ("Asia/Shanghai", "Shanghai", "Shanghái"),
+    ("Asia/Singapore", "Singapur", "Singapur"),
+    ("Asia/Taipei", "Taipeh", "Taipéi"),
+    ("Asia/Tehran", "Teheran", "Teherán"),
+    ("Asia/Tokyo", "Tokio", "Tokio"),
+    ("Atlantic/Azores", "Azoren", "Azores"),
+    ("Atlantic/Canary", "Kanaren", "Canarias"),
+    ("Europe/Amsterdam", "Amsterdam", "Ámsterdam"),
+    ("Europe/Athens", "Athen", "Atenas"),
+    ("Europe/Belgrade", "Belgrad", "Belgrado"),
+    ("Europe/Berlin", "Berlin", "Berlín"),
+    ("Europe/Brussels", "Brüssel", "Bruselas"),
+    ("Europe/Bucharest", "Bukarest", "Bucarest"),
+    ("Europe/Copenhagen", "Kopenhagen", "Copenhague"),
+    ("Europe/Dublin", "Dublin", "Dublín"),
+    ("Europe/Istanbul", "Istanbul", "Estambul"),
+    ("Europe/Kiev", "Kiew", "Kiev"),
+    ("Europe/Kyiv", "Kiew", "Kiev"),
+    ("Europe/Lisbon", "Lissabon", "Lisboa"),
+    ("Europe/London", "London", "Londres"),
+    ("Europe/Luxembourg", "Luxemburg", "Luxemburgo"),
+    ("Europe/Monaco", "Monaco", "Mónaco"),
+    ("Europe/Moscow", "Moskau", "Moscú"),
+    ("Europe/Paris", "Paris", "París"),
+    ("Europe/Prague", "Prag", "Praga"),
+    ("Europe/Rome", "Rom", "Roma"),
+    ("Europe/Sofia", "Sofia", "Sofía"),
+    ("Europe/Stockholm", "Stockholm", "Estocolmo"),
+    ("Europe/Vatican", "Vatikan", "Vaticano"),
+    ("Europe/Vienna", "Wien", "Viena"),
+    ("Europe/Vilnius", "Vilnius", "Vilna"),
+    ("Europe/Warsaw", "Warschau", "Varsovia"),
+    ("Europe/Zurich", "Zürich", "Zúrich"),
+    ("Indian/Maldives", "Malediven", "Maldivas"),
+];
+
+/// The city of a zone as `lang` calls it: "Wien" in German, "Viena" in Spanish, `city_of` where the name is the same.
+pub fn city_in(zone: &str, lang: crate::i18n::Lang) -> String {
+    let local = LOCAL_CITIES.iter().find(|(z, ..)| *z == zone);
+    match (lang, local) {
+        (crate::i18n::Lang::De, Some((_, de, _))) => de.to_string(),
+        (crate::i18n::Lang::Es, Some((_, _, es))) => es.to_string(),
+        _ => city_of(zone),
+    }
+}
+
+/// The city of a zone in the language the interface is in now (`city_in`): what lists, rows and notes show.
+pub fn city_here(zone: &str) -> String {
+    city_in(zone, crate::i18n::current())
+}
+
+/// Lower case without accents, '_' and '/' as spaces: "Zúrich" and "zurich" are the same word to the search.
+fn plain(s: &str) -> String {
+    s.to_lowercase()
+        .chars()
+        .map(|c| match c {
+            'á' | 'à' | 'â' | 'ä' | 'ã' => 'a',
+            'é' | 'è' | 'ê' | 'ë' => 'e',
+            'í' | 'ì' | 'î' | 'ï' => 'i',
+            'ó' | 'ò' | 'ô' | 'ö' | 'õ' => 'o',
+            'ú' | 'ù' | 'û' | 'ü' => 'u',
+            'ñ' => 'n',
+            'ç' => 'c',
+            '_' | '/' | '-' => ' ',
+            c => c,
+        })
+        .collect::<String>()
+        .replace('ß', "ss")
+}
+
 /// Region headings in the order they are listed.
 pub fn regions(zones: &[String]) -> Vec<String> {
     let mut v: Vec<String> = zones.iter().map(|z| region_of(z).to_string()).collect();
@@ -101,14 +198,14 @@ pub fn regions(zones: &[String]) -> Vec<String> {
 /// The zones of a region, ordered by the city name shown (not by the path, which puts "Argentina/..." first).
 pub fn zones_in<'a>(zones: &'a [String], region: &str) -> Vec<&'a str> {
     let mut v: Vec<&str> = zones.iter().map(String::as_str).filter(|z| region_of(z) == region).collect();
-    v.sort_by_key(|z| city_of(z).to_lowercase());
+    v.sort_by_key(|z| plain(&city_here(z)));
     v
 }
 
-/// Zones whose region or city contains every word of `query` (case, spaces and underscores ignored).
+/// Zones whose region or city contains every word of `query`, the city in English, German or Spanish ("wien", "viena"
+/// and "vie" find Vienna; case, accents, spaces and underscores ignored).
 pub fn search<'a>(zones: &'a [String], query: &str) -> Vec<&'a str> {
-    let norm = |s: &str| s.to_lowercase().replace(['_', '/'], " ");
-    let words: Vec<String> = norm(query).split_whitespace().map(str::to_string).collect();
+    let words: Vec<String> = plain(query).split_whitespace().map(str::to_string).collect();
     if words.is_empty() {
         return Vec::new();
     }
@@ -116,11 +213,14 @@ pub fn search<'a>(zones: &'a [String], query: &str) -> Vec<&'a str> {
         .iter()
         .map(String::as_str)
         .filter(|z| {
-            let hay = norm(z);
+            let mut hay = plain(z);
+            if let Some((_, de, es)) = LOCAL_CITIES.iter().find(|(zone, ..)| zone == z) {
+                hay = format!("{hay} {} {}", plain(de), plain(es));
+            }
             words.iter().all(|w| hay.contains(w.as_str()))
         })
         .collect();
-    v.sort_by_key(|z| city_of(z).to_lowercase());
+    v.sort_by_key(|z| plain(&city_here(z)));
     v
 }
 
@@ -762,9 +862,39 @@ mod tests {
         assert_eq!(search(&zones, "new york"), ["America/New_York"]);
         assert_eq!(search(&zones, "america bue"), ["America/Argentina/Buenos_Aires"]);
         assert!(search(&zones, "  ").is_empty());
+        // The city as it is called in German or Spanish, with or without its accents (first-start walk 2026-11-06).
+        let more = list(&["Europe/Vienna", "Europe/Zurich", "Europe/Rome", "Europe/Lisbon", "Europe/Prague", "America/New_York"]);
+        assert_eq!(search(&more, "wien"), ["Europe/Vienna"]);
+        assert_eq!(search(&more, "Viena"), ["Europe/Vienna"]);
+        assert_eq!(search(&more, "zurich"), ["Europe/Zurich"]);
+        assert_eq!(search(&more, "zúrich"), ["Europe/Zurich"]);
+        assert_eq!(search(&more, "Zürich"), ["Europe/Zurich"]);
+        assert_eq!(search(&more, "rom"), ["Europe/Rome"]);
+        assert_eq!(search(&more, "lissabon"), ["Europe/Lisbon"]);
+        assert_eq!(search(&more, "lisboa"), ["Europe/Lisbon"]);
+        assert_eq!(search(&more, "prag"), ["Europe/Prague"]);
+        assert_eq!(search(&more, "praga"), ["Europe/Prague"]);
+        assert_eq!(search(&more, "nueva york"), ["America/New_York"]);
+        assert_eq!(search(&more, "europe wien"), ["Europe/Vienna"]);
+        use crate::i18n::Lang;
+        assert_eq!(city_in("Europe/Vienna", Lang::De), "Wien");
+        assert_eq!(city_in("Europe/Vienna", Lang::Es), "Viena");
+        assert_eq!(city_in("Europe/Vienna", Lang::En), "Vienna");
+        assert_eq!(city_in("America/Chicago", Lang::De), "Chicago", "no German name of its own: the zone's");
+        assert_eq!(city_in("America/Argentina/Buenos_Aires", Lang::Es), "Buenos Aires, Argentina");
         assert_eq!(fmt_offset(7200), "UTC+02:00");
         assert_eq!(fmt_offset(-4 * 3600), "UTC-04:00");
         assert_eq!(fmt_offset(19800), "UTC+05:30");
+    }
+
+    /// The table's zones are plain zone names, each once, with both names filled in.
+    #[test]
+    fn local_city_names_are_complete() {
+        let mut seen = std::collections::HashSet::new();
+        for (zone, de, es) in LOCAL_CITIES {
+            assert!(is_valid(zone) && zone.contains('/') && seen.insert(*zone), "{zone}");
+            assert!(!de.trim().is_empty() && !es.trim().is_empty(), "{zone}");
+        }
     }
 
     #[test]

@@ -20,6 +20,24 @@ pub enum Row {
 
 pub const ROWS: [Row; 4] = [Row::GamesPerformance, Row::GamesFan, Row::OutsideFan, Row::SmoothFan];
 
+/// The rows this device shows: on the TrimUI Brick only the processor's (it has no fan; three rows of "No fan" were noise there).
+pub fn rows() -> &'static [Row] {
+    #[cfg(feature = "brick")]
+    if crate::device::brick() {
+        return &ROWS[..1];
+    }
+    &ROWS
+}
+
+/// The page's title and its row's name in Settings: "Performance" on the Brick (`rows`).
+pub fn title() -> &'static str {
+    #[cfg(feature = "brick")]
+    if crate::device::brick() {
+        return "Performance";
+    }
+    "Performance & fan"
+}
+
 /// The choices of each row, in the order Left/Right walk through them.
 const PERFORMANCE: [Performance; 3] = [Performance::Battery, Performance::Auto, Performance::Performance];
 const GAMES_FAN: [Fan; 4] = [Fan::VeryQuiet, Fan::Quiet, Fan::Auto, Fan::Cool];
@@ -94,11 +112,16 @@ impl PerfFanPage {
     }
 
     pub fn row(&self) -> Row {
-        ROWS[self.sel.min(ROWS.len() - 1)]
+        rows()[self.sel.min(rows().len() - 1)]
+    }
+
+    /// A and Left/Right change the selected row: not a fan row where the fan isn't the page's (`fan_not_ours`).
+    pub fn changeable(&self) -> bool {
+        !fan_not_ours(self.row())
     }
 
     pub fn press(&mut self, b: Button, confirm: Button, cancel: Button) -> Action {
-        let n = ROWS.len();
+        let n = rows().len();
         let delta = match b {
             Button::Up => {
                 self.sel = (self.sel + n - 1) % n;
@@ -224,6 +247,15 @@ pub fn fan_blurb(f: Fan, smooth: bool) -> String {
 }
 
 /// The note under the description: which settings win, and which games these are.
+/// `PRECEDENCE_NOTE` for this device: no fan rows on the Brick.
+pub fn precedence_note() -> &'static str {
+    #[cfg(feature = "brick")]
+    if crate::device::brick() {
+        return "A choice saved in the pause menu (Options › Speed, rumble, fan) wins over this one.";
+    }
+    PRECEDENCE_NOTE
+}
+
 pub const PRECEDENCE_NOTE: &str = "A choice saved in the pause menu (Options › Speed, rumble, fan) wins over these. Games: performance covers games with a \
 pause menu and ports; with Smooth fan, Games: fan covers every game.";
 
@@ -236,19 +268,24 @@ impl PerfFanPage {
     }
 
     /// The four readout lines, label and value ("Unknown" for what the device doesn't report).
-    pub fn readout_lines(&self) -> [(&'static str, String); 4] {
+    /// The readings at the bottom; no fan line on a handheld without one (it read "Unknown" there).
+    pub fn readout_lines(&self) -> Vec<(&'static str, String)> {
         let r = self.readout.clone().unwrap_or_default();
         let or = |v: Option<String>| match (&self.readout, v) {
             (None, _) => "…".to_string(),
             (Some(_), Some(v)) => v,
             (Some(_), None) => "Unknown".to_string(),
         };
+        let fan = crate::device::current().has_fan();
         [
             ("Hottest", or(r.temperature())),
             ("Fan", or(r.fan())),
             ("CPU", or(r.cpu())),
             ("Battery draw", or(r.battery())),
         ]
+        .into_iter()
+        .filter(|(label, _)| fan || *label != "Fan")
+        .collect()
     }
 }
 

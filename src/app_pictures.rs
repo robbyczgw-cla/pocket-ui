@@ -3,7 +3,7 @@
 //! decodes them). The same worker also reads and fits the ordinary box-art covers (`App::cover`).
 //!
 //! * The Split look's preview shows the box art; after a short dwell on the selection it fades to the game
-//!   running, then to the title screen, and round again (`paint_preview`). Motion: Off keeps the box art still.
+//!   running, then to the title screen, and back to the box once (`paint_preview`). Motion: Off keeps the box art still.
 //! * The game card shows the same two pictures under the facts (`card_pictures`).
 //! * Nothing is read while the selection is moving: the files are looked at (24 bytes of header each) once it has
 //!   rested [`REST`], and decoded on the loader thread into the same image cache as the box art (`App::covers`),

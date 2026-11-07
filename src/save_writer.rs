@@ -162,26 +162,31 @@ impl Drop for SaveWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     #[test]
     fn writes_in_the_background_and_drops_superseded_saves() {
         let written = Arc::new(Mutex::new(Vec::<Vec<u8>>::new()));
         let log = written.clone();
-        // A slow card: every write takes 300 ms.
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let release_rx = Mutex::new(release_rx);
+        let caller = std::thread::current().id();
         let w = SaveWriter::with(move |_, bytes| {
-            std::thread::sleep(Duration::from_millis(300));
+            if bytes == b"A" {
+                entered_tx.send(std::thread::current().id()).unwrap();
+                release_rx.lock().unwrap().recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).map_err(io::Error::other)?;
+            }
             log.lock().unwrap().push(bytes.to_vec());
             Ok(())
         });
-        let t = Instant::now();
         w.submit("Game.srm".into(), b"A".to_vec());
-        assert!(t.elapsed() < Duration::from_millis(100), "the game thread waited {:?} for the card", t.elapsed());
-        std::thread::sleep(Duration::from_millis(50));
+        assert_ne!(entered_rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap(), caller, "the card writes on its own thread");
         // A is being written; B is replaced by C before its turn.
         w.submit("Game.srm".into(), b"B".to_vec());
         w.submit("Game.srm".into(), b"C".to_vec());
-        assert!(t.elapsed() < Duration::from_millis(200), "the game thread waited {:?} for the card", t.elapsed());
+        assert!(written.lock().unwrap().is_empty(), "submits returned while the card is blocked");
+        release_tx.send(()).unwrap();
         w.wait();
         assert_eq!(w.trouble(), None);
         assert_eq!(*written.lock().unwrap(), [b"A".to_vec(), b"C".to_vec()]);
@@ -217,16 +222,23 @@ mod tests {
     fn the_clock_waiting_does_not_push_out_the_battery_save() {
         let written = Arc::new(Mutex::new(Vec::<(PathBuf, Vec<u8>)>::new()));
         let log = written.clone();
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let release_rx = Mutex::new(release_rx);
         let w = SaveWriter::with(move |path, bytes| {
-            std::thread::sleep(Duration::from_millis(100));
+            if bytes == b"A" {
+                entered_tx.send(()).unwrap();
+                release_rx.lock().unwrap().recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).map_err(io::Error::other)?;
+            }
             log.lock().unwrap().push((path.to_path_buf(), bytes.to_vec()));
             Ok(())
         });
         w.submit("Game.srm".into(), b"A".to_vec());
-        std::thread::sleep(Duration::from_millis(30));
+        entered_rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap();
         w.submit("Game.srm".into(), b"B".to_vec());
         w.submit("Game.rtc".into(), b"T".to_vec());
         w.submit("Game.srm".into(), b"C".to_vec());
+        release_tx.send(()).unwrap();
         w.wait();
         let got = written.lock().unwrap().clone();
         assert_eq!(got, [("Game.srm".into(), b"A".to_vec()), ("Game.srm".into(), b"C".to_vec()), ("Game.rtc".into(), b"T".to_vec())]);

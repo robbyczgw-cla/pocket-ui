@@ -292,23 +292,31 @@ impl App {
             y += pocket_ui::type_scale::line(44, 8);
         }
         y = y.max(panel_top + panel_h + 40);
-        // A short screen (768 lines) sets the three paragraphs smaller so that they end above the footer.
-        let about = if pocket_ui::kit::short_screen(c.h) { 24 } else { 28 };
-        for p in page::ABOUT {
-            for line in self.text.wrap_prose(Face::Body, about, p, width) {
-                self.text.draw(c, Face::Body, about, left, y, pal().dust, &line);
-                y += pocket_ui::type_scale::line(about, 10);
-            }
-            y += 14;
-        }
-
         let action = match (&page.view, page.signed_in()) {
             (View::SigningIn, _) => None,
             (_, true) => Some("Log out"),
             (_, false) => Some("Sign in"),
         };
         let hints: Vec<(&str, &str)> = std::iter::once(("B", "Back")).chain(action.map(|a| ("A", a))).collect();
-        self.nu_foot(c, &hints, page.describe(), pal().text);
+        let foot_top = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, &hints, page.describe(), 2, pal().text);
+        // A short screen (768 lines) sets the three paragraphs smaller so that they end above the footer; where they
+        // still don't fit (a wide face, a small screen) one size smaller, and what is left over is not painted.
+        let first = if pocket_ui::kit::short_screen(c.h) { 24 } else { 28 };
+        let room = foot_top - 12 - y;
+        let height = |text: &mut pocket_ui::text::Text, px: u32| -> i32 {
+            page::ABOUT.iter().map(|p| text.wrap_prose(Face::Body, px, p, width).len() as i32 * pocket_ui::type_scale::line(px, 10) + 14).sum()
+        };
+        let about = if height(&mut self.text, first) <= room { first } else { first - 4 };
+        'paragraphs: for p in page::ABOUT {
+            for line in self.text.wrap_prose(Face::Body, about, p, width) {
+                if y + pocket_ui::type_scale::px(about) as i32 / 4 > foot_top - 12 {
+                    break 'paragraphs;
+                }
+                self.text.draw(c, Face::Body, about, left, y, pal().dust, &line);
+                y += pocket_ui::type_scale::line(about, 10);
+            }
+            y += 14;
+        }
     }
 }
 

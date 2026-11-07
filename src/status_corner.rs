@@ -153,7 +153,11 @@ impl Pill {
     pub fn paint(&self, c: &mut Canvas, text: &mut Text, corner: &Corner, fill: u32, colour: u32) -> i32 {
         let px = self.px;
         let Some((placed, left)) = self.layout(corner, |s| text.width(Face::Body, px, s)) else { return self.right };
-        c.round_rect(left, self.top, self.right - left, self.h, self.h / 2, fill);
+        if crate::retro::on() {
+            crate::retro::frame(c, left, self.top, self.right - left, self.h, fill);
+        } else {
+            c.round_rect(left, self.top, self.right - left, self.h, self.h / 2, fill);
+        }
         let baseline = self.top + self.h / 2 + crate::type_scale::mid(px);
         for (part, x) in placed {
             match part {

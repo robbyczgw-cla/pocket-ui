@@ -198,8 +198,7 @@ pub fn resume_files(g: &Game) -> Vec<PathBuf> {
     if g.emulator == "pocket-core" {
         // Not the state a start already gave up on (`slots::retry_auto_path`): no start loads it by itself.
         let auto = crate::slots::auto_path(&crate::slots::base(&g.system, stem));
-        let taken = crate::slots::taken_auto_path(&auto);
-        return vec![auto, taken];
+        return crate::slots::auto_candidates(&auto, false);
     }
     if g.emulator == "retroarch" {
         let mut name = crate::slots::base(&g.system, stem).into_os_string();

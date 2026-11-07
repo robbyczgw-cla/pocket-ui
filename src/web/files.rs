@@ -16,7 +16,9 @@
 //! - At most [`MAX_ROM`], [`MAX_BIOS`] or [`MAX_PORT`] bytes, and never more than the card's free space less
 //!   [`RESERVE`].
 
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
+#[cfg(not(feature = "brick"))]
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -453,6 +455,8 @@ pub fn sweep_leftovers(tmp_dir: &Path) {
 /// chunks: while a game runs the upload pauses; switched off, it stops.
 pub fn receive(r: &mut impl Read, target: &Path, tmp_dir: &Path, len: u64, overwrite: bool, gate: &Gate) -> Result<Written, Refused> {
     use std::os::unix::fs::OpenOptionsExt;
+    #[cfg(feature = "brick")]
+    let _idle = crate::update::brick_io::IdleIo::enter().map_err(|e| Refused::Io(e.to_string()))?;
     let exists = std::fs::symlink_metadata(target).is_ok();
     if exists && !overwrite {
         return Err(Refused::Exists(format!("{} is there already.", target.file_name().unwrap_or_default().to_string_lossy())));
@@ -496,6 +500,8 @@ fn unchanged_folder(target: &Path) -> Result<(), Refused> {
 }
 
 fn copy(r: &mut impl Read, w: &mut std::fs::File, len: u64, gate: &Gate) -> Result<u64, Refused> {
+    #[cfg(feature = "brick")]
+    let mut pacer = crate::update::brick_io::Pacer::new();
     let off = || Refused::Io("The web companion was switched off. Nothing was kept.".into());
     let mut buf = vec![0u8; 256 * 1024];
     let mut done = 0u64;
@@ -529,7 +535,11 @@ fn copy(r: &mut impl Read, w: &mut std::fs::File, len: u64, gate: &Gate) -> Resu
                 return Err(Refused::NotAllowed("That file is a program. Programs don't go into a port's folder. Nothing was kept.".into()));
             }
         }
-        w.write_all(&buf[..n]).map_err(|e| Refused::Io(format!("The SD card refused the write: {e}")))?;
+        #[cfg(feature = "brick")]
+        let written = pacer.write(&buf[..n], w);
+        #[cfg(not(feature = "brick"))]
+        let written = w.write_all(&buf[..n]);
+        written.map_err(|e| Refused::Io(format!("The SD card refused the write: {e}")))?;
         done += n as u64;
     }
     if (gate.abort)() {

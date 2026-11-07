@@ -138,6 +138,9 @@ fn supervise(ctx: &Ctx, tx: SyncSender<(std::net::TcpStream, Conn)>, stop: &Atom
     let mut failed: Vec<Listen> = Vec::new();
     let mut refused = 0u64;
     while !stop.load(Ordering::Relaxed) {
+        #[cfg(feature = "brick")]
+        let want = fixed.clone().unwrap_or_else(|| net::plan_here(&net::interfaces(), PORT));
+        #[cfg(not(feature = "brick"))]
         let want = fixed.clone().unwrap_or_else(|| net::plan(&net::interfaces(), PORT));
         let now: Vec<Listen> = open.iter().map(|(l, _)| l.clone()).collect();
         if now != want {
@@ -186,6 +189,15 @@ fn supervise(ctx: &Ctx, tx: SyncSender<(std::net::TcpStream, Conn)>, stop: &Atom
                 continue;
             }
             while let Ok((stream, peer)) = s.accept() {
+                #[cfg(feature = "brick")]
+                if !net::peer_allowed(peer.ip()) && !(net::is_userspace(l) && peer.ip().is_loopback()) && fixed.is_none() {
+                    refused += 1;
+                    if refused.is_power_of_two() {
+                        eprintln!("web: refused {refused} connection(s) from outside the tailnet");
+                    }
+                    continue;
+                }
+                #[cfg(not(feature = "brick"))]
                 if !net::peer_allowed(peer.ip()) && fixed.is_none() {
                     refused += 1;
                     if refused.is_power_of_two() {

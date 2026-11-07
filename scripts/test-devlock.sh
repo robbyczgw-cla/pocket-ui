@@ -8,35 +8,60 @@ set -u
 DEVLOCK=${1:-$(dirname "$0")/devlock.sh}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-export POCKET_DEVLOCK="$tmp/lock" POCKET_DEVLOCK_POLL=1
+export POCKET_DEVLOCK="$tmp/lock" POCKET_DEVLOCK_POLL=0.01
+BUDGET=$(python3 "$(dirname "$0")/test-time-budget.py" 1)
+REAL_SLEEP=$(command -v sleep)
+mkdir "$tmp/bin"
+cat >"$tmp/bin/sleep" <<EOF
+#!/bin/sh
+: >"$tmp/waiter-polled"
+exec "$REAL_SLEEP" "\$@"
+EOF
+chmod +x "$tmp/bin/sleep"
+export PATH="$tmp/bin:$PATH"
 failed=0
 check() { # <what> <expected> <actual>
   if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: expected '$2', got '$3'"; failed=1; fi
 }
 # Runs a command, killed after <secs> seconds (a lock that is never released or broken would hang the test).
-limit() { # <secs> <command...>
-  secs=$1
+limit() { # <secs> <command...>; reap the owned command, no sleeping watchdog left behind
+  secs=$(($1 * BUDGET))
   shift
-  "$@" &
-  pid=$!
-  (sleep "$secs" && kill "$pid" 2>/dev/null) &
-  killer=$!
-  wait "$pid"
-  rc=$?
-  kill "$killer" 2>/dev/null
-  wait "$killer" 2>/dev/null
-  return $rc
+  python3 - "$secs" "$@" <<'LIMIT'
+import os, signal, subprocess, sys
+child = subprocess.Popen(sys.argv[2:], start_new_session=True)
+try:
+    raise SystemExit(child.wait(timeout=float(sys.argv[1])))
+except subprocess.TimeoutExpired:
+    os.killpg(child.pid, signal.SIGTERM)
+    try:
+        child.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        os.killpg(child.pid, signal.SIGKILL)
+        child.wait()
+    raise SystemExit(124)
+LIMIT
 }
 
 # 1. While one run holds the lock, a second one waits and runs afterwards.
-sh "$DEVLOCK" first sh -c "echo first-start >>'$tmp/log'; sleep 3; echo first-end >>'$tmp/log'" &
+mkfifo "$tmp/release"
+sh "$DEVLOCK" first sh -c "echo first-start >>'$tmp/log'; read release <'$tmp/release'; echo first-end >>'$tmp/log'" &
 first=$!
 n=0
-until [ -d "$POCKET_DEVLOCK" ] || [ $n -ge 50 ]; do
-  sleep 0.1
+until [ -f "$tmp/log" ] || [ $n -ge $((50 * BUDGET)) ]; do
+  "$REAL_SLEEP" 0.1
   n=$((n + 1))
 done
-limit 20 sh "$DEVLOCK" second sh -c "echo second >>'$tmp/log'"
+limit 20 sh "$DEVLOCK" second sh -c "echo second >>'$tmp/log'" &
+second=$!
+n=0
+until [ -f "$tmp/waiter-polled" ] || [ $n -ge $((50 * BUDGET)) ]; do
+  "$REAL_SLEEP" 0.1
+  n=$((n + 1))
+done
+check "second caller encountered the held lock" yes "$([ -f "$tmp/waiter-polled" ] && echo yes || echo no)"
+echo release >"$tmp/release"
+wait "$second"
 check "waiter exits cleanly" 0 $?
 wait "$first"
 check "waiter runs after the holder" "first-start first-end second" "$(tr '\n' ' ' <"$tmp/log" | sed 's/ $//')"

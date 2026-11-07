@@ -16,9 +16,7 @@
 #    debug assertions, no overflow checks), but no LTO, 16 codegen units and incremental compilation. Nothing that
 #    ships is built with it: the app and the release builds keep [profile.release].
 #  - the shell tests (launcher test in one lane, the small ones in another) run beside cargo on hosts with 8+ cores
-#    (GATE_PARALLEL=0 or fewer cores: after it). Several launcher tests (Smooth fan's watchdog) time real intervals of
-#    0.1-0.6 s and failed under the load of the compile (2026-10-24); if any shell test fails beside cargo, all of them
-#    run again alone and that result counts. They take about 50 s on a quiet machine, about 3 min on the remote host.
+#    after compilation and the serial Rust timing tier. They never retry a red verdict.
 #  - paths changed against the merge base with main (GATE_BASE=<ref>; a remote gate: the list comes from tools/remote-gate.sh)
 #    skip what cannot be affected, and say so ("gate: SKIPPED ..."): shell tests may skip ordinary Markdown and Rust
 #    sources no shell script names. Licence files and every unknown path run them. The integration tests (unit tests and
@@ -106,10 +104,11 @@ elif base=$(git merge-base "${GATE_BASE:-main}" HEAD 2>/dev/null); then
 fi
 # Every skipped path must be known harmless. Source references include all shell scripts, not just the test entry
 # points: e.g. check-core-licences.sh reads src/hostsys.rs. Other assets, configuration and unknown paths run the suite.
-# The Rust-only sources are safe here because shell tests use stand-in binaries rather than compiling/running them.
+# Rust files under src/ and tests/ are safe here when no shell script names them: shell tests use stand-in binaries,
+# not the Rust test executables. A Rust test change still runs all Rust integration and timing tests.
 docs_only=0 shell_tests=1 why_shell=
 if [ -n "$changed" ] && [ -z "${GATE_FULL:-}" ]; then
-    srcrefs=$(find deploy scripts -type f -name '*.sh' -exec grep -hoE 'src/[a-zA-Z0-9_./-]+\.rs' {} + 2>/dev/null | sort -u)
+    srcrefs=$(find deploy scripts -type f -name '*.sh' -exec grep -hoE '(src|tests)/[a-zA-Z0-9_./-]+\.rs' {} + 2>/dev/null | sort -u)
     docs_only=1 shell_tests=0
     while IFS= read -r f; do
         case $f in
@@ -122,7 +121,8 @@ if [ -n "$changed" ] && [ -z "${GATE_FULL:-}" ]; then
         case $f in
             LICENSE|NOTICE.md|assets/fonts/OFL.txt) shell_tests=1; why_shell=$f ;;
             docs/*.md) ;;
-            src/*.rs) case "
+            tests/*[!a-zA-Z0-9_./-]*) shell_tests=1; why_shell=$f ;;
+            src/*.rs|tests/*.rs) case "
 $srcrefs
 " in *"
 $f
@@ -155,22 +155,17 @@ shell_small() {
     # SD image's boot hook with its update guard (about 1 s): deploy/image/mount-storage.sh.
     { sh deploy/fat/test-hook.sh && sh deploy/image/test-mount-storage.sh; } >"$F" 2>&1; echo $? >"$RCD/f"
 }
-shell_tests_run() { shell_launcher & shell_small; wait; }   # two lanes: the launcher (the longest) and all the small ones
+shell_tests_run() { shell_launcher; shell_small; }
 shell_rc() {
     # A skipped suite has no result by design; a selected suite without a complete result never passed.
     if [ "$shell_tests" -eq 0 ]; then echo 0; return; fi
     result=$(cat "$RCD/$1" 2>/dev/null)
     case $result in ''|*[!0-9]*) echo 125 ;; *) echo "$result" ;; esac
 }
-shell_failed() { for k in l v c p q g f; do [ "$(shell_rc $k)" = 0 ] || return 0; done; return 1; }
 
-# The shell tests build nothing and use no port or shared directory (mktemp, fakes), so they run beside cargo when the host has
-# cores to spare (GATE_PARALLEL=0 or fewer than 8 cores: one after the other, as before). If they fail beside the compile
-# (the launcher's watchdog tests time real 0.1-0.6 s intervals), they run again alone after cargo, and that result counts.
+# Deadline and watchdog scenarios run after cargo, in a separate serial tier.
+# A retry would conceal a scheduling assumption; a red verdict stays red.
 cores=$(nproc 2>/dev/null || echo 1)
-parallel=0
-[ "$shell_tests" -eq 1 ] && [ "${GATE_PARALLEL:-1}" != 0 ] && [ "$cores" -ge 8 ] && parallel=1
-if [ "$parallel" -eq 1 ]; then shell_tests_run & shell_pid=$!; fi   # the launcher and the small tests are independent of each other too
 
 # shellcheck disable=SC2086  # pflag is one or two words
 runner=${GATE_RUNNER:-auto}
@@ -202,6 +197,19 @@ case $runner in
         ;;
     *) echo "GATE: unknown GATE_RUNNER (use auto, cargo or nextest)"; exit 2 ;;
 esac
+# The ordinary library tier covers every captured public controller. The private
+# Brick feature must run the SAME corpus too: otherwise a default gate can miss an
+# ID collision that only changes the built-in Brick's F keys. Fixture gate trees and
+# public exports without this feature keep their ordinary integration tier.
+if [ "$trc" -eq 0 ] && [ "$docs_only" -eq 0 ] && [ -f src/input_corpus_tests.rs ] && grep -Eq '^[[:space:]]*brick[[:space:]]*=' Cargo.toml; then
+    nice -n "$nice_increment" cargo test $pflag --features brick --lib input_corpus_tests -q >>"$T" 2>&1 || trc=1
+fi
+# The ignored timing tier is mandatory for both cargo and nextest. It gets one
+# attempt, one test thread, and runs after compilation; failure stays red.
+if [ "$trc" -eq 0 ]; then
+    if [ "$docs_only" -eq 1 ]; then timing_targets="--lib --bins"; else timing_targets=; fi
+    nice -n "$nice_increment" sh scripts/test-timing.sh "$profile" $timing_targets >>"$T" 2>&1 || trc=1
+fi
 # The Steam Deck's and Android's own code (scripts/check-platforms.sh): checks, not builds; after the tests. Android is
 # skipped where no NDK is installed; GATE_ANDROID_TARGET_DIR (set by the remote gate) keeps its files out of the host target dir.
 prc_platforms=0 platforms_log=/tmp/gate-platforms-$name.log
@@ -211,18 +219,11 @@ fi
 tdone=$(date +%s)
 sdone=$tdone
 shell_run_rc=0
-if [ "$parallel" -eq 1 ]; then
+if [ "$shell_tests" -eq 1 ]; then
+    # Supervise a child even in the serial tier: an interrupted coordinator must
+    # not turn missing exit-code files into success.
+    shell_tests_run & shell_pid=$!
     wait "$shell_pid" || shell_run_rc=$?
-    sdone=$(date +%s)
-    # An interrupted coordinator can leave a lane alive. Fail this run; do not race a retry against it.
-    if [ "$shell_run_rc" -eq 0 ] && shell_failed; then
-        echo "gate: shell tests failed beside cargo, running them again alone (first logs: $L.parallel ...)"
-        cp "$L" "$L.parallel"
-        shell_tests_run
-        sdone=$(date +%s)
-    fi
-elif [ "$shell_tests" -eq 1 ]; then
-    shell_tests_run
     sdone=$(date +%s)
 fi
 lrc=$(shell_rc l) vrc=$(shell_rc v) crc=$(shell_rc c) prc=$(shell_rc p) qrc=$(shell_rc q) grc=$(shell_rc g) frc=$(shell_rc f)
@@ -234,7 +235,7 @@ if [ "$shell_tests" -eq 1 ]; then
     cp "$V" /tmp/gate-verify.log
 fi
 if [ "$shell_tests" -eq 1 ]; then
-    echo "gate: profile $profile; tests $((tdone - start)) s, shell tests (launcher etc.) $((sdone - start)) s$([ "$parallel" -eq 1 ] && echo ' beside cargo')$([ -n "$why_shell" ] && echo "; run because of $why_shell"), total $((end - start)) s"
+    echo "gate: profile $profile; tests $((tdone - start)) s, shell tests (launcher etc.) $((sdone - start)) s$([ -n "$why_shell" ] && echo "; run because of $why_shell"), total $((end - start)) s"
 else
     echo "gate: profile $profile; tests $((tdone - start)) s, total $((end - start)) s"
 fi
@@ -307,6 +308,6 @@ fi
 if [ "$runner" = nextest ]; then
     summary=$(sed -n 's/.*tests run: \([0-9][0-9]*\) passed.*/\1 passed/p' "$T" | tail -1)
 else
-    summary=$(grep -o '[0-9]* passed' "$T" | head -1)
+    summary=$(awk '/^test result: ok\./ { n += $4 } END { print n " passed" }' "$T")
 fi
 echo "GATE: ok (${summary:-tests passed})"

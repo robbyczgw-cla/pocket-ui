@@ -1,0 +1,23 @@
+#!/bin/sh
+# The stand-in for `grim` (pocket-ui takes the screen with `grim -t png -`: the pause menu's picture behind a standalone emulator, the
+# screenshot key, the web companion's screen view). The card's pocket-fb is the compositor, so it hands over the window on show as a PNG:
+#   grim [-t png] [-]            the PNG on stdout
+#   grim [-t png] FILE           the PNG in FILE
+# Exit 1 when there is nothing to take (no window yet, pocket-fb not running).
+FB=${BRICK_FB:-$(dirname "$0")/../../../bin/pocket-fb}
+SOCK=${SWAYSOCK:-}
+out=-
+while [ $# -gt 0 ]; do
+  case $1 in
+    -t|-s|-g|-o|-l|-c) shift ;;
+    -*) ;;
+    *) out=$1 ;;
+  esac
+  shift
+done
+[ -n "$SOCK" ] && [ -x "$FB" ] || exit 1
+tmp=${BRICK_GRIM_TMP:-${XDG_RUNTIME_DIR:-/tmp}}/grim-$$.png
+rm -f "$tmp"
+"$FB" --ipc-send "$SOCK" "pocket_grab $tmp" >/dev/null 2>&1 || { rm -f "$tmp"; exit 1; }
+[ -s "$tmp" ] || { rm -f "$tmp"; exit 1; }
+if [ "$out" = - ]; then cat "$tmp"; rm -f "$tmp"; else mv "$tmp" "$out"; fi

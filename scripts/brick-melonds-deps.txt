@@ -1,0 +1,13 @@
+# Resolved dependencies of melonDS DS bc4e4b6, verified against the built source trees.
+# name|repository|full commit; git submodules are additionally pinned by their parent trees.
+date|https://github.com/HowardHinnant/date|1ead6715dec030d340a316c927c877a3c4e5a00c
+embed-binaries|https://github.com/andoalon/embed-binaries|078b62beba97e8192c99bfb16d5e17220cfc7598
+fmt|https://github.com/fmtlib/fmt|40626af88bd7df9a5fb80be7b25ac85b122d6c21
+glm|https://github.com/g-truc/glm|e7970a8b26732f1b0df9690f7180546f8c30e48e
+libretro-common|https://github.com/libretro/libretro-common|ad9124f1ecc5d0092fd285cbf9c4ffac317b1a65
+libslirp|https://github.com/JesseTG/libslirp-mirror|e61dbd459c8c06607b3a84694489427e8ec60f17
+melonds|https://github.com/melonDS-emu/melonDS|7117178c2dd56df32b6534ba6a54ad1f8547e693
+pntr|https://github.com/robloach/pntr|922aed03c4c53803466100596211da7549945da7
+span-lite|https://github.com/martinmoene/span-lite|00afc281a8c3c7657bb9c5b000d6e7082c1bbc7f
+yamc|https://github.com/yohhoy/yamc|4e015a7e8eb0d61c34e6928676c8c78881a72d73
+zlib|https://github.com/madler/zlib|51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf

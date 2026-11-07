@@ -37,7 +37,7 @@ struct Fake {
 
 impl Tailnet for Fake {
     fn self_node(&self) -> Option<SelfNode> {
-        Some(SelfNode { user_id: 1, login: "alex@example.com".into(), tagged: false, hostname: "pocket".into(), dns_name: "pocket.tail1234.ts.net".into() })
+        Some(SelfNode { user_id: 1, login: "alex@example.com".into(), tagged: false, hostname: "pocket".into(), dns_name: "pocket.tail1234.ts.net".into(), #[cfg(feature = "brick")] addrs: Vec::new() })
     }
     fn whois(&self, _peer: SocketAddr) -> Option<Whois> {
         let (user_id, login, device) = if self.owner { (1, "alex@example.com", "macbook") } else { (2, "friend@example.com", "friends-phone") };

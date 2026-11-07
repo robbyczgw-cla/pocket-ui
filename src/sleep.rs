@@ -38,7 +38,7 @@
 //! make the short press turn only the screen off with the game going on (`screen_off_now`, docs/SLEEP.md "Screen off
 //! with the game running") and the hold sleep at its release.
 //!
-//! **Switch off after sleeping** (L3, `auto_off`): after the hours set in Settings → System → Sleep & power in deep sleep on battery,
+//! **Switch off after sleeping** (L3, `auto_off`): after the time set in Settings → System → Sleep & power in deep sleep on battery,
 //! the RTC alarm wakes the system with the screen dark and the Power off path below runs (`Why::Slept`); on the
 //! charger it suspends again. A wake before that time costs one clock read on its way to the screen.
 //!
@@ -369,6 +369,7 @@ pub struct Ctx {
 }
 
 /// Results from the worker threads.
+#[cfg(not(feature = "brick"))]
 enum Msg {
     /// The system is back from the suspend of deep sleep number `seq` (`at_us`: when the worker saw it, trace clock);
     /// ROCKNIX's wake hooks may still be running. Screen and game come on now.
@@ -391,6 +392,32 @@ enum Msg {
     Restart,
 }
 
+#[cfg(feature = "brick")]
+enum Msg {
+    /// The system is back from the suspend of deep sleep number `seq` (`at_us`: when the worker saw it, trace clock);
+    /// ROCKNIX's wake hooks may still be running. Screen and game come on now.
+    Resumed { seq: u64, at_us: u64 },
+    /// Deep sleep number `seq` is over (`slept`: the system really suspended; then the wake hooks are done too and
+    /// the volume is set, at `hooks_us` and `volume_us`).
+    Woke { seq: u64, slept: bool, hooks_us: Option<u64>, volume_us: Option<u64> },
+    /// `systemctl poweroff` failed; the message was shown, the device stays on.
+    PowerOffFailed,
+    /// A suspend pocket-ui didn't start has ended, and its repairs are done.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    ExternalWake,
+    /// The battery crossed the warning or the critical level (`low_battery`).
+    Battery(crate::low_battery::Alert),
+    /// The CPU stayed at or over the heat guard's limit (the TrimUI Brick, `heat`): save, quit and power off.
+    #[cfg(feature = "brick")]
+    Hot(u32),
+    /// Deep sleep number `seq` lasted the `minutes` chosen, on battery (`auto_off`): save, quit and power off, dark.
+    SwitchOff { seq: u64, minutes: u32 },
+    /// The power-off after sleeping failed: the Pocket stays dark in light sleep.
+    SwitchOffFailed,
+    /// Restart pocket-ui: the game is saved and quit, the resume note written; the app may end now.
+    Restart,
+}
+
 /// Why the session ends (`Sleep::shut_down_for`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Why {
@@ -398,8 +425,18 @@ enum Why {
     Asked,
     /// The low-battery guard: the screen says so.
     BatteryEmpty,
-    /// Switch off after sleeping (`auto_off`) after this many hours: the screen stays dark, and the next start says why.
+    /// Switch off after sleeping (`auto_off`) after this many minutes: the screen stays dark, and the next start says why.
     Slept(u32),
+    /// The heat guard (`heat`): the CPU at this many °C.
+    #[cfg(feature = "brick")]
+    Hot(u32),
+}
+
+/// Whether a power off turns the output on before the game saves and quits (the backlight stays as it is). pocket-core
+/// takes no command while its output is off: a game playing behind the dark screen (`screen_off_now`), or one in dark
+/// light sleep that is switched off after sleeping (`dpms`: the SM8550, `POCKETUI_SLEEP_DPMS`).
+fn output_on_first(dpms: bool, dark_game: bool, from_light: bool) -> bool {
+    dpms && (dark_game || from_light)
 }
 
 // Fake power backends never flush every filesystem of the shared build host. The real backend still
@@ -446,7 +483,10 @@ impl System {
     }
 
     fn from_env() -> System {
-        let backlight = std::env::var("POCKETUI_BACKLIGHT").ok().map(PathBuf::from).or_else(|| {
+        // Two panels (RG DS Plus): the upper one's; the lower one follows it (`second_screen::follow_light`).
+        let upper = crate::second_screen::Panels::current().and_then(|p| crate::second_screen::light_dir(Path::new("/"), &p.top_light));
+        if upper.is_some() { crate::second_screen::note_restore(); }
+        let backlight = std::env::var("POCKETUI_BACKLIGHT").ok().map(PathBuf::from).or(upper).or_else(|| {
             std::fs::read_dir("/sys/class/backlight")
                 .ok()?
                 .flatten()
@@ -493,6 +533,7 @@ impl System {
                 let _ = std::fs::write(DARK_FILE, saved.to_string());
             }
             let _ = std::fs::write(&file, "0");
+            crate::second_screen::follow_light(Path::new("/"), 0, 1);
             Some(saved)
         });
         if self.dpms {
@@ -532,13 +573,20 @@ impl System {
     /// The screen on, on the caller's thread.
     fn screen_on_now(&self, saved: Option<u32>) {
         if self.dpms {
-            crate::control::sway_command("output * power on");
+            if let Some(p) = crate::second_screen::Panels::current() {
+                // The second-screen worker restores the lower panel according to the game/setting.
+                crate::control::sway_command(&format!("output {} power on", p.top));
+            } else {
+                crate::control::sway_command("output * power on");
+            }
         }
         let saved = saved
             .filter(|l| *l > 0)
             .or_else(|| std::fs::read_to_string(DARK_FILE).ok()?.trim().parse().ok());
         if let (Some(dir), Some(level)) = (self.backlight.as_ref(), saved) {
             let _ = std::fs::write(dir.join("brightness"), level.to_string());
+            let max = std::fs::read_to_string(dir.join("max_brightness")).ok().and_then(|m| m.trim().parse().ok()).unwrap_or(255);
+            crate::second_screen::follow_light(Path::new("/"), level, max);
         }
         let _ = std::fs::remove_file(DARK_FILE);
     }
@@ -922,8 +970,9 @@ fn is_input(e: &PadEvent) -> bool {
 /// The steps of a deep sleep, as its worker thread runs them (`deep_sequence`); the tests run them on a fake and
 /// check the order.
 trait DeepSteps {
-    /// The game writes the state the next start resumes from; the resume note.
-    fn save(&mut self);
+    /// The game writes the state the next start resumes from; the resume note. True when the spot is safe: a new
+    /// version of the state was confirmed, or no game is open. RetroArch and other emulators can't confirm one.
+    fn save(&mut self) -> bool;
     /// The sink's volume and mute now.
     fn volume(&mut self) -> Option<(u32, bool)>;
     /// `set_volume`; `kick`: one step off and back, so PipeWire writes the codec again.
@@ -1027,6 +1076,15 @@ fn deep_sequence(s: &mut impl DeepSteps, mut plan: Option<crate::auto_off::Plan>
                 let now = s.clock();
                 plan = Some(p.again(now));
             }
+            // Powered off only with the game's spot saved just now (the game has stood still since the suspend): a
+            // save that fails, or an emulator that can't confirm one, must not lose the game. Asleep again without an
+            // alarm, as with switch-off Off, until someone wakes it (or the battery runs out, the state from before
+            // the suspend still there).
+            Verdict::SwitchOff if !s.save() => {
+                println!("sleep: switch-off time, but the game's state couldn't be saved; asleep again, no switch-off");
+                s.alarm(None);
+                plan = None;
+            }
             Verdict::SwitchOff => {
                 s.alarm(None);
                 s.switch_off(p);
@@ -1055,12 +1113,23 @@ fn deep_sequence(s: &mut impl DeepSteps, mut plan: Option<crate::auto_off::Plan>
 
 /// The switch-off plan for a deep sleep that starts `now`: the dark spell's own when it has one (kept across failed
 /// suspends), a full period on when its time passed while nothing could act, a new one at the spell's first suspend.
+#[cfg(not(feature = "brick"))]
 fn plan_for_deep(hours: Option<u32>, before: Option<crate::auto_off::Plan>, now: f64, hour_secs: f64) -> Option<crate::auto_off::Plan> {
     match (hours, before) {
         (None, _) => None,
         (Some(h), Some(plan)) if plan.hours == h && plan.at > now => Some(plan),
         (Some(h), Some(plan)) if plan.hours == h => Some(plan.again(now)),
         (Some(h), _) => Some(crate::auto_off::Plan::new(now, h, hour_secs)),
+    }
+}
+
+#[cfg(feature = "brick")]
+fn plan_for_deep(minutes: Option<u32>, before: Option<crate::auto_off::Plan>, now: f64, minute_secs: f64) -> Option<crate::auto_off::Plan> {
+    match (minutes, before) {
+        (None, _) => None,
+        (Some(h), Some(plan)) if plan.minutes == h && plan.at > now => Some(plan),
+        (Some(h), Some(plan)) if plan.minutes == h => Some(plan.again(now)),
+        (Some(h), _) => Some(crate::auto_off::Plan::new(now, h, minute_secs)),
     }
 }
 
@@ -1082,17 +1151,17 @@ struct DeepWorker {
 }
 
 impl DeepSteps for DeepWorker {
-    fn save(&mut self) {
-        if let Some(game) = &self.game {
-            let saved = game.save_for_sleep(self.stopped);
-            println!(
-                "sleep: {} for {} after {:?}",
-                if saved { "state saved" } else { "no state saved" },
-                game.name,
-                self.t0.elapsed()
-            );
-            write_resume(&self.data_dir, game);
-        }
+    fn save(&mut self) -> bool {
+        let Some(game) = &self.game else { return true };
+        let saved = game.save_for_sleep(self.stopped);
+        println!(
+            "sleep: {} for {} after {:?}",
+            if saved { "state saved" } else { "no state saved" },
+            game.name,
+            self.t0.elapsed()
+        );
+        write_resume(&self.data_dir, game);
+        saved
     }
 
     fn volume(&mut self) -> Option<(u32, bool)> {
@@ -1210,9 +1279,17 @@ impl DeepSteps for DeepWorker {
         std::thread::sleep(d);
     }
 
+    #[cfg(not(feature = "brick"))]
     fn switch_off(&mut self, plan: crate::auto_off::Plan) {
         self.own.store(false, Ordering::SeqCst);
         let _ = self.tx.send(Msg::SwitchOff { seq: self.seq, hours: plan.hours });
+        (self.notify)();
+    }
+
+    #[cfg(feature = "brick")]
+    fn switch_off(&mut self, plan: crate::auto_off::Plan) {
+        self.own.store(false, Ordering::SeqCst);
+        let _ = self.tx.send(Msg::SwitchOff { seq: self.seq, minutes: plan.minutes });
         (self.notify)();
     }
 }
@@ -1237,6 +1314,13 @@ pub struct Sleep {
     battery_warning: Option<u8>,
     /// The battery is empty: the game is saved and the device switched off as soon as nothing else is under way.
     battery_empty: bool,
+    /// The heat guard said so (°C): saved and switched off as `battery_empty` is.
+    #[cfg(feature = "brick")]
+    too_hot: Option<u32>,
+    /// The TrimUI Brick's own card: a dark screen pauses the game (it never plays on unseen), and only the power key wakes it (a
+    /// Brick in a bag woke itself on every button and ran its menu until the battery was empty, hot, 03.11.).
+    #[cfg(feature = "brick")]
+    brick_card: bool,
     inhibitor: InhibitorSlot,
     force_power_key: bool,
     /// The power button: short press sleeps, long press asks for the power menu (`take_menu_request`).
@@ -1281,6 +1365,7 @@ pub struct Sleep {
 
 impl Sleep {
     /// `notify` wakes the app's event loop when a worker has news (then call `tick`).
+    #[cfg(not(feature = "brick"))]
     pub fn new(data_dir: PathBuf, notify: Arc<dyn Fn() + Send + Sync>) -> Sleep {
         let host_owned = crate::device::current().host_owned();
         let mut sleep = Sleep::build(data_dir, System::from_env(), notify, InhibitorSlot::take_soon_unless(host_owned));
@@ -1296,6 +1381,31 @@ impl Sleep {
         // A Steam Deck: SteamOS owns the battery, sleep and the power key (docs/STEAMDECK.md), so no critical-battery power-off.
         if !host_owned {
             sleep.spawn_battery_guard();
+        }
+        sleep.spawn_rtc_check();
+        sleep
+    }
+
+    #[cfg(feature = "brick")]
+    pub fn new(data_dir: PathBuf, notify: Arc<dyn Fn() + Send + Sync>) -> Sleep {
+        let host_owned = crate::device::current().host_owned() || { #[cfg(feature = "brick")] { crate::device::brick() } #[cfg(not(feature = "brick"))] { false } };
+        let mut sleep = Sleep::build(data_dir, System::from_env(), notify, InhibitorSlot::take_soon_unless(host_owned));
+        sleep.sys.recover();
+        // Switched off after sleeping: the backlight was 0 then. One small file, and only that start finds one.
+        sleep.switched_off = crate::auto_off::take_note(&sleep.data_dir);
+        if let Some(level) = sleep.switched_off.as_ref().and_then(|n| n.brightness).filter(|_| sleep.sys.screen_dark()) {
+            println!("sleep: switched off dark after sleeping; the screen on again");
+            sleep.sys.screen_on_now(Some(level));
+        }
+        #[cfg(target_os = "linux")]
+        sleep.spawn_watcher();
+        // A Steam Deck: SteamOS owns the battery, sleep and the power key (docs/STEAMDECK.md), so no critical-battery power-off.
+        if !host_owned {
+            sleep.spawn_battery_guard();
+            #[cfg(feature = "brick")]
+            if sleep.brick_card {
+                sleep.spawn_heat_guard();
+            }
         }
         sleep.spawn_rtc_check();
         sleep
@@ -1319,8 +1429,16 @@ impl Sleep {
     }
 
     /// The state alone: no threads, no inhibitor, nothing read but the settings (`new` adds those; the tests don't).
+    #[cfg(not(feature = "brick"))]
     fn build(data_dir: PathBuf, sys: System, notify: Arc<dyn Fn() + Send + Sync>, inhibitor: InhibitorSlot) -> Sleep {
         Sleep::build_on(crate::device::current().host_owned(), data_dir, sys, notify, inhibitor)
+    }
+
+    #[cfg(feature = "brick")]
+    fn build(data_dir: PathBuf, sys: System, notify: Arc<dyn Fn() + Send + Sync>, inhibitor: InhibitorSlot) -> Sleep {
+        // The Brick with NextUI's card: NextUI owns sleep. Its own card is ours: the idle timers run (they did not, and a Brick woken in a
+        // bag stayed on until the battery was empty, 03.11.).
+        Sleep::build_on(crate::device::current().host_owned() || { #[cfg(feature = "brick")] { crate::device::brick() && !crate::brick_profile::standalone() } #[cfg(not(feature = "brick"))] { false } }, data_dir, sys, notify, inhibitor)
     }
 
     /// `host_owned`: SteamOS (a Steam Deck) owns sleep, so none of the idle timers run, whatever sleep.json says.
@@ -1349,6 +1467,10 @@ impl Sleep {
             woke_at: None,
             battery_warning: None,
             battery_empty: false,
+            #[cfg(feature = "brick")]
+            too_hot: None,
+            #[cfg(feature = "brick")]
+            brick_card: crate::device::brick() && crate::brick_profile::standalone(),
             inhibitor,
             force_power_key: std::env::var_os("POCKETUI_POWER_KEY").is_some(),
             power_key: PowerKey::default(),
@@ -1372,6 +1494,37 @@ impl Sleep {
             dark_game: false,
             restart: false,
         }
+    }
+
+    /// The heat guard (`heat`): the CPU's temperature every `heat::EVERY` on a thread of its own; enough readings in a row at or over the
+    /// limit (dark or in play, `heat::limits`) say "too hot".
+    #[cfg(feature = "brick")]
+    fn spawn_heat_guard(&self) {
+        let (tx, notify) = (self.tx.clone(), self.notify.clone());
+        let _ = std::thread::Builder::new().name("heat-guard".into()).spawn(move || {
+            let Some(zone) = crate::heat::cpu_zone(std::path::Path::new("/")) else { return };
+            let (dark_c, play_c) = crate::heat::limits(&zone);
+            println!("heat: guard on {} (switch-off dark at {dark_c} °C, in play at {play_c} °C)", zone.display());
+            let mut over = 0;
+            loop {
+                let dark = crate::heat::dark();
+                let (limit, need) = if dark { (dark_c, crate::heat::CONFIRM_DARK) } else { (play_c, crate::heat::CONFIRM_PLAY) };
+                match crate::heat::read_c(&zone) {
+                    Some(c) if c >= limit => over += 1,
+                    _ => over = 0,
+                }
+                if over >= need {
+                    let c = crate::heat::read_c(&zone).unwrap_or(limit);
+                    eprintln!("heat: the CPU at {c} °C, {over} readings at or over {limit} °C ({})", if dark { "dark" } else { "in play" });
+                    if tx.send(Msg::Hot(c)).is_err() {
+                        return;
+                    }
+                    notify();
+                    return;
+                }
+                std::thread::sleep(crate::heat::EVERY);
+            }
+        });
     }
 
     /// Reads the battery every `low_battery::EVERY` on a thread of its own and reports a crossing of the warning or
@@ -1466,6 +1619,9 @@ impl Sleep {
         let guarded = self.woke_at.is_some_and(|t| now < t + WAKE_GUARD);
         match self.state {
             State::Deep | State::PoweringOff => true,
+            // The Brick's own card: dark, only the power key wakes it (as a phone does); every other press is swallowed.
+            #[cfg(feature = "brick")]
+            State::Light if self.brick_card && !matches!(e, PadEvent::Button { button: Button::Power, pressed: true, .. }) => true,
             // The volume keys stay ROCKNIX's; they don't wake the screen.
             State::Light
                 if is_input(e)
@@ -1623,6 +1779,7 @@ impl Sleep {
         }
     }
 
+    #[cfg(not(feature = "brick"))]
     fn tick_timers(&mut self, ctx: Ctx) -> Option<Instant> {
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
@@ -1673,6 +1830,10 @@ impl Sleep {
                 Msg::SwitchOffFailed => {
                     // Dark and paused as before, without another try in this dark spell; the low-battery guard still acts.
                     eprintln!("sleep: couldn't switch off after sleeping; staying in light sleep");
+                    // The output the switch-off turned on for the game (`output_on_first`) goes off again.
+                    if self.sys.dpms {
+                        self.brightness = self.sys.screen_off().filter(|l| *l > 0).or(self.brightness);
+                    }
                     self.state = State::Light;
                     self.timers.light_since = Some(Instant::now());
                     self.auto_off = None;
@@ -1728,6 +1889,127 @@ impl Sleep {
         }
     }
 
+    #[cfg(feature = "brick")]
+    fn tick_timers(&mut self, ctx: Ctx) -> Option<Instant> {
+        while let Ok(msg) = self.rx.try_recv() {
+            match msg {
+                Msg::Resumed { seq, at_us } if seq == self.deep_seq && self.state == State::Deep => self.resumed(at_us),
+                Msg::Woke { seq, slept, hooks_us, volume_us } if seq == self.deep_seq => self.woke(slept, hooks_us, volume_us),
+                // A deep sleep that a newer one overtook (asleep again while its wake hooks still ran): nothing of it is
+                // current, and a `wake` for pocket-core now would wake the game of the newer one.
+                Msg::Resumed { .. } | Msg::Woke { .. } => {}
+                Msg::PowerOffFailed => {
+                    if let Ok(mut o) = self.overlay.lock() {
+                        *o = None;
+                    }
+                    self.state = State::Awake;
+                    crate::battery_history::set_asleep(false);
+                    self.timers.last_input = Instant::now();
+                }
+                Msg::ExternalWake => {
+                    println!("sleep: the system was suspended without us; volume and quantum set again");
+                    // No game's battery stretch reaches across that suspend (`battery_history`).
+                    crate::battery_history::sleep_boundary();
+                    if let Some(Game {
+                        kind: GameKind::PocketCore { .. },
+                        ..
+                    }) = &self.game
+                    {
+                        control::pocket_core("wake");
+                    }
+                    self.woke_at = Some(Instant::now());
+                    self.timers.last_input = Instant::now();
+                }
+                Msg::Battery(crate::low_battery::Alert::Low(percent)) => {
+                    println!("sleep: battery at {percent} %");
+                    // Nobody sees a warning on a dark screen; the critical level still acts.
+                    if self.state == State::Awake {
+                        self.battery_warning = Some(percent);
+                    }
+                }
+                #[cfg(feature = "brick")]
+                Msg::Hot(c) => self.too_hot = Some(c),
+                Msg::Battery(crate::low_battery::Alert::Critical(percent)) => {
+                    println!("sleep: battery at {percent} %, saving the game and switching off");
+                    self.battery_empty = true;
+                }
+                Msg::SwitchOff { seq, minutes } if seq == self.deep_seq && self.state == State::Deep => {
+                    println!("sleep: {minutes} min asleep on battery; saving the game and switching off, the screen dark");
+                    self.shut_down_for(PowerAction::PowerOff, Why::Slept(minutes));
+                }
+                Msg::SwitchOff { .. } => {}
+                Msg::Restart => self.restart = true,
+                Msg::SwitchOffFailed => {
+                    // Dark and paused as before, without another try in this dark spell; the low-battery guard still acts.
+                    eprintln!("sleep: couldn't switch off after sleeping; staying in light sleep");
+                    // The output the switch-off turned on for the game (`output_on_first`) goes off again.
+                    if self.sys.dpms {
+                        self.brightness = self.sys.screen_off().filter(|l| *l > 0).or(self.brightness);
+                    }
+                    self.state = State::Light;
+                    self.timers.light_since = Some(Instant::now());
+                    self.auto_off = None;
+                }
+            }
+        }
+        // Not in the middle of a suspend (it comes back to Light, then this runs) or a power-off already under way.
+        if self.battery_empty && matches!(self.state, State::Awake | State::Light) {
+            self.battery_empty = false;
+            self.shut_down_for(PowerAction::PowerOff, Why::BatteryEmpty);
+            return None;
+        }
+        #[cfg(feature = "brick")]
+        crate::heat::set_dark(self.state != State::Awake);
+        #[cfg(feature = "brick")]
+        if let Some(c) = self.too_hot.filter(|_| matches!(self.state, State::Awake | State::Light)) {
+            self.too_hot = None;
+            println!("sleep: the CPU at {c} °C; saving the game and switching off");
+            self.shut_down_for(PowerAction::PowerOff, Why::Hot(c));
+            return None;
+        }
+        // Dark in light sleep, suspends failing, on battery, and the time is up: switched off as from deep sleep.
+        let light_off = match (self.state, self.auto_off) {
+            (State::Light, Some(plan)) => {
+                let now = crate::auto_off::clock();
+                // Read now, not the battery guard's reading of up to 30 s ago: a charger plugged in just before the
+                // deadline must keep the Pocket on (the deep verdict reads fresh too, `DeepWorker::power`).
+                if plan.due(now) && crate::auto_off::decide(false, crate::low_battery::read(&self.battery_dir)) == crate::auto_off::Verdict::SwitchOff {
+                    println!("sleep: {} min dark on battery (suspends failed); saving the game and switching off", plan.minutes);
+                    self.shut_down_for(PowerAction::PowerOff, Why::Slept(plan.minutes));
+                    return None;
+                }
+                // Looked at again then (or a minute on, on the charger, should it be unplugged).
+                Some(Instant::now() + Duration::from_secs_f64((plan.at - now).max(60.0)))
+            }
+            _ => None,
+        };
+        if ctx.busy && self.state == State::Awake {
+            self.timers.last_input = Instant::now();
+        }
+        // A game left running behind the dark screen (`screen_off_now`) is never put to sleep by the timers.
+        let auto_suspend = self.auto_suspend() && !self.dark_game;
+        let (due, next) = self.timers.due(self.state, Instant::now(), auto_suspend);
+        match due {
+            Some(Due::Light) => {
+                println!("sleep: light after {:?} without input", self.timers.light_after.unwrap_or_default());
+                self.light(ctx);
+                if self.screen_only {
+                    self.tick(ctx) // schedule the screen-off power-off deadline; there is no suspend timer
+                } else {
+                    self.timers.due(self.state, Instant::now(), self.auto_suspend()).1
+                }
+            }
+            Some(Due::Deep) => {
+                self.deep(ctx, SuspendOrigin::Other);
+                None
+            }
+            None => match (next, light_off) {
+                (Some(a), Some(b)) => Some(a.min(b)),
+                (a, b) => a.or(b),
+            },
+        }
+    }
+
     /// Awake again since the last call (a light sleep or a deep one): true once. The app draws a frame then, so the
     /// clock and the battery in the corner are those of now, not of when it went dark.
     pub fn take_woke(&mut self) -> bool {
@@ -1735,6 +2017,7 @@ impl Sleep {
     }
 
     /// Screen off, game paused.
+    #[cfg(not(feature = "brick"))]
     fn light(&mut self, ctx: Ctx) {
         // Send from your phone closes before the screen goes dark (security review M2).
         crate::phone_upload::sleeping();
@@ -1754,6 +2037,35 @@ impl Sleep {
         self.timers.failures = 0;
         if self.screen_only {
             self.auto_off = plan_for_deep(self.config.off_after, self.auto_off, crate::auto_off::clock(), minute().as_secs_f64() * 60.0);
+        }
+
+        // The battery per game doesn't count minutes with the game paused in the dark (`battery_games`).
+        crate::battery_history::set_asleep(true);
+        crate::battery_history::flush_soon();
+        // Nor does Play history: the running game's stretch ends here (`play_log`, a channel send).
+        crate::play_log::paused();
+    }
+
+    #[cfg(feature = "brick")]
+    fn light(&mut self, ctx: Ctx) {
+        // Send from your phone closes before the screen goes dark (security review M2).
+        crate::phone_upload::sleeping();
+        self.power_key.cancel();
+        crate::trace::step("sleep: light");
+        // 0 when a screen-on is still under way (asleep again at once): the level from before stays.
+        self.brightness = self.sys.screen_off().filter(|l| *l > 0).or(self.brightness);
+        self.menu_open = ctx.menu_open;
+        if let Some(game) = &self.game {
+            if !ctx.menu_open || matches!(game.kind, GameKind::PocketCore { .. }) {
+                game.pause();
+                self.stopped_game = !ctx.menu_open && !matches!(game.kind, GameKind::PocketCore { .. });
+            }
+        }
+        self.state = State::Light;
+        self.timers.light_since = Some(Instant::now());
+        self.timers.failures = 0;
+        if self.screen_only {
+            self.auto_off = plan_for_deep(self.config.off_after, self.auto_off, crate::auto_off::clock(), minute().as_secs_f64());
         }
 
         // The battery per game doesn't count minutes with the game paused in the dark (`battery_games`).
@@ -1818,6 +2130,7 @@ impl Sleep {
     /// ("screen off"; its "wake" ends that and hides the button that woke it until it is let go). Other emulators
     /// keep drawing to the dark screen and get every press. Anywhere else (the shelf, the pause menu) it is the
     /// light sleep of a while without input, Sleep after included. Any button but Vol± turns the screen back on.
+    #[cfg(not(feature = "brick"))]
     pub fn screen_off_now(&mut self, ctx: Ctx) {
         if self.state != State::Awake {
             return;
@@ -1855,6 +2168,52 @@ impl Sleep {
         crate::battery_history::set_asleep(true);
         crate::battery_history::flush_soon();
     }
+
+    #[cfg(feature = "brick")]
+    pub fn screen_off_now(&mut self, ctx: Ctx) {
+        if self.state != State::Awake {
+            return;
+        }
+        // The Brick's own card: dark means the game waits (paused, pocket-core at its lowest clock), never plays on unseen.
+        #[cfg(feature = "brick")]
+        if self.brick_card {
+            println!("sleep: screen off, the game paused");
+            self.light(ctx);
+            return;
+        }
+        if self.game.is_none() || ctx.menu_open {
+
+            self.light(ctx);
+            return;
+        }
+        crate::phone_upload::sleeping();
+        self.power_key.cancel();
+        crate::trace::step("sleep: screen off, the game on");
+        self.brightness = self.sys.screen_off().filter(|l| *l > 0).or(self.brightness);
+        if let Some(Game {
+            kind: GameKind::PocketCore { .. },
+            ..
+        }) = &self.game
+        {
+
+
+            control::pocket_core("screen off");
+        }
+        self.menu_open = false;
+        self.stopped_game = false;
+        self.dark_game = true;
+        self.state = State::Light;
+        self.timers.light_since = Some(Instant::now());
+        self.timers.failures = 0;
+        if self.screen_only {
+            self.auto_off = plan_for_deep(self.config.off_after, self.auto_off, crate::auto_off::clock(), minute().as_secs_f64());
+        }
+
+        // The battery per game doesn't count dark minutes: the screen is most of what a game costs. Play history goes
+        // on, the game being played.
+        crate::battery_history::set_asleep(true);
+        crate::battery_history::flush_soon();
+    }
     /// A game playing behind the dark screen (`screen_off_now`), as the fan and the quick settings need to know.
     pub fn dark_game(&self) -> bool {
         self.dark_game
@@ -1871,6 +2230,7 @@ impl Sleep {
         crate::play_log::paused();
     }
     /// Saves, then suspends, in a worker thread; `tick` sees it come back.
+    #[cfg(not(feature = "brick"))]
     fn deep(&mut self, _ctx: Ctx, origin: SuspendOrigin) {
         // Closed in `light` already; again here in case a path ever reaches the suspend without it.
         crate::phone_upload::sleeping();
@@ -1884,6 +2244,61 @@ impl Sleep {
         // Switch off after sleeping: counted from the dark spell's first suspend; a time that passed while nothing
         // could act (on the charger in light sleep) starts over.
         self.auto_off = plan_for_deep(self.config.off_after, self.auto_off, crate::auto_off::clock(), minute().as_secs_f64() * 60.0);
+        let plan = self.auto_off;
+        let worker = DeepWorker {
+            seq: self.deep_seq,
+            game: self.game.clone(),
+            // Stopped by us or by the open pause menu: stopped again after saving.
+            stopped: self.stopped_game || self.menu_open,
+            sys: self.sys.clone(),
+            data_dir: self.data_dir.clone(),
+            tx: self.tx.clone(),
+            notify: self.notify.clone(),
+            own: self.own_suspend.clone(),
+            t0: Instant::now(),
+            hooks_us: None,
+            volume_us: None,
+            rtc: self.rtc.clone(),
+        };
+        let turn = self.suspend_turn.clone();
+        self.own_suspend.store(true, Ordering::SeqCst);
+        let run = move || {
+            let mut worker = worker;
+            // An earlier deep sleep still waiting for its wake hooks finishes first.
+            let _turn = turn.lock().unwrap_or_else(|e| e.into_inner());
+            // A power off disarmed the alarm while this one waited its turn: no suspend on the way down.
+            if worker.rtc.shut() {
+                println!("sleep: a power off is under way; this deep sleep does not start");
+                worker.own.store(false, Ordering::SeqCst);
+                return;
+            }
+            worker.own.store(true, Ordering::SeqCst);
+            worker.t0 = Instant::now();
+            deep_sequence(&mut worker, plan, origin);
+            // Ended by a power off without `done`: the next sleep is not "ours" any more.
+            worker.own.store(false, Ordering::SeqCst);
+        };
+        if let Err(e) = std::thread::Builder::new().name("deep-sleep".into()).spawn(run) {
+            eprintln!("sleep: no thread for the suspend ({e}); staying awake");
+            self.own_suspend.store(false, Ordering::SeqCst);
+            self.wake_light("no deep sleep");
+        }
+    }
+
+    #[cfg(feature = "brick")]
+    fn deep(&mut self, _ctx: Ctx, origin: SuspendOrigin) {
+        // Closed in `light` already; again here in case a path ever reaches the suspend without it.
+        crate::phone_upload::sleeping();
+        // Final barrier: no worker, suspend command or RTC alarm on this platform.
+        if self.screen_only {
+            return;
+        }
+        self.pause_dark_game();
+        self.state = State::Deep;
+        self.deep_seq += 1;
+        // Switch off after sleeping: counted from the dark spell's first suspend; a time that passed while nothing
+        // could act (on the charger in light sleep) starts over.
+        self.auto_off = plan_for_deep(self.config.off_after, self.auto_off, crate::auto_off::clock(), minute().as_secs_f64());
         let plan = self.auto_off;
         let worker = DeepWorker {
             seq: self.deep_seq,
@@ -2000,8 +2415,11 @@ impl Sleep {
 
     /// `shut_down`, for a reason: the low-battery guard's says so on the screen; switching off after sleeping keeps the
     /// screen dark (from Deep too, where its worker ended without waking anything) and leaves a note for the next start.
+    #[cfg(not(feature = "brick"))]
     fn shut_down_for(&mut self, action: PowerAction, why: Why) {
         let dark = matches!(why, Why::Slept(_));
+        // Switched off from dark light sleep: on the SM8550 its output is off too (below).
+        let from_light = dark && self.state == State::Light;
         match self.state {
             State::PoweringOff => return,
             State::Deep if !dark => return,
@@ -2022,12 +2440,15 @@ impl Sleep {
         }
         // A game playing in the dark is quit from where it is (it saves on the way). pocket-core takes no command
         // while its output is off (it waits for a frame that never comes; soak 2026-11-01: Quit after 7-10 s by the
-        // fallback, no exit save), so the output goes on first, the backlight staying at 0 where it is dark.
-        let dark_output = self.dark_game && self.sys.dpms;
+        // fallback, no exit save), so the output goes on first, the backlight staying at 0 where it is dark. The same in
+        // light sleep: the frame under way when the output went off waits until it is on, the `sleep` and the `autosave`
+        // behind it (Odin 2 Mini 05.11.2026: no state written in 10 s, the switch-off refused).
+        let dark_output = output_on_first(self.sys.dpms, self.dark_game, from_light);
         self.dark_game = false;
         let (game, sys, data_dir, overlay) = (self.game.clone(), self.sys.clone(), self.data_dir.clone(), self.overlay.clone());
         let (notify, tx, wake_app) = (self.notify.clone(), self.tx.clone(), self.notify.clone());
         let rtc = self.rtc.clone();
+        let stopped = self.stopped_game || self.menu_open;
         let note = match why {
             Why::Slept(hours) => Some(crate::auto_off::Note { hours, brightness: self.brightness.filter(|b| *b > 0) }),
             Why::Asked | Why::BatteryEmpty => None,
@@ -2055,9 +2476,160 @@ impl Sleep {
             if let Some(game) = &game {
                 if dark_output {
                     let _turn = sys.screen_lock.lock().unwrap_or_else(|e| e.into_inner());
-                    crate::control::sway_command("output * power on");
+                    if let Some(p) = crate::second_screen::Panels::current() {
+                // The second-screen worker restores the lower panel according to the game/setting.
+                crate::control::sway_command(&format!("output {} power on", p.top));
+            } else {
+                crate::control::sway_command("output * power on");
+            }
                 }
                 say(if why == Why::BatteryEmpty { "Battery empty. Saving…" } else { "Saving…" });
+                // Nobody asked for this power off: it happens only with the game's spot confirmed saved right now
+                // (deep sleep checked once already before it sent `SwitchOff`; the dark light sleep of failed suspends
+                // and the SM8550 have only this check). Else the Pocket stays dark, the game paused where it was.
+                if note.is_some() && !game.save_for_sleep(stopped) {
+                    eprintln!("sleep: switch-off after sleeping: the game's state couldn't be saved; staying on, dark");
+                    crate::shutdown_log::event(&data_dir, "PowerOff (Slept): no confirmed save; not switched off");
+                    rtc.reopen();
+                    let _ = tx.send(Msg::SwitchOffFailed);
+                    wake_app();
+                    return;
+                }
+                write_resume(&data_dir, game);
+                // In a bag: no sound of the game going on for a moment before it quits (RetroArch resumes first).
+                let muted = dark.then(mute_sink).flatten();
+                game.quit_for_power_off();
+                if let Some(was) = muted {
+                    set_mute(was);
+                }
+            }
+            if let Some(note) = &note {
+                crate::auto_off::write_note(&data_dir, note);
+            }
+            say(shutdown_text(action));
+            crate::battery_history::flush();
+            sync_filesystems();
+            // Restart pocket-ui: the system stays up; the app ends and its launcher starts it again.
+            if action == PowerAction::RestartUi {
+                println!("sleep: restarting pocket-ui");
+                let _ = tx.send(Msg::Restart);
+                wake_app();
+                return;
+            }
+            let cmd = sys.shutdown_cmd(action);
+            println!("sleep: {action:?} ({cmd})");
+            // The last thing before the command: no wake alarm left armed (or in the past) for the power off to
+            // meet, and none that a suspend worker could arm again (`Rtc` keeps its gate shut).
+            crate::shutdown_log::snapshot(&data_dir, &format!("{action:?} ({why:?}): the state before the command"));
+            crate::auto_off::disarm_before_power_off(&rtc, &data_dir, &format!("{action:?}"));
+            crate::shutdown_log::event(&data_dir, &format!("{action:?}: running `{cmd}`"));
+            let (ok, how) = crate::shutdown_log::run_and_describe(cmd);
+            crate::shutdown_log::event(&data_dir, &format!("{action:?}: `{cmd}` ended: {how}"));
+            if !ok {
+                eprintln!("sleep: {action:?} (`{cmd}`) failed: {how}");
+                // Still up: alarms may be set again by the next sleep.
+                rtc.reopen();
+                if note.is_some() {
+                    crate::auto_off::clear_note(&data_dir);
+                    let _ = tx.send(Msg::SwitchOffFailed);
+                    wake_app();
+                    return;
+                }
+                say(if action == PowerAction::PowerOff { "Couldn't switch off." } else { "Couldn't restart." });
+                // Tests exercise completion without waiting out the on-screen notice.
+                #[cfg(not(test))]
+                std::thread::sleep(Duration::from_secs(3));
+                let _ = tx.send(Msg::PowerOffFailed);
+                wake_app();
+            }
+        });
+    }
+
+    #[cfg(feature = "brick")]
+    fn shut_down_for(&mut self, action: PowerAction, why: Why) {
+        let dark = matches!(why, Why::Slept(_));
+        // Switched off from dark light sleep: on the SM8550 its output is off too (below).
+        let from_light = dark && self.state == State::Light;
+        match self.state {
+            State::PoweringOff => return,
+            State::Deep if !dark => return,
+            State::Deep => {}
+            State::Light if dark => {}
+            // Dark: on again, so "Saving…" can be seen.
+            State::Light => {
+                self.screen_job = self.sys.screen_on_soon(self.brightness.take());
+            }
+            State::Awake if dark => return,
+            State::Awake => {}
+        }
+        self.state = State::PoweringOff;
+        // From this moment no alarm may be armed and no deep sleep starts; the disarm itself waits until the game is
+        // saved and quit, just before the command (a failed command opens the gate again).
+        if action != PowerAction::RestartUi {
+            self.rtc.close();
+        }
+        // A game playing in the dark is quit from where it is (it saves on the way). pocket-core takes no command
+        // while its output is off (it waits for a frame that never comes; soak 2026-11-01: Quit after 7-10 s by the
+        // fallback, no exit save), so the output goes on first, the backlight staying at 0 where it is dark. The same in
+        // light sleep: the frame under way when the output went off waits until it is on, the `sleep` and the `autosave`
+        // behind it (Odin 2 Mini 05.11.2026: no state written in 10 s, the switch-off refused).
+        let dark_output = output_on_first(self.sys.dpms, self.dark_game, from_light);
+        self.dark_game = false;
+        let (game, sys, data_dir, overlay) = (self.game.clone(), self.sys.clone(), self.data_dir.clone(), self.overlay.clone());
+        let (notify, tx, wake_app) = (self.notify.clone(), self.tx.clone(), self.notify.clone());
+        let rtc = self.rtc.clone();
+        let stopped = self.stopped_game || self.menu_open;
+        let note = match why {
+            Why::Slept(minutes) => Some(crate::auto_off::Note { minutes, hours: 0, brightness: self.brightness.filter(|b| *b > 0) }),
+            Why::Asked | Why::BatteryEmpty => None,
+            #[cfg(feature = "brick")]
+            Why::Hot(_) => None,
+        };
+        // Nothing on a dark screen: a frame drawn for nobody, and pocket-ui's window over a game that is quitting.
+        let say = move |s: &str| {
+            if dark {
+                return;
+            }
+            if let Ok(mut o) = overlay.lock() {
+                *o = Some(s.to_string());
+            }
+            notify();
+        };
+        std::thread::spawn(move || {
+            crate::shutdown_log::event(&data_dir, &format!("{action:?} asked ({why:?})"));
+            // A store package half moved into place would stay half installed (review N5): it finishes first.
+            let end = Instant::now() + STORE_WAIT;
+            if crate::store::changing() {
+                say("Finishing the install…");
+                while crate::store::changing() && Instant::now() < end {
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+            }
+            if let Some(game) = &game {
+                if dark_output {
+                    let _turn = sys.screen_lock.lock().unwrap_or_else(|e| e.into_inner());
+                    if let Some(p) = crate::second_screen::Panels::current() {
+                        // The second-screen worker restores the lower panel according to the game/setting.
+                        crate::control::sway_command(&format!("output {} power on", p.top));
+                    } else {
+                        crate::control::sway_command("output * power on");
+                    }
+                }
+                #[cfg(not(feature = "brick"))]
+                say(if why == Why::BatteryEmpty { "Battery empty. Saving…" } else { "Saving…" });
+                #[cfg(feature = "brick")]
+                say(match why { Why::BatteryEmpty => "Battery empty. Saving…", Why::Hot(_) => "Too hot. Saving…", _ => "Saving…" });
+                // Nobody asked for this power off: it happens only with the game's spot confirmed saved right now
+                // (deep sleep checked once already before it sent `SwitchOff`; the dark light sleep of failed suspends
+                // and the SM8550 have only this check). Else the Pocket stays dark, the game paused where it was.
+                if note.is_some() && !game.save_for_sleep(stopped) {
+                    eprintln!("sleep: switch-off after sleeping: the game's state couldn't be saved; staying on, dark");
+                    crate::shutdown_log::event(&data_dir, "PowerOff (Slept): no confirmed save; not switched off");
+                    rtc.reopen();
+                    let _ = tx.send(Msg::SwitchOffFailed);
+                    wake_app();
+                    return;
+                }
                 write_resume(&data_dir, game);
                 // In a bag: no sound of the game going on for a moment before it quits (RetroArch resumes first).
                 let muted = dark.then(mute_sink).flatten();
@@ -2353,6 +2925,8 @@ mod tests {
         press_at_pause: bool,
         /// A power off begins before the next round.
         shutting: bool,
+        /// How the saves end, in turn (confirmed when empty).
+        saves: std::collections::VecDeque<bool>,
     }
 
     fn fake(volume: Option<(u32, bool)>, slept: bool) -> FakeDeep {
@@ -2373,12 +2947,14 @@ mod tests {
             press_at_settle: false,
             press_at_pause: false,
             shutting: false,
+            saves: Default::default(),
         }
     }
 
     impl DeepSteps for FakeDeep {
-        fn save(&mut self) {
+        fn save(&mut self) -> bool {
             self.log.push("save");
+            self.saves.pop_front().unwrap_or(true)
         }
         fn volume(&mut self) -> Option<(u32, bool)> {
             self.log.push("read volume");
@@ -2471,6 +3047,8 @@ mod tests {
     }
 
     const HOUR: f64 = 3600.0;
+    #[cfg(feature = "brick")]
+    const MIN: f64 = 60.0;
 
     fn on_battery() -> Option<crate::low_battery::Level> {
         Some(crate::low_battery::Level { percent: 70, external_power: false })
@@ -2481,6 +3059,7 @@ mod tests {
     }
 
     /// A deep sleep with switch-off after 3 h, from the fake clock's start, the suspends ending as `script` says.
+    #[cfg(not(feature = "brick"))]
     fn run_plan(script: &[Ends], power: &[Option<crate::low_battery::Level>]) -> FakeDeep {
         let mut f = fake(Some((60, false)), true);
         f.script = script.iter().copied().collect();
@@ -2491,6 +3070,18 @@ mod tests {
         f
     }
 
+    #[cfg(feature = "brick")]
+    fn run_plan(script: &[Ends], power: &[Option<crate::low_battery::Level>]) -> FakeDeep {
+        let mut f = fake(Some((60, false)), true);
+        f.script = script.iter().copied().collect();
+        f.power = power.iter().copied().collect();
+        let plan = crate::auto_off::Plan::new(f.clock, 180, MIN);
+        deep_sequence(&mut f, Some(plan), SuspendOrigin::Other);
+        assert!(f.script.is_empty(), "every suspend of the script happened");
+        f
+    }
+
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn rtc_and_clock_step_re_suspends_do_not_inherit_a_power_keys_permission() {
         let mut f = fake(None, true);
@@ -2510,6 +3101,27 @@ mod tests {
         assert!(!blocked.log.contains(&"screen and game on"));
     }
 
+    #[cfg(feature = "brick")]
+    #[test]
+    fn rtc_and_clock_step_re_suspends_do_not_inherit_a_power_keys_permission() {
+        let mut f = fake(None, true);
+        f.script = [Ends::RtcJump(60.0), Ends::Alarm, Ends::Key(1.0)].into();
+        f.power = [on_charger()].into();
+        let plan = crate::auto_off::Plan::new(f.clock, 180, MIN);
+        deep_sequence(&mut f, Some(plan), SuspendOrigin::PowerKey);
+        assert!(f.script.is_empty());
+        assert_eq!(f.origins, [SuspendOrigin::PowerKey, SuspendOrigin::Other, SuspendOrigin::Other]);
+
+        let mut blocked = fake(None, false);
+        let plan = crate::auto_off::Plan::new(blocked.clock, 180, MIN);
+        deep_sequence(&mut blocked, Some(plan), SuspendOrigin::Other);
+        assert_eq!(blocked.origins, [SuspendOrigin::Other]);
+        assert_eq!(blocked.rtc, None, "a refused suspend leaves no alarm armed");
+        assert_eq!(blocked.log.last(), Some(&"failed"));
+        assert!(!blocked.log.contains(&"screen and game on"));
+    }
+
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn the_alarm_on_battery_switches_off_with_nothing_turned_on() {
         let f = run_plan(&[Ends::Alarm], &[on_battery()]);
@@ -2517,12 +3129,59 @@ mod tests {
             f.log,
             [
                 "save", "read volume", "store volume", "alarm", "suspend", "settle in the dark",
-                "confirm in the dark", "confirm in the dark", "clear alarm", "switch off"
+                "confirm in the dark", "confirm in the dark", "save", "clear alarm", "switch off"
             ],
-            "no screen, no game, no volume: the screen stays dark; the battery was read three times"
+            "no screen, no game, no volume: the screen stays dark; the battery was read three times, the game saved again"
         );
         assert_eq!(f.alarms, [Some(3 * 3600), None]);
         assert_eq!(f.switched_off.map(|p| p.hours), Some(3));
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn the_alarm_on_battery_switches_off_with_nothing_turned_on() {
+        let f = run_plan(&[Ends::Alarm], &[on_battery()]);
+        assert_eq!(
+            f.log,
+            [
+                "save", "read volume", "store volume", "alarm", "suspend", "settle in the dark",
+                "confirm in the dark", "confirm in the dark", "save", "clear alarm", "switch off"
+            ],
+            "no screen, no game, no volume: the screen stays dark; the battery was read three times, the game saved again"
+        );
+        assert_eq!(f.alarms, [Some(3 * 3600), None]);
+        assert_eq!(f.switched_off.map(|p| p.minutes), Some(180));
+    }
+
+    #[test]
+    fn a_save_that_fails_at_the_switch_off_time_keeps_it_asleep_with_no_alarm() {
+        // Long asleep on battery, but the game's state can't be confirmed (a failed write, or RetroArch): never
+        // switched off; asleep again with no alarm, and the next wake is the player's, the game where it was.
+        let mut f = fake(Some((60, false)), true);
+        f.script = [Ends::Alarm, Ends::Key(5.0 * HOUR)].into();
+        f.power = [on_battery()].into();
+        f.saves = [true, false].into();
+        let plan = crate::auto_off::Plan::new(f.clock, 3, HOUR);
+        deep_sequence(&mut f, Some(plan), SuspendOrigin::Other);
+        assert!(f.script.is_empty());
+        assert_eq!(f.switched_off, None, "no power off without the game saved");
+        assert_eq!(f.alarms, [Some(3 * 3600), None], "no alarm armed again: it stays asleep until woken");
+        assert_eq!(
+            f.log,
+            [
+                "save", "read volume", "store volume", "alarm", "suspend", "settle in the dark",
+                "confirm in the dark", "confirm in the dark", "save", "clear alarm", "suspend",
+                "screen and game on", "volume again", "wake hooks done", "volume again", "done"
+            ]
+        );
+        // The save before the suspend failing too changes nothing: the one that counts is the one at the time.
+        let mut f = fake(None, true);
+        f.script = [Ends::Alarm].into();
+        f.power = [on_battery()].into();
+        f.saves = [false, true].into();
+        let plan = crate::auto_off::Plan::new(f.clock, 3, HOUR);
+        deep_sequence(&mut f, Some(plan), SuspendOrigin::Other);
+        assert!(f.switched_off.is_some(), "saved at the switch-off time: switched off");
     }
 
     #[test]
@@ -2571,6 +3230,7 @@ mod tests {
     /// arming and the suspend) is no wake of a player and no new start of the count: the wall clock against
     /// CLOCK_BOOTTIME moved, so it is asleep again for what is left (2026-10-26; before, the screen came on in the bag
     /// and the next sleep began a full 3 h).
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn a_clock_set_by_hand_neither_switches_off_nor_wakes_the_screen_nor_restarts_the_count() {
         // The plan's clock is not the wall clock: a set of the wall clock doesn't move it.
@@ -2587,7 +3247,7 @@ mod tests {
             f.log,
             [
                 "save", "read volume", "store volume", "alarm", "suspend", "settle in the dark",
-                "alarm", "suspend", "settle in the dark", "confirm in the dark", "confirm in the dark", "clear alarm", "switch off"
+                "alarm", "suspend", "settle in the dark", "confirm in the dark", "confirm in the dark", "save", "clear alarm", "switch off"
             ]
         );
         // The second alarm is what was left of the first period (600 s asleep and the 1 s look), not a new 3 h.
@@ -2610,8 +3270,49 @@ mod tests {
         assert_eq!(next.secs_left(g.clock), 3 * 3600);
     }
 
+    #[cfg(feature = "brick")]
+    #[test]
+    fn a_clock_set_by_hand_neither_switches_off_nor_wakes_the_screen_nor_restarts_the_count() {
+        // The plan's clock is not the wall clock: a set of the wall clock doesn't move it.
+        let wall = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64();
+        assert!((wall - crate::auto_off::clock()).abs() > 1e8, "auto_off counts on CLOCK_BOOTTIME");
+        // A wake by the power key an hour in: no alarm is left armed while the Pocket is awake (and the clock is set).
+        let f = run_plan(&[Ends::Key(HOUR)], &[on_battery()]);
+        assert_eq!((f.rtc, f.switched_off), (None, None));
+        // The clock set, the alarm fired early, on battery, nobody there: the screen stays dark and the game paused;
+        // asleep again for what is left of the period, then the alarm at its real time switches off.
+        let f = run_plan(&[Ends::RtcJump(600.0), Ends::Alarm], &[on_battery()]);
+        assert_eq!(f.switched_off.map(|p| p.minutes), Some(180));
+        assert_eq!(
+            f.log,
+            [
+                "save", "read volume", "store volume", "alarm", "suspend", "settle in the dark",
+                "alarm", "suspend", "settle in the dark", "confirm in the dark", "confirm in the dark", "save", "clear alarm", "switch off"
+            ]
+        );
+        // The second alarm is what was left of the first period (600 s asleep and the 1 s look), not a new 3 h.
+        assert_eq!(f.alarms, [Some(3 * 3600), Some(3 * 3600 - 601), None]);
+        // A key pressed at that moment is someone there: a normal wake, as after any wake.
+        let mut g = fake(Some((60, false)), true);
+        g.script = [Ends::RtcJump(600.0)].into_iter().collect();
+        g.press_at_settle = true;
+        let plan = crate::auto_off::Plan::new(g.clock, 180, MIN);
+        deep_sequence(&mut g, Some(plan), SuspendOrigin::Other);
+        assert_eq!(g.switched_off, None);
+        assert_eq!(
+            g.log,
+            ["save", "read volume", "store volume", "alarm", "suspend", "settle in the dark", "screen and game on", "clear alarm", "volume again", "wake hooks done", "volume again", "done"]
+        );
+        assert_eq!(g.rtc, None);
+        // The next dark spell keeps counting on its own clock: the switch-off is a full period after its first suspend.
+        let next = plan_for_deep(Some(180), None, g.clock, MIN).unwrap();
+        assert!(!next.due(g.clock + 60.0));
+        assert_eq!(next.secs_left(g.clock), 3 * 3600);
+    }
+
     /// The wake hooks can outlast their 15 s cap and a charger's state arrives seconds after the wake: the first
     /// reading of "battery" is not enough to switch off (2026-10-26, Muse's review §2.2).
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn a_deep_sleep_that_finds_a_power_off_under_way_neither_arms_nor_suspends() {
         let mut f = fake(Some((60, false)), true);
@@ -2622,6 +3323,18 @@ mod tests {
         assert!(f.alarms.is_empty());
     }
 
+    #[cfg(feature = "brick")]
+    #[test]
+    fn a_deep_sleep_that_finds_a_power_off_under_way_neither_arms_nor_suspends() {
+        let mut f = fake(Some((60, false)), true);
+        f.shutting = true;
+        let plan = crate::auto_off::Plan::new(f.clock, 180, MIN);
+        deep_sequence(&mut f, Some(plan), SuspendOrigin::Other);
+        assert!(!f.log.contains(&"alarm") && !f.log.contains(&"suspend") && !f.log.contains(&"done"), "{:?}", f.log);
+        assert!(f.alarms.is_empty());
+    }
+
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn a_charger_that_shows_up_after_the_first_reading_keeps_it_asleep() {
         // Battery at the alarm, the charger by the second reading: no switch-off; asleep again, a full period on.
@@ -2648,6 +3361,33 @@ mod tests {
         assert!(g.log.contains(&"screen and game on"), "{:?}", g.log);
     }
 
+    #[cfg(feature = "brick")]
+    #[test]
+    fn a_charger_that_shows_up_after_the_first_reading_keeps_it_asleep() {
+        // Battery at the alarm, the charger by the second reading: no switch-off; asleep again, a full period on.
+        let f = run_plan(&[Ends::Alarm, Ends::Key(5.0)], &[on_battery(), on_charger()]);
+        assert_eq!(f.switched_off, None);
+        assert_eq!(f.pauses, 1);
+        assert_eq!(&f.log[3..6], ["alarm", "suspend", "settle in the dark"]);
+        assert_eq!(f.log[6], "confirm in the dark");
+        assert_eq!(f.alarms.len(), 3, "armed again, then cleared at the key's wake: {:?}", f.alarms);
+        // Charger only at the third reading.
+        let f = run_plan(&[Ends::Alarm, Ends::Key(5.0)], &[on_battery(), on_battery(), on_charger()]);
+        assert_eq!((f.switched_off, f.pauses), (None, 2));
+        // A battery that cannot be read on the way is no reason either.
+        let f = run_plan(&[Ends::Alarm, Ends::Key(5.0)], &[on_battery(), None]);
+        assert_eq!(f.switched_off, None);
+        // The power key in that window: someone is there.
+        let mut g = fake(Some((60, false)), true);
+        g.script = [Ends::Alarm].into_iter().collect();
+        g.power = [on_battery()].into_iter().collect();
+        g.press_at_pause = true;
+        let plan = crate::auto_off::Plan::new(g.clock, 180, MIN);
+        deep_sequence(&mut g, Some(plan), SuspendOrigin::Other);
+        assert_eq!(g.switched_off, None);
+        assert!(g.log.contains(&"screen and game on"), "{:?}", g.log);
+    }
+
     #[test]
     fn the_power_key_at_the_moment_of_the_alarm_wakes_it() {
         let f = run_plan(&[Ends::AlarmAndKey], &[on_battery()]);
@@ -2658,6 +3398,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn a_failed_suspend_clears_the_alarm_and_the_next_try_sets_only_what_is_left() {
         let f = run_plan(&[Ends::Fails], &[on_battery()]);
@@ -2673,6 +3414,24 @@ mod tests {
         // Changed in Settings since: the new time, from now. Off: none.
         assert_eq!(plan_for_deep(Some(1), Some(plan), 2000.0, HOUR).unwrap().at, 2000.0 + HOUR);
         assert_eq!(plan_for_deep(None, Some(plan), 2000.0, HOUR), None);
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn a_failed_suspend_clears_the_alarm_and_the_next_try_sets_only_what_is_left() {
+        let f = run_plan(&[Ends::Fails], &[on_battery()]);
+        assert_eq!(f.log, ["save", "read volume", "store volume", "alarm", "suspend", "clear alarm", "failed"]);
+        assert_eq!(f.rtc, None);
+        // The next try (2 min later, `Timers::deep_wait`) keeps the dark spell's plan: the alarm for what is left.
+        let plan = plan_for_deep(Some(180), None, 1000.0, MIN).unwrap();
+        let later = plan_for_deep(Some(180), Some(plan), 1120.0, MIN).unwrap();
+        assert_eq!(later, plan);
+        assert_eq!(later.secs_left(1120.0), 3 * 3600 - 120);
+        // A time that passed with nothing able to act (on the charger in light sleep): a full period from now.
+        assert_eq!(plan_for_deep(Some(180), Some(plan), plan.at + 50.0, MIN).unwrap().at, plan.at + 50.0 + 3.0 * HOUR);
+        // Changed in Settings since: the new time, from now. Off: none.
+        assert_eq!(plan_for_deep(Some(60), Some(plan), 2000.0, MIN).unwrap().at, 2000.0 + HOUR);
+        assert_eq!(plan_for_deep(None, Some(plan), 2000.0, MIN), None);
     }
 
     #[test]
@@ -2715,7 +3474,8 @@ mod tests {
     }
 
     #[test]
-    fn the_wake_timeline_says_where_the_time_went() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_wake_timeline_says_where_the_time_went() {
         assert_eq!(
             wake_timeline(1_000_000, 900_000, 1_004_000, Some(1_001_000), Some(1_800_000), Some(1_150_000)),
             "sleep: wake timeline, ms after the system was back: power key seen by the kernel -100 ms, screen on +4 ms, game on +1 ms, \
@@ -2738,7 +3498,7 @@ mod tests {
 
     impl Drop for SleepDir {
         fn drop(&mut self) {
-            let end = Instant::now() + Duration::from_secs(3);
+            let end = Instant::now() + crate::testutil::timeout(Duration::from_secs(3));
             while self.1.load(Ordering::SeqCst) && Instant::now() < end {
                 std::thread::sleep(Duration::from_millis(5));
             }
@@ -2763,7 +3523,7 @@ mod tests {
     /// Waits (up to 5 s) for the power-off thread to run the command: the note has its line. The shell's `>>` makes the
     /// file before it writes, so the file being there is not the command having run (a gate read it empty once).
     fn powered_off(dir: &Path) -> bool {
-        let end = Instant::now() + Duration::from_secs(5);
+        let end = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
         while Instant::now() < end {
             if std::fs::read_to_string(dir.join("powered-off")).is_ok_and(|s| !s.trim().is_empty()) {
                 return true;
@@ -2773,6 +3533,7 @@ mod tests {
         false
     }
 
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn switching_off_after_sleeping_keeps_the_screen_dark_and_leaves_a_note() {
         let (dir, mut s, file) = test_sleep("switch-off");
@@ -2795,9 +3556,32 @@ mod tests {
         assert_eq!(note, crate::auto_off::Note { hours: 3, brightness: Some(120) });
     }
 
+    #[cfg(feature = "brick")]
+    #[test]
+    fn switching_off_after_sleeping_keeps_the_screen_dark_and_leaves_a_note() {
+        let (dir, mut s, file) = test_sleep("switch-off");
+        s.light(Ctx::default());
+        s.state = State::Deep;
+        s.deep_seq = 4;
+        // An older deep sleep's news is not this one's.
+        s.tx.send(Msg::SwitchOff { seq: 3, minutes: 180 }).unwrap();
+        s.tick(Ctx::default());
+        assert_eq!(s.state(), State::Deep);
+        s.tx.send(Msg::SwitchOff { seq: 4, minutes: 180 }).unwrap();
+        s.tick(Ctx::default());
+        assert_eq!(s.state(), State::PoweringOff);
+        assert!(powered_off(&dir));
+        assert!(shutdown_log_with(&dir, "ended: exit 0").contains("RTC alarm disarm"), "the auto-off switch-off disarms like the others");
+        assert_eq!(level(&file), "0", "the screen never came on");
+        assert!(s.screen_job.is_none() && s.overlay().is_none());
+        // The next start: the screen at its level again, and the line to say once.
+        let note = crate::auto_off::take_note(&dir).unwrap();
+        assert_eq!(note, crate::auto_off::Note { minutes: 180, hours: 0, brightness: Some(120) });
+    }
+
     /// The shutdown log once it says `what` (the thread writes the end after the command), up to 5 s.
     fn shutdown_log_with(dir: &Path, what: &str) -> String {
-        let end = Instant::now() + Duration::from_secs(5);
+        let end = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
         loop {
             let text = std::fs::read_to_string(dir.join("logs/shutdown.log")).unwrap_or_default();
             if text.contains(what) || Instant::now() >= end {
@@ -2838,10 +3622,10 @@ mod tests {
         // Hold the worker at its visible notice, before it can disarm or run the command. No timed shell sleep.
         s.notify = Arc::new(move || {
             entered.send(()).unwrap();
-            resume.lock().unwrap().recv_timeout(Duration::from_secs(5)).unwrap();
+            resume.lock().unwrap().recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap();
         });
         s.shut_down(PowerAction::PowerOff);
-        waiting.recv_timeout(Duration::from_secs(5)).unwrap();
+        waiting.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap();
         assert!(s.rtc.shut(), "shut before the worker can disarm");
         assert!(!s.rtc.set(Some(30)));
         release.send(()).unwrap();
@@ -2854,7 +3638,7 @@ mod tests {
         std::fs::write(dir.join("wakealarm"), "1793051031").unwrap();
         s.shut_down(PowerAction::RestartUi);
         // Wait for the worker's completion message, then feed it through the ordinary tick handler.
-        let message = s.rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        let message = s.rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap();
         assert!(matches!(message, Msg::Restart));
         s.tx.send(message).unwrap();
         s.tick(Ctx::default());
@@ -2882,7 +3666,7 @@ mod tests {
         std::fs::write(dir.join("wakealarm"), "1793051031").unwrap();
         s.shut_down(PowerAction::PowerOff);
         // Completion, rather than three seconds of wall time, drives the test's notice deadline.
-        let message = s.rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        let message = s.rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap();
         assert!(matches!(message, Msg::PowerOffFailed));
         s.tx.send(message).unwrap();
         s.tick(Ctx::default());
@@ -2906,8 +3690,10 @@ mod tests {
         assert!(crate::phone_upload::sleeping_calls() > before, "the power key");
     }
 
+    #[cfg(not(feature = "brick"))]
     #[test]
-    fn a_switch_off_that_fails_stays_dark_in_light_sleep() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_switch_off_that_fails_stays_dark_in_light_sleep() {
         let (dir, mut s, file) = test_sleep("switch-off-fails");
         s.sys.poweroff_cmd = "false".into();
         s.light(Ctx::default());
@@ -2915,6 +3701,27 @@ mod tests {
         s.state = State::Deep;
         s.deep_seq = 1;
         s.tx.send(Msg::SwitchOff { seq: 1, hours: 3 }).unwrap();
+        s.tick(Ctx::default());
+        let end = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
+        while s.state() != State::Light && Instant::now() < end {
+            std::thread::sleep(Duration::from_millis(20));
+            s.tick(Ctx::default());
+        }
+        assert_eq!((s.state(), level(&file).as_str()), (State::Light, "0"));
+        assert_eq!(s.auto_off, None, "no second try in this dark spell");
+        assert_eq!(crate::auto_off::take_note(&dir), None, "no note for a start that didn't follow a switch-off");
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn a_switch_off_that_fails_stays_dark_in_light_sleep() {
+        let (dir, mut s, file) = test_sleep("switch-off-fails");
+        s.sys.poweroff_cmd = "false".into();
+        s.light(Ctx::default());
+        s.auto_off = Some(crate::auto_off::Plan::new(0.0, 180, MIN));
+        s.state = State::Deep;
+        s.deep_seq = 1;
+        s.tx.send(Msg::SwitchOff { seq: 1, minutes: 180 }).unwrap();
         s.tick(Ctx::default());
         let end = Instant::now() + Duration::from_secs(5);
         while s.state() != State::Light && Instant::now() < end {
@@ -2926,6 +3733,44 @@ mod tests {
         assert_eq!(crate::auto_off::take_note(&dir), None, "no note for a start that didn't follow a switch-off");
     }
 
+    #[cfg(not(feature = "brick"))]
+    #[test]
+    fn a_switch_off_from_the_dark_turns_the_output_on_so_the_game_can_save() {
+        // Odin 2 Mini 05.11.2026: with the output off pocket-core never took its `autosave`; the game would have been lost.
+        assert!(output_on_first(true, false, true), "SM8550 light sleep: the output on before the save");
+        assert!(output_on_first(true, true, false), "a game playing behind the dark screen");
+        assert!(!output_on_first(false, false, true), "the output was never off (backlight-only devices)");
+        assert!(!output_on_first(true, false, false), "a power off with the screen on");
+    }
+
+    #[test]
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_dark_and_due_on_battery_it_never_switches_off_a_game_it_could_not_save() {
+        // The SM8550's (and failed suspends') light-sleep path: RetroArch can't confirm a state, so the game stays
+        // open behind the dark screen instead of being quit by a power off.
+        let (dir, mut s, file) = test_sleep("unsaved-off");
+        s.game_started(Game::new("gba", "Advance Wars", Path::new("/storage/roms/gba/aw.gba"), "retroarch", None));
+        s.light(Ctx::default());
+        s.auto_off = Some(crate::auto_off::Plan::new(crate::auto_off::clock() - 4.0 * HOUR, 3, HOUR));
+        let battery = dir.join("battery");
+        std::fs::create_dir_all(&battery).unwrap();
+        std::fs::write(battery.join("capacity"), "60").unwrap();
+        std::fs::write(battery.join("status"), "Discharging").unwrap();
+        s.battery_dir = battery;
+        s.tick(Ctx::default());
+        let end = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
+        while s.state() != State::Light && Instant::now() < end {
+            std::thread::sleep(Duration::from_millis(20));
+            s.tick(Ctx::default());
+        }
+        assert_eq!((s.state(), level(&file).as_str()), (State::Light, "0"), "still dark, still on");
+        assert!(!powered_off(&dir), "no power off");
+        assert!(shutdown_log_with(&dir, "no confirmed save").contains("not switched off"));
+        assert_eq!(crate::auto_off::take_note(&dir), None);
+        assert!(s.game.is_some(), "the game is still open");
+    }
+
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn sm8550_never_suspends_or_sets_an_alarm_and_can_switch_off_in_the_dark() {
         let (dir, mut s, file) = test_sleep("sm8550");
@@ -2966,6 +3811,48 @@ mod tests {
         assert_eq!(std::fs::read_to_string(dir.join("wakealarm")).unwrap_or_default(), "0");
     }
 
+    #[cfg(feature = "brick")]
+    #[test]
+    fn sm8550_never_suspends_or_sets_an_alarm_and_can_switch_off_in_the_dark() {
+        let (dir, mut s, file) = test_sleep("sm8550");
+        s.screen_only = true;
+        let forbidden = dir.join("suspended");
+        s.sys.suspend_cmd = format!("touch {}", forbidden.display());
+        s.set_config(Config { screen_off: Some(30), off_after: Some(60), ..Config::default() });
+        assert_eq!(s.config.short_press, ShortPress::ScreenOff);
+        assert_eq!(s.config.sleep_after, None);
+        s.timers.last_input = Instant::now() - Duration::from_secs(60);
+        assert!(s.tick(Ctx::default()).is_some(), "idle screen-off schedules the optional power-off deadline");
+        s.sleep_now(Ctx::default());
+        assert_eq!((s.state(), level(&file).as_str()), (State::Light, "0"));
+        assert!(s.auto_off.is_some(), "power-off counts from screen off, no suspend required");
+        s.deep(Ctx::default(), SuspendOrigin::Other); // final barrier even if a future caller bypasses sleep_now
+        assert_eq!(s.state(), State::Light);
+        s.timers.light_since = Some(Instant::now() - Duration::from_secs(3600));
+        s.tick(Ctx::default());
+        assert_eq!(s.state(), State::Light);
+        assert!(!forbidden.exists() && !dir.join("wakealarm").exists(), "no alarm set before the switch-off");
+        s.auto_off = Some(crate::auto_off::Plan::new(crate::auto_off::clock() - 2.0 * HOUR, 60, MIN));
+        let battery = dir.join("battery");
+        std::fs::create_dir_all(&battery).unwrap();
+        s.battery_dir = battery.clone();
+        std::fs::write(battery.join("capacity"), "60").unwrap();
+        std::fs::write(battery.join("status"), "Charging").unwrap();
+        s.tick(Ctx::default());
+        assert_eq!(s.state(), State::Light, "never auto-off on the charger");
+        std::fs::write(battery.join("status"), "Discharging").unwrap();
+        s.tick(Ctx::default());
+        assert_eq!(s.state(), State::PoweringOff);
+        assert!(powered_off(&dir));
+        assert!(!forbidden.exists());
+        // The switch-off is a power off like the others: the alarm disarmed and read back first (nothing was ever armed:
+        // the file did not exist before; the disarm made it in this fake folder and it says 0, never "+N").
+        let log = shutdown_log_with(&dir, "ended: exit 0");
+        assert!(log.contains("RTC alarm disarm verified") && log.contains("before=no-rtc"), "nothing was ever armed: {log}");
+        assert_eq!(std::fs::read_to_string(dir.join("wakealarm")).unwrap_or_default(), "0");
+    }
+
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn dark_in_light_sleep_after_failed_suspends_it_switches_off_on_battery_only() {
         let (dir, mut s, file) = test_sleep("light-off");
@@ -2998,6 +3885,40 @@ mod tests {
         assert_eq!(level(&file), "0");
     }
 
+    #[cfg(feature = "brick")]
+    #[test]
+    fn dark_in_light_sleep_after_failed_suspends_it_switches_off_on_battery_only() {
+        let (dir, mut s, file) = test_sleep("light-off");
+        s.light(Ctx::default());
+        // The failed suspend's news: back to light sleep, the plan kept.
+        s.state = State::Deep;
+        s.deep_seq = 2;
+        let plan = crate::auto_off::Plan::new(crate::auto_off::clock() - 4.0 * HOUR, 180, MIN);
+        s.auto_off = Some(plan);
+        s.tx.send(Msg::Woke { seq: 2, slept: false, hooks_us: None, volume_us: None }).unwrap();
+        s.tick(Ctx::default());
+        assert_eq!(s.state(), State::Light);
+        // On the charger (or not read yet): it stays dark and looks again a minute on.
+        let battery = dir.join("battery");
+        std::fs::create_dir_all(&battery).unwrap();
+        s.battery_dir = battery.clone();
+        std::fs::write(battery.join("capacity"), "60").unwrap();
+        std::fs::write(battery.join("status"), "Charging").unwrap();
+        let next = s.tick(Ctx::default()).expect("a next look");
+        assert!(next <= Instant::now() + Duration::from_secs(61));
+        std::fs::remove_file(battery.join("capacity")).unwrap();
+        s.tick(Ctx::default());
+        assert_eq!(s.state(), State::Light, "a battery that can't be read is no reason");
+        // Unplugged: switched off, dark.
+        std::fs::write(battery.join("capacity"), "60").unwrap();
+        std::fs::write(battery.join("status"), "Discharging").unwrap();
+        s.tick(Ctx::default());
+        assert_eq!(s.state(), State::PoweringOff);
+        assert!(powered_off(&dir));
+        assert_eq!(level(&file), "0");
+    }
+
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn a_wake_ends_the_plan_and_a_late_switch_off_does_nothing() {
         let (dir, mut s, file) = test_sleep("late-alarm");
@@ -3012,6 +3933,26 @@ mod tests {
         assert_eq!(s.auto_off, None, "the next dark spell counts from its own first suspend");
         // News of a switch-off arriving now (an alarm after the manual wake) changes nothing.
         s.tx.send(Msg::SwitchOff { seq: 5, hours: 3 }).unwrap();
+        s.tick(Ctx::default());
+        assert_eq!(s.state(), State::Awake);
+        assert!(!powered_off_now(&dir));
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn a_wake_ends_the_plan_and_a_late_switch_off_does_nothing() {
+        let (dir, mut s, file) = test_sleep("late-alarm");
+        s.light(Ctx::default());
+        s.state = State::Deep;
+        s.deep_seq = 5;
+        s.auto_off = Some(crate::auto_off::Plan::new(0.0, 180, MIN));
+        s.tx.send(Msg::Resumed { seq: 5, at_us: crate::trace::now_us() }).unwrap();
+        s.tick(Ctx::default());
+        s.screen_job.take().unwrap().join().unwrap();
+        assert_eq!((s.state(), level(&file).as_str()), (State::Awake, "120"));
+        assert_eq!(s.auto_off, None, "the next dark spell counts from its own first suspend");
+        // News of a switch-off arriving now (an alarm after the manual wake) changes nothing.
+        s.tx.send(Msg::SwitchOff { seq: 5, minutes: 180 }).unwrap();
         s.tick(Ctx::default());
         assert_eq!(s.state(), State::Awake);
         assert!(!powered_off_now(&dir));
@@ -3293,7 +4234,8 @@ mod tests {
     }
 
     #[test]
-    fn restart_pocket_ui_saves_and_quits_the_game_first_and_never_runs_a_system_command() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_restart_pocket_ui_saves_and_quits_the_game_first_and_never_runs_a_system_command() {
         let (dir, mut s, _) = test_sleep("restart-ui");
         s.sys.reboot_cmd = format!("echo reboot >> {}", dir.join("powered-off").display());
         // The game: a process group of its own that ends on SIGTERM (reparented, so nothing here has to reap it).
@@ -3305,7 +4247,7 @@ mod tests {
         s.game_started(Game { pgid: Some(pgid), path: dir.join("Tetris.gb"), ..some_game() });
         s.shut_down(PowerAction::RestartUi);
         assert_eq!(s.state(), State::PoweringOff);
-        let end = Instant::now() + Duration::from_secs(10);
+        let end = Instant::now() + crate::testutil::timeout(Duration::from_secs(10));
         let mut restart = false;
         while !restart && Instant::now() < end {
             std::thread::sleep(Duration::from_millis(20));
@@ -3326,6 +4268,7 @@ mod tests {
         dir.join("powered-off").exists()
     }
 
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn the_low_battery_guard_still_switches_off_with_the_screen_on_and_only_once() {
         let (dir, mut s, file) = test_sleep("guard");
@@ -3346,6 +4289,32 @@ mod tests {
         assert!(powered_off(&dir));
         // A switch-off after sleeping on top of it: nothing more.
         s.tx.send(Msg::SwitchOff { seq: 1, hours: 3 }).unwrap();
+        s.tick(Ctx::default());
+        assert_eq!(std::fs::read_to_string(dir.join("powered-off")).unwrap().lines().count(), 1);
+        assert_eq!(crate::auto_off::take_note(&dir), None, "the guard's power-off leaves no switch-off note");
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn the_low_battery_guard_still_switches_off_with_the_screen_on_and_only_once() {
+        let (dir, mut s, file) = test_sleep("guard");
+        s.light(Ctx::default());
+        s.auto_off = Some(crate::auto_off::Plan::new(0.0, 180, MIN));
+        // Critical while a suspend is under way: nothing until it comes back.
+        s.state = State::Deep;
+        s.deep_seq = 1;
+        s.tx.send(Msg::Battery(crate::low_battery::Alert::Critical(2))).unwrap();
+        s.tick(Ctx::default());
+        assert_eq!(s.state(), State::Deep);
+        // The suspend failed: back in light sleep, the guard's power-off with the screen on ("Battery empty").
+        s.tx.send(Msg::Woke { seq: 1, slept: false, hooks_us: None, volume_us: None }).unwrap();
+        s.tick(Ctx::default());
+        assert_eq!(s.state(), State::PoweringOff);
+        s.screen_job.take().unwrap().join().unwrap();
+        assert_eq!(level(&file), "120", "the guard shows what it does, as before");
+        assert!(powered_off(&dir));
+        // A switch-off after sleeping on top of it: nothing more.
+        s.tx.send(Msg::SwitchOff { seq: 1, minutes: 180 }).unwrap();
         s.tick(Ctx::default());
         assert_eq!(std::fs::read_to_string(dir.join("powered-off")).unwrap().lines().count(), 1);
         assert_eq!(crate::auto_off::take_note(&dir), None, "the guard's power-off leaves no switch-off note");
@@ -3423,7 +4392,7 @@ mod tests {
         assert_eq!(
             g.kind,
             GameKind::PocketCore {
-                auto_state: PathBuf::from("/storage/roms/savestates/gbc/uCity.pstate.auto")
+                auto_state: PathBuf::from("/storage/roms/savestates/gbc/uCity.pstate.auto.z")
             }
         );
         assert_eq!(Game::new("n64", "x", Path::new("/r/x.z64"), "retroarch", None).kind, GameKind::RetroArch);

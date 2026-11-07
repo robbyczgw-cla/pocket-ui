@@ -117,6 +117,23 @@ pub fn target(dir: &Path, system: &str, game: &str, stamp: &Stamp) -> PathBuf {
     path
 }
 
+/// A wl_shm picture (ARGB8888 or XRGB8888: bytes blue, green, red, unused; `stride` bytes per row) as packed RGB; None when the
+/// buffer is too small for its size.
+#[cfg(feature = "brick")]
+pub fn xrgb_to_rgb(pixels: &[u8], width: u32, height: u32, stride: usize) -> Option<Vec<u8>> {
+    let (w, h) = (width as usize, height as usize);
+    if w == 0 || h == 0 || stride < w.checked_mul(4)? || pixels.len() < stride.checked_mul(h - 1)?.checked_add(w * 4)? {
+        return None;
+    }
+    let mut out = Vec::with_capacity(w * h * 3);
+    for row in pixels.chunks(stride).take(h) {
+        for px in row[..w * 4].chunks_exact(4) {
+            out.extend_from_slice(&[px[2], px[1], px[0]]);
+        }
+    }
+    Some(out)
+}
+
 /// 8-bit RGB as a PNG; None when the buffer doesn't match the size.
 pub fn encode_rgb(width: u32, height: u32, rgb: &[u8]) -> Option<Vec<u8>> {
     if width == 0 || height == 0 || rgb.len() != width as usize * height as usize * 3 {
@@ -326,6 +343,17 @@ pub fn find(dir: &Path, system: &str, game: &str, at: &str) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    #[cfg(feature = "brick")]
+    fn a_shm_picture_becomes_rgb_without_the_stride_padding() {
+        // 2 x 2 pixels, 12 bytes per row (4 of them padding): blue, green, red, unused.
+        let px = [1, 2, 3, 0, 4, 5, 6, 255, 9, 9, 9, 9, 7, 8, 9, 0, 10, 11, 12, 0, 9, 9, 9, 9];
+        assert_eq!(xrgb_to_rgb(&px, 2, 2, 12), Some(vec![3, 2, 1, 6, 5, 4, 9, 8, 7, 12, 11, 10]));
+        assert_eq!(xrgb_to_rgb(&px[..19], 2, 2, 12), None, "a pool too short for its picture");
+        assert_eq!(xrgb_to_rgb(&px, 4, 2, 12), None, "a row wider than its stride");
+        assert_eq!(xrgb_to_rgb(&px, 0, 2, 12), None);
+    }
+
     use super::*;
     use crate::testutil::TestDir;
 
@@ -484,7 +512,8 @@ mod tests {
     }
 
     #[test]
-    fn encoding_and_writing_happen_on_the_savers_own_thread() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_encoding_and_writing_happen_on_the_savers_own_thread() {
         let dir = scratch("thread");
         let (tx, rx) = std::sync::mpsc::channel();
         let saver = Saver::start(dir.to_path_buf(), move |o| {
@@ -495,7 +524,7 @@ mod tests {
         let t0 = std::time::Instant::now();
         assert!(saver.submit(request("Big", frame(640, 480, [1, 2, 3, 0]))));
         let handed_over = t0.elapsed();
-        let (id, name, outcome) = rx.recv_timeout(Duration::from_secs(20)).expect("an outcome");
+        let (id, name, outcome) = rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(20))).expect("an outcome");
         assert_ne!(id, std::thread::current().id());
         assert_eq!(name.as_deref(), Some("screenshot"));
         assert!(matches!(outcome, Outcome::Saved(_)));
@@ -503,7 +532,8 @@ mod tests {
     }
 
     #[test]
-    fn a_press_while_one_is_being_written_is_ignored_not_queued_up() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_press_while_one_is_being_written_is_ignored_not_queued_up() {
         let dir = scratch("busy");
         let (gate_tx, gate_rx) = std::sync::mpsc::channel::<()>();
         let gate_rx = std::sync::Mutex::new(gate_rx);
@@ -528,7 +558,7 @@ mod tests {
             gate_tx.send(()).unwrap();
         }
         for _ in 0..accepted {
-            assert!(matches!(rx.recv_timeout(Duration::from_secs(10)).unwrap(), Outcome::Saved(_)));
+            assert!(matches!(rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(10))).unwrap(), Outcome::Saved(_)));
         }
     }
 

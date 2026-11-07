@@ -10,11 +10,59 @@ newest app and OS release. Code: `src/update.rs`; page: Settings → System → 
 ```
 
 `url` is absolute or relative to update.json. The channel URL is `update::DEFAULT_URL`,
-`https://pocketui.xyz/updates/stable/update.json` (the list on the website, the files on GitHub Releases; nothing is
-published there yet), or `update_url` in `/storage/.config/pocket-ui/settings.json` (`file://` works too, which the
+`https://pocketui.xyz/updates/stable/update.json` (the signed list on the website; app files can be hosted there with GitHub Releases as fallback), or `update_url` in `/storage/.config/pocket-ui/settings.json` (`file://` works too, which the
 device test uses). Only `https://` and `file://` are fetched, and a redirect is followed only to `https://`
 (`--proto =https,file --proto-redir =https`); hosting, signing and the release procedure are in
 [UPDATE-CHANNEL.md](UPDATE-CHANNEL.md). `sd_image` and `install_zip` in the list are for people; a device ignores them.
+
+## Bounded downloads and alternate sources (0.3)
+
+A release may add `"mirrors": ["https://github.com/owner/repo/releases/download/vX/file"]`.
+`url` remains the first source, so older clients still work; all sources serve **identical bytes**.
+The complete list of sources is signed with the existing Ed25519 key. Size and SHA-256 checks
+apply equally to every source. HTTPS and HTTPS-only redirects remain enforced (`file://` for offline tests).
+A changed mirror list without a fresh signature is refused.
+
+The worker tries at most four signed sources, once each. It stops a source after 30 seconds
+without any file growth, or after five minutes plus the file's size at 10 KB/s (`source_deadline`: a 15 MB
+app gets about 30 minutes, a 1.5 GB system update a day), including DNS, TLS and redirects. A flat five minutes
+cut every system update and, on weak Wi-Fi, the app, and the next source began from nothing. Curl also has
+20-second connect and 30-second low-speed timeouts. There are no hidden curl retries. A host that stalls is left
+after 30 seconds; one that trickles is bounded by that deadline. When the deadline ends while bytes
+still come, the page says "The download is too slow on this network"; curl's own limit is 10 s after the
+worker's. Before the download the app update checks the SD card's room: the rest of the download, three times
+the archive unpacked, and 32 MB to spare (`update::room_for_app`); curl's write error (23) says the card is
+full, not Wi-Fi. A failed secure connection (curl 35, 60) with the clock before this build (`clock_check`) names
+the clock.
+Cancellation stops the operation rather than starting the next host. On a host change, partial
+bytes are discarded: a corrupt prefix from one host cannot poison the next. A partial file from
+the same source can still resume on a later attempt; the final full-file hash remains mandatory.
+
+The page names connecting, trying the next server, downloading, checking and preparing phases;
+a stalled final source reports “The download server stopped responding. Nothing was installed.
+Try again.” Failure leaves the active installation unchanged. Source-index failures go to the
+UI log without URLs or credentials. The progress counter restarts on a change of host.
+
+`scripts/release-channel.sh --direct-app …` prepares the app beside the signed website list
+under `/updates/<channel>/`, with GitHub as the signed fallback. It refuses an app over
+80,000,000 bytes to leave margin below the Hobby upload limit. It publishes nothing.
+`store-tool mirror KEY update.json app URL [URL] [URL]` signs alternate sources;
+`store-tool list` and `release-channel.sh --check` check every source, not only the primary.
+Card images, source archives and installers can stay on the release. Check the complete
+website deployment size and remaining monthly transfer before requesting a public deploy.
+
+## The hint on the shelf
+
+`src/update_hint.rs` (rules, `update-hint.json`) and `src/app_update_hint.rs` (the App's side). `FIRST_LOOK` (60 s)
+after the start, with Wi-Fi up (`status_corner::status().wifi`; no Wi-Fi = no timer, the change of Wi-Fi wakes the
+loop), a thread fetches the same signed list (`update::fetch_manifest`, `UpdateEvent::Looked`) and keeps it for the
+Updates page. `update_hint::due` says a version when `app` is newer than the running one and not `said` yet; the
+notice (`Notice::update_ready`, A to the page, B closes) waits for `shelf_notice_free()` and writes `said` when it is
+shown. Next look `EVERY` (12 h) after a look that found nothing or said its hint, `RETRY` (1 h) after a failed one.
+Never during a game, never in Kids Mode, never on a host-owned device (Steam Deck) or with `POCKETUI_MOCK`, and only
+in a release build (`update::release_build`: the release scripts set `POCKETUI_VERSION`; a main or branch build carries
+Cargo.toml's older version and would announce the release over itself, `update_hint::looks`);
+`{"off": true}` in the file stops the look. Only `app`: the system image and the Store are not announced from here.
 
 ## App: live, with automatic way back
 
@@ -35,8 +83,13 @@ device test uses). Only `https://` and `file://` are fetched, and a redirect is 
 Install = download → size + SHA-256 against the signed list → tar paths checked → unpacked to
 `.staging-<v>` → **both binaries must print exactly `pocket-ui <version>` / `pocket-core <version>`** (catches a
 wrong architecture or a broken build before anything changes; a substring test once mistook
-11.2.3 for 1.2.3) → staging renamed into
-`releases/<v>` → `previous` and `current` switched → pocket-ui exits with 75.
+11.2.3 for 1.2.3) → every file of the staging folder `fsync`ed → staging renamed into
+`releases/<v>` → `previous` → `update-pending` (synced with its folder) → `current` switched → pocket-ui exits with 75.
+The order is what a power cut needs: a switch reaches the card's journal within seconds, the programs' bytes only when
+the kernel writes them back, up to half a minute later; without the sync a cut in between left `current` pointing at
+empty programs. Cut off at any step (`update::crash_tests`: SIGKILL at each step, then the real launcher on what is
+left), the next start runs the old version or the new one with `update-pending` and `previous` in place, and the next
+try of the install finishes.
 
 `deploy/run-pocket-ui.sh` restarts on 75. If pocket-ui then exits with an error while
 `update-pending` is still there, it points `current` back at `previous` and writes `rolled-back`.
@@ -48,14 +101,19 @@ moment after installing; it once confirmed the new version by mistake).
 
 `update-pending` goes away when the new version has **presented its first frame** and the event
 loop has turned once more (`update::watch_health`, started at the very beginning of `main`), not
-after a fixed time. A version that hangs before that is killed by the same thread after
+after a fixed time. Before it does, the new version syncs its own folder and checks that the pocket-core next to it
+prints its version (`update::release_settled`): a release installed by a pocket-ui up to 0.2.x, which did not sync, could
+otherwise be confirmed with a player the power cut had left empty. If that check fails it exits with 124 as below, and
+the launcher (or on the Brick card `start.sh`) goes back. A version that hangs before that is killed by the same thread after
 `WATCHDOG_AFTER` (20 s): it exits with `WATCHDOG_EXIT` (124), which the launcher treats like a crash
 and rolls back. (Before, 10 s of uptime counted as healthy: a build that hung at 13 s stayed.)
 
-Downloads (`update::download`) give curl `--connect-timeout 20`, `--speed-limit 10240
---speed-time 30` (under 10 KB/s for 30 s counts as stalled and is retried) and
-`--max-filesize <size from the signed list>`; the poll loop also stops a file that grows past that
-size. The Updates page offers **A: Cancel** while a download runs (the partial file stays and is
+Downloads (`update::download`) give curl `--connect-timeout 20`, `--speed-limit 1 --speed-time 30`,
+`--max-time` (the source's deadline, `update::source_deadline`, plus 10 s) and `--max-filesize <size from the signed
+list>`, without curl's own retries; the poll loop also stops a file that grows past that size, one that has not grown
+for 30 s (the next source) and one whose time is up ("too slow"), see [Bounded downloads](#bounded-downloads-and-alternate-sources-03).
+Before the download the space on the card is checked (`update::room_for_app`). A kept part that turns out bad
+after it was continued is loaded once more from nothing on the same source. The Updates page offers **A: Cancel** while a download runs (the partial file stays and is
 resumed by the next try). A running job keeps auto-sleep off for at most 30 minutes.
 
 Releasing to the public channel: `scripts/release-channel.sh` makes and signs the list from the release artefacts

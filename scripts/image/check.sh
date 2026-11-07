@@ -259,6 +259,12 @@ sort >"$W/lists/storage.expected" <<EOF
 755 0:0 f ./pocket-ui/releases/$V/pocket-splash
 755 0:0 f ./pocket-ui/releases/$V/portmaster-setup.sh
 EOF
+if [ -d "$S/pocket-ui/releases/$V/cores" ]; then
+  check "bundled gpSP is the pinned ARM64 core with intact licence, source and recipe" \
+    'sh /repo/scripts/image/gba-checks.sh --validate "$S/pocket-ui/releases/$V/cores"'
+  sh /repo/scripts/image/gba-checks.sh --files "$V" >>"$W/lists/storage.expected"
+  sort -o "$W/lists/storage.expected" "$W/lists/storage.expected"
+fi
 check "exactly the expected files, owners and modes" 'same "$W/lists/storage" "$W/lists/storage.expected"' ||
   diff "$W/lists/storage.expected" "$W/lists/storage" | sed 's/^/     /'
 check ".please_resize_me there: ROCKNIX grows STORAGE at the first boot" '[ -f "$S/.please_resize_me" ]'

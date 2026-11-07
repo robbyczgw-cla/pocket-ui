@@ -45,6 +45,41 @@ pub fn clock_ms() -> f64 {
     ts.tv_sec as f64 * 1000.0 + ts.tv_nsec as f64 / 1e6
 }
 
+/// A slow-load signal on the runtime tmpfs, shared by pocket-core and pocket-ui.
+pub fn loading_path() -> std::path::PathBuf {
+    std::env::temp_dir().join("pocket-core.loading")
+}
+
+/// Keeps the UI informed if loading a core/game exceeds three seconds. Dropping the guard cancels the
+/// worker immediately and removes its marker, including when loading fails.
+pub struct LoadWatch {
+    stop: Option<std::sync::mpsc::Sender<()>>,
+    worker: Option<std::thread::JoinHandle<()>>,
+}
+
+pub fn watch_load() -> LoadWatch {
+    watch_load_at(loading_path(), Duration::from_secs(3))
+}
+
+fn watch_load_at(path: std::path::PathBuf, delay: Duration) -> LoadWatch {
+    let (stop, rx) = std::sync::mpsc::channel::<()>();
+    let worker = std::thread::Builder::new().name("loading".into()).spawn(move || {
+        if rx.recv_timeout(delay) == Err(std::sync::mpsc::RecvTimeoutError::Timeout) {
+            let _ = std::fs::write(&path, std::process::id().to_string());
+            let _ = rx.recv();
+        }
+        let _ = std::fs::remove_file(&path);
+    }).ok();
+    LoadWatch { stop: Some(stop), worker }
+}
+
+impl Drop for LoadWatch {
+    fn drop(&mut self) {
+        drop(self.stop.take());
+        if let Some(worker) = self.worker.take() { let _ = worker.join(); }
+    }
+}
+
 /// Environment variable with `clock_ms` at the moment the player started the game (pocket-ui sets it for pocket-core).
 pub const LAUNCHED_AT: &str = "POCKET_LAUNCHED_AT";
 
@@ -52,10 +87,9 @@ pub const LAUNCHED_AT: &str = "POCKET_LAUNCHED_AT";
 /// (Settings > Sound & feel > Animations) plays over the shelf meanwhile. Unset in Quick.
 pub const HOLD_UNTIL: &str = "POCKET_LAUNCH_HOLD_UNTIL";
 
-/// pocket-core's window is still to be held back (`HOLD_UNTIL`). A deadline further away than the longest hold pocket-ui
-/// asks for is a mistake, not a hold.
+/// pocket-core's window is still to be held back (`HOLD_UNTIL`). A visible reminder waits for a button; only an animation uses a deadline.
 pub fn held() -> bool {
-    // A slow or broken preview must never buy an invisible reminder four seconds of game time. The UI opts into
+    // A slow or broken preview must never buy an invisible reminder. The UI opts into
     // this handshake; a core that reaches play before the card is ready simply starts as usual.
     if hold_still() && std::env::var_os(HOLD_READY).is_some_and(|p| !std::path::Path::new(&p).exists()) {
         return false;
@@ -67,8 +101,8 @@ pub fn held() -> bool {
 /// `held` at `now` (`clock_ms`) for a deadline `until`.
 pub fn held_at(until: f64, now: f64, still: bool) -> bool {
     let left = until - now;
-    // Only a reminder opts into the longer bound. An ordinary launch keeps its original 2 s safety limit.
-    left > 0.0 && left <= if still { MAX_HOLD_MS } else { 2000.0 }
+    // A reminder remains readable even after a slow load or a long pause to read the note.
+    still || (left > 0.0 && left <= 2000.0)
 }
 
 /// pocket-core: whether this refresh runs no frame of the game. Only in a hold that keeps the game still
@@ -78,12 +112,7 @@ pub fn stands_still(hold: bool, still: bool, resume_pending: bool) -> bool {
     hold && still && !resume_pending
 }
 
-/// The longest hold pocket-ui asks for: Cozy's fade has run by then, and "Where was I?" has been read (its card after the
-/// launch animation, `where_was_i::SHOWN`).
-pub const MAX_HOLD_MS: f64 = 6000.0;
-
-/// Environment variable: "1" while the hold is "Where was I?"'s, the game stands still at its moment until the hold is
-/// over (no frame run, no sound), so nothing of it is missed while the card is read. Without it the game runs silently
+/// Environment variable: "1" while the hold is "Where was I?"'s, the game stands still at its moment until a button ends the hold (no frame run, no sound), so nothing of it is missed while the card is read. Without it the game runs silently
 /// behind the launch animation, as before.
 pub const HOLD_STILL: &str = "POCKET_LAUNCH_HOLD_STILL";
 
@@ -308,20 +337,33 @@ impl<T: Send + 'static> std::ops::DerefMut for Later<T> {
 mod tests {
 
     #[test]
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_blocked_load_signals_the_ui_and_finishing_or_failing_clears_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("loading");
+        let guard = watch_load_at(path.clone(), Duration::from_millis(20));
+        let until = Instant::now() + crate::testutil::timeout(Duration::from_secs(2));
+        while !path.exists() && Instant::now() < until { std::thread::sleep(Duration::from_millis(5)); }
+        assert!(path.exists(), "a blocked read tells the UI it is loading");
+        drop(guard);
+        assert!(!path.exists(), "completion or an error removes the loading note");
+        drop(watch_load_at(path.clone(), Duration::from_secs(3)));
+        assert!(!path.exists(), "a quick load never flashes a loading note");
+    }
+
+    #[test]
     fn where_was_i_holds_after_cozys_animation_and_a_still_hold_waits_for_the_moment() {
-        // The longest hold pocket-ui asks for: Cozy's animation, its fade, then the card's seconds. Accepted, and a
-        // deadline further away is still taken for a mistake.
-        let longest = crate::cabinet::fade_delay(true) + crate::insert_scene::FADE + crate::where_was_i::SHOWN;
-        assert!(held_at(1000.0 + longest.as_secs_f64() * 1000.0, 1000.0, true), "{longest:?}");
-        assert!(!held_at(1000.0 + MAX_HOLD_MS + 1.0, 1000.0, true));
-        assert!(!held_at(999.0, 1000.0, true), "over");
-        assert!(!held_at(1000.0 + longest.as_secs_f64() * 1000.0, 1000.0, false), "without a reminder the old safety limit stays");
+        for now in [1000.0, 5000.0, 60_000.0, 3_600_000.0] {
+            assert!(held_at(2600.0, now, true), "the reminder waits for a button at {now} ms");
+        }
+        assert!(!held_at(999.0, 1000.0, false), "animation over");
+        assert!(!held_at(3001.0, 1000.0, false), "ordinary launches keep the 2 s safety bound");
         assert!(held_at(2600.0, 1000.0, false), "Cozy's ordinary 1.6 s deadline still works");
         // Still only in "Where was I?"'s hold, and only once the moment is in.
         assert!(stands_still(true, true, false));
         assert!(!stands_still(true, false, false), "Cozy's hold alone: the game runs silently, as before");
         assert!(!stands_still(true, true, true), "a 3D core's moment not loaded yet: its first frames run");
-        assert!(!stands_still(false, true, false), "a button or the deadline ended it: the game plays");
+        assert!(!stands_still(false, true, false), "a button ended it: the game plays");
     }
 
     #[test]
@@ -340,20 +382,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn jobs_wait_for_the_first_frame_and_later_ones_start_at_once() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_jobs_wait_for_the_first_frame_and_later_ones_start_at_once() {
         use std::sync::mpsc::channel;
         let (tx, rx) = channel();
         let tx2 = tx.clone();
         after_first_frame("test-early", move || tx.send("early").unwrap());
         assert!(rx.recv_timeout(Duration::from_millis(50)).is_err(), "nothing before the first frame");
         first_frame_done();
-        assert_eq!(rx.recv_timeout(Duration::from_secs(5)), Ok("early"));
+        assert_eq!(rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))), Ok("early"));
         after_first_frame("test-late", move || tx2.send("late").unwrap());
-        assert_eq!(rx.recv_timeout(Duration::from_secs(5)), Ok("late"));
+        assert_eq!(rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))), Ok("late"));
     }
 
     #[test]
-    fn later_is_read_on_its_thread_after_start_or_at_once_when_used_before() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_later_is_read_on_its_thread_after_start_or_at_once_when_used_before() {
         use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
         let reads = Arc::new(AtomicUsize::new(0));
@@ -379,7 +423,7 @@ mod tests {
         late.start();
         late.start();
         let t0 = Instant::now();
-        while late.loaded().is_none() && t0.elapsed() < Duration::from_secs(5) {
+        while late.loaded().is_none() && t0.elapsed() < crate::testutil::timeout(Duration::from_secs(5)) {
             std::thread::sleep(Duration::from_millis(1));
         }
         assert_eq!(late.loaded().cloned(), Some(Some("later-late".to_string())), "read on its own thread");

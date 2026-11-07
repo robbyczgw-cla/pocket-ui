@@ -322,8 +322,30 @@ impl Power {
         Some(zone)
     }
 
+    /// The game waits behind a dark screen (the TrimUI Brick, where a dark screen is no suspend): every cluster at its lowest speed
+    /// (`powersave` under the lowest available limit), noted like any profile so the end of the game puts the originals back.
+    /// `set_performance` with the game's profile brings its speed back on waking.
+    #[cfg(feature = "brick")]
+    pub fn set_dark(&mut self) -> bool {
+        let before = self.saved.clone();
+        self.note_cpu();
+        if !self.journal_or_rollback(before, "dark") {
+            return false;
+        }
+        let mut ok = false;
+        for p in self.policies() {
+            let low = read(&p.join("scaling_available_frequencies"))
+                .and_then(|f| f.split_whitespace().filter_map(|v| v.parse::<u64>().ok()).min())
+                .or_else(|| read(&p.join("cpuinfo_min_freq")).and_then(|v| v.parse().ok()));
+            let Some(low) = low else { continue };
+            ok |= write(&p.join("scaling_governor"), "powersave") & write(&p.join("scaling_max_freq"), &low.to_string());
+        }
+        ok
+    }
+
     /// Applies a CPU profile. Returns false when nothing could be written (or the restore note couldn't be, so
     /// nothing was).
+    #[cfg(not(feature = "brick"))]
     pub fn set_performance(&mut self, mode: Performance) -> bool {
         self.set_performance_on(mode, crate::device::current().model.is_some_and(|m| m.is_h700()))
     }
@@ -352,6 +374,36 @@ impl Power {
                 Performance::Auto => (gov, max),
                 Performance::Performance => ("performance".to_string(), max),
                 Performance::Battery => (gov, battery_cap(&p, &max)),
+            };
+            // Raising the limit first lets a governor change to `performance` take its full effect.
+            ok |= write(&p.join("scaling_max_freq"), &want_max) & write(&p.join("scaling_governor"), &want_gov);
+        }
+        ok
+    }
+
+    #[cfg(feature = "brick")]
+    pub fn set_performance(&mut self, mode: Performance) -> bool {
+        if mode == Performance::Auto && self.saved.cpu.is_empty() {
+            return true; // never touched: nothing to undo
+        }
+        let before = self.saved.clone();
+        self.note_cpu();
+        // Auto writes the originals back: that needs no note. Anything else does, before the first write.
+        if mode != Performance::Auto && !self.journal_or_rollback(before, &format!("performance {}", mode.value())) {
+            return false;
+        }
+        let mut ok = false;
+        for p in self.policies() {
+            let key = p.file_name().unwrap().to_string_lossy().into_owned();
+            let Some((gov, max)) = self.saved.cpu.get(&key).cloned() else { continue };
+            let (want_gov, want_max) = match mode {
+                Performance::Auto => (gov, max),
+                Performance::Performance => ("performance".to_string(), max),
+                Performance::Battery => match brick_battery_freq() {
+                    // The Brick: one steady speed, not ondemand under a cap (ondemand stayed too low there and the sound crackled).
+                    Some(f) => ("performance".to_string(), f.to_string()),
+                    None => (gov, battery_cap(&p, &max)),
+                },
             };
             // Raising the limit first lets a governor change to `performance` take its full effect.
             ok |= write(&p.join("scaling_max_freq"), &want_max) & write(&p.join("scaling_governor"), &want_gov);
@@ -575,6 +627,17 @@ pub fn fan_trips(root: &Path) -> Vec<i64> {
     fan_zone(root).map(|z| Power::active_trips(&z).into_iter().filter_map(|(_, t)| t.parse().ok()).collect()).unwrap_or_default()
 }
 
+/// Battery on the TrimUI Brick (A133P, one cluster, 408 MHz to 2.0 GHz): a fixed speed, `performance` under this limit, so the game gets
+/// it steadily. 1.416 GHz is a first value, to be confirmed on the device with GBA and SNES at 60 fps and no audio underruns. None elsewhere.
+#[cfg(feature = "brick")]
+fn brick_battery_freq() -> Option<u64> {
+    #[cfg(feature = "brick")]
+    if crate::device::brick() {
+        return Some(1_416_000);
+    }
+    None
+}
+
 /// `scaling_max_freq` for Battery: the lowest available frequency that is at least `BATTERY_SHARE` of the top one.
 fn battery_cap(policy: &Path, current_max: &str) -> String {
     let top: u64 = read(&policy.join("cpuinfo_max_freq")).and_then(|s| s.parse().ok()).or_else(|| current_max.parse().ok()).unwrap_or(0);
@@ -643,6 +706,21 @@ mod tests {
     use super::fake::Fake;
     use super::*;
     use crate::testutil::TestDir;
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn a_game_waiting_in_the_dark_runs_at_the_lowest_speed_and_gets_its_own_back() {
+        let f = Fake::new("dark");
+        let mut p = f.power();
+        assert!(p.set_performance(Performance::Performance));
+        assert!(p.set_dark());
+        assert_eq!((f.cpu("policy0", "scaling_governor").as_str(), f.cpu("policy0", "scaling_max_freq").as_str()), ("powersave", "300000"));
+        assert_eq!(f.cpu("policy7", "scaling_max_freq"), "844800", "each cluster its own lowest");
+        assert!(p.set_performance(Performance::Performance));
+        assert_eq!((f.cpu("policy0", "scaling_governor").as_str(), f.cpu("policy7", "scaling_max_freq").as_str()), ("performance", "2841600"), "awake: the game's speed again");
+        p.restore();
+        assert_eq!(f.cpu("policy0", "scaling_governor"), "ondemand", "the game's end: as found");
+    }
 
     #[test]
     fn sm8550_discovers_policy_3_and_never_writes_fan_trips() {
@@ -1056,19 +1134,21 @@ mod tests {
                 assert!(p.set_performance(Performance::Battery));
                 applied.send(()).unwrap();
                 go.recv().unwrap();
-                // The exit save takes a moment; then the CPU goes back, then the lease.
-                std::thread::sleep(Duration::from_millis(150));
+                // The next caller has observed this lease before allowing restore.
                 assert!(p.restore());
                 drop(l);
             })
         };
         applied.1.recv().unwrap();
         assert_eq!(f.cpu("policy4", "scaling_max_freq"), "1286400", "the old game's cap");
-        go.0.send(()).unwrap();
-        // The new game's start.
-        let t0 = Instant::now();
-        let l = Lease::take(&lease, LEASE_WAIT, || false).expect("after the old game's restore");
-        assert!(t0.elapsed() >= Duration::from_millis(100), "it waited for the restore");
+        // give_up is called only after a failed flock. Release the old owner
+        // from that observation, not after a guessed overlap of two sleeps.
+        let encountered = std::cell::Cell::new(false);
+        let l = Lease::take(&lease, crate::testutil::timeout(LEASE_WAIT), || {
+            if !encountered.replace(true) { go.0.send(()).unwrap(); }
+            false
+        }).expect("after the old game's restore");
+        assert!(encountered.get(), "the old lease was actually encountered");
         let mut p = Power::with_root(&f.0, f.0.join("new.json"));
         assert!(p.set_performance(Performance::Battery));
         let note: Saved = serde_json::from_str(&std::fs::read_to_string(f.0.join("new.json")).unwrap()).unwrap();

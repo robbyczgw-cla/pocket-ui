@@ -37,8 +37,7 @@ fn every_shelf_can_be_reached_opened_and_left_at_every_panel_size() {
     let _stub = if cfg!(target_os = "linux") {
         let child = Command::new("python3").args(["-I", &format!("{}/scripts/wayland-stub.py", std::env::var("CARGO_MANIFEST_DIR").unwrap())]).arg(&socket).spawn().unwrap();
         let stub = Stub(child);
-        for _ in 0..200 { if socket.exists() { break; } std::thread::sleep(Duration::from_millis(10)); }
-        assert!(socket.exists());
+        test_clock::wait_for(|| socket.exists(), Duration::from_secs(2), "Wayland stub listening");
         Some(stub)
     } else { None };
     // Match a simple card: five systems, no recent games, favourites or pinned Curator shelves.
@@ -100,3 +99,6 @@ fn every_shelf_can_be_reached_opened_and_left_at_every_panel_size() {
         }
     }
 }
+
+#[path = "../src/test_clock.rs"]
+mod test_clock;

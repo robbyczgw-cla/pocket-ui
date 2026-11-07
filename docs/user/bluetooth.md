@@ -1,5 +1,7 @@
 # Bluetooth
 
+> **TrimUI Brick:** controllers and headphones pair on this page as below. While headphones (or a Bluetooth speaker) are connected, games and menu sounds play on them, and the sound comes back to the Brick's speaker when they are switched off or disconnected; the volume keys and the mute slider work on them too. Turn headphones down before the first connect. The quantum and PipeWire notes below are ROCKNIX's.
+
 Settings → Connections → **Bluetooth** pairs game controllers, headphones, speakers and other Bluetooth devices with the Pocket.
 
 ![Bluetooth with controllers found nearby](pictures/bluetooth.webp)
@@ -25,7 +27,15 @@ To pair a device:
 A paired controller reconnects by itself when you switch it on, even after the Pocket has slept. You can use it in the
 menus straight away, and in games on pocket-ui's own host it is the next player: the Pocket stays Player 1, the first
 controller is Player 2 (see [Players](pause-menu.md#players) to change that). **X** on a paired device forgets it; press X a second time to confirm (B keeps it). A forgotten
-device has to be paired again.
+device has to be paired again, and a forgotten controller gives up its player number. Use this for a controller you
+don't use any more, or after switching an 8BitDo pad to another mode (D, S, X): each mode pairs as a controller of its
+own, so forget the one you no longer use.
+
+**Your controller's buttons.** Each controller can have its own layout, kept for that controller (two of the same
+model are told apart) and used again whenever it reconnects: Settings → Playing → Buttons →
+[Controller setup](controls-settings.md#controller-setup). Xbox, PlayStation, Switch Pro and 8BitDo controllers are
+recognised with their triggers and sticks. To see what a controller really sends, Settings → Help & tools →
+[Test buttons](settings-system.md#test-buttons) lights up every button, trigger and stick as you press it.
 
 **Headphones and speakers** pair the same way: put them in pairing mode, search, select them and press A. Their row
 says Audio. Once they are connected, the sound of the menus and games plays on them. A short delay is normal with

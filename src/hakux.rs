@@ -472,7 +472,7 @@ mod tests {
     #[test]
     fn a_command_reaches_the_port_of_this_game_only() {
         let rx = UdpSocket::bind("127.0.0.1:0").unwrap();
-        rx.set_read_timeout(Some(std::time::Duration::from_secs(2))).unwrap();
+        rx.set_read_timeout(Some(crate::testutil::timeout(std::time::Duration::from_secs(2)))).unwrap();
         let port = rx.local_addr().unwrap().port();
         assert!(send_to(port, "QUIT"));
         let mut buf = [0u8; 16];

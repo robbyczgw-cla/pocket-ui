@@ -2,7 +2,7 @@
 
 Settings → System → **Updates** ("New versions of pocket-ui and the system."). It needs Wi-Fi.
 
-New versions of pocket-ui come over Wi-Fi, with one press. Your games, saves and settings stay.
+New versions of pocket-ui come over Wi-Fi, with one press. Your games, saves and settings stay. On the TrimUI Brick, unchanged engine data stays in place when an update starts; changed files are prepared at a limited write speed before the menu opens.
 
 1. Open Settings → System → **Updates**. The page checks by itself.
 2. If a newer version is out, the pocket-ui row says so ("0.2.0, 0.2.1 available") and **Install pocket-ui …** appears. Press A on it.
@@ -16,6 +16,32 @@ at all, a check ends with "No updates published yet. A new version installs like
 stay." You can also install a new version by running the installer again with the new download
 ([Getting started](getting-started.md)); it installs over the current version.
 
+Downloads show when they are connecting, trying another server, checking the file or preparing
+the update. If a server fails or sends no new data for 30 seconds, pocket-ui tries the next
+source in the signed update list. If no source works, it shows an error and keeps your current
+version. Choose **Check again** and retry once the connection works. **A / Cancel** stops all
+sources. Each server gets five minutes plus the time a big file needs on a slow but steady
+connection, so a download cannot wait forever; one that is slower still ends with "The download is
+too slow on this network. Nothing was installed. Try again on a faster Wi-Fi."
+Downloaded files are always checked before installation, including files from another server.
+
+Before it downloads, pocket-ui checks that the SD card has room for the update and still some to
+spare for your saves; if not, it says how much is missing ("The SD card is too full for this
+update: it needs … MB more. Nothing was changed."). If the clock is far behind (after a flat
+battery, before network time has set it), secure connections fail and the page says "The clock
+looks wrong, so the update server can't be checked. Set it in Settings › System › Time, or wait
+for network time over Wi-Fi."
+
+## The hint on the shelf
+
+When a newer pocket-ui is out, the shelf says so once, a little after the start and only with Wi-Fi: "pocket-ui 0.3.0
+is ready. Your games and settings stay." **A** opens Settings → System → Updates, **B** only closes it. Each version is
+said once, whatever you pressed; the next version says it again. It never comes over a game, over a page or the first
+start, not in Kids Mode, and only on a released pocket-ui (a test build from the developers stays quiet). While the Pocket stays on it looks again every twelve hours. It only asks the signed list
+that the Updates page reads (no account, nothing about you or your games is sent). It stays quiet for the system
+(ROCKNIX) and for ports; those are only in Settings → System → Updates. To switch it off, put `{"off": true}` in
+`update-hint.json` in pocket-ui's data folder (`/storage/.config/pocket-ui/`).
+
 ## The Updates page
 
 ![Settings → System with the Updates row and the installed version](pictures/updates.webp)
@@ -24,7 +50,8 @@ The first time you open the page, pocket-ui checks for updates by itself. The pa
 
 - **pocket-ui**: the installed version, and a newer one if available ("0.2.0, 0.2.1 available").
 - **System**: the installed system version, and a newer one if available, or "update waiting for
-  restart" when a system update has been downloaded.
+  restart" when a system update has been downloaded. Not on the TrimUI Brick: its system is TrimUI's, and pocket-ui only updates
+  itself there ("New versions of pocket-ui.").
 
 Below that are the actions that apply right now:
 
@@ -36,8 +63,9 @@ Below that are the actions that apply right now:
 | **Check again** | Checks for updates again. |
 
 While something downloads, a progress bar shows how far it is, and **A** cancels the download
-("Download cancelled."). A download that stalls (under 10 KB/s for 30 seconds) is retried and then
-given up with "Download failed. Check Wi-Fi." The release notes of the selected
+("Download cancelled."). A download that sends nothing new for 30 seconds goes on from the
+next download server; slow Wi-Fi is fine as long as data keeps coming. When no server works, the page says why
+("The download server stopped responding…" or "Download failed. Check Wi-Fi."). The release notes of the selected
 update appear at the bottom. If everything is current, the page says "Everything is up to date."
 
 ## What makes it safe
@@ -106,3 +134,10 @@ Updates page reminds you: "This device starts from a computer: make a new boot i
 
 System updates have not been tested on a device yet, because our own system build does not exist
 yet.
+
+On a standalone TrimUI Brick card, an update keeps cores and supporting files that already
+match the new version. It checks them before switching versions and keeps a recovery record so the previous version can use them again. Only changed
+or missing components need a download, and they receive the same integrity checks as the app.
+Downloads finish in memory before the card is written. If memory is too full, restart the Brick and try again.
+Your games, saves and settings stay in place. Leave enough free card space for both app
+versions; the previous version remains available for automatic recovery.

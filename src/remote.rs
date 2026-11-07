@@ -47,9 +47,32 @@ mod imp {
         }
     }
 
+    /// The TrimUI Brick's own card (docs/TRIMUI-BRICK-REMOTE.md): no ROCKNIX and no systemd. `systemctl start|stop sshd` is the card's
+    /// stand-in (brick-ssh): dropbear takes this device's password from `PASSWORD_PATH` itself, so root's password in the firmware is
+    /// never changed, and a key from the card's `authorized_keys` works too. The marker is in the card's RAM folder (there is no /run).
+    #[cfg(feature = "brick")]
+    fn brick_card() -> bool {
+        crate::device::brick() && crate::brick_profile::standalone()
+    }
+
+    #[cfg(feature = "brick")]
+    fn owned_marker() -> std::path::PathBuf {
+        match std::env::var_os("XDG_RUNTIME_DIR").filter(|_| brick_card()) {
+            Some(run) => Path::new(&run).join("pocket-ui-ssh-on"),
+            None => OWNED_MARKER.into(),
+        }
+    }
+
+    #[cfg(not(feature = "brick"))]
     pub fn current() -> Mode {
         let running = Command::new("systemctl").args(["is-active", "--quiet", "sshd"]).status().is_ok_and(|s| s.success());
         mode(running, Path::new(OWNED_MARKER).exists(), Path::new(DEV_MARKER).exists())
+    }
+
+    #[cfg(feature = "brick")]
+    pub fn current() -> Mode {
+        let running = Command::new("systemctl").args(["is-active", "--quiet", "sshd"]).status().is_ok_and(|s| s.success());
+        mode(running, owned_marker().exists(), Path::new(DEV_MARKER).exists())
     }
 
     /// Sets this device's password (created once) as root's, then starts sshd for this session.
@@ -59,6 +82,12 @@ mod imp {
             return Err("SSH is always on on this developer device.".into());
         }
         let pw = crate::secret::load_or_create(Path::new(PASSWORD_PATH)).map_err(|e| e.to_string())?;
+        #[cfg(feature = "brick")]
+        if brick_card() {
+            std::fs::write(owned_marker(), b"").map_err(|e| e.to_string())?;
+            sh("systemctl start sshd", &[])?;
+            return Ok(pw);
+        }
         // setrootpass writes /storage/.cache/shadow and root.password, which ROCKNIX applies again at
         // every boot (autostart 007-rootpw), so the password stays until the next change.
         sh(". /etc/profile >/dev/null 2>&1; setrootpass \"$1\"", &[&pw])?;
@@ -70,11 +99,29 @@ mod imp {
     }
 
     /// Stops sshd (open sessions end with it) and keeps ROCKNIX from starting it at boot.
+    #[cfg(not(feature = "brick"))]
     pub fn turn_off() -> Result<(), String> {
         if Path::new(DEV_MARKER).exists() {
             return Err("SSH is always on on this developer device.".into());
         }
         let _ = std::fs::remove_file(OWNED_MARKER);
+        // ROCKNIX's boot setting first, under its lock (`system_cfg`), only if it is on; then the service.
+        if crate::system_cfg::get("ssh.enabled").is_some_and(|v| v.trim() == "1") {
+            crate::system_cfg::set("ssh.enabled", "0");
+        }
+        sh("rm -f \"$1\"; systemctl stop sshd", &[SERVICE_FLAG])
+    }
+
+    #[cfg(feature = "brick")]
+    pub fn turn_off() -> Result<(), String> {
+        if Path::new(DEV_MARKER).exists() {
+            return Err("SSH is always on on this developer device.".into());
+        }
+        let _ = std::fs::remove_file(owned_marker());
+        #[cfg(feature = "brick")]
+        if brick_card() {
+            return sh("systemctl stop sshd", &[]);
+        }
         // ROCKNIX's boot setting first, under its lock (`system_cfg`), only if it is on; then the service.
         if crate::system_cfg::get("ssh.enabled").is_some_and(|v| v.trim() == "1") {
             crate::system_cfg::set("ssh.enabled", "0");

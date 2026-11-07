@@ -137,7 +137,7 @@ impl App {
         let label = zoom.label();
         let (pad, pill) = (NU_PAD, pocket_ui::kit::PILL);
         let w = self.text.width(Face::Body, NU_SMALL, &label) + 2 * NU_BTN_PAD;
-        c.round_rect(pad, pad, w, pill, pill / 2, DARK.select);
+        pocket_ui::retro::pill(c, pad, pad, w, pill, pill / 2, DARK.select);
         self.text.draw(c, Face::Body, NU_SMALL, pad + NU_BTN_PAD, pad + (pill - 20) / 2 + pocket_ui::type_scale::mid(NU_SMALL), INK, &label);
         self.nu_hints(c, &[("D-pad", "Move"), ("A", "2x / 3x"), ("B", "Back")]);
     }

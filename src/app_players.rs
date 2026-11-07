@@ -80,11 +80,17 @@ impl App {
             UserEvent::Pad(pe) => pe,
             ev => return Some(ev),
         };
+        let captured = self.controller_capture(&pe);
+        // Test buttons sees each controller's own events, before they are merged.
+        self.test_buttons_event(&pe);
         let roster = matches!(pe, PadEvent::Connected { .. } | PadEvent::Disconnected { .. });
         let mut merged = self.pad.merge(pe);
         if roster {
+            Order::remember_async(self.data_dir.clone(), self.pad.controllers());
             self.players_event();
+            self.test_buttons_roster();
         }
+        if captured { return None; }
         let last = merged.pop()?;
         for m in merged {
             self.user_event(el, UserEvent::Merged(m));
@@ -137,8 +143,7 @@ impl App {
                 let data_dir = self.data_dir.clone();
                 // The card write and the FIFO off the UI thread; pocket-core reads the file after it was written.
                 std::thread::spawn(move || {
-                    let order = Order { order: pocket_ui::players_page::order_of(&seats, &Order::load(&data_dir).order) };
-                    if let Err(e) = order.save(&data_dir) {
+                    if let Err(e) = Order::update(&data_dir, |order| order.order = pocket_ui::players_page::order_of(&seats, &order.order)) {
                         eprintln!("players: can't save the order: {e}");
                     }
                     control::pocket_core(players::COMMAND);

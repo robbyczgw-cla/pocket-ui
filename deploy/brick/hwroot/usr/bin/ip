@@ -1,0 +1,17 @@
+#!/bin/sh
+# Stand-in for the one `ip` question pocket-ui asks (`ip -4 -o addr show wlan0`: is there an address, i.e. is Wi-Fi up, which decides
+# whether covers and descriptions are fetched). The Brick's BusyBox may have no `ip`; the real one is used when there is one,
+# else `ifconfig` (which the Wi-Fi switch uses) answers in `ip -o` form: "2: wlan0    inet 192.0.2.5/24 ...".
+self=$(cd "$(dirname "$0")" && pwd)/ip
+for d in ${BRICK_IP_DIRS-/sbin /usr/sbin /bin /usr/bin}; do [ -x "$d/ip" ] && [ "$d/ip" != "$self" ] && exec "$d/ip" "$@"; done
+IFCONFIG=${BRICK_IFCONFIG_BIN:-ifconfig}
+iface=
+for a in "$@"; do iface=$a; done
+case "$*" in
+  *addr*show*|*addr*list*) ;;
+  *) echo "ip: not available here" >&2; exit 1 ;;
+esac
+out=$("$IFCONFIG" "$iface" 2>/dev/null) || exit 1
+addr=$(echo "$out" | sed -n 's/.*inet addr:\([0-9.]*\).*/\1/p; s/^[[:space:]]*inet \([0-9.]*\)[[:space:]].*/\1/p' | head -n 1)
+[ -n "$addr" ] || exit 0
+echo "2: $iface    inet $addr/24 scope global $iface"

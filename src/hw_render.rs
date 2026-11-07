@@ -476,3 +476,34 @@ mod tests {
         assert_eq!(unsafe { environment(10, std::ptr::null_mut()) }, None);
     }
 }
+
+// The Brick (`brick_gles`): pocket-core there draws the picture on the CPU and gives a 3D core a context of its own on the vendor's EGL
+// (no glutin display, no window). At the end of the file, so a build without the `brick` feature keeps every line where it was.
+#[cfg(feature = "brick")]
+impl Request {
+    /// The core's `context_reset`, with its context current.
+    ///
+    /// # Safety
+    /// The core's GL context is current on this thread.
+    pub unsafe fn reset_context(&self) {
+        if let Some(reset) = self.context_reset {
+            reset();
+        }
+    }
+
+    /// The core's `context_destroy`, with its context current.
+    ///
+    /// # Safety
+    /// As `reset_context`.
+    pub unsafe fn destroy_context(&self) {
+        if let Some(destroy) = self.context_destroy {
+            destroy();
+        }
+    }
+}
+
+/// The framebuffer the core draws into (`get_current_framebuffer`), set by `brick_gles`.
+#[cfg(feature = "brick")]
+pub fn set_framebuffer(name: u32) {
+    FBO.store(name, Ordering::Relaxed);
+}

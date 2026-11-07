@@ -19,13 +19,15 @@ Start at [user/index.md](user/index.md).
 |---|---|
 | [user/index.md](user/index.md) | The first page: what pocket-ui is and does, what it leaves alone, the list of pages |
 | [user/getting-started.md](user/getting-started.md) | Preparing the card, first start, Wi-Fi, adding games |
+| [user/other-handhelds.md](user/other-handhelds.md) | Other Retroid devices, SM8550 and Anbernic H700 |
 | [user/games-drive.md](user/games-drive.md) | RG28XX card: copying games from a Mac or Windows PC |
 | [user/copy-games.md](user/copy-games.md) | Copying games without Wi-Fi: the second card |
 | [user/how-to.md](user/how-to.md) | Short steps: update over Wi-Fi, a game that won't start, pair a controller, back up saves, sync with a second device |
 | [user/game-check.md](user/game-check.md) | Settings → Games → Game check: will your games start? |
 | [user/coming-from.md](user/coming-from.md) | Coming from ROCKNIX or Android: what happens to saves, states, favourites and settings, what needs a copy, what does not come over |
 | [user/playing.md](user/playing.md) | Home, finding a game, the looks, console pages, starting a game, the game switcher, continuing, menu sounds |
-| [user/pause-menu.md](user/pause-menu.md) | The pause menu of each emulator, Quit and Settings → Playing → Continue where I quit, Pixel Path, save slots, Auto and Before load |
+| [user/pause-menu.md](user/pause-menu.md) | The pause menu of each emulator, Quit and Settings → Playing → Continue where I quit, Pixel Path |
+| [user/pause-menu-saves.md](user/pause-menu-saves.md) | Save slots, Where I quit and Before load, Earlier, where the state files are, when a save fails |
 | [user/options.md](user/options.md) | Options in a game: picture, screen frames, emulator, controls, cheats, shortcuts, extras, run-ahead, saving them |
 | [user/options-big.md](user/options-big.md) | The Options of PS2, GameCube, Wii and 3DS games |
 | [user/controls.md](user/controls.md) | Every button, screen by screen |
@@ -52,6 +54,7 @@ Start at [user/index.md](user/index.md).
 | [user/extras.md](user/extras.md) | Box art, game pictures (screenshots and title screens), PortMaster games, the Store |
 | [user/sync.md](user/sync.md) | Syncing saves and states with Syncthing |
 | [user/remote.md](user/remote.md) | Reaching the Pocket from anywhere with Tailscale: switch, QR sign-in, name, what it does to SSH |
+| [RETRO-STYLE.md](RETRO-STYLE.md) | The Retro style: Settings → Look → Style → Retro, its palettes, frames, icons and blips |
 | [user/easy.md](user/easy.md), [BIG-SHELF.md](BIG-SHELF.md) | The Easy look: one big game at a time, for a handful of games |
 | [user/kids-mode.md](user/kids-mode.md), [KIDS-MODE.md](KIDS-MODE.md) | Kids mode: for a grown-up; what is closed and how, the clock, what is left open |
 | [user/phone-upload.md](user/phone-upload.md) | Games from your phone: Add games → Y, the QR code, what it takes and refuses, what plain HTTP on a Wi-Fi means |
@@ -93,10 +96,22 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [ROCKNIX-H700-AUDIO-ISSUE-DRAFT.md](ROCKNIX-H700-AUDIO-ISSUE-DRAFT.md) | Draft, not submitted | Frozen-rootfs UCM finding, observed controls and untested upstream investigation proposal |
 | [SLEEP.md](SLEEP.md) | Reference and design notes | Sleep and power: research, what is built, a device test plan |
 | [DEVICES.md](DEVICES.md) | Design and reference | The Mini V2 and its experimental SM8250 siblings (Pocket 5, Flip 2, Mini V1): how pocket-ui tells them apart, what each gets, layouts at 1920x1080 and 1280x960, safety on untested hardware, installing |
+| [TRIMUI-BRICK.md](TRIMUI-BRICK.md) | Design and reference | A private prototype behind the `brick` feature: pocket-ui on the TrimUI Brick under Knulli, the framebuffer bridge, the test kit |
+| [TRIMUI-BRICK-CORES.md](TRIMUI-BRICK-CORES.md) | Design and reference | Additional standalone software cores: pinned builds, licences, routing, real-library checks and limits |
+| [TRIMUI-BRICK-STANDALONE.md](TRIMUI-BRICK-STANDALONE.md) | Design and reference | The same Brick without NextUI: a card folder with its own start script, cores built for glibc 2.33, stand-ins for the firmware helpers, host tests |
+| [TRIMUI-BRICK-REMOTE.md](TRIMUI-BRICK-REMOTE.md) | Design and reference | The Brick's own card on the network: Tailscale, Remote access with dropbear, updates of the card's program folder from a private channel, the way back |
+| [TRIMUI-BRICK-MORE.md](TRIMUI-BRICK-MORE.md) | Design and reference | The Brick's own card with Kids mode, screenshots (and the `grim` stand-in), the web companion over userspace Tailscale, Over the game and a Tour that fits |
+| [TRIMUI-BRICK-HW.md](TRIMUI-BRICK-HW.md) | Design and reference | The Brick's own hardware: rumble motor, the 23 LEDs, the F1/F2 keys and the mute slider, and the Settings page "Lights & buttons" |
+| [TRIMUI-BRICK-SYNC.md](TRIMUI-BRICK-SYNC.md) | Design and reference | Save sync on the Brick's own card: the card's Syncthing, its service and what differs from ROCKNIX |
+| [TRIMUI-BRICK-BLUETOOTH.md](TRIMUI-BRICK-BLUETOOTH.md) | Design and reference | Bluetooth on the Brick's own card: the BlueZ service, pairing kept on the card, controllers, and headphones over BlueALSA (A2DP) |
+| [TRIMUI-BRICK-SMOKE.md](TRIMUI-BRICK-SMOKE.md) | Testing | The smoke test on the real Brick after an installation: version, services, lights in the dark, picture options and the FPS line in a test game |
+| [BRICK-CFG.md](BRICK-CFG.md) | Design and verification | Compile-time ownership of Brick code and assets, the standard-build reference and comparison evidence |
+| [BRICK-SHADERS.md](BRICK-SHADERS.md) | Design and reference | Picture options on the Brick through the GPU: the choices, their cost and the read-back proof |
 | [STEAMDECK.md](STEAMDECK.md) | Design and reference | pocket-ui on a Steam Deck (first preparation, run on a PC only): the Deck profile, EmuDeck library, emulators, bundle and Flatpak plan, Add to Steam, what needs real hardware |
 | [PLATFORMS.md](PLATFORMS.md) | Reference | Which user-visible feature exists on ROCKNIX handhelds, Android and the Steam Deck, and what was seen on a device |
 | [H700-SCALED-LAYOUT.md](H700-SCALED-LAYOUT.md) | Small-panel logical layouts, complete snapshot comparisons, JPEG readability and CPU measurement method |
 | [DISPLAY-OUT.md](DISPLAY-OUT.md) | Design and reference | Playing on a TV through USB-C: what ROCKNIX does, TV mode, what is built, the device test plan |
+| [DUAL-SCREEN.md](DUAL-SCREEN.md) | Design and reference | Two screens (the RG DS Plus; Retroid's add-on, prototype): the shelf on top, the game's box below, the panel table to confirm on the device |
 | [FAN-CURVE.md](FAN-CURVE.md) | Design and reference | Smooth fan: why the mechanism, the curves, the safety net, the simulation, the device test |
 | [UPDATES.md](UPDATES.md) | Reference | The signed update channel for the app and the system |
 | [UPDATE-CHANNEL.md](UPDATE-CHANNEL.md) | Reference | Where the channel lives (pocketui.xyz, GitHub Releases), the signing key, the release procedure, rollback |
@@ -110,10 +125,12 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [PHONE-UPLOAD.md](PHONE-UPLOAD.md) | Reference | "Send from your phone": the upload server that exists only while its page is open, its routes, limits and threat model |
 | [VIRTUAL-DEVICE.md](VIRTUAL-DEVICE.md) | Reference | The Docker-based virtual Mini V2 |
 | [WIFI-BENCH.md](WIFI-BENCH.md) | Reference | The Wi-Fi bench: ROCKNIX's NetworkManager + iwd and the real pocket-ui against simulated radios and access points (mac80211_hwsim + hostapd), its scenarios and the first results |
+| [IDLE.md](IDLE.md) | Reference | Still menus: finite animation passes, input and timer scheduling, two-window presentation traces and repeatable idle measurements |
 | [LATENCY.md](LATENCY.md) | Reference | The speed guard: latency benchmark, baselines, comparing in CI |
 | [MEASURED.md](MEASURED.md) | Reference | The homepage's former numbers page: speed guard of 25 Oct, waking, sleep, CPU, pocket-ui against EmulationStation |
 | [COMPARE-ROCKNIX.md](COMPARE-ROCKNIX.md) | Reference | pocket-ui against stock ROCKNIX (EmulationStation + RetroArch) on a Mini V2, measured from outside the same way for both: method, limits, the plan of presses, how to run it |
 | [DESIGN.md](DESIGN.md) | Reference | Visual design of the shelf: colours, type, layout, motion |
+| [UI-SCHEME.md](UI-SCHEME.md) | Reference | The one control scheme every page follows: keys, focus, hint bar, rows, help lines |
 | [CURATOR.md](CURATOR.md) | Design notes and reference | Curator (Lens, smart shelves, stickers, Echoes, Versions) and Pixel Path: the design, then what was built ("Developer notes", "Pixel Path as built") |
 | [HISTORY.md](HISTORY.md) | Reference | Play history: the session log and its file, what counts, Curator → History and the Year in review, the read API for the web companion |
 | [SYNC-CURATION.md](SYNC-CURATION.md) | Reference | Settings → Sync → Library data: one folder per device, values with times, the field-by-field merge with tombstones, the play history union, what is left out |

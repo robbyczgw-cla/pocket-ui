@@ -86,6 +86,8 @@ pub struct EmuChoicePage {
     shipped: Cfg,
     /// What can be picked, and whether it is installed.
     choices: Vec<(Runner, bool)>,
+    /// What runs when nothing is chosen at this page's level (`default_runner`): first in the list, as "Default (…)".
+    default: Runner,
     /// The values on screen.
     pub runner: Runner,
     pub ra: HashMap<&'static str, String>,
@@ -103,6 +105,7 @@ impl EmuChoicePage {
             cfg,
             shipped,
             choices: Vec::new(),
+            default: Runner::default(),
             runner: Runner::default(),
             ra: HashMap::new(),
             sel: 0,
@@ -149,6 +152,19 @@ impl EmuChoicePage {
 
     fn reload(&mut self) {
         (self.runner, self.ra) = self.in_use();
+        self.default = self.default_runner();
+    }
+
+    /// What the game starts with without a choice of its own (the console's choice, else the default), or the console
+    /// without one (pocket-core where it hosts the system, else ROCKNIX's default). Picking it and saving removes the
+    /// level's emulator lines, so a player can always go back to the default (`edits`). A game pocket-core couldn't
+    /// start counts with pocket-core: choosing it gives pocket-core another try.
+    fn default_runner(&self) -> Runner {
+        let (sys, file) = (self.subject.system.as_str(), self.file());
+        let level = if file.is_some() { Level::Game } else { Level::Console };
+        let mut cfg = self.cfg.clone();
+        cfg.apply(&[(emu_choice::key(sys, file, level, "emulator"), None), (emu_choice::key(sys, file, level, "core"), None)]);
+        emu_choice::resolve(&self.ctx(false), &cfg, file).runner
     }
 
     /// What the game (or the console) starts with now.
@@ -199,6 +215,7 @@ impl EmuChoicePage {
 
     pub fn value(&self, row: Row) -> String {
         match row {
+            Row::RunsOn if self.runner == self.default => format!("Default ({})", self.runner_label(&self.runner)),
             Row::RunsOn => self.runner_label(&self.runner),
             Row::Ra(i) => {
                 let s = &RA_SETTINGS[i];
@@ -299,9 +316,21 @@ impl EmuChoicePage {
         v
     }
 
-    /// The runners Left/Right step through: the installed ones, and the one in use.
+    /// Left/Right (and A) change `row`: Runs on only when there is another emulator to step to.
+    pub fn changes(&self, row: Row) -> bool {
+        row != Row::RunsOn || self.runners().len() > 1
+    }
+
+    /// The runners Left/Right step through: the default first, then the installed ones and the one in use.
     fn runners(&self) -> Vec<Runner> {
-        self.choices.iter().filter(|(r, ok)| *ok || *r == self.runner).map(|(r, _)| r.clone()).collect()
+        let mut v = vec![self.default.clone()];
+        v.extend(
+            self.choices
+                .iter()
+                .filter(|(r, ok)| (*ok || *r == self.runner) && *r != self.default)
+                .map(|(r, _)| r.clone()),
+        );
+        v
     }
 
     fn step(&mut self, row: Row, delta: i32) {
@@ -313,13 +342,11 @@ impl EmuChoicePage {
             })
         };
         match row {
+            // No wrap: Left always ends on "Default (…)", and never jumps from the first core to the last emulator.
             Row::RunsOn => {
                 let list = self.runners();
-                let n = list.len() as i32;
-                if n > 0 {
-                    let i = list.iter().position(|r| *r == self.runner).map_or(0, |i| i as i32);
-                    self.runner = list[(i + delta).rem_euclid(n) as usize].clone();
-                }
+                let i = list.iter().position(|r| *r == self.runner).map_or(0, |i| i as i32);
+                self.runner = list[(i + delta).clamp(0, list.len() as i32 - 1) as usize].clone();
             }
             Row::Ra(i) => {
                 let key = RA_SETTINGS[i].key;
@@ -421,7 +448,10 @@ impl EmuChoicePage {
                     ]);
                 }
                 let auto = emu_choice::resolve(&self.ctx(self.subject.fell_back && !pocket_retry), &unchosen, file).runner;
-                if self.runner == auto {
+                // A game with a runner of its own by default (Jeanne d'Arc): what its page saves for the console is a
+                // choice for the other games too, even when it matches what this one starts with.
+                let own_default = file.is_some_and(|f| emu_choice::game_default(&self.ctx(false), f).is_some());
+                if self.runner == auto && !own_default {
                     edits.extend([del(ek), del(ck)]);
                 } else {
                     edits.push(set(ek, &self.runner.emulator));
@@ -547,6 +577,35 @@ mod tests {
         EmuChoicePage::new(subject(game), Cfg::parse(cfg), Cfg::parse(SHIPPED), |r| r.core != "gpsp")
     }
 
+    /// Jeanne d'Arc starts in standalone PPSSPP by default; "Save for this console" on its page must still reach the
+    /// other PSP games, and pocket-core chosen there must win over the game's own default.
+    #[test]
+    fn saving_for_the_console_from_a_game_with_its_own_default_applies_to_the_console() {
+        let e = |name: &str, cores: &[&str], default: Option<usize>| EsEmulator { name: name.into(), cores: cores.iter().map(|c| c.to_string()).collect(), default_core: default };
+        let file = "Jeanne d'Arc (USA).chd";
+        let psp = || Subject {
+            system: "psp".into(),
+            system_name: "PSP".into(),
+            game: Some(("Jeanne d'Arc (USA)".into(), file.into())),
+            emulators: vec![e("ppsspp", &["ppsspp-sa"], Some(0)), e("retroarch", &["ppsspp"], None)],
+            pocket_core: Some("ppsspp".into()),
+            pocket_cores: &[],
+            default_override: None,
+            file_ok: true,
+            fell_back: false,
+        };
+        let mut p = EmuChoicePage::new(psp(), Cfg::default(), Cfg::default(), |_| true);
+        assert_eq!(p.runner, Runner::new("ppsspp", "ppsspp-sa"), "the page shows what the game starts with");
+        let edits = save(&mut p, SaveChoice::Console);
+        assert!(edits.contains(&("psp.emulator".into(), Some("ppsspp".into()))), "{edits:?}");
+        assert!(edits.contains(&("psp.core".into(), Some("ppsspp-sa".into()))), "{edits:?}");
+        let mut p = EmuChoicePage::new(psp(), Cfg::default(), Cfg::default(), |_| true);
+        p.runner = Runner::new("pocket-core", "ppsspp");
+        let edits = save(&mut p, SaveChoice::Console);
+        assert!(edits.contains(&("psp.emulator".into(), Some("pocket-core".into()))), "{edits:?}");
+        assert_eq!(p.resolved().runner, Runner::new("pocket-core", "ppsspp"), "the console's choice wins over the game default");
+    }
+
     const A: Button = Button::East;
     const B: Button = Button::South;
 
@@ -573,7 +632,7 @@ mod tests {
     #[test]
     fn opens_on_what_runs_and_steps_through_installed_choices() {
         let mut p = page(Some("Zelda.gba"), SHIPPED);
-        assert_eq!(p.value(Row::RunsOn), "pocket-core · mGBA");
+        assert_eq!(p.value(Row::RunsOn), "Default (pocket-core · mGBA)");
         assert_eq!(p.rows(), [Row::RunsOn, Row::Save], "no RetroArch rows for pocket-core");
         let mut seen = Vec::new();
         for _ in 0..12 {
@@ -592,6 +651,61 @@ mod tests {
         assert!(p.unsaved());
     }
 
+    /// 06.11. on a real Pocket: there was no way back to the default core but naming it, and Left on mGBA jumped to
+    /// "Standalone · SkyEmu" (the end of the list) instead of gpSP.
+    // ROCKNIX H700 (`pocket_cores`); the Brick names gpSP/mGBA in its own es_systems.cfg (`emu_choice`'s Brick tests).
+    #[cfg(not(feature = "brick"))]
+    #[test]
+    fn default_comes_first_and_left_stops_there() {
+        // H700: pocket-core plays GBA with gpSP, mGBA beside it.
+        let mut s = subject(Some("Aero.gba"));
+        s.pocket_core = Some("gpsp".into());
+        s.pocket_cores = crate::h700_gba::CORES;
+        let cfg = format!("{SHIPPED}gba[\"Aero.gba\"].emulator=pocket-core\ngba[\"Aero.gba\"].core=mgba\n");
+        let mut p = EmuChoicePage::new(s.clone(), Cfg::parse(&cfg), Cfg::parse(SHIPPED), |_| true);
+        assert_eq!(p.value(Row::RunsOn), "pocket-core · mGBA");
+        assert_eq!(p.level_line(), "Using this game's settings.");
+        p.press(Button::Left, A, B);
+        assert_eq!(p.value(Row::RunsOn), "Default (pocket-core · gpSP)");
+        p.press(Button::Left, A, B);
+        assert_eq!(p.value(Row::RunsOn), "Default (pocket-core · gpSP)", "the start of the list: no wrap to the end");
+        let edits = save(&mut p, SaveChoice::Game);
+        assert!(edits.contains(&("gba[\"Aero.gba\"].core".into(), None)), "the game's own choice goes: {edits:?}");
+        assert_eq!(p.level_line(), "Using the defaults.");
+        assert_eq!(p.value(Row::RunsOn), "Default (pocket-core · gpSP)");
+        // At the end of the list Right stays too.
+        for _ in 0..30 {
+            p.press(Button::Right, A, B);
+        }
+        let last = p.value(Row::RunsOn);
+        p.press(Button::Right, A, B);
+        assert_eq!(p.value(Row::RunsOn), last);
+        // mGBA as the default (a Retroid Pocket with gpSP beside it): Left from gpSP goes to the default, never past it.
+        s.pocket_core = Some("mgba".into());
+        let mut p = EmuChoicePage::new(s, Cfg::parse(SHIPPED), Cfg::parse(SHIPPED), |_| true);
+        p.press(Button::Right, A, B);
+        assert_eq!(p.value(Row::RunsOn), "pocket-core · gpSP");
+        p.press(Button::Left, A, B);
+        p.press(Button::Left, A, B);
+        assert_eq!(p.value(Row::RunsOn), "Default (pocket-core · mGBA)");
+    }
+
+    /// On a game's page the default is what the console gives it: back to "Default" drops only the game's choice.
+    #[test]
+    fn a_games_default_is_the_consoles_choice() {
+        let cfg = format!("{SHIPPED}gba.emulator=retroarch\ngba.core=vbam\ngba[\"Zelda.gba\"].emulator=retroarch\ngba[\"Zelda.gba\"].core=mgba\n");
+        let mut p = page(Some("Zelda.gba"), &cfg);
+        assert_eq!(p.value(Row::RunsOn), "RetroArch · mGBA");
+        for _ in 0..30 {
+            p.press(Button::Left, A, B);
+        }
+        assert_eq!(p.value(Row::RunsOn), "Default (RetroArch · VBA-M)");
+        let edits = save(&mut p, SaveChoice::Game);
+        assert!(edits.contains(&("gba[\"Zelda.gba\"].emulator".into(), None)), "{edits:?}");
+        assert!(!edits.iter().any(|(k, _)| k.starts_with("gba.")), "the console's choice stays: {edits:?}");
+        assert_eq!(p.level_line(), "Using this console's settings.");
+    }
+
     #[test]
     fn an_es_choice_is_shown_and_kept() {
         // Chosen in EmulationStation, gpSP isn't installed: still shown, marked, and kept unless changed.
@@ -599,7 +713,7 @@ mod tests {
             Some("Zelda.gba"),
             &format!("{SHIPPED}gba.emulator=retroarch\ngba.core=gpsp\ngba.shaderset=crt/crt-royale.slangp\n"),
         );
-        assert_eq!(p.value(Row::RunsOn), "RetroArch · gpSP");
+        assert_eq!(p.value(Row::RunsOn), "Default (RetroArch · gpSP)", "the console's choice is the game's default");
         assert!(p.describe(Row::RunsOn)[1].starts_with("Not installed"));
         assert_eq!(p.value(Row::Ra(3)), "crt-royale", "a shader chosen in ES");
         assert_eq!(p.level(), Some(Level::Console));
@@ -672,7 +786,7 @@ mod tests {
         assert!(edits.contains(&("gba.rewind".into(), None)));
         assert!(edits.contains(&("gba.emulator".into(), None)));
         assert!(edits.contains(&("gba[\"Zelda.gba\"].core".into(), None)));
-        assert_eq!(p.value(Row::RunsOn), "pocket-core · mGBA");
+        assert_eq!(p.value(Row::RunsOn), "Default (pocket-core · mGBA)");
         assert_eq!(p.level(), None);
         assert_eq!(p.level_line(), "Using the defaults.");
     }
@@ -691,7 +805,7 @@ mod tests {
         let Action::Save { edits, clear_fallback } = p.press(A, A, B) else { panic!() };
         assert!(clear_fallback);
         assert!(edits.iter().all(|(_, v)| v.is_none()), "pocket-core is the default: no keys, just the retry");
-        assert_eq!(p.value(Row::RunsOn), "pocket-core · mGBA");
+        assert_eq!(p.value(Row::RunsOn), "Default (pocket-core · mGBA)");
     }
 
     #[test]

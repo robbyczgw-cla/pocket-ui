@@ -3,9 +3,9 @@
 #   scripts/release-channel.sh --check OUT/updates/<channel>/update.json      (after the GitHub upload, see below)
 #   scripts/release-channel.sh --repo OWNER/NAME [--version V] [--in DIR] [--out DIR] [--channel NAME]
 #                              [--key FILE] [--notes TEXT | --notes-file FILE] [--previous FILE]
-#                              [--os-tar FILE --os-version V] [--base-url URL] [--allow-foreign-key]
+#                              [--os-tar FILE --os-version V] [--base-url URL] [--github-primary] [--allow-foreign-key]
 #     --repo        the public GitHub repository whose release v<version> will hold the files
-#     --version     pocket-ui version (default: from the file names in --in)
+#     --version     pocket-ui version, plain X.Y.Z (default: from the file names in --in)
 #     --gba-core    pinned ARM64 gpSP build folder (licence and corresponding source included)
 #     --in          the artefacts (default release-out/): bin/pocket-ui and bin/pocket-core (or a ready
 #                   pocket-ui-<v>-aarch64.tar.gz), optional pocket-ui-<v>-rocknix-install.zip,
@@ -17,10 +17,16 @@
 #                   carried over; its signature is checked first
 #     --os-tar      a system update tar of our own image build, with --os-version (its version, YYYYMMDD)
 #     --base-url    where the files will be (default https://github.com/OWNER/NAME/releases/download/v<version>)
+#     --direct-app  the app on pocketui.xyz first, the same bytes at --base-url as its signed mirror (80 MB guard;
+#                   nothing deployed). The default unless --base-url is given: pocket-ui up to 0.2.x knows no mirrors
+#                   and downloads only `url`, so the app must not depend on GitHub's download host, which some
+#                   players' networks don't reach.
+#     --github-primary  the app only at --base-url (GitHub), for a test channel
 #     --allow-foreign-key  sign with a key pocket-ui does not have built in (tests); devices would refuse the result
 #
 # --check downloads every file the list names, the way a device does (https only, redirects followed), and compares
-# size and sha256: run it after the upload to GitHub and before the list goes to Vercel.
+# size and sha256: run it after the upload to GitHub and before the list goes to Vercel. A pocketui.xyz file that is not
+# live yet is compared in the folder next to the list, which goes live with it.
 #
 # Publishes nothing: it writes OUT and prints the upload and deploy commands. Needs store-tool (STORE_TOOL=<path>, or
 # it is built with cargo), tar, gzip, od.
@@ -39,10 +45,15 @@ PREVIOUS=
 OS_TAR=
 OS_VERSION=
 BASE_URL=
+DIRECT_APP=
 FOREIGN=0
 CHECK=
+# The website (tests put a file:// folder here).
+SITE=${POCKETUI_SITE_URL:-https://pocketui.xyz}
 while [ $# -gt 0 ]; do
   case $1 in
+    --direct-app) DIRECT_APP=1 ;;
+    --github-primary) DIRECT_APP=0 ;;
     --check) CHECK=$2; shift ;;
     --repo) REPO=$2; shift ;;
     --version) VERSION=$2; shift ;;
@@ -84,11 +95,26 @@ if [ -n "$CHECK" ]; then
   # One line per file: kind, version, size, sha256, url (store-tool list).
   "$TOOL" list "$CHECK" >"$T/list" || die "$CHECK can't be read"
   while IFS='	' read -r kind version size sha url; do
-    if ! curl -fsSL --proto =https,file --proto-redir =https --retry 2 --connect-timeout 20 -o "$T/f" "$url"; then
-      echo "  MISSING  $kind $version  $url"; bad=1; continue
+    where=
+    if ! curl -fsSL --proto =https,file --proto-redir =https --connect-timeout 20 --speed-limit 1 --speed-time 30 --max-time 300 -o "$T/f" "$url"; then
+      # The website's own copy is deployed together with the list: before that, the one in the list's folder counts
+      # (also below it: the Brick's packages are in updates/brick/assets/).
+      in_channel=${url#"$SITE/updates/$(basename "$(dirname "$CHECK")")/"}
+      local_copy=$(dirname "$CHECK")/$in_channel
+      if [ "$in_channel" = "$url" ] || case $in_channel in *..*) true ;; *) false ;; esac || [ ! -f "$local_copy" ]; then
+        echo "  MISSING  $kind $version  $url"; bad=1; continue
+      fi
+      cp "$local_copy" "$T/f"
+      where=" (not live yet: the copy next to the list, deployed with it)"
     fi
     got=$("$TOOL" hash "$T/f")
-    if [ "$got" = "$sha  $size bytes" ]; then echo "  ok       $kind $version  $url"; else echo "  CHANGED  $kind $version  $url ($got)"; bad=1; fi
+    if [ "$got" = "$sha  $size bytes" ]; then
+      echo "  ok       $kind $version  $url$where"
+      if [ "$kind" = app ] && [ ! -e "$T/assets-added" ]; then
+        python3 "$ROOT/scripts/list-update-assets.py" "$T/f" >>"$T/list" || die "the app's asset list cannot be checked"
+        touch "$T/assets-added"
+      fi
+    else echo "  CHANGED  $kind $version  $url ($got)"; bad=1; fi
     rm -f "$T/f"
   done <"$T/list"
   [ $bad = 0 ] || die "the list names files that are not there as signed: do not deploy it"
@@ -109,9 +135,17 @@ if [ -z "$VERSION" ]; then
     break
   done
 fi
-case $VERSION in '' | *[!A-Za-z0-9.+-]*) echo "bad or no version: '$VERSION' (give --version)" >&2; exit 2 ;; esac
+# Plain X.Y.Z: every pocket-ui compares versions by their numbers only (update::newer, the same up to 0.2.x), so 0.3.0-rc1
+# would count as newer than 0.3.0 (which would then never be offered to it) and 0.3 as older than 0.3.0.
+case $VERSION in
+  [0-9]*.[0-9]*.[0-9]*) case $VERSION in *[!0-9.]* | *.*.*.* | *..*) VERSION_BAD=1 ;; *) VERSION_BAD= ;; esac ;;
+  *) VERSION_BAD=1 ;;
+esac
+[ -z "$VERSION_BAD" ] || { echo "bad or no version: '$VERSION' (give --version, plain X.Y.Z)" >&2; exit 2; }
 [ -z "$OS_TAR" ] || case $OS_VERSION in '' | *[!0-9]*) echo "--os-tar needs --os-version YYYYMMDD" >&2; exit 2 ;; esac
 [ -f "$KEY" ] || die "no signing key at $KEY (docs/UPDATE-CHANNEL.md, 'The signing key')"
+# The app on the website first, unless the files go somewhere of their own (--base-url) or a test channel wants GitHub only.
+[ -n "$DIRECT_APP" ] || { if [ -n "$BASE_URL" ]; then DIRECT_APP=0; else DIRECT_APP=1; fi; }
 [ -n "$BASE_URL" ] || BASE_URL=https://github.com/$REPO/releases/download/v$VERSION
 BASE_URL=${BASE_URL%/}
 case $BASE_URL in https://* | file://*) ;; *) die "the files must be on https (pocket-ui refuses anything else): $BASE_URL" ;; esac
@@ -209,6 +243,13 @@ add() { # kind version file
 }
 echo "release-channel: pocket-ui $VERSION, channel $CHANNEL"
 add app "$VERSION" "$GH/$APP"
+if [ "$DIRECT_APP" = 1 ]; then
+  [ "$(size_of "$GH/$APP")" -le 80000000 ] || die "app exceeds the 80 MB direct-hosting budget"
+  cp "$GH/$APP" "$CH/$APP"
+  "$TOOL" update "$KEY" "$INDEX" app "$VERSION" "$GH/$APP" "$SITE/updates/$CHANNEL/$APP" "$NOTES" >/dev/null
+  "$TOOL" mirror "$KEY" "$INDEX" app "$BASE_URL/$APP" >/dev/null
+  printf '  %-12s %-10s %s (first; the line above is its mirror)\n' app "$VERSION" "$SITE/updates/$CHANNEL/$APP"
+fi
 if [ -n "$OS_TAR" ]; then
   [ -f "$OS_TAR" ] || die "no system tar $OS_TAR"
   # The device takes only a *.tar name (update::stage_os).
@@ -284,7 +325,8 @@ pocket-ui $VERSION, channel $CHANNEL. Nothing has been published.
      \$(cat $GH/assets.txt)
 2. Check the uploads against the signed list (downloads every file once, as a device does):
    scripts/release-channel.sh --check $INDEX
-3. Copy $OUT/updates/ into the website's folder (updates/ next to index.html), keep the /updates/ rule of
-   vercel-headers.json in its vercel.json, and deploy the website.
+3. Copy $OUT/updates/ into the website's folder (updates/ next to index.html; with the app it carries, keep the files
+   of earlier versions that are there), keep the /updates/ rule of vercel-headers.json in its vercel.json, deploy the
+   website, and run step 2 again: now every file is the live one.
 EOF
 echo "release-channel: wrote $OUT ($(wc -l <"$GH/assets.txt" | tr -d ' ') files for the GitHub release); next: $OUT/NEXT-STEPS.txt"

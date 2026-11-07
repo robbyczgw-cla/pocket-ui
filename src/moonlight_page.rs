@@ -180,10 +180,9 @@ impl MoonlightPage {
                 _ => Action::Nothing,
             },
             b if b == confirm => match self.row() {
-                Row::Pair if !self.installed() => {
-                    self.message = Some(("Moonlight isn't on this system.".into(), true));
-                    Action::Nothing
-                }
+                // Without Moonlight the page says so already ("Moonlight isn't on this system") and offers no A: A does
+                // nothing, rather than repeat it as "That did not work" (the navigation explorer, 2026-11-07).
+                Row::Pair if !self.installed() => Action::Nothing,
                 _ if self.offline => {
                     self.message = Some((OFFLINE.into(), true));
                     Action::Nothing
@@ -386,11 +385,13 @@ mod tests {
         assert!(crate::i18n::german().translate(OFFLINE).is_some(), "OFFLINE has a German line");
     }
 
+    /// Without Moonlight the page says so and offers no A; A said "That did not work" on top until the navigation explorer
+    /// (2026-11-07) found a key the hints don't name changing the page. Now A does nothing.
     #[test]
     fn without_moonlight_there_is_nothing_to_pair() {
         let mut p = MoonlightPage::new();
         p.event(Event::Loaded(Loaded::default()));
         assert_eq!(p.press(A, A, B), Action::Nothing);
-        assert!(p.address.is_none() && p.message.is_some());
+        assert!(p.address.is_none() && p.message.is_none(), "no keyboard, and no error over the page's own line");
     }
 }

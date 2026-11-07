@@ -1364,7 +1364,7 @@ mod tests {
     fn five_years_of_fake_history_summarise_quickly() {
         let log = fake_years(5, 8, 400);
         let today = local_day(log.sessions.last().unwrap().start, TZ);
-        let t = std::time::Instant::now();
+        let t = crate::testutil::clock::CpuInstant::now();
         for span in Span::ALL {
             let s = summarise(&log, Period::of(span, today), today, &Tags);
             assert!(!s.is_empty());

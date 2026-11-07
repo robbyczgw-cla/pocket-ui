@@ -21,6 +21,8 @@ mod check_page;
 mod onboarding;
 #[path = "phone.rs"]
 mod phone;
+#[path = "play_cards.rs"]
+mod play_cards;
 
 #[derive(Default, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
@@ -37,6 +39,8 @@ pub struct Preferences {
     pub german: Option<bool>,
     pub text_size: pocket_ui::text_size::TextSize,
     pub muted: bool,
+    pub haptics: bool,
+    pub remind_where: Option<bool>,
     pub gameboy_gambatte: bool,
     pub onboarding_done: bool,
     pub onboarding_step: usize,
@@ -127,6 +131,8 @@ enum Setting {
     /// A cozy extra you hear or that moves: a switch of its own (`Extra::home` is Sound & feel on Linux).
     Extra(pocket_ui::cozy_extras::Extra),
     Sounds,
+    Haptics,
+    RemindWhere,
     ButtonSymbols,
     GameBoy,
     Folder,
@@ -134,7 +140,7 @@ enum Setting {
     Media,
     FirstStart,
 }
-const SETTINGS: [Setting; 20] = [
+const SETTINGS: [Setting; 22] = [
     Setting::Look,
     Setting::Appearance,
     Setting::Colours,
@@ -147,6 +153,8 @@ const SETTINGS: [Setting; 20] = [
     Setting::Extra(pocket_ui::cozy_extras::Extra::CrtOn),
     Setting::Motion,
     Setting::Sounds,
+    Setting::Haptics,
+    Setting::RemindWhere,
     Setting::Extra(pocket_ui::cozy_extras::Extra::CaseSounds),
     Setting::Extra(pocket_ui::cozy_extras::Extra::IdleSlideshow),
     Setting::ButtonSymbols,
@@ -181,6 +189,7 @@ pub enum Action {
     /// A fact on the open card that leads to the player's other games.
     Link(usize),
     JustPlay,
+    Controls,
     /// The landscape shelf's arrows: the shelf above (-1) or below (1).
     Shelf(i32),
     /// The Game of the year sticker's year, back (-1) or on (1).
@@ -257,6 +266,9 @@ pub struct Ui {
     pub hits: HitMap,
     pub message: String,
     pub system_font_scale: f32,
+    pub controls_open: bool,
+    controls_scroll: usize,
+    control_names: Vec<pocket_ui::controls::Target>,
     pub keyboard: Option<Keyboard>,
     pub query: String,
     pub lens: pocket_ui::curator::Lens,
@@ -338,6 +350,9 @@ impl Ui {
             hits: HitMap::default(),
             message: String::new(),
             system_font_scale: 1.0,
+            controls_open: false,
+            controls_scroll: 0,
+            control_names: Vec::new(),
             keyboard: None,
             query: String::new(),
             lens: Default::default(),
@@ -526,7 +541,26 @@ impl Ui {
     fn sheet(&self) -> bool {
         matches!(self.screen, Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Quick | Screen::Curator | Screen::Facet | Screen::Stickers)
     }
+    fn open_controls(&mut self) {
+        // Read once at the explicit open, like the game card's save details; never in the painter.
+        self.control_names = self.game().map(|g| play_cards::remembered_names(&super::data_dir(), &game_key(g,self.prefs.gameboy_gambatte))).unwrap_or_default();
+        self.controls_open = true;
+        self.controls_scroll = 0;
+    }
     pub fn press(&mut self, b: Button) -> Command {
+        if self.controls_open {
+            match b {
+                Button::South | Button::East => self.controls_open = false,
+                Button::Up | Button::Left => self.controls_scroll = self.controls_scroll.saturating_sub(1),
+                Button::Down | Button::Right => self.controls_scroll += 1,
+                _ => (),
+            }
+            return Command::None;
+        }
+        if self.screen == Screen::Box && b == Button::R2 && self.game().is_some_and(|g| super::bundled_core(g.system_id).is_some()) {
+            self.open_controls();
+            return Command::None;
+        }
         if !self.prefs.onboarding_done {
             return self.setup_press(b);
         }
@@ -669,6 +703,8 @@ impl Ui {
                     }
                     Setting::TextSize => self.prefs.text_size = self.prefs.text_size.next(),
                     Setting::Sounds => self.prefs.muted = !self.prefs.muted,
+                    Setting::Haptics => self.prefs.haptics = !self.prefs.haptics,
+                    Setting::RemindWhere => self.prefs.remind_where = Some(!self.prefs.remind_where.unwrap_or(true)),
                     Setting::Motion => self.prefs.motion = self.prefs.motion.next(),
                     Setting::ButtonSymbols => self.prefs.prompts = self.prefs.prompts.step(true),
                     Setting::GameBoy => self.prefs.gameboy_gambatte = !self.prefs.gameboy_gambatte,
@@ -1121,7 +1157,7 @@ impl Ui {
         let Some(stem) = std::path::Path::new(&game.relative).file_stem() else {
             return;
         };
-        let base = pocket_ui::platform::data_dir().join("states").join(key).join(stem);
+        let base = super::data_dir().join("states").join(key).join(stem);
         let times: Vec<_> = (0..pocket_ui::slots::SLOTS).map(|i| pocket_ui::slots::saved_at(&base, i)).collect();
         lib.cards[index].saves = Some(pocket_ui::game_card_model::CardSaves {
             system: game.system_id.into(),
@@ -1176,6 +1212,10 @@ impl Ui {
         }
         let action = self.regions.iter().rev().find(|r| r.area.contains(x, y)).map(|r| r.action.clone());
         match action {
+            Some(Action::Controls) => {
+                self.open_controls();
+                Command::None
+            }
             Some(Action::JustPlay) => self.just_play(),
             Some(Action::Tab(screen)) => {
                 if self.screen == screen && Self::list_screen(screen) {
@@ -1258,6 +1298,14 @@ impl Ui {
     }
     /// A finger moved by (dx, dy) canvas pixels: the page follows it (the landscape shelf moves a game per step).
     pub fn drag(&mut self, dx: f32, dy: f32) -> bool {
+        if self.controls_open {
+            self.drag_rest += dy;
+            if self.drag_rest.abs() > 35.0 {
+                self.controls_scroll = (self.controls_scroll as i32 + if self.drag_rest < 0.0 {1} else {-1}).max(0) as usize;
+                self.drag_rest = 0.0;
+            }
+            return true;
+        }
         self.touch_mode = true;
         if !self.prefs.onboarding_done {
             return false;
@@ -1394,14 +1442,8 @@ impl Ui {
     pub fn paint(&mut self, c: &mut Canvas, text: &mut Text, cover: Option<&Image>) {
         self.prefs.apply_look();
         palette::set_blend(if self.prefs.light { 255 } else { 0 });
-        let text_size = if self.system_font_scale >= 1.25 {
-            pocket_ui::text_size::TextSize::Large
-        } else if self.system_font_scale >= 1.12 && self.prefs.text_size == pocket_ui::text_size::TextSize::Normal {
-            pocket_ui::text_size::TextSize::Medium
-        } else {
-            self.prefs.text_size
-        };
-        pocket_ui::type_scale::set(text_size);
+        pocket_ui::type_scale::set_system_scale(self.system_font_scale);
+        pocket_ui::type_scale::set(play_cards::text_size(self.prefs.text_size, self.system_font_scale));
         pocket_ui::game_card_model::set_touch(self.touch_mode);
         c.clear(pal().void);
         self.hits.clear();
@@ -1409,6 +1451,14 @@ impl Ui {
         self.front_at = None;
         if !self.prefs.onboarding_done {
             self.paint_setup(c, text);
+            return;
+        }
+        if self.controls_open {
+            let system = self.game().map_or("", |g| g.system_id).to_string();
+            let (back, max) = play_cards::paint_controls(c, text, &system, &self.control_names, self.controls_scroll);
+            self.controls_scroll = self.controls_scroll.min(max);
+            self.target(back, "Back", Action::Press(Button::South));
+            self.target(Area::new(36, 120, c.w - 72, back.y - 140), &play_cards::control_lines(&system, &self.control_names).join(". "), Action::Label);
             return;
         }
         self.paint_phone(c, text, cover);
@@ -1437,6 +1487,8 @@ impl Ui {
                     Setting::CozyExtras => row("Cozy extras", ""),
                     Setting::Extra(e) => row(e.label(), on_off(self.prefs.extras.get(*e))),
                     Setting::Sounds => row("UI sounds", on_off(!self.prefs.muted)),
+                    Setting::Haptics => row("Haptics", on_off(self.prefs.haptics)),
+                    Setting::RemindWhere => row("Remind me where I was", on_off(self.prefs.remind_where.unwrap_or(true))),
                     Setting::ButtonSymbols => row("Button symbols", self.prefs.prompts.label()),
                     Setting::GameBoy => row("Game Boy core", if self.prefs.gameboy_gambatte { "Gambatte" } else { "mGBA" }),
                     Setting::Folder => row("Choose your ROM folder", ""),

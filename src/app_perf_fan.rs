@@ -19,7 +19,7 @@ use pocket_ui::gfx::Canvas;
 use pocket_ui::pad::Button;
 use pocket_ui::palette::*;
 use pocket_ui::perf_fan::{outside_fan, FanKeeper, Moment, Prefs, Readout};
-use pocket_ui::perf_fan_page::{Action, Event, PerfFanPage, PRECEDENCE_NOTE, ROWS};
+use pocket_ui::perf_fan_page::{rows, Action, Event, PerfFanPage};
 use pocket_ui::power::{Fan, Performance};
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
@@ -272,7 +272,7 @@ impl App {
             smooth_fan: true,
         };
         let mut page = PerfFanPage::new(prefs);
-        page.sel = row.min(ROWS.len() - 1);
+        page.sel = row.min(rows().len() - 1);
         if !waiting {
             page.event(Event::Readout(Readout {
                 fan_starts: Some(83_500),
@@ -301,9 +301,10 @@ impl App {
     fn paint_perf_fan_page(&mut self, c: &mut Canvas, page: &PerfFanPage) {
         c.clear(pal().void);
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
-        self.sheet_header(c, SETTINGS_NAME);
+        self.sheet_header(c, pocket_ui::perf_fan_page::title());
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
-        for (i, r) in ROWS.iter().enumerate() {
+        let rows = rows();
+        for (i, r) in rows.iter().enumerate() {
             let y = top + i as i32 * row;
             self.hits.row(Area::new(pad, y, right - pad, row), i);
             let base = y + row / 2 + pocket_ui::type_scale::mid(font);
@@ -316,22 +317,23 @@ impl App {
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, name);
             }
             let value = page.value(*r);
-            let shown = if selected { format!("‹ {value} ›") } else { value.to_string() };
+            let changeable = selected && page.changeable();
+            let shown = if changeable { format!("‹ {value} ›") } else { value.to_string() };
             let vx = right - NU_BTN_PAD;
             pocket_ui::kit::row_value(c, &mut self.text, font, vx, base, &shown, selected);
-            // The arrows of the selected row are buttons of their own for a finger.
-            if selected {
+            // Read-only values have neither change arrows nor arrow touch targets.
+            if changeable {
                 let vw = self.text.width(Face::Body, font, &shown);
                 let aw = self.text.width(Face::Body, font, "‹ ") + 24;
                 self.hits.button(Area::new(vx - vw - 24, y, aw, row), Button::Left);
                 self.hits.button(Area::new(vx - aw + 24, y, aw, row), Button::Right);
             }
         }
-        self.hits.list(page.sel, ROWS.len(), 0.0, row as f32);
+        self.hits.list(page.sel, rows.len(), 0.0, row as f32);
 
         // What the selected row is for and what its choice does, then which settings win.
         let (left, width) = (pad + NU_BTN_PAD, c.w - 2 * (pad + NU_BTN_PAD));
-        let mut y = top + ROWS.len() as i32 * row + 44;
+        let mut y = top + rows.len() as i32 * row + 44;
         let [what, choice] = page.describe(page.row());
         let desc_step = pocket_ui::type_scale::line(NU_SMALL, 12);
         let wrapped = [(what.as_str(), pal().dust), (choice.as_str(), pal().text)]
@@ -375,7 +377,7 @@ impl App {
         let step = pocket_ui::type_scale::line(24, 8);
         // As many lines as leave the panel (12 px under them) clear of the hints.
         let room = ((hints_top - 8 - panel_h - 12 - y) / step).max(0) as usize;
-        for line in self.text.wrap_prose_at_most(Face::Body, 24, PRECEDENCE_NOTE, width, room) {
+        for line in self.text.wrap_prose_at_most(Face::Body, 24, pocket_ui::perf_fan_page::precedence_note(), width, room) {
             self.text.draw(c, Face::Body, 24, left, y, pal().quiet, &line);
             y += step;
         }
@@ -396,9 +398,12 @@ impl App {
         } else {
             total
         };
+        let n = lines.len();
         for (i, (label, value)) in lines.into_iter().enumerate() {
-            // One column: the four under each other. Two: Hottest and Battery draw (0, 3), then Fan and CPU (1, 2).
-            let (col, row) = if cols > 1 { [(0, 0), (1, 0), (1, 1), (0, 1)][i] } else { (0, i as i32) };
+            // One column: the four under each other. Two: Hottest and Battery draw (0, 3), then Fan and CPU (1, 2); without a
+            // fan line Hottest and Battery draw left, CPU right.
+            let place: &[(i32, i32)] = if n == 4 { &[(0, 0), (1, 0), (1, 1), (0, 1)] } else { &[(0, 0), (1, 0), (0, 1)] };
+            let (col, row) = if cols > 1 { place[i.min(place.len() - 1)] } else { (0, i as i32) };
             let (cx, room, label_w) = match (cols > 1, col) {
                 (false, _) => (px, total, label_w),
                 (true, 0) => (px, left_w, lab_left),
@@ -410,6 +415,8 @@ impl App {
             self.text.draw(c, Face::Title, 32, cx + label_w, ly + 2, pal().chalk, &value);
         }
 
-        self.nu_hints(c, &[("B", "Back"), ("A", "Next"), ("< >", "Change")]);
+        // A fan row without a fan of the page's ("No fan", ROCKNIX's own) changes with no key: no key offered for it.
+        let hints: &[(&str, &str)] = if page.changeable() { &[("B", "Back"), ("A", "Next"), ("< >", "Change")] } else { &[("B", "Back")] };
+        self.nu_hints(c, hints);
     }
 }

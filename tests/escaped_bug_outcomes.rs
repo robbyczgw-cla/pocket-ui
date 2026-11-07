@@ -11,11 +11,8 @@ fn compositor(root: &Path) -> Compositor {
     let child = Command::new("python3").args(["-I", concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/wayland-stub.py")])
         .arg(&socket).spawn().unwrap();
     let stub = Compositor(child);
-    for _ in 0..200 {
-        if socket.exists() { return stub; }
-        std::thread::sleep(Duration::from_millis(10));
-    }
-    panic!("host compositor greeting did not start");
+    test_clock::wait_for(|| socket.exists(), Duration::from_secs(2), "Wayland stub listening");
+    stub
 }
 
 fn render(root: &Path, state: &str, size: &str, name: &str) -> (String, String) {
@@ -89,3 +86,6 @@ fn every_cabinet_shelf_has_a_visible_case_title_showcase_and_hints_at_native_102
         }
     }
 }
+
+#[path = "../src/test_clock.rs"]
+mod test_clock;

@@ -260,10 +260,22 @@ impl Ctx {
         None
     }
 
+    #[cfg(not(feature = "brick"))]
     fn host_ok(&self, req: &Request) -> bool {
         let Some(host) = req.host() else { return false };
         let listening = self.shared.listening.lock().unwrap().clone();
         let names = self.me().map(|m| m.names()).unwrap_or_default();
+        net::host_allowed(&host, &names, &listening)
+    }
+
+    #[cfg(feature = "brick")]
+    fn host_ok(&self, req: &Request) -> bool {
+        let Some(host) = req.host() else { return false };
+        let mut listening = self.shared.listening.lock().unwrap().clone();
+        let me = self.me();
+        let names = me.as_ref().map(|m| m.names()).unwrap_or_default();
+        // The node's own tailnet addresses: on the Brick's userspace Tailscale the socket listens on 127.0.0.1 and the browser comes by 100.x.
+        listening.extend(me.iter().flat_map(|m| m.addrs.iter().map(|a| SocketAddr::new(*a, 0))));
         net::host_allowed(&host, &names, &listening)
     }
 }

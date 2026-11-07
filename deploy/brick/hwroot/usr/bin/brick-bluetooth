@@ -1,0 +1,214 @@
+#!/bin/sh
+# Own BlueZ lifecycle, not the firmware/NextUI Bluetooth scripts. Firmware binaries stay on the device.
+# Pairings live in RAM with an atomic card archive (FAT cannot keep BlueZ's permissions).
+DATA=${BRICK_DATA:-/mnt/SDCARD/pocket-ui}
+RUN=${BRICK_RUN:-/tmp/pocket-ui}
+BT=$RUN/bluetooth
+STATE=${BRICK_STATE:-$DATA/storage/.config/pocket-ui}
+ARCHIVE=$STATE/bluetooth.tar
+STORE=${BRICK_BT_STORE:-/var/lib/bluetooth}
+HCI=${BRICK_BT_HCI:-/sys/class/bluetooth/hci0}
+RFK=${BRICK_RFKILL:-/sys/class/rfkill}
+CTL=${BRICK_BT_CTL:-/usr/bin/bluetoothctl}
+DAEMON=${BRICK_BT_DAEMON:-/usr/bin/bluetoothd}
+# Headphones (A2DP, SBC): the firmware's BlueALSA sends what ALSA's "pipewire" device plays while a headset is connected.
+BLUEALSA=${BRICK_BLUEALSA:-/usr/bin/bluealsa}
+# While a headset is connected its address is in $ROUTE: pocket-core and pocket-ui then open ALSA's "pocket_bt:DEV=<address>"
+# (the card's asoundrc: BlueALSA behind a software volume) instead of "pipewire" (the chip), at their next open; pocket-core
+# opens its stream again when the file comes or goes (`audio_route::brick_route`). alsa-lib does not read a changed ~/.asoundrc
+# again in a running program, so the device's name changes, not its config.
+ROUTE=$RUN/bt-audio
+SELF=$(readlink -f "$0")
+running_here=0
+mounted_here=0
+
+# Only signal PIDs saved by us and still running the expected executable/script.
+owned() {
+  [ -s "$BT/$1.pid" ] || return 1
+  p=$(cat "$BT/$1.pid")
+  case "$p" in ''|*[!0-9]*) return 1 ;; esac
+  kill -0 "$p" 2>/dev/null || return 1
+  tr '\000' '\n' <"${BRICK_PROC:-/proc}/$p/cmdline" 2>/dev/null | grep -Fxq "$2"
+}
+stop_child() {
+  if owned "$1" "$2"; then
+    p=$(cat "$BT/$1.pid"); kill "$p" 2>/dev/null
+    n=0
+    while owned "$1" "$2" && [ "$n" -lt 5 ]; do sleep 1; n=$((n + 1)); done
+    if owned "$1" "$2"; then kill -KILL "$p" 2>/dev/null; fi
+    wait "$p" 2>/dev/null
+  fi
+  rm -f "$BT/$1.pid"
+}
+save() {
+  [ -d "$BT/keys" ] || return 0
+  mkdir -p "$STATE" || return 1
+  # Serialize writes from trust/remove and shutdown. A failed save must not replace the old copy.
+  mkdir "$BT/save.lock" 2>/dev/null || return 1
+  ( umask 077; tar -cf "$ARCHIVE.new" -C "$BT/keys" . ) && mv -f "$ARCHIVE.new" "$ARCHIVE"
+  rc=$?
+  rmdir "$BT/save.lock"
+  return "$rc"
+}
+ctl() {
+  # Firmware has no timeout utility. Own watchdog bounds every one-shot bluetoothctl invocation.
+  "$CTL" "$@" >"$BT/reply" 2>&1 &
+  q=$!
+  ( sleep "${BRICK_BT_TIMEOUT:-4}";
+    tr '\000' '\n' <"${BRICK_PROC:-/proc}/$q/cmdline" 2>/dev/null | grep -Fxq "$CTL" && kill -KILL "$q" 2>/dev/null
+  ) &
+  timer=$!
+  wait "$q"; rc=$?
+  kill "$timer" 2>/dev/null; wait "$timer" 2>/dev/null
+  cat "$BT/reply"
+  return "$rc"
+}
+# The connected device that takes A2DP sound (its address), nothing when there is none. Asked only while the kernel has a link.
+audio_sink() {
+  ls -d "$HCI":* >/dev/null 2>&1 || return 0
+  ctl devices | while read -r word mac _; do
+    [ "$word" = Device ] || continue
+    info=$(ctl info "$mac")
+    if echo "$info" | grep -q 'Connected: yes' && echo "$info" | grep -q 'UUID: Audio Sink'; then echo "$mac"; break; fi
+  done
+}
+# Sound to `$1` (an address) or back to the speaker (empty).
+route_to() {
+  [ "$1" = "$(cat "$ROUTE" 2>/dev/null)" ] && return 0
+  mkdir -p "$RUN"
+  if [ -n "$1" ]; then
+    echo "$1" >"$ROUTE.new" && mv -f "$ROUTE.new" "$ROUTE" || return 1
+    : >"$BT/volume-pending"
+    echo "brick-bluetooth: sound to the headphones $1"
+  else
+    rm -f "$ROUTE" "$BT/volume-pending"
+    echo 'brick-bluetooth: sound to the speaker'
+  fi
+}
+cleanup() {
+  trap '' TERM INT
+  trap - EXIT
+  rm -f "$BT/ready"
+  if [ "$running_here" = 1 ]; then
+    [ ! -e "$ROUTE" ] || route_to ''
+    stop_child bluealsa "$BLUEALSA"
+    if owned daemon "$DAEMON"; then ctl power off; fi
+    stop_child agent "$CTL"
+    stop_child daemon "$DAEMON"
+  fi
+  if [ "$mounted_here" = 1 ]; then save || echo 'brick-bluetooth: could not save pairings' >&2; fi
+  if [ "$mounted_here" = 1 ]; then
+    if "${BRICK_BT_UMOUNT:-umount}" "$STORE"; then rm -f "$BT/mounted"; fi
+  fi
+  [ "$running_here" != 1 ] || stop_child attach "${BRICK_BT_ATTACH:-/usr/bin/hciattach}"
+  rm -f "$BT/service.pid" "$BT/agent.in"
+  exit 0
+}
+case "${1:-}" in
+  start)
+    mkdir -p "$BT" "$STATE" || exit 1
+    # A supervisor already starting is also ours: don't race a second mount/daemon.
+    if owned service "$SELF"; then
+      n=0
+    else
+      mkdir "$BT/start.lock" 2>/dev/null || exit 1
+      trap 'rmdir "$BT/start.lock" 2>/dev/null' EXIT
+      rm -f "$BT/ready"
+      "$SELF" run >>"$BT/service.log" 2>&1 &
+      echo $! >"$BT/service.pid"
+      n=0
+    fi
+    while [ "$n" -lt 50 ]; do
+      [ -f "$BT/ready" ] && owned service "$SELF" && { : >"$STATE/bluetooth-on"; exit 0; }
+      owned service "$SELF" || break
+      sleep 1; n=$((n + 1))
+    done
+    echo "brick-bluetooth: start failed; see $BT/service.log" >&2
+    exit 1 ;;
+  run)
+    trap cleanup TERM INT EXIT
+    rm -f "$BT/ready"
+    # Do not take over a foreign daemon: it may own another card's pairings and connections.
+    "${BRICK_BT_PIDOF:-pidof}" bluetoothd >/dev/null 2>&1 && { echo 'foreign bluetoothd is running'; exit 1; }
+    [ -x "$CTL" ] && [ -x "$DAEMON" ] || exit 1
+    [ -S "${BRICK_BT_BUS:-/var/run/dbus/system_bus_socket}" ] || { echo 'firmware system D-Bus is missing'; exit 1; }
+    [ ! -e "$BT/mounted" ] || { echo 'previous storage mount is still in use; refusing to start'; exit 1; }
+    running_here=1
+    rm -f "$BT/daemon.pid" "$BT/agent.pid" "$BT/attach.pid"
+    # /var is RAM on the firmware. Create the standard BlueZ directory there, never in /etc.
+    [ ! -L "$STORE" ] || { echo 'BlueZ storage must not point into firmware'; exit 1; }
+    mkdir -p "$BT/keys" "$STORE" || exit 1
+    chmod 700 "$BT/keys"
+    # Always restore into a fresh directory: forgotten devices cannot return from old RAM files.
+    find "$BT/keys" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} \;
+    [ ! -s "$ARCHIVE" ] || tar -xf "$ARCHIVE" -C "$BT/keys" || exit 1
+    "${BRICK_BT_MOUNT:-mount}" --bind "$BT/keys" "$STORE" || exit 1
+    mounted_here=1
+    : >"$BT/mounted"
+    for r in "$RFK"/rfkill*; do
+      [ "$(cat "$r/type" 2>/dev/null)" != bluetooth ] || echo 1 >"$r/state" || exit 1
+    done
+    if [ ! -d "$HCI" ]; then
+      "${BRICK_BT_PIDOF:-pidof}" hciattach >/dev/null 2>&1 && { echo 'firmware HCI attach is still starting; retry later'; exit 1; }
+      # This Brick's firmware uses XR829 on UART1. No vendor reset script, no other process killed.
+      [ ! -w "${BRICK_BT_WRITE:-/proc/bluetooth/sleep/btwrite}" ] || echo 1 >"${BRICK_BT_WRITE:-/proc/bluetooth/sleep/btwrite}"
+      "${BRICK_BT_ATTACH:-/usr/bin/hciattach}" -n ttyS1 xradio >>"$BT/attach.log" 2>&1 &
+      echo $! >"$BT/attach.pid"
+      n=0; while [ ! -d "$HCI" ] && [ "$n" -lt 7 ]; do sleep 1; n=$((n + 1)); done
+      [ -d "$HCI" ] || exit 1
+    fi
+    "$DAEMON" --nodetach >>"$BT/daemon.log" 2>&1 &
+    echo $! >"$BT/daemon.pid"
+    # Interactive bluetoothctl keeps its agent registered; separate one-shot calls would unregister on exit.
+    rm -f "$BT/agent.in"
+    mkfifo "$BT/agent.in" || exit 1
+    exec 3<>"$BT/agent.in"
+    : >"$BT/agent.log"
+    "$CTL" --agent NoInputNoOutput <"$BT/agent.in" >>"$BT/agent.log" 2>&1 &
+    echo $! >"$BT/agent.pid"
+    n=0
+    while [ "$n" -lt 7 ]; do
+      ctl power on | grep -q succeeded && break
+      owned daemon "$DAEMON" || exit 1
+      sleep 1; n=$((n + 1))
+    done
+    ctl show | grep -q 'Powered: yes' || exit 1
+    printf 'default-agent\npairable on\ndiscoverable off\nsystem-alias TrimUI Brick (pocket-ui)\n' >&3
+    n=0
+    while [ "$n" -lt 5 ]; do
+      grep -q 'Default agent request successful' "$BT/agent.log" && break
+      owned agent "$CTL" || exit 1
+      sleep 1; n=$((n + 1))
+    done
+    grep -q 'Default agent request successful' "$BT/agent.log" || exit 1
+    # A2DP source for headphones; without BlueALSA (or when it ends) the sound stays on the speaker and controllers still work.
+    [ ! -e "$ROUTE" ] || route_to ''
+    if [ -x "$BLUEALSA" ]; then
+      "$BLUEALSA" -p a2dp-source >>"$BT/bluealsa.log" 2>&1 &
+      echo $! >"$BT/bluealsa.pid"
+    fi
+    : >"$BT/ready"
+    n=0
+    while owned daemon "$DAEMON" && owned agent "$CTL"; do
+      sleep 1; n=$((n + 1))
+      # Every 3 s: a headset that connected or went (switched off, out of range, disconnected on the page).
+      if [ $((n % 3)) = 0 ]; then
+        if owned bluealsa "$BLUEALSA"; then route_to "$(audio_sink)"; else route_to ''; fi
+        # The headset's level once its volume control exists (pocket-core's first stream to it makes it).
+        if [ -e "$BT/volume-pending" ] && "${BRICK_VOLUME:-$(dirname "$SELF")/volume}" bt; then rm -f "$BT/volume-pending"; fi
+      fi
+    done
+    exit 1 ;;
+  stop)
+    rm -f "$STATE/bluetooth-on"
+    if owned service "$SELF"; then
+      p=$(cat "$BT/service.pid"); kill "$p" 2>/dev/null
+      n=0; while owned service "$SELF" && [ "$n" -lt 25 ]; do sleep 1; n=$((n + 1)); done
+      owned service "$SELF" && exit 1
+    fi
+    [ ! -e "$BT/mounted" ] ;;
+  status) [ -f "$BT/ready" ] && owned service "$SELF" && owned daemon "$DAEMON" && owned agent "$CTL" ;;
+  audio) cat "$ROUTE" 2>/dev/null ;;
+  save) save ;;
+  *) echo 'usage: brick-bluetooth start|stop|status|save|audio' >&2; exit 2 ;;
+esac

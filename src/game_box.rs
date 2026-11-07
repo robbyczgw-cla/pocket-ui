@@ -718,7 +718,7 @@ fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[Ca
     facts.extend(d.facts.iter().map(|(k, v)| (*k, v.clone())));
     facts.extend(d.players.clone().map(|p| ("Players", p)));
     facts.extend(d.scores.clone().map(|s| ("Reviews", s)));
-    // The label column holds the widest label: a face wider than Barlow (Settings → Look → Font) or a longer German word.
+    // The label column holds the widest label: a face wider than Barlow (Settings → Look → Style) or a longer German word.
     let gap = text.width(Face::Body, 28, "  ");
     let key_w = facts.iter().map(|(k, _)| text.width(Face::Body, 28, k) + gap).fold(key_w, i32::max).min(col_w / 2);
     if facts.is_empty() {

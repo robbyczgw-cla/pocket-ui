@@ -1,20 +1,59 @@
 # The update channel on pocketui.xyz
 
-Status: 2026-10-26. Designed, built and tested on the build machine with made-up artefacts and a throwaway key.
-**Nothing is published yet**: no list on pocketui.xyz, no GitHub release. How the device installs an update and
+Status: 2026-11-06. The stable signed channel is live. Since 0.2.1 its app update and install package are served directly by pocketui.xyz. How the device installs an update and
 rolls back is in [UPDATES.md](UPDATES.md); this page is about where the files live and how a release gets there.
+
+## Bounded downloads and alternate sources (0.3)
+
+A release may add `"mirrors": ["https://github.com/owner/repo/releases/download/vX/file"]`.
+`url` remains the first source, so older clients still work; all sources serve **identical bytes**.
+The complete list of sources is signed with the existing Ed25519 key. Size and SHA-256 checks
+apply equally to every source. HTTPS and HTTPS-only redirects remain enforced (`file://` for offline tests).
+A changed mirror list without a fresh signature is refused.
+
+The worker tries at most four signed sources, once each. It stops a source after 30 seconds
+without any file growth, or after five minutes plus the file's size at 10 KB/s (`source_deadline`: a 15 MB
+app gets about 30 minutes, a 1.5 GB system update a day), including DNS, TLS and redirects. A flat five minutes
+cut every system update and, on weak Wi-Fi, the app, and the next source began from nothing. Curl also has
+20-second connect and 30-second low-speed timeouts. There are no hidden curl retries. A host that stalls is left
+after 30 seconds; one that trickles is bounded by that deadline. When the deadline ends while bytes
+still come, the page says "The download is too slow on this network"; curl's own limit is 10 s after the
+worker's. Before the download the app update checks the SD card's room: the rest of the download, three times
+the archive unpacked, and 32 MB to spare (`update::room_for_app`); curl's write error (23) says the card is
+full, not Wi-Fi. A failed secure connection (curl 35, 60) with the clock before this build (`clock_check`) names
+the clock.
+Cancellation stops the operation rather than starting the next host. On a host change, partial
+bytes are discarded: a corrupt prefix from one host cannot poison the next. A partial file from
+the same source can still resume on a later attempt; the final full-file hash remains mandatory.
+
+The page names connecting, trying the next server, downloading, checking and preparing phases;
+a stalled final source reports “The download server stopped responding. Nothing was installed.
+Try again.” Failure leaves the active installation unchanged. Source-index failures go to the
+UI log without URLs or credentials. The progress counter restarts on a change of host.
+
+`scripts/release-channel.sh` prepares the app beside the signed website list under
+`/updates/<channel>/`, with GitHub as the signed fallback (the default since 0.3; `--github-primary` keeps a
+test channel on GitHub only, and so does a `--base-url` of its own unless `--direct-app` is given). pocket-ui
+up to 0.2.x knows no mirrors and downloads only `url`: an app that only GitHub's download host serves would
+reach none of the players whose network blocks it. It refuses an app over 80,000,000 bytes to leave margin
+below the Hobby upload limit, and a version that is not plain `X.Y.Z` (every pocket-ui compares versions by
+their numbers only: `0.3.0-rc1` would count as newer than `0.3.0`). It publishes nothing.
+`store-tool mirror KEY update.json app URL [URL] [URL]` signs alternate sources;
+`store-tool list` and `release-channel.sh --check` check every source, not only the primary.
+Card images, source archives and installers can stay on the release. Check the complete
+website deployment size and remaining monthly transfer before requesting a public deploy.
 
 ## Layout
 
-A small signed list on the website, the big files on GitHub Releases of the public repository:
+A small signed list and the app update on the website, the big files on GitHub Releases of the public repository:
 
 | What | Where | Size |
 |---|---|---|
 | The update list | `https://pocketui.xyz/updates/stable/update.json` (`update::DEFAULT_URL`) | about 1 KB |
 | Its signature | `https://pocketui.xyz/updates/stable/update.json.sig` (base64 Ed25519 of the exact bytes) | 88 bytes |
 | The store catalog, once there is one | `https://pocketui.xyz/updates/store/catalog.json` and `.sig` ([below](#the-store-catalog)) | a few KB |
-| The app update | `https://github.com/<owner>/pocket-ui/releases/download/v<version>/pocket-ui-<version>-aarch64.tar.gz` | about 8 MB |
-| The install package for a ROCKNIX card | `…/v<version>/pocket-ui-<version>-rocknix-install.zip` | about 8 MB |
+| The app update | `https://pocketui.xyz/updates/stable/pocket-ui-<version>-aarch64.tar.gz`, the same file on `https://github.com/<owner>/pocket-ui/releases/download/v<version>/` as its signed mirror | about 15 MB |
+| The install package for a ROCKNIX card | `https://github.com/<owner>/pocket-ui/releases/download/v<version>/pocket-ui-<version>-rocknix-install.zip` | about 15 MB |
 | The SD card image and its notes | `…/v<version>/pocket-ui-<version>-rp-mini-v2.img.xz`, `.txt` | about 1.5 GB |
 | Checksums for people | `…/v<version>/SHA256SUMS` | |
 
@@ -35,7 +74,7 @@ compare); a device ignores them. `os` stays empty until our own system build exi
 
 Why the split:
 
-- **Vercel** (the website, static) takes at most 100 MB per deployment on the Hobby plan (1 GB on Pro), and the
+- **Vercel** (the website, static) documents a 100 MB static CLI upload limit on the Hobby plan (1 GB on Pro), and the
   website is about 31 MB already. An image of 1.5 GB cannot go there; a list of 1 KB is ideal there.
 - **GitHub Releases** takes files under 2 GiB each (the image is 1.52 GB: watch it; `release-channel.sh` refuses
   2 GiB or more), serves them to anyone without a token as long as the repository is public, and costs nothing. A
@@ -43,6 +82,26 @@ Why the split:
   it (below).
 - **Neither host is trusted.** The list is signed and every file is checked against its sha256, so a changed file or
   list on either host is refused. What the hosts have to provide is HTTPS, anonymous reads and stable URLs.
+
+## The Brick card
+
+The TrimUI Brick's own card ([TRIMUI-BRICK-REMOTE.md](TRIMUI-BRICK-REMOTE.md)) has a channel of its own, laid out the same way:
+the signed list at `https://pocketui.xyz/updates/brick/update.json` (`update::BRICK_DEFAULT_URL`, asked by a card that has no
+`app/update-url`, which is every card from the public zip), the files on the same GitHub release as the ROCKNIX ones. `app` is
+`pocket-ui-brick-<version>.tar.gz`, the card's whole program folder (the device installs it with `update::install_brick`);
+`install_zip` is `pocket-ui-brick-card-<version>.zip`, for people. Same key, same checks, same caching rule (it is under
+`/updates/`). The cores' source is not in the tarball: it is `pocket-ui-brick-sources-<version>.zip` on the same release, next to
+the card zip. No Tailscale and no account are involved; a private beta card asks the channel its `app/update-url` names instead.
+
+    BRICK_PARTS=PARTS BRICK_SOURCES_APART=1 BRICK_POCKETUI_SOURCE=pocket-ui-<v>.tar.gz \
+      scripts/brick-make-card.sh OUT BINS LIBS CORES <v>                 # no BRICK_UPDATE_URL: the card asks the public channel
+    scripts/brick-publish.sh OUT/card --public OWNER/pocket-ui --out brick-public --zip OUT/pocket-ui-brick-card-<v>.zip --notes "…"
+    gh release upload v<v> brick-public/release/* OUT/pocket-ui-brick-sources-<v>.zip --repo OWNER/pocket-ui
+    scripts/release-channel.sh --check brick-public/updates/brick/update.json
+    # then brick-public/updates/brick/ into the website's updates/brick/, deployed with it
+
+`brick-publish.sh --public` refuses a build with an `app/update-url`, a beta version (`X.Y.Z-brick.N`) and a key pocket-ui does not
+trust, and publishes nothing itself (tests: `scripts/test-brick-card.sh`, "public:").
 
 ## Caching
 
@@ -104,13 +163,15 @@ On the build machine, from a clean checkout of the release commit. Nothing below
    scripts/make-image.sh --version $V --bin-dir release-out/bin --out release-out     # optional: the SD image
    ```
 
-2. **Check the artefacts** for BIOS files, ROMs and unapproved cores. The optional pinned ARM64 gpSP for H700 is
-   staged with `--gba-core BUILD_DIR` on the package and channel scripts; its GPL text, corresponding source and
-   build recipe must accompany it. For these finished packages only, pass
-   `--allowlist deploy/gpsp/release-allowlist.txt` to `scripts/check-release-tree.py`. Keep the source repository
-   core-free and scan it with the default allowlist. `gba-core-files.sh` verifies the exact core SHA256.
-   Then
-   and write the release notes into `release-out/NOTES.txt` (shown on the Updates page and on the release page).
+   For an update supporting H700 GBA, build the pinned ARM64 gpSP with `scripts/build-gpsp.sh` and pass its output
+   folder as `--gba-core BUILD_DIR` to both `make-install-zip.sh` and `release-channel.sh` below. This includes the
+   verified core, licence, corresponding source and recipe; a prebuilt app archive missing them is refused.
+
+2. **Check the artefacts** for BIOS files, ROMs and unapproved cores. The optional pinned gpSP is shipped only with
+   its licence and corresponding source ([HOST.md](HOST.md#h700-gba)); source repositories stay free of core binaries.
+   Write the release notes into `release-out/NOTES.txt` (shown on the Updates page and on the release page).
+   For packaged gpSP artefacts, invoke `scripts/check-release-tree.py --allowlist deploy/gpsp/release-allowlist.txt`
+   with the app archive, install zip or image. The normal source-tree check keeps rejecting third-party cores.
 3. **Get the list that is live now**, so that what this release does not replace (a system update) is carried over:
 
    ```sh
@@ -131,6 +192,7 @@ On the build machine, from a clean checkout of the release commit. Nothing below
 
    ```
    site-updates/updates/stable/update.json, update.json.sig   → the website
+   site-updates/updates/stable/pocket-ui-$V-aarch64.tar.gz    → the website (the app's first source)
    site-updates/updates/store/…                               → the website (only with release-out/store/)
    site-updates/github/pocket-ui-$V-aarch64.tar.gz, SHA256SUMS, notes.md, assets.txt
    site-updates/vercel-headers.json, NEXT-STEPS.txt
@@ -158,9 +220,10 @@ On the build machine, from a clean checkout of the release commit. Nothing below
 
    It downloads every file the list names the way a device does (https only, GitHub's redirect followed) and compares
    size and sha256: `ok`, `MISSING` or `CHANGED` per file, exit 1 unless all are ok. The image is 1.5 GB, so this takes
-   a while.
+   a while. The app's website copy is not live yet at this point: the one next to the list is compared instead
+   ("not live yet"); run the check once more after step 8.
 8. **Deploy the list**: copy `site-updates/updates/` into the website's folder (as `updates/`, next to `index.html`;
-   `cp -R site-updates/updates/. <website>/updates/`), check that its `vercel.json` still has the `/updates/(.*)` rule
+   `cp -R site-updates/updates/. <website>/updates/`, which keeps the files of earlier versions that are there), check that its `vercel.json` still has the `/updates/(.*)` rule
    ([Caching](#caching)), and deploy the website as usual (`vercel deploy --prod` from its folder).
 9. **Look at it:**
 
@@ -221,6 +284,10 @@ What the page says when something is not right:
 | `update_url` set to `http://…` | The update address has to start with https://. Nothing was changed. |
 | The list names an `http://` file | The update list names a file that isn't on https. Nothing was installed. |
 | A redirect to plain http | The update server sent an address that isn't https. Nothing was changed. |
+| Not enough room on the SD card (before the download) | The SD card is too full for this update: it needs … MB more. Nothing was changed. |
+| The card filled up during the download | The update couldn't be saved: the SD card is full or can't be written. Nothing was installed. |
+| Still coming, but too slowly for the file's time | The download is too slow on this network. Nothing was installed. Try again on a faster Wi-Fi. |
+| The clock is before this build and the secure connection fails | The clock looks wrong, so the update server can't be checked. Set it in Settings › System › Time, or wait for network time over Wi-Fi. |
 
 **Overrides, for tests and development:** `"update_url"` in `/storage/.config/pocket-ui/settings.json` replaces
 `update::DEFAULT_URL` (`https://…` or `file:///…`); `"store_url"` replaces `store::DEFAULT_URL`. Both are kept by
@@ -255,7 +322,10 @@ There is no public catalog yet, so `store::DEFAULT_URL` stays empty and the Stor
   contents and that a rebuild gives the same bytes, the files for GitHub and their checksums, the headers file, that
   the private key ends up in none of the output; refusals (a key pocket-ui doesn't trust, no key, another
   architecture or version, 2 GiB, http); carrying a system update over from the live list and refusing a changed
-  one; `--check` with all files there, one changed and one missing.
+  one; `--check` with all files there, one changed and one missing, and with the app's website copy not live yet.
+  Every list it writes, and the live 0.2.2 list (`testdata/update-channel/`), is read with a frozen copy of the list
+  as pocket-ui 0.1.7 to 0.2.2 read it: the app it finds is the same, on pocketui.xyz. Versions other than plain `X.Y.Z`
+  are refused.
 
 Not tested: anything against the real pocketui.xyz or GitHub (nothing is published), the real key (not on the build
 machine), a device fetching from the public channel.
@@ -266,3 +336,39 @@ machine), a device fetching from the public channel.
 - A `serial` and `expires` in the update list, checked like the store catalog's (`store::check_fresh`), so that a
   replayed old list is refused instead of only hiding a newer version.
 - A download page on the website that reads `sd_image` and `install_zip` from the list.
+
+## Small standalone-card updates (public Brick channel)
+
+The first public card must be rebuilt with `update/brick_assets.rs`. `brick-publish.sh --public`
+refuses a UI binary without the `asset-packages.json` support marker; existing pre-release
+candidate archives must never be distributed against the small-update channel. Old beta cards
+keep their private channel and its full archives. Full legacy archives remain installable by
+the new updater. The marker is a build compatibility guard; signatures and SHA-256 provide trust.
+
+The public package builder (`scripts/brick-update-pack.py`) excludes `cores/`, `bios-data/`
+and six infrequently changing helper programs (`brick-egl`, `curl`, `dropbearmulti`, `syncthing`,
+`tailscale`, `tailscaled`). Everything else is a complete app archive. Its embedded
+`asset-packages.json` names each required file's exact size and SHA-256, and an immutable
+one-file package with signed primary/fallback URLs. The app tar's verified hash authenticates
+this inventory. Neither the publisher nor the device accepts packages over 80,000,000 bytes.
+
+A matching installed immutable asset is hashed and moved into `app.new` with a durable recovery
+manifest on FAT32. The fixed boot script restores it if activation is interrupted or the new version fails.
+A missing or changed asset is downloaded into RAM and verified before any card writes,
+unpacked in a separate temporary directory with the existing strict tar validator, checked to
+contain only its named file, and moved into staging. No component can replace application
+executables or player data: allowed paths are cores, BIOS data and the exact six helper names.
+Free space includes inherited data, one temporary component and reserve; cancellation and all
+failures leave `app` active. Only after every asset passes does the existing ready/pending/rename
+sequence run. There is no binary patching and no dependency on one specific previous version.
+
+`release-channel.sh --check` checks every embedded asset source after verifying the app tar,
+including the fallback URL. It publishes nothing. The cores' sources remain provided alongside the full
+card on the public release; they are never downloaded on the device during an app update.
+Budget regular app releases separately from core changes and first installs.
+
+When deploying prepared files after approval, retain the currently offered app and at least the
+two previous app archives, plus every immutable asset any retained app references. Merge the
+new files into the website tree; do not replace its complete updates folder with the new output.
+A player may have opened an older signed offer before the new deployment. Never overwrite an
+asset filename: its archive SHA-256 is its name. A changed asset receives a different name.

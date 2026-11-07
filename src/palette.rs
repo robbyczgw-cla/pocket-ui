@@ -190,11 +190,10 @@ thread_local! {
 pub fn pal() -> Palette {
     CURRENT.with(|c| {
         let (p, made) = c.get();
-        let now = colours() as u8;
+        let (now, s) = active();
         if made == now {
             return p;
         }
-        let s = Colours::from_u8(now).scheme();
         let p = Palette::mixed(&s.dark, &s.light, p.t);
         c.set((p, now));
         p
@@ -203,9 +202,18 @@ pub fn pal() -> Palette {
 
 /// Sets the palette in use: 0 dark, 255 light, anything between while crossfading.
 pub fn set_blend(t: u8) {
-    let now = colours();
-    let s = now.scheme();
-    CURRENT.with(|c| c.set((Palette::mixed(&s.dark, &s.light, t), now as u8)));
+    let (now, s) = active();
+    CURRENT.with(|c| c.set((Palette::mixed(&s.dark, &s.light, t), now)));
+}
+
+/// The colours in use and their number for `CURRENT`: a Retro style's own (`retro`, from 100 on), else Settings → Look
+/// → Colours'.
+fn active() -> (u8, &'static Scheme) {
+    if crate::retro::on() {
+        let r = crate::retro::colours();
+        return (100 + r as u8, r.scheme());
+    }
+    (colours() as u8, colours().scheme())
 }
 
 /// Runs `f` with the palette at `t` (0 dark, 255 light) and puts the one in use back afterwards.
@@ -315,7 +323,7 @@ pub fn colours() -> Colours {
 
 /// The colours in use: their palettes and what they give the Cabinet.
 pub fn scheme() -> &'static Scheme {
-    colours().scheme()
+    active().1
 }
 
 /// One set of colours: the dark and the light palette, and the Cabinet's.
@@ -624,6 +632,9 @@ mod tests {
             // The pulled-out label and every row selected the same way.
             ("ink on the label", p.ink, p.label),
             ("label dust on the label", p.label_dust, p.label),
+            // The quieter part of a selected row (`kit::selection`): the pause menu's slot "‹ 3 ›", a pad's second line.
+            // Retro's selection is its orange or green bar, where the slot digit was 2.4:1 (Mini V2, 06.11.2026).
+            ("label dust on the selection", p.label_dust, p.select),
             // Hints: the key letter in its cap; the status corner and hint pills; their key chips.
             ("chalk on a key cap", p.chalk, p.keycap),
             ("pill text on a pill", p.soft, p.pill),
@@ -666,6 +677,45 @@ mod tests {
             }
         }
         assert!(low.is_empty(), "below 4.5:1:\n{}", low.join("\n"));
+    }
+
+    /// Settings → Look → Style → Retro's palettes (`retro`, Cocoa and Pea), dark and light: every pair above at WCAG AA,
+    /// plus the text Retro puts in its windows (the hint bar, the pause menu, notices, quick settings), and the frame's
+    /// line and the selection bar at 3:1 against the page (WCAG's non-text contrast).
+    #[test]
+    fn retro_palettes_are_readable_wcag_aa_in_dark_and_light() {
+        let mut low = Vec::new();
+        for c in crate::retro::Colours::ALL {
+            let s = c.scheme();
+            for (look, p) in [("dark", &s.dark), ("light", &s.light)] {
+                let mut text = pairs(p);
+                text.extend([
+                    ("text in a window", p.text, p.pill),
+                    ("chalk in a window", p.chalk, p.pill),
+                    ("dust in a window", p.dust, p.pill),
+                    ("ink on the selection bar", p.ink, p.select),
+                    ("chalk on a spine-coloured row", p.chalk, p.spine),
+                ]);
+                for (what, fg, bg) in text {
+                    let r = contrast(fg, bg);
+                    if r < 4.5 {
+                        low.push(format!("{}: {look}: {what}: {fg:06x} on {bg:06x} is {r:.2}:1", c.label()));
+                    }
+                }
+                let line = mix(p.chalk, p.pill, 40);
+                for (what, fg, bg) in [("the frame's line on the page", line, p.void), ("the frame's line on its window", line, p.pill), ("the selection bar on the page", p.select, p.void)] {
+                    let r = contrast(fg, bg);
+                    if r < 3.0 {
+                        low.push(format!("{}: {look}: {what}: {fg:06x} on {bg:06x} is {r:.2}:1 (3:1 needed)", c.label()));
+                    }
+                }
+            }
+            let r = contrast(s.card_ink, s.card);
+            if r < 4.5 {
+                low.push(format!("{}: the name on a Cabinet plate is {r:.2}:1", c.label()));
+            }
+        }
+        assert!(low.is_empty(), "too low:\n{}", low.join("\n"));
     }
 
     /// Each set is its own: a page colour of its own in each appearance (the Cabinet keeps its wood per page colour), a

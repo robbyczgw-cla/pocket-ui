@@ -298,11 +298,35 @@ pub struct Resolved {
 /// * Only a core (ES writes both, people editing by hand may not): that core under `base`'s emulator when it has
 ///   it (ES `getCore`: the core is looked up under the emulator in use).
 /// * Anything else (a name es_systems.cfg doesn't list, "auto"): nothing chosen, as in ES.
+#[cfg(not(feature = "brick"))]
 fn chosen(ctx: &Ctx, cfg: &Cfg, emu_key: &str, core_key: &str, base: &Runner) -> Option<Runner> {
     let emu = cfg.get(emu_key);
     let core = cfg.get(core_key);
     match emu {
         Some(POCKET_CORE) => match core.filter(|c| ctx.pocket_cores.contains(c)) {
+            Some(c) if ctx.pocket_core.is_some() => Some(Runner::new(POCKET_CORE, c)),
+            _ => ctx.pocket(),
+        },
+        Some(name) => {
+            let e = emulator(ctx.emulators, name)?;
+            let core = core.filter(|c| e.cores.iter().any(|x| x == c)).unwrap_or_else(|| default_core(e));
+            Some(Runner::new(&e.name, core))
+        }
+        None => {
+            let core = core?;
+            let e = emulator(ctx.emulators, &base.emulator)?;
+            e.cores.iter().any(|x| x == core).then(|| Runner::new(&e.name, core))
+        }
+    }
+}
+
+#[cfg(feature = "brick")]
+fn chosen(ctx: &Ctx, cfg: &Cfg, emu_key: &str, core_key: &str, base: &Runner) -> Option<Runner> {
+    let emu = cfg.get(emu_key);
+    let core = cfg.get(core_key);
+    match emu {
+        // pocket-core with one of its cores that es_systems.cfg lists for it (the TrimUI Brick card: mGBA beside gpSP); else its own.
+        Some(POCKET_CORE) => match core.filter(|c| emulator(ctx.emulators, POCKET_CORE).is_some_and(|e| e.cores.iter().any(|x| x == c))) {
             Some(c) if ctx.pocket_core.is_some() => Some(Runner::new(POCKET_CORE, c)),
             _ => ctx.pocket(),
         },
@@ -359,6 +383,9 @@ pub fn resolve(ctx: &Ctx, cfg: &Cfg, file: Option<&str>) -> Resolved {
             return Resolved { runner: r, from };
         }
     }
+    if let Some(runner) = file.and_then(|f| game_default(ctx, f)) {
+        return Resolved { runner, from: From::Default };
+    }
     if ctx.pocket_ok() {
         return Resolved {
             runner: ctx.pocket().expect("pocket_ok"),
@@ -376,6 +403,21 @@ pub fn resolve(ctx: &Ctx, cfg: &Cfg, file: Option<&str>) -> Resolved {
     }
 }
 
+/// Shipped per-game runner defaults, below explicit game/console choices. ROCKNIX's PPSSPP libretro build uses
+/// system FFmpeg: Jeanne's opening movie can loop forever in av_read_frame, with the host waiting in retro_run.
+/// Its standalone build uses bundled FFmpeg and passes that scene. GPU readback and CPU/I/O options do not help.
+/// Keep this in the resolver so the shelf, Continue and Runs on all agree; never write a player preference.
+pub fn game_default(ctx: &Ctx, file: &str) -> Option<Runner> {
+    if ctx.system != "psp" { return None; }
+    let stem = Path::new(file).file_stem()?.to_string_lossy().to_lowercase();
+    let words: Vec<_> = stem.split(|c: char| !c.is_ascii_alphanumeric()).filter(|s| !s.is_empty()).collect();
+    let title = format!(" {} ", words.join(" "));
+    let serial = words.contains(&"ucus98700") || words.windows(2).any(|w| w == ["ucus", "98700"]);
+    if !title.contains(" jeanne d arc ") && !serial { return None; }
+    let emu = emulator(ctx.emulators, "ppsspp")?;
+    emu.cores.iter().any(|c| c == "ppsspp-sa").then(|| Runner::new("ppsspp", "ppsspp-sa"))
+}
+
 /// The default of the system as a whole (what "Restore defaults" and an unset console give): pocket-core where it
 /// hosts the system, else ROCKNIX's default.
 pub fn system_default(ctx: &Ctx) -> Runner {
@@ -384,6 +426,7 @@ pub fn system_default(ctx: &Ctx) -> Runner {
 
 /// What the player can pick for this system or game, in this order: pocket-core (where it hosts the system and
 /// takes the file), then es_systems.cfg's pairs.
+#[cfg(not(feature = "brick"))]
 pub fn choices(ctx: &Ctx) -> Vec<Runner> {
     let mut v = Vec::new();
     if let (Some(p), true) = (ctx.pocket(), ctx.file_ok) {
@@ -396,6 +439,27 @@ pub fn choices(ctx: &Ctx) -> Vec<Runner> {
         }
     }
     v.extend(es_pairs(ctx.emulators));
+    if let Some((e, c)) = ctx.default_override {
+        let r = Runner::new(e, c);
+        if !v.contains(&r) {
+            v.push(r);
+        }
+    }
+    v
+}
+
+#[cfg(feature = "brick")]
+pub fn choices(ctx: &Ctx) -> Vec<Runner> {
+    let mut v = Vec::new();
+    if let (Some(p), true) = (ctx.pocket(), ctx.file_ok) {
+        v.push(p);
+    }
+    // es_systems.cfg may list pocket-core's own cores too (the TrimUI Brick card: gpSP and mGBA for GBA); each runner once.
+    for r in es_pairs(ctx.emulators) {
+        if !v.contains(&r) {
+            v.push(r);
+        }
+    }
     if let Some((e, c)) = ctx.default_override {
         let r = Runner::new(e, c);
         if !v.contains(&r) {
@@ -987,8 +1051,12 @@ while [ $# -ge 2 ]; do
   K="$K" awk 'index($0, ENVIRON["K"] "=") != 1' "$tmp" >"$tmp.n" && mv "$tmp.n" "$tmp" || exit 4
   [ -n "$V" ] && printf '%s=%s\n' "$K" "$V" >>"$tmp"
 done
+# Persist the file AND its renamed directory entry, without flushing unrelated
+# dirty files from other processes. Report an I/O failure instead of a false save.
 mv "$tmp" "$J_CONF" || exit 5
-sync
+parent=${J_CONF%/*}
+[ "$parent" != "$J_CONF" ] || parent=.
+sync "$J_CONF" "$parent" || exit 6
 rm -f "$J_CONF_LOCK"
 "#;
 
@@ -1024,6 +1092,42 @@ pub fn write_system_cfg(edits: &[(String, Option<String>)], functions: Option<&P
     }
 }
 
+/// The Brick's card has no ROCKNIX shell functions (`FUNCTIONS`), so `write_system_cfg`'s script ends at once with status 2 there:
+/// the same edit (a key matched as text, the old line dropped, `key=value` appended) through `system_cfg` instead, under the
+/// same lock. Blocking: call it on a thread.
+#[cfg(feature = "brick")]
+pub fn write_system_cfg_brick(edits: &[(String, Option<String>)], file: &Path) -> Result<(), String> {
+    if let Some((k, _)) = edits.iter().find(|(k, v)| k.contains('\n') || v.as_deref().is_some_and(|v| v.contains('\n'))) {
+        return Err(format!("{k}: a line break can't go into system.cfg"));
+    }
+    crate::system_cfg::SystemCfg::at(file).edit(|old| Some(edited_cfg(old, edits))).map(|_| ()).map_err(|e| format!("system.cfg: {e}"))
+}
+
+/// `text` with `edits` made as `WRITE_SCRIPT` makes them: every line starting with `key=` goes, a value is appended.
+#[cfg(feature = "brick")]
+fn edited_cfg(text: &str, edits: &[(String, Option<String>)]) -> String {
+    let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
+    for (k, v) in edits {
+        let prefix = format!("{k}=");
+        lines.retain(|l| !l.starts_with(&prefix));
+        if let Some(v) = v.as_deref().filter(|v| !v.is_empty()) {
+            lines.push(format!("{k}={v}"));
+        }
+    }
+    let mut out = lines.join("\n");
+    if !out.is_empty() {
+        out.push('\n');
+    }
+    out
+}
+
+/// The choices cache read again from the file: a save that did not reach it must not seem to hold until the next start.
+#[cfg(feature = "brick")]
+pub fn reload_cache() {
+    let cfg = Arc::new(Cfg::choices_only(&std::fs::read_to_string(SYSTEM_CFG).unwrap_or_default()));
+    *CHOICES.write().unwrap_or_else(|e| e.into_inner()) = Some(cfg);
+}
+
 /// `write_system_cfg` on a thread of its own, for the UI.
 pub fn write_in_background(edits: Vec<(String, Option<String>)>) {
     let _ = std::thread::Builder::new().name("system-cfg".into()).spawn(move || {
@@ -1039,6 +1143,25 @@ pub fn write_in_background(edits: Vec<(String, Option<String>)>) {
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    #[test]
+    fn jeanne_boots_with_standalone_by_default_but_keeps_explicit_runner_choices() {
+        let emus = vec![EsEmulator { name: "ppsspp".into(), cores: vec!["ppsspp-sa".into()], default_core: Some(0) },
+                        EsEmulator { name: "retroarch".into(), cores: vec!["ppsspp".into()], default_core: None }];
+        let c = ctx("psp", &emus, Some("ppsspp"));
+        for file in ["Jeanne d'Arc (USA).chd", "Jeanne d’Arc.iso", "Jeanne_d_Arc.cso", "UCUS-98700.chd"] {
+            assert_eq!(resolve(&c, &Cfg::default(), Some(file)).runner, Runner::new("ppsspp", "ppsspp-sa"));
+        }
+        for file in ["Valkyria Chronicles II.chd", "NotJeanne d'Arc.chd", "UCUS987000.iso"] {
+            assert_eq!(resolve(&c, &Cfg::default(), Some(file)).runner, Runner::new(POCKET_CORE, "ppsspp"));
+        }
+        let file = "Jeanne d'Arc (USA).chd";
+        assert_eq!(resolve(&c, &Cfg::parse("psp.emulator=pocket-core"), Some(file)).from, From::Console);
+        let cfg = Cfg::parse("psp[\"Jeanne d'Arc (USA).chd\"].emulator=retroarch\npsp[\"Jeanne d'Arc (USA).chd\"].core=ppsspp");
+        assert_eq!(resolve(&c, &cfg, Some(file)).runner, Runner::new("retroarch", "ppsspp"));
+        assert_eq!(resolve(&ctx("gba", &emus, Some("mgba")), &Cfg::default(), Some(file)).runner, Runner::new(POCKET_CORE, "mgba"));
+        assert_eq!(resolve(&ctx("psp", &emus[1..], Some("ppsspp")), &Cfg::default(), Some(file)).runner, Runner::new(POCKET_CORE, "ppsspp"));
+    }
 
     /// es_systems.cfg as ROCKNIX 20261001 generates it for the Mini V2 (SM8250), three systems.
     const ES_SYSTEMS: &str = r#"<systemList>
@@ -1096,6 +1219,8 @@ mod tests {
         assert_eq!(es_default(&[]), None);
     }
 
+    // ROCKNIX H700: the Brick lists gpSP/mGBA in its own es_systems.cfg (`pocket_cores_listed_in_es_systems_are_choices_once_each`).
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn h700_gba_stays_in_our_player_with_both_cores_and_honours_saved_choices() {
         let gba = emulators("gba");
@@ -1210,6 +1335,19 @@ mod tests {
         assert_eq!(Cfg::choices_only("gba.cores=big\ngba.core=vbam\n").choice_lines(), ["gba.core=vbam"]);
     }
 
+    #[cfg(feature = "brick")]
+    #[test]
+    fn pocket_cores_listed_in_es_systems_are_choices_once_each() {
+        // The TrimUI Brick card's es_systems.cfg: pocket-core with gpSP (its default) and mGBA for GBA.
+        let doc = roxmltree::Document::parse(r#"<systemList><system><name>gba</name><emulators><emulator name="pocket-core"><cores><core default="true">gpsp</core><core>mgba</core></cores></emulator></emulators></system></systemList>"#).unwrap();
+        let emus = parse_emulators(doc.descendants().find(|n| n.has_tag_name("system")).unwrap());
+        let c = Ctx { system: "gba", emulators: &emus, pocket_core: Some("gpsp"), pocket_cores: &[], file_ok: true, fell_back: false, default_override: None };
+        assert_eq!(choices(&c), [Runner::new(POCKET_CORE, "gpsp"), Runner::new(POCKET_CORE, "mgba")]);
+        let cfg = Cfg::parse("gba[\"Monomyth.gba\"].emulator=pocket-core\ngba[\"Monomyth.gba\"].core=mgba\n");
+        assert_eq!(resolve(&c, &cfg, Some("Monomyth.gba")).runner, Runner::new(POCKET_CORE, "mgba"), "a game set to mGBA starts with it");
+        assert_eq!(resolve(&c, &cfg, Some("Other.gba")).runner, Runner::new(POCKET_CORE, "gpsp"), "the others stay with gpSP");
+    }
+
     #[test]
     fn pocket_core_choices_follow_what_pocket_core_can_take() {
         let gba = emulators("gba");
@@ -1260,7 +1398,7 @@ mod tests {
         }
         let cfg = Cfg::choices_only(&text);
         let c = ctx("gba", &gba, Some("mgba"));
-        let started = std::time::Instant::now();
+        let started = crate::testutil::clock::CpuInstant::now();
         for i in 0..1000 {
             let _ = resolve(&c, &cfg, Some(&format!("Game {i}.gba")));
         }
@@ -1359,7 +1497,8 @@ wait_lock() {
       trap 'rc=$?; [ "$(cat "${J_CONF_LOCK}" 2>/dev/null)" = "$$" ] && rm -f "${J_CONF_LOCK}"; exit "${rc}"' INT TERM EXIT
       break
     else
-      sleep 1
+      : > "$J_CONF.waiting"
+      sleep 0.01
     fi
   done
 }
@@ -1409,7 +1548,7 @@ wait_lock() {
         std::fs::write(&lock, "1").unwrap();
         let (l2, f2, fu2) = (lock.clone(), file.clone(), funcs.clone());
         let writer = std::thread::spawn(move || write_system_cfg(&[("x.y".into(), Some("1".into()))], Some(&fu2), Some(&f2), Some(&l2)));
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        crate::testutil::clock::wait_for(|| file.with_extension("cfg.waiting").exists(), std::time::Duration::from_secs(20), "writer encountered held lock");
         assert!(
             !std::fs::read_to_string(&file).unwrap().contains("x.y=1"),
             "waits while the lock is someone else's"
@@ -1419,4 +1558,44 @@ wait_lock() {
         assert!(std::fs::read_to_string(&file).unwrap().contains("x.y=1\n"));
         assert!(write_system_cfg(&[("a\nb".into(), Some("1".into()))], Some(&funcs), Some(&file), Some(&lock)).is_err());
     }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn the_brick_writes_a_choice_without_rocknix_functions_and_keeps_everything_else() {
+        let dir = TestDir::new("brick-cfg-write");
+        let file = dir.join("system.cfg");
+        std::fs::write(&file, "audio.volume=60\ngba.core=gpsp\ngba[\"Game (USA).gba\"].core=gpsp\nwifi.enabled=1\n").unwrap();
+        let edits = vec![("gba[\"Game (USA).gba\"].core".to_string(), Some("mgba".to_string())), ("gba[\"Game (USA).gba\"].emulator".to_string(), Some("pocket-core".to_string()))];
+        write_system_cfg_brick(&edits, &file).expect("written without /etc/profile.d/001-functions");
+        let text = std::fs::read_to_string(&file).unwrap();
+        assert_eq!(text, "audio.volume=60\ngba.core=gpsp\nwifi.enabled=1\ngba[\"Game (USA).gba\"].core=mgba\ngba[\"Game (USA).gba\"].emulator=pocket-core\n");
+        let cfg = Cfg::choices_only(&text);
+        assert_eq!(cfg.map.get("gba[\"Game (USA).gba\"].core").map(String::as_str), Some("mgba"), "it reads back");
+        // Removing goes too, and a value with a line break is refused before anything is written.
+        write_system_cfg_brick(&[("gba.core".to_string(), None)], &file).unwrap();
+        assert!(!std::fs::read_to_string(&file).unwrap().contains("gba.core=gpsp"));
+        assert!(write_system_cfg_brick(&[("x".to_string(), Some("a\nb".to_string()))], &file).is_err());
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn a_brick_save_that_cannot_be_written_says_so() {
+        let dir = TestDir::new("brick-cfg-fail");
+        // A folder where the file should be: nothing can be written there.
+        let file = dir.join("system.cfg");
+        std::fs::create_dir_all(file.join("x")).unwrap();
+        assert!(write_system_cfg_brick(&[("gba.core".to_string(), Some("mgba".to_string()))], &file).is_err());
+    }
+
+    #[test]
+    fn a_system_cfg_sync_failure_is_reported_and_releases_its_lock() {
+        let dir = TestDir::new("syscfg-sync-failure");
+        let (funcs, file, lock) = (dir.join("001-functions"), dir.join("system.cfg"), dir.join("lock"));
+        std::fs::write(&funcs, format!("{FUNCTIONS_STUB}\nsync() {{ return 1; }}\n")).unwrap();
+        std::fs::write(&file, "audio.volume=60\n").unwrap();
+        let error = write_system_cfg(&[("gba.core".into(), Some("mgba".into()))], Some(&funcs), Some(&file), Some(&lock)).unwrap_err();
+        assert!(error.contains("writer ended"), "a failed flush is not a successful settings save: {error}");
+        assert!(!lock.exists(), "the failed writer releases its lock for the next attempt");
+    }
+
 }

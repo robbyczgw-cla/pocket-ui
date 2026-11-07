@@ -32,7 +32,13 @@ impl App {
         let data_dir = self.data_dir.clone();
         // A game hidden on its card is no sample either (`app_storage`).
         let recents: Vec<_> = self.recents.list.iter().filter(|r| !self.library.is_hidden(&r.path)).cloned().collect();
-        let sample = look_sample::pick(&self.systems, &self.hidden, &recents, |system, rom| {
+        // Games sent from the phone or copied over file sharing during the first start join the library only when it
+        // ends (`finish_setup`): read the card, or the look shows sample games on a card that has some now
+        // (first-start walk 2026-11-06).
+        let card = (self.setup.is_some() && self.systems.iter().all(|s| s.games.is_empty()))
+            .then(|| pocket_ui::library::load_shown(&self.es_systems, &self.data_dir).ok())
+            .flatten();
+        let sample = look_sample::pick(card.as_deref().unwrap_or(&self.systems), &self.hidden, &recents, |system, rom| {
             let path = pocket_ui::covers::cover_path(&data_dir, system, rom);
             path.exists().then_some(path)
         });
@@ -144,7 +150,8 @@ impl App {
 /// The colours, font and button symbols in use (Settings → Look → Colours and Font, Playing → Buttons): the previews are
 /// painted again when one changes.
 pub(crate) fn style_mark() -> u32 {
-    pocket_ui::button_prompts::get() as u32 | (pocket_ui::palette::colours() as u32) << 4 | (pocket_ui::font_style::get() as u32) << 8
+    // Retro's own colours too: Cocoa or Pea on the first start's Colours row changes the previews.
+    pocket_ui::button_prompts::get() as u32 | (pocket_ui::palette::colours() as u32) << 4 | (pocket_ui::font_style::get() as u32) << 8 | (pocket_ui::retro::colours() as u32) << 12
 }
 
 /// What the previews were painted with: appearance, language, text size and the corner's clock ("14:02", None while the

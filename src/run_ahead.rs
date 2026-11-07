@@ -1180,7 +1180,8 @@ mod tests {
     }
 
     #[test]
-    fn a_gap_between_refreshes_settles_again() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_gap_between_refreshes_settles_again() {
         let mut ra = on(1);
         let mut m = Stub::default();
         // Past the start (as if 3 s had gone by).

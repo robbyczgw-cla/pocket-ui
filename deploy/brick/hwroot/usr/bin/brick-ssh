@@ -1,0 +1,82 @@
+#!/bin/sh
+# Remote access on the Brick card: dropbear (ours, deploy/brick/dropbear) on port 22, for root, over the local network and Tailscale.
+#   brick-ssh start | stop | status     (status: exit 0 while it runs; `systemctl start|stop|is-active sshd` lands here)
+# Logins: the device's own password (pocket-ui makes it once and shows it on screen: storage/.config/pocket-ui/remote/password on the card),
+# or a key from pocket-ui/authorized_keys on the card (empty at first; copied to a RAM folder while it runs, so dropbear can check it is
+# only root's). The firmware's own root password is never asked. Nothing is written to the Brick's flash: host key and keys live on the
+# card and in /tmp, the session's home is a RAM folder.
+APP=${BRICK_APP:-/mnt/SDCARD/pocket-ui/app}
+DATA=${BRICK_DATA:-/mnt/SDCARD/pocket-ui}
+RUN=${BRICK_RUN:-/tmp/pocket-ui}
+STATE=${BRICK_STATE:-$DATA/storage/.config/pocket-ui}
+DROPBEAR=${BRICK_DROPBEAR:-$APP/bin/dropbearmulti}
+PORT=${BRICK_SSH_PORT:-22}
+S=$RUN/ssh
+PIDF=$S/dropbear.pid
+KEYSPIDF=$S/keys.pid
+KEYS_EVERY=${BRICK_SSH_KEYS_EVERY:-3}
+LOG=$RUN/dropbear.log
+PW=$STATE/remote/password
+KEY=$STATE/remote/dropbear_ed25519_host_key
+
+alive() { [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF" 2>/dev/null)" 2>/dev/null; }
+
+# The RAM copy of the card's keys (comments and CRs dropped, 0600, only root's), made again every few seconds while dropbear runs (a
+# tiny file; a FAT card's 2-second times can't tell a change reliably): a key added while Remote access is on works within seconds.
+keys_once() {
+  if [ -f "$DATA/authorized_keys" ]; then
+    grep -v '^[[:space:]]*#' "$DATA/authorized_keys" | tr -d '\r' >"$S/authorized_keys.new"
+  else
+    : >"$S/authorized_keys.new"
+  fi
+  chmod 600 "$S/authorized_keys.new" && mv -f "$S/authorized_keys.new" "$S/authorized_keys"
+}
+
+# The card's copy, under a temporary name first: a power cut leaves the old file or the new one, never half of one.
+to_card() { # file-in-ram card-file
+  mkdir -p "$(dirname "$2")" && cp "$1" "$2.new" && mv -f "$2.new" "$2"
+}
+
+case "${1:-}" in
+  start)
+    alive && exit 0
+    [ -x "$DROPBEAR" ] || { echo "brick-ssh: $DROPBEAR is missing" >&2; exit 1; }
+    # No password file (a developer card with dev-ssh that never switched Remote access on): keys only; dropbear refuses passwords then.
+    [ -s "$PW" ] || echo "brick-ssh: no password yet, keys only" >>"$LOG"
+    mkdir -p "$S/home" && chmod 700 "$S" "$S/home"
+    # The host key stays the same across restarts and card updates (it is on the card), so a computer that knows the Brick keeps knowing it.
+    if [ -s "$KEY" ]; then
+      cp "$KEY" "$S/host_key"
+    else
+      rm -f "$S/host_key"
+      "$DROPBEAR" dropbearkey -t ed25519 -f "$S/host_key" >>"$LOG" 2>&1 || { echo "brick-ssh: no host key" >&2; exit 1; }
+      to_card "$S/host_key" "$KEY" || echo "brick-ssh: host key not kept on the card" >&2
+    fi
+    chmod 600 "$S/host_key"
+    # Keys: whatever is in the card's file (nothing at first), copied now and again whenever the card's file changes.
+    keys_once
+    # -F in the foreground of our own background job (its PID is ours to stop), -E log to stderr, -D the RAM key folder, -K keepalive.
+    DROPBEAR_PASSWORD_FILE=$PW DROPBEAR_HOME=$S/home "$DROPBEAR" dropbear -F -E -p "$PORT" -r "$S/host_key" -D "$S" -K 30 >>"$LOG" 2>&1 &
+    echo $! >"$PIDF"
+    sleep 1
+    alive || { rm -f "$PIDF"; echo "brick-ssh: dropbear did not start: $(tail -n 1 "$LOG" 2>/dev/null)" >&2; exit 1; }
+    ( while alive; do sleep "$KEYS_EVERY"; keys_once; done ) >/dev/null 2>&1 &
+    echo $! >"$KEYSPIDF"
+    ;;
+  stop)
+    if alive; then
+      pid=$(cat "$PIDF")
+      # Open sessions are children of the listener: they end with it (their shells get a hangup), as on ROCKNIX.
+      for st in /proc/[0-9]*/stat; do
+        set -- $(cat "$st" 2>/dev/null); [ "${4:-}" = "$pid" ] && kill "$1" 2>/dev/null
+      done
+      kill "$pid" 2>/dev/null
+      n=0; while kill -0 "$pid" 2>/dev/null && [ $n -lt 5 ]; do sleep 1; n=$((n + 1)); done
+      kill -9 "$pid" 2>/dev/null
+    fi
+    rm -f "$PIDF"
+    [ -f "$KEYSPIDF" ] && kill "$(cat "$KEYSPIDF")" 2>/dev/null; rm -f "$KEYSPIDF"
+    ;;
+  status) alive ;;
+  *) echo "usage: brick-ssh start|stop|status" >&2; exit 2 ;;
+esac

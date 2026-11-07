@@ -5,7 +5,7 @@ The look for someone with 10 to 30 games who just wants to play: one big case, L
 **Renamed:** it was "Just Play" in the first prototype; players now see **Easy** everywhere (the Look list, the first start's row, the manual, English, German and Spanish; its line is "One big game at a time, simple menus."). The code names stay. "Just Play" is the name of a different feature (a one-button action) and is not used for this look. In the first start's list the rows read The shelf, Easy, Enthusiast, Choose for yourself and For a child; the old profile name "Simple" is gone from the screen.
 
 It is the second of the looks
-(Settings → Look → **Look**, and the first start's look step, the same list); going back is picking another look. Player's page: [user/playing.md](user/easy.md).
+(Settings → Look → **Layout**, and the first start's look step, the same list); going back is picking another look. Player's page: [user/playing.md](user/easy.md).
 
 ## What it shares with Kids Mode, and what it doesn't
 

@@ -434,6 +434,8 @@ for the rest; the start-up log lists what is mocked. On the virtual device that 
 battery (72 %), time zone and power; **volume is real** (PipeWire's null sink, `volume N` writes `system.cfg`).
 The mock's time zone sets `TZ` for pocket-ui's own clock, so a zone change shows. Power actions are only logged;
 the panel says "not on a virtual device, nothing happened". `POCKETUI_MOCK=1` forces the mock everywhere.
+Mock starts also skip the GPU stock-clock helper, leaving the host's GPU and system settings alone. On a real
+start the SM8250 helper runs only when its GPU clock file exists; an image without a GPU cannot create `/max_freq`.
 
 The virtual pad has `VOLUP` and `VOLDOWN`, so `vdev.sh pad press VOLUP`, `pad down START` etc. drive all of it.
 To see the "ROCKNIX does the volume" path, a process named `input_sense` has to run
@@ -492,3 +494,11 @@ clock and RTC set), `src/display.rs` (look, ramps, tint),
     `POCKETUI_SLEEP_MINUTE_SECS=5`), set the clock an hour on, then Sleep: it switches off at its own time, not at
     once; `cat /sys/class/rtc/rtc0/wakealarm` is empty while awake. A game played across a set adds its real minutes
     to History only.
+
+### Standalone Brick Bluetooth service
+
+The `brick` standalone profile uses `systemctl start|stop|is-active bluetooth` backed by the
+card's own `brick-bluetooth`, and archives pairings through `brick-bluetoothctl`. The pairing
+page stays asynchronous. This implementation is controller-only and still awaits device
+verification; firmware BlueALSA is present but menu/game audio routing is not implemented.
+See [TRIMUI-BRICK-BLUETOOTH.md](TRIMUI-BRICK-BLUETOOTH.md).

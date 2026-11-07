@@ -401,7 +401,7 @@ const NEEDS_DATA: &[c_uint] = &[
 
 unsafe extern "C" fn environment(cmd: c_uint, data: *mut c_void) -> bool {
     if let Some(handled) = crate::hw_render::environment(cmd, data) {
-        return handled;
+        #[cfg(feature = "brick")] crate::brick_gles::after_environment(cmd, data, handled); return handled;
     }
     if let Some(handled) = crate::rumble::environment(cmd, data) {
         return handled;
@@ -513,6 +513,11 @@ unsafe extern "C" fn environment(cmd: c_uint, data: *mut c_void) -> bool {
         ENV_GET_VARIABLE_UPDATE => {
             if !data.is_null() {
                 *(data as *mut bool) = s.opts.take_changed();
+                // The Brick: the core has asked for the change (its log says so with the "core option:" line of pocket-core).
+                #[cfg(feature = "brick")]
+                if *(data as *mut bool) {
+                    println!("core option: the core asked for the change and reads it now");
+                }
             }
             true
         }
@@ -809,6 +814,9 @@ pub struct Core {
     sram_written: Vec<u8>,
     /// When the battery save read at start was written (`resume` compares it with the state's time).
     sram_time: Option<SystemTime>,
+    /// The battery save is on the card but couldn't be read (an input/output error): nothing is written over it
+    /// (`read_sram`), and `save_trouble` says so.
+    sram_unreadable: bool,
     /// The cartridge clock's file (`MEMORY_RTC`), and what is on disk: like `sram_path` and `sram_written`.
     rtc_path: PathBuf,
     rtc_written: Vec<u8>,
@@ -998,6 +1006,7 @@ impl Core {
                 sram_path: save_dir.join(format!("{stem}.srm")),
                 sram_written: Vec::new(),
                 sram_time: None,
+                sram_unreadable: false,
                 rtc_path: save_dir.join(format!("{stem}.rtc")),
                 rtc_written: Vec::new(),
                 saver: crate::save_writer::SaveWriter::new(),
@@ -1022,11 +1031,23 @@ impl Core {
     }
 
     fn read_sram(&mut self) {
-        if let (Some(mem), Ok(saved)) = (memory_of(&mut self.lib, MEMORY_SAVE_RAM), std::fs::read(&self.sram_path)) {
-            let n = mem.len().min(saved.len());
-            mem[..n].copy_from_slice(&saved[..n]);
-            self.sram_written = saved;
-            self.sram_time = std::fs::metadata(&self.sram_path).and_then(|m| m.modified()).ok();
+        self.sram_unreadable = false;
+        let Some(mem) = memory_of(&mut self.lib, MEMORY_SAVE_RAM) else { return };
+        match std::fs::read(&self.sram_path) {
+            Ok(saved) => {
+                let n = mem.len().min(saved.len());
+                mem[..n].copy_from_slice(&saved[..n]);
+                self.sram_written = saved;
+                self.sram_time = std::fs::metadata(&self.sram_path).and_then(|m| m.modified()).ok();
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            // The save is there and the card wouldn't hand it over (an input/output error: a failing card reads a worn sector
+            // wrong and still writes a new one fine). The game runs without it, and nothing is written over it, or the next
+            // flush would replace the player's save with the game's empty one (save-safety review 2026-11-06).
+            Err(e) => {
+                eprintln!("battery save {}: {e}; not read, and nothing is written over it", self.sram_path.display());
+                self.sram_unreadable = true;
+            }
         }
     }
 
@@ -1081,6 +1102,9 @@ impl Core {
     pub fn write_sram(&mut self) -> Result<(), crate::save_trouble::Trouble> {
         self.saver.wait();
         for id in [MEMORY_SAVE_RAM, MEMORY_RTC] {
+            if id == MEMORY_SAVE_RAM && self.sram_unreadable {
+                continue;
+            }
             let (path, written) = if id == MEMORY_RTC { (&self.rtc_path, &mut self.rtc_written) } else { (&self.sram_path, &mut self.sram_written) };
             let Some(mem) = memory_of(&mut self.lib, id) else { continue };
             if !self.saver.failed(path) && mem == written.as_slice() {
@@ -1097,6 +1121,9 @@ impl Core {
     /// `save_writer` writes them. A failed write is tried again at the next flush.
     pub fn write_sram_in_background(&mut self) {
         for id in [MEMORY_SAVE_RAM, MEMORY_RTC] {
+            if id == MEMORY_SAVE_RAM && self.sram_unreadable {
+                continue;
+            }
             let (path, written) = if id == MEMORY_RTC { (&self.rtc_path, &mut self.rtc_written) } else { (&self.sram_path, &mut self.sram_written) };
             if self.saver.failed(path) {
                 written.clear();
@@ -1112,9 +1139,10 @@ impl Core {
     }
 
     /// Why the game's saves don't reach the card, if the newest write of one failed (the flushes so far, without
-    /// waiting for one under way): pocket-core's line over the game and pocket-ui's note (`save_trouble`).
+    /// waiting for one under way) or the battery save on the card couldn't be read at the start (nothing is written over
+    /// it then): pocket-core's line over the game and pocket-ui's note (`save_trouble`).
     pub fn save_trouble(&self) -> Option<crate::save_trouble::Trouble> {
-        self.saver.trouble()
+        self.saver.trouble().or(self.sram_unreadable.then_some(crate::save_trouble::Trouble::Unreadable))
     }
 
     /// Snapshot of the whole emulated machine (libretro serialize). A core that refuses because its state grew since
@@ -1256,22 +1284,66 @@ impl Core {
     /// of the session before, so it is tried once more, renamed to `slots::retry_auto_path` first (the
     /// battery-save check above applies the same way). If that start crashes too, maybe because of the
     /// state, the one after starts fresh. A state the core refuses is not tried again.
+    ///
+    /// A state that can't be read (a compressed one whose length or checksum fails: a card that confirmed a write it
+    /// never finished) never reaches the core; the next one in Continue's order is read instead, usually the one the
+    /// session that wrote it had started from. Without that, the next quit would retire the intact moment with the
+    /// damaged one (save-safety review 2026-11-06).
     pub fn resume(&mut self, auto: &Path) -> Resume {
-        let taken = crate::slots::taken_auto_path(auto);
-        let retry = crate::slots::retry_auto_path(auto);
-        // The exit that wrote the state couldn't write the battery save (a full or failing card): the state holds the
-        // newer one (`slots::battery_unsaved`). Read once, whatever happens below.
-        let battery_unsaved = crate::slots::take_battery_unsaved(auto);
-        let (state, to, again) = if auto.exists() {
-            (auto, taken.as_path(), false)
-        } else if taken.exists() {
-            (taken.as_path(), retry.as_path(), true)
-        } else {
-            return Resume::NoState;
+        let mut groups = vec![auto.to_path_buf()];
+        if let Some(old) = crate::state_file::legacy_path(auto) { groups.push(old); }
+        let group_of = |state: &Path| groups.iter().find(|p| **p == state || crate::slots::taken_auto_path(p) == state).unwrap().clone();
+        // Continue and its preview use the same order across both namespaces: newest quit, then crash recovery.
+        let mut unreadable: Option<(PathBuf, std::io::Error)> = None;
+        let mut found = None;
+        for p in crate::slots::auto_candidates(auto, false).into_iter().filter(|p| p.is_file()) {
+            match crate::state_file::read(&p) {
+                Ok(data) => {
+                    found = Some((p, data));
+                    break;
+                }
+                Err(e) => {
+                    eprintln!("resume from {}: {e}", p.display());
+                    unreadable.get_or_insert((p, e));
+                }
+            }
+        }
+        let Some((state, data)) = found else {
+            let Some((state, _)) = unreadable else { return Resume::NoState };
+            // Keep corrupt input for recovery; the caller reports the failed resume and starts from battery.
+            let retry = crate::slots::retry_auto_path(&group_of(&state));
+            let kept = if crate::fsutil::rename_no_replace(&state, &retry).is_ok() { retry } else { state };
+            self.taken = Some((Resume::Failed, kept));
+            return Resume::Failed;
         };
-        let Ok(data) = std::fs::read(state) else { return Resume::NoState };
-        let state_time = std::fs::metadata(state).and_then(|m| m.modified()).ok();
-        let _ = std::fs::rename(state, to);
+        let passed_over = unreadable.is_some();
+        if let Some((bad, e)) = unreadable {
+            // Its checksum says no player can ever load it, and the moment before it is the one that goes on: it goes, or
+            // Load would list it as Where I quit. One that failed for another reason (the card) or is another version's
+            // (a newer player's, after a rollback) stays where it is.
+            if e.kind() == std::io::ErrorKind::InvalidData && crate::state_file::legacy_path(&bad).is_some() && crate::state_file::is_own_format(&bad) {
+                let _ = std::fs::remove_file(&bad);
+            }
+        }
+        let battery_auto = &group_of(&state);
+        let again = state != *battery_auto;
+        // The note belongs to the exit that wrote the state passed over, never to an older one: that one must not win over
+        // the battery save on the card.
+        let battery_unsaved = crate::slots::take_battery_unsaved(battery_auto) && !passed_over;
+        // Keep raw legacy moments in their raw namespace until a new exit writes compressed Auto. No migration
+        // write at startup, and even a full card can still resume an old moment.
+        let taken = crate::slots::taken_auto_path(battery_auto);
+        let retry = crate::slots::retry_auto_path(battery_auto);
+        let to = if again { &retry } else { &taken };
+        let state_time = std::fs::metadata(&state).and_then(|m| m.modified()).ok();
+        let _ = std::fs::rename(&state, to);
+        // After a downgrade both namespaces can hold an Auto; the one not chosen is older. It goes where a state given up
+        // on goes (Load still lists it), or a crash or a quit without saving would bring it back at the next start.
+        for other in groups.iter().filter(|g| *g != battery_auto) {
+            if other.is_file() {
+                let _ = std::fs::rename(other, crate::slots::retry_auto_path(other));
+            }
+        }
         let save_is_newer = matches!((self.sram_time, state_time), (Some(save_at), Some(state_at)) if save_at > state_at);
         // The game as it starts, to go back to: a whole snapshot only when the clock already says the battery save is
         // newer (it costs a serialize at start), else at least its battery save (small) and a reset.
@@ -1279,7 +1351,8 @@ impl Core {
         let sram_at_start = self.memories_now();
         if let Err((reached, why)) = self.load_state_reached(&data) {
             eprintln!("resume from {}: {why}", state.display());
-            let _ = std::fs::rename(to, &retry);
+            let kept = if std::fs::rename(to, &retry).is_ok() { retry.clone() } else { to.to_path_buf() };
+            self.taken = Some((Resume::Failed, kept));
             // The core may have put part of the state in place before it gave up, its battery save among it, which the
             // next flush would write over the one on disk (SOL-02): back to the start.
             if reached {
@@ -1321,6 +1394,12 @@ impl Core {
         [MEMORY_SAVE_RAM, MEMORY_RTC].map(|id| memory_of(&mut self.lib, id).map(|m| m.to_vec()))
     }
 
+    /// Where this start's selected state is now (taken/retry, raw/compressed), including a rejected state. Earlier
+    /// copies successful resumes; Android preserves rejected states from this exact path for Load.
+    pub fn resumed_from(&self) -> Option<&Path> {
+        self.taken.as_ref().map(|(_, p)| p.as_path())
+    }
+
     /// Quit without saving (the pause menu's "Quit" with Continue where I quit off; the battery save is written as on
     /// every exit, `write_sram` first): no new auto-resume state, and the one this session resumed from is not the next
     /// start's either: it moves to `slots::retry_auto_path`, where nothing starts from it but Load still lists it as
@@ -1337,18 +1416,20 @@ impl Core {
             // The older moment is not the next start's (Continue where I quit is off: the game starts as it would
             // without one), but it stays for Load, under the name a state given up on has (`StateSet::pocket_core`).
             Resume::Resumed | Resume::ResumedAgain => {
-                let retry = crate::slots::retry_auto_path(auto);
+                let raw = crate::state_file::legacy_path(auto);
+                let same_format = if crate::state_file::legacy_path(&taken).is_none() { raw.as_deref().unwrap_or(auto) } else { auto };
+                let retry = crate::slots::retry_auto_path(same_format);
                 if taken != retry {
                     // If this fails the state stays where it was and the next start may continue from it, as before: an
                     // inconvenience, never a loss.
-                    if let Err(e) = std::fs::rename(&taken, &retry) {
+                    if let Err(e) = crate::state_file::move_file(&taken, &retry) {
                         eprintln!("quit without saving: couldn't park {} for Load only: {e}", taken.display());
                     }
                 }
             }
             Resume::SaveIsNewer => {
                 let _ = std::fs::remove_file(&taken);
-                let _ = std::fs::remove_file(crate::slots::preview_path(auto));
+                let _ = std::fs::remove_file(crate::state_file::resolve(&crate::slots::preview_path(auto)));
             }
             Resume::NoState | Resume::Failed => {}
         }
@@ -1916,7 +1997,7 @@ bool retro_unserialize(const void *d, size_t n) {
         /// pocket-core's clean exit: battery save, then the auto-resume state.
         fn quit(&self, mut core: Core) {
             core.write_sram().unwrap();
-            std::fs::write(&self.state, core.save_state().unwrap()).unwrap();
+            crate::state_file::write(&self.state, &core.save_state().unwrap()).unwrap();
             crate::slots::auto_written(&self.state);
         }
 
@@ -1982,6 +2063,172 @@ bool retro_unserialize(const void *d, size_t n) {
         age(&g.battery_save(), 60);
     }
 
+    #[test]
+    fn an_upgrade_resumes_raw_auto_without_a_migration_write() {
+        let _l = globals();
+        let mut g = Game::new("legacy-upgrade", "srm");
+        let compressed = g.state.clone();
+        g.state = crate::state_file::legacy_path(&compressed).unwrap();
+        first_session(&g);
+        let raw = std::fs::read(&g.state).unwrap();
+        g.state = compressed;
+        let (mut core, resumed) = g.start();
+        assert_eq!((resumed, position(&core)), (Resume::Resumed, 5));
+        assert_eq!(sram(&mut core), "SAVE-A");
+        let old = crate::state_file::legacy_path(&g.state).unwrap();
+        assert_eq!(std::fs::read(crate::slots::taken_auto_path(&old)).unwrap(), raw);
+        assert_eq!(core.resumed_from(), Some(crate::slots::taken_auto_path(&old).as_path()), "what Earlier copies as the session start");
+        assert!(!g.taken().exists(), "raw upgrade did no conversion write");
+        g.quit(core);
+        assert!(!old.exists() && !crate::slots::taken_auto_path(&old).exists());
+        assert_eq!(g.start().1, Resume::Resumed);
+    }
+
+    #[test]
+    fn android_preserves_the_rejected_legacy_moment_when_a_compressed_crash_point_exists() {
+        let _l = globals();
+        let g = Game::new("android-downgrade-rejected", "srm");
+        first_session(&g);
+        // An upgraded session crashes; a downgraded player then writes a different, newer raw Auto.
+        drop(g.start().0);
+        let old = crate::state_file::legacy_path(&g.state).unwrap();
+        let mut older = Core::load(&g.core, &g.rom, &g.dir, &g.dir, &[]).unwrap();
+        older.use_save_extension(g.save_ext);
+        play(&older, 23);
+        let legacy = older.save_state().unwrap();
+        std::fs::write(&old, &legacy).unwrap();
+        std::fs::write(crate::slots::preview_path(&g.state), b"old preview").unwrap();
+        std::fs::write(crate::slots::preview_path(&old), b"legacy preview").unwrap();
+        drop(older);
+        // A newer in-game save must win, while the rejected moment remains available in Load.
+        put_battery_save(&g, b"SAVE-C", 0);
+        let (mut core, resumed) = g.start();
+        assert_eq!(resumed, Resume::SaveIsNewer);
+        assert_eq!(sram(&mut core), "SAVE-C");
+        let base = g.dir.join("Game");
+        let notice = crate::frozen_phone::after_resume(&base, resumed, core.resumed_from());
+        assert!(notice.iter().any(|s| s.contains("slot 1")));
+        assert_eq!(std::fs::read(crate::slots::state_path(&base, 0)).unwrap(), legacy,
+            "Load must retain the actual rejected moment, not an older crash point");
+        assert_eq!(std::fs::read(crate::slots::preview_path(&crate::slots::state_path(&base, 0))).unwrap(), b"legacy preview",
+            "the retained moment keeps its own picture");
+        g.quit(core);
+        let loaded = g.start().0;
+        loaded.load_state(&crate::state_file::read(&crate::slots::state_path(&base, 0)).unwrap()).unwrap();
+        assert_eq!(position(&loaded), 23, "the rejected moment survives the next automatic save");
+    }
+
+    #[test]
+    fn android_keeps_the_legacy_state_the_core_refused_instead_of_an_older_compressed_retry() {
+        let _l = globals();
+        let g = Game::new("android-legacy-refused", "srm");
+        first_session(&g);
+        std::fs::rename(&g.state, g.retry()).unwrap();
+        let old = crate::state_file::legacy_path(&g.state).unwrap();
+        let older = Core::load(&g.core, &g.rom, &g.dir, &g.dir, &[]).unwrap();
+        play(&older, 23);
+        let mut rejected = older.save_state().unwrap();
+        rejected[65] = 0xEE; // The stub refuses this state after touching battery memory.
+        std::fs::write(&old, &rejected).unwrap();
+        drop(older);
+        let (core, resumed) = g.start();
+        assert_eq!(resumed, Resume::Failed);
+        let base = g.dir.join("Game");
+        let note = crate::frozen_phone::after_resume(&base, resumed, core.resumed_from());
+        assert!(note.iter().any(|s| s.contains("slot 1")));
+        g.quit(core);
+        assert_eq!(std::fs::read(crate::slots::state_path(&base, 0)).unwrap(), rejected,
+            "a subsequent Auto must not delete the actual refused legacy moment");
+    }
+
+    #[test]
+    fn a_downgrade_uses_battery_and_cannot_overwrite_the_compressed_quit_moment() {
+        let _l = globals();
+        let g = Game::new("downgrade", "srm");
+        first_session(&g);
+        let kept = std::fs::read(&g.state).unwrap();
+        let old = crate::state_file::legacy_path(&g.state).unwrap();
+        // Exactly the paths 0.1.14/0.2.0 use: no new-format reader is involved in this old launch or quit.
+        let mut older = Core::load(&g.core, &g.rom, &g.dir, &g.dir, &[]).unwrap();
+        older.use_save_extension(g.save_ext);
+        assert!(!old.exists() && !crate::slots::taken_auto_path(&old).exists());
+        assert_eq!(older.resume(&old), Resume::NoState);
+        assert_eq!(sram(&mut older), "SAVE-A");
+        assert_eq!(position(&older), 0);
+        set_sram(&mut older, b"SAVE-B");
+        play(&older, 23);
+        older.write_sram().unwrap();
+        std::fs::write(&old, older.save_state().unwrap()).unwrap();
+        crate::slots::auto_written(&old);
+        drop(older);
+        assert_eq!(std::fs::read(&g.state).unwrap(), kept, "legacy quit leaves the compressed moment byte-for-byte");
+        let (mut core, resumed) = g.start();
+        assert_eq!((resumed, position(&core)), (Resume::Resumed, 23), "upgrade also reads the newer legacy quit");
+        assert_eq!(sram(&mut core), "SAVE-B");
+        assert_eq!(std::fs::read(g.retry()).unwrap(), kept, "the older compressed one stays, for Load only");
+        g.quit(core);
+        assert!(!old.exists() && !crate::slots::taken_auto_path(&old).exists());
+        assert_eq!(g.start().1, Resume::Resumed);
+    }
+
+    /// A downgraded player's raw quit, newer than the compressed one an upgrade left: its quit (session 1), an old
+    /// player's start from the battery save and its quit 23 frames in (session 2). Both Auto files are on disk.
+    fn downgraded_quit(g: &Game) -> PathBuf {
+        first_session(g);
+        let old = crate::state_file::legacy_path(&g.state).unwrap();
+        let mut older = Core::load(&g.core, &g.rom, &g.dir, &g.dir, &[]).unwrap();
+        older.use_save_extension(g.save_ext);
+        assert_eq!(older.resume(&old), Resume::NoState);
+        play(&older, 23);
+        older.write_sram().unwrap();
+        std::fs::write(&old, older.save_state().unwrap()).unwrap();
+        crate::slots::auto_written(&old);
+        assert!(g.state.exists() && old.exists());
+        old
+    }
+
+    #[test]
+    fn after_a_downgrade_a_crash_resumes_the_newer_raw_moment_not_the_older_compressed_one() {
+        let _l = globals();
+        let g = Game::new("downgrade-crash", "srm");
+        downgraded_quit(&g);
+        let (core, resumed) = g.start();
+        assert_eq!((resumed, position(&core)), (Resume::Resumed, 23));
+        drop(core); // the session ends without a quit (a crash, a dead battery)
+        let (core, resumed) = g.start();
+        assert_eq!((resumed, position(&core)), (Resume::ResumedAgain, 23), "the moment the crashed session started from");
+    }
+
+    #[test]
+    fn after_a_downgrade_quit_without_saving_does_not_bring_back_the_older_compressed_moment() {
+        let _l = globals();
+        let g = Game::new("downgrade-nosave", "srm");
+        downgraded_quit(&g);
+        let (core, resumed) = g.start();
+        assert_eq!((resumed, position(&core)), (Resume::Resumed, 23));
+        g.quit_without_saving(core);
+        assert_eq!(g.start().1, Resume::NoState, "the next start is as if no moment had been kept");
+        let set = crate::states::StateSet::pocket_core(&g.dir.join("Game"));
+        assert!(set.path(crate::states::Target::Auto).is_some(), "both moments stay for Load");
+    }
+
+    #[test]
+    fn corrupt_compressed_auto_starts_from_battery_without_calling_unserialize() {
+        let _l = globals();
+        let g = Game::new("compressed-corrupt", "srm");
+        first_session(&g);
+        let mut corrupt = std::fs::read(&g.state).unwrap();
+        corrupt[0] ^= 0x80;
+        std::fs::write(&g.state, &corrupt).unwrap();
+        let (mut core, resumed) = g.start();
+        assert_eq!(resumed, Resume::Failed);
+        assert_eq!((position(&core), sram(&mut core).as_str()), (0, "SAVE-A"));
+        assert_eq!(std::fs::read(g.retry()).unwrap(), corrupt, "damaged input stays available for recovery");
+        core.write_sram().unwrap();
+        assert_eq!(g.saved(), "SAVE-A");
+        assert_eq!(g.start().1, Resume::NoState, "no repeated damaged-state boot");
+    }
+
     /// The battery save on disk replaced by `text` (padded to the stub's 64 bytes), its time `secs` in the past.
     fn put_battery_save(g: &Game, text: &[u8], secs: u64) {
         let mut bytes = text.to_vec();
@@ -1991,63 +2238,15 @@ bool retro_unserialize(const void *d, size_t n) {
     }
 
     #[test]
-    fn a_moment_the_core_refuses_is_kept_in_a_free_slot_past_the_next_quit() {
-        // Runs on changed (mGBA's moment, gpSP now), or the core's version: before, it waited as `.taken.retry` and the next
-        // Save & quit removed it (`slots::auto_written`), the only copy of that progress.
-        let _l = globals();
-        let g = Game::new("refused-kept", "srm");
-        first_session(&g);
-        let base = g.dir.join("Game");
-        let foreign = vec![9u8; 200];
-        std::fs::write(&g.state, &foreign).unwrap();
-        std::fs::write(&crate::slots::state_path(&base, 0), b"the player's slot 1").unwrap();
-        let (core, r) = g.start();
-        assert_eq!(r, Resume::Failed);
-        let aside = crate::frozen_phone::set_aside_refused(&base);
-        assert_eq!(aside, Some(crate::frozen_phone::Aside::Slot(1)), "the first free slot; slot 1 stays the player's");
-        g.quit(core);
-        assert_eq!(std::fs::read(crate::slots::state_path(&base, 1)).unwrap(), foreign, "still there after the next quit");
-        assert_eq!(std::fs::read(crate::slots::state_path(&base, 0)).unwrap(), b"the player's slot 1");
-    }
-
-    #[test]
-    fn a_moment_of_another_file_or_emulator_is_kept_and_full_slots_hand_it_on_later() {
-        let _l = globals();
-        let g = Game::new("other-kept", "srm");
-        first_session(&g);
-        let base = g.dir.join("Game");
-        let moment = std::fs::read(&g.state).unwrap();
-        let older = b"older Continue moment";
-        std::fs::write(g.taken(), older).unwrap();
-        std::fs::write(crate::slots::preview_path(&g.state), b"moment picture").unwrap();
-        for n in 0..crate::slots::SLOTS {
-            std::fs::write(crate::slots::state_path(&base, n), format!("slot {n}")).unwrap();
-        }
-        // pocket-ui said this start isn't for that moment (`frozen::SKIP_RESUME_ENV`).
-        assert_eq!(crate::frozen_phone::set_aside_all(&base), Some(crate::frozen_phone::Aside::Kept), "every slot taken");
-        let (core, r) = g.start();
-        assert_eq!(r, Resume::NoState);
-        g.quit(core);
-        assert_eq!(crate::frozen_phone::kept(&base).len(), 2, "both Continue candidates survive the quit");
-        assert_eq!(std::fs::read(crate::slots::preview_path(&crate::frozen_phone::kept(&base)[0])).unwrap(), b"moment picture");
-        std::fs::remove_file(crate::slots::state_path(&base, 3)).unwrap();
-        crate::frozen_phone::restore_kept(&base);
-        assert_eq!(std::fs::read(crate::slots::state_path(&base, 3)).unwrap(), moment, "past the quit, into the slot freed later");
-        assert_eq!(std::fs::read(crate::slots::state_path(&base, 0)).unwrap(), b"slot 0");
-        assert_eq!(std::fs::read(crate::slots::preview_path(&crate::slots::state_path(&base, 3))).unwrap(), b"moment picture");
-        assert_eq!(std::fs::read(&crate::frozen_phone::kept(&base)[0]).unwrap(), older);
-    }
-
-    #[test]
     fn a_state_the_core_gives_up_on_halfway_does_not_bring_back_its_battery_save() {
         // SOL-02 A: the core restored the state's battery save (A) and then refused the rest. The newer one on disk
         // (B) must stay, on disk and in the game.
         let _l = globals();
         let g = Game::new("late-refusal", "srm");
         first_session(&g);
-        let mut state = std::fs::read(&g.state).unwrap();
+        let mut state = crate::state_file::read(&g.state).unwrap();
         state[64 + 1] = 0xEE;
-        std::fs::write(&g.state, state).unwrap();
+        crate::state_file::write(&g.state, &state).unwrap();
         age(&g.state, 60);
         put_battery_save(&g, b"SAVE-B", 10);
         let (mut core, r) = g.start();
@@ -2119,7 +2318,7 @@ bool retro_unserialize(const void *d, size_t n) {
         play(&core, 37);
         unsafe { core.lib.get::<unsafe extern "C" fn()>(b"stub_smaller_state").unwrap()() };
         g.quit(core);
-        let previous = std::fs::read(&g.state).unwrap();
+        let previous = crate::state_file::read(&g.state).unwrap();
         assert_eq!(previous.len(), 2 << 20, "the valid quit state is shorter than next launch's size");
         let (mut core, resume) = start();
         assert_eq!(core.state_size(), Some(3 << 20), "restart reports the larger launch size again");
@@ -2129,7 +2328,7 @@ bool retro_unserialize(const void *d, size_t n) {
         corrupt[65] = 0xEE; // The core rejects this after reading its battery data.
         assert!(core.load_state(&corrupt).is_err());
         assert!(core.load_state(&previous[..32]).is_err(), "truncated input is rejected too");
-        assert_eq!(std::fs::read(g.taken()).unwrap(), previous, "failed loads cannot replace the previous Continue moment");
+        assert_eq!(crate::state_file::read(&g.taken()).unwrap(), previous, "failed loads cannot replace the previous Continue moment");
         drop(core);
         let (mut core, resume) = start();
         assert_eq!(resume, Resume::ResumedAgain);
@@ -2310,7 +2509,7 @@ bool retro_unserialize(const void *d, size_t n) {
             // pocket-core's `save_auto`.
             let battery = core.write_sram();
             assert!(battery.is_err());
-            std::fs::write(&g.state, core.save_state().unwrap()).unwrap();
+            crate::state_file::write(&g.state, &core.save_state().unwrap()).unwrap();
             crate::slots::auto_written(&g.state);
             if noted {
                 crate::slots::battery_unsaved(&g.state, battery.is_err());
@@ -2416,7 +2615,7 @@ bool retro_unserialize(const void *d, size_t n) {
         let (mut core, _) = g.start();
         play(&core, 3);
         core.write_sram().unwrap();
-        std::fs::write(&g.state, core.save_state().unwrap()).unwrap();
+        crate::state_file::write(&g.state, &core.save_state().unwrap()).unwrap();
         age(&g.state, 30);
         set_sram(&mut core, b"SAVE-B");
         core.write_sram().unwrap();
@@ -2482,7 +2681,7 @@ bool retro_unserialize(const void *d, size_t n) {
         // Session 3 starts as the game does without a moment, and Load brings the old one back.
         let (core, r) = g.start();
         assert_eq!((r, position(&core)), (Resume::NoState, 0));
-        core.load_state(&std::fs::read(g.retry()).unwrap()).unwrap();
+        core.load_state(&crate::state_file::read(&g.retry()).unwrap()).unwrap();
         assert_eq!(position(&core), 5, "the moment of session 1");
         // A second quit without saving changes nothing about it; a saving quit replaces it as any Auto is replaced.
         g.quit_without_saving(core);
@@ -2560,7 +2759,7 @@ bool retro_unserialize(const void *d, size_t n) {
         let (mut core, _) = g.start();
         play(&core, 3);
         core.write_sram().unwrap();
-        std::fs::write(&g.state, core.save_state().unwrap()).unwrap();
+        crate::state_file::write(&g.state, &core.save_state().unwrap()).unwrap();
         crate::slots::auto_written(&g.state);
         play(&core, 10);
         g.quit_without_saving(core);
@@ -2572,7 +2771,7 @@ bool retro_unserialize(const void *d, size_t n) {
     fn a_state_the_core_refuses_is_tried_once() {
         let _l = globals();
         let g = Game::new("broken", "srm");
-        std::fs::write(&g.state, b"not a state").unwrap();
+        crate::state_file::write(&g.state, b"not a state").unwrap();
         assert_eq!(g.start().1, Resume::Failed);
         assert_eq!(g.start().1, Resume::NoState);
     }
@@ -2649,6 +2848,227 @@ bool retro_unserialize(const void *d, size_t n) {
             assert_eq!(g.saved(), "SAVE-B", "{ext}: the battery save on disk is rolled back");
             assert_eq!(r, Resume::SaveIsNewer, "{ext}");
             assert_eq!((position(&core), sram(&mut core).as_str()), (0, "SAVE-B"), "{ext}: a fresh start with the newer save");
+        }
+    }
+
+    // Save-safety review 2026-11-06: each of these failed before its fix (see the review).
+
+    #[test]
+    fn a_damaged_newer_moment_gives_way_to_the_intact_one_before_it() {
+        let _l = globals();
+        let g = Game::new("torn", "srm");
+        first_session(&g);
+        let (core, r) = g.start();
+        assert_eq!(r, Resume::Resumed);
+        play(&core, 10);
+        // The quit's moment reached the card cut off: a card that confirmed a flush it had not made.
+        let whole = g.dir.join("whole.pstate.auto.z");
+        crate::state_file::write(&whole, &core.save_state().unwrap()).unwrap();
+        let bytes = std::fs::read(&whole).unwrap();
+        std::fs::write(&g.state, &bytes[..bytes.len() / 2]).unwrap();
+        std::fs::remove_file(&whole).unwrap();
+        drop(core);
+        let (mut core, r) = g.start();
+        assert_eq!((r, position(&core), sram(&mut core).as_str()), (Resume::ResumedAgain, 5, "SAVE-A"), "the moment the session started from");
+        assert!(!g.state.exists(), "the damaged one no player can load is gone, so Load doesn't list it as Where I quit");
+        play(&core, 2);
+        g.quit(core);
+        assert_eq!(g.start().1, Resume::Resumed, "the next quit is a normal moment again");
+    }
+
+    #[test]
+    fn a_moment_of_a_newer_format_is_passed_over_but_never_removed() {
+        // After a rollback: a newer player's Auto in a format this one doesn't know is not damage of ours to delete.
+        let _l = globals();
+        let g = Game::new("newer-format", "srm");
+        first_session(&g);
+        let (core, _) = g.start();
+        drop(core);
+        let newer = b"PCKSTZ\x02\0 a later version's moment".to_vec();
+        std::fs::write(&g.state, &newer).unwrap();
+        let (core, r) = g.start();
+        assert_eq!((r, position(&core)), (Resume::ResumedAgain, 5), "the moment before it");
+        assert_eq!(std::fs::read(&g.state).unwrap(), newer, "kept as it is");
+    }
+
+    #[test]
+    fn a_damaged_moment_after_a_failed_battery_save_does_not_let_the_older_one_win() {
+        // The note that the exit's battery save failed belongs to the damaged moment: the older one it gives way to must
+        // not roll back the battery save written during that session.
+        let _l = globals();
+        let g = Game::new("torn-note", "srm");
+        first_session(&g);
+        let (mut core, _) = g.start();
+        set_sram(&mut core, b"SAVE-B");
+        core.write_sram().unwrap();
+        // Its time says nothing (a clock set back, a save copied in): only the note could have let the older moment win.
+        age(&g.battery_save(), 120);
+        std::fs::write(&g.state, b"PCKSTZ\x01\0 cut off").unwrap();
+        crate::slots::battery_unsaved(&g.state, true);
+        drop(core);
+        let (mut core, r) = g.start();
+        assert_eq!((r, sram(&mut core).as_str()), (Resume::SaveIsNewer, "SAVE-B"));
+        core.write_sram().unwrap();
+        assert_eq!(g.saved(), "SAVE-B");
+    }
+
+    #[test]
+    fn an_unreadable_battery_save_is_never_written_over() {
+        use crate::save_trouble::Trouble;
+        use std::os::unix::fs::PermissionsExt;
+        if unsafe { libc::geteuid() } == 0 {
+            return; // root reads it anyway: no way to make the read fail here.
+        }
+        let _l = globals();
+        let g = Game::new("unreadable", "srm");
+        put_battery_save(&g, b"SAVE-A", 60);
+        // A read that fails while writing still works: a failing card's worn sector, here a file we may not read.
+        std::fs::set_permissions(g.battery_save(), std::fs::Permissions::from_mode(0o200)).unwrap();
+        let (mut core, _) = g.start();
+        assert_eq!(core.save_trouble(), Some(Trouble::Unreadable), "the player is told, over the game and on the shelf");
+        set_sram(&mut core, b"SAVE-X");
+        core.write_sram_in_background();
+        assert_eq!(core.write_sram(), Ok(()), "not a failed write: nothing is written, the exit's note stays off");
+        drop(core);
+        std::fs::set_permissions(g.battery_save(), std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert_eq!(g.saved(), "SAVE-A", "the player's save on the card is as it was");
+        let (core, _) = g.start();
+        assert_eq!(core.save_trouble(), None, "readable again: a normal start");
+    }
+
+    #[test]
+    fn a_moment_the_core_refuses_is_kept_in_a_free_slot_past_the_next_quit() {
+        // Runs on changed (mGBA's moment, gpSP now), or the core's version: before, it waited as `.taken.retry` and the next
+        // Save & quit removed it (`slots::auto_written`), the only copy of that progress.
+        let _l = globals();
+        let g = Game::new("refused-kept", "srm");
+        first_session(&g);
+        let base = g.dir.join("Game");
+        let foreign = vec![9u8; 200];
+        crate::state_file::write(&g.state, &foreign).unwrap();
+        crate::state_file::write(&crate::slots::state_path(&base, 0), b"the player's slot 1").unwrap();
+        let (core, r) = g.start();
+        assert_eq!(r, Resume::Failed);
+        let aside = crate::frozen_phone::set_aside_refused(&base, core.resumed_from());
+        assert_eq!(aside, Some(crate::frozen_phone::Aside::Slot(1)), "the first free slot; slot 1 stays the player's");
+        g.quit(core);
+        assert_eq!(std::fs::read(crate::slots::state_path(&base, 1)).unwrap(), foreign, "still there after the next quit");
+        assert_eq!(std::fs::read(crate::slots::state_path(&base, 0)).unwrap(), b"the player's slot 1");
+        // A damaged one no player can load doesn't take a slot.
+        std::fs::write(&g.state, b"PCKSTZ\x01\0 cut off").unwrap();
+        let (core, r) = g.start();
+        assert_eq!(r, Resume::Failed);
+        assert_eq!(crate::frozen_phone::set_aside_refused(&base, core.resumed_from()), None);
+    }
+
+    #[test]
+    fn full_card_regression_a_set_aside_moment_survives_the_next_successful_quit() {
+        let _l = globals();
+        let g = Game::new("refused-full-card", "srm");
+        first_session(&g);
+        let base = g.dir.join("Game");
+        let foreign = vec![9u8; 200];
+        crate::state_file::write(&g.state, &foreign).unwrap();
+        std::fs::write(crate::slots::preview_path(&g.state), b"old picture").unwrap();
+        let (core, resumed) = g.start();
+        assert_eq!(resumed, Resume::Failed);
+        // A free slot exists, but converting the compressed rejected moment to it fails with ENOSPC.
+        crate::fsutil::fail_next_write();
+        let _ = crate::frozen_phone::set_aside_refused(&base, core.resumed_from());
+        // Space becomes available again; the next quit clears .taken.retry as it normally does.
+        g.quit(core);
+        let kept = crate::frozen_phone::kept(&base);
+        assert_eq!(kept.len(), 1, "the promised old moment must survive the next successful quit");
+        assert_eq!(crate::state_file::read(&kept[0]).unwrap(), foreign);
+        assert_eq!(std::fs::read(crate::slots::preview_path(&kept[0])).unwrap(), b"old picture");
+        crate::frozen_phone::restore_kept(&base);
+        assert_eq!(std::fs::read(crate::slots::state_path(&base, 0)).unwrap(), foreign, "Load can reach it once space is available");
+    }
+
+    #[test]
+    fn a_moment_of_another_file_or_emulator_is_kept_and_full_slots_hand_it_on_later() {
+        let _l = globals();
+        let g = Game::new("other-kept", "srm");
+        first_session(&g);
+        let base = g.dir.join("Game");
+        let moment = crate::state_file::read(&g.state).unwrap();
+        for n in 0..crate::slots::SLOTS {
+            std::fs::write(crate::slots::state_path(&base, n), format!("slot {n}")).unwrap();
+        }
+        // pocket-ui said this start isn't for that moment (`frozen::SKIP_RESUME_ENV`).
+        assert_eq!(crate::frozen_phone::set_aside_all(&base), Some(crate::frozen_phone::Aside::Kept), "every slot taken");
+        let (core, r) = g.start();
+        assert_eq!(r, Resume::NoState);
+        g.quit(core);
+        std::fs::remove_file(crate::slots::state_path(&base, 3)).unwrap();
+        crate::frozen_phone::restore_kept(&base);
+        assert_eq!(std::fs::read(crate::slots::state_path(&base, 3)).unwrap(), moment, "past the quit, into the slot freed later");
+        assert_eq!(std::fs::read(crate::slots::state_path(&base, 0)).unwrap(), b"slot 0");
+    }
+
+    /// The quit's saves cut off at every write step, as a power cut or `kill -9` would (`fsutil::crash_point`): the battery
+    /// save, the moment's picture, the moment, the retired moments, the battery note. At any step the next start goes on
+    /// from a whole moment, the new one or the one before, and never puts an older battery save back on the card.
+    #[test]
+    fn a_quit_cut_off_at_any_write_step_keeps_a_whole_moment_and_the_newest_battery_save() {
+        if let Some(dir) = std::env::var_os("POCKETUI_TEST_QUIT_DIR") {
+            // The child: session 2 continues, saves in the game, plays on and quits as pocket-core does (`App::save_auto`).
+            let dir = PathBuf::from(dir);
+            let state = crate::slots::auto_path(&dir.join("Game"));
+            let mut core = Core::load(&dir.join("stub_libretro.so"), &dir.join("Game.gb"), &dir, &dir, &[]).unwrap();
+            assert_eq!(core.resume(&state), Resume::Resumed);
+            set_sram(&mut core, b"SAVE-B");
+            play(&core, 10);
+            let battery = core.write_sram();
+            crate::fsutil::replace_file(&crate::slots::preview_path(&state), b"the moment's picture").unwrap();
+            crate::state_file::write(&state, &core.save_state().unwrap()).unwrap();
+            crate::slots::auto_written(&state);
+            crate::slots::battery_unsaved(&state, battery.is_err());
+            std::mem::forget(core);
+            return;
+        }
+        let _l = globals();
+        let cut = |g: &Game, at: usize| -> (std::process::ExitStatus, Vec<String>) {
+            let log = g.dir.join("steps.log");
+            let _ = std::fs::remove_file(&log);
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "libretro::resume_tests::a_quit_cut_off_at_any_write_step_keeps_a_whole_moment_and_the_newest_battery_save"])
+                .args(["--nocapture", "--test-threads=1"])
+                .env("POCKETUI_TEST_QUIT_DIR", &*g.dir)
+                .env("POCKETUI_TEST_KILL_AT", at.to_string())
+                .env("POCKETUI_TEST_KILL_LOG", &log)
+                .output()
+                .unwrap()
+                .status;
+            (status, std::fs::read_to_string(&log).unwrap_or_default().lines().map(str::to_string).collect())
+        };
+        let g = Game::new("cut-count", "srm");
+        first_session(&g);
+        let (status, steps) = cut(&g, 0);
+        assert!(status.success() && steps.len() >= 15, "a whole quit, every step logged: {steps:?}");
+        println!("{} write steps, each cut by SIGKILL: {steps:?}", steps.len());
+        use std::os::unix::process::ExitStatusExt;
+        for at in 1..=steps.len() {
+            let g = Game::new(&format!("cut-{at}"), "srm");
+            first_session(&g);
+            let (status, reached) = cut(&g, at);
+            let step = reached.last().cloned().unwrap_or_default();
+            assert_eq!(status.signal(), Some(libc::SIGKILL), "cut at {step}");
+            let on_card = std::fs::read(g.battery_save()).unwrap();
+            assert_eq!(on_card.len(), 64, "cut at {step}: the battery save is whole");
+            let on_card = g.saved();
+            assert!(crate::fsutil::reap_temp_files(&g.dir, 0, Duration::ZERO).iter().all(|p| p.extension().is_some_and(|e| e == "tmp")));
+            let (mut core, r) = g.start();
+            let got = (r, position(&core), sram(&mut core));
+            let ok = match on_card.as_str() {
+                // The new battery save reached the card: the new moment with it, or a fresh start with it.
+                "SAVE-B" => got == (Resume::Resumed, 15, "SAVE-B".into()) || got == (Resume::SaveIsNewer, 0, "SAVE-B".into()),
+                // It didn't: the moment the session started from, with the save it had.
+                _ => got == (Resume::ResumedAgain, 5, "SAVE-A".into()),
+            };
+            assert!(ok, "cut at {step}: card has {on_card}, the next start gave {got:?}");
+            core.write_sram().unwrap();
+            assert_eq!(g.saved(), on_card, "cut at {step}: the start never puts an older battery save back");
         }
     }
 }

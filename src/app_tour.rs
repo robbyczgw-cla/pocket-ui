@@ -47,6 +47,7 @@ impl App {
         Switches {
             motion: pocket_ui::motion::level(),
             text_size: pocket_ui::type_scale::get(),
+            font: pocket_ui::font_style::get(),
             on_start: self.on_start,
             remember_quit: self.remember_quit,
             frames: self.frames,
@@ -69,6 +70,12 @@ impl App {
         if s.text_size != pocket_ui::type_scale::get() {
             // Kept by `set_text_size` itself (and the glyphs of the new size drawn ahead).
             self.set_text_size(s.text_size);
+        }
+        if s.font != pocket_ui::font_style::get() {
+            // As Settings › Look › Style does it (`step_font`): used from the next frame on, kept in settings.json.
+            pocket_ui::font_style::set(s.font);
+            self.cases_look_changed();
+            settings = true;
         }
         if s.on_start != self.on_start {
             self.on_start = s.on_start;
@@ -150,7 +157,9 @@ impl App {
             return;
         }
         self.tour.checked = true;
-        let current = update::app_version();
+        // The journey tests' stand-in for a newer build (a mock run only, as `POCKETUI_UPDATE_HINT`).
+        let stand_in = std::env::var_os("POCKETUI_MOCK").and_then(|_| std::env::var("POCKETUI_NEW_IN").ok()).filter(|v| !v.is_empty());
+        let current = stand_in.as_deref().unwrap_or(update::app_version());
         if !features::unseen(self.tour.seen_version.as_deref(), current) {
             return;
         }

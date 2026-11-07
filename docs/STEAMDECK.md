@@ -153,3 +153,7 @@ removed afterwards), data in a copy folder (`POCKETUI_APP_DATA`), the player's R
 - PCSX2 (user Flatpak, branch `stable`): started through `runemu.sh`, window `pcsx2-qt` found, pause menu over it, Quit closed it in 0.6 s. PPSSPP Flatpak started for a PSP game as the fallback when the core was missing.
 - Found there: `flatpak run` finds nothing when `XDG_DATA_HOME` is moved (flatpak's user installation lives under it): the launcher now has `POCKETUI_APP_DATA`; a Flatpak does not inherit the caller's environment, so `runemu.sh` passes `PULSE_SINK`, `PIPEWIRE_NODE` and `SDL_AUDIODRIVER` on; the Quick settings > Power menu showed the Android boot hint (hidden on the Deck now).
 - Side effects on the player's setup (all emulator-written): PCSX2.ini got `EnablePINE = true`, `Renderer`, `OsdMessagesPos` from our integration (restored from a backup after the test); PPSSPP rewrote its own `ppsspp.ini` on exit.
+
+Automatic states from 0.2.1 use the same compressed `.pstate.auto.z` format as the handheld Linux player and Android.
+`POCKETUI_STATES` still selects the folder. Manual slots stay raw, old raw Auto states remain readable, and older players
+fall back to in-game saves without touching compressed moments; see [the pause menu](user/pause-menu.md).

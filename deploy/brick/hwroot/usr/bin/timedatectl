@@ -1,0 +1,13 @@
+#!/bin/sh
+# Stand-in for the one `timedatectl` question pocket-ui asks (`show -p NTP -p NTPSynchronized`). There is no
+# systemd or timesyncd on the Brick: network time is our own one-shot sync (the systemctl stand-in's
+# "restart systemd-timesyncd"), which leaves a note when it last set the clock. NTP=yes means the sync is
+# offered (an ntpd is there); NTPSynchronized=yes only when that sync has set the clock since this boot.
+STATE=${BRICK_STATE:-/mnt/SDCARD/pocket-ui/storage/.config/pocket-ui}
+case "$1" in
+  show)
+    if command -v "${BRICK_NTPD:-ntpd}" >/dev/null 2>&1; then echo "NTP=yes"; else echo "NTP=no"; fi
+    if [ -e "$STATE/ntp-synced" ]; then echo "NTPSynchronized=yes"; else echo "NTPSynchronized=no"; fi
+    ;;
+  *) echo "timedatectl: $* is not available on the Brick" >&2; exit 1 ;;
+esac

@@ -1,0 +1,122 @@
+# pocket-ui for the TrimUI Brick card: the device's own login (docs/TRIMUI-BRICK-REMOTE.md). Applied by scripts/brick-remote-parts.sh to dropbear 2026.94 (MIT).
+diff -ru a/src/svr-auth.c b/src/svr-auth.c
+--- a/src/svr-auth.c
++++ b/src/svr-auth.c
+@@ -323,6 +323,11 @@
+ 			goto goodshell;
+ 		}
+ 	}
++	/* pocket-ui: the device's own login (DROPBEAR_PASSWORD_FILE set) takes the firmware's root shell as it is, when it runs: the
++	 * Brick's /etc/shells may not exist or not list it, and the account belongs to the device, not to a user. */
++	if (getenv("DROPBEAR_PASSWORD_FILE") != NULL && access(usershell, X_OK) == 0) {
++		goto goodshell;
++	}
+ 	/* no matching shell */
+ 	endusershell();
+ 	TRACE(("no matching shell"))
+diff -ru a/src/svr-authpasswd.c b/src/svr-authpasswd.c
+--- a/src/svr-authpasswd.c
++++ b/src/svr-authpasswd.c
+@@ -46,6 +46,31 @@
+ 	return constant_time_memcmp(a, b, la);
+ }
+ 
++/* pocket-ui on the TrimUI Brick: with DROPBEAR_PASSWORD_FILE set, the password is the one in that file (the device made it and
++ * shows it on screen), compared as it is; the account's own password is not looked at. A missing or unreadable file, or one
++ * shorter than 8 characters, lets nobody in by password. Returns 1 when `given` (of `len` bytes) is that password. */
++static int pocketui_password_ok(const char *file, const char *given, unsigned int len) {
++	char expected[DROPBEAR_MAX_PASSWORD_LEN + 2];
++	size_t n = 0;
++	int ok = 0;
++	FILE *f = fopen(file, "r");
++	if (f == NULL) {
++		dropbear_log(LOG_WARNING, "pocket-ui: no password file, password login refused");
++		return 0;
++	}
++	n = fread(expected, 1, sizeof(expected) - 1, f);
++	fclose(f);
++	expected[n] = '\0';
++	while (n > 0 && (expected[n - 1] == '\n' || expected[n - 1] == '\r' || expected[n - 1] == ' ')) {
++		expected[--n] = '\0';
++	}
++	if (n >= 8 && n <= DROPBEAR_MAX_PASSWORD_LEN && strlen(expected) == n && strlen(given) == len) {
++		ok = constant_time_strcmp(given, expected) == 0;
++	}
++	m_burn(expected, sizeof(expected));
++	return ok;
++}
++
+ /* Process a password auth request, sending success or failure messages as
+  * appropriate */
+ void svr_auth_password(int valid_user) {
+@@ -66,9 +91,16 @@
+ 
+ 	password = buf_getstring(ses.payload, &passwordlen);
+ 	if (valid_user && passwordlen <= DROPBEAR_MAX_PASSWORD_LEN) {
++		const char *pocketui_file = getenv("DROPBEAR_PASSWORD_FILE");
++		if (pocketui_file != NULL) {
++			/* Compared here, so the password is burnt below as usual; what follows only sees equal or unequal. */
++			passwdcrypt = "pocket-ui";
++			testcrypt = pocketui_password_ok(pocketui_file, password, passwordlen) ? "pocket-ui" : "refused";
++		} else {
+ 		/* the first bytes of passwdcrypt are the salt */
+ 		passwdcrypt = ses.authstate.pw_passwd;
+ 		testcrypt = crypt(password, passwdcrypt);
++		}
+ 	}
+ 	m_burn(password, passwordlen);
+ 	m_free(password);
+diff -ru a/src/svr-authpubkey.c b/src/svr-authpubkey.c
+--- a/src/svr-authpubkey.c
++++ b/src/svr-authpubkey.c
+@@ -578,6 +578,9 @@
+ static int checkpubkeyperms() {
+ 	char *path = authorized_keys_filepath(), *sep = NULL;
+ 	int ret = DROPBEAR_SUCCESS;
++	/* pocket-ui: a folder given with -D (a RAM folder the device fills from the card) is checked itself, not every folder above
++	 * it: /tmp is writable by everyone (sticky), which would refuse every key. */
++	int given_dir = strcmp(svr_opts.authorized_keys_dir, "~/.ssh") != 0;
+ 
+ 	TRACE(("enter checkpubkeyperms"))
+ 
+@@ -592,7 +595,7 @@
+ 			TRACE(("checkpubkeyperms: bad perm on %s", path))
+ 			ret = DROPBEAR_FAILURE;
+ 		}
+-		if (strcmp(path, ses.authstate.pw_dir) == 0 || strcmp(path, "/") == 0) {
++		if (given_dir || strcmp(path, ses.authstate.pw_dir) == 0 || strcmp(path, "/") == 0) {
+ 			break;
+ 		}
+ 	}
+diff -ru a/src/svr-chansession.c b/src/svr-chansession.c
+--- a/src/svr-chansession.c
++++ b/src/svr-chansession.c
+@@ -982,6 +982,10 @@
+ 	seedrandom();
+ #endif
+ 
++	/* pocket-ui: the session's home is a RAM folder (DROPBEAR_HOME), so what a shell writes there (its history) never lands in the
++	 * Brick's own flash, where root's home is. */
++	char *pocketui_home = getenv("DROPBEAR_HOME") != NULL ? m_strdup(getenv("DROPBEAR_HOME")) : NULL;
++
+ 	/* clear environment if -e was not set */
+ 	/* if we're debugging using valgrind etc, we need to keep the LD_PRELOAD
+ 	 * etc. This is hazardous, so should only be used for debugging. */
+@@ -1005,7 +1009,7 @@
+ 	/* set env vars */
+ 	addnewvar("USER", ses.authstate.pw_name);
+ 	addnewvar("LOGNAME", ses.authstate.pw_name);
+-	addnewvar("HOME", ses.authstate.pw_dir);
++	addnewvar("HOME", pocketui_home != NULL ? pocketui_home : ses.authstate.pw_dir);
+ 	addnewvar("SHELL", get_user_shell());
+ 	if (getuid() == 0) {
+ 		addnewvar("PATH", DEFAULT_ROOT_PATH);
+@@ -1043,7 +1047,7 @@
+ #endif
+ 
+ 	/* change directory */
+-	if (chdir(ses.authstate.pw_dir) < 0) {
++	if (chdir(pocketui_home != NULL ? pocketui_home : ses.authstate.pw_dir) < 0) {
+ 		int e = errno;
+ 		if (chdir("/") < 0) {
+ 			dropbear_exit("chdir(\"/\") failed");

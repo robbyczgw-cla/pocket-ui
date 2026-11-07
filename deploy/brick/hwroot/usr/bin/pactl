@@ -1,0 +1,26 @@
+#!/bin/sh
+# Stand-in for the few `pactl` questions pocket-ui asks (there is no PulseAudio or PipeWire on the Brick). Volume and mute only.
+AMIXER=${BRICK_AMIXER:-amixer}
+STATE=${BRICK_STATE:-/tmp}
+. "$(dirname "$0")/brick-volume-profile"
+case "${1:-}" in
+  get-sink-volume)
+    now=$("$AMIXER" -c 0 cget name='digital volume' 2>/dev/null | sed -n 's/.*: values=\([0-9]*\).*/\1/p' | head -1)
+    [ -n "$now" ] || exit 1
+    saved=$(volume_curve_saved) || saved=
+    # Muting ramps hardware down but preserves the exact restore percentage.
+    if [ -e "$STATE/brick-muted" ]; then pct=$(volume_saved)
+    elif [ "$now" = 63 ]; then pct=0
+    elif [ -n "$saved" ] && [ "$(volume_raw "$(volume_percent "$saved")")" -eq "$now" ]; then pct=$(volume_percent "$saved")
+    else pct=$(volume_from_gain "$now" 255 low); fi
+    if [ -e "$STATE/brick-muted" ] || [ "$pct" -eq 0 ]; then db=-inf
+    else attenuation=$((now * 116)); db=$(printf -- '-%d.%02d' "$((attenuation / 100))" "$((attenuation % 100))"); fi
+    echo "Volume: front-left: $((pct * 655)) / ${pct}% / $db dB,   front-right: $((pct * 655)) / ${pct}% / $db dB"
+    ;;
+  get-sink-mute)
+    # The speaker amplifier override does not mute headphones/Bluetooth. The slider marker owns global mute.
+    if [ -e "$STATE/brick-muted" ]; then echo "Mute: yes"; else echo "Mute: no"; fi
+    ;;
+  get-default-sink) echo "alsa_output.audiocodec" ;;
+  *) exit 1 ;;
+esac

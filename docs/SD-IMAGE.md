@@ -26,6 +26,12 @@ For a card that already runs ROCKNIX there is a second artefact, the install pac
 (`scripts/make-install-zip.sh` → `build/image/pocket-ui-<version>-rocknix-install.zip`, tests
 `sh deploy/package/test-package.sh`), described in [INSTALL-DUAL-BOOT.md](INSTALL-DUAL-BOOT.md#install-on-a-rocknix-card-you-already-use).
 
+H700 releases also pass `--gba-core BUILD_DIR` to `scripts/make-image-family.sh --family H700`, using the pinned
+ARM64 gpSP output from `scripts/build-gpsp.sh`. `make-image.sh` accepts the same option. The verified library,
+COPYING, corresponding source and recipe go into `pocket-ui/releases/<version>/cores/`; the image without this
+option has the same layout as before. Check the resulting image with the explicit packaged-core allowlist
+described in [UPDATE-CHANNEL.md](UPDATE-CHANNEL.md#releasing-step-by-step), keeping source-tree checks core-free.
+
 **For the Mini V2 only.** The image boots through GRUB with the Mini V2's device tree; the experimental Pocket 5,
 Flip 2 and Mini V1 need ROCKNIX's own image and the install package ([DEVICES.md](DEVICES.md#installing)). ROCKNIX's
 SM8250 image itself serves all of them because its bootloader picks the device tree ("Set device model"); this
@@ -177,11 +183,22 @@ Status 2026-10-30: the builder and the offline check exist and pass; **no image 
 Built on an x86_64 Linux machine (3.6 GB of images and 7.5 GB of source are too much to move around). Nothing is published.
 
 ```sh
-scripts/make-image-h700.sh --version V           # make-image-family.sh --family H700: build/image-h700/pocket-ui-V-{rg35xx-plus,rg35xx-sp,rg28xx}.img.xz, .txt, SHA256SUMS
+scripts/make-image-h700.sh --version V           # make-image-family.sh --family H700: build/image-h700/pocket-ui-V-<model>.img.xz, .txt, SHA256SUMS
 scripts/check-image-h700.sh build/image-h700/pocket-ui-V-rg35xx-sp.img.xz
 scripts/image/rocknix-source.sh OUT --device H700   # the source bundle of the H700 build (source-bundle.sh --device H700)
 sh scripts/image/test-h700-pins.sh                   # pins, notes and model list (part of the gate)
 ```
+
+**Rebuilding for a release**: build the three binaries from the
+exported public commit, then one `make-image.sh` run (Mini V2) and one `make-image-family.sh --family H700 --models "... rg40xx-h-ddr3"`
+run (all H700 models including the DDR3 card; SYSTEM is repacked once per run, about 13 minutes). Every image ends with its own
+`check-image-family.sh` (grow-check from 8 GB to 2 TB included). Then
+`python3 -I scripts/image/compare-images.py OLD.img.xz NEW.img.xz --work DIR` against the same model of the last release (it takes the
+pocket-ui version folder from the images, so `0.3.0-dryrun` works; the launcher and `portmaster-setup.sh` of the program are allowed
+differences; anything else is a finding to explain from `git diff` of the two public commits), and
+`sh scripts/image/release-sums.sh OUT_DIR BUILD_DIR...` for `SHA256SUMS-images` / `SHA256SUMS-images-more`. The export itself:
+`export-public.sh --allow-hand-commits --update PUBLIC_CLONE ...` (the public repository has hand commits from 0.1.x); a test that times out
+on a busy build machine gets one more try alone and is named as FLAKED in the report.
 
 **What differs from the Mini V2 image.** ROCKNIX's H700 image boots through its own U-Boot (written 8 KiB into the card,
 before the first partition) and `extlinux/extlinux.conf` (`LINUX /KERNEL`, `FDT /dtb.img`). So there is no GRUB, no
@@ -192,15 +209,22 @@ pocket-ui on STORAGE. The partition table is MBR (the Mini V2's is GPT) with the
 
 **One image per model, one file apart.** ROCKNIX's install page has the player copy the model's tree from
 `device_trees/` to the FAT root as `dtb.img`. We do it at build time (`pins.sh` `H700_MODELS`: RG35XX Plus
-`sun50i-h700-anbernic-rg35xx-plus.dtb`, RG35XX SP `...-rg35xx-sp.dtb`, RG28XX `...-rg28xx.dtb`, each with its md5).
-The three images differ in `dtb.img` and in the model name in the notes, nothing else. The newer screen revisions
-(`rg35xx-plus-rev6-panel`, `rg35xx-sp-v2-panel`) have their own trees and are not built; a unit with a broken picture
-on the plain one needs that variant (one more entry in `H700_MODELS`).
+`sun50i-h700-anbernic-rg35xx-plus.dtb`, RG35XX SP `...-rg35xx-sp.dtb`, RG28XX `...-rg28xx.dtb`, each with its md5). More models are in `H700_MODELS` as untested expectations (same image, their own tree: RG35XX H, Pro, 2024, RG40XX H and V, RG34XX, RG34XX-SP, RG-SP, CubeXX, and the Plus rev6 and SP v2 panel trees); ROCKNIX does not say which model has DDR3, so the RG35XX 2024 (the only DDR3 overlay is named for it) may need the DDR3 image. The CubeXX image is for testing only: pocket-ui's profile holds that model back (`not_yet`).
+The images differ in `dtb.img` and in the model name in the notes, nothing else. The newer screen revisions of the Plus
+and the SP (`rg35xx-plus-r6` for the Plus's rev6 panel, `rg35xx-sp-v2` for the SP's v2 panel; short names so the hostname
+`pocket-<model>` stays within 24 characters) have their own trees; a unit with a broken picture on the plain one needs that
+variant. The other panel trees (RG35XX 2024 and H rev6, RG40XX H and V v2, RG34XX-SP v2) are not built yet.
 
 **RAM type.** The base is the DDR4 image: U-Boot for LPDDR4 units. The RG35XX Plus reads `vdd-dram` 1.1 V (DDR4). The
 RG35XX SP and the RG28XX are **expected** to be DDR4 (ROCKNIX's device pages), not confirmed on the units; a DDR3 unit
 would not start (the card is not harmed). If the SP or the RG28XX turns out to be DDR3, the DDR3 image has other
-hashes (`ROCKNIX-H700...-DDR3.img.gz.sha256`) and its own `H700_` pins.
+hashes (`ROCKNIX-H700...-DDR3.img.gz.sha256`) and its own `H700_DDR3_` pins (already there).
+**The DDR3 variant** (`rg40xx-h-ddr3`, a fifth field `ddr3` in `H700_MODELS`) is a DDR4 card with the two things that differ in
+ROCKNIX's DDR3 image: its first 16 MiB (partition table and U-Boot with the DDR3 RAM set-up) and `extlinux/extlinux.conf` (one more
+line, `FDTOVERLAYS /overlays/sun50i-h700-anbernic-rg35xx-2024-ddr3.dtbo`). KERNEL and SYSTEM are byte for byte the same in both images
+(`build.sh` checks that against the DDR4 pins and refuses otherwise). `make-image-family.sh --models "... rg40xx-h-ddr3"` downloads
+and pins the DDR3 image by itself; `check-image-family.sh` checks the loader and extlinux.conf against `H700_DDR3_LOADER_MD5` and
+`H700_DDR3_EXTLINUX_MD5`. The notes name DDR3 and say it is a test build.
 
 **SYSTEM without a few files** (`H700_SYSTEM_REMOVE`; read again for this family on 2026-10-30 with
 `scripts/check-release-tree.py` on the unpacked SYSTEM): the six SKick tables loose and in Amiberry's `boot-data.zip`
@@ -221,7 +245,7 @@ its source archive); the repository gives them no separate licence and we could 
 values first came from. `deploy/image/firmware-licences-h700/README.txt` says this next to every file's md5. The card
 also carries U-Boot and TF-A binaries (GPL, BSD) whose source is in the bundle.
 
-**The GAMES drive (by model, `pins.sh` `<FAMILY>_GAMES_DRIVE_MODELS`: today the RG28XX only, a handheld with no Wi-Fi chip and so
+**The GAMES drive (by model, `pins.sh` `<FAMILY>_GAMES_DRIVE_MODELS`: today the RG28XX and the RG35XX 2024 (ROCKNIX's tree has no Wi-Fi node for it), handhelds with no Wi-Fi chip and so
 no file sharing).** ROCKNIX's layout is the standard on every image (RG35XX Plus and SP, the SM8550 models, the Mini V2):
 STORAGE over the whole card, with ROCKNIX's fs-resize and none of the files below on the card; the add-on zips and anything
 already installed are unchanged too. After the first start an RG28XX card of 16 GB or more has a third partition, exFAT, label `GAMES`, that a Mac or
@@ -309,6 +333,7 @@ few more files come from ROCKNIX's `extra-firmware` repository, which has no lic
 simply go; these handhelds can't work without them. `deploy/image/firmware-licences-sm8550/README.txt` lists each file. The
 check also proves every firmware the model's device tree names is still in SYSTEM. The source needs no bundle: the offer
 points to ROCKNIX's repository at the tag (see the GPL source section).
+
 
 ## Offline check (`scripts/check-image.sh`)
 

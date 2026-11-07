@@ -140,7 +140,10 @@ fn tag(path: &Path) -> Option<(String, u64)> {
 /// `Metroid Prime.s03` → `Metroid Prime`. None for a name that isn't a state's.
 pub fn state_stem(name: &str) -> Option<&str> {
     let name = name.strip_suffix(".png").unwrap_or(name);
-    for long in [".pstate.auto.taken.retry", ".pstate.auto.taken", ".pstate.auto", ".pstate.undo", ".state.auto"] {
+    for long in [
+        ".pstate.auto.z.taken.retry", ".pstate.auto.z.taken", ".pstate.auto.z",
+        ".pstate.auto.taken.retry", ".pstate.auto.taken", ".pstate.auto", ".pstate.undo", ".state.auto",
+    ] {
         if let Some(stem) = name.strip_suffix(long) {
             return Some(stem).filter(|s| !s.is_empty());
         }
@@ -596,6 +599,9 @@ mod tests {
         assert_eq!(state_stem("uCity.pstate7"), Some("uCity"));
         assert_eq!(state_stem("uCity.pstate.auto"), Some("uCity"));
         assert_eq!(state_stem("uCity.pstate.auto.taken"), Some("uCity"));
+        assert_eq!(state_stem("uCity.pstate.auto.z"), Some("uCity"));
+        assert_eq!(state_stem("uCity.pstate.auto.z.png"), Some("uCity"));
+        assert_eq!(original_name("uCity.pstate.auto.sync-conflict-20261024-181502-ABCDEF7.z").as_deref(), Some("uCity.pstate.auto.z"));
         assert_eq!(state_stem("uCity.pstate2.png"), Some("uCity"));
         assert_eq!(state_stem("Super Mario Bros. 3.state.auto"), Some("Super Mario Bros. 3"));
         assert_eq!(state_stem("Metroid Prime.s03"), Some("Metroid Prime"));

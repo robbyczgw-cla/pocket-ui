@@ -1,0 +1,1588 @@
+{
+  "provenance": "Read-only sysfs bitmaps and EVIOCGID/EVIOCGABS, 2026-11-07. Native hidden nodes opened through existing InputPlumber descriptors; no grabs or event injection.",
+  "nodes": [
+    {
+      "name": "InputPlumber Keyboard",
+      "id": {
+        "bustype": 3,
+        "vendor": 4660,
+        "product": 22136,
+        "version": 273
+      },
+      "bitmaps": {
+        "ev": "3",
+        "key": "300000c07 ff9f207ac07057ff fabeffdfffefffff fffffffffffffffe",
+        "abs": "0",
+        "sw": "0",
+        "rel": "0",
+        "ff": "0"
+      },
+      "abs": [],
+      "keys": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108,
+        109,
+        110,
+        111,
+        113,
+        114,
+        115,
+        116,
+        117,
+        119,
+        121,
+        123,
+        124,
+        125,
+        126,
+        127,
+        128,
+        129,
+        130,
+        131,
+        132,
+        133,
+        134,
+        135,
+        136,
+        137,
+        138,
+        140,
+        142,
+        148,
+        149,
+        150,
+        158,
+        159,
+        161,
+        163,
+        164,
+        165,
+        166,
+        173,
+        176,
+        177,
+        178,
+        179,
+        180,
+        183,
+        184,
+        185,
+        186,
+        187,
+        188,
+        189,
+        190,
+        191,
+        192,
+        193,
+        194,
+        202,
+        203,
+        224,
+        225
+      ],
+      "expected_keys": [
+        {
+          "code": 1,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 2,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 3,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 4,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 5,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 6,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 7,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 8,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 9,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 10,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 11,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 12,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 13,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 14,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 15,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 16,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 17,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 18,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 19,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 20,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 21,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 22,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 23,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 24,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 25,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 26,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 27,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 28,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 29,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 30,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 31,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 32,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 33,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 34,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 35,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 36,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 37,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 38,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 39,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 40,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 41,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 42,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 43,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 44,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 45,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 46,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 47,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 48,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 49,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 50,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 51,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 52,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 53,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 54,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 55,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 56,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 57,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 58,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 59,
+          "physical": "BACK",
+          "menu_nintendo": "BACK",
+          "menu_xbox": "BACK",
+          "retro_mask": 0
+        },
+        {
+          "code": 60,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 61,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 62,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 63,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 64,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 65,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 66,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 67,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 68,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 69,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 70,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 71,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 72,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 73,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 74,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 75,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 76,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 77,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 78,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 79,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 80,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 81,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 82,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 83,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 85,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 86,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 87,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 88,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 89,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 90,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 91,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 92,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 93,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 94,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 95,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 96,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 97,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 98,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 99,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 100,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 102,
+          "physical": "MODE",
+          "menu_nintendo": "MODE",
+          "menu_xbox": "MODE",
+          "retro_mask": 0
+        },
+        {
+          "code": 103,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 104,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 105,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 106,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 107,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 108,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 109,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 110,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 111,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 113,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 114,
+          "physical": "VOL_DOWN",
+          "menu_nintendo": "VOL_DOWN",
+          "menu_xbox": "VOL_DOWN",
+          "retro_mask": 0
+        },
+        {
+          "code": 115,
+          "physical": "VOL_UP",
+          "menu_nintendo": "VOL_UP",
+          "menu_xbox": "VOL_UP",
+          "retro_mask": 0
+        },
+        {
+          "code": 116,
+          "physical": "POWER",
+          "menu_nintendo": "POWER",
+          "menu_xbox": "POWER",
+          "retro_mask": 0
+        },
+        {
+          "code": 117,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 119,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 121,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 123,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 124,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 125,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 126,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 127,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 128,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 129,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 130,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 131,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 132,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 133,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 134,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 135,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 136,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 137,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 138,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 140,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 142,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 148,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 149,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 150,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 158,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 159,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 161,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 163,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 164,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 165,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 166,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 173,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 176,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 177,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 178,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 179,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 180,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 183,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 184,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 185,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 186,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 187,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 188,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 189,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 190,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 191,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 192,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 193,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 194,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 202,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 203,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 224,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 225,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        }
+      ]
+    },
+    {
+      "name": "Sony Interactive Entertainment DualSense Wireless Controller",
+      "id": {
+        "bustype": 3,
+        "vendor": 1356,
+        "product": 3302,
+        "version": 33041
+      },
+      "bitmaps": {
+        "ev": "20000b",
+        "key": "7fdb000000000000 0 0 0 0",
+        "abs": "3003f",
+        "sw": "0",
+        "rel": "0",
+        "ff": "107030000 0"
+      },
+      "abs": [
+        [
+          0,
+          0,
+          255,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          255,
+          0,
+          0,
+          0
+        ],
+        [
+          2,
+          0,
+          255,
+          0,
+          0,
+          0
+        ],
+        [
+          3,
+          0,
+          255,
+          0,
+          0,
+          0
+        ],
+        [
+          4,
+          0,
+          255,
+          0,
+          0,
+          0
+        ],
+        [
+          5,
+          0,
+          255,
+          0,
+          0,
+          0
+        ],
+        [
+          16,
+          -1,
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          17,
+          -1,
+          1,
+          0,
+          0,
+          0
+        ]
+      ],
+      "keys": [
+        304,
+        305,
+        307,
+        308,
+        310,
+        311,
+        312,
+        313,
+        314,
+        315,
+        316,
+        317,
+        318
+      ],
+      "expected_keys": [
+        {
+          "code": 304,
+          "physical": "SOUTH",
+          "menu_nintendo": "SOUTH",
+          "menu_xbox": "EAST",
+          "retro_mask": 1
+        },
+        {
+          "code": 305,
+          "physical": "EAST",
+          "menu_nintendo": "EAST",
+          "menu_xbox": "SOUTH",
+          "retro_mask": 256
+        },
+        {
+          "code": 307,
+          "physical": "NORTH",
+          "menu_nintendo": "NORTH",
+          "menu_xbox": "WEST",
+          "retro_mask": 512
+        },
+        {
+          "code": 308,
+          "physical": "WEST",
+          "menu_nintendo": "WEST",
+          "menu_xbox": "NORTH",
+          "retro_mask": 2
+        },
+        {
+          "code": 310,
+          "physical": "L1",
+          "menu_nintendo": "L1",
+          "menu_xbox": "L1",
+          "retro_mask": 1024
+        },
+        {
+          "code": 311,
+          "physical": "R1",
+          "menu_nintendo": "R1",
+          "menu_xbox": "R1",
+          "retro_mask": 2048
+        },
+        {
+          "code": 312,
+          "physical": "L2",
+          "menu_nintendo": "L2",
+          "menu_xbox": "L2",
+          "retro_mask": 4096
+        },
+        {
+          "code": 313,
+          "physical": "R2",
+          "menu_nintendo": "R2",
+          "menu_xbox": "R2",
+          "retro_mask": 8192
+        },
+        {
+          "code": 314,
+          "physical": "SELECT",
+          "menu_nintendo": "SELECT",
+          "menu_xbox": "SELECT",
+          "retro_mask": 4
+        },
+        {
+          "code": 315,
+          "physical": "START",
+          "menu_nintendo": "START",
+          "menu_xbox": "START",
+          "retro_mask": 8
+        },
+        {
+          "code": 316,
+          "physical": "MODE",
+          "menu_nintendo": "MODE",
+          "menu_xbox": "MODE",
+          "retro_mask": 0
+        },
+        {
+          "code": 317,
+          "physical": "L3",
+          "menu_nintendo": "L3",
+          "menu_xbox": "L3",
+          "retro_mask": 16384
+        },
+        {
+          "code": 318,
+          "physical": "R3",
+          "menu_nintendo": "R3",
+          "menu_xbox": "R3",
+          "retro_mask": 32768
+        }
+      ],
+      "expected_axes": [
+        {
+          "code": 0,
+          "axis": "LEFT_X",
+          "hat": null
+        },
+        {
+          "code": 1,
+          "axis": "LEFT_Y",
+          "hat": null
+        },
+        {
+          "code": 2,
+          "axis": "L2",
+          "hat": null
+        },
+        {
+          "code": 3,
+          "axis": "RIGHT_X",
+          "hat": null
+        },
+        {
+          "code": 4,
+          "axis": "RIGHT_Y",
+          "hat": null
+        },
+        {
+          "code": 5,
+          "axis": "R2",
+          "hat": null
+        },
+        {
+          "code": 16,
+          "axis": null,
+          "hat": "HORIZONTAL"
+        },
+        {
+          "code": 17,
+          "axis": null,
+          "hat": "VERTICAL"
+        }
+      ]
+    }
+  ]
+}

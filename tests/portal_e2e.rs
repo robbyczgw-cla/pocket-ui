@@ -40,7 +40,7 @@ impl Standin {
             .args([mode, &format!("{ROOT}/testdata/portal"), &port_file.to_string_lossy(), &log.to_string_lossy()])
             .spawn()
             .ok()?;
-        let until = Instant::now() + Duration::from_secs(10);
+        let until = Instant::now() + test_clock::timeout(Duration::from_secs(10));
         while Instant::now() < until {
             if let Some(port) = std::fs::read_to_string(&port_file).ok().and_then(|p| p.trim().parse().ok()) {
                 return Some(Standin { child, port, log, _dir: guard });
@@ -203,7 +203,8 @@ fn a_please_wait_interstitial_forwards_to_online_by_itself() {
 }
 
 #[test]
-fn pages_the_helper_cant_do_end_plainly() {
+#[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+fn timing_pages_the_helper_cant_do_end_plainly() {
     if !tools() {
         return;
     }
@@ -221,7 +222,7 @@ fn pages_the_helper_cant_do_end_plainly() {
     let start = net_check::check_with("curl", &lp.check()).portal.expect("redirected");
     let t = Instant::now();
     assert!(matches!(lp.session().open(&start), Outcome::Failed(Failure::Loop)));
-    assert!(t.elapsed() < Duration::from_secs(10));
+    assert!(t.elapsed() < test_clock::timeout(Duration::from_secs(10)));
 
     // A form that posts to another site: shown, but never sent.
     let away = Standin::start("elsewhere").expect("the stand-in portal starts");

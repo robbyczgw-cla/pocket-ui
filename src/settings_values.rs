@@ -98,9 +98,15 @@ pub fn look(theme: Theme, appearance: Appearance) -> String {
 }
 
 /// Performance & fan: what games run with unless their console or the game chose, "Auto · Quiet" (the words of the
-/// page and the quick settings, `perf_fan_page`).
+/// page and the quick settings, `perf_fan_page`). Without a fan (the H700 handhelds, the Brick) only the performance: "Auto · Quiet"
+/// named a fan the device hasn't (settings walk 06.11.).
 pub fn perf_fan(performance: crate::power::Performance, fan: crate::power::Fan) -> String {
-    format!("{} · {}", crate::perf_fan_page::performance_label(performance), crate::perf_fan_page::fan_label(fan))
+    perf_fan_with(performance, fan, crate::device::current().has_fan())
+}
+
+fn perf_fan_with(performance: crate::power::Performance, fan: crate::power::Fan, has_fan: bool) -> String {
+    let performance = crate::perf_fan_page::performance_label(performance);
+    if has_fan { format!("{performance} · {}", crate::perf_fan_page::fan_label(fan)) } else { performance.to_string() }
 }
 
 /// Add games: "No games", "1 game", "332 games".
@@ -136,7 +142,7 @@ pub fn zone(zone: &str) -> String {
     if crate::timezone::is_utc(zone) {
         "UTC".into()
     } else {
-        crate::timezone::city_of(zone)
+        crate::timezone::city_here(zone)
     }
 }
 
@@ -319,8 +325,10 @@ mod tests {
         assert_eq!(look(Theme::Shelf, Appearance::Dark), "Shelf · Dark");
         assert_eq!(look(Theme::Cabinet, Appearance::Auto), "Cabinet · Automatic");
         let defaults = crate::perf_fan::Prefs::default();
-        assert_eq!(perf_fan(defaults.games_performance, defaults.games_fan), "Auto · Quiet", "the defaults");
-        assert_eq!(perf_fan(crate::power::Performance::Performance, crate::power::Fan::Cool), "Max · Cool");
+        assert_eq!(perf_fan_with(defaults.games_performance, defaults.games_fan, true), "Auto · Quiet", "the defaults");
+        assert_eq!(perf_fan_with(crate::power::Performance::Performance, crate::power::Fan::Cool, true), "Max · Cool");
+        // No fan (the H700 handhelds, the Brick): the row names none.
+        assert_eq!(perf_fan_with(defaults.games_performance, defaults.games_fan, false), "Auto");
         assert_eq!([games(0), games(1), games(332)], ["No games", "1 game", "332 games"]);
         assert_eq!([pcs(0), pcs(1), pcs(2)], ["No PC paired", "1 PC", "2 PCs"]);
         assert_eq!([hidden_systems(0), hidden_systems(1), hidden_systems(3)], ["", "1 hidden", "3 hidden"]);

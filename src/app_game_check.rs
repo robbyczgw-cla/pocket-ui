@@ -38,7 +38,14 @@ pub(crate) struct GameCheckUi {
     last: Option<String>,
     /// The next list read again is the starter pack's: its games were checked by their own hash.
     no_offer: bool,
+    /// The first start ended a moment ago: games that came during it (the phone page, file sharing) were sent by the
+    /// player, so no toast about "new games" and a check they never heard of (`game_check_after_first_start`).
+    quiet_until: Option<Instant>,
 }
+
+/// How long after the first start new games are taken without a toast: the folders read again for games sent during
+/// it may answer a little later than the shelf appears.
+const QUIET_AFTER_FIRST_START: std::time::Duration = std::time::Duration::from_secs(120);
 
 impl App {
     pub(crate) fn open_game_check(&mut self) -> Option<SettingsPage> {
@@ -62,7 +69,7 @@ impl App {
         let systems = self.library_pending().unwrap_or(&self.systems);
         let shelf: Vec<(String, Vec<PathBuf>)> = systems.iter().map(|s| (s.name.clone(), s.games.iter().map(|g| g.path.clone()).collect())).collect();
         let (proxy, es_systems) = (self.proxy.clone(), self.es_systems.clone());
-        let h700 = pocket_ui::device::current().model.is_some_and(|m| m.is_h700());
+        let h700 = pocket_ui::device::current().model.is_some_and(|m| m.small_chip());
         let spawned = std::thread::Builder::new().name("game-check".into()).spawn(move || {
             #[cfg(target_os = "linux")]
             // SAFETY: setpriority on this thread's own id only changes its scheduling.
@@ -165,6 +172,12 @@ impl App {
         }
     }
 
+    /// The first start has just ended: the games it brought are no news (first-start walk 2026-11-06: "2 new games.
+    /// Settings › Games › Game check looks them over." greeted the first shelf).
+    pub(crate) fn game_check_after_first_start(&mut self) {
+        self.game_check.quiet_until = Some(Instant::now() + QUIET_AFTER_FIRST_START);
+    }
+
     pub(crate) fn game_check_games_added(&mut self, added: usize) {
         if std::mem::take(&mut self.game_check.no_offer) || added == 0 || self.running.is_some() {
             return;
@@ -173,7 +186,7 @@ impl App {
         if from_add_games {
             self.game_check.page = Some(GameCheckPage::offer(added));
             self.settings_page = Some(SettingsPage::GameCheck);
-        } else if self.settings_page.is_none() && self.onboarded {
+        } else if self.settings_page.is_none() && self.onboarded && !self.game_check.quiet_until.is_some_and(|t| Instant::now() < t) {
             let line = if added == 1 { "1 new game. Settings › Games › Game check looks it over.".to_string() } else { format!("{added} new games. Settings › Games › Game check looks them over.") };
             self.toast = Some((line, Instant::now()));
         }
@@ -229,8 +242,8 @@ impl App {
         if *total > 0 {
             let (x, w) = (NU_PAD + NU_BTN_PAD, c.w - 2 * (NU_PAD + NU_BTN_PAD));
             let frac = (*done as f32 / *total as f32).clamp(0.0, 1.0);
-            c.round_rect(x, y, w, 12, 6, pal().keycap);
-            c.round_rect(x, y, ((w as f32 * frac) as i32).max(12), 12, 6, pal().label);
+            pocket_ui::retro::pill(c, x, y, w, 12, 6, pal().keycap);
+            pocket_ui::retro::pill(c, x, y, ((w as f32 * frac) as i32).max(12), 12, 6, pal().label);
         }
         self.nu_hints(c, &[("B", "Stop")]);
     }
@@ -377,7 +390,7 @@ impl App {
                 let catalog = pocket_ui::library::all_systems(&self.es_systems).unwrap_or_default();
                 let roms = pocket_ui::library::roms_root(&catalog).unwrap_or_default();
                 let shelf = self.systems.iter().map(|s| (s.name.clone(), s.games.iter().map(|g| g.path.clone()).collect())).collect();
-                let input = Input { catalog, shelf, bios_dir: roms.join("bios"), roms, h700: pocket_ui::device::current().model.is_some_and(|m| m.is_h700()) };
+                let input = Input { catalog, shelf, bios_dir: roms.join("bios"), roms, h700: pocket_ui::device::current().model.is_some_and(|m| m.small_chip()) };
                 let report = game_check::check(&input, &AtomicBool::new(false), &mut |_, _, _| {});
                 page.event(Event::Done(report.unwrap_or_default()));
                 page.group_sel = row.min(page.groups().len().saturating_sub(1));

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Offline checks of a pocket-ui SD image of a family that boots ROCKNIX's own way: FAMILY=H700 or SM8550 (the other half
+# Offline checks of a pocket-ui SD image of a family that boots ROCKNIX's own way: FAMILY=H700, SM8550 or RK3566 (the other half
 # of scripts/image/check.sh). Runs in the pocket-image-tools container (scripts/check-image-family.sh starts it), with the
 # repository at /repo. Only reads the image: the FAT partition through mtools, STORAGE as a copy.
 #   FAMILY=H700 check-h700.sh IMG VERSION WORKDIR MODEL
@@ -70,7 +70,17 @@ fi
 check "image size unchanged (2,198,863,872 bytes)" '[ "$(stat -c %s "$IMG")" = 2198863872 ]'
 # ROCKNIX's U-Boot sits before the first partition at 8 KiB (dd seek=8, bootloader/update.sh): the card's boot chain.
 tail -c +8193 "$IMG" | head -c 666105 >"$W/lists/uboot"
-[ "$FAMILY" != H700 ] || check "ROCKNIX's DDR4 U-Boot is 8 KiB into the card, unchanged" '[ "$(md5 "$W/lists/uboot")" = f7008775f3e7b5fa45f869288752d3a3 ]'
+DDR3=0
+[ "$FAMILY" != H700 ] || ! is_ddr3 H700 "$MODEL" || DDR3=1
+if [ "$FAMILY" = H700 ] && [ $DDR3 = 0 ]; then
+  check "ROCKNIX's DDR4 U-Boot is 8 KiB into the card, unchanged" '[ "$(md5 "$W/lists/uboot")" = f7008775f3e7b5fa45f869288752d3a3 ]'
+  check "the first 16 MiB (partition table, U-Boot) are the DDR4 image's" '[ "$(head -c $((P1_START * 512)) "$IMG" | md5sum | cut -d" " -f1)" = "$H700_LOADER_MD5" ]'
+elif [ $DDR3 = 1 ]; then
+  check "ROCKNIX's DDR3 U-Boot is 8 KiB into the card, unchanged (the whole first 16 MiB are the DDR3 image's)" '[ "$(head -c $((P1_START * 512)) "$IMG" | md5sum | cut -d" " -f1)" = "$H700_DDR3_LOADER_MD5" ]'
+fi
+# RK3566: ROCKNIX's idbloader and U-Boot sit in the 16 MiB before the first partition, with the GPT.
+[ "$FAMILY" != RK3566 ] || check "ROCKNIX's idbloader, U-Boot and GPT (the card's first 16 MiB) unchanged" \
+  '[ "$(head -c $((P1_START * 512)) "$IMG" | md5sum | cut -d" " -f1)" = "$RK3566_LOADER_MD5" ]'
 
 echo "== FAT partition (/flash)"
 check "label ROCKNIX (boot=LABEL=ROCKNIX)" 'mlabel -i "$FAT" -s :: 2>/dev/null | grep -q "Volume label is ROCKNIX"'
@@ -98,6 +108,12 @@ mdir -b -i "$FAT" ::/device_trees 2>/dev/null | sed 's#.*/#device_trees/#' >>"$W
 # SM8550: ROCKNIX's ABL in the handheld starts KERNEL, so the card has none of the H700's boot files (and no rocknix_abl).
 if [ "$FAMILY" = SM8550 ]; then
   grep -Ev '^(device_trees/|dtb\.img|extlinux/|overlays/|games-first-start\.sh)' "$W/lists/fat.expected" >"$W/lists/fat.expected.new"
+  mv "$W/lists/fat.expected.new" "$W/lists/fat.expected"
+fi
+# RK3566: extlinux.conf names the model's tree in device_trees/ (no dtb.img); ROCKNIX's three undervolt overlays.
+if [ "$FAMILY" = RK3566 ]; then
+  grep -Ev '^(dtb\.img|overlays/sun50i-)' "$W/lists/fat.expected" >"$W/lists/fat.expected.new"
+  printf 'overlays/rk3566-undervolt-cpu-l%s.dtbo\n' 1 2 3 >>"$W/lists/fat.expected.new"
   mv "$W/lists/fat.expected.new" "$W/lists/fat.expected"
 fi
 # The firmware's terms, as in the repository.
@@ -153,8 +169,8 @@ for k in ssh.enabled samba.enabled syncthing.enabled; do
 done
 check "no SSH keys or host keys in SYSTEM (usr/config/ssh/authorized_keys, ssh_host_*)" \
   '! grep -Eq "(^usr/config/ssh/authorized_keys|ssh_host_.*key)" "$W/lists/system"'
-if [ "$FAMILY" = H700 ]; then
-check "the kernel command line does not turn SSH on (no ssh word)" '! grep -Eq "^ *APPEND .* ssh( |$)" "$W/fat/extlinux/extlinux.conf"'
+if [ "$FAMILY" = H700 ] || [ "$FAMILY" = RK3566 ]; then
+[ "$FAMILY" != H700 ] || check "the kernel command line does not turn SSH on (no ssh word)" '! grep -Eq "^ *APPEND .* ssh( |$)" "$W/fat/extlinux/extlinux.conf"'
 check "the only BIOS files in SYSTEM are DraStic's open replacement pair (BSD, drastic_bios_arm7/arm9.bin)" \
   '[ "$(grep -i "bios.*\\.bin$" "$W/lists/system" | sort | tr "\n" " ")" = "usr/config/drastic/system/drastic_bios_arm7.bin usr/config/drastic/system/drastic_bios_arm9.bin " ]'
 else
@@ -199,6 +215,9 @@ X=$W/fat/extlinux/extlinux.conf
 # ROCKNIX's U-Boot reads extlinux/extlinux.conf: kernel /KERNEL, tree /dtb.img. It is ROCKNIX's file, unchanged.
 check "extlinux.conf: LINUX /KERNEL, FDT /dtb.img, boot=LABEL=ROCKNIX disk=LABEL=STORAGE" \
   'grep -qx "  LINUX /KERNEL" "$X" && grep -qx "  FDT /dtb.img" "$X" && grep -Eq "^  APPEND boot=LABEL=ROCKNIX disk=LABEL=STORAGE " "$X"'
+[ $DDR3 = 0 ] || check "extlinux.conf is the DDR3 image's (md5 $H700_DDR3_EXTLINUX_MD5, with its FDTOVERLAYS line)" \
+  '[ "$(md5 "$X")" = "$H700_DDR3_EXTLINUX_MD5" ] && grep -qx "  FDTOVERLAYS /overlays/sun50i-h700-anbernic-rg35xx-2024-ddr3.dtbo" "$X"'
+[ $DDR3 = 1 ] || check "extlinux.conf has no FDTOVERLAYS line (DDR4)" '! grep -q FDTOVERLAYS "$X"'
 check "no GRUB, no EFI folder, no boot/ folder (ROCKNIX's U-Boot boots it)" '! grep -Eq "^(EFI|boot)/" "$W/lists/fat"'
 check "dtb.img is device_trees/$DTB_NAME.dtb (md5 $DTB_MD5_WANT)" '[ "$(md5 "$W/fat/dtb.img")" = "$DTB_MD5_WANT" ]'
 mcopy -n -i "$FAT" "::/device_trees/$DTB_NAME.dtb" "$W/fat/tree.dtb" 2>/dev/null
@@ -207,7 +226,20 @@ check "dtb model is $DT_MODEL" '[ "$(fdtget -t s "$W/fat/dtb.img" / model)" = "$
 check "dtb.img is a device tree ROCKNIX ships and this model's only: no other model's dtb.img would match" \
   '[ "$(for d in $(mdir -b -i "$FAT" ::/device_trees | sed "s#.*/##"); do mcopy -n -i "$FAT" "::/device_trees/$d" - | cmp -s - "$W/fat/dtb.img" && echo "$d"; done)" = "$DTB_NAME.dtb" ]'
 }
-case $FAMILY in H700) boot_h700 ;; SM8550) boot_sm8550 ;; esac
+boot_rk3566() {
+X=$W/fat/extlinux/extlinux.conf
+# ROCKNIX's U-Boot reads extlinux/extlinux.conf. Ours is ROCKNIX's with one line changed: the FDT names this model's tree.
+check "extlinux.conf: LINUX /KERNEL, FDT /device_trees/$DTB_NAME.dtb, boot=LABEL=ROCKNIX disk=LABEL=STORAGE" \
+  'grep -qx "  LINUX /KERNEL" "$X" && grep -qx "  FDT /device_trees/$DTB_NAME.dtb" "$X" && grep -Eq "^  APPEND boot=LABEL=ROCKNIX disk=LABEL=STORAGE " "$X"'
+check "extlinux.conf is ROCKNIX's with only that line changed (back from $RK3566_DEFAULT_FDT)" \
+  '[ "$(sed "s#^  FDT /device_trees/$DTB_NAME.dtb\$#  FDT $RK3566_DEFAULT_FDT#" "$X" | md5sum | cut -d" " -f1)" = "$RK3566_EXTLINUX_MD5" ]'
+check "the kernel command line does not turn SSH on (no ssh word)" '! grep -Eq "^ *APPEND .* ssh( |$)" "$X"'
+check "no GRUB, no EFI folder, no boot/ folder, no dtb.img (ROCKNIX's U-Boot boots it)" '! grep -Eq "^(EFI|boot)/|^dtb\.img$" "$W/lists/fat"'
+mcopy -n -i "$FAT" "::/device_trees/$DTB_NAME.dtb" "$W/fat/tree.dtb" 2>/dev/null
+check "device_trees/$DTB_NAME.dtb is ROCKNIX's (md5 $DTB_MD5_WANT), model $DT_MODEL" \
+  '[ "$(md5 "$W/fat/tree.dtb")" = "$DTB_MD5_WANT" ] && [ "$(fdtget -t s "$W/fat/tree.dtb" / model)" = "$DT_MODEL" ]'
+}
+case $FAMILY in H700) boot_h700 ;; SM8550) boot_sm8550 ;; RK3566) boot_rk3566 ;; esac
 check "KERNEL.md5 is KERNEL's" '[ "$(cut -d" " -f1 "$W/fat/KERNEL.md5")" = "$(md5 "$W/fat/KERNEL")" ]'
 check "initramfs hook mount-storage.sh is deploy/image/mount-storage.sh" 'same "$W/fat/mount-storage.sh" /repo/deploy/image/mount-storage.sh'
 check "initramfs hook post-flash.sh is deploy/image/post-flash.sh" 'same "$W/fat/post-flash.sh" /repo/deploy/image/post-flash.sh'
@@ -222,8 +254,15 @@ check "pocket-ui-info/pocket-ui-os.txt: $POCKET_OS_NAME $VERSION, for Settings >
 
 echo "== notes on the card (pocket-ui-info/README.txt)"
 R=$W/fat/pocket-ui-info/README.txt
-if [ "$FAMILY" = H700 ]; then
-check "names the model: $DT_MODEL, DDR4, dtb.img from device_trees/$DTB_NAME.dtb" 'grep -q "for the $DT_MODEL: SD card image" "$R" && grep -q "DDR4" "$R" && grep -q "device_trees/$DTB_NAME.dtb" "$R"'
+if [ "$FAMILY" = RK3566 ]; then
+check "names the model: $DT_MODEL, and that extlinux.conf names its tree device_trees/$DTB_NAME.dtb" 'grep -q "for the $DT_MODEL: SD card image" "$R" && grep -q "device_trees/$DTB_NAME.dtb" "$R"'
+check "says it is a test image, not a release" 'grep -q "test image" "$R"'
+check "warns about charging (ROCKNIX PR #3539): weak 5 V chargers, charge fully under the original system first" 'grep -q "3539" "$R" && grep -q "5 V" "$R" && grep -q "original system" "$R"'
+check "says the firmware not traced and the Mali driver's terms are open" 'grep -q "not traced" "$R" && grep -q "Mali" "$R"'
+elif [ "$FAMILY" = H700 ]; then
+RAMW=DDR4
+[ $DDR3 = 0 ] || RAMW=DDR3
+check "names the model: $DT_MODEL, $RAMW, dtb.img from device_trees/$DTB_NAME.dtb" 'grep -q "for the $DT_MODEL: SD card image" "$R" && grep -q "$RAMW" "$R" && grep -q "device_trees/$DTB_NAME.dtb" "$R"'
 else
 check "names the model: $DT_MODEL" 'grep -q "for the $DT_MODEL: SD card image" "$R"'
 check "says plainly what the handheld needs first: ROCKNIX's boot helper (ABL), once, from Android, and that this card doesn't do it" \
@@ -246,6 +285,7 @@ else
 fi
 check "no #if lines of the notes' template left" '! grep -Eq "^#(if|else|endif)" "$R"'
 [ "$FAMILY" != H700 ] || check "going back: the original card, into the first slot (TF1)" 'grep -q "original card back" "$R"'
+[ "$FAMILY" != RK3566 ] || check "going back: the original card" 'grep -q "original card back" "$R"'
 check "says remote access is off, and that pocket-ui makes the password" 'grep -q "Remote access (SSH), file sharing and Syncthing are off" "$R"'
 check "points to the source next to the image and to SOURCE-OFFER.txt" 'grep -q "pocket-ui-info/SOURCE-OFFER.txt" "$R"'
 warn "names a clean pocket-ui source (no -dirty commit)" '! grep -q -- "-dirty" "$R"'
@@ -328,6 +368,12 @@ if [ $GAMES = 1 ]; then
 644 0:0 f ./.pocket-seed/.config/system.d/rocknix-automount.service.d/10-pocket-games.conf
 755 0:0 f ./pocket-ui/games-mount.sh
 GAMESFILES
+fi
+if [ -d "$S/pocket-ui/releases/$V/cores" ]; then
+  check "bundled gpSP is the pinned ARM64 core with intact licence, source and recipe" \
+    'sh /repo/scripts/image/gba-checks.sh --validate "$S/pocket-ui/releases/$V/cores"'
+  sh /repo/scripts/image/gba-checks.sh --files "$V" >>"$W/lists/storage.expected"
+  sort -o "$W/lists/storage.expected" "$W/lists/storage.expected"
 fi
 check "exactly the expected files, owners and modes" 'same "$W/lists/storage" "$W/lists/storage.expected"' ||
   diff "$W/lists/storage.expected" "$W/lists/storage" | sed 's/^/     /'

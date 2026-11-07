@@ -1,5 +1,5 @@
 //! Which picture of a game the shelf's preview shows, and when it changes: the box art first, then (after a short
-//! dwell) the in-game screenshot, then the title screen, then the box art again, each fading into the next
+//! dwell) the in-game screenshot, then the title screen, then the box art again where it rests, each fading into the next
 //! (docs/DESIGN.md, Pictures). Pure timing: the pictures themselves are found and drawn in the app
 //! (`app_pictures.rs`); this says only "from slide `from` to slide `to`, `mix` of the way, and when to look again".
 //!
@@ -67,6 +67,8 @@ pub fn step(slides: usize, elapsed: Duration, cycling: bool, fade: Duration) -> 
     if elapsed < DWELL {
         return Step { next: Some(DWELL - elapsed), ..Step::still(0) };
     }
+    // Show each available picture and return to the box once, then let an untouched shelf sleep.
+    if elapsed >= DWELL + HOLD * (slides as u32 - 1) + fade { return Step::still(0); }
     let into = elapsed - DWELL;
     let k = (into.as_millis() / HOLD.as_millis()) as usize + 1;
     let started = HOLD * (k as u32 - 1);
@@ -140,6 +142,16 @@ mod tests {
         assert!(cycling(), "Reduced fades");
         motion::set_level(motion::Motion::Full);
         assert!(cycling());
+    }
+
+    #[test]
+    fn the_preview_returns_to_its_box_then_the_idle_shelf_requests_no_redraw() {
+        let finish = DWELL + HOLD * 2 + FADE;
+        for seconds in 0..60 {
+            let step = step(3, finish + Duration::from_secs(seconds), true, FADE);
+            assert_eq!(step, Step::still(0), "one tour of the pictures must not loop on the shelf");
+        }
+        assert_eq!(step(3, Duration::ZERO, true, FADE).next, Some(DWELL), "another selection starts a new tour");
     }
 
     #[test]

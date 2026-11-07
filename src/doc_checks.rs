@@ -322,7 +322,12 @@ fn settings_curator_rows_and_their_start_settings_are_described() {
 fn sleep_and_power_rows_their_start_values_and_choices_are_described() {
     use pocket_ui::sleep_settings::{Config, Hold, Row, ShortPress, ROWS, SCREEN_OFF_CHOICES, SLEEP_AFTER_CHOICES};
     let start = Config::default();
-    for (page, heading) in [("docs/user/quick-settings.md", "Sleep & power settings")] {
+    for (page, heading) in [
+        #[cfg(not(feature = "brick"))]
+        ("docs/user/quick-settings.md", "Sleep & power settings"),
+        #[cfg(feature = "brick")]
+        ("docs/user/brick-quick-settings.md.inc", "Sleep & power settings"),
+    ] {
         let md = read(page);
         let rows = first_table(&section(&md, heading));
         let doc: Vec<String> = rows.iter().map(|r| bold(&r[0])).collect();
@@ -399,7 +404,7 @@ fn the_quick_settings_table_lists_every_row_in_order() {
 #[test]
 fn the_look_row_names_the_looks_in_the_pickers_order() {
     use pocket_ui::settings::Theme;
-    let line = super::SETTINGS.iter().find(|s| s.0 == "Look").expect("the Settings row").2;
+    let line = super::SETTINGS.iter().find(|s| s.0 == "Layout").expect("the Settings row").2;
     let at: Vec<usize> = Theme::ALL.iter().map(|t| line.find(t.name()).unwrap_or_else(|| panic!("{} in {line}", t.name()))).collect();
     assert!(at.windows(2).all(|w| w[0] < w[1]), "{line}");
 }
@@ -623,20 +628,33 @@ fn user_pages() -> Vec<String> {
 fn every_user_page_is_in_the_manual_or_marked_desktop_only() {
     let in_manual: BTreeSet<&str> = manual::PAGES.iter().map(|(n, _)| *n).collect();
     for p in user_pages() {
-        let (m, d) = (in_manual.contains(p.as_str()), manual::DESKTOP_ONLY.contains(&p.as_str()));
+        let skipped = cfg!(feature = "brick") && manual::BRICK_SKIPS.contains(&p.as_str());
+        let (m, d) = (in_manual.contains(p.as_str()), manual::DESKTOP_ONLY.contains(&p.as_str()) || skipped);
         assert!(
             m != d,
             "docs/user/{p}.md: in manual::PAGES or in manual::DESKTOP_ONLY, exactly one (manual {m}, desktop {d})"
         );
     }
     for (n, md) in manual::PAGES {
+        #[cfg(not(feature = "brick"))]
         assert_eq!(*md, read(&format!("docs/user/{n}.md")), "manual::PAGES {n:?} bundles docs/user/{n}.md");
+        #[cfg(feature = "brick")]
+        {
+            let source = if matches!(*n, "index" | "controls" | "copy-games" | "performance" | "quick-settings") {
+                format!("docs/user/brick-{n}.md.inc")
+            } else {
+                format!("docs/user/{n}.md")
+            };
+            assert_eq!(*md, read(&source), "manual::PAGES {n:?} bundles {source}");
+        }
     }
 }
 
 #[test]
 fn the_first_page_lists_the_manual_pages_in_their_order() {
-    let pages = section(&read("docs/user/index.md"), "Pages");
+    // The Brick's manual starts with its own page, with the same list but for `manual::BRICK_SKIPS`.
+    let first = if cfg!(feature = "brick") { "docs/user/brick-index.md.inc" } else { "docs/user/index.md" };
+    let pages = section(&read(first), "Pages");
     // Pages of the guide are linked by their file name; the developer documents are one folder up.
     let listed: Vec<String> = links(&pages)
         .into_iter()
@@ -964,7 +982,21 @@ fn settings_names(table: Option<&std::collections::HashMap<String, String>>) -> 
         let key = table.and_then(|m| m.get(s)).map(|g| g.as_str()).unwrap_or(s);
         key.trim_end_matches('\u{200b}').to_string()
     };
-    super::SETTINGS_GROUPS.iter().map(|(c, _, rows)| (tr(c), rows.iter().map(|r| tr(r.0)).collect())).collect()
+    super::SETTINGS_GROUPS
+        .iter()
+        .map(|(c, _, rows)| {
+            let mut names: Vec<String> = rows.iter().map(|r| tr(r.0)).collect();
+            // The Brick calls the lights row as its page (`app_settings_groups::row_name`): a path may name it either way.
+            if rows.iter().any(|r| matches!(r.1, super::Opens::Leds)) {
+                names.push(tr("Lights & buttons"));
+            }
+            // And the performance row "Performance" (no fan on the Brick, `perf_fan_page::title`).
+            if rows.iter().any(|r| matches!(r.1, super::Opens::PerfFan)) {
+                names.push(tr("Performance"));
+            }
+            (tr(c), names)
+        })
+        .collect()
 }
 
 /// A path in Settings in the user documents (docs/user, README.md), on the web page, in a string of `src/` and on

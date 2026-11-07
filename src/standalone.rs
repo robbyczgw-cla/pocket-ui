@@ -33,7 +33,8 @@ use std::time::{Duration, Instant};
 pub const QUIT_GRACE: Duration = Duration::from_secs(35);
 
 /// How long `quit` waits for each step before it moves on: the state to be written, ARMSX2's VM to shut down,
-/// the process to end after the second SIGTERM, Azahar to close its window, and before SIGKILL.
+/// the process to end after the second SIGTERM, Azahar to close its window (about a second once it is in front), and
+/// before SIGKILL.
 const SAVE_WAIT: Duration = Duration::from_secs(12);
 const VM_SHUTDOWN_WAIT: Duration = Duration::from_secs(10);
 const EXIT_WAIT: Duration = Duration::from_millis(500);
@@ -357,6 +358,7 @@ fn settle_governors_after(root: &Path, mut wait: impl FnMut(), mut running: impl
 }
 
 /// Writes the system's governor to every cluster of `root` that is on `performance`; how many were changed.
+#[cfg(not(feature = "brick"))]
 fn settle_governors_in(root: &Path, cfg: &str) -> usize {
     let wanted = cfg
         .lines()
@@ -365,6 +367,26 @@ fn settle_governors_in(root: &Path, cfg: &str) -> usize {
         .map(str::trim)
         .filter(|g| !g.is_empty())
         .unwrap_or("ondemand");
+    if wanted == "performance" {
+        return 0;
+    }
+    let Ok(dir) = std::fs::read_dir(root.join("sys/devices/system/cpu/cpufreq")) else { return 0 };
+    dir.flatten()
+        .map(|e| e.path().join("scaling_governor"))
+        .filter(|f| std::fs::read_to_string(f).is_ok_and(|g| g.trim() == "performance"))
+        .filter(|f| std::fs::write(f, wanted).is_ok())
+        .count()
+}
+
+#[cfg(feature = "brick")]
+fn settle_governors_in(root: &Path, cfg: &str) -> usize {
+    let wanted = cfg
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix("system.cpugovernor="))
+        .next_back()
+        .map(str::trim)
+        .filter(|g| !g.is_empty())
+        .unwrap_or(if crate::device::brick() { "performance" } else { "ondemand" });
     if wanted == "performance" {
         return 0;
     }
@@ -489,6 +511,9 @@ enum Step {
     SaveResume,
     /// Ask the emulator's window to close, as its own close button would.
     CloseWindow,
+    /// Put the game's window in front of the menu again: a client covered by pocket-ui's fullscreen window gets no
+    /// frame callbacks, so its presenting stalls, and an emulator that waits for its last frame before it ends never does.
+    ShowGame,
     Signal(i32),
     /// Wait until PINE no longer reports a running VM (ARMSX2), at most this long.
     VmDown(Duration),
@@ -521,16 +546,15 @@ fn quit_plan(emu: Emu) -> &'static [Step] {
             Signal(libc::SIGKILL),
         ],
         Emu::Dolphin => &[SaveResume, Signal(libc::SIGTERM), Exit(KILL_WAIT), Signal(libc::SIGKILL)],
-        // Azahar has no SIGTERM handler (it would end on the spot); its window's close request stops the
-        // emulation and saves its config (qt-config.ini, `confirmClose` off so no question comes up).
-        Emu::Azahar => &[
-            SaveResume,
-            CloseWindow,
-            Exit(AZAHAR_EXIT_WAIT),
-            Signal(libc::SIGTERM),
-            Exit(KILL_WAIT),
-            Signal(libc::SIGKILL),
-        ],
+        // Azahar's window's close request stops the emulation and saves its config (qt-config.ini, `confirmClose` off
+        // so no question comes up). Its window goes in front first: the resume state's save hands the screen back to
+        // the menu, and covered, Azahar's Qt close most likely waits for an emulation thread stuck behind the stalled
+        // picture (`ShutdownGame` → `emu_thread->wait()`). The Mini V2's Save & quit took 20.7 s (06.11.2026), exactly
+        // the save and both 8 s waits: neither the close nor SIGTERM had ended it. SIGTERM is no step: Azahar's SDL input
+        // (`SDL_Init(SDL_INIT_GAMECONTROLLER)`, no `SDL_HINT_NO_SIGNAL_HANDLERS`) takes it over and only queues an
+        // SDL quit event that its Qt frontend never reads. SIGKILL is what's left if the close hangs (ROCKNIX's own
+        // HOME+START quit is `kill -9 azahar`); the resume state is complete by then (`save_target` waits for it).
+        Emu::Azahar => &[SaveResume, ShowGame, CloseWindow, Exit(AZAHAR_EXIT_WAIT), Signal(libc::SIGKILL)],
         // The state of a Quit only when the core has states (`Session::states`; else the step finds no file name and
         // does nothing). RetroArch's own QUIT first (it leaves the core cleanly), then the signals, then the group.
         Emu::Hakux => &[SaveResume, RaQuit, Exit(RA_EXIT_WAIT), Signal(libc::SIGTERM), Exit(KILL_WAIT), KillGroup],
@@ -553,7 +577,7 @@ fn quit_worst_of(emu: Emu, save: bool) -> Duration {
     quit_steps(emu, save).fold(Duration::ZERO, |sum, step| match step {
         Step::SaveResume => sum + SAVE_WAIT,
         Step::VmDown(d) | Step::Exit(d) => sum + d,
-        Step::CloseWindow | Step::Signal(_) | Step::RaQuit | Step::KillGroup | Step::KillSame => sum,
+        Step::CloseWindow | Step::ShowGame | Step::Signal(_) | Step::RaQuit | Step::KillGroup | Step::KillSame => sum,
     })
 }
 
@@ -799,6 +823,9 @@ fn run_plan(plan: &[Step], process: &str, pgid: Option<i32>) {
                     azahar::close_window(p);
                 }
             }
+            Step::ShowGame => {
+                crate::control::show_game();
+            }
             // SAFETY: kill(2) on the emulator's own process.
             Step::Signal(sig) => unsafe {
                 libc::kill(pid, sig);
@@ -821,7 +848,7 @@ fn run_plan(plan: &[Step], process: &str, pgid: Option<i32>) {
     }
 }
 
-/// SIGKILL to every process whose name starts with `name` in the group `pgid` (any group when None).
+/// SIGKILL to every matching process in `pgid` (any group when None); pocket-core matches exactly.
 fn kill_same(name: &str, pgid: Option<i32>) {
     while let Some(pid) = find_pid(pgid, name) {
         // SAFETY: kill(2) on a process of the emulator's own name in the game's group.
@@ -835,12 +862,12 @@ fn kill_same(name: &str, pgid: Option<i32>) {
     }
 }
 
-/// The process of `pgid` whose name starts with `name` (any process of that name without a group).
+/// The first matching process in `pgid` (any group when None); pocket-core matches exactly.
 fn find_pid(pgid: Option<i32>, name: &str) -> Option<i32> {
     pids_of(pgid, name).first().copied()
 }
 
-/// Every process of `pgid` whose name starts with `name`.
+/// Every process of `pgid` whose name starts with `name`; pocket-core's full comm must match exactly.
 fn pids_of(pgid: Option<i32>, name: &str) -> Vec<i32> {
     let Ok(dir) = std::fs::read_dir("/proc") else { return Vec::new() };
     // The Steam Deck's Flatpaks may leave the game's process group: the emulator's name is enough there.
@@ -2122,7 +2149,8 @@ mod tests {
     }
 
     #[test]
-    fn actions_take_turns_and_a_finished_games_worker_does_nothing() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_actions_take_turns_and_a_finished_games_worker_does_nothing() {
         let _session = SESSION_TESTS.lock().unwrap_or_else(|e| e.into_inner());
         // Review N4 / SOL-03: Save, Load and Quit each ran on a thread of their own at once (Dolphin's slot steps of
         // two saves landed both in slot 2), and a slow worker of a game that had ended acted on the next one.
@@ -2140,7 +2168,7 @@ mod tests {
         };
         assert!(rx.recv_timeout(Duration::from_millis(200)).is_err(), "the second action waits for the first");
         drop(first);
-        assert_eq!(rx.recv_timeout(Duration::from_secs(5)), Ok(true));
+        assert_eq!(rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))), Ok(true));
         second.join().unwrap();
         assert_eq!(BOUND.get(), None, "a turn given back unbinds the thread");
 
@@ -2240,7 +2268,8 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn port_quit_leaves_an_overlapping_launch_and_its_same_named_helpers_alive() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_port_quit_leaves_an_overlapping_launch_and_its_same_named_helpers_alive() {
         struct Port(std::process::Child);
         impl Drop for Port {
             fn drop(&mut self) {
@@ -2255,7 +2284,7 @@ mod tests {
         };
         let (a, mut b) = (spawn(), spawn());
         let (ga, gb) = (a.0.id() as i32, b.0.id() as i32);
-        let end = Instant::now() + Duration::from_secs(5);
+        let end = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
         while (port_members(ga).len() < 2 || port_members(gb).len() < 2) && Instant::now() < end {
             std::thread::sleep(Duration::from_millis(20));
         }
@@ -2264,8 +2293,11 @@ mod tests {
         assert_eq!(before.len(), 2, "overlapping launch and its helper");
         let started = Instant::now();
         quit_port(Some(ga));
-        assert!(port_members(ga).is_empty(), "the first session, including its helper, ended");
-        assert!(started.elapsed() < PORT_WORST + Duration::from_secs(2));
+        let quit_took = started.elapsed();
+        // SIGKILL returning acknowledges delivery, not the kernel's completion.
+        // Observe both processes becoming non-live before checking isolation.
+        crate::testutil::clock::wait_for(|| port_members(ga).is_empty(), Duration::from_secs(5), "killed port session exited");
+        assert!(quit_took < crate::testutil::timeout(PORT_WORST + Duration::from_secs(2)));
         assert!(b.0.try_wait().unwrap().is_none(), "the other launch survives");
         for p in before {
             assert_eq!(port_process(p.pid), Some(p), "the other launch's identically named helper survives");
@@ -2282,11 +2314,12 @@ mod tests {
     }
 
     #[test]
-    fn a_port_that_is_gone_is_quit_at_once() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_port_that_is_gone_is_quit_at_once() {
         let started = Instant::now();
         quit_port(None);
         quit_port(Some(1));
-        assert!(started.elapsed() < Duration::from_secs(1));
+        assert!(started.elapsed() < crate::testutil::timeout(Duration::from_secs(1)));
     }
 
     #[test]
@@ -2657,9 +2690,12 @@ mod tests {
             quit_plan(Emu::Dolphin),
             &[SaveResume, Signal(libc::SIGTERM), Exit(KILL_WAIT), Signal(libc::SIGKILL)]
         );
-        // Azahar: its window is asked to close (Qt saves its config); SIGTERM would end it on the spot.
-        assert_eq!(quit_plan(Emu::Azahar)[1], CloseWindow);
-        assert_eq!(quit_plan(Emu::Azahar)[3], Signal(libc::SIGTERM));
+        // Azahar: its window in front, then asked to close (Qt saves its config); covered, the close waited until SIGKILL
+        // (20.7 s on the Mini V2, 06.11.2026). No SIGTERM: Azahar's SDL takes it over and does nothing with it.
+        assert_eq!(quit_plan(Emu::Azahar), &[SaveResume, ShowGame, CloseWindow, Exit(AZAHAR_EXIT_WAIT), Signal(libc::SIGKILL)]);
+        let show = quit_plan(Emu::Azahar).iter().position(|s| *s == ShowGame);
+        assert!(show < quit_plan(Emu::Azahar).iter().position(|s| *s == CloseWindow), "in front before the close request");
+        assert!(!quit_plan(Emu::Azahar).contains(&Signal(libc::SIGTERM)));
     }
 
     #[test]
@@ -2799,13 +2835,15 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn a_header_peek_is_not_taken_for_the_state_load() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_header_peek_is_not_taken_for_the_state_load() {
         use std::io::Read;
         let dir = scratch("opened");
         let path = dir.join("T.00.cst");
         std::fs::write(&path, vec![7u8; 1 << 16]).unwrap();
         let watch = azahar::opened::Watch::new(&path).unwrap();
         let (peeked, peeks_done) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
         let reader = {
             let path = path.clone();
             std::thread::spawn(move || {
@@ -2816,12 +2854,12 @@ mod tests {
                 for _ in 0..3 {
                     let mut head = [0u8; 256];
                     std::fs::File::open(&path).unwrap().read_exact(&mut head).unwrap();
-                    std::thread::sleep(Duration::from_millis(40));
+
                 }
-                peeked.send(()).unwrap();
                 let mut f = std::fs::File::open(&path).unwrap();
                 let started = Instant::now();
-                std::thread::sleep(Duration::from_millis(200));
+                peeked.send(()).unwrap();
+                release_rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap();
                 let _ = f.read_to_end(&mut Vec::new());
                 started
             })
@@ -2829,6 +2867,7 @@ mod tests {
         peeks_done.recv().unwrap();
         assert!(watch.held_open(Duration::from_millis(25), Duration::from_secs(3)));
         let seen = Instant::now();
+        release_tx.send(()).unwrap();
         let load_started = reader.join().unwrap();
         // Recognised during the load, not at one of the header reads before it.
         assert!(seen >= load_started, "taken for a header read");
@@ -3032,4 +3071,3 @@ mod tests {
         assert!(!crate::hakux::states_supported(include_str!("../deploy/hakux/hakux_libretro.info")));
     }
 }
-

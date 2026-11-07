@@ -51,7 +51,7 @@ impl App {
     pub(crate) fn extra_row_line(&self, e: Extra, line: &'static str) -> &'static str {
         match e.needs().filter(|n| cozy_extras::on(e) && !self.cozy_need_met(*n)) {
             Some(n) => n.note(),
-            None => line,
+            None => cozy_extras::row_line(e, &cozy_extras::get(), line),
         }
     }
 

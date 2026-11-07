@@ -18,7 +18,7 @@ trap 'rm -rf "$tmp"' EXIT
 fail() { echo "test-rocknix-compare: $*" >&2; exit 1; }
 
 # --- 2. a synthetic video --------------------------------------------------------------------------------------
-if command -v ffmpeg >/dev/null 2>&1; then
+if [ "${POCKETUI_TEST_NO_VIDEO:-0}" != 1 ] && command -v ffmpeg >/dev/null 2>&1; then
   # 160x120 at 60 fps, 2 s: grey, a small square running round the top-left corner all the time (a clock), from frame
   # 75 on a box at the bottom that is 40 wide, from frame 77 on 120 wide. Encoded lossy and decoded again.
   ffmpeg -loglevel error -f lavfi -i "color=c=0x707070:s=160x120:r=60:d=2" \
@@ -43,7 +43,7 @@ assert f is None, (f.t / 1e6, how)
 print("test-rocknix-compare: synthetic video ok (react at frame 75, done at frame 77, the running corner ignored)")
 EOF
 else
-  echo "test-rocknix-compare: no ffmpeg, the synthetic video is skipped"
+  echo "test-rocknix-compare: synthetic video skipped (ffmpeg absent or POCKETUI_TEST_NO_VIDEO=1)"
 fi
 
 # --- 3. the device script in a made-up root --------------------------------------------------------------------
@@ -145,7 +145,8 @@ rm -f "$tmp/calls.log" "$tmp/driven" "$W/rc"
 printf 'UIS="es pocket-ui"\nDRIVE_ARGS="--scenarios start --asleep 20"\nPLAN=scripts/rocknix-compare-plan.json\n' >"$W/run.env"
 env PATH="$BIN:$PATH" COMPARE_ROOT="$R" COMPARE_WORK="$W" COMPARE_PY="$tmp/drive" SLOW=1 sh "$W/scripts/rocknix-compare-device.sh" >"$tmp/device.log" 2>&1 &
 pid=$!
-i=0; while [ ! -f "$tmp/halfway" ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+steps=$(python3 "$ROOT/scripts/test-time-budget.py" 100)
+i=0; while [ ! -f "$tmp/halfway" ] && [ $i -lt "$steps" ]; do sleep 0.1; i=$((i+1)); done
 [ -f "$tmp/halfway" ] || fail "the stand-in driver did not start"
 kill -TERM "$(cat "$tmp/halfway")" "$pid"  # the driver and the script: the unit's processes all get it
 wait "$pid" || true

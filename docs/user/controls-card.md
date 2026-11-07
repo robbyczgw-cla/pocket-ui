@@ -47,3 +47,22 @@ left stick is the D-pad again and the card says so.
   Square and Triangle; the Game Boy Advance's turbo buttons are on X and Y).
 - The card does not come at a first start: it only comes for games that run on pocket-ui's own host, once for each console,
   and not in Kids Mode. The game's card has the row at any time.
+
+On a TrimUI Brick, **MENU** opens the menu. The card and hints use the name printed on that device; other devices use **HOME**.
+
+## On Android
+
+Tap **Controls** on a game's card (R2 with a gamepad), or **Controls** in the pause sheet.
+The scrollable card shows Android's printed A/B/X/Y names alongside the actual touch-pad
+labels and the console buttons they press. The first game of a console opens it once;
+Back or A goes on. Continuing an existing moment skips it. Swipe or use the D-pad to read
+all the rows. The N64 touch D-pad is its analog stick, and the small C arrows use its right
+stick. Console names come from the running core, or the verified console table before a
+first start. External emulator apps own their controls.
+
+## Bluetooth and separate controller layouts
+
+The controls card describes the game's layout after the controller's own layout. **Controller setup**, beside
+**Controls card** in Pause → Options → Controls, changes one controller for the shelf, menus and games;
+Settings → Playing → Buttons opens the same setup. An occupied button swaps automatically and L2/R2 can be
+captured whether the controller reports buttons or analogue axes. See [Controller setup](controls-settings.md#controller-setup).

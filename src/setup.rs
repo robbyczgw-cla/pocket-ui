@@ -62,6 +62,8 @@ pub enum SetupEvent {
     Remote { mode: remote::Mode, password: Option<String>, result: Option<Result<(), String>> },
     /// The time zone step's first look (`Setup::enter_zone`): the guess and the zone list, read on a thread.
     Zone(ZoneFacts),
+    /// The first start's guess of the time zone while the Wi-Fi page is up (`Setup::guess_zone`).
+    ZoneGuess(ZoneFacts),
     /// UTC offsets of zones the step lists, read on a thread (`Setup::zone_offsets_wanted`).
     ZoneOffsets(Vec<(String, Option<i32>)>),
     /// How many games each system's folder holds, and what in `roms` isn't read, found on a thread when the games
@@ -170,7 +172,9 @@ fn default_net(_hw: &SharedHw) -> Arc<NetState> {
 
 /// Rows of the Extras page: Cover art, Game pictures, PortMaster games. A Steam Deck has no PortMaster: two.
 fn extras_rows() -> usize {
-    if crate::device::current().host_owned() { 2 } else { 3 }
+    // No PortMaster on the Steam Deck nor on the TrimUI Brick's card (Pictures & extras offered "PortMaster games" there).
+    let brick = { #[cfg(feature = "brick")] { crate::device::brick() } #[cfg(not(feature = "brick"))] { false } };
+    if crate::device::current().host_owned() || brick { 2 } else { 3 }
 }
 
 /// Setup steps that Settings can open on their own.
@@ -186,10 +190,45 @@ pub enum Only {
     Remote,
 }
 
-/// The step after the play style: Wi-Fi and the time zone, except where the system owns both (the Steam Deck,
-/// docs/STEAMDECK.md): there the first start goes on to the extras.
-fn network_step() -> Step {
-    if crate::device::current().host_owned() { Step::Extras { sel: 0 } } else { Step::Wifi }
+/// What the small menu of a saved network offers (`Setup::net_menu_rows`).
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum NetAction {
+    Connect,
+    /// The first start, on the network it is connected to: on to your games.
+    Continue,
+    Forget,
+}
+
+/// The Wi-Fi page's rows after the networks (`Setup::wifi_tail`).
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum WifiRow {
+    Other,
+    Country,
+    /// The first start: the time zone is chosen here too.
+    Zone,
+    /// What X does, as a row (not with the radio off, where it did nothing).
+    Scan,
+    /// The first start: on to your games, online or not (B goes back a stage).
+    Continue,
+}
+
+/// The rows of the look step (`Setup::look_rows`).
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum LookRow {
+    Layout,
+    Appearance,
+    Motion,
+    Animations,
+    /// The first start: Barlow, Pixel, Rounded or Retro (Settings › Look › Style).
+    Font,
+    /// The first start: the colour set (Retro's own two while it is on; Settings › Look › Colours).
+    Colours,
+}
+
+/// Whether the welcome offers to set the Pocket up for a child (Kids Mode): not where the host owns buttons a child can
+/// reach (the Steam Deck's Steam button, `features::Profile::offered`).
+fn kids_offered() -> bool {
+    Profile::offered().contains(&Profile::Child)
 }
 
 /// A handheld with no Wi-Fi chip (RG28XX, RG35XX 2024; not the Steam Deck, which skips more): the first start leaves out the
@@ -226,6 +265,9 @@ enum Step {
     Ports,
     /// "Copy your game files" for a port that needs them: X in the browser, and after installing one.
     PortFiles(Box<FilesPage>),
+    /// The first start's "Your games": how many were found, Continue, Add more…, and the Box art switch. Add more… opens
+    /// `Games`, the systems grid and the ways.
+    Found { sel: usize },
     Games,
     /// "Send from your phone" (Y on Add games): its upload server runs while this step is shown (`phone_upload`).
     Phone(Box<crate::phone_upload_page::PhonePage>),
@@ -245,10 +287,15 @@ struct ZoneStep {
     error: Option<String>,
     /// A thread is still reading the guess and the zone list (`Setup::enter_zone`): the step says so and waits.
     loading: bool,
+    /// The first start after Wi-Fi (`Setup::leave_wifi`): a guess it can trust is taken without showing the step; only
+    /// a failed guess (no zone, or a country with several) shows it.
+    auto: bool,
     /// UTC offsets of the zones shown, read on threads (`Setup::zone_offsets_wanted`); painting only looks here.
     offsets: HashMap<String, Option<i32>>,
     /// The zones whose offsets were asked for already.
     asked: std::collections::HashSet<String>,
+    /// The card's focused row: 0 takes the guess, 1 opens the picker (X does too).
+    card_row: usize,
 }
 
 enum ZoneView {
@@ -286,9 +333,16 @@ impl ZoneStep {
             view: ZoneView::Card,
             error: None,
             loading: true,
+            auto: false,
             offsets: HashMap::new(),
             asked: Default::default(),
+            card_row: 0,
         }
+    }
+
+    /// A guess to take without asking: the zone the system has, or a country's one zone, and the system took it.
+    fn clear(&self) -> bool {
+        !self.loading && self.error.is_none() && matches!(self.guess, Guess::System(_) | Guess::Country { .. })
     }
 
     /// The zones the screen shows that have no offset yet and were not asked for.
@@ -328,8 +382,33 @@ impl ZoneStep {
 pub struct Setup {
     /// Whether the last page of the first start says what HOME does (`first_game::told_on_last_page`), read once.
     home_line: std::cell::Cell<Option<bool>>,
-    /// "For a child" was pressed (`take_kids_asked`).
+    /// Add games was left with `kids_wanted` and games on the card: the App opens Kids Mode's steps (`take_kids_asked`).
     kids_asked: bool,
+    /// Y on the welcome, "For a child…": only the wish. Kids Mode's own steps (PIN, games, colour, time) take the look
+    /// step's place after Add games, when there are games to pick (`leave_games`).
+    kids_wanted: bool,
+    /// Kids Mode was wanted but there was nothing it could start: the look step says where to set it up later.
+    kids_later: bool,
+    /// Kids Mode's first page was skipped with B: the look step says where the mode is for later.
+    kids_skipped: bool,
+    /// The guess of the time zone made while the Wi-Fi page is up (`guess_zone`), for its Time zone row, and whether a
+    /// thread is making one.
+    zone_guess: Option<Box<ZoneStep>>,
+    zone_guessing: bool,
+    /// Left/Right on the look step's Colours row (first start): the next (true) or previous set, once; the app steps them.
+    colours_step: Option<bool>,
+    /// The same on its Style row (Barlow, Pixel, Rounded, Retro: `font_style`, `retro`).
+    font_step: Option<bool>,
+    /// The time zone was opened from the Wi-Fi page's Time zone row: leaving it goes back there, and the zone picked
+    /// there is kept (the guess after Wi-Fi is not made again).
+    zone_from_wifi: bool,
+    zone_picked: Option<String>,
+    /// The first start's time zone stage was shown and left (a zone set, Skip, Keep UTC): leaving Wi-Fi again goes
+    /// straight on, the Wi-Fi page's Time zone row still opens it (first-start walk 2026-11-06: asked three times).
+    zone_asked: bool,
+    /// The phone page, or its way on Add games, sent the first start to the Wi-Fi page: leaving it goes back to Add
+    /// games, and on to the phone page once there is an address (`back_to_phone`).
+    wifi_for_phone: bool,
     /// The look previews (Shelf, Easy, ...) for "How do you like to play?": lent by the app while it paints that step.
     pub play_previews: Vec<Image>,
     profile_look: Option<usize>,
@@ -379,6 +458,8 @@ pub struct Setup {
     entries: Vec<Entry>,
     /// Y was pressed on this saved network once: the next Y forgets it, anything else keeps it.
     forget: Option<String>,
+    /// A on a saved network: its small menu (Connect or Continue, Forget) and the row selected; Y forgets straight.
+    net_menu: Option<(String, usize)>,
     /// The network NetworkManager is bringing up (`Saved::connecting`) and since when this page sees it so: after
     /// `CONNECT_STUCK` the page says it isn't answering, and A types the password again.
     connecting_since: Option<(String, Instant)>,
@@ -438,10 +519,23 @@ pub struct Setup {
     /// (name, one-line description) of each theme, and the one currently shown.
     themes: Vec<(&'static str, &'static str)>,
     theme: usize,
-    /// Settings > Look > Appearance, changed with Y on the look step.
+    /// Settings > Look > Appearance: a row of the look step opened from Settings, and of the first start's.
     appearance: Appearance,
-    /// Settings > Sound & feel > Motion, changed with R1 on the look step (Settings > Look only).
+    /// Settings > Sound & feel > Motion: a row of the look step opened from Settings.
     motion: Motion,
+    /// The look step's focused row, Up/Down as in every list (`LookRow`): the layouts, then the rows under them. Left/Right
+    /// change the focused one (Brick, 2026-11-07: the rows under the layouts were drawn and unreachable).
+    look_row: usize,
+    /// Settings > Look as it was when the page took its first press: the layout, Appearance, Motion and Animations, which
+    /// B puts back (the Brick and the Odin, 2026-11-07: B kept the last layout looked at, though the bar said "A Keep").
+    look_opened: Option<(usize, Appearance, Motion, Option<Animations>)>,
+    /// Opened again from Settings › Help & tools › First-start setup (`again`): B on the welcome goes back there, and
+    /// `backed_out` says so to the app.
+    again: bool,
+    backed_out: bool,
+    /// The welcome's row that Left/Right change: 0 the language, 1 Easy to read (Up/Down; first-start walk 2026-11-06:
+    /// the second row looked like one to choose, and Down then Right changed the language).
+    welcome_row: u8,
     /// The language chosen on the welcome step (Left/Right), until the app has kept it (`take_language`).
     language_chosen: Option<crate::i18n::Lang>,
     /// The text size chosen with R1 on the first start's look step, until the app has kept it (`take_text_size`).
@@ -481,8 +575,12 @@ pub struct Setup {
     only: Option<Only>,
     /// Games came in from the phone and its page closed: the shelf reads the folders again (`take_phone_added`).
     phone_added: bool,
-    /// The phone page asked for the Wi-Fi settings (`take_open_wifi`).
-    open_wifi: bool,
+    /// Add games asked for the Wi-Fi settings (`take_open_wifi`): from which way's tile (true: From your phone,
+    /// false: File sharing), and whether from the phone page itself.
+    open_wifi: Option<(bool, bool)>,
+    /// Settings › Wi-Fi opened from Add games (`back_to_games`): leaving it opens Add games again, on that tile, and on
+    /// the phone page when that asked (`take_back_to_games`).
+    back_to_games: Option<(bool, bool)>,
     /// The system controls: the time zone step reads and sets the zone through them.
     hw: SharedHw,
     /// Settings > Look > Systems on the shelf: the systems with games, the hidden ones, whether that changed,
@@ -693,11 +791,11 @@ impl Setup {
             // The tick box.
             let (bx, by, bs) = (MARGIN + 28, y + (row - 8 - 34) / 2, 34);
             if shown {
-                c.round_rect(bx, by, bs, bs, 6, if selected { pal().ink } else { pal().chalk });
+                crate::retro::pill(c, bx, by, bs, bs, 6, if selected { pal().ink } else { pal().chalk });
                 tick(c, bx, by, bs, if selected { pal().label } else { pal().spine });
             } else {
-                c.round_rect(bx, by, bs, bs, 6, fg);
-                c.round_rect(bx + 3, by + 3, bs - 6, bs - 6, 4, if selected { pal().label } else { pal().spine });
+                crate::retro::pill(c, bx, by, bs, bs, 6, fg);
+                crate::retro::pill(c, bx + 3, by + 3, bs - 6, bs - 6, 4, if selected { pal().label } else { pal().spine });
             }
             // The console, small, between the box and the name.
             let mut x = bx + bs + 24;
@@ -771,8 +869,9 @@ impl Setup {
                 } else {
                     "One folder per system in roms. Copy games over Wi-Fi with file sharing."
                 };
-                let line = text.fit(Face::Body, 28, about, width);
-                text.draw(c, Face::Body, 28, MARGIN, 192, pal().dust, &line);
+                // Smaller type before "…": the Spanish line at large text (first-start walk 2026-11-06).
+                let (px, line) = text.fit_sizes(Face::Body, &[28, 25, 22], about, width);
+                text.draw(c, Face::Body, px, MARGIN, 192, pal().dust, &line);
             }
             [one] => {
                 text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Add your games");
@@ -893,7 +992,9 @@ impl Setup {
         let tile_w = (width - GAP * (cols as i32 - 1)) / cols as i32;
         let tiles = grid.tiles();
         let rows = tiles.len().div_ceil(cols);
-        let first_row = (grid.sel / cols).saturating_sub(1).min(rows.saturating_sub(rows_shown));
+        // Keep context above the selection only when there is room for it. A one-row viewport must show
+        // the selected row itself (H700's Add games page).
+        let first_row = (grid.sel / cols).saturating_sub(rows_shown.saturating_sub(1).min(1)).min(rows.saturating_sub(rows_shown));
         for (i, tile) in tiles.iter().enumerate().skip(first_row * cols).take(rows_shown * cols) {
             let (r, col) = ((i / cols - first_row) as i32, (i % cols) as i32);
             let (x, y) = (MARGIN + col * (tile_w + GAP), top + r * (TILE_H + GAP));
@@ -981,15 +1082,20 @@ impl Setup {
                     systems_grid::Bios::Needed { missing: None, what } => (format!("In place ({what})"), pal().chalk),
                     systems_grid::Bios::Unknown => ("Not known to pocket-ui. If its emulator needs one, it goes in roms/bios.".to_string(), pal().dust),
                 };
-                let bios_lines = text.wrap_prose(Face::Body, 24, &line, w - label_w);
-                for (i, l) in bios_lines.iter().take(3).enumerate() {
+                // Above the hint bar: on a 768-line screen (the Brick) the third line of an unknown BIOS ran under "From your phone".
+                let bar = crate::kit::hint_bar_top(c.h) - 8;
+                let room = |y: i32| ((bar - y) / 32 + 1).max(1) as usize;
+                let bios_lines = text.wrap_prose_at_most(Face::Body, 24, &line, w - label_w, room(top + 160).min(3));
+                for (i, l) in bios_lines.iter().enumerate() {
                     text.draw(c, Face::Body, 24, x + label_w, top + 160 + i as i32 * 32, color, l);
                 }
                 // One plain caution where the handheld runs the system but not every game of it smoothly.
                 if let Some(note) = crate::system_notes::note(&sys.id) {
-                    let y = top + 160 + bios_lines.len().min(3) as i32 * 32 + 14;
-                    for (i, l) in text.wrap_prose(Face::Body, 24, note, w).iter().take(2).enumerate() {
-                        text.draw(c, Face::Body, 24, x, y + i as i32 * 32, pal().dust, l);
+                    let y = top + 160 + bios_lines.len() as i32 * 32 + 14;
+                    if y < bar {
+                        for (i, l) in text.wrap_prose_at_most(Face::Body, 24, note, w, room(y).min(2)).iter().enumerate() {
+                            text.draw(c, Face::Body, 24, x, y + i as i32 * 32, pal().dust, l);
+                        }
                     }
                 }
             }
@@ -1043,7 +1149,9 @@ impl Setup {
                 None if self.only.is_none() && crate::card_health::games_drive() => GAMES_DRIVE_FIRST_WAY,
                 None => offline_way(crate::card_health::games_drive(), d.has_second_card_slot(), d.has_wifi()).1,
             };
-            for (i, l) in text.wrap_prose(Face::Body, 24, about, w).iter().take(4).enumerate() {
+            // Above the hint bar ("estas carpetas." ran into it at Large text on 768 lines, the Brick).
+            let room = (((crate::kit::hint_bar_top(c.h) - 8 - (top + 92)) / 32 + 1).max(1) as usize).min(4);
+            for (i, l) in text.wrap_prose_at_most(Face::Body, 24, about, w, room).iter().enumerate() {
                 text.draw(c, Face::Body, 24, x, top + 92 + i as i32 * 32, pal().dust, l);
             }
             return;
@@ -1109,6 +1217,15 @@ enum Way {
     Usb,
 }
 
+/// The rows of the first start's "Your games" (`Setup::found_rows`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FoundRow {
+    Continue,
+    More,
+    Later,
+    BoxArt,
+}
+
 /// What a touch on Add games does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Touch {
@@ -1134,6 +1251,12 @@ fn ways_for(host_owned: bool, wifi: bool, usb: bool) -> Vec<Way> {
     }
     ways
 }
+
+/// The first start's "Your games" without games, on a handheld with Wi-Fi.
+const FOUND_WIFI_WAY: &str = "Copy them from a computer or a phone on the same Wi-Fi, or put them on the SD card in its roms folder. Add games… shows you how.";
+
+/// The Box art row's line on "Your games".
+const BOX_ART_NOTE: &str = "Finds the real box for each game, in the background while you're online. Only a game's name is sent.";
 
 /// Add games with Wi-Fi but file sharing off: how to start it, and how long it stays on.
 const SHARE_OFF: &str = "Press X to turn it on. Then a computer on the same network can copy games into these folders. It stays on until you turn it off.";
@@ -1189,7 +1312,7 @@ fn stage(step: &Step) -> Option<Only> {
         Step::Look | Step::ShelfSystems { .. } => Some(Only::Look),
         Step::Wifi | Step::Portal(_) | Step::Password { .. } | Step::Connecting { .. } | Step::HiddenName { .. } | Step::Country { .. } => Some(Only::Wifi),
         Step::Extras { .. } | Step::Ports | Step::PortFiles(_) => Some(Only::Extras),
-        Step::Games | Step::Phone(_) => Some(Only::Games),
+        Step::Games | Step::Phone(_) | Step::Found { .. } => Some(Only::Games),
         Step::Remote => Some(Only::Remote),
         // Settings > Time is the way to this one on its own.
         // The profiles and the cards are first-start steps; Settings → Tour shows the cards on its own.
@@ -1201,25 +1324,23 @@ fn stage(step: &Step) -> Option<Only> {
 /// How soon after the last count a press on the games step counts again.
 const RECOUNT_AFTER: Duration = Duration::from_secs(3);
 
-/// The steps the first start counts: Welcome, Look, How you like to play, Wi-Fi, Time zone, Extras, Add your games (the
-/// last page, "You're all set", is the end, not a step). A Steam Deck skips Wi-Fi and the time zone: five.
-fn first_steps(no_wifi: bool) -> usize {
-    if crate::device::current().host_owned() || no_wifi { 5 } else { 7 }
+/// How many stages the first start has, for its dots: the welcome with the language, Wi-Fi (the time zone in its place
+/// without a Wi-Fi chip; with Wi-Fi the zone is guessed and only asked inside this stage when the guess is unsure), your
+/// games, the look (Kids Mode's own steps in its place for a child). A Steam Deck has no Wi-Fi stage: three.
+fn stage_count(host_owned: bool) -> usize {
+    if host_owned { 3 } else { 4 }
 }
 
-/// A first-start step's number for "Step n of 7"; `None` for the pages inside a step (keyboards, lists) and after the
-/// last one, which would only crowd their titles.
-fn step_number(step: &Step, no_wifi: bool) -> Option<usize> {
-    let skipped = if crate::device::current().host_owned() { 2 } else { 0 };
+/// Which dot a first-start page lights (from 0); `None` for the pages inside a stage (keyboards, lists, the time zone's
+/// picker, Add more…), which keep the screen for their own title.
+fn stage_of(step: &Step, host_owned: bool) -> Option<usize> {
+    let games = if host_owned { 1 } else { 2 };
     match step {
-        Step::Welcome => Some(1),
-        Step::Look => Some(2),
-        Step::Play { .. } => Some(3),
-        Step::Wifi => Some(4),
-        // No Wi-Fi chip: the time zone is the fourth step and the games the fifth.
-        Step::Zone(z) if matches!(z.view, ZoneView::Card) => Some(if no_wifi { 4 } else { 5 }),
-        Step::Extras { .. } => Some(6 - skipped),
-        Step::Games => Some(if no_wifi { 5 } else { 7 - skipped }),
+        Step::Welcome => Some(0),
+        Step::Wifi => Some(1),
+        Step::Zone(z) if matches!(z.view, ZoneView::Card | ZoneView::List { from: ListFrom::Country, .. }) => Some(1),
+        Step::Found { .. } => Some(games),
+        Step::Look => Some(games + 1),
         _ => None,
     }
 }
@@ -1229,15 +1350,15 @@ const RESUME_FILE: &str = "setup-step";
 
 /// The name `remember_step` writes for a step, `None` where nothing is written (the welcome, which has no choice to
 /// lose, and the steps that only exist in Settings or after the last page).
+/// "shelf-look" is the look as the last stage: the name "look" was the look as the second step before 0.2 and is read as
+/// such (`resume`). The welcome's wish for Kids Mode is kept after the name (`games child`).
 fn resume_name(step: &Step) -> Option<&'static str> {
     match step {
-        Step::Look => Some("look"),
-        Step::Play { .. } | Step::Cards(_) => Some("play"),
+        Step::Look => Some("shelf-look"),
         Step::Wifi | Step::Portal(_) | Step::Password { .. } | Step::Connecting { .. } | Step::HiddenName { .. } | Step::Country { .. } => Some("wifi"),
         Step::Zone(_) => Some("zone"),
-        Step::Extras { .. } | Step::Ports | Step::PortFiles(_) => Some("extras"),
-        Step::Games | Step::Phone(_) => Some("games"),
-        Step::Welcome | Step::ShelfSystems { .. } | Step::Remote | Step::Done => None,
+        Step::Found { .. } | Step::Games | Step::Phone(_) => Some("games"),
+        Step::Welcome | Step::Play { .. } | Step::Cards(_) | Step::Extras { .. } | Step::Ports | Step::PortFiles(_) | Step::ShelfSystems { .. } | Step::Remote | Step::Done => None,
     }
 }
 
@@ -1261,7 +1382,7 @@ fn look_zone(hw: &dyn crate::system_ctl::Hw) -> ZoneStep {
         }
         _ => None,
     };
-    let mut z = ZoneStep { guess, country, all, view: ZoneView::Card, error: None, loading: false, offsets: HashMap::new(), asked: Default::default() };
+    let mut z = ZoneStep { guess, country, all, view: ZoneView::Card, error: None, loading: false, auto: false, offsets: HashMap::new(), asked: Default::default(), card_row: 0 };
     z.view = z.start_view();
     let wanted = z.wanted();
     z.asked.extend(wanted.iter().cloned());
@@ -1396,6 +1517,17 @@ impl Setup {
             step: Step::Welcome,
             home_line: std::cell::Cell::new(None),
             kids_asked: false,
+            kids_wanted: false,
+            kids_later: false,
+            kids_skipped: false,
+            zone_guess: None,
+            zone_guessing: false,
+            colours_step: None,
+            font_step: None,
+            zone_from_wifi: false,
+            zone_picked: None,
+            zone_asked: false,
+            wifi_for_phone: false,
             play_previews: Vec::new(),
             profile_look: None,
             look_before_profile: None,
@@ -1420,6 +1552,7 @@ impl Setup {
             iso_tab: String::new(),
             entries: Vec::new(),
             forget: None,
+            net_menu: None,
             connecting_since: None,
             connect_hidden: false,
             advance_armed: false,
@@ -1458,6 +1591,11 @@ impl Setup {
             theme,
             appearance: Appearance::Dark,
             motion: crate::motion::level(),
+            welcome_row: 0,
+            look_row: 0,
+            look_opened: None,
+            again: false,
+            backed_out: false,
             language_chosen: None,
             text_size_chosen: None,
             animations: None,
@@ -1480,7 +1618,8 @@ impl Setup {
             port_note: None,
             previews: HashMap::new(),
             only: None,
-            open_wifi: false,
+            open_wifi: None,
+            back_to_games: None,
             phone_added: false,
             direct: false,
             hw,
@@ -1518,9 +1657,37 @@ impl Setup {
         std::mem::take(&mut self.kids_asked)
     }
 
-    /// Kids Mode's steps are done: the first start goes on like after any play style (no Wi-Fi page without a chip).
+    /// Kids Mode's steps are done: they were the first start's last step. The app ends the setup (`App::finish_setup`).
     pub fn kids_done(&mut self) {
-        self.after_play();
+        self.step = Step::Done;
+        self.remember_step(true);
+    }
+
+    /// B on Kids Mode's first page: the first start goes on as without the wish, at the look step.
+    pub fn kids_cancelled(&mut self) {
+        self.kids_wanted = false;
+        self.kids_skipped = true;
+        self.enter_look();
+        self.remember_step(false);
+    }
+
+    /// Kids Mode found no game it could start (they all run in emulators with menus of their own): never a locked, empty
+    /// shelf. The look step comes and says where to set the mode up later.
+    pub fn kids_no_games(&mut self) {
+        self.kids_wanted = false;
+        self.kids_later = true;
+        self.enter_look();
+        self.remember_step(false);
+    }
+
+    /// The first start's look step asked for the next (true) or previous style on its Style row, or colours on its Colours
+    /// row, once; the app steps them as Settings › Look › Style and Colours do.
+    pub fn take_font_step(&mut self) -> Option<bool> {
+        self.font_step.take()
+    }
+
+    pub fn take_colours_step(&mut self) -> Option<bool> {
+        self.colours_step.take()
     }
 
     pub fn take_tour(&mut self) -> Option<(Switches, Vec<String>)> {
@@ -1530,6 +1697,20 @@ impl Setup {
     /// Opens the first start at "How do you like to play?" (for the snapshots).
     pub fn at_play(mut self) -> Self {
         self.step = Step::Play { sel: 0 };
+        self
+    }
+
+    /// Opens the first start at a stage (for the snapshots): "wifi", "games" (your games), "look".
+    pub fn at_stage(mut self, stage: &str) -> Self {
+        match stage {
+            "wifi" => {
+                self.step = Step::Wifi;
+                self.guess_zone();
+            }
+            "games" => self.enter_found(),
+            "look" => self.enter_look(),
+            _ => {}
+        }
         self
     }
 
@@ -1585,27 +1766,11 @@ impl Setup {
         self
     }
 
-    /// The first start is past the step where Pictures is chosen (or this is a page opened from Settings): automatic
-    /// cover downloads may start. They wait for that step so that the choice, Off included, comes first; the name is
-    /// from when they started right after the Wi-Fi step.
+    /// The first start is past the step where box art is switched (Add games), or this is a page opened from Settings:
+    /// automatic cover downloads may start. They wait for that step so that the choice, Off included, comes first; the
+    /// name is from when they started right after the Wi-Fi step.
     pub fn past_wifi(&self) -> bool {
-        self.only.is_some()
-            || !matches!(
-                self.step,
-                Step::Welcome
-                    | Step::Look
-                    | Step::Play { .. }
-                    | Step::Cards(_)
-                    | Step::ShelfSystems { .. }
-                    | Step::Wifi
-                    | Step::Portal(_)
-                    | Step::Password { .. }
-                    | Step::Connecting { .. }
-                    | Step::HiddenName { .. }
-                    | Step::Country { .. }
-                    | Step::Zone(_)
-                    | Step::Extras { .. }
-            )
+        self.only.is_some() || matches!(self.step, Step::Look | Step::Done)
     }
 
     /// The appearance in use when the setup opens.
@@ -1890,12 +2055,119 @@ impl Setup {
     }
 
     /// The Wi-Fi page's rows: "This network wants a sign-in" while it does (`lead`), the networks (`entries`), then
-    /// Other network, then Wi-Fi country.
+    /// `wifi_tail`.
     fn wifi_rows(&self) -> usize {
         if self.radio == Radio::Absent {
-            return 0;
+            return self.wifi_tail().len();
         }
-        self.lead() + self.entries.len() + 2
+        self.lead() + self.entries.len() + self.wifi_tail().len()
+    }
+
+    /// The rows after the networks: Other network, Wi-Fi country, the first start's Time zone, Scan again (X's, as a
+    /// row) and the first start's Continue, so that every way on is a row Down reaches.
+    fn wifi_tail(&self) -> Vec<WifiRow> {
+        // No Wi-Fi chip after all: nothing to choose, only the way on (the first start).
+        if self.radio == Radio::Absent {
+            return if self.only.is_none() { vec![WifiRow::Continue] } else { Vec::new() };
+        }
+        let mut rows = vec![WifiRow::Other, WifiRow::Country];
+        if self.zone_row() {
+            rows.push(WifiRow::Zone);
+        }
+        if !self.radio.is_off() {
+            rows.push(WifiRow::Scan);
+        }
+        if self.only.is_none() {
+            rows.push(WifiRow::Continue);
+        }
+        rows
+    }
+
+    /// The rows of a saved network's menu: Connect (Continue on the first start's connected one; nothing in Settings
+    /// on the connected one, which is connected already), then Forget.
+    fn net_menu_rows(&self, ssid: &str) -> Vec<NetAction> {
+        let active = self.entries.iter().any(|e| e.ssid == ssid && e.active);
+        match (active, self.only.is_none()) {
+            (true, true) => vec![NetAction::Continue, NetAction::Forget],
+            (true, false) => vec![NetAction::Forget],
+            (false, _) => vec![NetAction::Connect, NetAction::Forget],
+        }
+    }
+
+    /// A saved-network sheet covers its Wi-Fi list; the navigation explorer checks Back at both levels.
+    pub fn network_menu_open(&self) -> bool {
+        self.net_menu.is_some()
+    }
+
+    /// A key on a saved network's menu: Up/Down, A does the row, B closes it.
+    fn press_net_menu(&mut self, b: Button) {
+        let Some((ssid, sel)) = self.net_menu.clone() else { return };
+        let rows = self.net_menu_rows(&ssid);
+        match b {
+            Button::Up => self.net_menu = Some((ssid, sel.saturating_sub(1))),
+            Button::Down => self.net_menu = Some((ssid, (sel + 1).min(rows.len() - 1))),
+            Button::South => self.net_menu = None,
+            Button::East => {
+                self.net_menu = None;
+                let saved = self.entries.iter().find(|e| e.ssid == ssid).and_then(|e| e.saved.clone());
+                match (rows.get(sel), saved) {
+                    (Some(NetAction::Continue), _) => self.leave_wifi(),
+                    (Some(NetAction::Connect), Some(saved)) => self.connect_saved(saved),
+                    (Some(NetAction::Forget), Some(saved)) => {
+                        self.note = Some((format!("Forgetting {}…", saved.ssid), false));
+                        self.forget_saved(saved);
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// A saved network's menu over the dimmed list: its name, then its rows (`net_menu_rows`), as the other small menus
+    /// (`kit::sheet`).
+    fn paint_net_menu(&self, c: &mut Canvas, text: &mut Text) {
+        let Some((ssid, sel)) = &self.net_menu else { return };
+        let rows = self.net_menu_rows(ssid);
+        c.shade_rect(0, 0, c.w, c.h, pal().void, 150);
+        let row = crate::type_scale::row(70, 37);
+        let w = (c.w - 2 * MARGIN).min(720);
+        let h = 48 + 60 + rows.len() as i32 * row + 40;
+        let (x, y) = ((c.w - w) / 2, ((c.h - h) / 2).max(40));
+        crate::kit::sheet(c, x, y, w, h);
+        // The network's name is its own: painted as it is, never translated.
+        text.set_translate(false);
+        let name = text.fit(Face::Title, 50, ssid, w - 96);
+        text.draw(c, Face::Title, 50, x + 48, y + 48 + 46, pal().chalk, &name);
+        text.set_translate(true);
+        for (i, r) in rows.iter().enumerate() {
+            let ry = y + 48 + 60 + 20 + i as i32 * row;
+            let selected = i == *sel;
+            crate::kit::shelf_row(c, x + 24, ry, w - 48, row - 8, selected);
+            let label = match r {
+                NetAction::Connect => "Connect",
+                NetAction::Continue => "Continue",
+                NetAction::Forget => "Forget",
+            };
+            text.draw(c, Face::Title, 37, x + 52, ry + (row - 8) / 2 + crate::type_scale::base(13, 37), if selected { pal().ink } else { pal().chalk }, label);
+        }
+        let a = match rows.get(*sel) {
+            Some(NetAction::Connect) => "Connect",
+            Some(NetAction::Continue) => "Continue",
+            _ => "Forget",
+        };
+        hints(c, text, &[("A", a), ("B", "Back")]);
+    }
+
+    /// The tail row at the selection, if it is one.
+    fn wifi_tail_at(&self, row: Option<usize>) -> Option<WifiRow> {
+        row.and_then(|r| r.checked_sub(self.entries.len())).and_then(|t| self.wifi_tail().get(t).copied())
+    }
+
+    /// The first start's Wi-Fi page ends with a Time zone row: the zone is guessed after Wi-Fi, and this is the way to
+    /// choose it yourself (Settings › System › Time later).
+    fn zone_row(&self) -> bool {
+        self.only.is_none()
     }
 
     /// Joined, but nothing online works before the sign-in: the page says so on a row of its own, first.
@@ -2237,6 +2509,9 @@ impl Setup {
                         let was_connecting = matches!(self.step, Step::Connecting { .. });
                         self.connected_here(&ssid, was_connecting);
                         self.step = Step::Wifi;
+                        if !self.zone_guess.as_ref().is_some_and(|z| z.clear()) {
+                            self.guess_zone();
+                        }
                     }
                     // The saved password is no longer right (or the profile lost it): ask for it.
                     Err(e) if wifi::wrong_password(&e) => {
@@ -2286,7 +2561,7 @@ impl Setup {
                 let up = !self.portal_shown() && !self.radio.is_off();
                 if self.advance_pending.is_some() && gen == self.advance_gen && matches!(self.step, Step::Wifi) && up {
                     self.advance_pending = None;
-                    self.enter_zone();
+                    self.leave_wifi();
                     self.remember_step(false);
                 } else if gen == self.advance_gen {
                     self.advance_pending = None;
@@ -2303,6 +2578,10 @@ impl Setup {
                 if result.is_ok() {
                     let was_connecting = matches!(self.step, Step::Connecting { .. });
                     self.connected_here(&ssid, was_connecting);
+                    // The Wi-Fi chip may know the country now: an unsure time zone is guessed again.
+                    if !self.zone_guess.as_ref().is_some_and(|z| z.clear()) {
+                        self.guess_zone();
+                    }
                 } else {
                     self.advance_armed = false;
                 }
@@ -2352,9 +2631,29 @@ impl Setup {
             }
             SetupEvent::Zone(facts) => {
                 // Only into the step that is still waiting for it (B or START may have left it already).
-                if matches!(&self.step, Step::Zone(z) if z.loading) {
-                    self.step = Step::Zone(Box::new(facts.0));
+                if let Step::Zone(z) = &self.step {
+                    if z.loading {
+                        let auto = z.auto;
+                        self.step = Step::Zone(Box::new(facts.0));
+                        // After Wi-Fi: a zone the system has or the country's one zone is taken as it is, unseen.
+                        if auto && matches!(&self.step, Step::Zone(z) if matches!(z.guess, Guess::System(_) | Guess::Country { .. })) {
+                            self.leave_zone(None);
+                            self.remember_step(false);
+                        }
+                    }
                 }
+            }
+            SetupEvent::ZoneGuess(facts) => {
+                self.zone_guessing = false;
+                // Picked on the row while the guess was being made: the pick wins (set again, the guess's thread may have
+                // set the country's zone after it).
+                if let Some(picked) = self.zone_picked.clone() {
+                    if facts.0.guess.zone() != Some(picked.as_str()) && matches!(facts.0.guess, Guess::Country { .. }) {
+                        let _ = self.hw.set_timezone(&picked);
+                    }
+                    return;
+                }
+                self.zone_guess = Some(Box::new(facts.0));
             }
             SetupEvent::ZoneOffsets(found) => {
                 if let Step::Zone(z) = &mut self.step {
@@ -2422,10 +2721,12 @@ impl Setup {
         let (notify, data_dir, games, pictures) = (self.notify.clone(), self.data_dir.clone(), self.games.clone(), self.art == Art::Pictures);
         std::thread::spawn(move || {
             let _claim = claim;
+            crate::web::lower_priority();
             let report = |done, total, found| notify(SetupEvent::Covers { done, total, found });
             // Box art, then (unless Box art only) the games' screenshots and title screens.
             let wanted = pictures.then(|| game_pictures::missing(&data_dir, &games, &Default::default()));
-            let run = game_pictures::run_until(&game_pictures::Libretro, &data_dir, &games, wanted.as_deref(), report, || false);
+            // A game started from the shelf while this first start's run goes on stops it (`covers::game_on`).
+            let run = game_pictures::run_until(&game_pictures::Libretro, &data_dir, &games, wanted.as_deref(), report, covers::game_on);
             // Nothing to do still has to end the run.
             if games.is_empty() || run.found == 0 || run.unreachable {
                 report(1, 1, run.found);
@@ -2496,9 +2797,21 @@ impl Setup {
         Share { on: self.sharing, ip: self.ip.clone(), password: self.share_password.clone() }
     }
 
+    #[cfg(not(feature = "brick"))]
     fn ways(&self) -> Vec<Way> {
         let d = crate::device::current();
         ways_for(d.host_owned(), d.has_wifi(), crate::usb_transfer::offered())
+    }
+
+    #[cfg(feature = "brick")]
+    fn ways(&self) -> Vec<Way> {
+        let d = crate::device::current();
+        let mut ways = ways_for(d.host_owned(), d.has_wifi(), crate::usb_transfer::offered());
+        #[cfg(feature = "brick")]
+        if d.model == Some(crate::device::Model::Brick) && !crate::brick_profile::file_sharing() {
+            ways.retain(|w| *w != Way::Sharing);
+        }
+        ways
     }
 
     fn usb_status(&self) -> crate::usb_transfer::Status {
@@ -2542,7 +2855,10 @@ impl Setup {
     fn activate_way(&mut self) {
         match self.ways().get(self.ways_sel) {
             Some(Way::Sharing) if self.ip.is_none() && !self.sharing => self.to_wifi(),
-            Some(Way::Phone) if self.ip.is_none() => self.to_wifi(),
+            Some(Way::Phone) if self.ip.is_none() => {
+                self.wifi_for_phone = self.only.is_none();
+                self.to_wifi();
+            }
             Some(Way::Phone) => self.open_phone(),
             Some(Way::Sharing) => self.switch_sharing(),
             Some(Way::Usb) => self.switch_usb(),
@@ -2553,17 +2869,46 @@ impl Setup {
     /// The Wi-Fi page: the first start's step, or from Settings the Wi-Fi settings (`take_open_wifi`).
     fn to_wifi(&mut self) {
         if self.only.is_none() {
+            // Asked for to connect: the networks first, not the Continue row it may have been left on.
+            self.sel = 0;
             self.step = Step::Wifi;
             self.scan();
         } else {
-            self.open_wifi = true;
+            let page = matches!(self.step, Step::Phone(_));
+            let phone = page || self.ways().get(self.ways_sel).filter(|_| self.ways_focus) == Some(&Way::Phone);
+            self.open_wifi = Some((phone, page));
             self.step = Step::Done;
         }
     }
 
-    /// The phone page without Wi-Fi asked for the Wi-Fi settings (opened from Settings: the app opens them).
-    pub fn take_open_wifi(&mut self) -> bool {
-        std::mem::take(&mut self.open_wifi)
+    /// The phone page or a way's tile without Wi-Fi asked for the Wi-Fi settings (opened from Settings: the app opens
+    /// them): (from the From your phone tile, from the phone page itself).
+    pub fn take_open_wifi(&mut self) -> Option<(bool, bool)> {
+        self.open_wifi.take()
+    }
+
+    /// Settings › Wi-Fi opened from Add games (`take_open_wifi`'s answer): leaving it goes back there.
+    pub fn back_to_games(mut self, from: (bool, bool)) -> Self {
+        self.back_to_games = Some(from);
+        self
+    }
+
+    /// Where leaving this Wi-Fi page goes: Add games on the tile, and its phone page, it came from; None: Settings.
+    pub fn take_back_to_games(&mut self) -> Option<(bool, bool)> {
+        self.back_to_games.take()
+    }
+
+    /// Add games back from the Wi-Fi settings one of its ways asked for (`take_open_wifi`): the focus on that way's tile
+    /// (From your phone, or File sharing), and the phone page open again when it was the one asking.
+    pub fn back_on_way(mut self, (phone, page): (bool, bool)) -> Self {
+        let want = if phone { Way::Phone } else { Way::Sharing };
+        if let Some(i) = self.ways().iter().position(|w| *w == want).filter(|_| matches!(self.step, Step::Games)) {
+            (self.ways_focus, self.ways_sel) = (true, i);
+            if page {
+                self.open_phone();
+            }
+        }
+        self
     }
 
     /// USB file transfer on or off, on a thread (about a second): what Settings → Connections does, with the same
@@ -2600,6 +2945,10 @@ impl Setup {
 
     /// The last frame's touch targets, into the app's map: the ways as rows of a list, the hints as buttons.
     pub fn register_touch(&self, hits: &mut crate::touch::HitMap) {
+        // Only the step that takes touch: the other steps' frames would keep Add games' tiles in the map.
+        if !self.takes_touch() {
+            return;
+        }
         for (area, t) in self.touch.borrow().iter() {
             match t {
                 Touch::Way(i) => hits.row(*area, *i),
@@ -2654,7 +3003,10 @@ impl Setup {
             self.remote_password = remote::password();
         }
         if matches!(&self.step, Step::Zone(z) if z.loading) {
-            self.step = Step::Zone(Box::new(look_zone(&*self.hw)));
+            self.on_event(SetupEvent::Zone(ZoneFacts(look_zone(&*self.hw))));
+        }
+        if self.zone_guessing {
+            self.on_event(SetupEvent::ZoneGuess(ZoneFacts(look_zone(&*self.hw))));
         }
         self.zone_offsets_now();
         if std::mem::take(&mut self.counting) {
@@ -2707,10 +3059,10 @@ impl Setup {
         let mut h = std::collections::hash_map::DefaultHasher::new();
         match &self.step {
             Step::Welcome => (0u8, crate::i18n::current()).hash(&mut h),
-            Step::Look => (1u8, self.appearance, self.motion).hash(&mut h),
+            Step::Look => (1u8, self.appearance, self.motion, self.look_row, self.animations_shown(), self.theme).hash(&mut h),
             Step::Play { sel } => (15u8, sel).hash(&mut h),
             Step::Cards(c) => (16u8, c.mark()).hash(&mut h),
-            Step::Wifi => (2u8, &self.forget).hash(&mut h),
+            Step::Wifi => (2u8, &self.forget, &self.net_menu).hash(&mut h),
             Step::Password { ssid, kb, .. } => (3u8, ssid, &kb.text, kb.row, kb.col, kb.shift, kb.symbols).hash(&mut h),
             Step::HiddenName { kb } => (13u8, &kb.text, kb.row, kb.col, kb.shift, kb.symbols).hash(&mut h),
             Step::Country { sel, .. } => (14u8, sel).hash(&mut h),
@@ -2720,6 +3072,7 @@ impl Setup {
             Step::Ports => (6u8, self.port_tab).hash(&mut h),
             Step::PortFiles(page) => (12u8, page.scroll()).hash(&mut h),
             Step::Games => 7u8.hash(&mut h),
+            Step::Found { sel } => (19u8, sel, self.art == Art::Off, self.games_counted).hash(&mut h),
             Step::Phone(_) => 18u8.hash(&mut h),
             Step::Remote => 8u8.hash(&mut h),
             Step::Done => 9u8.hash(&mut h),
@@ -2737,9 +3090,8 @@ impl Setup {
         h.finish()
     }
 
-    /// Where the setup is, as a short word; for tests.
-    #[cfg(test)]
-    fn at(&self) -> String {
+    /// Where the setup is, as a short word; for tests and the navigation explorer (`app_nav_probe`).
+    pub fn at(&self) -> String {
         match &self.step {
             Step::Welcome => "welcome",
             Step::Look => "look",
@@ -2762,6 +3114,7 @@ impl Setup {
             },
             Step::PortFiles(_) => "port files",
             Step::Games => "games",
+            Step::Found { .. } => "your games",
             Step::Phone(_) => "phone",
             Step::Remote => "remote",
             Step::Done => "done",
@@ -2781,7 +3134,7 @@ impl Setup {
     /// Whether a thread this setup started for the time zone step or the games step has not answered yet.
     #[cfg(test)]
     fn waiting(&self) -> bool {
-        self.counting || matches!(&self.step, Step::Zone(z) if z.loading || z.asked.iter().any(|a| !z.offsets.contains_key(a)))
+        self.counting || self.zone_guessing || matches!(&self.step, Step::Zone(z) if z.loading || z.asked.iter().any(|a| !z.offsets.contains_key(a)))
     }
 
     /// Takes the answers of those threads, waiting for them (the tests run steps one after the other).
@@ -2811,29 +3164,172 @@ impl Setup {
         }
     }
 
-    /// On from the play style: the Wi-Fi page, the time zone where there is no Wi-Fi page, the extras on the Steam Deck.
+    /// On from the play style (Settings › Help & tools › How you like to play): the answer is all there is to do.
     fn after_play(&mut self) {
         if self.only.is_some() {
-            // Opened from Settings: the answer is all there is to do.
             self.step = Step::Done;
-        } else if self.no_wifi {
-            self.enter_zone();
         } else {
-            self.step = network_step();
+            self.after_welcome();
         }
     }
 
-    /// Back from the time zone: the Wi-Fi page, or the play style where there is no Wi-Fi page.
-    fn zone_back(&mut self) {
-        self.step = if self.no_wifi { Step::Play { sel: 0 } } else { Step::Wifi };
+    /// On from the welcome: Wi-Fi; the time zone where there is no Wi-Fi chip; your games where the system owns both
+    /// (the Steam Deck, docs/STEAMDECK.md).
+    fn after_welcome(&mut self) {
+        if crate::device::current().host_owned() {
+            self.enter_found();
+        } else if self.no_wifi {
+            self.enter_zone();
+        } else {
+            self.step = Step::Wifi;
+            self.scan();
+            self.guess_zone();
+        }
     }
 
-    /// On from the time zone: Extras, or the games where there is no Extras page (no downloads without Wi-Fi).
-    fn after_zone(&mut self) {
-        if self.no_wifi {
-            self.go_to_games();
+    /// On from Wi-Fi in the first start: a time zone guess that can be trusted was taken already (the Time zone row says
+    /// it) and the games come next; an unsure one opens the time zone step, which can be skipped.
+    /// Sent here from the phone page: back to it instead (`back_to_phone`). The time zone is asked once only.
+    fn leave_wifi(&mut self) {
+        if std::mem::take(&mut self.wifi_for_phone) {
+            self.back_to_phone();
+            return;
+        }
+        let unsure = self.zone_picked.is_none() && !self.zone_guess.as_ref().is_some_and(|z| z.clear()) && !self.zone_asked;
+        if !unsure {
+            self.enter_found();
+        } else if let Some(z) = self.zone_guess.take() {
+            let mut z = *z;
+            z.view = z.start_view();
+            self.step = Step::Zone(Box::new(z));
+            self.zone_offsets_wanted();
         } else {
-            self.step = Step::Extras { sel: 0 };
+            // No guess yet (its thread is slow): the step looks itself and takes a clear answer without being seen.
+            self.enter_zone_auto();
+        }
+    }
+
+    /// Back from the time zone: the Wi-Fi page, or the welcome where there is no Wi-Fi page.
+    fn zone_back(&mut self) {
+        if std::mem::take(&mut self.zone_from_wifi) {
+            self.zone_back_to_wifi();
+        } else {
+            self.step = if self.no_wifi { Step::Welcome } else { Step::Wifi };
+        }
+    }
+
+    /// Back on the Wi-Fi page from its Time zone row: what the step read (the zones, the offsets) is kept for the row and
+    /// the next time it opens.
+    fn zone_back_to_wifi(&mut self) {
+        if let Step::Zone(z) = std::mem::replace(&mut self.step, Step::Wifi) {
+            if !z.loading {
+                self.zone_guess = Some(z);
+            }
+        }
+    }
+
+    /// On from the time zone: your games, or back to the Wi-Fi page it was opened from (Settings: the page closes).
+    fn after_zone(&mut self) {
+        if std::mem::take(&mut self.zone_from_wifi) {
+            self.zone_back_to_wifi();
+        } else {
+            self.zone_asked = true;
+            self.enter_found();
+        }
+    }
+
+    /// Wi-Fi was opened for the phone page: Add games again, and the phone page itself once there is an address (online
+    /// it shows its code at once; offline, B on Wi-Fi, the grid with Send from your phone still chosen).
+    fn back_to_phone(&mut self) {
+        self.go_to_games();
+        if self.ip.is_some() {
+            self.open_phone();
+        }
+    }
+
+    /// The first start's "Your games": the folders are counted again on a thread, the page says so meanwhile.
+    fn enter_found(&mut self) {
+        self.go_to_games();
+        self.step = Step::Found { sel: 0 };
+    }
+
+    /// Your games is left with Continue (or skipped): Kids Mode's steps where a child was named and there are games,
+    /// otherwise the look.
+    fn leave_games(&mut self) {
+        match (self.kids_wanted, self.games_known() > 0) {
+            (true, true) => self.kids_asked = true,
+            (true, false) => {
+                self.kids_wanted = false;
+                self.kids_later = true;
+                self.enter_look();
+            }
+            _ => self.enter_look(),
+        }
+    }
+
+    /// The look step.
+    fn enter_look(&mut self) {
+        self.step = Step::Look;
+    }
+
+    /// The time zone after Wi-Fi: looked at on a thread like `enter_zone`, and a guess that can be trusted is taken
+    /// without the step being seen (`SetupEvent::Zone`).
+    fn enter_zone_auto(&mut self) {
+        self.enter_zone();
+        if let Step::Zone(z) = &mut self.step {
+            z.auto = true;
+        }
+    }
+
+    /// The first start's Wi-Fi page: the time zone guessed on a thread (`look_zone`), again after a connection (the
+    /// Wi-Fi chip learns the country from the network). A clear guess is set at once and shown on the Time zone row.
+    fn guess_zone(&mut self) {
+        if self.only.is_some() || self.zone_guessing || self.zone_picked.is_some() {
+            return;
+        }
+        self.zone_guessing = true;
+        let (hw, notify) = (self.hw.clone(), self.notify.clone());
+        // A country's one zone is set right there, off the UI thread (the zone the system has needs nothing); a refusal
+        // makes it a guess to ask about.
+        std::thread::spawn(move || {
+            let mut z = look_zone(&*hw);
+            if let Guess::Country { zone, .. } = &z.guess {
+                if hw.timezone().as_deref() != Some(zone.as_str()) {
+                    match hw.set_timezone(zone) {
+                        Ok(()) => crate::night_light::poke(),
+                        Err(e) => z.error = Some(e),
+                    }
+                }
+            }
+            notify(SetupEvent::ZoneGuess(ZoneFacts(z)))
+        });
+    }
+
+    /// The Wi-Fi page's Time zone row: the picker, coming back to the Wi-Fi page.
+    fn open_zone_from_wifi(&mut self) {
+        self.zone_from_wifi = true;
+        match self.zone_guess.take() {
+            Some(z) => {
+                let mut z = *z;
+                z.view = ZoneView::Regions { sel: z.region_row() };
+                self.step = Step::Zone(Box::new(z));
+            }
+            None => self.enter_zone(),
+        }
+    }
+
+    /// The Time zone row's value: the zone picked or guessed with its time ("Vienna, 22:41"), "Choose" when unsure.
+    fn zone_value(&self) -> String {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+        let shown = |zone: &str, z: Option<&ZoneStep>| match z.and_then(|z| z.offsets.get(zone).copied().flatten()) {
+            Some(off) => format!("{}, {}", timezone::city_here(zone), timezone::clock_at(now, off)),
+            None => timezone::city_here(zone),
+        };
+        match (&self.zone_picked, self.zone_guess.as_deref()) {
+            (Some(z), g) => shown(z, g),
+            (None, Some(g)) if g.clear() => shown(g.guess.zone().unwrap_or("UTC"), Some(g)),
+            (None, Some(_)) => "Choose".into(),
+            (None, None) => "…".into(),
         }
     }
 
@@ -2882,7 +3378,7 @@ impl Setup {
         if z.loading {
             // Nothing to confirm or pick yet; leaving works.
             match b {
-                Button::South => self.zone_back(),
+                Button::South => self.zone_back_or_skip(),
                 Button::Start => self.after_zone(),
                 _ => {}
             }
@@ -2891,7 +3387,13 @@ impl Setup {
         z.error = None;
         let view = std::mem::replace(&mut z.view, ZoneView::Card);
         let (view, next) = match view {
+            // Two rows under the card, as in every list: the guess, or another zone (X opens the picker too).
             ZoneView::Card => match b {
+                Button::Up | Button::Down => {
+                    z.card_row = usize::from(b == Button::Down);
+                    (ZoneView::Card, ZoneNext::Stay)
+                }
+                Button::East if z.card_row == 1 => (ZoneView::Regions { sel: z.region_row() }, ZoneNext::Stay),
                 Button::East | Button::Start => (ZoneView::Card, ZoneNext::Take(None)),
                 Button::North => (ZoneView::Regions { sel: z.region_row() }, ZoneNext::Stay),
                 Button::South => (ZoneView::Card, ZoneNext::Back),
@@ -2921,7 +3423,9 @@ impl Setup {
                 (view.unwrap_or(ZoneView::Regions { sel }), next)
             }
             ZoneView::List { heading, zones, mut sel, from } => {
-                let n = zones.len().max(1);
+                // A country's own list ends with Other places… (X opens it too).
+                let other = matches!(from, ListFrom::Country);
+                let n = (zones.len() + usize::from(other)).max(1);
                 let mut next = ZoneNext::Stay;
                 let mut view = None;
                 match b {
@@ -2929,12 +3433,13 @@ impl Setup {
                     Button::Down => sel = (sel + 1).min(n - 1),
                     Button::L1 => sel = sel.saturating_sub(5),
                     Button::R1 => sel = (sel + 5).min(n - 1),
+                    Button::East if other && sel == zones.len() => view = Some(ZoneView::Regions { sel: z.region_row() }),
                     Button::East => {
                         if let Some(zone) = zones.get(sel) {
                             next = ZoneNext::Take(Some(zone.clone()));
                         }
                     }
-                    Button::North if matches!(from, ListFrom::Country) => view = Some(ZoneView::Regions { sel: z.region_row() }),
+                    Button::North if other => view = Some(ZoneView::Regions { sel: z.region_row() }),
                     Button::Start => next = ZoneNext::Take(None),
                     Button::South => match &from {
                         ListFrom::Country => next = ZoneNext::Back,
@@ -2948,6 +3453,11 @@ impl Setup {
                 }
                 (view.unwrap_or(ZoneView::List { heading, zones, sel, from }), next)
             }
+            // L1 empties the field, as in the Wi-Fi password.
+            ZoneView::Search(mut kb) if b == Button::L1 => {
+                kb.text.clear();
+                (ZoneView::Search(kb), ZoneNext::Stay)
+            }
             ZoneView::Search(mut kb) => match kb.press(b) {
                 Outcome::Editing => (ZoneView::Search(kb), ZoneNext::Stay),
                 Outcome::Cancelled => (ZoneView::Regions { sel: 0 }, ZoneNext::Stay),
@@ -2960,22 +3470,44 @@ impl Setup {
         z.view = view;
         match next {
             ZoneNext::Stay => {}
-            ZoneNext::Back => self.zone_back(),
+            ZoneNext::Back => self.zone_back_or_skip(),
             ZoneNext::Take(zone) => self.leave_zone(zone),
         }
+    }
+
+    /// The time zone as a stage of the first start (after Wi-Fi, or in its place), not opened from the Wi-Fi page's row.
+    fn zone_stage(&self) -> bool {
+        self.only.is_none() && !self.zone_from_wifi
+    }
+
+    /// B on the time zone's first screen: the first start skips the step (the zone stays as it is, UTC said as
+    /// unconfirmed); opened from the Wi-Fi page's row, or from Settings, it goes back.
+    fn zone_back_or_skip(&mut self) {
+        if self.only.is_some() || self.zone_from_wifi {
+            self.zone_back();
+            return;
+        }
+        // Nothing guessed to keep: the clock stays as the system has it, said as unconfirmed when that is UTC.
+        self.zone_utc = matches!(&self.step, Step::Zone(z) if matches!(z.guess, Guess::Utc));
+        self.after_zone();
     }
 
     /// Ends the time zone step: sets the picked zone, or the guess when nothing was picked. Stays when the system refuses.
     fn leave_zone(&mut self, pick: Option<String>) {
         let Step::Zone(z) = &self.step else { return };
+        let chosen = pick.is_some();
         let want = pick.or_else(|| match &z.guess {
             // No guess to keep: UTC (or a whole country) leaves the zone as it is.
             Guess::Utc | Guess::Several { .. } => None,
             g => g.zone().map(String::from),
         });
         let unconfirmed = want.is_none() && matches!(z.guess, Guess::Utc);
-        if want.is_none_or(|zone| self.set_zone(&zone)) {
+        if want.as_ref().is_none_or(|zone| self.set_zone(zone)) {
             self.zone_utc = unconfirmed;
+            // Chosen in a list, or on the Wi-Fi page's row: kept, a guess after a later connection leaves it alone.
+            if (chosen || self.zone_from_wifi) && want.is_some() {
+                self.zone_picked = want;
+            }
             self.after_zone();
         }
     }
@@ -2983,12 +3515,17 @@ impl Setup {
     /// The Wi-Fi page: A connects (a saved network without its password), Y forgets a saved one (twice), X scans,
     /// the last two rows are Other network and Wi-Fi country.
     fn press_wifi(&mut self, b: Button) {
+        if self.net_menu.is_some() {
+            self.press_net_menu(b);
+            return;
+        }
         let n = self.wifi_rows();
-        // The row among the networks, Other network and Wi-Fi country; None on the sign-in row.
+        // The row among the networks and the rows after them; None on the sign-in row.
         let row = self.sel.checked_sub(self.lead());
         let entry = row.and_then(|r| self.entries.get(r)).cloned();
-        // No Wi-Fi chip: nothing on this page to choose; Start goes on (first start), B goes back.
-        if self.radio == Radio::Absent && !matches!(b, Button::Start | Button::South) {
+        let tail = self.wifi_tail_at(row);
+        // No Wi-Fi chip: nothing on this page to choose but Continue (first start); Start goes on, B goes back.
+        if self.radio == Radio::Absent && !matches!(b, Button::Start | Button::South | Button::East) {
             return;
         }
         // The tick for A on the connected network stays until the next press.
@@ -3005,9 +3542,12 @@ impl Setup {
             Button::Down => self.sel = (self.sel + 1).min(n.saturating_sub(1)),
             Button::L1 => self.sel = self.sel.saturating_sub(5),
             Button::R1 => self.sel = (self.sel + 5).min(n.saturating_sub(1)),
-            Button::North => self.scan(),
-            Button::Start => self.enter_zone(),
-            Button::South => self.step = if self.only.is_none() { Step::Play { sel: 0 } } else { Step::Look },
+            Button::North if !self.radio.is_off() => self.scan(),
+            Button::Start => self.step = Step::Done,
+            // The first start's B went back a stage before it came here (`press_first_start`), but from the phone page's
+            // "Connect to Wi-Fi first" it goes back to that page; Settings: B leaves.
+            Button::South if self.only.is_none() => self.leave_wifi(),
+            Button::South => self.step = Step::Done,
             Button::West => match entry.and_then(|e| e.saved) {
                 Some(saved) if self.forget.as_deref() == Some(saved.uuid.as_str()) => {
                     self.forget = None;
@@ -3022,10 +3562,18 @@ impl Setup {
             },
             Button::East if row.is_none() && self.lead_kind() == Some(Lead::Off) => self.turn_wifi_on(),
             Button::East if row.is_none() => self.open_portal(),
-            Button::East if row == Some(self.entries.len()) && self.radio.is_off() => self.note = Some(("Turn Wi-Fi on first.".into(), false)),
-            Button::East if row == Some(self.entries.len()) => self.step = Step::HiddenName { kb: Keyboard::default() },
-            Button::East if row == Some(self.entries.len() + 1) => self.open_country(),
+            Button::East if tail == Some(WifiRow::Other) && self.radio.is_off() => self.note = Some(("Turn Wi-Fi on first.".into(), false)),
+            Button::East if tail == Some(WifiRow::Other) => self.step = Step::HiddenName { kb: Keyboard::default() },
+            Button::East if tail == Some(WifiRow::Country) => self.open_country(),
+            Button::East if tail == Some(WifiRow::Zone) => self.open_zone_from_wifi(),
+            Button::East if tail == Some(WifiRow::Scan) => self.scan(),
+            Button::East if tail == Some(WifiRow::Continue) => self.leave_wifi(),
             Button::East => match entry {
+                // A saved network: its small menu, Connect (Continue when connected in the first start) and Forget, so
+                // that forgetting is never Y alone (2026-11-07). One being connected keeps its own answers below.
+                Some(e) if e.saved.is_some() && (e.active || !connecting(&e)) => self.net_menu = Some((e.ssid.clone(), 0)),
+                // The first start: connected already, A is Continue.
+                Some(e) if e.active && self.only.is_none() => self.leave_wifi(),
                 // Nothing to connect: said with a tick and what comes next, not a changed subtitle.
                 Some(e) if e.active => {
                     self.note = None;
@@ -3046,9 +3594,9 @@ impl Setup {
     pub fn press(&mut self, b: Button) -> bool {
         // A press takes the player's hand back: the step no longer goes on by itself.
         self.advance_pending = None;
-        let done = self.press_step(b);
+        let done = self.press_first_start(b).unwrap_or_else(|| self.press_step(b));
         // Games being copied while the page is open: a press reads the folders again (not a read already under way).
-        if matches!(self.step, Step::Games) && !self.counting && self.counted_at.elapsed() >= RECOUNT_AFTER {
+        if matches!(self.step, Step::Games | Step::Found { .. }) && !self.counting && self.counted_at.elapsed() >= RECOUNT_AFTER {
             self.count_games();
         }
         self.remember_step(done);
@@ -3063,6 +3611,93 @@ impl Setup {
         }
     }
 
+    /// The keys every first-start stage shares (BananaOS's way): START skips the rest of the setup, L2 switches Easy to
+    /// read (larger text and calmer menus, at once, on every page of it), B and L1 go back a stage. None: the stage's own
+    /// keys decide (B closes a page inside a stage). Each stage's way on is a row or button Down reaches (one scheme for
+    /// every page, 2026-11-07: B skipped forward here and went back everywhere else).
+    fn press_first_start(&mut self, b: Button) -> Option<bool> {
+        if self.only.is_some() {
+            return None;
+        }
+        match b {
+            // The Wi-Fi country list jumps by letter with L2/R2.
+            Button::L2 if !matches!(self.step, Step::Country { .. }) => {
+                self.switch_easy_to_read();
+                Some(false)
+            }
+            Button::Start if stage_of(&self.step, crate::device::current().host_owned()).is_some() => Some(true),
+            // B and L1 go back to the stage before; lists inside a stage keep L1 for paging. A question the page asked
+            // (Forget this network?) is taken back by B first.
+            Button::L1 if self.stage_back() => Some(false),
+            // Wi-Fi opened from the phone page: B goes back there (`press_wifi`), not a stage.
+            Button::South if self.forget.is_none() && self.net_menu.is_none() && !self.wifi_for_phone && self.b_back() => Some(false),
+            _ => None,
+        }
+    }
+
+    /// L1 on a first-start stage: opens the stage before it, as it opens when reached forward (Wi-Fi scans again, your
+    /// games are counted afresh); the welcome has none. False where L1 is the page's own (a list inside a stage, the
+    /// welcome, the pages that are no stage).
+    fn stage_back(&mut self) -> bool {
+        self.l1_goes_back() && self.go_back_a_stage()
+    }
+
+    /// B on a first-start stage: back a stage as L1 goes, and also from a country's own list of zones, which is the time
+    /// zone's stage page too (L1 pages there).
+    fn b_back(&mut self) -> bool {
+        let zone_list = self.only.is_none() && matches!(&self.step, Step::Zone(z) if matches!(z.view, ZoneView::List { from: ListFrom::Country, .. }));
+        (self.l1_goes_back() || zone_list) && self.go_back_a_stage()
+    }
+
+    /// The stage before this one, opened as when reached forward.
+    fn go_back_a_stage(&mut self) -> bool {
+        self.net_menu = None;
+        let host_owned = crate::device::current().host_owned();
+        match &self.step {
+            // The time zone belongs to the Wi-Fi stage: back to its page (the welcome where it takes Wi-Fi's place).
+            // Seen and left with B: asked once, Continue then goes on (the Time zone row still opens it); a country's list
+            // has no row to go on without a city.
+            Step::Zone(_) if !self.no_wifi => {
+                self.zone_from_wifi = false;
+                self.zone_asked = true;
+                self.zone_back_to_wifi();
+                self.scan();
+                true
+            }
+            Step::Wifi | Step::Zone(_) => {
+                self.wifi_for_phone = false;
+                self.step = Step::Welcome;
+                true
+            }
+            Step::Found { .. } if host_owned => {
+                self.step = Step::Welcome;
+                true
+            }
+            Step::Found { .. } => {
+                self.after_welcome();
+                true
+            }
+            Step::Look => {
+                self.enter_found();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether L1 goes back a stage here (`stage_back`): the first start's stages after the welcome, not inside a list of
+    /// one (the time zone's regions and lists page with L1). B does the same there (`press_first_start`).
+    fn l1_goes_back(&self) -> bool {
+        if self.only.is_some() {
+            return false;
+        }
+        match &self.step {
+            Step::Zone(z) => matches!(z.view, ZoneView::Card),
+            Step::Wifi | Step::Found { .. } | Step::Look => true,
+            _ => false,
+        }
+    }
+
     /// First start only: the step reached goes to `setup-step` in the data folder (a few bytes, on a button press), so a
     /// restart or a crash resumes there (`resume`); finishing deletes the file. Only the steps `resume` can open again
     /// are written; the others (Done, the keyboards inside Wi-Fi) leave the last line as it is.
@@ -3074,32 +3709,33 @@ impl Setup {
         if done {
             let _ = std::fs::remove_file(file);
         } else if let Some(name) = resume_name(&self.step) {
-            if std::fs::read_to_string(&file).ok().as_deref() != Some(name) {
+            let line = if self.kids_wanted { format!("{name} child") } else { name.to_string() };
+            if std::fs::read_to_string(&file).ok().as_deref() != Some(line.as_str()) {
                 let _ = std::fs::create_dir_all(&self.data_dir);
-                let _ = crate::fsutil::write_atomic(&file, name.as_bytes());
+                let _ = crate::fsutil::write_atomic(&file, line.as_bytes());
             }
         }
     }
 
     /// The first start after a restart: opens at the step the last run reached (`remember_step`). A missing, unreadable
     /// or unknown line means the beginning; Wi-Fi, the zone and the games are looked at afresh, as when stepping in.
+    /// The names of the first start before 0.2 (look, play, extras: its second, third and sixth steps) open the stage of
+    /// today's that comes next by position: the welcome was answered, so Wi-Fi (or what takes its place); Extras is now
+    /// the Box art switch on your games. "child" after the name is the welcome's wish for Kids Mode.
     pub fn resume(mut self) -> Self {
-        let Ok(name) = std::fs::read_to_string(self.data_dir.join(RESUME_FILE)) else { return self };
-        match name.trim() {
-            "look" => {
-                self.step = Step::Look;
-                self.scan();
-            }
-            "play" => self.step = Step::Play { sel: 0 },
-            "wifi" | "zone" if self.no_wifi => self.enter_zone(),
-            "wifi" => {
-                self.step = Step::Wifi;
-                self.scan();
-            }
-            "zone" => self.enter_zone(),
-            "extras" if self.no_wifi => self.go_to_games(),
-            "extras" => self.step = Step::Extras { sel: 0 },
-            "games" => self.go_to_games(),
+        let Ok(line) = std::fs::read_to_string(self.data_dir.join(RESUME_FILE)) else { return self };
+        let mut words = line.split_whitespace();
+        let name = words.next().unwrap_or("");
+        self.kids_wanted = words.next() == Some("child") && kids_offered();
+        let host_owned = crate::device::current().host_owned();
+        match name {
+            "look" | "play" | "wifi" => self.after_welcome(),
+            "zone" if host_owned => self.enter_found(),
+            // Opened again as when Wi-Fi was left: a guess that can be trusted is taken, a failed one shows the step.
+            "zone" if self.no_wifi => self.enter_zone(),
+            "zone" => self.enter_zone_auto(),
+            "extras" | "games" => self.enter_found(),
+            "shelf-look" => self.enter_look(),
             _ => {}
         }
         self
@@ -3111,7 +3747,11 @@ impl Setup {
     }
 
     fn press_step(&mut self, b: Button) -> bool {
+        if matches!(self.step, Step::Look) && self.only.is_some() && self.look_opened.is_none() {
+            self.look_opened = Some((self.theme, self.appearance, self.motion, self.animations));
+        }
         let profiles = self.profiles();
+        let found_rows = self.found_rows();
         // Add games: the row of ways under the grid, and the grid's own keys.
         if matches!(self.step, Step::Games) {
             let used = if self.ways_focus { self.press_ways(b) } else { self.press_grid(b) };
@@ -3121,46 +3761,69 @@ impl Setup {
         }
         match &mut self.step {
             Step::Welcome => {
-                if b == Button::East || b == Button::Start {
-                    self.step = Step::Look;
+                // A gets started, from any row; B has nothing to go back to on the first page, except Settings when the
+                // first start was opened from there.
+                if b == Button::East {
+                    self.after_welcome();
                 }
-                // The language, in use from the next frame on (`i18n`).
-                if matches!(b, Button::Left | Button::Right) {
+                if b == Button::South && self.again {
+                    self.backed_out = true;
+                    return true;
+                }
+                // "For a child": only the wish, a row of its own (Y switches it too); Kids Mode's own steps come after your
+                // games (`leave_games`).
+                if b == Button::West && kids_offered() {
+                    self.kids_wanted = !self.kids_wanted;
+                }
+                let rows = 2 + u8::from(kids_offered());
+                match b {
+                    Button::Up => self.welcome_row = self.welcome_row.saturating_sub(1),
+                    Button::Down => self.welcome_row = (self.welcome_row + 1).min(rows - 1),
+                    _ => {}
+                }
+                // The language, in use from the next frame on (`i18n`); on the rows below, Easy to read as L2 switches it,
+                // and the wish for Kids Mode.
+                if matches!(b, Button::Left | Button::Right) && self.welcome_row == 2 {
+                    self.kids_wanted = !self.kids_wanted;
+                } else if matches!(b, Button::Left | Button::Right) && self.welcome_row == 1 {
+                    self.switch_easy_to_read();
+                } else if matches!(b, Button::Left | Button::Right) {
                     let now = crate::i18n::current();
                     let lang = if b == Button::Left { now.previous() } else { now.next() };
                     crate::i18n::set(lang);
                     self.language_chosen = Some(lang);
                 }
             }
+            // A list like every other: Up/Down move between the layouts and the rows under them, Left/Right change the
+            // focused one, A keeps (the first start: finishes) from any of them.
+            Step::Look if self.only.is_some() && b == Button::South => {
+                self.cancel_look();
+                self.step = Step::Done;
+            }
             Step::Look => match b {
-                Button::Left | Button::Up => self.theme = (self.theme + self.themes.len() - 1) % self.themes.len(),
-                Button::Right | Button::Down => self.theme = (self.theme + 1) % self.themes.len(),
-                // Settings > Look has no shortcut keys: Appearance, Motion and Animations have their own rows there
-                // (polish 2026-11-04); the first start's pills are the only place for them, so the keys stay there.
-                Button::West if self.only.is_none() => {
-                    let i = Appearance::ALL.iter().position(|a| *a == self.appearance).unwrap_or(0);
-                    self.appearance = Appearance::ALL[(i + 1) % Appearance::ALL.len()];
-                }
-                // Cozy or Quick; from the first press the look no longer decides.
-                Button::L1 if self.only.is_none() => {
-                    self.animations = Some(self.animations_shown().next());
-                    self.animations_changed = true;
-                }
-                Button::East | Button::Start => {
-                    // The scan starts now, so the networks are there when the Wi-Fi step opens.
-                    self.step = if self.only.is_none() { Step::Play { sel: 0 } } else { Step::Wifi };
-                    self.scan();
-                }
-                Button::South => self.step = Step::Welcome,
-                // The first start: the text size (in Settings it has its own row under Look), in use from the next
-                // frame on (`type_scale`).
-                Button::R1 if self.only.is_none() => {
-                    let size = crate::type_scale::get().next();
-                    crate::type_scale::set(size);
-                    self.text_size_chosen = Some(size);
-                }
+                Button::Up => self.look_row = self.look_row.saturating_sub(1),
+                Button::Down => self.look_row = (self.look_row + 1).min(self.look_rows().len() - 1),
+                Button::Left | Button::Right => self.change_look_row(b == Button::Right),
+                // The first start's last stage: Finish, the shelf is next (B went back a stage, `press_first_start`).
+                Button::East if self.only.is_none() => return true,
+                Button::East | Button::Start => self.step = Step::Done,
                 _ => {}
             },
+            Step::Found { sel } => {
+                let rows = &found_rows;
+                *sel = (*sel).min(rows.len().saturating_sub(1));
+                match (b, rows.get(*sel).copied()) {
+                    (Button::Up, _) => *sel = sel.saturating_sub(1),
+                    (Button::Down, _) => *sel = (*sel + 1).min(rows.len().saturating_sub(1)),
+                    (Button::East | Button::Left | Button::Right, Some(FoundRow::BoxArt)) => {
+                        self.art = if self.art == Art::Off { Art::default() } else { Art::Off };
+                        self.art_changed = true;
+                    }
+                    (Button::East, Some(FoundRow::More)) => self.step = Step::Games,
+                    (Button::East, Some(FoundRow::Continue | FoundRow::Later)) => self.leave_games(),
+                    _ => {}
+                }
+            }
             Step::Play { sel } => match b {
                 Button::Up => *sel = (*sel + profiles.len() - 1) % profiles.len(),
                 Button::Down => *sel = (*sel + 1) % profiles.len(),
@@ -3321,11 +3984,14 @@ impl Setup {
                 }
                 // No Wi-Fi: the first start goes back to its Wi-Fi step; from Settings the app opens Wi-Fi.
                 crate::phone_upload_page::Action::Wifi if self.only.is_none() => {
+                    self.wifi_for_phone = true;
+                    // To connect: the networks first, not the Continue row Wi-Fi was left on.
+                    self.sel = 0;
                     self.step = Step::Wifi;
                     self.scan();
                 }
                 crate::phone_upload_page::Action::Wifi => {
-                    self.open_wifi = true;
+                    self.open_wifi = Some((true, true));
                     self.step = Step::Done;
                 }
                 crate::phone_upload_page::Action::None => {}
@@ -3335,9 +4001,15 @@ impl Setup {
             Step::Games => match b {
                 Button::North => self.switch_sharing(),
                 Button::West if crate::phone_upload_page::offered() => self.open_phone(),
+                // The first start: Add more… is a page of "Your games", which counts again.
+                // Back on Add more…, the row it was opened from.
+                Button::Start | Button::South if self.only.is_none() => {
+                    let more = self.found_rows().iter().position(|r| *r == FoundRow::More).unwrap_or(0);
+                    self.step = Step::Found { sel: more };
+                    self.count_games();
+                }
                 Button::Start => self.step = Step::Done,
-                Button::South if self.no_wifi => self.enter_zone(),
-                Button::South => self.step = Step::Extras { sel: 0 },
+                Button::South => self.step = Step::Done,
                 _ => {}
             },
             Step::Remote => match b {
@@ -3428,35 +4100,68 @@ impl Setup {
                 // device isn't known).
                 let model = crate::device::current().model.unwrap_or(crate::device::Model::MiniV2);
                 let row = [crate::ui_art::Art::Logo, crate::ui_art::Art::Device(model)];
-                let dy = crate::ui_art::above_words_row(c, &row, MARGIN, false, 60, 300, 67);
-                text.draw(c, Face::Title, 67, MARGIN, 300 + dy, pal().chalk, "Welcome to your Pocket");
                 let lines = [
                     if crate::device::current().host_owned() {
-                        "A few short steps: a look you like, how you like to play, your games."
-                    } else if !crate::device::current().has_wifi() {
-                        "A few short steps: a look you like, how you like to play, your time zone, your games."
+                        // No count: "Three short steps" beside four dots (this page is the first) read as one missing.
+                        "Next: your games, then a look you like."
+                    } else if self.no_wifi {
+                        "Next: your time zone, your games, then a look you like."
                     } else {
-                        "A few short steps: a look you like, how you like to play, Wi-Fi, your time zone, your games."
+                        "Next: Wi-Fi, your games, then a look you like."
                     },
                     "You can skip any of them and come back later.",
                 ];
-                let mut below = paragraphs(c, text, &lines, 360 + dy);
                 // On a handheld nobody on the project has played on: one calm line, once (this step is only on the
                 // first start; docs/DEVICES.md).
-                if let Some(m) = crate::device::current().model.filter(|m| m.experimental() && !m.played_on()) {
+                let untested = crate::device::current().model.filter(|m| m.experimental() && !m.played_on()).map(|m| {
                     let name = m.name();
-                    let line = if name.starts_with(['A', 'E', 'I', 'O', 'U']) {
+                    if name.starts_with(['A', 'E', 'I', 'O', 'U']) {
                         format!("pocket-ui hasn't been tested on an {} yet. Most things should work; if something doesn't, Settings › Help & tools › Report a problem.", name)
                     } else {
                         format!("pocket-ui hasn't been tested on a {} yet. Most things should work; if something doesn't, Settings › Help & tools › Report a problem.", name)
-                    };
+                    }
+                });
+                // The rows under the words end above the hint bar: where the untested line and the third row (For a child)
+                // would run into it (1024x768), the page moves up by what is missing.
+                let step = crate::type_scale::line(28, 12);
+                let count = |text: &mut Text, l: &str| text.wrap_prose(Face::Body, 28, l, c.w - 2 * MARGIN).len().max(1) as i32;
+                let mut words_end = 360 + (lines.iter().map(|l| count(text, l)).sum::<i32>() - 1) * step;
+                if let Some(l) = &untested {
+                    words_end += 56 + (count(text, l) - 1) * step;
+                }
+                let rows = 2 + i32::from(kids_offered());
+                let rows_end = words_end.max(430) + 40 + rows * (pill_h() + 15) - 15;
+                let lift = (rows_end - (crate::kit::hint_bar_top(c.h) - 12)).max(0);
+                let dy = crate::ui_art::above_words_row(c, &row, MARGIN, false, 60, 300 - lift, 67) - lift;
+                text.draw(c, Face::Title, 67, MARGIN, 300 + dy, pal().chalk, "Welcome to your Pocket");
+                let mut below = paragraphs(c, text, &lines, 360 + dy);
+                if let Some(line) = &untested {
                     below = paragraphs(c, text, &[line.as_str()], below + 56);
                 }
                 // The languages in their own names; the line after them in the one chosen.
                 let on = crate::i18n::Lang::ALL.iter().position(|l| *l == crate::i18n::current()).unwrap_or(0);
                 let names: Vec<&str> = crate::i18n::Lang::ALL.iter().map(|l| l.name()).collect();
-                pill_row(c, text, below.max(470 - 40) + 40, "Language", &names, on, "You can change it later in Settings.", 0);
-                hints(c, text, &[("Left/Right", "Language"), ("A", "Get started"), ("SELECT", "Manual")]);
+                let label_w = ["Language", "Easy to read", "For a child"].iter().map(|l| text.width(Face::Body, 24, l)).max().unwrap_or(0);
+                let top = below.max(470 - 40 + dy.min(0)) + 40;
+                pill_row(c, text, top, "Language", &names, on, "You can change it later in Settings.", label_w);
+                self.paint_easy_to_read(c, text, top + pill_h() + 15, label_w);
+                // Kids Mode: only the wish; its steps come after your games.
+                if kids_offered() {
+                    let line = if self.kids_wanted { "For a child: Kids Mode is set up after your games." } else { "A simple shelf for a child, set up after your games." };
+                    pill_row(c, text, top + 2 * (pill_h() + 15), "For a child", &["Off", "On"], usize::from(self.kids_wanted), line, label_w);
+                }
+                // The row Left/Right change: a bar in the margin beside it.
+                focus_bar(c, top + i32::from(self.welcome_row) * (pill_h() + 15), pill_h());
+                let change = match self.welcome_row {
+                    0 => "Language",
+                    1 => "Easy to read",
+                    _ => "For a child",
+                };
+                let mut bar = vec![("Left/Right", change), ("A", "Get started")];
+                if self.again {
+                    bar.push(("B", "Back"));
+                }
+                hints(c, text, &bar);
             }
             // The app paints this step itself, with the previews (`paint_look`); without them, the names.
             Step::Look => self.paint_look(c, text, &[], false),
@@ -3482,20 +4187,28 @@ impl Setup {
                 self.paint_networks(c, text);
                 let row = self.sel.checked_sub(self.lead());
                 let saved = row.and_then(|r| self.entries.get(r)).is_some_and(|e| e.saved.is_some());
-                let a = match row.map(|r| r.checked_sub(self.entries.len())) {
-                    Some(None) => "Connect",
-                    None if self.lead_kind() == Some(Lead::Off) => "Turn on",
+                let first = self.only.is_none();
+                let entry = row.and_then(|r| self.entries.get(r));
+                let a = match (row.map(|r| r.checked_sub(self.entries.len())), self.wifi_tail_at(row)) {
+                    // A saved network opens its menu (Connect or Continue, Forget).
+                    (Some(None), _) if entry.is_some_and(|e| e.saved.is_some() && (e.active || !connecting(e))) => "Open",
+                    (Some(None), _) => "Connect",
+                    (None, _) if self.lead_kind() == Some(Lead::Off) => "Turn on",
+                    (_, Some(WifiRow::Zone)) => "Change",
+                    (_, Some(WifiRow::Scan)) => "Scan again",
+                    (_, Some(WifiRow::Continue)) => "Continue",
                     _ => "Open",
                 };
-                if self.radio == Radio::Absent {
-                    let mut h = Vec::new();
-                    if self.only.is_none() {
-                        h.push(("START", "Next"));
-                    }
-                    h.push(("B", "Back"));
-                    hints(c, text, &h);
+                let online = self.entries.iter().any(|e| e.active);
+                if self.radio == Radio::Absent && first {
+                    hints(c, text, &[("A", "Continue"), ("B", "Back")]);
+                } else if self.radio == Radio::Absent {
+                    hints(c, text, &[("B", "Back")]);
+                } else if self.net_menu.is_some() {
+                    // A saved network's menu over the page, with its own hints.
+                    self.paint_net_menu(c, text);
                 } else {
-                    hints(c, text, &wifi_hints(a, saved, self.forget.is_some(), self.only.is_none()));
+                    hints(c, text, &wifi_hints(a, saved, self.forget.is_some(), first, online, !self.radio.is_off()));
                 }
             }
             Step::Password { ssid, kb, hidden } => {
@@ -3525,7 +4238,11 @@ impl Setup {
                 if !kb.text.is_empty() {
                     bar.push(("L1", "Clear"));
                 }
-                bar.extend([("X", "Shift"), ("Y", "Symbols"), ("START", "Next")]);
+                bar.extend([("X", "Shift"), ("Y", "Symbols")]);
+                // An empty name goes nowhere: START only once there is one.
+                if !kb.text.trim().is_empty() {
+                    bar.push(("START", "Next"));
+                }
                 hints(c, text, &bar);
             }
             Step::Country { sel, list } => self.paint_country(c, text, *sel, list),
@@ -3544,6 +4261,10 @@ impl Setup {
             Step::Ports => self.paint_ports(c, text, &dots),
             Step::PortFiles(_) => self.paint_port_files(c, text, &dots),
             Step::Games => self.paint_games(c, text, &dots),
+            Step::Found { sel } => {
+                let sel = *sel;
+                self.paint_found(c, text, sel, &dots);
+            }
             Step::Phone(page) => {
                 page.paint(c, text);
                 hints(c, text, &page.hints());
@@ -3564,12 +4285,17 @@ impl Setup {
                     }
                 }
                 let ip = self.ip.clone().unwrap_or_else(|| "(not connected)".into());
-                text.draw(c, Face::Title, 37, MARGIN, if y > 322 { y + 24 } else { 366 }, pal().chalk, &format!("ssh root@{ip}"));
+                let ssh_y = if y > 322 { y + 24 } else { 366 };
+                text.draw(c, Face::Title, 37, MARGIN, ssh_y, pal().chalk, &format!("ssh root@{ip}"));
+                // The login and the status move down with a longer text above: four lines of it (German, Retro, 1024 wide: the
+                // Brick) put the ssh line over the login.
+                let (login_y, mut status_y) = ((ssh_y + 68).max(434), 544);
                 let on = matches!(self.remote, remote::Mode::On | remote::Mode::Dev | remote::Mode::External);
                 if on {
                     // Dev or external SSH: pocket-ui never set a password, root's own one applies.
                     let pw = self.remote_password.as_deref().or((self.remote != remote::Mode::On).then_some("(unchanged)"));
-                    paint_login(c, text, 434, "root", pw);
+                    paint_login(c, text, login_y, "root", pw);
+                    status_y = status_y.max(login_y + 110);
                 }
                 let (status, color) = match (&self.remote_error, self.remote) {
                     _ if self.remote_busy => (format!("Switching remote access{dots}"), pal().dust),
@@ -3581,7 +4307,7 @@ impl Setup {
                     (None, remote::Mode::Off) if self.ip.is_none() => ("Connect to Wi-Fi first.".into(), pal().dust),
                     (None, remote::Mode::Off) => ("Remote access is off.".into(), pal().dust),
                 };
-                text.draw(c, Face::Body, 28, MARGIN, 544, color, &status);
+                text.draw(c, Face::Body, 28, MARGIN, status_y, color, &status);
                 let h: &[(&str, &str)] = match self.remote {
                     remote::Mode::Dev => &[("B", "Back")],
                     // Without an address A does nothing (the status line says "Connect to Wi-Fi first").
@@ -3613,9 +4339,197 @@ impl Setup {
     /// First start only: "Step 3 of 7" at the top right, so a new player knows how long the setup is. The Look step is
     /// painted by the app (`paint_look`, which calls this too); the cards have their own "n of m".
     fn paint_step_count(&self, c: &mut Canvas, text: &mut Text) {
-        if let Some(n) = self.only.is_none().then(|| step_number(&self.step, self.no_wifi)).flatten() {
-            text.draw_right(c, Face::Body, 28, c.w - MARGIN, 72, pal().dust, &format!("Step {n} of {}", first_steps(self.no_wifi)));
+        let host_owned = crate::device::current().host_owned();
+        let Some(at) = self.only.is_none().then(|| stage_of(&self.step, host_owned)).flatten() else { return };
+        // One dot per stage, the ones done and this one filled: pages turned, not a queue (no "Step 2 of 4").
+        let n = stage_count(host_owned) as i32;
+        let (d, gap) = (14, 12);
+        let right = c.w - MARGIN;
+        let y = 56;
+        for i in 0..n {
+            let x = right - (n - i) * (d + gap) + gap;
+            let color = if i as usize <= at { pal().chalk } else { pal().keycap };
+            crate::retro::pill(c, x, y, d, d, d / 2, color);
         }
+        crate::text::boxes::area(c, (right - n * (d + gap) + gap, y, n * (d + gap) - gap, d), "‹dots›");
+        // Easy to read, on every stage: its key and "Aa", the letters larger when it is on.
+        let on = self.easy_to_read();
+        let label = if on { "Aa  On" } else { "Aa" };
+        let lw = text.width(Face::Body, 24, label);
+        let kh = crate::type_scale::row(36, 21);
+        let kw = (text.width(Face::Body, 21, crate::button_prompts::shown("L2")) + 24).max(kh);
+        let x = right - n * (d + gap) - 28 - lw - 10 - kw;
+        let base = y + d / 2 + crate::type_scale::mid(24);
+        crate::kit::key_cap(c, text, (x, y + d / 2 - kh / 2, kw, kh), "L2", 21, y + d / 2 + crate::type_scale::mid(21), (pal().keycap, pal().chalk));
+        text.draw(c, Face::Body, 24, x + kw + 10, base, if on { pal().chalk } else { pal().dust }, label);
+        crate::nav_probe::hint(c, (x, y + d / 2 - kh / 2, kw + 10 + lw, kh), "L2", label);
+    }
+
+    /// "Step n of m" as a number, for the tests: the dot that is lit (from 1) and how many there are.
+    #[cfg(test)]
+    fn step_of(&self) -> Option<(usize, usize)> {
+        let host_owned = crate::device::current().host_owned();
+        let n = self.only.is_none().then(|| stage_of(&self.step, host_owned)).flatten()?;
+        Some((n + 1, stage_count(host_owned)))
+    }
+
+    /// The rows of "Your games": Continue and Add more… with games, Add games… and I'll add games later without; the Box
+    /// art switch where pictures can be downloaded (not on a handheld without Wi-Fi).
+    fn found_rows(&self) -> Vec<FoundRow> {
+        let mut rows = if self.games_known() > 0 { vec![FoundRow::Continue, FoundRow::More] } else { vec![FoundRow::More, FoundRow::Later] };
+        if !self.no_wifi {
+            rows.push(FoundRow::BoxArt);
+        }
+        rows
+    }
+
+    /// "Your games" without games: the way that works here, in a sentence (Add games… has the details).
+    fn found_way(&self) -> &'static str {
+        let d = crate::device::current();
+        if d.host_owned() {
+            DECK_GAMES_NOTE
+        } else if crate::card_health::image_card() {
+            crate::card_health::IMAGE_CARD_NOTE
+        } else if crate::games_card::in_use() {
+            GAMES_CARD_WAY
+        } else if crate::card_health::games_drive() {
+            GAMES_DRIVE_FIRST_WAY
+        } else if d.has_wifi() {
+            FOUND_WIFI_WAY
+        } else {
+            offline_way(false, d.has_second_card_slot(), false).1
+        }
+    }
+
+    /// The first start's "Your games": what was found (or the way to add some), then its rows.
+    fn paint_found(&self, c: &mut Canvas, text: &mut Text, sel: usize, dots: &str) {
+        let width = c.w - 2 * MARGIN;
+        let games = self.games_known();
+        let looking = self.counting && self.games_counted.is_none() && games == 0;
+        let (title, sub) = if games > 0 || looking {
+            ("Your games", "They stand on your shelf in their real boxes.")
+        } else {
+            ("Add your games", "Pop your games on here and they'll stand on your shelf in their real boxes.")
+        };
+        text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, title);
+        let mut y = 192;
+        for l in text.wrap_prose_at_most(Face::Body, 28, sub, width, 2) {
+            text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &l);
+            y += crate::type_scale::line(28, 10);
+        }
+        y += 40;
+        let step = crate::type_scale::line(28, 10);
+        // The rows from the bottom up, always above the hints (1024x768: Add more… and Box art ran under them), and the
+        // line about the selected one over them: both come before the consoles, which give way on a short screen.
+        let rows = self.found_rows();
+        let row = crate::type_scale::row(70, 37);
+        let top = found_rows_top(c.h, rows.len());
+        let note = match rows.get(sel) {
+            Some(FoundRow::BoxArt) => Some(BOX_ART_NOTE),
+            _ if self.kids_wanted && games > 0 => Some("Kids Mode comes next: a PIN, then the games a child may play."),
+            _ if self.kids_wanted => Some("Kids Mode needs a few games first. Set it up later in Settings › System › Kids mode."),
+            _ => None,
+        };
+        let note_lines = note.map(|n| text.wrap_prose_at_most(Face::Body, 24, n, width, 2)).unwrap_or_default();
+        let note_top = top - 18 - note_lines.len() as i32 * crate::type_scale::line(24, 8);
+        if looking {
+            text.draw(c, Face::Title, 50, MARGIN, y + 30, pal().chalk, &format!("Looking for your games{dots}"));
+            y += 30 + step;
+        } else if games > 0 {
+            let found = if games == 1 { "Found 1 game".to_string() } else { format!("Found {games} games") };
+            text.draw(c, Face::Title, 50, MARGIN, y + 30, pal().chalk, &found);
+            y += 30 + step + 4;
+            // Which systems, the fullest first: their consoles in a row with the count under each, "+ 4 more" after.
+            if let Some(grid) = &self.grid {
+                let mut with: Vec<(&SysInfo, usize)> = grid.all.iter().map(|s| (s, grid.games(&s.id))).filter(|(_, n)| *n > 0).collect();
+                with.sort_by(|a, b| b.1.cmp(&a.1));
+                // The name line under each console must not push the rows below off a short screen (1024x768): the
+                // pictures give up that height there, down to 44 px.
+                let name_line = crate::type_scale::line(21, 8);
+                // The line about the selected row stands over the rows: the pictures leave it room, and where even the
+                // smallest would run into it they stay out ("Found 81 games" says it).
+                let art_room = note_top - y - 30 - name_line - step;
+                let art_h = art_room.clamp(44, 76);
+                let (tile, gap) = (150, 18);
+                let more_w = 120;
+                let fit = ((width - more_w + gap) / (tile + gap)).max(1) as usize;
+                let shown = if art_room < 44 { 0 } else if with.len() > fit { fit } else { with.len() };
+                for (k, (sys, n)) in with.iter().take(shown).enumerate() {
+                    let x = MARGIN + k as i32 * (tile + gap);
+                    if let Some(art) = crate::system_art::get(&sys.id).map(|a| a.fitted(tile - 20, art_h)) {
+                        c.blit_sprite(&art, x + (tile - art.w as i32) / 2, y + (art_h - art.h as i32), 0);
+                    }
+                    // The system's name under its console (a Game Gear or a Master System isn't known by sight to
+                    // everyone, first-start walk 2026-11-06), how many games under that.
+                    // Smaller type before "…": "Game Boy Advance" at 640 px.
+                    let (npx, name) = text.fit_sizes(Face::Body, &[21, 18, 16], &systems_grid::short_name(sys), tile);
+                    let w = text.width(Face::Body, npx, &name);
+                    text.draw(c, Face::Body, npx, x + (tile - w) / 2, y + art_h + 30, pal().chalk, &name);
+                    let words = if *n == 1 { "1 game".to_string() } else { format!("{n} games") };
+                    let count = text.fit(Face::Body, 21, &words, tile);
+                    let w = text.width(Face::Body, 21, &count);
+                    text.draw(c, Face::Body, 21, x + (tile - w) / 2, y + art_h + 30 + name_line, pal().dust, &count);
+                }
+                if with.len() > shown && shown > 0 {
+                    let x = MARGIN + shown as i32 * (tile + gap);
+                    text.draw(c, Face::Body, 24, x, y + art_h / 2 + 8, pal().dust, &format!("+ {} more", with.len() - shown));
+                }
+                if shown > 0 {
+                    y += art_h + 30 + name_line + step;
+                }
+            }
+        } else {
+            for l in text.wrap_prose_at_most(Face::Body, 28, self.found_way(), width, 4) {
+                text.draw(c, Face::Body, 28, MARGIN, y, pal().chalk, &l);
+                y += step;
+            }
+        }
+        let mut room = top - 18;
+        // The note only where it stands clear of what is above it.
+        if !note_lines.is_empty() && note_top + crate::type_scale::line(24, 8) >= y {
+            let mut ny = note_top + crate::type_scale::line(24, 8);
+            room = note_top;
+            for l in &note_lines {
+                text.draw(c, Face::Body, 24, MARGIN, ny, pal().dust, l);
+                ny += crate::type_scale::line(24, 8);
+            }
+        }
+        // What in roms isn't read, in plain words: specific help instead of a quiet "no games"; as many lines as fit
+        // above the note.
+        for l in unread_lines(&self.strays, &self.broken, "roms").iter().take(2) {
+            if y + 8 > room {
+                break;
+            }
+            let l = text.fit(Face::Body, 24, l, width);
+            text.draw(c, Face::Body, 24, MARGIN, y + 8, pal().alert, &l);
+            y += crate::type_scale::line(24, 8);
+        }
+        for (i, r) in rows.iter().enumerate() {
+            let ry = top + i as i32 * row;
+            let selected = i == sel;
+            crate::kit::shelf_row(c, MARGIN, ry, width, row - 8, selected);
+            let fg = if selected { pal().ink } else { pal().chalk };
+            let name = match r {
+                FoundRow::Continue => "Continue",
+                FoundRow::More if games > 0 => "Add more…",
+                FoundRow::More => "Add games…",
+                FoundRow::Later => "I'll add games later",
+                FoundRow::BoxArt => "Box art",
+            };
+            let base = ry + (row - 8) / 2 + crate::type_scale::base(13, 37);
+            text.draw(c, Face::Title, 37, MARGIN + 28, base, fg, name);
+            if *r == FoundRow::BoxArt {
+                let on = if self.art == Art::Off { "Off" } else { "On" };
+                let value = if selected { format!("‹ {on} ›") } else { on.to_string() };
+                crate::kit::row_value(c, text, 24, MARGIN + width - 28, ry + (row - 8) / 2 + crate::type_scale::base(10, 24), &value, selected);
+            }
+        }
+        let action = match rows.get(sel) {
+            Some(FoundRow::BoxArt) => "Switch",
+            Some(FoundRow::More) => "Open",
+            _ => "Continue",
+        };
+        hints(c, text, &[("A", action), ("B", "Back"), ("START", "Skip the rest")]);
     }
 
     fn paint_extras(&mut self, c: &mut Canvas, text: &mut Text, sel: usize, dots: &str) {
@@ -3701,7 +4615,7 @@ impl Setup {
             let label = if self.ports.is_empty() { tab.label().to_string() } else { format!("{}  {}", tab.label(), self.tab_count(tab)) };
             let w = text.width(Face::Body, 24, &label) + 40;
             let on = tab == self.port_tab;
-            c.round_rect(x, 152, w, 44, 22, if on { pal().label } else { pal().spine });
+            crate::retro::pill(c, x, 152, w, 44, 22, if on { pal().label } else { pal().spine });
             text.draw(c, Face::Body, 24, x + 20, 182, if on { pal().ink } else { pal().dust }, &label);
             x += w + 12;
         }
@@ -3836,7 +4750,11 @@ impl Setup {
         if z.loading {
             text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Time zone");
             text.draw(c, Face::Body, 28, MARGIN, 192, pal().dust, &format!("Looking at your time zone{dots}"));
-            hints(c, text, &[("START", "Next"), ("B", "Back")]);
+            if self.zone_stage() {
+                hints(c, text, &[("B", "Back"), ("START", "Skip the rest")]);
+            } else {
+                hints(c, text, &[("START", "Next"), ("B", "Back")]);
+            }
             return;
         }
         match &z.view {
@@ -3847,14 +4765,15 @@ impl Setup {
                     (Some(e), _) => (e.clone(), pal().alert),
                     (None, Guess::System(_)) => ("Already set on this Pocket.".to_string(), pal().dust),
                     (None, Guess::Country { .. }) => (format!("A guess from your Wi-Fi region: {country}."), pal().dust),
-                    (None, _) => ("Couldn't tell where you are. Press X to choose.".to_string(), pal().dust),
+                    (None, _) => ("Couldn't tell where you are. Choose your time zone below.".to_string(), pal().dust),
                 };
                 text.draw(c, Face::Body, 28, MARGIN, 192, color, &note);
 
                 let zone = z.guess.zone().unwrap_or("UTC");
-                let (top, h) = (250, 220);
+                // The card gives up height on a short screen (768 lines) for the two rows under it.
+                let (top, h) = (250, if c.h < 900 { 180 } else { 220 });
                 c.rect(MARGIN, top, width, h, pal().spine);
-                let city = text.fit(Face::Title, 67, &timezone::city_of(zone), width - 440);
+                let city = text.fit(Face::Title, 67, &timezone::city_here(zone), width - 440);
                 text.draw(c, Face::Title, 67, MARGIN + 40, top + 100, pal().chalk, &city);
                 if city != zone {
                     text.draw(c, Face::Body, 28, MARGIN + 40, top + 156, pal().dust, zone);
@@ -3863,11 +4782,35 @@ impl Setup {
                     text.draw_right(c, Face::Title, 67, MARGIN + width - 40, top + 100, pal().chalk, &timezone::clock_at(now, off));
                     text.draw_right(c, Face::Body, 28, MARGIN + width - 40, top + 156, pal().dust, &timezone::fmt_offset(off));
                 }
-                let clock = if crate::device::current().has_wifi() { "The clock sets itself from the internet while you're online." } else { "No Wi-Fi here, so the clock doesn't set itself." };
-                text.draw(c, Face::Body, 28, MARGIN, top + h + 60, pal().dust, clock);
-                text.draw(c, Face::Body, 28, MARGIN, top + h + 104, pal().dust, "Settings › System › Time has the rest.");
                 let yes = if matches!(z.guess, Guess::Utc) { "Keep UTC" } else { "Looks right" };
-                hints(c, text, &[("A", yes), ("X", "Change"), ("START", "Next"), ("B", "Back")]);
+                // The two ways on as rows, Up/Down between them (X still opens the picker).
+                let row = crate::type_scale::row(70, 37);
+                let rows_top = top + h + 20;
+                for (i, name) in [yes, "Choose another…"].into_iter().enumerate() {
+                    let y = rows_top + i as i32 * row;
+                    let selected = i == z.card_row;
+                    crate::kit::shelf_row(c, MARGIN, y, width, row - 8, selected);
+                    text.draw(c, Face::Title, 37, MARGIN + 28, y + (row - 8) / 2 + crate::type_scale::base(13, 37), if selected { pal().ink } else { pal().chalk }, name);
+                }
+                // The lines under them as far as the hint bar leaves room.
+                let clock = if crate::device::current().has_wifi() { "The clock sets itself from the internet while you're online." } else { "No Wi-Fi here, so the clock doesn't set itself." };
+                let last = crate::kit::hint_bar_top(c.h) - 16;
+                let mut y = rows_top + 2 * row + 30;
+                for l in [clock, "Settings › System › Time has the rest."] {
+                    if y > last {
+                        break;
+                    }
+                    let l = text.fit(Face::Body, 24, l, width);
+                    text.draw(c, Face::Body, 24, MARGIN, y, pal().dust, &l);
+                    y += crate::type_scale::line(24, 10);
+                }
+                let a = if z.card_row == 1 { "Open" } else { yes };
+                // The first start: B goes back a stage, START skips the rest (opened from the Wi-Fi row, B goes back there).
+                if self.zone_stage() {
+                    hints(c, text, &[("A", a), ("B", "Back"), ("START", "Skip the rest")]);
+                } else {
+                    hints(c, text, &[("A", a), ("START", "Next"), ("B", "Back")]);
+                }
             }
             ZoneView::Regions { sel } => {
                 text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Time zone");
@@ -3875,7 +4818,12 @@ impl Setup {
                 let mut rows = vec!["Search…".to_string()];
                 rows.extend(timezone::regions(&z.all));
                 self.paint_zone_rows(c, text, &rows.iter().map(|r| (r.clone(), ">".to_string())).collect::<Vec<_>>(), *sel);
-                hints(c, text, &[("A", "Open"), ("L1/R1", "Page"), ("START", "Next"), ("B", "Back")]);
+                // L1/R1 page only a list longer than the screen.
+                let mut bar = vec![("A", "Open"), ("L1/R1", "Page"), ("START", "Next"), ("B", "Back")];
+                if rows.len() <= zone_rows_visible(c.h) {
+                    bar.remove(1);
+                }
+                hints(c, text, &bar);
             }
             ZoneView::List { heading, zones, sel, from } => {
                 let heading = text.fit(Face::Title, 67, heading, width);
@@ -3889,7 +4837,7 @@ impl Setup {
                     text.draw(c, Face::Body, 28, MARGIN, 260, pal().chalk, "No time zone matches that.");
                     text.draw(c, Face::Body, 28, MARGIN, 304, pal().dust, "Try part of a city name, such as vie or york.");
                 } else {
-                    let rows: Vec<(String, String)> = zones
+                    let mut rows: Vec<(String, String)> = zones
                         .iter()
                         .map(|zone| {
                             // Blank until the thread has read the zone's file.
@@ -3899,21 +4847,34 @@ impl Setup {
                                 .copied()
                                 .flatten()
                                 .map_or(String::new(), |o| format!("{}   {}", timezone::fmt_offset(o), timezone::clock_at(now, o)));
-                            (timezone::city_of(zone), value)
+                            (timezone::city_here(zone), value)
                         })
                         .collect();
+                    // A country's own list: the other places last, a row as X's way there.
+                    if matches!(from, ListFrom::Country) {
+                        rows.push(("Other places…".to_string(), ">".to_string()));
+                    }
                     self.paint_zone_rows(c, text, &rows, *sel);
                 }
-                if matches!(from, ListFrom::Country) {
-                    hints(c, text, &[("A", "Set"), ("X", "Other places"), ("START", "Skip"), ("B", "Back")]);
-                } else {
-                    hints(c, text, &[("A", "Set"), ("L1/R1", "Page"), ("START", "Next"), ("B", "Back")]);
+                let mut bar = zone_list_hints(matches!(from, ListFrom::Country), self.zone_stage(), zones.is_empty());
+                // L1/R1 page only a list longer than the screen (Arctic, Other: one page).
+                if zones.len() + usize::from(matches!(from, ListFrom::Country)) <= zone_rows_visible(c.h) {
+                    bar.retain(|(k, _)| *k != "L1/R1");
                 }
+                if matches!(from, ListFrom::Country) && *sel == zones.len() {
+                    bar[0] = ("A", "Open");
+                }
+                hints(c, text, &bar);
             }
             ZoneView::Search(kb) => {
                 text.draw(c, Face::Title, 50, MARGIN, 110, pal().chalk, "Search time zones");
                 paint_keyboard_with(c, text, kb, "Search");
-                hints(c, text, &[("A", "Type"), ("B", "Delete"), ("X", "Shift"), ("Y", "Symbols"), ("START", "Search")]);
+                let mut bar = vec![("A", "Type"), if kb.text.is_empty() { ("B", "Back") } else { ("B", "Delete") }];
+                if !kb.text.is_empty() {
+                    bar.push(("L1", "Clear"));
+                }
+                bar.extend([("X", "Shift"), ("Y", "Symbols"), ("START", "Search")]);
+                hints(c, text, &bar);
             }
         }
     }
@@ -3921,7 +4882,7 @@ impl Setup {
     /// Rows of (name, value) under the heading, the selected one highlighted, scrolled to keep it in view.
     fn paint_zone_rows(&self, c: &mut Canvas, text: &mut Text, rows: &[(String, String)], sel: usize) {
         let (top, row) = (232, crate::type_scale::row(70, 37));
-        let visible = ((c.h - 130 - top) / row).max(1) as usize;
+        let visible = zone_rows_visible(c.h);
         // A short list (the regions) keeps its top, "Search…", until the selection runs off the bottom; a long one centres it.
         let lead = if rows.len() <= 2 * visible { visible - 1 } else { visible / 2 };
         let first = sel.saturating_sub(lead).min(rows.len().saturating_sub(visible));
@@ -3939,33 +4900,115 @@ impl Setup {
         }
     }
 
+    /// The look step's rows from the top: the layouts, then Appearance, Motion and Animations (Settings > Look; Style and
+    /// Colours are rows of Settings › Look itself) or Style, Colours and Appearance (the first start: how every page
+    /// looks, shown on the previews as it changes; 2026-11-07: Retro is to be seen, not hidden behind a key).
+    fn look_rows(&self) -> &'static [LookRow] {
+        if self.only.is_some() {
+            &[LookRow::Layout, LookRow::Appearance, LookRow::Motion, LookRow::Animations]
+        } else {
+            &[LookRow::Layout, LookRow::Font, LookRow::Colours, LookRow::Appearance]
+        }
+    }
+
+    /// The first start again, from Settings › Help & tools: B on the welcome goes back to Settings.
+    pub fn again(mut self) -> Self {
+        self.again = true;
+        self
+    }
+
+    /// The setup ended with B on the welcome of a first start opened from Settings: back to Settings, nothing finished.
+    pub fn backed_out(&self) -> bool {
+        self.backed_out
+    }
+
+    /// B on Settings > Look: everything the page changed goes back to how it was (the app takes it as it takes a
+    /// change: the layout through `take_profile_look`, the rest from `appearance`, `motion`, `take_animations`).
+    fn cancel_look(&mut self) {
+        let Some((theme, appearance, motion, animations)) = self.look_opened.take() else { return };
+        if self.theme != theme {
+            self.theme = theme;
+            self.profile_look = Some(theme);
+        }
+        (self.appearance, self.motion) = (appearance, motion);
+        if self.animations != animations {
+            self.animations = animations;
+            self.animations_changed = true;
+        }
+    }
+
+    /// Left/Right on the look step: the focused row's next or previous choice, round at the ends as the Style panel's.
+    fn change_look_row(&mut self, forward: bool) {
+        fn turn<T: Copy + PartialEq>(all: &[T], now: T, forward: bool) -> T {
+            let (i, n) = (all.iter().position(|a| *a == now).unwrap_or(0), all.len());
+            all[if forward { (i + 1) % n } else { (i + n - 1) % n }]
+        }
+        match self.look_rows().get(self.look_row) {
+            Some(LookRow::Layout) => {
+                let n = self.themes.len();
+                self.theme = if forward { (self.theme + 1) % n } else { (self.theme + n - 1) % n };
+            }
+            Some(LookRow::Appearance) => self.appearance = turn(&Appearance::ALL, self.appearance, forward),
+            Some(LookRow::Motion) => self.motion = turn(&Motion::ALL, self.motion, forward),
+            Some(LookRow::Animations) => {
+                self.animations = Some(turn(&Animations::ALL, self.animations_shown(), forward));
+                self.animations_changed = true;
+            }
+            // The app steps them (`take_font_step`, `take_colours_step`), as Settings › Look's rows do.
+            Some(LookRow::Font) => self.font_step = Some(forward),
+            Some(LookRow::Colours) => self.colours_step = Some(forward),
+            None => {}
+        }
+    }
+
     /// The look step: each look's real shelf, scaled down (`previews`, one per theme, `LOOK_PREVIEW` in size,
     /// made by the app), the one shown in the middle and its neighbours at the sides; then its name, one line
     /// about it, and how to switch. `sample`: the previews use the built-in sample games.
     pub fn paint_look(&mut self, c: &mut Canvas, text: &mut Text, previews: &[Image], sample: bool) {
         c.clear(pal().void);
-        text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Choose a look");
-        let sub = if sample { "How the shelf looks, with sample games until yours are on the SD card." } else { "Your shelf, in each look." };
-        text.draw(c, Face::Body, 28, MARGIN, 192, pal().dust, sub);
+        let first = self.only.is_none();
+        let title = if first { "How your games stand" } else { "Choose a look" };
+        // Cut to the page: Spanish in the Retro style ran off a 1024 px screen.
+        let title = text.fit(Face::Title, 67, title, c.w - 2 * MARGIN);
+        text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, &title);
+        let sub = match (first, sample) {
+            (true, true) => "Pick how your games line up. Shown with sample games until yours are here.",
+            (true, false) => "Pick how your games line up. These are your own games: try each one.",
+            (false, true) => "How the shelf looks, with sample games until yours are on the SD card.",
+            (false, false) => "Your shelf, in each look.",
+        };
+        // Smaller type before "…": German and Spanish at large text ended in "Probier j…" (first-start walk 2026-11-06).
+        let (sub_px, sub) = text.fit_sizes(Face::Body, &[28, 25, 22], sub, c.w - 2 * MARGIN);
+        text.draw(c, Face::Body, sub_px, MARGIN, 192, pal().dust, &sub);
         self.paint_step_count(c, text);
+        // The first start has a line under its rows (what HOME does in a game): the pictures give up its height.
         let (pw, ph) = look_preview((c.w, c.h));
+        let (pw, ph) = if first { let short = ph - crate::type_scale::line(24, 8); (pw * short / ph, short) } else { (pw, ph) };
         let (x, y) = ((c.w - pw) / 2, 226);
         let n = self.themes.len();
         if previews.len() == n {
             // The neighbours, dimmed and cut off by the screen's edges: there is more to either side.
             for (dx, i) in [(-(pw + 36), (self.theme + n - 1) % n), (pw + 36, (self.theme + 1) % n)] {
-                c.round_rect(x + dx - 8, y - 8, pw + 16, ph + 16, 16, pal().spine);
+                crate::retro::pill(c, x + dx - 8, y - 8, pw + 16, ph + 16, 16, pal().spine);
                 c.blit_scaled(&previews[i], x + dx, y, pw, ph);
                 c.shade_rect(x + dx - 8, y - 8, pw + 16, ph + 16, pal().void, 170);
             }
-            c.round_rect(x - 8, y - 8, pw + 16, ph + 16, 16, pal().keycap);
+            crate::retro::pill(c, x - 8, y - 8, pw + 16, ph + 16, 16, pal().keycap);
             c.blit_scaled(&previews[self.theme], x, y, pw, ph);
         }
         let (name, blurb) = self.themes[self.theme];
         let base = y + ph + 62 + crate::type_scale::grow(50);
         text.draw(c, Face::Title, 50, MARGIN, base, pal().chalk, name);
+        // The layouts focused: the bar beside their name, as beside a row of pills. For the navigation explorer the
+        // layouts are one row from the pictures to the name.
+        crate::nav_probe::row(c, (MARGIN, y - 8, c.w - 2 * MARGIN, base + 12 - (y - 8)));
+        if self.look_row == 0 {
+            let cap = crate::type_scale::px(50) as i32 * 3 / 4;
+            focus_bar(c, base - cap - 6, cap + 12);
+            crate::nav_probe::focus(c, (MARGIN - 28, y - 8, c.w - 2 * MARGIN + 28, base + 12 - (y - 8)));
+        }
         // Easy on a card with many games: says so, nothing more.
-        let blurb = if crate::settings::Theme::ALL.get(self.theme) == Some(&crate::settings::Theme::Big) && self.games.len() > HANDFUL { "Best with a handful of games" } else { blurb };
+        let blurb = if crate::settings::Theme::ALL.get(self.theme) == Some(&crate::settings::Theme::Big) && self.games.len() > HANDFUL { "One big game at a time, simple menus. Best with a handful of games." } else { blurb };
         let blurb = text.fit(Face::Body, 28, blurb, c.w - 2 * MARGIN);
         text.draw(c, Face::Body, 28, MARGIN, base + 40 + crate::type_scale::grow(28), pal().dust, &blurb);
         // One mark per theme, the shown one filled.
@@ -3974,65 +5017,132 @@ impl Setup {
             let color = if i as usize == self.theme { pal().chalk } else { pal().keycap };
             c.rect(mx, base - 18, 16, 16, color);
         }
-        // Appearance and a second row as two slimmer rows of pills, evenly spaced between the look's description and
-        // the hints: Motion in Settings > Look, the text size on the first start.
+        // The rows under the layouts, slimmer rows of pills one under the other as `look_rows` has them; the focused
+        // one has the bar beside it. Settings > Look: Appearance, Motion, Animations. The first start: Style, Colours,
+        // Appearance, the previews above changing with them.
         let top = base + 63 + crate::type_scale::grow(28);
-        let second = top + pill_h() + 15;
-        self.paint_appearance(c, text, top);
-        if self.only == Some(Only::Look) {
-            self.paint_motion(c, text, second);
-        } else {
-            self.paint_text_size(c, text, second);
+        let step = pill_h() + 15;
+        let label_w = self.label_w(text);
+        let rows = &self.look_rows()[1..];
+        for (i, row) in rows.iter().enumerate() {
+            self.paint_look_row(c, text, *row, top + i as i32 * step, label_w);
         }
-        self.paint_animations(c, text, second + pill_h() + 15);
-        hints(c, text, &look_hints(self.only == Some(Only::Look), c.w < 1100));
+        if self.look_row > 0 {
+            focus_bar(c, top + (self.look_row as i32 - 1) * step, pill_h());
+        }
+        if first {
+            self.paint_look_end(c, text, top + rows.len() as i32 * step + 10 + crate::type_scale::mid(24));
+            return;
+        }
+        hints(c, text, &look_hints(true, self.look_row > 0));
     }
 
-    /// The appearance row of the look step: "Appearance", Dark / Light / Automatic with the one in use on a
-    /// paper pill, and what it means (battery included) after it. `top`: the row's top edge.
-    fn paint_appearance(&self, c: &mut Canvas, text: &mut Text, top: i32) {
-        let names: Vec<&str> = Appearance::ALL.iter().map(|a| a.name()).collect();
-        let on = Appearance::ALL.iter().position(|a| *a == self.appearance).unwrap_or(0);
-        let label_w = self.label_w(text);
-        pill_row(c, text, top, "Appearance", &names, on, self.appearance.blurb(), label_w);
+    /// One row of pills under the layouts, from `top`.
+    fn paint_look_row(&self, c: &mut Canvas, text: &mut Text, row: LookRow, top: i32, label_w: i32) {
+        match row {
+            LookRow::Layout => {}
+            LookRow::Appearance => {
+                let names: Vec<&str> = Appearance::ALL.iter().map(|a| a.name()).collect();
+                let on = Appearance::ALL.iter().position(|a| *a == self.appearance).unwrap_or(0);
+                pill_row(c, text, top, "Appearance", &names, on, self.appearance.blurb(), label_w);
+            }
+            LookRow::Motion => {
+                let names: Vec<&str> = Motion::ALL.iter().map(|m| m.name()).collect();
+                let on = Motion::ALL.iter().position(|m| *m == self.motion).unwrap_or(0);
+                pill_row(c, text, top, "Motion", &names, on, self.motion.blurb(), label_w);
+            }
+            LookRow::Animations => {
+                let names: Vec<&str> = Animations::ALL.iter().map(|a| a.name()).collect();
+                let shown = self.animations_shown();
+                let on = Animations::ALL.iter().position(|a| *a == shown).unwrap_or(0);
+                pill_row(c, text, top, "Animations", &names, on, shown.blurb(), label_w);
+            }
+            // Barlow, Pixel, Rounded, Retro: as Settings › Look › Style, and every page in it from the next frame on.
+            LookRow::Font => {
+                let now = crate::font_style::get();
+                let names: Vec<&str> = crate::font_style::FontStyle::ALL.iter().map(|f| f.label()).collect();
+                let on = crate::font_style::FontStyle::ALL.iter().position(|f| *f == now).unwrap_or(0);
+                pill_row(c, text, top, "Style", &names, on, now.blurb(), label_w);
+            }
+            // Five sets (Retro: its own two) are too many pills for a small screen: the one in use, Left/Right step on.
+            LookRow::Colours => {
+                let (name, blurb) = if crate::retro::on() {
+                    (crate::retro::colours().label(), crate::retro::colours().blurb())
+                } else {
+                    (crate::palette::colours().label(), crate::palette::colours().blurb())
+                };
+                let shown = format!("‹ {name} ›");
+                pill_row(c, text, top, "Colours", &[shown.as_str()], 0, blurb, label_w);
+            }
+        }
     }
 
-    /// The motion row under it (Settings > Look): Full / Reduced / Off.
-    fn paint_motion(&self, c: &mut Canvas, text: &mut Text, top: i32) {
-        let names: Vec<&str> = Motion::ALL.iter().map(|m| m.name()).collect();
-        let on = Motion::ALL.iter().position(|m| *m == self.motion).unwrap_or(0);
-        let label_w = self.label_w(text);
-        pill_row(c, text, top, "Motion", &names, on, self.motion.blurb(), label_w);
+    /// Under the first start's rows: the lines beside Finish (what HOME does in a game, where the look changes later),
+    /// as many as fit above the hint bar.
+    fn paint_look_end(&self, c: &mut Canvas, text: &mut Text, top: i32) {
+        let width = c.w - 2 * MARGIN;
+        let step = crate::type_scale::line(24, 8);
+        let last = crate::kit::hint_bar_top(c.h) - 16;
+        let mut lines: Vec<&str> = Vec::new();
+        if self.kids_skipped {
+            lines.push("Kids Mode is there whenever you want it: Settings › System › Kids mode.");
+        }
+        if self.kids_later {
+            lines.push("Kids Mode needs games it can start. Set it up later in Settings › System › Kids mode.");
+        }
+        if self.home_line.get().unwrap_or_else(|| {
+            let v = crate::first_game::told_on_last_page(&self.data_dir);
+            self.home_line.set(Some(v));
+            v
+        }) {
+            lines.push(crate::first_game::LAST_PAGE_LINE);
+        }
+        lines.push("Change the look any time in Settings › Look.");
+        // Whole lines only, and none over the hint bar: the last ones give way on a short screen.
+        let mut y = top;
+        'lines: for l in lines {
+            let wrapped = text.wrap_prose_at_most(Face::Body, 24, l, width, 2);
+            if y + (wrapped.len() as i32 - 1) * step > last {
+                break 'lines;
+            }
+            for w in wrapped {
+                text.draw(c, Face::Body, 24, MARGIN, y, pal().dust, &w);
+                y += step;
+            }
+        }
+        hints(c, text, &look_hints(false, self.look_row > 0));
     }
 
-    /// The animations row under them: Cozy / Quick, with the plain line about the one in use.
-    fn paint_animations(&self, c: &mut Canvas, text: &mut Text, top: i32) {
-        let names: Vec<&str> = Animations::ALL.iter().map(|a| a.name()).collect();
-        let shown = self.animations_shown();
-        let on = Animations::ALL.iter().position(|a| *a == shown).unwrap_or(0);
-        let label_w = self.label_w(text);
-        pill_row(c, text, top, "Animations", &names, on, shown.blurb(), label_w);
+    /// Easy to read as the look step shows it: Large text and a Motion that isn't Full (`features::reading_on`).
+    fn easy_to_read(&self) -> bool {
+        features::reading_on(crate::type_scale::get(), self.motion)
     }
 
-    /// The text size row under it (the first start): Normal / Medium / Large.
-    fn paint_text_size(&self, c: &mut Canvas, text: &mut Text, top: i32) {
-        use crate::type_scale::TextSize;
-        let names: Vec<&str> = TextSize::ALL.iter().map(|t| t.label()).collect();
-        let now = crate::type_scale::get();
-        let on = TextSize::ALL.iter().position(|t| *t == now).unwrap_or(0);
-        let label_w = self.label_w(text);
-        let blurb = match now {
-            TextSize::Normal => "You can change it later in Settings.",
-            TextSize::Medium => "A little larger text on every screen.",
-            TextSize::Large => "Larger text on every screen.",
-        };
-        pill_row(c, text, top, "Text size", &names, on, blurb, label_w);
+    /// R1 on the first start's look step: Easy to read on or off, through the Tour card's own switch, so both set Text
+    /// size and Motion the same way. The app keeps both (`take_text_size`, `motion`).
+    fn switch_easy_to_read(&mut self) {
+        let Some(switch) = features::by_id("easy_to_read").and_then(|i| features::FEATURES[i].switch) else { return };
+        let mut s = self.switches.clone();
+        (s.text_size, s.motion) = (crate::type_scale::get(), self.motion);
+        (switch.set)(&mut s, !self.easy_to_read());
+        crate::type_scale::set(s.text_size);
+        self.text_size_chosen = Some(s.text_size);
+        self.motion = s.motion;
     }
 
-    /// The labels of the two pill rows line up.
+
+
+
+    /// The welcome's Easy to read row under the language: Off / On (L2 on every stage), Large text and calmer menus.
+    fn paint_easy_to_read(&self, c: &mut Canvas, text: &mut Text, top: i32, label_w: i32) {
+        let on = self.easy_to_read();
+        let blurb = if on { "Larger text and calmer menus, on every page." } else { "Larger text and calmer menus. L2 on every page." };
+        pill_row(c, text, top, "Easy to read", &["Off", "On"], usize::from(on), blurb, label_w);
+    }
+
+    /// The labels of the pill rows line up.
     fn label_w(&self, text: &mut Text) -> i32 {
-        let second = if self.only == Some(Only::Look) { "Motion" } else { "Text size" };
-        ["Appearance", second, "Animations"].iter().map(|l| text.width(Face::Body, 24, l)).max().unwrap_or(0)
+        ["Appearance", "Motion", "Animations", "Style", "Colours"].iter().map(|l| text.width(Face::Body, 24, l)).max().unwrap_or(0)
     }
 
     /// The line under the Wi-Fi page's title and its colour. What is true now outranks an old note: a switch under way
@@ -4141,8 +5251,14 @@ impl Setup {
                     };
                     (e.ssid.clone(), side.to_string(), e.signal)
                 }
-                None if i == self.entries.len() => ("Other network…".to_string(), "Hidden, by name".to_string(), None),
-                None => ("Wi-Fi country".to_string(), self.country_value(), None),
+                None => match self.wifi_tail_at(Some(i)) {
+                    Some(WifiRow::Other) => ("Other network…".to_string(), "Hidden, by name".to_string(), None),
+                    Some(WifiRow::Country) => ("Wi-Fi country".to_string(), self.country_value(), None),
+                    Some(WifiRow::Zone) => ("Time zone".to_string(), self.zone_value(), None),
+                    Some(WifiRow::Scan) => ("Scan again".to_string(), if self.scanning { "Scanning…".to_string() } else { String::new() }, None),
+                    Some(WifiRow::Continue) if self.entries.iter().any(|e| e.active) => ("Continue".to_string(), String::new(), None),
+                    Some(WifiRow::Continue) | None => ("Continue offline".to_string(), String::new(), None),
+                },
             };
             let side_w = text.width(Face::Body, 24, &side);
             // A network's name is its own (a hidden one typed by the player): painted as it is, never translated.
@@ -4265,23 +5381,29 @@ fn signal_bars(c: &mut Canvas, x: i32, base: i32, signal: u8, color: u32) {
     }
 }
 
-/// The look step's hint bar. Settings → Look: no shortcut keys, every setting has its own row. The first
-/// start: the text size on R1, and B, which goes back to the welcome (the first-day run, 2026-10-26, found it unnamed).
-fn look_hints(settings: bool, narrow: bool) -> Vec<(&'static str, &'static str)> {
-    // A key never stands without its word, and the bar shows four hints at most (`kit::page_hints`): the keys that keep
-    // the page moving come first, then what only this page has, and what does not fit is left out whole.
-    let mut h = vec![("Left/Right", "Change"), ("A", "Keep")];
-    if settings {
-        // No shortcut keys here: Appearance, Motion, Animations and Systems on the shelf have their own rows in Settings.
-        return h;
+/// Where "Your games" puts the first of its `rows` rows: from the bottom up, clear of the hint bar.
+fn found_rows_top(h: i32, rows: usize) -> i32 {
+    crate::kit::hint_bar_top(h) - 24 - rows as i32 * crate::type_scale::row(70, 37)
+}
+
+/// The look step's hint bar: the keys that work on the focused row (`below`: a row under the layouts). Left/Right change
+/// the layout or the row's choice; A keeps (Settings) or finishes (the first start) from any row. B goes back: in Settings
+/// with what the page changed put back, so it says Cancel (the Brick, 2026-11-07: no B on the bar, and B kept the layout).
+fn look_hints(settings: bool, below: bool) -> Vec<(&'static str, &'static str)> {
+    match (settings, below) {
+        (true, false) => vec![("Left/Right", "Layout"), ("A", "Keep"), ("B", "Cancel")],
+        (true, true) => vec![("Left/Right", "Change"), ("A", "Keep"), ("B", "Cancel")],
+        (false, false) => vec![("Left/Right", "Layout"), ("A", "Finish"), ("B", "Back")],
+        (false, true) => vec![("Left/Right", "Change"), ("A", "Finish"), ("B", "Back")],
     }
-    h.extend([("B", "Back"), ("R1", "Text size"), ("Y", "Appearance")]);
-    // Not on a screen as narrow as the Brick's 1024: there the bar has no room for its word, and a bare "L1" says nothing. The
-    // Animations row is on the page and Left/Right changes it.
-    if !narrow {
-        h.push(("L1", "Animations"));
-    }
-    h
+}
+
+/// The focus of a page whose rows are pills, not list rows (the welcome, the look step): a bar in the margin beside the
+/// row from `top`, `h` high.
+fn focus_bar(c: &mut Canvas, top: i32, h: i32) {
+    crate::retro::pill(c, MARGIN - 28, top + 6, 8, h - 12, 4, pal().label);
+    // For the navigation explorer the focus is the whole row the bar stands beside.
+    crate::nav_probe::focus(c, (MARGIN - 28, top, c.w - 2 * MARGIN + 28, h));
 }
 
 /// The last step's first line: the games already on the card, or where they will show up (the first-day run,
@@ -4403,15 +5525,17 @@ fn pill_row(c: &mut Canvas, text: &mut Text, top: i32, label: &str, names: &[&st
     let base = top + h / 2 + crate::type_scale::mid(px);
     let mut x = MARGIN + text.draw(c, Face::Body, px, MARGIN, base, pal().dust, label).max(label_w) + 20;
     let widths: Vec<i32> = names.iter().map(|n| text.width(Face::Body, px, n) + 40).collect();
-    c.round_rect(x, top, widths.iter().sum::<i32>() + 8, h, h / 2, pal().keycap);
+    crate::retro::pill(c, x, top, widths.iter().sum::<i32>() + 8, h, h / 2, pal().keycap);
     x += 4;
     for (i, (n, w)) in names.iter().zip(&widths).enumerate() {
         if i == on {
-            c.round_rect(x, top + 4, *w, h - 8, (h - 8) / 2, pal().label);
+            crate::retro::pill(c, x, top + 4, *w, h - 8, (h - 8) / 2, pal().label);
         }
         text.draw(c, Face::Body, px, x + 20, base, if i == on { pal().ink } else { pal().chalk }, n);
         x += w;
     }
+    // A row of choices a player expects to reach and change (the explorer, `nav_probe`): its label and its pills.
+    crate::nav_probe::row(c, (MARGIN, top, x + 4 - MARGIN, h));
     let room = c.w - MARGIN - x - 28;
     // The welcome step's one row has the page below it: a note that doesn't fit beside the pills (1024x768, the
     // Spanish one) goes under the row, whole, rather than "Settin…"
@@ -4439,11 +5563,11 @@ fn pill_track(c: &mut Canvas, text: &mut Text, x: i32, top: i32, names: &[&str],
     let base = top + h / 2 + crate::type_scale::mid(px);
     let widths: Vec<i32> = names.iter().map(|n| text.width(Face::Body, px, n) + 40).collect();
     let end = x + widths.iter().sum::<i32>() + 8;
-    c.round_rect(x, top, end - x, h, h / 2, pal().keycap);
+    crate::retro::pill(c, x, top, end - x, h, h / 2, pal().keycap);
     let mut x = x + 4;
     for (i, (n, w)) in names.iter().zip(&widths).enumerate() {
         if i == on {
-            c.round_rect(x, top + 4, *w, h - 8, (h - 8) / 2, pal().label);
+            crate::retro::pill(c, x, top + 4, *w, h - 8, (h - 8) / 2, pal().label);
         }
         text.draw(c, Face::Body, px, x + 20, base, if i == on { pal().ink } else { pal().chalk }, n);
         x += w;
@@ -4461,24 +5585,48 @@ fn pill_h() -> i32 {
 }
 
 /// The hint bar of the setup pages; returns where each pill is, for touch (pills of combined keys are left out).
-/// The hint bar of the Wi-Fi page. `wizard`: the first start, where START walks on; in Settings, B (and START) leave.
-fn wifi_hints(a: &'static str, saved: bool, forgetting: bool, wizard: bool) -> Vec<(&'static str, &'static str)> {
-    let mut h = vec![("A", a), ("X", "Scan again")];
+/// The hint bar of the Wi-Fi page. `wizard`: the first start, where B goes back a stage like on every stage, the
+/// Continue row goes on (online or not) and START skips the rest; Y still forgets there, without a hint (four at most).
+/// In Settings, B (and START) leave. `scan`: the radio is on (X with Wi-Fi off did nothing, and said "Scan again");
+/// X is a shortcut for the Scan again row, so it is not named on that row itself.
+fn wifi_hints(a: &'static str, saved: bool, forgetting: bool, wizard: bool, online: bool, scan: bool) -> Vec<(&'static str, &'static str)> {
+    let _ = online;
+    let rescan = if scan && a != "Scan again" { vec![("X", "Scan again")] } else { Vec::new() };
+    if wizard {
+        return [vec![("A", a), ("B", "Back")], rescan, vec![("START", "Skip the rest")]].concat();
+    }
+    let mut h = [vec![("A", a)], rescan].concat();
     if saved {
         h.push(("Y", if forgetting { "Forget now" } else { "Forget" }));
     }
-    if wizard {
-        h.push(("START", "Next"));
-    }
     h.push(("B", "Back"));
     h
+}
+
+/// How many rows a time zone list shows on a screen `h` high.
+fn zone_rows_visible(h: i32) -> usize {
+    ((h - 130 - 232) / crate::type_scale::row(70, 37)).max(1) as usize
+}
+
+/// The hint bar of a time zone list: a country's own (`country`), in the first start's stage (`stage`) or not; a search
+/// that found nothing (`empty`) has nothing to set or page through, B goes back to it.
+fn zone_list_hints(country: bool, stage: bool, empty: bool) -> Vec<(&'static str, &'static str)> {
+    match (country, stage) {
+        (true, true) => vec![("A", "Set"), ("B", "Back"), ("START", "Skip the rest")],
+        (true, false) => vec![("A", "Set"), ("START", "Skip"), ("B", "Back")],
+        _ if empty => vec![("START", "Next"), ("B", "Back")],
+        _ => vec![("A", "Set"), ("L1/R1", "Page"), ("START", "Next"), ("B", "Back")],
+    }
 }
 
 /// The hint bar of the Extras step: A only where it does something. The downloads and the browser need Wi-Fi, the
 /// pictures switch does not (`usable`).
 fn extras_hints(action: &'static str, usable: bool) -> Vec<(&'static str, &'static str)> {
     let mut h = Vec::new();
-    if usable {
+    // The Pictures row is a choice: Left/Right, as on every row of choices (A steps it on too).
+    if action == "Change" {
+        h.push(("Left/Right", "Change"));
+    } else if usable {
         h.push(("A", action));
     }
     h.push(("B", "Back"));
@@ -4499,7 +5647,7 @@ fn games_hints(more: Option<bool>, sharing: bool, online: bool) -> Vec<(&'static
     if crate::phone_upload_page::offered() {
         h.push(("Y", "From your phone"));
     }
-    h.push(("START", "Next"));
+    // START did the same as B (back to "Your games" in the first start, out of the page from Settings): B alone.
     h.push(("B", "Back"));
     h
 }
@@ -4512,7 +5660,7 @@ pub fn hints(c: &mut Canvas, text: &mut Text, items: &[(&str, &str)]) -> Vec<(cr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::system_ctl::{MockHw, MockState};
+    use crate::system_ctl::{Hw, MockHw, MockState};
     use crate::testutil::TestDir;
 
     const IW_AT: &str = "global\ncountry 00: DFS-UNSET\n\nphy#0 (self-managed)\ncountry AT: DFS-ETSI\n\t(2402 - 2472 @ 40), (N/A, 20), (N/A)\n";
@@ -4530,20 +5678,6 @@ mod tests {
         (setup_on(hw.clone(), name), hw)
     }
 
-    /// Release review 0.1.12: "For a child" on a device without a Wi-Fi chip skips the Wi-Fi page like the other profiles.
-    #[test]
-    fn child_without_wifi_skips_the_wifi_page() {
-        let (mut s, _) = setup("child-no-wifi", "UTC", None);
-        s.no_wifi = true;
-        s.step = Step::Play { sel: 4 };
-        assert!(!s.press(Button::East));
-        assert!(s.take_kids_asked());
-        s.kids_done();
-        assert!(matches!(s.step, Step::Zone(_)), "at {}", s.at());
-        assert_eq!(step_number(&s.step, true), Some(4));
-        press(&mut s, &[Button::Start]);
-        assert_eq!(s.at(), "games");
-    }
 
     /// Review 2026-11-01: sharing that came back by itself after the page opened: the page kept saying off, and X
     /// switched on what was on.
@@ -4566,7 +5700,7 @@ mod tests {
         s.step = Step::Games;
         s.keep_watch();
         let changed = |want: bool| loop {
-            let ev = seen.recv_timeout(std::time::Duration::from_secs(10)).expect("the page hears of it");
+            let ev = seen.recv_timeout(crate::testutil::timeout(std::time::Duration::from_secs(10))).expect("the page hears of it");
             if matches!(&ev, SetupEvent::ShareChanged { now, .. } if now.on == want) {
                 return ev;
             }
@@ -4632,7 +5766,7 @@ mod tests {
         let tx = std::sync::Mutex::new(tx);
         // Only the answers `Setup::settle` waits for; the rest (file sharing, remote access) is dropped as before.
         let notify: Notify = Arc::new(move |e| {
-            if matches!(e, SetupEvent::Zone(_) | SetupEvent::ZoneOffsets(_) | SetupEvent::GameCounts(_) | SetupEvent::Net) {
+            if matches!(e, SetupEvent::Zone(_) | SetupEvent::ZoneGuess(_) | SetupEvent::ZoneOffsets(_) | SetupEvent::GameCounts(_) | SetupEvent::Net) {
                 let _ = tx.lock().unwrap().send(e);
             }
         });
@@ -4657,10 +5791,531 @@ mod tests {
         }
     }
 
-    /// First start up to the Wi-Fi step (the profiles skipped with START).
+    /// First start up to the Wi-Fi step: A on the welcome.
     fn at_wifi(s: &mut Setup) {
-        press(s, &[Button::East, Button::East, Button::Start]);
+        press(s, &[Button::East]);
         assert_eq!(s.at(), "wifi");
+    }
+
+    /// The first start's Wi-Fi page left the way a player leaves it without connecting: Down to its last row, Continue
+    /// offline, and A (B went on there before 2026-11-07; it goes back now).
+    fn wifi_continue(s: &mut Setup) {
+        assert_eq!(s.at(), "wifi");
+        for _ in 0..s.wifi_rows() {
+            press(s, &[Button::Down]);
+        }
+        assert_eq!(s.wifi_tail_at(s.sel.checked_sub(s.lead())), Some(WifiRow::Continue), "the last row is Continue");
+        press(s, &[Button::East]);
+    }
+
+    /// "Your games" left the way on: Continue, or I'll add games later on a card without games.
+    fn found_on(s: &mut Setup) {
+        assert_eq!(s.at(), "your games");
+        let rows = s.found_rows();
+        let at = rows.iter().position(|r| matches!(r, FoundRow::Continue | FoundRow::Later)).expect("a way on");
+        press(s, &vec![Button::Up; rows.len()]);
+        press(s, &vec![Button::Down; at]);
+        press(s, &[Button::East]);
+    }
+
+    /// Selects the Wi-Fi page's row `row` (after the networks).
+    fn select_wifi(s: &mut Setup, row: WifiRow) {
+        let at = s.wifi_tail().iter().position(|r| *r == row).expect("the row is there");
+        s.sel = s.lead() + s.entries.len() + at;
+    }
+
+    /// Where the first start is, with its dot: ("wifi", 2 of 4).
+    fn where_(s: &Setup) -> (String, Option<(usize, usize)>) {
+        (s.at(), s.step_of())
+    }
+
+    /// A fresh data folder of its own for a test.
+    fn fresh(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("pocketui-setup-data-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    /// The first start on a handheld with Wi-Fi: language, Wi-Fi (the time zone set from the Wi-Fi region and shown on its
+    /// row), your games, the look; four dots; the way on is a row (Continue) or A, A on the look finishes.
+    #[test]
+    fn the_first_start_is_language_wifi_games_look() {
+        fresh("flow4");
+        let (mut s, hw) = setup("flow4", "UTC", Some(IW_AT));
+        let mut seen = vec![where_(&s)];
+        press(&mut s, &[Button::East]);
+        seen.push(where_(&s));
+        // Austria has one zone: taken at once, said on the Time zone row, never asked.
+        assert_eq!(hw.timezone().as_deref(), Some("Europe/Vienna"));
+        assert!(s.zone_value().starts_with("Vienna"), "{}", s.zone_value());
+        wifi_continue(&mut s);
+        seen.push(where_(&s));
+        found_on(&mut s);
+        seen.push(where_(&s));
+        let want = [("welcome", 1), ("wifi", 2), ("your games", 3), ("look", 4)];
+        assert_eq!(seen, want.map(|(a, n)| (a.to_string(), Some((n, 4)))));
+        assert!(s.press(Button::East), "Finish ends the setup: the shelf is next, no extra page");
+        // Settings pages count nothing.
+        assert_eq!(shelf_setup("flow4-settings").only(Only::Wifi).step_of(), None);
+    }
+
+    /// No clear guess (no Wi-Fi region, the zone nobody chose): the time zone is asked inside the Wi-Fi stage, and Keep
+    /// UTC goes on without setting anything.
+    #[test]
+    fn an_unsure_time_zone_is_asked_after_wifi_and_can_be_skipped() {
+        fresh("zone-unsure");
+        let (mut s, hw) = setup("zone-unsure", "UTC", None);
+        at_wifi(&mut s);
+        assert_eq!(s.zone_value(), "Choose");
+        wifi_continue(&mut s);
+        assert_eq!(where_(&s), ("zone".to_string(), Some((2, 4))), "the second dot still: part of the Wi-Fi stage");
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.at(), "your games");
+        assert_eq!(hw.timezone().as_deref(), Some("UTC"), "skipped: nothing set");
+        assert!(s.zone_utc, "the clock stays on UTC, unconfirmed");
+    }
+
+    /// First-start walk 2026-11-06: skipped once, the time zone was asked again every time Wi-Fi was left (L1 back and
+    /// on, a connection later). Once is enough; the Wi-Fi page's Time zone row still opens it.
+    #[test]
+    fn a_skipped_time_zone_is_not_asked_again() {
+        fresh("zone-once");
+        let (mut s, hw) = setup("zone-once", "UTC", None);
+        at_wifi(&mut s);
+        wifi_continue(&mut s);
+        assert_eq!(s.at(), "zone");
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.at(), "your games");
+        press(&mut s, &[Button::South]);
+        assert_eq!(s.at(), "wifi");
+        wifi_continue(&mut s);
+        assert_eq!(s.at(), "your games", "skipped once: not asked again");
+        assert_eq!(hw.timezone().as_deref(), Some("UTC"));
+        press(&mut s, &[Button::L1]);
+        select_wifi(&mut s, WifiRow::Zone);
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.at(), "zone: regions", "the row still opens it");
+    }
+
+    /// A zone chosen in the stage's list stays when a later connection guesses one (the guess is for an unset clock).
+    #[test]
+    fn a_zone_chosen_in_the_stage_is_kept_after_a_later_connection() {
+        fresh("zone-chosen-kept");
+        let (mut s, hw) = setup("zone-chosen-kept", "UTC", None);
+        at_wifi(&mut s);
+        wifi_continue(&mut s);
+        press(&mut s, &[Button::North, Button::Down, Button::East, Button::East]);
+        assert_eq!(s.at(), "your games");
+        let chosen = hw.timezone().expect("a zone");
+        assert_ne!(chosen, "UTC");
+        hw.with(|st| st.regdomain = Some(IW_AT.into()));
+        s.step = Step::Wifi;
+        s.on_event(SetupEvent::Connected { ssid: "Home".into(), result: Ok(()) });
+        s.settle();
+        assert_eq!(hw.timezone(), Some(chosen), "the chosen zone stays");
+    }
+
+    /// Wi-Fi opened from the phone page ("Connect to Wi-Fi first", A) and left offline with B: back to Add games, not on
+    /// to the time zone or "Your games" (online, `user_journeys` sees the phone page come back).
+    #[test]
+    fn wifi_from_the_phone_page_goes_back_to_add_games() {
+        fresh("phone-wifi-back");
+        let (mut s, _hw) = setup("phone-wifi-back", "UTC", None);
+        at_wifi(&mut s);
+        wifi_continue(&mut s);
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.at(), "your games");
+        s.go_to_games();
+        s.ip = None;
+        press(&mut s, &[Button::West]);
+        assert_eq!(s.at(), "phone");
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.at(), "wifi");
+        s.ip = None;
+        press(&mut s, &[Button::South]);
+        assert_eq!(s.at(), "games", "back where Wi-Fi was asked for");
+        // L1 out of that Wi-Fi page forgets where it came from.
+        s.wifi_for_phone = true;
+        s.step = Step::Wifi;
+        press(&mut s, &[Button::L1]);
+        assert!(!s.wifi_for_phone);
+    }
+
+    /// The Wi-Fi page's Time zone row: a zone picked there stays (the guess after Wi-Fi doesn't touch it), and B comes
+    /// back to the Wi-Fi page.
+    #[test]
+    fn the_time_zone_row_changes_the_zone_and_comes_back_to_wifi() {
+        fresh("zone-row");
+        let (mut s, hw) = setup("zone-row", "UTC", None);
+        at_wifi(&mut s);
+        select_wifi(&mut s, WifiRow::Zone);
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.at(), "zone: regions", "A on the row opens the picker");
+        press(&mut s, &[Button::South, Button::South]);
+        assert_eq!(s.at(), "wifi", "B goes back to Wi-Fi, not on");
+        select_wifi(&mut s, WifiRow::Zone);
+        press(&mut s, &[Button::East, Button::Down, Button::East, Button::East]);
+        assert_eq!(s.at(), "wifi", "a pick comes back to Wi-Fi");
+        let picked = hw.timezone().expect("a zone");
+        assert_ne!(picked, "UTC");
+        assert!(s.zone_value().starts_with(&timezone::city_here(&picked)), "the row says the zone picked: {}", s.zone_value());
+        wifi_continue(&mut s);
+        assert_eq!(s.at(), "your games", "picked: not asked again");
+        assert_eq!(hw.timezone().as_deref(), Some(picked.as_str()));
+    }
+
+    /// RG28XX, RG35XX 2024: no Wi-Fi chip, so the time zone takes the Wi-Fi stage's place; still four dots.
+    #[test]
+    fn a_handheld_without_wifi_asks_the_time_zone_in_wifis_place() {
+        fresh("flow-nowifi");
+        let (mut s, _hw) = setup("flow-nowifi", "UTC", None);
+        s.no_wifi = true;
+        press(&mut s, &[Button::East]);
+        assert_eq!(where_(&s), ("zone".to_string(), Some((2, 4))));
+        press(&mut s, &[Button::East]);
+        assert_eq!(where_(&s), ("your games".to_string(), Some((3, 4))));
+        assert!(!s.found_rows().contains(&FoundRow::BoxArt), "no downloads without Wi-Fi: no Box art switch");
+        // Painted at the H700's size, the pages are there.
+        for (w, h) in [(1240, 1080), (640, 480)] {
+            let mut px = vec![0u32; (w * h) as usize];
+            s.paint(&mut Canvas::new(&mut px, w, h), &mut Text::builtin());
+            assert!(px.iter().any(|p| *p != px[0]), "{w}x{h} is not blank");
+        }
+        found_on(&mut s);
+        assert_eq!(where_(&s), ("look".to_string(), Some((4, 4))));
+    }
+
+    /// START on any stage skips the rest of the setup (BananaOS's way); inside a keyboard START is the keyboard's.
+    #[test]
+    fn start_skips_the_rest_but_not_inside_a_keyboard() {
+        fresh("skip-rest");
+        let (mut s, _hw) = setup("skip-rest", "UTC", Some(IW_AT));
+        assert!(s.press(Button::Start), "on the welcome");
+        let (mut s, _hw) = setup("skip-rest", "UTC", Some(IW_AT));
+        at_wifi(&mut s);
+        assert!(s.press(Button::Start), "on Wi-Fi");
+        let mut s = wifi_setup("skip-rest-kb");
+        s.only = None;
+        s.step = Step::HiddenName { kb: Keyboard::default() };
+        assert!(!s.press(Button::Start), "the keyboard's START is its own");
+    }
+
+    /// L1 goes back a stage (Alex's review of the first start, 2026-11-06): the look to your games, your games to
+    /// Wi-Fi, Wi-Fi to the welcome; on the welcome nothing; B still skips forward; a keyboard's L1 stays its own.
+    /// One scheme for every page (2026-11-07): B skipped a first-start stage forward and went back everywhere else, and
+    /// some ways on were keys only. Now B (and L1) go back a stage, and every way on is a row Down reaches or A itself.
+    #[test]
+    fn b_goes_back_a_stage_and_every_way_on_is_a_row() {
+        fresh("b-back");
+        let (mut s, _hw) = setup("b-back", "UTC", Some(IW_AT));
+        s.games = vec![("snes".into(), PathBuf::from("/storage/roms/snes/a.sfc"))];
+        assert!(!s.press(Button::South));
+        assert!(!s.press(Button::L1));
+        assert_eq!(where_(&s).1, Some((1, 4)), "the welcome has nothing before it: B and L1 stay");
+        at_wifi(&mut s);
+        press(&mut s, &[Button::South]);
+        assert_eq!(where_(&s).1, Some((1, 4)), "B: Wi-Fi back to the welcome");
+        at_wifi(&mut s);
+        wifi_continue(&mut s);
+        assert_eq!(s.at(), "your games", "Continue offline, a row, goes on");
+        press(&mut s, &[Button::South]);
+        assert_eq!(s.at(), "wifi", "B: your games back to Wi-Fi");
+        wifi_continue(&mut s);
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.at(), "look", "Continue, the first row of your games");
+        assert!(!s.press(Button::South), "B on the last stage never ends the setup");
+        assert_eq!(s.at(), "your games", "B: the look back to your games");
+        press(&mut s, &[Button::East, Button::L1]);
+        assert_eq!(s.at(), "your games", "L1 does the same");
+        let mut s = wifi_setup("b-back-kb");
+        s.only = None;
+        s.step = Step::HiddenName { kb: Keyboard::default() };
+        press(&mut s, &[Button::L1]);
+        assert!(matches!(s.step, Step::HiddenName { .. }), "in a keyboard L1 clears, it doesn't leave");
+    }
+
+    /// Settings › Help & tools › First-start setup: B on its welcome goes back to Settings (it went on to Wi-Fi, and there
+    /// was no way back); the first start itself has nothing before the welcome.
+    #[test]
+    fn the_first_start_from_settings_goes_back_there_with_b() {
+        fresh("again");
+        let (s, _hw) = setup("again", "UTC", None);
+        let mut s = s.again();
+        assert!(s.press(Button::South), "B ends it");
+        assert!(s.backed_out(), "backed out: nothing finished");
+        let (mut s, _hw) = setup("again-first", "UTC", None);
+        assert!(!s.press(Button::South) && !s.backed_out() && s.at() == "welcome");
+    }
+
+    /// The welcome's three rows: the language, Easy to read, and For a child, which only Y reached before.
+    #[test]
+    fn the_welcome_reaches_for_a_child_with_the_d_pad() {
+        fresh("welcome-rows");
+        let (mut s, _hw) = setup("welcome-rows", "UTC", None);
+        if !kids_offered() {
+            return;
+        }
+        press(&mut s, &[Button::Down, Button::Down, Button::Right]);
+        assert!(s.kids_wanted, "Down, Down, Right: for a child");
+        press(&mut s, &[Button::Down, Button::Left]);
+        assert!(!s.kids_wanted, "the last row stays the last; Left takes the wish back");
+        press(&mut s, &[Button::West]);
+        assert!(s.kids_wanted, "Y still does it, as a shortcut");
+        assert!(!s.press(Button::South) && s.at() == "welcome", "B has nothing to go back to");
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.at(), "wifi", "A gets started from any row");
+    }
+
+    /// The time zone's card: Looks right and Choose another… are rows (X was the only way to another zone), B goes back
+    /// to Wi-Fi.
+    #[test]
+    fn the_time_zone_card_has_its_ways_as_rows() {
+        fresh("zone-rows");
+        let (mut s, _hw) = setup("zone-rows", "UTC", None);
+        at_wifi(&mut s);
+        wifi_continue(&mut s);
+        assert_eq!(s.at(), "zone", "no guess: the card asks");
+        press(&mut s, &[Button::Down, Button::East]);
+        assert_eq!(s.at(), "zone: regions", "Choose another…, a row");
+        press(&mut s, &[Button::South]);
+        assert_eq!(s.at(), "zone");
+        press(&mut s, &[Button::South]);
+        assert_eq!(s.at(), "wifi", "B on the card: back to Wi-Fi");
+    }
+
+    /// First-start walk 2026-11-06: L1 on the time zone went to the welcome, past the Wi-Fi page it belongs to; and the
+    /// top row says L1 where it goes back, not in the zone's lists (L1 pages there) nor on the welcome.
+    #[test]
+    fn l1_on_the_time_zone_goes_back_to_wifi_and_is_shown_where_it_works() {
+        fresh("l1-zone");
+        let (mut s, _hw) = setup("l1-zone", "UTC", None);
+        assert!(!s.l1_goes_back(), "nothing before the welcome");
+        at_wifi(&mut s);
+        assert!(s.l1_goes_back());
+        wifi_continue(&mut s);
+        assert_eq!(s.at(), "zone");
+        assert!(s.l1_goes_back());
+        press(&mut s, &[Button::North]);
+        assert_eq!(s.at(), "zone: regions");
+        assert!(!s.l1_goes_back(), "the regions page with L1");
+        press(&mut s, &[Button::South]);
+        press(&mut s, &[Button::L1]);
+        assert_eq!(s.at(), "wifi", "the time zone back to its Wi-Fi page");
+        // Without a Wi-Fi chip the time zone is the stage after the welcome.
+        let (mut s, _hw) = setup("l1-zone-nowifi", "UTC", None);
+        s.no_wifi = true;
+        press(&mut s, &[Button::East, Button::L1]);
+        assert_eq!(s.at(), "welcome");
+        assert!(!shelf_setup("l1-zone-settings").only(Only::Wifi).l1_goes_back(), "Settings pages have no stages");
+    }
+
+    /// The zone search: no hit offers no "A Set" (A did nothing there), and L1 empties the field as in the password.
+    #[test]
+    fn the_zone_search_without_hits_offers_no_set_and_l1_clears() {
+        fresh("zone-search-none");
+        let (mut s, _hw) = setup("zone-search-none", "UTC", None);
+        at_wifi(&mut s);
+        wifi_continue(&mut s);
+        press(&mut s, &[Button::North, Button::East]);
+        assert_eq!(s.at(), "zone: search");
+        s.type_search("qqq");
+        press(&mut s, &[Button::L1]);
+        assert!(matches!(&s.step, Step::Zone(z) if matches!(&z.view, ZoneView::Search(kb) if kb.text.is_empty())), "L1 empties the field");
+        s.type_search("qqq");
+        press(&mut s, &[Button::Start]);
+        assert_eq!(s.at(), "zone: Search: qqq");
+        assert!(matches!(&s.step, Step::Zone(z) if matches!(&z.view, ZoneView::List { zones, .. } if zones.is_empty())));
+        assert_eq!(zone_list_hints(false, true, true).iter().map(|(k, _)| *k).collect::<Vec<_>>(), ["START", "B"], "no A Set without a hit");
+        assert_eq!(zone_list_hints(false, true, false)[0].0, "A");
+        paint_it(&mut s);
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.at(), "zone: Search: qqq", "A does nothing, as the bar says");
+    }
+
+    /// Wi-Fi off: X ("Scan again") did nothing, and the bar offered it.
+    #[test]
+    fn wifi_off_offers_no_scan() {
+        assert_eq!(wifi_hints("Turn on", false, false, true, false, false).iter().map(|(k, _)| *k).collect::<Vec<_>>(), ["A", "B", "START"]);
+        assert_eq!(wifi_hints("Connect", false, false, false, false, false).iter().map(|(k, _)| *k).collect::<Vec<_>>(), ["A", "B"]);
+    }
+
+    /// The welcome: Down reaches the Easy to read row and Left/Right switch it there; the language stays (first-start walk
+    /// 2026-11-06: the row looked like one to choose, Down did nothing and Right changed the language).
+    #[test]
+    fn down_on_the_welcome_reaches_easy_to_read() {
+        fresh("welcome-rows");
+        let (mut s, _hw) = setup("welcome-rows", "UTC", None);
+        let lang = crate::i18n::current();
+        let before = s.easy_to_read();
+        press(&mut s, &[Button::Down, Button::Right]);
+        assert_ne!(s.easy_to_read(), before, "switched on the row below");
+        assert_eq!(crate::i18n::current(), lang, "the language stays");
+        assert!(s.language_chosen.is_none());
+        press(&mut s, &[Button::Left]);
+        assert_eq!(s.easy_to_read(), before);
+        press(&mut s, &[Button::Up]);
+        assert_eq!(s.welcome_row, 0, "Up: the language row again");
+        assert_eq!(s.at(), "welcome");
+    }
+
+    /// Your games: Continue with games, Add more… opens the grid and B there comes back; without games the ways and
+    /// "I'll add games later".
+    #[test]
+    fn your_games_says_what_was_found_and_goes_on() {
+        fresh("found");
+        let (mut s, _hw) = setup("found", "UTC", Some(IW_AT));
+        s.games = vec![("snes".into(), PathBuf::from("/storage/roms/snes/a.sfc"))];
+        at_wifi(&mut s);
+        wifi_continue(&mut s);
+        assert_eq!(s.found_rows(), [FoundRow::Continue, FoundRow::More, FoundRow::BoxArt]);
+        press(&mut s, &[Button::Down, Button::East]);
+        assert_eq!(s.at(), "games", "Add more… opens the systems and the ways");
+        press(&mut s, &[Button::South]);
+        assert_eq!(s.at(), "your games", "B comes back");
+        assert!(matches!(s.step, Step::Found { sel: 1 }), "on Add more…, the row it left from");
+        press(&mut s, &[Button::Up, Button::East]);
+        assert_eq!(s.at(), "look", "Continue");
+        let (mut s, _hw) = setup("found-none", "UTC", Some(IW_AT));
+        at_wifi(&mut s);
+        wifi_continue(&mut s);
+        assert_eq!(s.found_rows(), [FoundRow::More, FoundRow::Later, FoundRow::BoxArt]);
+        press(&mut s, &[Button::Down, Button::East]);
+        assert_eq!(s.at(), "look", "I'll add games later");
+    }
+
+    /// Box art: one switch on your games, on as it ships; nothing is downloaded before it was seen (Off comes first).
+    #[test]
+    fn box_art_is_one_switch_and_nothing_downloads_before_it_is_seen() {
+        fresh("art-first");
+        let (mut s, _hw) = setup("art-first", "UTC", Some(IW_AT));
+        at_wifi(&mut s);
+        assert!(!s.past_wifi(), "Wi-Fi");
+        wifi_continue(&mut s);
+        assert_eq!(s.at(), "your games");
+        assert!(!s.past_wifi(), "the switch is on this page: the downloads still wait");
+        assert_ne!(s.art, Art::Off, "on as it ships");
+        press(&mut s, &[Button::Down, Button::Down, Button::East]);
+        assert_eq!(s.take_art(), Some(Art::Off));
+        press(&mut s, &[Button::Right]);
+        assert_eq!(s.take_art(), Some(Art::Pictures), "on again");
+        found_on(&mut s);
+        assert!(s.past_wifi(), "left: the downloads may start, as chosen");
+        assert!(shelf_setup("art-settings").only(Only::Extras).past_wifi(), "Settings: at once");
+    }
+
+    /// "For a child…" on the welcome is only the wish: Kids Mode's own steps come after your games, in the look's place;
+    /// B there goes on to the look; without games no locked, empty shelf.
+    #[test]
+    fn kids_mode_comes_after_the_games_and_never_without_them() {
+        fresh("kids");
+        let (mut s, _hw) = setup("kids", "UTC", Some(IW_AT));
+        s.games = vec![("snes".into(), PathBuf::from("/storage/roms/snes/a.sfc"))];
+        press(&mut s, &[Button::West]);
+        assert!(s.kids_wanted && !s.take_kids_asked(), "only the wish, no PIN before the games");
+        assert_eq!(s.at(), "welcome");
+        press(&mut s, &[Button::East]);
+        wifi_continue(&mut s);
+        press(&mut s, &[Button::East]);
+        assert!(s.take_kids_asked(), "after your games: Kids Mode's steps");
+        s.kids_cancelled();
+        assert_eq!(s.at(), "look", "cancelled: the look, as without the wish");
+        // Done: the setup ends with them.
+        let (mut s, _hw) = setup("kids-done", "UTC", Some(IW_AT));
+        s.games = vec![("snes".into(), PathBuf::from("/storage/roms/snes/a.sfc"))];
+        press(&mut s, &[Button::West, Button::East]);
+        wifi_continue(&mut s);
+        press(&mut s, &[Button::East]);
+        assert!(s.take_kids_asked());
+        s.kids_done();
+        assert_eq!(s.at(), "done");
+        assert!(!s.data_dir.join(RESUME_FILE).exists(), "finished: nothing to resume");
+        // No games: the look comes, with where to set the mode up later.
+        let (mut s, _hw) = setup("kids-none", "UTC", Some(IW_AT));
+        press(&mut s, &[Button::West, Button::East]);
+        wifi_continue(&mut s);
+        press(&mut s, &[Button::Down, Button::East]);
+        assert!(!s.take_kids_asked(), "never an empty locked shelf");
+        assert_eq!(s.at(), "look");
+        assert!(s.kids_later);
+    }
+
+    /// A restart resumes at the stage it reached, the wish for a child included; the names of the first start before
+    /// 0.2 open the stage that comes next (look and play: Wi-Fi; extras: your games).
+    #[test]
+    fn the_first_start_resumes_where_a_restart_found_it() {
+        let name = "resume";
+        let dir = fresh(name);
+        let (mut s, hw) = setup(name, "UTC", None);
+        assert!(!dir.join(RESUME_FILE).exists(), "the welcome has nothing to lose");
+        press(&mut s, &[Button::West]);
+        at_wifi(&mut s);
+        assert_eq!(std::fs::read_to_string(dir.join(RESUME_FILE)).unwrap(), "wifi child");
+        let s2 = setup_on(hw.clone(), name).resume();
+        assert_eq!((s2.at(), s2.kids_wanted), ("wifi".to_string(), true));
+        wifi_continue(&mut s);
+        assert_eq!(setup_on(hw.clone(), name).resume().at(), "zone", "unsure zone: asked again");
+        press(&mut s, &[Button::East]);
+        assert_eq!(setup_on(hw.clone(), name).resume().at(), "your games");
+        for (old, opens) in [("look", "wifi"), ("play", "wifi"), ("extras", "your games"), ("games", "your games"), ("shelf-look", "look"), ("nonsense", "welcome")] {
+            std::fs::write(dir.join(RESUME_FILE), old).unwrap();
+            assert_eq!(setup_on(hw.clone(), name).resume().at(), opens, "saved at {old}");
+        }
+        // Without a Wi-Fi chip Wi-Fi's place is the time zone.
+        std::fs::write(dir.join(RESUME_FILE), "wifi").unwrap();
+        let mut s3 = setup_on(hw.clone(), name);
+        s3.no_wifi = true;
+        assert_eq!(s3.resume().at(), "zone");
+        // Finishing deletes it.
+        let mut s4 = setup_on(hw.clone(), name).resume();
+        assert_eq!(s4.at(), "wifi");
+        assert!(s4.press(Button::Start));
+        s4.remember_step(true);
+        assert!(!dir.join(RESUME_FILE).exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Easy to read on every stage with L2: larger text and calmer menus at once, kept by the app; and back.
+    #[test]
+    fn easy_to_read_is_one_key_on_every_stage() {
+        use crate::type_scale::TextSize;
+        fresh("reading");
+        let (mut s, _hw) = setup("reading", "UTC", Some(IW_AT));
+        crate::type_scale::set(TextSize::Normal);
+        at_wifi(&mut s);
+        press(&mut s, &[Button::L2]);
+        assert_eq!((crate::type_scale::get(), s.motion()), (TextSize::Large, Motion::Reduced));
+        assert_eq!(s.take_text_size(), Some(TextSize::Large), "the app keeps it");
+        assert_eq!(s.at(), "wifi", "the page stays");
+        press(&mut s, &[Button::South, Button::L2]);
+        assert_eq!((crate::type_scale::get(), s.motion()), (TextSize::Normal, Motion::Full));
+        crate::type_scale::set(TextSize::Normal);
+    }
+
+    /// The look stage: Style, Colours and Appearance are rows under the layouts, Down reaches each, Left/Right change it;
+    /// B goes back to your games.
+    #[test]
+    fn the_look_stage_has_style_and_b_goes_back_to_your_games() {
+        fresh("look-end");
+        let (s, _hw) = setup("look-end", "UTC", Some(IW_AT));
+        let mut s = s.at_stage("look");
+        press(&mut s, &[Button::Right]);
+        assert_eq!(s.theme, 1);
+        press(&mut s, &[Button::Down, Button::Left]);
+        assert_eq!((s.take_font_step(), s.take_colours_step()), (Some(false), None), "Style: the app steps it");
+        press(&mut s, &[Button::Down, Button::Right]);
+        assert_eq!(s.take_colours_step(), Some(true), "Colours: the app steps them");
+        press(&mut s, &[Button::Down, Button::Right, Button::Down]);
+        assert_eq!(s.appearance(), Appearance::Light, "the last row, Appearance; Down stays on it");
+        assert_eq!((s.at(), s.theme), ("look".to_string(), 1), "the rows leave the layout as it was");
+        press(&mut s, &[Button::Up, Button::Up, Button::Up]);
+        assert_eq!(s.look_row, 0, "Up: back to the layouts");
+        paint_it(&mut s);
+        // B goes back a stage, never ends the setup (first-start walk 2026-11-06: B, B from Kids Mode's first page was
+        // the shelf); back on the look, A finishes with the look picked.
+        assert!(!s.press(Button::South), "B on the last stage doesn't end the setup");
+        found_on(&mut s);
+        assert!(s.press(Button::East), "A finishes");
+        assert_eq!(s.theme, 1, "with the look picked");
     }
 
     #[test]
@@ -4702,140 +6357,26 @@ mod tests {
     }
 
     #[test]
-    fn a_on_the_connected_network_says_so_on_the_status_line() {
+    fn a_on_the_connected_network_opens_its_menu() {
+        // A saved network's menu (2026-11-07): the connected one in Settings offers Forget; the status line still says
+        // what is connected.
         let mut s = wifi_setup("wifi-confirm");
         let first = s.entries.iter().position(|e| e.active).expect("a connected network in the demo");
         s.sel = s.lead() + first;
         press(&mut s, &[Button::East]);
+        assert!(s.net_menu.is_some(), "its menu");
+        assert_eq!(s.net_menu_rows(&s.entries[first].ssid.clone()), [NetAction::Forget]);
         let (line, color) = s.wifi_status("");
         assert!(line.starts_with("Connected to "), "{line}");
         assert_eq!(color, pal().chalk);
-        // Any other press takes it back.
-        press(&mut s, &[Button::Down]);
-        assert!(!s.wifi_status("").0.starts_with("Connected to Home. Press"));
-        // Opened from Settings, the way on is B.
-        let mut s = wifi_setup("wifi-confirm-settings").only(Only::Wifi);
-        s.sel = s.lead() + s.entries.iter().position(|e| e.active).unwrap();
-        press(&mut s, &[Button::East]);
-        assert!(s.wifi_status("").0.ends_with("Press B to go back."));
-    }
-
-    #[test]
-    fn the_first_start_counts_its_steps() {
-        let (mut s, _hw) = setup("count", "UTC", Some(IW_AT));
-        let mut seen = vec![(s.at(), step_number(&s.step, false))];
-        press(&mut s, &[Button::East, Button::East]);
-        seen.push((s.at(), step_number(&s.step, false)));
-        press(&mut s, &[Button::Start, Button::Start, Button::Start]);
-        seen.push((s.at(), step_number(&s.step, false)));
-        press(&mut s, &[Button::Start]);
-        seen.push((s.at(), step_number(&s.step, false)));
-        let want = [("welcome", Some(1)), ("how you like to play", Some(3)), ("extras", Some(6)), ("games", Some(7))];
-        assert_eq!(seen, want.map(|(a, n)| (a.to_string(), n)));
-        assert_eq!(step_number(&Step::Look, false), Some(2));
-        assert_eq!(step_number(&Step::Wifi, false), Some(4));
-        assert_eq!(step_number(&Step::Done, false), None, "the end is not a step");
-        assert_eq!(first_steps(false), 7, "a handheld counts seven steps (the Steam Deck five)");
-        assert_eq!(shelf_setup("count-settings").only(Only::Wifi).only, Some(Only::Wifi));
-    }
-
-    /// RG28XX, RG35XX 2024: no Wi-Fi chip, so no Wi-Fi page and no Extras page ("downloads aren't available"): five steps.
-    #[test]
-    fn a_handheld_without_wifi_skips_the_wifi_and_extras_pages() {
-        let (mut s, _hw) = setup("count-nowifi", "UTC", Some(IW_AT));
-        s.no_wifi = true;
-        let mut seen = vec![(s.at(), step_number(&s.step, true))];
-        press(&mut s, &[Button::East, Button::East]);
-        seen.push((s.at(), step_number(&s.step, true)));
-        // A on "Simple": straight to the time zone.
-        press(&mut s, &[Button::East]);
-        assert!(matches!(s.step, Step::Zone(_)), "the zone follows the play style, not the Wi-Fi page: {}", s.at());
         press(&mut s, &[Button::South]);
-        assert_eq!(s.at(), "how you like to play", "B from the zone goes back to the play style");
-        press(&mut s, &[Button::Start]);
-        assert!(matches!(s.step, Step::Zone(_)), "skipping the play style goes the same way");
-        press(&mut s, &[Button::Start]);
-        seen.push((s.at(), step_number(&s.step, true)));
-        let want = [("welcome", Some(1)), ("how you like to play", Some(3)), ("games", Some(5))];
-        assert_eq!(seen, want.map(|(a, n)| (a.to_string(), n)));
-        press(&mut s, &[Button::South]);
-        assert!(matches!(s.step, Step::Zone(_)), "B from the games goes back to the zone, not to an empty Extras page");
-        assert_eq!(first_steps(true), 5);
-        // Painted at the H700's size, the counter and the pages are there.
-        for (w, h) in [(1240, 1080), (640, 480)] {
-            let mut px = vec![0u32; (w * h) as usize];
-            s.paint(&mut Canvas::new(&mut px, w, h), &mut Text::builtin());
-            assert!(px.iter().any(|p| *p != px[0]), "{w}x{h} is not blank");
-        }
+        assert!(s.net_menu.is_none() && s.at() == "wifi", "B closes the menu, the page stays");
     }
 
-    #[test]
-    fn a_restart_on_a_removed_page_of_a_handheld_without_wifi_opens_the_next_one() {
-        let name = "resume-nowifi";
-        let dir = std::env::temp_dir().join(format!("pocketui-setup-data-{name}"));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        for (saved, opens) in [("wifi", "zone"), ("zone", "zone"), ("extras", "games")] {
-            std::fs::write(dir.join(RESUME_FILE), saved).unwrap();
-            let (mut s, _hw) = setup(name, "UTC", Some(IW_AT));
-            s.no_wifi = true;
-            assert_eq!(s.resume().at(), opens, "a restart saved at {saved}");
-        }
-        let _ = std::fs::remove_dir_all(&dir);
-    }
 
-    #[test]
-    fn the_first_start_resumes_where_a_restart_found_it() {
-        let name = "resume";
-        let dir = std::env::temp_dir().join(format!("pocketui-setup-data-{name}"));
-        let _ = std::fs::remove_dir_all(&dir);
-        let (mut s, hw) = setup(name, "UTC", Some(IW_AT));
-        // The welcome step has nothing to lose; a fresh start begins there.
-        assert_eq!(s.at(), "welcome");
-        assert!(!dir.join(RESUME_FILE).exists());
-        at_wifi(&mut s);
-        assert_eq!(std::fs::read_to_string(dir.join(RESUME_FILE)).unwrap(), "wifi");
-        // The restart: a new setup on the same data folder opens on Wi-Fi, not the welcome.
-        let s2 = setup_on(hw.clone(), name).resume();
-        assert_eq!(s2.at(), "wifi");
-        // Further on: the zone step, then the games step.
-        press(&mut s, &[Button::Start]);
-        assert_eq!(setup_on(hw.clone(), name).resume().at(), "zone");
-        press(&mut s, &[Button::Start, Button::Start]);
-        assert_eq!(s.at(), "games");
-        assert_eq!(setup_on(hw.clone(), name).resume().at(), "games");
-        // Settings pages leave the first start's line alone; a line nobody knows means the beginning.
-        let _ = shelf_setup("resume-settings").only(Only::Extras);
-        std::fs::write(dir.join(RESUME_FILE), "nonsense").unwrap();
-        assert_eq!(setup_on(hw.clone(), name).resume().at(), "welcome");
-        std::fs::write(dir.join(RESUME_FILE), "games").unwrap();
-        // Finishing deletes it: the next first start (a reset) begins at the welcome.
-        press(&mut s, &[Button::Start]);
-        assert_eq!(s.at(), "done");
-        assert!(s.press(Button::East), "the last page ends the setup");
-        assert!(!dir.join(RESUME_FILE).exists());
-        assert_eq!(setup_on(hw, name).resume().at(), "welcome");
-        let _ = std::fs::remove_dir_all(&dir);
-    }
 
-    #[test]
-    fn the_first_start_downloads_nothing_before_the_extras_step_is_left() {
-        let (mut s, _hw) = setup("art-first", "UTC", Some(IW_AT));
-        at_wifi(&mut s);
-        assert!(!s.past_wifi(), "Wi-Fi");
-        press(&mut s, &[Button::Start]);
-        assert_eq!(s.at(), "zone");
-        assert!(!s.past_wifi(), "the zone step: the Pictures choice has not been seen yet");
-        press(&mut s, &[Button::Start]);
-        assert_eq!(s.at(), "extras");
-        assert!(!s.past_wifi(), "on the Extras step the downloads still wait, so Off can come first");
-        press(&mut s, &[Button::Start]);
-        assert_eq!(s.at(), "games");
-        assert!(s.past_wifi(), "left: the downloads may start, as chosen");
-        // The page opened from Settings has no such wait: a change there acts at once.
-        let s = shelf_setup("art-settings").only(Only::Extras);
-        assert!(s.past_wifi());
-    }
+
+
 
     #[test]
     fn pictures_is_one_row_of_three_choices_that_works_without_wifi() {
@@ -4875,97 +6416,68 @@ mod tests {
         assert!(PICTURES_NOTE.contains("free collection") && PICTURES_NOTE.contains("no account") && PICTURES_NOTE.contains("Off"));
     }
 
-    #[test]
-    fn the_time_zone_step_sits_between_wifi_and_extras() {
-        let (mut s, _hw) = setup("flow", "UTC", Some(IW_AT));
-        assert_eq!(s.at(), "welcome");
-        press(&mut s, &[Button::East]);
-        assert_eq!(s.at(), "look");
-        press(&mut s, &[Button::East]);
-        assert_eq!(s.at(), "how you like to play", "after the look");
-        press(&mut s, &[Button::Start]);
-        assert_eq!(s.at(), "wifi");
-        assert!(s.take_tour().is_none(), "skipped: nothing changed");
-        press(&mut s, &[Button::Start]);
-        assert_eq!(s.at(), "zone", "after Wi-Fi");
-        press(&mut s, &[Button::Start]);
-        assert_eq!(s.at(), "extras", "before Extras");
-        // Back goes the same way.
-        press(&mut s, &[Button::South]);
-        assert_eq!(s.at(), "zone");
-        press(&mut s, &[Button::South]);
-        assert_eq!(s.at(), "wifi");
-        press(&mut s, &[Button::South]);
-        assert_eq!(s.at(), "how you like to play");
-        press(&mut s, &[Button::South]);
-        assert_eq!(s.at(), "look");
-    }
 
+    /// Settings › Help & tools › How you like to play: a profile sets its switches once and the page ends (the first
+    /// start no longer asks; its switches stay as they ship, `the_first_start_changes_no_switch`).
     #[test]
-    fn a_profile_sets_the_switches_once_and_goes_on_to_wifi() {
+    fn a_profile_sets_the_switches_once_and_ends_the_page() {
         use crate::features::Switches;
         for (downs, lens, pixel_path) in [(0, true, false), (1, true, false), (2, true, true)] {
             let (s, _hw) = setup(&format!("profile{downs}"), "UTC", Some(IW_AT));
-            let mut s = s.with_switches(Switches::default(), Vec::new());
-            press(&mut s, &[Button::East, Button::East]);
+            let mut s = s.with_switches(Switches::default(), Vec::new()).only(Only::Play);
             for _ in 0..downs {
                 press(&mut s, &[Button::Down]);
             }
-            press(&mut s, &[Button::East]);
-            assert_eq!(s.at(), "wifi");
+            assert!(s.press(Button::East), "A on a profile ends the page");
             let (sw, later) = s.take_tour().expect("the profile's switches");
             assert_eq!((sw.curator.lens, sw.curator.pixel_path, later.len()), (lens, pixel_path, 0));
-            assert_eq!(s.motion(), sw.motion, "the look step's motion follows");
+            assert_eq!(s.motion(), sw.motion, "the motion follows");
             assert!(s.take_tour().is_none(), "once");
         }
+    }
+
+    /// The first start asks no play style: walked through, it changes no switch and puts off no card.
+    #[test]
+    fn the_first_start_changes_no_switch() {
+        use crate::features::Switches;
+        fresh("no-switch");
+        let (s, _hw) = setup("no-switch", "UTC", Some(IW_AT));
+        let mut s = s.with_switches(Switches::default(), Vec::new());
+        press(&mut s, &[Button::East]);
+        wifi_continue(&mut s);
+        found_on(&mut s);
+        assert_eq!(s.at(), "look");
+        assert!(s.take_tour().is_none());
     }
 
     #[test]
     fn the_second_row_is_just_play_and_only_it_changes_the_look() {
         use crate::features::Switches;
-        assert_eq!(Profile::offered()[..2], [Profile::Simple, Profile::JustPlay]);
+        assert_eq!(Profile::offered_in_settings()[..2], [Profile::Simple, Profile::JustPlay]);
         let (s, _hw) = setup("just-play-row", "UTC", Some(IW_AT));
-        let mut s = s.with_switches(Switches::default(), Vec::new());
-        press(&mut s, &[Button::East, Button::East, Button::Down, Button::East]);
-        assert_eq!(s.at(), "wifi");
+        let mut s = s.with_switches(Switches::default(), Vec::new()).only(Only::Play);
+        press(&mut s, &[Button::Down, Button::East]);
         assert_eq!(s.take_profile_look(), Some(1), "Easy's place among the looks");
         assert_eq!(crate::settings::Theme::ALL[1], crate::settings::Theme::Big);
         assert_eq!(s.take_tour().expect("taken").0, Switches::default(), "the start settings otherwise");
-        // Back, and the first row or skipping after all: the look from the look step again.
-        for second in [&[Button::East][..], &[Button::Start][..]] {
-            s.step = Step::Play { sel: 1 };
-            press(&mut s, &[Button::East]);
-            assert_eq!(s.take_profile_look(), Some(1));
-            s.step = Step::Play { sel: 0 };
-            press(&mut s, second);
-            assert_eq!(s.take_profile_look(), Some(0));
-        }
-        // The first row and skipping alone change no look.
-        for (name, keys) in [("shelf-row", &[Button::East, Button::East, Button::East][..]), ("skip-row", &[Button::East, Button::East, Button::Start][..])] {
-            let (s, _hw) = setup(name, "UTC", Some(IW_AT));
-            let mut s = s.with_switches(Switches::default(), Vec::new());
-            press(&mut s, keys);
-            assert_eq!(s.take_profile_look(), None, "{name}");
-        }
+        // The first row alone changes no look.
+        let (s, _hw) = setup("shelf-row", "UTC", Some(IW_AT));
+        let mut s = s.with_switches(Switches::default(), Vec::new()).only(Only::Play);
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.take_profile_look(), None);
     }
 
     #[test]
-    fn simple_and_skip_leave_a_new_device_exactly_as_it_starts() {
+    fn simple_leaves_a_new_device_exactly_as_it_starts() {
         use crate::features::Switches;
         let (s, _hw) = setup("simple-is-skip", "UTC", Some(IW_AT));
-        let mut s = s.with_switches(Switches::default(), Vec::new());
+        let mut s = s.with_switches(Switches::default(), Vec::new()).only(Only::Play);
         // Simple, the first row: A.
-        press(&mut s, &[Button::East, Button::East, Button::East]);
-        assert_eq!(s.at(), "wifi");
+        press(&mut s, &[Button::East]);
         let (sw, later) = s.take_tour().expect("a profile was taken");
         assert_eq!(sw, Switches::default(), "Simple sets nothing that differs from the start settings");
         assert!(later.is_empty());
         assert!(sw.curator.lens && sw.curator.stickers && !sw.curator.up_next, "Lens and Stickers on, Up next off");
-        // Skip (START) changes nothing at all, so both end in the same place.
-        let (s, _hw) = setup("simple-is-skip-2", "UTC", Some(IW_AT));
-        let mut s = s.with_switches(Switches::default(), Vec::new());
-        press(&mut s, &[Button::East, Button::East, Button::Start]);
-        assert!(s.take_tour().is_none(), "skipped: nothing changed, which is what Simple leaves too");
     }
 
     /// Settings › Help & tools › How you like to play: the first start's question, answered later in one page.
@@ -5014,10 +6526,9 @@ mod tests {
     fn choose_yourself_opens_the_cards_and_b_on_the_first_goes_back_to_it() {
         use crate::features::Switches;
         let (s, _hw) = setup("choose", "UTC", Some(IW_AT));
-        let mut s = s.with_switches(Switches::default(), Vec::new());
-        press(&mut s, &[Button::East, Button::East, Button::Down, Button::Down, Button::Down, Button::East]);
+        let mut s = s.with_switches(Switches::default(), Vec::new()).only(Only::Play);
+        press(&mut s, &[Button::Down, Button::Down, Button::Down, Button::East]);
         assert_eq!(s.at(), "feature cards");
-        assert!(!s.past_wifi(), "no covers before the Wi-Fi step");
         // The first card (Continue where I quit, on): Off, A. A player's first card is one they can judge.
         press(&mut s, &[Button::Down, Button::East]);
         let (sw, _) = s.take_tour().expect("a switch changed");
@@ -5032,8 +6543,7 @@ mod tests {
         assert_eq!(s.at(), "how you like to play");
         press(&mut s, &[Button::East]);
         assert_eq!(s.at(), "feature cards", "Choose yourself again");
-        press(&mut s, &[Button::Start]);
-        assert_eq!(s.at(), "wifi", "START skips the rest");
+        assert!(s.press(Button::Start), "START skips the rest of the cards and ends the page");
     }
 
     #[test]
@@ -5042,94 +6552,92 @@ mod tests {
         assert!(s.press(Button::East), "Keep this look closes the page");
     }
 
+    /// The Wi-Fi page's Time zone row, selected.
+    fn on_zone_row(s: &mut Setup) {
+        select_wifi(s, WifiRow::Zone);
+    }
+
     #[test]
     fn a_zone_the_system_already_has_is_left_alone() {
         let (mut s, hw) = setup("system", "America/New_York", Some(IW_AT));
         at_wifi(&mut s);
-        press(&mut s, &[Button::Start]);
-        assert_eq!(s.at(), "zone");
-        press(&mut s, &[Button::East]);
-        assert_eq!(s.at(), "extras");
+        wifi_continue(&mut s);
+        assert_eq!(s.at(), "your games", "nothing to ask");
         assert_eq!(hw.state().zone, "America/New_York", "the Wi-Fi country does not override a set zone");
     }
 
     #[test]
-    fn one_press_takes_the_guess_and_skipping_keeps_it() {
-        // A confirms ...
+    fn a_country_with_one_zone_is_set_without_asking() {
         let (mut s, hw) = setup("confirm", "UTC", Some(IW_AT));
         at_wifi(&mut s);
-        press(&mut s, &[Button::Start, Button::East]);
-        assert_eq!(s.at(), "extras");
-        assert_eq!(hw.state().zone, "Europe/Vienna");
-        // ... and so does START.
-        let (mut s, hw) = setup("skip", "UTC", Some(IW_AT));
-        at_wifi(&mut s);
-        press(&mut s, &[Button::Start, Button::Start]);
-        assert_eq!(s.at(), "extras");
-        assert_eq!(hw.state().zone, "Europe/Vienna");
+        assert_eq!(hw.state().zone, "Europe/Vienna", "set while the Wi-Fi page is up, said on its row");
+        wifi_continue(&mut s);
+        assert_eq!(s.at(), "your games");
+        assert!(!s.zone_utc, "a zone was set: no UTC fallback");
     }
 
     #[test]
     fn without_a_guess_utc_stays() {
         let (mut s, hw) = setup("none", "UTC", None);
         at_wifi(&mut s);
-        press(&mut s, &[Button::Start, Button::East]);
-        assert_eq!(s.at(), "extras");
+        wifi_continue(&mut s);
+        assert_eq!(s.at(), "zone", "unsure: asked");
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.at(), "your games");
         assert_eq!(hw.state().zone, "UTC");
-        assert!(s.zone_utc, "the last page says the clock is on UTC");
-    }
-
-    #[test]
-    fn a_confirmed_zone_leaves_no_utc_note() {
-        let (mut s, _hw) = setup("confirmed", "UTC", Some(IW_AT));
-        at_wifi(&mut s);
-        press(&mut s, &[Button::Start, Button::East]);
-        assert!(!s.zone_utc, "a guess the player took is no UTC fallback");
+        assert!(s.zone_utc, "kept UTC: unconfirmed");
     }
 
     #[test]
     fn a_country_with_several_zones_opens_its_list() {
         let (mut s, hw) = setup("several", "UTC", Some(IW_US));
         at_wifi(&mut s);
-        press(&mut s, &[Button::Start]);
+        wifi_continue(&mut s);
         assert_eq!(s.at(), "zone: United States", "the picker, filtered to the country");
-        // Skipping keeps what there is: nothing was guessed.
-        press(&mut s, &[Button::Start]);
-        assert_eq!(s.at(), "extras");
+        // B goes back to Wi-Fi, and Continue then goes on without asking again: nothing was guessed, nothing is set.
+        press(&mut s, &[Button::South]);
+        assert_eq!(s.at(), "wifi");
+        wifi_continue(&mut s);
+        assert_eq!(s.at(), "your games");
         assert_eq!(hw.state().zone, "UTC");
         // Choosing: Chicago is the first by city.
-        press(&mut s, &[Button::South]);
-        assert_eq!(s.at(), "zone: United States");
+        let (mut s, hw) = setup("several-pick", "UTC", Some(IW_US));
+        at_wifi(&mut s);
+        wifi_continue(&mut s);
         press(&mut s, &[Button::Down, Button::Down, Button::East]);
-        assert_eq!(s.at(), "extras");
+        assert_eq!(s.at(), "your games");
         assert_eq!(hw.state().zone, "America/New_York");
     }
 
     #[test]
-    fn x_changes_the_guess_by_region() {
+    fn the_time_zone_row_changes_the_guess_by_region() {
         let (mut s, hw) = setup("change", "UTC", Some(IW_AT));
         at_wifi(&mut s);
-        press(&mut s, &[Button::Start, Button::North]);
+        on_zone_row(&mut s);
+        press(&mut s, &[Button::East]);
         assert_eq!(s.at(), "zone: regions");
         // Opens on the guess's region (Europe), and in it on the guessed city (Vienna, after Berlin).
         press(&mut s, &[Button::East]);
         assert_eq!(s.at(), "zone: Europe");
         press(&mut s, &[Button::Up, Button::East]);
-        assert_eq!(s.at(), "extras");
+        assert_eq!(s.at(), "wifi", "back on the Wi-Fi page");
         assert_eq!(hw.state().zone, "Europe/Berlin");
+        assert!(s.zone_value().starts_with("Berlin"), "{}", s.zone_value());
     }
 
     #[test]
     fn b_steps_back_out_of_a_list_and_out_of_the_regions() {
         let (mut s, hw) = setup("change-back", "UTC", Some(IW_AT));
         at_wifi(&mut s);
-        press(&mut s, &[Button::Start, Button::North, Button::Up, Button::East]);
+        on_zone_row(&mut s);
+        press(&mut s, &[Button::East, Button::Up, Button::East]);
         assert_eq!(s.at(), "zone: America");
         press(&mut s, &[Button::South]);
         assert_eq!(s.at(), "zone: regions");
         press(&mut s, &[Button::South]);
         assert_eq!(s.at(), "zone");
         press(&mut s, &[Button::East]);
+        assert_eq!(s.at(), "wifi");
         assert_eq!(hw.state().zone, "Europe/Vienna", "the guess is still the guess");
     }
 
@@ -5137,16 +6645,17 @@ mod tests {
     fn search_finds_a_city() {
         let (mut s, hw) = setup("search", "UTC", None);
         at_wifi(&mut s);
-        press(&mut s, &[Button::Start, Button::North]);
+        on_zone_row(&mut s);
+        press(&mut s, &[Button::East]);
         assert_eq!(s.at(), "zone: regions");
         press(&mut s, &[Button::Up; 10]); // "Search…" is the first row
         press(&mut s, &[Button::East]);
         assert_eq!(s.at(), "zone: search");
         s.type_search("vie");
         press(&mut s, &[Button::Start]);
-        assert_eq!(s.at(), "zone: Search: vie");
+        assert_eq!(s.at(), "zone: Search: vie", "START in the keyboard searches, it doesn't end the setup");
         press(&mut s, &[Button::East]);
-        assert_eq!(s.at(), "extras");
+        assert_eq!(s.at(), "wifi");
         assert_eq!(hw.state().zone, "Europe/Vienna");
     }
 
@@ -5189,19 +6698,19 @@ mod tests {
     #[test]
     fn the_sign_in_is_the_first_row_and_opens_its_sheet() {
         let mut s = wifi_setup("wifi-portal-row");
-        assert_eq!(s.wifi_rows(), 7);
+        assert_eq!(s.wifi_rows(), 8);
         s.on_event(check(net_check::Net::Portal));
-        assert_eq!(s.wifi_rows(), 8, "the sign-in row before the networks");
+        assert_eq!(s.wifi_rows(), 9, "the sign-in row before the networks");
         assert_eq!(s.sel, 0, "selected: A opens it");
         // The networks keep their rows below it.
         s.sel = 1 + wifi_row(&s, "Cafe guest");
         press(&mut s, &[Button::Up]);
         assert_eq!(s.sel, 1, "the connected network");
         press(&mut s, &[Button::East]);
-        assert_eq!(s.at(), "wifi", "A on the connected network stays on the page");
+        assert_eq!(s.at(), "wifi", "A on the connected network stays on the page, with its menu");
         let (line, _) = s.wifi_status("");
         assert!(line.starts_with("Connected to "), "{line}");
-        press(&mut s, &[Button::Up, Button::East]);
+        press(&mut s, &[Button::South, Button::Up, Button::East]);
         assert_eq!(s.at(), "wifi: sign-in");
         let Step::Portal(page) = &s.step else { unreachable!() };
         assert_eq!(page.where_line(), "Sign-in page: login.hotel.example");
@@ -5212,7 +6721,7 @@ mod tests {
         s.sel = 2;
         let on = s.entries[1].ssid.clone();
         s.on_event(check(net_check::Net::Online));
-        assert_eq!(s.wifi_rows(), 7);
+        assert_eq!(s.wifi_rows(), 8);
         assert_eq!(s.entries[s.sel].ssid, on);
         assert!(s.note.as_ref().is_some_and(|(m, _)| m.starts_with("You're online now")), "said, without a press");
     }
@@ -5244,7 +6753,7 @@ mod tests {
         assert_eq!(s.at(), "wifi: sign-in form");
         assert!(s.portal_session.is_some(), "the session lives while the page is open");
         assert!(s.animating(), "loading: the dots move");
-        let e = rx.recv_timeout(std::time::Duration::from_secs(10)).expect("the thread answers");
+        let e = rx.recv_timeout(crate::testutil::timeout(std::time::Duration::from_secs(10))).expect("the thread answers");
         s.on_event(e);
         let Step::Portal(page) = &s.step else { unreachable!() };
         assert!(matches!(page.signin.as_ref().map(|x| &x.state), Some(crate::portal_form::State::Ended(crate::portal_form::End::Failed(_)))));
@@ -5279,7 +6788,8 @@ mod tests {
     }
 
     #[test]
-    fn the_page_checks_again_by_itself_turns_online_and_stops() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_page_checks_again_by_itself_turns_online_and_stops() {
         use std::sync::atomic::Ordering;
         // One test drives the counter: the second part needs the first's numbers.
         ASKED.store(0, Ordering::SeqCst);
@@ -5287,7 +6797,7 @@ mod tests {
         let (mut s, rx) = watched("wifi-recheck");
         s.on_event(check(net_check::Net::Portal));
         assert!(s.watch.is_some(), "the page shows a sign-in: it asks again");
-        let wait = std::time::Duration::from_secs(5);
+        let wait = crate::testutil::timeout(std::time::Duration::from_secs(5));
         while s.portal {
             let e = rx.recv_timeout(wait).expect("the re-check answers");
             s.on_event(e);
@@ -5317,10 +6827,12 @@ mod tests {
         let mut s = wifi_setup("wifi-saved");
         let names: Vec<&str> = s.entries.iter().map(|e| e.ssid.as_str()).collect();
         assert_eq!(names, ["Home", "Cafe guest", "Neighbour:5G", "Office", "Phone hotspot"]);
-        assert_eq!(s.wifi_rows(), 7, "then Other network and Wi-Fi country");
+        assert_eq!(s.wifi_rows(), 8, "then Other network, Wi-Fi country and Scan again");
         s.sel = wifi_row(&s, "Office");
         press(&mut s, &[Button::East]);
-        assert_eq!(s.at(), "connecting", "a saved network asks for nothing");
+        assert_eq!(s.at(), "wifi", "A on a saved network opens its menu");
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.at(), "connecting", "Connect, its first row: a saved network asks for nothing");
         // A password that no longer works brings the keyboard.
         s.on_event(SetupEvent::ConnectedSaved { ssid: "Office".into(), result: Err("Secrets were required, but not provided".into()) });
         assert_eq!(s.at(), "password");
@@ -5329,6 +6841,47 @@ mod tests {
         s.sel = wifi_row(&s, "Neighbour:5G");
         press(&mut s, &[Button::East]);
         assert_eq!(s.at(), "password");
+    }
+
+    /// A saved network's menu: Connect and Forget, reached with A and Down; forgetting is never Y alone (2026-11-07). B
+    /// closes the menu and changes nothing; the connected one offers Forget only (Continue first in the first start).
+    #[test]
+    fn a_saved_network_has_a_menu_with_connect_and_forget() {
+        let mut s = wifi_setup("wifi-menu");
+        s.sel = wifi_row(&s, "Office");
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.net_menu, Some(("Office".to_string(), 0)));
+        paint_it(&mut s);
+        press(&mut s, &[Button::South]);
+        assert_eq!((s.net_menu.as_ref(), s.at()), (None, "wifi".to_string()), "B closes it, nothing else");
+        assert!(s.entries.iter().any(|e| e.ssid == "Office"), "kept");
+        press(&mut s, &[Button::East, Button::Down, Button::East]);
+        assert!(s.net_menu.is_none());
+        assert_eq!(s.note.as_ref().map(|(m, _)| m.as_str()), Some("Forgetting Office…"), "Forget, its second row");
+        // The connected one: Forget only in Settings; Continue, then Forget, in the first start.
+        assert_eq!(s.net_menu_rows("Home"), [NetAction::Forget]);
+        s.only = None;
+        assert_eq!(s.net_menu_rows("Home"), [NetAction::Continue, NetAction::Forget]);
+    }
+
+    #[test]
+    fn rc03_first_start_b_closes_saved_network_menu_before_leaving_the_stage() {
+        let mut s = wifi_setup("rc03-first-wifi-menu");
+        s.only = None;
+        s.sel = wifi_row(&s, "Office");
+        let selected = s.sel;
+        for _ in 0..2 {
+            press(&mut s, &[Button::East]);
+            assert_eq!(s.net_menu, Some(("Office".to_string(), 0)), "one A opens the menu");
+            press(&mut s, &[Button::South]);
+            assert_eq!(s.at(), "wifi", "B closes only the menu, staying on the Wi-Fi list");
+            assert!(s.net_menu.is_none());
+            assert_eq!(s.sel, selected, "the network stays selected");
+        }
+        press(&mut s, &[Button::South]);
+        assert_eq!(s.at(), "welcome", "the next B leaves the stage");
+        press(&mut s, &[Button::East]);
+        assert!(s.net_menu.is_none(), "returning to Wi-Fi must not resurrect a menu");
     }
 
     /// The page on `snap`'s saved networks: Home in reach, NetworkManager still bringing it up (`activating`).
@@ -5764,7 +7317,7 @@ mod tests {
     }
 
     fn heard_advance(rx: &std::sync::mpsc::Receiver<SetupEvent>) -> SetupEvent {
-        rx.recv_timeout(std::time::Duration::from_secs(10)).expect("the wait ends with an Advance")
+        rx.recv_timeout(crate::testutil::timeout(std::time::Duration::from_secs(10))).expect("the wait ends with an Advance")
     }
 
     #[test]
@@ -5784,7 +7337,8 @@ mod tests {
     }
 
     #[test]
-    fn first_start_stays_on_wifi_after_a_failed_connection() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_first_start_stays_on_wifi_after_a_failed_connection() {
         let (mut s, rx) = connecting_in_first_start("wifi-advance-fail");
         s.on_event(SetupEvent::Connected { ssid: "Home".into(), result: Err("Error: Timeout expired (45 seconds)".into()) });
         assert_eq!(s.at(), "wifi");
@@ -5804,7 +7358,8 @@ mod tests {
     }
 
     #[test]
-    fn back_from_the_time_zone_does_not_bounce_forward_again() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_back_from_the_time_zone_does_not_bounce_forward_again() {
         let (mut s, rx) = connecting_in_first_start("wifi-advance-back");
         s.on_event(SetupEvent::Connected { ssid: "Home".into(), result: Ok(()) });
         s.on_event(heard_advance(&rx));
@@ -5816,20 +7371,21 @@ mod tests {
         s.on_event(SetupEvent::Advance { gen: s.advance_gen });
         assert_eq!(s.at(), "wifi");
         assert!(rx.recv_timeout(std::time::Duration::from_millis(1800)).is_err(), "nothing waits to move on");
-        // And START is still the way on.
-        press(&mut s, &[Button::Start]);
+        // And the Continue row is still the way on (START would skip the rest of the setup; B goes back a stage).
+        wifi_continue(&mut s);
         assert_eq!(s.at(), "zone");
     }
 
     #[test]
-    fn leaving_or_pressing_during_the_connected_moment_cancels_the_move() {
-        // B within the second: back to the play style, and the late Advance finds nothing to do.
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_leaving_or_pressing_during_the_connected_moment_cancels_the_move() {
+        // B within the second: back a stage at once, and the late Advance finds nothing more to do.
         let (mut s, rx) = connecting_in_first_start("wifi-advance-b");
         s.on_event(SetupEvent::Connected { ssid: "Home".into(), result: Ok(()) });
         press(&mut s, &[Button::South]);
-        assert_eq!(s.at(), "how you like to play");
+        assert_eq!(s.at(), "welcome");
         s.on_event(heard_advance(&rx));
-        assert_eq!(s.at(), "how you like to play", "not pulled forward later");
+        assert_eq!(s.at(), "welcome", "not pulled forward after going back");
         // Any other press hands the page back too.
         let (mut s, rx) = connecting_in_first_start("wifi-advance-down");
         s.on_event(SetupEvent::Connected { ssid: "Home".into(), result: Ok(()) });
@@ -5839,7 +7395,7 @@ mod tests {
         // Leaving while the connect is still going (the Connecting page has no way out, but the setup may be moved
         // by other means): the result arriving on another step is not a connection made here.
         let (mut s, rx) = connecting_in_first_start("wifi-advance-left");
-        s.step = Step::Play { sel: 0 };
+        s.step = Step::Welcome;
         s.on_event(SetupEvent::Connected { ssid: "Home".into(), result: Ok(()) });
         assert!(rx.recv_timeout(std::time::Duration::from_millis(1800)).is_err());
     }
@@ -5854,7 +7410,8 @@ mod tests {
     }
 
     #[test]
-    fn settings_wifi_page_never_moves_on_by_itself() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_settings_wifi_page_never_moves_on_by_itself() {
         let (tx, rx) = std::sync::mpsc::channel();
         let tx = std::sync::Mutex::new(tx);
         let mut s = wifi_setup("wifi-advance-settings");
@@ -5880,7 +7437,7 @@ mod tests {
             None if s.lead_kind() == Some(Lead::Off) => "Turn on",
             _ => "Open",
         };
-        wifi_hints(a, false, false, false)
+        wifi_hints(a, false, false, false, false, true)
     }
 
     #[test]
@@ -5913,11 +7470,10 @@ mod tests {
 
     #[test]
     fn settings_look_has_systems_on_the_shelf_the_first_start_does_not() {
-        let mut s = shelf_setup("shelf-first");
-        press(&mut s, &[Button::East]);
+        let mut s = shelf_setup("shelf-first").at_stage("look");
         assert_eq!(s.at(), "look");
         press(&mut s, &[Button::North]);
-        assert_eq!(s.at(), "look", "no selection step in the first start");
+        assert_eq!(s.at(), "look", "X opens no page in the first start: Style is a row of the look, no systems page");
 
         // Settings → Look has no X key any more: the Systems on the shelf row opens the page straight.
         let mut s = shelf_setup("shelf-settings").only(Only::Look);
@@ -5934,30 +7490,18 @@ mod tests {
         assert!(s.press(Button::South), "B leaves the page that Settings opened straight");
     }
 
+    /// Cozy or Quick follows the look until the player chooses (Settings › Sound & feel › Animations); the first start
+    /// doesn't ask.
     #[test]
-    fn the_look_step_asks_cozy_or_quick_and_the_look_decides_until_it_is_answered() {
+    fn the_look_decides_the_animations_until_they_are_chosen() {
         use crate::settings::Theme;
-        let (mut s, _) = setup("look-animations", "UTC", None);
-        press(&mut s, &[Button::East]);
-        assert_eq!(s.at(), "look");
-        // Browsing: Cozy beside Shelf and Cabinet, Quick beside the other looks, nothing chosen yet.
-        for _ in 0..Theme::ALL.len() {
+        let mut s = setup("look-animations", "UTC", None).0.at_stage("look");
+        for _ in 0..s.themes.len() {
             let theme = Theme::ALL[s.theme];
             assert_eq!(s.animations_shown(), Animations::default_for(theme), "{theme:?}");
-            assert_eq!(s.take_animations(), None, "nothing to keep before L1");
-            press(&mut s, &[Button::Right]);
+            press(&mut s, &[Button::Right, Button::L1]);
+            assert_eq!(s.take_animations(), None, "nothing chosen on the first start's look");
         }
-        // L1 answers it, once, and from then on the look no longer decides.
-        let first = s.animations_shown();
-        press(&mut s, &[Button::L1]);
-        assert_eq!(s.take_animations(), Some(first.next()));
-        assert_eq!(s.take_animations(), None, "reported once");
-        for _ in 0..Theme::ALL.len() {
-            press(&mut s, &[Button::Right]);
-            assert_eq!(s.animations_shown(), first.next(), "kept while the looks change");
-        }
-        press(&mut s, &[Button::L1]);
-        assert_eq!(s.take_animations(), Some(first));
         // Settings > Look starts from what was chosen before.
         let s = setup("look-animations-2", "UTC", None).0.only(Only::Look).with_animations(Some(Animations::Quick));
         assert_eq!(s.animations_shown(), Animations::Quick);
@@ -5965,19 +7509,57 @@ mod tests {
 
     #[test]
     fn the_look_step_switches_the_preview_with_every_direction() {
-        let (mut s, _) = setup("look-switch", "UTC", None);
-        press(&mut s, &[Button::East]);
+        let mut s = setup("look-switch", "UTC", None).0.at_stage("look");
         assert_eq!(s.previewing(), Some(0));
-        for (b, want) in [(Button::Right, 1), (Button::Right, 0), (Button::Down, 1), (Button::Up, 0), (Button::Left, 1)] {
+        for (b, want) in [(Button::Right, 1), (Button::Right, 0), (Button::Left, 1)] {
             s.press(b);
             assert_eq!(s.previewing(), Some(want), "{b:?}");
         }
-        press(&mut s, &[Button::East]);
-        assert_eq!(s.previewing(), None, "A keeps it and goes on");
+        // Down is the row under the layouts, Style, as in every list.
+        press(&mut s, &[Button::Down, Button::Right]);
+        assert_eq!(s.previewing(), Some(1), "Down and Left/Right on the row leave the layout alone");
+        assert_eq!(s.take_font_step(), Some(true), "and change the style instead");
+        assert!(s.press(Button::East), "Finish keeps it and ends the setup, from any row");
+        assert_eq!(s.theme, 1);
     }
 
     #[test]
-    fn settings_look_has_no_shortcut_keys_but_the_first_start_keeps_its_own() {
+    fn settings_look_reaches_every_row_it_draws_with_the_d_pad() {
+        // The Brick, 2026-11-07: Settings › Look › Layout drew Appearance, Motion and Animations under the layouts, and
+        // Up/Down only turned the layouts: the rows could not be reached, and the hint bar had no B.
+        let (s, _) = setup("look-rows", "UTC", None);
+        let mut s = s.with_appearance(Appearance::Dark).only(Only::Look);
+        let (theme, motion, animations) = (s.theme, s.motion(), s.animations_shown());
+        press(&mut s, &[Button::Down, Button::Right]);
+        assert_eq!((s.appearance(), s.theme), (Appearance::Light, theme), "Down, Right: the next appearance, the same layout");
+        press(&mut s, &[Button::Down, Button::Right]);
+        assert_ne!(s.motion(), motion, "the second row: Motion");
+        press(&mut s, &[Button::Down, Button::Left]);
+        assert_ne!(s.animations_shown(), animations, "the third row: Animations");
+        assert_eq!(s.take_animations(), Some(s.animations_shown()), "and the app keeps it");
+        press(&mut s, &[Button::Down, Button::Up, Button::Up, Button::Up, Button::Up, Button::Right]);
+        assert_eq!(s.previewing(), Some((theme + 1) % s.themes.len()), "Up from the rows: the layouts again");
+        assert_eq!(s.appearance(), Appearance::Light, "the rows keep what was chosen");
+        for row in [0, 1] {
+            let bar = look_hints(true, row == 1);
+            assert!(bar.iter().any(|(k, _)| *k == "B"), "B goes back and says so: {bar:?}");
+            assert!(bar.iter().any(|(k, _)| *k == "Left/Right"), "{bar:?}");
+        }
+        assert!(s.press(Button::South), "B leaves the page");
+        assert_eq!(s.take_profile_look(), Some(theme), "and puts the layout back");
+        assert_eq!((s.appearance(), s.motion(), s.animations_shown()), (Appearance::Dark, motion, animations), "and the rows");
+        assert_eq!(s.take_animations(), Some(animations), "the app takes the animations back too");
+        // A keeps what is shown.
+        let (s, _) = setup("look-keep", "UTC", None);
+        let mut s = s.only(Only::Look);
+        press(&mut s, &[Button::Right]);
+        let shown = s.previewing();
+        assert!(s.press(Button::East), "A keeps and leaves");
+        assert_eq!((s.take_profile_look(), shown), (None, Some((theme + 1) % s.themes.len())), "nothing put back");
+    }
+
+    #[test]
+    fn settings_look_has_no_shortcut_keys_and_the_first_start_has_its_style_panel() {
         // Polish 2026-11-04: Appearance, Motion, Animations and Systems on the shelf have rows in Settings; the page
         // keeps Left/Right (the look) and A.
         let (s, _) = setup("look-appearance", "UTC", None);
@@ -5991,15 +7573,16 @@ mod tests {
         assert_eq!(s.previewing(), Some(0), "the look stays");
         assert!(s.press(Button::East), "A keeps the look and closes the page");
 
-        // The first start has the pills only on this page: Y appearance, L1 animations, R1 the text size.
-        let (mut first, _) = setup("look-motion-first", "UTC", None);
-        first.press(Button::East);
-        assert!(first.previewing().is_some(), "on the look step");
+        // The first start: no shoulder-button pills; the appearance is a row under the layouts (L1 there goes back
+        // a stage: `l1_goes_back_a_stage_and_b_still_skips`).
+        let mut first = setup("look-motion-first", "UTC", None).0.at_stage("look");
         let before = first.appearance();
-        first.press(Button::West);
-        assert_ne!(first.appearance(), before, "Y changes the appearance in the first start");
-        first.press(Button::R1);
-        assert_eq!(first.motion(), crate::motion::level(), "R1 is the text size, not the motion");
+        for b in [Button::West, Button::R1] {
+            first.press(b);
+        }
+        assert_eq!((first.appearance(), first.at()), (before, "look".to_string()), "nothing hidden on keys");
+        press(&mut first, &[Button::Down, Button::Down, Button::Down, Button::Right]);
+        assert_ne!(first.appearance(), before, "Down to Appearance, Right");
     }
 
     #[test]
@@ -6043,16 +7626,13 @@ mod tests {
     #[test]
     fn the_zone_step_opens_at_once_and_never_looks_at_the_system_on_the_ui_thread() {
         let spy = Arc::new(crate::system_ctl::spy::Spy::new(mock("spy-zone", "UTC", Some(IW_US))));
+        // Without a Wi-Fi chip the step opens right after the welcome, before its thread has looked.
         let mut s = setup_on(spy.clone(), "spy-zone");
-        at_wifi(&mut s);
-        s.press(Button::Start);
+        s.no_wifi = true;
+        s.press(Button::East);
         assert_eq!(s.at(), "zone", "open before the thread has answered");
         assert!(s.waiting() && s.animating(), "says it is looking");
         paint_it(&mut s);
-        // Leaving while it looks works (B back to Wi-Fi, again START), and the late answer finds nobody waiting.
-        s.press(Button::South);
-        assert_eq!(s.at(), "wifi");
-        s.press(Button::Start);
         s.settle();
         assert_eq!(s.at(), "zone: United States", "the answer is swapped in: the country's list");
         assert!(!s.waiting());
@@ -6065,23 +7645,36 @@ mod tests {
         paint_it(&mut s);
         press(&mut s, &[Button::South, Button::South]);
         paint_it(&mut s);
-        press(&mut s, &[Button::Start]);
-        assert_eq!(s.at(), "extras");
+        press(&mut s, &[Button::South]);
+        assert_eq!(s.at(), "welcome", "B goes back a stage");
+        // With Wi-Fi the guess is made while the Wi-Fi page is up, on its thread, the same way.
+        let mut s = setup_on(spy.clone(), "spy-zone-wifi");
+        at_wifi(&mut s);
+        paint_it(&mut s);
+        wifi_continue(&mut s);
+        assert_eq!(s.at(), "zone: United States", "unsure: the list, already read");
+        paint_it(&mut s);
         assert_eq!(spy.take(), Vec::<&str>::new(), "looked at the system on the UI thread");
     }
 
     #[test]
     fn leaving_the_zone_step_while_it_looks_drops_the_late_answer() {
         let (mut s, hw) = setup("leave-zone", "UTC", Some(IW_AT));
-        at_wifi(&mut s);
-        s.press(Button::Start);
-        s.press(Button::Start);
-        assert_eq!(s.at(), "extras", "START skips even before the answer");
-        // The first thread's answer arrives after the step is gone.
+        s.no_wifi = true;
+        s.press(Button::East);
+        assert_eq!(s.at(), "zone");
+        s.press(Button::South);
+        assert_eq!(s.at(), "welcome", "B goes back even before the answer");
+        // The thread's answer arrives after the step is gone.
         let rx = s.inbox.take().unwrap();
-        let late = rx.recv_timeout(std::time::Duration::from_secs(5)).expect("the thread answers");
+        let late = loop {
+            let e = rx.recv_timeout(crate::testutil::timeout(std::time::Duration::from_secs(5))).expect("the thread answers");
+            if matches!(e, SetupEvent::Zone(_)) {
+                break e;
+            }
+        };
         s.on_event(late);
-        assert_eq!(s.at(), "extras", "the answer finds the step gone");
+        assert_eq!(s.at(), "welcome", "the answer finds the step gone");
         assert_eq!(hw.state().zone, "UTC", "nothing was set");
     }
 
@@ -6140,7 +7733,31 @@ mod tests {
         assert!(!s.phone_listening());
         paint_it(&mut s);
         assert!(s.press(Button::East), "from Settings, A on \"Connect to Wi-Fi first\" leaves for the Wi-Fi page");
-        assert!(s.take_open_wifi() && !s.take_open_wifi());
+        assert_eq!((s.take_open_wifi(), s.take_open_wifi()), (Some((true, true)), None));
+        // The Wi-Fi settings it asked for: leaving them goes back to Add games, on the phone page (the explorer,
+        // 2026-11-07: B landed on the Settings list).
+        let mut w = setup("phone-wifi", "UTC", None).0.only(Only::Wifi).back_to_games((true, true));
+        assert!(w.press(Button::South), "B leaves the Wi-Fi settings");
+        assert_eq!((w.take_back_to_games(), w.take_back_to_games()), (Some((true, true)), None));
+        let (_dir2, catalog) = roms("phone-back", &[("gba", 1)]);
+        let mut back = setup("phone-back", "UTC", None).0.with_catalog(catalog).only(Only::Games).back_on_way((true, true));
+        assert_eq!(back.at(), "phone", "back on the phone page");
+        press(&mut back, &[Button::South]);
+        assert_eq!(back.at(), "games");
+        assert!(back.ways_focus && back.ways().get(back.ways_sel) == Some(&Way::Phone), "and B there: on its tile, where the player came from");
+        // A on the tile itself (no Wi-Fi): the Wi-Fi settings, and back on the tile without the page (the explorer).
+        let (_dir3, catalog) = roms("phone-tile", &[("gba", 1)]);
+        let mut t = setup("phone-tile", "UTC", None).0.with_catalog(catalog).only(Only::Games);
+        t.ip = None;
+        if let Some(i) = t.ways().iter().position(|w| *w == Way::Phone) {
+            (t.ways_focus, t.ways_sel) = (true, i);
+            assert!(t.press(Button::East), "the Wi-Fi settings, from Settings");
+            assert_eq!(t.take_open_wifi(), Some((true, false)), "from the tile, not the page");
+            let (_dir4, catalog) = roms("phone-tile-2", &[("gba", 1)]);
+            let back = setup("phone-tile-2", "UTC", None).0.with_catalog(catalog).only(Only::Games).back_on_way((true, false));
+            assert_eq!(back.at(), "games");
+            assert!(back.ways_focus && back.ways().get(back.ways_sel) == Some(&Way::Phone));
+        }
         let (s, _) = setup("phone-2", "UTC", None);
         let mut s = s.only(Only::Games);
         s.ip = Some("203.0.113.9".into());
@@ -6245,9 +7862,9 @@ mod tests {
     #[test]
     fn a_refused_zone_keeps_the_step_open() {
         // The mock refuses names that are not plain zone names; the table never produces one, so ask the step directly.
-        let (mut s, hw) = setup("refused", "UTC", Some(IW_AT));
+        let (mut s, hw) = setup("refused", "UTC", None);
         at_wifi(&mut s);
-        press(&mut s, &[Button::Start]);
+        wifi_continue(&mut s);
         assert!(!s.set_zone("not a zone"));
         assert_eq!(s.at(), "zone");
         assert_eq!(hw.state().zone, "UTC");
@@ -6349,21 +7966,22 @@ mod hint_bars {
     }
 
     #[test]
-    fn wifi_page_leads_back_in_settings_and_walks_on_in_the_first_start() {
-        assert_eq!(keys(&wifi_hints("Connect", false, false, true)), ["A", "X", "START", "B"]);
-        assert_eq!(keys(&wifi_hints("Connect", false, false, false)), ["A", "X", "B"], "Settings: no next step");
-        assert_eq!(wifi_hints("Connect", true, true, false)[2], ("Y", "Forget now"));
+    fn wifi_page_goes_back_with_b_everywhere_and_on_with_its_continue_row() {
+        // One scheme (2026-11-07): B is Back in the first start too; the way on is the Continue row (A on it).
+        assert_eq!(wifi_hints("Connect", false, false, true, false, true), [("A", "Connect"), ("B", "Back"), ("X", "Scan again"), ("START", "Skip the rest")]);
+        assert_eq!(wifi_hints("Continue", false, false, true, true, true)[..2], [("A", "Continue"), ("B", "Back")]);
+        assert_eq!(keys(&wifi_hints("Scan again", false, false, true, true, true)), ["A", "B", "START"], "on the Scan again row X is not named twice");
+        assert_eq!(keys(&wifi_hints("Connect", false, false, false, false, true)), ["A", "X", "B"], "Settings: no next step");
+        assert_eq!(wifi_hints("Connect", true, true, false, false, true)[2], ("Y", "Forget now"));
     }
 
     #[test]
-    fn the_first_starts_look_step_names_b() {
-        assert_eq!(keys(&look_hints(false, false)), ["Left/Right", "A", "B", "R1", "Y", "L1"], "B goes back to the welcome; the bar shows the first four");
-        assert_eq!(keys(&look_hints(true, false)), ["Left/Right", "A"], "Settings → Look has no shortcut keys: every one has its own row");
-        assert!(look_hints(true, false).iter().all(|(_, label)| !label.is_empty()), "every key on Settings → Look has its word");
-        assert_eq!(look_hints(false, false).last(), Some(&("L1", "Animations")));
-        assert_eq!(look_hints(false, false)[3], ("R1", "Text size"));
-        assert!(look_hints(false, false).iter().all(|(_, label)| !label.is_empty()), "every key of the first start has its word");
-        assert_eq!(keys(&look_hints(false, true)), ["Left/Right", "A", "B", "R1", "Y"], "1024 px wide: no L1");
+    fn the_look_steps_hints_name_the_keys_of_the_focused_row() {
+        assert_eq!(look_hints(false, false), [("Left/Right", "Layout"), ("A", "Finish"), ("B", "Back")]);
+        assert_eq!(look_hints(false, true), [("Left/Right", "Change"), ("A", "Finish"), ("B", "Back")], "Style, Colours, Appearance");
+        for below in [false, true] {
+            assert!(look_hints(true, below).iter().all(|(_, label)| !label.is_empty()), "every key on Settings → Look has its word");
+        }
     }
 
     #[test]
@@ -6438,10 +8056,10 @@ mod hint_bars {
     #[test]
     fn add_games_offers_file_sharing_only_with_an_address_or_while_it_is_on() {
         // Y (Send from your phone) stays: offline its page says "Connect to Wi-Fi first" and A leads there.
-        assert_eq!(keys(&games_hints(None, false, false)), ["Y", "START", "B"], "offline, sharing off: X would do nothing");
+        assert_eq!(keys(&games_hints(None, false, false)), ["Y", "B"], "offline, sharing off: X would do nothing");
         assert_eq!(games_hints(None, false, true)[0], ("X", "Turn on file sharing"));
         assert_eq!(games_hints(None, true, false)[0], ("X", "Turn off file sharing"), "on: it can be turned off");
-        assert_eq!(keys(&games_hints(Some(false), false, false)), ["A", "Y", "START", "B"]);
+        assert_eq!(keys(&games_hints(Some(false), false, false)), ["A", "Y", "B"]);
         assert_eq!(games_hints(Some(true), false, true)[0], ("A", "Fewer systems"));
     }
 }

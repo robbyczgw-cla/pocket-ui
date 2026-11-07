@@ -51,26 +51,44 @@ impl App {
     /// X on a game: its card.
     pub(crate) fn open_card(&mut self) {
         let Some(item) = self.items.get(self.sel).copied() else { return };
-        let (system, name, path) = match item {
-            Item::Recent(i) => {
-                let r = &self.recents.list[i];
-                (r.system.clone(), r.name.clone(), r.path.clone())
-            }
-            Item::Game(s, g) => (
-                self.systems[s].name.clone(),
-                self.systems[s].games[g].name.clone(),
-                self.systems[s].games[g].path.clone(),
-            ),
-            _ => return,
-        };
+        let Some((system, name, path)) = self.card_game(item) else { return };
         self.show_card(item, system, name, path);
+    }
+
+    /// The system, name and file of a game on the shelf; None for anything that is not a game.
+    pub(crate) fn card_game(&self, item: Item) -> Option<(String, String, PathBuf)> {
+        match item {
+            Item::Recent(i) => self.recents.list.get(i).map(|r| (r.system.clone(), r.name.clone(), r.path.clone())),
+            Item::Game(s, g) => {
+                let system = self.systems.get(s)?;
+                let game = system.games.get(g)?;
+                Some((system.name.clone(), game.name.clone(), game.path.clone()))
+            },
+            _ => None,
+        }
     }
 
     /// Builds the card of a game and starts loading its description if it isn't on the card yet.
     pub(crate) fn show_card(&mut self, item: Item, system: String, name: String, path: PathBuf) {
+        let mut open = self.build_card(item, system, name, path, true);
+        // The Minimal, Cards, Split and Big looks show the info page (`game_info`); Shelf and Cabinet the box (`game_box`)
+        // unless SELECT chose the page last time.
+        if matches!(self.theme, Theme::Minimal | Theme::Cards | Theme::Split | Theme::Big) {
+            open.card.show_info();
+        } else if self.game_box {
+            open.card.boxed = Some(pocket_ui::game_box::BoxView::new());
+            // The case opens: plastic or cardboard, instead of the confirm click.
+            self.play_sound(pocket_ui::ui_sound::opening(self.medium(item)));
+            pocket_ui::ui_sound::played();
+        }
+        self.card = Some(open);
+    }
+
+    /// A game's card, not shown yet: `show_card`, and the second screen's box (`app_second_screen`).
+    pub(crate) fn build_card(&mut self, item: Item, system: String, name: String, path: PathBuf, interactive: bool) -> OpenCard {
         let started = Instant::now();
         let info = self.game_info(&system, &path);
-        let mut data = self.card_data(&system, &name, &path, info.as_ref());
+        let mut data = self.card_data(&system, &name, &path, info.as_ref(), interactive);
         let source_facts = data.facts.clone();
         let article = info.as_ref().and_then(|i| i.enwiki.clone());
         // Wikipedia's text, when it is on the card's disk already, comes before anything else.
@@ -80,7 +98,7 @@ impl App {
             pocket_ui::gamelist::fill_card(&mut data, e, cached.is_some());
         }
         // Connections: which facts lead to the player's other games (a few lookups in the index, `app_connections`).
-        self.card_connections(&mut data, &path);
+        if interactive { self.card_connections(&mut data, &path); }
         println!(
             "card {}: {} in {:?}",
             path.display(),
@@ -101,6 +119,8 @@ impl App {
                 Some(text) => Summary::Wikipedia { text, title },
                 // The gamelist's description is on the card: no wait for Wikipedia, no request for it.
                 None if matches!(open.card.data.summary, Summary::Gamelist(_)) => open.card.data.summary.clone(),
+                // A passive second screen must not start network requests as the player browses the shelf.
+                None if !interactive => Summary::Unavailable("not cached".into()),
                 None => {
                     let (proxy, dir) = (self.proxy.clone(), self.data_dir.clone());
                     std::thread::spawn(move || {
@@ -111,21 +131,13 @@ impl App {
                 }
             };
         }
-        // The Minimal, Cards, Split and Big looks show the info page (`game_info`); Shelf and Cabinet the box (`game_box`)
-        // unless SELECT chose the page last time.
-        if matches!(self.theme, Theme::Minimal | Theme::Cards | Theme::Split | Theme::Big) {
-            open.card.show_info();
-        } else if self.game_box {
-            open.card.boxed = Some(pocket_ui::game_box::BoxView::new());
-            // The case opens: plastic or cardboard, instead of the confirm click.
-            self.play_sound(pocket_ui::ui_sound::opening(self.medium(item)));
-            pocket_ui::ui_sound::played();
-        }
-        self.card = Some(open);
+        open
     }
 
     /// The Wikipedia lead arrived (or could not be loaded).
     pub(crate) fn card_text(&mut self, title: String, text: Result<String, String>) {
+        // The second screen's box may be waiting for the same article (`app_second_screen`).
+        self.second_card_text(&title, &text);
         let Some(open) = self.card.as_mut().filter(|o| o.article.as_deref() == Some(title.as_str())) else {
             return;
         };
@@ -149,7 +161,7 @@ impl App {
             .collect()
     }
 
-    fn card_data(&mut self, system: &str, name: &str, path: &Path, info: Option<&GameInfo>) -> CardData {
+    fn card_data(&mut self, system: &str, name: &str, path: &Path, info: Option<&GameInfo>, interactive: bool) -> CardData {
         let meta = self.library.get(path);
         let played = self.recents.list.iter().find(|r| r.path == path).map(|r| (r.last_played, r.play_secs));
         let mut data = CardData {
@@ -201,7 +213,9 @@ impl App {
             plain: false,
         };
         // RetroAchievements: what is known, and a lookup in the background when that is old (`app_achievements`).
-        data.achievements = self.card_achievements(system, path);
+        data.achievements = if interactive { self.card_achievements(system, path) } else {
+            pocket_ui::achievements::snapshot::Summary::load(&self.data_dir, system, path).and_then(|s| s.text())
+        };
         // A game of the starter pack (docs/STARTER-PACK.md): whose it is and under what licence it may be shared.
         if let Some(g) = path.file_name().and_then(|n| n.to_str()).and_then(|n| pocket_ui::starter::find(system, n)) {
             data.facts.push(("By", g.author.clone()));
@@ -229,9 +243,13 @@ impl App {
             data.listed_as = Some(info.label.clone());
         }
         data.sentence = game_card::sentence(info);
-        let related = self.related_games(info, path);
-        data.more_by = related.0;
-        data.series = related.1;
+        // Only an interactive card needs related-game lists: this clones/resolves the whole library.
+        // Passive browsing on a 1 GB A55 must stay proportional to the selected game.
+        if interactive {
+            let related = self.related_games(info, path);
+            data.more_by = related.0;
+            data.series = related.1;
+        }
         data
     }
 
@@ -419,6 +437,7 @@ impl App {
         let (proxy, data_dir) = (self.proxy.clone(), self.data_dir.clone());
         std::thread::spawn(move || {
             use pocket_ui::auto_texts::{self, Event};
+            pocket_ui::web::lower_priority();
             let mut db = gamedb::GameDb::embedded();
             let todo = auto_texts::todo(&data_dir, &mut db, &games);
             // Games with nothing to load (no entry, no article, text cached) are done with as well.
@@ -428,7 +447,7 @@ impl App {
             let progress = |done, total| {
                 let _ = proxy.send_event(UserEvent::Texts(Event::Progress { done, total }));
             };
-            let stopped = || stop.load(std::sync::atomic::Ordering::Relaxed);
+            let stopped = || stop.load(std::sync::atomic::Ordering::Relaxed) || pocket_ui::covers::game_on();
             let run = auto_texts::fetch_until(
                 &todo,
                 progress,
@@ -512,6 +531,8 @@ impl App {
         }
         let pictures = self.card_pictures(item, c.w);
         let corner = self.status_corner();
+        // The second screen's box has no clock or battery of its own: they are on the screen above (`Card::bare`).
+        let corner = (!self.card.as_ref().is_some_and(|o| o.card.bare)).then_some(&corner);
         if self.card.as_ref().is_some_and(|o| o.card.boxed.is_some()) {
             // The box: the case's front from the shelf's own machinery, at the box's height (`game_box`). Its cover is
             // read on the cabinet's thread: taken here, since the shelf that usually takes it is not painted under a card.
@@ -524,7 +545,7 @@ impl App {
             let Some(open) = self.card.as_mut() else { return };
             open.card.pictures = pictures;
             let inputs = pocket_ui::game_box::Inputs { medium, look, front: front.as_deref(), game: game.as_deref(), cover: big.as_deref(), console };
-            open.card.paint_box(c, &mut self.text, &inputs, Some(&corner));
+            open.card.paint_box(c, &mut self.text, &inputs, corner);
             self.paint_card_toast(c);
             return;
         }
@@ -536,7 +557,7 @@ impl App {
             let console = self.item_rom(item).and_then(|(system, _)| pocket_ui::system_art::get(&system));
             let Some(open) = self.card.as_mut() else { return };
             open.card.pictures = pictures;
-            open.card.paint_info(c, &mut self.text, cover.as_ref(), console, Some(&corner));
+            open.card.paint_info(c, &mut self.text, cover.as_ref(), console, corner);
             self.paint_card_toast(c);
             return;
         }
@@ -544,7 +565,7 @@ impl App {
         let cover = self.cover(item, bw, bh);
         let Some(open) = self.card.as_mut() else { return };
         open.card.pictures = pictures;
-        open.card.paint(c, &mut self.text, cover.as_ref(), Some(&corner));
+        open.card.paint(c, &mut self.text, cover.as_ref(), corner);
         // Curator's rows can be tapped (`app_curator`).
         self.curator_card_hits(c.w);
         self.paint_card_toast(c);
@@ -562,7 +583,7 @@ impl App {
                 let msg = self.text.fit(Face::Body, 28, &msg, c.w - 2 * pocket_ui::palette::MARGIN - 48);
                 let w = self.text.width(Face::Body, 28, &msg) + 48;
                 let h = pocket_ui::type_scale::row(52, 28);
-                c.round_rect(c.w / 2 - w / 2, 36, w, h, h / 2, pocket_ui::palette::KEYCAP);
+                pocket_ui::retro::pill(c, c.w / 2 - w / 2, 36, w, h, h / 2, pocket_ui::palette::KEYCAP);
                 self.text.draw(c, Face::Body, 28, c.w / 2 - w / 2 + 24, 36 + h / 2 + pocket_ui::type_scale::base(10, 28), pocket_ui::palette::CHALK, &msg);
             }
         }

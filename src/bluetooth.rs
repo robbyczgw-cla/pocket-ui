@@ -399,6 +399,11 @@ pub struct Bluetoothctl {
 impl Bluetoothctl {
     /// `None` where there is no `bluetoothctl` (a desktop, the virtual device).
     pub fn system() -> Option<Bluetoothctl> {
+        #[cfg(feature = "brick")]
+        if crate::device::brick() && crate::brick_profile::standalone() {
+            let program = std::env::var_os("POCKETUI_BRICK_BLUETOOTHCTL").map(PathBuf::from)?;
+            return program.exists().then(|| Bluetoothctl::with(program, None));
+        }
         let program = ["/usr/bin/bluetoothctl", "/bin/bluetoothctl"].iter().map(PathBuf::from).find(|p| p.exists())?;
         let rocknix = Some(PathBuf::from("/usr/bin/rocknix-bluetooth")).filter(|p| p.exists());
         Some(Bluetoothctl::with(program, rocknix))
@@ -437,7 +442,10 @@ impl Bluetoothctl {
     /// The addresses `devices <filter>` lists; `None` when this BlueZ does not know the filter (before 5.66).
     fn listed(&self, filter: &str) -> Option<Vec<String>> {
         let out = self.run(&["devices", filter], ASK).ok()?;
-        if out.contains("Invalid argument") {
+        let unsupported = out.contains("Invalid argument");
+        #[cfg(feature = "brick")]
+        let unsupported = unsupported || out.contains("Invalid command") || out.contains("Too many arguments");
+        if unsupported {
             return None;
         }
         Some(parse_devices(&out).into_iter().map(|(a, _)| a).collect())
@@ -1015,7 +1023,8 @@ mod tests {
     }
 
     #[test]
-    fn the_mock_forgets_and_a_search_stops_when_told() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_mock_forgets_and_a_search_stops_when_told() {
         let m = searched();
         m.remove("4C:B9:9B:0A:1B:2C").unwrap();
         assert!(m.info("4C:B9:9B:0A:1B:2C").is_none());
@@ -1023,7 +1032,7 @@ mod tests {
         let slow = MockBluetooth::demo(Duration::ZERO, Duration::from_secs(10));
         let t0 = Instant::now();
         slow.scan(15, &AtomicBool::new(true)).unwrap();
-        assert!(t0.elapsed() < Duration::from_secs(1));
+        assert!(t0.elapsed() < crate::testutil::timeout(Duration::from_secs(1)));
     }
 
     // --- the real one, against a stand-in bluetoothctl ---
@@ -1084,6 +1093,20 @@ esac"#;
         assert_eq!(infos(), 7);
     }
 
+    #[cfg(feature = "brick")]
+    #[test]
+    fn bluez_554_without_device_filters_reads_state_from_info() {
+        let script = FAKE.replace(
+            "  \"devices Paired\"|\"devices Trusted\") cat $F/bluetoothctl-devices-paired.txt ;;",
+            "  \"devices Paired\"|\"devices Connected\"|\"devices Trusted\") echo 'Too many arguments: 2 > 1' ;;",
+        );
+        let (_dir, prog, _) = fake_bluetoothctl("old-bluez", &script);
+        let bt = Bluetoothctl::with(&prog, None);
+        let devices = bt.devices().unwrap();
+        let eight = devices.iter().find(|d| d.address == "E4:17:D8:0B:1D:0E").unwrap();
+        assert!(eight.paired && eight.trusted && eight.connected);
+    }
+
     #[test]
     fn the_real_backend_pairs_step_by_step_and_says_why_it_failed() {
         let (_dir, prog, log) = fake_bluetoothctl("pair", FAKE);
@@ -1097,7 +1120,8 @@ esac"#;
     }
 
     #[test]
-    fn the_real_backend_never_hangs_and_a_search_can_be_stopped() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_real_backend_never_hangs_and_a_search_can_be_stopped() {
         let (_dir, prog, _) = fake_bluetoothctl("hang", FAKE);
         let bt = Bluetoothctl::with(&prog, None);
         bt.scan(1, &AtomicBool::new(false)).unwrap();
@@ -1109,7 +1133,7 @@ esac"#;
         });
         let t0 = Instant::now();
         bt.scan(30, &stop).unwrap();
-        assert!(t0.elapsed() < Duration::from_secs(3), "stopped, not waited for: {:?}", t0.elapsed());
+        assert!(t0.elapsed() < crate::testutil::timeout(Duration::from_secs(3)), "stopped, not waited for: {:?}", t0.elapsed());
         // A dead `bluetoothd` makes bluetoothctl wait forever: every call has its own end.
         let (_dir, stuck, _) = fake_bluetoothctl("stuck", "sleep 60");
         let bt = Bluetoothctl::with(&stuck, None);

@@ -3,11 +3,10 @@
 #   scripts/build-gpsp.sh OUT WORK
 set -eu
 OUT=$1 WORK=$2
-HERE=$(cd "$(dirname "$0")" && pwd)
-ROOT=$(cd "$HERE/.." && pwd)
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
 HEADER=$ROOT/deploy/gpsp/clear-cache.h
-[ -f "$HEADER" ] || HEADER=$HERE/clear-cache.h
-[ -f "$HEADER" ] || { echo "build-gpsp: missing cache-sync header" >&2; exit 1; }
+# The packaged recipe carries the same header beside itself, outside a source checkout.
+[ -f "$HEADER" ] || HEADER=$(cd "$(dirname "$0")" && pwd)/clear-cache.h
 mkdir -p "$OUT/cores" "$OUT/licences/gpsp" "$OUT/sources" "$WORK/bin"
 OUT=$(cd "$OUT" && pwd); WORK=$(cd "$WORK" && pwd)
 git init -q "$WORK/gpsp"

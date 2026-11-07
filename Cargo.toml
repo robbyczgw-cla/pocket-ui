@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ui"
-version = "0.2.5"
+version = "0.3.0"
 edition = "2021"
 authors = ["Robby Czesany"]
 license = "GPL-2.0-or-later"
@@ -25,6 +25,18 @@ path = "src/bin/pocket_splash.rs"
 [[bin]]
 name = "store-tool"
 path = "src/bin/store_tool.rs"
+
+# The TrimUI Brick under Knulli (docs/TRIMUI-BRICK.md): Wayland and sway's IPC on a bare framebuffer.
+[[bin]]
+name = "pocket-fb"
+path = "src/bin/pocket_fb.rs"
+required-features = ["brick"]
+
+# The Brick's first GPU test: GLES through its EGL blob, frame times (docs/TRIMUI-BRICK.md).
+[[bin]]
+name = "brick-egl"
+path = "src/bin/brick_egl.rs"
+required-features = ["brick"]
 
 [dependencies]
 font8x8 = { version = "0.3", default-features = false }
@@ -53,6 +65,8 @@ qrcode = { version = "0.14.1", default-features = false }
 [features]
 # Steam Deck / desktop Linux (docs/STEAMDECK.md): XWayland or X11 windows besides Wayland. Off for the handhelds.
 x11 = ["winit/x11", "glutin/x11", "glutin-winit/x11", "softbuffer/x11", "softbuffer/x11-dlopen", "dep:x11rb"]
+# TrimUI Brick under Knulli (docs/TRIMUI-BRICK.md): the framebuffer bridge. Off for the handhelds of the ROCKNIX image.
+brick = []
 
 [build-dependencies]
 # Builds src/log_shim.c (see build.rs); already in the tree through other crates.

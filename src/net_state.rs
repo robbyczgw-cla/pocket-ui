@@ -1216,7 +1216,7 @@ mod tests {
         });
         net.subscribe(&wake);
         while !ok(&net.snapshot()) {
-            rx.recv_timeout(Duration::from_secs(10)).unwrap_or_else(|_| panic!("timed out waiting for {what}"));
+            rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(10))).unwrap_or_else(|_| panic!("timed out waiting for {what}"));
         }
     }
 
@@ -1558,7 +1558,7 @@ mod tests {
             g.pass();
             if !stop.load(Ordering::SeqCst) { c.store(true, Ordering::SeqCst); }
         });
-        waiting.recv_timeout(Duration::from_secs(5)).unwrap();
+        waiting.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap();
         net.set_enabled(false);
         gate.open();
         net.wait_idle();

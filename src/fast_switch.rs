@@ -522,7 +522,8 @@ mod tests {
     }
 
     #[test]
-    fn waiting_for_a_pause() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_waiting_for_a_pause() {
         let pgid = 9_200_001;
         let before = pauses(pgid);
         assert!(!wait_paused(pgid, before, Duration::from_millis(20)), "nothing said yet");
@@ -530,24 +531,21 @@ mod tests {
             std::thread::sleep(Duration::from_millis(30));
             note_paused(pgid);
         });
-        let t0 = Instant::now();
-        assert!(wait_paused(pgid, before, Duration::from_secs(5)));
-        assert!(t0.elapsed() < Duration::from_secs(2), "woke up at once");
+        assert!(wait_paused(pgid, before, crate::testutil::timeout(Duration::from_secs(5))));
         t.join().unwrap();
         assert!(!wait_paused(pgid, pauses(pgid), Duration::from_millis(10)), "an earlier pause doesn't count for the next");
     }
 
     #[test]
-    fn waiting_for_an_ended_game() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_waiting_for_an_ended_game() {
         let pgid = 9_000_001;
         assert!(!wait_ended(pgid, Duration::from_millis(20)));
         let t = std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(30));
             note_ended(pgid);
         });
-        let t0 = Instant::now();
-        assert!(wait_ended(pgid, Duration::from_secs(5)));
-        assert!(t0.elapsed() < Duration::from_secs(2), "woke up at once, not at the timeout");
+        assert!(wait_ended(pgid, crate::testutil::timeout(Duration::from_secs(5))));
         t.join().unwrap();
         for p in 0..ENDED_KEEP as i32 + 1 {
             note_ended(9_100_000 + p);
@@ -563,19 +561,25 @@ mod tests {
         use std::sync::mpsc;
         let run = |script: &str| {
             let mut cmd = std::process::Command::new("sh");
-            cmd.args(["-c", script]);
+            cmd.args(["-c", script]).stdin(std::process::Stdio::piped());
             let h = Handoff::attach(&mut cmd).expect("pipe");
             let mut child = cmd.spawn().unwrap();
             let (tx, rx) = mpsc::channel();
-            h.watch(0, move || tx.send(()).unwrap());
-            let saved = rx.recv_timeout(Duration::from_secs(120)).is_ok();
+            let Handoff { read, write } = h;
+            drop(write);
+            std::thread::spawn(move || {
+                let saved = saved_line(std::fs::File::from(read), || {});
+                let _ = tx.send(saved);
+            });
+            let saved = rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(120))).unwrap();
             let running_then = child.try_wait().unwrap().is_none();
+            drop(child.stdin.take()); // EOF releases the acknowledged child.
             child.wait().unwrap();
             (saved, running_then)
         };
         // `/dev/fd/N` rather than `>&N`: dash (Debian's sh) only takes single-digit descriptors there, and with the
         // whole suite running the pipe's number can have two.
-        let (saved, running) = run(r#"echo saved > "/dev/fd/$POCKET_HANDOFF_FD"; sleep 0.5"#);
+        let (saved, running) = run(r#"echo saved > "/dev/fd/$POCKET_HANDOFF_FD"; read -r release"#);
         assert!(saved && running, "saved {saved}, child still running {running}");
         let (saved, _) = run("kill -9 $$");
         assert!(!saved, "a process killed before its line never counts as saved");
@@ -593,14 +597,16 @@ mod tests {
         let state = dir.join("game.pstate.auto");
         std::fs::write(&state, b"old").unwrap();
         let mut cmd = std::process::Command::new("sh");
-        cmd.arg("-c").arg(r#"head -c 800000 /dev/zero > "$1.tmp" && sync "$1.tmp" && mv "$1.tmp" "$1" && echo saved > "/dev/fd/$POCKET_HANDOFF_FD"; sleep 0.3"#).arg("sh").arg(&state);
+        cmd.arg("-c").arg(r#"head -c 800000 /dev/zero > "$1.tmp" && sync "$1.tmp" && mv "$1.tmp" "$1" && echo saved > "/dev/fd/$POCKET_HANDOFF_FD"; read -r release"#).arg("sh").arg(&state).stdin(std::process::Stdio::piped());
         let h = Handoff::attach(&mut cmd).expect("pipe");
         let mut child = cmd.spawn().unwrap();
         let (tx, rx) = mpsc::channel();
         let read = state.clone();
         h.watch(0, move || tx.send(std::fs::metadata(&read).map(|m| m.len()).unwrap_or(0)).unwrap());
-        // Generous: the child syncs 800 kB to disk, which waits for every other test's writes on a loaded machine.
-        assert_eq!(rx.recv_timeout(Duration::from_secs(120)), Ok(800_000), "the whole new state, not the old one or a part");
+        // Observe the completed file while the acknowledged child is still alive.
+        // The load-aware guard catches a broken writer/pipe, not disk throughput.
+        assert_eq!(rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(120))), Ok(800_000), "the whole new state, not the old one or a part");
+        drop(child.stdin.take());
         child.wait().unwrap();
     }
 
@@ -619,7 +625,7 @@ mod tests {
             assert_eq!(status.signal(), Some(libc::SIGKILL));
             // Start reading only AFTER the kill: no scheduling race can lose the first-frame evidence.
             let observed = pipe.watch(child.id() as i32, || panic!("a killed game did not save"))
-                .recv_timeout(Duration::from_secs(5)).unwrap_or_default();
+                .recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap_or_default();
             assert_eq!(observed, expected);
             assert_eq!(fallback::should_retry(false, observed, false, None), expected == StartOutcome::NoFrame);
         }

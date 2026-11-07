@@ -7,7 +7,9 @@
 //! The Mini V2's L2/R2 are analog triggers; they count as pressed from half travel. The d-pad
 //! arrives as buttons (hat events are turned into Left/Right/Up/Down by `pad`).
 
-use crate::pad::{Axis, Button, PadEvent};
+use crate::pad::{Button, PadEvent};
+#[cfg(test)]
+use crate::pad::Axis;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Action {
@@ -51,9 +53,6 @@ impl Enabled {
     }
 }
 
-/// Analog travel (0 to 1) from which a trigger counts as pressed.
-const TRIGGER: f32 = 0.5;
-
 #[derive(Default)]
 pub struct Hotkeys {
     pub enabled: Enabled,
@@ -67,6 +66,11 @@ pub struct Hotkeys {
     y: bool,
     /// The right face button, "A" on the Mini V2 (`Button::East`).
     a: bool,
+    /// The Brick's F1 and F2 (`brick_hw`): held, and what each does (set from the player's choice; none elsewhere).
+    #[cfg(feature = "brick")]
+    f_down: [bool; 2],
+    #[cfg(feature = "brick")]
+    f_action: [Option<Action>; 2],
     pending: Vec<Action>,
 }
 
@@ -79,13 +83,38 @@ impl Hotkeys {
     pub fn feed(&mut self, e: &PadEvent) {
         match *e {
             PadEvent::Button { button, pressed, .. } => self.button(button, pressed),
-            PadEvent::Axis { axis: Axis::L2, value, .. } => self.button(Button::L2, value > TRIGGER),
-            PadEvent::Axis { axis: Axis::R2, value, .. } => self.button(Button::R2, value > TRIGGER),
+            // pad has already thresholded (with hysteresis) and remapped triggers as buttons.
+            // Reading the raw axis here too would fire the old shortcut after a device remap.
+            _ => {}
+        }
+    }
+
+    /// What F1 and F2 do (`brick_hw::FKeys`); an action the Shortcuts page has switched off stays off.
+    #[cfg(feature = "brick")]
+    pub fn set_f_keys(&mut self, actions: [Option<Action>; 2]) {
+        self.f_action = actions;
+    }
+
+    #[cfg(feature = "brick")]
+    fn f_key(&mut self, i: usize, pressed: bool) {
+        let was = std::mem::replace(&mut self.f_down[i], pressed);
+        if !pressed || was {
+            return;
+        }
+        let e = self.enabled;
+        match self.f_action[i] {
+            Some(a @ Action::Save) if e.save => self.pending.push(a),
+            Some(a @ Action::Load) if e.load => self.pending.push(a),
+            Some(a @ Action::Screenshot) if e.screenshot => self.pending.push(a),
             _ => {}
         }
     }
 
     fn button(&mut self, button: Button, pressed: bool) {
+        #[cfg(feature = "brick")]
+        if matches!(button, Button::F1 | Button::F2) {
+            return self.f_key((button == Button::F2) as usize, pressed);
+        }
         let slot = match button {
             Button::Mode => {
                 self.home = pressed;
@@ -149,6 +178,18 @@ pub fn home_tap_step(tap: bool, button: Button, pressed: bool) -> (bool, bool) {
     }
 }
 
+/// The action of pocket-core a Brick F key choice stands for; `Recent games` is pocket-ui's, `Nothing` is nothing.
+#[cfg(feature = "brick")]
+pub fn action_of(k: crate::brick_hw::FKey) -> Option<Action> {
+    use crate::brick_hw::FKey;
+    match k {
+        FKey::Save => Some(Action::Save),
+        FKey::Load => Some(Action::Load),
+        FKey::Screenshot => Some(Action::Screenshot),
+        FKey::Recent | FKey::Pause | FKey::Nothing => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -201,17 +242,16 @@ mod tests {
     }
 
     #[test]
-    fn analog_triggers_count_from_half_travel_and_do_not_repeat() {
+    fn analog_reports_do_not_bypass_a_controllers_remapped_trigger() {
         let mut h = Hotkeys::default();
         press(&mut h, Button::Mode, true);
-        for v in [0.2, 0.6, 0.8, 1.0, 0.9] {
+        for v in [0.2, 0.6, 0.8, 0.45, 0.56] {
             h.feed(&PadEvent::Axis { source: 0, axis: Axis::R2, value: v });
         }
-        assert_eq!(h.take(), [Action::ToggleFastForward], "one press, however many axis reports");
-        for v in [0.3, 0.0, 0.7] {
-            h.feed(&PadEvent::Axis { source: 0, axis: Axis::R2, value: v });
-        }
-        assert_eq!(h.take(), [Action::ToggleFastForward], "released and pressed again");
+        assert!(h.take().is_empty());
+        press(&mut h, Button::R2, true);
+        press(&mut h, Button::R2, true);
+        assert_eq!(h.take(), [Action::ToggleFastForward]);
     }
 
     #[test]
@@ -219,9 +259,9 @@ mod tests {
         let mut h = Hotkeys::default();
         press(&mut h, Button::Mode, true);
         assert!(!h.rewind_held());
-        h.feed(&PadEvent::Axis { source: 0, axis: Axis::L2, value: 0.9 });
+        press(&mut h, Button::L2, true);
         assert!(h.rewind_held());
-        h.feed(&PadEvent::Axis { source: 0, axis: Axis::L2, value: 0.0 });
+        press(&mut h, Button::L2, false);
         assert!(!h.rewind_held());
         // The button form of L2 (a virtual pad) works too, and letting go of HOME stops it.
         press(&mut h, Button::L2, true);
@@ -309,5 +349,36 @@ mod tests {
         assert_eq!(menus_opened(&[(Mode, true), (East, true), (East, false), (Mode, false), (Mode, true), (Mode, false)]), 1);
         // A alone never opens it.
         assert_eq!(menus_opened(&[(East, true), (East, false)]), 0);
+    }
+
+    #[test]
+    #[cfg(feature = "brick")]
+    fn the_brick_f_keys_do_what_they_were_given_without_home_and_on_the_press_only() {
+        let mut h = Hotkeys::new(Enabled::default());
+        let press = |h: &mut Hotkeys, b: Button, down: bool| h.feed(&PadEvent::Button { source: 0, button: b, pressed: down });
+        press(&mut h, Button::F1, true);
+        assert!(h.take().is_empty(), "nothing is set yet: a plain Brick does nothing");
+        h.set_f_keys([Some(Action::Save), Some(Action::Load)]);
+        press(&mut h, Button::F1, false);
+        press(&mut h, Button::F1, true);
+        press(&mut h, Button::F1, true);
+        press(&mut h, Button::F2, true);
+        assert_eq!(h.take(), [Action::Save, Action::Load], "one action per press, no HOME needed");
+        // Held: no repeat.
+        press(&mut h, Button::F2, true);
+        assert!(h.take().is_empty());
+        // The Shortcuts page (and Kids Mode) still switch them off.
+        let mut kids = Hotkeys::new(Enabled::none());
+        kids.set_f_keys([Some(Action::Save), Some(Action::Screenshot)]);
+        press(&mut kids, Button::F1, true);
+        press(&mut kids, Button::F2, true);
+        assert!(kids.take().is_empty());
+        // F keys do not disturb HOME shortcuts.
+        let mut both = Hotkeys::new(Enabled::default());
+        both.set_f_keys([Some(Action::Screenshot), None]);
+        press(&mut both, Button::Mode, true);
+        press(&mut both, Button::R1, true);
+        press(&mut both, Button::F1, true);
+        assert_eq!(both.take(), [Action::Save, Action::Screenshot]);
     }
 }

@@ -891,3 +891,22 @@ mod bench {
         println!("fade only: {:.3} ms", start.elapsed().as_secs_f64() * 1000.0 / n as f64);
     }
 }
+
+// The Brick's GPU (`brick_gpu`, `pocket-fb --gl`) draws a page's transition from the finished picture: the same slide and fade, the rows
+// come in together. At the end of the file, so a build without the `brick` feature keeps every line where it was.
+#[cfg(feature = "brick")]
+impl Transition {
+    /// The slide (x and y in pixels) and the fade towards the page colour (0 none, 1 all) at `now`; None once it is over.
+    pub fn look(&self, now: Instant) -> Option<(i32, i32, f32)> {
+        if !self.active(now) {
+            return None;
+        }
+        let p = self.progress_of(0, now);
+        let (dx, fade) = self.slide_fade(p);
+        let dy = match self.enter {
+            Enter::Rise { from_y } if allowed(Kind::Move) => ((1.0 - p) * (from_y - self.top).clamp(-160, 160) as f32 * 0.35).round() as i32,
+            _ => 0,
+        };
+        Some((dx, dy, fade as f32 / 255.0))
+    }
+}

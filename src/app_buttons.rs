@@ -24,15 +24,17 @@ pub(crate) const SETTINGS_NAME: &str = "Buttons";
 enum Row {
     Layout,
     Symbols,
+    Controllers,
 }
 
-const ROWS: [Row; 2] = [Row::Layout, Row::Symbols];
+const ROWS: [Row; 3] = [Row::Layout, Row::Symbols, Row::Controllers];
 
 impl Row {
     fn label(self) -> &'static str {
         match self {
             Row::Layout => "Button layout",
             Row::Symbols => "Button symbols",
+            Row::Controllers => "Controller setup",
         }
     }
 }
@@ -42,6 +44,7 @@ fn desc(row: Row, layout: ButtonLayout) -> String {
     let what = match row {
         Row::Layout => "Which button confirms in the menus. Games keep their own buttons.",
         Row::Symbols => "How the buttons look in the hints: letters, Xbox colours or PlayStation shapes.",
+        Row::Controllers => "A separate layout for each controller, in menus and games.",
     };
     let now = match layout {
         ButtonLayout::Nintendo => "The right button confirms, the bottom one goes back.",
@@ -59,13 +62,15 @@ impl App {
     pub(crate) fn buttons_input(&mut self, sel: usize, b: Button) -> Option<SettingsPage> {
         let sel = sel.min(ROWS.len() - 1);
         match b {
-            Button::Up | Button::Down => return Some(SettingsPage::Buttons((sel + 1) % ROWS.len())),
+            Button::Up => return Some(SettingsPage::Buttons((sel + ROWS.len() - 1) % ROWS.len())),
+            Button::Down => return Some(SettingsPage::Buttons((sel + 1) % ROWS.len())),
             b if b == CANCEL => return Some(SettingsPage::List(settings_row(SETTINGS_NAME))),
             _ => {}
         }
         if b == CONFIRM || matches!(b, Button::Left | Button::Right) {
             match ROWS[sel] {
                 Row::Layout => self.switch_button_layout(),
+                Row::Controllers => { self.open_controllers(false); return self.settings_page; },
                 Row::Symbols => {
                     button_prompts::set(button_prompts::get().step(b != Button::Left));
                     self.save_settings();
@@ -98,8 +103,9 @@ impl App {
             let v = match r {
                 Row::Layout => self.button_layout.label(),
                 Row::Symbols => button_prompts::get().label(),
+                Row::Controllers => ">",
             };
-            let shown = if i == sel { format!("‹ {v} ›") } else { v.to_string() };
+            let shown = if i == sel && *r != Row::Controllers { format!("‹ {v} ›") } else { v.to_string() };
             let vw = self.text.width(Face::Body, font, &shown);
             let name = self.text.fit(Face::Body, font, r.label(), right - pad - 2 * NU_BTN_PAD - vw - 24);
             let base = pocket_ui::kit::row_label(c, &mut self.text, (pad, y, right - pad, row), font, &name, i == sel);

@@ -193,13 +193,8 @@ fn wayland_for_snapshots(tmp: &Path) -> Option<Stub> {
         .spawn()
         .expect("python3 for scripts/wayland-stub.py");
     let stub = Stub { path, child };
-    for _ in 0..200 {
-        if stub.path.exists() {
-            return Some(stub);
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-    panic!("scripts/wayland-stub.py didn't start");
+    test_clock::wait_for(|| stub.path.exists(), std::time::Duration::from_secs(2), "Wayland stub listening");
+    Some(stub)
 }
 
 fn copy_dir(from: &Path, to: &Path) {
@@ -394,10 +389,22 @@ fn the_system_language_decides_until_one_is_chosen() {
         assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
         std::fs::read_to_string(misses).unwrap_or_default()
     };
+    // The contract is which language is painted, not a second copy of its wording.
+    // Read the expected text independently of the renderer's language-selection code.
+    let welcome = |lang: &str| -> String {
+        let table = std::fs::read_to_string(Path::new(&ROOT).join(format!("assets/i18n/{lang}.tsv"))).unwrap();
+        let title = table.lines().find_map(|line| line.strip_prefix("Welcome to your Pocket\t"))
+            .expect("translated welcome");
+        assert!(!title.trim().is_empty() && title != "Welcome to your Pocket", "expected a visible translated welcome");
+        format!("O\t{title}")
+    };
+    let german_welcome = welcome("de");
+    let spanish_welcome = welcome("es");
+    assert_ne!(german_welcome, spanish_welcome, "the welcome must distinguish the two test languages");
     let german = shot("de_DE.UTF-8", None, "de");
-    assert!(german.contains("O\tWillkommen auf deinem Pocket"), "ROCKNIX set to German, nothing chosen:\n{german}");
+    assert!(german.lines().any(|line| line == german_welcome), "ROCKNIX set to German, nothing chosen:\n{german}");
     let spanish = shot("es_MX.UTF-8", None, "es");
-    assert!(spanish.contains("O\tTe damos la bienvenida a tu Pocket"), "ROCKNIX set to Spanish, nothing chosen:\n{spanish}");
+    assert!(spanish.lines().any(|line| line == spanish_welcome), "ROCKNIX set to Spanish, nothing chosen:\n{spanish}");
     let english = shot("en_US.UTF-8", None, "en");
     assert!(!english.contains("O\t"), "ROCKNIX set to English:\n{english}");
     let chosen = shot("de_DE.UTF-8", Some(r#"{"language": "en"}"#), "chosen");

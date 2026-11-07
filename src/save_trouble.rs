@@ -1,7 +1,8 @@
 //! When the game's own save (the battery save, `.srm`, and the cartridge clock, `.rtc`) did not reach the card: a
 //! full card, one that turned read-only, one that fails. pocket-core keeps writing every 10 s and keeps the last good
 //! file in place (`fsutil::write_atomic` replaces it only once the new one is whole), so nothing on the card gets
-//! worse; but the player has to know that what they do now is not kept.
+//! worse; but the player has to know that what they do now is not kept. The same goes for a save that is on the card
+//! but couldn't be read at the start (`Unreadable`): the game runs without it and nothing is written over it.
 //!
 //! pocket-core finds out at its 10 s flush (`libretro::Core::save_trouble`, a look at what the writer thread left,
 //! no waiting) and at the saves of a quit or a sleep. It shows a calm line over the game while it lasts
@@ -26,6 +27,9 @@ pub enum Trouble {
     /// The card can't be written at all right now: read-only (EROFS, after card errors), refused (EACCES, EPERM), or
     /// an input/output error.
     Unwritable,
+    /// The game's save is on the card but couldn't be read at the start (an input/output error): the game runs without
+    /// it, and nothing is written over it this session (`libretro::Core`), so the save on the card stays as it was.
+    Unreadable,
 }
 
 impl Trouble {
@@ -42,6 +46,7 @@ impl Trouble {
         match self {
             Trouble::Full => "full",
             Trouble::Unwritable => "unwritable",
+            Trouble::Unreadable => "unreadable",
         }
     }
 
@@ -49,6 +54,7 @@ impl Trouble {
         match s.trim() {
             "full" => Some(Trouble::Full),
             "unwritable" => Some(Trouble::Unwritable),
+            "unreadable" => Some(Trouble::Unreadable),
             _ => None,
         }
     }
@@ -59,6 +65,7 @@ impl Trouble {
         match self {
             Trouble::Full => "Couldn't save: the SD card is full. Free some space.",
             Trouble::Unwritable => "Couldn't save to the SD card. Trying again.",
+            Trouble::Unreadable => "Couldn't read this game's save. It stays as it was.",
         }
     }
 
@@ -67,6 +74,7 @@ impl Trouble {
         match self {
             Trouble::Full => "The SD card is full. Quitting now loses what you did since the last save that reached the SD card; that save is kept. Free some space first if you can.",
             Trouble::Unwritable => "The SD card can't be written to. Quitting now loses what you did since the last save that reached the SD card; that save is kept.",
+            Trouble::Unreadable => "The game's save on the SD card couldn't be read, so the game started without it. Nothing is written over it: what you do now isn't kept, the save on the SD card is.",
         }
     }
 
@@ -75,6 +83,7 @@ impl Trouble {
         match self {
             Trouble::Full => "The game's last progress couldn't be saved: the SD card is full. The save before it is kept.",
             Trouble::Unwritable => "The game's last progress couldn't be saved: the SD card can't be written to. The save before it is kept.",
+            Trouble::Unreadable => "The game's save couldn't be read from the SD card, so nothing was written over it. It is kept as it was.",
         }
     }
 }
@@ -131,7 +140,7 @@ mod tests {
         let dir = TestDir::new("save-trouble");
         let file = dir.join("note");
         assert_eq!(read_from(&file), None, "no note: nothing to say");
-        for t in [Trouble::Full, Trouble::Unwritable] {
+        for t in [Trouble::Full, Trouble::Unwritable, Trouble::Unreadable] {
             publish_to(&file, Some(t));
             assert_eq!(read_from(&file), Some(t));
         }
@@ -143,7 +152,7 @@ mod tests {
 
     #[test]
     fn every_kind_has_its_words() {
-        for t in [Trouble::Full, Trouble::Unwritable] {
+        for t in [Trouble::Full, Trouble::Unwritable, Trouble::Unreadable] {
             assert_eq!(Trouble::from_word(t.word()), Some(t));
             assert!(!t.line().is_empty() && !t.risk().is_empty() && !t.after_quit().is_empty());
             assert!(!t.line().contains('!') && !t.risk().contains('!'), "calm");

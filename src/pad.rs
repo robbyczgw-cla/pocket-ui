@@ -1,24 +1,51 @@
 //! Controller state, fed by evdev on Linux and by the keyboard on the desktop preview.
 
+#[cfg(target_os = "linux")]
+#[path = "pad_linux_decode.rs"]
+pub mod decode;
+#[cfg(target_os = "linux")]
+#[path = "pad_bridge.rs"]
+pub mod bridge;
+
+#[path = "pad_bindings.rs"]
+pub mod bindings;
+
 use std::collections::VecDeque;
 use std::time::Instant;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Button {
     Up, Down, Left, Right,
     South, East, North, West,
     L1, R1, L2, R2, L3, R3,
     Select, Start, Mode, Back,
     Power, VolUp, VolDown,
+    /// The TrimUI Brick's two extra keys beside the screen (`brick_hw`); no other pad has them.
+    #[cfg(feature = "brick")]
+    F1,
+    #[cfg(feature = "brick")]
+    F2,
 }
 
 impl Button {
+    #[cfg(not(feature = "brick"))]
     pub const ALL: [Button; 21] = [
         Button::Up, Button::Down, Button::Left, Button::Right,
         Button::South, Button::East, Button::North, Button::West,
         Button::L1, Button::R1, Button::L2, Button::R2, Button::L3, Button::R3,
         Button::Select, Button::Start, Button::Mode, Button::Back,
         Button::Power, Button::VolUp, Button::VolDown,
+    ];
+
+    #[cfg(feature = "brick")]
+    pub const ALL: [Button; 23] = [
+        Button::Up, Button::Down, Button::Left, Button::Right,
+        Button::South, Button::East, Button::North, Button::West,
+        Button::L1, Button::R1, Button::L2, Button::R2, Button::L3, Button::R3,
+        Button::Select, Button::Start, Button::Mode, Button::Back,
+        Button::Power, Button::VolUp, Button::VolDown,
+        Button::F1, Button::F2,
     ];
 
     fn index(self) -> usize {
@@ -38,6 +65,10 @@ impl Button {
             Button::L3 => "L3", Button::R3 => "R3",
             Button::Select => "SELECT", Button::Start => "START", Button::Mode => "HOME", Button::Back => "BACK",
             Button::Power => "POWER", Button::VolUp => "VOL+", Button::VolDown => "VOL-",
+            #[cfg(feature = "brick")]
+            Button::F1 => "F1",
+            #[cfg(feature = "brick")]
+            Button::F2 => "F2",
         }
     }
 }
@@ -611,6 +642,47 @@ pub struct Started<D> {
     pub node: String,
     pub name: String,
     pub dev: D,
+    stop: std::sync::Arc<ReaderStop>,
+}
+
+/// Retiring a node must also wake its reader: an open fd can still be valid after a node/udev metadata change.
+/// Linux readers poll this eventfd alongside evdev, so idle pads need neither a timer nor another physical press.
+struct ReaderStop {
+    active: std::sync::atomic::AtomicBool,
+    #[cfg(target_os = "linux")]
+    wake: Option<std::os::fd::OwnedFd>,
+}
+
+impl ReaderStop {
+    fn new() -> Self {
+        Self {
+            active: std::sync::atomic::AtomicBool::new(true),
+            #[cfg(target_os = "linux")]
+            wake: {
+                use std::os::fd::FromRawFd;
+                // SAFETY: eventfd returns a fresh owned descriptor, or -1 on failure.
+                let fd = unsafe { libc::eventfd(0, libc::EFD_NONBLOCK | libc::EFD_CLOEXEC) };
+                (fd >= 0).then(|| unsafe { std::os::fd::OwnedFd::from_raw_fd(fd) })
+            },
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn active(&self) -> bool { self.active.load(std::sync::atomic::Ordering::Acquire) }
+
+    fn cancel(&self) {
+        if !self.active.swap(false, std::sync::atomic::Ordering::AcqRel) { return; }
+        #[cfg(target_os = "linux")]
+        if let Some(fd) = &self.wake {
+            use std::os::fd::AsRawFd;
+            let value = 1u64;
+            loop {
+                // SAFETY: a valid eventfd and an eight-byte value alive for the write; never blocking.
+                let written = unsafe { libc::write(fd.as_raw_fd(), (&value as *const u64).cast(), std::mem::size_of_val(&value)) };
+                if written >= 0 || std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted { break; }
+            }
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -639,6 +711,13 @@ struct LiveDev {
     node: String,
     id: u64,
     name: String,
+    stop: std::sync::Arc<ReaderStop>,
+}
+
+impl Drop for Supervisor {
+    fn drop(&mut self) {
+        for live in self.live.values() { live.stop.cancel(); }
+    }
 }
 
 impl Supervisor {
@@ -657,8 +736,9 @@ impl Supervisor {
                 Probe::Wanted(name, dev) => {
                     let source = self.next_source;
                     self.next_source += 1;
-                    self.live.insert(source, LiveDev { node: node.clone(), id, name: name.clone() });
-                    tick.started.push(Started { source, node, name, dev });
+                    let stop = std::sync::Arc::new(ReaderStop::new());
+                    self.live.insert(source, LiveDev { node: node.clone(), id, name: name.clone(), stop: stop.clone() });
+                    tick.started.push(Started { source, node, name, dev, stop });
                 }
                 Probe::NotWanted => {
                     self.rejected.insert(node, id);
@@ -672,7 +752,10 @@ impl Supervisor {
     /// The pump of `source` ended (read error): forget it so its node can be opened again.
     /// `None` when it was already forgotten because its node vanished.
     pub fn ended(&mut self, source: usize) -> Option<Lost> {
-        self.live.remove(&source).map(|l| Lost { source, node: l.node, name: l.name })
+        self.live.remove(&source).map(|l| {
+            l.stop.cancel();
+            Lost { source, node: l.node, name: l.name }
+        })
     }
 }
 
@@ -903,7 +986,8 @@ mod tests {
     /// next once-a-second look.
     #[cfg(target_os = "linux")]
     #[test]
-    fn a_new_device_node_wakes_the_supervisor_at_once() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_new_device_node_wakes_the_supervisor_at_once() {
         let dir = TestDir::new("pad-watch");
         let watch = DirWatch::new(&dir).expect("inotify");
         assert!(!watch.wait(std::time::Duration::from_millis(30)), "nothing changed: the timeout");
@@ -914,7 +998,7 @@ mod tests {
         });
         let t0 = std::time::Instant::now();
         assert!(watch.wait(std::time::Duration::from_secs(5)));
-        assert!(t0.elapsed() < std::time::Duration::from_millis(900), "{:?}", t0.elapsed());
+        assert!(t0.elapsed() < crate::testutil::timeout(std::time::Duration::from_millis(900)), "{:?}", t0.elapsed());
         maker.join().unwrap();
         assert!(DirWatch::new(&dir.join("missing")).is_none());
     }
@@ -972,25 +1056,27 @@ mod tests {
 
     #[test]
     fn a_press_while_the_ui_thread_still_starts_is_acted_on_when_it_is_ready() {
-        // Real threads, the start's order: the reader opens the pad first and gets a press (down at 20 ms, up at
-        // 40 ms) while the UI thread is still building its event loop (until 80 ms); a second press comes after.
-        use std::time::Duration;
+        // Hand over the first complete press before attaching the UI, then let
+        // the reader send the next press. Scheduling cannot exchange these phases.
         let early = std::sync::Arc::new(Early::default());
-        let t0 = Instant::now();
-        let at = move |ms: u64| std::thread::sleep(Duration::from_millis(ms).saturating_sub(t0.elapsed()));
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (go_tx, go_rx) = std::sync::mpsc::channel();
         let reader = {
             let early = early.clone();
             std::thread::spawn(move || {
-                for (ms, e) in [(20, press(3, Button::Down, true)), (40, press(3, Button::Down, false)), (120, press(3, Button::Down, true)), (140, press(3, Button::Down, false))] {
-                    at(ms);
-                    early.send(e);
-                }
+                early.send(press(3, Button::Down, true));
+                early.send(press(3, Button::Down, false));
+                ready_tx.send(()).unwrap();
+                go_rx.recv().unwrap();
+                early.send(press(3, Button::Down, true));
+                early.send(press(3, Button::Down, false));
             })
         };
-        at(80);
+        ready_rx.recv_timeout(crate::testutil::timeout(std::time::Duration::from_secs(5))).unwrap();
         assert_eq!(early.waiting(), 2, "the first press waited for the event loop");
         let (tx, rx) = std::sync::mpsc::channel();
         early.attach(move |e| tx.send(e).is_ok());
+        go_tx.send(()).unwrap();
         reader.join().unwrap();
         let got: Vec<PadEvent> = rx.try_iter().collect();
         assert_eq!(got.len(), 4);
@@ -1040,7 +1126,8 @@ mod tests {
     }
 
     #[test]
-    fn the_pad_is_open_before_the_first_frame_although_closing_the_other_nodes_takes_the_kernel_long() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_pad_is_open_before_the_first_frame_although_closing_the_other_nodes_takes_the_kernel_long() {
         // /dev/input of the Mini V2 in the scan's (name) order, 2026-10-26: the close of each node the scan doesn't
         // keep, in ms; InputPlumber's pad (event9) comes last. Closed on the scanning thread, it was open only at
         // about 220 ms after the start, the first frame at about 60 ms (`start.pads` of the speed guard).
@@ -1072,7 +1159,7 @@ mod tests {
         // They are all closed, in the background, in about the time they take.
         let wait = Instant::now();
         while closed.load(std::sync::atomic::Ordering::SeqCst) < 6 {
-            assert!(wait.elapsed() < std::time::Duration::from_secs(5), "the nodes are closed in the end");
+            assert!(wait.elapsed() < crate::testutil::timeout(std::time::Duration::from_secs(5)), "the nodes are closed in the end");
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
     }
@@ -1222,12 +1309,13 @@ pub mod linux {
     //! Reads every evdev device that looks like a gamepad or carries power/volume keys.
     //! Devices are read without grabbing, so sway and logind still see them.
 
-    use super::{Axis, Button, Controller, DeviceBus, Held, Node, PadEvent, Probe, PumpEnd, Supervisor};
-    use evdev::{AbsoluteAxisCode, Device, EventSummary, InputEvent, KeyCode, SwitchCode};
+    use super::{Button, Controller, DeviceBus, Held, Node, PadEvent, Probe, PumpEnd, Supervisor};
+    use evdev::{Device, EventSummary, InputEvent, KeyCode, SwitchCode};
 
     /// The one place that decides which input devices we read: gamepads, the power and volume keys, and a lid switch
     /// (the Flip 2's hall sensor), plus InputPlumber's keyboard aliases. Touch has its own reader.
     pub fn is_wanted(d: &Device) -> bool {
+        if d.name() == Some(super::bridge::NAME) { return false; }
         d.supported_keys().is_some_and(|k| wants_keys(|c| k.contains(c), d.name().is_some_and(|n| n.contains("InputPlumber"))))
             || d.supported_switches().is_some_and(|s| s.contains(SwitchCode::SW_LID))
     }
@@ -1311,15 +1399,16 @@ pub mod linux {
             while let Ok((source, end)) = done_rx.try_recv() {
                 closed |= end == PumpEnd::Closed;
                 if let Some(l) = sup.ended(source) {
-                    println!("pad: lost {} (source {})", l.name, l.source);
+                    println!("pad: lost {} (source {}, reader {end:?})", l.name, l.source);
                 }
             }
             if closed {
                 return None;
             }
+            super::bindings::refresh();
             let tick = sup.tick(bus);
             for l in &tick.lost {
-                println!("pad: lost {} (source {})", l.name, l.source);
+                println!("pad: lost {} (source {}, node changed)", l.name, l.source);
                 crate::trace::step("pad: lost");
             }
             Some(
@@ -1329,13 +1418,16 @@ pub mod linux {
                         // Which controller it is, before any of its events (`Mux`, `players`).
                         let controller = identify(&s.dev, &s.node);
                         println!("pad: source {} is {} ({})", s.source, controller.key, controller.name);
+                        let controller_key = controller.key.clone();
                         send(PadEvent::Connected { source: s.source, controller });
                         let (send, done_tx) = (send.clone(), done_tx.clone());
+                        let name = s.name.clone();
                         std::thread::spawn(move || {
-                            let end = pump(s.source, s.dev, |e| send(e));
-                            let _ = done_tx.send((s.source, end));
+                            let source = s.source;
+                            let end = pump_started(s, &controller_key, |e| send(e));
+                            let _ = done_tx.send((source, end));
                         });
-                        s.name
+                        name
                     })
                     .collect(),
             )
@@ -1370,13 +1462,28 @@ pub mod linux {
 
     /// ROCKNIX's built-in H700 pad (`rocknix-singleadc-joypad`) reports the printed X key as BTN_WEST and the printed Y
     /// key as BTN_NORTH (ROCKNIX corrects this in its RetroArch and SDL configs). Only that name is crossed over.
+    #[cfg(not(feature = "brick"))]
     pub(super) fn is_h700_pad(name: &str) -> bool {
         name.trim() == "H700 Gamepad"
+    }
+
+    #[cfg(feature = "brick")]
+    pub(super) fn is_h700_pad(name: &str) -> bool {
+        name.trim() == "H700 Gamepad" || { #[cfg(feature = "brick")] { crate::brick_profile::is_pad(name) } #[cfg(not(feature = "brick"))] { false } }
     }
 
     /// `button`, for the device called `name`: the H700 pad's X and Y cross over, so printed X is `North` and printed
     /// Y is `West` like on every other pad. This is the only place evdev keys become `Button`, for the UI and the core.
     pub(super) fn button_on(name: &str, code: KeyCode) -> Option<Button> {
+        // The Brick's F1 and F2 arrive as the thumb-stick presses (317, 318) on its pad, which has no sticks.
+        #[cfg(feature = "brick")]
+        if crate::brick_profile::is_pad(name) {
+            match code {
+                KeyCode::BTN_THUMBL | KeyCode::KEY_F1 => return Some(Button::F1),
+                KeyCode::BTN_THUMBR | KeyCode::KEY_F2 => return Some(Button::F2),
+                _ => {}
+            }
+        }
         match (button(code), is_h700_pad(name)) {
             (Some(Button::North), true) => Some(Button::West),
             (Some(Button::West), true) => Some(Button::North),
@@ -1417,12 +1524,27 @@ pub mod linux {
     /// (or `send` says nobody listens), everything it still held is released first, so no button stays "pressed",
     /// and then `Disconnected` says it is gone.
     pub fn pump(source: usize, dev: Device, send: impl Fn(PadEvent) -> bool) -> PumpEnd {
+        use std::os::fd::AsRawFd;
+        let node = std::fs::read_link(format!("/proc/self/fd/{}", dev.as_raw_fd())).unwrap_or_default();
+        let key = identify(&dev, &node.to_string_lossy()).key;
+        pump_for(source, dev, &key, &super::ReaderStop::new(), send)
+    }
+
+    fn pump_started(s: super::Started<Device>, key: &str, send: impl Fn(PadEvent) -> bool) -> PumpEnd {
+        pump_for(s.source, s.dev, key, &s.stop, send)
+    }
+
+    fn pump_for(source: usize, mut dev: Device, key: &str, stop: &super::ReaderStop, send: impl Fn(PadEvent) -> bool) -> PumpEnd {
         let held = std::cell::RefCell::new(Held::default());
+        let remap = std::cell::RefCell::new(super::bindings::Remap::default());
         let tracked = |e: PadEvent| {
+            let e = if matches!(e, PadEvent::Button { .. }) {
+                remap.borrow_mut().event(key, &super::bindings::layout(key), e)
+            } else { e };
             held.borrow_mut().observe(&e);
             send(e)
         };
-        let end = read_loop(source, dev, &tracked);
+        let end = read_loop(source, &mut dev, stop, &tracked);
         let undo = held.borrow_mut().release(source);
         for e in undo {
             send(e);
@@ -1431,22 +1553,37 @@ pub mod linux {
         end
     }
 
-    fn read_loop(source: usize, mut dev: Device, send: &impl Fn(PadEvent) -> bool) -> PumpEnd {
-        let ranges: Vec<(AbsoluteAxisCode, i32, i32)> = dev
-            .get_absinfo()
-            .map(|it| it.map(|(code, info)| (code, info.minimum(), info.maximum())).collect())
-            .unwrap_or_default();
-        let name = dev.name().unwrap_or("").to_string();
-        let norm = |code: AbsoluteAxisCode, v: i32| -> f32 {
-            match ranges.iter().find(|(c, _, _)| *c == code) {
-                Some((_, lo, hi)) if hi > lo => (v - lo) as f32 / (hi - lo) as f32,
-                _ => 0.0,
-            }
-        };
+    fn read_loop(source: usize, dev: &mut Device, stop: &super::ReaderStop, send: &impl Fn(PadEvent) -> bool) -> PumpEnd {
+        use std::os::fd::AsRawFd;
+        // poll readiness is not a promise that the following read can block safely (disconnect/revoke can race).
+        if dev.set_nonblocking(true).is_err() { return PumpEnd::DeviceGone; }
+        let mut decoder = super::decode::Decoder::new(dev);
+        let wake = stop.wake.as_ref().map_or(-1, AsRawFd::as_raw_fd);
         loop {
-            let Ok(events) = dev.fetch_events() else { return PumpEnd::DeviceGone };
+            if !stop.active() { return PumpEnd::DeviceGone; }
+            let mut fds = [
+                libc::pollfd { fd: dev.as_raw_fd(), events: libc::POLLIN, revents: 0 },
+                libc::pollfd { fd: wake, events: libc::POLLIN, revents: 0 },
+            ];
+            // Only if eventfd creation failed, a bounded wait still lets retirement finish. Normal idle is asleep.
+            // SAFETY: two live descriptors (a negative fd is ignored), and the array lives through poll.
+            let ready = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, if wake < 0 { 100 } else { -1 }) };
+            if ready < 0 {
+                if std::io::Error::last_os_error().kind() == std::io::ErrorKind::Interrupted { continue; }
+                return PumpEnd::DeviceGone;
+            }
+            if !stop.active() || fds[0].revents & (libc::POLLHUP | libc::POLLERR | libc::POLLNVAL) != 0 {
+                return PumpEnd::DeviceGone;
+            }
+            if fds[0].revents & libc::POLLIN == 0 { continue; }
+            let events = match dev.fetch_events() {
+                Ok(events) => events,
+                Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted) => continue,
+                Err(_) => return PumpEnd::DeviceGone,
+            };
             let batch: Vec<_> = events.collect();
             for ev in batch {
+                if !stop.active() { return PumpEnd::DeviceGone; }
                 // The power key's own time stamp, the kernel's (evdev's clock is CLOCK_REALTIME unless asked otherwise):
                 // after a wake by the key, how long the resume took before anything of ours ran (`sleep`'s log line).
                 if let EventSummary::Key(_, KeyCode::KEY_POWER, 1) = ev.destructure() {
@@ -1456,41 +1593,67 @@ pub mod linux {
                         }
                     }
                 }
-                let out = match ev.destructure() {
-                    EventSummary::Key(_, code, value) if value != 2 => match button_on(&name, code) {
-                        Some(b) => PadEvent::Button { source, button: b, pressed: value == 1 },
-                        None => PadEvent::Raw { source, text: format!("{:?} {}", code, value) },
-                    },
-                    EventSummary::AbsoluteAxis(_, code, value) => {
-                        let centered = |v: i32| norm(code, v) * 2.0 - 1.0;
-                        match code {
-                            AbsoluteAxisCode::ABS_X => PadEvent::Axis { source, axis: Axis::LeftX, value: centered(value) },
-                            AbsoluteAxisCode::ABS_Y => PadEvent::Axis { source, axis: Axis::LeftY, value: centered(value) },
-                            AbsoluteAxisCode::ABS_RX => PadEvent::Axis { source, axis: Axis::RightX, value: centered(value) },
-                            AbsoluteAxisCode::ABS_RY => PadEvent::Axis { source, axis: Axis::RightY, value: centered(value) },
-                            AbsoluteAxisCode::ABS_Z => PadEvent::Axis { source, axis: Axis::L2, value: norm(code, value) },
-                            AbsoluteAxisCode::ABS_RZ => PadEvent::Axis { source, axis: Axis::R2, value: norm(code, value) },
-                            AbsoluteAxisCode::ABS_HAT0X => {
-                                send(PadEvent::Button { source, button: Button::Left, pressed: value < 0 });
-                                PadEvent::Button { source, button: Button::Right, pressed: value > 0 }
-                            }
-                            AbsoluteAxisCode::ABS_HAT0Y => {
-                                send(PadEvent::Button { source, button: Button::Up, pressed: value < 0 });
-                                PadEvent::Button { source, button: Button::Down, pressed: value > 0 }
-                            }
-                            _ => continue,
-                        }
-                    }
-                    EventSummary::Switch(..) => match switch(source, &ev) {
-                        Some(lid) => lid,
-                        None => continue,
-                    },
-                    _ => continue,
-                };
-                if !send(out) {
-                    return PumpEnd::Closed;
+                for out in decoder.event(source, ev) {
+                    if !send(out) { return PumpEnd::Closed; }
                 }
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod hotplug_tests {
+        use super::*;
+        use std::sync::mpsc;
+        use std::time::{Duration, Instant};
+
+        /// A supervisor can retire an open node before its fd reports ENODEV. The old reader must let go even
+        /// while the controller is silent; otherwise it holds a menu direction and survives every replacement.
+        #[test]
+        #[ignore = "requires /dev/uinput and permission to create/read its event node; run explicitly as root"]
+        fn retiring_a_silent_reader_releases_held_input_during_capture() {
+            use evdev::{uinput::VirtualDevice, AttributeSet};
+            use std::os::unix::ffi::OsStrExt;
+            let mut pad = VirtualDevice::builder().unwrap().name("pocket-freeze-proof")
+                .with_keys(&AttributeSet::from_iter([KeyCode::BTN_SOUTH, KeyCode::BTN_TL2])).unwrap().build().unwrap();
+            let path = pad.enumerate_dev_nodes_blocking().unwrap().next().unwrap().unwrap();
+            let created = !path.exists();
+            if created {
+                let ids = std::fs::read_to_string(pad.get_syspath().unwrap().join(path.file_name().unwrap()).join("dev")).unwrap();
+                let (major, minor) = ids.trim().split_once(':').unwrap();
+                let name = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
+                assert_eq!(unsafe { libc::mknod(name.as_ptr(), libc::S_IFCHR | 0o600, libc::makedev(major.parse().unwrap(), minor.parse().unwrap())) }, 0);
+            }
+            struct Bus { node: Node }
+            impl DeviceBus for Bus {
+                type Dev = Device;
+                fn nodes(&mut self) -> Vec<Node> { vec![self.node.clone()] }
+                fn open(&mut self, node: &str) -> Probe<Self::Dev> {
+                    Probe::Wanted("test pad".into(), Device::open(node).unwrap())
+                }
+            }
+            let mut bus = Bus { node: (path.to_string_lossy().into(), 1) };
+            let mut sup = Supervisor::default();
+            let start = sup.tick(&mut bus).started.pop().unwrap();
+            let (tx, rx) = mpsc::channel();
+            let reader = std::thread::spawn(move || pump_started(start, "bt:freeze-proof", |e| tx.send(e).is_ok()));
+            pad.emit(&[InputEvent::new(1, KeyCode::BTN_TL2.0, 1)]).unwrap();
+            let pressed = rx.recv_timeout(Duration::from_secs(2)).unwrap();
+            assert!(matches!(pressed, PadEvent::Button { button: Button::L2, pressed: true, .. }));
+            // Capture waits for another press while the node is replaced. No new input wakes the old fd.
+            let capture = super::super::bindings::Capture::new(Button::South, Instant::now());
+            assert!(!capture.expired(Instant::now()));
+            bus.node.1 = 2;
+            let tick = sup.tick(&mut bus);
+            assert_eq!(tick.lost.len(), 1);
+            let release = rx.recv_timeout(Duration::from_secs(1));
+            let disconnect = rx.recv_timeout(Duration::from_millis(200));
+            // Always destroy our device and join the reader, including on the unfixed code.
+            drop(tick);
+            drop(pad);
+            reader.join().unwrap();
+            if created { std::fs::remove_file(path).unwrap(); }
+            assert!(matches!(release, Ok(PadEvent::Button { button: Button::L2, pressed: false, .. })), "retired reader kept L2 held: {release:?}");
+            assert!(matches!(disconnect, Ok(PadEvent::Disconnected { .. })), "retired reader stayed alive: {disconnect:?}");
         }
     }
 }

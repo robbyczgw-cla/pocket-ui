@@ -29,6 +29,28 @@ pub const ROWS: [Row; 10] = [
     Row::Share(Share::Bios),
 ];
 
+/// The TrimUI Brick's rows: no PS2, GameCube & Wii or 3DS saves, systems it doesn't play (their folders never exist there, so
+/// nothing was synced; the rows only offered what the Brick can't use).
+#[cfg(feature = "brick")]
+const BRICK_ROWS: [Row; 7] = [
+    Row::Switch,
+    Row::AfterPlay,
+    Row::Versions,
+    Row::Share(Share::Saves),
+    Row::Share(Share::States),
+    Row::Share(Share::Library),
+    Row::Share(Share::Bios),
+];
+
+/// The rows this device shows.
+pub fn rows() -> &'static [Row] {
+    #[cfg(feature = "brick")]
+    if crate::device::brick() {
+        return &BRICK_ROWS;
+    }
+    &ROWS
+}
+
 impl Row {
     pub fn label(self) -> &'static str {
         match self {
@@ -125,7 +147,7 @@ impl SyncPage {
     }
 
     pub fn row(&self) -> Row {
-        ROWS[self.sel.min(ROWS.len() - 1)]
+        rows()[self.sel.min(rows().len() - 1)]
     }
 
     /// The web interface is reachable from the network in a way that needs fixing.
@@ -138,7 +160,7 @@ impl SyncPage {
     }
 
     pub fn press(&mut self, b: Button, confirm: Button, cancel: Button) -> Action {
-        let n = ROWS.len();
+        let n = rows().len();
         if b == Button::Up {
             self.sel = (self.sel + n - 1) % n;
         } else if b == Button::Down {

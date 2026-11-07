@@ -1,0 +1,8 @@
+#!/bin/sh
+# Stand-in for ROCKNIX's `brightness set N`: pocket-ui has already moved the backlight (the file brick-hw watches); this keeps the
+# level for the next start.
+STATE=${BRICK_STATE:-/tmp}
+case "${1:-}" in
+  set) case "${2:-}" in ''|*[!0-9]*) exit 2 ;; esac; mkdir -p "$STATE" 2>/dev/null; echo "$2" >"$STATE/brick-brightness" ;;
+  *) exit 2 ;;
+esac

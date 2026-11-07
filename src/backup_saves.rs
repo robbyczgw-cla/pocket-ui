@@ -11,7 +11,9 @@
 //! is copied to a backup of its own first (`Reason::BeforeRestore`). Every call reads and writes files: run them on a thread.
 
 use std::collections::HashSet;
-use std::io::{Read, Write};
+use std::io::Read;
+#[cfg(not(feature = "brick"))]
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{Duration, UNIX_EPOCH};
@@ -272,6 +274,10 @@ enum CopyError {
 
 /// Copies one file and gives the copy the time `modified`, or the source's. Returns the source's size and time as read.
 fn copy_file(from: &Path, to: &Path, modified: Option<u64>) -> Result<(u64, u64), CopyError> {
+    #[cfg(feature = "brick")]
+    let _idle = crate::update::brick_io::IdleIo::enter().map_err(CopyError::Target)?;
+    #[cfg(feature = "brick")]
+    let mut pacer = crate::update::brick_io::Pacer::new();
     let mut src = std::fs::File::open(from).map_err(CopyError::Source)?;
     let meta = src.metadata().map_err(CopyError::Source)?;
     if let Some(parent) = to.parent() {
@@ -291,7 +297,11 @@ fn copy_file(from: &Path, to: &Path, modified: Option<u64>) -> Result<(u64, u64)
                 return Err(CopyError::Source(e));
             }
         };
-        dst.write_all(&buf[..n]).map_err(CopyError::Target)?;
+        #[cfg(feature = "brick")]
+        let written = pacer.write(&buf[..n], &mut dst);
+        #[cfg(not(feature = "brick"))]
+        let written = dst.write_all(&buf[..n]);
+        written.map_err(CopyError::Target)?;
         total += n as u64;
     }
     let time = modified.unwrap_or_else(|| seconds(&meta));

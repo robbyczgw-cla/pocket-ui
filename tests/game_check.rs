@@ -28,13 +28,8 @@ fn wayland(tmp: &Path) -> Option<Stub> {
     let path = tmp.join("wl");
     let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), path.to_str().unwrap()]).spawn().expect("python3 for scripts/wayland-stub.py");
     let stub = Stub { path, child };
-    for _ in 0..200 {
-        if stub.path.exists() {
-            return Some(stub);
-        }
-        std::thread::sleep(std::time::Duration::from_millis(25));
-    }
-    panic!("wayland stub did not start");
+    test_clock::wait_for(|| stub.path.exists(), std::time::Duration::from_secs(5), "Wayland stub listening");
+    Some(stub)
 }
 
 fn put(root: &Path, rel: &str, bytes: &[u8]) {

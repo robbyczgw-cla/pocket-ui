@@ -75,6 +75,14 @@ impl Mode {
     }
 
     pub fn blurb(self) -> &'static str {
+        #[cfg(feature = "brick")]
+        if crate::device::brick() {
+            return match self {
+                Mode::Off => "The Brick's lights stay dark.",
+                Mode::Colour => "The grips, the middle and the F keys glow in the colour you pick.",
+                Mode::Battery => "Dark while all is well. Orange breathing while it charges, green when it is full, red breathing when it runs low.",
+            };
+        }
         match self {
             Mode::Off => "The lights around the sticks stay dark.",
             Mode::Colour => "Both sticks glow in the colour you pick.",
@@ -127,6 +135,13 @@ impl Hue {
     }
 
     pub fn blurb(self) -> &'static str {
+        #[cfg(feature = "brick")]
+        if crate::device::brick() {
+            return match self {
+                Hue::Game => "Warm light in the menus. While a game runs, the main colour of its cover.",
+                _ => "The colour of the Brick's lights.",
+            };
+        }
         match self {
             Hue::Game => "Warm light in the menus. While a game runs, the colour of its system.",
             _ => "The colour of both sticks.",
@@ -238,6 +253,12 @@ pub enum Step {
     Setting { key: &'static str, value: String },
     /// A program below the root. `needed` false: a failure doesn't make the whole change count as failed.
     Run { program: &'static str, args: Vec<String>, needed: bool },
+    /// The Brick's lights (`brick_hw`): this look now.
+    #[cfg(feature = "brick")]
+    Look(crate::brick_hw::Look),
+    /// The Brick's battery look at this brightness (percent), decided from the battery as it is when the step runs.
+    #[cfg(feature = "brick")]
+    BrickBattery { percent: u8 },
 }
 
 fn run(program: &'static str, args: &[&str]) -> Step {
@@ -258,8 +279,24 @@ fn stop_battery_colours() -> Step {
     }
 }
 
+/// What a choice means on the Brick: the driver's files (`brick_hw`), no scripts.
+#[cfg(feature = "brick")]
+pub fn brick_plan(c: &Config) -> Vec<Step> {
+    use crate::brick_hw::{calm, Effect, Look};
+    let percent = LEVELS[c.level.min(LEVELS.len() - 1)];
+    match c.mode {
+        Mode::Off => vec![Step::Look(Look::OFF)],
+        Mode::Colour => vec![Step::Look(Look::of(Effect::Static(calm(c.hue.rgb())), percent).with_lights())],
+        Mode::Battery => vec![Step::BrickBattery { percent }],
+    }
+}
+
 /// What a choice means for ROCKNIX's scripts.
 pub fn plan(c: &Config) -> Vec<Step> {
+    #[cfg(feature = "brick")]
+    if crate::device::brick() {
+        return brick_plan(c);
+    }
     match c.mode {
         Mode::Off => vec![stop_battery_colours(), run(LEDCONTROL, &["off"])],
         // `ledcontrol rgb` reads `analogsticks.led` itself, so the boot applies the same.
@@ -278,6 +315,11 @@ pub fn plan(c: &Config) -> Vec<Step> {
 /// One colour on both sticks right now (brightness step, red green blue), without touching the stored choice: a
 /// game's own colour while it runs (a boot, or waking from sleep, brings the menu colour back).
 pub fn lights_plan(level: usize, rgb: (u8, u8, u8)) -> Vec<Step> {
+    #[cfg(feature = "brick")]
+    if crate::device::brick() {
+        let percent = LEVELS[level.min(LEVELS.len() - 1)];
+        return vec![Step::Look(crate::brick_hw::Look::of(crate::brick_hw::Effect::Static(crate::brick_hw::calm(rgb)), percent).with_lights())];
+    }
     vec![Step::Run {
         program: STICKS,
         args: sticks_args(level, rgb),
@@ -288,6 +330,9 @@ pub fn lights_plan(level: usize, rgb: (u8, u8, u8)) -> Vec<Step> {
 /// The lights, through the scripts below `root`.
 pub struct Leds {
     root: PathBuf,
+    /// Where the Brick's battery look reads the battery (`battery::dir()` when None).
+    #[cfg(feature = "brick")]
+    battery: Option<PathBuf>,
 }
 
 impl Leds {
@@ -297,16 +342,35 @@ impl Leds {
 
     /// Scripts and sysfs below `root` (a fake tree in tests).
     pub fn with_root(root: impl Into<PathBuf>) -> Self {
-        Leds { root: root.into() }
+        Leds {
+            root: root.into(),
+            #[cfg(feature = "brick")]
+            battery: None,
+        }
+    }
+
+    /// The Brick's battery look reads this battery (a fake in the tests).
+    #[cfg(feature = "brick")]
+    pub fn with_battery(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.battery = Some(dir.into());
+        self
     }
 
     /// ROCKNIX's script is there (any SM8250 image; the lights themselves may still be missing, see `present`).
     pub fn has_scripts(&self) -> bool {
+        #[cfg(feature = "brick")]
+        if crate::device::brick() {
+            return crate::brick_hw::leds_present(&self.root);
+        }
         self.root.join(LEDCONTROL).exists()
     }
 
     /// The board has the stick lights.
     pub fn present(&self) -> bool {
+        #[cfg(feature = "brick")]
+        if crate::device::brick() {
+            return crate::brick_hw::leds_present(&self.root);
+        }
         self.root.join(SYSFS_PROBE).exists()
     }
 
@@ -316,6 +380,14 @@ impl Leds {
             let (ok, needed) = match step {
                 Step::Setting { key, value } => (self.set_setting(key, value), true),
                 Step::Run { program, args, needed } => (self.exec(program, args), *needed),
+                #[cfg(feature = "brick")]
+                Step::Look(look) => (crate::brick_hw::apply_look(&self.root, *look), true),
+                #[cfg(feature = "brick")]
+                Step::BrickBattery { percent } => {
+                    let dir = self.battery.clone().unwrap_or_else(crate::battery::dir);
+                    let sample = crate::battery::read(&dir, 0);
+                    (crate::brick_hw::apply_look(&self.root, crate::brick_hw::battery_look(sample.as_ref(), *percent)), true)
+                }
             };
             if !ok && needed {
                 eprintln!("leds: {step:?} failed");

@@ -62,7 +62,7 @@ Your computer can't write to the card's large STORAGE part without extra softwar
 never say yes, press Cancel. Formatting would erase pocket-ui from the card.
 #endif
 
-This image is for the @MODEL_NAME@ with DDR4 memory. It carries that model's device tree as dtb.img, so
+This image is for the @MODEL_NAME@ with @RAM@ memory. It carries that model's device tree as dtb.img, so
 there is nothing to copy. If the screen stays black or shows a broken picture, switch off (hold Power for
 10 seconds) and report it with the model and the screen's look; some units have another screen revision.
 
@@ -80,10 +80,10 @@ by hand) to /storage/.update-refused and starts as usual. Nothing there is delet
 What is on the card
 -------------------
 
-Before the first partition (8 KiB into the card): ROCKNIX's U-Boot for DDR4 units, unchanged.
+Before the first partition (8 KiB into the card): ROCKNIX's U-Boot for @RAM@ units, unchanged.
 
 FAT partition "ROCKNIX" (readable on any computer):
-  KERNEL, KERNEL.md5         ROCKNIX @ROCKNIX_TAG@, unchanged (ROCKNIX-H700.aarch64-@ROCKNIX_TAG@-DDR4.img.gz)
+  KERNEL, KERNEL.md5         ROCKNIX @ROCKNIX_TAG@, unchanged (ROCKNIX-H700.aarch64-@ROCKNIX_TAG@-@RAM@.img.gz)
   SYSTEM, SYSTEM.md5         ROCKNIX @ROCKNIX_TAG@'s system, repacked without the files listed under
                              "Changes" below; everything else in it is unchanged
   device_trees/, overlays/, extlinux/   ROCKNIX's, unchanged

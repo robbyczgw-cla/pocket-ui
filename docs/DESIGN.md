@@ -18,7 +18,8 @@ a list of spines with an edge stripe.)
 (Socket inspired the physical-media idea; NextUI inspired the flat, minimal list and "continue first".)
 
 ## Design language
-One product, two kinds of surface (decided 2026-10-29, "cohesion"; the parts are in `src/kit.rs`). Snapshot states in
+One product, two kinds of surface (decided 2026-10-29, "cohesion"; the parts are in `src/kit.rs`). How every page
+behaves under the keys: [UI-SCHEME.md](UI-SCHEME.md). Snapshot states in
 brackets show each rule (`pocket-ui --snapshot <state>`, docs/DEVELOPING.md).
 
 - **The shelf** is where games are: spines, cases, the paper label, wood, props, the game box. It is pixel art and
@@ -147,7 +148,7 @@ read rather than glanced at (a fact, an explanation, a note under a list); 21 is
 notes beside larger text. Section headings on a page are Title 37 (the console page, credits, the game card).
 
 ### Font styles (`src/font_style.rs`)
-Settings → Look → Font (settings.json `"font"`: `barlow`, `pixel`, `rounded`; Barlow when unset or wrong) swaps the
+Settings → Look → Style (settings.json `"font"`: `barlow`, `pixel`, `rounded`, `retro`; Barlow when unset or wrong) swaps the
 two faces; everything above (the scale, Body 28 as the smallest read text) holds for each:
 
 | Style | Title (names, spines, labels) | Body (meta, hints) |
@@ -155,6 +156,7 @@ two faces; everything above (the scale, Body 28 as the smallest read text) holds
 | Barlow | Barlow Condensed SemiBold | Barlow Medium |
 | Pixel | Pixelify Sans SemiBold | Barlow Medium, so that small text stays readable |
 | Rounded | Nunito ExtraBold | Nunito SemiBold |
+| Retro | Pixelify Sans SemiBold | Pixelify Sans Regular at nine tenths of Barlow's capitals (it runs 21 % wider), and with it the whole Retro style ([RETRO-STYLE.md](RETRO-STYLE.md)) |
 
 All OFL 1.1, static Latin instances compiled in (about 100 KB for the two new families; `assets/fonts/OFL.txt`). Each
 alternative face is **fitted to Barlow's capitals**: it is rasterised at a size scaled so that its "H" (bounds, top to
@@ -358,7 +360,7 @@ Motion is there to make the device feel quicker, like the well-damped needle of 
 where something went, never makes anyone wait for it. Only in answer to input; nothing moves on its own, with
 one exception: a selected title too long for its row scrolls (rest at least 1.5 s with an ellipsis, then about 1.7 × its font size in
 pixels per second, `src/marquee.rs`). A single text layer travels to the end, pauses, and returns to the
-full beginning. Changing selection or available width resets it; fitting titles also reset the selection key.
+full beginning once, then stays there until reselected. Its still pauses use timers, with no frames between. Changing selection or available width resets it; fitting titles also reset the selection key.
 
 **Rules.**
 - *Input first.* A press changes the state at once (selection, page, value); the animation is only a picture of

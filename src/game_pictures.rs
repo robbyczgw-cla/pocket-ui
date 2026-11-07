@@ -342,6 +342,21 @@ mod tests {
         assert_eq!(Kind::Title.remote(), "Named_Titles");
     }
 
+    /// A real Brick right after the first start, 2026-11-06: the first start's picture run had no game to stop for,
+    /// so it went on fetching and writing while a game started (4 audio underruns at the game's start). A game that
+    /// starts (`covers::set_game_on`) ends the run after the picture in flight, also the first start's.
+    #[test]
+    fn a_game_that_starts_stops_the_picture_run_after_the_picture_in_flight() {
+        let d = dir("game-on");
+        let games = vec![game("gba", "Advance Wars (USA)"), game("gba", "Wario Land 4 (USA, Europe)"), game("gba", "Tekken Advance (USA)")];
+        let fake = Fake::new(&["Advance Wars (USA)", "Wario Land 4 (USA, Europe)", "Tekken Advance (USA)"]);
+        covers::set_game_on(false);
+        let done = scrape_until(&fake, &d, &games, |done, _, _| covers::set_game_on(done == 1), covers::game_on);
+        covers::set_game_on(false);
+        assert_eq!(done.found, 2, "the first game's snap and title, then nothing: {:?}", fake.asked.borrow());
+        assert!(!path(&d, Kind::Snap, "gba", &games[1].1).exists() && !path(&d, Kind::Snap, "gba", &games[2].1).exists());
+    }
+
     #[test]
     fn they_are_matched_by_the_names_the_box_art_is() {
         let d = dir("match");

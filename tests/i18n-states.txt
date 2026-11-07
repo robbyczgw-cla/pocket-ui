@@ -30,8 +30,14 @@ setup:first:device=rp5
 setup:first:device=mini
 about:device=flip2
 setup:first:a
-setup:first:aR
-setup:first:aL
+setup:first:y
+setup:first-wifi
+setup:first-wifi:uu
+setup:first-games
+setup:first-games:dd
+setup:first-look
+setup:first-look:d
+setup:first-look:dddr
 setup:look
 setup:look:L
 setup:play
@@ -178,6 +184,15 @@ tools:busy
 tools:done
 tools:empty
 tools:loading
+test-buttons
+test-buttons:idle
+test-buttons:bt
+test-buttons:two
+test-buttons:remap
+test-buttons:xbox
+test-buttons:hold
+test-buttons:unknown
+test-buttons:empty
 pc-streaming
 pc-streaming:pin
 pc-streaming:searching
@@ -340,6 +355,7 @@ tour:add_games
 tour:settings
 tour:easy_to_read
 tour-new:lens,echoes
+tour-new:retro_look
 
 # Settings → System → Sleep & power
 sleep
@@ -845,7 +861,10 @@ kids-flow:ready
 safe rescue:kids
 safe rescue:kids-pin
 
-tour:easy_to_read
+updates:connecting
+updates:fallback
+updates:timeout
 
-# A confirmed failed start may try the system emulator once.
+# Safe one-launch retry and a set-aside moment waiting for card space.
 notice:fallback
+notice:kept

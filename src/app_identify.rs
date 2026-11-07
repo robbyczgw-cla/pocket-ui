@@ -101,7 +101,7 @@ impl App {
             }
             let t = Instant::now();
             let fetch = |dat: &str| online.then(|| rom_id::fetch_dat(dat)).flatten();
-            let mut run = rom_id::run_until(&data_dir, &games, &fetch, true, || stop.load(Ordering::Relaxed));
+            let mut run = rom_id::run_until(&data_dir, &games, &fetch, true, || stop.load(Ordering::Relaxed) || pocket_ui::covers::game_on());
             // Not reached offline: says to try again online (`lists_missing_offline`).
             run.lists_missing &= !online;
             println!("identify: {} named, {} read in {:?}{}", run.names.len(), run.hashed, t.elapsed(), if run.stopped { ", stopped for a game" } else { "" });

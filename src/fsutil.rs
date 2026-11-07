@@ -169,20 +169,53 @@ pub fn fail_next_write() {
     FAIL_NEXT.set(true);
 }
 
+/// Tests: `POCKETUI_TEST_KILL_AT=<n>` ends this process with SIGKILL at the n-th write step (a power cut or `kill -9`
+/// between two steps); `POCKETUI_TEST_KILL_LOG=<file>` lists every step reached, numbered. Nothing in other builds.
+#[cfg(test)]
+pub(crate) fn crash_point(step: &str) {
+    static REACHED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let Some(at) = std::env::var("POCKETUI_TEST_KILL_AT").ok().and_then(|v| v.parse::<u32>().ok()) else { return };
+    let n = REACHED.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+    if let Some(log) = std::env::var_os("POCKETUI_TEST_KILL_LOG") {
+        if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(log) {
+            let _ = writeln!(f, "{n} {step}");
+            let _ = f.sync_all();
+        }
+    }
+    if n == at {
+        // SAFETY: raise(2) with a signal number; SIGKILL ends the process at once, as a power cut ends the program.
+        unsafe { libc::raise(libc::SIGKILL) };
+    }
+}
+
+#[cfg(not(test))]
+#[inline(always)]
+pub(crate) fn crash_point(_: &str) {}
+
 fn write_via_temp(path: &Path, bytes: &[u8], durable: bool) -> io::Result<()> {
     let dir = parent_dir(path);
     if let Some(dir) = dir {
         fs::create_dir_all(dir)?;
     }
     let (tmp, mut f) = create_temp(path)?;
+    crash_point("temporary file made");
     let written = (|| {
         #[cfg(test)]
         if FAIL_NEXT.replace(false) {
             return Err(io::Error::other("no space left (test)"));
         }
+        #[cfg(test)]
+        {
+            f.write_all(&bytes[..bytes.len() / 2])?;
+            crash_point("half written");
+            f.write_all(&bytes[bytes.len() / 2..])?;
+        }
+        #[cfg(not(test))]
         f.write_all(bytes)?;
+        crash_point("written");
         if durable {
             f.sync_all()?;
+            crash_point("synced");
         }
         drop(f);
         // rename replaces `path` itself, a link there included; it never writes through it.
@@ -192,14 +225,39 @@ fn write_via_temp(path: &Path, bytes: &[u8], durable: bool) -> io::Result<()> {
         let _ = fs::remove_file(&tmp);
         return Err(e);
     }
+    crash_point("renamed");
     // The rename itself lives in the directory. Some filesystems refuse to sync a directory; the data is
     // safe by then, so that is not an error.
     if let (true, Some(dir)) = (durable, dir) {
-        if let Ok(d) = File::open(dir) {
-            let _ = d.sync_all();
+        sync_dir(dir);
+    }
+    crash_point("folder synced");
+    Ok(())
+}
+
+/// A folder's own entries (a rename into it, a new link) on the card. Some file systems refuse to sync a folder; that is
+/// not an error.
+pub fn sync_dir(dir: &Path) {
+    if let Ok(d) = File::open(dir) {
+        let _ = d.sync_all();
+    }
+}
+
+/// Everything below `dir` on the card, the folder itself last; links are not followed. For a program folder before a link
+/// is switched to it (`update::install_app`): the switch reaches the card's journal within seconds, the programs' bytes only
+/// when the kernel writes them back, up to half a minute later. A power cut in between would leave the link pointing at
+/// empty programs.
+pub fn sync_tree(dir: &Path) -> io::Result<()> {
+    for e in fs::read_dir(dir)? {
+        let e = e?;
+        let kind = e.file_type()?;
+        if kind.is_dir() {
+            sync_tree(&e.path())?;
+        } else if kind.is_file() {
+            File::open(e.path())?.sync_all()?;
         }
     }
-    Ok(())
+    File::open(dir)?.sync_all()
 }
 
 /// [`write_atomic`] for a value as pretty JSON, and the same bytes again as `<name>.bak` (after the file
@@ -307,9 +365,38 @@ fn finish_write(write: PendingWrite) {
     }
 }
 
+// Test-only progress probe: scope/reset regressions must reach the writer
+// barrier while an older write is held, rather than hoping a thread ran in 100 ms.
+#[cfg(test)]
+static SETTLING_THREADS: std::sync::Mutex<Vec<std::thread::ThreadId>> = std::sync::Mutex::new(Vec::new());
+
+#[cfg(test)]
+pub(crate) fn waiting_for_writes(thread: std::thread::ThreadId) -> bool {
+    SETTLING_THREADS.lock().unwrap().contains(&thread)
+}
+
+#[cfg(test)]
+struct SettlingThread(std::thread::ThreadId);
+#[cfg(test)]
+impl SettlingThread {
+    fn observe() -> Self {
+        let thread = std::thread::current().id();
+        SETTLING_THREADS.lock().unwrap().push(thread);
+        Self(thread)
+    }
+}
+#[cfg(test)]
+impl Drop for SettlingThread {
+    fn drop(&mut self) {
+        SETTLING_THREADS.lock().unwrap().retain(|t| *t != self.0);
+    }
+}
+
 /// Waits until everything handed to [`write_json_soon`] is on the card. Returns at once when nothing is waiting.
 pub fn settle() {
     let mut q = lock_queue();
+    #[cfg(test)]
+    let _observer = (!q.waiting.is_empty() || q.busy).then(SettlingThread::observe);
     while !q.waiting.is_empty() || q.busy {
         q = QUEUE_CHANGED.wait(q).unwrap_or_else(|e| e.into_inner());
     }
@@ -561,7 +648,7 @@ mod tests {
         write_json_checked_soon(&path, &vec![7], move |result| {
             let _ = tx.send((std::thread::current().id(), result));
         }).unwrap();
-        let (writer, result) = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        let (writer, result) = rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap();
         assert_ne!(writer, caller, "the checked API never writes on its caller's thread");
         assert_eq!(result.unwrap(), WriteStatus::Saved);
         assert_eq!(fs::read(&path).unwrap(), fs::read(backup_path(&path)).unwrap(), "receipt follows the backup too");
@@ -570,7 +657,7 @@ mod tests {
         fs::write(&blocked, b"keep").unwrap();
         let (tx, rx) = std::sync::mpsc::channel();
         write_json_checked_soon(&blocked.join("library.json"), &vec![8], move |result| { let _ = tx.send(result); }).unwrap();
-        assert!(rx.recv_timeout(Duration::from_secs(5)).unwrap().is_err(), "an accepted request must still report SD I/O errors");
+        assert!(rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap().is_err(), "an accepted request must still report SD I/O errors");
         assert_eq!(fs::read(blocked).unwrap(), b"keep");
     }
 
@@ -583,12 +670,12 @@ mod tests {
         let (new_tx, new_rx) = std::sync::mpsc::channel();
         assert!(q.put(PendingWrite { path: path.clone(), bytes: b"[1]".to_vec(), done: Some(Box::new(move |result| { let _ = old_tx.send(result); })) }).is_none());
         superseded(q.put(PendingWrite { path: path.clone(), bytes: b"[2]".to_vec(), done: Some(Box::new(move |result| { let _ = new_tx.send(result); })) }));
-        assert_eq!(old_rx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap(), WriteStatus::Superseded);
+        assert_eq!(old_rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap().unwrap(), WriteStatus::Superseded);
         // Unchecked work on the same file must not discard the remaining error notification.
         assert!(q.put(PendingWrite { path: path.clone(), bytes: b"[3]".to_vec(), done: None }).is_none());
         assert_eq!(q.waiting.len(), 1);
         finish_write(q.waiting.pop_front().unwrap());
-        assert_eq!(new_rx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap(), WriteStatus::Saved);
+        assert_eq!(new_rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap().unwrap(), WriteStatus::Saved);
         assert_eq!(fs::read(path).unwrap(), b"[3]");
     }
 
@@ -633,7 +720,8 @@ mod tests {
     }
 
     #[test]
-    fn a_file_still_being_written_is_waited_for() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_file_still_being_written_is_waited_for() {
         let d = dir("version-growing");
         fs::create_dir_all(&d).unwrap();
         let f = d.join("Game.s03");
@@ -655,7 +743,8 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn a_file_the_writer_still_holds_open_is_not_done() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_file_the_writer_still_holds_open_is_not_done() {
         let d = dir("version-open");
         fs::create_dir_all(&d).unwrap();
         let f = d.join("Game.s04");

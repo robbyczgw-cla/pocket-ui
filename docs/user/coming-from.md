@@ -113,7 +113,7 @@ saves live in the emulators' own folders, so they carry over on the same card:
 
 The slots of the pause menu are states in `roms/savestates/ps2`, `gamecube`, `wii` and `3ds`; the 3DS has one slot.
 
-The full list of state files is in [Where the states are](pause-menu.md#where-the-states-are-for-players-coming-from-android).
+The full list of state files is in [Where the states are](pause-menu-saves.md#where-the-states-are-for-players-coming-from-android).
 PlayStation 2 on **AetherSX2** (ROCKNIX has it as another choice for PS2) and the other standalone emulators keep their
 own saves and settings; save in the game before you quit.
 

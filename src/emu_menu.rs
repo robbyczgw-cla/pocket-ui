@@ -221,7 +221,10 @@ impl EmuMenu {
                 15 => "\nR3 means pressing the right stick in.",
                 _ => "",
             };
-            rows.push(Row { name: phys.into(), value: name, desc: format!("{desc}{extra}") });
+            let mut desc = format!("{desc}{extra}");
+            desc.push('\n');
+            desc.push_str("An occupied action swaps with this button's previous action.");
+            rows.push(Row { name: phys.into(), value: name, desc });
         }
         rows.push(Row {
             name: "Hold to toggle".into(),
@@ -254,15 +257,16 @@ impl EmuMenu {
             let current = self.mapping.target[id as usize];
             let now = choices.iter().position(|c| *c == current).unwrap_or(0) as i32;
             let next = choices[(now + delta).rem_euclid(choices.len() as i32) as usize];
-            self.mapping.target[id as usize] = next;
-            let key = controls::KEYS[id as usize];
-            let value = self.mapping.value_of(id);
-            if self.mapping.target[id as usize] == defaults.target[id as usize] {
-                settings.values.remove(&format!("{prefix}{key}"));
-            } else {
-                settings.values.insert(format!("{prefix}{key}"), value.to_string());
+            for changed in self.mapping.assign(id, next) {
+                let key = controls::KEYS[changed as usize];
+                let value = self.mapping.value_of(changed);
+                if self.mapping.target[changed as usize] == defaults.target[changed as usize] {
+                    settings.values.remove(&format!("{prefix}{key}"));
+                } else {
+                    settings.values.insert(format!("{prefix}{key}"), value.to_string());
+                }
+                control::pocket_core(&format!("ctl {key} {value}"));
             }
-            control::pocket_core(&format!("ctl {key} {value}"));
         } else if sel == MENU_ORDER.len() + 1 {
             let choices = self.hold_choices();
             let now = choices.iter().position(|c| *c == self.mapping.hold_toggle).unwrap_or(0) as i32;
@@ -415,7 +419,7 @@ mod tests {
         assert_eq!((rows[0].name.as_str(), rows[0].value.as_str()), ("Left stick as D-pad", "On"));
         assert_eq!((rows[1].name.as_str(), rows[1].value.as_str()), ("A", "A"));
         assert_eq!((rows[3].name.as_str(), rows[3].value.as_str()), ("X", "None"), "a Game Boy has no X");
-        assert_eq!(rows[3].desc, "X does nothing in this game.");
+        assert_eq!(rows[3].desc, "X does nothing in this game.\nAn occupied action swaps with this button's previous action.");
         assert!(rows[1].desc.starts_with("A presses A"));
     }
 
@@ -430,7 +434,11 @@ mod tests {
         m.control_step(3, -1, &mut s);
         assert_eq!(m.control_rows()[3].value, "None");
         assert_eq!(s.values["ctl.x"], "none", "None differs from the default identity, so it is stored");
-        // Row 1 is A: right → B.
+        // X took A, so the old A now has X (not a button this console describes).
+        // The first step restores A, the next chooses B and swaps the former B too.
+        assert_eq!(m.control_rows()[1].value, "None");
+        m.control_step(1, 1, &mut s);
+        assert_eq!(m.control_rows()[1].value, "A");
         m.control_step(1, 1, &mut s);
         assert_eq!(m.control_rows()[1].value, "B");
         assert_eq!(s.values["ctl.a"], "b");

@@ -100,7 +100,7 @@ searched. On the touch screen, tap the keys to type, tap a game to select it and
 
 ## Looks
 
-The shelf has six looks. Choose one in Settings → Look → **Look**, with a live preview. The look you
+The shelf has six looks. Choose one in Settings → Look → **Layout**, with a live preview. The look you
 choose is remembered. Each look comes dark or light: Appearance in Settings ([Appearance](settings.md#appearance)),
 and how much the menus move is [Motion](settings.md#motion).
 
@@ -413,9 +413,13 @@ hub without it shows nothing.
   its own; on 3DS about three seconds after the game's title appears.
 - **Other emulators** start fresh. Use the game's own save feature.
 
-If a PSP exit save stops responding for 20 seconds in pocket-ui's own host, the game closes
-using a moment already saved on the card when one is available. Progress after that moment
-cannot be recovered. A newer in-game save is still protected when continuing.
+If a game in pocket-ui's own host stops answering Pause or Quit, it closes after a few seconds
+and keeps the previous saved moment. A game that is only busy saving or loading is not closed. A PSP stall without a request closes after 25 seconds without
+progress, including a stalled Continue or shutdown. The PSP exit save still has a 20-second state
+capture guard. Progress after the last saved moment cannot be recovered. A newer in-game save
+is still protected when continuing.
+
+Messages about a fresh start or a saved moment stay inside the screen as the game opens.
 
 Your last five games with a saved moment also stand a little open on the shelf, and A goes straight back: [Continue](continue.md#continue).
 

@@ -34,7 +34,8 @@ pub fn source_at(base: &Path, kept: &Path) -> Option<Source> {
         p.push(suffix);
         PathBuf::from(p)
     };
-    let resume = [crate::slots::preview_path(&crate::slots::auto_path(base)), with(".state.auto.png")];
+    let mut resume = crate::slots::auto_previews(&crate::slots::auto_path(base));
+    resume.push(with(".state.auto.png"));
     if let Some(p) = resume.into_iter().find(|p| p.is_file()) {
         return Some(Source::Resume(p));
     }

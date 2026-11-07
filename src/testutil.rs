@@ -120,3 +120,7 @@ mod tests {
 pub(crate) fn manifest_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap_or_else(|| env!("CARGO_MANIFEST_DIR").into()))
 }
+
+#[path = "test_clock.rs"]
+pub(crate) mod clock;
+pub(crate) use clock::timeout;

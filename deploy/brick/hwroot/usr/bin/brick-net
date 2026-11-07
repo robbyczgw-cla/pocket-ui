@@ -1,0 +1,63 @@
+#!/bin/sh
+# The Brick card's network keeper. Seen on the real Brick (03.11.): after the firmware restarted wpa_supplicant, wlan0 had its address and
+# the LAN route but no default route (the udhcpc from the boot kept running and did not renew), so nothing outside the LAN answered:
+# Tailscale went offline, updates and covers failed. Every BRICK_NET_EVERY seconds (30): wlan0 with a route of its own but no default
+# route gets its lease renewed (SIGUSR1 to udhcpc, or a new udhcpc when none runs); the log says so.
+# Seen on the real Brick (06.11.): moved from one Wi-Fi to another, wpa_supplicant joined the new one but udhcpc kept the old
+# network's address and default route, so the Brick showed "Connected" with the old address and nothing answered. When wlan0's
+# network (its SSID, `iw dev wlan0 link`) changes, the old lease is released (SIGUSR2) and a new one asked for (SIGUSR1).
+# The log never names a network.
+#   brick-net watch | check
+ROUTE=${BRICK_PROC_ROUTE:-/proc/net/route}
+UDHCPC=${BRICK_UDHCPC:-udhcpc}
+PIDOF=${BRICK_PIDOF:-pidof}
+IW=${BRICK_IW:-iw}
+SEEN=${BRICK_NET_SEEN:-/tmp/pocket-ui/net-ssid}
+EVERY=${BRICK_NET_EVERY:-15}
+LOG=${BRICK_NET_LOG:-/dev/stderr}
+say() { echo "$(date '+%H:%M:%S' 2>/dev/null) net: $*" >>"$LOG"; }
+
+# 0 when wlan0 joined another network than the last one seen, and its lease was asked for again.
+moved() {
+  now=$("$IW" dev wlan0 link 2>/dev/null | sed -n 's/^[[:space:]]*SSID: //p' | head -n 1)
+  [ -n "$now" ] || return 1                                                                   # not joined: nothing to compare
+  last=$(cat "$SEEN" 2>/dev/null)
+  [ "$now" = "$last" ] && return 1
+  mkdir -p "$(dirname "$SEEN")" 2>/dev/null; printf '%s' "$now" >"$SEEN"
+  [ -n "$last" ] || return 1                                                                  # the first one seen
+  pids=$("$PIDOF" udhcpc 2>/dev/null)
+  if [ -n "$pids" ]; then
+    # shellcheck disable=SC2086
+    kill -USR2 $pids 2>/dev/null; sleep 1
+    # shellcheck disable=SC2086
+    kill -USR1 $pids 2>/dev/null
+    say "wlan0 joined another network: the old address released, a new lease asked for (udhcpc $pids)"
+  else
+    "$UDHCPC" -i wlan0 -b >/dev/null 2>&1
+    say "wlan0 joined another network and no udhcpc ran: started one"
+  fi
+  return 0
+}
+
+# 0 when it had to act.
+check() {
+  moved && return 0
+  grep -q '^wlan0[[:space:]]' "$ROUTE" 2>/dev/null || return 1                                    # no address on wlan0: nothing to keep
+  awk '$1 == "wlan0" && $2 == "00000000" { found = 1 } END { exit !found }' "$ROUTE" 2>/dev/null && return 1   # default route there
+  pids=$("$PIDOF" udhcpc 2>/dev/null)
+  if [ -n "$pids" ]; then
+    # shellcheck disable=SC2086
+    kill -USR1 $pids 2>/dev/null
+    say "wlan0 had no default route: lease renewed (udhcpc $pids)"
+  else
+    "$UDHCPC" -i wlan0 -b >/dev/null 2>&1
+    say "wlan0 had no default route and no udhcpc: started one"
+  fi
+  return 0
+}
+
+case "${1:-}" in
+  check) check ;;
+  watch) while :; do sleep "$EVERY"; check; done ;;
+  *) echo "usage: brick-net watch|check" >&2; exit 2 ;;
+esac

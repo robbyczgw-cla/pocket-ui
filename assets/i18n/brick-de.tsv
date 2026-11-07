@@ -1,0 +1,91 @@
+Back to NextUI	Zurück zu NextUI
+Back to NextUI?	Zurück zu NextUI?
+Back to NextUI. Your games, saves and settings stay as they are.	Zurück zu NextUI. Deine Spiele, Spielstände und Einstellungen bleiben, wie sie sind.
+Couldn't reach the update server over Tailscale. Is Tailscale on and connected?	Der Update-Server ist über Tailscale nicht erreichbar. Ist Tailscale an und verbunden?
+The SD card is too full for this update: it needs {n} MB more. Nothing was changed.	Die SD-Karte ist zu voll für dieses Update: Es braucht {n} MB mehr. Nichts wurde geändert.
+The update list names no usable version. Nothing was changed.	Die Update-Liste nennt keine brauchbare Version. Nichts wurde geändert.
+The update is missing {s}. Nothing was changed.	Im Update fehlt {s}. Nichts wurde geändert.
+The update is not version {s} inside. Nothing was changed.	Das Update ist innen nicht Version {s}. Nichts wurde geändert.
+The update's start script is broken. Nothing was changed.	Das Startskript des Updates ist kaputt. Nichts wurde geändert.
+Couldn't switch to the new version: {s}. Nothing was changed.	Wechsel zur neuen Version nicht möglich: {s}. Nichts wurde geändert.
+No space left to unpack the download.	Kein Platz mehr, um den Download zu entpacken.
+Battery & charging	Akku & Laden
+Like the rest	Wie die anderen
+Customised	Eigene
+How bright the lights glow.	Wie hell die Lichter leuchten.
+Colour, effect and brightness of the grips, the middle and the two F keys one by one. A: open.	Farbe, Effekt und Helligkeit der Griffe, der Mitte und der beiden F-Tasten einzeln. A: öffnen.
+Quick save, quick load, screenshot, Recent games, the pause menu, or nothing.	Schnell speichern, schnell laden, Bildschirmfoto, Zuletzt gespielt, das Pausenmenü oder nichts.
+The slider on the side mutes the sound, or does nothing.	Der Schieber an der Seite schaltet den Ton stumm oder tut nichts.
+Which light to set.	Welches Licht du einstellst.
+Its own colour, or the one above.	Eine eigene Farbe oder die von oben.
+Steady, breathing, fading, pulsing or off; "Like the rest" follows the colour above.	Ruhig, atmend, verblassend, pulsierend oder aus; "Wie die anderen" folgt der Farbe oben.
+Its own brightness, or the one above.	Eine eigene Helligkeit oder die von oben.
+Lights & buttons	Lichter & Tasten
+Each light	Jedes Licht
+F1 button	F1-Taste
+F2 button	F2-Taste
+Mute slider	Stummschieber
+The Brick's lights, the F1 and F2 keys and the mute slider.	Die Lichter des Brick, die Tasten F1 und F2 und der Stummschieber.
+Lights off	Lichter aus
+Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds, haptics, lights & buttons.	Animationen, verspielte Hüllen, Alter-Fernseher-Effekt, Bewegung, Lupe, Töne, Hüllen-Geräusche, Haptik, Lichter & Tasten.
+A soft tick as you move, and how strong it is. Games rumble on their own (pause menu, Options).	Ein sanftes Ticken beim Bewegen, und wie stark es ist. Spiele vibrieren für sich (Pausenmenü, Optionen).
+Left grip	Linker Griff
+Right grip	Rechter Griff
+Middle	Mitte
+F1 key	F1-Taste
+F2 key	F2-Taste
+Nothing	Nichts
+Quick save	Schnell speichern
+Quick load	Schnell laden
+Pause menu	Pausenmenü
+Mutes	Schaltet stumm
+Does nothing	Tut nichts
+Steady	Ruhig
+Breathing	Atmend
+Fading	Verblassend
+Pulsing	Pulsierend
+{s} (heavy)	{s} (schwer)
+Warm light in the menus. While a game runs, the main colour of its cover.	Warmes Licht in den Menüs. Während ein Spiel läuft, die Hauptfarbe seiner Hülle.
+The colour of the Brick's lights.	Die Farbe der Lichter des Brick.
+The Brick's lights stay dark.	Die Lichter des Brick bleiben dunkel.
+The grips, the middle and the F keys glow in the colour you pick.	Die Griffe, die Mitte und die F-Tasten leuchten in der Farbe, die du wählst.
+Dark while all is well. Orange breathing while it charges, green when it is full, red breathing when it runs low.	Dunkel, solange alles gut ist. Orange atmend beim Laden, grün wenn voll, rot atmend wenn der Akku knapp wird.
+That cover is not a PNG picture.	Dieses Cover ist kein PNG-Bild.
+No game called {s} is on the card. Send the game first, then its cover with the same name.	Auf der Karte ist kein Spiel namens {s}. Schick zuerst das Spiel, dann sein Cover mit demselben Namen.
+Several systems take this cover: more than one has a game with that name.	Mehrere Systeme kommen für dieses Cover in Frage: mehr als eines hat ein Spiel mit diesem Namen.
+The time zone could not be kept on the card: {s}	Die Zeitzone konnte nicht auf der Karte gespeichert werden: {s}
+The system didn't take the new time zone: {s}	Das System hat die neue Zeitzone nicht übernommen: {s}
+PC Engine CD needs a BIOS file in Roms/bios: syscard3.pce	PC Engine CD braucht eine BIOS-Datei in Roms/bios: syscard3.pce
+Switched off after {n} min asleep to save the battery.	Nach {n} min im Ruhezustand ausgeschaltet, um den Akku zu schonen.
+Switched off after {n} min with the screen off to save the battery.	Nach {n} min mit dunklem Bildschirm zum Akkusparen ausgeschaltet.
+
+# Update 5: own colour, speed, colour cycle
+Hue	Farbton
+Saturation	Sättigung
+Own colour	Eigene Farbe
+Colour cycle	Farbwechsel
+Slow	Langsam
+Its own colour, or the one above. Own colour: pick the hue and the saturation below.	Eine eigene Farbe oder die von oben. Eigene Farbe: Farbton und Sättigung darunter wählen.
+Round the colour wheel: red, yellow, green, blue, violet and back.	Einmal um den Farbkreis: Rot, Gelb, Grün, Blau, Violett und zurück.
+From pale to full colour.	Von blass bis kräftig.
+Steady, breathing, fading, pulsing, a colour cycle, the battery and charger, or off; "Like the rest" follows the colour above.	Ruhig, atmend, verblassend, pulsierend, Farbwechsel, Akku und Laden, oder aus; "Wie die anderen" folgt der Farbe oben.
+How fast it breathes, fades, pulses or cycles.	Wie schnell es atmet, verblasst, pulsiert oder die Farbe wechselt.
+
+# Update 6: the beta version (update::brick_short, brick_long)
+{s} beta {n}	{s} Beta {n}
+{s} for TrimUI Brick (beta {n})	{s} für TrimUI Brick (Beta {n})
+Not saved.	Nicht gespeichert.
+The emulator choice couldn't be saved on the card. Nothing was changed.	Die Emulator-Wahl ließ sich nicht auf der Karte speichern. Nichts wurde geändert.
+Controllers and headphones. Connected headphones take the sound of games and menus; it comes back to the speaker when they go.	Controller und Kopfhörer. Verbundene Kopfhörer bekommen den Ton von Spielen und Menüs; er geht zurück auf den Lautsprecher, wenn sie weg sind.
+
+# Settings walk 06.11.: the leave dialog on the Brick's own card
+Restart pocket-ui?	pocket-ui neu starten?
+Only pocket-ui starts again, in seconds. Your games, saves and settings stay as they are.	Nur pocket-ui startet neu, in Sekunden. Deine Spiele, Spielstände und Einstellungen bleiben, wie sie sind.
+New versions of pocket-ui.	Neue Versionen von pocket-ui.
+User	Benutzer
+(unchanged)	(unverändert)
+The screen goes off and the game waits; any button wakes it.	Der Bildschirm geht aus und das Spiel wartet; jede Taste weckt ihn.
+How fast the processor may run, in games and in menus.	Wie schnell der Prozessor laufen darf, in Spielen und Menüs.
+A choice saved in the pause menu (Options › Speed, rumble, fan) wins over this one.	Eine im Pausenmenü gespeicherte Wahl (Optionen › Tempo, Vibration, Lüfter) geht dieser vor.
+Battery saves and save states. No games, no BIOS files.	Spielspeicher und Spielstände. Keine Spiele, keine BIOS-Dateien.
+To {s} on the SD card. Copy it to a computer too.	Nach {s} auf der SD-Karte. Kopiere sie auch auf einen Computer.

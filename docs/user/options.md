@@ -268,11 +268,11 @@ Pause menu → Options → **Speed, rumble, fan** ("Settings you rarely need.").
 |---|---|---|
 | **Fast-forward speed** | 2x, 3x, **4x**, 8x, As fast as possible | How fast the game runs while fast-forward is on (HOME + R2). Sound is muted meanwhile, and "FF 4x" (or the speed you chose) shows over the picture. |
 | **Rewind** | **Off**, On | Remembers the last minute so you can play it backwards: hold HOME + L2. "REWIND" shows over the picture and sound is muted; at the oldest moment the picture stops. Uses some extra power. |
-| **Earlier states** | Off, **On** | Keeps a state every 5 minutes of play, the last half hour, and where each session began; the pause menu's **Earlier** loads them ([Earlier](pause-menu.md#earlier)). The game never waits for it. **Off by default for N64, PSP, DS, Dreamcast and Saturn**: their states are 8 to 40 MB. At most 100 MB a game and 1 GB on the SD card. |
+| **Earlier states** | Off, **On** | Keeps a state every 5 minutes of play, the last half hour, and where each session began; the pause menu's **Earlier** loads them ([Earlier](pause-menu-saves.md#earlier)). The game never waits for it. **Off by default for N64, PSP, DS, Dreamcast and Saturn**: their states are 8 to 40 MB. At most 100 MB a game and 1 GB on the SD card. |
 | **Over the game** | **Off**, FPS, FPS + sensors, Pixel Path | What is drawn over the game while you play. **FPS** shows frames per second and CPU load in the top left corner, for example "60 FPS   CPU 23%", updated twice a second. **FPS + sensors** adds temperature, fan and battery draw: see [the FPS line and sensors](pause-menu.md#the-fps-line-and-sensors). **Pixel Path** shows one line beside the picture instead, which turns orange when something slips: see [Pixel Path over the game](pause-menu.md#pixel-path-over-the-game). The start value is the one under Settings → Playing → [Over the game](settings.md#over-the-game). |
 | **Rumble** | Off, Low, **Medium**, High | How strongly games that rumble shake the console. |
 | **Performance** | Battery, **Auto**, Max | **Auto**: the system decides how fast the CPU runs (until October 2026 this was called Balanced). Battery limits the CPU to half speed: enough for Game Boy and NES. Max keeps the CPU at full speed for demanding games. |
-| **Fan** | Very quiet, **Quiet**, Auto, Cool | Very quiet keeps the fan off until the Pocket gets warm (60 °C); the Pocket feels a bit warmer. Quiet starts the fan later and keeps it slow. Auto keeps the system's cooling profile. Cool starts it earlier. With [Smooth fan](performance.md#smooth-fan) on, each is a smooth curve. |
+| **Fan** | Very quiet, **Quiet**, Auto, Cool | Very quiet keeps the fan off until the Pocket gets warm (60 °C); the Pocket feels a bit warmer. Quiet starts the fan later and keeps it slow. Auto keeps the system's cooling profile. Cool starts it earlier. With [Smooth fan](performance.md#smooth-fan) on, each is a smooth curve. Not shown on a handheld without a fan (the Anbernic H700 ones, the TrimUI Brick). |
 | **Run-ahead** | **Off**, 1 frame, 2 frames | The game responds to your buttons 1 or 2 frames sooner (a frame is 1/60 s). Only on NES, Famicom Disk System, SNES, Game Boy, Game Boy Color, Game Boy Advance, Mega Drive, Master System, Game Gear, SG-1000, PC Engine, SuperGrafx, Atari 2600, WonderSwan and Virtual Boy; the row is not shown for other systems. See [Run-ahead](#run-ahead). |
 
 - Rewind is off by default because keeping the history costs processor time, most on SNES.
@@ -331,10 +331,11 @@ with **START** on a console page, with **START** on a game's card and then the *
 host, **Options** for RetroArch and the other emulators. (PlayStation 2, GameCube, Wii and 3DS have other Options in
 the pause menu; use START on the card for them.)
 
-The first row shows what plays the game now, for example "pocket-core · mGBA", "RetroArch · gpSP" or "Standalone ·
-PPSSPP". Left/Right go through pocket-ui's own host (pocket-core, where it plays the system) and every emulator and
-core ROCKNIX lists for the system. Those ROCKNIX can't start on this Pocket are left out; one chosen anyway (earlier,
-in EmulationStation) shows "Not installed". The line below says what you get:
+The first row shows what plays the game now, for example "pocket-core · mGBA" or "RetroArch · gpSP". Its first entry
+is **Default (…)**, what plays without a choice of yours (a game: its console's; a console: pocket-core where it plays
+the system, else ROCKNIX's); save it to go back. Right goes on through pocket-core and every emulator ROCKNIX lists for
+the system that starts on this Pocket (one chosen earlier in EmulationStation shows "Not installed"); the list stops at
+both ends. The line below says what you get:
 
 - **pocket-core**: continues at once where you left off, eight save slots, Options, shortcuts, run-ahead, fast
   switching between games and achievements.
@@ -359,10 +360,9 @@ until you save, because a choice applies the next time the game starts, even whe
 couldn't start a game (see [Systems](systems.md#when-a-game-does-not-start-on-the-own-host)), the page says so;
 choose pocket-core and save to give it another try.
 
-The choice is kept where ROCKNIX's EmulationStation keeps its "Emulator" setting, so a choice made there earlier is
-used here and one made here shows up there (pocket-core as AUTO). Not offered: ROCKNIX's full list of shader presets
-(one chosen in EmulationStation is kept and shown), video filters, bezels and the settings of the standalone
-emulators themselves. RetroArch settings for one game need a file name ROCKNIX's scripts can read; for names with
+The choice is kept where ROCKNIX's EmulationStation keeps its "Emulator" setting, so each sees the other's (pocket-core
+as AUTO). Not offered: ROCKNIX's full shader list (one chosen in EmulationStation is kept), video filters, bezels and
+the standalone emulators' own settings. RetroArch settings for one game need a file name ROCKNIX's scripts can read; for names with
 `[`, `*`, `$` and the like the page asks to save them for the console.
 
 PlayStation 2, GameCube, Wii and 3DS games have their own, shorter Options: see [Options for PlayStation 2, GameCube, Wii and 3DS](options-big.md).

@@ -80,8 +80,9 @@ Sleep works in two steps, each with its own time in Settings → System → **Sl
   or 8 h. After that long asleep (3 hours is about 14% of the battery) the Pocket saves the game and switches itself
   off, as Power off does, with the screen dark. When you switch it on again, the game opens where you left it,
   whatever **On start** says, and a line says once "Switched off after 3 h asleep to save the battery." On the charger
-  it never switches off; it stays asleep. Waking it before the time is up works as always. With **Off**, no clock
-  alarm is ever set for this.
+  it never switches off; it stays asleep. Waking it before the time is up works as always. It only switches off once
+  the game is saved: if the save doesn't work, or the game runs in an emulator that can't save a moment for Continue
+  (RetroArch), it stays asleep and the game waits where you left it. With **Off**, no clock alarm is ever set for this.
 - **Low battery.** At 5% (on battery) a note says so, on the shelf and over a game on pocket-ui's own host. At 2% the Pocket saves the
   running game and switches itself off, as Power off does, so the game is not lost when the battery runs out, even
   when it lies dark in light sleep. On the charger, none of this happens.
@@ -142,3 +143,11 @@ hardware mute is kept on startup; changing volume deliberately can bring sound b
 On Anbernic H700 handhelds, **Battery** keeps the game's normal processor speed. Power saving stays with menus
 and idle; it does not impose a half-speed game cap. Volume feedback is shown on the shelf and in Quick settings;
 its small overlay is suppressed over running H700 games to keep rendering work out of their frame budget.
+
+On the TrimUI Brick, the lower half of the volume range has gentler steps and is easier to hear.
+Levels from 50% upward and the maximum stay the same. The mute slider keeps the current level: while muted, volume keys show **Muted** and
+leave that level alone. Moving the slider back restores it with a short fade. Zero volume is silent.
+
+After updating a Brick from the older volume curve, its displayed percentage can be lower while
+the sound level stays the same. Very quiet old settings below the new range start muted; use a
+volume key to choose the new lowest step.

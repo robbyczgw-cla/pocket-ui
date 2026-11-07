@@ -20,6 +20,7 @@ use std::cell::Cell;
 pub use crate::settings::TextSize;
 
 thread_local! {
+    static SYSTEM: Cell<f32> = const { Cell::new(1.0) };
     static SIZE: Cell<TextSize> = const { Cell::new(TextSize::Normal) };
     /// Off while something drawn to a fixed physical size is painted (`unscaled`): a case's spine, a key cap.
     static FIXED: Cell<bool> = const { Cell::new(false) };
@@ -30,20 +31,26 @@ pub fn set(size: TextSize) {
     SIZE.with(|s| s.set(size));
 }
 
+/// Android's font preference, independent of the in-app choice. Other hosts leave it at 1.
+/// Custom-drawn text has no framework sp conversion: use the larger preference.
+pub fn set_system_scale(scale: f32) {
+    SYSTEM.with(|s| s.set(if scale.is_finite() { scale.clamp(0.85, 2.0) } else { 1.0 }));
+}
+
 pub fn get() -> TextSize {
     SIZE.with(|s| s.get())
 }
 
 /// Whether type is painted larger than the design right now (Medium or Large).
 pub fn scaled() -> bool {
-    get() != TextSize::Normal && !FIXED.with(|f| f.get())
+    (get() != TextSize::Normal || SYSTEM.with(|s| s.get()) != 1.0) && !FIXED.with(|f| f.get())
 }
 
 /// The size `Text` paints a design size `px` at.
 #[inline]
 pub fn px(px: u32) -> u32 {
     if scaled() {
-        grown_in(get(), px)
+        grown_in(get(), px).max(SYSTEM.with(|s| (px as f32 * s.get()).round() as u32))
     } else {
         px
     }

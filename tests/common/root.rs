@@ -30,3 +30,6 @@ impl AsRef<std::path::Path> for Root {
 }
 
 static ROOT: Root = Root;
+
+#[path = "../../src/test_clock.rs"]
+mod test_clock;

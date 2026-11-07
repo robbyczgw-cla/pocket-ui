@@ -1,0 +1,145 @@
+#!/bin/sh
+# Brick volume: gentler low steps, unchanged upper half. Mute keeps the exact remembered level.
+AMIXER=${BRICK_AMIXER:-amixer}
+STATE=${BRICK_STATE:-/tmp}
+. "$(dirname "$0")/brick-volume-profile"
+mkdir -p "$STATE" || exit 1
+# Keys and slider share one transaction: a key queued behind mute must not change its restore level.
+exec 9>"$STATE/brick-volume.lock"
+flock -x 9 || exit 1
+get() { "$AMIXER" -c 0 cget "name=$1" 2>/dev/null | sed -n 's/^  : values=\([0-9]*\).*/\1/p' | head -1; }
+set_ctl() { "$AMIXER" -c 0 -q cset "name=$1" "$2" >/dev/null 2>&1; }
+pause() { sleep "${BRICK_VOLUME_RAMP_DELAY:-0.004}"; }
+ramp() {
+  current=$(get "$1")
+  case "$current" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$current" -le "$3" ] || return 1
+  [ "$current" -ne "$2" ] || return 0
+  # amixer --stdin keeps ONE ALSA control handle for the whole fade. Forking amixer for
+  # every tick took about 40 ms per tick on the real Brick and delayed slider feedback.
+  {
+    while [ "$current" -ne "$2" ]; do
+      tick=${4:-1}
+      if [ "$current" -lt "$2" ]; then
+        current=$((current + tick)); [ "$current" -le "$2" ] || current=$2
+      else
+        current=$((current - tick)); [ "$current" -ge "$2" ] || current=$2
+      fi
+      printf "cset name='%s' %s\n" "$1" "$current"
+      pause
+    done
+  } | "$AMIXER" -c 0 -q -s >/dev/null 2>&1 || return 1
+  # amixer --stdin ignores missing controls; don't report success without the endpoint.
+  [ "$(get "$1")" = "$2" ]
+}
+switches() {
+  failed=0
+  set_ctl 'HpSpeaker Switch' "$1" || failed=1
+  set_ctl 'Headphone Switch' "$1" || failed=1
+  return "$failed"
+}
+bt() {
+  pct=$(volume_saved)
+  [ ! -e "$STATE/brick-muted" ] || pct=0
+  target=$(volume_bt_raw "$pct")
+  ramp 'BT Volume' "$target" 255 5
+}
+silence() {
+  # Attenuate BEFORE switching the amplifier paths. DAC=0 alone is not a lasting mute:
+  # the vendor driver restores DAC 160 on PCM open. Output switches enforce mute across opens.
+  ramp 'digital volume' 63 63 || :
+  set_ctl 'DAC volume' 0,0
+  switches off
+  bt || :
+}
+enable() {
+  pct=$(volume_saved)
+  if [ "$pct" -eq 0 ] || [ -e "$STATE/brick-muted" ]; then silence; return; fi
+  # Establish zero before the first amp enable; never enable at the old live gain.
+  ramp 'digital volume' 63 63 || return 1
+  set_ctl 'DAC volume' 0,0 || return 1
+  switches on || return 1
+  pause
+  set_ctl 'DAC volume' 160,160 || return 1
+  ramp 'digital volume' "$(volume_raw "$pct")" 63 || return 1
+  bt || :
+}
+safe_enable() {
+  enable || { : >"$STATE/brick-muted"; silence; return 1; }
+}
+remember() {
+  # Detect the actual OTA predecessor, including an earlier curve-3 package.
+  compat=${BRICK_VOLUME_COMPAT_CURVE:-old}
+  previous_profile="$(dirname "$0")/../../../../app.previous/hwroot/usr/bin/brick-volume-profile"
+  if [ -z "${BRICK_VOLUME_COMPAT_CURVE:-}" ] && [ -f "$previous_profile" ]; then
+    if grep -q '^VOLUME_CURVE=3$' "$previous_profile"; then compat=low; else compat=new; fi
+  fi
+  case "$compat" in old|new|low) ;; *) return 1 ;; esac
+  # Keep a valid, unchanged tag intact. Truncating it on every key press creates
+  # an unnecessary power-loss window. Repairs, like format changes, bridge zero.
+  if [ "$(cat "$STATE/brick-volume-compat" 2>/dev/null)" != "$compat" ]; then
+    echo 0 >"$STATE/brick-volume" || return 1
+    echo "$compat" >"$STATE/brick-volume-compat" || return 1
+  fi
+  raw=$(volume_legacy_raw "$1" low)
+  bt_raw=$(volume_bt_raw "$1")
+  legacy=$(volume_from_gain "$raw" "$bt_raw" "$compat")
+  # Keep curve 2 readable by its own older helper. Never put curve-3 percentages there.
+  curve2=$(volume_from_gain "$raw" "$bt_raw" new)
+  echo "$legacy" >"$STATE/brick-volume" || return 1
+  echo "$curve2" >"$STATE/brick-volume-curve2" || return 1
+  echo "$1" >"$STATE/brick-volume-curve3"
+}
+migrate() {
+  # A damaged/partially written saved value is unknown gain, never a request for 50%.
+  # A genuinely fresh card still receives its normal default in the branch below.
+  previous=$(volume_read_percent brick-volume) || previous=0
+  prior_curve=$(volume_compat_curve)
+  target=$(volume_curve_saved) || target=
+  raw=$(volume_legacy_raw "$previous" "$prior_curve")
+  bt_raw=$(volume_legacy_bt_raw "$previous" "$prior_curve")
+  # Compatibility encoding may round down slightly. Repeated restores must not ratchet
+  # down: accept the exact encoding we wrote, but import any actual predecessor change.
+  if [ -n "$target" ] && [ -f "$STATE/brick-volume" ] &&
+     [ "$previous" = "$(volume_from_gain "$(volume_legacy_raw "$target" low)" "$(volume_bt_raw "$target")" "$prior_curve")" ]; then
+    :
+  elif [ ! -f "$STATE/brick-volume" ] && [ ! -e "$STATE/brick-volume-curve2" ] && [ ! -e "$STATE/brick-volume-curve3" ]; then target=50
+  else
+    echo "$previous" >"$STATE/brick-volume-before-curve3"
+    target=$(volume_from_gain "$raw" "$bt_raw" low)
+  fi
+  remember "$target"
+}
+case "${1:-}" in
+  restore)
+    migrate || exit 1
+    # Read the physical slider before any sound, rather than waiting for slider-watch's first poll.
+    if [ -n "${BRICK_HW:-}" ] && [ "$(cat "${BRICK_SLIDER_CFG:-/dev/null}" 2>/dev/null)" != nothing ]; then
+      pin=$("$BRICK_HW" slider-get 2>/dev/null)
+      if [ "$pin" = "${BRICK_SLIDER_MUTED:-1}" ]; then : >"$STATE/brick-muted"; fi
+    fi
+    safe_enable
+    ;;
+  mute) migrate || exit 1; : >"$STATE/brick-muted"; silence ;;
+  unmute)
+    [ -e "$STATE/brick-muted" ] || exit 0
+    migrate || exit 1
+    rm -f "$STATE/brick-muted"
+    safe_enable
+    ;;
+  bt) migrate && bt ;;
+  ''|*[!0-9]*) echo 'usage: volume N | restore | mute | unmute | bt' >&2; exit 2 ;;
+  *)
+    # MinUI/NextUI default: the physical mute holds; keys cannot secretly change the restore level.
+    [ ! -e "$STATE/brick-muted" ] || exit 0
+    pct=$(volume_percent "$1")
+    old=$(volume_saved)
+    remember "$pct" || exit 1
+    if [ "$pct" -eq 0 ]; then silence
+    elif [ "$old" -eq 0 ]; then safe_enable
+    else
+      ramp 'digital volume' "$(volume_raw "$pct")" 63 || { : >"$STATE/brick-muted"; silence; exit 1; }
+      bt || :
+    fi
+    ;;
+esac

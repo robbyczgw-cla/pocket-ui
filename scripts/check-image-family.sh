@@ -1,9 +1,9 @@
 #!/bin/sh
 # Checks a pocket-ui SD card image of a family that boots ROCKNIX's own way (make-image-family.sh) offline, without
-# writing anything to a disk (docs/SD-IMAGE.md, "H700", "SM8550").
+# writing anything to a disk (docs/SD-IMAGE.md, "H700", "SM8550", "RK3566").
 #   scripts/check-image-family.sh build/image-<family>/pocket-ui-<version>-<model>.img.xz [--version <version>]
 # Partition table, what boots the card, the FAT files (nothing but ROCKNIX's, the hooks and the notes), KERNEL and SYSTEM
-# against ROCKNIX 20261001, the initramfs hooks, every file on STORAGE with owner and mode, and that nothing from a
+# against the family's ROCKNIX release, the initramfs hooks, every file on STORAGE with owner and mode, and that nothing from a
 # developer device is on the card. Model and family are read from the file name (pins.sh <FAMILY>_MODELS). Work files go
 # to build/image-<family>/check/ (CHECK_WORK). Docker is needed.
 set -eu
@@ -28,13 +28,14 @@ IN=$(cd "$(dirname "$IN")" && pwd)/$(basename "$IN")
 base=$(basename "$IN" | sed 's/\.xz$//; s/\.img$//')
 MODEL=
 FAMILY=
-for fam in H700 SM8550; do
+for fam in H700 SM8550 RK3566; do
   family_pins "$fam"
   for m in $(echo "$FAM_MODELS" | awk 'NF { print $1 }'); do
     case $base in pocket-ui-*-"$m") MODEL=$m FAMILY=$fam ;; esac
   done
 done
 [ -n "$MODEL" ] || { echo "FAIL cannot tell the model from the name $(basename "$IN")" >&2; exit 1; }
+family_pins "$FAMILY"
 [ -n "$VERSION" ] || VERSION=$(echo "$base" | sed "s/^pocket-ui-//; s/-$MODEL\$//")
 W=${CHECK_WORK:-$ROOT/build/image-$(echo "$FAMILY" | tr 'A-Z' 'a-z')/check}
 mkdir -p "$W"

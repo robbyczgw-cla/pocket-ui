@@ -50,9 +50,9 @@ the scan after a game were checked on a Mini V2, but no outside device may be pa
 for PlayStation 2, GameCube & Wii and 3DS saves are new and not yet checked on a Mini V2 (see
 [Sync](sync.md#what-is-shared)).
 
-**Bluetooth pairing has not been tried with a real controller yet.** The page, the search and the pairing steps were
-checked with stand-ins for ROCKNIX's Bluetooth tools; which controllers pair and reconnect on a Mini V2 is still to
-be confirmed (see [Bluetooth](bluetooth.md)).
+**Bluetooth controllers have been paired on one handheld so far** (an Anbernic H700 model). Reconnecting after sleep,
+two controllers at once and every controller model are still to be confirmed on real hardware; [Test buttons](settings-system.md#test-buttons)
+shows what your controller sends (see [Bluetooth](bluetooth.md)).
 
 **PC streaming has not been tried with a real PC** for the same reason. Starting it, the lookup and the way back
 are checked; pairing on the Pocket was checked with a stand-in for Moonlight (see
@@ -82,7 +82,7 @@ SD card: free some space first. A game that is already in its folder is never re
 
 **The SD card is full.**
 A game on pocket-ui's own host then says "Couldn't save: the SD card is full" at the bottom of the screen, and
-Quit asks first ([When your progress can't be saved](pause-menu.md#when-your-progress-cant-be-saved)). Settings
+Quit asks first ([When your progress can't be saved](pause-menu-saves.md#when-your-progress-cant-be-saved)). Settings
 → System → About shows the free space. Make space from a computer through the file share or
 [Remote access (SSH)](settings-system.md#remote-access-ssh), while the game waits in the pause menu or after quitting: save
 states you don't need any more (`roms/savestates/<system>/`, about 40 MB each for PSP and other 3D games), screenshots,
@@ -90,6 +90,12 @@ games you don't play. Delete no `.srm`, `.rtc` or `.sav` file: those are your in
 try (within 10 seconds) writes the save and the line goes away. An SD card that "can't be written to right now" has turned
 read-only, usually after an SD card error: quitting and restarting the Pocket often clears that; if it comes back, copy
 your saves off and replace the SD card.
+
+**"Couldn't read this game's save".**
+The SD card couldn't hand over the game's in-game save when the game started, which is how a failing SD card starts to show.
+The save is not changed: nothing is written over it, and what you play in that session isn't kept. Quit, copy the
+`.srm` (or `.sav`) beside the game to a computer through the file share, and back up your saves (Settings → System →
+Backup & reset). If the line comes back after a restart, replace the SD card and copy the saves onto the new one.
 
 **A tool from Settings → Help & tools → Tools doesn't let me out.**
 Hold HOME for a second and let go: pocket-ui stops the tool and Settings → Help & tools → Tools comes back. Tools that support it
@@ -117,6 +123,11 @@ there. To keep them apart, rename one of the files. In-game saves lie beside eac
 It has to be in pairing mode while the search runs: most controllers flash their light fast then. A controller that
 was paired with a phone or a console before often tries to reconnect there first; switch Bluetooth off on that device,
 or start pairing mode again. Keep it close to the Pocket.
+
+**A button on my controller does nothing, or the wrong thing.**
+Open Settings → Help & tools → [Test buttons](settings-system.md#test-buttons) and press it: if it lights up, the
+controller is fine and Settings → Playing → Buttons → [Controller setup](controls-settings.md#controller-setup) puts it
+where you want it; if it stays dark or shows **Not recognised**, send a report (Report a problem) with that name.
 
 **My device was paired, but it does not reconnect.**
 Switch it on (controllers: press the home button); give it a few seconds after the Pocket wakes up, since Bluetooth starts again
@@ -209,6 +220,11 @@ EmulationStation set to "custom", and for ten minutes when the system kept chang
 way rather than fight over it). `pocket-ui.log` says which, in lines starting with `fan curve:`.
 
 **A game's sound crackles and the game slows down.**
+
+PAL games running on a 60 Hz screen keep a little more sound buffered so repeated pictures do not interrupt
+the audio. Returning from pause preserves that queued sound and waits for enough audio for the next frame before fading in.
+Starting or continuing a game keeps its opening sound while the audio output connects, including when a Continue
+moment restores a large audio buffer.
 Try the same scene with another available core or player in the game's **Options → Runs on**. If that plays correctly,
 include both choices, the game and your device in [Report a problem](#report-a-problem). This helps distinguish a
 player timing problem from a game that is too demanding. On H700 handhelds, GBA normally uses gpSP; older Continue
@@ -325,6 +341,8 @@ When something goes wrong, Settings → Help & tools → **Report a problem** (a
 SELECT + START held on the shelf) puts what we need to find it into one
 file. Opening the row from Settings shows About with **Report a problem** selected: press A there once. When a game doesn't start, the message on the shelf says how to get there. A few seconds later the Pocket shows the file's name, for example `report-2026-10-26-164007.zip`
 (the date and time on the Pocket's clock, as for screenshots).
+
+Sensor readings and logs may contain Unicode (for example °C and µs); these are kept in the report.
 
 **Where it is.** In the `reports` folder of the games share, the same place as `screenshots`: `roms/reports` on the SD
 card. Copy it to your computer over [file sharing](getting-started.md#over-wi-fi-file-sharing), or with the SD card in a computer.

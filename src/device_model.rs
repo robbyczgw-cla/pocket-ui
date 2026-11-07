@@ -23,9 +23,13 @@ pub enum Model {
     /// An Allwinner H700 handheld of ROCKNIX's H700 image: one profile (1 GB, no fan, no touch), the quirks of each
     /// model are one row of `H700_BOARDS`.
     H700(&'static H700Board),
+    /// Anbernic RG DS Plus (ROCKNIX's RK3566 image; an RK3568, 1 GB): two 1024x768 panels, one above the other, touch only
+    /// on the lower one, a lid, one stick, no fan. pocket-ui is on the upper panel; the lower one shows the selected game
+    /// (`second_screen`, docs/DUAL-SCREEN.md).
+    RgDsPlus,
     /// Valve Steam Deck (SteamOS, Gamescope): 1280x800, a desktop Linux that owns Wi-Fi, Bluetooth, sleep and fan itself
     /// (docs/STEAMDECK.md). Found by `POCKETUI_DEVICE=steamdeck` or DMI (`Valve`: `Jupiter`, `Galileo`).
-    SteamDeck,
+    SteamDeck, #[cfg(feature = "brick")] Brick,
 }
 
 /// What differs between the Anbernic H700 models (`H700_BOARDS`, docs/DEVICES.md has the same table). The

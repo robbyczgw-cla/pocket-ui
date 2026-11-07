@@ -231,14 +231,21 @@ def to_pattern(s, fmt):
 def table_lines():
     """(English, German) of every line of the table, as the app reads them (`i18n::Table::parse`)."""
     out = []
-    with open(TABLE, encoding="utf-8") as f:
-        for line in f:
-            line = line.rstrip("\n")
-            if not line.strip() or line.startswith("#") or "\t" not in line:
-                continue
-            en, de = line.split("\t", 1)
-            # `!` in front marks a careful pattern (src/i18n.rs); the English is what follows.
-            out.append((en.strip().lstrip("!").replace("\\n", "\n").replace("\\t", "\t"), de.strip()))
+    # The extractor scans every source file, including feature-only modules. Check their
+    # translation extension too; runtime snapshots still validate the table selected by cfg.
+    tables = [TABLE]
+    brick = os.path.join(ROOT, "assets", "i18n", "brick-de.tsv")
+    if os.path.isfile(brick):
+        tables.append(brick)
+    for table in tables:
+        with open(table, encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if not line.strip() or line.startswith("#") or "\t" not in line:
+                    continue
+                en, de = line.split("\t", 1)
+                # `!` in front marks a careful pattern (src/i18n.rs); the English is what follows.
+                out.append((en.strip().lstrip("!").replace("\\n", "\n").replace("\\t", "\t"), de.strip()))
     return out
 
 

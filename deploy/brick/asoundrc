@@ -1,0 +1,45 @@
+# ALSA for pocket-ui and pocket-core on the Brick (the updater copies this to /storage/home/.asoundrc and sets HOME there).
+# They play to ALSA's "pipewire" device on ROCKNIX; there is no PipeWire here, so that name is the Brick's sound chip, mixed
+# (dmix) so the UI's sounds and a game can both be open, with a small buffer: 256 frames a period, 1024 in all, 21 ms at 48 kHz.
+# The firmware's own default (/etc/asound.conf) uses 1024 / 8192, 170 ms, and a software volume besides; the volume here is the
+# chip's "digital volume" (the `volume` stand-in). UNPROVEN on the real chip: if a game crackles, make period_size 512 and
+# buffer_size 2048 here, and say so.
+pcm.pipewire {
+    type plug
+    slave.pcm "pocket_dmix"
+}
+pcm.pocket_dmix {
+    type dmix
+    ipc_key 2121
+    ipc_perm 0666
+    slave {
+        pcm "hw:audiocodec,0"
+        format S16_LE
+        rate 48000
+        period_size 256
+        buffer_size 1024
+    }
+}
+# Bluetooth headphones (A2DP, SBC; brick-bluetooth writes the headset's address to /tmp/pocket-ui/bt-audio while one is
+# connected): pocket-core and pocket-ui open "pocket_bt:DEV=<address>" then, the firmware's BlueALSA behind a software volume
+# ("BT Volume" on card 0, set by the `volume` stand-in; 0..255).
+pcm.pocket_bt {
+    @args [ DEV ]
+    @args.DEV {
+        type string
+        default "00:00:00:00:00:00"
+    }
+    type plug
+    slave.pcm {
+        type softvol
+        slave.pcm {
+            type bluealsa
+            device $DEV
+            profile "a2dp"
+        }
+        control {
+            name "BT Volume"
+            card 0
+        }
+    }
+}

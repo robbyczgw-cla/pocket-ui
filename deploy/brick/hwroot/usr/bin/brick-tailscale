@@ -1,0 +1,109 @@
+#!/bin/sh
+# Tailscale on the Brick card (docs/TRIMUI-BRICK-REMOTE.md): the official tailscaled from the card, run by us (there is no systemd).
+#   brick-tailscale start | stop | status | sync     (`systemctl start|stop|is-active tailscaled` lands here)
+# - Its state (the login) lives on the card, storage/.cache/tailscale/ in the pocket-ui folder, so it survives restarts and card updates.
+#   tailscaled writes it in a RAM folder (it sets file modes, which the card's FAT cannot keep) and a watcher copies what changed to
+#   the card within a few seconds; `start` puts the card's copy back first.
+# - Kernel tunnel when the firmware has /dev/net/tun, else userspace networking (no tunnel device needed); a tunnel that does not come
+#   up falls back to userspace by itself. `pocket-ui/tailscale-mode` on the card (tun or userspace) forces one.
+# - Either way a local proxy on 127.0.0.1:1055 reaches the tailnet by name: pocket-ui's updater uses it for the private channel.
+# - DNS and firewall of the firmware are never changed (pocket-ui's `tailscale up` says --accept-dns=false --netfilter-mode=off).
+APP=${BRICK_APP:-/mnt/SDCARD/pocket-ui/app}
+DATA=${BRICK_DATA:-/mnt/SDCARD/pocket-ui}
+RUN=${BRICK_RUN:-/tmp/pocket-ui}
+TAILSCALED=${BRICK_TAILSCALED:-$APP/bin/tailscaled}
+TUN_DEV=${BRICK_TUN_DEV:-/dev/net/tun}
+PROXY=${BRICK_TS_PROXY:-127.0.0.1:1055}
+SYNC_EVERY=${BRICK_TS_SYNC_EVERY:-5}
+CARD_STATE=$DATA/storage/.cache/tailscale
+LIVE=$RUN/tailscale
+PIDF=$RUN/tailscaled.pid
+SYNCPIDF=$RUN/tailscale-sync.pid
+SOCK=$RUN/tailscaled.sock
+LOG=$RUN/tailscaled.log
+# The files that make the login (the node's keys and prefs) and the log id; caches are made again by tailscaled.
+FILES="tailscaled.state tailscaled.log.conf"
+
+alive() { [ -f "$1" ] && kill -0 "$(cat "$1" 2>/dev/null)" 2>/dev/null; }
+
+# What changed in RAM goes to the card: a temporary name first, so a power cut leaves the old copy or the new one.
+sync_once() {
+  mkdir -p "$CARD_STATE" 2>/dev/null || return 1
+  for f in $FILES; do
+    [ -s "$LIVE/$f" ] || continue
+    cmp -s "$LIVE/$f" "$CARD_STATE/$f" 2>/dev/null && continue
+    cp "$LIVE/$f" "$CARD_STATE/$f.new" && mv -f "$CARD_STATE/$f.new" "$CARD_STATE/$f" && echo "$(date '+%H:%M:%S' 2>/dev/null) saved $f to the card" >>"$LOG"
+  done
+  # tailscaled's own log stays in RAM; it is cut back when it grows.
+  [ "$(wc -c <"$LOG" 2>/dev/null || echo 0)" -gt 2000000 ] && { tail -c 500000 "$LOG" >"$LOG.old"; : >"$LOG"; }
+  return 0
+}
+
+# The node's name in the tailnet: tailscaled takes the system's host name, which on the Brick is the firmware's ("tinalinux"). Once
+# signed in, a node that still has that name is renamed to BRICK_TS_HOSTNAME (pocket-brick) with `tailscale set`: the login stays as it
+# is. A name of its own (chosen on Settings > Tailscale) is kept. 0 when there is nothing more to do.
+TS_NAME=${BRICK_TS_HOSTNAME:-pocket-brick}
+name_once() {
+  st=$("$APP/bin/tailscale" --socket="$SOCK" status --json --peers=false 2>/dev/null) || return 1
+  case $st in *'"BackendState": "Running"'*) ;; *) return 1 ;; esac
+  cur=$(printf '%s\n' "$st" | sed -n 's/^[[:space:]]*"HostName": "\([^"]*\)".*/\1/p' | head -n 1)
+  [ -n "$cur" ] && [ "$cur" = "$(hostname 2>/dev/null)" ] || return 0
+  "$APP/bin/tailscale" --socket="$SOCK" set --hostname="$TS_NAME" >>"$LOG" 2>&1 && echo "$(date '+%H:%M:%S' 2>/dev/null) named $TS_NAME in the tailnet (was $cur)" >>"$LOG"
+}
+
+# The watcher: copies the login to the card, gives the node its name once; ends when the daemon does.
+watch_start() {
+  stop_pid "$SYNCPIDF"
+  ( named=; while alive "$PIDF"; do sleep "$SYNC_EVERY"; sync_once; [ -n "$named" ] || { name_once && named=1; }; done; sync_once ) >/dev/null 2>&1 &
+  echo $! >"$SYNCPIDF"
+}
+
+stop_pid() { # pidfile
+  alive "$1" || { rm -f "$1"; return 0; }
+  pid=$(cat "$1"); kill "$pid" 2>/dev/null
+  n=0; while kill -0 "$pid" 2>/dev/null && [ $n -lt 10 ]; do sleep 1; n=$((n + 1)); done
+  kill -9 "$pid" 2>/dev/null; rm -f "$1"
+}
+
+launch() { # tun-name-or-userspace-networking
+  rm -f "$SOCK"
+  "$TAILSCALED" --statedir="$LIVE" --socket="$SOCK" --port=41641 --tun="$1" --outbound-http-proxy-listen="$PROXY" >>"$LOG" 2>&1 &
+  echo $! >"$PIDF"
+  n=0; while [ ! -S "$SOCK" ] && [ $n -lt 10 ]; do alive "$PIDF" || return 1; sleep 1; n=$((n + 1)); done
+  sleep 1
+  alive "$PIDF"
+}
+
+case "${1:-}" in
+  start)
+    # Already running (an update restarted pocket-ui; the login and an SSH session go on): only the watcher is started again, so it is
+    # this version's (the one before kept running its own copy, and a rename it never knew of did not happen).
+    if alive "$PIDF"; then watch_start; exit 0; fi
+    [ -x "$TAILSCALED" ] || { echo "brick-tailscale: $TAILSCALED is missing" >&2; exit 1; }
+    mkdir -p "$LIVE" && chmod 700 "$LIVE"
+    for f in $FILES; do [ -s "$CARD_STATE/$f" ] && [ ! -s "$LIVE/$f" ] && cp "$CARD_STATE/$f" "$LIVE/$f"; done
+    chmod 600 "$LIVE"/* 2>/dev/null
+    mode=$(cat "$DATA/tailscale-mode" 2>/dev/null)
+    if [ -z "$mode" ]; then if [ -c "$TUN_DEV" ]; then mode=tun; else mode=userspace; fi; fi
+    echo "$(date '+%H:%M:%S' 2>/dev/null) starting tailscaled ($mode)" >>"$LOG"
+    if [ "$mode" = tun ] && ! launch tailscale0; then
+      echo "$(date '+%H:%M:%S' 2>/dev/null) the kernel tunnel did not come up: userspace networking" >>"$LOG"
+      stop_pid "$PIDF"; mode=userspace
+    fi
+    if [ "$mode" = userspace ] && ! alive "$PIDF"; then
+      launch userspace-networking || { stop_pid "$PIDF"; echo "brick-tailscale: tailscaled did not start: $(tail -n 1 "$LOG" 2>/dev/null)" >&2; exit 1; }
+    fi
+    echo "$mode" >"$RUN/tailscale-mode"
+    watch_start
+    ;;
+  stop)
+    sync_once
+    stop_pid "$PIDF"
+    stop_pid "$SYNCPIDF"
+    sync_once
+    rm -f "$SOCK"
+    ;;
+  status) alive "$PIDF" ;;
+  sync) sync_once ;;
+  *) echo "usage: brick-tailscale start|stop|status|sync" >&2; exit 2 ;;
+esac

@@ -34,13 +34,8 @@ fn wayland(tmp: &Path) -> Option<Stub> {
         .spawn()
         .expect("python3 for scripts/wayland-stub.py");
     let stub = Stub { path, child };
-    for _ in 0..200 {
-        if stub.path.exists() {
-            return Some(stub);
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-    panic!("scripts/wayland-stub.py didn't start");
+    test_clock::wait_for(|| stub.path.exists(), std::time::Duration::from_secs(2), "Wayland stub listening");
+    Some(stub)
 }
 
 /// Three systems, one game each: Game Boy and Sega CD (with a fact sheet and a picture) and Watara Supervision (with neither; the SuperGrafx had neither until it got a fact sheet and a picture).

@@ -1,0 +1,294 @@
+{
+  "provenance": "Real Lite 2 hand-test evtest descriptor, 2026-11-06. Expected positions use the matching SDL record (S) or Nintendo HID fallback (D); physical labels still require a hand-test. No claim that the other synthetic SN30/Pro2 fixtures were captured.",
+  "nodes": [
+    {
+      "name": "8BitDo Lite 2",
+      "id": {
+        "bustype": 5,
+        "vendor": 11720,
+        "product": 20754,
+        "version": 256
+      },
+      "keys": [
+        304,
+        305,
+        306,
+        307,
+        308,
+        309,
+        310,
+        311,
+        312,
+        313,
+        314,
+        315,
+        316,
+        317,
+        318,
+        319,
+        704,
+        705,
+        706,
+        707
+      ],
+      "abs": [
+        [
+          0,
+          0,
+          255,
+          0,
+          15,
+          0
+        ],
+        [
+          1,
+          0,
+          255,
+          0,
+          15,
+          0
+        ],
+        [
+          2,
+          0,
+          255,
+          0,
+          15,
+          0
+        ],
+        [
+          5,
+          0,
+          255,
+          0,
+          15,
+          57
+        ],
+        [
+          9,
+          0,
+          255,
+          0,
+          15,
+          0
+        ],
+        [
+          10,
+          0,
+          255,
+          0,
+          15,
+          0
+        ],
+        [
+          16,
+          -1,
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          17,
+          -1,
+          1,
+          0,
+          0,
+          0
+        ]
+      ],
+      "bitmaps": {
+        "ev": "1b",
+        "key": "f 0 0 0 0 0 0 ffff000000000000 0 0 0 0",
+        "abs": "30627",
+        "sw": "0",
+        "rel": "0",
+        "ff": "0"
+      },
+      "expected_keys": [
+        {
+          "code": 304,
+          "physical": "EAST",
+          "menu_nintendo": "EAST",
+          "menu_xbox": "SOUTH",
+          "retro_mask": 256
+        },
+        {
+          "code": 305,
+          "physical": "SOUTH",
+          "menu_nintendo": "SOUTH",
+          "menu_xbox": "EAST",
+          "retro_mask": 1
+        },
+        {
+          "code": 306,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 307,
+          "physical": "NORTH",
+          "menu_nintendo": "NORTH",
+          "menu_xbox": "WEST",
+          "retro_mask": 512
+        },
+        {
+          "code": 308,
+          "physical": "WEST",
+          "menu_nintendo": "WEST",
+          "menu_xbox": "NORTH",
+          "retro_mask": 2
+        },
+        {
+          "code": 309,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 310,
+          "physical": "L1",
+          "menu_nintendo": "L1",
+          "menu_xbox": "L1",
+          "retro_mask": 1024
+        },
+        {
+          "code": 311,
+          "physical": "R1",
+          "menu_nintendo": "R1",
+          "menu_xbox": "R1",
+          "retro_mask": 2048
+        },
+        {
+          "code": 312,
+          "physical": "L2",
+          "menu_nintendo": "L2",
+          "menu_xbox": "L2",
+          "retro_mask": 4096
+        },
+        {
+          "code": 313,
+          "physical": "R2",
+          "menu_nintendo": "R2",
+          "menu_xbox": "R2",
+          "retro_mask": 8192
+        },
+        {
+          "code": 314,
+          "physical": "SELECT",
+          "menu_nintendo": "SELECT",
+          "menu_xbox": "SELECT",
+          "retro_mask": 4
+        },
+        {
+          "code": 315,
+          "physical": "START",
+          "menu_nintendo": "START",
+          "menu_xbox": "START",
+          "retro_mask": 8
+        },
+        {
+          "code": 316,
+          "physical": "MODE",
+          "menu_nintendo": "MODE",
+          "menu_xbox": "MODE",
+          "retro_mask": 0
+        },
+        {
+          "code": 317,
+          "physical": "L3",
+          "menu_nintendo": "L3",
+          "menu_xbox": "L3",
+          "retro_mask": 16384
+        },
+        {
+          "code": 318,
+          "physical": "R3",
+          "menu_nintendo": "R3",
+          "menu_xbox": "R3",
+          "retro_mask": 32768
+        },
+        {
+          "code": 319,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 704,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 705,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 706,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        },
+        {
+          "code": 707,
+          "physical": null,
+          "menu_nintendo": null,
+          "menu_xbox": null,
+          "retro_mask": 0
+        }
+      ],
+      "expected_axes": [
+        {
+          "code": 0,
+          "axis": "LEFT_X",
+          "hat": null
+        },
+        {
+          "code": 1,
+          "axis": "LEFT_Y",
+          "hat": null
+        },
+        {
+          "code": 2,
+          "axis": "RIGHT_X",
+          "hat": null
+        },
+        {
+          "code": 5,
+          "axis": "RIGHT_Y",
+          "hat": null
+        },
+        {
+          "code": 9,
+          "axis": "R2",
+          "hat": null
+        },
+        {
+          "code": 10,
+          "axis": "L2",
+          "hat": null
+        },
+        {
+          "code": 16,
+          "axis": null,
+          "hat": "HORIZONTAL"
+        },
+        {
+          "code": 17,
+          "axis": null,
+          "hat": "VERTICAL"
+        }
+      ]
+    }
+  ]
+}

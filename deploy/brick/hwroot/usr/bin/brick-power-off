@@ -1,0 +1,38 @@
+#!/bin/sh
+# What the long hold of Power does on the card (brick-hw power-watch runs this; keymon's "6 seconds power off" was the firmware's):
+#   1. the running game saves and quits: pocket-core gets SIGTERM, which makes it write its save (and the auto state) and end; waited
+#      for up to BRICK_QUIT_WAIT seconds (10), then SIGKILL (a hung game must not keep the Brick on). While pocket-core says it is
+#      still writing its exit save (its mark, `fast_switch::saving`: "<pid> <start>" in /tmp/pocket-core.saving, naming that very
+#      game), the wait goes on up to BRICK_SAVE_LIMIT seconds (120, pocket-ui's own `quit::SAVE_LIMIT`): a big moment on the card,
+#      which is mounted `sync`, can take longer than 10 s, and a SIGKILL then lost it (save-safety review 2026-11-06).
+#   2. sync (the card is mounted `sync`, this is belt and braces)
+#   3. the stand-in `systemctl poweroff`
+# Nothing is asked of pocket-ui: it may be the thing that hangs. The resume note pocket-ui leaves for its own power menu is not written
+# here, so the game is not reopened by itself at the next start; its save is on the card.
+HERE=$(cd "$(dirname "$0")" && pwd)
+WAIT=${BRICK_QUIT_WAIT:-10}
+LIMIT=${BRICK_SAVE_LIMIT:-120}
+MARK=${BRICK_SAVING_FILE:-/tmp/pocket-core.saving}
+LOG=${BRICK_POWER_LOG:-/dev/null}
+say() { echo "$(date '+%H:%M:%S' 2>/dev/null) power-off: $*" >>"$LOG"; }
+pids() { if [ -n "${BRICK_GAME_PIDFILE:-}" ]; then cat "$BRICK_GAME_PIDFILE" 2>/dev/null; else pidof pocket-core 2>/dev/null; fi; }
+alive() { for p in $(pids); do kill -0 "$p" 2>/dev/null && return 0; done; return 1; }
+# The mark names one of the running games: it is writing its exit save. A mark left by a killed game names no live game.
+saving() {
+  [ -r "$MARK" ] || return 1
+  read -r who _ <"$MARK" || return 1
+  for p in $(pids); do [ "$p" = "$who" ] && kill -0 "$p" 2>/dev/null && return 0; done
+  return 1
+}
+if alive; then
+  say "game running: SIGTERM, waiting up to $WAIT s for its save"
+  kill -TERM $(pids) 2>/dev/null
+  n=0
+  while alive && { [ $n -lt $((WAIT * 10)) ] || { [ $n -lt $((LIMIT * 10)) ] && saving; }; }; do sleep 0.1; n=$((n + 1)); done
+  if alive; then say "the game did not end: SIGKILL"; kill -KILL $(pids) 2>/dev/null; sleep 0.2; else say "the game saved and ended"; fi
+else
+  say "no game running"
+fi
+sync
+say "powering off"
+exec "${BRICK_SYSTEMCTL:-$HERE/systemctl}" poweroff

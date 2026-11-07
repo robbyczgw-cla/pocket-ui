@@ -227,14 +227,21 @@ pub fn gpu_overclock_unset(system_cfg: &str) -> bool {
 /// Puts the GPU on its stock clock when no overclock was chosen, through ROCKNIX's own script (it also saves the
 /// choice, so the next boot applies it). Devices without the script are left alone.
 pub fn cap_gpu_if_unset() {
-    if crate::device::rocknix_cooling(Path::new("/")) {
+    cap_gpu_at(Path::new("/"), std::env::var_os("POCKETUI_MOCK").is_some());
+}
+
+fn cap_gpu_at(root: &Path, mocked: bool) {
+    if mocked || crate::device::rocknix_cooling(root) {
         return;
     }
-    const SCRIPT: &str = "/usr/lib/autostart/quirks/platforms/SM8250/bin/gpu_overclock";
-    const SYSTEM_CFG: &str = "/storage/.config/system/configs/system.cfg";
-    let cfg = std::fs::read_to_string(SYSTEM_CFG).unwrap_or_default();
-    if Path::new(SCRIPT).exists() && gpu_overclock_unset(&cfg) {
-        let ok = run("bash", &["-c", r#". /etc/profile >/dev/null 2>&1; "$1" 0"#, "gpu_overclock", SCRIPT]);
+    let script = root.join("usr/lib/autostart/quirks/platforms/SM8250/bin/gpu_overclock");
+    let cfg = std::fs::read_to_string(root.join("storage/.config/system/configs/system.cfg")).unwrap_or_default();
+    if script.exists() && gpu_overclock_unset(&cfg) {
+        // On a host/virtual image GPU_FREQ can be empty: the platform script then redirects into /max_freq.
+        // Only a real sysfs clock is eligible, and a mock preview never changes the machine's GPU or system.cfg.
+        let profile = root.join("etc/profile");
+        let ok = run("bash", &["-c", r#". "$1" >/dev/null 2>&1; [ -n "${GPU_FREQ:-}" ] && [ -f "$GPU_FREQ/max_freq" ] && "$2" 0"#,
+            "gpu_overclock", &profile.to_string_lossy(), &script.to_string_lossy()]);
         println!("gpu: no overclock chosen, stock clock (587 MHz): {}", if ok { "set" } else { "failed" });
     }
 }
@@ -288,7 +295,7 @@ pub fn parse_charge(status: &str) -> Charge {
     }
 }
 
-/// The Steam package's helper (SM8250, SM8550). Absent on the H700 image.
+/// The Steam package's helper (SM8250, SM8550). Absent on the H700 and RK3566 images.
 const STEAMOS_TIMEZONE: &str = "usr/bin/steamos-polkit-helpers/steamos-set-timezone";
 
 impl RealHw {
@@ -312,7 +319,47 @@ impl RealHw {
         run("timedatectl", &["set-timezone", zone]) || self.timezone().as_deref() == Some(zone)
     }
 
+    /// This root is the Brick standalone card's stand-in root (`POCKETUI_HW_ROOT`, `RealHw::system`): no ROCKNIX, no
+    /// systemd; the card's own files and helpers answer instead (docs/TRIMUI-BRICK-STANDALONE.md).
+    #[cfg(feature = "brick")]
+    fn brick_root(&self) -> bool {
+        std::env::var_os("POCKETUI_HW_ROOT").filter(|r| !r.is_empty()).is_some_and(|r| PathBuf::from(r) == self.root)
+    }
+
+    /// The zone on the Brick's own card: the name is kept on the card (`storage/.config/pocket-ui/timezone`, a FAT
+    /// card takes no symlink, so the name is the record), the stand-in root's `etc/localtime` link is repointed at
+    /// the card's zone data, and this process follows at once. The start script rebuilds the link from the name at
+    /// every boot and exports `TZ` for pocket-core, so the choice survives.
+    #[cfg(feature = "brick")]
+    fn set_timezone_brick(&self, zone: &str) -> Result<(), String> {
+        let kept = self.root.join("storage/.config/pocket-ui/timezone");
+        if let Some(dir) = kept.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        crate::fsutil::write_atomic(&kept, format!("{zone}\n").as_bytes()).map_err(|e| format!("The time zone could not be kept on the card: {e}"))?;
+        let etc = self.root.join("etc");
+        let _ = std::fs::create_dir_all(&etc);
+        let link = etc.join("localtime");
+        let _ = std::fs::remove_file(&link);
+        std::os::unix::fs::symlink(format!("../usr/share/zoneinfo/{zone}"), &link).map_err(|e| format!("The system didn't take the new time zone: {e}"))?;
+        // libc gets the zone file's own path: the firmware's zone data may not hold the zone at all.
+        if let Ok(file) = std::fs::canonicalize(self.root.join("usr/share/zoneinfo").join(zone)) {
+            apply_process_zone_file(&file);
+        }
+        if self.timezone().as_deref() == Some(zone) {
+            Ok(())
+        } else {
+            Err("The system didn't take the new time zone.".into())
+        }
+    }
+
     pub fn system() -> Self {
+        // The Brick's standalone card has no ROCKNIX: its sysfs files and stand-in helpers sit in a folder of their own
+        // (deploy/brick/updater builds it, docs/TRIMUI-BRICK-STANDALONE.md).
+        #[cfg(feature = "brick")]
+        if let Some(root) = std::env::var_os("POCKETUI_HW_ROOT").filter(|r| !r.is_empty()) {
+            return Self::with_root(PathBuf::from(root));
+        }
         Self::with_root("/")
     }
 
@@ -321,6 +368,8 @@ impl RealHw {
         RealHw { root: root.into(), settle: std::time::Duration::from_secs(4), nm_radio: Mutex::new(None) }
     }
 
+    /// The first backlight by name; on a handheld with two panels the upper one's (`second_screen::Panels`), whose
+    /// level the lower one follows.
     fn backlight(&self) -> Option<(PathBuf, u32)> {
         let mut dirs: Vec<PathBuf> = std::fs::read_dir(self.root.join("sys/class/backlight"))
             .ok()?
@@ -328,6 +377,9 @@ impl RealHw {
             .map(|e| e.path())
             .collect();
         dirs.sort();
+        if let Some(upper) = crate::second_screen::Panels::current().and_then(|p| crate::second_screen::light_dir(&self.root, &p.top_light)) {
+            dirs.insert(0, upper);
+        }
         dirs.into_iter().find_map(|d| {
             let max: u32 = read(&d.join("max_brightness"))?.parse().ok()?;
             (max > 0 && d.join("brightness").exists()).then_some((d, max))
@@ -418,6 +470,14 @@ impl RealHw {
     pub fn has_backlight(&self) -> bool {
         self.backlight().is_some()
     }
+    /// The Brick's own remembered target, not a transient raw tick halfway through its fade.
+    /// Reads happen on the controls worker and avoid spawning pactl/amixer for every held key.
+    #[cfg(feature = "brick")]
+    fn brick_volume_state(&self) -> Option<PathBuf> {
+        if !self.root.join("usr/bin/brick-volume-profile").is_file() { return None; }
+        std::env::var_os("BRICK_STATE").filter(|p| !p.is_empty()).map(PathBuf::from)
+    }
+
     /// `pactl` and ROCKNIX's `volume`. Not tried against the sound server: it may still be starting.
     pub fn has_volume(&self) -> bool {
         self.root.join("usr/bin/pactl").exists() && self.root.join("usr/bin/volume").exists()
@@ -426,6 +486,10 @@ impl RealHw {
         self.rfkill("wlan").is_some() && self.root.join("usr/bin/wifictl").exists()
     }
     pub fn has_bluetooth(&self) -> bool {
+        #[cfg(feature = "brick")]
+        if self.brick_root() && crate::brick_profile::standalone() {
+            return self.root.join("usr/bin/brick-bluetooth").exists() && self.root.join("usr/bin/brick-bluetoothctl").exists();
+        }
         self.systemd() && self.root.join("usr/bin/rocknix-bluetooth").exists()
     }
     pub fn has_battery(&self) -> bool {
@@ -456,6 +520,7 @@ impl Hw for RealHw {
         if let Some((dir, max)) = self.backlight() {
             let raw = pct.clamp(MIN_BRIGHTNESS, 100) as u32 * max / 100;
             let _ = std::fs::write(dir.join("brightness"), raw.to_string());
+            crate::second_screen::follow_light(&self.root, raw, max);
         }
     }
 
@@ -464,10 +529,24 @@ impl Hw for RealHw {
     }
 
     fn volume(&self) -> Option<u8> {
+        #[cfg(feature = "brick")]
+        if let Some(state) = self.brick_volume_state() {
+            for file in ["brick-volume-curve3", "brick-volume-curve2"] {
+                if let Some(pct) = std::fs::read_to_string(state.join(file)).ok().and_then(|s| s.trim().parse::<u8>().ok()).filter(|v| *v <= 100) {
+                    return Some(pct);
+                }
+            }
+        }
         run_out("pactl", &["get-sink-volume", "@DEFAULT_SINK@"]).as_deref().and_then(parse_pactl_volume)
     }
 
     fn muted(&self) -> Option<bool> {
+        #[cfg(feature = "brick")]
+        if let Some(state) = self.brick_volume_state() {
+            // The speaker amplifier override also applies while other outputs remain audible.
+            // Only the slider marker may freeze the shared headphone/Bluetooth volume.
+            return Some(state.join("brick-muted").exists());
+        }
         run_out("pactl", &["get-sink-mute", "@DEFAULT_SINK@"]).as_deref().and_then(parse_pactl_mute)
     }
 
@@ -553,10 +632,25 @@ impl Hw for RealHw {
     }
 
     fn bluetooth(&self) -> Option<bool> {
+        #[cfg(feature = "brick")]
+        if self.brick_root() && crate::brick_profile::standalone() {
+            return Some(crate::proc::run_with_timeout(
+                Command::new(self.tool("systemctl")).args(["is-active", "bluetooth"]),
+                std::time::Duration::from_secs(3),
+            ).is_ok_and(|out| out.status.success() && String::from_utf8_lossy(&out.stdout).trim() == "active"));
+        }
         run_out("systemctl", &["is-active", "bluetooth"]).map(|s| s.trim() == "active").or(Some(false))
     }
 
     fn set_bluetooth(&self, on: bool) {
+        #[cfg(feature = "brick")]
+        if self.brick_root() && crate::brick_profile::standalone() {
+            let _ = crate::proc::status_with_timeout(
+                Command::new(self.tool("systemctl")).args([if on { "start" } else { "stop" }, "bluetooth"]),
+                std::time::Duration::from_secs(55),
+            );
+            return;
+        }
         run("rocknix-bluetooth", &[if on { "enable" } else { "disable" }]);
     }
 
@@ -581,6 +675,11 @@ impl Hw for RealHw {
     }
 
     fn timezone_chosen(&self) -> bool {
+        // The Brick's card keeps the choice as the zone's name in its own state folder (`set_timezone_brick`).
+        #[cfg(feature = "brick")]
+        if self.brick_root() {
+            return read(&self.root.join("storage/.config/pocket-ui/timezone")).is_some_and(|v| !v.trim().is_empty());
+        }
         // Only ROCKNIX images keep the choice in system.cfg; elsewhere (SteamOS, a container) the zone is the owner's.
         !self.has_rocknix_timezone() || self.system_cfg().get("system.timezone").is_some_and(|v| !v.trim().is_empty())
     }
@@ -588,6 +687,10 @@ impl Hw for RealHw {
     fn set_timezone(&self, zone: &str) -> Result<(), String> {
         if !timezone::is_valid(zone) || !self.root.join("usr/share/zoneinfo").join(zone).is_file() {
             return Err(format!("Unknown time zone {zone}."));
+        }
+        #[cfg(feature = "brick")]
+        if self.brick_root() {
+            return self.set_timezone_brick(zone);
         }
         let ok = if self.root.join(STEAMOS_TIMEZONE).exists() {
             run(&format!("/{STEAMOS_TIMEZONE}"), &[zone])
@@ -625,6 +728,7 @@ impl Hw for RealHw {
         run("systemctl", &["restart", "systemd-timesyncd"]);
     }
 
+    #[cfg(not(feature = "brick"))]
     fn set_clock(&self, unix: i64) -> Result<ClockSet, String> {
         // Only the machine's own root: a test's `with_root` never sets a clock.
         if self.root != Path::new("/") {
@@ -635,6 +739,34 @@ impl Hw for RealHw {
             return Err("The system didn't take the new time.".into());
         }
         Ok(match crate::manual_time::write_rtc(&self.root.join("dev/rtc0"), unix) {
+            Ok(()) => ClockSet::Saved,
+            Err(e) => ClockSet::ClockOnly(e),
+        })
+    }
+
+    #[cfg(feature = "brick")]
+    fn set_clock(&self, unix: i64) -> Result<ClockSet, String> {
+        // Only the machine's own root: a test's `with_root` never sets a clock. The Brick's card root is the
+        // machine's own too (pocket-ui is the system there and runs as root); its RTC is the real /dev/rtc0.
+        let brick = {
+            #[cfg(feature = "brick")]
+            {
+                self.brick_root()
+            }
+            #[cfg(not(feature = "brick"))]
+            {
+                false
+            }
+        };
+        if self.root != Path::new("/") && !brick {
+            return Err("Not the system's clock.".into());
+        }
+        if let Err(e) = crate::manual_time::set_system_clock(unix) {
+            eprintln!("time: couldn't set the clock: {e}");
+            return Err("The system didn't take the new time.".into());
+        }
+        let rtc = if brick { PathBuf::from("/dev/rtc0") } else { self.root.join("dev/rtc0") };
+        Ok(match crate::manual_time::write_rtc(&rtc, unix) {
             Ok(()) => ClockSet::Saved,
             Err(e) => ClockSet::ClockOnly(e),
         })
@@ -655,9 +787,21 @@ impl Hw for RealHw {
             .any(|d| read(&d.path().join("reboot_modes")).is_some_and(|t| reboot_modes_have_bootloader(&t)))
     }
 
+    #[cfg(not(feature = "brick"))]
     fn power(&self, action: PowerAction) -> Result<(), String> {
         if action == PowerAction::Sleep && crate::device::rocknix_cooling(&self.root) {
             return Err(crate::sleep_settings::NO_SLEEP.into());
+        }
+        if action.argv().is_empty() {
+            return Err("Only pocket-ui itself can restart pocket-ui.".into());
+        }
+        power_via(action, &crate::auto_off::Rtc::from_env(), &crate::shutdown_log::default_dir(), &run)
+    }
+
+    #[cfg(feature = "brick")]
+    fn power(&self, action: PowerAction) -> Result<(), String> {
+        if action == PowerAction::Sleep && (crate::device::rocknix_cooling(&self.root) || crate::device::current().screen_off_only()) {
+            return Err(crate::sleep_settings::no_sleep().into());
         }
         if action.argv().is_empty() {
             return Err("Only pocket-ui itself can restart pocket-ui.".into());
@@ -797,12 +941,13 @@ impl MockHw {
         self.state.lock().unwrap().clone()
     }
 
-    fn with<R>(&self, f: impl FnOnce(&mut MockState) -> R) -> R {
+    pub(crate) fn with<R>(&self, f: impl FnOnce(&mut MockState) -> R) -> R {
         f(&mut self.state.lock().unwrap())
     }
 }
 
 /// Moves libc's local time to `zone` for this process.
+#[cfg(not(feature = "brick"))]
 fn apply_process_zone(zone: &str) {
     if timezone::is_valid(zone) {
         // SAFETY: called from the UI thread at start-up and on a user's choice; the night light's thread reads the
@@ -812,6 +957,38 @@ fn apply_process_zone(zone: &str) {
             libc::setenv(c"TZ".as_ptr(), std::ffi::CString::new(zone).unwrap().as_ptr(), 1);
             crate::timezone::tzset();
         }
+    }
+}
+
+#[cfg(feature = "brick")]
+fn apply_process_zone(zone: &str) {
+    if timezone::is_valid(zone) {
+        set_tz(zone);
+    }
+}
+
+/// `apply_process_zone` with a zone file's own path (`TZ=/…/zoneinfo/Europe/Berlin`, which glibc reads as that
+/// file): the Brick's card carries zones the firmware's own zone data may not have. Only a real file goes in, so
+/// nothing the caller invented can reach the environment.
+#[cfg(feature = "brick")]
+fn apply_process_zone_file(file: &Path) {
+    if file.is_file() {
+        if let Some(s) = file.to_str() {
+            if !s.contains('\0') {
+                set_tz(s);
+            }
+        }
+    }
+}
+
+#[cfg(feature = "brick")]
+fn set_tz(value: &str) {
+    // SAFETY: called from the UI thread at start-up and on a user's choice; the night light's thread reads the
+    // local time under the same lock (`timezone::zone_lock`).
+    let _zone = timezone::zone_lock();
+    unsafe {
+        libc::setenv(c"TZ".as_ptr(), std::ffi::CString::new(value).unwrap().as_ptr(), 1);
+        crate::timezone::tzset();
     }
 }
 
@@ -976,6 +1153,8 @@ impl AutoHw {
         }
         // Without the real time service the mock owns the zone, and shows it on this process's clock.
         if !caps.time {
+            // The Brick's card zone, unless a zone was asked for above (the journeys' fresh UTC start).
+            #[cfg(feature = "brick")] if std::env::var_os("POCKETUI_MOCK_ZONE").is_none() { if let Some(z) = real.timezone() { mock.with(|s| s.zone = z); } }
             mock = mock.with_clock();
         } else if let Some(z) = real.timezone() {
             mock.with(|s| s.zone = z);
@@ -1299,6 +1478,33 @@ mod tests {
         assert!(gpu_overclock_unset("#gpu-overclock-speed=750\n"), "commented out counts as unset");
     }
 
+    #[test]
+    fn a_mock_start_leaves_gpu_and_system_settings_alone_and_a_missing_gpu_never_runs_the_helper() {
+        let d = TestDir::new("gpu-cap-host");
+        let root: &Path = &d;
+        let script = root.join("usr/lib/autostart/quirks/platforms/SM8250/bin/gpu_overclock");
+        let cfg = root.join("storage/.config/system/configs/system.cfg");
+        let gpu = root.join("sys/gpu/max_freq");
+        put(root, "etc/profile", &format!("export GPU_FREQ='{}'\n", gpu.parent().unwrap().display()));
+        put(root, "sys/gpu/max_freq", "650000000\n");
+        put(root, "storage/.config/system/configs/system.cfg", "chosen=keep\n");
+        std::fs::create_dir_all(script.parent().unwrap()).unwrap();
+        crate::testutil::write_executable(&script, format!(
+            "#!/bin/sh\nprintf '587000000\\n' > \"$GPU_FREQ/max_freq\"\nprintf called > \"$0.called\"\nprintf changed > '{}'\n", cfg.display()));
+        let called = script.with_file_name("gpu_overclock.called");
+        cap_gpu_at(root, true);
+        assert_eq!(std::fs::read_to_string(&gpu).unwrap(), "650000000\n", "a mock start leaves the player's clock alone");
+        assert_eq!(std::fs::read_to_string(&cfg).unwrap(), "chosen=keep\n", "a preview cannot rewrite system settings");
+        assert!(!called.exists());
+        cap_gpu_at(root, false);
+        assert_eq!(std::fs::read_to_string(&gpu).unwrap(), "587000000\n", "a real GPU still gets its safe stock cap");
+        assert!(called.exists());
+        std::fs::remove_file(&called).unwrap();
+        put(root, "etc/profile", "unset GPU_FREQ\n");
+        cap_gpu_at(root, false);
+        assert!(!called.exists(), "an image with no GPU must never run a helper that writes /max_freq");
+    }
+
     fn fake_root(name: &str) -> crate::testutil::TestDir {
         TestDir::new(&format!("sysctl-{name}"))
     }
@@ -1593,7 +1799,8 @@ mod tests {
     }
 
     #[test]
-    fn the_worker_drops_superseded_jobs_with_the_same_key() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_worker_drops_superseded_jobs_with_the_same_key() {
         let w = Worker::new();
         let (gate_tx, gate_rx) = channel::<()>();
         let ran = Arc::new(Mutex::new(Vec::new()));

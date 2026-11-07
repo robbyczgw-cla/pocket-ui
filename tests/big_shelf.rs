@@ -34,12 +34,7 @@ impl Card {
         assert!(status.success());
         let stub = (cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|w| w.is_empty())).then(|| {
             let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), dir.path().join("wl").to_str().unwrap()]).spawn().unwrap();
-            for _ in 0..200 {
-                if dir.path().join("wl").exists() {
-                    break;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
+            test_clock::wait_for(|| dir.path().join("wl").exists(), std::time::Duration::from_secs(2), "Wayland stub listening");
             Stub(child)
         });
         Card { dir, _stub: stub }

@@ -1286,6 +1286,9 @@ impl Ui {
             secondary.push(("Turn over", Action::Press(Button::North)));
         }
         secondary.push(("Stickers", Action::Press(Button::Select)));
+        if self.game().is_some_and(|g| super::super::bundled_core(g.system_id).is_some()) {
+            secondary.push(("Controls", Action::Controls));
+        }
         // A favourite's button is amber, the colour of Favourites on the shelf.
         let colors = |label: &str| {
             if label == "Favourite" && favourite {
@@ -1402,6 +1405,7 @@ impl Ui {
         if hints {
             // What only a key reaches first: a narrow phone leaves out what doesn't fit, and A and B say themselves.
             let mut keys = vec![("SELECT", "Stickers"), ("Y", "Favourite"), ("A", self.play_word()), ("B", "Back")];
+            if self.game().is_some_and(|g| super::super::bundled_core(g.system_id).is_some()) {keys.insert(0,("R2","Controls"));}
             if boxed {
                 keys.insert(1, ("X", "Turn over"));
             }

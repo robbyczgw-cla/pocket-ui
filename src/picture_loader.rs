@@ -77,7 +77,7 @@ mod tests {
         let loader = Loader::start(move |key, img| { tx.send((key, img)).unwrap(); });
         let key = (path, 1, 1);
         loader.request(key.clone());
-        let (returned, img) = rx.recv_timeout(Duration::from_secs(5)).expect("cover decoded off-thread");
+        let (returned, img) = rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).expect("cover decoded off-thread");
         assert_eq!(returned, key);
         let img = img.expect("valid cover");
         assert_eq!((img.w, img.h), (1, 1));
@@ -94,10 +94,10 @@ mod tests {
             if first { blocked.recv().unwrap(); }
         });
         loader.request(("missing".into(), 0, 1));
-        assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), 0);
+        assert_eq!(rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap(), 0);
         for i in 1..20 { loader.request(("missing".into(), i, 1)); }
         release.send(()).unwrap();
-        let got: Vec<_> = (1..20).map(|_| rx.recv_timeout(Duration::from_secs(5)).unwrap()).collect();
+        let got: Vec<_> = (1..20).map(|_| rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap()).collect();
         assert_eq!(got, (1..20).rev().collect::<Vec<_>>());
     }
 
@@ -116,7 +116,7 @@ mod tests {
             let _ = tx.send((key, img.is_some()));
         });
         loader.request((PathBuf::from("/nonexistent/none.png"), 100, 100));
-        let (key, got) = rx.recv_timeout(Duration::from_secs(5)).expect("answered");
+        let (key, got) = rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).expect("answered");
         assert_eq!(key.0, PathBuf::from("/nonexistent/none.png"));
         assert!(!got);
     }

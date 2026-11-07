@@ -894,7 +894,8 @@ mod tests {
     }
 
     #[test]
-    fn the_store_is_read_on_a_thread_and_nobody_waits_for_it() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_store_is_read_on_a_thread_and_nobody_waits_for_it() {
         // Review SOL 2026-10-24 #6: the loader held the lock while it read, and `with` waited for it or read the
         // files itself. A slow card (half a second here): the UI's look is None at once, never a wait or a read.
         let d = dir("shared");
@@ -908,7 +909,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(50));
         let t0 = Instant::now();
         assert_eq!(with(&shared, |s| s.choice(Path::new(ROM), (Performance::Auto, Fan::Auto)).fan), None, "still being read");
-        assert!(t0.elapsed() < Duration::from_millis(100), "no wait: {:?}", t0.elapsed());
+        assert!(t0.elapsed() < crate::testutil::timeout(Duration::from_millis(100)), "no wait: {:?}", t0.elapsed());
         // A worker waits for it; then everyone sees the finished store.
         let own = with_when_loaded(&shared, Duration::from_secs(5), || false, |s| s.choice(Path::new(ROM), (Performance::Auto, Fan::Auto)).own_fan);
         assert_eq!(own, Some(true));
@@ -1085,7 +1086,7 @@ mod tests {
     }
 
     fn until(what: &str, ok: impl Fn() -> bool) {
-        let end = Instant::now() + Duration::from_secs(10);
+        let end = Instant::now() + crate::testutil::timeout(Duration::from_secs(10));
         while !ok() {
             assert!(Instant::now() < end, "never: {what}");
             std::thread::sleep(Duration::from_millis(5));
@@ -1126,7 +1127,8 @@ mod tests {
     }
 
     #[test]
-    fn an_ended_session_never_touches_the_next_ones_settings_or_note() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_an_ended_session_never_touches_the_next_ones_settings_or_note() {
         // Session A (group 100) ends while it waits for the CPU (another game still holds it); session B (group 200)
         // starts. A must write nothing: not its caps, not the group file, and it must not delete B's.
         let (f, paths) = system("cancel");
@@ -1171,7 +1173,8 @@ mod tests {
     }
 
     #[test]
-    fn a_port_started_before_the_settings_were_read_gets_its_own_choice_on_its_thread() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_port_started_before_the_settings_were_read_gets_its_own_choice_on_its_thread() {
         let (f, paths) = system("later");
         port_runs(&paths, &[100]);
         let d = dir("later-store");

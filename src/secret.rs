@@ -74,6 +74,7 @@ pub fn load(path: &Path) -> Option<String> {
 }
 
 /// Writes `data` with mode 0600 under a temporary name and renames it into place.
+#[cfg(not(feature = "brick"))]
 pub fn write_private(path: &Path, data: &[u8]) -> std::io::Result<()> {
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
     if let Some(dir) = path.parent() {
@@ -85,6 +86,26 @@ pub fn write_private(path: &Path, data: &[u8]) -> std::io::Result<()> {
     f.write_all(data)?;
     f.sync_all()?;
     std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
+    std::fs::rename(&tmp, path)
+}
+
+#[cfg(feature = "brick")]
+pub fn write_private(path: &Path, data: &[u8]) -> std::io::Result<()> {
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let tmp = path.with_extension("new");
+    let _ = std::fs::remove_file(&tmp);
+    let mut f = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&tmp)?;
+    f.write_all(data)?;
+    f.sync_all()?;
+    // The file was made 0600 already; this undoes a umask that took less. A FAT card (the TrimUI Brick's, where pocket-ui keeps its
+    // settings) has no modes at all and refuses the change with EPERM: there the card's own mount decides, as for every file on it.
+    match std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600)) {
+        Err(e) if e.raw_os_error() == Some(libc::EPERM) => {}
+        other => other?,
+    }
     std::fs::rename(&tmp, path)
 }
 

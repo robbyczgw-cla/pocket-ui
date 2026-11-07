@@ -701,7 +701,8 @@ mod tests {
     }
 
     #[test]
-    fn a_thread_fades_on_a_poke_and_follows_new_choices() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_thread_fades_on_a_poke_and_follows_new_choices() {
         let (tx, rx) = mpsc::channel();
         // Off at the start and nothing shown: nothing is sent.
         let run = Runner::start(Prefs::default(), 0, Duration::from_millis(150), move |l| {
@@ -711,7 +712,7 @@ mod tests {
         assert!(rx.recv_timeout(Duration::from_millis(200)).is_err(), "nothing changes by itself");
         run.set_prefs(Prefs { mode: Mode::On, strength: 4, ..Prefs::default() });
         let mut got = Vec::new();
-        while let Ok(l) = rx.recv_timeout(Duration::from_secs(1)) {
+        while let Ok(l) = rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(1))) {
             got.push(l);
             if l == 3800 {
                 break;
@@ -722,7 +723,7 @@ mod tests {
         // Motion off: one step.
         run.set_instant(true);
         run.set_prefs(Prefs { mode: Mode::Off, ..Prefs::default() });
-        assert_eq!(rx.recv_timeout(Duration::from_secs(1)), Ok(0));
+        assert_eq!(rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(1))), Ok(0));
         assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "and nothing else");
         // A poke with nothing changed does nothing.
         run.poke();
@@ -730,10 +731,10 @@ mod tests {
         // A new choice in the middle of a fade turns it round from where it is.
         run.set_instant(false);
         run.set_prefs(Prefs { mode: Mode::On, strength: 5, ..Prefs::default() });
-        let first = rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        let first = rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(1))).unwrap();
         run.set_prefs(Prefs { mode: Mode::Off, ..Prefs::default() });
         let mut last = first;
-        while let Ok(l) = rx.recv_timeout(Duration::from_millis(600)) {
+        while let Ok(l) = rx.recv_timeout(crate::testutil::timeout(Duration::from_millis(600))) {
             last = l;
             if l == 0 {
                 break;

@@ -265,8 +265,8 @@ for SH in $SHELLS; do
 
   # Refusals: nothing changes.
   make_root
-  sed -i 's/SM8250/RK3566/' "$r/etc/os-release"
-  refused "another SoC" "ROCKNIX for RK3566"
+  sed -i 's/SM8250/RK3588/' "$r/etc/os-release"
+  refused "another SoC" "ROCKNIX for RK3588"
   make_root
   sed -i 's/aarch64/x86_64/' "$r/etc/os-release"
   refused "another architecture" "needs ROCKNIX for SM8250"
@@ -358,9 +358,23 @@ for SH in $SHELLS; do
   make_root
   printf 'Anbernic RG28XX\000' >"$r/sys/firmware/devicetree/base/model"
   refused "an Anbernic name on the SM8250 image" "this device is 'Anbernic RG28XX'"
+  # ROCKNIX's RK3566 image: the RG DS Plus alone (two screens), experimental; its other handhelds and the first RG DS not.
   make_root
   sed -i 's/SM8250/RK3566/' "$r/etc/os-release"
-  refused "another ROCKNIX platform" "needs ROCKNIX for SM8250, SM8550 or H700"
+  printf 'Anbernic RG DS Plus\000' >"$r/sys/firmware/devicetree/base/model"
+  inst --check
+  rc=$?
+  check "$SH: the RG DS Plus (RK3566 image) passes as experimental, without an option" '[ $rc = 0 ] && said "ROCKNIX 20261001 for RK3566" && said "device: Anbernic RG DS Plus, experimental" && said "hasn'"'"'t been tested on one yet"'
+  for other in 'Anbernic RG DS' 'Anbernic RG353V' 'Retroid Pocket Mini V2'; do
+    make_root
+    sed -i 's/SM8250/RK3566/' "$r/etc/os-release"
+    printf '%s\000' "$other" >"$r/sys/firmware/devicetree/base/model"
+    refused "an RK3566 card of '$other' (no profile)" "this RK3566 handheld is '$other'; pocket-ui knows only the Anbernic RG DS Plus"
+    refused "an RK3566 card of '$other', even with --allow-other-device" "has no profile yet" --allow-other-device
+  done
+  make_root
+  sed -i 's/SM8250/RK3588/' "$r/etc/os-release"
+  refused "another ROCKNIX platform" "needs ROCKNIX for SM8250, SM8550, H700 or RK3566"
   make_root
   printf 'AYN Thor Lite\000' >"$r/sys/firmware/devicetree/base/model"
   refused "another device" "this device is 'AYN Thor Lite'"

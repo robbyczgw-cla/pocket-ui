@@ -42,8 +42,9 @@ impl StateSet {
     /// pocket-core: `<stem>.pstate` (slot 1) to `.pstate7` (slot 8), `.pstate.auto` and `.pstate.undo`.
     pub fn pocket_core(base: &Path) -> StateSet {
         let auto = crate::slots::auto_path(base);
+        let autos = crate::slots::auto_candidates(&auto, true);
         StateSet {
-            auto: vec![auto.clone(), crate::slots::taken_auto_path(&auto), crate::slots::retry_auto_path(&auto)],
+            auto: autos,
             undo: crate::slots::undo_path(base),
             slots: (0..crate::slots::SLOTS).map(|i| crate::slots::state_path(base, i)).collect(),
         }
@@ -147,8 +148,8 @@ impl StateSet {
     pub fn preview(&self, target: Target) -> Option<(Option<Image>, SystemTime)> {
         let path = self.path(target)?;
         // The auto state's picture stays beside its first name, whichever of its names the state has now.
-        let picture = if target == Target::Auto { self.auto.first().map_or(path, PathBuf::as_path) } else { path };
-        Some((image::load_png(&crate::slots::preview_path(picture)), self.saved_at(target)?))
+        let picture_owned = if target == Target::Auto { crate::slots::auto_root(path) } else { path.to_path_buf() };
+        Some((image::load_png(&crate::slots::preview_path(&picture_owned)), self.saved_at(target)?))
     }
 }
 
@@ -217,7 +218,7 @@ mod tests {
         let pc = StateSet::pocket_core(Path::new("/storage/roms/savestates/gbc/uCity"));
         assert_eq!(pc.slots.len(), 8);
         assert_eq!(pc.slots[0], Path::new("/storage/roms/savestates/gbc/uCity.pstate"), "slot 1 is the file that always was");
-        assert_eq!(pc.auto[0], Path::new("/storage/roms/savestates/gbc/uCity.pstate.auto"));
+        assert_eq!(pc.auto[0], Path::new("/storage/roms/savestates/gbc/uCity.pstate.auto.z"));
         assert_eq!(pc.undo, Path::new("/storage/roms/savestates/gbc/uCity.pstate.undo"));
         // ARMSX2: slots 1-8 are its slots 1-8, auto 99 and undo 98 (its menu has 1-10; the old auto was slot 0)
         let ps2 = StateSet::armsx2("SLES-12345 (ABCD1234)");

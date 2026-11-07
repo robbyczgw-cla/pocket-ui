@@ -502,13 +502,23 @@ fn dotted(v: &[u32]) -> String {
     v.iter().map(u32::to_string).collect::<Vec<_>>().join(".")
 }
 
-/// Files ROCKNIX's H700 image doesn't have and pocket-ui's H700 profiles handle (docs/DEVICES.md).
+/// Files of ROCKNIX's Steam package, which its H700 and RK3566 images don't have and pocket-ui does without there
+/// (docs/DEVICES.md).
 const H700_WITHOUT: &[&str] = &["usr/bin/steamos-polkit-helpers/steamos-set-timezone", "usr/sbin/quantum"];
 
-/// Whether the system is ROCKNIX's H700 image (`HW_DEVICE="H700"` in its os-release).
+/// Whether the system is ROCKNIX's H700 or RK3566 image (`HW_DEVICE` in its os-release): no Steam package.
 fn is_h700_system(sys: &dyn System) -> bool {
     let text = resolve(sys, "etc/os-release").and_then(|p| sys.read(&p)).map(|b| String::from_utf8_lossy(&b).into_owned());
-    text.is_some_and(|t| t.lines().any(|l| l.trim().strip_prefix("HW_DEVICE=").is_some_and(|v| v.trim_matches('"') == "H700")))
+    let platform = text.and_then(|t| t.lines().find_map(|l| l.trim().strip_prefix("HW_DEVICE=").map(|v| v.trim_matches('"').to_string())));
+    match platform.as_deref() {
+        Some("H700") => true,
+        Some("RK3566") => {
+            let model = resolve(sys, "sys/firmware/devicetree/base/model").and_then(|p| sys.read(&p)).unwrap_or_default();
+            let compatible = resolve(sys, "sys/firmware/devicetree/base/compatible").and_then(|p| sys.read(&p)).unwrap_or_default();
+            crate::device::identify(&String::from_utf8_lossy(&model), &compatible).model == Some(crate::device::Model::RgDsPlus)
+        },
+        _ => false,
+    }
 }
 
 /// Checks `sys` against `needs`.
@@ -1121,7 +1131,13 @@ pub(crate) mod tests {
         // Another system (the Mini V2's) still warns about both.
         let rep = check(&sd, &needs("GLIBC_2.38", &[]));
         assert_eq!(rep.warnings().len(), 2, "{}", rep.text());
-        // The H700 image is told by its os-release.
+        // The H700 image is told by its os-release; the RK3566 one (the RG DS Plus) has no Steam package either.
+        r.file("etc/os-release", b"OS_NAME=\"ROCKNIX\"\nHW_DEVICE=\"RK3566\"\nHW_ARCH=\"aarch64\"\n");
+        let rep = check(&sd, &needs("GLIBC_2.38", &[]));
+        assert_eq!(rep.warnings().len(), 2, "other RK3566 handhelds have no profile exemption");
+        r.file("sys/firmware/devicetree/base/model", b"Anbernic RG DS Plus\0");
+        let rep = check(&sd, &needs("GLIBC_2.38", &[]));
+        assert!(rep.warnings().is_empty() && rep.blocking().is_empty(), "{}", rep.text());
         r.file("etc/os-release", b"OS_NAME=\"ROCKNIX\"\nHW_DEVICE=\"H700\"\nHW_ARCH=\"aarch64\"\n");
         let rep = check(&sd, &needs("GLIBC_2.38", &[]));
         assert!(rep.warnings().is_empty() && rep.blocking().is_empty(), "{}", rep.text());

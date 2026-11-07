@@ -5,8 +5,7 @@
 //! document's size with the mark ([`stand_open`]); what the file holds is judged in the player, after the copy and before
 //! the core sees a state ([`at_start`]). A moment that isn't loaded goes to a free slot, or behind the slots when all are
 //! taken: Load finds it either way and no later Quit can overwrite it ([`set_aside`]). In-game saves aren't touched by
-//! anything here. Handheld pocket-core shares the preservation helpers (`set_aside_all`, `set_aside_refused`,
-//! `restore_kept`) for raw Continue moments it does not load; its paths still come from `slots`.
+//! anything here.
 
 use std::path::{Path, PathBuf};
 
@@ -20,10 +19,11 @@ pub const EMULATOR: &str = "pocket-core";
 const CHANGED: &str = "The game's file changed: started fresh";
 const OTHER_EMULATOR: &str = "Started fresh: its saved moment belongs to its other emulator";
 const SAVE_NEWER: &str = "In-game save is newer: not resumed";
-const AGAIN: &str = "The game didn't close normally: back at your last saved moment";
-const FULL: &str = "All slots are full: its moment is under Load, after the last slot";
-/// Handheld Load lists no kept moments: they enter the first free slot at the next start.
-const FULL_HANDHELD: &str = "All slots are full: the moment is kept and goes into the first free slot";
+/// After a session that ended without an exit save (a crash, a dead battery, a moment that didn't reach the card).
+pub const AGAIN: &str = "The game didn't close normally: back at your last saved moment";
+const FULL: &str = "Its moment is kept under Load, after the last slot";
+/// A handheld's Load has no places after the slots: the moment waits beside them for the first free one (`restore_kept`).
+const FULL_HANDHELD: &str = "Its moment is kept until it can move into a free slot";
 const STUCK: &str = "Its moment couldn't be moved and stays where it is";
 
 /// `states/<key>/<stem>`, the common start of a game's files (`slots`).
@@ -45,8 +45,7 @@ pub fn core_of(path: &Path) -> String {
 /// The files the next start would resume from, as `frozen::resume_files` for pocket-core.
 pub fn files(base: &Path) -> Vec<PathBuf> {
     let auto = slots::auto_path(base);
-    let taken = slots::taken_auto_path(&auto);
-    vec![auto, taken]
+    slots::auto_candidates(&auto, false)
 }
 
 fn mark_path(base: &Path) -> PathBuf {
@@ -57,7 +56,7 @@ fn mark_path(base: &Path) -> PathBuf {
 
 /// The mark beside the state. A mark that can't be read trusts nothing: it matches no runner, so the state isn't loaded.
 pub fn read_mark(base: &Path) -> Option<Mark> {
-    let bytes = std::fs::read(mark_path(base)).ok()?;
+    let bytes = std::fs::read(crate::state_file::resolve(&mark_path(base))).ok()?;
     Some(serde_json::from_slice(&bytes).unwrap_or(Mark { emulator: "unreadable".into(), core: String::new(), rom_bytes: 0, rom_mtime: 0, rom_hash: 0, patches: None, auto: None }))
 }
 
@@ -99,14 +98,20 @@ pub fn stand_open(games: &[Candidate]) -> Vec<String> {
 pub enum Aside {
     /// This slot (0-based), where Load finds it.
     Slot(usize),
-    /// Every slot is taken: beside them, under a name no Quit removes; Load lists it after the slots ([`kept`]).
+    /// Waiting beside the slots (all taken, or conversion failed), under a name no Quit removes; Load lists it after the slots ([`kept`]).
     Kept,
     /// It couldn't be moved.
     Stuck,
 }
 
-fn kept_path(base: &Path) -> PathBuf {
+fn kept_path(base: &Path, from: &Path) -> PathBuf {
     let auto = slots::auto_path(base);
+    // Keep the source format so a full card needs only a rename, never a new compressed/raw copy.
+    let auto = if crate::state_file::legacy_path(from).is_none() {
+        crate::state_file::legacy_path(&auto).unwrap_or(auto)
+    } else {
+        auto
+    };
     (0u32..)
         .map(|n| {
             let mut p = auto.clone().into_os_string();
@@ -121,12 +126,13 @@ fn kept_path(base: &Path) -> PathBuf {
 pub fn kept(base: &Path) -> Vec<PathBuf> {
     let auto = slots::auto_path(base);
     let Some(dir) = auto.parent() else { return Vec::new() };
-    let prefix = format!("{}.kept", auto.file_name().unwrap_or_default().to_string_lossy());
+    let mut prefixes = vec![format!("{}.kept", auto.file_name().unwrap_or_default().to_string_lossy())];
+    if let Some(old) = crate::state_file::legacy_path(&auto) { prefixes.push(format!("{}.kept", old.file_name().unwrap_or_default().to_string_lossy())); }
     let mut found: Vec<(u32, PathBuf)> = std::fs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
-        .filter_map(|e| Some((e.file_name().to_str()?.strip_prefix(&prefix)?.parse().ok()?, e.path())))
+        .filter_map(|e| Some((prefixes.iter().find_map(|prefix| e.file_name().to_str()?.strip_prefix(prefix).and_then(|s| s.parse().ok()))?, e.path())))
         .collect();
     found.sort();
     found.into_iter().map(|(_, p)| p).collect()
@@ -138,7 +144,7 @@ pub fn restore_kept(base: &Path) {
     for moment in kept(base) {
         let Some(slot) = free.next() else { return };
         let to = slots::state_path(base, slot);
-        if std::fs::rename(&moment, &to).is_ok() {
+        if crate::state_file::move_file(&moment, &to).is_ok() {
             let _ = std::fs::rename(slots::preview_path(&moment), slots::preview_path(&to));
         }
     }
@@ -146,13 +152,22 @@ pub fn restore_kept(base: &Path) {
 
 /// Moves the state `from` out of what a start or a Quit touches, with the auto state's picture when there is one.
 pub fn set_aside(base: &Path, from: &Path) -> Aside {
+    let from = crate::state_file::resolve(from);
     let free = (0..slots::SLOTS).find(|i| !slots::state_path(base, *i).exists());
-    let to = free.map_or_else(|| kept_path(base), |i| slots::state_path(base, i));
-    if std::fs::rename(from, &to).is_err() {
-        return Aside::Stuck;
-    }
-    let _ = std::fs::rename(slots::preview_path(&slots::auto_path(base)), slots::preview_path(&to));
-    free.map_or(Aside::Kept, Aside::Slot)
+    let mut to = free.map_or_else(|| kept_path(base, &from), |i| slots::state_path(base, i));
+    let aside = if crate::state_file::move_file(&from, &to).is_ok() {
+        free.map_or(Aside::Kept, Aside::Slot)
+    } else {
+        // ENOSPC while expanding a compressed moment into a raw slot must not leave it in .taken.retry:
+        // a later successful Quit removes that name. A same-format rename keeps it outside that cleanup.
+        to = kept_path(base, &from);
+        if std::fs::rename(&from, &to).is_err() {
+            return Aside::Stuck;
+        }
+        Aside::Kept
+    };
+    let _ = std::fs::rename(slots::preview_path(&slots::auto_root(&from)), slots::preview_path(&to));
+    aside
 }
 
 /// A handheld's start that doesn't load the moment (`frozen::SKIP_RESUME_ENV`: another file's, another emulator's): every
@@ -166,13 +181,11 @@ pub fn set_aside_all(base: &Path) -> Option<Aside> {
     first
 }
 
-/// After a handheld's `Core::resume` failed: the raw retry moment the core refused goes aside when it can be
+/// After a handheld's `Core::resume` failed: the moment the core refused (`Core::resumed_from`) goes aside when it can be
 /// read (another core's, another version's: it may load again elsewhere). One that can't be read stays where `resume` left it.
-pub fn set_aside_refused(base: &Path) -> Option<Aside> {
-    // Released 0.2.x parks every refused raw Continue state here; it has no compressed-state candidates.
-    let moment = slots::retry_auto_path(&slots::auto_path(base));
-    std::fs::read(&moment).ok()?;
-    Some(set_aside(base, &moment))
+pub fn set_aside_refused(base: &Path, moment: Option<&Path>) -> Option<Aside> {
+    let moment = moment.filter(|p| crate::state_file::read(p).is_ok())?;
+    Some(set_aside(base, moment))
 }
 
 fn aside_line(aside: Aside) -> String {
@@ -224,8 +237,9 @@ pub fn at_start(base: &Path, rom: &Path, core: &str, shown: bool) -> Start {
 }
 
 /// After `Core::resume`: what to say about how it went. A moment it didn't go back to is set aside: the next Quit would
-/// remove it where it lies (`slots::auto_written`).
-pub fn after_resume(base: &Path, resume: Resume) -> Vec<String> {
+/// remove it where it lies (`slots::auto_written`). `moment` is `Core::resumed_from`: another namespace may contain
+/// an older crash point, so a compressed-name fallback alone cannot identify the state this start rejected.
+pub fn after_resume(base: &Path, resume: Resume, moment: Option<&Path>) -> Vec<String> {
     let auto = slots::auto_path(base);
     let (first, lies) = match resume {
         Resume::NoState | Resume::Resumed => return Vec::new(),
@@ -233,7 +247,7 @@ pub fn after_resume(base: &Path, resume: Resume) -> Vec<String> {
         Resume::Failed => (frozen::REFUSED, slots::retry_auto_path(&auto)),
         Resume::SaveIsNewer => (SAVE_NEWER, slots::taken_auto_path(&auto)),
     };
-    let aside = set_aside(base, &lies);
+    let aside = set_aside(base, moment.unwrap_or(&lies));
     if aside != Aside::Stuck {
         let _ = std::fs::remove_file(mark_path(base));
     }
@@ -254,7 +268,7 @@ mod tests {
         let b = base(&d, "abc", "Game.gba");
         std::fs::create_dir_all(b.parent().unwrap()).unwrap();
         let auto = slots::auto_path(&b);
-        std::fs::write(&auto, b"moment").unwrap();
+        crate::state_file::write(&auto, b"moment").unwrap();
         write_mark(&b, &Mark::new(EMULATOR, "mgba", &rom, None).unwrap());
         (d, rom, b, auto)
     }
@@ -287,7 +301,7 @@ mod tests {
         assert!(!auto.exists());
         assert_eq!(read_mark(&b), None, "the mark went with its state");
         // The next Quit writes a new auto state: the old moment stays.
-        std::fs::write(&auto, b"new").unwrap();
+        crate::state_file::write(&auto, b"new").unwrap();
         slots::auto_written(&auto);
         assert_eq!(std::fs::read(slots::state_path(&b, 0)).unwrap(), b"moment");
     }
@@ -306,7 +320,7 @@ mod tests {
     fn another_core_starts_fresh_and_a_taken_state_goes_along() {
         let (_d, rom, b, auto) = played("core");
         let taken = slots::taken_auto_path(&auto);
-        std::fs::write(&taken, b"older").unwrap();
+        crate::state_file::write(&taken, b"older").unwrap();
         assert!(stand_open(&[Candidate { game: Game { core: "gpsp".into(), ..candidate(&rom, &b, "k").game }, ..candidate(&rom, &b, "k") }]).is_empty());
         let start = at_start(&b, &rom, "gpsp", false);
         assert!(!start.resume);
@@ -371,7 +385,7 @@ mod tests {
         assert!(at_start(&b, &rom, "mgba", true).resume, "the same core id and file after the update");
         let retry = slots::retry_auto_path(&auto);
         std::fs::rename(&auto, &retry).unwrap(); // What `Core::resume` leaves when the core refuses.
-        assert_eq!(after_resume(&b, Resume::Failed), [frozen::REFUSED.to_string(), "Its moment is in slot 1".to_string()]);
+        assert_eq!(after_resume(&b, Resume::Failed, None), [frozen::REFUSED.to_string(), "Its moment is in slot 1".to_string()]);
         assert_eq!(std::fs::read(slots::state_path(&b, 0)).unwrap(), b"moment");
         assert_eq!(read_mark(&b), None);
     }
@@ -380,10 +394,10 @@ mod tests {
     fn a_newer_in_game_save_says_so_and_the_moment_stays() {
         let (_d, _rom, b, auto) = played("newer");
         std::fs::rename(&auto, slots::taken_auto_path(&auto)).unwrap();
-        assert_eq!(after_resume(&b, Resume::SaveIsNewer)[0], SAVE_NEWER);
+        assert_eq!(after_resume(&b, Resume::SaveIsNewer, None)[0], SAVE_NEWER);
         assert_eq!(std::fs::read(slots::state_path(&b, 0)).unwrap(), b"moment");
-        assert!(after_resume(&b, Resume::NoState).is_empty());
-        assert_eq!(after_resume(&b, Resume::ResumedAgain), [AGAIN]);
+        assert!(after_resume(&b, Resume::NoState, None).is_empty());
+        assert_eq!(after_resume(&b, Resume::ResumedAgain, None), [AGAIN]);
     }
 
     fn fill_slots(b: &Path) {
@@ -399,15 +413,34 @@ mod tests {
         assert!(kept(&b).is_empty());
         let mut names = Vec::new();
         for n in 0..12 {
-            std::fs::write(&auto, format!("moment{n}")).unwrap();
+            crate::state_file::write(&auto, format!("moment{n}").as_bytes()).unwrap();
             std::fs::write(slots::preview_path(&auto), b"picture").unwrap();
             assert_eq!(set_aside(&b, &auto), Aside::Kept);
             names.push(format!("moment{n}"));
         }
         // Number 10 after number 2, and no picture among them: Load reads each of these as a state.
-        let listed: Vec<String> = kept(&b).iter().map(|p| std::fs::read_to_string(p).unwrap()).collect();
+        let listed: Vec<String> = kept(&b).iter().map(|p| String::from_utf8(crate::state_file::read(p).unwrap()).unwrap()).collect();
         assert_eq!(listed, names);
         assert_eq!(aside_line(Aside::Kept), FULL);
+    }
+
+    #[test]
+    fn a_raw_moment_from_an_older_version_is_kept_raw_and_survives_a_new_quit() {
+        let (_d, _rom, b, auto) = played("kept-raw");
+        std::fs::remove_file(&auto).unwrap();
+        let raw = crate::state_file::legacy_path(&auto).unwrap();
+        std::fs::write(&raw, b"old progress").unwrap();
+        fill_slots(&b);
+        assert_eq!(set_aside(&b, &raw), Aside::Kept);
+        let saved = kept(&b);
+        assert_eq!(saved.len(), 1);
+        assert_eq!(std::fs::read(&saved[0]).unwrap(), b"old progress", "no format conversion while setting aside");
+        crate::state_file::write(&auto, b"new session").unwrap();
+        slots::auto_written(&auto);
+        assert_eq!(crate::state_file::read(&saved[0]).unwrap(), b"old progress");
+        std::fs::remove_file(slots::state_path(&b, 0)).unwrap();
+        restore_kept(&b);
+        assert_eq!(std::fs::read(slots::state_path(&b, 0)).unwrap(), b"old progress");
     }
 
     #[test]
@@ -415,10 +448,10 @@ mod tests {
         let (_d, rom, b, auto) = played("kept-back");
         fill_slots(&b);
         for moment in ["first", "second"] {
-            std::fs::write(&auto, moment).unwrap();
+            crate::state_file::write(&auto, moment.as_bytes()).unwrap();
             assert_eq!(set_aside(&b, &auto), Aside::Kept);
         }
-        std::fs::write(&auto, b"moment").unwrap();
+        crate::state_file::write(&auto, b"moment").unwrap();
         // Still full: they stay where Load finds them, and the game's own moment goes on.
         assert!(at_start(&b, &rom, "mgba", true).resume);
         assert_eq!(kept(&b).len(), 2);
@@ -426,9 +459,9 @@ mod tests {
         assert!(at_start(&b, &rom, "mgba", true).resume);
         assert_eq!(std::fs::read(slots::state_path(&b, 3)).unwrap(), b"first");
         assert_eq!(kept(&b).len(), 1);
-        assert_eq!(std::fs::read(&kept(&b)[0]).unwrap(), b"second");
+        assert_eq!(crate::state_file::read(&kept(&b)[0]).unwrap(), b"second");
         assert_eq!(std::fs::read(slots::state_path(&b, 0)).unwrap(), b"slot0");
-        assert_eq!(std::fs::read(&auto).unwrap(), b"moment");
+        assert_eq!(crate::state_file::read(&auto).unwrap(), b"moment");
     }
 
     #[test]
@@ -445,7 +478,7 @@ mod tests {
         }
         let mut kept = auto.clone().into_os_string();
         kept.push(".kept0");
-        assert_eq!(std::fs::read(kept).unwrap(), b"moment");
+        assert_eq!(crate::state_file::read(Path::new(&kept)).unwrap(), b"moment");
     }
 
     #[test]
@@ -460,7 +493,7 @@ mod tests {
                 std::fs::write(&rom, b"rom").unwrap();
                 let b = base(&d, &key, &name);
                 std::fs::create_dir_all(b.parent().unwrap()).unwrap();
-                std::fs::write(slots::auto_path(&b), b"s").unwrap();
+                crate::state_file::write(&slots::auto_path(&b), b"s").unwrap();
                 candidate(&rom, &b, &key)
             })
             .collect();

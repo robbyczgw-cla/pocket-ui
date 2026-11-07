@@ -68,6 +68,36 @@ pub fn plan(ifaces: &[Iface], port: u16) -> Vec<Listen> {
     out
 }
 
+/// `plan` for the Brick's own card (docs/TRIMUI-BRICK-MORE.md): when its tailscaled runs in userspace networking (the firmware has no
+/// tunnel device, or the tunnel did not come up) there is no `tailscale0` to bind to, and tailscaled hands a connection to the node's
+/// tailnet address on to 127.0.0.1 itself. Then the companion listens on 127.0.0.1 alone (never the Wi-Fi: that cannot reach it) and every
+/// browser pairs with a code, because tailscaled's `whois` sees only the loopback peer. With a tunnel it is `plan` as on every device.
+#[cfg(feature = "brick")]
+pub fn plan_userspace(ifaces: &[Iface], port: u16) -> Vec<Listen> {
+    let tunnel = plan(ifaces, port);
+    if tunnel.is_empty() {
+        vec![Listen { addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port), iface: String::new(), index: 0 }]
+    } else {
+        tunnel
+    }
+}
+
+/// The plan for this device: `plan_userspace` on the Brick's own card, `plan` everywhere else.
+#[cfg(feature = "brick")]
+pub fn plan_here(ifaces: &[Iface], port: u16) -> Vec<Listen> {
+    #[cfg(feature = "brick")]
+    if crate::brick_profile::standalone() {
+        return plan_userspace(ifaces, port);
+    }
+    plan(ifaces, port)
+}
+
+/// Whether `l` is the loopback listener of `plan_userspace`: its connections come from tailscaled on this machine.
+#[cfg(feature = "brick")]
+pub fn is_userspace(l: &Listen) -> bool {
+    l.iface.is_empty() && l.addr.ip().is_loopback()
+}
+
 /// Whether a connection from `peer` may be served: only from a Tailscale address (a device on the Wi-Fi that
 /// routes a packet for 100.x to the Pocket is refused even before the interface binding would drop it).
 pub fn peer_allowed(peer: IpAddr) -> bool {
@@ -123,6 +153,7 @@ pub fn interfaces() -> Vec<Iface> {
 
 /// A listening socket on `l.addr`, tied to `l.iface` so that nothing arriving on another interface reaches it.
 #[cfg(target_os = "linux")]
+#[cfg(not(feature = "brick"))]
 pub fn bind(l: &Listen) -> std::io::Result<TcpListener> {
     use std::os::fd::FromRawFd;
     let family = if l.addr.is_ipv4() { libc::AF_INET } else { libc::AF_INET6 };
@@ -172,6 +203,57 @@ pub fn bind(l: &Listen) -> std::io::Result<TcpListener> {
     }
 }
 
+#[cfg(feature = "brick")]
+pub fn bind(l: &Listen) -> std::io::Result<TcpListener> {
+    use std::os::fd::FromRawFd;
+    let family = if l.addr.is_ipv4() { libc::AF_INET } else { libc::AF_INET6 };
+    // SAFETY: plain socket calls on a descriptor this function owns until it is handed to TcpListener (or closed).
+    unsafe {
+        let fd = libc::socket(family, libc::SOCK_STREAM | libc::SOCK_CLOEXEC, 0);
+        if fd < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        let fail = |fd: i32| {
+            let e = std::io::Error::last_os_error();
+            libc::close(fd);
+            Err(e)
+        };
+        let one: libc::c_int = 1;
+        let opt = |level, name, v: &libc::c_int| libc::setsockopt(fd, level, name, v as *const _ as *const libc::c_void, std::mem::size_of::<libc::c_int>() as libc::socklen_t);
+        if opt(libc::SOL_SOCKET, libc::SO_REUSEADDR, &one) != 0 {
+            return fail(fd);
+        }
+        if family == libc::AF_INET6 && opt(libc::IPPROTO_IPV6, libc::IPV6_V6ONLY, &one) != 0 {
+            return fail(fd);
+        }
+        let dev = std::ffi::CString::new(l.iface.as_bytes()).map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
+        if !l.iface.is_empty()
+            && libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_BINDTODEVICE, dev.as_ptr() as *const libc::c_void, dev.as_bytes_with_nul().len() as libc::socklen_t) != 0 {
+            return fail(fd);
+        }
+        let rc = match l.addr {
+            SocketAddr::V4(a) => {
+                let mut sin: libc::sockaddr_in = std::mem::zeroed();
+                sin.sin_family = libc::AF_INET as libc::sa_family_t;
+                sin.sin_port = a.port().to_be();
+                sin.sin_addr.s_addr = u32::from(*a.ip()).to_be();
+                libc::bind(fd, &sin as *const _ as *const libc::sockaddr, std::mem::size_of::<libc::sockaddr_in>() as libc::socklen_t)
+            }
+            SocketAddr::V6(a) => {
+                let mut sin6: libc::sockaddr_in6 = std::mem::zeroed();
+                sin6.sin6_family = libc::AF_INET6 as libc::sa_family_t;
+                sin6.sin6_port = a.port().to_be();
+                sin6.sin6_addr.s6_addr = a.ip().octets();
+                libc::bind(fd, &sin6 as *const _ as *const libc::sockaddr, std::mem::size_of::<libc::sockaddr_in6>() as libc::socklen_t)
+            }
+        };
+        if rc != 0 || libc::listen(fd, 16) != 0 {
+            return fail(fd);
+        }
+        Ok(TcpListener::from_raw_fd(fd))
+    }
+}
+
 /// Elsewhere (a desktop, for development) the address alone.
 #[cfg(not(target_os = "linux"))]
 pub fn bind(l: &Listen) -> std::io::Result<TcpListener> {
@@ -192,6 +274,9 @@ pub struct SelfNode {
     pub hostname: String,
     /// The MagicDNS name without the trailing dot ("pocket.tail1234.ts.net").
     pub dns_name: String,
+    /// The node's own tailnet addresses (`TailscaleIPs`): a browser may name the Pocket by them.
+    #[cfg(feature = "brick")]
+    pub addrs: Vec<IpAddr>,
 }
 
 impl SelfNode {
@@ -212,6 +297,12 @@ impl SelfNode {
             tagged: s.get("Tags").and_then(|t| t.as_array()).is_some_and(|t| !t.is_empty()),
             hostname: s.get("HostName").and_then(|h| h.as_str()).unwrap_or_default().to_string(),
             dns_name: s.get("DNSName").and_then(|h| h.as_str()).unwrap_or_default().trim_end_matches('.').to_string(),
+            #[cfg(feature = "brick")]
+            addrs: s
+                .get("TailscaleIPs")
+                .and_then(|a| a.as_array())
+                .map(|a| a.iter().filter_map(|i| i.as_str()?.parse::<IpAddr>().ok()).filter(|i| is_tailnet(*i)).collect())
+                .unwrap_or_default(),
         })
     }
 
@@ -271,9 +362,18 @@ pub struct LocalApi {
     pub socket: PathBuf,
 }
 
+#[cfg(not(feature = "brick"))]
 impl Default for LocalApi {
     fn default() -> Self {
         LocalApi { socket: PathBuf::from(TAILSCALED_SOCKET) }
+    }
+}
+
+#[cfg(feature = "brick")]
+impl Default for LocalApi {
+    fn default() -> Self {
+        // The Brick's card keeps tailscaled's socket in its own run folder (`POCKETUI_TAILSCALED_SOCKET`, set by its start script).
+        LocalApi { socket: std::env::var_os("POCKETUI_TAILSCALED_SOCKET").filter(|v| !v.is_empty()).map_or_else(|| PathBuf::from(TAILSCALED_SOCKET), PathBuf::from) }
     }
 }
 

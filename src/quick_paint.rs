@@ -176,14 +176,14 @@ impl Sys {
         if let Some((msg, _)) = &self.message {
             let w = text.width(Face::Body, SMALL, msg) + 2 * BTN_PAD;
             let y = c.h - PAD - PILL - 100;
-            c.round_rect((c.w - w) / 2, y, w, 64, 32, 0x262626);
+            crate::retro::pill(c, (c.w - w) / 2, y, w, 64, 32, 0x262626);
             text.draw(c, Face::Body, SMALL, (c.w - w) / 2 + BTN_PAD, y + 32 + crate::type_scale::mid(SMALL), 0xffffff, msg);
         }
         if let Some((msg, at)) = &self.toast {
             // Comes down into place and fades in and out (`motion::paint_toast`).
             let w = text.width(Face::Body, 28, msg) + 48;
             crate::motion::paint_toast(c, *at, Instant::now(), Some(TOAST_FOR), (c.w / 2 - w / 2, 36, w, 52), 20.0, |c, dy| {
-                c.round_rect(c.w / 2 - w / 2, 36 + dy, w, 52, 26, KEYCAP);
+                crate::retro::pill(c, c.w / 2 - w / 2, 36 + dy, w, 52, 26, KEYCAP);
                 text.draw(c, Face::Body, 28, c.w / 2 - w / 2 + 24, 72 + dy, CHALK, msg);
             });
         }
@@ -247,6 +247,7 @@ impl Sys {
             let base = y + row() / 2 + crate::type_scale::mid(FONT);
             let selected = i == sel;
             self.hits.row(Area::new(PAD, y, right - PAD, row()), i);
+            crate::nav_probe::row(c, (PAD, y, right - PAD, row()));
             let value = if selected && r.arrows { format!("‹ {} ›", r.value) } else { r.value.clone() };
             let value_w = if value.is_empty() { 0 } else { text.width(Face::Body, FONT, &value) };
             let note_w = r.note.as_ref().map_or(0, |n| text.width(Face::Body, NOTE, n) + 24);
@@ -379,6 +380,9 @@ impl Sys {
         };
         let hints: &[(&str, &str)] = match rows[sel] {
             Row::Brightness | Row::Volume => &[("< >", "Change"), ("B", "Close")],
+            // A dimmed profile row (not available here) changes with no key: none offered (the navigation explorer, 2026-11-07).
+            Row::Performance if !self.profiles.available(Which::Performance) => &[("B", "Close")],
+            Row::Fan if !self.profiles.available(Which::Fan) => &[("B", "Close")],
             Row::Performance | Row::Fan => &[("< >", "Change"), ("B", "Close"), ("A", "Next")],
             _ => &[("B", "Close"), ("A", "Choose")],
         };
@@ -403,8 +407,10 @@ impl Sys {
         let row_h = top_h + hint_h;
         let panel_w = 960.min(c.w - 2 * PAD);
         let inner_w = panel_w - 2 * BTN_PAD;
-        // No Android on a Steam Deck (docs/STEAMDECK.md): nothing to say about a boot menu there. Nor to a child (no Restart pocket-ui: Kids Mode).
-        let note: Vec<String> = if choices.contains(&Choice::BootMenu) || !choices.contains(&Choice::RestartUi) || crate::device::current().host_owned() {
+        // No Android on a Steam Deck (docs/STEAMDECK.md) or a TrimUI Brick: nothing to say about a boot menu there. Nor to a child (no
+        // Restart pocket-ui: Kids Mode).
+        let brick = { #[cfg(feature = "brick")] { crate::device::brick() } #[cfg(not(feature = "brick"))] { false } };
+        let note: Vec<String> = if choices.contains(&Choice::BootMenu) || !choices.contains(&Choice::RestartUi) || crate::device::current().host_owned() || brick {
             Vec::new()
         } else {
             text.wrap_prose(Face::Body, HINT_SIZE, power_menu::NO_BOOT_MENU_HINT, inner_w)
@@ -414,8 +420,12 @@ impl Sys {
         let note_h = if note.is_empty() { 0 } else { 28 + note.len() as i32 * note_step };
         let panel_h = title_h + choices.len() as i32 * row_h + note_h + 30;
         let (x, y) = ((c.w - panel_w) / 2, ((c.h - panel_h) / 2 - 30).max(PAD));
-        c.round_rect(x - 3, y - 3, panel_w + 6, panel_h + 6, 43, 0x3c3a37);
-        c.round_rect(x, y, panel_w, panel_h, 40, SPINE);
+        if crate::retro::on() {
+            crate::retro::frame(c, x, y, panel_w, panel_h, crate::palette::pal().pill);
+        } else {
+            c.round_rect(x - 3, y - 3, panel_w + 6, panel_h + 6, 43, 0x3c3a37);
+            c.round_rect(x, y, panel_w, panel_h, 40, SPINE);
+        }
         let title_base = y + 72 + crate::type_scale::grow(50) / 2;
         text.draw(c, Face::Title, 50, x + BTN_PAD, title_base, CHALK, "Power");
 
@@ -441,23 +451,44 @@ impl Sys {
             let selected = i == sel;
             let (rx, rw) = (x + 14, panel_w - 28);
             self.hits.row(Area::new(rx, ry, rw, row_h), i);
+            crate::nav_probe::row(c, (rx, ry, rw, row_h));
+            if selected {
+                crate::nav_probe::focus(c, (rx, ry, rw, row_h));
+            }
             let label = choice.label();
             let label_x = rx + MARK_W + 10;
             let mid = ry + 4 + (top_h - 4) / 2;
             let bg = if selected {
                 let name_w = MARK_W + 10 + text.width(Face::Body, FONT, label) + BTN_PAD;
-                c.round_rect(rx, ry + 4, rw, row_h - 8, 30, ACCENT);
-                c.round_rect(rx, ry + 4, name_w, top_h - 4, (top_h - 4) / 2, NAME_PILL);
-                NAME_PILL
+                if crate::retro::on() {
+                    crate::retro::plain_bar(c, rx, ry + 4, rw, row_h - 8, crate::palette::pal().select);
+                    crate::palette::pal().select
+                } else {
+                    c.round_rect(rx, ry + 4, rw, row_h - 8, 30, ACCENT);
+                    c.round_rect(rx, ry + 4, name_w, top_h - 4, (top_h - 4) / 2, NAME_PILL);
+                    NAME_PILL
+                }
             } else {
                 SPINE
             };
             let fg = if selected { INK } else { 0xf2f2f2 };
             paint_mark(c, rx + MARK_W / 2 + 8, mid, choice.mark(), fg, bg);
             text.draw(c, Face::Body, FONT, label_x, mid + crate::type_scale::mid(FONT), fg, label);
-            let hint = text.fit(Face::Body, HINT_SIZE, choice.hint(ctx), rx + rw - BTN_PAD / 2 - label_x);
+            // A line a little too long for the row (a wide face, a long translation) steps down up to 4 px before it is cut.
+            let room = rx + rw - BTN_PAD / 2 - label_x;
+            let mut hint_px = HINT_SIZE;
+            while hint_px > HINT_SIZE - 4 && text.width(Face::Body, hint_px, choice.hint(ctx)) > room {
+                hint_px -= 1;
+            }
+            let hint = text.fit(Face::Body, hint_px, choice.hint(ctx), room);
             let hint_base = ry + top_h + hint_h / 2 + crate::type_scale::mid(HINT_SIZE) - 4;
-            text.draw(c, Face::Body, HINT_SIZE, label_x, hint_base, if selected { 0xffffff } else { 0xb8b4ac }, &hint);
+            // On Retro's selection bar the line is its ink, as the name.
+            let hint_fg = match (selected, crate::retro::on()) {
+                (true, true) => crate::palette::pal().ink,
+                (true, false) => 0xffffff,
+                _ => 0xb8b4ac,
+            };
+            text.draw(c, Face::Body, hint_px, label_x, hint_base, hint_fg, &hint);
             ry += row_h;
         }
         if !note.is_empty() {
@@ -559,7 +590,7 @@ impl Sys {
                     // The offset is blank until the worker has read it.
                     let off = self.offset(z).flatten();
                     let value = off.map_or(String::new(), |o| format!("{}   {}", timezone::fmt_offset(o), clock_at(now, o)));
-                    let mut v = RowView::new(timezone::city_of(z), value);
+                    let mut v = RowView::new(timezone::city_here(z), value);
                     v.current = current.as_deref() == Some(z.as_str());
                     rows.push(v);
                 }
@@ -660,9 +691,9 @@ impl Sys {
             text.draw(c, Face::Body, LABEL, x + (w - lw) / 2, label_base, if selected { pal().text } else { pal().dust }, label);
             let (bg, fg) = if selected { (pal().select, pal().ink) } else { (pal().pill, pal().text) };
             if selected {
-                c.round_rect(x - 4, box_top - 4, w + 8, box_h + 8, 22, pal().band);
+                crate::retro::pill(c, x - 4, box_top - 4, w + 8, box_h + 8, 22, pal().band);
             }
-            c.round_rect(x, box_top, w, box_h, 18, bg);
+            crate::retro::pill(c, x, box_top, w, box_h, 18, bg);
             let value = p.value(f);
             let vw = text.width(Face::Title, BIG, &value);
             text.draw(c, Face::Title, BIG, x + (w - vw) / 2, box_top + box_h / 2 + crate::type_scale::mid(BIG), fg, &value);
@@ -683,7 +714,7 @@ impl Sys {
         let dw = text.width(Face::Body, FONT, &date);
         text.draw(c, Face::Body, FONT, (c.w - dw) / 2, date_base, pal().text, &date);
         let zone = match self.view.timezone.clone().flatten() {
-            Some(z) => format!("Local time in {}", timezone::city_of(&z)),
+            Some(z) => format!("Local time in {}", timezone::city_here(&z)),
             None => "Local time on the Pocket".to_string(),
         };
         let zone = text.fit(Face::Body, SMALL, &zone, c.w - 4 * PAD);

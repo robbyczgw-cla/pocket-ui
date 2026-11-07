@@ -737,6 +737,8 @@ pub enum Ignored {
     SystemPanel,
     /// The last frame left nothing to touch.
     NothingToTouch,
+    /// Two screens (the RG DS Plus): the touch screen is the lower one's, under the game info, never the shelf's.
+    LowerScreen,
 }
 
 impl Ignored {
@@ -750,6 +752,7 @@ impl Ignored {
             Ignored::Setup => "the first-start setup is open (buttons only)",
             Ignored::SystemPanel => "a system panel is open (buttons only)",
             Ignored::NothingToTouch => "the last frame had nothing to touch",
+            Ignored::LowerScreen => "the touch screen is the lower screen's, which only shows the game (buttons for the shelf)",
         }
     }
 }

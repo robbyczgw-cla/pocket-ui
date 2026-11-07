@@ -487,7 +487,7 @@ impl App {
         let w = self.text.width(Face::Title, px, word);
         let (pad, h) = ((30.0 * u) as i32, (78.0 * u) as i32);
         let (x, y) = (fx + (front.w - w) / 2 - pad, fy + front.h - h * 3 / 4);
-        c.round_rect(x, y, w + 2 * pad, h, h / 2, colours.accent);
+        pocket_ui::retro::pill(c, x, y, w + 2 * pad, h, h / 2, colours.accent);
         self.text.draw(c, Face::Title, px, x + pad, y + h / 2 + px as i32 * 34 / 100, colours.on_accent, word);
     }
 

@@ -1,8 +1,7 @@
 //! "Where was I?": coming back to a game after a long break. While the moment loads (the picture of where the game was
 //! left fades in, `launch_picture`), a quiet card at the bottom says when it was played last, how long it has been
 //! played in all, and the player's own note from the game card, if there is one. Nothing is asked. A pocket-core game
-//! stands still at its moment under the card for [`SHOWN`] (counted with the time it took to load) and then plays on; any
-//! button ends that at once. Other emulators show the card while they load, until the game covers it
+//! stands still at its moment under the card until any button is pressed. Other emulators show the card while they load, until the game covers it
 //! (docs/user/continue.md "Where was I?").
 //!
 //! Only when a moment is continued (the launch has a picture of it and keeps it, `frozen::at_launch`) and the last
@@ -17,8 +16,6 @@ use crate::type_scale;
 
 /// How long a game must have rested before its next start shows the card.
 pub const AWAY: u64 = 14 * DAY;
-/// How long a pocket-core game stands still at its moment under the card, unless a button comes first.
-pub const SHOWN: std::time::Duration = std::time::Duration::from_secs(4);
 const DAY: u64 = 86_400;
 
 /// What the card says; built at the launch, painted while the moment loads.
@@ -77,6 +74,7 @@ pub fn ago(secs: u64) -> String {
 
 /// When a game of `path` was last played and how long in all: the recent games first (what the game card says), else
 /// the play log (a game that fell off the recent games' twenty while others were played).
+#[cfg(not(target_os = "android"))]
 pub fn last_played(recent: Option<(u64, u64)>, log: Option<&crate::play_log::Log>, path: &str) -> Option<(u64, u64)> {
     if let Some(r) = recent {
         return Some(r);
@@ -267,7 +265,7 @@ mod tests {
         let games: Vec<_> = (0..200).map(|i| crate::play_log::Game { path: format!("/roms/snes/{i}.sfc"), name: format!("{i}"), system: "snes".into() }).collect();
         let sessions = (0..20_000u64).map(|i| crate::play_log::Session { game: (i % 200) as usize, start: 1_700_000_000 + i * 3600, secs: 1800, ended: true, ..Default::default() }).collect();
         let log = crate::play_log::build(games, sessions, Vec::new(), Vec::new());
-        let t = std::time::Instant::now();
+        let t = crate::testutil::clock::CpuInstant::now();
         for i in 0..200 {
             let (last, secs) = last_played(None, Some(&log), &format!("/roms/snes/{i}.sfc")).unwrap();
             let f = Facts { on: true, last_played: Some(last), play_secs: secs, note: "a note", ..Default::default() };

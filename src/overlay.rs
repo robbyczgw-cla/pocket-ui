@@ -114,6 +114,27 @@ pub struct Hud {
     strip_seq: u64,
 }
 
+#[cfg(feature = "brick")]
+impl Hud {
+    /// What the overlay draws now (the FPS line, the badge, the toast, the volume or brightness bar's wire text), for the Brick's bridge,
+    /// which draws them over the game there (`pocket_overlay`): pocket-core has no GL of its own on the Brick.
+    pub fn texts(&mut self) -> [String; 4] {
+        let fps = if self.show_fps { self.fps_text.clone() } else { String::new() };
+        [fps, self.badge.clone(), self.toast_text().to_string(), self.osd_text().to_string()]
+    }
+
+    /// The bridge's side of `texts`: shown as they came until the next ones (pocket-core sends them again when they change, an empty
+    /// one when a toast or the bar is gone), so no timers run here.
+    pub fn show_texts(&mut self, [fps, badge, toast, osd]: [String; 4]) {
+        self.show_fps = !fps.is_empty();
+        self.fps_text = fps;
+        self.badge = badge;
+        self.toast_for = Duration::from_secs(24 * 3600);
+        self.toast = (!toast.is_empty()).then(|| (toast, Instant::now()));
+        self.osd = (!osd.is_empty()).then(|| (osd, Instant::now() + osd::SHOW_FOR * 1000));
+    }
+}
+
 impl Default for Hud {
     fn default() -> Self {
         Hud {
@@ -327,6 +348,7 @@ enum Anchor {
 struct Piece {
     texture: glow::Texture,
     text: String,
+    wrap_width: u32,
     size: (i32, i32),
     anchor: Anchor,
 }
@@ -410,7 +432,7 @@ impl Overlay {
                 ] {
                     gl.tex_parameter_i32(glow::TEXTURE_2D, p, v as i32);
                 }
-                Ok(Piece { texture, text: String::new(), size: (0, 0), anchor })
+                Ok(Piece { texture, text: String::new(), wrap_width: 0, size: (0, 0), anchor })
             };
             let tint_tex = piece(Anchor::TopLeft)?.texture;
             let pieces = [piece(Anchor::TopLeft)?, piece(Anchor::TopRight)?, piece(Anchor::BottomCenter)?, piece(Anchor::TopCenter)?];
@@ -468,9 +490,7 @@ impl Overlay {
             if text.is_empty() {
                 continue;
             }
-            if self.pieces[i].text != *text {
-                self.render(gl, i, text);
-            }
+            self.render(gl, i, text);
             let piece = &self.pieces[i];
             let (w, h) = piece.size;
             let (x, y) = match piece.anchor {
@@ -645,18 +665,35 @@ impl Overlay {
 
     /// Rasterises `text` in a pill and uploads it as the texture of piece `i` (piece 3: the level bar of an OSD).
     fn render(&mut self, gl: &glow::Context, i: usize, text: &str) {
+        let piece = &mut self.pieces[i];
         let (w, h, buf) = if i == 3 {
+            if piece.text == text {
+                return;
+            }
             let Some(data) = osd::Data::from_wire(text) else { return };
             let mut buf = vec![KEY; (osd::W * osd::H) as usize];
             let mut c = Canvas::new(&mut buf, osd::W as u32, osd::H as u32);
             osd::paint(&mut c, &mut self.text, 0, 0, &data, PILL);
+            piece.text = text.to_string();
             (osd::W, osd::H, buf)
         } else {
-            paint_pill_on(&mut self.text, text, self.view_w)
+            let Some(pill) = changed_pill(&mut self.text, &mut piece.text, &mut piece.wrap_width, text, self.view_w) else { return };
+            pill
         };
-        upload(gl, &mut self.pieces[i], w, h, &buf);
-        self.pieces[i].text = text.to_string();
+        upload(gl, piece, w, h, &buf);
     }
+}
+
+/// Reuse the raster only while its words and layout width still match. The first fullscreen configure can shrink
+/// the initial window after the startup note was painted. Height only changes the anchor, not the raster's wrapping.
+fn changed_pill(text: &mut Text, cached: &mut String, width: &mut u32, msg: &str, view_w: u32) -> Option<(i32, i32, Vec<u32>)> {
+    if *cached == msg && *width == view_w {
+        return None;
+    }
+    let pill = paint_pill_on(text, msg, view_w);
+    *cached = msg.to_string();
+    *width = view_w;
+    Some(pill)
 }
 
 /// A message in its dark pill: one line, or a rounded box of several when it is wider than `WRAP_AT` (the save
@@ -669,17 +706,26 @@ pub fn paint_pill(text: &mut Text, msg: &str) -> (i32, i32, Vec<u32>) {
 /// type and lines that stay on it.
 pub fn paint_pill_on(text: &mut Text, msg: &str, view_w: u32) -> (i32, i32, Vec<u32>) {
     let font = if view_w < SMALL_VIEW { SMALL_FONT } else { FONT };
-    let wrap_at = WRAP_AT.min(view_w as i32 - 2 * MARGIN - 2 * PAD_X);
+    // Retro: the text keeps its padding from the window's inner line, not from its outer edge (it sat on the line,
+    // Retro clip 06.11.2026); frame pixels of half `U` on a small panel, as pocket-ui's look there.
+    let u = if view_w < SMALL_VIEW { crate::retro::U / 2 } else { crate::retro::U };
+    let inset = if crate::retro::on() { crate::retro::frame_inset(u) } else { 0 };
+    let (pad_x, pad_y) = (PAD_X + inset, PAD_Y + inset);
+    let wrap_at = WRAP_AT.min(view_w as i32 - 2 * MARGIN - 2 * pad_x);
     let lines = if text.width(Face::Body, font, msg) > wrap_at { text.wrap_prose(Face::Body, font, msg, wrap_at) } else { vec![msg.to_string()] };
     let line_h = font as i32 * 13 / 10;
-    let w = lines.iter().map(|l| text.width(Face::Body, font, l)).max().unwrap_or(0) + 2 * PAD_X;
-    let h = font as i32 + (lines.len() as i32 - 1) * line_h + 2 * PAD_Y;
+    let w = lines.iter().map(|l| text.width(Face::Body, font, l)).max().unwrap_or(0) + 2 * pad_x;
+    let h = font as i32 + (lines.len() as i32 - 1) * line_h + 2 * pad_y;
     let mut buf = vec![KEY; (w * h) as usize];
     let mut c = Canvas::new(&mut buf, w as u32, h as u32);
     let radius = if lines.len() > 1 { 26 } else { h / 2 };
-    c.round_rect(0, 0, w, h, radius, PILL);
+    if crate::retro::on() {
+        crate::retro::frame_at(&mut c, 0, 0, w, h, PILL, u);
+    } else {
+        c.round_rect(0, 0, w, h, radius, PILL);
+    }
     for (i, l) in lines.iter().enumerate() {
-        text.draw(&mut c, Face::Body, font, PAD_X, PAD_Y + font as i32 * 4 / 5 + i as i32 * line_h, 0xffffff, l);
+        text.draw(&mut c, Face::Body, font, pad_x, pad_y + font as i32 * 4 / 5 + i as i32 * line_h, 0xffffff, l);
     }
     (w, h, buf)
 }
@@ -713,12 +759,12 @@ pub fn paint_unlock(text: &mut Text, u: &Unlock) -> (i32, i32, Vec<u32>) {
     let w = CARD_PAD + BADGE + 20 + text_w + CARD_PAD + 8;
     let mut buf = vec![KEY; (w * h) as usize];
     let mut c = Canvas::new(&mut buf, w as u32, h as u32);
-    c.round_rect(0, 0, w, h, 26, PILL);
+    crate::retro::window(&mut c, 0, 0, w, h, 26, PILL);
     let (bx, by) = (CARD_PAD, CARD_PAD);
     match &u.badge {
         Some(img) => c.blit_scaled(img, bx, by, BADGE, BADGE),
         None => {
-            c.round_rect(bx, by, BADGE, BADGE, 14, 0x2a2a2e);
+            crate::retro::pill(&mut c, bx, by, BADGE, BADGE, 14, 0x2a2a2e);
             c.ring(bx + BADGE / 2, by + BADGE / 2, 20, 4, 0xd39a2c);
             c.disc(bx + BADGE / 2, by + BADGE / 2, 7, 0xd39a2c);
         }
@@ -733,6 +779,40 @@ pub fn paint_unlock(text: &mut Text, u: &Unlock) -> (i32, i32, Vec<u32>) {
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    #[test]
+    fn the_start_note_reflows_when_fullscreen_replaces_the_initial_window() {
+        let msg = "Zurück in den Moment ging nicht: neu gestartet. Der Moment liegt in Slot 2";
+        for (w, h) in [(640, 480), (1024, 768)] {
+            let mut text = Text::builtin();
+            let (mut cached, mut width) = (String::new(), 0);
+            let mut pill = changed_pill(&mut text, &mut cached, &mut width, msg, 1240).unwrap();
+            assert!(pill.0 > 640, "the initial wide-window note really needs to reflow");
+            if let Some(next) = changed_pill(&mut text, &mut cached, &mut width, msg, w) {
+                pill = next;
+            }
+            assert!(pill.0 <= w as i32 - 2 * MARGIN && pill.1 < h, "startup note must stay on {w}x{h}, got {}x{}", pill.0, pill.1);
+            let fresh = paint_pill_on(&mut Text::builtin(), msg, w);
+            assert_eq!(pill, fresh, "every word must look exactly as a fresh layout for {w}x{h}");
+            if let Some(out) = std::env::var_os("POCKETUI_TEXT_FIT_OUTPUT") {
+                let out = std::path::PathBuf::from(out);
+                std::fs::create_dir_all(&out).unwrap();
+                let mut pixels = vec![0u32; (w * h as u32) as usize];
+                let (x, y) = ((w as i32 - pill.0) / 2, h - MARGIN - pill.1);
+                for py in 0..pill.1 {
+                    for px in 0..pill.0 {
+                        let colour = pill.2[(py * pill.0 + px) as usize];
+                        if colour != KEY {
+                            pixels[((y + py) as u32 * w + (x + px) as u32) as usize] = colour;
+                        }
+                    }
+                }
+                let rgb: Vec<u8> = pixels.iter().flat_map(|p| [(p >> 16) as u8, (p >> 8) as u8, *p as u8]).collect();
+                let png = crate::screenshot::encode_rgb(w, h as u32, &rgb).unwrap();
+                std::fs::write(out.join(format!("start-note-{w}x{h}.png")), png).unwrap();
+            }
+        }
+    }
 
     #[test]
     fn the_veil_covers_what_is_around_the_picture_and_fades_in_its_time() {
@@ -894,7 +974,8 @@ mod tests {
     }
 
     #[test]
-    fn the_counter_takes_the_sensors_from_the_cache_and_leaves_out_what_is_missing() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_counter_takes_the_sensors_from_the_cache_and_leaves_out_what_is_missing() {
         use crate::osd_sensors::Watcher;
         let root = TestDir::new("hud-sensors");
         std::fs::create_dir_all(root.join("sys/class/thermal/thermal_zone0")).unwrap();
@@ -907,7 +988,7 @@ mod tests {
         tick(&mut hud);
         assert!(!hud.fps_text.contains("°C"), "plain On: no sensors, no reader thread: {}", hud.fps_text);
         let w = Watcher::start(root.to_path_buf(), root.join("battery"), Duration::from_millis(5), crate::i18n::Lang::En);
-        let until = Instant::now() + Duration::from_secs(5);
+        let until = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
         while w.reads() == 0 && Instant::now() < until {
             std::thread::sleep(Duration::from_millis(5));
         }

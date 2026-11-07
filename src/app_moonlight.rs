@@ -294,7 +294,7 @@ impl App {
                 let spaced: String = pin.chars().map(|d| d.to_string()).collect::<Vec<_>>().join(" ");
                 let w = self.text.width(Face::Title, digits, &spaced);
                 let (bx, bw) = ((c.w - w) / 2 - 60, w + 120);
-                c.round_rect(bx, by, bw, bh, 28, pal().label);
+                pocket_ui::retro::pill(c, bx, by, bw, bh, 28, pal().label);
                 self.text.draw(c, Face::Title, digits, (c.w - w) / 2, by + bh * 205 / 260, pal().ink, &spaced);
                 let mut y = by + bh + gap;
                 for line in [

@@ -2,11 +2,11 @@
 """Writes tiny self-made test ROMs for systems we have no legal game for, so pocket-core can be
 checked on the device (picture, sound, input, save states, frame pacing):
 
-    testroms.py OUTDIR      -> sms-test.sms, gg-test.gg, sg-test.sg, a2600-test.a26, ws-test.ws, fds-test.fds,
+    testroms.py OUTDIR      -> md-test.md, sms-test.sms, gg-test.gg, sg-test.sg, a2600-test.a26, ws-test.ws, fds-test.fds,
                                fds-bios-standin.rom, vb-test.vb, snes-test.sfc, gba-test.gba,
                                naomi-bios-standin.zip, naomi-test.bin
 
-Every ROM draws colour bars and plays a steady tone. Holding a button moves the picture (Master System / Game
+Every ROM draws colour bars and plays a steady tone (the Mega Drive one: a green screen, no sound). Holding a button moves the picture (Master System / Game
 Gear: button 2 scrolls the bars for good, button 1 shifts them vertically while held; SG-1000: button 1 changes the
 backdrop; Atari 2600: fire moves the gradient), so a screenshot can tell whether input arrived and, after a state
 is loaded, whether the picture went back. WonderSwan: the bars scroll by themselves. Famicom Disk System: an empty
@@ -616,9 +616,33 @@ def naomi_cart():
     return bytes(rom)
 
 
+def megadrive():
+    """A Mega Drive program of our own: 68000 code that unlocks the TMSS, turns the VDP on and paints the backdrop green."""
+    rom = bytearray(0x20000)
+    rom[0:8] = struct.pack(">II", 0x00FF0000, 0x200)
+    for v in range(2, 64):
+        rom[v * 4 : v * 4 + 4] = struct.pack(">I", 0x200)
+    hdr = b"SEGA MEGA DRIVE " + b"(C)TEST 2026.NOV".ljust(16) + b"POCKET UI TEST".ljust(48) + b"POCKET UI TEST".ljust(48)
+    hdr += b"GM 00000000-00" + struct.pack(">H", 0) + b"J".ljust(16) + struct.pack(">IIII", 0, 0x1FFFF, 0xFF0000, 0xFFFFFF)
+    rom[0x100 : 0x100 + len(hdr)] = hdr
+    rom[0x1F0:0x1F3] = b"JUE"
+    code = bytes.fromhex(
+        "23FC534547410 0A14000".replace(" ", "")      # move.l #'SEGA',$A14000   (TMSS)
+        + "41F900C00004"                               # lea $C00004,a0           (VDP control)
+        + "30BC8144"                                   # move.w #$8144,(a0)       (display on, mode 5)
+        + "30BC8F02"                                   # move.w #$8F02,(a0)       (auto increment 2)
+        + "20BCC0000000"                               # move.l #$C0000000,(a0)   (write colour 0)
+        + "33FC00E000C00000"                           # move.w #$00E0,$C00000    (green)
+        + "60FE"                                       # bra.s *
+    )
+    rom[0x200 : 0x200 + len(code)] = code
+    return bytes(rom)
+
+
 def main():
     out = Path(sys.argv[1])
     out.mkdir(parents=True, exist_ok=True)
+    (out / "md-test.md").write_bytes(megadrive())
     (out / "sms-test.sms").write_bytes(sega_rom("sms"))
     (out / "gg-test.gg").write_bytes(sega_rom("gg"))
     (out / "sg-test.sg").write_bytes(sega_rom("sg"))

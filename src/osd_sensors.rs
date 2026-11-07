@@ -46,6 +46,19 @@ pub struct Sensors {
     /// PWM duty, 0 to 255.
     pub fan_pwm: Option<i64>,
     pub power: Option<Power>,
+    /// The charge in percent, left out unless the device asks for it (the Brick's card: it has no fan to show, `shows_charge`).
+    #[cfg(feature = "brick")]
+    pub percent: Option<u8>,
+}
+
+/// Whether the line carries the battery's charge: on the TrimUI Brick, where "Over the game" is the only look at the battery in a game
+/// (docs/TRIMUI-BRICK-MORE.md). Every other device's line is as it was.
+#[cfg(feature = "brick")]
+fn shows_charge() -> bool {
+    #[cfg(feature = "brick")]
+    return crate::device::brick();
+    #[cfg(not(feature = "brick"))]
+    false
 }
 
 impl Sensors {
@@ -56,6 +69,8 @@ impl Sensors {
             hottest: hottest_zone(root).filter(|t| *t > 0),
             fan_rpm: fan.as_ref().and_then(|d| read_i64(&d.join("fan1_input"))).filter(|v| *v >= 0),
             fan_pwm: fan.as_ref().and_then(|d| read_i64(&d.join("pwm1"))).filter(|v| *v >= 0),
+            #[cfg(feature = "brick")]
+            percent: if shows_charge() { battery::read(battery_dir, 0).map(|b| b.capacity) } else { None },
             power: battery::read(battery_dir, 0).and_then(|b| {
                 if b.charging {
                     Some(Power::Charging)
@@ -99,10 +114,18 @@ impl Sensors {
 
     /// [`text`](Self::text) in `lang`: the fan and "charging" through the table ("62 °C   Lüfter 45 %   4.8 W"), the
     /// temperature and the watts, only a number and a unit, as they are. A part the table lacks stays English.
+    #[cfg(not(feature = "brick"))]
     pub fn text_in(&self, lang: Lang) -> String {
         let words = |part: Option<String>| part.map(|p| crate::i18n::tr_in(lang, &p));
         let battery = if self.power == Some(Power::Charging) { words(self.battery()) } else { self.battery() };
         [self.temperature(), words(self.fan()), battery].into_iter().flatten().collect::<Vec<_>>().join("   ")
+    }
+
+    #[cfg(feature = "brick")]
+    pub fn text_in(&self, lang: Lang) -> String {
+        let words = |part: Option<String>| part.map(|p| crate::i18n::tr_in(lang, &p));
+        let battery = if self.power == Some(Power::Charging) { words(self.battery()) } else { self.battery() };
+        [self.temperature(), words(self.fan()), self.percent.map(|p| format!("{p}%")), battery].into_iter().flatten().collect::<Vec<_>>().join("   ")
     }
 }
 
@@ -213,7 +236,7 @@ mod tests {
     }
 
     fn full(power: Power) -> Sensors {
-        Sensors { hottest: Some(62_400), fan_rpm: Some(3200), fan_pwm: Some(115), power: Some(power) }
+        Sensors { hottest: Some(62_400), fan_rpm: Some(3200), fan_pwm: Some(115), power: Some(power), #[cfg(feature = "brick")] percent: None }
     }
 
     #[test]
@@ -277,12 +300,13 @@ mod tests {
     }
 
     #[test]
-    fn the_watcher_words_its_line_in_the_language_it_started_with_on_its_own_thread() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_watcher_words_its_line_in_the_language_it_started_with_on_its_own_thread() {
         let root = dir("watch-de");
         put(&root, "sys/class/hwmon/hwmon3/name", "pwmfan\n");
         put(&root, "sys/class/hwmon/hwmon3/pwm1", "0\n");
         let w = Watcher::start(root.to_path_buf(), root.join("battery"), Duration::from_millis(5), Lang::De);
-        let until = Instant::now() + Duration::from_secs(5);
+        let until = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
         while w.reads() < 1 && Instant::now() < until {
             std::thread::sleep(Duration::from_millis(5));
         }
@@ -326,12 +350,23 @@ mod tests {
         assert_eq!(Sensors::read(&root, &bat).text(), "Fan 45%", "no current: no draw");
     }
 
+    /// The Brick's line carries the charge ("62 °C   86%   4.8 W"); a Sensors without it (every other device) is as before.
     #[test]
-    fn the_readings_come_from_a_thread_of_their_own_and_stop_with_the_watcher() {
+    #[cfg(feature = "brick")]
+    fn the_charge_is_in_the_line_when_the_device_has_it() {
+        let s = Sensors { hottest: Some(41_000), power: Some(Power::Draw(4_760)), percent: Some(86), ..Default::default() };
+        assert_eq!(s.text(), "41 °C   86%   4.8 W");
+        assert_eq!(Sensors { power: Some(Power::Charging), ..s }.text(), "41 °C   86%   charging");
+        assert_eq!(Sensors { percent: None, ..s }.text(), "41 °C   4.8 W");
+    }
+
+    #[test]
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_readings_come_from_a_thread_of_their_own_and_stop_with_the_watcher() {
         let root = dir("watch");
         put(&root, "sys/class/thermal/thermal_zone0/temp", "55000\n");
         let w = Watcher::start(root.to_path_buf(), root.join("battery"), Duration::from_millis(5), Lang::En);
-        let until = Instant::now() + Duration::from_secs(5);
+        let until = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
         while w.reads() < 3 && Instant::now() < until {
             std::thread::sleep(Duration::from_millis(5));
         }

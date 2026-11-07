@@ -299,9 +299,24 @@ pub fn download_from(playlist: &str, remote_dir: &str, name: &str, dest: &Path, 
     }
     let url = format!("{BASE}/{}/{remote_dir}/{}.png", percent_encode(playlist), percent_encode(name));
     let tmp = dest.with_extension("part");
-    let ok = curl_with(&url, Some(&tmp), extra).is_some() && accept(&tmp) && std::fs::rename(&tmp, dest).is_ok();
+    // A game that started meanwhile gets the CPU and the card: the picture isn't checked or kept (asked again later).
+    let ok = curl_with(&url, Some(&tmp), extra).is_some() && !game_on() && accept(&tmp) && std::fs::rename(&tmp, dest).is_ok();
     let _ = std::fs::remove_file(&tmp);
     ok
+}
+
+/// A game is starting or running (`set_game_on`, from the launch until the game's exit is handled). Every background
+/// download and lookup (covers, pictures, descriptions, the checksums) stops at once, also the first start's own
+/// run, which had no game to wait for: a real Brick right after the first start lost sound for 4 chunks at the game's
+/// start while the last cover of a run was still being fetched, checked and written to its `sync`-mounted card.
+static GAME_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_game_on(on: bool) {
+    GAME_ON.store(on, std::sync::atomic::Ordering::Release);
+}
+
+pub fn game_on() -> bool {
+    GAME_ON.load(std::sync::atomic::Ordering::Acquire)
 }
 
 /// One scrape at a time: the automatic one (src/auto_covers.rs) and Extras > Cover art write the same files.

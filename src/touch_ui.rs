@@ -92,6 +92,16 @@ impl HitMap {
         self.pitch
     }
 
+    /// The list's selected row and how many rows it has, when the frame painted a list (the navigation explorer).
+    pub fn list_state(&self) -> Option<(usize, usize)> {
+        self.sel.map(|sel| (sel, self.len))
+    }
+
+    /// Every area and what a tap on it means, in the order they were registered (the navigation explorer).
+    pub fn targets(&self) -> &[(Area, Target)] {
+        &self.areas
+    }
+
     pub fn is_empty(&self) -> bool {
         self.areas.is_empty()
     }
@@ -135,7 +145,7 @@ pub fn hint_button(key: &str) -> Option<Button> {
         "START" => Button::Start,
         "L1" => Button::L1,
         "R1" => Button::R1,
-        // "R2 Theme" on Settings → Look → Look.
+        // "R2 Theme" on Settings → Look → Layout.
         "R2" => Button::R2,
         // The cabinet's "UP Search" on its top shelf.
         "UP" => Button::Up,

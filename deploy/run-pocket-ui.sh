@@ -465,6 +465,9 @@ stop_game() {
 clean_up() {
   # The fan first: the rest can take a while (a game ending).
   fan_handback "pocket-ui ended"
+  dual_note=${POCKETUI_SECOND_RESTORE_FILE:-/tmp/pocket-ui-second.restore}
+  dual_level=
+  [ -f "$dual_note" ] && dual_level=$(cat "$DARK_FILE" 2>/dev/null)
   if [ -f "$DARK_FILE" ]; then
     level=$(cat "$DARK_FILE" 2>/dev/null)
     backlight=${POCKETUI_BACKLIGHT:-$(for d in /sys/class/backlight/*; do [ -f "$d/brightness" ] && echo "$d" && break; done)}
@@ -492,6 +495,13 @@ clean_up() {
   fi
   # After stop_game: a runemu.sh that ended normally has put the screen back itself.
   scanout_reset_stale
+  # Only a dual-panel run leaves this note. The helper checks the RG DS Plus profile again, restores both lights
+  # (including a crash in sleep), and powers the outputs back on after the emulator's cleanup.
+  if [ -f "$dual_note" ] && [ -x "$ROOT/pocket-ui" ]; then
+    if bounded "$HELPER_SECS" "$ROOT/pocket-ui" --restore-second-screen "$dual_level" >>"$LOG" 2>&1; then
+      rm -f "$dual_note"
+    fi
+  fi
 }
 
 # Hands the screen to EmulationStation: in essway mode by exec, by hand by starting the essway unit. $1: why.

@@ -10,7 +10,7 @@ sharing are counted too. After a game or a delete they are counted again. Under 
 | **Free on the SD card** | Free space and the SD card's size ("41.2 GB of 63.9 GB") | nothing |
 | **Games** | Every game file, all systems together | the systems, largest first |
 | **Save states** | States of every game, the ones you saved and the automatic ones | deletes old automatic states (below) |
-| **Earlier states** | What the pause menu's [Earlier](pause-menu.md#earlier) keeps by itself, part of Save states. Under the list: the most they may take (1 GB in all, 100 MB a game; the oldest go first) | nothing: they go with Save states' clean-up |
+| **Earlier states** | What the pause menu's [Earlier](pause-menu-saves.md#earlier) keeps by itself, part of Save states. Under the list: the most they may take (1 GB in all, 100 MB a game; the oldest go first) | nothing: they go with Save states' clean-up |
 | **Saves** | The games' own saves and memory cards | nothing: saves are never deleted here |
 | **Screenshots** | The pictures HOME + A took | nothing: delete them in [Settings → Games → Screenshots](playing.md#looking-at-your-screenshots), or from your computer |
 | **Box art and pictures** | The box art, screenshots and title screens pocket-ui downloaded | clears them |
@@ -28,7 +28,7 @@ A does it, B keeps it. Moving to another row cancels the question. What each one
 
 - **Save states**: the *automatic* states of games you have not played for 6 months (left/right: 3, 6 or 12):
   the moment Quit kept for "Continue", the state Load kept as "Before load", and the pause menu's
-  [Earlier](pause-menu.md#earlier) states. A game played within the months keeps
+  [Earlier](pause-menu-saves.md#earlier) states. A game played within the months keeps
   them, even when its state files are older. The slots you saved into yourself and your saves are never touched. Such a
   game starts from its last slot or its save next time, not where you quit.
 - **Box art and pictures**: the whole picture cache, including pictures you put there yourself. They are downloaded
@@ -46,7 +46,7 @@ With less than 1 GB free, pocket-ui says so once on the shelf ("The SD card is n
 full: 812 MB left …"), at a start or after a game, and the Free row of this page says it in red. It says it again only
 after the SD card has had space again (1.5 GB). 1 GB, because what fills an SD card does not grow with its size: a PS2 state
 is 20 to 40 MB and a GameCube or Wii state 40 to 100 MB, and a session keeps one when you quit and one more when you
-load, so a session of a big game can take 200 MB. Below 1 GB free, no new [Earlier](pause-menu.md#earlier) state is
+load, so a session of a big game can take 200 MB. Below 1 GB free, no new [Earlier](pause-menu-saves.md#earlier) state is
 written either; they never take more than 1 GB in all. The notice is the warning before the SD card is full; it does not
 watch the saves themselves.
 

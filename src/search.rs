@@ -163,7 +163,11 @@ impl Index {
                     text.push_str(&n);
                 }
                 // Names longer than u16 offsets allow are cut (no game is called that).
-                text.truncate(u16::MAX as usize - 1);
+                let mut end = text.len().min(u16::MAX as usize - 1);
+                while !text.is_char_boundary(end) {
+                    end -= 1;
+                }
+                text.truncate(end);
                 let mut words = Vec::new();
                 let mut start = None;
                 for (i, b) in text.bytes().enumerate().chain(std::iter::once((text.len(), b' '))) {
@@ -752,5 +756,15 @@ mod tests {
         assert_eq!(Recent::load(&dir), r);
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(Recent::load(&dir), Recent::default(), "no file: no recent searches");
+    }
+}
+
+#[cfg(test)]
+mod rc03_tests {
+    #[test]
+    fn rc03_long_unicode_game_name_can_be_indexed_and_found() {
+        let name = format!("{}界", "a".repeat(u16::MAX as usize - 2));
+        let index = super::Index::build([(0, 0, name.as_str())]);
+        assert_eq!(index.search("aaaa", &|_| true).len(), 1);
     }
 }

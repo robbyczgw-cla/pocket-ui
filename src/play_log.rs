@@ -1693,7 +1693,8 @@ mod tests {
 
     /// Review SOL-2026-10-24 #5: the flush at exit writes what a full card held back before it says it is done.
     #[test]
-    fn the_flush_at_exit_writes_what_was_held_back() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_flush_at_exit_writes_what_was_held_back() {
         let d = dir("flush");
         let mut w = Writer::open(&d, vienna);
         w.fail = (1, false);
@@ -1703,12 +1704,12 @@ mod tests {
         let (done, wait) = channel();
         tx.send(Cmd::Flush(done)).unwrap();
         // The start could not be written (the card was full) and nothing came after it: the flush writes it.
-        assert_eq!(wait.recv_timeout(Duration::from_secs(5)), Ok(true));
+        assert_eq!(wait.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))), Ok(true));
         assert_eq!(read(&d).sessions.iter().map(|s| (s.start, s.ended)).collect::<Vec<_>>(), [(T0, false)]);
         tx.send(Cmd::Event(Event::Ended { at: T0 + 700, path: "/roms/gb/Tetris.gb".into(), name: "Tetris".into(), system: "gb".into(), secs: 600, mono: Duration::from_secs(600) })).unwrap();
         let (done, wait) = channel();
         tx.send(Cmd::Flush(done)).unwrap();
-        assert_eq!(wait.recv_timeout(Duration::from_secs(5)), Ok(true));
+        assert_eq!(wait.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))), Ok(true));
         assert_eq!(read(&d).sessions.iter().map(|s| (s.secs, s.ended)).collect::<Vec<_>>(), [(600, true)]);
         // The same with the writer in hand: the flush tries again before it answers.
         let mut w = Writer::open(&d, vienna);
@@ -1722,7 +1723,7 @@ mod tests {
         start(&mut w, T0 + 2000, "/roms/gb/Tetris.gb");
         let t = Instant::now();
         assert!(!w.flush(Duration::from_millis(400)));
-        assert!(t.elapsed() < Duration::from_secs(1));
+        assert!(t.elapsed() < crate::testutil::timeout(Duration::from_secs(1)));
         drop(tx);
         writer.join().unwrap();
     }

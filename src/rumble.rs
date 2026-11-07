@@ -84,6 +84,9 @@ static WEAK: [AtomicU16; PORTS] = [ZERO; PORTS];
 /// The level last sent to the worker, so a core that repeats itself every frame doesn't flood it.
 static SENT: [AtomicU16; PORTS] = [ZERO; PORTS];
 static MENU: AtomicBool = AtomicBool::new(false);
+/// How strong the menu ticks are when `MENU` is on: 1 low, 2 medium, 3 high (Settings > Haptics on the Brick).
+#[cfg(feature = "brick")]
+static MENU_STEP: AtomicU8 = AtomicU8::new(2);
 static LAST_TICK_MS: AtomicU64 = AtomicU64::new(0);
 
 /// Where one player's rumble goes.
@@ -172,7 +175,7 @@ fn update_level(port: usize) {
 
 /// A core's request for player `port`: `effect` 0 is the strong motor, 1 the weak one; the Mini V2 has one motor
 /// (and we drive a pad's two together), so the stronger of the two counts.
-fn core_rumble(port: usize, effect: c_uint, strength: u16) {
+pub(crate) fn core_rumble(port: usize, effect: c_uint, strength: u16) {
     if port >= PORTS {
         return;
     }
@@ -248,7 +251,9 @@ fn haptics_file(data_dir: &std::path::Path) -> std::path::PathBuf {
     data_dir.join("haptics.json")
 }
 
-/// Reads the menu haptics switch (`<data>/haptics.json`, `{"menu": true}`); off when there is no file.
+/// Reads the menu haptics choice (`<data>/haptics.json`, `{"menu": true, "step": 2}`); off when there is no file. `step` is the
+/// Brick's strength (1 low, 2 medium, 3 high); a file without it means medium.
+#[cfg(not(feature = "brick"))]
 pub fn load_menu_haptics(data_dir: &std::path::Path) -> bool {
     let on = std::fs::read(haptics_file(data_dir))
         .ok()
@@ -259,17 +264,62 @@ pub fn load_menu_haptics(data_dir: &std::path::Path) -> bool {
     on
 }
 
+#[cfg(feature = "brick")]
+pub fn load_menu_haptics(data_dir: &std::path::Path) -> bool {
+    let v = std::fs::read(haptics_file(data_dir)).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok());
+    let on = v.as_ref().and_then(|v| v["menu"].as_bool()).unwrap_or(false);
+    let step = v.as_ref().and_then(|v| v["step"].as_u64()).map_or(2, |n| n.clamp(1, 3) as u8);
+    MENU.store(on, Ordering::Relaxed);
+    MENU_STEP.store(step, Ordering::Relaxed);
+    on
+}
+
 pub fn menu_haptics() -> bool {
     MENU.load(Ordering::Relaxed)
 }
 
+/// The menu ticks' strength: 0 off, else 1 low, 2 medium, 3 high.
+#[cfg(feature = "brick")]
+pub fn menu_step() -> u8 {
+    if menu_haptics() { MENU_STEP.load(Ordering::Relaxed) } else { 0 }
+}
+
+#[cfg(feature = "brick")]
+fn save_menu_haptics(data_dir: &std::path::Path) {
+    let json = format!("{{\"menu\": {}, \"step\": {}}}\n", menu_haptics(), MENU_STEP.load(Ordering::Relaxed));
+    let _ = crate::fsutil::write_atomic(&haptics_file(data_dir), json.as_bytes());
+}
+
 /// Switches the menu ticks and remembers the choice. A tick confirms "on".
+#[cfg(not(feature = "brick"))]
 pub fn set_menu_haptics(data_dir: &std::path::Path, on: bool) {
     MENU.store(on, Ordering::Relaxed);
     let _ = crate::fsutil::write_atomic(&haptics_file(data_dir), format!("{{\"menu\": {on}}}\n").as_bytes());
     if on {
         tick();
     }
+}
+
+#[cfg(feature = "brick")]
+pub fn set_menu_haptics(data_dir: &std::path::Path, on: bool) {
+    MENU.store(on, Ordering::Relaxed);
+    save_menu_haptics(data_dir);
+    if on {
+        tick();
+    }
+}
+
+/// Off, Low, Medium, High as one setting (the Brick's Settings row goes round them): `step` 0 is off. A tick shows the new strength.
+#[cfg(feature = "brick")]
+pub fn set_menu_step(data_dir: &std::path::Path, step: u8) {
+    if step > 0 {
+        MENU_STEP.store(step.min(3), Ordering::Relaxed);
+    }
+    MENU.store(step > 0, Ordering::Relaxed);
+    save_menu_haptics(data_dir);
+    // Let the new strength be felt at once, whatever the gap since the last tick.
+    LAST_TICK_MS.store(0, Ordering::Relaxed);
+    tick();
 }
 
 /// The menu moved: a very short, soft buzz, if menu haptics are on.
@@ -285,6 +335,12 @@ pub fn tick() {
     }
     LAST_TICK_MS.store(now, Ordering::Relaxed);
     let (ms, magnitude) = tick_params();
+    // The Brick's motor has no known strength scale yet: the pulse is as long as the setting says (`brick_hw::pulse_ms`).
+    #[cfg(feature = "brick")]
+    if crate::device::brick() {
+        send(Cmd::Pulse { ms: crate::brick_hw::pulse_ms(menu_step()), magnitude: 65535 });
+        return;
+    }
     send(Cmd::Pulse { ms, magnitude });
 }
 
@@ -297,6 +353,10 @@ const FF_CONSTANT: u16 = 0x52;
 const FF_SINE: u16 = 0x5a;
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 const FF_MAX: usize = 0x7f;
+
+/// A play request this short is a pulse (a menu tick): the Brick's motor is timed by the worker, not by the driver.
+#[cfg(feature = "brick")]
+const PULSE_MAX_MS: u16 = 200;
 
 /// A play request lasts this long; the worker renews it while the rumble is on.
 const LEASE_MS: u16 = 1500;
@@ -366,7 +426,13 @@ mod dev {
     }
 
     pub struct Haptics {
+        /// The evdev node; None for the Brick's sysfs motor.
+        #[cfg(feature = "brick")]
+        fd: Option<OwnedFd>,
+        #[cfg(not(feature = "brick"))]
         fd: OwnedFd,
+        #[cfg(feature = "brick")]
+        motor: Option<crate::brick_hw::Motor>,
         pub kind: Kind,
         pub name: String,
         pub path: String,
@@ -402,6 +468,7 @@ mod dev {
         } else {
             String::new()
         };
+        if name == crate::pad::bridge::NAME { return None; }
         Some((fd, kind, name))
     }
 
@@ -423,11 +490,18 @@ mod dev {
         }
 
         /// The device at `path` (a player's controller), if it has force feedback.
+        #[cfg(not(feature = "brick"))]
         pub fn open_at(path: &str) -> Option<Haptics> {
             probe(path).map(|(fd, kind, name)| Haptics { fd, kind, name, path: path.to_string(), id: -1 })
         }
 
+        #[cfg(feature = "brick")]
+        pub fn open_at(path: &str) -> Option<Haptics> {
+            probe(path).map(|(fd, kind, name)| Haptics { fd: Some(fd), #[cfg(feature = "brick")] motor: None, kind, name, path: path.to_string(), id: -1 })
+        }
+
         /// The Pocket's motor, not one of `exclude` (the controllers other players rumble).
+        #[cfg(not(feature = "brick"))]
         pub fn open_excluding(exclude: &[String]) -> Option<Haptics> {
             let mut paths: Vec<String> = match std::env::var("POCKET_RUMBLE_DEVICE") {
                 Ok(p) if !p.is_empty() => vec![p],
@@ -451,7 +525,38 @@ mod dev {
             best.map(|(_, path, fd, kind, name)| Haptics { fd, kind, name, path, id: -1 })
         }
 
+        #[cfg(feature = "brick")]
+        pub fn open_excluding(exclude: &[String]) -> Option<Haptics> {
+            let mut paths: Vec<String> = match std::env::var("POCKET_RUMBLE_DEVICE") {
+                Ok(p) if !p.is_empty() => vec![p],
+                _ => std::fs::read_dir("/dev/input")
+                    .ok()?
+                    .flatten()
+                    .map(|e| e.path().to_string_lossy().into_owned())
+                    .filter(|p| p.contains("/event") && !exclude.contains(p))
+                    .collect(),
+            };
+            paths.sort();
+            let mut best: Option<(u8, String, OwnedFd, Kind, String)> = None;
+            for p in paths {
+                if let Some((fd, kind, name)) = probe(&p) {
+                    let r = rank(&name);
+                    if best.as_ref().is_none_or(|b| r < b.0) {
+                        best = Some((r, p, fd, kind, name));
+                    }
+                }
+            }
+            best.map(|(_, path, fd, kind, name)| Haptics { fd: Some(fd), #[cfg(feature = "brick")] motor: None, kind, name, path, id: -1 })
+        }
+
+        /// The Brick's motor (gpio227, docs/TRIMUI-BRICK-HW.md); None when the pin is not there.
+        #[cfg(feature = "brick")]
+        pub fn open_brick() -> Option<Haptics> {
+            crate::brick_hw::Motor::system().map(|m| Haptics { fd: None, motor: Some(m), kind: Kind::Rumble, name: "Brick motor".into(), path: "gpio227".into(), id: -1 })
+        }
+
         /// Uploads the effect (updating the one already there) and starts it.
+        #[cfg(not(feature = "brick"))]
         pub fn play(&mut self, magnitude: u16, ms: u16) -> bool {
             let mut eff = effect_bytes(self.kind, self.id, magnitude, ms);
             if unsafe { libc::ioctl(self.fd.as_raw_fd(), EVIOCSFF, eff.as_mut_ptr()) } < 0 {
@@ -463,23 +568,68 @@ mod dev {
             self.write(1)
         }
 
+        #[cfg(feature = "brick")]
+        pub fn play(&mut self, magnitude: u16, ms: u16) -> bool {
+            #[cfg(feature = "brick")]
+            if let Some(m) = self.motor.as_mut() {
+                // A pulse (a menu tick) is over before this returns; a lease stays on until the worker renews or stops it.
+                let ok = m.on(magnitude);
+                if ms <= PULSE_MAX_MS {
+                    std::thread::sleep(Duration::from_millis(ms as u64));
+                    m.off();
+                }
+                return ok;
+            }
+            let Some(raw) = self.fd.as_ref().map(|f| f.as_raw_fd()) else { return false };
+            let mut eff = effect_bytes(self.kind, self.id, magnitude, ms);
+            if unsafe { libc::ioctl(raw, EVIOCSFF, eff.as_mut_ptr()) } < 0 {
+                // The driver may have lost it (device reset): ask for a new one next time.
+                self.id = -1;
+                return false;
+            }
+            self.id = i16::from_ne_bytes([eff[2], eff[3]]);
+            self.write(1)
+        }
+
         pub fn stop(&mut self) {
+            #[cfg(feature = "brick")]
+            if let Some(m) = self.motor.as_mut() {
+                m.off();
+                return;
+            }
             if self.id >= 0 {
                 self.write(0);
             }
         }
 
+        #[cfg(not(feature = "brick"))]
         fn write(&self, value: i32) -> bool {
             let ev = play_event(self.id, value);
             unsafe { libc::write(self.fd.as_raw_fd(), ev.as_ptr() as *const c_void, ev.len()) == ev.len() as isize }
         }
+
+        #[cfg(feature = "brick")]
+        fn write(&self, value: i32) -> bool {
+            let Some(fd) = self.fd.as_ref() else { return false };
+            let ev = play_event(self.id, value);
+            unsafe { libc::write(fd.as_raw_fd(), ev.as_ptr() as *const c_void, ev.len()) == ev.len() as isize }
+        }
     }
 
     impl Drop for Haptics {
+        #[cfg(not(feature = "brick"))]
         fn drop(&mut self) {
             if self.id >= 0 {
                 let id = self.id as libc::c_int;
                 unsafe { libc::ioctl(self.fd.as_raw_fd(), EVIOCRMFF, id as libc::c_ulong) };
+            }
+        }
+
+        #[cfg(feature = "brick")]
+        fn drop(&mut self) {
+            if let (true, Some(fd)) = (self.id >= 0, self.fd.as_ref()) {
+                let id = self.id as libc::c_int;
+                unsafe { libc::ioctl(fd.as_raw_fd(), EVIOCRMFF, id as libc::c_ulong) };
             }
         }
     }
@@ -535,6 +685,8 @@ fn device<'a>(devs: &'a mut Vec<Dev>, target: &Target) -> Option<&'a mut Haptics
         // The motor is never one of the controllers the other players have.
         let others: Vec<String> = targets().iter().filter_map(|t| if let Target::Node(n) = t { Some(n.clone()) } else { None }).collect();
         let haptics = match target {
+            #[cfg(feature = "brick")]
+            Target::Motor if crate::device::brick() => Haptics::open_brick(),
             Target::Motor => Haptics::open_excluding(&others),
             Target::Node(path) => Haptics::open_at(path),
             Target::None => None,
@@ -629,6 +781,9 @@ fn run_worker(rx: std::sync::mpsc::Receiver<Cmd>) {
 /// checked without a game. Reports the device it found. Returns the exit code.
 pub fn selftest(args: &[String]) -> i32 {
     let hold: u64 = args.first().and_then(|a| a.parse().ok()).unwrap_or(700);
+    #[cfg(feature = "brick")]
+    let found = if crate::device::brick() { Haptics::open_brick() } else { Haptics::open() };
+    #[cfg(not(feature = "brick"))]
     let found = Haptics::open();
     match &found {
         Some(h) => println!("device {} ({}), effect {:?}", h.name, h.path, h.kind),

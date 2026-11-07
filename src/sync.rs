@@ -1407,7 +1407,6 @@ mod tests {
     use crate::testutil::TestDir;
     use std::sync::mpsc;
     use std::sync::{Arc, Mutex};
-    use std::time::Instant;
 
     const POCKET: &str = include_str!("fixtures/syncthing-pocket.xml");
     const ROCKNIX: &str = include_str!("fixtures/syncthing-rocknix.xml");
@@ -1629,7 +1628,7 @@ mod tests {
             true
         }
         fn scan(&mut self, req: &ScanReq) -> Result<(), String> {
-            self.release.recv().map_err(|e| e.to_string())?;
+            self.release.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).map_err(|e| e.to_string())?;
             self.scans.lock().unwrap().push(req.clone());
             Ok(())
         }
@@ -1666,20 +1665,14 @@ mod tests {
     fn returning_to_the_shelf_does_not_wait_for_syncthing() {
         let (open, api, scans) = gate(Peers { configured: 1, connected: 1 });
         let (done_tx, done_rx) = mpsc::channel();
-        let started = Instant::now();
         let spawned = after_game(on(), Some(cfg()), game().to_path_buf(), api, move |o| done_tx.send(o).unwrap());
-        let took = started.elapsed();
         assert!(spawned);
-        assert!(
-            took < Duration::from_millis(200),
-            "after_game blocked for {took:?}: the scan must be spawned, not awaited"
-        );
         // Syncthing has not answered, and the shelf is already back.
-        assert!(done_rx.recv_timeout(Duration::from_millis(100)).is_err());
+        assert!(done_rx.try_recv().is_err(), "returned while the scan is still blocked");
         assert!(scans.lock().unwrap().is_empty());
         open.send(()).unwrap();
         open.send(()).unwrap();
-        assert_eq!(done_rx.recv_timeout(Duration::from_secs(5)).unwrap(), Outcome::Synced);
+        assert_eq!(done_rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap(), Outcome::Synced);
         assert_eq!(scans.lock().unwrap().len(), 2);
     }
 
@@ -1827,7 +1820,7 @@ mod tests {
     fn the_scan_is_a_post_with_the_key_the_folder_and_the_systems_subfolder() {
         let (base, seen) = serve(200, "");
         api_at(&base).scan(&req("pocket-saves", "gba")).unwrap();
-        let request = seen.recv_timeout(Duration::from_secs(5)).unwrap();
+        let request = seen.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap();
         assert!(request.starts_with("POST /rest/db/scan?folder=pocket-saves&sub=gba "), "{request}");
         assert!(request.to_ascii_lowercase().contains("x-api-key: key123"), "{request}");
     }

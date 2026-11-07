@@ -9,9 +9,14 @@ mkdir -p "$T/tree/scripts/nested/helpers" "$T/bin" "$T/logs"
 sed -e "s|/tmp/gate-|$T/logs/gate-|g" \
     -e 's|^export PATH=.*|export PATH="$GATE_FIXTURE_BIN:$PATH"|' \
     "$ROOT/scripts/gate.sh" >"$T/tree/scripts/gate.sh"
+cp "$ROOT/scripts/test-timing.sh" "$T/tree/scripts/test-timing.sh"
 cat >"$T/bin/cargo" <<'CARGO'
 #!/bin/sh
 printf '%s\n' "$*" >>"$GATE_FIXTURE_CARGO"
+case " $* " in *" timing_ "*) [ "${GATE_FIXTURE_TIMING_FAIL:-0}" = 0 ] || exit 1 ;; esac
+if [ "${GATE_FIXTURE_TIMING_EMPTY:-0}" = 1 ]; then
+    case " $* " in *" timing_ "*) echo 'test result: ok. 0 passed'; exit 0 ;; esac
+fi
 echo 'test result: ok. 1 passed'
 CARGO
 chmod +x "$T/bin/cargo"
@@ -30,6 +35,7 @@ SUITE
 done
 # A transitive shell helper must keep the Rust source it names in the shell test set.
 printf '# helper reads src/hostsys.rs\n' >"$T/tree/scripts/nested/helpers/check.sh"
+printf '# helper reads tests/shell_input.rs\n' >>"$T/tree/scripts/nested/helpers/check.sh"
 export GATE_FIXTURE_BIN="$T/bin" TMPDIR="$T"
 export GATE_FIXTURE_CARGO="$T/cargo" GATE_FIXTURE_CALLS="$T/calls"
 pass=0
@@ -50,6 +56,8 @@ check() {
         cat "$T/out"
         exit 1
     fi
+    grep -q 'timing_ -- --ignored --test-threads=1' "$T/cargo" || { echo "FAIL timing tier missing"; exit 1; }
+    [ "$(wc -l <"$T/cargo")" -eq 2 ] || { echo "FAIL timing tier retried or regular tests skipped"; exit 1; }
     pass=$((pass + 1))
     echo "ok $label"
 }
@@ -64,6 +72,13 @@ check 'Markdown outside docs is unknown' 10 0 assets/new-input.md
 check 'unknown doc configuration runs all tests' 10 0 docs/new-input.conf
 check 'unreferenced Rust source skips shell only' 0 0 src/unreferenced_feature.rs
 check 'transitive shell source input runs shell tests' 10 0 src/hostsys.rs
+check 'unreferenced Rust test skips shell but retains all Rust tests' 0 0 tests/layout_contract.rs
+check 'transitive shell test input runs shell tests' 10 0 tests/shell_input.rs
+check 'unknown test data still runs shell tests' 10 0 tests/new-input.txt
+check 'Rust test path with spaces remains unknown' 10 0 'tests/new input.rs'
+check 'Rust test changes cannot cancel deploy tests' 10 0 'tests/layout_contract.rs
+deploy/run-pocket-ui.sh'
+check 'full override retains shell tests after Rust test changes' 10 0 tests/layout_contract.rs 1
 check 'non-Rust source input is unknown' 10 0 src/new-input.c
 check 'unknown assets run shell tests' 10 0 assets/new-input.txt
 check 'unknown root files run shell tests' 10 0 new-input
@@ -78,6 +93,17 @@ check 'path with spaces remains one unknown path' 10 0 'assets/new input.md'
 check 'Markdown path with spaces remains one document' 0 1 'docs/new document.md'
 check 'no change list runs everything' 10 0 ''
 check 'full override runs everything' 10 0 docs/DEVELOPING.md 1
+# A red timing result cannot be retried into green.
+rc=0
+GATE_FIXTURE_TIMING_FAIL=1 GATE_RUNNER=cargo sh "$T/tree/scripts/gate.sh" "$T/tree" >"$T/out" 2>&1 || rc=$?
+[ "$rc" = 1 ] && grep -q 'GATE: tests FAILED' "$T/out" || { echo 'FAIL red timing tier'; exit 1; }
+pass=$((pass + 1))
+echo 'ok red timing tier fails the gate'
+rc=0
+GATE_FIXTURE_TIMING_EMPTY=1 GATE_RUNNER=cargo sh "$T/tree/scripts/gate.sh" "$T/tree" >"$T/out" 2>&1 || rc=$?
+[ "$rc" = 1 ] && grep -q 'GATE: tests FAILED' "$T/out" || { echo 'FAIL empty timing tier'; exit 1; }
+pass=$((pass + 1))
+echo 'ok empty timing tier fails the gate'
 # A killed parallel coordinator used to leave missing result files which the gate read as success. Only fixture
 # processes are signalled here; no cargo build or real suite runs.
 printf '#!/bin/sh\necho 8\n' >"$T/bin/nproc"

@@ -303,12 +303,12 @@ impl App {
         let rows = self.starter.rows();
         let n = rows.len();
         // Moving puts away what the last job said (a running job keeps its line).
-        if matches!(b, Button::Up | Button::Down | Button::Left | Button::Right | Button::L1 | Button::R1) && self.starter.busy.is_none() {
+        if matches!(b, Button::Up | Button::Down | Button::L1 | Button::R1) && self.starter.busy.is_none() {
             self.starter.message = None;
         }
         match b {
-            Button::Up | Button::Left if n > 0 => self.starter.sel = (self.starter.sel + n - 1) % n,
-            Button::Down | Button::Right if n > 0 => self.starter.sel = (self.starter.sel + 1) % n,
+            Button::Up if n > 0 => self.starter.sel = (self.starter.sel + n - 1) % n,
+            Button::Down if n > 0 => self.starter.sel = (self.starter.sel + 1) % n,
             Button::L1 => self.starter.sel = self.starter.sel.saturating_sub(5),
             Button::R1 if n > 0 => self.starter.sel = (self.starter.sel + 5).min(n - 1),
             b if b == CANCEL => {
@@ -417,14 +417,14 @@ impl App {
             let label = if offline { "Connect to Wi-Fi" } else { "Get the starter pack" };
             let w = self.text.width(Face::Body, 34, label) + 2 * NU_BTN_PAD;
             let h = 72;
-            c.round_rect(MARGIN, y, w, h, h / 2, pal().select);
+            pocket_ui::retro::select(c, MARGIN, y, w, h, h / 2, pal().select);
             self.text.draw(c, Face::Body, 34, MARGIN + NU_BTN_PAD, y + h / 2 + 12, pal().ink, label);
             self.hits.button(Area::new(MARGIN, y, w, h), CONFIRM);
             // The player's own games, one press away (X): beside the first button when it fits, else under it.
             let own_label = "Add games";
             let own_w = self.text.width(Face::Body, 34, own_label) + 2 * NU_BTN_PAD;
             let (ox, oy) = if MARGIN + w + 20 + own_w <= c.w - MARGIN { (MARGIN + w + 20, y) } else { (MARGIN, y + h + 16) };
-            c.round_rect(ox, oy, own_w, h, h / 2, pal().spine);
+            pocket_ui::retro::pill(c, ox, oy, own_w, h, h / 2, pal().spine);
             self.text.draw(c, Face::Body, 34, ox + NU_BTN_PAD, oy + h / 2 + 12, pal().chalk, own_label);
             self.hits.button(Area::new(ox, oy, own_w, h), Button::North);
             let h = if oy > y { h * 2 + 16 } else { h };
@@ -530,8 +530,8 @@ impl App {
             let (w, by) = (c.w - 2 * NU_PAD - 2 * NU_BTN_PAD, c.h - NU_PAD - NU_PILL - 110);
             let b = self.starter.busy.as_ref();
             let frac = b.map_or(0.0, |b| if b.total > 0 { (b.done as f32 / b.total as f32).clamp(0.0, 1.0) } else { 0.0 });
-            c.round_rect(NU_PAD + NU_BTN_PAD, by, w, 12, 6, pal().keycap);
-            c.round_rect(NU_PAD + NU_BTN_PAD, by, ((w as f32 * frac) as i32).max(12), 12, 6, pal().label);
+            pocket_ui::retro::pill(c, NU_PAD + NU_BTN_PAD, by, w, 12, 6, pal().keycap);
+            pocket_ui::retro::pill(c, NU_PAD + NU_BTN_PAD, by, ((w as f32 * frac) as i32).max(12), 12, 6, pal().label);
             vec![(text, pal().chalk)]
         } else if let Some((m, err)) = self.starter.message.clone() {
             vec![(m, if err { pal().alert } else { pal().chalk })]

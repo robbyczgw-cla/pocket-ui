@@ -27,7 +27,7 @@ for code in AXES.values():
     fcntl.ioctl(fd, 0x40045567, code)
 import ctypes
 phys_c = ctypes.create_string_buffer(PHYS + b"\0")
-fcntl.ioctl(fd, 0x4008556C, ctypes.addressof(phys_c))  # UI_SET_PHYS
+assert ctypes.CDLL(None).ioctl(fd, ctypes.c_ulong(0x4008556C), ctypes.cast(phys_c, ctypes.c_void_p)) == 0  # UI_SET_PHYS
 absmax, absmin = [0] * 64, [0] * 64
 for code in AXES.values():
     absmax[code], absmin[code] = 32767, -32768

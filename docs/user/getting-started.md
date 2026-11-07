@@ -5,9 +5,9 @@ This page takes you from a ROCKNIX card to your first game in pocket-ui. You nee
 > **Already play on ROCKNIX or Android?** [Coming from ROCKNIX or Android](coming-from.md) says what happens to your
 > saves, states, favourites and settings.
 
-> **Not a Mini V2?** The two-file card install below is for the Mini V2 only. Other Retroid devices: see
-> [Other Retroid devices](#other-retroid-devices); the Anbernic H700 handhelds: see
-> [Anbernic H700 handhelds](#anbernic-h700-handhelds-experimental). Both are supported as **experimental**.
+> **Not a Mini V2?** The two-file card install below is for the Mini V2 only. Other Retroid devices and the Anbernic H700
+> handhelds are on [Other handhelds](other-handhelds.md) (other Retroid devices, SM8550, H700). They are
+> supported as **experimental**.
 
 ## 1. Put pocket-ui on the card
 
@@ -75,92 +75,87 @@ itself if pocket-ui cannot start at all.
 
 ## 3. First start
 
-The first time pocket-ui runs, it walks you through a short setup. **START skips a step** (on a keyboard it means
-Connect or Next: B goes back, then START skips). You can
-open every step again later from **Settings** (press START on the Home screen).
-Each step says "Step n of 7" at the top right (five with no Wi-Fi chip, which skips Wi-Fi and Pictures & extras).
+The first time pocket-ui runs, it walks you through four short stages: your language, Wi-Fi, your games, and how
+your games stand on the shelf. Dots at the top right show how far you are. Every stage works like a list in Settings:
+**Up/Down** reach every row and choice on the page (a bar or the light row shows where you are), **Left/Right** change
+the one you are on, **A** takes it, and the way on is always a row or "A" itself (Continue, Looks right, Finish).
+**B goes back** to the stage before (L1 does too), and **START skips the rest** of the setup; inside a keyboard or a
+list B, L1 and START are the keyboard's and the list's. The hint bar names the keys of the row you are on. **L2**
+switches **Easy to read** on every stage (larger text and calmer menus, at once, also in the keyboards): the small
+**L2 Aa** at the top right says so. Settings → Help & tools → **First-start setup** runs it all again later.
 
 ![The first start: choose the language, then a few short steps](pictures/first-start.webp)
 
-1. **Welcome.** Under the cartridge and your handheld, press A to begin. Left/Right choose the language, **English**, **Deutsch** or **Español**: the screen
-   changes at once, and the choice is kept ([Language](language.md)). It starts on the system language
-   ROCKNIX was set to. SELECT opens the manual, this guide, on the device (in English); B comes back.
-2. **Choose a look.** A small picture of the shelf in each look, the one shown in the middle and its
-   neighbours at the sides. It is your own shelf when the SD card already has games: your systems and one game,
-   with its box art (a plain drawn box with the console where it has none yet), shown as the game to continue
-   if you played it, else as "Not played yet". On an empty card it shows three systems and games called
-   "Sample game". Left/Right (or Up/Down) switch looks, Y switches between Dark, Light and Automatic
-   ([Appearance](settings.md#appearance)), L1 between Cozy and Quick animations ("Cozy: watch your game slide into the
-   console. Quick: straight into the game.", [Animations](settings.md#animations)), R1 between Normal, Medium and Large
-   text ([Text size](settings.md#text-size)), then A ("Keep"). See [Playing](playing.md#looks) for the six looks.
-3. **How do you like to play?** Ways to start: **The shelf**, **Easy**, **Enthusiast** or **Choose for yourself**.
-   See below.
-4. **Wi-Fi.** See below.
-5. **Time zone.** pocket-ui suggests one. See below.
-6. **Pictures & extras.** Box art, pictures and PortMaster games. **Pictures** is a choice you see here, **Box art**,
-   **Box art and screenshots** (the default) or **Off**, with a line about where they come from. Box art
-   and PortMaster need Wi-Fi and are optional. Nothing is downloaded before you leave this step: with a connection,
-   the pictures for the games already on the SD card then download by themselves in the background, as chosen, unless
-   you chose Off; this page shows the progress. See [Pictures & extras](extras.md#box-art).
-7. **Add your games.** A tile per system with its folder, and a switch for file sharing. See below.
-8. **You're all set.** A line tells you that in a game, HOME opens the menu (save, load, quit); Kids Mode leaves it out. It counts the games you put on the card ("Your 16 games are on the shelf."), not Steam entries. With a skipped time zone and nothing to guess from, it says the clock is on UTC. Press A ("Go to
-   your games") to reach Home.
+1. **Your language.** The Spanish welcome reads **Bienvenido a tu Pocket**. Under the cartridge and your handheld,
+   Left/Right choose **English**, **Deutsch** or **Español**:
+   the screen changes at once, and the choice is kept ([Language](language.md)). It starts on the system language
+   ROCKNIX was set to. The row under it is **Easy to read**: Down reaches it and Left/Right switch it there (L2 does it
+   from anywhere), Up goes back to the language. Setting the Pocket up for a child? The third row, **For a child**
+   (On with Left/Right; Y switches it too), notes it, and Kids Mode's own steps come after your games (below); not on
+   the Steam Deck. A ("Get started") goes on from any row. SELECT opens the manual, this guide, on the device (in
+   English); B comes back.
+2. **Wi-Fi.** Choose a network. Already connected: A on it is Continue. A network that connects says "Connected to
+   Home" and the setup goes on by itself. Under the networks: **Other network…**, **Wi-Fi country**, **Time zone**,
+   **Scan again** (X does it too) and last **Continue** (**Continue offline** without a connection), the way on
+   without Wi-Fi. The Time zone row: the zone is
+   guessed while you are here and shown with its time ("Vienna, 22:41"); A there changes it. Only when there is no
+   clear guess does the setup ask, right after Wi-Fi (see [Time zone](#time-zone)). A handheld without a Wi-Fi chip
+   shows the time zone here instead.
+3. **Your games.** What is on the card: "Found 81 games" and the consoles with their names and how many games each, or, with no games
+   yet, the way that works on this handheld. **Continue** (or **I'll add games later**) goes on, **Add more…** opens
+   the systems, their folders and file sharing ([Add games](#5-add-games)), and B comes back from there. Something in
+   the roms folder that isn't read (a folder of no system, a disc game missing a file) is named in a line of its own.
+   **Box art** is one switch, **On** as it ships: the boxes come in the background while you're online, only a game's
+   name is sent ([Pictures & extras](extras.md#box-art) has the finer choice). Nothing is downloaded before you leave
+   this page. No switch on a handheld without Wi-Fi.
+4. **How your games stand.** A small picture of the shelf in each look, the one shown in the middle and its
+   neighbours at the sides: your own games when the card has some, else games called "Sample game". Left/Right
+   switch looks; Easy says what it does ("One big game at a time, simple menus."). Under them three rows, as in
+   every list: Down reaches **Style** (Barlow, Pixel, Rounded or [Retro](theme.md#style)), **Colours** (Retro's
+   Cocoa and Pea while it is on) and **Appearance** (Dark, Light or Automatic), a bar beside the row you are on;
+   Left/Right change it and the pictures above show it at once, Up goes back to the looks. **A** ("Finish") goes
+   straight to your shelf, with the look shown, from any row; B goes back to your games, so pressing B a few times
+   never ends the setup by surprise. Under the rows: in a game, HOME opens the menu (save, load, quit), and the look
+   changes any time in Settings → Look (as far as the screen has room). See [Playing](playing.md#looks) for the six
+   looks.
 
-After a restart or a flat battery in the middle, the setup opens again at the step it had reached.
+For a child (the third row of the first page): after your games, Kids Mode's own steps (a PIN, the games a child may play, its
+colour, time and volume) take the look's place, and the setup ends with them ([Kids mode](kids-mode.md)). B on their
+first page goes on to the look as without it, which then says where Kids Mode is for later. With no game Kids Mode can start it is left out, never an empty
+shelf: the look stage then says to set it up later in Settings → System → Kids mode.
 
-In most steps, B goes back one step. The hint bar lists only what works now: without Wi-Fi, Pictures & extras leaves out A and
-Add your games leaves out X (file sharing).
+After a restart or a flat battery in the middle, the setup opens again at the stage it had reached.
 
-### How do you like to play?
-
-pocket-ui has more than it shows at first: Curator's Lens and Echoes, Pixel Path, screen frames, going straight back
-into your game, and more. This step sets them in one go. Up/Down choose, A takes it; under the rows the page
-says what the selected one switches on and off, in everyday words ("On: suggestions for similar games, gentle
-animations. Off: pick games by mood and length, ..."). The feature cards are described in
-[Features and the Tour](tour.md).
-
-- **The shelf**: "Your games on a shelf, as it comes." This is the start
-  setting of a new Pocket, nothing more, the same as skipping this step: Lens & smart shelves, Labels, Echoes, Versions and Motion are on; Up next,
-  Pixel Path, Echoes beyond this device, frames on every console and going straight back into your game are off.
-- **Easy**: the same start settings with the [Easy](easy.md) look.
-- **Enthusiast**: "Suggestions, play statistics, picture details and frames, all on." All of Curator, Pixel Path in the pause menu (the line over the game stays off), Auto screen frames on every
-  console, and On start set to your last game.
-- **Choose for yourself**: one card per feature, each with a small picture of what it does and three rows, **On**, **Off**
-  and **Later**. Up/Down choose, A takes the choice and shows the next card, B goes back a card, START skips the rest.
-  Later leaves the feature as it is.
-
-- **For a child**: a big, simple shelf with the games you pick, behind your PIN. Its own steps follow, then the rest of the first start
-  ([Kids mode](kids-mode.md)). Not on the Steam Deck.
-
-START skips the step and leaves everything as it is: the same as The shelf at the first start (picked later from Help & tools, The
-shelf puts every extra back as pocket-ui ships it, On start and Screen frames too). A profile only sets switches that Settings has
-too; each stays on its Settings page, and [Settings → Help & tools → Tour](tour.md) explains the basics and offers easier reading in 7 cards whenever you like. Menu
-sounds, haptics and the stick lights are left as they are.
+The first start asks no play style and shows no feature cards: everything stands as pocket-ui ships it, and features
+introduce themselves when you meet them. Settings → Help & tools → **How you like to play** (The shelf, Easy,
+Enthusiast or one card per feature) and [Tour](tour.md) are there whenever you like.
 
 ### Time zone
 
-The step comes right after Wi-Fi and shows a city with the time it is there now. pocket-ui guesses it without
-asking any web service, so nothing about you leaves the device. It looks, in this order, at:
+The time zone is guessed while the Wi-Fi page is up and shown on its last row with the time it is there now.
+pocket-ui guesses it without asking any web service, so nothing about you leaves the device. It looks, in this order,
+at:
 
-1. **The zone the system already has**, if it is not UTC and somebody chose it. The note says "Already set on this Pocket." The zone a fresh image ships with (New York) does not count: nobody chose it, so the next two steps decide.
+1. **The zone the system already has**, if it is not UTC and somebody chose it. The zone a fresh image ships with
+   (New York) does not count: nobody chose it, so the next two decide.
 2. **The country of your Wi-Fi region.** The Wi-Fi chip knows the country it is allowed to transmit in (the same
-   setting that decides which channels it may use). For a country with one time zone, such as Austria or Germany,
-   that zone is shown, with the note "A guess from your Wi-Fi region". For a country with several time zones
-   (the United States, Canada, Australia, Brazil, Russia, Mexico and a few more), the step opens straight on a
-   list of that country's cities, because there is no single answer.
-3. **UTC**, if nothing is known. The note says so.
+   setting that decides which channels it may use; it often learns it from the network once connected). For a
+   country with one time zone, such as Austria or Germany, that zone is set at once and the row says it. For a
+   country with several time zones (the United States, Canada, Australia, Brazil, Russia, Mexico and a few more),
+   there is no single answer: right after Wi-Fi the setup opens on a list of that country's cities.
+3. **Nothing known:** right after Wi-Fi the setup asks, "Couldn't tell where you are".
 
-Your choices:
-
-- **A** ("Looks right") keeps the suggestion and goes on. **START** does the same: skipping keeps the guess.
-  Nothing changes if the suggestion is the zone the Pocket already has, or if it was UTC.
-- **X** ("Change") opens the list of regions, with a search row (the on-screen keyboard) on top. This is the same
-  list as Settings → System → [Time](settings-system.md#time). In a city list, A sets that city and moves on; B goes back.
-- **B** goes back to Wi-Fi.
+When it asks: two rows under the card. **Looks right** (or **Keep UTC**) keeps what is shown, **Choose another…**
+(X does it too) opens the regions with a search row on top (the same list as Settings → System →
+[Time](settings-system.md#time); L1 empties the search field). A country's own list of cities ends with **Other
+places…**. **B** goes back to the Wi-Fi page it belongs to. It asks once: after an answer, leaving Wi-Fi again (B
+back, a connection later) goes straight on. On the Time zone row of the Wi-Fi
+page, A opens the same regions and B comes back to Wi-Fi; a zone you
+pick there stays.
 
 The Wi-Fi region is only a hint to where you live: a Pocket bought abroad can still carry another country's
-setting, so look at the city before you press A. The clock sets itself from the internet whenever Wi-Fi is
-on; that switch stays under Settings → System → Time. Without Wi-Fi, set the date and time by hand there
+setting, so look at the city on the row. The clock sets itself from the internet whenever Wi-Fi is on; that switch
+stays under Settings → System → Time. Without Wi-Fi, set the date and time by hand there
 ([Date and time](settings-system.md#time)).
 
 ## 4. Connect to Wi-Fi
@@ -175,8 +170,8 @@ Settings → Connections → **Wi-Fi**, or the Wi-Fi step of the first start.
    If the first row says **This network wants a sign-in**, the network (a hotel, a train) wants its page done
    first: see [Hotel and train Wi-Fi](hotel-wifi.md).
 2. Choose a network and press A ("Connect").
-   In the first start, a network that connects shows "Connected to Home" and the setup goes on by itself; B from the
-   next step comes back and stays. A on the connected network gets a tick and "Press START for the next step."
+   In the first start, a network that connects shows "Connected to Home" and the setup goes on by itself. A on the
+   connected network is Continue.
 3. For a network with a password, type it on the on-screen keyboard:
    - D-pad: move between keys
    - A: type the selected key
@@ -195,7 +190,7 @@ If the Pocket is already connecting to the network you chose, it waits for that 
 starting again. Choosing a different network leaves the previous one first; a newly typed password replaces an old
 attempt. "Wi-Fi isn’t ready yet" means the radio or network service is still starting; try again in a moment.
 
-Press X ("Scan again") to refresh the list. The line under the title is always true to what happened:
+The **Scan again** row (or X) refreshes the list. The line under the title is always true to what happened:
 
 - **Wi-Fi is off. Press A to turn it on.** The radio is off (switched off in quick settings, or blocked while the
   Pocket started), and the first row, **Wi-Fi is off**, turns it on with A. The list is empty because there is nothing
@@ -333,127 +328,10 @@ missing a file.
 A game whose file is no longer on the SD card (deleted or moved over file sharing, for example) does not start: the
 Pocket says "*Game* can't start: its file … is no longer there" and reads the list again.
 
-## Other Retroid devices
-
-pocket-ui also runs on the **Retroid Pocket 5**, the **Retroid Pocket Flip 2** (the Snapdragon 865 one) and the first
-**Retroid Pocket Mini**, as **experimental**: they use the same ROCKNIX system as the Mini V2, so most things should
-work, but nobody has tried pocket-ui on one yet.
-
-- **Installing.** Don't use the Mini V2's SD card image on them. Install ROCKNIX for that device as ROCKNIX's own guide
-  says, start it once, then add pocket-ui with the install package for an existing ROCKNIX card (the
-  [install guide](../INSTALL-DUAL-BOOT.md#install-on-a-rocknix-card-you-already-use) has the steps). It recognises
-  these devices and says they are experimental.
-- **What you see.** The first start says once that pocket-ui hasn't been tested on your device, unless the project has
-  played on it ([DEVICES](../DEVICES.md)); Settings → Help & tools →
-  About shows the device with "(experimental)". Everything else is the same as on the Mini V2. On the Pocket 5's and
-  Flip 2's wider screen, Settings and the Shelf look sit in a column in the middle; on the Flip 2, closing the lid
-  puts it to sleep.
-- **If something doesn't work**, Settings → Help & tools → About → Report a problem saves a file to attach to a report.
-
-
-
-### Experimental SM8550 handhelds
-
-The **Retroid Pocket 6** (including TOP-DPAD), **Retroid Pocket Nova**, **AYN Odin 2 Mini**,
-**AYN Odin 2** and **AYN Odin 2 Portal** are experimental. Only the Odin 2 Mini has been tried on a real device
-(2026-10-27: the install package, the first-start screens, the shelf, a GBA game with the pause menu, screen off and
-wake, driven over the command pipe; no button or touch pressed, no Bluetooth, no sleep); the other four are computer
-tests only, with no hardware verification. Use ROCKNIX's own **SM8550 aarch64 image**
-(20261001), set up following ROCKNIX's guide for your device, boot it once, then add pocket-ui
-with the install package. The Mini V2 SD image must not be used on these devices.
-
-Pocket 6 and the Odin 2 family use 1920×1080; Nova uses 1280×960. First start says once that the device is untested;
-About marks it experimental. **Stock ROCKNIX still disables sleep on these devices (checked 2026-10-27):** the power button
-turns the screen off, and idle turns it off with the game paused. Any button brings it back.
-Settings → System → Sleep & power offers **Switch off after** (Off by default) to save and power
-off after a longer dark spell on battery. Screen off still uses battery. ROCKNIX controls the fan;
-pocket-ui's fan choices have no effect here. Touch, LEDs, vibration, battery drain, 120 Hz pacing
-and Zink on the real GPU still need a tester. Mini and Portal menus start with Xbox buttons
-(A bottom); the original Odin 2 uses Nintendo buttons (A right). Saved layout choices win. See [device notes](../DEVICES.md).
-
-## Anbernic H700 handhelds (experimental)
-
-pocket-ui runs on the Anbernic handhelds that ROCKNIX's **H700 image** supports. All of them are **experimental**:
-pocket-ui knows each model (screen, buttons, what it has). The **RG35XX Plus** has been played on a real handheld; the other
-models have only been tested on a computer so far. If something doesn't work, Settings → Help & tools → About → Report a problem saves a file to attach to a
-report. The **RG CubeXX** (square 720×720 screen) is **not supported yet**: pocket-ui draws that screen too slowly on
-this processor for now, and the installers say so and change nothing.
-
-| Model | Screen | Wi-Fi | Sticks | Lid | Lights |
-|---|---|---|---|---|---|
-| RG28XX | 640×480 | none | no | no | |
-| RG35XX 2024 | 640×480 | none | no | no | |
-| RG35XX Plus | 640×480 | yes | no | no | |
-| RG35XX H | 640×480 | yes | yes | no | |
-| RG35XX Pro | 640×480 | yes | yes | no | |
-| RG35XX SP | 640×480 | yes | no | yes | |
-| RG40XX H | 640×480 | yes | yes | no | RGB |
-| RG40XX V | 640×480 | yes | yes | no | RGB |
-| RG34XX | 720×480 | yes | no (ROCKNIX lists none) | no | |
-| RG34XX-SP | 720×480 | yes | yes | yes | |
-| RG-SP | 720×480 | yes | no | yes | |
-| RG CubeXX | 720×720 | yes | yes | no | RGB (**not yet**) |
-
-All of them have 1 GB of memory, no touch screen and no fan. The RGB lights of the RG40XX are ROCKNIX's; pocket-ui
-doesn't change them.
-
-### Install
-
-1. **Use a spare microSD card for ROCKNIX and keep your stock card as it is.** The H700 handhelds have no internal
-   storage: the stock system lives on the card in slot 1, so ROCKNIX goes on a different card and you can switch back
-   by swapping cards. Back up the card with your games before you put it in a ROCKNIX boot.
-2. Download ROCKNIX's **H700 image** from the [official ROCKNIX H700 install page](https://rocknix.org/configure/h700-installation/)
-   (version 20261001 or newer) and flash it with balenaEtcher or Raspberry Pi Imager. There is one image per memory
-   type: **try the DDR4 image first. If the handheld doesn't start from it** (the screen stays black), flash the **DDR3**
-   image onto the same card instead; only the card is at risk.
-3. Take the card out and in again so your computer shows the **ROCKNIX** drive. Copy your model's device tree file
-   from its `device_trees` folder to the top folder of that drive and name the copy **`dtb.img`** (all lower case).
-   Eject the card properly: skipping this step can leave the card unable to start.
-
-   | Model | Device tree file (in `device_trees`) |
-   |---|---|
-   | RG28XX | `sun50i-h700-anbernic-rg28xx.dtb` |
-   | RG35XX 2024 | `sun50i-h700-anbernic-rg35xx-2024.dtb` (`...-2024-rev6-panel.dtb` if the picture is garbled) |
-   | RG35XX Plus | `sun50i-h700-anbernic-rg35xx-plus.dtb` (`...-plus-rev6-panel.dtb`) |
-   | RG35XX H | `sun50i-h700-anbernic-rg35xx-h.dtb` (`...-h-rev6-panel.dtb`) |
-   | RG35XX Pro | `sun50i-h700-anbernic-rg35xx-pro.dtb` |
-   | RG35XX SP | `sun50i-h700-anbernic-rg35xx-sp.dtb` (`...-sp-v2-panel.dtb`) |
-   | RG40XX H | `sun50i-h700-anbernic-rg40xx-h.dtb` (`...-h-v2-panel.dtb`) |
-   | RG40XX V | `sun50i-h700-anbernic-rg40xx-v.dtb` (`...-v-v2-panel.dtb`) |
-   | RG34XX | `sun50i-h700-anbernic-rg34xx.dtb` |
-   | RG34XX-SP | `sun50i-h700-anbernic-rg34xx-sp.dtb` (`...-sp-v2-panel.dtb`) |
-   | RG-SP | `sun50i-h700-anbernic-rg-sp.dtb` |
-
-   The name in brackets is for a newer panel revision: if the first file shows a garbled or striped picture, hold
-   the power button for 10 seconds, flash again and try that one.
-4. Start ROCKNIX from the card. The first start grows its storage and restarts by itself; then ROCKNIX asks its own
-   first questions. Let it come up to EmulationStation once.
-5. Add pocket-ui. Without a network (the RG28XX and RG35XX 2024 have no Wi-Fi), use one of these:
-   - **The Ports installer:** copy the single file *Install pocket-ui.sh* into the `roms/ports` folder of the card
-     (the card in your computer, or ROCKNIX's file sharing), start EmulationStation again, open **Ports** and start
-     **Install pocket-ui**. The screen shows the checks and the install, then pocket-ui starts.
-   - **Two files on the card:** copy `mount-storage.sh` and `pocket-ui-seed.tar.gz` to the top folder of the
-     **ROCKNIX** drive, put the card in and start the handheld. It installs during that start and opens pocket-ui.
-   With Wi-Fi and SSH, the install package for an existing ROCKNIX card works too (see the
-   [install guide](../INSTALL-DUAL-BOOT.md#install-on-a-rocknix-card-you-already-use)).
-
-   All three check the device first: only the models in the table are accepted, and an H700 handheld that isn't in
-   it is refused with a sentence and nothing is changed. ROCKNIX keeps starting as before.
-
-### What works, what is hidden
-
-- **Games.** The consoles ROCKNIX's H700 image ships cores for play in pocket-ui's own player, with its pause menu,
-  states and shortcuts. **N64, PSP, Dreamcast and Nintendo DS stay on ROCKNIX's own emulators** (they ask more than
-  these processors give). PS2, GameCube, Wii and 3DS are not in ROCKNIX's H700 image, so those systems don't appear.
-  See [Game Boy Advance on H700](systems.md#game-boy-advance-on-h700) for GBA cores and existing Continue moments.
-- **Screen.** pocket-ui draws its normal layout and reduces it to the small screen, so it looks like on the Mini V2,
-  only smaller. Small hint text can be hard to read on the 640×480 handhelds; Settings → Look → Text size
-  makes it larger.
-- **Hidden or reduced.** Fan settings say "No fan"; there is no touch setup. The RG28XX and RG35XX 2024 say
-  "This device has no Wi-Fi" on the Wi-Fi page and offer nothing to switch on there: everything else works offline,
-  while online features (Store, covers, updates, RetroAchievements, file sharing) wait for a network. On the
-  handhelds without sticks, no stick lights are offered.
-- **Time zone** is set the H700 way (ROCKNIX's system setting); the first-start step is there as on the other devices.
-- **To go back:** take the card out and put your stock card in, or run `sh /storage/pocket-ui/uninstall.sh`, or
-  start *Uninstall pocket-ui* in Ports: EmulationStation is back at the next start. Don't run ROCKNIX's online
-  update on a card with pocket-ui until a pocket-ui release says that version was checked.
+A saved Wi-Fi network opens its Connect / Forget menu with A. B closes that menu back to the same network
+on the list; another B returns to the previous first-start step. In Add games, the grid scrolls with the
+selected tile, including on a small screen. In the Starter pack list, Up/Down choose a game; Left/Right leave
+the focus where it is.
+When another Wi-Fi network is already connected, choosing a saved network that a fresh scan cannot find
+leaves the current connection in place and says it is out of range. Hidden networks still get a connection
+attempt, since their absence from a scan does not mean they are unavailable.

@@ -55,6 +55,7 @@ impl Summary {
             Summary::Loading => "Loading the description from Wikipedia…".into(),
             Summary::None => "No Wikipedia article for this game".into(),
             Summary::Unavailable(why) => match why.as_str() {
+                "not cached" => return None,
                 "offline" | "no curl" => "Offline: the description comes with Wi-Fi".into(),
                 "no article" | "no text" => "No Wikipedia article for this game".into(),
                 why => format!("No description from Wikipedia: {why}"),

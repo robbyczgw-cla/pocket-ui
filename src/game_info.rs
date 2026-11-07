@@ -22,6 +22,8 @@ use std::rc::Rc;
 /// The scroll of the description; the rest of the page stands still.
 #[derive(Default, Debug)]
 pub struct InfoView {
+    /// No controls act on a passive second-screen page.
+    pub passive: bool,
     pub scroll: i32,
     max_scroll: i32,
     /// The fact the selection is on (an index into `CardData::links`): A opens its list of games (Connections). None:
@@ -185,16 +187,22 @@ impl InfoView {
             }
         };
         lift_shadow(c, side, top + fh, fw, pal().t);
+        let mut your = your_rows(d);
+        if self.passive {
+            for (_, value) in &mut your {
+                if matches!(value, Val::Quiet(t) if *t == crate::game_card_model::no_rating()) { *value = Val::Quiet("None"); }
+            }
+            your.retain(|(_, value)| !matches!(value, Val::Quiet("Busy core? Press START")));
+        }
         // The player's lines: under the cover on a wide screen, under the facts on a narrow one.
         let (tx, mut ty, tw) = if narrow(c.w) {
             (side, top + fh + 24, c.w - 2 * side)
         } else {
             // Beside the cover as it came out (a tall box is narrower than its room), or the player's lines if they
             // are wider.
-            let rx = side + fw.max(your_w(text, &your_rows(d))).min(cw) + 48;
+            let rx = side + fw.max(your_w(text, &your)).min(cw) + 48;
             (rx, top, c.w - side - rx)
         };
-        let your = your_rows(d);
         let (yx, yw) = if narrow(c.w) { (side, tw) } else { (side, tx - 48 - side) };
         // The right column: the title on two lines at most, then the system and year (and the Favourites mark).
         let title_step = type_scale::line(50, 6);

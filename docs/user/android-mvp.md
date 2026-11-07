@@ -16,13 +16,16 @@ and SELECT opens quick settings. The key hints appear above the tabs as soon as 
 when you touch the screen again.
 
 The player has touch controls on a phone. Back, Pause or the controller's Menu opens Continue, Save, Load, Earlier,
-Options, Screenshot and Quit. With touch the menu is made of large buttons: one tap does it, and the arrows beside "Slot N"
+Options, Controls, Zoom, Screenshot and Save & quit. With touch the menu is made of large buttons: one tap does it, and the arrows beside "Slot N"
 choose one of eight manual slots; Options shows each setting with arrows to change it and scrolls by dragging. With a controller the
-menu is a list (A chooses, B continues, L/R choose the slot).
+same page shows a selection ring (A chooses, B continues, L/R choose the slot).
 GBA and SNES also have on-screen L/R shoulder buttons.
-Quit writes a separate auto state; the next start continues there. Quit closes the game only after that state is written, however long the phone takes, and a write is never half done. Two games with one file name in different folders keep their own states on the phone. Android Home suspends/saves and returns to a
+Save & quit writes a separate auto state; the next start continues there. It closes the game only after that state is written, however long the phone takes, and a write is never half done. Two games with one file name in different folders keep their own states on the phone. Android Home suspends/saves and returns to a
 paused game. Keep the app installed: its saves, states and screenshots are private app data and uninstalling deletes
 them. Export/backup UI is still open work. ROM-folder permission does not expose another emulator's private saves.
+
+If a moment cannot be resumed, or your in-game save is newer, the recovery message tells you where the moment was
+kept under **Load**. After changing app versions, this keeps the moment that was just attempted and its own picture.
 
 Type and buttons are sized for the phone's density (buttons at least 48 dp), in portrait and landscape, and stay clear
 of the camera hole, rounded corners and the gesture bar.
@@ -113,7 +116,7 @@ others that need a restart) are under "Advanced (this emulator)", closed until y
 The touch controls look like a pad: a round D-pad you can roll your thumb around (diagonals too), round buttons in
 each system's own layout (PlayStation shapes on PSP, C buttons on N64, six buttons on Mega Drive), shoulder buttons
 and small Select/Start pills. They are see-through, sit beside the picture in landscape and under it in portrait,
-tick when pressed if your phone's touch vibration is on, and hide while you play with a controller.
+tick when pressed only if Settings → Haptics and your phone's touch vibration are both on, and hide while you play with a controller. Haptics defaults off.
 
 
 Continue is here too: your last five games stand a little open and Continue goes straight back to the moment you left. See [Continue](continue.md#on-an-android-phone).
@@ -162,3 +165,16 @@ kept rather than resumed because the bundled emulator cannot safely check their 
 The Games shelf now calls its first row Continue and includes only games whose open
 moment was verified by the Android worker. Recently played external games without
 an internal moment remain on their system shelf. Easy keeps its single-game order.
+
+## Android 0.2
+
+[Controls](controls-card.md#on-android) explains Android gamepad and touch-pad buttons from
+a game's card or the pause sheet. [Zoom and Hold to toggle](controls.md#on-android) help
+with small dialogue and keeping one game button pressed. Android's font scale and the app's
+Text size use the larger choice, up to 200% system text. After a long break, [Where was I?](continue.md#on-an-android-phone)
+can hold a resumed picture briefly for reading; Settings → Remind me where I was turns it off.
+Back returns one page, and only Save & quit leaves gameplay. A controller disconnect pauses
+play and brings back the touch pad. Battery saver pauses optional media downloads, idle
+slideshow and the startup animation; it leaves the game speed and saved preferences alone.
+A refused old PSP moment opens Recovery with a clear explanation and keeps the original
+under Load. The in-game save remains safe.

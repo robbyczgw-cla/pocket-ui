@@ -7,7 +7,10 @@ use std::sync::Arc;
 
 use crate::keyboard::{Keyboard, Outcome};
 use crate::pad::Button;
+#[cfg(not(feature = "brick"))]
 use crate::tailscale::{clean_hostname, Backend, Snapshot, State, NO_NETWORK, SUGGESTED_HOSTNAME};
+#[cfg(feature = "brick")]
+use crate::tailscale::{clean_hostname, Backend, Snapshot, State, NO_NETWORK};
 
 /// A row of the page, top to bottom.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -143,6 +146,7 @@ impl TailscalePage {
     }
 
     /// The name shown: the one Tailscale reports, else the one chosen, else the suggestion.
+    #[cfg(not(feature = "brick"))]
     pub fn hostname(&self) -> String {
         let reported = self
             .snap
@@ -153,6 +157,19 @@ impl TailscalePage {
         reported
             .or_else(|| self.chosen_hostname.clone())
             .unwrap_or_else(|| SUGGESTED_HOSTNAME.to_string())
+    }
+
+    #[cfg(feature = "brick")]
+    pub fn hostname(&self) -> String {
+        let reported = self
+            .snap
+            .as_ref()
+            .and_then(|s| s.status.as_ref())
+            .map(|s| s.hostname.clone())
+            .filter(|h| !h.is_empty());
+        reported
+            .or_else(|| self.chosen_hostname.clone())
+            .unwrap_or_else(|| crate::tailscale::suggested_hostname().to_string())
     }
 
     pub fn press(&mut self, b: Button, confirm: Button, cancel: Button) -> Action {

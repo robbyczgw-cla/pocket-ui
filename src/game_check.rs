@@ -375,7 +375,8 @@ pub struct Input {
     /// `<roms>/bios`.
     pub bios_dir: PathBuf,
     pub roms: PathBuf,
-    /// An H700 handheld (`device`).
+    /// An H700 handheld or the RG DS Plus (`device::Model::small_chip`): a stray folder of a system it has no emulator
+    /// for needs a stronger handheld.
     pub h700: bool,
 }
 
@@ -1539,7 +1540,7 @@ mod tests {
             c.put(&format!("{sys}/Spiel Nummer {i} (Europe).{ext}"), if i % 500 == 0 { b"" } else { b"x" });
         }
         let input = c.input(false);
-        let t = std::time::Instant::now();
+        let t = crate::testutil::clock::CpuInstant::now();
         let r = check(&input, &AtomicBool::new(false), &mut |_, _, _| {}).unwrap();
         let took = t.elapsed();
         println!("game check, 5000 games: {took:?}");

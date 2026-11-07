@@ -47,6 +47,8 @@ pub struct Text {
     /// How much larger each face is painted than the size asked for (`font_style`: an alternative face fitted to
     /// Barlow's capitals); 1.0 for Barlow and a theme's own faces.
     scale: [f32; 2],
+    /// A pixel face's pixel in ems for each (`font_style::Alt::grid`), 0 for the others: `raster` paints it crisp.
+    grid: [f32; 2],
     /// The faces of Barlow, or of the store theme that replaced them (`new`): what a style that leaves a face alone
     /// (Pixel's body) or the Barlow style itself uses, and `themed`: which of the two came from the store, which no
     /// style replaces.
@@ -116,16 +118,80 @@ pub fn fonts_dir() -> std::path::PathBuf {
 /// Spiel", first-run test 2026-10-24, finding #9): a letter or digit (a Japanese title) is painted as "?" so that the
 /// name still shows something, anything else (a tick, a star, an emoji, a zero-width mark) is left out. Decided once
 /// per character and size, when the glyph enters the cache: nothing per frame.
-fn raster(font: &Font, scale: f32, ch: char, px: u32) -> Glyph {
+fn raster(font: &Font, scale: f32, grid: f32, plain: &Font, ch: char, px: u32) -> Glyph {
+    // Retro's digits (`retro::Digits`): Barlow's as they are, or the LCD set on the pixel face's grid; its "B" and "Z"
+    // from that set whatever the digits are (`retro::lcd_letter`).
+    if grid > 0.0 && ch.is_ascii_digit() {
+        match crate::retro::digits() {
+            crate::retro::Digits::Plain => return raster(plain, 1.0, 0.0, plain, ch, px),
+            crate::retro::Digits::Lcd => {
+                let rows = &crate::retro::LCD[(ch as u8 - b'0') as usize];
+                return lcd_glyph(font, on_grid(px as f32 * scale, grid), grid, ch, rows, if ch == '1' { 3 } else { 5 });
+            }
+            crate::retro::Digits::Pixelify => {}
+        }
+    }
+    if let Some(rows) = crate::retro::lcd_letter(ch).filter(|_| grid > 0.0) {
+        return lcd_glyph(font, on_grid(px as f32 * scale, grid), grid, ch, rows, 5);
+    }
     // `scale` fits an alternative face to Barlow's capitals (1.0 for Barlow: the size as it was).
     let px = if scale == 1.0 { px as f32 } else { px as f32 * scale };
-    if font.lookup_glyph_index(ch) != 0 || ch == '?' {
-        return font.rasterize(ch, px);
+    let px = on_grid(px, grid);
+    let ch = if font.lookup_glyph_index(ch) != 0 || ch == '?' {
+        ch
+    } else if ch.is_alphanumeric() {
+        '?'
+    } else {
+        return (Metrics::default(), Vec::new());
+    };
+    let (mut metrics, mut bitmap) = font.rasterize(ch, px);
+    // A pixel face: every screen pixel in or out, as the font's own pixels are (`on_grid`), and each letter a whole
+    // number of font pixels on from the last, so the gaps between letters are even ("ha t" in "hat" otherwise).
+    if grid > 0.0 {
+        for v in &mut bitmap {
+            *v = if *v >= 128 { 255 } else { 0 };
+        }
+        metrics.advance_width = whole_pixels(metrics.advance_width, px, grid);
     }
-    if ch.is_alphanumeric() {
-        return font.rasterize('?', px);
+    (metrics, bitmap)
+}
+
+/// `ch` drawn from `rows` (seven rows, `cols` pixels across from bit 4; `retro::LCD`) for a pixel face painted at `px`
+/// (on its grid of `grid` ems): as wide, as far in and as far apart as the face's own `ch`, its seven rows the face's
+/// capitals' height.
+fn lcd_glyph(font: &Font, px: f32, grid: f32, ch: char, rows: &[u8; 7], cols: usize) -> Glyph {
+    let own = font.metrics(ch, px);
+    let n = (px * grid).round().max(1.0) as usize;
+    let (w, h) = (cols * n, 7 * n);
+    let mut bitmap = vec![0u8; w * h];
+    for (r, bits) in rows.iter().enumerate() {
+        for col in 0..cols {
+            if bits & (0b10000 >> col) != 0 {
+                for y in r * n..(r + 1) * n {
+                    bitmap[y * w + col * n..y * w + (col + 1) * n].fill(255);
+                }
+            }
+        }
     }
-    (Metrics::default(), Vec::new())
+    let xmin = own.bounds.xmin.round() as i32;
+    let metrics = Metrics { xmin, ymin: 0, width: w, height: h, advance_width: whole_pixels(own.advance_width, px, grid), ..own };
+    (metrics, bitmap)
+}
+
+/// `advance` of a pixel face painted at `px` (its pixel `grid` ems) in whole font pixels.
+fn whole_pixels(advance: f32, px: f32, grid: f32) -> f32 {
+    let n = (px * grid).round().max(1.0);
+    (advance / n).round() * n
+}
+
+/// The size `px` of a pixel face whose pixel is `grid` ems (`font_style::Alt::grid`; 0: any other face, `px` as it
+/// is) rounded to whole screen pixels per font pixel, at least two: Pixelify between two such sizes paints strokes of
+/// two and three pixels with grey edges.
+fn on_grid(px: f32, grid: f32) -> f32 {
+    if grid <= 0.0 {
+        return px;
+    }
+    (px * grid).round().max(2.0) / grid
 }
 
 /// `ch` from the fallback font in `path`, fitted to `face`; opens the font the first time (`text_fallback::open`, the
@@ -187,6 +253,7 @@ impl Text {
             title,
             body,
             scale: [1.0; 2],
+            grid: [0.0; 2],
             themed,
             style: FontStyle::Barlow,
             pinned: None,
@@ -211,7 +278,7 @@ impl Text {
         Self::with_faces(load(font_style::BARLOW_TITLE), load(font_style::BARLOW_BODY), [false; 2], None).pinned_to(FontStyle::Barlow)
     }
 
-    /// Follows Settings → Look → Font again (`builtin` holds Barlow): the Android launcher and player, which have the
+    /// Follows Settings → Look → Style again (`builtin` holds Barlow): the Android launcher and player, which have the
     /// embedded faces only but a Font row of their own.
     pub fn following_font(mut self) -> Self {
         self.pinned = None;
@@ -219,7 +286,7 @@ impl Text {
         self
     }
 
-    /// Held to `style` whatever Settings → Look → Font says: the tests, and safe mode (`builtin`).
+    /// Held to `style` whatever Settings → Look → Style says: the tests, and safe mode (`builtin`).
     pub fn pinned_to(mut self, style: FontStyle) -> Self {
         self.pinned = Some(style);
         self.sync();
@@ -231,7 +298,7 @@ impl Text {
         self.style
     }
 
-    /// Follows the style in use (`font_style::get`; Settings → Look → Font): one atomic read, and only when it
+    /// Follows the style in use (`font_style::get`; Settings → Look → Style): one atomic read, and only when it
     /// changed the faces are swapped and everything drawn with the old ones dropped. The faces of a style are parsed
     /// the first time it is used (`FontStyle::fitted`), not here per frame. A store theme's faces stay.
     fn sync(&mut self) {
@@ -242,12 +309,12 @@ impl Text {
         self.style = want;
         let alt = want.fitted();
         let pick = |i: usize, alt: Option<&font_style::Alt>| match alt {
-            Some(a) if !self.themed[i] => (a.font.clone(), a.scale),
-            _ => (self.base[i].clone(), 1.0),
+            Some(a) if !self.themed[i] => (a.font.clone(), a.scale, a.grid),
+            _ => (self.base[i].clone(), 1.0, 0.0),
         };
         let (title, body) = (pick(0, alt.and_then(|a| a.title.as_ref())), pick(1, alt.and_then(|a| a.body.as_ref())));
-        (self.title, self.scale[0]) = title;
-        (self.body, self.scale[1]) = body;
+        (self.title, self.scale[0], self.grid[0]) = title;
+        (self.body, self.scale[1], self.grid[1]) = body;
         // Glyphs, the fallback's fit to the capitals and what the threads were drawing ahead are of the old faces.
         self.cache.clear();
         self.more.clear();
@@ -302,13 +369,13 @@ impl Text {
             self.take_warm();
         }
         // One lookup for a glyph in the cache, as before the fallback font; the fields apart for the one that isn't.
-        let Text { cache, title, body, scale, base, fallback_path, fallback, more, more_bytes, drawn, .. } = self;
+        let Text { cache, title, body, scale, grid, base, fallback_path, fallback, more, more_bytes, drawn, .. } = self;
         cache.entry(key).or_insert_with(|| {
             *drawn += 1;
-            let (font, k) = match face {
-                Face::Title => (&**title, scale[0]),
-                Face::Body => (&**body, scale[1]),
-                Face::Narrow => (&*base[0], 1.0),
+            let (font, k, g) = match face {
+                Face::Title => (&**title, scale[0], grid[0]),
+                Face::Body => (&**body, scale[1], grid[1]),
+                Face::Narrow => (&*base[0], 1.0, 0.0),
             };
             // The PlayStation-style shapes of the hints (`button_prompts`): drawn, at the face's cap height.
             if let Some(glyph) = crate::button_prompts::raster(ch, px, font.metrics('H', px as f32 * k).height as f32) {
@@ -322,7 +389,7 @@ impl Text {
                     return glyph;
                 }
             }
-            raster(font, k, ch, px)
+            raster(font, k, g, &base[face.slot()], ch, px)
         })
     }
 
@@ -475,7 +542,7 @@ impl Text {
             self.tr.is_translated(key);
         }
         let (tx, rx) = mpsc::channel();
-        let (title, body, scale) = (self.title.clone(), self.body.clone(), self.scale);
+        let (title, body, scale, grid, base) = (self.title.clone(), self.body.clone(), self.scale, self.grid, self.base.clone());
         // At the sizes they are painted at (Settings → Text size, `type_scale`); a change of size draws them anew.
         let sizes: Vec<(Face, u32)> = PREWARM.iter().flat_map(|(face, sizes)| sizes.iter().map(|px| (*face, crate::type_scale::px(*px)))).collect();
         let spawned = std::thread::Builder::new().name("glyph-prewarm".into()).spawn(move || {
@@ -483,7 +550,7 @@ impl Text {
             for (face, px) in sizes {
                 let font = if face == Face::Title { &title } else { &body };
                 for ch in (' '..='~').chain(PREWARM_MORE.chars()) {
-                    out.push(((face, px, ch), raster(font, scale[face as usize], ch, px)));
+                    out.push(((face, px, ch), raster(font, scale[face as usize], grid[face as usize], &base[face.slot()], ch, px)));
                 }
             }
             let _ = tx.send(out);
@@ -518,11 +585,8 @@ impl Text {
     /// `s` in the interface's language (`crate::i18n`); a borrowed string or a shared one, never a new allocation
     /// for a string painted in the frame before.
     pub fn translated<'a>(&mut self, s: &'a str) -> crate::i18n::Tr<'a> {
-        if self.raw {
-            crate::i18n::Tr::Same(s)
-        } else {
-            self.tr.get(s)
-        }
+        let translated = if self.raw { crate::i18n::Tr::Same(s) } else { self.tr.get(s) };
+        if crate::i18n::is_name(s) { translated } else { crate::i18n::device_text(translated) }
     }
 
     pub fn width(&mut self, face: Face, px: u32, s: &str) -> i32 {
@@ -882,7 +946,7 @@ pub mod boxes {
     fn record() -> Option<&'static Mutex<Vec<Painted>>> {
         static REC: OnceLock<Option<Mutex<Vec<Painted>>>> = OnceLock::new();
         REC.get_or_init(|| {
-            ["POCKETUI_TEXT_BOXES", "POCKETUI_VISIBLE_TEXT", "POCKETUI_LAYOUT_AUDIT"].iter()
+            ["POCKETUI_TEXT_BOXES", "POCKETUI_VISIBLE_TEXT", "POCKETUI_LAYOUT_AUDIT", crate::nav_probe::ENV].iter()
                 .any(|key| std::env::var_os(key).is_some_and(|p| !p.is_empty()))
                 .then(|| Mutex::new(Vec::new()))
         }).as_ref()
@@ -1134,10 +1198,14 @@ pub mod boxes {
                 placed.push((r, *cut, s));
             }
         }
+        // The navigation explorer's record (`nav_probe`): every string and mark with its place, then left out of what follows,
+        // which is about text.
+        crate::nav_probe::write(&placed);
+        placed.retain(|(_, _, s)| !crate::nav_probe::is_mark(s));
         // A transcript of strings actually painted into this frame, after clipping and covered-dialog resets.
         // Unlike translation diagnostics it excludes width measurements and off-screen text.
         if let Some(path) = std::env::var_os("POCKETUI_VISIBLE_TEXT") {
-            let text = placed.iter().filter(|(_, _, s)| !s.starts_with("‹hints"))
+            let text = placed.iter().filter(|(_, _, s)| !s.starts_with("‹hints") && !s.starts_with("‹row") && *s != "‹frame›")
                 .map(|(_, _, s)| *s).collect::<Vec<_>>().join("\n");
             let _ = std::fs::write(path, text);
         }
@@ -1162,6 +1230,10 @@ pub mod boxes {
                 // The hint bar and its own keys and labels, which lie inside it.
                 let inside = |r: &Rect, o: &Rect| r.0 >= o.0 && r.1 >= o.1 && r.2 <= o.2 && r.3 <= o.3;
                 if (sa.starts_with("‹hints") && inside(b, a)) || (sb.starts_with("‹hints") && inside(a, b)) {
+                    continue;
+                }
+                // A row's band (`area` "‹row›") holds its own text and its neighbours stand close: only a hint bar over it is a fault.
+                if (sa.starts_with("‹row") && !sb.starts_with("‹hints")) || (sb.starts_with("‹row") && !sa.starts_with("‹hints")) {
                     continue;
                 }
                 let (ox, oy) = (a.2.min(b.2) - a.0.max(b.0), a.3.min(b.3) - a.1.max(b.1));
@@ -1203,7 +1275,7 @@ pub mod boxes {
         let below = |a: &Rect, b: &Rect| (b.0 - a.0).abs() <= 2 && b.1 >= a.1 && b.1 - a.1 <= (a.3 - a.1) * 2 + 4 && b.1 > a.1;
         for (a, _, sa) in placed.iter() {
             let n = sa.trim().chars().count();
-            if sa.starts_with("‹hints") {
+            if sa.starts_with("‹hints") || sa.starts_with("‹row") {
                 continue;
             }
             if (1..=2).contains(&n) && word(sa) > 0 {
@@ -1441,7 +1513,8 @@ mod tests {
     }
 
     #[test]
-    fn the_letters_of_japanese_names_are_drawn_ahead_and_a_plain_library_starts_no_thread() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_letters_of_japanese_names_are_drawn_ahead_and_a_plain_library_starts_no_thread() {
         let mut t = Text::builtin().with_fallback(Some(PathBuf::from("/nonexistent/NotoSansCJKsc-Regular.otf")));
         t.prewarm_names(["Super Mario World", "Tetris", "Mega Man X"]);
         assert!(t.warm_names.is_none(), "only plain ASCII names: no thread");
@@ -1454,7 +1527,7 @@ mod tests {
         let mut ahead = Text::builtin().with_fallback(Some(font.clone()));
         let t0 = std::time::Instant::now();
         ahead.prewarm_names(names);
-        assert!(t0.elapsed() < std::time::Duration::from_millis(20), "the caller only starts a thread: {:?}", t0.elapsed());
+        assert!(t0.elapsed() < crate::testutil::timeout(std::time::Duration::from_millis(20)), "the caller only starts a thread: {:?}", t0.elapsed());
         ahead.finish_prewarm();
         let before = ahead.drawn_on_the_spot();
         let mut plain = Text::builtin().with_fallback(Some(font));
@@ -1529,5 +1602,38 @@ mod tests {
         assert_eq!(two[0], all[0]);
         assert!(two[1].ends_with('…') && t.width(Face::Body, 28, &two[1]) <= 300, "{two:?}");
         assert!(t.wrap_at_most(Face::Body, 28, s, 300, 0).is_empty());
+    }
+
+    /// Retro's letters as the Retro clip showed them (06.11.2026): Pixelify between whole pixels per font pixel came
+    /// out with grey edges and strokes of two and three pixels, its "8" read as "S", "Z" as "2", "C" as "O". At the
+    /// sizes the pause menu and its notes use, every pixel is ink or not, and those pairs differ by whole font pixels.
+    #[test]
+    fn retro_letters_are_crisp_and_digits_tell_apart_from_letters() {
+        let mut t = Text::builtin().pinned_to(FontStyle::Retro);
+        for face in [Face::Body, Face::Title] {
+            for px in [28, 30, 37, 46, 50, 56] {
+                for ch in "Slot 3 · heute 11:41 48% Zurück SELECT".chars() {
+                    let (_, bitmap) = t.glyph(face, px, ch).clone();
+                    assert!(bitmap.iter().all(|&v| v == 0 || v == 255), "{face:?} {px} px {ch:?}: grey edges");
+                }
+                for (a, b) in [('8', 'S'), ('5', 'S'), ('0', 'O'), ('2', 'Z'), ('8', 'B'), ('C', 'O')] {
+                    let ((ma, ga), (mb, gb)) = (t.glyph(face, px, a).clone(), t.glyph(face, px, b).clone());
+                    // The font pixel in screen pixels: the capitals are seven high.
+                    let n = (mb.height.max(ma.height) / 7).max(1);
+                    // Ink at (x, y) from the pen on the baseline, y down, as `draw` places a glyph's rows.
+                    let at = |m: &Metrics, g: &[u8], x: i32, y: i32| {
+                        let (col, row) = (x - m.xmin, y + m.height as i32 + m.ymin);
+                        (0..m.width as i32).contains(&col) && (0..m.height as i32).contains(&row) && g[row as usize * m.width + col as usize] > 0
+                    };
+                    let mut differ = 0;
+                    for y in -(ma.height.max(mb.height) as i32) - 2..2 {
+                        for x in -2..(ma.width.max(mb.width) as i32 + 4) {
+                            differ += usize::from(at(&ma, &ga, x, y) != at(&mb, &gb, x, y));
+                        }
+                    }
+                    assert!(differ >= 3 * n * n, "{face:?} {px} px: {a:?} and {b:?} differ by {differ} pixels only (font pixel {n})");
+                }
+            }
+        }
     }
 }

@@ -28,7 +28,8 @@ pub mod touch;
 pub mod frozen;
 pub mod kids;
 pub mod big_shelf;
-// Frozen moments: shared phone rules also keep refused handheld moments safe past the next Quit.
+// Android's files for Frozen games. On Linux pocket-core uses its set-aside (a moment that isn't loaded goes into a free
+// slot, never under a name the next quit removes), and the gate tests its rules.
 pub mod frozen_phone;
 // A phone's Games page: on Linux only so the gate tests its rules.
 #[cfg(test)]
@@ -61,6 +62,8 @@ pub mod remote;
 pub mod report;
 pub mod palette;
 pub mod kit;
+/// What a frame offers the D-pad, for tests/nav_explorer.rs (off unless POCKETUI_NAV_PROBE is set).
+pub mod nav_probe;
 pub mod appearance;
 pub mod setup;
 // The feature registry, its cards and their previews (first start, Settings → Tour, "New in this version").
@@ -89,6 +92,8 @@ pub mod look;
 pub mod starter;
 pub mod store;
 pub mod update;
+/// The quiet "a newer pocket-ui is ready" notice, once for each version (`app_update_hint.rs`).
+pub mod update_hint;
 /// Whether a new ROCKNIX system still has what pocket-ui needs (OS updates, docs/UPDATES.md).
 pub mod os_compat;
 pub mod untar;
@@ -117,6 +122,7 @@ pub mod controls;
 pub mod controls_card;
 pub mod emu_menu;
 pub mod slots;
+pub mod state_file;
 // The pause menu: the Disc row of multi-disc games, and Save and Load only where they do something.
 pub mod disc;
 pub mod pause_saves;
@@ -151,8 +157,11 @@ pub mod favorites;
 pub mod marquee;
 pub mod motion;
 pub mod button_layout;
+/// Settings → Help & tools → Test buttons: what each connected controller does, with the remaps shown (`app_test_buttons.rs` paints it).
+pub mod button_test;
 pub mod button_prompts;
 pub mod font_style;
+pub mod retro;
 pub mod switcher;
 /// The status corner at the top right: the time, a Wi-Fi symbol while connected, the battery.
 pub mod status_corner;
@@ -168,6 +177,9 @@ pub mod sleep_settings;
 pub mod auto_off;
 /// Low-battery warning and power-off (review B12 / SOL-05).
 pub mod low_battery;
+/// The heat guard (the TrimUI Brick's own card): over the CPU zone's limit the game is saved and the device switched off.
+#[cfg(feature = "brick")]
+pub mod heat;
 pub mod powerkey;
 pub mod power_menu;
 pub mod timezone;
@@ -178,6 +190,8 @@ pub mod system_cfg;
 pub mod rescue;
 pub mod display;
 pub mod display_out;
+/// Two screens: the shelf on top, the selected game's box below (the RG DS Plus, Retroid's add-on; docs/DUAL-SCREEN.md).
+pub mod second_screen;
 /// Which handheld this is: the Mini V2 (tested) or one of its experimental SM8250 siblings (docs/DEVICES.md).
 pub mod device;
 /// Window handling without sway (the Steam Deck, X11; the code itself only with `--features x11`).
@@ -358,3 +372,17 @@ pub mod document_library;
 pub mod document_check;
 
 pub mod device_model;
+#[cfg(feature = "brick")]
+pub mod soft_screen;
+#[cfg(feature = "brick")]
+pub mod brick_profile;
+#[cfg(feature = "brick")]
+pub mod brick_gl;
+#[cfg(feature = "brick")]
+pub mod brick_gpu;
+#[cfg(feature = "brick")]
+pub mod brick_gles;
+#[cfg(feature = "brick")]
+pub mod brick_picture;
+#[cfg(feature = "brick")]
+pub mod brick_hw;

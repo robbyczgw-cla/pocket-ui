@@ -568,18 +568,18 @@ mod tests {
             },
             move || { let _ = published.send(()); },
         ));
-        publications.recv_timeout(Duration::from_secs(5)).unwrap();
+        publications.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap();
         let mut last = IndexSnapshot::default();
         assert_eq!(cache.read(&mut last).index["Game.sh"].md5.as_deref(), Some("1"));
         cache.invalidate();
-        scanning.recv_timeout(Duration::from_secs(5)).unwrap();
+        scanning.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap();
 
         // A UI reader must finish while the scan is blocked, even during the brief publication exchange.
         let held = cache.state.published.lock().unwrap();
         let reader = cache.clone();
         let (read, result) = mpsc::channel();
         let thread = std::thread::spawn(move || { let _ = read.send(reader.read(&mut last)); });
-        let snapshot = result.recv_timeout(Duration::from_secs(2)).expect("index reads must never wait for the scan or publisher");
+        let snapshot = result.recv_timeout(crate::testutil::timeout(Duration::from_secs(2))).expect("index reads must never wait for the scan or publisher");
         assert_eq!(snapshot.index["Game.sh"].md5.as_deref(), Some("1"));
         drop(held);
         thread.join().unwrap();
@@ -587,7 +587,7 @@ mod tests {
         // Updating a port while an older pass reads it must cause another pass even when the root stamp stays the same.
         cache.invalidate();
         release.send(()).unwrap();
-        publications.recv_timeout(Duration::from_secs(5)).unwrap();
+        publications.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap();
         let mut last = snapshot;
         let refreshed = cache.read(&mut last);
         assert_eq!(refreshed.index["Game.sh"].md5.as_deref(), Some("3"));
@@ -609,9 +609,9 @@ mod tests {
             },
             move || { let _ = published.send(()); },
         );
-        publications.recv_timeout(Duration::from_secs(5)).unwrap();
+        publications.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap();
         directory_version.store(1, Ordering::Relaxed);
-        publications.recv_timeout(Duration::from_secs(5)).expect("the worker must notice directory changes without forget");
+        publications.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).expect("the worker must notice directory changes without forget");
         assert_eq!(cache.read(&mut IndexSnapshot::default()).index["Game.sh"].md5.as_deref(), Some("2"));
     }
 

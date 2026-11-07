@@ -93,7 +93,7 @@ Settings → Games → Pictures & extras.
 Where they show:
 
 - **Split**: the picture on the right shows the box art; when you stay on a game for a moment (about two and a half
-  seconds) it fades to the game running, then to the title screen, then back to the box art, a few seconds each. The
+  seconds) it fades to the game running, then to the title screen, then back to the box art, a few seconds each. It makes one pass and rests until you select another game. The
   next game starts again from its box art. With [Motion](settings.md#motion) Off nothing changes by itself: the box
   art stays.
 - **The game card** ([What the card shows](library.md#what-the-card-shows)): the screenshot and the title screen under the facts,

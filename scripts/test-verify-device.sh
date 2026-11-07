@@ -221,8 +221,8 @@ chmod +x "$T/restore-bin/pidof" "$T/restore-bin/systemd-run"
 restore() { # $1: yes when the boot-UI drop-in exists
   rm -rf "$T/live" "$T/systemctl-calls"; mkdir -p "$T/live"
   # In a subshell: they are then not this shell's children, and a killed one does not stay behind as a zombie.
-  (sleep 60 >/dev/null 2>&1 & echo $! >"$T/live/pocket-ui")
-  (sleep 60 >/dev/null 2>&1 & echo $! >"$T/live/pocket-core")
+  (sleep infinity >/dev/null 2>&1 & echo $! >"$T/live/pocket-ui")
+  (sleep infinity >/dev/null 2>&1 & echo $! >"$T/live/pocket-core")
   dropin=$T/dropin; rm -f "$dropin"; [ "$1" = yes ] && : >"$dropin"
   eval "$(sed -n "/^DEVICE_RESTORE='/,/fi'\$/p" "$here/latency.sh")"
   PATH="$T/restore-bin:$PATH" DROPIN=$dropin sh -c "$DEVICE_RESTORE"

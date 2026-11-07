@@ -6,12 +6,15 @@ has a child's own screen, a time limit or a loudest volume; the way out is every
 
 ## What a grown-up does
 
-- First start, "How do you like to play?" → **For a child**, or later Settings → System → **Kids mode**.
+- First start: **Y, "For a child…"** on its first page, a quiet hint, not a step (`Setup::kids_wanted`). Only the wish is
+  noted; after "Your games" these steps take the look stage's place and the first start ends with them
+  (`Setup::leave_games`, `App::kids_flow_press`). Or later Settings → System → **Kids mode**.
 - A 4-digit PIN with the D-pad, twice. 5 to 20 games (fewer if the card has fewer). Blue or Pink. A time per day and a
-  loudest volume, both optional. The first start then goes on with Wi-Fi and the rest.
-- **No games yet:** Add games comes first. From Settings, A on the step opens Add games and the list is read again when it
-  closes; START goes on without (the child's shelf then says "No games here yet"). In the first start Add games is one
-  of the steps that follow anyway, so the games are picked right after them, before the shelf.
+  loudest volume, both optional.
+- **No games yet:** from Settings, A on the step opens Add games and the list is read again when it closes; START goes on
+  without (the child's shelf then says "No games here yet"). In the first start the steps only open with games Kids Mode
+  can start: with none the look stage comes instead and says to set the mode up later (`Setup::kids_no_games`), never a
+  locked, empty shelf. B on the first step goes on to the look stage (`Setup::kids_cancelled`).
 
 ## What a child sees
 

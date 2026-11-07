@@ -401,6 +401,7 @@ impl App {
     }
 
     /// The page's lists from the shared state: paired browsers, addresses, the code's time left.
+    #[cfg(not(feature = "brick"))]
     fn web_page_refresh(&mut self) {
         let shared = self.web.shared();
         let browsers: Vec<Paired> = shared
@@ -428,6 +429,56 @@ impl App {
         page.address = match (running, &name, tailnet) {
             (true, Some(n), Some(_)) => Some(format!("http://{n}")),
             (true, None, Some(a)) => Some(address(*a)),
+            (true, _, None) => listening.first().map(|a| address(*a)),
+            _ => None,
+        };
+        match pairing {
+            Some(p) if !p.expired(Instant::now()) => {
+                page.code = Some(p.code.clone());
+                page.code_left = p.until.saturating_duration_since(Instant::now()).as_secs();
+            }
+            _ => {
+                // Used, run out or five wrong tries: the code goes from the screen.
+                if page.view == View::Pairing && page.code.is_some() {
+                    page.view = View::List;
+                }
+                page.code = None;
+            }
+        }
+    }
+
+    #[cfg(feature = "brick")]
+    fn web_page_refresh(&mut self) {
+        let shared = self.web.shared();
+        let browsers: Vec<Paired> = shared
+            .sessions
+            .lock()
+            .unwrap()
+            .browsers
+            .iter()
+            .rev()
+            .map(|b| Paired { id: b.id.clone(), name: b.name.clone(), when: web_page::short_date(b.paired) })
+            .collect();
+        let listening = shared.listening.lock().unwrap().clone();
+        let name = shared.tailnet_name.lock().unwrap().clone();
+        let pairing = shared.pairing.lock().unwrap().clone();
+        let running = self.web.server.is_some();
+        let problem = shared.problem.lock().unwrap().clone();
+        let Some(page) = self.web.page.as_mut() else { return };
+        page.problem = problem.filter(|_| page.prefs.enabled);
+        page.browsers = browsers;
+        if let View::Browsers { sel, .. } = &mut page.view {
+            *sel = (*sel).min(page.browsers.len().saturating_sub(1));
+        }
+        let tailnet = listening.iter().find(|a| pocket_ui::web::net::is_tailnet(a.ip()));
+        // The Brick's userspace Tailscale: the socket is on 127.0.0.1, the address to open is the node's (shown once it is known).
+        let loopback_only = !listening.is_empty() && listening.iter().all(|a| a.ip().is_loopback()) && { #[cfg(feature = "brick")] { pocket_ui::brick_profile::standalone() } #[cfg(not(feature = "brick"))] { false } };
+        page.addresses = if running && !loopback_only { listening.iter().map(|a| address(*a)).collect() } else { Vec::new() };
+        page.address = match (running, &name, tailnet) {
+            (true, Some(n), Some(_)) => Some(format!("http://{n}")),
+            (true, None, Some(a)) => Some(address(*a)),
+            (true, Some(n), None) if loopback_only => Some(format!("http://{n}")),
+            (true, None, None) if loopback_only => None,
             (true, _, None) => listening.first().map(|a| address(*a)),
             _ => None,
         };
@@ -639,16 +690,17 @@ impl App {
         } else {
             "Only over Tailscale, and every browser needs a code, yours too. Pauses while a game runs."
         };
-        for l in self.text.wrap_prose(Face::Body, 24, note, width) {
-            self.text.draw(c, Face::Body, 24, left, y, pal().quiet, &l);
-            y += pocket_ui::type_scale::line(24, 8);
-        }
-
-        let a_label = match page.row() {
-            web_page::Row::Pair | web_page::Row::Browsers => "Open",
-            _ => "Change",
+        // Pair opens only while the companion is on, the browsers' list only with a browser in it: no A where A does nothing
+        // (the row's line says why; the navigation explorer, 2026-11-07).
+        let hints: &[(&str, &str)] = match page.row() {
+            web_page::Row::Pair if !page.prefs.enabled => &[("B", "Back")],
+            web_page::Row::Browsers if page.browsers.is_empty() => &[("B", "Back")],
+            web_page::Row::Pair | web_page::Row::Browsers => &[("B", "Back"), ("A", "Open")],
+            _ => &[("B", "Back"), ("A", "Change")],
         };
-        self.nu_foot(c, &[("B", "Back"), ("A", a_label)], page.describe(page.row()), pal().text);
+        // The foot first: the note stops above it, shortened with "…" (at Large text on 768 lines it ran into the hints, the Brick).
+        let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, hints, page.describe(page.row()), 2, pal().text);
+        self.text.paragraph(c, Face::Body, 24, (left, y), width, pocket_ui::type_scale::line(24, 8), foot - 8, pal().quiet, note);
     }
 
     /// The code in large digits beside a QR code of the address with the code in it (the page pairs by itself).
@@ -703,7 +755,7 @@ impl App {
             let base = y + row / 2 + pocket_ui::type_scale::mid(font);
             let when = format!("paired {}", b.when);
             if i == sel {
-                c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, if confirm { pal().alert } else { pal().select });
+                pocket_ui::retro::select(c, pad, y + 4, right - pad, row - 8, (row - 8) / 2, if confirm { pal().alert } else { pal().select });
                 let name = self.text.fit(Face::Body, font, &b.name, right - pad - 2 * NU_BTN_PAD - 260);
                 let fg = if confirm { pal().on_alert } else { pal().ink };
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, fg, &name);
@@ -764,7 +816,7 @@ mod tests {
     /// The page from the running server, as a browser gets it.
     fn page_answers(ui: &WebUi) -> bool {
         let shared = ui.shared.clone().unwrap();
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + crate::test_clock::timeout(Duration::from_secs(5));
         let addr = loop {
             if let Some(a) = shared.listening.lock().unwrap().first().copied() {
                 break a;
@@ -773,7 +825,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         };
         let Ok(mut s) = std::net::TcpStream::connect(addr) else { return false };
-        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        s.set_read_timeout(Some(crate::test_clock::timeout(Duration::from_secs(5)))).unwrap();
         write!(s, "GET / HTTP/1.1\r\nHost: {addr}\r\n\r\n").unwrap();
         let mut out = String::new();
         let _ = s.read_to_string(&mut out);

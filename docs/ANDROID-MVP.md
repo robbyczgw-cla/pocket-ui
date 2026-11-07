@@ -328,7 +328,7 @@ The rules are Linux's (`src/frozen.rs`); `src/frozen_phone.rs` is where they mee
 the gate. Settings has the row (`Setting::Extra(FrozenGames)`, on by default). Differences from Linux, all from the files:
 
 - Identity: a game's states are `states/<game_key>/<stem>` and the core plays a copy of the document (`content/<game_key>/<name>`)
-  made at every start. The mark lives beside the state (`<stem>.pstate.auto.mark`, written by the player before the state, from
+  made at every start. The mark lives beside the state (`<stem>.pstate.auto.z.mark`, written by the player before the state, from
   this session's file), not in a recents list; "recent" is `launcher.json` `played`.
 - Which stand open: `App::frozen_refresh` on a worker, at each return from a game and on a changed setting or library. Only games
   `player_core` would start (bundled cores; never `launchGame`'s external apps, nor with the test's `externalPlayer`). The shelf
@@ -338,7 +338,7 @@ the gate. Settings has the row (`Setting::Extra(FrozenGames)`, on by default). D
   (Linux samples them), so a patch in the middle counts as another file. The launcher hands `frozen_shown` in the settings JSON.
   A frozen start has no old-TV switch-on (`cabinet::starts_cozy`).
 - A moment that isn't loaded (another file or core, refused, older than the in-game save) goes to the first free slot, or to
-  `.pstate.auto.kept<n>` when all eight are taken: the next Quit would remove it where it lies (`slots::auto_written`). The pause
+  `.pstate.auto.z.kept<n>` when all eight are taken: the next Quit would remove it where it lies (`slots::auto_written`). The pause
   menu's slot picker goes on after slot 8 through the kept moments (`frozen_phone::kept`), which Load loads and Save refuses, and a
   start moves them into a slot that has come free. A note over the game's first 8 seconds says so (`Player::note`, also a semantic node).
 - `Player::automatic` writes the battery save before the state, as pocket-core's exit does.
@@ -459,3 +459,40 @@ No device measurements or full Linux feature parity are implied by an APK build.
 The Games shelf now calls its first row Continue and includes only games whose open
 moment was verified by the Android worker. Recently played external games without
 an internal moment remain on their system shelf. Easy keeps its single-game order.
+
+Automatic states from 0.2.1 use the shared `state_file` codec (`.pstate.auto.z`); raw older Auto states remain readable.
+The Android player uses it for both automatic writes and all state reads. Manual slots/undo/Earlier stay raw. Moving a
+compressed moment into a manual slot decodes it first. Downgrading starts from the in-game save and cannot overwrite the
+compressed moment; Linux/Deck use the identical format (HOST.md, compressed automatic states).
+
+## Android 0.2
+
+The [Android preview guide](../android/README.md#android-02-preview) describes the new
+Controls, Zoom, Hold to toggle, font scaling, resume reminder and Android lifecycle behavior.
+`android/src/play_cards.rs` holds the phone's control labels, the continuous frozen-frame
+crop and shared card presentation; both native libraries use it. The launcher passes old
+history facts before recording this launch. The player shows the reminder only after
+`Core::resume` actually succeeds and a restored frame exists; it runs no further ticks or
+audio while the card is being read. Android has no editable per-game notes yet.
+
+`Preferences.haptics` defaults false; `remind_where: Option<bool>` defaults to enabled for
+older preferences. Per-game toggle selections live under private `android-controls/<key>.json`;
+core descriptor snapshots use `android-buttons/<key>.json`, loaded once on explicit Controls open.
+They use the game/core identity, so one game's action names cannot describe another game.
+These settings change no SAF permission, game-file location or manual slot format.
+`type_scale::set_system_scale` applies Android's configured factor separately from the
+shared three text sizes, on the drawing thread. The player receives it in `nativeFrame`,
+so a font change does not require JNI work from Rust on every game tick. `fontScale` is a
+handled configuration change in both Activities. New visible strings include DE/ES.
+
+The player observes InputManager device events, releases digital/analog/touch/latching
+inputs and pauses on a controller change/removal. An unrelated keyboard/mouse change
+leaves the game alone. GLSurfaceView's pause path queues the save on its GL thread before
+parking the surface; duplicate audio-focus/background notifications share one suspend
+save per foreground period. The queued-event-before-pause ordering is visible in
+[Android 15's GLThread](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-15.0.0_r1/opengl/java/android/opengl/GLSurfaceView.java).
+Resume keeps the pause sheet open. See the Android framework's
+[GLSurfaceView lifecycle](https://developer.android.com/reference/android/opengl/GLSurfaceView)
+and [edge-to-edge guidance](https://developer.android.com/develop/ui/views/layout/edge-to-edge).
+SAF remains the only access to external game files; app-private copies, saves and settings
+remain in the sandbox. The existing external-emulator intents retain their own lifecycle.

@@ -335,7 +335,8 @@ mod tests {
     }
 
     #[test]
-    fn a_lock_held_by_a_live_process_is_waited_for_then_the_write_fails() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_lock_held_by_a_live_process_is_waited_for_then_the_write_fails() {
         let d = tmp("held");
         let mut c = SystemCfg::at(&d.join("system.cfg"));
         c.wait = Duration::from_millis(300);
@@ -350,7 +351,8 @@ mod tests {
     }
 
     #[test]
-    fn a_lock_taken_while_we_wait_is_honoured_and_used_after_its_release() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_lock_taken_while_we_wait_is_honoured_and_used_after_its_release() {
         let d = tmp("release");
         let c = SystemCfg::at(&d.join("system.cfg"));
         std::fs::write(&c.lock, "1\n").unwrap();

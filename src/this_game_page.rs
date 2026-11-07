@@ -95,6 +95,10 @@ impl ThisGamePage {
         let mut rows = Vec::new();
         if let Some(s) = self.settings.as_ref() {
             for (name, only) in GROUPS {
+                #[cfg(feature = "brick")]
+                if name == "Picture" && crate::brick_profile::picture_rows_out() {
+                    continue;
+                }
                 let Some(g) = options::GROUPS.iter().find(|g| g.name == name) else { continue };
                 let visible = g.visible(Some(s));
                 if only.is_empty() {
@@ -121,6 +125,7 @@ impl ThisGamePage {
     }
 
     /// (name, value, explanation) of a row; the value is ">" for one that opens a page, empty for an action.
+    #[cfg(not(feature = "brick"))]
     pub fn describe(&self, row: Row) -> (String, String, String) {
         match row {
             Row::Setting(key) => {
@@ -129,6 +134,28 @@ impl ThisGamePage {
                 let shortcut = options::GROUPS.iter().any(|g| g.name == "Shortcuts" && g.settings.iter().any(|x| x.key == key));
                 let name = if shortcut { format!("Shortcut: {}", setting.name) } else { setting.name.to_string() };
                 (name, setting.choices[s.index(setting)].label.to_string(), options::describe(setting, Some(s)))
+            }
+            Row::Standalone(i) => self.standalone.as_ref().and_then(|m| m.rows().into_iter().nth(i)).unwrap_or_default(),
+            Row::Controls => ("Controls".into(), ">".into(), "Which button does what, and the left stick. The pause menu shows this console's own button names.".into()),
+            Row::RunsOn => ("Runs on".into(), if self.subject.runs_on.is_empty() { "Default".into() } else { self.subject.runs_on.clone() }, "Which emulator plays this game or this console: pocket-core, RetroArch or another.".into()),
+            Row::Reset => ("Use the console's settings".into(), String::new(), "Takes this game off its own settings: it starts like the other games on this console.".into()),
+        }
+    }
+
+    #[cfg(feature = "brick")]
+    pub fn describe(&self, row: Row) -> (String, String, String) {
+        match row {
+            Row::Setting(key) => {
+                let (Some(setting), Some(s)) = (options::setting(key), self.settings.as_ref()) else { return Default::default() };
+                // Rewind and Over the game are in Speed, rumble, fan and Shortcuts both: the shortcut says so.
+                let shortcut = options::GROUPS.iter().any(|g| g.name == "Shortcuts" && g.settings.iter().any(|x| x.key == key));
+                let name = if shortcut { format!("Shortcut: {}", setting.name) } else { setting.name.to_string() };
+                let choice = &setting.choices[s.index(setting)];
+                #[cfg(feature = "brick")]
+                let label = crate::brick_profile::labelled(key, choice.value, choice.label);
+                #[cfg(not(feature = "brick"))]
+                let label = choice.label.to_string();
+                (name, label, options::describe(setting, Some(s)))
             }
             Row::Standalone(i) => self.standalone.as_ref().and_then(|m| m.rows().into_iter().nth(i)).unwrap_or_default(),
             Row::Controls => ("Controls".into(), ">".into(), "Which button does what, and the left stick. The pause menu shows this console's own button names.".into()),

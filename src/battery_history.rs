@@ -880,7 +880,8 @@ mod tests {
     /// The sampler's shared state (`RECORDER`, `STOPPED`, `WRITING`) in one test, in its order: nothing read yet, read
     /// on a thread, written, stopped.
     #[test]
-    fn the_card_never_reads_the_files_and_an_orderly_exit_leaves_no_temp_file() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_card_never_reads_the_files_and_an_orderly_exit_leaves_no_temp_file() {
         let d = dir("lifecycle");
         let key = Key::new("gba", Path::new("a.gba"), "");
         // Review SOL 2026-10-24 #6: before the sampler has read its files the card says so, without a file read.
@@ -924,7 +925,8 @@ mod tests {
     /// Review 2026-10-24 (wake from deep sleep): the sample after a wake took three reads 100 ms apart and a write on
     /// the UI thread, right when the player woke the Pocket. Asking for it returns at once; the reads run elsewhere.
     #[test]
-    fn the_sample_after_a_wake_never_holds_up_the_caller() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_sample_after_a_wake_never_holds_up_the_caller() {
         let bat = dir("wake-battery");
         for (name, value) in [("capacity", "77"), ("status", "Discharging"), ("voltage_now", "3900000"), ("current_now", "-400000")] {
             std::fs::write(bat.join(name), value).unwrap();

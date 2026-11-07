@@ -11,7 +11,8 @@
 //!   GameCube playable for many games, heavy ones not; Wii and 3DS mixed; Dreamcast, PSP, N64, DS fine), Snapdragon 8 Gen 2
 //!   (Odin 2 family, Pocket 6: PS2, GameCube, Wii, 3DS, Dreamcast, PSP broadly fine; PS3, Wii U, Vita and Xbox for
 //!   selected games), Allwinner H700 (RG35XX / RG40XX / RG34XX: up to PlayStation smooth; N64, PSP, Dreamcast, DS and
-//!   Saturn only some games, at reduced speed or frameskip).
+//!   Saturn only some games, at reduced speed or frameskip), RK3568 (RG DS Plus, reviews: up to PlayStation and DS at full
+//!   speed, N64 playable, Dreamcast and PSP only some games).
 use crate::device_model::Model;
 
 /// The sentence (one string, translated in assets/i18n).
@@ -23,6 +24,8 @@ enum Family {
     Sd865,
     Sd8Gen2,
     H700,
+    /// The RG DS Plus's RK3568 (four Cortex-A55): DS full speed on DraStic, N64/PSP/Dreamcast only some games.
+    Rk3566,
 }
 
 fn family(model: Model) -> Option<Family> {
@@ -30,7 +33,8 @@ fn family(model: Model) -> Option<Family> {
         Model::MiniV2 | Model::MiniV1 | Model::Pocket5 | Model::Flip2 => Some(Family::Sd865),
         Model::Pocket6 | Model::Nova | Model::Odin2 | Model::Odin2Mini | Model::Odin2Portal => Some(Family::Sd8Gen2),
         Model::H700(_) => Some(Family::H700),
-        Model::SteamDeck => None,
+        Model::RgDsPlus => Some(Family::Rk3566),
+        Model::SteamDeck => None, #[cfg(feature = "brick")] Model::Brick => None,
     }
 }
 
@@ -39,6 +43,7 @@ const TABLE: &[(Family, &[&str])] = &[
     (Family::Sd865, &["ps2", "gamecube", "wii", "3ds", "xbox"]),
     (Family::Sd8Gen2, &["ps2", "gamecube", "xbox", "ps3", "wiiu", "psvita"]),
     (Family::H700, &["n64", "psp", "dreamcast", "nds", "saturn"]),
+    (Family::Rk3566, &["n64", "psp", "dreamcast", "saturn"]),
 ];
 
 /// The note for `system` on `model` (None: an unknown handheld, a system without a caution).
@@ -85,6 +90,11 @@ mod tests {
     }
 
     #[test]
+    fn rg_ds_plus_gets_it_on_the_heavier_systems_but_not_on_ds() {
+        assert_eq!(systems(Some(Model::RgDsPlus)), ["n64", "psp", "dreamcast", "saturn"]);
+    }
+
+    #[test]
     fn the_deck_and_unknown_handhelds_get_nothing() {
         assert!(systems(Some(Model::SteamDeck)).is_empty());
         assert!(systems(None).is_empty());
@@ -92,7 +102,7 @@ mod tests {
 
     #[test]
     fn every_listed_handheld_has_a_family() {
-        for m in [Model::MiniV1, Model::Pocket5, Model::Flip2, Model::Pocket6, Model::Nova, Model::Odin2, Model::Odin2Portal] {
+        for m in [Model::MiniV1, Model::Pocket5, Model::Flip2, Model::Pocket6, Model::Nova, Model::Odin2, Model::Odin2Portal, Model::RgDsPlus] {
             assert!(family(m).is_some());
         }
     }

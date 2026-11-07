@@ -190,6 +190,12 @@ pub fn all_systems(es_systems: &Path) -> Result<Vec<SysInfo>, String> {
             // The share starts at /storage/roms; a few apps keep their files elsewhere and show their own path.
             let path = path.trim_end_matches('/');
             let folder = path.strip_prefix("/storage/").filter(|p| p.starts_with("roms/")).unwrap_or(path).to_string();
+            // On the Brick's card a computer sees the games under "Roms/<system>" (bound onto /storage/roms, deploy/brick/start.sh).
+            #[cfg(feature = "brick")]
+            let folder = match folder.strip_prefix("roms/") {
+                Some(rest) if crate::device::brick() => format!("Roms/{rest}"),
+                _ => folder,
+            };
             let mut extensions: Vec<String> = Vec::new();
             for e in child_text(sys, "extension").unwrap_or_default().split_whitespace() {
                 let e = e.trim_start_matches('.').to_ascii_lowercase();

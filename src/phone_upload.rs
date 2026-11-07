@@ -163,7 +163,10 @@ fn marker_in(s: &str) -> Option<&'static str> {
 }
 
 const PAGE_HTML: &str = include_str!("../assets/phone-upload/index.html");
+#[cfg(not(feature = "brick"))]
 const PAGE_JS: &str = include_str!("../assets/phone-upload/app.js");
+#[cfg(feature = "brick")]
+const PAGE_JS: &str = include_str!("../assets/phone-upload/brick-app.js");
 const PAGE_CSS: &str = include_str!("../assets/phone-upload/app.css");
 
 /// Why the page closed by itself.
@@ -236,6 +239,9 @@ struct Inner {
     // Per-server capacity fixture: no process-wide environment or shared disk measurements.
     #[cfg(test)]
     capacity: Mutex<Option<(Option<u64>, u64)>>,
+    // Test clients must observe full request teardown, not just TCP write EOF.
+    #[cfg(test)]
+    completed: Mutex<std::collections::HashSet<std::net::SocketAddr>>,
     token: String,
     /// "address:port" as the browser must name it in Host.
     authority: String,
@@ -354,6 +360,8 @@ impl Server {
             cfg,
             #[cfg(test)]
             capacity: Mutex::new(None),
+            #[cfg(test)]
+            completed: Mutex::new(std::collections::HashSet::new()),
             token: new_token()?,
             authority: addr.to_string(),
             stop: AtomicBool::new(false),
@@ -484,7 +492,7 @@ fn listen(inner: &Arc<Inner>, listener: TcpListener) {
         if !ready {
             continue;
         }
-        while let Ok((stream, _)) = listener.accept() {
+        while let Ok((stream, _peer)) = listener.accept() {
             let _ = stream.set_nonblocking(false);
             let (active, auth) = (inner.active.load(Ordering::SeqCst), inner.active_auth.load(Ordering::SeqCst));
             if active >= MAX_CONNS || active.saturating_sub(auth) >= MAX_UNAUTH {
@@ -502,6 +510,8 @@ fn listen(inner: &Arc<Inner>, listener: TcpListener) {
                 handle(&i2, stream);
                 i2.conns.lock().unwrap_or_else(|e| e.into_inner()).retain(|(c, _)| *c != id);
                 i2.active.fetch_sub(1, Ordering::SeqCst);
+                #[cfg(test)]
+                i2.completed.lock().unwrap().insert(_peer);
             });
             if spawned.is_err() {
                 inner.conns.lock().unwrap_or_else(|e| e.into_inner()).retain(|(c, _)| *c != id);
@@ -655,6 +665,9 @@ fn page(inner: &Inner) -> Response {
     // `<` escaped: a system's name can't end the block.
     let data = serde_json::to_string(&json!({ "systems": systems, "saves": SAVES, "disc": DISC_PARTS, "prefer": PREFER.iter().map(|(e, id)| (e.to_string(), id.to_string())).collect::<std::collections::BTreeMap<_, _>>() })).unwrap_or_default().replace('<', "\\u003c");
     let html = PAGE_HTML.replace("{{TOKEN}}", &inner.token).replace("{{DATA}}", &data);
+    // The page's own words before its script runs ("Add games to your Pocket") name the Brick on the Brick, as its script does.
+    #[cfg(feature = "brick")]
+    let html = if crate::device::brick() { crate::i18n::brick_words(&html) } else { html };
     Response::new(200, "text/html; charset=utf-8", html.into_bytes())
 }
 
@@ -811,6 +824,10 @@ pub fn plan(roots: &Roots, systems: &[SysInfo], raw: &str, system: Option<&str>,
         return Err(Refused::NotAllowed(format!("A name with \".{m}\" inside can't be sent this way. Rename the file first.")));
     }
     let fits = candidates(roots, systems, &name);
+    #[cfg(feature = "brick")]
+    if ext == "png" && fits.is_empty() {
+        return cover_plan(roots, systems, name, system);
+    }
     let sys = match system {
         Some(id) => *fits.iter().find(|s| s.id == id).ok_or_else(|| Refused::NotAllowed("That system doesn't take this kind of file here.".into()))?,
         None => match fits.as_slice() {
@@ -839,6 +856,45 @@ pub fn plan(roots: &Roots, systems: &[SysInfo], raw: &str, system: Option<&str>,
         }
     };
     Ok(Plan { sys: sys.clone(), sub, name, ext, max })
+}
+
+/// The largest cover picture this page takes.
+#[cfg(feature = "brick")]
+const COVER_MAX: u64 = 4 << 20;
+
+/// A cover (`Game.png`) goes to `<system>/.media/Game.png`, where pocket-ui looks for box art, into the system that has a game
+/// of that name (a file, or a disc game's folder). A cover for a game that is not on the card is refused: it would be lost.
+#[cfg(feature = "brick")]
+fn cover_plan(roots: &Roots, systems: &[SysInfo], name: String, system: Option<&str>) -> Result<Plan, Refused> {
+    let stem = name[..name.len() - 4].to_string();
+    let has_game = |s: &SysInfo| -> bool {
+        let Some((exts, _)) = allowed(s) else { return false };
+        std::fs::read_dir(&s.path).into_iter().flatten().flatten().any(|e| {
+            let n = e.file_name().to_string_lossy().into_owned();
+            if n.starts_with('.') {
+                return false;
+            }
+            if e.file_type().is_ok_and(|t| t.is_dir()) {
+                return n == stem;
+            }
+            files::matching_ext(&n, &exts).is_some() && n.rsplit_once('.').is_some_and(|(b, _)| b == stem)
+        })
+    };
+    let fits: Vec<&SysInfo> = systems.iter().filter(|s| files::system_folder_ok(roots, s) && system.is_none_or(|id| id == s.id) && has_game(s)).collect();
+    let sys = match fits.as_slice() {
+        [] => return Err(Refused::NotAllowed(format!("No game called {stem} is on the card. Send the game first, then its cover with the same name."))),
+        [one] => *one,
+        _ => return Err(Refused::NotAllowed("Several systems take this cover: more than one has a game with that name.".into())),
+    };
+    files::system_folder(roots, sys)?;
+    Ok(Plan { sys: sys.clone(), sub: Some(".media".into()), name, ext: "png".into(), max: COVER_MAX })
+}
+
+/// Whether the file at `path` starts like a PNG picture.
+#[cfg(feature = "brick")]
+fn is_png(path: &Path) -> bool {
+    let mut head = [0u8; 8];
+    std::fs::File::open(path).and_then(|mut f| f.read_exact(&mut head)).is_ok() && head == [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]
 }
 
 /// A file a disc sheet names may only be a plain name beside it: no folder, no absolute path, nothing hidden.
@@ -974,6 +1030,10 @@ fn refusal_code(e: &Refused) -> Option<&'static str> {
         _ if m.starts_with("No system takes") => "no_system",
         _ if m.starts_with("Several systems take") => "choose_system",
         _ if m.starts_with("That folder name") => "bad_folder",
+        #[cfg(feature = "brick")]
+        _ if m.starts_with("No game called") => "no_game",
+        #[cfg(feature = "brick")]
+        _ if m.starts_with("That cover is not") => "bad_cover",
         _ if m.ends_with(" is in the way.") => "in_the_way",
         _ if m.starts_with("This disc sheet names") => "sheet_names",
         _ if m.starts_with("This page has taken enough") => "enough",
@@ -1075,6 +1135,15 @@ fn upload(inner: &Inner, req: &http::Request, body: &mut BufReader<Timed>) -> Re
         Some(data) => files::receive(&mut Counting { r: &data[..], inner, id }, &t, uploads, len, false, &gate),
         None => files::receive(&mut Counting { r: body, inner, id }, &t, uploads, len, false, &gate),
     };
+    // A cover that is not a picture is taken out again at once: pocket-ui would show a broken box.
+    #[cfg(feature = "brick")]
+    let result = match result {
+        Ok(_) if p.ext == "png" && p.sub.as_deref() == Some(".media") && !is_png(&t) => {
+            let _ = std::fs::remove_file(&t);
+            Err(Refused::NotAllowed("That cover is not a PNG picture.".into()))
+        }
+        other => other,
+    };
     claim.release(result.is_err());
     {
         let mut st = inner.status();
@@ -1170,7 +1239,8 @@ mod tests {
         /// One request exactly as given.
         fn send_raw(&self, head: &str, body: &[u8]) -> (u16, String) {
             let mut s = TcpStream::connect(self.server().addr()).unwrap();
-            s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+            let peer = s.local_addr().unwrap();
+            s.set_read_timeout(Some(crate::testutil::timeout(Duration::from_secs(10)))).unwrap();
             s.write_all(head.as_bytes()).unwrap();
             let _ = s.write_all(body);
             let mut out = Vec::new();
@@ -1178,6 +1248,14 @@ mod tests {
             let text = String::from_utf8_lossy(&out).into_owned();
             let status = text.split(' ').nth(1).and_then(|c| c.parse().ok()).unwrap_or(0);
             let body = text.split_once("\r\n\r\n").map(|(_, b)| b.to_string()).unwrap_or_default();
+            // The server half-closes its response before draining unread request
+            // data. Close our end, then wait for the worker's actual slot release.
+            // A capacity rejection (503) creates no worker and must stay testable.
+            drop(s);
+            if status != 503 {
+                crate::testutil::clock::wait_for(|| self.server().inner.completed.lock().unwrap().contains(&peer),
+                    Duration::from_secs(5), "upload request worker released its slot");
+            }
             (status, body)
         }
 
@@ -1248,10 +1326,35 @@ mod tests {
     }
 
     #[test]
-    fn too_many_wrong_codes_close_the_page() {
+    #[cfg(feature = "brick")]
+    fn a_cover_goes_to_media_of_the_system_with_that_game() {
         let env = Env::new(IDLE);
-        for _ in 0..MAX_BAD {
+        let png: Vec<u8> = [&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a][..], b"rest"].concat();
+        let (status, body) = env.up("name=Tetris.png", &png);
+        assert_eq!(status, 403, "no game yet: {body}");
+        assert!(body.contains("no_game"), "{body}");
+        assert!(!env.roms.join("gb/.media").exists(), "nothing was made");
+        assert_eq!(env.up("name=Tetris.gb", b"GB DATA").0, 200);
+        let (status, body) = env.up("name=Tetris.png", &png);
+        assert_eq!(status, 200, "{body}");
+        assert_eq!(std::fs::read(env.roms.join("gb/.media/Tetris.png")).unwrap(), png);
+        let (status, _) = env.up("name=Tetris.png", &png);
+        assert_ne!(status, 200, "never over an existing cover");
+        assert_eq!(env.up("name=Other.gb", b"GB DATA").0, 200);
+        let (status, body) = env.up("name=Other.png", b"not a picture at all");
+        assert_ne!(status, 200, "{body}");
+        assert!(body.contains("bad_cover"), "{body}");
+        assert!(!env.roms.join("gb/.media/Other.png").exists(), "a file that is no PNG is taken out again");
+        assert!(env.leftovers().is_empty());
+    }
+
+    #[test]
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_too_many_wrong_codes_close_the_page() {
+        let env = Env::new(IDLE);
+        for n in 0..MAX_BAD {
             env.send("GET /guess/ HTTP/1.1\r\n\r\n", b"");
+            assert_eq!(env.server().inner.bad.load(Ordering::SeqCst), n + 1, "each wrong code was counted");
         }
         assert_eq!(env.server().closed(), Some(Closed::Guessing));
         std::thread::sleep(TICK * 3);
@@ -1434,7 +1537,7 @@ mod tests {
         assert_eq!(status, 413, "{body}");
         // The upload itself checks again: the phone announces more than fits and sends nothing.
         let mut s = TcpStream::connect(env.server().addr()).unwrap();
-        s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        s.set_read_timeout(Some(crate::testutil::timeout(Duration::from_secs(10)))).unwrap();
         write!(s, "POST /{t}/upload?name=Big.gba HTTP/1.1\r\nHost: {}\r\nContent-Length: {}\r\n\r\n", env.host(), CART + 1).unwrap();
         let mut out = String::new();
         let _ = s.read_to_string(&mut out);
@@ -1475,28 +1578,30 @@ mod tests {
     }
 
     #[test]
-    fn closing_the_page_mid_upload_stops_listening_and_removes_the_part() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_closing_the_page_mid_upload_stops_listening_and_removes_the_part() {
         let mut env = Env::new(IDLE);
         let (t, addr) = (env.token(), env.server().addr());
         let mut s = TcpStream::connect(addr).unwrap();
         write!(s, "POST /{t}/upload?name=Open.gba HTTP/1.1\r\nHost: {}\r\nContent-Length: 1000000\r\n\r\n", env.host()).unwrap();
         s.write_all(&[7u8; 200_000]).unwrap();
-        std::thread::sleep(Duration::from_millis(300));
+        wait_for(|| env.leftovers().len() == 1);
         assert_eq!(env.leftovers().len(), 1);
         let t0 = Instant::now();
         env.server = None;
-        assert!(t0.elapsed() < Duration::from_secs(2), "closing doesn't wait for the phone");
+        assert!(t0.elapsed() < crate::testutil::timeout(Duration::from_secs(2)), "closing doesn't wait for the phone");
         wait_for(|| env.leftovers().is_empty());
         assert!(!env.roms.join("gba/Open.gba").exists());
         assert!(TcpStream::connect(addr).is_err(), "nothing listens once the page is closed");
         // The phone sees the connection end.
-        s.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        s.set_read_timeout(Some(crate::testutil::timeout(Duration::from_secs(2)))).unwrap();
         let mut buf = [0u8; 16];
         assert!(s.write_all(&[7u8; 300_000]).is_err() || s.read(&mut buf).map_or(true, |n| n == 0));
     }
 
     #[test]
-    fn idle_for_long_enough_closes_by_itself() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_idle_for_long_enough_closes_by_itself() {
         let env = Env::new(Duration::from_millis(600));
         wait_for(|| env.server().closed() == Some(Closed::Idle));
         std::thread::sleep(TICK * 2);
@@ -1505,11 +1610,15 @@ mod tests {
 
     #[test]
     fn uploads_at_the_same_time_each_land_in_place() {
+        // The Brick paces all bulk card writes together at 2 MiB/s (`update::brick_io::Pacer`, its firmware's Wi-Fi and card
+        // share one retry path): four 2 MB files would need 4 s plus an fsync per 256 KiB, near the client's 10 s. This test
+        // is about the uploads not mixing, not about their size.
+        const SIZE: usize = if cfg!(feature = "brick") { 300_000 } else { 2_000_000 };
         let env = Arc::new(Env::new(IDLE));
         let threads: Vec<_> = (0..4)
             .map(|i| {
                 let env = env.clone();
-                std::thread::spawn(move || env.up(&format!("name=Game{i}.gba"), &vec![i as u8; 2_000_000]).0)
+                std::thread::spawn(move || env.up(&format!("name=Game{i}.gba"), &vec![i as u8; SIZE]).0)
             })
             .collect();
         for t in threads {
@@ -1517,7 +1626,7 @@ mod tests {
         }
         for i in 0..4u8 {
             let data = std::fs::read(env.roms.join(format!("gba/Game{i}.gba"))).unwrap();
-            assert!(data.len() == 2_000_000 && data.iter().all(|b| *b == i));
+            assert!(data.len() == SIZE && data.iter().all(|b| *b == i));
         }
         assert_eq!(env.server().status().added, 4);
         assert!(env.leftovers().is_empty());
@@ -1602,7 +1711,8 @@ mod tests {
 
     /// Security review M3: connections without the code never keep the page open, and are capped.
     #[test]
-    fn connections_without_the_code_never_keep_it_open() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_connections_without_the_code_never_keep_it_open() {
         let env = Env::new(Duration::from_millis(800));
         let held: Vec<TcpStream> = (0..MAX_UNAUTH).map(|_| TcpStream::connect(env.server().addr()).unwrap()).collect();
         std::thread::sleep(Duration::from_millis(100));
@@ -1617,8 +1727,9 @@ mod tests {
     #[test]
     fn broken_heads_count_as_tries() {
         let env = Env::new(IDLE);
-        for _ in 0..MAX_BAD {
+        for n in 0..MAX_BAD {
             env.send_raw("NOT HTTP\r\n\r\n", b"");
+            assert_eq!(env.server().inner.bad.load(Ordering::SeqCst), n + 1, "each malformed request was counted, not rejected as busy");
         }
         wait_for(|| env.server().closed() == Some(Closed::Guessing));
     }
@@ -1626,7 +1737,8 @@ mod tests {
     /// Security review M4: a check makes nothing; a refused or cut upload leaves no folder behind; a page takes at
     /// most MAX_NEW_ENTRIES files and folders.
     #[test]
-    fn checks_and_refused_uploads_make_nothing_on_the_card() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_checks_and_refused_uploads_make_nothing_on_the_card() {
         let env = Env::new(IDLE);
         let t = env.token();
         for n in 0..5 {
@@ -1778,7 +1890,7 @@ mod tests {
             drop(first);
             wait_for(|| env.leftovers().len() == 1);
             second.write_all(&[5u8; 900]).unwrap();
-            second.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+            second.set_read_timeout(Some(crate::testutil::timeout(Duration::from_secs(10)))).unwrap();
             let mut out = String::new();
             let _ = second.read_to_string(&mut out);
             assert!(out.starts_with("HTTP/1.1 200"), "{dir}: {out}");
@@ -1790,7 +1902,7 @@ mod tests {
     fn wait_for(f: impl Fn() -> bool) {
         let t0 = Instant::now();
         while !f() {
-            assert!(t0.elapsed() < Duration::from_secs(5), "timed out");
+            assert!(t0.elapsed() < crate::testutil::timeout(Duration::from_secs(5)), "timed out");
             std::thread::sleep(Duration::from_millis(20));
         }
     }

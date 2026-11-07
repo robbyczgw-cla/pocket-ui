@@ -112,7 +112,7 @@ pub fn is_panel(name: &str) -> bool {
 
 /// Retroid's dual-screen add-on is a DisplayPort screen too (a Lontium bridge); ROCKNIX sets it up as a second
 /// screen, and it is not a TV.
-fn is_add_on_screen(o: &Output) -> bool {
+pub fn is_add_on_screen(o: &Output) -> bool {
     let l = |s: &str| s.to_ascii_lowercase().contains("lontium");
     l(&o.make) || l(&o.model)
 }
@@ -718,7 +718,8 @@ mod tests {
     }
 
     #[test]
-    fn sound_goes_to_the_tv_unless_headphones_or_a_speakerless_monitor() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_sound_goes_to_the_tv_unless_headphones_or_a_speakerless_monitor() {
         let tv = SoundInputs { tv: true, ..Default::default() };
         assert_eq!(sound_route(SoundInputs::default()), Sound::Device);
         assert_eq!(sound_route(tv), Sound::Tv);
@@ -822,7 +823,7 @@ mod tests {
         }
 
         fn until(what: &str, within: Duration, mut ok: impl FnMut() -> bool) {
-            let end = Instant::now() + within;
+            let end = Instant::now() + crate::testutil::timeout(within);
             while !ok() {
                 assert!(Instant::now() < end, "{what}");
                 std::thread::sleep(Duration::from_millis(10));
@@ -844,7 +845,8 @@ mod tests {
         }
 
         #[test]
-        fn a_panel_only_pocket_is_asked_for_its_outputs_and_nothing_else() {
+        #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+        fn timing_a_panel_only_pocket_is_asked_for_its_outputs_and_nothing_else() {
             let (_dir, path, sway) = fake_sway("panel", PANEL_ONLY);
             let (rx, _h) = start(path.clone(), Duration::from_millis(100));
             until("subscribed", Duration::from_secs(2), || sway.lock().unwrap().asked.contains(&ipc::GET_OUTPUTS));
@@ -862,14 +864,15 @@ mod tests {
         }
 
         #[test]
-        fn plugging_in_waits_for_rocknix_then_repairs_and_unplugging_brings_the_panel_back() {
+        #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+        fn timing_plugging_in_waits_for_rocknix_then_repairs_and_unplugging_brings_the_panel_back() {
             let (_dir, path, sway) = fake_sway("tv", PANEL_ONLY);
             let settle = Duration::from_millis(400);
             let (rx, h) = start(path.clone(), settle);
             until("subscribed", Duration::from_secs(2), || sway.lock().unwrap().subscriber.is_some());
             let plugged = Instant::now();
             change(&sway, TV_JUST_PLUGGED);
-            let tv = rx.recv_timeout(Duration::from_secs(2)).unwrap();
+            let tv = rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(2))).unwrap();
             assert_eq!(tv.map(|t| (t.name, t.w, t.h)), Some(("DP-1".to_string(), 3840, 2160)));
             // ROCKNIX's turn first.
             assert!(sway.lock().unwrap().commands.is_empty());
@@ -881,13 +884,13 @@ mod tests {
             );
             // sway did it: the TV at 1080p. The UI hears the new size, nothing more is sent to sway.
             change(&sway, TV_SET_UP);
-            let tv = rx.recv_timeout(Duration::from_secs(2)).unwrap();
+            let tv = rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(2))).unwrap();
             assert_eq!(tv.map(|t| (t.w, t.h)), Some((1920, 1080)));
             std::thread::sleep(Duration::from_millis(100));
             assert_eq!(sway.lock().unwrap().commands.len(), 3);
             // Unplugged with the panel dark: back on, and the UI told (which ends this watcher).
             change(&sway, UNPLUGGED_DARK);
-            assert_eq!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), None);
+            assert_eq!(rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(2))).unwrap(), None);
             assert!(h.join().unwrap().is_ok());
             // With the transform this computer's fbcon gives, if it has one.
             assert!(sway.lock().unwrap().commands.last().is_some_and(|c| c.starts_with("output DSI-1 enable power on")));
@@ -898,7 +901,7 @@ mod tests {
         fn a_tv_there_at_the_start_is_told_at_once() {
             let (_dir, path, _sway) = fake_sway("at-start", TV_SET_UP);
             let (rx, _h) = start(path.clone(), Duration::from_millis(50));
-            assert_eq!(rx.recv_timeout(Duration::from_secs(2)).unwrap().map(|t| t.name), Some("DP-1".to_string()));
+            assert_eq!(rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(2))).unwrap().map(|t| t.name), Some("DP-1".to_string()));
             let _ = std::fs::remove_file(&path);
         }
     }

@@ -89,6 +89,39 @@ fn data_dir() -> PathBuf {
 }
 
 static TERMINATE: AtomicBool = AtomicBool::new(false);
+static PROGRESS: std::sync::LazyLock<Arc<pocket_ui::exit_guard::Progress>> = std::sync::LazyLock::new(pocket_ui::exit_guard::Progress::new);
+
+static RECOVERY_MOMENT: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+
+fn remember_resumed_moment(core: &Core, resumed: Resume) {
+    if matches!(resumed, Resume::Resumed | Resume::ResumedAgain) {
+        *RECOVERY_MOMENT.lock().unwrap() = core.resumed_from().map(Path::to_path_buf);
+    }
+}
+
+fn spawn_progress_watchdog(limits: pocket_ui::exit_guard::Limits) {
+    PROGRESS.watch(limits, Duration::from_millis(100), &TERMINATE, || {
+        // Recovery itself must be bounded, even if the log pipe or the card is blocked. The existing Auto/taken
+        // files stay untouched: a stalled frame, load or teardown cannot manufacture a new quit moment.
+        std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_secs(1));
+            unsafe { libc::_exit(0) };
+        });
+        // A successfully loaded crash retry normally retires from Continue. If this process itself stalls,
+        // make that known-good source available again. Never replace an Auto, a slot or a newer taken state.
+        if let Some(from) = RECOVERY_MOMENT.lock().unwrap().as_ref() {
+            if let Some(name) = from.as_os_str().as_encoded_bytes().strip_suffix(b".retry") {
+                use std::os::unix::ffi::OsStrExt;
+                let to = Path::new(std::ffi::OsStr::from_bytes(name));
+                let _ = pocket_ui::fsutil::rename_no_replace(from, to);
+            }
+        }
+        pocket_ui::fast_switch::saving(false);
+        let _ = std::fs::write(ERROR_FILE, pocket_ui::i18n::tr("The game stopped responding. Your previous saved moment is kept."));
+        eprintln!("stall guard: game stopped responding; previous saved moment kept");
+        unsafe { libc::_exit(0) };
+    });
+}
 
 /// How long the exit save may wait for the core to hand over its state (`retro_serialize_size`/`retro_serialize`). PPSSPP
 /// (its emulation thread) can wait forever for a frame nobody runs any more; a core that is merely slow needs up to ~12 s
@@ -96,6 +129,26 @@ static TERMINATE: AtomicBool = AtomicBool::new(false);
 const CORE_STATE_LIMIT: Duration = Duration::from_secs(20);
 /// The exit save's calls into the core, timed (`pocket_ui::exit_guard`).
 static CORE_CALLS: std::sync::LazyLock<Arc<pocket_ui::exit_guard::CoreCalls>> = std::sync::LazyLock::new(pocket_ui::exit_guard::CoreCalls::new);
+
+/// Software pacing still matters when a swap returns immediately (notably the first one after
+/// pause). Keep its clock separate from rendering so resume cannot add an extra audio burst.
+#[derive(Default)]
+struct FrameClock {
+    previous: Option<Instant>,
+}
+
+impl FrameClock {
+    fn after_pause(&mut self, now: Instant) {
+        self.previous = Some(now);
+    }
+
+    fn finish_frame(&mut self, now: Instant, period: Duration) -> Instant {
+        let next = self.previous.map_or(now, |n| n + period);
+        let next = if now > next + period * 2 { now } else { next };
+        self.previous = Some(next);
+        next
+    }
+}
 
 /// During the exit save: ends the process if the core doesn't answer within `limit`, instead of leaving the game
 /// unquittable. The battery save is on the card by then. The newest moment already written (a slot, an Earlier state, the
@@ -195,7 +248,7 @@ impl Stats {
 struct App {
     core: Core,
     window: Option<Window>,
-    gfx: Option<Gfx>,
+    gfx: Option<Gfx>, #[cfg(feature = "brick")] soft: Option<pocket_ui::soft_screen::SoftScreen>, #[cfg(feature = "brick")] brick_gles: Option<pocket_ui::brick_gles::BrickGles>, #[cfg(feature = "brick")] brick_picture: BrickPicture,
     audio: Option<Audio>,
     /// `Audio::open` running on its thread until `resumed` takes the result (instant start).
     audio_opening: Option<std::thread::JoinHandle<Option<Audio>>>,
@@ -217,7 +270,7 @@ struct App {
     bench: Option<Duration>,
     /// Display refresh period; vsync alone lets some frames through early on this sway.
     period: Duration,
-    next_frame: Option<Instant>,
+    frame_clock: FrameClock,
     /// Last frame the core produced, for save previews.
     last_frame: Option<Frame>,
     /// `/storage/roms/savestates/<system>/<game>`, the start of every state file (see `slots`).
@@ -310,7 +363,7 @@ impl App {
         }
     }
 
-    fn try_create_gfx(&mut self, el: &ActiveEventLoop) -> Result<(), String> {
+    fn try_create_gfx(&mut self, el: &ActiveEventLoop) -> Result<(), String> { #[cfg(feature = "brick")] if std::env::var_os("POCKET_CORE_SOFTWARE").is_some() { self.soft = Some(pocket_ui::soft_screen::SoftScreen::new(el)?); if hw_render::requested().is_some() { let g = self.core.av.geometry; self.brick_gles = Some(pocket_ui::brick_gles::BrickGles::new((g.max_width, g.max_height))?); } return Ok(()); }
         let attrs = Window::default_attributes().with_title("pocket-core").with_fullscreen(Some(Fullscreen::Borderless(None)));
         let template = ConfigTemplateBuilder::new().with_alpha_size(0);
         let (window, config) = DisplayBuilder::new()
@@ -354,7 +407,7 @@ impl App {
         hostsys::display_aspect(system, g.base_width, g.base_height, g.aspect_ratio)
     }
 
-    fn draw(&mut self) {
+    fn draw(&mut self) { #[cfg(feature = "brick")] if self.soft.is_some() && self.last_frame.is_some() { self.sync_brick_picture(); } #[cfg(feature = "brick")] if let (Some(soft), Some(frame)) = (self.soft.as_mut(), self.last_frame.as_ref()) { soft.set_look(&self.hud.look); self.view = soft.show(frame); pocket_ui::fast_switch::first_frame(); self.sync_brick_hud(); return; }
         let (Some(window), Some(gfx)) = (&self.window, &mut self.gfx) else { return };
         let size = window.inner_size();
         let (w, h) = (size.width.max(1), size.height.max(1));
@@ -406,12 +459,13 @@ impl App {
             unsafe { glow::HasContext::finish(gfx.video.gl()) };
             self.stats.draw_ms.push(t0.elapsed().as_secs_f32() * 1000.0);
         }
-        // Blocks until the next vsync: this paces the whole loop.
+        // Blocks until the next vsync: this paces the whole loop. With the output off it blocks until it is on again,
+        // which is no stall of the core (`exit_guard::Progress::display`).
         if gfx.video.has_frame() {
             pocket_ui::fast_switch::presenting_frame();
         }
-        let swapped = gfx.surface.swap_buffers(&gfx.context).ok();
-        // Only a successfully displayed game picture proves that this launch started.
+        let swapped = PROGRESS.display(|| gfx.surface.swap_buffers(&gfx.context).ok());
+        // A successful swap of a real game picture is evidence it started. Empty/failed swaps are not.
         if swapped.is_some() && gfx.video.has_frame() {
             pocket_ui::fast_switch::first_frame();
         }
@@ -521,18 +575,18 @@ impl App {
             (hk.home_held(), hk.rewind_held(), hk.take())
         };
         // With the screen off no shortcut acts (a press in a pocket); the game just goes on.
-        let (rewind_held, actions) = if self.dark { (false, Vec::new()) } else { (rewind_held, actions) };
+        let reminder = self.hold && self.hold_still;
+        let (rewind_held, actions) = if self.dark || reminder { (false, Vec::new()) } else { (rewind_held, actions) };
         // A screenshot only reads the last frame: run-ahead keeps its state.
         if actions.iter().any(|a| *a != Action::Screenshot) {
             self.ex.ahead.forget();
         }
         for a in actions {
-            self.hotkey(a);
+            PROGRESS.work(|| self.hotkey(a));
         }
         self.screenshot_results();
         // Couch co-op: every player's buttons and sticks; player 1's go with `run`, the others' to their ports below.
-        let (players, sticks) = self.read_players(home);
-        let (mapped, analog) = (players[0], sticks[0]);
+        let (mut players, sticks) = self.read_players(home);
         // Over when the deadline passed or any button is pressed (pocket-ui skips its animation on the same press).
         // The finger still on the A that started the game ends nothing; a new press does.
         let pressed = (self.hold || self.crt_on) && pocket_ui::startup::new_press(&players, &mut self.hold_down);
@@ -546,6 +600,13 @@ impl App {
                 }
             }
         }
+        if reminder && !self.hold {
+            // The dismissing button only starts play; keep it out of the game until released.
+            self.held_mask = std::array::from_fn(|p| self.input.buttons(p));
+            self.toggled.iter_mut().for_each(controls::HoldToggle::clear);
+            players.fill(0);
+        }
+        let (mapped, analog) = (players[0], sticks[0]);
         if self.crt_on && pressed {
             self.crt_on = false;
         }
@@ -707,7 +768,7 @@ impl App {
         if let (Some(frame), Some(gfx), false) = (frame.as_ref(), self.gfx.as_mut(), self.dark) {
             gfx.video.upload(frame);
         }
-        self.hw_frame(av.is_some());
+        self.hw_frame(av.is_some()); #[cfg(feature = "brick")] let frame = match self.brick_gles.as_mut().and_then(|h| h.frame((self.core.av.geometry.max_width, self.core.av.geometry.max_height))) { Some(f) => { if let Some(n) = self.resume_in.as_mut() { *n = n.saturating_sub(1); } Some(f) } None => frame };
         if frame.is_some() {
             self.last_frame = frame;
         }
@@ -835,7 +896,7 @@ impl App {
     /// whole periods, so short hiccups are absorbed; after a long stall it resyncs.
     fn limit(&mut self) {
         let now = Instant::now();
-        let next = self.next_frame.map_or(now, |n| n + self.period);
+        let next = self.frame_clock.finish_frame(now, self.period);
         if next > now {
             // Sleep most of the way, spin the last stretch for accuracy.
             let until = next - Duration::from_micros(150);
@@ -845,9 +906,6 @@ impl App {
             while Instant::now() < next {
                 std::hint::spin_loop();
             }
-            self.next_frame = Some(next);
-        } else {
-            self.next_frame = Some(if now - next > self.period * 2 { now } else { next });
         }
     }
 
@@ -860,15 +918,17 @@ impl App {
         self.time_driven = !(0.95..1.05).contains(&skew);
         let skew = if self.time_driven { 1.0 } else { skew };
         if let Some(audio) = self.audio.as_mut() {
+            audio.set_frame_timing(self.core.av.timing.fps, 1.0 / self.period.as_secs_f64());
             audio.set_input_rate(self.core.av.timing.sample_rate * skew);
         }
     }
 
-    /// Writes a state and its preview image; the preview first so a listed state always has one.
-    fn save_to(&self, path: &Path) -> bool {
+    /// Writes a state and its preview image; the preview first so a listed state always has one. Err(None): the core
+    /// handed over no state; Err(Some): it didn't reach the card (full, read-only, failing), the file there stays as it was.
+    fn save_to(&self, path: &Path) -> Result<(), Option<std::io::Error>> {
         let t0 = Instant::now();
         let data = CORE_CALLS.during(|| self.core.save_state());
-        let Some(data) = data else { return false };
+        let Some(data) = data else { return Err(None) };
         // Latency trace only (`trace::step`): where a slow exit save spends its time.
         pocket_ui::trace::step("save: state serialized");
         if let Some(dir) = path.parent() {
@@ -889,12 +949,13 @@ impl App {
             }
             pocket_ui::trace::step("save: preview written");
         }
-        let ok = pocket_ui::fsutil::write_atomic(path, &data).is_ok();
+        let written = pocket_ui::state_file::write(path, &data);
         pocket_ui::trace::step("save: state synced to the SD card");
-        if ok {
-            println!("saved {} ({} KB, {:.0} ms)", path.display(), data.len() / 1024, t0.elapsed().as_secs_f32() * 1000.0);
+        match &written {
+            Ok(()) => println!("saved {} ({} KB, {:.0} ms)", path.display(), data.len() / 1024, t0.elapsed().as_secs_f32() * 1000.0),
+            Err(e) => eprintln!("not saved {}: {e}", path.display()),
         }
-        ok
+        written.map_err(Some)
     }
 
     /// Tells the pause menu what the core offers: its options with their values, its button names, the layout in use.
@@ -1016,11 +1077,19 @@ impl App {
 
     /// Instant resume: continues where the last session ended.
     fn resume(&mut self) {
+        // Reading and loading a 50 MB moment takes seconds: a Pause pressed meanwhile waits for it (`exit_guard::Limits`).
+        let was = PROGRESS.busy(true);
+        self.resume_moment();
+        PROGRESS.busy(was);
+    }
+
+    fn resume_moment(&mut self) {
         // "Before load" of a session that didn't end with a Quit (a crash) is gone with it.
         slots::clear_undo(&self.states);
         let path = slots::auto_path(&self.states);
-        // A moment kept while all slots were full enters the first free slot on the next start.
+        // A moment set aside while every slot was taken goes into the first free one (`frozen_phone::set_aside`).
         pocket_ui::frozen_phone::restore_kept(&self.states);
+        // A line from the shelf about this start (`frozen::at_launch`).
         let note = std::env::var(pocket_ui::frozen::NOTE_ENV).ok().filter(|n| !n.is_empty());
         if let Some(note) = &note {
             self.hud.note(note);
@@ -1029,6 +1098,7 @@ impl App {
             if self.hold_still {
                 self.hold = false;
             }
+            // The moment of another file or emulator: not this start's, and kept where no later Quit removes it.
             let aside = pocket_ui::frozen_phone::set_aside_all(&self.states);
             println!("not resumed: {} is not for this file; set aside: {aside:?}", path.display());
             match (aside, &note) {
@@ -1039,6 +1109,7 @@ impl App {
             return;
         }
         let resumed = self.core.resume(&path);
+        remember_resumed_moment(&self.core, resumed);
         // A stale preview can outlive its state, or the core can refuse it / keep a newer battery save. A reminder
         // hold is only for a successfully continued moment, never a fresh boot behind an invisible card.
         if self.hold_still && !matches!(resumed, Resume::Resumed | Resume::ResumedAgain) {
@@ -1057,17 +1128,28 @@ impl App {
         }
         // Earlier: where this session began is the state it continued from, copied on the writer's thread.
         if matches!(resumed, Resume::Resumed | Resume::ResumedAgain) && self.ex.cfg.timeline {
-            let from = if resumed == Resume::Resumed { slots::taken_auto_path(&path) } else { slots::retry_auto_path(&path) };
+            // The file it now has: an upgrade's first start takes the older player's raw Auto under its own names.
+            let fallback = if resumed == Resume::Resumed { slots::taken_auto_path(&path) } else { slots::retry_auto_path(&path) };
+            let from = self.core.resumed_from().map_or(fallback, Path::to_path_buf);
             self.timeline.submit_copy(&self.states, pocket_ui::timeline::Kind::Started, &from, &slots::preview_path(&path));
         }
         match resumed {
             Resume::Resumed => println!("loaded {}\nresumed", path.display()),
-            Resume::ResumedAgain => println!("loaded {}\nresumed (once more: the last session ended without an exit save)", path.display()),
+            Resume::ResumedAgain => {
+                println!("loaded {}\nresumed (once more: the last session ended without an exit save)", path.display());
+                // An older moment than the player may expect: said, as on a phone.
+                self.hud.note(pocket_ui::frozen_phone::AGAIN);
+            }
             Resume::Failed => {
                 println!("couldn't resume from {}", path.display());
-                // A refused raw state is in retry; move it beyond the next Quit's cleanup.
-                match pocket_ui::frozen_phone::set_aside_refused(&self.states) {
-                    Some(a) => self.note_aside(pocket_ui::frozen::REFUSED, a),
+                // The core refused a moment it could read (another core's, an older version's): into a free slot, as on a
+                // phone, so the next Quit doesn't remove it with the retired ones (`slots::auto_written`). One that can't
+                // be read stays where `resume` left it.
+                match pocket_ui::frozen_phone::set_aside_refused(&self.states, self.core.resumed_from()) {
+                    Some(a) => {
+                        println!("set aside: {a:?}");
+                        self.note_aside(pocket_ui::frozen::REFUSED, a);
+                    }
                     None => self.hud.note(pocket_ui::frozen::REFUSED),
                 }
             }
@@ -1079,7 +1161,7 @@ impl App {
         }
     }
 
-    /// One note: each part is translated separately.
+    /// Why a moment wasn't loaded and where it is now, one note (each part translated, the pair isn't a line of the table).
     fn note_aside(&mut self, why: &str, aside: pocket_ui::frozen_phone::Aside) {
         use pocket_ui::i18n::tr;
         self.hud.note(format!("{}. {}", tr(why), tr(&pocket_ui::frozen_phone::aside_line_handheld(aside))));
@@ -1091,13 +1173,20 @@ impl App {
     /// state, if it gets written, then holds the newer save (`slots::battery_unsaved`, `Core::resume`).
     fn save_auto(&mut self) {
         let battery = self.core.write_sram();
-        self.note_save_trouble(battery.err());
+        self.note_save_trouble(battery.err().or(self.core.save_trouble()));
         pocket_ui::trace::step("save: battery save checked");
         let path = slots::auto_path(&self.states);
-        if self.save_to(&path) {
-            slots::auto_written(&path);
-            slots::battery_unsaved(&path, battery.is_err());
-            self.flash_frame_light();
+        match self.save_to(&path) {
+            Ok(()) => {
+                slots::auto_written(&path);
+                slots::battery_unsaved(&path, battery.is_err());
+                self.flash_frame_light();
+            }
+            // The moment didn't reach the card (a full one: a 4 MB state that no longer fits beside an 8 KB battery save).
+            // The previous moment stays; the player hears of it, over the game and on the shelf after a Quit, instead of
+            // finding an older moment at the next start (save-safety review 2026-11-06).
+            Err(Some(e)) if e.raw_os_error().is_some() => self.note_save_trouble(Some(pocket_ui::save_trouble::Trouble::of(&e))),
+            Err(_) => {}
         }
     }
 
@@ -1141,16 +1230,17 @@ impl App {
     /// The one this session resumed from is left for Load, not for the next start (`Core::keep_resume_point`); one
     /// older than the battery save written now doesn't roll it back (`Core::resume`).
     fn exit_without_saving(&mut self) {
+        *RECOVERY_MOMENT.lock().unwrap() = None;
         pocket_ui::fast_switch::saving(true);
         let battery = self.core.write_sram();
-        self.note_save_trouble(battery.err());
+        self.note_save_trouble(battery.err().or(self.core.save_trouble()));
         self.core.keep_resume_point(&slots::auto_path(&self.states));
         slots::clear_undo(&self.states);
         pocket_ui::fast_switch::saving(false);
     }
 
     fn save_slot(&mut self, slot: usize) {
-        let ok = self.save_to(&slots::state_path(&self.states, slot));
+        let ok = self.save_to(&slots::state_path(&self.states, slot)).is_ok();
         if ok {
             self.flash_frame_light();
         }
@@ -1190,7 +1280,7 @@ impl App {
         let loaded = slots::load_keeping_undo(
             &self.states,
             path,
-            |undo| self.core.has_states() && self.save_to(undo),
+            |undo| self.core.has_states() && self.save_to(undo).is_ok(),
             |data| self.core.load_state_reached(data),
             |before| {
                 let _ = self.core.load_state(before);
@@ -1268,6 +1358,10 @@ impl App {
         if !self.timeline.due() {
             return;
         }
+        PROGRESS.work(|| self.timeline_play_due());
+    }
+
+    fn timeline_play_due(&mut self) {
         // ScummVM and the like: nothing to keep (asked only every 5 minutes).
         if !self.core.has_states() {
             self.timeline.skip();
@@ -1289,7 +1383,7 @@ impl App {
     fn timeline_quiet(&mut self) {
         let menu_up = self.paused_at.is_some_and(|t| t.elapsed() >= pocket_ui::timeline::QUIET_AFTER);
         if menu_up && self.early.is_none() && !self.sleeping && self.ex.cfg.timeline && self.bench.is_none() && self.timeline.due() {
-            self.timeline_capture(pocket_ui::timeline::Moment::Quiet);
+            PROGRESS.work(|| self.timeline_capture(pocket_ui::timeline::Moment::Quiet));
         }
     }
 
@@ -1404,6 +1498,7 @@ impl App {
     /// The settings of this console/game, read again after the menu saved or restored them: picture,
     /// extras, core options and controls.
     fn reload_settings(&mut self) {
+        #[cfg(feature = "brick")] self.brick_picture.reload();
         self.video = VideoSettings::load(&data_dir(), &self.video_src.0, &self.video_src.1);
         let settings = GameSettings::load(&data_dir(), &self.video_src.0, &self.video_src.1);
         self.mapping = Mapping::from_values(&self.video_src.0, &settings.values);
@@ -1462,10 +1557,11 @@ impl App {
                     if let Some(a) = &self.audio {
                         a.pause(true);
                     }
+                    PROGRESS.answered();
                     println!("play paused");
                 }
                 // Paused already (or asleep): it draws nothing, so it says so again.
-                ["pause"] => pocket_ui::fast_switch::announce_paused(),
+                ["pause"] => { PROGRESS.answered(); pocket_ui::fast_switch::announce_paused(); },
                 ["resume"] if self.paused => {
                     self.paused = false;
                     self.paused_at = None;
@@ -1481,6 +1577,9 @@ impl App {
                     if let Some(a) = &self.audio {
                         a.pause(true);
                     }
+                    // The Brick: the CPU at its lowest speed while the game waits in the dark.
+                    #[cfg(feature = "brick")]
+                    self.ex.dark(true);
                     println!("asleep");
                 }
                 ["screen", "off"] if !self.dark => {
@@ -1488,6 +1587,9 @@ impl App {
                     self.hold = false;
                     self.crt_on = false;
                     self.dark = true;
+                    #[cfg(feature = "brick")]
+                    println!("screen off, playing on (sound underruns so far: {})", self.underruns());
+                    #[cfg(not(feature = "brick"))]
                     println!("screen off, playing on");
                 }
                 // Also sent after a suspend pocket-ui didn't start itself: the quantum is reset either way.
@@ -1500,9 +1602,14 @@ impl App {
                     // The screen is back: the button that woke it reaches the game only once it was let go.
                     if std::mem::take(&mut self.dark) {
                         self.held_mask = std::array::from_fn(|p| self.input.buttons(p));
+                        #[cfg(feature = "brick")]
+                        println!("screen on (sound underruns so far: {})", self.underruns());
+                        #[cfg(not(feature = "brick"))]
                         println!("screen on");
                     }
                     if std::mem::take(&mut self.sleeping) {
+                        #[cfg(feature = "brick")]
+                        self.ex.dark(false);
                         self.after_pause();
                         self.woke_frame = !self.paused;
                         pocket_ui::trace::step("core: awake");
@@ -1623,7 +1730,14 @@ impl App {
                 // "opt <key> <value>": a core option changed in the pause menu's Emulator page.
                 ["opt", ..] => {
                     if let Some((key, value)) = rest("opt ") {
+                        #[cfg(not(feature = "brick"))]
                         self.core.set_option(key, value);
+                        // The Brick: one line per change, so its log says whether the core has the option and takes the value.
+                        #[cfg(feature = "brick")]
+                        {
+                            let took = self.core.set_option(key, value);
+                            println!("core option: {key} = {value} ({})", if took { "the core reads it on its next frame" } else { "not one of the core's values, or already so" });
+                        }
                     }
                 }
                 // "ctl <button> <console button|none>", "ctl stick_dpad on|off" or "ctl hold_toggle <console button|none>": the Controls page.
@@ -1641,6 +1755,7 @@ impl App {
                     if !kids_picture && !self.video.set(key, value) {
                         self.ex.set(key, value);
                     }
+                    #[cfg(feature = "brick")] if !kids_picture { self.brick_picture.changed(key, value); }
                 }
                 ["quit", ..] => {
                     if let Some(exit) = Exit::from_command(&words) {
@@ -1659,6 +1774,11 @@ impl App {
     /// Renders the last frame as the screen would show it with the current settings, and writes the
     /// centre at 1:1 plus a whole-screen overview for pocket-ui's pause menu.
     fn preview(&mut self, w: u32, h: u32, seq: u32) {
+        #[cfg(feature = "brick")]
+        if self.soft.is_some() {
+            self.preview_soft(w, h, seq);
+            return;
+        }
         let t0 = Instant::now();
         let (sw, sh) = if self.view.0 > 0 { self.view } else { pocket_ui::device::current().screen() };
         let aspect = Self::display_aspect(&self.core, &self.video_src.0);
@@ -1690,7 +1810,7 @@ impl App {
 
     /// The last frame as the screen shows it, whole and full size, for the pause menu's background
     /// (`pocket_ui::preview::SHOT_FILE`): pocket-ui doesn't wait for a screenshot before it shows the menu.
-    fn write_shot(&mut self, seq: u32) {
+    fn write_shot(&mut self, seq: u32) { #[cfg(feature = "brick")] if self.soft.is_some() { self.write_shot_soft(seq); return; }
         let t0 = Instant::now();
         let (sw, sh) = if self.view.0 > 0 { self.view } else { pocket_ui::device::current().screen() };
         let aspect = Self::display_aspect(&self.core, &self.video_src.0);
@@ -1727,6 +1847,12 @@ impl App {
         }
     }
 
+    /// Buffer underruns of the sound so far (the log lines around a dark screen say whether a click there was one).
+    #[cfg(feature = "brick")]
+    fn underruns(&self) -> u64 {
+        self.audio.as_ref().map_or(0, |a| *a.underruns.lock().unwrap())
+    }
+
     /// Back from the pause menu or from sleep: sound and frames go on unless the other still holds them.
     fn after_pause(&mut self) {
         if let Some(a) = &self.audio {
@@ -1739,7 +1865,10 @@ impl App {
         self.touch.after_pause();
         // The pause is no late frame: restart pacing and the frame-time statistics. Nor is it play (Earlier).
         self.timeline.stop();
-        self.next_frame = None;
+        // The first picture may present immediately after a pause. Anchor its deadline now so
+        // the next frame cannot run straight after it: that extra burst accumulated each resume
+        // until the audio overflow cap discarded valid samples (also with a 60 Hz source).
+        self.frame_clock.after_pause(Instant::now());
         self.stats.last_swap = None;
         self.hud.restart();
     }
@@ -1778,7 +1907,7 @@ impl Exit {
 }
 
 impl ApplicationHandler for App {
-    fn resumed(&mut self, el: &ActiveEventLoop) {
+    fn resumed(&mut self, el: &ActiveEventLoop) { #[cfg(feature = "brick")] if self.soft.is_some() { return; }
         if self.gfx.is_none() {
             pocket_ui::startup::mark("loop");
             self.create_gfx(el);
@@ -1801,6 +1930,7 @@ impl ApplicationHandler for App {
     fn window_event(&mut self, el: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         if let WindowEvent::CloseRequested = event {
             pocket_ui::fast_switch::mark("quit received (window closed)");
+            PROGRESS.exiting();
             self.save_exit();
             pocket_ui::fast_switch::mark("exit save done");
             el.exit();
@@ -1809,7 +1939,12 @@ impl ApplicationHandler for App {
 
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
         // Quitting (the window's close request): no more waiting for commands, the loop is about to end.
+        #[cfg(not(feature = "brick"))]
         if self.gfx.is_none() || el.exiting() {
+            return;
+        }
+        #[cfg(feature = "brick")]
+        if self.gfx.is_none() && self.soft.is_none() || el.exiting() {
             return;
         }
         if self.paused || self.sleeping {
@@ -1824,8 +1959,11 @@ impl ApplicationHandler for App {
             }
             self.timeline_quiet();
         }
+        // Commands save and load states, which takes seconds: no frame (`exit_guard::Limits`).
+        PROGRESS.busy(true);
         let exit = if self.should_exit() { Some(Exit::Save) } else { self.handle_commands() };
         if let Some(exit) = exit {
+            PROGRESS.exiting();
             // Fade out now: the exit save stalls for a while (16-40 MB states of 3D cores), which
             // would otherwise cut the sound off mid-sample.
             if let Some(a) = &self.audio {
@@ -1846,9 +1984,12 @@ impl ApplicationHandler for App {
             el.exit();
             return;
         }
+        // A frame, or the pause waiting for its next command: a Pause or Quit is due within `Limits::unanswered`.
+        PROGRESS.busy(false);
         if !self.paused && !self.sleeping {
             self.step();
         }
+        PROGRESS.checkpoint();
     }
 }
 
@@ -1963,6 +2104,59 @@ fn another_pocket_core_runs() -> bool {
 const ERROR_FILE: &str = pocket_ui::notice::ERROR_FILE;
 const BIOS_DIR: &str = "/storage/roms/bios";
 
+/// What the process was doing while a core loaded a game that took long. A PlayStation disc on the Brick's card took 111 s to the first
+/// frame (2026-11-02) with the main thread in disk wait and nothing in the log to say where: from the third second on, every five
+/// seconds, one line says how much the process asked to read, how much came from the card, and the main thread's state; when the load
+/// is over, one line with the total. Nothing is printed for a load under a second. `/proc/self/io` is the kernel's own count.
+#[cfg(feature = "brick")]
+struct LoadWatch {
+    started: Instant,
+    stop: Option<std::sync::mpsc::Sender<()>>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+#[cfg(feature = "brick")]
+fn proc_io() -> (u64, u64) {
+    let text = std::fs::read_to_string("/proc/self/io").unwrap_or_default();
+    let field = |name: &str| text.lines().find_map(|l| l.strip_prefix(name)).and_then(|v| v.trim().parse::<u64>().ok()).unwrap_or(0);
+    (field("rchar:"), field("read_bytes:"))
+}
+
+#[cfg(feature = "brick")]
+fn main_thread_state() -> char {
+    // "pid (name) S ...": the state follows the last closing bracket.
+    std::fs::read_to_string("/proc/self/stat").ok().and_then(|t| t.rsplit_once(')').and_then(|(_, rest)| rest.trim().chars().next())).unwrap_or('?')
+}
+
+#[cfg(feature = "brick")]
+fn watch_load() -> LoadWatch {
+    let started = Instant::now();
+    let (stop, rx) = std::sync::mpsc::channel::<()>();
+    let thread = std::thread::Builder::new().name("load-watch".into()).spawn(move || {
+        let mut next = Duration::from_secs(3);
+        while let Err(std::sync::mpsc::RecvTimeoutError::Timeout) = rx.recv_timeout(next.saturating_sub(started.elapsed())) {
+            let (asked, card) = proc_io();
+            println!("load: {} s so far, {} MB asked of the files, {} MB from the card, main thread {}", started.elapsed().as_secs(), asked >> 20, card >> 20, main_thread_state());
+            next = started.elapsed() + Duration::from_secs(5);
+        }
+    });
+    LoadWatch { started, stop: Some(stop), thread: thread.ok() }
+}
+
+#[cfg(feature = "brick")]
+impl LoadWatch {
+    fn done(mut self) {
+        drop(self.stop.take());
+        if let Some(t) = self.thread.take() {
+            let _ = t.join();
+        }
+        if self.started.elapsed() >= Duration::from_secs(1) {
+            let (asked, card) = proc_io();
+            println!("load: core and game ready after {:?}, {} MB asked of the files, {} MB from the card", self.started.elapsed(), asked >> 20, card >> 20);
+        }
+    }
+}
+
 /// Reports why the game cannot start (log and ERROR_FILE) and exits.
 fn fail(msg: &str) -> ! {
     eprintln!("{msg}");
@@ -2033,6 +2227,10 @@ fn main() {
     pocket_ui::crash::install("pocket-core", data_dir(), Some(PathBuf::from(ERROR_FILE)));
     // Settings → Language for the overlay's notes (`i18n`; one field of settings.json).
     pocket_ui::i18n::set(pocket_ui::settings::language(&data_dir()));
+    // Settings → Look → Style: Retro's overlays (`retro`) are pixel windows in its palette and type.
+    let (font, retro_colours) = pocket_ui::settings::style(&data_dir());
+    pocket_ui::font_style::set(font);
+    pocket_ui::retro::set_colours(retro_colours);
     let arg = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1));
     let bench = arg("--bench").and_then(|s| s.parse().ok()).map(Duration::from_secs);
     unsafe {
@@ -2042,11 +2240,68 @@ fn main() {
     let rom = PathBuf::from(&args[2]);
     // The ROCKNIX system name (pocket-ui passes it); otherwise the ROM's folder, which is the same for most.
     let system = arg("--system").cloned().or_else(|| rom.parent().and_then(|p| p.file_name()).and_then(|s| s.to_str()).map(str::to_string)).unwrap_or_else(|| "misc".into());
+    let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or("game").to_string();
+    let states = pocket_ui::slots::base(&system, &stem);
+
+    // Start before retro_load_game and before deferred Continue. A core can stall in any of these, not only in
+    // the exit save. Long operations in other cores retain the existing two-minute save allowance.
+    // A Pause or Quit no frame picks up within 2 s means a stuck PPSSPP; other cores keep the 5 s pocket-ui gave a closing
+    // window before (`quit::WINDOW_GRACE`), so a merely slow frame of a 3D core isn't taken for a hang. Busy with a state
+    // load or save, the main thread gets the exit save's 20 s; once it has taken the Quit, the exit save's own limits.
+    let ppsspp = core_options::core_id(Path::new(&args[1])) == "ppsspp";
+    spawn_progress_watchdog(pocket_ui::exit_guard::Limits {
+        stall: if ppsspp { Duration::from_secs(25) } else { pocket_ui::quit::SAVE_LIMIT },
+        unanswered: if ppsspp { Duration::from_secs(2) } else { pocket_ui::quit::WINDOW_GRACE },
+        busy: CORE_STATE_LIMIT,
+        exiting: pocket_ui::quit::SAVE_LIMIT,
+    });
+    let (cmd_tx, commands) = std::sync::mpsc::channel();
+    #[cfg(target_os = "linux")]
+    {
+        // Host regression runs get their own FIFO, just like their own states and launch-skip file.
+        let fifo = if std::env::var_os("POCKET_CORE_TEST").is_some() { std::env::temp_dir().join("pocket-core.cmd") } else { PathBuf::from("/tmp/pocket-core.cmd") };
+        let _ = std::fs::remove_file(&fifo);
+        // mkfifo(3) rather than the mkfifo program: no process to start before the first frame.
+        // SAFETY: the path is a valid C string that lives through the call.
+        let made = std::ffi::CString::new(fifo.as_os_str().as_encoded_bytes()).is_ok_and(|c| unsafe { libc::mkfifo(c.as_ptr(), 0o644) } == 0);
+        if made {
+            // Read-write: we count as a writer ourselves, so the FIFO never hits EOF and always has a
+            // reader, and pocket-ui's writes never block.
+            std::thread::spawn(move || {
+                use std::io::BufRead;
+                let Ok(f) = std::fs::OpenOptions::new().read(true).write(true).open(fifo) else { return };
+                for line in std::io::BufReader::new(f).lines().map_while(Result::ok) {
+                    let words: Vec<_> = line.split_whitespace().collect();
+                    if words == ["pause"] || Exit::from_command(&words).is_some() {
+                        PROGRESS.request();
+                    }
+                    if Exit::from_command(&words).is_some() {
+                        // The UI must give the independent guard time to keep the previous moment and exit.
+                        pocket_ui::fast_switch::saving(true);
+                    }
+                    if cmd_tx.send(line).is_err() {
+                        return;
+                    }
+                }
+            });
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    drop(cmd_tx);
+
+    pocket_ui::startup::mark("fifo");
     let host = hostsys::find(&system);
+    #[cfg(feature = "brick")]
+    {
+        let missing_bios = host.and_then(|h| h.missing_bios(Path::new(BIOS_DIR)));
+        let missing_bios = pocket_ui::brick_profile::missing_bios(&system, Path::new(BIOS_DIR)).or(missing_bios);
+        if let Some(msg) = missing_bios { fail(&msg); }
+    }
+    #[cfg(not(feature = "brick"))]
     if let Some(msg) = host.and_then(|h| h.missing_bios(Path::new(BIOS_DIR))) {
         fail(&msg);
     }
-    let save_dir = rom.parent().map_or_else(|| PathBuf::from("/storage/roms/misc"), Path::to_path_buf);
+    let save_dir = rom.parent().map_or_else(|| PathBuf::from("/storage/roms/misc"), Path::to_path_buf); #[cfg(feature = "brick")] let save_dir = std::env::var_os("POCKET_CORE_SAVE_DIR").map(|d| PathBuf::from(d).join(&system)).inspect(|d| { let _ = std::fs::create_dir_all(d); }).unwrap_or(save_dir);
     let settings = GameSettings::load(&data_dir(), &system, &rom);
     let saved = core_options::saved_from(&settings.values);
     // The user's saved options first (the first match wins), then the ones this system needs.
@@ -2078,16 +2333,31 @@ fn main() {
     // ScummVM's ROCKNIX list names the game folder rather than being a game (`hostsys::content_path`).
     let content = hostsys::content_path(&system, &rom);
     if core_options::core_id(core_so) == "scummvm" {
+        #[cfg(feature = "brick")] let card_prepared = pocket_ui::brick_profile::prepare_scummvm(Path::new(BIOS_DIR));
+        #[cfg(feature = "brick")]
+        if !card_prepared { hostsys::prepare_scummvm(Path::new(BIOS_DIR)); }
+        #[cfg(not(feature = "brick"))]
         hostsys::prepare_scummvm(Path::new(BIOS_DIR));
     }
     // PPSSPP's atlas, VFPU tables and fonts live in <system dir>/PPSSPP; ROCKNIX ships them only for its standalone PPSSPP.
     if core_options::core_id(core_so) == "ppsspp" {
         hostsys::prepare_ppsspp(Path::new(hostsys::PPSSPP_ASSETS_SRC), Path::new(BIOS_DIR));
     }
-    let mut core = match Core::load(core_so, &content, Path::new(BIOS_DIR), &save_dir, &options) {
+    let loaded = {
+        let _loading = pocket_ui::startup::watch_load();
+        // The Brick: what the load read from the card, every 5 s after the first 3 (a slow card or a stall shows here).
+        #[cfg(feature = "brick")]
+        let load_log = watch_load();
+        let loaded = Core::load(core_so, &content, Path::new(BIOS_DIR), &save_dir, &options);
+        #[cfg(feature = "brick")]
+        load_log.done();
+        loaded
+    };
+    let mut core = match loaded {
         Ok(c) => c,
         Err(e) => fail(&e),
     };
+    PROGRESS.checkpoint();
     pocket_ui::startup::mark("core");
     // A note of the game before about saves that didn't reach the card is not this game's (`save_trouble`).
     pocket_ui::save_trouble::publish_to(Path::new(pocket_ui::save_trouble::FILE), None);
@@ -2133,6 +2403,12 @@ fn main() {
     let mut ex = Extras::new(&values, Power::system());
     // Run-ahead looks at the core's RetroArch info file and the system when it is switched on (`run_ahead`).
     ex.ahead.set_core(core_so, &system);
+    // The Brick's F1 and F2 do what Settings > F1 button / F2 button say (quick save and load unless chosen otherwise).
+    #[cfg(feature = "brick")]
+    if pocket_ui::device::brick() {
+        let keys = pocket_ui::brick_hw::FKeys::load(&data);
+        ex.hotkeys.lock().unwrap().set_f_keys([pocket_ui::hotkeys::action_of(keys.f1), pocket_ui::hotkeys::action_of(keys.f2)]);
+    }
     if let Some(n) = arg("--run-ahead") {
         ex.set("run_ahead", n);
     }
@@ -2177,36 +2453,7 @@ fn main() {
         });
     }
     pocket_ui::startup::mark("input");
-    let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or("game").to_string();
-    let states = pocket_ui::slots::base(&system, &stem);
 
-    let (cmd_tx, commands) = std::sync::mpsc::channel();
-    #[cfg(target_os = "linux")]
-    {
-        // Host regression runs get their own FIFO, just like their own states and launch-skip file.
-        let fifo = if std::env::var_os("POCKET_CORE_TEST").is_some() { std::env::temp_dir().join("pocket-core.cmd") } else { PathBuf::from("/tmp/pocket-core.cmd") };
-        let _ = std::fs::remove_file(&fifo);
-        // mkfifo(3) rather than the mkfifo program: no process to start before the first frame.
-        // SAFETY: the path is a valid C string that lives through the call.
-        let made = std::ffi::CString::new(fifo.as_os_str().as_encoded_bytes()).is_ok_and(|c| unsafe { libc::mkfifo(c.as_ptr(), 0o644) } == 0);
-        if made {
-            // Read-write: we count as a writer ourselves, so the FIFO never hits EOF and always has a
-            // reader, and pocket-ui's writes never block.
-            std::thread::spawn(move || {
-                use std::io::BufRead;
-                let Ok(f) = std::fs::OpenOptions::new().read(true).write(true).open(fifo) else { return };
-                for line in std::io::BufReader::new(f).lines().map_while(Result::ok) {
-                    if cmd_tx.send(line).is_err() {
-                        return;
-                    }
-                }
-            });
-        }
-    }
-    #[cfg(not(target_os = "linux"))]
-    drop(cmd_tx);
-
-    pocket_ui::startup::mark("fifo");
     // The sound device is opened while the window and GL come up (`resumed` takes it): connecting to PipeWire took
     // 13-18 ms in the virtual device.
     let audio_opening = {
@@ -2218,7 +2465,7 @@ fn main() {
     let mut app = App {
         core,
         window: None,
-        gfx: None,
+        gfx: None, #[cfg(feature = "brick")] soft: None, #[cfg(feature = "brick")] brick_gles: None, #[cfg(feature = "brick")] brick_picture: BrickPicture::default(),
         audio: None,
         audio_opening: Some(audio_opening),
         shown_at: None,
@@ -2231,7 +2478,7 @@ fn main() {
         stats: Stats { emulated: 0, started: Instant::now(), last_swap: None, intervals: Vec::new(), run_ms: Vec::new(), draw_ms: Vec::new(), strip_us: Vec::new() },
         bench,
         period: Duration::from_micros(16_667),
-        next_frame: None,
+        frame_clock: FrameClock::default(),
         last_frame: None,
         states,
         commands,
@@ -2306,12 +2553,14 @@ fn main() {
     app.core.take_snapshot_dirty();
     // Multi-disc games: the discs for the pause menu's Disc row, known once the game is loaded (`publish_discs`).
     app.publish_discs();
+    PROGRESS.checkpoint();
     pocket_ui::startup::mark("resume");
     STARTED.set(started).ok();
     event_loop.run_app(&mut app).expect("run");
+    PROGRESS.exiting();
     pocket_ui::fast_switch::mark("event loop left");
     // The Disc row's file ends with the game (a game started meanwhile keeps its own).
-    pocket_ui::disc::forget(&app.video_src.1);
+    pocket_ui::disc::forget(&app.video_src.1); #[cfg(feature = "brick")] if let Some(h) = app.brick_gles.as_mut() { h.destroy(); }
     // RetroArch's order: context_destroy, then retro_unload_game (when `core` drops below), both
     // with the core's context current.
     if let Some(Gfx { surface, hw: Some(hw), .. }) = app.gfx.as_mut() {
@@ -2367,11 +2616,32 @@ fn main() {
     pocket_ui::fast_switch::mark("window and GL closed");
     drop(audio);
     pocket_ui::fast_switch::mark("torn down");
+    PROGRESS.stop();
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A resumed swap can return immediately. Replay five pauses with a 48 kHz consumer: each
+    /// first 60 Hz frame must get a full period before the next one can add another 800 samples.
+    /// An empty clock used to add 800 extra samples on every resume until the queue dropped audio.
+    #[test]
+    fn repeated_resumes_do_not_accumulate_extra_audio_when_the_first_swap_is_immediate() {
+        let mut clock = FrameClock::default();
+        let period = Duration::from_secs_f64(1.0 / 60.0);
+        let mut now = Instant::now();
+        let mut buffered = 800usize;
+        for _ in 0..5 {
+            clock.after_pause(now);
+            buffered += 800;
+            let next_frame = clock.finish_frame(now, period);
+            let played = (next_frame.saturating_duration_since(now).as_secs_f64() * 48_000.0).round() as usize;
+            buffered = buffered.saturating_sub(played);
+            assert_eq!(buffered, 800, "resume added a burst until the overflow cap would discard sound");
+            now = next_frame + Duration::from_secs(1);
+        }
+    }
 
     #[test]
     fn quit_commands() {
@@ -2382,6 +2652,155 @@ mod tests {
         assert_eq!(Exit::from_command(&words("quit later")), None);
         assert_eq!(Exit::from_command(&words("quitnosave")), None);
         assert_eq!(Exit::from_command(&words(pocket_ui::fast_switch::QUIT_FOR_SWITCH)), Some(Exit::Handoff));
+    }
+}
+
+/// The pause menu's picture without GL (`POCKET_CORE_SOFTWARE`, the Brick): the last frame placed on the screen the way `soft_screen`
+/// placed it, written as `write_shot` does.
+#[cfg(feature = "brick")]
+impl App {
+    /// The Picture page's live preview on the Brick (pocket-core draws no GL there): the bridge's renderer draws it with the settings as
+    /// the menu has them now; without the GPU path the CPU copy, as the game shows it then.
+    fn preview_soft(&mut self, w: u32, h: u32, seq: u32) {
+        let t0 = Instant::now();
+        let (sw, sh) = if self.view.0 > 0 { self.view } else { pocket_ui::device::current().screen() };
+        if self.brick_picture.on && self.last_frame.is_some() {
+            self.sync_brick_picture();
+            if self.brick_picture.on && pocket_ui::brick_picture::send_preview(seq, (sw, sh), (w, h)) {
+                println!("preview {seq}: {w}x{h} by the bridge's GPU in {:.1} ms", t0.elapsed().as_secs_f32() * 1000.0);
+                return;
+            }
+        }
+        let Some(frame) = self.last_frame.as_ref() else {
+            println!("preview {seq}: no picture of the game yet");
+            return;
+        };
+        let mut px = vec![0u32; sw as usize * sh as usize];
+        pocket_ui::soft_screen::blit(frame, &mut px, sw as usize, sh as usize);
+        let rgba: Vec<u8> = px.iter().flat_map(|p| [(p >> 16) as u8, (p >> 8) as u8, *p as u8, 0xff]).collect();
+        let (crop, overview) = pocket_ui::preview::from_screen(&rgba, sw, sh, w, h);
+        if let Err(e) = pocket_ui::preview::write(Path::new(pocket_ui::preview::FILE), seq, &[&crop, &overview]) {
+            eprintln!("preview: {e}");
+        }
+        println!("preview {seq}: {w}x{h} in {:.1} ms (CPU copy)", t0.elapsed().as_secs_f32() * 1000.0);
+    }
+
+    fn write_shot_soft(&mut self, seq: u32) {
+        let t0 = Instant::now();
+        let (sw, sh) = if self.view.0 > 0 { self.view } else { pocket_ui::device::current().screen() };
+        // With the GPU's picture path the bridge draws the background with the shaders and the frame (a Picture choice just made shows
+        // behind the menu at once); the settings go out first.
+        if self.brick_picture.on && self.last_frame.is_some() {
+            self.sync_brick_picture();
+            if self.brick_picture.on && pocket_ui::brick_picture::send_shot(seq, sw, sh) {
+                println!("menu shot {seq}: {sw}x{sh} by the bridge's GPU in {:.1} ms", t0.elapsed().as_secs_f32() * 1000.0);
+                return;
+            }
+        }
+        let Some(frame) = self.last_frame.as_ref() else { return };
+        let mut px = vec![0u32; sw as usize * sh as usize];
+        pocket_ui::soft_screen::blit(frame, &mut px, sw as usize, sh as usize);
+        let shot = pocket_ui::preview::Pixels { w: sw, h: sh, px };
+        // The game's rectangle first, as `write_shot` does: where `blit` put it (Zoom crops to it).
+        let game = pocket_ui::preview::game_rect_image(pocket_ui::soft_screen::placement((frame.width, frame.height), (sw, sh)));
+        if let Err(e) = pocket_ui::preview::write(Path::new(pocket_ui::preview::SHOT_FILE), seq, &[&game, &shot]) {
+            eprintln!("shot: {e}");
+        }
+        println!("menu shot {seq}: {sw}x{sh} in {:.1} ms (CPU copy)", t0.elapsed().as_secs_f32() * 1000.0);
+    }
+}
+
+/// What the Brick's bridge knows about this game's picture (`pocket_ui::brick_picture`): with `pocket-fb --gl` pocket-core hands over the
+/// core's picture at its own size and the Picture settings, and the bridge draws it with the renderer ROCKNIX devices run here. Without
+/// the GPU nothing changes: the CPU copy scales the picture in `soft_screen`.
+#[cfg(feature = "brick")]
+#[derive(Default)]
+struct BrickPicture {
+    /// The GPU path was asked for and the bridge took it.
+    on: bool,
+    /// Asked once; a bridge that said no (no GPU) is not asked again.
+    asked: bool,
+    /// The Picture settings by key; None until read, and again after the menu saved or restored them.
+    values: Option<std::collections::BTreeMap<String, String>>,
+    /// What was last sent: the aspect's bits and the turns, and whether the values changed since.
+    sent: Option<(u32, u32)>,
+    stale: bool,
+    /// Over the game: what the overlay shows goes to the bridge, which draws it over the picture (`pocket_overlay`); the last one sent.
+    hud: Option<pocket_ui::brick_picture::HudSender>,
+    hud_sent: [String; 4],
+    /// The first picture is out: the first-game note was asked for (ROCKNIX asks after its first swap, which the Brick never reaches).
+    first_shown: bool,
+}
+
+#[cfg(feature = "brick")]
+impl BrickPicture {
+    fn changed(&mut self, key: &str, value: &str) {
+        if let Some(v) = self.values.as_mut().filter(|v| v.contains_key(key)) {
+            v.insert(key.to_string(), value.to_string());
+            self.stale = true;
+            println!("brick picture: {key} = {value}");
+        }
+    }
+
+    fn reload(&mut self) {
+        self.values = None;
+        self.stale = true;
+    }
+}
+
+#[cfg(feature = "brick")]
+impl App {
+    /// Over the game on the Brick: the overlay's texts (the FPS line, toasts, the volume bar) to the bridge when they changed. Only with the
+    /// GPU path; the CPU copy shows the picture alone.
+    fn sync_brick_hud(&mut self) {
+        if !self.brick_picture.on {
+            return;
+        }
+        // Only where it can be seen: `tell_once` marks it told.
+        if !std::mem::replace(&mut self.brick_picture.first_shown, true) && pocket_ui::first_game::tell_once(&data_dir()) {
+            self.hud.note(pocket_ui::first_game::NOTE);
+        }
+        let texts = self.hud.texts();
+        let bp = &mut self.brick_picture;
+        if texts == bp.hud_sent {
+            return;
+        }
+        if bp.hud.is_none() {
+            println!("brick picture: over the game drawn by the bridge");
+        }
+        bp.hud.get_or_insert_with(pocket_ui::brick_picture::HudSender::new).send(&texts);
+        bp.hud_sent = texts;
+    }
+
+    /// Before a picture goes out: asks the bridge for the GPU path once, and tells it again whenever the settings, the aspect or the turn changed.
+    fn sync_brick_picture(&mut self) {
+        let bp = &mut self.brick_picture;
+        if !bp.asked {
+            bp.asked = true;
+            bp.on = pocket_ui::brick_picture::shaders_available();
+            println!("brick picture: shaders and frames {}", if bp.on { "on the GPU" } else { "off, the CPU copy" });
+        }
+        if !bp.on {
+            return;
+        }
+        let aspect = Self::display_aspect(&self.core, &self.video_src.0);
+        let turns = self.rotate_override.unwrap_or_else(|| self.core.rotation());
+        if bp.sent == Some((aspect.to_bits(), turns)) && !bp.stale {
+            return;
+        }
+        let kids = pocket_ui::kids::Config::load(&data_dir()).on;
+        let values = bp.values.get_or_insert_with(|| pocket_ui::brick_picture::values(&data_dir(), &self.video_src.0, &self.video_src.1, kids)).clone();
+        let request = pocket_ui::brick_picture::Request { system: self.video_src.0.clone(), aspect, turns, frames_dir: data_dir().join("frames"), values };
+        bp.sent = Some((aspect.to_bits(), turns));
+        bp.stale = false;
+        let took = pocket_ui::brick_picture::send(&request);
+        if let Some(soft) = self.soft.as_mut() {
+            soft.set_native(took);
+        }
+        if !took {
+            println!("brick picture: the bridge took no settings, back to the CPU copy");
+            bp.on = false;
+        }
     }
 }
 

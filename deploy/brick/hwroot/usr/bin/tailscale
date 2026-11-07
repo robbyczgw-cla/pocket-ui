@@ -1,0 +1,4 @@
+#!/bin/sh
+# The tailscale command for pocket-ui (Settings > Tailscale) and for an SSH shell: the card's own CLI, talking to the card's tailscaled
+# (brick-tailscale) over its socket in /tmp.
+exec "${BRICK_APP:-/mnt/SDCARD/pocket-ui/app}/bin/tailscale" --socket="${BRICK_RUN:-/tmp/pocket-ui}/tailscaled.sock" "$@"

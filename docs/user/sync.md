@@ -17,7 +17,7 @@ Each row of Settings → Connections → **Sync** is a folder:
 | Row | Folder | What is in it |
 |---|---|---|
 | **Saves** | `/storage/roms` (only save files) | The `.srm`, `.rtc` (the cartridge clock of games such as Pokémon Crystal), `.sav`, `.eep`, `.fla`, `.sra`, `.mcr`, `.mcd` and `.dsv` files next to your games. The games themselves are **not** shared |
-| **Save states** | `/storage/roms/savestates` | The states of every system, with their small pictures. Not the [Earlier](pause-menu.md#earlier) states: they stay on the Pocket that played them |
+| **Save states** | `/storage/roms/savestates` | The states of every system, with their small pictures. Not the [Earlier](pause-menu-saves.md#earlier) states: they stay on the Pocket that played them |
 | **PS2 memory cards** | `/storage/roms/ps2` (only the cards) | `Mcd001.ps2` and `Mcd002.ps2`, the two memory cards every PlayStation 2 game saves on. Your PS2 games are **not** shared |
 | **GameCube & Wii saves** | two folders: `/storage/roms/bios/GC` (only the cards) and Dolphin's Wii save data | The GameCube memory cards (`MemoryCardA.USA.raw` and so on, or the `.gci` files of each game) and the save data of each Wii game. Not the GameCube BIOS next to the cards, not the games |
 | **3DS saves** | `/storage/roms/3ds/azahar/sdmc/Nintendo 3DS` (only save data) | The save data and extra data of each 3DS game. Not the games, nor any updates or downloadable content installed there |
@@ -38,7 +38,7 @@ and nothing arrives in them, so the running game can't overwrite a save that com
 the folders carry on and the new saves go out at once (with **Sync after playing**, below, or within about ten
 seconds otherwise). A folder you paused yourself in Syncthing's web interface stays paused.
 
-**Earlier states stay here.** The states the pause menu's [Earlier](pause-menu.md#earlier) keeps by itself (up to 1 GB, a
+**Earlier states stay here.** The states the pause menu's [Earlier](pause-menu-saves.md#earlier) keeps by itself (up to 1 GB, a
 new one every 5 minutes of play) are left out of **Save states** by its `.stignore` (`*.pstate.earlier*`,
 `*.pstate.started*`); pocket-ui adds those lines to a folder that was shared before, after the next game. To share them
 anyway, write your own `.stignore` in `/storage/roms/savestates` (one that doesn't start with pocket-ui's first line);

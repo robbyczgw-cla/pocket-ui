@@ -111,7 +111,10 @@ fn builds_a_signed_list_that_names_the_files_of_the_github_release() {
     let base = format!("https://github.com/owner/pocket-ui/releases/download/v{VERSION}");
     let app = m.app.expect("the app update");
     assert_eq!(app.version, VERSION);
-    assert_eq!(app.url, format!("{base}/pocket-ui-{VERSION}-aarch64.tar.gz"));
+    // The website first (pocket-ui up to 0.2.x downloads only `url`), the same file on GitHub as its signed mirror.
+    assert_eq!(app.url, format!("https://pocketui.xyz/updates/stable/pocket-ui-{VERSION}-aarch64.tar.gz"));
+    assert_eq!(app.mirrors, [format!("{base}/pocket-ui-{VERSION}-aarch64.tar.gz")]);
+    assert_eq!(sha(&site.join(format!("updates/stable/pocket-ui-{VERSION}-aarch64.tar.gz"))), app.sha256, "the website's copy goes with the list");
     assert_eq!(app.notes, "Faster menus.", "NOTES.txt");
     let tarball = site.join(format!("github/pocket-ui-{VERSION}-aarch64.tar.gz"));
     assert_eq!(app.sha256, sha(&tarball));
@@ -287,4 +290,212 @@ fn check_downloads_every_file_and_finds_a_missing_or_changed_one() {
     assert!(t.contains("CHANGED  sd_image"), "{t}");
     assert!(t.contains("MISSING  install_zip"), "{t}");
     assert!(t.contains("do not deploy"), "{t}");
+}
+
+#[test]
+fn direct_app_is_copied_with_a_signed_identical_github_fallback() {
+    let tmp = Tmp::new("direct-app");
+    let inp = release_out(&tmp.0);
+    let (key, public) = throwaway_key(&tmp.0);
+    let (out, site) = build(&tmp.0, &inp, &key, &["--direct-app"]);
+    assert!(out.status.success(), "{}", text(&out));
+    let app = signed_list(&site, &public).app.unwrap();
+    let name = format!("pocket-ui-{VERSION}-aarch64.tar.gz");
+    assert_eq!(app.url, format!("https://pocketui.xyz/updates/stable/{name}"));
+    assert_eq!(app.mirrors, [format!("https://github.com/owner/pocket-ui/releases/download/v{VERSION}/{name}")]);
+    assert_eq!(sha(&site.join("updates/stable").join(&name)), app.sha256);
+    assert_eq!(sha(&site.join("github").join(&name)), app.sha256);
+    let listed = Command::new(STORE_TOOL).arg("list").arg(site.join("updates/stable/update.json")).output().unwrap();
+    let list = String::from_utf8_lossy(&listed.stdout);
+    assert!(list.contains(&app.url) && list.contains(&app.mirrors[0]), "preflight checks every signed source: {list}");
+}
+
+#[test]
+fn preflight_checks_nested_asset_packages_and_every_mirror() {
+    let tmp = Tmp::new("nested-assets");
+    let (key, _) = throwaway_key(&tmp.0);
+    let primary = tmp.0.join("primary");
+    let mirror = tmp.0.join("mirror");
+    std::fs::write(&primary, b"asset").unwrap();
+    let package = serde_json::json!({"version":"9", "url":format!("file://{}", primary.display()),
+        "mirrors":[format!("file://{}", mirror.display())], "sha256":sha(&primary), "size":5});
+    let src = tmp.0.join("app");
+    std::fs::create_dir(&src).unwrap();
+    std::fs::write(src.join("asset-packages.json"), serde_json::to_vec(&serde_json::json!({"format":1,
+        "assets":[{"path":"cores/core.so", "size":5, "sha256":sha(&primary), "package":package}]})).unwrap()).unwrap();
+    let tar = tmp.0.join("app.tar.gz");
+    assert!(Command::new("tar").arg("-czf").arg(&tar).arg("-C").arg(&src).arg(".").status().unwrap().success());
+    let list = tmp.0.join("update.json");
+    assert!(Command::new(STORE_TOOL).args(["update", s(&key), s(&list), "app", "9", s(&tar), &format!("file://{}", tar.display())]).status().unwrap().success());
+    let out = run(&["--check", s(&list)]);
+    assert!(!out.status.success() && text(&out).contains("MISSING  asset"), "{}", text(&out));
+    std::fs::copy(&primary, &mirror).unwrap();
+    let out = run(&["--check", s(&list)]);
+    assert!(out.status.success(), "{}", text(&out));
+    std::fs::write(&mirror, b"wrong").unwrap();
+    let out = run(&["--check", s(&list)]);
+    assert!(!out.status.success() && text(&out).contains("CHANGED  asset"), "{}", text(&out));
+}
+
+/// The Brick's list (scripts/brick-publish.sh --public) has its packages in updates/brick/assets/ on the website: before the
+/// deploy, --check takes them from the same place below the list, so the check before the deploy can pass.
+#[test]
+fn check_takes_website_packages_below_the_list_before_they_are_live() {
+    let tmp = Tmp::new("check-site-assets");
+    let (key, _) = throwaway_key(&tmp.0);
+    let site_url = format!("file://{}", tmp.0.join("live-site").display());
+    let channel = tmp.0.join("out/updates/brick");
+    std::fs::create_dir_all(channel.join("assets")).unwrap();
+    let asset = channel.join("assets/brick-asset-1.tar.gz");
+    std::fs::write(&asset, b"asset").unwrap();
+    let mirror = tmp.0.join("github-asset");
+    std::fs::copy(&asset, &mirror).unwrap();
+    let package = serde_json::json!({"version":"9", "url":format!("{site_url}/updates/brick/assets/brick-asset-1.tar.gz"),
+        "mirrors":[format!("file://{}", mirror.display())], "sha256":sha(&asset), "size":5});
+    let src = tmp.0.join("app");
+    std::fs::create_dir(&src).unwrap();
+    std::fs::write(src.join("asset-packages.json"), serde_json::to_vec(&serde_json::json!({"format":1,
+        "assets":[{"path":"cores/core.so", "size":5, "sha256":sha(&asset), "package":package}]})).unwrap()).unwrap();
+    let tar = channel.join("app.tar.gz");
+    assert!(Command::new("tar").arg("-czf").arg(&tar).arg("-C").arg(&src).arg(".").status().unwrap().success());
+    let list = channel.join("update.json");
+    assert!(Command::new(STORE_TOOL).args(["update", s(&key), s(&list), "app", "9", s(&tar), &format!("{site_url}/updates/brick/app.tar.gz")]).status().unwrap().success());
+    let check = || Command::new("sh").arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/release-channel.sh")).args(["--check", s(&list)]).env("STORE_TOOL", STORE_TOOL).env("POCKETUI_SITE_URL", &site_url).output().unwrap();
+    let out = check();
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(text(&out).contains("ok       asset 9") && text(&out).matches("not live yet").count() == 2, "{}", text(&out));
+    // A package missing there is still missing.
+    std::fs::remove_file(&asset).unwrap();
+    let out = check();
+    assert!(!out.status.success() && text(&out).contains("MISSING  asset"), "{}", text(&out));
+}
+
+#[test]
+fn a_test_channel_can_keep_the_app_on_github_only() {
+    let tmp = Tmp::new("github-primary");
+    let inp = release_out(&tmp.0);
+    let (key, public) = throwaway_key(&tmp.0);
+    let (out, site) = build(&tmp.0, &inp, &key, &["--github-primary"]);
+    assert!(out.status.success(), "{}", text(&out));
+    let app = signed_list(&site, &public).app.unwrap();
+    assert_eq!(app.url, format!("https://github.com/owner/pocket-ui/releases/download/v{VERSION}/pocket-ui-{VERSION}-aarch64.tar.gz"));
+    assert!(app.mirrors.is_empty());
+    assert!(!site.join(format!("updates/stable/pocket-ui-{VERSION}-aarch64.tar.gz")).exists(), "nothing for the website but the list");
+}
+
+/// The update list exactly as every pocket-ui from 0.1.7 to 0.2.2 reads it (their src/update.rs, unchanged in between):
+/// `format`, and in every entry that is there `version`, `url`, `sha256` and `size` with these types; a field they
+/// don't know is skipped. Those versions stay in players' hands and leave only through an update they can read: a
+/// list they can't parse, or an app they can only get from a host their network blocks, strands every one of them.
+mod oldest_client {
+    #[allow(dead_code)]
+    #[derive(serde::Deserialize)]
+    pub struct Release {
+        pub version: String,
+        pub url: String,
+        pub sha256: String,
+        pub size: u64,
+        #[serde(default)]
+        pub notes: String,
+    }
+
+    #[allow(dead_code)]
+    #[derive(serde::Deserialize)]
+    pub struct Manifest {
+        pub format: u32,
+        #[serde(default)]
+        pub app: Option<Release>,
+        #[serde(default)]
+        pub os: Option<Release>,
+        #[serde(default)]
+        pub sd_image: Option<Release>,
+        #[serde(default)]
+        pub install_zip: Option<Release>,
+    }
+}
+
+#[test]
+fn every_list_we_write_is_read_by_the_oldest_pocket_ui_in_players_hands() {
+    let tmp = Tmp::new("oldest-client");
+    let inp = release_out(&tmp.0);
+    let (key, _) = throwaway_key(&tmp.0);
+    let live = tmp.0.join("live/update.json");
+    std::fs::create_dir_all(live.parent().unwrap()).unwrap();
+    std::fs::write(tmp.0.join("live/SYSTEM-20261101.tar"), b"a system update").unwrap();
+    let made = Command::new(STORE_TOOL).args(["update", s(&key), s(&live), "os", "20261101", s(&tmp.0.join("live/SYSTEM-20261101.tar")), "https://pocketui.xyz/s.tar"]).output().unwrap();
+    assert!(made.status.success());
+    let release = |extra: &[&str]| {
+        let (out, site) = build(&tmp.0, &inp, &key, extra);
+        assert!(out.status.success(), "{extra:?}: {}", text(&out));
+        std::fs::read(site.join("updates/stable/update.json")).unwrap()
+    };
+    let lists = [
+        ("a release", release(&[])),
+        ("a release over the live list", release(&["--previous", s(&live)])),
+        ("a test channel", release(&["--github-primary"])),
+        // What players' 0.2.x read today (pocketui.xyz, 06.11.2026).
+        ("the live 0.2.2 list", std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/update-channel/stable-0.2.2.json")).unwrap()),
+    ];
+    for (what, json) in lists {
+        let old: oldest_client::Manifest = serde_json::from_slice(&json).unwrap_or_else(|e| panic!("{what}: 0.1.7–0.2.2 can't read it: {e}"));
+        let now: Manifest = serde_json::from_slice(&json).unwrap();
+        let (app, new) = (old.app.expect(what), now.app.expect(what));
+        assert_eq!((app.version, app.sha256, app.size), (new.version, new.sha256, new.size), "{what}: both read the same app");
+        if what != "a test channel" {
+            assert!(app.url.starts_with("https://pocketui.xyz/updates/"), "{what}: the only source an old pocket-ui tries: {}", app.url);
+        }
+    }
+    // The archive as 0.1.7 to 0.2.2 install it (their untar.rs): only plain files and folders (a link, device or anything else
+    // refuses the whole update), pocket-ui and pocket-core at the top, both printing `<name> <version>` (checked on the device).
+    let (_, site) = build(&tmp.0, &inp, &key, &[]);
+    let listing = Command::new("tar").arg("-tvzf").arg(site.join(format!("updates/stable/pocket-ui-{VERSION}-aarch64.tar.gz"))).output().unwrap();
+    let listing = String::from_utf8_lossy(&listing.stdout);
+    assert!(listing.lines().all(|l| l.starts_with('-') || l.starts_with('d')), "{listing}");
+    for program in ["pocket-ui", "pocket-core"] {
+        assert!(listing.lines().any(|l| l.split_whitespace().last() == Some(program)), "{program} at the top: {listing}");
+    }
+}
+
+#[test]
+fn a_version_other_than_plain_numbers_is_refused() {
+    let tmp = Tmp::new("versions");
+    let inp = release_out(&tmp.0);
+    let (key, _) = throwaway_key(&tmp.0);
+    // 0.3.0-rc1 would count as newer than 0.3.0 on every pocket-ui (update::newer), 0.3 as older than 0.3.0.
+    for bad in ["9.9.9-rc1", "9.9", "9.9.9.1", "v9.9.9", "9.9.9+dev"] {
+        let (out, _) = build(&tmp.0, &inp, &key, &["--version", bad]);
+        assert_eq!(out.status.code(), Some(2), "{bad}: {}", text(&out));
+        assert!(text(&out).contains("plain X.Y.Z"), "{bad}: {}", text(&out));
+    }
+    let (out, _) = build(&tmp.0, &inp, &key, &["--version", VERSION]);
+    assert!(out.status.success(), "{}", text(&out));
+}
+
+#[test]
+fn check_takes_the_website_copy_next_to_the_list_before_it_is_live() {
+    let tmp = Tmp::new("check-site");
+    let inp = release_out(&tmp.0);
+    let (key, _) = throwaway_key(&tmp.0);
+    let (release, live_site) = (tmp.0.join("release"), tmp.0.join("live-site"));
+    std::fs::create_dir_all(&release).unwrap();
+    let site_url = format!("file://{}", live_site.display());
+    let site = tmp.0.join("site");
+    let args = ["--repo", "owner/pocket-ui", "--in", s(&inp), "--out", s(&site), "--key", s(&key), "--allow-foreign-key", "--direct-app", "--base-url", &format!("file://{}", release.display())];
+    let out = Command::new("sh").arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/release-channel.sh")).args(args).env("STORE_TOOL", STORE_TOOL).env("POCKETUI_SITE_URL", &site_url).env_remove("POCKETUI_SIGNING_KEY").output().unwrap();
+    assert!(out.status.success(), "{}", text(&out));
+    for line in std::fs::read_to_string(site.join("github/assets.txt")).unwrap().lines() {
+        std::fs::copy(line, release.join(Path::new(line).file_name().unwrap())).unwrap();
+    }
+    let list = site.join("updates/stable/update.json");
+    let check = || Command::new("sh").arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/release-channel.sh")).args(["--check", s(&list)]).env("STORE_TOOL", STORE_TOOL).env("POCKETUI_SITE_URL", &site_url).output().unwrap();
+    // The website is not deployed yet: its app is the copy next to the list; the GitHub mirror is checked for real.
+    let out = check();
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(text(&out).contains("not live yet"), "{}", text(&out));
+    // A changed copy next to the list is no excuse.
+    let name = format!("pocket-ui-{VERSION}-aarch64.tar.gz");
+    std::fs::write(site.join("updates/stable").join(&name), b"other bytes").unwrap();
+    let out = check();
+    assert_eq!(out.status.code(), Some(1), "{}", text(&out));
+    assert!(text(&out).contains("CHANGED  app"), "{}", text(&out));
 }

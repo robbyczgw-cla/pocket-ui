@@ -1,0 +1,4 @@
+#!/bin/sh
+# Entry for a Brick on TrimUI's own firmware: its start script runs /mnt/SDCARD/trimui/app/MainUI when that folder exists on the
+# card. All the work is in pocket-ui/start.sh.
+exec sh "$(dirname "$0")/../../pocket-ui/start.sh" stock-firmware

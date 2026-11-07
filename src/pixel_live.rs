@@ -245,7 +245,7 @@ pub fn paint(text: &mut Text, s: &Strip, style: Style) -> (i32, i32, Vec<u32>) {
     let mut buf = vec![KEY; (w * h) as usize];
     let mut c = Canvas::new(&mut buf, w as u32, h as u32);
     let r = if style == Style::Column { 16 } else { h / 2 };
-    c.round_rect(0, 0, w, h, r, PILL);
+    crate::retro::window(&mut c, 0, 0, w, h, r, PILL);
     let colour = |p: &Part| if p.alert { Grade::Compromised.colour() } else { TEXT };
     let dot_r = dot_r(font);
     let baseline = |line: i32| py + line * line_h(font) + font as i32 * 4 / 5;

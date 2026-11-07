@@ -39,7 +39,8 @@ The quickest way for a few games: send them straight from your phone. Phone and 
   arrives, the Pocket doesn't go to sleep by itself.
 - When you leave Add games, the new games are read in and the page offers the [Game check](game-check.md): it explains in plain
   words a file that is empty, the wrong type or misses its BIOS.
-- Without Wi-Fi the page says **Connect to Wi-Fi first**; **A** opens the Wi-Fi settings.
+- Without Wi-Fi the page says **Connect to Wi-Fi first**; **A** opens the Wi-Fi settings. In the first start, once a
+  network connects there you are back on this page with its code; B on Wi-Fi without connecting comes back to Add games.
 - Not on the Steam Deck: there games go into its own folders.
 
 ## What plain HTTP on a Wi-Fi means
@@ -47,7 +48,8 @@ The quickest way for a few games: send them straight from your phone. Phone and 
 The page is reachable only while it is open on the Pocket, only on your Wi-Fi, and only with the code in the address,
 which is new each time the page opens. **The connection is not encrypted:** someone else on the same Wi-Fi could see
 the code and the games you send, and could change them on the way; with the code they could also add games while the
-page is open. Both the Pocket and the phone say this under the code. Nobody can download anything from the Pocket this
+page is open. The phone says this under the code; the Pocket says it in one line ("Not encrypted, so use it on your
+own Wi-Fi at home"). Nobody can download anything from the Pocket this
 way: no list of your games, no saves, no settings; the page only tells whether a game of the same name is already
 there. Use it on your own Wi-Fi at home; on a Wi-Fi you don't trust (a hotel, a café) use file sharing at home or the
 SD card instead. Too many tries with a wrong code close the page.

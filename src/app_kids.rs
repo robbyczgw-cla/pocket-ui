@@ -268,6 +268,17 @@ impl App {
         self.kids.over_setup = over_setup;
     }
 
+    /// The flow just opened over the first start has games to pick.
+    pub(crate) fn kids_flow_has_games(&self) -> bool {
+        self.kids.flow.as_ref().is_some_and(|f| !f.library.is_empty())
+    }
+
+    /// Closes the flow without keeping anything.
+    pub(crate) fn kids_close_flow(&mut self) {
+        self.kids.flow = None;
+        self.kids.over_setup = false;
+    }
+
     pub(crate) fn kids_time_up(&self) -> bool {
         self.kids.ledger.is_up(self.kids.cfg.minutes)
     }
@@ -278,7 +289,15 @@ impl App {
         // A game's pictures come through the case cache; nothing here waits for them.
         match out {
             FlowOut::Stay => {}
-            FlowOut::Back => self.kids.flow = None,
+            FlowOut::Back => {
+                self.kids.flow = None;
+                // Over the first start: it goes on at the look step, as without the wish.
+                if std::mem::take(&mut self.kids.over_setup) {
+                    if let Some(s) = self.setup.as_mut() {
+                        s.kids_cancelled();
+                    }
+                }
+            }
             // Over Add games the App's own pages take the buttons and the screen (`kids_pad`, `kids_paint`).
             // The starter pack's page (B comes back, `from_home`), over the flow, which waits in `adding`.
             FlowOut::Starter => {
@@ -298,10 +317,12 @@ impl App {
                     self.rebuild();
                     self.sys.kids_volume_enter(self.kids.cfg.volume, &self.data_dir);
                     self.kids.background = None;
-                } else if self.kids.over_setup {
+                } else if std::mem::take(&mut self.kids.over_setup) {
+                    // The first start's last step: the setup ends, and the mode takes over (`kids_pad`).
                     if let Some(s) = self.setup.as_mut() {
                         s.kids_done();
                     }
+                    self.finish_setup();
                 } else {
                     self.settings_page = None;
                     self.kids_enter();
@@ -815,7 +836,7 @@ impl App {
         let ww = self.text.width(Face::Title, word_px, word);
         let row_y = c.h - (88.0 * u) as i32;
         let x0 = (c.w - ww - 2 * r - (20.0 * u) as i32) / 2;
-        c.disc(x0 + r, row_y, r, colours.accent);
+        pocket_ui::retro::disc(c, x0 + r, row_y, r, colours.accent);
         let aw = self.text.width(Face::Title, word_px, "A");
         self.text.draw(c, Face::Title, word_px, x0 + r - aw / 2, row_y + (word_px as i32) * 34 / 100, colours.on_accent, "A");
         self.kids_words(c, Face::Title, word_px, x0 + 2 * r + (20.0 * u) as i32, row_y + (word_px as i32) * 34 / 100, colours.ink, colours.top, word);
@@ -908,7 +929,7 @@ impl App {
         let (bw, bh) = ((110.0 * u) as i32, (60.0 * u) as i32);
         let gap = (28.0 * u) as i32;
         let x = (c.w - bw - gap - tw) / 2;
-        c.round_rect(x - gap, y, bw + tw + 3 * gap, band, (30.0 * u) as i32, colours.on_accent);
+        pocket_ui::retro::pill(c, x - gap, y, bw + tw + 3 * gap, band, (30.0 * u) as i32, colours.on_accent);
         let by = y + (band - bh) / 2;
         let t = (6.0 * u).max(2.0) as i32;
         c.frame(x, by, bw, bh, t, 0xffffff);
@@ -992,7 +1013,7 @@ impl App {
         let ww = self.text.width(Face::Title, word_px, word);
         let row_y = c.h - (130.0 * u) as i32;
         let x0 = (c.w - ww - 2 * disc_r - (20.0 * u) as i32) / 2;
-        c.disc(x0 + disc_r, row_y, disc_r, colours.accent);
+        pocket_ui::retro::disc(c, x0 + disc_r, row_y, disc_r, colours.accent);
         let aw = self.text.width(Face::Title, word_px, "A");
         self.text.draw(c, Face::Title, word_px, x0 + disc_r - aw / 2, row_y + word_px as i32 * 34 / 100, colours.on_accent, "A");
         self.kids_words(c, Face::Title, word_px, x0 + 2 * disc_r + (20.0 * u) as i32, row_y + word_px as i32 * 34 / 100, colours.ink, colours.top, word);
@@ -1042,7 +1063,7 @@ impl App {
             // Easy's rows are all seen as rows: the unselected ones stand a shade off the background.
             let rest = if big { colours.shape } else { colours.top };
             let (bg, fg) = if selected { (colours.accent, colours.on_accent) } else { (rest, colours.ink) };
-            c.round_rect(x, y, bw, bh, (if big { 38.0 } else { 44.0 } * u) as i32, bg);
+            pocket_ui::retro::pill(c, x, y, bw, bh, (if big { 38.0 } else { 44.0 } * u) as i32, bg);
             let (icon, gap) = (((if big { 80.0 } else { 116.0 }) * u) as i32, (if big { 30.0 } else { 36.0 } * u) as i32);
             // A longer word in another language: smaller, never out of its button.
             let sizes: [f32; 4] = if big { [76.0, 66.0, 58.0, 50.0] } else { [104.0, 88.0, 74.0, 62.0] };
@@ -1125,7 +1146,12 @@ impl App {
     fn kids_title(&mut self, c: &mut Canvas, ink: u32, title: &str, line: &str) -> i32 {
         let u = c.h as f32 / 1080.0;
         let margin = (72.0 * u) as i32;
-        self.text.draw(c, Face::Title, (72.0 * u).round() as u32, margin, (130.0 * u) as i32, ink, title);
+        // A long title in a wide face (Retro, German) steps down in size until it fits the page.
+        let mut px = (72.0 * u).round() as u32;
+        while px > (44.0 * u) as u32 && self.text.width(Face::Title, px, title) > c.w - 2 * margin {
+            px -= 2;
+        }
+        self.text.draw(c, Face::Title, px, margin, (130.0 * u) as i32, ink, title);
         let mut y = (196.0 * u) as i32;
         let spx = (34.0 * u).round() as u32;
         for l in self.text.wrap_prose_at_most(Face::Body, spx, line, c.w - 2 * margin, 3) {
@@ -1217,15 +1243,20 @@ impl App {
                     }
                     y += (72.0 * u) as i32 - (lpx as f32 * 1.3) as i32;
                 }
-                self.paint_hint_row(c, &[("A", "Start"), ("B", "Back")]);
+                // Over the first start B goes on to the look, like B on its other stages: "Back" sent a parent forward
+                // (first-start walk 2026-11-06).
+                self.paint_hint_row(c, &[("A", "Start"), ("B", if self.kids.over_setup { "Skip" } else { "Back" })]);
             }
             Stage::Pin { dials, first, mismatch } => {
                 let (t, l) = if first.is_some() { ("Once more", "Enter the same PIN again, so a slip doesn't lock you out.") } else { ("Pick a PIN", "Four digits for you, not for your child. You'll need it to leave Kids mode.") };
                 self.kids_title(c, pal().chalk, t, l);
                 paint_dials(self, c, dials, (430.0 * u) as i32, None, false);
                 if mismatch {
-                    let spx = (38.0 * u).round() as u32;
+                    let mut spx = (38.0 * u).round() as u32;
                     let line = "Those two were different. Pick one again.";
+                    while spx > (26.0 * u) as u32 && self.text.width(Face::Body, spx, line) > c.w - (144.0 * u) as i32 {
+                        spx -= 1;
+                    }
                     let w = self.text.width(Face::Body, spx, line);
                     self.text.draw(c, Face::Body, spx, (c.w - w) / 2, (810.0 * u) as i32, pal().chalk, line);
                 }
@@ -1572,7 +1603,7 @@ fn paint_dials(app: &mut App, c: &mut Canvas, dials: kids::Dials, top: i32, colo
     for (i, digit) in dials.digits.iter().enumerate() {
         let x = x0 + i as i32 * (w + gap);
         let at = i == dials.at;
-        c.round_rect(x, top, w, h, (26.0 * u) as i32, if at { selected } else { card });
+        pocket_ui::retro::pill(c, x, top, w, h, (26.0 * u) as i32, if at { selected } else { card });
         let fg = if at { on_selected } else { ink };
         let s = if hide && !at && i < dials.at { "•".to_string() } else { digit.to_string() };
         let tw = app.text.width(Face::Title, px, &s);
@@ -1587,7 +1618,7 @@ fn paint_dials(app: &mut App, c: &mut Canvas, dials: kids::Dials, top: i32, colo
 }
 
 fn arrow(c: &mut Canvas, cx: i32, cy: i32, size: i32, dir: i32, k: Colours) {
-    c.disc(cx, cy, size + size / 3, k.accent);
+    pocket_ui::retro::disc(c, cx, cy, size + size / 3, k.accent);
     let tip = size * 3 / 4;
     for dx in 0..tip {
         let half = tip - dx;

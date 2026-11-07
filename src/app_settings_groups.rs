@@ -97,13 +97,47 @@ pub(crate) fn set_store_offered(on: bool) {
 
 /// Whether Settings has a row for `opens`, with the Store `store`-offered or not. The LEDs row (the lights around the
 /// sticks) is left out on a device without sticks (the H700 handhelds).
+#[cfg(not(feature = "brick"))]
 fn shown(opens: Opens, store: bool) -> bool {
     shown_on(opens, store, pocket_ui::device::current().has_sticks(), pocket_ui::device::current().host_owned())
 }
 
-/// USB file transfer is retired (`usb_transfer::RETIRED`): its row and its part of the Connections line stay out.
+#[cfg(feature = "brick")]
+fn shown(opens: Opens, store: bool) -> bool {
+    shown_on(opens, store, pocket_ui::device::current().has_sticks(), pocket_ui::device::current().host_owned() || { #[cfg(feature = "brick")] { pocket_ui::device::brick() } #[cfg(not(feature = "brick"))] { false } })
+}
+
+/// USB file transfer is retired (`usb_transfer::RETIRED`): its row and its part of the Connections line stay out. Second
+/// screen is only there with two screens (`second_screen::offered`).
+#[cfg(not(feature = "brick"))]
 fn shown_on(opens: Opens, store: bool, sticks: bool, host_owned: bool) -> bool {
-    (!matches!(opens, Opens::UsbTransfer) || pocket_ui::usb_transfer::offered()) && (store || !matches!(opens, Opens::Store)) && !device_key(opens).is_some_and(|k| pocket_ui::device::hides(k, sticks, host_owned))
+    (!matches!(opens, Opens::UsbTransfer) || pocket_ui::usb_transfer::offered())
+        && (!matches!(opens, Opens::SecondScreen) || pocket_ui::second_screen::offered()) && (store || !matches!(opens, Opens::Store)) && !device_key(opens).is_some_and(|k| pocket_ui::device::hides(k, sticks, host_owned))
+}
+
+#[cfg(feature = "brick")]
+fn shown_on(opens: Opens, store: bool, sticks: bool, host_owned: bool) -> bool {
+    let kept = { #[cfg(feature = "brick")] { brick_keeps(opens) } #[cfg(not(feature = "brick"))] { false } };
+    (!matches!(opens, Opens::UsbTransfer) || pocket_ui::usb_transfer::offered())
+        && (!matches!(opens, Opens::SecondScreen) || pocket_ui::second_screen::offered())
+        && (store || !matches!(opens, Opens::Store))
+        && (kept || brick_has(opens) || !device_key(opens).is_some_and(|k| pocket_ui::device::hides(k, sticks, host_owned)))
+        && { #[cfg(feature = "brick")] { !brick_hides(opens) } #[cfg(not(feature = "brick"))] { true } }
+}
+
+/// The Brick has its own motor and lights (`brick_hw`): Haptics and LEDs stay on its Settings although it has no sticks and is not a
+/// handheld the way ROCKNIX's are.
+#[cfg(feature = "brick")]
+fn brick_has(opens: Opens) -> bool {
+    #[cfg(feature = "brick")]
+    {
+        pocket_ui::device::brick() && matches!(opens, Opens::Haptics | Opens::Leds)
+    }
+    #[cfg(not(feature = "brick"))]
+    {
+        let _ = opens;
+        false
+    }
 }
 
 /// The pages a device may lack (`pocket_ui::device::hides`, also behind the Tour cards): the lights around the sticks;
@@ -140,6 +174,28 @@ fn rows_on(g: usize, store: bool, sticks: bool, host_owned: bool) -> Vec<usize> 
     span(g).filter(|i| shown_on(SETTINGS[*i].1, store, sticks, host_owned)).collect()
 }
 
+/// The name of row `i` of `SETTINGS` as this device paints it: its own, except the Brick's lights row, which carries its page's title
+/// (`app_brick_lights::TITLE`, "Lights & buttons") instead of the sticks' "LEDs". The table keeps "LEDs" (the handhelds, the manual's
+/// tables, `settings_row`); everything that shows a row's name asks here.
+pub(crate) fn row_name(i: usize) -> &'static str {
+    #[cfg(feature = "brick")]
+    if pocket_ui::device::brick() && matches!(SETTINGS[i].1, Opens::Leds) {
+        return super::app_brick_lights::TITLE;
+    }
+    // No fan on the Brick: the row is called as its page, "Performance" (`perf_fan_page::title`).
+    #[cfg(feature = "brick")]
+    if pocket_ui::device::brick() && matches!(SETTINGS[i].1, Opens::PerfFan) {
+        return pocket_ui::perf_fan_page::title();
+    }
+    SETTINGS[i].0
+}
+
+/// The row that opens the lights page, to come back to from it.
+#[cfg(feature = "brick")]
+pub(crate) fn leds_row() -> usize {
+    SETTINGS.iter().position(|s| matches!(s.1, Opens::Leds)).unwrap_or(0)
+}
+
 /// The line under row `i` of `SETTINGS`: its own, except where the Steam Deck has less than the handhelds (no file sharing,
 /// no PortMaster).
 pub(crate) fn row_line(i: usize) -> &'static str {
@@ -148,6 +204,19 @@ pub(crate) fn row_line(i: usize) -> &'static str {
             Opens::Setup(Only::Games) => return "Where each system's games go.",
             Opens::Setup(Only::Extras) => return "Box art and game pictures.",
             Opens::SleepPower => return "A slideshow of your games when the Deck sits idle.",
+            _ => {}
+        }
+    }
+    #[cfg(feature = "brick")]
+    if pocket_ui::device::brick() {
+        match SETTINGS[i].1 {
+            Opens::Leds => return "The Brick's lights, the F1 and F2 keys and the mute slider.",
+            Opens::Haptics => return "A soft tick as you move, and how strong it is. Games rumble on their own (pause menu, Options).",
+            // Nothing on the card updates TrimUI's system: "and the system" promised what the page can't do.
+            Opens::Updates => return "New versions of pocket-ui.",
+            Opens::PerfFan => return "How fast the processor may run, in games and in menus.",
+            // No PortMaster on the Brick's card.
+            Opens::Setup(Only::Extras) => return "Box art and game pictures.",
             _ => {}
         }
     }
@@ -162,16 +231,37 @@ pub(crate) fn rows(g: usize) -> Vec<usize> {
 /// The line naming what is in category `g` on this device, in the interface's language through `tr`: the parts of
 /// rows that are not there (the Store without a catalog, LEDs without sticks, what SteamOS owns on a Steam Deck) left
 /// out, as the list leaves them out.
+#[cfg(not(feature = "brick"))]
 pub(crate) fn blurb(g: usize, tr: impl FnMut(&str) -> String) -> String {
     let device = pocket_ui::device::current();
     blurb_with(g, STORE_OFFERED.load(Ordering::Relaxed), device.has_sticks(), device.host_owned(), tr)
 }
 
+#[cfg(feature = "brick")]
+pub(crate) fn blurb(g: usize, tr: impl FnMut(&str) -> String) -> String {
+    let device = pocket_ui::device::current();
+    blurb_with(g, STORE_OFFERED.load(Ordering::Relaxed), device.has_sticks(), device.host_owned() || { #[cfg(feature = "brick")] { pocket_ui::device::brick() } #[cfg(not(feature = "brick"))] { false } }, tr)
+}
+
+/// Category `g`'s line in English: `SETTINGS_GROUPS`', except Sound & feel on the Brick, whose last part is the row's name there
+/// ("lights & buttons", not "LEDs"). Same parts in the same order, so `blurb_with` can still leave parts out by row.
+fn group_line(g: usize) -> &'static str {
+    #[cfg(feature = "brick")]
+    if pocket_ui::device::brick() && span(g).any(|i| matches!(SETTINGS[i].1, Opens::Leds)) {
+        return BRICK_SOUND_LINE;
+    }
+    SETTINGS_GROUPS[g].1
+}
+
+/// Sound & feel's line on the Brick (`group_line`); translated in `assets/i18n/brick-*.tsv`.
+#[cfg(feature = "brick")]
+const BRICK_SOUND_LINE: &str = "Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds, haptics, lights & buttons.";
+
 /// `blurb` with the Store offered (`store`) or not, a device with sticks or without, owned by its host (the Deck) or not. A line has one part per row,
 /// in the rows' order, also in German (`every_category_line_names_its_rows_in_order`), so the parts can be left out
 /// by the row they stand for.
 pub(crate) fn blurb_with(g: usize, store: bool, sticks: bool, host_owned: bool, mut tr: impl FnMut(&str) -> String) -> String {
-    let line = tr(SETTINGS_GROUPS[g].1);
+    let line = tr(group_line(g));
     let shown: Vec<bool> = span(g).map(|i| shown_on(SETTINGS[i].1, store, sticks, host_owned)).collect();
     let parts: Vec<&str> = line.trim_end_matches('.').split(", ").collect();
     if shown.iter().all(|s| *s) || parts.len() != shown.len() {
@@ -242,6 +332,21 @@ impl Switches {
 }
 
 /// The icon of each category of `SETTINGS_GROUPS`, in its order (the length keeps one each).
+/// The Colours row's value: Retro's palette while it is on (`retro`), else the colours'.
+fn colours_label() -> &'static str {
+    if pocket_ui::retro::on() {
+        pocket_ui::retro::colours().label()
+    } else {
+        pocket_ui::palette::colours().label()
+    }
+}
+
+/// The same in the Retro style (`retro`): colour pictures.
+const RETRO_ICONS: [pocket_ui::retro::Icon; SETTINGS_GROUPS.len()] = {
+    use pocket_ui::retro::Icon;
+    [Icon::Look, Icon::Sound, Icon::Playing, Icon::Games, Icon::Connections, Icon::System, Icon::Help]
+};
+
 const ICONS: [pocket_ui::ui_art::Icon; SETTINGS_GROUPS.len()] = {
     use pocket_ui::ui_art::Icon;
     [Icon::Look, Icon::Sound, Icon::Playing, Icon::Games, Icon::Connections, Icon::System, Icon::Help]
@@ -255,6 +360,15 @@ pub(crate) fn value_is_typed(i: usize) -> bool {
 
 fn typed_value(opens: Opens, wifi: &Option<values::Wifi>) -> bool {
     matches!(opens, Opens::Setup(Only::Wifi)) && matches!(wifi, Some(values::Wifi::Connected(Some(_))))
+}
+
+/// Settings → System → Second screen's value.
+fn second_screen_value(on: bool) -> &'static str {
+    if on {
+        "Game info"
+    } else {
+        "Off"
+    }
 }
 
 /// The line under Remind me where I was while it is Off.
@@ -271,12 +385,16 @@ impl App {
         let value = match SETTINGS[i].1 {
             Opens::UsbTransfer if i == sel && !self.usb_busy => format!("‹ {} ›", self.usb_transfer_value()),
             Opens::UsbTransfer => self.usb_transfer_value(),
+            #[cfg(feature = "brick")]
+            Opens::Haptics if pocket_ui::device::brick() => self.brick_haptics_value(i == sel),
             Opens::Haptics => values::on_off(pocket_ui::rumble::menu_haptics()).to_string(),
             Opens::Extra(e) if i == sel => format!("‹ {} ›", values::on_off(pocket_ui::cozy_extras::on(e))),
             Opens::Extra(e) => values::on_off(pocket_ui::cozy_extras::on(e)).to_string(),
             Opens::OnStart if i == sel => format!("‹ {} ›", self.on_start.label()),
             Opens::OnStart => self.on_start.label().to_string(),
             Opens::RememberQuit => values::on_off(self.remember_quit).to_string(),
+            Opens::SecondScreen if i == sel => format!("‹ {} ›", second_screen_value(self.second_screen_on)),
+            Opens::SecondScreen => second_screen_value(self.second_screen_on).to_string(),
             Opens::RemindWhere => values::on_off(self.remind_where).to_string(),
             Opens::ZoomInPause => values::on_off(self.zoom_in_pause).to_string(),
             Opens::Animations if i == sel => format!("‹ {} ›", self.animations_in_use().name()),
@@ -303,6 +421,8 @@ impl App {
             Opens::Gamelist => self.gamelist_list_value(),
             // How many screenshots there are: memory only (`app_gallery`).
             Opens::Screenshots => self.gallery_list_value(),
+            #[cfg(feature = "brick")]
+            Opens::Leds if pocket_ui::device::brick() => page(super::app_brick_lights::list_value(&self.leds)),
             Opens::Leds => page(self.leds.summary()),
             Opens::NightLight => page(&self.night.summary()),
             Opens::Tailscale => self.tailscale_list_value(),
@@ -314,8 +434,8 @@ impl App {
             Opens::PerfFan => page(&values::perf_fan(self.perf_prefs().games_performance, self.perf_prefs().games_fan)),
             Opens::Setup(Only::Look) => page(self.theme.name()),
             Opens::Setup(Only::Play) => pocket_ui::features::Profile::of(&self.switches()).name().to_string(),
-            Opens::Colours if i == sel => format!("‹ {} ›", pocket_ui::palette::colours().label()),
-            Opens::Colours => pocket_ui::palette::colours().label().to_string(),
+            Opens::Colours if i == sel => format!("‹ {} ›", colours_label()),
+            Opens::Colours => colours_label().to_string(),
             Opens::Font if i == sel => format!("‹ {} ›", pocket_ui::font_style::get().label()),
             Opens::Font => pocket_ui::font_style::get().label().to_string(),
             Opens::Appearance if i == sel => format!("‹ {} ›", self.appearance.name()),
@@ -334,9 +454,16 @@ impl App {
             Opens::Battery => page(&pocket_ui::status_corner::status().battery.map(|b| format!("{}%", b.percent)).unwrap_or_default()),
             Opens::Updates => {
                 let newer = self.updates.manifest.as_ref().and_then(|m| m.app.as_ref()).map(|a| a.version.as_str()).filter(|v| update::newer(v, update::app_version()));
-                page(&values::updates(update::app_version(), newer))
+                #[cfg(not(feature = "brick"))]
+                let shown = values::updates(update::app_version(), newer);
+                #[cfg(feature = "brick")]
+                let shown = values::updates(&update::brick_short(update::app_version()), newer.map(update::brick_short).as_deref());
+                page(&shown)
             }
+            #[cfg(not(feature = "brick"))]
             Opens::About => page(update::app_version()),
+            #[cfg(feature = "brick")]
+            Opens::About => page(&update::brick_short(update::app_version())),
             _ => ">".to_string(),
         };
         let max_w = room.min(values::MAX_W);
@@ -401,7 +528,10 @@ impl App {
     /// line naming what is in it at the bottom, as in every list. All seven fit on one page at Large text on 640x480.
     pub(crate) fn paint_settings_groups(&mut self, c: &mut Canvas, sel: usize) {
         c.clear(pal().void);
-        let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
+        let retro = pocket_ui::retro::on();
+        // Retro: taller rows for its 64 px icons.
+        let row = if retro { pocket_ui::type_scale::row(66, 36).max(80) } else { pocket_ui::type_scale::row(66, 36) };
+        let (pad, font) = (NU_PAD, 36u32);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         let n = SETTINGS_GROUPS.len();
         self.sheet_header(c, "Settings");
@@ -419,7 +549,7 @@ impl App {
         let (first_f, hl) = self.motion.list_at(app_motion::List::Settings, first, sel, now);
         // Each category's icon (`ui_art`, one colour, painted in the name's) before its name, which moves right for it.
         let icon_k = 2;
-        let indent = 16 * icon_k + 18;
+        let indent = if retro { pocket_ui::retro::ICON * icon_k + 18 } else { 16 * icon_k + 18 };
         let mut band = c.rows(top, top + visible as i32 * row);
         let hy = ((hl - first_f) * row as f32).round() as i32;
         pocket_ui::kit::selection(&mut band, pad, hy, right - pad, row);
@@ -432,7 +562,11 @@ impl App {
             }
             let base = y + row / 2 + pocket_ui::type_scale::mid(font);
             let ink = mix(pal().text, pal().ink, (app_motion::under(g, hl) * 255.0) as u32);
-            pocket_ui::ui_art::paint_tinted(&mut band, pocket_ui::ui_art::Art::Icon(ICONS[g]), pad + NU_BTN_PAD, y + row / 2 - 8 * icon_k, icon_k, ink);
+            if retro {
+                pocket_ui::retro::icon(&mut band, RETRO_ICONS[g], pad + NU_BTN_PAD, y + row / 2 - pocket_ui::retro::ICON * icon_k / 2, icon_k);
+            } else {
+                pocket_ui::ui_art::paint_tinted(&mut band, pocket_ui::ui_art::Art::Icon(ICONS[g]), pad + NU_BTN_PAD, y + row / 2 - 8 * icon_k, icon_k, ink);
+            }
             self.text.draw(&mut band, Face::Body, font, pad + NU_BTN_PAD + indent, base, ink, name);
             pocket_ui::kit::row_value_in(&mut band, &mut self.text, font, right - NU_BTN_PAD, base, ">", (ink, mix(pal().dust, pal().ink, (app_motion::under(g, hl) * 255.0) as u32)));
         }
@@ -705,7 +839,7 @@ mod tests {
     /// page were the only way to some), and each is in one place.
     #[test]
     fn every_choice_has_one_row_of_its_own() {
-        for name in ["Look", "Appearance", "Colours", "Font", "Text size", "Screen colour", "Systems on the shelf", "Animations", "Motion", "Buttons", "Language"] {
+        for name in ["Layout", "Appearance", "Colours", "Style", "Text size", "Screen colour", "Systems on the shelf", "Animations", "Motion", "Buttons", "Language"] {
             assert_eq!(SETTINGS.iter().filter(|r| r.0 == name).count(), 1, "{name}: one row");
         }
         let opens: Vec<String> = SETTINGS.iter().map(|r| match r.1 {
@@ -849,7 +983,7 @@ mod tests {
         assert_eq!(deck("Sound & feel"), "Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds.");
         assert_eq!(deck("Connections"), "Web companion.");
         assert_eq!(deck("System"), "Language, sleep & power, storage, backup & reset.");
-        assert_eq!(deck("Help & tools"), "How you like to play, Tour, manual, report a problem, about.");
+        assert_eq!(deck("Help & tools"), "First-start setup, how you like to play, Tour, manual, test buttons, report a problem, about.");
         assert_eq!(deck("Playing"), "On start, continue, where I was, buttons, over the game, frames, battery, achievements.");
     }
 
@@ -874,5 +1008,124 @@ mod tests {
         assert!(sounds.contains("Game volume") && sounds.contains("brightness") && sounds.contains("HOME"), "{sounds}");
         assert!(line("Add games").contains("BIOS"), "{}", line("Add games"));
         assert!(line("Over the game").contains("picture and sound"), "Pixel Path says what it is where it first appears");
+    }
+}
+
+/// The rows the TrimUI Brick leaves out beside what a host-owned device leaves out (docs/TRIMUI-BRICK.md): everything that needs a
+/// compositor effect (night light, the picture over the game, screenshots; screen frames only while the bridge has no GPU path, `brick_picture`), ROCKNIX (From EmulationStation, Sleep & power
+/// through systemd, PC streaming), or a network state this system does not give pocket-ui (Wi-Fi is NextUI's): the starter pack,
+/// pictures & extras, the web companion, RetroAchievements. A row that does nothing is worse than none.
+#[cfg(feature = "brick")]
+fn brick_hides(opens: Opens) -> bool {
+    pocket_ui::device::brick() && brick_hides_with(opens, pocket_ui::brick_profile::standalone())
+}
+
+/// The Brick's own card has these of what NextUI's card leaves out (docs/TRIMUI-BRICK-REMOTE.md): Wi-Fi, Remote access (the card's
+/// dropbear), Tailscale (the card's), Updates (its private channel) and Sync (the card's Syncthing, docs/TRIMUI-BRICK-SYNC.md).
+/// Bluetooth uses the card service (docs/TRIMUI-BRICK-BLUETOOTH.md); the other firmware-owned rows stay out.
+#[cfg(feature = "brick")]
+fn brick_keeps(opens: Opens) -> bool {
+    pocket_ui::device::brick() && brick_keeps_with(opens, pocket_ui::brick_profile::standalone())
+}
+
+#[cfg(feature = "brick")]
+fn brick_keeps_with(opens: Opens, standalone: bool) -> bool {
+    standalone && matches!(opens, Opens::Setup(Only::Wifi | Only::Remote) | Opens::Tailscale | Opens::Updates | Opens::Kids | Opens::Sync | Opens::PerfFan | Opens::Bluetooth)
+}
+
+/// `brick_hides` on a Brick, with NextUI's card or `standalone` (its own card has Wi-Fi of its own, so the pictures row stays: the
+/// automatic cover fetch is on by default there, and this is where it is switched off or box art only is chosen).
+#[cfg(feature = "brick")]
+fn brick_hides_with(opens: Opens, standalone: bool) -> bool {
+    if matches!(opens, Opens::Frames) && pocket_ui::brick_profile::picture_rows_out() {
+        return true;
+    }
+    !(standalone && matches!(opens, Opens::Setup(Only::Extras | Only::Games) | Opens::SleepPower | Opens::NightLight | Opens::Starter | Opens::Achievements | Opens::OverGame | Opens::Screenshots | Opens::Web))
+        && matches!(
+            opens,
+            Opens::NightLight
+                | Opens::OverGame
+                | Opens::Screenshots
+                | Opens::Web
+                | Opens::Gamelist
+                | Opens::SleepPower
+                | Opens::PcStreaming
+                | Opens::Achievements
+                | Opens::Starter
+                | Opens::Setup(Only::Extras | Only::Games)
+        )
+}
+
+#[cfg(all(test, feature = "brick"))]
+mod brick_standalone_tests {
+    use super::*;
+
+    /// Sound & feel's line on the Brick names the same parts as the handhelds' line, the last one by the row's Brick name.
+    #[test]
+    fn the_bricks_sound_line_names_the_lights_row_by_its_page() {
+        let g = SETTINGS_GROUPS.iter().position(|c| c.0 == "Sound & feel").unwrap();
+        let (brick, other): (Vec<&str>, Vec<&str>) = (BRICK_SOUND_LINE.trim_end_matches('.').split(", ").collect(), SETTINGS_GROUPS[g].1.trim_end_matches('.').split(", ").collect());
+        assert_eq!(brick.len(), other.len());
+        assert_eq!(brick[..brick.len() - 1], other[..other.len() - 1]);
+        assert_eq!(brick.last().copied(), Some(super::super::app_brick_lights::TITLE.to_lowercase().as_str()));
+        assert_eq!(*other.last().unwrap(), "LEDs");
+    }
+
+    /// Alex, 2026-11-03: Tailscale is essential on the Brick. Its own card keeps Wi-Fi, Remote access, Tailscale, Updates and Sync;
+    /// NextUI's card does not. Bluetooth is available only on our own card.
+    #[test]
+    fn the_standalone_card_keeps_the_network_rows() {
+        for (name, kept) in [("Bluetooth", Opens::Bluetooth), ("Wi-Fi", Opens::Setup(Only::Wifi)), ("Remote", Opens::Setup(Only::Remote)), ("Tailscale", Opens::Tailscale), ("Updates", Opens::Updates), ("Sync", Opens::Sync)] {
+            assert!(brick_keeps_with(kept, true), "{name}");
+            assert!(!brick_keeps_with(kept, false), "{name} with NextUI's card");
+        }
+        for (name, out) in [("Time", Opens::Time), ("Store", Opens::Store), ("Tools", Opens::Tools)] {
+            assert!(!brick_keeps_with(out, true), "{name}");
+        }
+    }
+
+    /// Alex's standalone boot (2026-11-03): no covers appeared. The pictures row (Settings > Games > Extras) is the one place the
+    /// automatic fetch is switched off, so on the card without NextUI it stays reachable and the fetch is on until chosen off.
+    #[test]
+    fn the_standalone_card_keeps_the_pictures_row_and_fetches_by_default() {
+        let extras = Opens::Setup(Only::Extras);
+        assert!(brick_hides_with(extras, false), "with NextUI's card the pictures row stays out");
+        assert!(!brick_hides_with(extras, true), "the standalone card keeps it");
+        for still_hidden in [Opens::PcStreaming] {
+            assert!(brick_hides_with(still_hidden, true));
+        }
+        let games = Opens::Setup(Only::Games);
+        assert!(brick_hides_with(games, false), "NextUI's card has its own way to add games");
+        assert!(!brick_hides_with(games, true), "the standalone card shows Add games (phone page, file sharing)");
+        for (n, kept) in [Opens::SleepPower, Opens::NightLight, Opens::Starter, Opens::Achievements].into_iter().enumerate() {
+            assert!(brick_hides_with(kept, false), "with NextUI's card page {n} stays out");
+            assert!(!brick_hides_with(kept, true), "the standalone card keeps page {n}");
+        }
+        let fresh = pocket_ui::settings::Settings::default();
+        assert!(!fresh.art_off, "nothing is switched off on a new card");
+        assert_eq!(pocket_ui::settings::Art::from_flags(fresh.box_art_only, fresh.art_off), pocket_ui::settings::Art::Pictures);
+    }
+
+    /// The starter pack on the Brick's own card: every system it holds games for is a folder the card's shelf reads, so a game
+    /// that is added shows up (the download goes to the shelf's folder, the work folder is in the data dir on the card).
+    #[test]
+    fn the_starter_pack_only_asks_for_systems_the_cards_shelf_has() {
+        let cfg = include_str!("../deploy/brick/es_systems.cfg");
+        let games = pocket_ui::starter::games();
+        assert!(!games.is_empty());
+        for g in games {
+            assert!(cfg.contains(&format!("<name>{}</name>", g.system)), "{} ({}) has no shelf on the card", g.title, g.system);
+        }
+    }
+
+    /// docs/TRIMUI-BRICK-MORE.md: Kids mode, the screenshots gallery, the web companion and Over the game are pocket-ui's own and
+    /// need nothing of NextUI; the standalone card shows them, NextUI's card keeps them out.
+    #[test]
+    fn the_standalone_card_shows_kids_screenshots_web_and_over_the_game() {
+        for (name, opens) in [("Screenshots", Opens::Screenshots), ("Web companion", Opens::Web), ("Over the game", Opens::OverGame)] {
+            assert!(!brick_hides_with(opens, true), "{name} on the card");
+            assert!(brick_hides_with(opens, false), "{name} with NextUI's card");
+        }
+        assert!(brick_keeps_with(Opens::Kids, true) && !brick_keeps_with(Opens::Kids, false));
     }
 }

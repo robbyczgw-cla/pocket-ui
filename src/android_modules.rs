@@ -50,6 +50,8 @@ pub mod play_time;
 pub mod game_box;
 
 pub mod kit;
+/// What a frame offers the D-pad, for tests/nav_explorer.rs (off unless POCKETUI_NAV_PROBE is set).
+pub mod nav_probe;
 pub mod ui_art;
 pub mod scaled_layout;
 #[path = "touch_ui.rs"]
@@ -76,6 +78,7 @@ pub mod controls_card;
 pub mod core_options;
 pub mod vfs;
 pub mod slots;
+pub mod state_file;
 pub mod dsv;
 pub mod softpatch;
 pub mod save_trouble;
@@ -96,6 +99,7 @@ pub mod recents { pub use crate::play_time::*; }
 #[path = "cabinet_tv_art.rs"]
 pub mod cabinet_tv;
 pub mod font_style;
+pub mod retro;
 pub mod room_light;
 pub mod room_deco;
 pub mod room_props;
@@ -104,3 +108,6 @@ pub mod cozy_extras;
 pub mod insert_rig;
 pub mod insert_scene;
 pub mod playful;
+
+pub mod where_was_i;
+pub mod zoom;

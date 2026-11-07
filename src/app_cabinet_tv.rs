@@ -159,7 +159,8 @@ mod tests {
     }
 
     #[test]
-    fn replacing_a_picture_at_the_same_path_refreshes_the_selected_tv() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_replacing_a_picture_at_the_same_path_refreshes_the_selected_tv() {
         let dir = tempfile::tempdir().unwrap();
         let want = Want { system: "snes".into(), rom: PathBuf::from("Game.sfc"), cover: None, w: 90, h: 70 };
         write_snap(dir.path(), &want, [230, 10, 10]);
@@ -175,7 +176,7 @@ mod tests {
         tv.pictures_changed();
         assert!(Rc::ptr_eq(&old, tv.shown.as_ref().unwrap().1.as_ref().unwrap()), "keep the old screen while loading");
         let started = Instant::now();
-        while tv.refresh && started.elapsed() < std::time::Duration::from_secs(3) {
+        while tv.refresh && started.elapsed() < crate::test_clock::timeout(std::time::Duration::from_secs(3)) {
             tv.select(want.clone(), dir.path(), false, Instant::now());
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
@@ -186,7 +187,8 @@ mod tests {
     }
 
     #[test]
-    fn a_hidden_tv_finishes_waiting_and_has_its_picture_when_the_cabinet_returns() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_hidden_tv_finishes_waiting_and_has_its_picture_when_the_cabinet_returns() {
         let dir = tempfile::tempdir().unwrap();
         let want = Want { system: "snes".into(), rom: PathBuf::from("Game.sfc"), cover: None, w: 90, h: 70 };
         write_snap(dir.path(), &want, [20, 210, 20]);
@@ -199,7 +201,7 @@ mod tests {
         // paint_cabinet_tv/select call to consume the answer. Finishing must stop the redraw timer anyway.
         let started = Instant::now();
         let mut repaint = false;
-        while tv.busy(Instant::now()) && started.elapsed() < std::time::Duration::from_secs(3) {
+        while tv.busy(Instant::now()) && started.elapsed() < crate::test_clock::timeout(std::time::Duration::from_secs(3)) {
             repaint |= tv.poll();
             std::thread::sleep(std::time::Duration::from_millis(5));
         }

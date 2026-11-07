@@ -483,8 +483,9 @@ fn previews(base: &Path) -> (Vec<PathBuf>, Vec<(PathBuf, SystemTime)>) {
         p.push(suffix);
         PathBuf::from(p)
     };
-    let auto: Vec<PathBuf> = [slots::preview_path(&slots::auto_path(base)), with(".state.auto.png")]
-        .into_iter()
+    let mut auto_files = slots::auto_previews(&slots::auto_path(base));
+    auto_files.push(with(".state.auto.png"));
+    let auto: Vec<PathBuf> = auto_files.into_iter()
         .filter(|p| p.is_file())
         .collect();
     let mut slot_pics: Vec<(PathBuf, SystemTime)> = (0..slots::SLOTS)
@@ -714,7 +715,7 @@ impl Switcher {
         };
         let hw = text.width(Face::Body, SMALL, heading);
         let cw = if count.is_empty() { 0 } else { text.width(Face::Body, SMALL, &count) + 24 };
-        c.round_rect(PAD, PAD, hw + cw + 2 * PILL_PAD, PILL, PILL / 2, pal().pill);
+        crate::retro::window(c, PAD, PAD, hw + cw + 2 * PILL_PAD, PILL, PILL / 2, pal().pill);
         let base = PAD + PILL / 2 + crate::type_scale::mid(SMALL);
         text.draw(c, Face::Body, SMALL, PAD + PILL_PAD, base, pal().soft, heading);
         if !count.is_empty() {
@@ -763,7 +764,7 @@ impl Switcher {
             for i in 0..n {
                 let selected = i as usize == self.sel;
                 let w = if selected { wide } else { dot };
-                c.round_rect(x, dy, w, dot, dot / 2, if selected { pal().pick(0xf4f2ec, 0x2b2925) } else { pal().pick(0x4a4a4e, 0xc9c3b7) });
+                crate::retro::pill(c, x, dy, w, dot, dot / 2, if selected { pal().pick(0xf4f2ec, 0x2b2925) } else { pal().pick(0x4a4a4e, 0xc9c3b7) });
                 x += w + gap;
             }
         }
@@ -875,7 +876,7 @@ impl Switcher {
                 // "Now playing" in a white pill on the picture's top left corner.
                 let t = "Now playing";
                 let tw = text.width(Face::Body, 24, t);
-                c.round_rect(x + 18, y + 18, tw + 40, 44, 22, 0xf4f2ec);
+                crate::retro::pill(c, x + 18, y + 18, tw + 40, 44, 22, 0xf4f2ec);
                 text.draw(c, Face::Body, 24, x + 38, y + 18 + 22 + 8, INK, t);
             }
             if favorite {
@@ -1148,7 +1149,8 @@ mod tests {
     }
 
     #[test]
-    fn pictures_arrive_from_the_worker_without_the_caller_waiting_and_a_second_switcher_gets_them_from_the_cache() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_pictures_arrive_from_the_worker_without_the_caller_waiting_and_a_second_switcher_gets_them_from_the_cache() {
         let dir = scratch("worker");
         let files: Vec<PathBuf> = (0..3).map(|i| dir.join(format!("g{i}.png"))).collect();
         for (i, f) in files.iter().enumerate() {
@@ -1168,9 +1170,9 @@ mod tests {
         let mut sw = make();
         let t0 = Instant::now();
         sw.load_pictures(0.0);
-        assert!(t0.elapsed() < Duration::from_millis(50), "asking does not read: {:?}", t0.elapsed());
+        assert!(t0.elapsed() < crate::testutil::timeout(Duration::from_millis(50)), "asking does not read: {:?}", t0.elapsed());
         assert!(sw.animating(), "repaints until the pictures are in");
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + crate::testutil::timeout(Duration::from_secs(10));
         while sw.animating() && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(5));
             sw.load_pictures(0.0);

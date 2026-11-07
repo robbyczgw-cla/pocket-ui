@@ -18,6 +18,8 @@
 //!   switch off, through the power menu's Power off (the game saves and quits, `resume.json`, `systemctl poweroff`),
 //!   with the screen dark and a note for the next start (`Note`, "Switched off after 3 h asleep to save the
 //!   battery.").
+//! - Only with the game saved just then (`sleep.rs`, `DeepSteps::save` and `shut_down_for`): a save that can't be
+//!   confirmed (it failed, or RetroArch) keeps the Pocket asleep with no alarm, the game where it was.
 //! - A suspend that keeps failing leaves the Pocket dark in light sleep (`Timers::deep_wait`); once the time is up
 //!   there on battery it switches off the same way (`Sleep::tick`).
 //!
@@ -27,8 +29,13 @@ use std::path::{Path, PathBuf};
 
 use crate::low_battery::Level;
 
-/// The choices in hours (None = never).
+/// The choices in minutes (None = never). 15 and 30 min since 2026-11-03: the TrimUI Brick only turns the screen off, which costs
+/// more than a real sleep, so a Brick that is forgotten needs a shorter way to switch off.
+#[cfg(not(feature = "brick"))]
 pub const CHOICES: [Option<u32>; 4] = [None, Some(1), Some(3), Some(8)];
+
+#[cfg(feature = "brick")]
+pub const CHOICES: [Option<u32>; 6] = [None, Some(15), Some(30), Some(60), Some(180), Some(480)];
 /// Off (owner's decision, 2026-10-26): a Pocket put to sleep stays asleep, as on ROCKNIX and NextUI, and no wake alarm
 /// is ever armed. The owner found one he had expected asleep hard off after 3 h. Switching off after sleeping is a
 /// choice under Settings → System → Sleep & power; 3 h costs about 14 % of the battery at the 4.8 %/h measured asleep
@@ -41,14 +48,33 @@ const EARLY_SECS: f64 = 5.0;
 const RTC_ALARM: &str = "/sys/class/rtc/rtc0/wakealarm";
 const NOTE_FILE: &str = "switched-off.json";
 
-/// "Off", "1 h", "3 h", "8 h".
+/// "Off", "15 min", "30 min", "1 h", "3 h", "8 h".
+#[cfg(not(feature = "brick"))]
 pub fn label(hours: Option<u32>) -> String {
     hours.map_or("Off".into(), |h| format!("{h} h"))
 }
 
+#[cfg(feature = "brick")]
+pub fn label(minutes: Option<u32>) -> String {
+    match minutes {
+        None => "Off".into(),
+        Some(m) if m % 60 == 0 => format!("{} h", m / 60),
+        Some(m) => format!("{m} min"),
+    }
+}
+
 /// The line under the setting on Settings → System → Sleep & power (`sleep_settings`, which steps through `CHOICES`).
+#[cfg(not(feature = "brick"))]
 pub fn explain(hours: Option<u32>) -> &'static str {
     match hours {
+        Some(_) => "After this long asleep on battery, the Pocket saves the game and switches off. Sleeping uses a few percent of the battery an hour.",
+        None => "The Pocket stays asleep until you wake it. Sleeping uses a few percent of the battery an hour.",
+    }
+}
+
+#[cfg(feature = "brick")]
+pub fn explain(minutes: Option<u32>) -> &'static str {
+    match minutes {
         Some(_) => "After this long asleep on battery, the Pocket saves the game and switches off. Sleeping uses a few percent of the battery an hour.",
         None => "The Pocket stays asleep until you wake it. Sleeping uses a few percent of the battery an hour.",
     }
@@ -72,6 +98,7 @@ pub fn clock() -> f64 {
 }
 
 /// When this dark spell switches off, on `clock()`.
+#[cfg(not(feature = "brick"))]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Plan {
     pub at: f64,
@@ -81,10 +108,27 @@ pub struct Plan {
     pub hours: u32,
 }
 
+#[cfg(feature = "brick")]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Plan {
+    pub at: f64,
+    /// The chosen time in seconds (an hour is shorter with `POCKETUI_SLEEP_MINUTE_SECS`).
+    pub every: f64,
+    /// The chosen minutes, for the note.
+    pub minutes: u32,
+}
+
 impl Plan {
+    #[cfg(not(feature = "brick"))]
     pub fn new(now: f64, hours: u32, hour_secs: f64) -> Plan {
         let every = hours as f64 * hour_secs;
         Plan { at: now + every, every, hours }
+    }
+
+    #[cfg(feature = "brick")]
+    pub fn new(now: f64, minutes: u32, minute_secs: f64) -> Plan {
+        let every = minutes as f64 * minute_secs;
+        Plan { at: now + every, every, minutes }
     }
 
     /// Whole seconds from `now` to the alarm, at least one.
@@ -391,6 +435,7 @@ pub const CLOCK_STEP_SECS: f64 = EARLY_SECS;
 
 /// Left for the next start by a switch-off after sleeping: what it says once, and the screen's brightness (the
 /// backlight was 0 when the Pocket went down).
+#[cfg(not(feature = "brick"))]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
 pub struct Note {
     pub hours: u32,
@@ -398,12 +443,36 @@ pub struct Note {
     pub brightness: Option<u32>,
 }
 
+#[cfg(feature = "brick")]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+pub struct Note {
+    /// How long it was dark. A note of a version before 2026-11-03 has `hours`.
+    #[serde(default)]
+    pub minutes: u32,
+    #[serde(default, skip_serializing)]
+    pub hours: u32,
+    #[serde(default)]
+    pub brightness: Option<u32>,
+}
+
 impl Note {
+    #[cfg(not(feature = "brick"))]
     pub fn text(&self) -> String {
         if crate::device::current().screen_off_only() {
             format!("Switched off after {} h with the screen off to save the battery.", self.hours)
         } else {
             format!("Switched off after {} h asleep to save the battery.", self.hours)
+        }
+    }
+
+    #[cfg(feature = "brick")]
+    pub fn text(&self) -> String {
+        let minutes = if self.minutes == 0 { self.hours * 60 } else { self.minutes };
+        match (crate::device::current().screen_off_only(), minutes % 60 == 0) {
+            (true, true) => format!("Switched off after {} h with the screen off to save the battery.", minutes / 60),
+            (true, false) => format!("Switched off after {} min with the screen off to save the battery.", minutes),
+            (false, true) => format!("Switched off after {} h asleep to save the battery.", minutes / 60),
+            (false, false) => format!("Switched off after {} min asleep to save the battery.", minutes),
         }
     }
 }
@@ -431,6 +500,7 @@ mod tests {
     use super::*;
     use crate::testutil::TestDir;
 
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn choices_and_labels() {
         assert_eq!(label(DEFAULT), "Off", "opt-in");
@@ -438,12 +508,30 @@ mod tests {
         assert_eq!(CHOICES.map(label), ["Off", "1 h", "3 h", "8 h"]);
     }
 
+    #[cfg(feature = "brick")]
+    #[test]
+    fn choices_and_labels() {
+        assert_eq!(label(DEFAULT), "Off", "opt-in");
+        assert_eq!(label(None), "Off");
+        assert_eq!(CHOICES.map(label), ["Off", "15 min", "30 min", "1 h", "3 h", "8 h"]);
+    }
+
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn the_three_hour_choice_costs_about_a_seventh_of_the_battery_and_is_not_the_default() {
         // 4.8 %/h asleep, measured on a Mini V2 (2026-10-25).
         let cost = 3.0 * 4.8;
         assert!((10.0..=15.0).contains(&cost), "{cost}");
         assert!(CHOICES.contains(&Some(3)) && DEFAULT.is_none());
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn the_three_hour_choice_costs_about_a_seventh_of_the_battery_and_is_not_the_default() {
+        // 4.8 %/h asleep, measured on a Mini V2 (2026-10-25).
+        let cost = 3.0 * 4.8;
+        assert!((10.0..=15.0).contains(&cost), "{cost}");
+        assert!(CHOICES.contains(&Some(180)) && DEFAULT.is_none());
     }
 
     #[test]
@@ -555,7 +643,7 @@ mod tests {
         use std::sync::Arc;
         // Waits for a counter to move, yielding; a worker that never gets there fails the test rather than hanging it.
         fn wait_for(counter: &AtomicU32, what: &str) {
-            let end = std::time::Instant::now() + std::time::Duration::from_secs(30);
+            let end = std::time::Instant::now() + crate::testutil::timeout(std::time::Duration::from_secs(30));
             while counter.load(Ordering::SeqCst) == 0 {
                 assert!(std::time::Instant::now() < end, "the worker never {what}");
                 std::thread::yield_now();
@@ -651,6 +739,7 @@ mod tests {
         assert!(log.contains("PowerOff: RTC alarm disarm NOT verified"), "{log}");
     }
 
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn the_note_is_read_once() {
         let dir = TestDir::new("autooff-note");
@@ -663,5 +752,25 @@ mod tests {
         std::fs::write(dir.join(NOTE_FILE), "garbage").unwrap();
         assert_eq!(take_note(&dir), None, "a broken note says nothing");
         assert!(!dir.join(NOTE_FILE).exists(), "and is gone");
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn the_note_is_read_once() {
+        let dir = TestDir::new("autooff-note");
+        assert_eq!(take_note(&dir), None);
+        write_note(&dir, &Note { minutes: 180, hours: 0, brightness: Some(120) });
+        let note = take_note(&dir).unwrap();
+        assert_eq!(note.text(), "Switched off after 3 h asleep to save the battery.");
+        assert_eq!(note.brightness, Some(120));
+        assert_eq!(take_note(&dir), None);
+        std::fs::write(dir.join(NOTE_FILE), "garbage").unwrap();
+        assert_eq!(take_note(&dir), None, "a broken note says nothing");
+        assert!(!dir.join(NOTE_FILE).exists(), "and is gone");
+        // A note of a version before 2026-11-03 counts hours; a short time says minutes.
+        std::fs::write(dir.join(NOTE_FILE), r#"{"hours":3,"brightness":90}"#).unwrap();
+        assert_eq!(take_note(&dir).unwrap().text(), "Switched off after 3 h asleep to save the battery.");
+        write_note(&dir, &Note { minutes: 15, hours: 0, brightness: None });
+        assert_eq!(take_note(&dir).unwrap().text(), "Switched off after 15 min asleep to save the battery.");
     }
 }

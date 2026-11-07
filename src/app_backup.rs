@@ -310,16 +310,20 @@ impl App {
                 Row::BackUpSaves => (
                     "Back up saves".into(),
                     vec![
-                        "Battery saves, save states, and the memory cards and save data of PS2, GameCube, Wii and 3DS. No games, no BIOS files.".into(),
+                        if brick() { "Battery saves and save states. No games, no BIOS files." } else { "Battery saves, save states, and the memory cards and save data of PS2, GameCube, Wii and 3DS. No games, no BIOS files." }.into(),
                         "A counts them first and shows the size.".into(),
-                        format!("To {} on the SD card. Flashing the card erases it, so copy it to a computer too.", saves::ROOT),
+                        if brick() {
+                            format!("To {} on the SD card. Copy it to a computer too.", shown(saves::ROOT))
+                        } else {
+                            format!("To {} on the SD card. Flashing the card erases it, so copy it to a computer too.", saves::ROOT)
+                        },
                     ],
                     pal().chalk,
                 ),
                 Row::Saves(k) => (
                     page.saves.get(k).map(|b| backup::when_text(b.manifest.created)).unwrap_or_default(),
                     vec![
-                        page.saves.get(k).map_or(String::new(), |b| format!("Files: {}, {}, made by pocket-ui {}. {}", b.manifest.items.len(), size(b.bytes()), b.manifest.app, b.dir.display())),
+                        page.saves.get(k).map_or(String::new(), |b| format!("Files: {}, {}, made by pocket-ui {}. {}", b.manifest.items.len(), size(b.bytes()), b.manifest.app, shown(&b.dir.display().to_string()))),
                         "A compares it with the card and says what would change. What is newer on the card stays.".into(),
                     ],
                     pal().chalk,
@@ -328,7 +332,7 @@ impl App {
                     "Back up settings".into(),
                     vec![
                         "pocket-ui's settings, every Options page, and your library notes (status, notes, time played, favourites).".into(),
-                        format!("To {} on the SD card. Not your games, saves or states.", backup::ROOT),
+                        format!("To {} on the SD card. Not your games, saves or states.", shown(backup::ROOT)),
                     ],
                     pal().chalk,
                 ),
@@ -379,5 +383,25 @@ mod tests {
         let main = include_str!("main.rs");
         let ctx = &main[main.find("fn sleep_ctx").unwrap()..];
         assert!(ctx[..ctx.find("power_menu:").unwrap()].contains("self.backup_working()"));
+    }
+}
+
+/// The TrimUI Brick: nothing is flashed there, and the PS2, GameCube, Wii and 3DS saves don't exist.
+fn brick() -> bool {
+    #[cfg(feature = "brick")]
+    {
+        pocket_ui::device::brick()
+    }
+    #[cfg(not(feature = "brick"))]
+    {
+        false
+    }
+}
+
+/// A folder as the player finds it: on the Brick's card a computer sees /storage/roms as "Roms" (deploy/brick/start.sh).
+fn shown(path: &str) -> String {
+    match path.strip_prefix("/storage/roms/") {
+        Some(rest) if brick() => format!("Roms/{rest}"),
+        _ => path.to_string(),
     }
 }

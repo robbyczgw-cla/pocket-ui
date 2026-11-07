@@ -17,7 +17,7 @@ final class SafeInsets {
         int padding=(int)((gestureSides?12:8)*context.getResources().getDisplayMetrics().density);
         int[] safe={padding,padding,padding,padding};
         if(Build.VERSION.SDK_INT>=30){
-            int types=WindowInsets.Type.displayCutout()|(gestureSides?WindowInsets.Type.systemGestures():WindowInsets.Type.mandatorySystemGestures());
+            int types=WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout()|(gestureSides?WindowInsets.Type.systemGestures():WindowInsets.Type.mandatorySystemGestures());
             android.graphics.Insets edges=insets.getInsets(types);
             safe[0]=Math.max(safe[0],edges.left);safe[1]=Math.max(safe[1],edges.top);safe[2]=Math.max(safe[2],edges.right);safe[3]=Math.max(safe[3],edges.bottom);
         }else{

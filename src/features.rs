@@ -20,6 +20,7 @@ use crate::leds;
 use crate::on_start::OnStart;
 use crate::pad::Button;
 use crate::palette::*;
+use crate::font_style::FontStyle;
 use crate::settings::{Frames, Motion, TextSize};
 use crate::text::{Face, Text};
 use crate::touch::Area;
@@ -33,6 +34,8 @@ pub struct Switches {
     pub motion: Motion,
     /// Settings › Look › Text size (settings.json's `text_size`).
     pub text_size: TextSize,
+    /// Settings › Look › Style (settings.json's `font`); Retro is its fourth value.
+    pub font: FontStyle,
     pub on_start: OnStart,
     /// Settings › Continue where I quit (settings.json's `forget_where_quit`, the other way round).
     pub remember_quit: bool,
@@ -51,6 +54,7 @@ impl Default for Switches {
         Switches {
             motion: Motion::default(),
             text_size: TextSize::default(),
+            font: FontStyle::default(),
             on_start: OnStart::default(),
             remember_quit: true,
             frames: Frames::default(),
@@ -178,9 +182,21 @@ pub struct Feature {
     pub preview: Preview,
     /// Not wired yet: which branch brings it. Such entries are never shown.
     pub todo: Option<&'static str>,
+    /// "New in this version" only: while the switch is off, the card starts on On and A says this ("Try Retro"), so
+    /// one press tries the feature and B leaves it. None: the card starts on what is set, as everywhere else.
+    pub try_it: Option<&'static str>,
 }
 
 impl Feature {
+    /// `place` as this device has it: on the Brick the lights row is called "Lights & buttons" (`app_settings_groups::row_name`).
+    pub fn place_here(&self) -> &'static str {
+        #[cfg(feature = "brick")]
+        if self.id == "leds" && crate::device::brick() {
+            return "Settings › Sound & feel › Lights & buttons";
+        }
+        self.place
+    }
+
     pub fn pick(&self, p: Profile) -> Pick {
         match p {
             Profile::Simple | Profile::JustPlay => self.simple,
@@ -223,6 +239,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::Keep,
         preview: pv::remember_quit,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "last_game",
@@ -240,6 +257,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::On,
         preview: pv::last_game,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "motion",
@@ -258,6 +276,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::On,
         preview: pv::motion,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "easy_to_read",
@@ -287,6 +306,28 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::Keep,
         preview: pv::easy_to_read,
         todo: None,
+        try_it: None,
+    },
+    Feature {
+        id: "retro_look",
+        title: "Retro",
+        plain: "an old handheld's look for every menu",
+        line: "Pixel letters, chunky frames, little icons and blips in every menu. Your shelf and box art stay.",
+        place: "Settings › Look › Style › Retro",
+        guide: "theme.md#style",
+        since: "0.3.0",
+        // On is the Retro style; Off goes back to the default type (another style chosen before stays: Off only changes
+        // anything while Retro is on).
+        switch: Some(Switch {
+            get: |s| s.font == FontStyle::Retro,
+            set: |s, on| s.font = if on { FontStyle::Retro } else { FontStyle::Barlow },
+        }),
+        // A taste, not part of a profile.
+        simple: Pick::Keep,
+        enthusiast: Pick::Keep,
+        preview: pv::retro_look,
+        todo: None,
+        try_it: Some("Try Retro"),
     },
     Feature {
         id: "sounds",
@@ -304,6 +345,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::Keep,
         preview: pv::sounds,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "haptics",
@@ -321,6 +363,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::Keep,
         preview: pv::haptics,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "leds",
@@ -345,6 +388,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::Keep,
         preview: pv::leds,
         todo: None,
+        try_it: None,
     },
     // ---- nothing to switch: where it is ----
     Feature {
@@ -363,6 +407,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::On,
         preview: pv::frames,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "echoes",
@@ -380,6 +425,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::On,
         preview: pv::echoes,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "versions",
@@ -397,6 +443,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::On,
         preview: pv::versions,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "stickers",
@@ -414,6 +461,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::On,
         preview: pv::stickers,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "up_next",
@@ -432,6 +480,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::On,
         preview: pv::up_next,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "play_history",
@@ -450,6 +499,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::On,
         preview: pv::play_history,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "echoes_elsewhere",
@@ -467,6 +517,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::On,
         preview: pv::echoes_elsewhere,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "pixel_path",
@@ -484,6 +535,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::On,
         preview: pv::pixel_path,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "pixel_path_live",
@@ -511,6 +563,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::Keep,
         preview: pv::pixel_path_live,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "lens",
@@ -529,6 +582,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::On,
         preview: pv::lens,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "search",
@@ -543,6 +597,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::Keep,
         preview: pv::search,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "console_credits",
@@ -557,6 +612,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::Keep,
         preview: pv::console_credits,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "players",
@@ -571,6 +627,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::Keep,
         preview: pv::players,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "run_ahead",
@@ -585,6 +642,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::Keep,
         preview: pv::run_ahead,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "runs_on",
@@ -599,6 +657,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::Keep,
         preview: pv::runs_on,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "achievements",
@@ -613,6 +672,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::Keep,
         preview: pv::achievements,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "sync",
@@ -627,6 +687,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::Keep,
         preview: pv::sync,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "tailscale",
@@ -641,6 +702,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::Keep,
         preview: pv::tailscale,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "tools",
@@ -655,6 +717,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::Keep,
         preview: pv::tools,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "cozy_extras",
@@ -669,6 +732,7 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::Keep,
         preview: pv::cozy_extras,
         todo: None,
+        try_it: None,
     },
     Feature {
         id: "perf_fan",
@@ -683,14 +747,21 @@ pub static FEATURES: &[Feature] = &[
         enthusiast: Pick::Keep,
         preview: pv::perf_fan,
         todo: None,
+        try_it: None,
     },
 ];
 
 /// The entries that are wired (not `todo`) and that this device has (the same list as Settings' rows,
 /// `device::hides`: no Stick lights without sticks, no Haptics, Sync, Tailscale, Tools or Performance & fan on a
 /// Steam Deck), with their index in `FEATURES`.
+#[cfg(not(feature = "brick"))]
 pub fn available() -> impl Iterator<Item = (usize, &'static Feature)> {
     available_on(crate::device::current().has_sticks(), crate::device::current().host_owned())
+}
+
+#[cfg(feature = "brick")]
+pub fn available() -> impl Iterator<Item = (usize, &'static Feature)> {
+    FEATURES.iter().enumerate().filter(|(_, f)| f.todo.is_none() && !crate::device::hides_here(f.id))
 }
 
 pub fn available_on(sticks: bool, host_owned: bool) -> impl Iterator<Item = (usize, &'static Feature)> {
@@ -721,7 +792,7 @@ pub static BASICS: &[Basic] = &[
         title: "Play, and HOME is the menu",
         text: "Pick a game and press A. While you play, tap HOME to pause and open the menu: Continue, Save, Load, Quit.",
         place: "Tap HOME in a game",
-        guide: "pause-menu.md#save-slots-where-i-quit-and-before-load",
+        guide: "pause-menu-saves.md#save-slots-where-i-quit-and-before-load",
     },
     Basic {
         id: "continue",
@@ -735,7 +806,7 @@ pub static BASICS: &[Basic] = &[
         title: "Saving",
         text: "Save and Load are in the pause menu. Earlier brings back a moment from before, if a game went wrong.",
         place: "Pause menu › Save, Load, Earlier",
-        guide: "pause-menu.md#earlier",
+        guide: "pause-menu-saves.md#earlier",
     },
     Basic {
         id: "quick",
@@ -898,10 +969,18 @@ impl Cards {
     /// Opens at card `i` of the list.
     pub fn show(&mut self, i: usize) {
         self.at = i.min(self.list.len().saturating_sub(1));
+        let offers = self.offer().is_some();
         self.choice = match self.feature().and_then(|f| f.is_on(&self.switches)) {
-            Some(false) => 1,
+            Some(false) if !offers => 1,
             _ => 0,
         };
+    }
+
+    /// After an update, a new feature that is off and has a `try_it`: what A says while On is chosen.
+    fn offer(&self) -> Option<&'static str> {
+        let f = self.feature()?;
+        let off = f.is_on(&self.switches) == Some(false);
+        matches!(self.mode, Mode::New { .. }).then_some(()).filter(|_| off).and(f.try_it)
     }
 
     pub fn len(&self) -> usize {
@@ -1033,7 +1112,7 @@ impl Cards {
         }
         // Where, on a paper strip: the one thing to do with a finger or a thumb.
         y += 8;
-        c.round_rect(MARGIN, y, c.w - 2 * MARGIN, strip_h, 16, pal().keycap);
+        crate::retro::pill(c, MARGIN, y, c.w - 2 * MARGIN, strip_h, 16, pal().keycap);
         let place = text.fit(Face::Body, 28, b.place, c.w - 2 * MARGIN - 56);
         text.draw(c, Face::Body, 28, MARGIN + 28, y + strip_h / 2 + crate::type_scale::base(10, 28), pal().chalk, &place);
         let last = self.at + 1 >= self.list.len();
@@ -1077,7 +1156,7 @@ impl Cards {
         let short = crate::kit::short_screen(c.h);
         let (pw, ph) = if short { (360 * PREVIEW.0 / PREVIEW.1, 360) } else { PREVIEW };
         let (px, py) = (MARGIN + 8, if short { 280 } else { 300 });
-        c.round_rect(px - 8, py - 8, pw + 16, ph + 16, 16, pal().keycap);
+        crate::retro::pill(c, px - 8, py - 8, pw + 16, ph + 16, 16, pal().keycap);
         if let Some(img) = self.preview(text) {
             c.blit_scaled(img, px, py, pw, ph);
         }
@@ -1099,7 +1178,7 @@ impl Cards {
         let limit = crate::kit::hint_bar_top(c.h) - 8;
         let mut chosen = None;
         for (row, gap, extra, font) in tiers {
-            let lines = text.wrap_prose(Face::Body, font, f.place, w);
+            let lines = text.wrap_prose(Face::Body, font, f.place_here(), w);
             let high = rows * (row + gap) + if rows > 0 { extra } else { 30 } + lead_lines.len() as i32 * crate::type_scale::line(24, 10) + 16
                 + lines.len() as i32 * crate::type_scale::line(font, 12);
             chosen = Some((row, gap, extra, font, lines));
@@ -1146,7 +1225,11 @@ impl Cards {
         }
 
         let last = self.at + 1 >= self.list.len();
-        let a = if last { "Done" } else { "Next" };
+        let a = match self.offer() {
+            Some(t) if self.choice == 0 => t,
+            _ if last => "Done",
+            _ => "Next",
+        };
         let mut h: Vec<(&str, &str)> = Vec::new();
         if f.switch.is_some() {
             h.push(("Up/Down", "Choose"));
@@ -1218,17 +1301,12 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[P
     // under them at pitch 108).
     let short = crate::kit::short_screen(c.h);
     let (head, sub, first, pitch, row_h) = if short { (100, 148, 172, 100, 92) } else { (140, 192, 230, 124, 112) };
-    text.draw(c, Face::Title, 67, MARGIN, head, pal().chalk, "How do you like to play?");
-    text.draw(
-        c,
-        Face::Body,
-        28,
-        MARGIN,
-        sub,
-        pal().dust,
-        "A starting point for the extras. Every switch stays in Settings.",
-    );
     let full = c.w - 2 * MARGIN;
+    // A little smaller where they would not fit: Retro's wider letters ran both off a 1024-wide screen (the Brick).
+    let (px, title) = text.fit_sizes(Face::Title, &[67, 60, 54], "How do you like to play?", full);
+    text.draw(c, Face::Title, px, MARGIN, head, pal().chalk, &title);
+    let (px, line) = text.fit_sizes(Face::Body, &[28, 25, 22], "A starting point for the extras. Every switch stays in Settings.", full);
+    text.draw(c, Face::Body, px, MARGIN, sub, pal().dust, &line);
     // A small live preview beside the rows (the look step's pictures: Easy's case for its row, the shelf for
     // The shelf and Enthusiast): only where there's room. On a small screen (drawn on 960 lines at 640x480) the rows fill it, so the preview is left out.
     let (pw, ph) = (PROFILE_PREVIEW_W, PROFILE_PREVIEW_W * c.h / c.w.max(1));
@@ -1236,7 +1314,7 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[P
     let width = if preview { full - pw - 24 } else { full };
     if preview {
         let (px, py) = (c.w - MARGIN - pw, 230);
-        c.round_rect(px - 8, py - 8, pw + 16, ph + 16, 12, pal().keycap);
+        crate::retro::pill(c, px - 8, py - 8, pw + 16, ph + 16, 12, pal().keycap);
         match profiles[sel.min(profiles.len() - 1)] {
             // Look order: Shelf, Easy, ... (`Theme::ALL`).
             Profile::JustPlay => c.blit_scaled(&previews[1], px, py, pw, ph),
@@ -1259,7 +1337,9 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[P
         let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else { (pal().chalk, pal().dust) };
         text.draw(c, Face::Title, 46, MARGIN + 28, y + row_h * 50 / 112, fg, p.name());
         let blurb = text.fit(Face::Body, 24, p.blurb(), width - 56);
-        text.draw(c, Face::Body, 24, MARGIN + 28, y + row_h * 90 / 112, dim, &blurb);
+        // Lower by what Large text adds to it: on a short screen's rows (92 px) the grown line touched the name above
+        // (Retro, Spanish, 1024x768, 2026-11-07).
+        text.draw(c, Face::Body, 24, MARGIN + 28, y + row_h * 90 / 112 + crate::type_scale::grow(24), dim, &blurb);
         hits.choices.push((Area::new(MARGIN, y, width, row_h), i));
     }
     let mut y = first + profiles.len() as i32 * pitch + if short { 22 } else { 30 };
@@ -1318,6 +1398,10 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[P
 /// A spine row of the previews: the spine or, selected, the paper label with its lift and the stripe at the left.
 /// Returns (text, secondary text) colours. As Curator's pages draw their rows (`app_curator::row_back`).
 pub fn row_back(c: &mut Canvas, (x, y, w, h): (i32, i32, i32, i32), stripe: u32, selected: bool) -> (u32, u32) {
+    crate::nav_probe::row(c, (x, y, w, h));
+    if selected {
+        crate::nav_probe::focus(c, (x, y, w, h));
+    }
     c.rect(x, y, w, h, if selected { pal().label } else { pal().spine });
     if selected {
         crate::game_card::lift_shadow(c, x, y + h, w, pal().t);
@@ -1475,18 +1559,55 @@ mod tests {
 
     #[test]
     fn new_cards_are_the_entries_newer_than_the_version_seen_at_most_three_newest_first() {
-        // Easy to read is the only entry newer than the baseline: an update to 0.2.0 or later shows it, once, and nothing before.
-        let easy = by_id("easy_to_read").unwrap();
-        assert_eq!(due(None, "0.3.0"), vec![easy]);
+        // Easy to read came in 0.2.0, Retro in 0.3.0: an update shows what is newer than the version seen, once, newest first.
+        let (easy, retro) = (by_id("easy_to_read").unwrap(), by_id("retro_look").unwrap());
+        assert_eq!(due(None, "0.3.0"), vec![retro, easy]);
         assert_eq!(due(Some("0.1.14"), "0.2.0"), vec![easy]);
         assert!(due(None, "0.1.15").is_empty(), "not in a version before its own");
-        assert!(due(Some("0.2.0"), "0.3.0").is_empty());
+        for seen in ["0.2.0", "0.2.1", "0.2.2"] {
+            assert_eq!(due(Some(seen), "0.3.0"), vec![retro], "from {seen}: only Retro");
+        }
+        assert!(due(Some("0.2.2"), "0.2.2").is_empty() && due(Some("0.3.0"), "0.3.1").is_empty(), "seen once, never again");
         assert!(unseen(None, "0.3.0") && unseen(Some("0.2.0"), "0.3.0"));
         assert!(
             !unseen(Some("0.3.0"), "0.3.0") && !unseen(Some("0.4.0"), "0.3.0"),
             "seen, or an older version again"
         );
         assert!(!unseen(None, BASELINE), "a dev build of the baseline");
+    }
+
+    /// After the update to 0.3.0 the Retro card is one press away from trying it: it starts on On with A saying "Try
+    /// Retro", A switches the style at once, B leaves the style as it was. Elsewhere it starts on what is set.
+    #[test]
+    fn the_retro_card_after_an_update_tries_retro_with_one_press_and_b_leaves_the_style() {
+        let new = || Mode::New { version: "0.3.0".into() };
+        let mut c = cards(new(), &["retro_look"]);
+        assert_eq!((c.choice(), c.offer()), (0, Some("Try Retro")), "On is chosen and A says what it does");
+        assert_eq!(c.press(Button::East), Out::Done, "one press, and the card is gone");
+        assert_eq!(c.take_switches().map(|s| s.font), Some(FontStyle::Retro), "A switched Style to Retro");
+
+        let mut c = cards(new(), &["retro_look"]);
+        assert_eq!(c.press(Button::South), Out::Done);
+        assert!(c.take_switches().is_none(), "B changes nothing");
+
+        // Pixel chosen before: B keeps it, and so does Off (Off only takes Retro away).
+        let pixel = Switches { font: FontStyle::Pixel, ..Switches::default() };
+        let mut c = Cards::new(new(), vec![by_id("retro_look").unwrap()], pixel.clone(), Vec::new());
+        c.press(Button::Down);
+        assert_eq!(c.offer().map(|_| c.choice()), Some(1), "Off chosen: A says Done again");
+        c.press(Button::East);
+        assert!(c.take_switches().is_none(), "Off leaves Pixel alone");
+
+        // Retro on already: nothing to try, A changes nothing.
+        let on = Switches { font: FontStyle::Retro, ..Switches::default() };
+        let mut c = Cards::new(new(), vec![by_id("retro_look").unwrap()], on, Vec::new());
+        assert_eq!((c.choice(), c.offer()), (0, None));
+        c.press(Button::East);
+        assert!(c.take_switches().is_none());
+
+        // "Choose for yourself" shows what is set, as every card there.
+        let c = cards(Mode::First, &["retro_look"]);
+        assert_eq!((c.choice(), c.offer()), (1, None));
     }
 
     #[test]
@@ -1622,7 +1743,7 @@ mod tests {
         let mut text = Text::new();
         for (_, f) in available() {
             for light in [false, true] {
-                let t0 = std::time::Instant::now();
+                let t0 = crate::testutil::clock::CpuInstant::now();
                 let img = render_preview(f, &mut text, light);
                 let took = t0.elapsed();
                 assert_eq!((img.w as i32, img.h as i32), PREVIEW);

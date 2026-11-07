@@ -314,6 +314,9 @@ fn walk(dir: &Path, u: &mut Usage, f: &mut dyn FnMut(&mut Usage, &Path, u64, u64
 /// and Before load, longest first. Each may carry `.png` (its picture). Never a slot: `.pstate`, `.pstate3`,
 /// `.state1`, `.s01`, `.01.p2s`, `.00.cst` are the player's.
 const AUTO_ENDINGS: &[&str] = &[
+    ".pstate.auto.z.taken.retry",
+    ".pstate.auto.z.taken",
+    ".pstate.auto.z",
     ".pstate.auto.taken.retry",
     ".pstate.auto.taken",
     ".pstate.auto",
@@ -647,6 +650,9 @@ mod tests {
     fn automatic_states_are_told_from_the_players_slots() {
         for (name, base) in [
             ("Alpha.pstate.auto", "Alpha"),
+            ("Alpha.pstate.auto.z", "Alpha"),
+            ("Alpha.pstate.auto.z.png", "Alpha"),
+            ("Alpha.pstate.auto.z.taken.retry", "Alpha"),
             ("Alpha.pstate.auto.png", "Alpha"),
             ("Alpha.pstate.auto.taken.retry", "Alpha"),
             ("Alpha.pstate.undo", "Alpha"),

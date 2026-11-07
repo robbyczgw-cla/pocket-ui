@@ -9,7 +9,7 @@ right and the selected entry's line at the bottom. In that list A opens an entry
 the categories with the one you came from selected, and B there comes back to where you were.
 The values ("Home" on Wi-Fi, "Shelf · Dark" on Look, "Auto · Quiet" on Performance & fan: what games run with)
 are short; one that is looked up comes a moment later. An entry that opens a page ends in a small arrow **>**; one
-without it is a switch: Appearance, Colours, Font, Text size, Motion, Screen frames and the like change with A or
+without it is a switch: Appearance, Colours, Style, Text size, Motion, Screen frames and the like change with A or
 Left/Right, right in the list, and the selected one shows **‹ ›** round its value. The hint at the bottom says
 **A Open** or **A Change**.
 
@@ -17,13 +17,13 @@ Left/Right, right in the list, and the selected one shows **‹ ›** round its 
 
 | Category | What is in it |
 |---|---|
-| **Look** | Look, Appearance, Colours, Font, Text size, Screen colour, Night light, Systems on the shelf, Cozy extras. See [Look](#look) |
+| **Look** | Layout, Systems on the shelf, Cozy extras, Appearance, Colours, Style, Text size, Screen colour, Night light. See [Look](#look) |
 | **Sound & feel** | Animations, Playful cases, Old-TV switch-on, Motion, Zoom in the pause menu, Sounds, Case sounds, Haptics, LEDs. See [Sound & feel](#sound--feel) |
 | **Playing** | On start, Continue where I quit, Remind me where I was, Buttons, Over the game, Screen frames, Performance & fan, Battery, RetroAchievements. See [Playing](#playing) |
 | **Games** | Add games, Game check, Starter pack, Pictures & extras, From EmulationStation, Screenshots, Curator, PC streaming. See [Games](#games) |
 | **Connections** | Wi-Fi, Bluetooth, Tailscale, Sync, Remote access (SSH), Web companion. See [Connections](settings-system.md#connections) |
-| **System** | Language, Time, Sleep & power, Kids mode, Updates, Storage, Backup & reset. See [System](settings-system.md#system) |
-| **Help & tools** | How you like to play, Tour, Manual, Tools, Store (only on a device with a store set up), Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
+| **System** | Language, Time, Sleep & power, Second screen (two screens only), Kids mode, Updates, Storage, Backup & reset. See [System](settings-system.md#system) |
+| **Help & tools** | First-start setup, How you like to play, Tour, Manual, Tools, Test buttons, Store (only on a device with a store set up), Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
 
 The second half of Settings, [Connections, System and Help & tools](settings-system.md), has its own page.
 
@@ -31,36 +31,39 @@ A page that opens from somewhere else (a hint, a feature card, the pause menu) g
 list, and from there to the categories, as if you had opened it from Settings. In this guide a place in Settings is
 written as its path: Settings → Playing → **Battery** is the Battery entry in the Playing category.
 
-The first-start steps (Look, Wi-Fi, Pictures & extras, Add games) are the same pages. Opened from Settings, B returns to
-the category's list instead of moving on to the next step. The first start's time zone step has no page of its own here:
-Settings → System → **Time** does the same job.
+The first start's pages (Wi-Fi, Add games, the look) are the same pages. Opened from Settings, B returns to the
+category's list instead of moving on. The first start's time zone has no page of its own here: Settings → System →
+**Time** does the same job. Settings → Help & tools → **First-start setup** runs the whole first start again
+([Getting started](getting-started.md#3-first-start)).
 
 ## Look
 
-Settings → **Look**. How pocket-ui looks. Every choice has a row of its own; the buttons on the look page (see
-[Choose a look](#choose-a-look)) are shortcuts to some of the same choices.
+Settings → **Look**. How pocket-ui looks, in the first start's order: first how your games stand (the layout, which
+systems, the cozy extras), then the style (appearance, colours, type, the screen). Every choice has a row of its own.
+Easy to read, Large text and Reduced motion together, is a card of the [Tour](tour.md) and a key of the first start.
 
 | Entry | What it holds |
 |---|---|
-| **Look** | Shelf, Easy, Minimal, Split, Cards or Cabinet, each a live preview of your own shelf. See [Choose a look](#choose-a-look) |
+| **Layout** | How your games stand: Shelf, Easy, Minimal, Split, Cards or Cabinet, each a live preview of your own shelf. See [Choose a look](#choose-a-look) |
+| **Systems on the shelf** | Which systems are on Home, a tick each. The row says "1 hidden" (or 2, 3...) while a system with games is off the shelf: this is the way back. See [Systems on the shelf](#systems-on-the-shelf) |
+| **Cozy extras** | The little touches you see, each on or off on its own: the TV on the cabinet, stickers, printed discs, the memory card in the pause menu, light by time of day, decorations, game connections, Rediscover. See [Cozy extras](#cozy-extras) |
 | **Appearance** | **Dark** (the default), **Light** or **Automatic**. A or Left/Right switches it. See [Appearance](#appearance) |
-| **Colours** | The colours of every page: Warm, Indigo Cube, Grey Brick, Green X or Blue Station. A or Left/Right switches it. See [Colours and font](theme.md) |
-| **Font** | The type of every screen: Barlow, Pixel or Rounded. A or Left/Right switches it. See [Colours and font](theme.md#font) |
+| **Colours** | The colours of every page: Warm, Indigo Cube, Grey Brick, Green X or Blue Station; with the Retro style, Cocoa or Pea. A or Left/Right switches it. See [Colours and style](theme.md) |
+| **Style** | Barlow, Pixel or Rounded type, or **Retro**: pixel letters, frames and icons everywhere, with its own colours and menu sounds. A or Left/Right switches it. See [Colours and style](theme.md#style) |
 | **Text size** | **Normal** (the default), **Medium** or **Large**: larger text on every screen, fewer rows on a page. A or Left/Right switches it. See [Text size](#text-size) |
 | **Screen colour** | The screen's white: **Cooler 10** … **Neutral** … **Warmer 10**. Left/Right changes it, you see it at once; A goes back to Neutral. The same setting as [SELECT + Vol](controls-settings.md#volume-and-brightness-keys), so the two always agree |
 | **Night light** | Warmer, less blue colours in the evening, in the menus and in games: **Off** (the default), **On** or **Scheduled**, with a strength. See [Night light](night-light.md) |
-| **Systems on the shelf** | Which systems are on Home, a tick each. The row says "1 hidden" (or 2, 3...) while a system with games is off the shelf: this is the way back. See [Systems on the shelf](#systems-on-the-shelf) |
-| **Cozy extras** | The little touches you see, each on or off on its own: the TV on the cabinet, stickers, printed discs, the memory card in the pause menu, light by time of day, decorations, game connections, Rediscover. See [Cozy extras](#cozy-extras) |
 
 ### Choose a look
 
-Settings → Look → **Look** is the first start's look step: a scaled-down picture of your shelf in each look, drawn by
+Settings → Look → **Layout** is the first start's last page ("How your games stand"): a scaled-down picture of your shelf in each look, drawn by
 the shelf itself with a few of your systems and one game (with its box art when it has one; on an SD card without
-games, a built-in set of "Sample game"s). Left/Right or Up/Down switch between the six looks, and the shelf
-behind Settings takes the look at once; A keeps the one shown. See [Playing](playing.md#looks) for what each look
-does. Under the preview are the [appearance](#appearance), the [motion](#motion) and the [animations](#animations)
-in use. This page has no shortcut keys: Appearance, Motion, Animations and [Systems on the shelf](#systems-on-the-shelf) each have
-their own row in Settings.
+games, a built-in set of "Sample game"s). It works like every list: Left/Right switch between the six looks, and the
+shelf behind Settings takes the look at once. See [Playing](playing.md#looks) for what each look does. Under the
+preview are three rows, the [appearance](#appearance), the [motion](#motion) and the [animations](#animations):
+Down reaches each one (a bar beside it shows which), Left/Right change it, Up goes back to the looks. A keeps
+everything as shown; B ("Cancel") goes back to Settings and puts back the look and the rows as they were when you
+came. The hint bar names the keys of the row you are on.
 
 ### Appearance
 
@@ -79,11 +82,11 @@ The choice is saved at once. The pause menu, the power menu and the small messag
 ### Colours
 
 Settings → Look → **Colours** switches the colour set in place; the whole screen shows it at once. See
-[Colours and font](theme.md#colours).
+[Colours and style](theme.md#colours).
 
-### Font
+### Style
 
-Settings → Look → **Font** switches the type in place. See [Colours and font](theme.md#font).
+Settings → Look → **Style** switches the type, or the whole Retro style, in place. See [Colours and style](theme.md#style).
 
 ### Text size
 
@@ -108,8 +111,8 @@ belong to a picture of a fixed size: the titles on the cases' spines and the she
 pictures on the Tour's cards and the look previews' shrunken screens, and what is drawn over a running game by
 pocket-core (the in-game messages and Pixel Path's line over the game).
 
-The first start's look step has the same choice on **R1** (Normal, Medium, Large, and round again), so larger text is
-there from the start.
+The first start has **Easy to read** on every page (**L2**, and a row on its first page), so larger text is there from
+the start.
 Safe mode uses the size chosen here too.
 
 ### Night light
@@ -129,7 +132,7 @@ box, its console and the number of games. All are ticked by default. When Moonli
   ticked again.
 - The last ticked system cannot be unticked; the page says why.
 - The choice is saved at once (in `settings.json`) and kept across restarts and updates.
-- **B** goes back to where you opened it from: to the Settings list when you opened it from its row, to Choose a look when you pressed **X** there.
+- **B** goes back to the Settings list.
 
 The first start does not have this list; every system is on the shelf until you change it here.
 
@@ -150,14 +153,14 @@ Settings → **Sound & feel**. What moves, what you hear and what you feel in yo
 | **Sounds** | Soft clicks in the menus (not the game's volume or the screen brightness: those are on HOME, [Quick settings](quick-settings.md)). A turns them on or off, Left/Right set how loud. See [Playing](playing.md#menu-sounds) |
 | **Case sounds** | Cases click open, cartridges and discs go in with a sound, the old TV hums on. Shelf and Cabinet looks only. Needs Sounds on; the menu sounds are not affected. **On** at the start. A or Left/Right switches it |
 | **Haptics** | A very short tick in the menus as the selection moves. A turns it on or off. Off by default |
-| **LEDs** | The lights around the sticks: off, one colour, or the battery colours. Only on a device with sticks. See [LEDs](#leds) |
+| **LEDs** | The lights around the sticks: off, one colour, or the battery colours. Only on a device with sticks. On the TrimUI Brick the row is called **Lights & buttons** and holds the Brick's own lights, the F1 and F2 keys and the mute slider. See [LEDs](#leds) |
 
 Playful cases, Old-TV switch-on and Case sounds sit beside the switches they need (Animations, Motion, Sounds). While
 one of those keeps them from showing, the line at the bottom says which.
 
 ### Animations
 
-Settings → Sound & feel → **Animations**; on Choose a look **L1** switches it too, and the first start asks it on its look step.
+Settings → Sound & feel → **Animations**. The first start doesn't ask: the look decides until you choose here.
 
 - **Cozy**: when you start a game in the Shelf or the Cabinet look, you watch its case open and the cartridge or disc slide into the console
   (about a second, with a click). Pages, the game's box and the menus take about a third longer and ease in more softly.
@@ -172,8 +175,8 @@ The picture then comes on like an old TV, in a third of a second: dark, a bright
 
 ### Motion
 
-Settings → Sound & feel → **Motion**; A or Left/Right switches it (the first start keeps the default and has the
-[text size](#text-size) on R1 instead).
+Settings → Sound & feel → **Motion**; A or Left/Right switches it (the first start keeps the default; its Easy to read,
+L2, switches Reduced on with Large text).
 
 - **Full**, the default: the selection glides to the row you move to, lists scroll smoothly, pages slide in,
   the game card rises out of its label, the hints and small messages fade.
@@ -277,8 +280,7 @@ moment to resume only when the device sleeps or switches off. With the switch of
 
 Settings → Playing → **Remind me where I was**: when a game continues its moment and you last played it more than two
 weeks ago, a quiet card shows while the moment loads: when you played it last, how long you have played it, and your note
-from the game card if there is one. The game stands still at that moment for about four seconds, then plays on; any
-button plays at once. **On** is the default; A switches it. See [Where was I?](continue.md#where-was-i).
+from the game card if there is one. On pocket-ui’s own host the game stands still at that moment until you press any button. That button just starts play. **On** is the default; A switches it. See [Where was I?](continue.md#where-was-i).
 
 The switch applies to pocket-ui's own host and to PlayStation 2, GameCube, Wii and 3DS. **RetroArch games still save
 the moment on Quit** with the switch off: ROCKNIX sets RetroArch to save on every exit, and RetroArch has no way to

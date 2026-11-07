@@ -803,6 +803,20 @@ mod imp {
 
     const IW_TIMEOUT: Duration = Duration::from_secs(3);
 
+    /// A known, non-hidden target that is out of range must not tear down the working connection first.
+    /// Keep this on the connection worker, before prepare() can disconnect wlan0. A failed scan is inconclusive;
+    /// hidden networks cannot be ruled out by a scan and still get their normal activation attempt.
+    fn prepare_saved_connection(nmcli: &Path, saved: &Saved) -> Result<bool, String> {
+        let mut activation = Activation { nmcli, started: Instant::now() };
+        if !saved.hidden
+            && crate::wifi_activation::Ops::device(&mut activation).is_ok_and(|d| d.state == 100 && d.ssid.as_deref() != Some(saved.ssid.as_str()))
+            && scan_checked(nmcli).is_ok_and(|nets| !nets.iter().any(|n| n.ssid == saved.ssid))
+        {
+            return Err(format!("No network with SSID '{}' found.", saved.ssid));
+        }
+        prepare_connection(nmcli, &saved.ssid)
+    }
+
     /// Connects to a saved network without asking for its password (ROCKNIX's `wifictl connect_saved`). ROCKNIX's
     /// settings follow: the name, and the key read back from the profile, so EmulationStation's `wifictl connect` never
     /// rebuilds the profile from an empty key (docs: ES-REPLACEMENT-GAPS 4.2). A secured profile whose key can't be
@@ -815,7 +829,7 @@ mod imp {
         let joined = if stop.is_some() {
             crate::wifi_activation::prepare_reconnect(&mut Activation { nmcli: Path::new("nmcli"), started: Instant::now() }, &s.ssid)?
         } else {
-            prepare_connection(Path::new("nmcli"), &s.ssid)?
+            prepare_saved_connection(Path::new("nmcli"), s)?
         };
         // A skipped background activation must not copy another network's settings into ROCKNIX either.
         if stop.is_some() && joined { return Ok(()); }
@@ -1210,7 +1224,8 @@ esac
         }
 
         #[test]
-        fn a_second_wrong_password_is_refused_again_at_once() {
+        #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+        fn timing_a_second_wrong_password_is_refused_again_at_once() {
             // The owner wasn't sure the second password was right: if it was wrong too, it says so again, without the
             // six minutes of "connecting" the card showed.
             let dir = TestDir::new("wifi-refused-twice");
@@ -1219,7 +1234,7 @@ esac
                 let started = Instant::now();
                 let err = connect_network(&nmcli, "Wifi", Some(key), false).unwrap_err();
                 assert_eq!(super::super::connection_error(&err), "Wrong password. Try again.");
-                assert!(started.elapsed() < Duration::from_secs(5), "no wait for an activation in the background");
+                assert!(started.elapsed() < crate::testutil::timeout(Duration::from_secs(5)), "no wait for an activation in the background");
                 assert!(profiles(&dir).is_empty());
             }
             let log = std::fs::read_to_string(dir.join("log")).unwrap();
@@ -1273,12 +1288,12 @@ s.recv(1)
             net.reconnect(move |stop| { finished.send(activate_saved(&nmcli, "uuid-home", Some(&stop))).unwrap(); });
             let mut poll = libc::pollfd { fd: listener.as_raw_fd(), events: libc::POLLIN, revents: 0 };
             // Wait for the fake's readiness socket, never for an assumed startup duration.
-            assert_eq!(unsafe { libc::poll(&mut poll, 1, 5000) }, 1, "nmcli did not reach its activation barrier");
+            assert_eq!(unsafe { libc::poll(&mut poll, 1, crate::testutil::timeout(Duration::from_secs(5)).as_millis().min(i32::MAX as u128) as i32) }, 1, "nmcli did not reach its activation barrier");
             let (mut ready, _) = listener.accept().unwrap();
-            ready.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            ready.set_read_timeout(Some(crate::testutil::timeout(Duration::from_secs(5)))).unwrap();
             ready.read_exact(&mut [0]).unwrap();
             net.set_enabled(false);
-            assert!(result.recv_timeout(Duration::from_secs(1)).unwrap().unwrap_err().contains("stopped"));
+            assert!(result.recv_timeout(crate::testutil::timeout(Duration::from_secs(1))).unwrap().unwrap_err().contains("stopped"));
             net.wait_idle();
             assert!(net.snapshot().radio.is_off());
         }
@@ -1298,6 +1313,30 @@ esac
 "#,
             );
             assert!(prepare_connection(&nmcli, "Lab:5G").unwrap(), "already connected, no activation command");
+        }
+
+        #[test]
+        fn rc03_out_of_range_saved_network_keeps_the_current_connection() {
+            let dir = TestDir::new("rc03-wifi-out-of-range");
+            let nmcli = dir.join("nmcli");
+            write_executable(&nmcli, r#"#!/bin/sh
+base=$(dirname "$0")
+printf '%s\n' "$*" >> "$base/log"
+case "$*" in
+  '-g GENERAL.STATE,GENERAL.CON-UUID,GENERAL.REASON device show wlan0') printf '100 (connected)\nuuid-home\n' ;;
+  '-e no -g 802-11-wireless.ssid connection show uuid uuid-home') echo Home ;;
+  *'wifi list'*) printf 'Home:78:WPA2:*\n' ;;
+  *) exit 1 ;;
+esac
+"#);
+            let saved = Saved { id: "Office".into(), uuid: "uuid-office".into(), ssid: "Office".into(), hidden: false, active: false, connecting: false };
+            let err = prepare_saved_connection(&nmcli, &saved).unwrap_err();
+            let log = std::fs::read_to_string(dir.join("log")).unwrap();
+            assert!(!log.contains("disconnect") && !log.contains("connection up"), "keep Home connected: {log}");
+            assert_eq!(super::super::connection_error(&err), "That network is out of range. Scan again.");
+            // The working network itself still joins without a scan or another activation.
+            let saved = Saved { ssid: "Home".into(), uuid: "uuid-home".into(), ..saved };
+            assert!(prepare_saved_connection(&nmcli, &saved).unwrap());
         }
 
         #[test]

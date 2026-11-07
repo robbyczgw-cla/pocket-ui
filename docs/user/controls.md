@@ -233,3 +233,18 @@ On experimental **AYN Odin 2 Mini** and **Odin 2 Portal**, the default menu layo
 B right, X left, Y top), matching the printed letters. The original Odin 2 defaults to Nintendo. A saved choice
 wins. Safe mode follows the device’s printed layout. Games keep their positional controls: the screenshot
 shortcut is HOME + the right face button (printed B on Mini/Portal), regardless of the menu layout.
+
+## On Android
+
+System **Back** (gesture or button) opens the pause sheet during play. On a player subpage
+it returns to that sheet; it does not quit the game. Use **Save & quit** to leave. A gamepad
+that disconnects pauses play and brings the touch pad back. Android's A/B/X/Y labels follow
+their physical positions; the [Controls card](controls-card.md#on-android) shows their console jobs.
+
+The pause sheet's **Zoom** keeps the picture still. Pinch to enlarge it, drag to move it,
+or use the D-pad and A to switch 2x/3x. Back returns to the sheet. **Options → Controls →
+Hold to toggle** chooses one game button: press to hold it, press again to let go. Pause,
+loading a moment, backgrounding or changing a controller releases it; the choice stays for
+this game. **Haptics** in Android Settings is off until you turn it on, and also follows
+the phone's own haptic setting. **Text size** uses the larger of the app's choice and the
+Android font scale, up to 200% for the system setting.

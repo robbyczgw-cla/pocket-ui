@@ -17,18 +17,45 @@ public final class PlayerActivity extends Activity {
     private SemanticView semantics;
     private android.media.AudioFocusRequest focus;
     private boolean ready;
+    private volatile boolean paused;
+    private boolean hapticsEnabled;
+    private android.view.ScaleGestureDetector pinch;
+    private android.hardware.input.InputManager inputs;
+    private final android.hardware.input.InputManager.InputDeviceListener inputListener = new android.hardware.input.InputManager.InputDeviceListener(){
+        public void onInputDeviceAdded(int id){controllersChanged(false);}
+        public void onInputDeviceChanged(int id){controllersChanged(true,id);}
+        public void onInputDeviceRemoved(int id){controllersChanged(true,id);}
+    };
+    private final java.util.Set<Integer> gamepads=new java.util.HashSet<>();
+    private void controllersChanged(boolean interrupted){controllersChanged(interrupted,-1);}
+    private void controllersChanged(boolean interrupted,int changedId){
+        java.util.Set<Integer> now=new java.util.HashSet<>();
+        for(int id:android.view.InputDevice.getDeviceIds()){
+            android.view.InputDevice d=android.view.InputDevice.getDevice(id);
+            if(d!=null&&!d.isVirtual()&&((d.getSources()&android.view.InputDevice.SOURCE_GAMEPAD)==android.view.InputDevice.SOURCE_GAMEPAD||(d.getSources()&android.view.InputDevice.SOURCE_JOYSTICK)==android.view.InputDevice.SOURCE_JOYSTICK))now.add(id);
+        }
+        final boolean changed=!gamepads.equals(now);
+        if(interrupted&&!changed&&!gamepads.contains(changedId))return;
+        gamepads.clear();gamepads.addAll(now);
+        final boolean connected=!now.isEmpty();
+        surface.queueEvent(()->nativeControllers(connected,interrupted));surface.requestRender();
+    }
+    private native void nativeControllers(boolean connected,boolean interrupted);
+    private native void nativeZoom(float factor);
     private volatile int safeLeft,safeTop,safeRight,safeBottom;
     private native String nativeCreate(String core,String rom,String system,String key,String title);
-    private native int nativeFrame(int width,int height,float density,int left,int top,int right,int bottom);
+    private native int nativeFrame(int width,int height,float density,float fontScale,int left,int top,int right,int bottom);
     private native boolean nativeKey(int key,boolean down,boolean controller);
     private native boolean nativeAnalog(float x,float y,float rx,float ry,float hatX,float hatY);
     private native boolean nativeTouch(int id,float x,float y,int phase);
     private native void nativeSuspend();
+    private native void nativeForeground();
     public String dataPath(){return getFilesDir().getAbsolutePath();}
+    public String batterySaver(){return Boolean.toString(((android.os.PowerManager)getSystemService(POWER_SERVICE)).isPowerSaveMode());}
     public String fontScale(){return Float.toString(getResources().getConfiguration().fontScale);}
     public String playerSettings(){String value=getIntent().getStringExtra("settings");return value==null?"":value;}
     /** A short tick for an on-screen button (the system's haptic setting decides whether it is felt). */
-    public String haptic(){runOnUiThread(()->getWindow().getDecorView().performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY));return "";}
+    public String haptic(){if(hapticsEnabled)runOnUiThread(()->getWindow().getDecorView().performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY));return "";}
     public String hasGamepad(){
         for(int id:android.view.InputDevice.getDeviceIds()){
             android.view.InputDevice device=android.view.InputDevice.getDevice(id);if(device==null)continue;
@@ -45,6 +72,8 @@ public final class PlayerActivity extends Activity {
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved); setVolumeControlStream(AudioManager.STREAM_MUSIC);
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        if(android.os.Build.VERSION.SDK_INT>=28){android.view.WindowManager.LayoutParams attrs=getWindow().getAttributes();attrs.layoutInDisplayCutoutMode=android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;getWindow().setAttributes(attrs);}
+        try{hapticsEnabled=new org.json.JSONObject(playerSettings()).optBoolean("haptics",false);}catch(org.json.JSONException ignored){hapticsEnabled=false;}
         immersive();
         surface=new GLSurfaceView(this); surface.setEGLContextClientVersion(3); surface.setPreserveEGLContextOnPause(true);
         surface.setRenderer(new GLSurfaceView.Renderer() {
@@ -56,12 +85,18 @@ public final class PlayerActivity extends Activity {
             public void onSurfaceChanged(GL10 unused,int width,int height) { }
             public void onDrawFrame(GL10 unused) {
                 if (!ready) return;
-                int state=nativeFrame(surface.getWidth(),surface.getHeight(),getResources().getDisplayMetrics().density,safeLeft,safeTop,safeRight,safeBottom);
+                int state=nativeFrame(surface.getWidth(),surface.getHeight(),getResources().getDisplayMetrics().density,getResources().getConfiguration().fontScale,safeLeft,safeTop,safeRight,safeBottom);
+                paused=state==1;
                 if (state==2) {ready=false;runOnUiThread(()->finish());}
                 else if (state==1) surface.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
             }
         });
+        pinch=new android.view.ScaleGestureDetector(this,new android.view.ScaleGestureDetector.SimpleOnScaleGestureListener(){
+            @Override public boolean onScaleBegin(android.view.ScaleGestureDetector detector){if(!paused)return false;surface.queueEvent(()->nativeZoom(1));surface.requestRender();return true;}
+            @Override public boolean onScale(android.view.ScaleGestureDetector detector){final float factor=detector.getScaleFactor();surface.queueEvent(()->nativeZoom(factor));surface.requestRender();return true;}
+        });
         surface.setOnTouchListener((view,event)->{
+            if(paused){pinch.onTouchEvent(event);if(pinch.isInProgress())return true;}
             int action=event.getActionMasked();
             if(action==MotionEvent.ACTION_CANCEL) {surface.queueEvent(()->nativeTouch(-1,0,0,3));}
             else if(action==MotionEvent.ACTION_MOVE) {
@@ -76,6 +111,7 @@ public final class PlayerActivity extends Activity {
             return insets;
         });
         setContentView(surface);
+        inputs=(android.hardware.input.InputManager)getSystemService(INPUT_SERVICE);
         semantics=new SemanticView(this);addContentView(semantics,new android.view.ViewGroup.LayoutParams(-1,-1));
         if(android.os.Build.VERSION.SDK_INT>=33)getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,this::backRequested);
     }
@@ -109,9 +145,13 @@ public final class PlayerActivity extends Activity {
     }
     @Override public void onBackPressed(){backRequested();}
     private void backRequested(){android.util.Log.i("PocketMvp","player system back");surface.queueEvent(()->{if(nativeKey(KeyEvent.KEYCODE_BACK,true,false))surface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);});surface.requestRender();}
+    @Override public void onConfigurationChanged(android.content.res.Configuration config){super.onConfigurationChanged(config);surface.requestApplyInsets();surface.requestRender();}
     @Override protected void onResume(){super.onResume();surface.onResume();immersive();
+        inputs.registerInputDeviceListener(inputListener,null);surface.queueEvent(()->nativeForeground());controllersChanged(false);
         AudioManager audio=(AudioManager)getSystemService(AUDIO_SERVICE);
         focus=new android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(new android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_GAME).setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC).build()).setOnAudioFocusChangeListener(change->{if(change<0){surface.queueEvent(()->nativeSuspend());surface.requestRender();}}).build();audio.requestAudioFocus(focus);
     }
-    @Override protected void onPause(){surface.queueEvent(()->nativeSuspend());surface.onPause();if(focus!=null)((AudioManager)getSystemService(AUDIO_SERVICE)).abandonAudioFocusRequest(focus);super.onPause();}
+    @Override protected void onPause(){inputs.unregisterInputDeviceListener(inputListener);
+        // GLSurfaceView.onPause waits for the GL thread: the queued save completes before its context is parked.
+        surface.queueEvent(()->nativeSuspend());surface.onPause();if(focus!=null)((AudioManager)getSystemService(AUDIO_SERVICE)).abandonAudioFocusRequest(focus);super.onPause();}
 }

@@ -5,12 +5,14 @@ plays, HOME pauses with **Continue** and **Stop**. Your settings, look and saves
 
 ## Setting it up
 
-At the first start, choose **For a child** on "How do you like to play?". Later: Settings → System → **Kids mode**. It takes two minutes:
+At the first start, press **Y** ("For a child…") on its first page: after your games, these steps come instead of the
+look, and the setup ends with them. Later: Settings → System → **Kids mode**. It takes two minutes:
 
 1. **A PIN**, four digits, twice. It is for you, not for your child.
-2. **The games**, 5 to 20 (fewer if the card has fewer). A picks, START goes on. No games on the card yet? Add games comes
-   first, and you pick right after; if none arrive, the first start ends on the page that adds them. That page also has **X: Starter pack**, a handful of free games
-   (Wi-Fi needed); B comes back to the games to pick.
+2. **The games**, 5 to 20 (fewer if the card has fewer). A picks, START goes on. No games on the card yet? From Settings, Add games
+   comes first, and you pick right after. That page also has **X: Starter pack**, a handful of free games (Wi-Fi
+   needed); B comes back to the games to pick. In the first start the steps come only once there are games Kids Mode can
+   start; without them the setup goes on to the look and says to set it up later.
 3. **Blue or Pink.**
 4. **How long per day**: 30 minutes to 2 hours, or no limit.
 5. **How loud at most**: the volume keys stop there. Good for small ears and headphones.

@@ -8,6 +8,7 @@
 #   - every "Settings › A › B" path in docs, strings and tables names a real category and row
 #   - each category's line under Settings names its rows in order
 #   - the manual's pages are not too long for the screen (editorial advice)
+#   - the D-pad explorer (tests/nav_explorer.rs) at the sizes and text size the gate leaves out
 # Placeholder integrity, language choice, clipping, saves, launch, quit, update and input stay in the gate.
 cd "$(dirname "$0")/.." || exit 2
 export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-4}
@@ -22,4 +23,5 @@ cargo test --profile "${GATE_PROFILE:-gate}" --lib --bins --test i18n_snapshots 
     every_path_in_settings_names_a_category_and_one_of_its_rows \
     every_category_line_names_its_rows_in_order \
     manual_pages_are_not_too_long_for_the_screen \
+    && cargo test --profile "${GATE_PROFILE:-gate}" --test nav_explorer -q -- --ignored \
     && echo "RELEASE CHECK: ok" || { echo "RELEASE CHECK: FAILED"; exit 1; }

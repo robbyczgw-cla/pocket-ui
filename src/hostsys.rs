@@ -343,14 +343,15 @@ pub fn host_core(system: &str) -> Option<&'static str> {
 /// needs: with that BIOS missing from `bios_dir` the game stays on the default emulator.
 /// The official PICO-8 in `roms/pico-8` keeps its games as well (`HostSystem::official`). `bios_dir` is `<roms>/bios`.
 pub fn route(system: &str, bios_dir: &Path) -> Option<&'static str> {
-    route_on(system, bios_dir, crate::device::current().model.is_some_and(|m| m.is_h700()))
+    route_on(system, bios_dir, crate::device::current().model.is_some_and(|m| m.small_chip()))
 }
 
 /// Systems whose pocket-core cores are far heavier than an H700's four Cortex-A53 allow (docs/DEVICES.md): on those
-/// handhelds they stay on ROCKNIX's own emulators (DraStic for NDS and so on), as an unverified system does.
+/// handhelds they stay on ROCKNIX's own emulators (DraStic for NDS and so on), as an unverified system does. The RG DS
+/// Plus too (`Model::small_chip`): its A55 is unmeasured, and DraStic puts a DS game on both its screens.
 pub const H700_STAYS_ON_ROCKNIX: &[&str] = &["n64", "psp", "dreamcast", "nds"];
 
-/// `route` for an H700 handheld (`h700`) or any other device.
+/// `route` for an H700 handheld or the RG DS Plus (`h700`, `Model::small_chip`) or any other device.
 pub fn route_on(system: &str, bios_dir: &Path, h700: bool) -> Option<&'static str> {
     if h700 && H700_STAYS_ON_ROCKNIX.contains(&system) {
         return None;

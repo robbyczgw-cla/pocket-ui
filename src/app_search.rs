@@ -606,7 +606,7 @@ impl App {
             let track = (visible as i32 * pitch - ROW_GAP).max(1);
             let h = (track * visible as i32 / page.hits.len() as i32).max(24);
             let y = LIST_TOP + (track - h) * first as i32 / (page.hits.len() - visible).max(1) as i32;
-            c.round_rect(c.w - MARGIN + 18, y, 4, h, 2, pal().chip);
+            pocket_ui::retro::pill(c, c.w - MARGIN + 18, y, 4, h, 2, pal().chip);
         }
     }
 
@@ -642,7 +642,7 @@ impl App {
         let (bw, bh) = (sw + 52, pocket_ui::type_scale::row(36, 21));
         let bx = x + w - 20 - bw;
         let by = y + (h - bh) / 2;
-        c.round_rect(bx, by, bw, bh, bh / 2, if selected { mix(pal().label, pal().ink, 24) } else { pal().keycap });
+        pocket_ui::retro::pill(c, bx, by, bw, bh, bh / 2, if selected { mix(pal().label, pal().ink, 24) } else { pal().keycap });
         c.disc(bx + 20, by + bh / 2, 6, colour);
         self.text.draw(c, Face::Body, 21, bx + 34, by + bh / 2 + pocket_ui::type_scale::base(8, 21), if selected { pal().ink } else { pal().chalk }, &short);
         let title_x = tx + thumb + 22;
@@ -688,7 +688,7 @@ impl App {
         if let Some((msg, at)) = self.toast.clone() {
             if super::toast_age(at) < super::toast_len(&msg) {
                 let w = self.text.width(Face::Body, 28, &msg) + 48;
-                c.round_rect(c.w / 2 - w / 2, 36, w, 52, 26, KEYCAP);
+                pocket_ui::retro::pill(c, c.w / 2 - w / 2, 36, w, 52, 26, KEYCAP);
                 self.text.draw(c, Face::Body, 28, c.w / 2 - w / 2 + 24, 72, CHALK, &msg);
             }
         }

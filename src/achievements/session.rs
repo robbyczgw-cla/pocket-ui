@@ -640,12 +640,11 @@ impl Session {
     /// Waits until the network thread has nothing to do and the worker has handled what it got (tests).
     #[cfg(test)]
     fn settle(&self) {
-        let until = Instant::now() + Duration::from_secs(10);
+        let until = Instant::now() + crate::testutil::timeout(Duration::from_secs(10));
         loop {
             std::thread::sleep(Duration::from_millis(20));
-            if self.shared.outstanding.load(Ordering::Acquire) == 0 || Instant::now() > until {
-                break;
-            }
+            if self.shared.outstanding.load(Ordering::Acquire) == 0 { break; }
+            assert!(Instant::now() < until, "achievement requests did not settle");
         }
     }
 }
@@ -746,7 +745,7 @@ mod tests {
     /// Waits up to 10 s for what the worker writes (`menu_opened`): the pause menu's list and the summary the shelf
     /// shows come from its thread, and how long that takes is the machine's business, not a test's sleep.
     fn until<T>(mut f: impl FnMut() -> Option<T>) -> Option<T> {
-        let until = Instant::now() + Duration::from_secs(10);
+        let until = Instant::now() + crate::testutil::timeout(Duration::from_secs(10));
         loop {
             if let Some(v) = f() {
                 return Some(v);
@@ -763,15 +762,26 @@ mod tests {
     /// compiles the mock server and rc_client's threads took longer than 2 s (2026-10-25).
     fn until_ready(s: &mut Session) -> Vec<Notice> {
         let mut notices = Vec::new();
-        for _ in 0..2000 {
+        crate::testutil::clock::wait_for(|| {
             run_frame(s);
             notices.extend(s.take_notices());
-            if s.shared.state() != State::Loading && unsafe { ffi::rc_client_is_game_loaded(s.client) } != 0 {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(5));
-        }
+            s.shared.state() != State::Loading && unsafe { ffi::rc_client_is_game_loaded(s.client) } != 0
+        }, Duration::from_secs(10), "achievement set activated in a frame");
         notices
+    }
+
+    /// Test teardown must finish before another session reuses the same files or
+    /// emulated RAM. Production close may intentionally leave work for process
+    /// exit; a test must fail rather than silently take that escape path.
+    fn close_cleanly(s: Session) {
+        let shared = s.shared.clone();
+        shared.closing.store(true, Ordering::Release);
+        shared.send(Work::Stop);
+        crate::testutil::clock::wait_for(|| {
+            s.worker.as_ref().is_none_or(|w| w.is_finished()) && shared.outstanding.load(Ordering::Acquire) == 0
+        }, Duration::from_secs(5), "achievement session drained before reuse");
+        s.close(Duration::ZERO);
+        assert!(shared.client.load(Ordering::Acquire).is_null(), "test session was destroyed, not abandoned");
     }
 
     static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
@@ -823,7 +833,7 @@ mod tests {
         let menu = until(|| read().filter(|s| (s.unlocked, s.total) == (2, 2))).expect("the menu's list");
         assert_eq!((menu.unlocked, menu.total, menu.points_unlocked, menu.points), (2, 2, 7, 7));
         assert_eq!(until(|| Summary::load(&dir, "nes", &dir.join("Game.nes"))).expect("the summary").text().as_deref(), Some("2 of 2"));
-        s.close(Duration::from_secs(5));
+        close_cleanly(s);
     }
 
     /// A server that also has badges: it writes a small PNG for every download and counts them.
@@ -881,21 +891,14 @@ mod tests {
         poke(1, 3);
         poke(2, 7);
         run_frame(&mut s);
-        let mut badge = None;
-        for _ in 0..1000 {
-            for n in s.take_notices() {
-                if let Notice::Badge { name, image } = n {
-                    badge = Some((name, image.map(|i| (i.w, i.h, i.px[0]))));
-                }
-            }
-            if badge.is_some() {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
+        let badge = until(|| s.take_notices().into_iter().find_map(|n| {
+            if let Notice::Badge { name, image } = n {
+                Some((name, image.map(|i| (i.w, i.h, i.px[0]))))
+            } else { None }
+        }));
         assert_eq!(badge, Some(("00234".to_string(), Some((64, 64, 0xff0000)))), "scaled to the card's size");
         assert!(dir.join("achievements/badges/00234.png").exists(), "kept for the next time");
-        s.close(Duration::from_secs(5));
+        close_cleanly(s);
     }
 
     #[test]
@@ -923,7 +926,7 @@ mod tests {
         poke(1, 3);
         run_frame(&mut s);
         assert!(s.take_notices().iter().any(|n| matches!(n, Notice::Unlocked { id: 5501, .. })));
-        s.close(Duration::from_secs(5));
+        close_cleanly(s);
     }
 
     #[test]
@@ -934,7 +937,7 @@ mod tests {
         // First online, so the set is kept.
         let mut s = start(&dir, Arc::new(server(SETS, r#"{"Success":true,"Unlocks":[],"HardcoreUnlocks":[]}"#)));
         until_ready(&mut s);
-        s.close(Duration::from_secs(5));
+        close_cleanly(s);
         // Then without network: the game still loads its achievements.
         let mut s = start(&dir, Arc::new(Mock::new(vec![])));
         let notices = until_ready(&mut s);
@@ -951,7 +954,7 @@ mod tests {
         let waiting = Pending::load(&dir, "Alex");
         assert_eq!(waiting.unlocks.iter().map(|u| u.id).collect::<Vec<_>>(), vec![5501], "kept for later");
         assert_eq!(s.snapshot().waiting, 1);
-        s.close(Duration::from_millis(200));
+        close_cleanly(s);
         // The next start online sends it once, with the time it happened (rc_client doesn't send it again: until the
         // server has it, the session's unlock list counts it, see `offline::exchange`).
         *RAM.lock().unwrap() = [0; 0x800];
@@ -961,13 +964,10 @@ mod tests {
         let mock = Arc::new(server(SETS, r#"{"Success":true,"Unlocks":[],"HardcoreUnlocks":[]}"#));
         let mut s = start(&dir, mock.clone());
         until_ready(&mut s);
-        for _ in 0..1000 {
+        until(|| {
             run_frame(&mut s);
-            std::thread::sleep(Duration::from_millis(5));
-            if !Pending::path(&dir).exists() {
-                break;
-            }
-        }
+            (!Pending::path(&dir).exists()).then_some(())
+        }).expect("pending unlock sent");
         assert!(!Pending::path(&dir).exists(), "sent");
         let awards: Vec<String> = mock
             .asked
@@ -979,7 +979,7 @@ mod tests {
             .collect();
         assert_eq!(awards.len(), 1, "{awards:?}");
         assert!(awards[0].contains("a=5501") && awards[0].contains("&o=360"), "an hour ago: {awards:?}");
-        s.close(Duration::from_secs(5));
+        close_cleanly(s);
     }
 
     #[test]
@@ -998,15 +998,12 @@ mod tests {
                 ("achievementsets", not_found),
             ])),
         );
-        for _ in 0..1000 {
+        until(|| {
             run_frame(&mut s);
-            std::thread::sleep(Duration::from_millis(5));
-            if s.shared.state() != State::Loading {
-                break;
-            }
-        }
+            (s.shared.state() != State::Loading).then_some(())
+        }).expect("unknown game answer");
         assert_eq!(s.shared.state(), State::NoSet);
-        s.close(Duration::from_secs(5));
+        close_cleanly(s);
         assert_eq!(
             Summary::load(&dir, "nes", &dir.join("Game.nes")).map(|t| t.game_id),
             Some(0),
@@ -1021,17 +1018,11 @@ mod tests {
             },
         )]);
         let mut s = start(&dir, Arc::new(refused));
-        let mut told = false;
-        for _ in 0..1000 {
+        until(|| {
             run_frame(&mut s);
-            told |= s.take_notices().iter().any(|n| matches!(n, Notice::SignInAgain));
-            std::thread::sleep(Duration::from_millis(5));
-            if told {
-                break;
-            }
-        }
-        assert!(told);
+            s.take_notices().iter().any(|n| matches!(n, Notice::SignInAgain)).then_some(())
+        }).expect("sign-in refusal notice");
         assert_eq!(s.shared.state(), State::SignedOut);
-        s.close(Duration::from_secs(5));
+        close_cleanly(s);
     }
 }

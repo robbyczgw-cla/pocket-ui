@@ -775,7 +775,7 @@ mod tests {
             let (sys, ext) = [("gba", "gba"), ("snes", "sfc"), ("megadrive", "md"), ("nes", "nes")][i % 4];
             file(&format!("{sys}/Spiel Nummer {i} (Europe).{ext}"), if i % 500 == 0 { 0 } else { 100 }, "")
         }).collect();
-        let t = std::time::Instant::now();
+        let t = crate::testutil::clock::CpuInstant::now();
         let o = run(&Phone::default(), vec![root(files)]);
         println!("android game check, 5000 games: {:?}", t.elapsed());
         assert_eq!(o.report.total, 5000);

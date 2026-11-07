@@ -515,7 +515,7 @@ fn emulators_txt(src: &Sources) -> String {
             let info_name = name.replace(".so", ".info");
             let version = src.core_dirs().iter().find_map(|(d, _)| info_version(&std::fs::read_to_string(d.join(&info_name)).ok()?));
             let meta = std::fs::metadata(dir.join(&name)).ok();
-            let date = meta.as_ref().and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| crate::crash::timestamp(d.as_secs())[..10].to_string());
+            let date = meta.as_ref().and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| crate::crash::timestamp(d.as_secs()).chars().take(10).collect::<String>());
             cores.push(format!(
                 "{} = {}, {origin}, {}, {}",
                 name.trim_end_matches("_libretro.so"),
@@ -970,7 +970,8 @@ fn mac_at(t: &str, i: usize) -> Option<(usize, String)> {
             return None;
         }
         if g < 5 {
-            let enc = t[j..].len() >= 3 && matches!(t[j..j + 3].to_ascii_lowercase().as_str(), "%3a" | "%2d");
+            // Address syntax is ASCII. Looking at three UTF-8 bytes as a str can end inside ° / µ in sensor logs.
+            let enc = b.get(j..j + 3).is_some_and(|s| s.eq_ignore_ascii_case(b"%3a") || s.eq_ignore_ascii_case(b"%2d"));
             if matches!(at_byte(t, j), b':' | b'-') {
                 j += 1;
             } else if enc {
@@ -1363,6 +1364,20 @@ mod tests {
         assert!(text.contains("client_mac=[mac]") && text.contains("card=[mac]"), "{text}");
         assert!(!text.contains("abc123"), "{text}");
         assert!(text.contains("name=sessionid"), "the field's name stays: {text}");
+    }
+
+    #[test]
+    fn rc03_report_keeps_unicode_sensor_logs_and_redacts_addresses() {
+        let r = Redactor::new(vec![], &[]);
+        // The three-byte MAC lookahead used to end inside ° / µ / a CJK character.
+        for ch in ["°", "µ", "界", "🎮"] {
+            for prefix in ["", " ", "a", "ab", "ab ", "ab  ", "12:", "aa%3Abb:"] {
+                let line = format!("{prefix}{ch}C: 47 °C, took 12 µs; peer aa:bb:cc:dd:ee:ff");
+                assert_eq!(r.clean(&line), line.replace("aa:bb:cc:dd:ee:ff", "[mac]"));
+            }
+        }
+        assert_eq!(r.clean("peer aa%3Abb%3Acc%3Add%3Aee%3Aff µs"), "peer [mac] µs");
+        assert_eq!(r.clean("password=\"a\\µ\" µs"), "password=\"[removed]\" µs");
     }
 
     /// Four numbers that are a version stay; the same numbers as an address go. The kernel's serial driver line stays,

@@ -221,6 +221,11 @@ impl Extras {
         };
         let mut ex = ex;
         ex.apply_settings(cfg);
+        // On the Brick, Auto (in place before anything is applied) is full speed already: say it to the CPU once.
+        #[cfg(feature = "brick")]
+        if game_performance(Performance::Auto) != Performance::Auto && cfg.performance == Performance::Auto {
+            ex.power.set_performance(game_performance(Performance::Auto));
+        }
         if cfg.performance == Performance::Auto && crate::device::current().model.is_some_and(|m| m.is_h700()) {
             ex.power.set_performance(Performance::Auto);
         }
@@ -231,7 +236,21 @@ impl Extras {
         ex
     }
 
+    /// The game waits behind a dark screen (`dark`) or plays again: on the TrimUI Brick the CPU goes to its lowest speed meanwhile and
+    /// back to the game's profile after. Elsewhere nothing changes (ROCKNIX suspends, or its own governor rules the dark screen).
+    #[cfg(feature = "brick")]
+    pub fn dark(&mut self, dark: bool) {
+        if crate::device::brick() {
+            if dark {
+                self.power.set_dark();
+            } else {
+                self.power.set_performance(game_performance(self.cfg.performance));
+            }
+        }
+    }
+
     /// Switches to `new`, doing only what changed.
+    #[cfg(not(feature = "brick"))]
     pub fn apply_settings(&mut self, new: Settings) {
         let old = std::mem::replace(&mut self.cfg, new);
         if new.rumble != old.rumble {
@@ -239,6 +258,34 @@ impl Extras {
         }
         if new.performance != old.performance {
             self.power.set_performance(new.performance);
+        }
+        if new.fan != old.fan {
+            match &self.fan_request {
+                Some(p) => crate::fan_curve::request(p, new.fan),
+                None => {
+                    self.power.set_fan(new.fan);
+                }
+            }
+        }
+        if !new.rewind {
+            self.rewind.clear();
+            self.verify.iter_mut().for_each(|v| v.hashes.clear());
+        }
+        self.hotkeys.lock().unwrap().enabled = allowed_shortcuts(new.shortcuts);
+        self.ahead.configure(new.run_ahead);
+        if new.over_game != old.over_game {
+            self.over_game = new.over_game;
+        }
+    }
+
+    #[cfg(feature = "brick")]
+    pub fn apply_settings(&mut self, new: Settings) {
+        let old = std::mem::replace(&mut self.cfg, new);
+        if new.rumble != old.rumble {
+            crate::rumble::set_strength(new.rumble);
+        }
+        if game_performance(new.performance) != game_performance(old.performance) {
+            self.power.set_performance(game_performance(new.performance));
         }
         if new.fan != old.fan {
             match &self.fan_request {
@@ -292,6 +339,18 @@ impl Extras {
     pub fn fast_forward(&self) -> Option<FastForward> {
         self.ff_on.then_some(self.cfg.fast_forward)
     }
+}
+
+/// The CPU profile a game runs with. Auto is "what the system does": on ROCKNIX its runemu.sh sets the governor for the game; the Brick's
+/// firmware stays on `ondemand`, which held a GBA game at 1.0-1.2 of 2.0 GHz with audio underruns (crackling, 03.11. on the real Brick),
+/// so there Auto is full speed for the game (`performance`, put back when it ends). Battery and Max stay what they say.
+#[cfg(feature = "brick")]
+pub fn game_performance(chosen: Performance) -> Performance {
+    #[cfg(feature = "brick")]
+    if chosen == Performance::Auto && crate::device::brick() {
+        return Performance::Performance;
+    }
+    chosen
 }
 
 #[cfg(test)]

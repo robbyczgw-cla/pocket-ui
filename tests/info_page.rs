@@ -33,7 +33,7 @@ fn wayland(tmp: &Path) -> Option<Stub> {
     let mut stub = Stub { path, child };
     // The stub publishes its socket only once it listens. Python's start-up can take many seconds on a loaded
     // machine (the gate runs the whole suite in parallel), so the limit is only there to end a stub that is dead.
-    let until = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    let until = std::time::Instant::now() + test_clock::timeout(std::time::Duration::from_secs(120));
     while std::time::Instant::now() < until {
         if stub.path.exists() {
             return Some(stub);

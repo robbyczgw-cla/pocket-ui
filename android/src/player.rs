@@ -23,6 +23,8 @@ use std::{
 };
 #[path = "picture.rs"]
 mod picture;
+#[path = "play_cards.rs"]
+mod play_cards;
 thread_local! {static PLAYER:RefCell<Option<Player>>=const{RefCell::new(None)};}
 #[link(name = "EGL")]
 extern "C" {
@@ -227,6 +229,9 @@ impl Drop for Graphics {
 enum Menu {
     Pause,
     Options,
+    Controls,
+    Recovery,
+    Zoom,
 }
 // Dereferencing the core makes its isolated context current for every entry point,
 // including save/load, options and destruction; composition explicitly restores the Activity.
@@ -308,6 +313,19 @@ struct Player {
     note_area: Area,
     first_frame: bool,
     paused: bool,
+    resumed: bool,
+    suspended: bool,
+    controls_intro: bool,
+    control_names: Vec<pocket_ui::controls::Target>,
+    hold_button: Option<u8>,
+    held: pocket_ui::controls::HoldToggle,
+    haptics: bool,
+    text_size: pocket_ui::text_size::TextSize,
+    last_font_scale: f32,
+    reminder: Option<pocket_ui::where_was_i::Card>,
+    zoom: play_cards::Zoom,
+    zoom_fingers: HashMap<i32, (f32, f32)>,
+    zoom_distance: Option<f32>,
     crt_started: Option<Instant>,
     crt_done: bool,
     light: bool,
@@ -404,7 +422,8 @@ impl Player {
         }
         let resume = if start.resume { core.resume(&pocket_ui::slots::auto_path(&base)) } else { pocket_ui::libretro::Resume::NoState };
         let mut note = start.note;
-        note.extend(pocket_ui::frozen_phone::after_resume(&base, resume));
+        note.extend(pocket_ui::frozen_phone::after_resume(&base, resume, core.resumed_from()));
+        if let Some(message) = play_cards::recovery_note(&core_id, resume) {note.push(message.into());}
         let mark = pocket_ui::frozen::Mark::new(pocket_ui::frozen_phone::EMULATOR, &core_id, Path::new(rom), None);
         let period = Duration::from_secs_f64(1.0 / core.av.timing.fps.clamp(10.0, 240.0));
         let audio = pocket_ui::audio::Audio::open(core.av.timing.sample_rate, false);
@@ -426,11 +445,18 @@ impl Player {
             .save_state()
             .and_then(|bytes| pocket_ui::fsutil::write_atomic(&base.with_extension("earlier0"), &bytes).ok().map(|_| 1))
             .unwrap_or(0);
+        let resumed_frame = if matches!(resume, pocket_ui::libretro::Resume::Resumed | pocket_ui::libretro::Resume::ResumedAgain) {
+            let (frame,_,_,_) = core.run(0);
+            core_hw_frame(&core).or(frame).and_then(|f| Some(f.to_rgb()).map(|rgb| Image {w:f.width,h:f.height,px:rgb.chunks_exact(3).map(|p|((p[0] as u32)<<16)|((p[1] as u32)<<8)|p[2] as u32).collect()}))
+        } else {None};
         let filled_slots = std::array::from_fn(|i| pocket_ui::slots::state_path(&base, i).is_file());
         let kept = pocket_ui::frozen_phone::kept(&base);
         let slot_icon = pocket_ui::system_art::get(&system).map(|sprite| sprite.fitted(26, 26));
         let sounds = pocket_ui::ui_sound::Config::load(&data);
         let picture = picture::Settings::load(&data, &system, &key);
+        let control_names: Vec<_> = core.described_inputs().into_iter().map(|t| pocket_ui::controls::Target{id:t.id,label:t.label}).collect();
+        if let Err(e)=play_cards::remember_names(&data,&key,&control_names) {log::warn!("Could not remember core button names: {e}");}
+        let zoom = play_cards::Zoom::new(&system);
         Ok(Self {
             core,
             audio,
@@ -439,7 +465,7 @@ impl Player {
             pixels: vec![],
             overlay_size: None,
             touch_visible: pocket_ui::platform::android::string("hasGamepad") != "true",
-            frame: None,
+            frame: resumed_frame,
             game_area: None,
             stylus_finger: None,
             title,
@@ -453,6 +479,19 @@ impl Player {
             note_area: Area::new(0, 0, 0, 0),
             first_frame: false,
             paused: false,
+            resumed: matches!(resume, pocket_ui::libretro::Resume::Resumed | pocket_ui::libretro::Resume::ResumedAgain),
+            suspended: false,
+            controls_intro: false,
+            control_names,
+            hold_button: None,
+            held: Default::default(),
+            haptics: false,
+            text_size: Default::default(),
+            last_font_scale: 0.0,
+            reminder: None,
+            zoom,
+            zoom_fingers: HashMap::new(),
+            zoom_distance: None,
             crt_started: None,
             crt_done: false,
             light,
@@ -503,7 +542,7 @@ impl Player {
     }
     fn state(&mut self, path: &Path) -> Result<(), String> {
         let bytes = self.core.save_state().ok_or("This core could not save its state")?;
-        pocket_ui::fsutil::write_atomic(path, &bytes).map_err(|e| e.to_string())?;
+        pocket_ui::state_file::write(path, &bytes).map_err(|e| e.to_string())?;
         if let Some(image) = &self.frame {
             png(&pocket_ui::slots::preview_path(path), image)?;
         }
@@ -524,7 +563,7 @@ impl Player {
         battery.map_err(|e| format!("{e:?}"))
     }
     fn load(&mut self, path: &Path) -> Result<(), String> {
-        let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+        let bytes = pocket_ui::state_file::read(path).map_err(|e| e.to_string())?;
         let undo = self.core.save_state().ok_or("Cannot preserve the current state")?;
         let undo_path = pocket_ui::slots::undo_path(&self.base);
         pocket_ui::fsutil::write_atomic(&undo_path, &undo).map_err(|e| e.to_string())?;
@@ -532,6 +571,10 @@ impl Player {
             let _ = self.core.load_state(&undo);
             return Err(error);
         }
+        self.held = Default::default();
+        self.buttons = 0;
+        self.fingers.clear();
+        self.pulses = 0;
         log::info!("player state loaded: {}", path.display());
         Ok(())
     }
@@ -554,6 +597,7 @@ impl Player {
         );
     }
     fn pause(&mut self, on: bool) {
+        if !on {self.suspended=false;}
         if !on && self.audio.is_none() {
             self.audio = pocket_ui::audio::Audio::open(self.core.av.timing.sample_rate, false);
         }
@@ -568,6 +612,10 @@ impl Player {
             pocket_ui::ui_sound::Sound::Back
         });
         self.paused = on;
+        self.reminder = None;
+        self.held = Default::default();
+        self.zoom_fingers.clear();
+        self.zoom_distance = None;
         self.overlay_size = None;
         self.buttons = 0;
         self.pulses = 0;
@@ -595,15 +643,17 @@ impl Player {
         self.core.set_analog(axes.map(|v| (v.clamp(-1.0, 1.0) * 32767.0) as i16));
         let x = if hat[0].abs() > 0.5 { hat[0] } else { axes[0] };
         let y = if hat[1].abs() > 0.5 { hat[1] } else { axes[1] };
-        self.stick_buttons = (if x < -0.55 {
+        // On an analog console the stick stays analog; only its actual hat presses the D-pad.
+        let (game_x,game_y) = if pocket_ui::controls::stick_dpad_default(&self.system) {(x,y)} else {(hat[0],hat[1])};
+        self.stick_buttons = (if game_x < -0.55 {
             1 << 6
-        } else if x > 0.55 {
+        } else if game_x > 0.55 {
             1 << 7
         } else {
             0
-        }) | (if y < -0.55 {
+        }) | (if game_y < -0.55 {
             1 << 4
-        } else if y > 0.55 {
+        } else if game_y > 0.55 {
             1 << 5
         } else {
             0
@@ -635,16 +685,47 @@ impl Player {
         if down {
             self.crt_done = true;
         }
-        if matches!(key, 4 | 82 | 110) {
+        if down && self.reminder.is_some() {
+            self.reminder = None;
+            self.next = Instant::now();
+            self.overlay_size = None;
+            return true;
+        }
+        if matches!(key, 4 | 82 | 110) || (self.paused && matches!(key, 97 | 111)) {
             if down {
-                if self.paused && self.menu == Menu::Options {
+                if self.controls_intro {
+                    self.controls_intro = false;
+                    self.pause(false);
+                } else if self.paused && self.menu != Menu::Pause {
                     self.menu = Menu::Pause;
                     self.row = 0;
-                } else {
-                    self.pause(!self.paused);
+                    self.scroll = 0;
+                    self.zoom_fingers.clear();
+                } else { self.pause(!self.paused); }
+            }
+            return !self.paused;
+        }
+        if self.paused && matches!(self.menu, Menu::Controls | Menu::Recovery) {
+            if down {
+                match key {
+                    19 => self.scroll = (self.scroll - 1).max(0),
+                    20 => self.scroll = (self.scroll + 1).min(self.scroll_max),
+                    23 | 66 | 96 => { self.key(4, true); },
+                    _ => (),
                 }
             }
             return !self.paused;
+        }
+        if self.paused && self.menu == Menu::Zoom {
+            if down {
+                match key {
+                    19 => self.zoom.pan(0.0,-0.2), 20 => self.zoom.pan(0.0,0.2),
+                    21 => self.zoom.pan(-0.2,0.0), 22 => self.zoom.pan(0.2,0.0),
+                    23 | 66 | 96 | 102 | 103 => self.zoom.scale = if self.zoom.scale < 2.5 {3.0} else {2.0},
+                    _ => (),
+                }
+            }
+            return false;
         }
         if self.paused {
             if !down {
@@ -702,12 +783,16 @@ impl Player {
     }
     fn display_options(&self) -> Vec<FileOption> {
         let mut options = self.picture.options();
+        let choices = play_cards::targets(&self.system, &self.control_names);
+        let mut values = vec![pocket_ui::core_options::FileValue {value:"none".into(), label:"Off".into()}];
+        values.extend(choices.iter().filter(|t| !(2..8).contains(&t.id)).map(|t| pocket_ui::core_options::FileValue {value:t.id.to_string(),label:t.label.clone()}));
+        options.push(FileOption {key:"hold_toggle".into(), label:"Hold to toggle".into(), current:self.hold_button.map_or("none".into(),|b|b.to_string()), values, category:Some("Controls".into()), ..Default::default()});
         options.extend(self.options.iter().cloned());
         for (row, option) in options.iter_mut().enumerate() { option.category = Some(Self::section(row).into()); }
         options
     }
     fn section(row: usize) -> &'static str {
-        if row < picture::ROWS { "Picture" } else { "Emulator" }
+        if row < picture::ROWS { "Picture" } else if row == picture::ROWS { "Controls" } else { "Emulator" }
     }
     fn rows(&self) -> Vec<String> {
         if self.menu == Menu::Options {
@@ -723,6 +808,8 @@ impl Player {
             "Earlier".into(),
             "Options".into(),
             "Screenshot".into(),
+            "Controls".into(),
+            "Zoom".into(),
             "Save & quit".into(),
         ]
     }
@@ -743,7 +830,18 @@ impl Player {
             self.overlay_size = None;
             return;
         }
-        let Some(option) = self.options.get_mut(self.row - picture::ROWS) else { return };
+        if self.row == picture::ROWS {
+            let choices = play_cards::targets(&self.system, &self.control_names);
+            let ids: Vec<_> = std::iter::once(None).chain(choices.iter().filter(|t| !(2..8).contains(&t.id)).map(|t| Some(t.id))).collect();
+            let at = ids.iter().position(|id| *id == self.hold_button).unwrap_or(0);
+            let before=self.hold_button;
+            self.hold_button = ids[(at as i32 + delta).rem_euclid(ids.len() as i32) as usize];
+            self.held = Default::default();
+            let path = self.data.join("android-controls").join(format!("{}.json",self.key));
+            if let Err(e) = pocket_ui::fsutil::write_json(&path, &self.hold_button) {self.hold_button=before;self.message = e.to_string();}
+            return;
+        }
+        let Some(option) = self.options.get_mut(self.row - picture::ROWS - 1) else { return };
         if option.values.is_empty() {
             return;
         }
@@ -758,11 +856,11 @@ impl Player {
     }
     fn activate(&mut self) {
         if self.menu == Menu::Options {
-            if self.row == self.options.len() + picture::ROWS + 1 {
+            if self.row == self.options.len() + picture::ROWS + 2 {
                 // "Advanced (this emulator)": opens or closes its group.
                 self.advanced_open = !self.advanced_open;
                 self.sound(pocket_ui::ui_sound::Sound::Confirm);
-            } else if self.row >= self.options.len() + picture::ROWS {
+            } else if self.row >= self.options.len() + picture::ROWS + 1 {
                 self.menu = Menu::Pause;
                 self.row = 0;
             } else {
@@ -809,6 +907,16 @@ impl Player {
                 ));
                 self.frame.as_ref().ok_or_else(|| "No frame yet".into()).and_then(|image| png(&path, image))
             }
+            6 => {
+                self.menu = Menu::Controls;
+                self.scroll = 0;
+                return;
+            }
+            7 => {
+                self.menu = Menu::Zoom;
+                self.zoom = play_cards::Zoom::new(&self.system);
+                return;
+            }
             _ => {
                 let saved = self.automatic();
                 if saved.is_ok() {
@@ -841,6 +949,10 @@ impl Player {
             self.touch_visible = touch;
             self.overlay_size = None;
             self.fingers.clear();
+            self.buttons = 0;
+            self.stick_buttons = 0;
+            self.held = Default::default();
+            self.core.set_analog([0;4]);
             self.core.set_pointer(None);
             self.stylus_finger = None;
             self.pulses = 0;
@@ -858,17 +970,30 @@ impl Player {
         ]
     }
     fn touch(&mut self, id: i32, x: f32, y: f32, phase: i32) -> bool {
+        if phase == 0 && self.reminder.take().is_some() {
+            self.next = Instant::now();
+            self.swallow = Some(id);
+            self.overlay_size = None;
+            return true;
+        }
         if phase == 0 {
             self.crt_done = true;
         }
         if phase == 3 {
             self.fingers.clear();
+            self.buttons = 0;
+            self.stick_buttons = 0;
+            self.held = Default::default();
+            self.core.set_analog([0;4]);
             self.core.set_pointer(None);
             self.stylus_finger = None;
             self.pulses = 0;
             self.menu_drag = None;
             self.swallow = None;
             self.dragging = false;
+            self.zoom_fingers.clear();
+            self.zoom_distance = None;
+            self.overlay_size = None;
             return !self.paused;
         }
         if phase == 0 && !self.touch_visible {
@@ -890,6 +1015,36 @@ impl Player {
         // View stores the bottom inset for GL; input's top inset is kept in menu_button's map by frame().
         let top = self.input_top();
         let y = (y - top) * self.logical.1 as f32 / self.view.3.max(1) as f32;
+        if self.paused && self.menu == Menu::Zoom {
+            if phase == 2 && self.hits.iter().any(|(a,_,_)| a.contains(x,y)) {
+                self.key(4,true);
+                return false;
+            }
+            let previous = self.zoom_fingers.insert(id,(x,y));
+            if phase == 1 {
+                let points:Vec<_>=self.zoom_fingers.values().copied().collect();
+                if points.len() == 2 {
+                    let distance=((points[0].0-points[1].0).powi(2)+(points[0].1-points[1].1).powi(2)).sqrt();
+                    if let Some(before)=self.zoom_distance {if before > 1.0 {self.zoom.magnify(distance/before);}}
+                    self.zoom_distance=Some(distance);
+                } else if let Some((px,py))=previous {
+                    let travel=(self.zoom.scale-1.0).max(0.1);
+                    self.zoom.pan((px-x)/self.logical.0 as f32/travel,(py-y)/self.logical.1 as f32/travel);
+                }
+            }
+            if phase == 2 {self.zoom_fingers.remove(&id);self.zoom_distance=None;}
+            return false;
+        }
+        if self.paused && matches!(self.menu, Menu::Controls | Menu::Recovery) {
+            if phase == 0 {self.menu_drag=Some((id,x,y));}
+            if phase == 2 {
+                if let Some((_,_,sy))=self.menu_drag.take() {
+                    if (y-sy).abs()>30.0 {self.scroll=(self.scroll + if y<sy {3} else {-3}).clamp(0,self.scroll_max);}
+                    else if self.hits.iter().any(|(a,_,_)|a.contains(x,y)) {self.key(4,true);}
+                }
+            }
+            return !self.paused;
+        }
         if self.paused {
             // A tap activates directly. A finger that travelled is a drag: it scrolls the Options page, else it is nothing.
             if phase == 0 {
@@ -959,7 +1114,6 @@ impl Player {
         }
         if phase == 2 {
             if let Some(bits) = self.fingers.remove(&id) {
-                self.pulses |= bits;
                 if bits != 0 {
                     self.overlay_size = None;
                 }
@@ -967,7 +1121,8 @@ impl Player {
         } else {
             let bits = control_bits;
             let before = self.fingers.insert(id, bits).unwrap_or(0);
-            if bits & !before != 0 {
+            self.pulses |= bits & !before;
+            if self.haptics && bits & !before != 0 {
                 // A tick for each new press (and for sliding onto another direction or button).
                 let _ = pocket_ui::platform::android::strings("haptic", &[]);
             }
@@ -997,10 +1152,15 @@ impl Player {
     fn input_top(&self) -> f32 {
         self.top as f32
     }
-    fn frame(&mut self, w: i32, h: i32, density: f32, insets: [i32; 4]) -> i32 {
+    fn frame(&mut self, w: i32, h: i32, density: f32, insets: [i32; 4], font_scale: f32) -> i32 {
         if self.quit {
             return 2;
         }
+        if self.last_font_scale != font_scale {self.overlay_size=None;self.last_font_scale=font_scale;}
+
+        pocket_ui::type_scale::set_system_scale(font_scale);
+        let size = play_cards::text_size(self.text_size, font_scale);
+        pocket_ui::type_scale::set(size);
         let [left, top, right, bottom] = insets;
         self.top = top;
         let view = (left, bottom, (w - left - right).max(1), (h - top - bottom).max(1));
@@ -1015,7 +1175,7 @@ impl Player {
         // Catch up bounded emulation ticks before painting once; audio must not lose samples when
         // a presentation misses vsync. Core calls remain on the EGL thread for hardware cores.
         let mut ticks = 0;
-        while !self.paused && Instant::now() >= self.next && ticks < 4 {
+        while !self.paused && self.reminder.is_none() && Instant::now() >= self.next && ticks < 4 {
             ticks += 1;
             let touch = self.fingers.values().fold(self.pulses, |v, b| v | b);
             let mut buttons = self.buttons | touch | self.stick_buttons;
@@ -1034,6 +1194,9 @@ impl Player {
                 // Touch C buttons use the core's right stick, independent of its face-button map.
                 buttons &= !((1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9) | (1 << 13) | (1 << 14));
             }
+            let was_held = self.held.held();
+            buttons = self.held.apply(buttons,self.hold_button);
+            if was_held != self.held.held() {self.overlay_size = None;}
             let (frame, samples, av, geometry) = self.core.run(buttons);
             if let Some(av) = av {
                 self.core.av = av;
@@ -1102,57 +1265,35 @@ impl Player {
         }
     }
     fn control_label(&self, bit: u16) -> &'static str {
-        if self.system == "n64" {
-            match bit {
-                0 => return "A",
-                1 => return "B",
-                8 => return "C<",
-                9 => return "C^",
-                13 => return "C>",
-                14 => return "Cv",
-                12 => return "Z",
-                _ => (),
-            }
-        }
-        if self.system == "psp" {
-            match bit {
-                0 => return "×",
-                8 => return "○",
-                1 => return "□",
-                9 => return "△",
-                _ => (),
-            }
-        }
-        if self.system == "megadrive" {
-            match bit {
-                1 => return "A",
-                0 => return "B",
-                8 => return "C",
-                10 => return "X",
-                9 => return "Y",
-                11 => return "Z",
-                _ => (),
-            }
-        }
-        [
-            "B", "Y", "Select", "Start", "Up", "Down", "Left", "Right", "A", "X", "L", "R", "L2", "R2", "L3", "R3",
-        ][bit as usize]
+        play_cards::touch_label(&self.system, bit as usize)
     }
     fn semantic_nodes(&self) -> String {
         let areas: Vec<_> = if self.paused {
             let mut nodes: Vec<_> = self.hits.iter().map(|(a, i, label)| (*a, label.clone(), !self.touch_visible && *i == self.row)).collect();
             nodes.extend(self.slot_controls().into_iter().map(|(a, _, label)| (a, label.to_string(), false)));
+            if self.menu == Menu::Zoom {nodes.push((Area::new(0,0,self.logical.0 as i32,80),format!("{} · {:.1}x",pocket_ui::i18n::tr("Zoom"),self.zoom.scale),false));}
             if self.menu == Menu::Options {
                 nodes.extend(self.option_arrows.iter().map(|(a, _, _, label)| (*a, label.clone(), false)));
             }
+            if matches!(self.menu, Menu::Controls | Menu::Recovery) {
+                nodes.push((Area::new(36,120,self.logical.0 as i32-72,self.logical.1 as i32-280),if self.menu == Menu::Recovery {self.note.iter().map(|l|pocket_ui::i18n::tr(l)).collect::<Vec<_>>().join(". ")} else {play_cards::control_lines(&self.system,&self.control_names).join(". ")},false));
+            }
+            if !self.message.is_empty() {nodes.push((Area::new(40,100,self.logical.0 as i32-80,60),self.message.clone(),false));}
             nodes
         } else {
             let mut nodes: Vec<_> = self.controls.iter().map(|(a, bit)| (*a, self.control_label(*bit).to_string(), false)).collect();
-            if self.touch_visible {
+            if self.touch_visible && self.reminder.is_none() {
                 nodes.push((self.menu_button, "Pause".into(), false));
             }
             if !self.note.is_empty() {
                 nodes.push((self.note_area, self.note.iter().map(|l| note_text(l)).collect::<Vec<_>>().join(". "), false));
+            }
+            if let Some(bit)=self.held.held() {
+                let label=pocket_ui::i18n::tr("{s} held").replace("{s}",self.control_label(bit as u16));
+                nodes.push((Area::new(28,20,self.logical.0 as i32-56,type_scale::row(64,28)),label,false));
+            }
+            if let Some(card)=&self.reminder {
+                nodes.push((Area::new(40,self.logical.1 as i32-360,self.logical.0 as i32-80,320),std::iter::once(pocket_ui::i18n::tr(&card.ago)).chain(card.played.as_deref().map(pocket_ui::i18n::tr)).chain(card.note.clone()).collect::<Vec<_>>().join(". "),false));
             }
             nodes
         };
@@ -1196,6 +1337,7 @@ impl Player {
             self.gfx.present(&self.pixels, (w, h), self.view, game, false, &crt);
             return;
         }
+        let held_label = self.held.held().map(|b| self.control_label(b as u16).to_string());
         self.pixels.resize((w * h) as usize, 0);
         let rows = self.rows();
         let display_options = self.display_options();
@@ -1214,7 +1356,7 @@ impl Player {
         } else {
             Area::new(0, 0, 0, 0)
         };
-        if !self.paused && self.touch_visible {
+        if !self.paused && self.touch_visible && self.reminder.is_none() {
             let pressed = self.fingers.values().fold(0u16, |v, b| v | b);
             let out = touch_controls(&mut c, &mut self.text, &self.system, (w, h), self.dp, game_rect, pressed);
             self.controls = out.0;
@@ -1250,7 +1392,20 @@ impl Player {
                 advanced_open: self.advanced_open,
                 card: pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::PauseMemoryCard),
             };
-            let out = touch_pause(&mut c, &mut self.text, &view);
+            let out = if matches!(self.menu, Menu::Controls | Menu::Recovery) {
+                let (back,max) = if self.menu == Menu::Recovery {
+                    let lines:Vec<_> = self.note.iter().map(|l|pocket_ui::i18n::tr(l)).collect();
+                    play_cards::paint_lines(&mut c,&mut self.text,"Recovery",&lines,self.scroll.max(0) as usize)
+                } else {play_cards::paint_controls(&mut c,&mut self.text,&self.system,&self.control_names,self.scroll.max(0) as usize)};
+                TouchOut {hits:vec![(back,0,pocket_ui::i18n::tr("Back"))],scroll:self.scroll.min(max as i32),scroll_max:max as i32,..Default::default()}
+            } else if self.menu == Menu::Zoom {
+                let back=Area::new(40,h-120,w-80,TARGET_MIN);
+                if let Some(image)=&self.frame {self.zoom.paint(&mut c,image,Area::new(0,0,w,h-150));}
+                pill(&mut c,&mut self.text,back,"Back",false);
+                let label=format!("{} · {:.1}x",pocket_ui::i18n::tr("Zoom"),self.zoom.scale);
+                play_cards::paint_badge(&mut c,&mut self.text,&label);
+                TouchOut {hits:vec![(back,0,pocket_ui::i18n::tr("Back"))],..Default::default()}
+            } else {touch_pause(&mut c, &mut self.text, &view)};
             self.hits = out.hits;
             self.option_arrows = out.option_arrows;
             self.scroll = out.scroll;
@@ -1258,6 +1413,11 @@ impl Player {
             if let [Some(a), Some(b)] = out.slot_arrows {
                 self.slot_arrows = [a, b];
             }
+        }
+        if let Some(card)=&self.reminder {pocket_ui::where_was_i::paint(&mut c,&mut self.text,card,h-40,255);}
+        if let Some(held)=held_label {
+            let label = self.text.translated("{s} held").replace("{s}", &held);
+            play_cards::paint_badge(&mut c,&mut self.text,&label);
         }
         self.core.frontend_current();
         self.gfx.backdrop = if self.paused { pal().void } else { 0 };
@@ -1585,6 +1745,7 @@ fn option_section(option: &FileOption, row: usize) -> usize {
     if row < picture::ROWS {
         return 0;
     }
+    if option.key == "hold_toggle" {return 2;}
     let s = format!("{} {}", option.key, option.label).to_lowercase();
     let has = |words: &[&str]| words.iter().any(|w| s.contains(w));
     // The emulator's own hardware choices and anything that needs a restart: for those who know that core.
@@ -1679,7 +1840,7 @@ fn touch_pause(c: &mut Canvas, text: &mut Text, v: &TouchView) -> TouchOut {
         let cols = if portrait { 1 } else { 2 };
         let (win_top, win_bottom) = (if portrait { top } else { back.y + back.h + GAP }, if portrait { back.y - GAP } else { bottom });
         let col_w = (inner - (cols - 1) * GAP) / cols;
-        let (zone, row_h, head_h) = (116, 128, 76);
+        let (zone, row_h, head_h) = (116, 128.max(type_scale::px(26) as i32+type_scale::px(36) as i32+44), type_scale::row(76,40));
         // The page: a heading per section ("Picture", "Sound", "Controls", "Speed", "Game"), its rows under it.
         let order = option_order(v.options);
         let mut places: Vec<(usize, i32, i32)> = Vec::new();
@@ -1779,10 +1940,10 @@ fn touch_pause(c: &mut Canvas, text: &mut Text, v: &TouchView) -> TouchOut {
             };
             let label = text.fit(Face::Body, 26, &name, middle.w);
             let width = text.width(Face::Body, 26, &label);
-            text.draw(c, Face::Body, 26, middle.x + (middle.w - width) / 2, area.y + 46, pal().soft, &label);
+            text.draw(c, Face::Body, 26, middle.x + (middle.w - width) / 2, area.y + type_scale::px(26) as i32 + 16, pal().soft, &label);
             let value = text.fit(Face::Body, 36, &option_value(option.label_of(&option.current)), middle.w);
             let width = text.width(Face::Body, 36, &value);
-            text.draw(c, Face::Body, 36, middle.x + (middle.w - width) / 2, area.y + 96, pal().text, &value);
+            text.draw(c, Face::Body, 36, middle.x + (middle.w - width) / 2, area.y + type_scale::px(26) as i32 + type_scale::px(36) as i32 + 28, pal().text, &value);
             // Taps only count inside the visible window, not under the header or the Back button.
             if many {
                 if let Some(a) = visible(Area::new(area.x, area.y, zone, row_h)) {
@@ -1820,7 +1981,7 @@ fn touch_pause(c: &mut Canvas, text: &mut Text, v: &TouchView) -> TouchOut {
     text.draw(c, Face::Body, 28, EDGE, 140, pal().dust, &message);
     // With the whole memory card the slot picker is taller, to show the medium.
     let (picker_extra, primary_extra) = (if v.card { 38 + 110 } else { 38 }, 16);
-    let labels = ["Continue", "Save", "Load", "Earlier", "Options", "Screenshot", "Save & quit"];
+    let labels = ["Continue", "Save", "Load", "Earlier", "Options", "Screenshot", "Controls", "Zoom", "Save & quit"];
     let picker = |c: &mut Canvas, text: &mut Text, out: &mut TouchOut, area: Area| {
         c.round_rect(area.x, area.y, area.w, area.h, 28, pal().pill);
         let zone = 120.min(area.w / 4);
@@ -1878,10 +2039,12 @@ fn touch_pause(c: &mut Canvas, text: &mut Text, v: &TouchView) -> TouchOut {
         button(c, text, &mut out, Area::new(EDGE, y, half, bh), 1);
         button(c, text, &mut out, Area::new(EDGE + half + GAP, y, half, bh), 2);
         y += bh + GAP;
-        for row in 3..7 {
-            button(c, text, &mut out, Area::new(EDGE, y, inner, bh), row);
+        for pair in [[3,4],[6,7]] {
+            for (col,row) in pair.into_iter().enumerate() {button(c,text,&mut out,Area::new(EDGE+col as i32*(half+GAP),y,half,bh),row);}
             y += bh + GAP;
         }
+        // The two longest actions keep a full row, including at 200% font scale in DE/ES.
+        for row in [5,8] {button(c,text,&mut out,Area::new(EDGE,y,inner,bh),row);y+=bh+GAP;}
     } else {
         // Two columns that always fit the height: Continue, the slot and Save | Load at the left; Earlier, Options,
         // Screenshot and Quit at the right. The buttons shrink to fit, never below 48 dp, before anything scrolls.
@@ -1891,9 +2054,11 @@ fn touch_pause(c: &mut Canvas, text: &mut Text, v: &TouchView) -> TouchOut {
         let right_h = 4 * bh + 3 * GAP;
         let y0 = top + ((avail - right_h) / 2).max(0);
         let x2 = w - EDGE - col_w;
-        for (n, row) in (3..7).enumerate() {
-            button(c, text, &mut out, Area::new(x2, y0 + n as i32 * (bh + GAP), col_w, bh), row);
+        let half = (col_w-GAP)/2;
+        for (n,pair) in [[3,4],[6,7]].into_iter().enumerate() {
+            for (col,row) in pair.into_iter().enumerate() {button(c,text,&mut out,Area::new(x2+col as i32*(half+GAP),y0+n as i32*(bh+GAP),half,bh),row);}
         }
+        for (n,row) in [5,8].into_iter().enumerate() {button(c,text,&mut out,Area::new(x2,y0+(n as i32+2)*(bh+GAP),col_w,bh),row);}
         // Left column: the same height as the right one, the spare room shared between its gaps.
         let (cont, pick) = (bh + primary_extra.min((right_h - 3 * bh - 2 * GAP) / 2).max(0), bh + picker_extra.min((right_h - 3 * bh - 2 * GAP) / 2).max(0));
         // The whole memory card: the picker takes two rows' height, Continue and Save | Load keep a plain one.
@@ -1972,6 +2137,7 @@ pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeCreate(
     let language = prefs["language"].as_str().map(pocket_ui::i18n::Lang::from_locale).or(prefs["german"].as_bool().map(|g| if g { pocket_ui::i18n::Lang::De } else { pocket_ui::i18n::Lang::En })).unwrap_or_else(|| pocket_ui::i18n::Lang::from_locale(&pocket_ui::platform::android::string("language")));
     pocket_ui::i18n::set(language);
     let font_scale = pocket_ui::platform::android::string("fontScale").parse::<f32>().unwrap_or(1.0);
+    pocket_ui::type_scale::set_system_scale(font_scale);
     let text_size = prefs["text_size"].as_str().unwrap_or("normal");
     pocket_ui::type_scale::set(if font_scale >= 1.25 || text_size == "large" {
         pocket_ui::text_size::TextSize::Large
@@ -2004,9 +2170,29 @@ pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeCreate(
         match Player::new(&core, &rom, system, key, title, prefs["light"].as_bool().unwrap_or(false), frozen) {
             Ok(mut player) => {
                 player.sounds_muted = prefs["muted"].as_bool().unwrap_or(false);
+                player.haptics = prefs["haptics"].as_bool().unwrap_or(false);
+                player.text_size = serde_json::from_value(prefs["text_size"].clone()).unwrap_or_default();
+                let hold_path = player.data.join("android-controls").join(format!("{}.json",player.key));
+                player.hold_button = pocket_ui::fsutil::read_json_or_backup::<Option<u8>>(&hold_path).flatten().filter(|b| *b<16 && !(2..8).contains(b));
+                if player.resumed && player.frame.is_some() {
+                    let r=&prefs["reminder"];
+                    if let Some(ago)=r["ago"].as_str() {
+                        log::info!("Android reminder: {ago}");
+                        player.reminder=Some(pocket_ui::where_was_i::Card{ago:ago.into(),played:r["played"].as_str().map(str::to_string),note:r["note"].as_str().map(str::to_string)});
+                    }
+                }
+                if !player.note.is_empty() && player.system == "psp" && !player.resumed {
+                    player.pause(true);
+                    player.menu=Menu::Recovery;
+                }
+                if pocket_ui::controls_card::first_start_due(&player.data,&player.system,false,player.resumed) && player.menu != Menu::Recovery {
+                    player.pause(true);
+                    player.menu=Menu::Controls;
+                    player.controls_intro=true;
+                }
                 // A frozen game goes straight back: its moment is the first thing on screen (`cabinet::starts_cozy`).
                 let cozy = pocket_ui::cabinet::starts_cozy(prefs["cozy"].as_bool().unwrap_or(true), pocket_ui::motion::Motion::Full, frozen);
-                player.crt_done = !cozy || !extras.tv_switch_on;
+                player.crt_done = player.paused || !cozy || !extras.tv_switch_on || pocket_ui::platform::android::string("batterySaver") == "true";
                 player.core.frontend_current();
                 *slot.borrow_mut() = Some(player);
                 String::new()
@@ -2023,6 +2209,7 @@ pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeFrame(
     w: jint,
     h: jint,
     density: jfloat,
+    font_scale: jfloat,
     left: jint,
     top: jint,
     right: jint,
@@ -2030,7 +2217,7 @@ pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeFrame(
 ) -> jint {
     PLAYER.with(|slot| {
         let mut slot = slot.borrow_mut();
-        let result = slot.as_mut().map_or(2, |p| p.frame(w, h, density, [left, top, right, bottom]));
+        let result = slot.as_mut().map_or(2, |p| p.frame(w, h, density, [left, top, right, bottom], font_scale));
         if let Some(p) = slot.as_mut() {
             let nodes = p.semantic_nodes();
             if nodes != p.semantics {
@@ -2097,6 +2284,8 @@ pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeTouch(_: JNIEn
 pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeSuspend(_: JNIEnv, _: JObject) {
     PLAYER.with(|slot| {
         if let Some(p) = slot.borrow_mut().as_mut() {
+            if p.suspended {return;}
+            p.suspended=true;
             p.pause(true);
             p.audio.take();
             if let Err(e) = p.automatic() {
@@ -2106,4 +2295,31 @@ pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeSuspend(_: JNI
             p.core.frontend_current();
         }
     });
+}
+
+/// Input-device removal must release every source and latch before a replacement controller is used.
+#[no_mangle]
+pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeControllers(_: JNIEnv,_:JObject,connected:jboolean,interrupted:jboolean) {
+    PLAYER.with(|slot|{if let Some(p)=slot.borrow_mut().as_mut(){
+        if interrupted != 0 {
+            p.buttons=0;p.pulses=0;p.stick_buttons=0;p.stick_direction=0;p.fingers.clear();p.held=Default::default();
+            p.core.set_analog([0;4]);p.core.set_pointer(None);
+            if !p.paused {p.pause(true);}
+        }
+        p.input_mode(connected==0);
+        p.core.frontend_current();
+    }});
+}
+#[no_mangle]
+pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeZoom(_: JNIEnv,_:JObject,factor:jfloat) {
+    PLAYER.with(|slot|{if let Some(p)=slot.borrow_mut().as_mut(){
+        if p.paused && p.frame.is_some() && matches!(p.menu,Menu::Pause|Menu::Zoom) {
+            p.menu=Menu::Zoom;p.zoom.magnify(factor);p.zoom_fingers.clear();p.zoom_distance=None;
+        }
+    }});
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeForeground(_: JNIEnv,_:JObject) {
+    PLAYER.with(|slot|{if let Some(p)=slot.borrow_mut().as_mut(){p.suspended=false;}});
 }

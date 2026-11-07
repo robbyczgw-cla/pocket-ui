@@ -8,6 +8,8 @@ Settings → Games → **Starter pack**, and on Home while no system has a game:
 
 > **Status** (ledger: [STATUS.md](STATUS.md)): built and tested offline (unit tests, snapshots, the virtual device, where all nine games were downloaded and placed). Not yet run on the Mini V2 itself.
 
+The list follows [UI-SCHEME.md](UI-SCHEME.md): Up/Down choose a game, A gets it, B leaves; Left/Right do nothing.
+
 ## Rules
 
 1. **Legal first.** A game goes in only when its author's own notice allows redistribution: an open-source licence, or a

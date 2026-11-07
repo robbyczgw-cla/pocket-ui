@@ -662,7 +662,7 @@ impl App {
                     let (cw, ch) = (img.w as i32, img.h as i32);
                     c.blit_scaled(img, tx + (96 - cw) / 2, y + (h - ch) / 2, cw, ch);
                 }
-                None => c.round_rect(tx + 12, y + 16, 72, h - 32, 6, mix(colour, pal().label, 170)),
+                None => pocket_ui::retro::pill(c, tx + 12, y + 16, 72, h - 32, 6, mix(colour, pal().label, 170)),
             }
             tx += 96 + 24;
             let tw = x + w - 28 - tx;
@@ -1723,7 +1723,7 @@ impl App {
         if let Some((msg, at)) = self.toast.clone() {
             if super::toast_age(at) < super::toast_len(&msg) {
                 let w = self.text.width(Face::Body, 28, &msg) + 48;
-                c.round_rect(c.w / 2 - w / 2, 36, w, 52, 26, KEYCAP);
+                pocket_ui::retro::pill(c, c.w / 2 - w / 2, 36, w, 52, 26, KEYCAP);
                 self.text.draw(c, Face::Body, 28, c.w / 2 - w / 2 + 24, 72, CHALK, &msg);
             }
         }
@@ -1904,7 +1904,7 @@ impl App {
                 // No box art: a quiet box in the system's colour keeps the titles in line.
                 None => {
                     let bg = if selected { pal().label } else { pal().spine };
-                    c.round_rect(tx + 12, y + 14, 80, row - 28, 6, mix(stripe(&f.system), bg, 170));
+                    pocket_ui::retro::pill(c, tx + 12, y + 14, 80, row - 28, 6, mix(stripe(&f.system), bg, 170));
                 }
             }
             tx += 104 + 24;
@@ -2100,19 +2100,25 @@ impl App {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
         self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
-        // On a short screen (768 lines) the rows share what is left above two lines of the explanation and the hints.
+        // On a short screen (768 lines) the rows share what is left above the explanation (as many lines as it has: a third ran
+        // into the hints on the Brick) and the hints.
         let step = pocket_ui::type_scale::line(NU_SMALL, 12);
-        let row = row.min((c.h - pad - NU_PILL - 16 - top - 44 - 2 * step) / SETTINGS_ROWS.len() as i32).max(row * 3 / 4);
         let sel = self.curator.settings_sel;
+        let width = c.w - 2 * (pad + NU_BTN_PAD);
+        let help = self.text.wrap_prose(Face::Body, NU_SMALL, SETTINGS_ROWS[sel.min(SETTINGS_ROWS.len() - 1)].1, width);
+        let row = row.min((c.h - pad - NU_PILL - 16 - top - 44 - help.len().max(2) as i32 * step) / SETTINGS_ROWS.len() as i32).max(row * 3 / 4);
         for (i, (name, _)) in SETTINGS_ROWS.iter().enumerate() {
             let y = top + i as i32 * row;
             self.hits.row(Area::new(pad, y, right - pad, row), i);
             let base = y + row / 2 + pocket_ui::type_scale::mid(font);
+            // The name stops short of the value (a wide face, a long German name): "…" rather than over "On".
+            let room = right - NU_BTN_PAD - self.text.width(Face::Body, font, "Off").max(self.text.width(Face::Body, font, "On")) - 24 - (pad + NU_BTN_PAD);
+            let name = self.text.fit(Face::Body, font, name, room);
             if i == sel {
                 pocket_ui::kit::selection(c, pad, y, right - pad, row);
-                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, name);
+                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, &name);
             } else {
-                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, name);
+                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, &name);
             }
             let on = *switch(&mut self.curator.prefs.clone(), i);
             self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, if i == sel { pal().ink } else { pal().text }, if on { "On" } else { "Off" });
@@ -2120,9 +2126,12 @@ impl App {
         self.hits.list(sel, SETTINGS_ROWS.len(), 0.0, row as f32);
         let (left, width) = (pad + NU_BTN_PAD, c.w - 2 * (pad + NU_BTN_PAD));
         let mut y = top + SETTINGS_ROWS.len() as i32 * row + 44;
-        for line in self.text.wrap_prose(Face::Body, NU_SMALL, SETTINGS_ROWS[sel].1, width) {
+        // Never under the hints: what doesn't fit ends with "…" (at the smallest rows).
+        let last = c.h - pad - NU_PILL - 8 - pocket_ui::type_scale::px(NU_SMALL) as i32 / 4;
+        let room = if y > last { 0 } else { ((last - y) / step + 1) as usize };
+        for line in self.text.wrap_prose_at_most(Face::Body, NU_SMALL, SETTINGS_ROWS[sel].1, width, room.max(1)).into_iter().take(room) {
             self.text.draw(c, Face::Body, NU_SMALL, left, y, pal().text, &line);
-            y += pocket_ui::type_scale::line(NU_SMALL, 12);
+            y += step;
         }
         y += 18;
         let note = "Everything Curator knows comes with pocket-ui and stays on the Pocket: it works without a network.";
@@ -2473,7 +2482,7 @@ fn save_states(system: &str, path: &Path) -> usize {
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
     let base = pocket_ui::slots::base(system, stem);
     let slots = pocket_ui::slots::filled(&base).iter().filter(|f| **f).count();
-    let auto = pocket_ui::slots::auto_path(&base).exists() as usize;
+    let auto = pocket_ui::state_file::exists(&pocket_ui::slots::auto_path(&base)) as usize;
     let retroarch = pocket_ui::slots::states_dir().join(system).join(format!("{stem}.state")).exists() as usize;
     slots + auto + retroarch
 }

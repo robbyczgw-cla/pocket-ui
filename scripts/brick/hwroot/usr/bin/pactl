@@ -1,0 +1,19 @@
+#!/bin/sh
+# Stand-in for the few `pactl` questions pocket-ui asks (there is no PulseAudio or PipeWire on the Brick). Volume and mute only.
+AMIXER=${BRICK_AMIXER:-amixer}
+STATE=${BRICK_STATE:-/tmp}
+case "${1:-}" in
+  get-sink-volume)
+    now=$("$AMIXER" -c 0 cget name='digital volume' 2>/dev/null | sed -n 's/.*: values=\([0-9]*\).*/\1/p' | head -1)
+    [ -n "$now" ] || exit 1
+    saved=$(cat "$STATE/brick-volume" 2>/dev/null)
+    # The remembered percentage, when it is what the chip is at (the chip has 64 steps, the player 101); else worked out from the chip.
+    if [ -n "$saved" ] && [ $(( (saved * 63 + 50) / 100 )) -eq "$now" ]; then pct=$saved; else pct=$(( (now * 100 + 31) / 63 )); fi
+    echo "Volume: front-left: $((pct * 655)) / ${pct}% / 0.00 dB,   front-right: $((pct * 655)) / ${pct}% / 0.00 dB"
+    ;;
+  get-sink-mute)
+    if [ "$(cat "${BRICK_SPEAKER:-/sys/class/speaker/mute}" 2>/dev/null)" = 1 ]; then echo "Mute: yes"; else echo "Mute: no"; fi
+    ;;
+  get-default-sink) echo "alsa_output.audiocodec" ;;
+  *) exit 1 ;;
+esac

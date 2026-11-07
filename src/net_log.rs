@@ -382,7 +382,7 @@ mod tests {
     fn collect(f: &mut NetFeed, done: impl Fn(&str) -> bool) -> String {
         let mut all = String::new();
         let t0 = Instant::now();
-        while t0.elapsed() < Duration::from_secs(2) && !done(&all) {
+        while t0.elapsed() < crate::testutil::timeout(Duration::from_secs(2)) && !done(&all) {
             all += &f.poll(Instant::now(), 12.0);
             std::thread::sleep(Duration::from_millis(20));
         }

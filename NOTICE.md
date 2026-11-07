@@ -92,6 +92,7 @@ GPL-2.0-only code** (a project that is mostly "or later" but has files that say 
 | [ppsspp](https://github.com/hrydgard/ppsspp/tree/fa50bb1976065c4f8b1b47af227d367fe9771555) | PSP | `fa50bb1` | **mixed, with GPL-2.0-only code** | `Common/CPUDetect.cpp`: "the Free Software Foundation, version 2.0." (no "or later"; Dolphin-derived, also `Arm64Emitter.cpp`, `PrxDecrypter.h`); most other files say "version 2.0 or later versions"; GPL-3.0-only xBRZ | yes |
 | [melondsds](https://github.com/JesseTG/melonds-ds/tree/bc4e4b67d2d470d7c682810a1e892cafd6f9082b) | Nintendo DS | `bc4e4b6` | GPL-3.0-or-later | `src/libretro/exceptions.cpp`: "either version 3 of the License, or (at your option) any later version" | yes |
 | [yabasanshiro](https://github.com/libretro/yabause/tree/39535a6abcad5abf9f71c8b2a7975f005ee12ed6) | Sega Saturn | `39535a6` | GPL-2.0-or-later | `yabause/src/yabause.c`: "either version 2 of the License, or (at your option) any later version"; GPL-2-only files are macOS/Qt-only | yes |
+| [yabause (Brick software build)](https://github.com/libretro/yabause/tree/8926b0c6c347f8c5c755911ddb0ac695420ffbf8) | Sega Saturn (experimental) | `8926b0c` | GPL-2.0-or-later | `yabause/src/vidsoft.c`: version 2 or later; software renderer, interpreter; dependencies retain their notices | Brick standalone only |
 | [dosbox_pure](https://github.com/schellingb/dosbox-pure/tree/7f6e8fb7385fa446d1444d671063268520bf9b54) | DOS | `7f6e8fb` | GPL-2.0-or-later | `dosbox_pure_libretro.cpp`: "either version 2 of the License, or (at your option) any later version"; README: "version 2 or later" | yes |
 | [scummvm](https://github.com/libretro/scummvm/tree/292e409938384ac0b3819a336c61fbb71dcbb9c3) | ScummVM | `292e409` | GPL-3.0-or-later | `video/avi_decoder.h`: "either version 3 of the License, or (at your option) any later version" | yes |
 | [fake08](https://github.com/jtothebell/fake-08/tree/814991a2571ad3970e386cef48f3b148aa1c27b9) | PICO-8 | `814991a` | permissive (MIT) | `LICENSE.MD`: "License: MIT" | yes |
@@ -105,6 +106,10 @@ What the table shows:
 - Several cores bundle GPL-3.0-only or LGPL-3.0 code (xBRZ in flycast, ppsspp and mupen64plus_next, GNU Lightning in
   pcsx_rearmed): a binary with those can only be distributed under GPLv3, not GPLv2. mupen64plus_next and ppsspp mix
   such code with GPL-2.0-only code, so no single GPL version covers them as built; that is an upstream matter.
+- The TrimUI Brick standalone card ships mupen64plus_next, ppsspp and flycast built from the pinned commits above (GLES 3 variants, source
+  archives and licence files on the card): the GPL-2.0-only / GPL-3.0 mix described here applies to those binaries. They link the Brick's own
+  libGLESv2/libEGL (not shipped) and compile against the Khronos EGL/GLES headers (MIT/Apache-2.0, not shipped). ppsspp's bundled ffmpeg
+  (linux/aarch64 static libraries, LGPL-2.1-or-later, built by `ffmpeg/linux_arm64.sh`) is part of the binary; its source and that script are in the ppsspp source archive.
 - The check is `scripts/check-core-licences.sh` (table: `scripts/core-licences.txt`); see "How the licences fit
   together" below.
 
@@ -218,7 +223,7 @@ described file by file in [assets/ui-art/SOURCES.md](assets/ui-art/SOURCES.md). 
 | Font | Where | Licence | Notes |
 |---|---|---|---|
 | Barlow Medium, Barlow Condensed SemiBold (version 1.408) | `assets/fonts/`; compiled into the binaries (`src/text.rs`, `src/font_style.rs`) | SIL Open Font License 1.1 | Copyright 2017 The Barlow Project Authors ([source](https://github.com/jpt/barlow)), designer Jeremy Tribby. Licence text: `assets/fonts/OFL.txt` |
-| Pixelify Sans SemiBold, Nunito ExtraBold and SemiBold | `assets/fonts/`; compiled into the binaries (`src/font_style.rs`), used by Settings → Theme → Font (Pixel, Rounded) | SIL Open Font License 1.1 | Copyright 2021 The Pixelify Sans Project Authors ([source](https://github.com/eifetx/Pixelify-Sans)); Copyright 2014 The Nunito Project Authors ([source](https://github.com/googlefonts/nunito)). Static Latin instances of the official variable fonts. Licence texts: `assets/fonts/OFL.txt` |
+| Pixelify Sans SemiBold and Regular, Nunito ExtraBold and SemiBold | `assets/fonts/`; compiled into the binaries (`src/font_style.rs`), used by Settings → Theme → Font (Pixel, Rounded) | SIL Open Font License 1.1 | Copyright 2021 The Pixelify Sans Project Authors ([source](https://github.com/eifetx/Pixelify-Sans)); Copyright 2014 The Nunito Project Authors ([source](https://github.com/googlefonts/nunito)). Static Latin instances of the official variable fonts. Licence texts: `assets/fonts/OFL.txt` |
 | Titillium Web Regular, Bold | `store/test-catalog/src/fonts/`; packed into the test store's `type-titillium` package only, not compiled in | SIL Open Font License 1.1 | Copyright (c) 2009-2011 Accademia di Belle Arti di Urbino and students of MA course of Visual design. Licence text: `store/test-catalog/src/fonts/OFL.txt` (also inside the package as `Titillium-OFL.txt`) |
 | Noto Sans CJK SC Regular | Not shipped: pocket-ui uses the system's copy if present (ROCKNIX installs it at `/usr/share/fonts/truetype/noto-cjk/`), for Japanese, Chinese and Korean letters (`src/text_fallback.rs`) | SIL Open Font License 1.1 (ROCKNIX's package) | Nothing of it is in this repository or our binaries |
 | 8x8 bitmap glyphs (crate `font8x8` 0.3.1) | linked as a Rust crate | MIT | The crate says the glyph data comes from public-domain IBM VGA fonts |
@@ -300,8 +305,7 @@ bindings they generate are compiled in.
 
 ## No games, no BIOS
 
-The pocket-ui source repository contains no game, ROM, BIOS, firmware dump, key or third-party emulator binary.
-Release packages may include the separately licensed ARM64 gpSP described below, with its corresponding source. The
+The pocket-ui source repository contains no game, ROM, BIOS or firmware file, key or third-party emulator binary. The
 source names BIOS files (`src/hostsys.rs`) only so it can tell the user which one is missing; the user supplies
 them. `scripts/check-release-tree.py` enforces this before a release.
 
@@ -311,3 +315,10 @@ The H700 GBA update includes gpSP (GPL-2.0-or-later), revision
 5819380c2ffb0900219d700a382ee68c464ebb99 from https://github.com/libretro/gpsp.
 The release's `cores/gpsp/` folder contains COPYING, the corresponding source, the ARM64 build recipe and the
 instruction-cache synchronization header used by that build. The emulator remains a separate dynamically loaded library.
+
+## Controller mapping data
+
+`assets/controllers/gamecontrollerdb.txt` is an altered subset of the Linux records from
+[SDL_GameControllerDB](https://github.com/mdqinc/SDL_GameControllerDB), retrieved 2026-11-06.
+It retains its **zlib licence**, Copyright (C) 1997-2025 Sam Lantinga; the unchanged licence is in
+`assets/controllers/LICENSE`. These are SDL joystick indices, translated using each evdev node's capabilities.

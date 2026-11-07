@@ -48,9 +48,9 @@ pub enum StartOutcome {
 pub fn has_moments(base: &Path) -> bool {
     let set = crate::states::StateSet::pocket_core(base);
     set.auto.iter().chain(&set.slots).chain(std::iter::once(&set.undo))
-        .any(|p| p.is_file())
+        .any(|p| crate::state_file::resolve(p).is_file())
         || !crate::frozen_phone::kept(base).is_empty()
-        || crate::timeline::Name::all().any(|n| crate::timeline::path(base, n).is_file())
+        || crate::timeline::Name::all().any(|n| crate::state_file::resolve(&crate::timeline::path(base, n)).is_file())
 }
 
 /// Whether a pocket-core run that just ended should be retried with RetroArch: it failed before any game frame,
@@ -299,7 +299,8 @@ mod tests {
         assert!(!has_moments(&base));
         let set = crate::states::StateSet::pocket_core(&base);
         let auto = crate::slots::auto_path(&base);
-        let kept = [Path::new(&format!("{}.kept0", auto.display())).to_path_buf()];
+        let kept = [auto.clone(), crate::state_file::legacy_path(&auto).unwrap()]
+            .map(|p| Path::new(&format!("{}.kept0", p.display())).to_path_buf());
         let paths = set.auto.into_iter().chain(set.slots).chain([set.undo]).chain(kept)
             .chain(crate::timeline::Name::all().map(|n| crate::timeline::path(&base, n)));
         for path in paths {

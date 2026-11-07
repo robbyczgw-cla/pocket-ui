@@ -411,7 +411,8 @@ impl App {
                     y += 52;
                 }
                 y += 24;
-                self.text.draw(c, Face::Body, 24, tx, y, pal().dust, "Or type this address into a browser");
+                let or_type = self.text.fit(Face::Body, 24, "Or type this address into a browser", width);
+                self.text.draw(c, Face::Body, 24, tx, y, pal().dust, &or_type);
                 y += 52;
                 let short = url.trim_start_matches("https://").trim_start_matches("http://");
                 // Host on one line, the path on the next: the whole address is wider than the space left of the code.

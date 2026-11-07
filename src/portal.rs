@@ -1116,13 +1116,14 @@ exit 0"#,
     }
 
     #[test]
-    fn a_huge_page_and_a_hanging_curl_cost_a_bounded_time() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_huge_page_and_a_hanging_curl_cost_a_bounded_time() {
         let f = Fake::new("huge", "cat > /dev/null; printf 'HTTP/1.1 200 OK\\r\\n\\r\\n'; head -c 3000000 /dev/zero");
         let t = Instant::now();
         assert!(matches!(f.session().open("http://192.0.2.1/"), Outcome::Failed(Failure::TooBig)));
         let f = Fake::new("hang", "cat > /dev/null; printf 'HTTP/1.1 200 OK\\r\\n\\r\\n<p>'; sleep 30");
         assert!(matches!(f.session().open("http://192.0.2.1/"), Outcome::Failed(Failure::Unreachable)));
-        assert!(t.elapsed() < Duration::from_secs(10), "{:?}", t.elapsed());
+        assert!(t.elapsed() < crate::testutil::timeout(Duration::from_secs(10)), "{:?}", t.elapsed());
         let f = Fake::new("garbage", "cat > /dev/null; head -c 20000 /dev/urandom");
         assert!(matches!(f.session().open("http://192.0.2.1/"), Outcome::Failed(_)));
         let missing = Session::new("/nonexistent/curl", "http://check.example/ok", Rules::default()).unwrap();

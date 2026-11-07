@@ -186,6 +186,9 @@ pub struct Card {
     pub info: Option<crate::game_info::InfoView>,
     /// Opened as the info page: SELECT goes between it and the full page, and the box is never shown.
     pub info_look: bool,
+    /// Painted without its hint bar and the status corner: the second screen's box and info page, which no key acts on
+    /// and whose clock is on the screen above (`second_screen`).
+    pub bare: bool,
 }
 
 /// The baseline of the body's first headings ("About the game", "Your game") below `top`: lower by what Large adds to
@@ -213,6 +216,7 @@ impl Card {
             boxed: None,
             info: None,
             info_look: false,
+            bare: false,
         }
     }
 
@@ -758,9 +762,12 @@ impl Card {
         // No Curator rows on this page: none to tap.
         self.row_at.borrow_mut().clear();
         if let Some(info) = self.info.as_mut() {
+            info.passive = self.bare;
             info.paint(c, text, &self.data, cover, console);
         }
-        crate::setup::hints(c, text, &self.hints());
+        if !self.bare {
+            crate::setup::hints(c, text, &self.hints());
+        }
         match &self.mode {
             Mode::Status { sel, stars } => self.paint_picker(c, text, *sel, *stars),
             Mode::Choose { sel, rows } => self.paint_chooser(c, text, *sel, rows),
@@ -792,13 +799,15 @@ impl Card {
                     let step = type_scale::line(28, 8);
                     let h = 40 + (1 + text.wrap(Face::Body, 28, why, w - 48).len() as i32) * step;
                     crate::text::boxes::painted_over(c, (x, y, w, h));
-                    c.round_rect(x, y, w, h, 12, pal().void);
+                    crate::retro::pill(c, x, y, w, h, 12, pal().void);
                     c.rect(x, y + 12, 4, h - 24, pal().alert);
                     paint_problem(c, text, why, (x + 24, y + 20 + type_scale::px(28) as i32, w - 48));
                 }
             }
         }
-        crate::setup::hints(c, text, &self.hints());
+        if !self.bare {
+            crate::setup::hints(c, text, &self.hints());
+        }
         match &self.mode {
             Mode::Status { sel, stars } => self.paint_picker(c, text, *sel, *stars),
             Mode::Choose { sel, rows } => self.paint_chooser(c, text, *sel, rows),
@@ -895,7 +904,7 @@ impl Card {
             if let Some(l) = &d.listed_as {
                 rows.push(("Listed as", l.clone()));
             }
-            // A face wider than Barlow (Settings → Look → Font) or a longer German label: the column holds the widest one.
+            // A face wider than Barlow (Settings → Look → Style) or a longer German label: the column holds the widest one.
             let key_w = rows.iter().map(|(k, _)| text.width(Face::Body, 28, k)).max().map_or(key_w, |w| key_w.max(w + text.width(Face::Body, 28, "  ")));
             for (k, v) in rows {
                 text.draw(c, Face::Body, 28, lx, ly, pal().dust, k);
@@ -917,7 +926,12 @@ impl Card {
         let mut ry = heading_baseline(top);
         text.draw(c, Face::Title, 37, rx, ry, pal().dust, "Your game");
         ry += row();
-        let rkey = type_scale::wide(150, 28);
+        // The labels' column holds the widest label in use (a face wider than Barlow, a German label), as the left one.
+        let rkey = ["Status", "Rating", "Played", "Last", "Battery", "Save slots", "Continue", "Note"]
+            .iter()
+            .map(|k| text.width(Face::Body, 28, k) + 24)
+            .fold(type_scale::wide(150, 28), i32::max)
+            .min(rw / 2);
         text.draw(c, Face::Body, 28, rx, ry, pal().dust, "Status");
         text.draw(c, Face::Body, 28, rx + rkey, ry, pal().chalk, d.status.label());
         ry += row();

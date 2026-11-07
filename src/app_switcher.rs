@@ -372,6 +372,10 @@ impl App {
         // Cards farthest first, the selected one on top: later areas win, as the cards do.
         for (x, y, w, h, i) in &sw.card_areas {
             self.hits.row(pocket_ui::touch::Area::new(*x, *y, *w, *h), *i);
+            // The selected card stands in the middle, largest: that is its focus (the navigation explorer, `nav_probe`).
+            if *i == sw.sel {
+                pocket_ui::nav_probe::focus(c, (*x, *y, *w, *h));
+            }
         }
         self.hits.list(sw.sel, sw.entries.len(), switcher::STEP / 2.0, 0.0);
         self.switcher = Some(sw);

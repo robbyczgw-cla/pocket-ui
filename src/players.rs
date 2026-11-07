@@ -6,14 +6,18 @@
 //!   as last chosen on the pause menu's Players page; `""` for a player left without a controller. Only pocket-ui
 //!   writes it. Without one the Pocket's own controls are player 1.
 //! - **Seats**: who is which player in the running game, kept by pocket-core. At the start everyone connected is
-//!   seated by the order, closing gaps (a player whose controller is off is skipped), then the controllers the order
-//!   doesn't name: the Pocket first, then in the order they connected. A controller that connects during the game
-//!   gets the seat it had in this game if that is free, else the lowest free one; one that goes away leaves its seat
-//!   empty (that player gets no input). The Players page's choice is taken exactly as chosen (`Mode::Exact`).
+//!   seated by the remembered order with the gaps closed (`Mode::Compact`): an absent controller reserves nothing,
+//!   so a pad that is off, or the same pad in another mode (a new identity), never pushes the one in hand to a later
+//!   player (06.11., 8BitDo Lite 2 in D and S mode; ROCKNIX's EmulationStation seats the same way at each launch).
+//!   Then the controllers the order doesn't name: the Pocket first, then in the order they connected. During the
+//!   game a controller that goes away leaves its seat empty (that player gets no input) and gets it back when it
+//!   reconnects; a new one takes the lowest seat nobody had in this game. The Players page's choice is taken exactly
+//!   as chosen (`Mode::Exact`) for the running game. Forgetting a controller (Settings › Connections › Bluetooth)
+//!   takes it out of the order (`Order::forget`).
 //! - pocket-core writes the seats to `SEATS_FILE` whenever they change; the Players page shows that file.
 //!
 //! Only gamepads (and the Pocket) are players: a headset's volume keys are a controller of their own but take no
-//! seat. More than four gamepads: the fifth gets no player until a seat is free.
+//! seat. More than four gamepads: the fifth waits until the Players page assigns it a seat.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU8, Ordering};
@@ -44,6 +48,53 @@ pub struct Order {
 impl Order {
     pub fn load(data_dir: &Path) -> Order {
         std::fs::read(data_dir.join(FILE)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    }
+
+    /// All UI writers share the load/edit/save transaction: hotplug cannot overwrite a
+    /// Players-page choice made while its background write was waiting.
+    pub fn update(data_dir: &Path, edit: impl FnOnce(&mut Order)) -> std::io::Result<()> {
+        static WRITER: Mutex<()> = Mutex::new(());
+        let _writer = WRITER.lock().unwrap_or_else(|p| p.into_inner());
+        let mut order = Self::load(data_dir);
+        let before = order.clone();
+        edit(&mut order);
+        if order != before || !data_dir.join(FILE).exists() { order.save(data_dir)?; }
+        Ok(())
+    }
+
+    /// UI roster events are queued in arrival order, not as competing threads. A very short
+    /// connect/disconnect must still reserve its place before a later controller is remembered.
+    pub fn remember_async(data_dir: PathBuf, connected: Vec<Controller>) {
+        type Roster = (PathBuf, Vec<Controller>);
+        static WRITER: std::sync::OnceLock<std::sync::mpsc::Sender<Roster>> = std::sync::OnceLock::new();
+        let tx = WRITER.get_or_init(|| {
+            let (tx, rx) = std::sync::mpsc::channel::<Roster>();
+            std::thread::spawn(move || {
+                for (dir, connected) in rx {
+                    if let Err(e) = Self::remember(&dir, &connected) { eprintln!("players: cannot remember controllers: {e}"); }
+                }
+            });
+            tx
+        });
+        let _ = tx.send((data_dir, connected));
+    }
+
+    /// Remember new identities without moving absent controllers out of their seats.
+    pub fn remember(data_dir: &Path, connected: &[Controller]) -> std::io::Result<()> {
+        Self::update(data_dir, |order| {
+            if order.order.is_empty() { order.order.push(crate::pad::BUILTIN.into()); }
+            for c in connected.iter().filter(|c| seatable(c)) {
+                if !order.order.contains(&c.key) { order.order.push(c.key.clone()); }
+            }
+        })
+    }
+
+    /// A controller was forgotten (unpaired): it is no player any more, the ones after it move up. The Pocket stays.
+    pub fn forget(data_dir: &Path, key: &str) -> std::io::Result<()> {
+        if key == crate::pad::BUILTIN {
+            return Ok(());
+        }
+        Self::update(data_dir, |order| order.order.retain(|k| k != key))
     }
 
     pub fn save(&self, data_dir: &Path) -> std::io::Result<()> {
@@ -96,11 +147,14 @@ impl Seats {
         let mut rest: Vec<&Controller> = players.into_iter().filter(|c| s.player_of(&c.key).is_none()).collect();
         rest.sort_by_key(|c| !c.is_builtin());
         for c in rest {
-            if let Some(free) = s.seat.iter().position(Option::is_none) {
+            if let Some(free) = s.seat.iter().enumerate().position(|(i, c)| c.is_none() && (mode != Mode::Exact || order.get(i).is_none_or(String::is_empty))) {
                 s.seat[free] = Some(c.clone());
             }
         }
-        s.had = s.seat.iter().enumerate().filter_map(|(i, c)| c.as_ref().map(|c| (c.key.clone(), i))).collect();
+        s.had = if mode == Mode::Exact { order.iter().take(MAX).enumerate().filter(|(_, k)| !k.is_empty()).map(|(i, k)| (k.clone(), i)).collect() } else { Vec::new() };
+        for (i, c) in s.seat.iter().enumerate().filter_map(|(i, c)| c.as_ref().map(|c| (i, c))) {
+            if !s.had.iter().any(|(k, _)| k == &c.key) { s.had.push((c.key.clone(), i)); }
+        }
         s
     }
 
@@ -115,7 +169,7 @@ impl Seats {
             return Some(at);
         }
         let before = self.had.iter().find(|(k, _)| *k == c.key).map(|(_, i)| *i).filter(|i| self.seat[*i].is_none());
-        let at = before.or_else(|| self.seat.iter().position(Option::is_none))?;
+        let at = before.or_else(|| self.seat.iter().enumerate().position(|(i, c)| c.is_none() && !self.had.iter().any(|(_, at)| *at == i)))?;
         self.seat[at] = Some(c.clone());
         self.had.retain(|(k, _)| *k != c.key);
         self.had.push((c.key.clone(), at));
@@ -290,7 +344,7 @@ impl Inputs {
         }
     }
 
-    /// The first look at the devices is done: everyone is seated by the order (`Mode::Compact`).
+    /// The first look at the devices is done: the connected controllers in the remembered order, gaps closed.
     pub fn arrange(&self) {
         let mut g = self.lock();
         let connected = g.mux.controllers();
@@ -452,17 +506,48 @@ mod tests {
         assert_eq!(keys(&s), ["a", "b", "c", "d"], "four players");
     }
 
+    /// 06.11., RG35XX Plus: an 8BitDo Lite 2 paired in D mode (then removed) and again in S mode, a new identity. The
+    /// old one kept player 2 and the pad in hand became player 3.
     #[test]
-    fn a_controller_that_comes_back_is_the_same_player_if_its_seat_is_free() {
+    fn an_absent_controller_reserves_no_player_at_the_start() {
+        let d = tempfile::tempdir().unwrap();
+        Order::remember(d.path(), &[Controller::builtin(), pad("bt:d-mode")]).unwrap();
+        Order::remember(d.path(), &[Controller::builtin(), pad("bt:s-mode")]).unwrap();
+        let order = Order::load(d.path());
+        assert_eq!(order.order, ["builtin", "bt:d-mode", "bt:s-mode"], "both identities are remembered");
+        let input = Inputs::new(order.order.clone(), None);
+        input.feed(PadEvent::Connected { source: 1, controller: Controller::builtin() }, |_| {});
+        input.feed(PadEvent::Connected { source: 2, controller: pad("bt:s-mode") }, |_| {});
+        input.arrange();
+        assert_eq!(keys(&input.seats()), ["builtin", "bt:s-mode", "", ""], "the pad in hand is player 2");
+        input.feed(PadEvent::Button { source: 2, button: Button::L2, pressed: true }, |_| {});
+        assert_ne!(input.buttons(1) & (1 << 12), 0, "player 2 gets its L2");
+        assert_eq!(input.buttons(0), 0);
+        // The old identity turning up later in the game takes the next free player; nobody is renumbered.
+        input.feed(PadEvent::Connected { source: 3, controller: pad("bt:d-mode") }, |_| {});
+        assert_eq!(keys(&input.seats()), ["builtin", "bt:s-mode", "bt:d-mode", ""]);
+        // A normal reconnect during the game keeps the player, even with another pad joining meanwhile.
+        input.feed(PadEvent::Disconnected { source: 2 }, |_| {});
+        input.feed(PadEvent::Connected { source: 4, controller: pad("bt:other") }, |_| {});
+        input.feed(PadEvent::Connected { source: 5, controller: pad("bt:s-mode") }, |_| {});
+        assert_eq!(keys(&input.seats()), ["builtin", "bt:s-mode", "bt:d-mode", "bt:other"]);
+        // Forgotten on the Bluetooth page: out of the order; the Pocket can't be forgotten.
+        Order::forget(d.path(), "bt:d-mode").unwrap();
+        Order::forget(d.path(), BUILTIN).unwrap();
+        assert_eq!(Order::load(d.path()).order, ["builtin", "bt:s-mode"]);
+    }
+
+    #[test]
+    fn a_controller_that_comes_back_keeps_its_player_even_after_another_pad_joins() {
         let mut s = Seats::arrange(&[], &[Controller::builtin(), pad("bt:a"), pad("bt:b")], Mode::Compact);
         assert_eq!(s.disconnect("bt:a"), Some(1));
         assert_eq!(keys(&s), ["builtin", "", "bt:b", ""], "player 3 stays player 3");
         assert_eq!(s.connect(&pad("bt:a")), Some(1), "back as player 2");
         assert_eq!(s.disconnect("bt:a"), Some(1));
-        assert_eq!(s.connect(&pad("bt:c")), Some(1), "a new one takes the lowest free seat");
-        assert_eq!(s.connect(&pad("bt:a")), Some(3), "its old seat is taken now");
+        assert_eq!(s.connect(&pad("bt:c")), Some(3), "a new pad cannot steal a disconnected pad's seat");
+        assert_eq!(s.connect(&pad("bt:a")), Some(1), "its original seat was reserved");
         assert_eq!(s.connect(&pad("bt:d")), None, "all four taken");
-        assert_eq!(s.connect(&pad("bt:c")), Some(1), "connecting again changes nothing");
+        assert_eq!(s.connect(&pad("bt:c")), Some(3), "connecting again changes nothing");
         assert_eq!(s.disconnect("bt:zz"), None);
     }
 

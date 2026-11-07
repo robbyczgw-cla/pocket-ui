@@ -25,7 +25,7 @@ fn fixture(tmp: &Path) -> (Option<Stub>, Option<PathBuf>) {
     let path = tmp.join("wayland-stub");
     let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), path.to_str().unwrap()]).spawn().unwrap();
     let stub = Stub(child);
-    let until = std::time::Instant::now() + std::time::Duration::from_secs(8);
+    let until = std::time::Instant::now() + test_clock::timeout(std::time::Duration::from_secs(8));
     while std::time::Instant::now() < until {
         if path.exists() { return (Some(stub), Some(path)); }
         std::thread::sleep(std::time::Duration::from_millis(10));

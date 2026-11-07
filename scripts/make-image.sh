@@ -5,6 +5,7 @@
 #   scripts/make-image.sh [--version V] [--bin-dir DIR] [--source TEXT] [--release-url URL] [--out DIR] [--keep-work] [--no-check]
 #     --version      pocket-ui version (default: Cargo.toml); the binaries are built with POCKETUI_VERSION=V
 #     --bin-dir      take pocket-ui, pocket-core and pocket-splash from DIR instead of building them (must answer --version V)
+#     --gba-core     pinned ARM64 gpSP build folder, including licence and corresponding source
 #     --source       where the notes say pocket-ui's source is (default: "the pocket-ui repository, commit <HEAD>");
 #                    for a public image the public repository and its tag or commit
 #     --release-url  the release page of the source tarball, for the notes and SOURCE-OFFER.txt
@@ -31,6 +32,7 @@ TARGET=aarch64-unknown-linux-gnu
 
 VERSION=
 BIN_DIR=
+GBA_CORE_DIR=
 SOURCE=
 RELEASE_URL=
 OUT=$ROOT/build/image
@@ -40,6 +42,7 @@ while [ $# -gt 0 ]; do
   case $1 in
     --version) VERSION=$2; shift ;;
     --bin-dir) BIN_DIR=$2; shift ;;
+    --gba-core) GBA_CORE_DIR=$2; shift ;;
     --source) SOURCE=$2; shift ;;
     --release-url) RELEASE_URL=$2; shift ;;
     --out) OUT=$2; shift ;;
@@ -124,6 +127,7 @@ else
   cp "$ROOT/target/$TARGET/release/pocket-ui" "$ROOT/target/$TARGET/release/pocket-core" "$ROOT/target/$TARGET/release/pocket-splash" "$W/bin/"
 fi
 sh "$ROOT/scripts/check-binary-paths.sh" "$W/bin/pocket-ui" "$W/bin/pocket-core" "$W/bin/pocket-splash" || die "the binaries carry build paths (scripts/release-rustflags.sh)"
+[ -z "$GBA_CORE_DIR" ] || sh "$ROOT/scripts/gba-core-files.sh" "$GBA_CORE_DIR" "$W/bin/cores"
 
 say "notes and licences"
 rm -rf "$W/info"

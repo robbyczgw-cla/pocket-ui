@@ -10,6 +10,17 @@ use pocket_ui::touch::Area;
 
 use super::{stripe, App, SettingsPage, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
 
+/// Which game's colour is current: a cover read for an earlier game is dropped (Brick).
+#[cfg(feature = "brick")]
+static GAME_TURN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The main colour of the cover at `path` as 0xRRGGBB; None when there is no cover or it cannot be read.
+#[cfg(feature = "brick")]
+fn cover_colour(path: &std::path::Path) -> Option<u32> {
+    let img = pocket_ui::image::load_image(path)?;
+    pocket_ui::media::cover_colors(&img.px).map(|(main, _)| main)
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Row {
     Mode,
@@ -37,11 +48,19 @@ fn rows(c: &Config) -> &'static [Row] {
 
 impl App {
     pub(crate) fn open_leds(&mut self) -> Option<SettingsPage> {
+        #[cfg(feature = "brick")]
+        {
+            self.brick.detail = false;
+        }
         Some(SettingsPage::Leds(0))
     }
 
     /// A key on the page. The choice is saved at once and handed to ROCKNIX's scripts on a thread of its own.
     pub(crate) fn leds_input(&mut self, sel: usize, b: Button) -> Option<SettingsPage> {
+        #[cfg(feature = "brick")]
+        if pocket_ui::device::brick() {
+            return self.brick_lights_input(sel, b);
+        }
         let rows = rows(&self.leds);
         let sel = sel.min(rows.len() - 1);
         let step = match b {
@@ -68,15 +87,42 @@ impl App {
         Some(SettingsPage::Leds(sel))
     }
 
-    /// A game starts: with the game's colour chosen, the sticks take the colour of its system.
+    /// A game starts: with the game's colour chosen, the lights take the colour of its system's stripe. On the Brick they take the
+    /// main colour of the game's cover instead (the stripe when it has none), read on a thread of its own.
+    #[cfg(not(feature = "brick"))]
     pub(crate) fn leds_game_started(&self, system: &str) {
         if self.leds.mode == Mode::Colour && self.leds.hue == Hue::Game {
             leds::apply_in_background(Job::Direct(self.leds.level, leds::unpack(stripe(system))));
         }
     }
 
+    #[cfg(feature = "brick")]
+    pub(crate) fn leds_game_started(&self, system: &str, rom: &std::path::Path) {
+        #[cfg(not(feature = "brick"))]
+        let _ = rom;
+        if self.leds.mode == Mode::Colour && self.leds.hue == Hue::Game {
+            #[cfg(feature = "brick")]
+            if pocket_ui::device::brick() {
+                let (level, fallback) = (self.leds.level, stripe(system));
+                let cover = pocket_ui::covers::cover_path(&self.data_dir, system, rom);
+                let turn = GAME_TURN.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                std::thread::spawn(move || {
+                    let rgb = cover_colour(&cover).unwrap_or(fallback);
+                    // The game may have ended while the cover was read: the menu colour is already back.
+                    if GAME_TURN.load(std::sync::atomic::Ordering::SeqCst) == turn {
+                        leds::apply_in_background(Job::Direct(level, leds::unpack(rgb)));
+                    }
+                });
+                return;
+            }
+            leds::apply_in_background(Job::Direct(self.leds.level, leds::unpack(stripe(system))));
+        }
+    }
+
     /// The game ended: back to the menu colour.
     pub(crate) fn leds_game_ended(&self) {
+        #[cfg(feature = "brick")]
+        GAME_TURN.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         if self.leds.mode == Mode::Colour && self.leds.hue == Hue::Game {
             leds::apply_in_background(Job::Direct(self.leds.level, Hue::Game.rgb()));
         }
@@ -84,6 +130,10 @@ impl App {
 
     /// Rows in the style of the Sync page: name, and at the right the value (with arrows on the selected row).
     pub(crate) fn paint_leds(&mut self, c: &mut Canvas, sel: usize) {
+        #[cfg(feature = "brick")]
+        if pocket_ui::device::brick() {
+            return self.paint_brick_lights(c, sel);
+        }
         c.clear(pal().void);
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
         self.sheet_header(c, "LEDs");
@@ -157,7 +207,8 @@ impl App {
         self.nu_hints(c, &[("B", "Back"), ("A", "Next"), ("< >", "Change")]);
     }
 
-    /// `leds:<mode>:<row>` for the screenshots: `off`, `colour` (blue), `colour-game`, `battery`; the row to select.
+    /// `leds:<mode>:<row>[:<keys>]` for the screenshots: `off`, `colour` (blue), `colour-game`, `battery`; the row to select; then
+    /// keys pressed on the page (`u d l r a b`), e.g. `b` for the way back to the Settings list.
     pub(crate) fn leds_snapshot(&mut self, state: &str) -> bool {
         let Some(rest) = state.strip_prefix("leds") else { return false };
         let mut parts = rest.trim_start_matches(':').split(':');
@@ -184,7 +235,23 @@ impl App {
             },
             _ => Config::default(),
         };
-        self.settings_page = Some(SettingsPage::Leds(row));
+        let mut page = SettingsPage::Leds(row);
+        for key in parts.next().unwrap_or_default().chars() {
+            let b = match key {
+                'u' => Button::Up,
+                'd' => Button::Down,
+                'l' => Button::Left,
+                'r' => Button::Right,
+                'a' => CONFIRM,
+                'b' => CANCEL,
+                _ => continue,
+            };
+            page = match page {
+                SettingsPage::Leds(sel) => self.leds_input(sel, b).unwrap_or(page),
+                other => other,
+            };
+        }
+        self.settings_page = Some(page);
         true
     }
 }

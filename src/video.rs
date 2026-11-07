@@ -661,6 +661,20 @@ impl Renderer {
         Ok(n)
     }
 
+    /// Compiles the variant `settings` will draw with, if it isn't yet, so the first picture doesn't wait for the driver (the Brick's
+    /// `brick_picture`). A variant the driver rejects is remembered as such, as `draw` does.
+    #[cfg(feature = "brick")]
+    pub fn warm(&mut self, settings: &VideoSettings) {
+        let variant = (settings.sharpness, settings.effect, settings.lcd_colours(self.bezel.system()));
+        if !self.programs.contains_key(&variant) {
+            let compiled = Self::compile(&self.gl, variant);
+            if let Err(log) = &compiled {
+                eprintln!("video: shader variant {variant:?} failed, using the plain one: {log}");
+            }
+            self.programs.insert(variant, compiled.ok());
+        }
+    }
+
     /// Turns the picture by `quarter_turns` x 90 degrees counter-clockwise, as the core asked (SET_ROTATION: vertical
     /// arcade games, WonderSwan's portrait mode).
     pub fn set_rotation(&mut self, quarter_turns: u32) {

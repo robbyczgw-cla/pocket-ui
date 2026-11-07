@@ -98,7 +98,7 @@ The search did not start. Switch Bluetooth off and on, then try again.	Die Suche
 Forget now	Jetzt vergessen
 Forget	Vergessen
 Forget {s}?	{s} vergessen?
-Press X again to forget it. To use it after that, pair it again. B keeps it.	Noch einmal X vergisst ihn. Danach musst du ihn neu koppeln. B behält ihn.
+Press X again to forget it. A controller also gives up its player number. To use it after that, pair it again. B keeps it.	Noch einmal X vergisst ihn. Ein Controller gibt dabei auch seine Spielernummer frei. Danach musst du ihn neu koppeln. B behält ihn.
 X again forgets it. B keeps it.	X: vergessen, B: behalten.
 Pairing {s}	Kopple {s}
 Keep the device close and switched on. This takes up to half a minute.	Halte das Gerät nah und eingeschaltet. Das dauert bis zu einer halben Minute.
@@ -289,7 +289,7 @@ shortest first	kürzeste zuerst
 Surprise me	Überrasch mich
 From 1 game	Aus 1 Spiel
 From {n} games	Aus {n} Spielen
-One game picked for you, and why. Right picks another.	Ein Spiel für dich, mit Grund. Rechts: ein anderes.
+One game picked for you, and why. Right picks another.	Ein Spiel für dich, mit Begründung. Rechts gibt es ein anderes.
 No games to pick from yet	Noch keine Spiele zum Aussuchen
 Another	Ein anderes
 Never played	Nie gespielt
@@ -1575,6 +1575,8 @@ Installed. Restarting…	Installiert. Startet neu …
 {s}, update waiting for restart	{s}, Update wartet auf Neustart
 Check again	Erneut prüfen
 Install pocket-ui {s}	pocket-ui {s} installieren
+pocket-ui {s} is ready. Your games and settings stay.	pocket-ui {s} ist da. Deine Spiele und Einstellungen bleiben.
+Press A for Settings › System › Updates, B to close.	Mit A zu Einstellungen › System › Updates, mit B schließen.
 Get system {s}	System {s} laden
 Remove the waiting system update	Wartendes System-Update entfernen
 Cancelling	Wird abgebrochen
@@ -1675,8 +1677,8 @@ HOME + A saves a picture of the game to the SD card.	HOME + A speichert ein Bild
 The pause menu does not open.	Das Pausenmenü geht dabei nicht auf.
 HOME + A	HOME + A
 HOME + X	HOME + X
-HOME + X shows the paused game's picture larger.	HOME + X zeigt das angehaltene Bild größer.
-B goes back to the game.	B geht zurück ins Spiel.
+HOME + X shows the paused game's picture larger.	HOME + X zeigt das Spielbild größer.
+B goes back to the game.	Mit B zurück ins Spiel.
 HOME + Y cycles through Off, FPS, FPS + sensors	HOME + Y schaltet weiter zwischen Aus, FPS, FPS + Sensoren
 and Pixel Path, until you quit or change Over the game.	und Pixel Path, bis du beendest oder Anzeige im Spiel änderst.
 Settings you rarely need.	Einstellungen, die du selten brauchst.
@@ -1748,7 +1750,7 @@ The whole picture slightly blurred, no hard pixel squares.	Das ganze Bild leicht
 A clear picture where bright parts glow softly around the edges.	Ein klares Bild, bei dem helle Stellen an den Rändern sanft leuchten.
 Thin lines between the pixels, like a handheld's screen, in the GBA screen's colours.	Dünne Linien zwischen den Pixeln, wie bei einem Handheld-Bildschirm, in den Farben des GBA-Bildschirms.
 Thin lines between the pixels, like a handheld's screen.	Dünne Linien zwischen den Pixeln, wie bei einem Handheld-Bildschirm.
-Dark lines between the rows, like a TV. Fades out in hi-res menus.	Dunkle Linien zwischen den Zeilen, wie bei einem Fernseher. Blasst in hochauflösenden Menüs aus.
+Dark lines between the rows, like a TV. Fades out in hi-res menus.	Dunkle Linien zwischen den Zeilen, wie bei einem Fernseher. Verblasst in Menüs mit hoher Auflösung.
 Scanlines plus the glow of a tube TV. The TV around it is a Screen frame.	Scanlines plus das Leuchten eines Röhrenfernsehers. Der Fernseher drumherum ist ein Bildschirmrahmen.
 Pick sharpness and effect yourself in the two rows below.	Wähl Schärfe und Effekt selbst in den zwei Zeilen darunter.
 Sharp	Scharf
@@ -2050,7 +2052,7 @@ The clock is set from a time server over Wi-Fi. No answer yet: check that Wi-Fi 
 The clock sets itself from a time server over Wi-Fi. A asks again now.	Die Uhr stellt sich über WLAN von einem Zeitserver. A fragt jetzt erneut.
 Search…	Suchen …
 No time zone matches that.	Keine Zeitzone passt dazu.
-Try part of a city name, such as vie or york.	Versuch einen Teil eines Stadtnamens, etwa vie oder york.
+Try part of a city name, such as vie or york.	Versuch einen Teil eines Stadtnamens, etwa wien oder york.
 Search time zones	Zeitzonen suchen
 Switching…	Wird umgeschaltet …
 
@@ -2375,7 +2377,7 @@ The resume states, Before load and earlier states of 1 game not played for {n} m
 Slot {n} · replaces the save from {t}	Platz {n} · ersetzt den Spielstand von {t}
 Slot {n} · saved {t}	Platz {n} · gespeichert {t}
 Slot {n} · empty	Platz {n} · leer
-No save in slot {n} yet	Kein Spielstand in Platz {n}
+No save in slot {n} yet	Noch kein Spielstand auf Platz {n}
 
 # --- Store
 The list of installed packages ({s}) is damaged, so the Store changes nothing{s2}.	Die Liste der installierten Pakete ({s}) ist beschädigt, daher ändert der Store nichts{s2}.
@@ -2714,10 +2716,10 @@ The console's pixels are not square ({s} pixels): the picture keeps the shape it
 {s} runs this game on its own. pocket-ui starts it and draws the pause menu over it, but the picture, the timing and the sound are {s2}'s, and it doesn't tell pocket-ui how it draws them. Pixel Path grades games that pocket-core runs.	{s} führt dieses Spiel selbst aus. pocket-ui startet es und zeichnet das Pausenmenü darüber, aber Bild, Takt und Ton gehören {s2}, und es verrät pocket-ui nicht, wie es sie zeichnet. Pixel Path bewertet Spiele, die pocket-core ausführt.
 An estimate from how pocket-core is built, not a camera measurement: {t}, ≈ {s} refreshes or {n} ms. The game's own reaction comes on top of that: most games respond to a button one to three frames later, as they did on the original console.	Eine Schätzung aus dem Aufbau von pocket-core, keine Kameramessung: {t}, ≈ {s} Bildaufbauten oder {n} ms. Die Reaktion des Spiels kommt dazu: Die meisten Spiele antworten in der Konsole ein bis drei Bilder später auf eine Taste, wie sie es auf ihr taten.
 reading the buttons {s}, the emulator {s2}, waiting for the screen {s3} and the panel drawing down to its middle {s4} refreshes	Tasten lesen {s}, Emulator {s2}, Warten auf den Bildschirm {s3} und das Panel bis zu seiner Mitte {s4} Bildaufbauten
-The emulator makes sound at {n} Hz; pocket-core resamples it to the {m} Hz of the output with a windowed-sinc filter{t}, and steers a {k} ms queue ({n2} ms in it now) by nudging the rate by up to ±0.5%, so the sound neither runs dry nor drifts behind the picture. After the queue, the output ({s}) holds about {n3} ms more. {t2} in this session.	Der Emulator erzeugt Ton mit {n} Hz; pocket-core rechnet ihn mit einem Windowed-Sinc-Filter auf die {m} Hz der Ausgabe um{t} und regelt einen Puffer von {k} ms (gerade {n2} ms darin), indem es die Rate um bis zu ±0,5 % anpasst, damit der Ton weder abreißt noch hinter dem Bild zurückfällt. Nach dem Puffer hält die Ausgabe ({s}) etwa {n3} ms mehr. {t2} in dieser Sitzung.
-The emulator makes sound at {n} Hz; pocket-core resamples it to the {m} Hz of the output with a windowed-sinc filter, and steers a {k} ms queue ({n2} ms in it now) by nudging the rate by up to ±0.5%, so the sound neither runs dry nor drifts behind the picture. After the queue, the output ({s}) holds about {n3} ms more. {t2} in this session.	Der Emulator erzeugt Ton mit {n} Hz; pocket-core rechnet ihn mit einem Windowed-Sinc-Filter auf die {m} Hz der Ausgabe um und regelt einen Puffer von {k} ms (gerade {n2} ms darin), indem es die Rate um bis zu ±0,5 % anpasst, damit der Ton weder abreißt noch hinter dem Bild zurückfällt. Nach dem Puffer hält die Ausgabe ({s}) etwa {n3} ms mehr. {t2} in dieser Sitzung.
-The emulator makes sound at {n} Hz; pocket-core resamples it to the {m} Hz of the output with a windowed-sinc filter{t}, and steers a {k} ms queue ({n2} ms in it now) by nudging the rate by up to ±0.5%, so the sound neither runs dry nor drifts behind the picture. After the queue, the output ({s}) holds about {n3} ms more. {t2} in this session. The sound goes to Bluetooth headphones or a speaker. Their codec and the radio add a delay of their own that pocket-core can't measure, often 100 to 250 ms, so the sound comes later than on the Pocket's speaker and the numbers here don't include it.	Der Emulator erzeugt Ton mit {n} Hz; pocket-core rechnet ihn mit einem Windowed-Sinc-Filter auf die {m} Hz der Ausgabe um{t} und regelt einen Puffer von {k} ms (gerade {n2} ms darin), indem es die Rate um bis zu ±0,5 % anpasst, damit der Ton weder abreißt noch hinter dem Bild zurückfällt. Nach dem Puffer hält die Ausgabe ({s}) etwa {n3} ms mehr. {t2} in dieser Sitzung. Der Ton geht an Bluetooth-Kopfhörer oder einen Bluetooth-Lautsprecher. Deren Codec und die Funkstrecke bringen eine eigene Verzögerung mit, die pocket-core nicht messen kann, oft 100 bis 250 ms. Der Ton kommt deshalb später als über den Lautsprecher des Pocket, und die Zahlen hier enthalten sie nicht.
-The emulator makes sound at {n} Hz; pocket-core resamples it to the {m} Hz of the output with a windowed-sinc filter, and steers a {k} ms queue ({n2} ms in it now) by nudging the rate by up to ±0.5%, so the sound neither runs dry nor drifts behind the picture. After the queue, the output ({s}) holds about {n3} ms more. {t2} in this session. The sound goes to Bluetooth headphones or a speaker. Their codec and the radio add a delay of their own that pocket-core can't measure, often 100 to 250 ms, so the sound comes later than on the Pocket's speaker and the numbers here don't include it.	Der Emulator erzeugt Ton mit {n} Hz; pocket-core rechnet ihn mit einem Windowed-Sinc-Filter auf die {m} Hz der Ausgabe um und regelt einen Puffer von {k} ms (gerade {n2} ms darin), indem es die Rate um bis zu ±0,5 % anpasst, damit der Ton weder abreißt noch hinter dem Bild zurückfällt. Nach dem Puffer hält die Ausgabe ({s}) etwa {n3} ms mehr. {t2} in dieser Sitzung. Der Ton geht an Bluetooth-Kopfhörer oder einen Bluetooth-Lautsprecher. Deren Codec und die Funkstrecke bringen eine eigene Verzögerung mit, die pocket-core nicht messen kann, oft 100 bis 250 ms. Der Ton kommt deshalb später als über den Lautsprecher des Pocket, und die Zahlen hier enthalten sie nicht.
+The emulator makes sound at {n} Hz; pocket-core resamples it to the {m} Hz of the output with a windowed-sinc filter{t}, and steers a {k} ms queue ({n2} ms in it now) by nudging the rate by up to ±0.5%, so the sound neither runs dry nor drifts behind the picture. After the queue, the output ({s}) holds about {n3} ms more. {t2} in this session.	Der Emulator erzeugt Ton mit {n} Hz; pocket-core rechnet ihn mit einem Windowed-Sinc-Filter auf die {m} Hz der Ausgabe um{t} und regelt einen Puffer von {k} ms (gerade {n2} ms darin), indem es die Rate um bis zu ±0,5 % anpasst, damit der Ton weder abreißt noch hinter dem Bild zurückfällt. Nach dem Puffer kommen bei der Ausgabe ({s}) noch etwa {n3} ms dazu. {t2} in dieser Sitzung.
+The emulator makes sound at {n} Hz; pocket-core resamples it to the {m} Hz of the output with a windowed-sinc filter, and steers a {k} ms queue ({n2} ms in it now) by nudging the rate by up to ±0.5%, so the sound neither runs dry nor drifts behind the picture. After the queue, the output ({s}) holds about {n3} ms more. {t2} in this session.	Der Emulator erzeugt Ton mit {n} Hz; pocket-core rechnet ihn mit einem Windowed-Sinc-Filter auf die {m} Hz der Ausgabe um und regelt einen Puffer von {k} ms (gerade {n2} ms darin), indem es die Rate um bis zu ±0,5 % anpasst, damit der Ton weder abreißt noch hinter dem Bild zurückfällt. Nach dem Puffer kommen bei der Ausgabe ({s}) noch etwa {n3} ms dazu. {t2} in dieser Sitzung.
+The emulator makes sound at {n} Hz; pocket-core resamples it to the {m} Hz of the output with a windowed-sinc filter{t}, and steers a {k} ms queue ({n2} ms in it now) by nudging the rate by up to ±0.5%, so the sound neither runs dry nor drifts behind the picture. After the queue, the output ({s}) holds about {n3} ms more. {t2} in this session. The sound goes to Bluetooth headphones or a speaker. Their codec and the radio add a delay of their own that pocket-core can't measure, often 100 to 250 ms, so the sound comes later than on the Pocket's speaker and the numbers here don't include it.	Der Emulator erzeugt Ton mit {n} Hz; pocket-core rechnet ihn mit einem Windowed-Sinc-Filter auf die {m} Hz der Ausgabe um{t} und regelt einen Puffer von {k} ms (gerade {n2} ms darin), indem es die Rate um bis zu ±0,5 % anpasst, damit der Ton weder abreißt noch hinter dem Bild zurückfällt. Nach dem Puffer kommen bei der Ausgabe ({s}) noch etwa {n3} ms dazu. {t2} in dieser Sitzung. Der Ton geht an Bluetooth-Kopfhörer oder einen Bluetooth-Lautsprecher. Deren Codec und die Funkstrecke bringen eine eigene Verzögerung mit, die pocket-core nicht messen kann, oft 100 bis 250 ms. Der Ton kommt deshalb später als über den Lautsprecher des Pocket, und die Zahlen hier enthalten sie nicht.
+The emulator makes sound at {n} Hz; pocket-core resamples it to the {m} Hz of the output with a windowed-sinc filter, and steers a {k} ms queue ({n2} ms in it now) by nudging the rate by up to ±0.5%, so the sound neither runs dry nor drifts behind the picture. After the queue, the output ({s}) holds about {n3} ms more. {t2} in this session. The sound goes to Bluetooth headphones or a speaker. Their codec and the radio add a delay of their own that pocket-core can't measure, often 100 to 250 ms, so the sound comes later than on the Pocket's speaker and the numbers here don't include it.	Der Emulator erzeugt Ton mit {n} Hz; pocket-core rechnet ihn mit einem Windowed-Sinc-Filter auf die {m} Hz der Ausgabe um und regelt einen Puffer von {k} ms (gerade {n2} ms darin), indem es die Rate um bis zu ±0,5 % anpasst, damit der Ton weder abreißt noch hinter dem Bild zurückfällt. Nach dem Puffer kommen bei der Ausgabe ({s}) noch etwa {n3} ms dazu. {t2} in dieser Sitzung. Der Ton geht an Bluetooth-Kopfhörer oder einen Bluetooth-Lautsprecher. Deren Codec und die Funkstrecke bringen eine eigene Verzögerung mit, die pocket-core nicht messen kann, oft 100 bis 250 ms. Der Ton kommt deshalb später als über den Lautsprecher des Pocket, und die Zahlen hier enthalten sie nicht.
 No underruns in this session	Keine Aussetzer in dieser Sitzung
 The sound goes to Bluetooth headphones or a speaker. Their codec and the radio add a delay of their own that pocket-core can't measure, often 100 to 250 ms, so the sound comes later than on the Pocket's speaker and the numbers here don't include it.	Der Ton geht an Bluetooth-Kopfhörer oder einen Bluetooth-Lautsprecher. Deren Codec und die Funkstrecke bringen eine eigene Verzögerung mit, die pocket-core nicht messen kann, oft 100 bis 250 ms. Der Ton kommt deshalb später als über den Lautsprecher des Pocket, und die Zahlen hier enthalten sie nicht.
 No gaps. Bluetooth adds its own delay.	Ohne Lücken. Bluetooth bringt eine eigene Verzögerung mit.
@@ -3468,7 +3470,7 @@ Screenshot not saved	Screenshot nicht gespeichert
 
 # --- Starter pack (Settings → Games, Home on a card without games). The games' descriptions come from assets/starter-pack.json.
 Starter pack	Startpaket
-A few free games to start with, downloaded to this handheld.	Ein paar kostenlose Spiele zum Anfangen, auf dieses Gerät geladen.
+A few free games to start with, downloaded to this handheld.	Ein paar kostenlose Spiele zum Anfangen, auf dieses Gerät heruntergeladen.
 Get the starter pack	Startpaket holen
 Get a few free games to start playing right away.	Hol dir ein paar kostenlose Spiele, um sofort loszuspielen.
 Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing).	Oder kopiere eigene: Einstellungen › Spiele › Spiele hinzufügen zeigt die Wege (Handy, Dateifreigabe).
@@ -3521,11 +3523,14 @@ The colours are the Game Boy Advance screen's: darker and softer, as the games w
 {s} didn't start. {s2} needs a BIOS file in roms/bios: {s3} or {s4}. BIOS files come from your own console.	{s} wurde nicht gestartet. {s2} braucht eine BIOS-Datei in roms/bios: {s3} oder {s4}. BIOS-Dateien stammen von deiner eigenen Konsole.
 {s} didn't start. {s2} needs a BIOS file in roms/bios: {s3}. BIOS files come from your own console.	{s} wurde nicht gestartet. {s2} braucht eine BIOS-Datei in roms/bios: {s3}. BIOS-Dateien stammen von deiner eigenen Konsole.
 Couldn't save: the SD card is full. Free some space.	Nicht gespeichert: SD-Karte voll. Mach Platz frei.
-Couldn't save to the SD card. Trying again.	Speichern scheitert an der SD-Karte. Wird wiederholt.
+Couldn't save to the SD card. Trying again.	Speichern auf die SD-Karte ging nicht. Es wird noch einmal versucht.
 The SD card is full. Quitting now loses what you did since the last save that reached the SD card; that save is kept. Free some space first if you can.	Die SD-Karte ist voll. Beendest du jetzt, geht verloren, was du seit dem letzten Speichern auf der SD-Karte gespielt hast; dieser Spielspeicher bleibt. Mach vorher etwas Platz frei, wenn du kannst.
 The SD card can't be written to. Quitting now loses what you did since the last save that reached the SD card; that save is kept.	Auf die SD-Karte lässt sich nicht schreiben. Beendest du jetzt, geht verloren, was du seit dem letzten Speichern auf der SD-Karte gespielt hast; dieser Spielspeicher bleibt.
 The game's last progress couldn't be saved: the SD card is full. The save before it is kept.	Der letzte Fortschritt des Spiels ließ sich nicht speichern: Die SD-Karte ist voll. Der Spielspeicher davor bleibt.
 The game's last progress couldn't be saved: the SD card can't be written to. The save before it is kept.	Der letzte Fortschritt des Spiels ließ sich nicht speichern: Auf die SD-Karte lässt sich nicht schreiben. Der Spielspeicher davor bleibt.
+Couldn't read this game's save. It stays as it was.	Der Spielspeicher ließ sich nicht lesen. Er bleibt, wie er war.
+The game's save on the SD card couldn't be read, so the game started without it. Nothing is written over it: what you do now isn't kept, the save on the SD card is.	Der Spielspeicher auf der SD-Karte ließ sich nicht lesen, das Spiel startete ohne ihn. Nichts wird darüber geschrieben: Was du jetzt spielst, bleibt nicht, der Spielspeicher auf der SD-Karte schon.
+The game's save couldn't be read from the SD card, so nothing was written over it. It is kept as it was.	Der Spielspeicher ließ sich nicht von der SD-Karte lesen, also wurde nichts darüber geschrieben. Er bleibt, wie er war.
 Couldn't save. Quit anyway?	Speichern ging nicht. Trotzdem beenden?
 Keep playing	Weiterspielen
 Quit anyway	Trotzdem beenden
@@ -4018,6 +4023,7 @@ The room's light follows the time of day: morning sun, evening lamp.	Das Licht i
 Little things appear on your shelf the more you play.	Je mehr du spielst, desto mehr kleine Dinge tauchen in deinem Regal auf.
 When you put the Pocket down for a while, your games show one after another.	Legst du den Pocket eine Weile weg, erscheinen deine Spiele nacheinander.
 Cases spring and wiggle, discs drop into trays, cartridges click in, spines lean as you scroll.	Hüllen federn und wackeln, Discs fallen in die Lade, Module rasten ein, Rücken neigen sich beim Blättern.
+Cases spring and wiggle. Follows Animations: on with Cozy, off with Quick, until you switch it.	Hüllen federn und wackeln. Folgt den Animationen: an bei Gemütlich, aus bei Schnell, bis du umschaltest.
 Shelf and Cabinet looks only.	Nur in den Ansichten Regal und Vitrine.
 Cabinet look only.	Nur in der Ansicht Vitrine.
 Silent now: Sounds is off (Sound & feel › Sounds).	Gerade stumm: Töne sind aus (Klang & Gefühl › Töne).
@@ -4041,16 +4047,13 @@ From your save	Aus deinem Spielstand
 Font	Schrift
 # Settings in seven categories (2026-10-30). The Look category's key ends with a zero-width mark.
 Look​	Aussehen
-Look, appearance, colours, font, text size, screen colour, night light, systems, extras.	Ansicht, Darstellung, Farben, Schrift, Schriftgröße, Bildschirmfarbe, Nachtlicht, Systeme, Extras.
 Sound & feel	Klang & Gefühl
 Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds, haptics, LEDs.	Animationen, verspielte Hüllen, Alter-Fernseher-Effekt, Bewegung, Lupe, Töne, Hüllen-Geräusche, Haptik, LEDs.
-On start, continue, where I was, buttons, over the game, frames, performance, battery, achievements.	Start, Fortsetzen, Erinnern, Tasten, im Spiel, Rahmen, Leistung, Akku, RetroAchievements.
+On start, continue, where I was, buttons, over the game, frames, performance, battery, achievements.	Start, Fortsetzen, Erinnere mich, Tasten, im Spiel, Rahmen, Leistung, Akku, RetroAchievements.
 Help & tools	Hilfe & Werkzeuge
-How you like to play, Tour, manual, tools, Store, report a problem, about.	Wie du am liebsten spielst, Tour, Handbuch, Werkzeuge, Store, Problem melden, Info.
 Shelf, Cabinet, Minimal, Cards or Split, with a live preview.	Regal, Schrank, Minimal, Karten oder Geteilt, mit Live-Vorschau.
 Dark, Light, or Automatic by the time of day.	Dunkel, Hell oder automatisch nach Tageszeit.
 The colours of every page. Left/right: the next set.	Die Farben jeder Seite. Links/rechts: die nächsten.
-The type of every screen: Barlow, Pixel or Rounded.	Die Schrift jeder Seite: Barlow, Pixel oder Rund.
 Which systems are on Home. Their games stay either way.	Welche Systeme auf Home stehen. Ihre Spiele bleiben so oder so.
 Full: selections glide. Reduced: only fades. Off: nothing moves.	Voll: Auswahl gleitet. Reduziert: nur Überblenden. Aus: nichts bewegt sich.
 Which button confirms, and how the buttons look in the hints.	Welche Taste bestätigt und wie die Tasten in den Hinweisen aussehen.
@@ -4107,7 +4110,7 @@ Several systems take this kind of file: choose one.	Mehrere Systeme nehmen diese
 That folder name can't be used.	Dieser Ordnername geht nicht.
 Can't make the folder {s}: {s2}	Der Ordner {s} lässt sich nicht anlegen: {s2}
 The phone did not say how large the file is.	Das Handy hat nicht gesagt, wie groß die Datei ist.
-Not encrypted: someone else on this Wi-Fi could see the code and the games you send, and could change them on the way. Only use it on your own Wi-Fi at home. Nothing can be downloaded from the Pocket. B ends it.	Nicht verschlüsselt: Jemand anderes in diesem WLAN könnte den Code und die gesendeten Spiele sehen und sie unterwegs verändern. Nur im eigenen WLAN zu Hause nutzen. Vom Pocket lässt sich nichts herunterladen. B beendet es.
+Not encrypted, so use it on your own Wi-Fi at home. Nothing can be downloaded from the Pocket. B ends it.	Nicht verschlüsselt, also nur im eigenen WLAN zu Hause nutzen. Vom Pocket lässt sich nichts herunterladen. B beendet es.
 Closed after an hour	Nach einer Stunde geschlossen
 The page stays open for an hour at most.	Die Seite bleibt höchstens eine Stunde offen.
 No system takes this kind of file here.	Kein System nimmt diese Art Datei hier an.
@@ -4123,7 +4126,7 @@ Can't make the uploads folder: {s}	Der Upload-Ordner lässt sich nicht anlegen: 
 {s} is too big to load ({n} MB; at most {n2} MB)	{s} ist zu groß zum Laden ({n} MB; höchstens {n2} MB)
 A name with ".{s}" inside can't be sent this way. Rename the file first.	Ein Name mit „.{s}“ darin lässt sich so nicht senden. Benenne die Datei vorher um.
 A folder with ".{s}" in its name can't be used. Rename it first.	Ein Ordner mit „.{s}“ im Namen geht nicht. Benenne ihn vorher um.
-Language, time, sleep & power, kids mode, updates, storage, backup & reset.	Sprache, Uhrzeit, Ruhezustand, Kindermodus, Updates, Speicher, Sichern & Zurücksetzen.
+Language, time, sleep & power, second screen, kids mode, updates, storage, backup & reset.	Sprache, Uhrzeit, Ruhezustand, zweiter Bildschirm, Kindermodus, Updates, Speicher, Sichern & Zurücksetzen.
 Going back to your moment…	Zurück in deinen Moment…
 Couldn't go back to that moment: started fresh	Zurück in den Moment ging nicht: neu gestartet
 Another game has this file name and shares its save states. Saving here can overwrite its saves. Rename one to keep them apart	Ein anderes Spiel hat denselben Dateinamen und teilt sich die Speicherstände. Speichern hier kann seine überschreiben. Benenne eines um, um sie zu trennen
@@ -4213,7 +4216,7 @@ Typo in the file type: .{s} isn't read.	Tippfehler im Dateityp: .{s} wird nicht 
 {s} doesn't take .{s2} files, so this one isn't read.	{s} nimmt keine .{s2}-Dateien, diese wird deshalb nicht gelesen.
 It takes {s}.	Es nimmt {s}.
 The game's file changed: started fresh	Die Spieldatei hat sich geändert: neu gestartet
-Its moment is in slot {n}	Der Moment liegt in Slot {n}
+Its moment is in slot {n}	Der Moment liegt in Platz {n}
 All slots are full: its moment is under Load, after the last slot	Alle Plätze sind voll: Der Moment liegt unter Laden, hinter dem letzten Platz
 All slots are full: the moment is kept and goes into the first free slot	Alle Plätze sind voll: Der Moment bleibt erhalten und kommt in den ersten freien Platz
 Kept moment {n}	Aufgehobener Moment {n}
@@ -4431,7 +4434,7 @@ After this first start, switch off, put the card in a computer and copy games in
 Just Play	Einfach spielen
 Less browsing. More playing.	Weniger Stöbern. Mehr Spielen.
 One press	Ein Druck
-Nothing to play yet. Add a game first	Noch nichts zum Spielen. Füge zuerst ein Spiel hinzu
+Nothing to play yet. Add a game first	Noch nichts zum Spielen. Füg zuerst ein Spiel hinzu
 None of the games tried would start. Their files may be gone from the card.	Keines der versuchten Spiele ließ sich starten. Die Dateien fehlen vielleicht auf der Karte.
 In a game, HOME opens the menu: save, load, quit.	Im Spiel öffnet HOME das Menü: Speichern, Laden, Beenden.
 {s} didn't start. Its emulator, the {s2} core, isn't on this device. The game itself is fine.	{s} wurde nicht gestartet. Der Emulator, der Core {s2}, ist auf diesem Gerät nicht vorhanden. Das Spiel selbst ist in Ordnung.
@@ -4461,19 +4464,19 @@ Offline: the description comes with Wi-Fi	Offline: Die Beschreibung kommt mit WL
 Screen colour	Bildschirmfarbe
 Cooler or warmer white, the same as SELECT + Vol. Left/right: change. A: Neutral.	Kühleres oder wärmeres Weiß, wie bei SELECT + Vol. Links/rechts: ändern. A: Neutral.
 # First-start walk 2026-11-04
-Curator: pick by mood, length, or what's new to you	Curator: Wähle nach Stimmung, Länge oder was dir neu ist
-Just Play: one press, the game you'd like now	Just Play: Ein Druck, das Spiel, das du jetzt magst
-No games here yet. Add a game first	Hier sind noch keine Spiele. Füge zuerst ein Spiel hinzu
-Left as it is for now. Changed any time in	Bleibt vorerst, wie es ist. Jederzeit zu ändern unter
+Curator: pick by mood, length, or what's new to you	Curator: Wähl nach Stimmung, Länge oder was dir neu ist
+Just Play: one press, the game you'd like now	Just Play: Ein Druck, das Spiel, auf das du jetzt Lust hast
+No games here yet. Add a game first	Hier sind noch keine Spiele. Füg zuerst ein Spiel hinzu
+Left as it is for now. Changed any time in	Bleibt vorerst, wie es ist. Ändern kannst du es jederzeit unter
 Play, and HOME is the menu	Spielen, und HOME ist das Menü
 Pick a game and press A. While you play, tap HOME to pause and open the menu: Continue, Save, Load, Quit.	Such ein Spiel aus und drück A. Beim Spielen hält HOME das Spiel an und öffnet das Menü: Fortsetzen, Speichern, Laden, Beenden.
-Tap HOME in a game	HOME im Spiel antippen
+Tap HOME in a game	HOME im Spiel drücken
 Continue where you stopped	Weiterspielen, wo du aufgehört hast
-Home opens on the game you played last. A continues it, and quitting keeps the moment, so the next start picks it up.	Home öffnet auf dem Spiel, das du zuletzt gespielt hast. A setzt es fort, und Beenden merkt sich den Moment, damit der nächste Start dort weitermacht.
+Home opens on the game you played last. A continues it, and quitting keeps the moment, so the next start picks it up.	Home startet mit dem Spiel, das du zuletzt gespielt hast. A setzt es fort, und Beenden merkt sich den Moment, damit der nächste Start dort weitermacht.
 Saving	Speichern
-Save and Load are in the pause menu. Earlier brings back a moment from before, if a game went wrong.	Speichern und Laden findest du im Pausenmenü. Früher holt einen Moment von vorher zurück, wenn etwas schiefging.
+Save and Load are in the pause menu. Earlier brings back a moment from before, if a game went wrong.	Speichern und Laden findest du im Pausenmenü. Früher holt einen früheren Moment zurück, wenn etwas schiefging.
 Pause menu › Save, Load, Earlier	Pausenmenü › Speichern, Laden, Früher
-Brightness, volume, Wi-Fi, Bluetooth, fan and power in one panel, over the shelf and over a game.	Helligkeit, Lautstärke, WLAN, Bluetooth, Lüfter und Strom in einem Feld, über dem Regal und über einem Spiel.
+Brightness, volume, Wi-Fi, Bluetooth, fan and power in one panel, over the shelf and over a game.	Helligkeit, Lautstärke, WLAN, Bluetooth, Lüfter und Ein/Aus in einem Feld, über dem Regal und über einem Spiel.
 HOME on the shelf, START in the pause menu	HOME im Regal, START im Pausenmenü
 Games go in each system's folder on the SD card. Add games shows the folders and BIOS files, and can share them over Wi-Fi.	Spiele kommen auf der SD-Karte in den Ordner ihres Systems. „Spiele hinzufügen“ zeigt die Ordner und BIOS-Dateien und kann sie per WLAN freigeben.
 START › Settings › Games › Add games	START › Einstellungen › Spiele › Spiele hinzufügen
@@ -4481,7 +4484,7 @@ Everything on these cards, and everything you meet along the way, can be switche
 START on the shelf	START im Regal
 The basics in 7 cards	Die Grundlagen in 7 Karten
 No picture	Kein Bild
-The basics in 7 cards: playing, saving, quick settings, adding games, easier reading.	Die Grundlagen in 7 Karten: Spielen, Speichern, Schnellmenü, Spiele hinzufügen, leichter lesen.
+The basics in 7 cards: playing, saving, quick settings, adding games, easier reading.	Die Grundlagen in 7 Karten: Spielen, Speichern, Schnellmenü, Spiele hinzufügen, leichteres Lesen.
 menu: Continue, Save, Load, Quit.	Menü: Fortsetzen, Speichern, Laden, Beenden.
 Continue, Save, Load, Quit.	Fortsetzen, Speichern, Laden, Beenden.
 Press A to close.	Mit A schließen.
@@ -4491,22 +4494,22 @@ Kept for this console.	Für diese Konsole behalten.
 Kept for this game.	Für dieses Spiel behalten.
 Changes show at once and stay for this game. Left or right: every game on this console.	Änderungen gelten sofort und bleiben für dieses Spiel. Links oder rechts: jedes Spiel auf dieser Konsole.
 Changes show at once and stay for every game on this console. Left or right: this game only.	Änderungen gelten sofort und bleiben für jedes Spiel auf dieser Konsole. Links oder rechts: nur dieses Spiel.
-Press A again to restore the defaults. B keeps your settings.	Zum Zurücksetzen noch einmal A drücken. Mit B bleiben deine Einstellungen.
+Press A again to restore the defaults. B keeps your settings.	Noch einmal A setzt alles zurück. B behält deine Einstellungen.
 
 # --- Zoom, Hold to toggle, Easy to read (pause menu, Options → Controls, the Tour)
 Zoom	Lupe
 The picture larger, to read small text. Move with the D-pad.	Das Bild größer, um kleinen Text zu lesen. Mit dem Steuerkreuz verschieben.
 Move	Bewegen
-Hold to toggle	Halten als Umschalter
-Pick a button: one press holds it down, the next lets go.	Wähle eine Taste: Ein Druck hält sie gedrückt, der nächste lässt los.
+Hold to toggle	Halten per Tastendruck
+Pick a button: one press holds it down, the next lets go.	Wähl eine Taste: Ein Druck hält sie gedrückt, der nächste lässt los.
 For buttons you would hold, like run.	Für Tasten, die man sonst halten müsste, etwa zum Rennen.
 Easy to read	Gut lesbar
 larger text and calmer menus	größere Schrift und ruhigere Menüs
-Larger text, menus that only fade, and Zoom in the pause menu. Switches Text size and Motion together.	Größere Schrift, Menüs blenden nur ein, Lupe im Pausenmenü. Schaltet Schriftgröße und Bewegung zusammen.
+Larger text, menus that only fade, and Zoom in the pause menu. Switches Text size and Motion together.	Größere Schrift, ruhige Menüs, Lupe im Pausenmenü. Schaltet Schriftgröße und Bewegung gleichzeitig.
 Settings › Look › Text size, Settings › Sound & feel › Motion	Einstellungen › Aussehen › Schriftgröße, Einstellungen › Klang & Gefühl › Bewegung
 {s} held	{s} gehalten
 # --- Where was I? (the card over a moment continued after a long break)
-Remind me where I was	Erinnern, wo ich war
+Remind me where I was	Erinnere mich, wo ich war
 Zoom in the pause menu	Lupe im Pausenmenü
 Zoom on the pause menu's first page. It is always under Options.	Die Lupe auf der ersten Seite des Pausenmenüs. Unter Optionen ist sie immer da.
 Back after two weeks or more: when you played last, and your note, while the game loads.	Nach zwei Wochen oder mehr: wann du zuletzt gespielt hast und deine Notiz, während das Spiel lädt.
@@ -4520,7 +4523,7 @@ Last played {n} years ago	Zuletzt vor {n} Jahren gespielt
 Controls card	Steuerungskarte
 Which button is which on this console, and what HOME does.	Welche Taste bei dieser Konsole welche ist, und was HOME tut.
 Which button of the Pocket does what	Welche Taste des Pocket was tut
-This console's button names show here after your first game on it.	Die Tastennamen dieser Konsole stehen hier nach deinem ersten Spiel darauf.
+This console's button names show here after your first game on it.	Die Tastennamen dieser Konsole stehen hier, sobald du ein erstes Spiel auf ihr gespielt hast.
 D-pad (changed)	Steuerkreuz (geändert)
 Menu	Menü
 Analog stick	Analogstick
@@ -4533,7 +4536,159 @@ Darken solar sensor	Solarsensor dunkler
 
 Brighten Solar Sensor	Solarsensor heller
 Darken Solar Sensor	Solarsensor dunkler
+Choose a game: its box shows here.	Wähle ein Spiel: Hier erscheint seine Box.
+# Settings → System → Second screen (two screens: the RG DS Plus, src/second_screen.rs)
+Second screen	Zweiter Bildschirm
+Game info	Spielinfo
+The lower screen: the selected game's box and info, or off. Off in games; DS games use it.	Der untere Bildschirm: Box und Infos des gewählten Spiels, oder aus. In Spielen aus; DS-Spiele nutzen ihn.
+
+# Android 0.2
+Android gamepad / Touch controls: Console	Android-Gamepad / Touch-Steuerung: Konsole
+D-pad: D-pad	Steuerkreuz: Steuerkreuz
+Touch D-pad: Analog stick	Touch-Steuerkreuz: Analogstick
+Left stick: D-pad	Linker Stick: Steuerkreuz
+Left stick: Analog stick	Linker Stick: Analogstick
+Touch the lower screen to use the stylus	Tippe für den Stift auf den unteren Bildschirm
+Touch C arrows: C buttons (right stick)	C-Pfeile auf dem Bildschirm: C-Tasten (rechter Stick)
+Back / Pause: Menu	Zurück / Pause: Menü
+Swipe or use the D-pad to read more	Wische oder nutze das Steuerkreuz zum Weiterlesen
+This PSP moment could not be loaded safely. It is kept under Load; your in-game save is safe.	Dieser PSP-Moment konnte nicht sicher geladen werden. Er bleibt unter Laden erhalten; dein Spielspeicher ist sicher.
+Recovery	Wiederherstellung
+The console’s button names will show here after its first game.	Die Tastennamen der Konsole werden nach ihrem ersten Spiel hier angezeigt.
+The game stopped responding. Your previous saved moment is kept.	Das Spiel reagiert nicht mehr. Dein vorheriger gespeicherter Moment bleibt erhalten.
+Loading the game…	Spiel wird geladen…
+
+# Controller layouts
+pocket-ui Controller	pocket-ui-Controller
+Controller setup	Controller belegen
+A separate layout for each controller, in menus and games.	Eine eigene Belegung für jeden Controller, in Menüs und Spielen.
+Controller disconnected	Controller getrennt
+No player	Kein Spieler
+Reset controller layout	Controller-Belegung zurücksetzen
+Bottom button	Untere Taste
+Right button	Rechte Taste
+Top button	Obere Taste
+Left button	Linke Taste
+Buttons swapped. Every action still has a button.	Tasten getauscht. Jede Aktion hat weiterhin eine Taste.
+Controller disconnected. Reconnect and try again.	Controller getrennt. Verbinde ihn und versuche es erneut.
+Saving controller layout…	Controller-Belegung wird gespeichert…
+Controller layout saved.	Controller-Belegung gespeichert.
+Could not save the controller layout. Try again.	Controller-Belegung nicht gespeichert. Versuche es erneut.
+An occupied action swaps with this button's previous action.	Eine belegte Aktion tauscht mit der bisherigen Aktion dieser Taste.
+Choose a controller, then an action. A captures its button.	Wähle Controller und Aktion. A erfasst die Taste.
+An occupied button swaps with the previous one.	Eine belegte Taste tauscht mit der bisherigen.
+
+# Update download phases and bounded fallback
+Connecting to the update server…	Verbindung zum Update-Server…
+Trying the next download server…	Versuche den nächsten Download-Server…
+Downloading the update…	Update wird geladen…
+Checking the download…	Download wird geprüft…
+Preparing the update…	Update wird vorbereitet…
+The download server stopped responding. Nothing was installed. Try again.	Der Download-Server antwortet nicht mehr. Nichts installiert. Erneut versuchen.
+The update list names too many download servers. Nothing was installed.	Die Update-Liste nennt zu viele Download-Server. Nichts installiert.
+The SD card is too full for this update: it needs {n} MB more. Nothing was changed.	Die SD-Karte ist für dieses Update zu voll: Es fehlen {n} MB. Nichts wurde geändert.
+The update couldn't be saved: the SD card is full or can't be written. Nothing was installed.	Das Update ließ sich nicht speichern: Die SD-Karte ist voll oder nicht beschreibbar. Nichts installiert.
+The download is too slow on this network. Nothing was installed. Try again on a faster Wi-Fi.	Der Download ist in diesem Netz zu langsam. Nichts installiert. Versuch es in einem schnelleren WLAN erneut.
+The clock looks wrong, so the update server can't be checked. Set it in Settings › System › Time, or wait for network time over Wi-Fi.	Die Uhr geht offenbar falsch, darum lässt sich der Update-Server nicht prüfen. Stell sie unter Einstellungen › System › Uhrzeit oder warte auf die Netzwerkzeit über WLAN.
+{t} {n}%	{t} {n} %
+
+# Standalone card asset verification
+Checking installed cores and data…	Installierte Cores und Daten werden geprüft…
+The update's asset list is invalid. Nothing was changed.	Die Komponentenliste des Updates ist ungültig. Nichts geändert.
+The update's core or data file is damaged. Nothing was changed.	Eine Core- oder Datendatei des Updates ist beschädigt. Nichts geändert.
+Layout, systems, extras, appearance, colours, style, text size, screen colour, night light.	Anordnung, Systeme, Extras, Darstellung, Farben, Stil, Schriftgröße, Bildschirmfarbe, Nachtlicht.
+How your games stand: Shelf, Easy, Minimal, Split, Cards or Cabinet, with a live preview.	Wie deine Spiele stehen: Regal, Einfach, Minimal, Geteilt, Karten oder Schrank, mit Vorschau.
+First-start setup, how you like to play, Tour, manual, tools, test buttons, Store, report a problem, about.	Ersteinrichtung, wie du am liebsten spielst, Tour, Handbuch, Werkzeuge, Tasten testen, Store, Problem melden, Info.
+First-start setup	Ersteinrichtung
+Language, Wi-Fi, your games and the look again, step by step. Your games and saves stay.	Sprache, WLAN, deine Spiele und das Aussehen noch einmal, Schritt für Schritt. Spiele und Spielstände bleiben.
+Copy them from a computer or a phone on the same Wi-Fi, or put them on the SD card in its roms folder. Add games… shows you how.	Kopier sie von einem Computer oder Handy im selben WLAN, oder leg sie auf der SD-Karte in den Ordner roms. „Spiele hinzufügen …“ zeigt dir, wie.
+Finds the real box for each game, in the background while you're online. Only a game's name is sent.	Sucht für jedes Spiel die echte Hülle, im Hintergrund, solange du online bist. Nur der Name des Spiels wird gesendet.
+Next: your games, then a look you like.	Als Nächstes: deine Spiele, dann ein Aussehen, das dir gefällt.
+Next: your time zone, your games, then a look you like.	Als Nächstes: deine Zeitzone, deine Spiele, dann ein Aussehen, das dir gefällt.
+Next: Wi-Fi, your games, then a look you like.	Als Nächstes: WLAN, deine Spiele, dann ein Aussehen, das dir gefällt.
+For a child: Kids Mode is set up after your games.	Für ein Kind: Der Kindermodus wird nach deinen Spielen eingerichtet.
+Not for a child	Nicht für ein Kind
+For a child…	Für ein Kind …
+Aa  On	Aa  An
+Aa	Aa
+They stand on your shelf in their real boxes.	Sie stehen in ihren echten Hüllen in deinem Regal.
+Pop your games on here and they'll stand on your shelf in their real boxes.	Bring deine Spiele hierher, dann stehen sie in ihren echten Hüllen in deinem Regal.
+Looking for your games{s}	Suche deine Spiele{s}
+Found 1 game	1 Spiel gefunden
+Found {s} games	{s} Spiele gefunden
++ {s} more	+ {s} weitere
+Kids Mode comes next: a PIN, then the games a child may play.	Als Nächstes kommt der Kindermodus: eine PIN, dann die Spiele, die ein Kind spielen darf.
+Kids Mode needs a few games first. Set it up later in Settings › System › Kids mode.	Der Kindermodus braucht zuerst ein paar Spiele. Richte ihn später ein unter Einstellungen › System › Kindermodus.
+Add more…	Mehr hinzufügen …
+Add games…	Spiele hinzufügen …
+I'll add games later	Spiele füge ich später hinzu
+Style	Stil
+How your games stand	Wie deine Spiele stehen
+Dark or light, the colours and the type of every page. The look stays as you picked it.	Dunkel oder hell, die Farben und die Schrift jeder Seite. Die Anordnung bleibt, wie du sie gewählt hast.
+Pick how your games line up. Shown with sample games until yours are here.	Wähl, wie deine Spiele stehen. Mit Beispielspielen, bis deine da sind.
+Pick how your games line up. These are your own games: try each one.	Wähl, wie deine Spiele stehen. Das sind deine eigenen Spiele: Probier jede aus.
+One big game at a time, simple menus. Best with a handful of games.	Ein großes Spiel auf einmal, einfache Menüs. Am besten mit einer Handvoll Spielen.
+The colours of every page.	Die Farben jeder Seite.
+Kids Mode needs games it can start. Set it up later in Settings › System › Kids mode.	Der Kindermodus braucht Spiele, die er starten kann. Richte ihn später ein unter Einstellungen › System › Kindermodus.
+Change the look any time in Settings › Look.	Das Aussehen änderst du jederzeit unter Einstellungen › Aussehen.
+Finish the setup with the look your Pocket had?	Die Einrichtung mit dem bisherigen Aussehen beenden?
+A finishes, B stays here.	A beendet sie, B bleibt hier.
+Stay	Bleiben
+Kids Mode is there whenever you want it: Settings › System › Kids mode.	Den Kindermodus findest du jederzeit unter Einstellungen › System › Kindermodus.
+Larger text and calmer menus, on every page.	Größere Schrift und ruhigere Menüs, auf jeder Seite.
+Larger text and calmer menus. L2 on every page.	Größere Schrift und ruhigere Menüs. L2 auf jeder Seite.
+Finish	Fertig
+Colours and style	Farben und Stil
+Style…	Stil …
+Continue offline	Ohne WLAN weiter
+# Settings → Look → Style (retro, prototype)
+Cocoa	Kakao
+Pea	Erbse
+Pixel letters, chunky frames and little icons, like an old handheld's menu.	Pixelschrift, kräftige Rahmen und kleine Bilder, wie das Menü eines alten Handhelds.
+Retro	Retro
+
+Barlow, Pixel or Rounded type, or Retro: pixel letters, frames and icons everywhere.	Schrift Barlow, Pixel oder Rund, oder Retro: Pixelschrift, Rahmen und Bilder überall.
+Cocoa: warm brown and cream, a tangerine selection.	Kakao: warmes Braun und Creme, eine Mandarinen-Auswahl.
+Pea: the four greens of an old handheld's screen.	Erbse: die vier Grüntöne eines alten Handheld-Bildschirms.
 
 Battery: saves in menus and idle. Games keep their normal processor speed on this device.	Akku: spart in Menüs und im Leerlauf. Spiele behalten auf diesem Gerät ihr normales Prozessortempo.
+Default ({t})	Standard ({t})
+Press a button on {s} · HOME on any pad cancels.	Drücke eine Taste an {s} · HOME an einem beliebigen Pad bricht ab.
+No button pressed. Nothing changed.	Keine Taste gedrückt. Nichts geändert.
+an old handheld's look for every menu	der Look eines alten Handhelds in jedem Menü
+Pixel letters, chunky frames, little icons and blips in every menu. Your shelf and box art stay.	Pixelschrift, kräftige Rahmen, kleine Icons und Blips in jedem Menü. Regal und Hüllen bleiben.
+Settings › Look › Style › Retro	Einstellungen › Aussehen › Stil › Retro
+Try Retro	Retro ausprobieren
+# Test buttons (Settings → Help & tools)
+Test buttons	Tasten testen
+Press buttons, triggers and sticks of each controller and watch them light up.	Drück Tasten, Trigger und Sticks jedes Controllers und sieh, wie sie aufleuchten.
+Every button, trigger and stick lights up here.	Jede Taste, jeder Trigger und jeder Stick leuchtet hier auf.
+To leave, hold HOME for 2 seconds, or B and START together.	Zum Verlassen HOME 2 Sekunden halten, oder B und START zusammen.
+Hold to leave	Halten zum Verlassen
+Keep holding to leave	Weiter halten zum Verlassen
+Press a button	Drück eine Taste
+It lights up on the controller drawn here.	Sie leuchtet am hier gezeichneten Controller auf.
+Here you see what it does in menus and in games.	Hier siehst du, was sie in Menüs und in Spielen bewirkt.
+In menus: {s}	In Menüs: {s}
+In games: the console's {t}	In Spielen: Konsolentaste {t}
+In games: opens the pause menu	In Spielen: öffnet das Pausenmenü
+In games: not used	In Spielen: nicht belegt
+Remapped to: {t}	Umbelegt auf: {t}
+Not recognised: {s}	Nicht erkannt: {s}
+A trigger counts as pressed from {n}%	Ein Trigger gilt ab {n} % als gedrückt
+No controller found	Kein Controller gefunden
+Pair one in Settings › Connections › Bluetooth, or plug one into the USB-C port. This handheld's own buttons show up here too.	Koppel einen unter Einstellungen › Verbindungen › Bluetooth oder steck einen in den USB-C-Anschluss. Die Tasten dieses Handhelds erscheinen hier ebenfalls.
+Built-in	Eingebaut
+Messages about a fresh start or a saved moment stay inside the screen as the game opens.	Meldungen zu einem Neustart oder einem gespeicherten Moment bleiben beim Öffnen des Spiels vollständig auf dem Bildschirm.
+This game didn't start on pocket-core, so it runs with {t} for this launch. Next time pocket-core will try again.	Dieses Spiel ist auf pocket-core nicht gestartet und läuft dieses Mal mit {t}. Beim nächsten Mal versucht es pocket-core wieder.
+Its moment is kept under Load, after the last slot	Der Moment bleibt unter Laden erhalten, hinter dem letzten Platz
+Its moment is kept until it can move into a free slot	Der Moment bleibt erhalten, bis er in einen freien Platz verschoben werden kann
+A simple shelf for a child, set up after your games.	Ein einfaches Regal für ein Kind, eingerichtet nach deinen Spielen.
+Choose another…	Andere wählen …
+Couldn't tell where you are. Choose your time zone below.	Dein Ort ließ sich nicht erkennen. Wähl deine Zeitzone unten.
+Other places…	Andere Orte …
 
-This game didn't start on pocket-core, so it runs with {t} for this launch. Next time pocket-core will try again.	Das Spiel startet nicht. Für diesen Start hilft {t}. Nächstes Mal versucht es pocket-core wieder.
+There isn't enough free memory for this update. Restart the device and try again. Nothing was changed.	Für dieses Update ist nicht genug Arbeitsspeicher frei. Starte das Gerät neu und versuche es noch einmal. Nichts geändert.
+Unsafe update temporary folder.	Unsicherer temporärer Update-Ordner.
+Restart the device to finish recovering the previous update before trying again.	Starte das Gerät neu, damit das vorherige Update wiederhergestellt wird, und versuche es dann noch einmal.
+Pixel letters, frames and icons.	Pixelschrift, Rahmen und Symbole.

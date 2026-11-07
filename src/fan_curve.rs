@@ -2000,12 +2000,13 @@ mod tests {
     }
 
     #[test]
-    fn the_thread_hands_back_when_asked_and_waits_for_it() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_thread_hands_back_when_asked_and_waits_for_it() {
         let rig = Rig::new("thread");
         rig.temps(60.0, 58.0);
         let h = spawn(rig.paths.clone());
         h.set(on(Fan::Quiet));
-        let until = Instant::now() + Duration::from_secs(3);
+        let until = Instant::now() + crate::testutil::timeout(Duration::from_secs(3));
         while !h.driving() && Instant::now() < until {
             std::thread::sleep(Duration::from_millis(10));
         }
@@ -2017,12 +2018,12 @@ mod tests {
         assert!(!rig.paths.note.exists());
         // Dropping the handle ends the thread, and it hands back if it had taken the fan again.
         h.set(on(Fan::Quiet));
-        let until = Instant::now() + Duration::from_secs(3);
+        let until = Instant::now() + crate::testutil::timeout(Duration::from_secs(3));
         while !h.driving() && Instant::now() < until {
             std::thread::sleep(Duration::from_millis(10));
         }
         drop(h);
-        let until = Instant::now() + Duration::from_secs(3);
+        let until = Instant::now() + crate::testutil::timeout(Duration::from_secs(3));
         while rig.paths.note.exists() && Instant::now() < until {
             std::thread::sleep(Duration::from_millis(10));
         }

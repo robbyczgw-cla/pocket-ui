@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "app": {
+    "version": "0.2.2",
+    "url": "https://pocketui.xyz/updates/stable/pocket-ui-0.2.2-aarch64.tar.gz",
+    "sha256": "e1e3bdc87d2282d4f7a84fb449baf49a53e04bbb1162887f87f394ff3b1b0840",
+    "size": 14681544,
+    "notes": "The audio pipeline in pocket-ui's player is more robust across ROCKNIX devices. This update gives H700 handhelds a larger buffer and fixes a startup dropout and silent blocks when audio runs short. SD images remain at 0.2.0: flash, then update over Wi-Fi."
+  },
+  "os": null,
+  "install_zip": {
+    "version": "0.2.2",
+    "url": "https://pocketui.xyz/updates/stable/pocket-ui-0.2.2-rocknix-install.zip",
+    "sha256": "46a77f049917f3d4dbc807caa84f6e27278b0f231b53be20ca2616f17a7cab16",
+    "size": 14794570,
+    "notes": "The audio pipeline in pocket-ui's player is more robust across ROCKNIX devices. This update gives H700 handhelds a larger buffer and fixes a startup dropout and silent blocks when audio runs short. SD images remain at 0.2.0: flash, then update over Wi-Fi."
+  }
+}

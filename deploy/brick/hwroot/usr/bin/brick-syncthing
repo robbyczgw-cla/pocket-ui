@@ -1,0 +1,89 @@
+#!/bin/sh
+# Save sync on the Brick card (docs/TRIMUI-BRICK-SYNC.md): the official Syncthing from the card, run by us (there is no systemd).
+#   brick-syncthing start | stop | status | sync     (`systemctl start|stop|restart|is-active syncthing` lands here)
+# - What pocket-ui's Settings > Sync does on ROCKNIX (src/sync.rs) works unchanged: it reads /storage/.config/syncthing/config.xml and
+#   cert.pem, asks the REST API on 127.0.0.1:8384 and writes the web password to /storage/.config/pocket-ui/sync/password.
+# - Syncthing's home (keys, config) lives in RAM: it sets file modes, which the card's FAT cannot keep. A watcher copies what changed
+#   to the card's folder storage/.config/syncthing (the place pocket-ui reads) within a few seconds; `start` puts the copy back first.
+# - The index database (--data) is on the card, storage/.cache/syncthing-db, so a restart does not rescan from nothing.
+# - The web interface is on 0.0.0.0:8384 with TLS and our own password (user pocket), never an open one; no usage reports, no crash
+#   reports, no browser, no self-upgrade (the card's update replaces the program).
+APP=${BRICK_APP:-/mnt/SDCARD/pocket-ui/app}
+DATA=${BRICK_DATA:-/mnt/SDCARD/pocket-ui}
+RUN=${BRICK_RUN:-/tmp/pocket-ui}
+SYNCTHING=${BRICK_SYNCTHING:-$APP/bin/syncthing}
+PORT=${BRICK_SYNC_PORT:-8384}
+USERNAME=pocket
+SYNC_EVERY=${BRICK_SYNC_EVERY:-5}
+CARD_CONF=$DATA/storage/.config/syncthing
+CARD_DB=$DATA/storage/.cache/syncthing-db
+PASSF=$DATA/storage/.config/pocket-ui/sync/password
+LIVE=$RUN/syncthing
+PIDF=$RUN/syncthing.pid
+WATCHF=$RUN/syncthing-watch.pid
+LOG=$RUN/syncthing.log
+# The login and the settings: keys, certificate, configuration. Everything else Syncthing makes again.
+FILES="config.xml cert.pem key.pem https-cert.pem https-key.pem"
+
+alive() { [ -f "$1" ] && kill -0 "$(cat "$1" 2>/dev/null)" 2>/dev/null; }
+
+sync_once() {
+  mkdir -p "$CARD_CONF" "$RUN" 2>/dev/null || return 1
+  for f in $FILES; do
+    [ -s "$LIVE/$f" ] || continue
+    cmp -s "$LIVE/$f" "$CARD_CONF/$f" 2>/dev/null && continue
+    cp "$LIVE/$f" "$CARD_CONF/$f.new" && mv -f "$CARD_CONF/$f.new" "$CARD_CONF/$f" && echo "$(date '+%H:%M:%S' 2>/dev/null) saved $f to the card" >>"$LOG"
+  done
+  [ "$(wc -c <"$LOG" 2>/dev/null || echo 0)" -gt 2000000 ] && { tail -c 500000 "$LOG" >"$LOG.old"; : >"$LOG"; }
+  return 0
+}
+
+stop_pid() { # pidfile
+  alive "$1" || { rm -f "$1"; return 0; }
+  pid=$(cat "$1"); kill "$pid" 2>/dev/null
+  n=0; while kill -0 "$pid" 2>/dev/null && [ $n -lt 10 ]; do sleep 1; n=$((n + 1)); done
+  kill -9 "$pid" 2>/dev/null; rm -f "$1"
+}
+
+# Inside the <gui> and <options> blocks only: a device's own <address> must stay as it is.
+configure() {
+  c=$LIVE/config.xml
+  sed -i \
+    -e "/<gui /,/<\\/gui>/s|<address>[^<]*</address>|<address>0.0.0.0:$PORT</address>|" \
+    -e '/<gui /s|tls="[a-z]*"|tls="true"|' \
+    -e '/<options>/,/<\/options>/{s|<urAccepted>[^<]*</urAccepted>|<urAccepted>-1</urAccepted>|;s|<crashReportingEnabled>[^<]*</crashReportingEnabled>|<crashReportingEnabled>false</crashReportingEnabled>|;s|<startBrowser>[^<]*</startBrowser>|<startBrowser>false</startBrowser>|;s|<autoUpgradeIntervalH>[^<]*</autoUpgradeIntervalH>|<autoUpgradeIntervalH>0</autoUpgradeIntervalH>|}' \
+    "$c" || return 1
+  grep -q "<address>0.0.0.0:$PORT</address>" "$c" && grep -q '<gui [^>]*tls="true"' "$c"
+}
+
+case "${1:-}" in
+  start)
+    alive "$PIDF" && exit 0
+    [ -x "$SYNCTHING" ] || { echo "brick-syncthing: $SYNCTHING is missing" >&2; exit 1; }
+    PASS=$(cat "$PASSF" 2>/dev/null)
+    [ -n "$PASS" ] || { echo "brick-syncthing: no password file, not starting" >&2; exit 1; }
+    mkdir -p "$RUN" "$LIVE" "$CARD_DB" && chmod 700 "$LIVE" || exit 1
+    # The card's copy back into RAM (the keys keep this device's ID the same across restarts and card updates).
+    for f in $FILES; do [ -s "$CARD_CONF/$f" ] && cp "$CARD_CONF/$f" "$LIVE/$f"; done
+    chmod 600 "$LIVE"/*.pem 2>/dev/null
+    export HOME=$LIVE STNOUPGRADE=1 STNORESTART=1
+    # Keys on the first start; afterwards only the login is set again. The password comes in on stdin.
+    printf '%s' "$PASS" | "$SYNCTHING" generate --home "$LIVE" --gui-user "$USERNAME" --gui-password - >>"$LOG" 2>&1 || { echo "brick-syncthing: generate failed: $(tail -n 1 "$LOG")" >&2; exit 1; }
+    configure || { echo "brick-syncthing: config.xml is not the shape we expect" >&2; exit 1; }
+    sync_once
+    "$SYNCTHING" serve --home "$LIVE" --data "$CARD_DB" --no-browser --no-restart >>"$LOG" 2>&1 &
+    echo $! >"$PIDF"
+    ( while sleep "$SYNC_EVERY"; do sync_once; done ) >/dev/null 2>&1 &
+    echo $! >"$WATCHF"
+    sleep 1
+    alive "$PIDF" || { stop_pid "$WATCHF"; rm -f "$PIDF"; echo "brick-syncthing: did not start: $(tail -n 1 "$LOG" 2>/dev/null)" >&2; exit 1; }
+    ;;
+  stop)
+    stop_pid "$PIDF"
+    stop_pid "$WATCHF"
+    sync_once
+    ;;
+  status) alive "$PIDF" ;;
+  sync) sync_once ;;
+  *) echo "usage: brick-syncthing start|stop|status|sync" >&2; exit 2 ;;
+esac

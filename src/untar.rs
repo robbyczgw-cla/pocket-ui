@@ -146,6 +146,7 @@ fn utf8(v: Vec<u8>) -> Result<String, String> {
 
 /// The entries of an uncompressed tar, or an error if any of them is not a plain file or folder
 /// inside the target, or the archive can't be read the same way by every tar.
+#[cfg(not(feature = "brick"))]
 pub fn entries(tar: &[u8]) -> Result<Vec<Entry>, String> {
     let mut out = Vec::new();
     let mut pos = 0;
@@ -233,6 +234,16 @@ pub fn entries(tar: &[u8]) -> Result<Vec<Entry>, String> {
     }
     Ok(out)
 }
+
+#[cfg(feature = "brick")]
+pub fn entries(tar: &[u8]) -> Result<Vec<Entry>, String> {
+    walk(&mut &tar[..], |_, _, _| Ok(())).map_err(|e| e.to_string())
+}
+
+#[cfg(feature = "brick")]
+mod brick;
+#[cfg(feature = "brick")]
+pub use brick::{walk, unpack_file, unpack_file_throttled, Gz, Refused};
 
 /// Sets folders and executables to 0755 and every other file to 0644 below `dir` (and `dir`
 /// itself); anything that is neither a file nor a folder is an error.
@@ -436,6 +447,47 @@ pub(crate) mod tests {
         let bad = dir.join("bad");
         assert!(unpack(&tar(&[("l", b'2', 0o777, b"", "/")]), &bad).is_err());
         assert!(!bad.exists(), "nothing is left after a refusal");
+    }
+
+    /// The Brick card's program folder is unpacked as it is read (docs/TRIMUI-BRICK-REMOTE.md): the same refusals as `entries`, modes
+    /// set when a file is made (no chmod afterwards: FAT refuses it), several gzip members, and nothing left behind on a failure.
+    #[cfg(feature = "brick")]
+    #[test]
+    fn unpack_file_streams_with_modes_and_cleans_up_after_a_refusal() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = TestDir::new("untar-stream");
+        let big: Vec<u8> = (0..300_000u32).map(|i| (i % 253) as u8).collect();
+        let t = tar(&[("app/", b'5', 0o755, b"", ""), ("app/bin/pocket-ui", b'0', 0o4755, b"#!/bin/sh\n", ""), ("app/cores/x.so", b'0', 0o600, &big, "")]);
+        let file = dir.join("a.tar.gz");
+        // Two members, as `cat a.gz b.gz` makes them; the second holds nothing but the end of the tar.
+        let mut two = gz(&t[..t.len() - 1024]);
+        two.extend(gz(&[0u8; 1024]));
+        std::fs::write(&file, &two).unwrap();
+        let into = dir.join("into");
+        let list = unpack_file(&file, &into, 1 << 30).unwrap();
+        assert_eq!(list.iter().filter(|e| !e.dir).count(), 2);
+        assert_eq!(std::fs::read(into.join("app/cores/x.so")).unwrap(), big);
+        let mode = |p: &str| std::fs::metadata(into.join(p)).unwrap().permissions().mode() & 0o7777;
+        assert_eq!((mode("app/bin/pocket-ui"), mode("app/cores/x.so")), (0o755, 0o644), "executable or not, never setuid");
+        assert!(unpack_file(&file, &into, 1 << 30).is_err(), "the target must be new");
+        for (name, archive) in [
+            ("link", gz(&tar(&[("a", b'0', 0o644, b"a", ""), ("l", b'2', 0o777, b"", "/etc")]))),
+            ("escape", gz(&tar(&[("a", b'0', 0o644, b"a", ""), ("../x", b'0', 0o644, b"x", "")]))),
+            ("cut short", { let g = gz(&t); g[..g.len() / 2].to_vec() }),
+            ("not gzip, not tar", b"hello, this is not an archive at all".repeat(20)),
+        ] {
+            let bad = dir.join(format!("bad-{}", name.replace(' ', "-")));
+            std::fs::write(dir.join("bad.tar.gz"), &archive).unwrap();
+            assert!(unpack_file(&dir.join("bad.tar.gz"), &bad, 1 << 30).is_err(), "{name}");
+            assert!(!bad.exists(), "{name}: nothing is left");
+        }
+        let small = dir.join("small");
+        assert!(unpack_file(&file, &small, 100_000).is_err(), "more than the limit");
+        assert!(!small.exists());
+        assert!(matches!(Refused::from(std::io::Error::from_raw_os_error(libc::ENOSPC)), Refused::Full), "a full card is told apart");
+        // A plain .tar is read as it is.
+        std::fs::write(&file, &t).unwrap();
+        assert_eq!(unpack_file(&file, &dir.join("plain"), 1 << 30).unwrap(), list);
     }
 
     /// The packages in store/test-catalog, made by macOS tar on the build machine, pass.

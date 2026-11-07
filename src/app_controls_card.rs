@@ -36,6 +36,15 @@ pub(crate) struct ControlsCardUi {
 }
 
 impl App {
+    /// On the Brick the card also says what F1 and F2 do.
+    #[cfg(feature = "brick")]
+    fn brick_card_keys(&self, card: Card) -> Card {
+        if !pocket_ui::device::brick() {
+            return card;
+        }
+        controls_card::with_brick_keys(card, pocket_ui::brick_hw::FKeys::load(&self.data_dir))
+    }
+
     /// The card for a game of `system` as the shelf knows it: the game's settings (remaps, shortcuts), the core's names
     /// from its snapshot when it ran before, whether pocket-core plays it.
     fn controls_card_of(&self, system: &str, path: &Path) -> Option<Card> {
@@ -45,7 +54,10 @@ impl App {
         let core_names = CoreOptionsFile::read(&core_options::file_path(&self.data_dir, system), path).map(|f| f.controls.targets).unwrap_or_default();
         let hosted = self.resolve_runner(sys, Some(path), Path::new(super::host_bin()).exists()).runner.emulator == pocket_ui::emu_choice::POCKET_CORE;
         let shortcuts = hosted.then(|| Shortcuts::from_values(&settings.effective()));
-        Some(controls_card::build(&Input { system, system_name: &sys.fullname, mapping: &mapping, core_names: &core_names, shortcuts }))
+        let card = controls_card::build(&Input { system, system_name: &sys.fullname, mapping: &mapping, core_names: &core_names, shortcuts });
+        #[cfg(feature = "brick")]
+        let card = self.brick_card_keys(card);
+        Some(card)
     }
 
     /// The game card's Controls row: for consoles pocket-core hosts or whose buttons are known.
@@ -187,6 +199,8 @@ impl App {
         let shortcuts = menu.hosted.then(|| values.as_ref().map_or(Shortcuts { save: true, load: true, zoom: false }, Shortcuts::from_values));
         let system_name = self.systems.iter().find(|s| s.name == system).map_or_else(|| system.clone(), |s| s.fullname.clone());
         let card = emu.controls_card(&system_name, shortcuts);
+        #[cfg(feature = "brick")]
+        let card = self.brick_card_keys(card);
         c.clear(VOID);
         let colors = Self::card_colors(true);
         self.paint_card_screen(c, &name, &system_name, &card, colors, &[("B", "Back")]);
@@ -249,6 +263,8 @@ impl App {
         let core_names = CoreOptionsFile::read(&core_options::file_path(&self.data_dir, &system), &path).map(|f| f.controls.targets).unwrap_or_default();
         let shortcuts = Some(Shortcuts::from_values(&settings.effective()));
         let card = controls_card::build(&Input { system: &system, system_name: &sys.fullname, mapping: &mapping, core_names: &core_names, shortcuts });
+        #[cfg(feature = "brick")]
+        let card = self.brick_card_keys(card);
         let launch = flags.contains(&"first").then(|| (system.clone(), name.clone(), path.clone()));
         self.controls_card = Some(ControlsCardUi { system_name: card.system_name.clone(), card, title: name, system, launch, since: Instant::now() });
         true

@@ -243,6 +243,8 @@ pub struct Sys {
     rocknix_keys: bool,
     /// H700: leave the game/compositor alone during level-key activity (diagnostic override for A/B).
     quiet_game_osd: bool,
+    #[cfg(feature = "brick")]
+    brick_slider: bool,
     vol_held: Option<(Button, Instant, Mode)>,
     /// Vol+ and Vol- as down/up, so a key reported by two input devices counts once.
     vol_down: [bool; 2],
@@ -366,6 +368,8 @@ impl Sys {
             home_tap: false,
             rocknix_keys: crate::fn_keys::rocknix_handles_volume(std::path::Path::new("/")),
             quiet_game_osd: crate::mako_osd::quiet_h700_games(),
+            #[cfg(feature = "brick")]
+            brick_slider: crate::device::current().model == Some(crate::device::Model::Brick),
             vol_held: None,
             vol_down: [false; 2],
             held: None,
@@ -438,6 +442,8 @@ impl Sys {
         sys.warm_at = None;
         sys.rocknix_keys = false;
         sys.backend = Backend::Soft;
+        #[cfg(feature = "brick")]
+        { sys.brick_slider = false; }
         sys.game_osd = std::sync::Arc::new(|_: &str| false);
         sys
     }
@@ -680,10 +686,32 @@ impl Sys {
         });
     }
 
+    fn brick_muted(&self) -> bool {
+        #[cfg(feature = "brick")]
+        { self.brick_slider && self.view.muted == Some(true) }
+        #[cfg(not(feature = "brick"))]
+        { false }
+    }
+
     fn step_volume(&mut self, dir: i32, now: Instant) -> Option<u8> {
         let cap = self.volume_cap.unwrap_or(100);
         let step = move |v: u8| ((v as i32 + dir * STEP as i32).clamp(0, 100) as u8).min(cap);
         let (hw, polled) = (self.hw.clone(), self.polled.clone());
+        #[cfg(feature = "brick")]
+        if self.brick_slider {
+            // Slider moves happen outside this process, even with the shelf hidden. Read its live state
+            // on the controls worker; cached view.muted alone can stay stale indefinitely between keys.
+            self.spawn("volume", move || {
+                if hw.muted() != Some(true) { hw.set_volume(step(hw.volume().unwrap_or(50))); }
+                // Read back after the helper's slider/key lock, so a racing mute never invents a hidden level.
+                let (volume, muted) = (hw.volume(), hw.muted());
+                let mut p = polled.lock().unwrap();
+                p.volume = volume;
+                p.muted = muted;
+                p.seq += 1;
+            });
+            return None;
+        }
         // Kids Mode has no quick settings keeping `view` fresh: the worker reads it, unless a step has just set it.
         let known = if self.kids_rocknix_keys.is_some() { self.levels.volume.filter(|(_, at)| now < *at + Duration::from_millis(1500)).map(|(v, _)| v) } else { self.volume_now(now) };
         let Some(v) = known else {
@@ -1345,7 +1373,8 @@ impl Sys {
                 Some((What::Volume, _)) if self.view.volume.is_some() => {
                     let v = self.view.volume.unwrap_or(0);
                     self.levels.volume = Some((v, now));
-                    self.show(Data::percent("Volume", v), ctx, now);
+                    let shown = if self.brick_muted() { 0 } else { v };
+                    self.show(Data::percent("Volume", shown), ctx, now);
                 }
                 Some((What::Brightness, _)) if self.view.brightness.is_some() => {
                     let v = self.view.brightness.unwrap_or(0);
@@ -1495,6 +1524,7 @@ fn poll_all(hw: &dyn crate::system_ctl::Hw, net: &Arc<NetState>, polled: &Mutex<
 // Quick settings
 
 impl Sys {
+    #[cfg(not(feature = "brick"))]
     pub(crate) fn rows(&self) -> Vec<Row> {
         let mut rows = Vec::new();
         // From the background's look only (`Polled`); before the first one every row is there, with "…".
@@ -1514,6 +1544,29 @@ impl Sys {
             Which::Fan => Row::Fan,
         }));
         rows.push(Row::Power);
+        rows
+    }
+
+    #[cfg(feature = "brick")]
+    pub(crate) fn rows(&self) -> Vec<Row> {
+        let mut rows = Vec::new();
+        // From the background's look only (`Polled`); before the first one every row is there, with "…".
+        let unknown = self.view.seq == 0;
+        if unknown || self.view.brightness.is_some() {
+            rows.push(Row::Brightness);
+        }
+        rows.push(Row::Volume);
+        if unknown || self.view.wifi.is_some() {
+            rows.push(Row::Wifi);
+        }
+        if (unknown || self.view.bluetooth.is_some()) && !{ #[cfg(feature = "brick")] { crate::device::brick() } #[cfg(not(feature = "brick"))] { false } } {
+            rows.push(Row::Bluetooth);
+        }
+        rows.extend(self.profiles.rows().into_iter().map(|w| match w {
+            Which::Performance => Row::Performance,
+            Which::Fan => Row::Fan,
+        }));
+        if !{ #[cfg(feature = "brick")] { crate::device::brick() } #[cfg(not(feature = "brick"))] { false } } { rows.push(Row::Power); }
         rows
     }
 
@@ -1881,7 +1934,7 @@ impl Sys {
     fn set_timezone(&mut self, zone: String, now: Instant) {
         match self.hw.set_timezone(&zone) {
             Ok(()) => {
-                self.toast = Some((format!("Time zone: {}", timezone::city_of(&zone)), now));
+                self.toast = Some((format!("Time zone: {}", timezone::city_here(&zone)), now));
                 self.screen = Screen::Time(TimePage::Summary { sel: 0 });
                 self.now_unix = unix_now();
                 // The new zone is known: the summary shows it at once (its offset is in the list the pick came from),
@@ -2068,7 +2121,8 @@ mod tests {
     }
 
     #[test]
-    fn a_running_night_light_is_there_from_the_first_look() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_running_night_light_is_there_from_the_first_look() {
         let hw = Arc::new(MockHw::default().with_zoneinfo("/nonexistent"));
         let dir = TestDir::new("quick-night");
         crate::night_light::Prefs { mode: crate::night_light::Mode::On, strength: 5, ..Default::default() }.save(&dir);
@@ -2506,7 +2560,7 @@ mod tests {
         // Everything the new rows show is in memory: a thousand opens and row lists stay far below a frame.
         let (mut s, _) = sys();
         let now = Instant::now();
-        let t = Instant::now();
+        let t = crate::testutil::clock::CpuInstant::now();
         for _ in 0..1000 {
             s.open_quick(now);
             let rows = s.rows();
@@ -2572,6 +2626,31 @@ mod tests {
         s.tick(&SHELF, now);
         assert_eq!(s.view.ntp, Some(NtpState::Synced));
         assert!(!s.view.busy_sync);
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn brick_slider_mute_keeps_the_level_and_keys_show_muted() {
+        let (mut s, hw) = sys();
+        s.brick_slider = true;
+        let now = Instant::now();
+        s.levels.volume = Some((45, now));
+        // The user slides to mute after the last UI poll; cached view still says unmuted.
+        hw.with(|state| state.muted = true);
+        for button in [Button::VolUp, Button::VolDown] {
+            key(&mut s, button, true, &SHELF, now);
+            s.tick(&SHELF, now);
+            assert_eq!(s.osd.as_ref().unwrap().data.value, "Muted");
+            assert_eq!(hw.volume(), Some(45));
+            assert_eq!(s.levels.volume.unwrap().0, 45);
+            key(&mut s, button, false, &SHELF, now);
+        }
+        // Cached muted state must not swallow the first key after the physical slider is released.
+        hw.with(|state| state.muted = false);
+        key(&mut s, Button::VolUp, true, &SHELF, now);
+        s.tick(&SHELF, now);
+        assert_eq!(hw.volume(), Some(50));
+        assert_eq!(s.osd.as_ref().unwrap().data.value, "50%");
     }
 
     #[test]
@@ -2704,7 +2783,8 @@ mod tests {
     /// (Bluetooth) and read rfkill (Wi-Fi) on the UI thread. Opening, painting every row, the power menu, stepping a
     /// level and switching a radio never look at the system on the UI thread, before the first look or after it.
     #[test]
-    fn the_panel_never_looks_at_the_system_on_the_ui_thread() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_panel_never_looks_at_the_system_on_the_ui_thread() {
         let spy = Arc::new(Spy::new(MockHw::default()));
         let dir = TestDir::new("quick-spy");
         // A real worker thread (not `for_test`'s inline jobs), as in the app.
@@ -2729,7 +2809,7 @@ mod tests {
         key(&mut s, Button::Right, true, &SHELF, t0);
         key(&mut s, Button::Right, false, &SHELF, t0);
         // The first look comes in (the worker answers within moments).
-        let until = Instant::now() + Duration::from_secs(5);
+        let until = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
         while s.polled.lock().unwrap().seq < 2 && Instant::now() < until {
             std::thread::sleep(Duration::from_millis(5));
         }
@@ -2757,7 +2837,8 @@ mod tests {
     /// frame of a list. Now the page opens with "…", and the worker reads; this walks every page of it with a spy that
     /// records each look made on the test's thread, before and after the answers are in.
     #[test]
-    fn the_time_page_never_looks_at_the_system_on_the_ui_thread() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_time_page_never_looks_at_the_system_on_the_ui_thread() {
         let spy = Arc::new(Spy::new(MockHw::default().with_zoneinfo("/nonexistent")));
         let dir = TestDir::new("time-spy");
         // A real worker thread, as in the app.
@@ -2770,7 +2851,7 @@ mod tests {
             s.paint(&mut c, &mut text, false);
         };
         let wait = |s: &mut Sys, what: &str, ready: &dyn Fn(&Sys) -> bool| {
-            let until = Instant::now() + Duration::from_secs(5);
+            let until = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
             while !ready(s) && Instant::now() < until {
                 std::thread::sleep(Duration::from_millis(2));
                 s.tick(&SHELF, Instant::now());
@@ -3146,7 +3227,8 @@ mod tests {
 
     /// The clock is set on the worker, never on the UI thread, and the answer comes back with the next tick.
     #[test]
-    fn setting_the_clock_never_runs_on_the_ui_thread() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_setting_the_clock_never_runs_on_the_ui_thread() {
         let state = crate::system_ctl::MockState { wifi: false, wifi_wanted: false, ntp: NtpState::Waiting, clock_answer: Ok(ClockSet::Saved), ..Default::default() };
         let spy = Arc::new(Spy::new(MockHw::new(state).with_zoneinfo("/nonexistent")));
         let dir = TestDir::new("clock-spy");
@@ -3157,7 +3239,7 @@ mod tests {
         s.open_time(now);
         s.screen = Screen::Time(TimePage::SetClock(Picker::at(a_sane_time(), 0)));
         tap(&mut s, CONFIRM, &SHELF, now);
-        let until = Instant::now() + Duration::from_secs(5);
+        let until = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
         while !s.clock_by_hand && Instant::now() < until {
             std::thread::sleep(Duration::from_millis(2));
             s.tick(&SHELF, Instant::now());

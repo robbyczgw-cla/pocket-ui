@@ -47,6 +47,7 @@ struct Inputs {
 }
 
 impl App {
+    #[cfg(not(feature = "brick"))]
     fn runner_inputs(&self, sys: &System, path: Option<&Path>, host_bin: bool) -> Inputs {
         let system = sys.name.as_str();
         let bios = Path::new(hostsys::BIOS_DIR);
@@ -66,6 +67,31 @@ impl App {
         Inputs {
             pocket_core,
             pocket_cores: if gba { pocket_ui::h700_gba::CORES } else { &[] },
+            file_ok,
+            fell_back: path.is_some_and(|p| self.fallback.contains(p)),
+            // PICO-8 without the official binary: RetroArch's fake08 instead of start_pico8.sh (`hostsys`).
+            default_override: hostsys::default_emulator(system, bios),
+        }
+    }
+
+    #[cfg(feature = "brick")]
+    fn runner_inputs(&self, sys: &System, path: Option<&Path>, host_bin: bool) -> Inputs {
+        let system = sys.name.as_str();
+        let bios = Path::new(hostsys::BIOS_DIR);
+        // pocket-core opens zip files itself but not 7z: those games stay with RetroArch.
+        let file_ok = path.is_none_or(|path| {
+            let is_7z = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("7z"));
+            !is_7z && hostsys::hosts_file(system, path)
+        });
+        let pocket_core = HOST_CORES.iter().find(|(s, _)| *s == system).map(|(_, core)| *core).or_else(|| hostsys::route(system, bios));
+        // The Brick has other cores than the default ones (`brick_profile::core_for`), for the verified systems (PlayStation, Sega) as well.
+        #[cfg(feature = "brick")]
+        let pocket_core = pocket_ui::brick_profile::additional_core(system).or_else(|| pocket_core.map(pocket_ui::brick_profile::core_for));
+        let pocket_core = pocket_core.filter(|_| host_bin);
+        Inputs {
+            pocket_core,
+            // The Brick lists its pocket-core cores in its own es_systems.cfg (`emu_choice`'s Brick `choices`).
+            pocket_cores: &[],
             file_ok,
             fell_back: path.is_some_and(|p| self.fallback.contains(p)),
             // PICO-8 without the official binary: RetroArch's fake08 instead of start_pico8.sh (`hostsys`).
@@ -187,6 +213,9 @@ impl App {
                 );
                 // The next start sees it at once; the file is written on a thread, under ROCKNIX's lock.
                 emu_choice::apply_to_cache(&edits);
+                #[cfg(feature = "brick")]
+                self.emu_choice_write_brick(edits);
+                #[cfg(not(feature = "brick"))]
                 emu_choice::write_in_background(edits);
                 if clear_fallback {
                     if let Some(path) = self.emu_page_path() {
@@ -196,6 +225,42 @@ impl App {
                 self.emu_choice_refresh_console();
             }
         }
+    }
+
+    /// On the Brick the choice goes to system.cfg without ROCKNIX's shell functions (its card has none), and the page hears
+    /// whether it got there (`emu_choice_written`). Other devices write as without the brick feature.
+    #[cfg(feature = "brick")]
+    fn emu_choice_write_brick(&mut self, edits: Vec<(String, Option<String>)>) {
+        if !pocket_ui::device::brick() {
+            emu_choice::write_in_background(edits);
+            return;
+        }
+        let proxy = self.proxy.clone();
+        let _ = std::thread::Builder::new().name("system-cfg".into()).spawn(move || {
+            let started = std::time::Instant::now();
+            let result = emu_choice::write_system_cfg_brick(&edits, Path::new(emu_choice::SYSTEM_CFG));
+            match &result {
+                Ok(()) => println!("emulator choice: wrote {} system.cfg key(s) in {:?}", edits.len(), started.elapsed()),
+                Err(e) => eprintln!("emulator choice: {e}"),
+            }
+            let _ = proxy.send_event(super::UserEvent::EmuChoiceWritten(result));
+        });
+    }
+
+    /// The Brick's write came back. A failed one takes the choice back out of the cache (it would have held only until the next
+    /// start) and says so instead of "Saved".
+    #[cfg(feature = "brick")]
+    pub(crate) fn emu_choice_written(&mut self, result: Result<(), String>) {
+        if result.is_ok() {
+            return;
+        }
+        emu_choice::reload_cache();
+        if let Some((page, _)) = self.emu.page.as_mut() {
+            page.note = Some("Not saved.".to_string());
+        }
+        self.emu_choice_refresh_console();
+        self.warn("The emulator choice couldn't be saved on the card. Nothing was changed.");
+        self.request_redraw();
     }
 
     /// The game the page is about, as a path in the library.
@@ -439,6 +504,8 @@ impl App {
 
         let hints: &[(&str, &str)] = match page.mode {
             Mode::List if page.row() == Row::Save => &[("B", "Back"), ("A", "Open")],
+            // One emulator for this console: nothing for A or Left/Right to step to (the navigation explorer, 2026-11-07).
+            Mode::List if !page.changes(page.row()) => &[("B", "Back")],
             Mode::List => &[("B", "Back"), ("A", "Next"), ("< >", "Change")],
             Mode::Save { .. } => &[("B", "Cancel"), ("A", "Save")],
         };

@@ -29,12 +29,7 @@ impl Card {
         assert!(status.success());
         let stub = (cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|w| w.is_empty())).then(|| {
             let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), dir.path().join("wl").to_str().unwrap()]).spawn().unwrap();
-            for _ in 0..200 {
-                if dir.path().join("wl").exists() {
-                    break;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
+            test_clock::wait_for(|| dir.path().join("wl").exists(), std::time::Duration::from_secs(2), "Wayland stub listening");
             Stub(child)
         });
         Card { dir, _stub: stub }
@@ -140,8 +135,9 @@ fn a_child_has_no_way_out_of_the_mode_on_the_power_menu_or_the_rescue_page() {
 #[test]
 fn the_steam_deck_has_no_kids_mode_and_the_handhelds_do() {
     let card = Card::new();
-    assert!(card.screen("setup:play", false).contains("For a child"));
-    assert!(!card.screen("setup:play:device=steamdeck", false).contains("For a child"));
+    // The first start's quiet way in: Y on its first page.
+    assert!(card.screen("setup:first", false).contains("For a child"));
+    assert!(!card.screen("setup:first:device=steamdeck", false).contains("For a child"));
 }
 
 /// The picker beside the list shows the cover of the game under the cursor with covers read on the cabinet's thread, as

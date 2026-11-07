@@ -73,9 +73,27 @@ impl Choice {
     }
 
     /// The line under the entry: what happens, in a few words.
+    #[cfg(not(feature = "brick"))]
     pub fn hint(self, ctx: Context) -> &'static str {
         match self {
             Choice::Sleep if crate::device::current().screen_off_only() => crate::sleep_settings::NO_SLEEP,
+            Choice::Sleep if ctx.game => "Saves the game. The power button wakes it. Uses a few percent of the battery an hour.",
+            Choice::Sleep => "The power button wakes it. Uses a few percent of the battery an hour.",
+            Choice::Restart if ctx.ram_booted => "Started from a computer: this goes back to Android.",
+            Choice::Restart if ctx.game => "Saves the game, then restarts the Pocket.",
+            Choice::Restart => "Restarts the whole Pocket.",
+            Choice::PowerOff if ctx.game => "Saves the game, then switches off.",
+            Choice::PowerOff => "Switches the Pocket off.",
+            Choice::RestartUi if ctx.game => "Saves the game. Only pocket-ui starts again.",
+            Choice::RestartUi => "Only pocket-ui starts again, in seconds.",
+            Choice::BootMenu => BOOT_MENU_HINT,
+        }
+    }
+
+    #[cfg(feature = "brick")]
+    pub fn hint(self, ctx: Context) -> &'static str {
+        match self {
+            Choice::Sleep if crate::device::current().screen_off_only() => crate::sleep_settings::no_sleep(),
             Choice::Sleep if ctx.game => "Saves the game. The power button wakes it. Uses a few percent of the battery an hour.",
             Choice::Sleep => "The power button wakes it. Uses a few percent of the battery an hour.",
             Choice::Restart if ctx.ram_booted => "Started from a computer: this goes back to Android.",

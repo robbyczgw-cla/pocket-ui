@@ -356,7 +356,7 @@ mod tests {
         let mut buf = vec![0u32; 1240 * 1080];
         let mut c = Canvas::new(&mut buf, 1240, 1080);
         paint(&mut c, Art::NoGames, 0, 0, 2);
-        let t = std::time::Instant::now();
+        let t = crate::testutil::clock::CpuInstant::now();
         for _ in 0..100 {
             paint(&mut c, Art::NoGames, 72, 120, 2);
         }

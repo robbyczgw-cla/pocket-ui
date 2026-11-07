@@ -42,7 +42,12 @@ impl App {
         if !(self.notice_painted && self.notice.is_some() && self.running.is_none()) || !(*button == CONFIRM || *button == CANCEL) {
             return false;
         }
+        // The "newer pocket-ui is ready" card: A goes to the Updates page, B only closes (`app_update_hint`).
+        let to_updates = *button == CONFIRM && self.notice.as_ref().is_some_and(Notice::opens_updates);
         self.drop_notice();
+        if to_updates {
+            self.open_updates_from_notice();
+        }
         true
     }
 

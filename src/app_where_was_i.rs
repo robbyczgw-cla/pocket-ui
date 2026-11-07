@@ -40,10 +40,8 @@ impl App {
         }
     }
 
-    /// How long a pocket-core game keeps its window back and stands still at its moment (`startup::HOLD_STILL`), counted
-    /// from the start: the launch animation, the fade and [`where_was_i::SHOWN`] to read the card. None when there is no
-    /// card, no moment to stand at, or another emulator plays it (those show the card while they load, as long as that
-    /// takes). Asked after `launch_animation`, whose length it adds.
+    /// Requests a still hold for a readable reminder. The animation has a deadline; the reminder waits for a
+    /// button (`startup::HOLD_STILL`). None without a card, a preview, or pocket-core hosting the game.
     pub(crate) fn where_was_i_hold(&self, system: &str, path: &Path, hosted: bool) -> Option<Duration> {
         if !hosted || self.where_was_i.is_none() {
             return None;
@@ -51,7 +49,7 @@ impl App {
         // The moment's picture is what the card stands on: without one there is nothing to hold for (a stat or two,
         // only at a start after a long break).
         pocket_ui::launch_picture::source(&self.data_dir, system, path)?;
-        Some(self.cabinet.launch_delay() + super::FADE + where_was_i::SHOWN)
+        Some(self.cabinet.launch_delay() + super::FADE)
     }
 
     /// Whether the card is on the screen: a launch with the moment's picture, nothing over it.
@@ -65,18 +63,20 @@ impl App {
             return;
         }
         let Some(card) = self.where_was_i.as_ref() else { return };
-        let bottom = if self.frozen_wait.is_some() { c.h - 112 } else { c.h - pocket_ui::kit::PAD };
+        let bottom = if self.frozen_wait.is_some() || self.loading.since.is_some() { c.h - 112 } else { c.h - pocket_ui::kit::PAD };
         where_was_i::paint(c, &mut self.text, card, bottom, (p * 255.0) as u8);
     }
 
     /// A button while a game is starting: the launch animation is skipped and the card goes at once, and nothing holds
     /// the game's window back (`startup::skip_hold`). Nothing happens when neither is on the screen.
-    pub(crate) fn launch_button(&mut self) {
-        if self.where_was_i_skip() | self.cabinet.skip_insert(Instant::now()) {
+    pub(crate) fn launch_button(&mut self) -> bool {
+        let reminder = self.where_was_i_skip();
+        if reminder | self.cabinet.skip_insert(Instant::now()) {
             pocket_ui::startup::skip_hold();
             self.launch_at = self.launch_at.map(|t| t.min(Instant::now() - super::FADE));
             self.request_redraw();
         }
+        reminder
     }
 
     /// The card goes, if it was up (false when there was none).
@@ -125,6 +125,9 @@ impl App {
         self.where_was_i_picture((what != "missing").then_some(pocket_ui::launch_picture::Prepared { rom: Default::default(), x: r.x as i32, y: r.y as i32, img }));
         if what == "wait" {
             self.frozen_wait = Some(Instant::now());
+        }
+        if what == "loading" {
+            self.loading.since = Some(Instant::now());
         }
         // A button right after the start: what `launch_button` leaves on the screen.
         if what == "press" {

@@ -60,7 +60,7 @@ Save states, checked on the virtual device with the same ROMs (`scripts/syscheck
 ... "fifo load"`, `scripts/shotdiff.py`): the picture after Load matches the one at Save (difference 0.0-0.4 of 255,
 the "Loaded slot" toast) while the one after playing on differs by 38-68, for Mega Drive, PC Engine, Master System,
 Game Gear and Atari 2600; SG-1000 and WonderSwan have nothing that stays changed, there the core only answered
-that the state loaded. Auto-resume (`.pstate.auto` written on exit, loaded on the next start, "resumed" in the log)
+that the state loaded. Auto-resume (`.pstate.auto.z` written on exit, loaded on the next start, "resumed" in the log)
 worked for all eight; Mega Drive, PC Engine, PlayStation and Atari 2600 were also started from the shelf on the
 device and resumed there.
 
@@ -98,7 +98,7 @@ and `bench` / `ra` next to it (see the header of `scripts/syscheck.sh`), then se
 - **Sound**: ALSA's PipeWire plugin, with PulseAudio simple API as fallback, loaded with dlopen. Windowed-sinc
   resampling to 48 kHz (`src/resample.rs`; `POCKET_CORE_RESAMPLER=linear` is the emergency fallback).
   - Base ratio includes the core/display rate skew (59.73 → 60 Hz); ±0.5 % smoothed dynamic rate control follows it.
-  - Queue/PCM targets are 20/10 ms at quantum 256 and 48/32 ms for a larger cycle or Bluetooth. H700 uses
+  - Queue/PCM targets are 24/10 ms at quantum 256 and 48/32 ms for a larger cycle or Bluetooth. H700 uses
     quantum 1024 with a 64 ms PCM ring and 48 ms queue, reducing graph wakeups and allowing more scheduling margin.
   - Downsampling uses a prepared polyphase table with rate-control headroom; ARM64 uses NEON. Late frames consume
     all available stereo samples and pad only the missing tail. See [Audio path](AUDIO-PATH.md) for measurements.
@@ -121,9 +121,6 @@ and `bench` / `ra` next to it (see the header of `scripts/syscheck.sh`), then se
 - **Battery saves**: `roms/<system>/<game>.srm`, the same place and format RetroArch uses (a NES save made by
   RetroArch loads and is written back byte for byte). Written every 10 s when changed (RetroArch's autosave
   interval) and on exit, through a temporary file and a rename.
-- **Skipped/refused Continue moments**: another emulator/game file or a core refusal keeps the raw moment and its
-  preview in the first free slot, with a start note naming it (`frozen_phone`). Full slots keep it beside them under
-  `.kept<N>` until a free slot is available at the next start; Save & quit never removes it.
 - **Reset and wall time** (2026-11-07): `Core::restart` copies live `RETRO_MEMORY_RTC` before `retro_reset`,
   reacquires its pointer and restores matching-length memory afterwards. ROCKNIX Gambatte resets its RTC base;
   without restoration the next normal flush would permanently write the reset clock. Cores without RTC memory
@@ -239,21 +236,43 @@ good one. `Core::save_trouble` reads that outcome without waiting (one mutex, at
 
 - shows the kind's line over the game, at the bottom in the notes' place, until a save gets through
   (`overlay::Hud::save_trouble`; a note has its moment first). Only a change repaints the pill.
-- writes `/tmp/pocket-core.save-trouble` (`full` or `unwritable`) when the trouble starts, removes it when it ends, and
+- writes `/tmp/pocket-core.save-trouble` (`full`, `unwritable` or `unreadable`) when the trouble starts, removes it when it ends, and
   removes a stale one at start.
 - after an exit or `autosave` whose battery save failed but whose auto state was written, leaves an empty
-  `<game>.pstate.auto.battery-unsaved` (`slots::battery_unsaved`). The next `resume` reads and removes it: with the note,
+  `<game>.pstate.auto.z.battery-unsaved` (`slots::battery_unsaved`). The next `resume` reads and removes it: with the note,
   a state whose battery save differs from the card's wins (it holds the newer one) unless the file on the card is newer
   than the state (written since, by Syncthing or RetroArch). Without it that start would take the older save on the
-  card for the newer one and throw the state's away.
+  card for the newer one and throw the state's away. The note never helps an older moment: when `resume` passes over a
+  damaged one (below), the note goes with it.
+- when the exit's or `autosave`'s **moment** doesn't reach the card (a full card: a 4 MB state that no longer fits beside
+  an 8 KB battery save), the same note and line follow from that write's error (`App::save_auto`), so a Quit ends with
+  the shelf's notice instead of an older moment at the next start without a word.
+
+A battery save that is on the card but can't be read at the start (an input/output error: a failing card reads a worn
+sector wrong and still writes new ones) is never written over: `Core::read_sram` marks it, the flushes and the exit skip
+it, and `save_trouble` says `Unreadable` ("Couldn't read this game's save. It stays as it was."). The game runs without
+it; the exit's moment is written as usual but without the battery note, so it can't win over the save on the card later.
+
+A moment that can't be read at the start (a compressed one whose length or checksum fails) never reaches the core:
+`resume` goes on to the next one in Continue's order, usually the one the session that wrote it had started from
+(`.taken`), says so ("The game didn't close normally: back at your last saved moment"), and removes the damaged one.
+Without that, the next quit retired the intact moment with the damaged one. A moment the core refuses (another core's
+after Runs on changed, another version's), or one of another file or emulator (`frozen::at_launch`), goes into the first
+free slot with its picture (`frozen_phone::set_aside`, as on a phone). If all slots are taken, or expanding a
+compressed state into a raw slot fails (including ENOSPC), it is renamed without changing format to `.keptN`.
+That name survives the next successful Quit. `restore_kept` retries the move into a free slot at every start;
+a failed conversion leaves the kept copy intact. Raw states from older versions are kept raw too. Before, it waited as `.taken.retry`, which the next Quit removes.
 
 pocket-ui reads the note when the pause menu opens over a pocket-core game (`app_save_trouble`): a line under the title,
 and Quit opens "Couldn't save. Quit anyway?" (Keep playing / Quit anyway, with what is lost). Quit anyway goes on as
 Quit does; the exit save is tried once more. A game that ended with the note still there gets a notice on the shelf
 (`Notice::take_after_game`). The game switcher, sleep and the critical-battery power-off don't ask: they send their
 usual commands and pocket-core tries the save once. A write that hangs on a dying card holds nothing up for long: a
-quit's escalation (`quit::grace`) ends the process, the power-off waits 25 s at most (`quit_for_power_off`). Tests: `save_writer` (ENOSPC, EROFS, per-file waiting), `libretro::resume_tests` (a fake
-core with and without RTC memory, a full card, the note), `save_trouble`, `overlay`.
+quit's escalation (`quit::grace`) ends the process, the power-off waits 25 s at most (`quit_for_power_off`), up to
+`quit::SAVE_LIMIT` while the exit save is still being written. Tests: `save_writer` (ENOSPC, EROFS, per-file waiting),
+`libretro::resume_tests` (a fake core with and without RTC memory, a full card, the note, an unreadable battery save, a
+damaged moment, and the quit cut off by SIGKILL at each of its 20 write steps: `fsutil::crash_point`, test builds only),
+`save_trouble`, `overlay`.
 
 ## Picture effects (2026-10-24)
 
@@ -466,17 +485,18 @@ Everything below is chosen in pocket-ui's pause menu (HOME tap) and applied to t
 
 **Save slots** (`src/slots.rs`). Eight per game plus the auto-resume state, in `/storage/roms/savestates/<system>/`:
 `<game>.pstate` (slot 1, the file that always existed), `.pstate1` … `.pstate7` (slots 2 to 8), each with a `.png`
-preview, `<game>.pstate.auto` and `<game>.pstate.undo` ("Before load", written before every Load and dropped at
+preview, `<game>.pstate.auto.z` and `<game>.pstate.undo` ("Before load", written before every Load and dropped at
 quit; `src/states.rs`). Save and Load share one slot; Left/Right on either row steps through them, the
 preview and a row of eight dots (filled = has a state) follow. The slot last used is remembered per game in
 `<data>/slots/<system>/<game>`, so the menu and the hotkeys always agree. Commands: `save [n]`, `load [n]`, `slot n`
 (n counts from 1, as on screen).
 
 **Auto-resume and the battery save** (`Core::resume`). Exit and `autosave` write the battery save first, then
-`<game>.pstate.auto`, and delete the taken ones below. The next start renames the state to `.pstate.auto.taken`
+`<game>.pstate.auto.z`, and delete the taken ones below. The next start renames the state to `.pstate.auto.z.taken`
 before loading it. If that session ends without an exit save (a crash, a dead battery), the start after it finds
 only `.taken`, still the quit point of the session before, and tries it once more as `.taken.retry`; if that crashes
-too, the next start is fresh. A state the core refuses is not tried again. If the battery save (`.srm`, or `.sav`
+too, the next start is fresh. A state the core refuses is not tried again; it goes into a free slot (see "When a save
+can't be written"). One that can't be read gives way to the next one in that order. If the battery save (`.srm`, or `.sav`
 for melonDS) differs from the one inside the state, the game starts fresh from that save instead ("In-game save is
 newer: not resumed"): most cores keep the battery save in their states, so resuming would put the older save back
 and the 10 s flush would write it over the newer one (a crash after an in-game save, or the game played in RetroArch,
@@ -486,6 +506,26 @@ length, padding aside). The file times only decide whether a snapshot of the sta
 (it costs a serialize); without one the game goes back with a reset and the battery save it started with. A core that
 refuses a state after putting part of it in place (its battery save among it) is put back the same way, and a manual
 load it refuses that way goes back to "Before load".
+
+**Compressed automatic states (0.2.1)** (`src/state_file.rs`). Quit and sleep use raw DEFLATE level 1 in a 32-byte
+wrapper: eight-byte `PCKSTZ\x01\0` magic/version, little-endian u64 decoded and packed lengths, then CRC32 of the decoded
+and packed data (u32 each). The packed bytes follow. Decoding is limited to 256 MiB, checks both lengths/checksums, and
+rejects damaged headers, truncated streams and oversized input before passing anything to the core. File and directory
+fsync remain in `fsutil::write_atomic`; compression runs in pocket-core/the Android player, never on the launcher's UI thread.
+
+Only Auto changes format/name. Manual slots, Before load and Earlier remain raw; a timeline copy or Android set-aside
+slot decodes Auto first, so no compressed bytes reach a legacy filename. Linux, Deck and handheld builds share the helper;
+Android's player uses the same codec for save/load and `Core::resume`. Old raw `.pstate.auto` / `.taken` states still load,
+without a migration write. The newest actual quit is selected across both namespaces before crash recovery points.
+
+**Downgrade:** 0.1.14 and 0.2.0 cannot see `.pstate.auto.z`. After a durable new Auto is written, old raw Auto/taken/retry
+names are retired and the directory is synced. An older build therefore starts from its battery save, and its later raw
+quit cannot overwrite the compressed moment. On upgrade both namespaces are readable, and battery-content protection
+still prevents rolling back a newer in-game save. The start that picks one of two Auto files moves the other (older) one
+to its `.taken.retry` name: Load still lists it, but a crash or a quit without saving never brings it back. No version writes compressed data into `.pstate`, `.pstate1`… or old
+`.pstate.auto`. Corrupt compressed Auto with nothing intact behind it is retained as retry when possible and reported as a
+failed resume; with an intact older moment behind it, that one is resumed and the corrupt one removed. Battery data
+is left intact. A later successful new exit replaces the older automatic recovery points as before.
 
 **Shortcuts** (`src/hotkeys.rs`, Options > Shortcuts, each can be switched off). pocket-core reads the same evdev pad
 as pocket-ui; while HOME is down the game gets no buttons.
@@ -554,11 +594,11 @@ game shows (below): the FPS line, or Pixel Path's strip beside the picture (`src
 ### Earlier: rolling states (`src/timeline.rs`, 2026-10-25)
 
 muOS-style timeline saves on pocket-core, the pause menu's **Earlier** row (`src/app_earlier.rs`;
-[user guide](user/pause-menu.md#earlier)).
+[user guide](user/pause-menu-saves.md#earlier)).
 
 - **What is kept**: a ring of 6 states, one every 5 minutes of play (`<game>.pstate.earlier1` … `6`, the oldest
   replaced; which is newest is the file time), and the state each session continued from, copied from
-  `.pstate.auto.taken` (or `.taken.retry`) with the auto state's picture (`.pstate.started1` … `3`). Each with a `.png`.
+  `.pstate.auto.z.taken` (or `.taken.retry`) with the auto state's picture (`.pstate.started1` … `3`). Each with a `.png`.
 - **Play time** (`timeline::Clock`): every refresh of play adds the time since the one before, at most 250 ms; `pause`,
   `sleep`, the pause's end (`after_pause`) and Earlier switched off stop the clock, so the menu, sleep and a suspend
   nobody announced don't count, nor does a stalled refresh (a loading screen) beyond a quarter second. Fast-forward
@@ -895,9 +935,11 @@ side: launch resolution, opening, painting, saving). User side: [user/options.md
 
 `h700_gba` supplies bundled ARM64 gpSP for `gba`, `gbah` and `gbav`, with mGBA still offered by Runs on.
 Explicit game/console choices win. Existing raw or compressed Auto/taken moments select mGBA unless their
-header identifies the pinned gpSP BSON format. Without any Auto/taken moment, the newest save slot
-(`.pstate`, `.pstate1`..`.pstate7`) decides the same way: mGBA states (397,888 bytes) are refused by gpSP
-(425,984 bytes), so existing mGBA slots keep the game on mGBA.
+header identifies the pinned gpSP BSON format. Compressed moments use `state_file`'s validated reader, including
+both length checks and checksums; damaged data keeps the conservative mGBA choice and remains untouched.
+On equal capture times, compressed moments precede raw ones, matching the player's own Continue order.
+Without any Auto/taken moment, the newest save slot (`.pstate`, `.pstate1`..`.pstate7`) decides the same way: an mGBA
+state (397,888 bytes) is refused by gpSP's size check (425,984), so slots saved on mGBA before 0.3 keep that game on mGBA.
 Owner scanning runs on a worker; an early launch waits for its
 answer. The worker refreshes after exit, including Quit without retaining a moment. No state is migrated or deleted.
 
@@ -911,6 +953,8 @@ cache-sync build; `gba-core-files.sh` refuses a different or 32-bit build. Rollb
 H700 Auto is explicitly applied at game start and maps to Performance while retaining the kernel's maximum
 frequency. The existing power lease/journal restores governor and limit on exit and after a crash. Battery and Max
 remain explicit choices. This avoids inheriting a low clock from the shelf when bypassing ROCKNIX's runemu.sh.
+Delayed standalone cleanup treats an exact `pocket-core` process as an active game, so it cannot reset the hosted
+game's governor after its eight-second grace period. Helper process names do not count.
 
 ### ROCKNIX's mechanism (20261001, read from the source and the image)
 
@@ -1103,7 +1147,7 @@ system's quiet profile and `/tmp/pocket-core.restore` gone.
   fills in what is missing from there (`hostsys::prepare_ppsspp`, like `prepare_scummvm`): file by file through a temporary
   file and a rename, never replacing a file that is there (custom fonts, an older `compat.ini`), a stat per file once complete,
   nothing on a system without that folder. These replaceable assets use no fsync/syncfs: per-file fsync took 39 seconds
-  on a slow SD card, and one final syncfs did not improve it. `.pocket-ui-seeded.json` records each copied file's size and
+  on a slow SD card. A single-sync probe also waited on outstanding filesystem writeback. `.pocket-ui-seeded.json` records each copied file's size and
   identity/mtime; later starts repair missing files and short, unchanged seeded files. Untracked files, destination links
   and player replacements/edits stay untouched. A missing/unreadable ownership record conservatively preserves existing
   files. One log line `ppsspp assets: N file(s) ... (M ms)` includes the copy time.
@@ -1312,7 +1356,7 @@ core reported for ROCKNIX in October 2026 (first released for the Miyoo Mini), i
   with its "Force HLE BIOS" option on. `hostsys` lists them (`SATURN_BIOS`), and the system is marked
   `default_without_bios`: `hostsys::route` sends a Saturn game to pocket-core only when one of them is in
   `roms/bios`, otherwise it stays on standalone YabaSanshiro as before, without an error card. A game pocket-core
-  can't start may try standalone YabaSanshiro once, before any game picture and without pocket-core moments (`fallback.rs`).
+  can't start may try standalone YabaSanshiro for this launch (`fallback.rs`), only before any game picture and without pocket-core moments.
 - **Picture**: ROCKNIX's build asks for desktop OpenGL (`RETRO_HW_CONTEXT_OPENGL`, compat 3.0), not GLES; it got
   `FD650 / 4.6 (Compatibility Profile) Mesa 26.2.2`, depth + stencil, bottom-left origin, framebuffer 704×512
   (resolution mode "original"). 320×240 at 4:3, 60 Hz (the core always reports NTSC). Picture defaults as for the
@@ -1620,7 +1664,8 @@ that missed the bounded shutdown deadline.
   EPIPE observations are separate because they can describe the same physical event as a later write EPIPE.
 - `queue`: startup shortage polling and largest deficit, planned server-prefill silence, intentional pause
   silence, refill-silence chunks, playing starvation, queue-deficit frames and full emitted silence frames, input/resampled/dropped frame counts and
-  current phase. Startup polling is not an audible dropout count. Planned silence must not disappear behind a
+  current phase. `startup_backpressure_us` measures time spent preserving opening PCM while the writer makes room.
+  Startup polling is not an audible dropout count. Planned silence must not disappear behind a
   zero playing-only count; a writer that never started is not a successful playback test.
 - `pipewire`: only when asked: the first `audio stats` starts the sampler (`Audio::observe_pipewire`), the tone fixture
   starts it at once, and `POCKET_CORE_AUDIO_PW=1` from the open. A game without a bench runs none of its helpers
@@ -1738,7 +1783,7 @@ What changes is the quantum (`src/audio_route.rs`):
   and opens the stream again when that changes during play, so headphones connected or switched off mid-game get the
   right buffer within one 2 s check. The shelf's stream (`ui_sound::ui_ring`) goes by the quantum the graph is seen
   at instead (below, "UI sounds": "Buffer and quantum").
-- **Queue.** 20 ms on the speaker at 256 (48 ms for 3D cores), as before. At 1024 the writer takes a whole cycle out
+- **Queue.** 20 ms on the speaker at 256 (48 ms for 3D cores). At 1024 the writer takes a whole cycle out
   of it at once, so it is 48 ms there (`CYCLE_TARGET_MS`; at 2048 a 20 ms queue underran in the bench). Together with
   the 32 ms buffer that adds about 60 ms on headphones, against the 100-250 ms the codec and the radio add.
 - **Rate control.** It steered on each raw reading of the queue, which saws by a core frame (17 ms) and a writer
@@ -1748,7 +1793,7 @@ What changes is the quantum (`src/audio_route.rs`):
   cents down and the overfilled queue then 9 cents up for seconds. The averaged fill after that second is the
   reference it holds, moved to the target by at most 0.02 % of the pitch (`REFERENCE_SLEW`, 0.35 cents), so a queue
   that starts a few ms off (a stream just linked) takes a minute to get there instead of a 2-4 cent glide. The writer
-  starts at the target instead of 1.5 times it, the Bluetooth stream is opened before the queue fills, and after the
+  starts at `max(target, 20 ms + one regular delivery)`, accounting for the before-push fill observed by the controller, the Bluetooth stream is opened before the queue fills, and after the
   pause menu the control starts afresh the same way (the queue comes back up to a core frame off where it was). Unit test: `audio::tests::the_rate_control_holds_the_pitch_steady`
   (a simulated graph at 256, 1024 and 2048, clocks ±0.3 %, a start 30 % low).
 - **The shelf** (`ui_sound`) skips its 256 on Bluetooth the same way, asked on its quantum thread. It follows the
@@ -1879,10 +1924,14 @@ headset's volume keys don't. If InputPlumber were set to take over Bluetooth pad
 devices and count as the Pocket; ROCKNIX's profile doesn't (to check on the device, see below).
 
 **Seats** (`players::Seats`, kept by pocket-core in `players::Inputs`):
-- At the start (`Inputs::arrange`, after the first look at the devices) everyone is seated by the order in
-  `<data>/players.json`, gaps closed, then the controllers it doesn't name: the Pocket first, then in the order they
-  connected. No file: the Pocket is player 1.
-- During the game a controller that connects gets the seat it had in this game if free, else the lowest free one; one
+- At the start (`Inputs::arrange`, after the first look at the devices) everyone connected is seated by the order in
+  `<data>/players.json` with the gaps closed (`Mode::Compact`; absent controllers reserve nothing, as ROCKNIX's
+  EmulationStation seats at each launch), then the controllers it doesn't name: the Pocket first, then in the order
+  they connected. No file: the Pocket is player 1. The controller bridge (`pad_bridge`) and the pages that show a
+  player number (Controller setup, Players before pocket-core wrote its seats) arrange the same way.
+- Forgetting a Bluetooth device (`app_bluetooth`, `Event::Forgotten`) takes `bt:<address>` out of the order
+  (`Order::forget`, the same serialized `Order::update`); its button layout in `controllers.json` stays.
+- During the game a controller that connects gets the seat it had in this game, else one nobody had; one
   that goes away leaves its seat empty (that player's port reads nothing). Both show a toast
   ("DualSense connected — Player 2", `players::connected_note`); the controllers there at the start don't.
 - pocket-core writes the seats to `/tmp/pocket-core.players.json` on every change; the pause menu's Players page
@@ -1976,6 +2025,21 @@ the Pocket's motor at the same time, and the Players page (A on each controller)
   under a game; at that level the 16-bit rounding of the gain stage (no dither) is audible on a 28 ms tick. The default
   is now step 7 (-7.5 dB), which puts the samples at about -9 dBFS.
   The mixer thread decodes all of them once when it starts (`ui_sound::start` at launch), so a sound is a buffer lookup.
+- **Retro blips** (style Retro, `retro::on()`): Nav, Confirm, Back, Menu and Error play synthesised chiptune blips
+  (`ui_sound::blip`: pulse wave, a pitch step or sweep, 1 ms attack and 6 ms release, two low-pass poles at 7 kHz, nothing
+  sampled) instead of the files; the mixer thread makes them once beside the files and `bank_index` picks by one atomic
+  load. Levelled by the RMS of the loudest 50 ms (`loudest_rms_db`), 1.5 to 3 dB under the file each replaces, peaks
+  -12 to -21 dBFS before the volume gain. Measured (`cargo test --profile gate --lib retro_blip_table -- --ignored --nocapture`,
+  `POCKETUI_BLIP_DIR=` also writes WAVs):
+
+  | Sound | file peak / RMS dBFS / ms | blip peak / RMS dBFS / ms |
+  |---|---|---|
+  | Nav | -3.0 / -18.6 / 92 | -14.7 / -20.5 / 32 |
+  | Confirm | -1.5 / -17.2 / 130 | -16.9 / -19.0 / 78 |
+  | Back | -1.5 / -21.2 / 70 | -20.8 / -23.0 / 78 |
+  | Menu | -1.5 / -10.2 / 450 | -11.9 / -13.0 / 102 |
+  | Error | -1.5 / -19.2 / 124 | -18.6 / -21.0 / 112 |
+
 - **Media sounds** (0.1.4): ElevenLabs sound effects (2026-10-29, the prompts in `scripts/ui-sounds/media-sounds.tsv`),
   four variants per sound, one chosen by measurement (all four were fine by ear; a first set synthesised with numpy
   sounded "like the same video-game drum" and went): a clean onset (the transient within the first 15 ms after
@@ -2046,9 +2110,9 @@ the Pocket's motor at the same time, and the Players page (A on each controller)
   mixer owns an `audio::Sink`, the same native PipeWire stream through ALSA's `pipewire` device that pocket-core uses
   (10 ms ALSA buffer; `POCKET_CORE_AUDIO=pulse` applies here too). It opens it for the first sound, mixes up to four
   voices in 128-frame chunks (2.7 ms), writes silence between sounds and closes the stream 2 s after the last one,
-  except while pocket-ui is in front, awake with the screen on and its sounds on (`ui_sound::keep_warm`, asked after
-  every sleep tick): then the stream opens at once and stays open, so the first sound after a quiet spell starts within
-  a chunk. Screen off, a game, sounds off or a muted sink close it as before, so a dark Pocket keeps no stream and its
+  with a short warm lease while pocket-ui is in front, awake with its sounds on (`ui_sound::keep_warm`, asked after
+  every sleep tick). The lease ends two seconds after the last button press, so a still shelf closes the stream too.
+  Browsing keeps the output ready between presses; the first sound after a longer rest reopens it off the UI thread. Screen off, a game, sounds off or a muted sink close it as before, so a dark Pocket keeps no stream and its
   sink suspends. `ui_sound::stop` closes it at once when a game starts, unless it is kept warm and open: then it closes
   once the launch's own sounds have played (`close_when_done`), instead of opening again for them while the game starts.
 - **Why warm** (2026-10-29, `examples/ui_open_bench`, the RG35XX Plus): opening the stream costs about 50 ms there alone
@@ -2185,6 +2249,46 @@ virtual device, `POCKET_CORE_TEST=1` and the command `achievement-demo` show an 
 commercial Game Boy and NES games): the log shows `achievements: <rom> hashed in N ms: <md5>`, `[rcheevos] Identified
 game ...`, `achievements: N of M unlocked`, and the "Achievements: N of M" note appears. The pause menu lists them.
 
+
+## Stalled player recovery
+
+`exit_guard::Progress` starts before loading the core and stays active until graphics, audio and the core have all
+been dropped. Completed event-loop turns refresh its clock, including while paused. The FIFO reader marks Pause
+and Quit requests before forwarding them; the watcher reads the SIGTERM atomic flag itself. An unhandled request
+expires after 2 s for PPSSPP and `quit::WINDOW_GRACE` (5 s, what pocket-ui gave a closing window before) for other
+cores while the main thread runs frames or waits in the pause. While it is busy with work of its own (`Progress::busy`:
+starting, Continue, commands such as a slot save or load) a request waits up to `CORE_STATE_LIMIT` (20 s): Quit right
+after "Save to slot" on a 50 MB state is no hang. A general stall expires after 25 seconds for PPSSPP, or
+`quit::SAVE_LIMIT` for other libretro cores. Once the main thread has taken a Quit (`Progress::exiting`) further
+requests and SIGTERM are ignored and only a 120 s stall ends it: the exit save keeps its own guards and
+pocket-ui's patience, and a second Quit must not cut a slow card's write short. The existing 20-second PPSSPP serialize guard remains responsible for its saved-slot fallback.
+A frame completing does not acknowledge an incoming command. Repeated requests never extend the first deadline.
+Shortcut actions and actual Earlier captures also use the busy allowance (`Progress::work`), even when entered from
+the frame or pause loop rather than the FIFO. Completing that work restores the previous busy state and starts fresh
+command patience; a Pause queued during a slow save must not be overdue the instant the save finishes. Idle Earlier
+checks do not enter this section or reset a pending command's clock.
+The swap (`Progress::display`) is outside both clocks: it blocks until the compositor wants the next frame, and with the
+output switched off that is when the output is on again. pocket-ui's light sleep on the SM8550 powers the output off
+right before pocket-core takes its `sleep`, so the frame under way waits there for the whole screen-off (Odin 2 Mini,
+05.11.2026: the main thread in `ppoll`, the game closed as stalled after 120 s). Leaving the swap starts the stall clock
+again and gives a Pause or Quit that came meanwhile its full patience (`tests/exit_guard.rs`).
+
+The terminal progress callback never serializes or replaces Auto. It uses `_exit`, with an independent one-second
+hard stop in case reporting or recovery I/O itself blocks. Continue renames its source Auto/taken file before the
+core loads it, as for a crash: a moment whose load hangs or crashes the core is tried once more, then only Load lists
+it (left in place, a moment that crashes `retro_unserialize` would crash every start). A successfully loaded crash
+retry is made available again after a host-detected stall in a later frame, through a no-clobber rename. Failed loads and deliberate Quit without saving retain their existing retirement rules.
+Atomic state publication protects the previous moment if a write is interrupted. No new moment at the stall is claimed.
+
+`emu_choice::game_default` defaults Jeanne d'Arc (title filename or US ID UCUS98700) to ROCKNIX's standalone
+PPSSPP when that runner is listed. Explicit game and console choices take priority. Odin comparison found the
+libretro emulation thread spinning in `MediaEngine::stepVideo` → system FFmpeg `av_read_frame`, while the main
+thread waited in `GLRenderManager::ThreadFrame` from `retro_run`. RetroArch's same core also hung; standalone
+PPSSPP with its bundled FFmpeg reached the title screen. GPU readbacks, software rendering, IR CPU and simulated
+UMD delays did not fix it. This is separate from the GPU pause-drain deadlock. Upstream has related system-FFmpeg
+movie-hang reports ([#17493](https://github.com/hrydgard/ppsspp/issues/17493)); the precise FFmpeg loop cause has
+not been bisected. Existing host moments remain on disk; standalone uses its own states and the shared PSP in-game saves.
+
 ## Failed starts and Continue safety (2026-11-07)
 
 `fast_switch::STARTING` confirms support for frame reporting before loading a core; an older binary without
@@ -2197,7 +2301,7 @@ only by clean pipe completion. A missing pipe, read error or a watcher delayed b
 trigger automatic fallback. This wait runs on the process waiter, after exit, not on the UI thread.
 
 `fallback::should_retry` requires an error before any frame, no requested quit and no BIOS/archive/patch refusal.
-The waiter also checks Auto (taken/retry), manual slots, undo, Earlier and `.keptN`. Any pocket-core moment
+The waiter also checks Auto (raw/compressed, taken/retry), manual slots, undo, Earlier and `.keptN`. Any pocket-core moment
 blocks an automatic switch. The temporary `Fallback` entry routes only the immediate retry and is removed after
 launch; it never persists a new automatic choice. Loading ignores old time-based guesses immediately and queues
 their retirement (primary JSON and backup) on the existing card writer, keeping fsync off the UI thread.

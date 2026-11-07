@@ -32,12 +32,7 @@ impl Card {
         assert!(status.success());
         let stub = (cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|w| w.is_empty())).then(|| {
             let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), dir.path().join("wl").to_str().unwrap()]).spawn().unwrap();
-            for _ in 0..200 {
-                if dir.path().join("wl").exists() {
-                    break;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
+            test_clock::wait_for(|| dir.path().join("wl").exists(), std::time::Duration::from_secs(2), "Wayland stub listening");
             Stub(child)
         });
         Card { dir, _stub: stub }
@@ -190,10 +185,67 @@ fn the_hold_to_toggle_row_is_visible_with_its_default_on_every_panel() {
     };
     assert!(file.write(&pocket_ui::core_options::file_path(&data, "gbc")));
     for size in ["640x480", "1024x768", "1240x1080", "1920x1080"] {
-        // Controls card is the first row, before the stick and sixteen button mappings.
-        let screen = card.screen("controls:18", size);
+        // Controls card and controller setup precede the stick and sixteen button mappings.
+        let screen = card.screen("controls:19", size);
         assert!(screen.contains("Hold to toggle"), "{size}: {screen}");
         assert!(screen.lines().any(|l| l == "Off"), "{size}: {screen}");
         assert!(screen.contains("Pick a button"), "the selected control explains itself: {size}: {screen}");
+    }
+}
+
+#[test]
+fn the_button_tester_without_a_controller_says_what_to_do_in_every_language_and_size() {
+    let card = Card::new();
+    for (lang, heading, leave) in [
+        ("en", "No controller found", "Hold to leave"),
+        ("de", "Kein Controller gefunden", "Halten zum Verlassen"),
+        ("es", "No se encontró ningún mando", "Mantén para salir"),
+    ] {
+        for size in ["640x480", "1024x768", "1240x1080"] {
+            let (words, boxes) = card.screen_in("test-buttons:empty", size, lang, "");
+            assert!(words.contains(heading) && words.contains(leave), "{lang} {size}: a sentence and the way out, not a blank: {words}");
+            assert!(boxes.trim().is_empty(), "{lang} {size}: text runs into other text or the hint bar: {boxes}");
+        }
+    }
+}
+
+#[test]
+fn the_button_tester_lists_every_pad_and_explains_the_last_press_without_cut_words() {
+    let card = Card::new();
+    // (state, words that must be on the screen)
+    let cases: [(&str, &[&str]); 5] = [
+        ("test-buttons", &["Pocket", "Player 1 · Built-in", "In menus: L1", "In games: the console's L1", "30%", "R2"]),
+        ("test-buttons:bt", &["8BitDo Pro 2", "Player 2 · Bluetooth", "80%", "In menus: B", "In games: the console's B", "A trigger counts as pressed from 55%"]),
+        ("test-buttons:two", &["Pocket", "8BitDo SN30 Pro", "Player 1 · Built-in", "Player 2 · Bluetooth", "Player 2 · 8BitDo SN30 Pro"]),
+        ("test-buttons:remap", &["Remapped to: Bottom button", "Bottom button"]),
+        ("test-buttons:hold", &["Keep holding to leave"]),
+    ];
+    for (state, expected) in cases {
+        for size in ["640x480", "1024x768", "1240x1080"] {
+            let (words, boxes) = card.screen_in(state, size, "en", "");
+            for want in expected {
+                assert!(words.contains(want), "{state} {size}: \"{want}\" is on the screen: {words}");
+            }
+            assert!(boxes.trim().is_empty(), "{state} {size}: text runs into other text or the hint bar: {boxes}");
+        }
+    }
+    // Press something nobody knows: the controller's own name for it is kept for a bug report.
+    let (words, _) = card.screen_in("test-buttons:unknown", "1240x1080", "en", "");
+    assert!(words.contains("Not recognised: 8BitDo SN30 Pro: BTN_C 1"), "{words}");
+}
+
+#[test]
+fn the_button_tester_reads_in_german_and_spanish_with_large_text_without_running_into_anything() {
+    let card = Card::new();
+    for lang in ["de", "es"] {
+        for state in ["test-buttons:two", "test-buttons:remap", "test-buttons:hold"] {
+            for size in ["640x480", "1240x1080"] {
+                for text in ["normal", "large"] {
+                    let (words, boxes) = card.screen_in(state, size, lang, text);
+                    assert!(!words.is_empty(), "{lang} {state} {size} {text}");
+                    assert!(boxes.trim().is_empty(), "{lang} {state} {size} {text}: text runs into other text or the hint bar: {boxes}\n{words}");
+                }
+            }
+        }
     }
 }

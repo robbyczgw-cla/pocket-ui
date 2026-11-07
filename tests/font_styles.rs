@@ -35,13 +35,8 @@ fn wayland(tmp: &Path) -> Option<Stub> {
     let path = tmp.join("wayland-stub");
     let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), path.to_str().unwrap()]).spawn().expect("python3 for scripts/wayland-stub.py");
     let stub = Stub { path, child };
-    for _ in 0..200 {
-        if stub.path.exists() {
-            return Some(stub);
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-    panic!("scripts/wayland-stub.py didn't start");
+    test_clock::wait_for(|| stub.path.exists(), std::time::Duration::from_secs(2), "Wayland stub listening");
+    Some(stub)
 }
 
 fn copy_dir(from: &Path, to: &Path) {
@@ -108,7 +103,7 @@ fn check_font(font: &str, lang: &'static str) {
                 let out = cmd
                     .args(["--snapshot", &state, png.to_str().unwrap()])
                     .env("POCKETUI_MOCK", "1")
-                    .env("POCKETUI_LANG", "de")
+                    .env("POCKETUI_LANG", lang)
                     .env("POCKETUI_TEXT_SIZE", "large")
                     .env("POCKETUI_SNAPSHOT_SIZE", "640x480")
                     .env("POCKETUI_FONT", &font)

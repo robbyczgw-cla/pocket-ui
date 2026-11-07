@@ -1287,7 +1287,8 @@ mod tests {
     }
 
     #[test]
-    fn the_logger_writes_net_log_from_the_journal_and_keeps_it_with_the_boot() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_logger_writes_net_log_from_the_journal_and_keeps_it_with_the_boot() {
         let mut r = rig("netlog");
         r.src.net = crate::net_log::NetSources {
             journal: vec!["sh".into(), "-c".into(), "printf '[    5.000000] h iwd[1]: psk=abc\\n[    6.000000] h NetworkManager[2]: <info> ok\\n'; sleep 3".into()],
@@ -1297,11 +1298,11 @@ mod tests {
         let t0 = Instant::now();
         let mut d = Daemon::open(&r.logs, r.src.clone(), FILE_CAP, t0);
         let mut n = 0;
-        while !read(&r.logs.join(NET_LOG)).contains("<info> ok") && n < 100 {
+        crate::testutil::clock::wait_for(|| {
             d.step(t0 + Duration::from_millis(100 * n), 1_791_900_000);
-            std::thread::sleep(Duration::from_millis(20));
             n += 1;
-        }
+            read(&r.logs.join(NET_LOG)).contains("<info> ok")
+        }, Duration::from_secs(2), "journal lines reached net.log");
         let net = read(&r.logs.join(NET_LOG));
         assert!(net.contains("iwd[1]: psk=[hidden]\n") && net.contains("NetworkManager[2]: <info> ok\n"), "{net}");
         d.sync_all(t0);

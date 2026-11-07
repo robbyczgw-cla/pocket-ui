@@ -25,8 +25,8 @@ use std::ffi::OsString;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -61,6 +61,9 @@ pub struct Release {
     pub version: String,
     /// Absolute, or relative to update.json.
     pub url: String,
+    /// Additional signed sources, tried in order after `url`, with exactly the same size and SHA-256.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mirrors: Vec<String>,
     pub sha256: String,
     pub size: u64,
     #[serde(default)]
@@ -94,6 +97,39 @@ pub fn app_version() -> &'static str {
     option_env!("POCKETUI_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"))
 }
 
+/// The Brick's beta builds are `<release>-brick.<n>` from update 6 on (0.1.14-brick.6): the release they are built on, then the
+/// beta's number. Older ones (0.1.11-brick.202611032041, a date) and anything else: None, shown as they are. `newer` still
+/// compares the raw strings: 0.1.14-brick.6 is newer than 0.1.11-brick.202611032041 (14 > 11 comes first).
+#[cfg(feature = "brick")]
+fn brick_beta(v: &str) -> Option<(&str, u32)> {
+    let (base, n) = v.split_once("-brick.")?;
+    let n = n.parse().ok().filter(|n| *n < 10_000)?;
+    Some((base, n))
+}
+
+/// A version in a short row (Settings' lists, the Updates page): "0.1.14 beta 6".
+#[cfg(feature = "brick")]
+pub fn brick_short(v: &str) -> String {
+    brick_beta(v).map_or_else(|| v.to_string(), |(base, n)| format!("{base} beta {n}"))
+}
+
+/// The version on About: "0.1.14 for TrimUI Brick (beta 6)", a public release "0.2.1 for TrimUI Brick".
+#[cfg(feature = "brick")]
+pub fn brick_long(v: &str) -> String {
+    match brick_beta(v) {
+        Some((base, n)) => format!("{base} for TrimUI Brick (beta {n})"),
+        None if !v.contains('-') => format!("{v} for TrimUI Brick"),
+        None => v.to_string(),
+    }
+}
+
+/// A release build: the release scripts (`release-app.sh`, `make-image*.sh`, `make-*-install.sh`) set
+/// POCKETUI_VERSION. A build from main or a branch (`dev.sh`, the artifact worker, tests) does not; its Cargo.toml
+/// version lags the released ones.
+pub fn release_build() -> bool {
+    option_env!("POCKETUI_VERSION").is_some()
+}
+
 /// `url` as given when absolute, otherwise next to `manifest_url`.
 pub fn resolve(manifest_url: &str, url: &str) -> String {
     if url.contains("://") {
@@ -113,12 +149,21 @@ struct Tools<'a> {
     /// curl's `--proto-redir`: where a redirect may lead. GitHub Releases answers with a redirect to its download
     /// host, so redirects are followed (`-L`), but only to https.
     redirects: &'a str,
+    no_progress: Duration,
+    source_timeout: Duration,
 }
 
 /// https only, and `file://` for a channel on the card (tests, the device test). Never plain http, not even after a
 /// redirect: the list is signed and every file hashed, but a network that can rewrite http could still stall or
 /// feed an old list.
-const TOOLS: Tools<'static> = Tools { curl: "curl", unsquashfs: "unsquashfs", protocols: "=https,file", redirects: "=https" };
+const TOOLS: Tools<'static> = Tools {
+    curl: "curl",
+    unsquashfs: "unsquashfs",
+    protocols: "=https,file",
+    redirects: "=https",
+    no_progress: Duration::from_secs(30),
+    source_timeout: Duration::from_secs(5 * 60),
+};
 
 /// Whether `url`'s scheme is one of `protocols` (curl's `--proto` syntax, `=https,file`).
 fn scheme_allowed(protocols: &str, url: &str) -> bool {
@@ -128,7 +173,10 @@ fn scheme_allowed(protocols: &str, url: &str) -> bool {
 
 /// The arguments every curl call of this module starts with.
 fn curl_base(tools: &Tools) -> Vec<OsString> {
-    ["-fsSL", "--proto", tools.protocols, "--proto-redir", tools.redirects].iter().map(OsString::from).collect()
+    ["-fsSL", "--proto", tools.protocols, "--proto-redir", tools.redirects]
+        .iter()
+        .map(OsString::from)
+        .collect()
 }
 
 /// curl's exit code 1, "unsupported protocol": a redirect to plain http (or another scheme `--proto-redir` forbids).
@@ -137,10 +185,55 @@ const CURL_PROTOCOL: i32 = 1;
 const CURL_HTTP_ERROR: i32 = 22;
 
 const NOT_HTTPS: &str = "The update server sent an address that isn't https. Nothing was changed.";
+const DAMAGED: &str = "The download is damaged or was changed. Nothing was installed.";
+/// curl's exit code 23: it could not write what it got, which on the device is a full SD card.
+const CURL_WRITE_ERROR: i32 = 23;
+const CARD_WRITE: &str = "The update couldn't be saved: the SD card is full or can't be written. Nothing was installed.";
+const TOO_SLOW: &str = "The download is too slow on this network. Nothing was installed. Try again on a faster Wi-Fi.";
+/// curl's TLS failures: the server's certificate can't be checked (60), the secure connection can't be set up (35).
+/// With a clock in the past (a flat battery, no network time yet) every certificate looks not valid yet.
+const CURL_TLS: [i32; 2] = [35, 60];
+const CLOCK_WRONG: &str = "The clock looks wrong, so the update server can't be checked. Set it in Settings › System › Time, or wait for network time over Wi-Fi.";
+
+/// The clock, when it is clearly wrong and curl's secure connection failed (exit `code`).
+fn clock_reason(code: Option<i32>, clock_wrong: bool) -> Option<&'static str> {
+    code.filter(|c| clock_wrong && CURL_TLS.contains(c)).map(|_| CLOCK_WRONG)
+}
+
+/// What a failed connection says: the clock (`clock_reason`), else `generic` (or the network's sign-in page).
+fn unreachable_because(code: Option<i32>, generic: &str) -> String {
+    clock_reason(code, clock_wrong()).map_or_else(|| crate::net_check::refine(generic), String::from)
+}
+
+/// The clock is before this build or 2026 (`clock_check`).
+fn clock_wrong() -> bool {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+    crate::clock_check::looks_wrong(now, crate::clock_check::built_unix())
+}
+
+/// The SD card has room for an app update of `size` bytes of which `have` are downloaded already: the rest of the download,
+/// the unpacked programs (about three times the .tar.gz) and `APP_SPARE` left over, so the update never fills the card
+/// that the next save needs. `free`: None where it can't be asked.
+fn room_for_app(size: u64, have: u64, free: Option<u64>) -> Result<(), String> {
+    let needed = size.saturating_sub(have) + size.saturating_mul(APP_UNPACKED_FACTOR) + APP_SPARE;
+    match free {
+        Some(free) if free < needed => Err(card_full(needed - free)),
+        _ => Ok(()),
+    }
+}
+
+/// The unpacked programs of an app update next to its .tar.gz, for `room_for_app` (the list has no unpacked size).
+const APP_UNPACKED_FACTOR: u64 = 3;
+/// Kept free on the card besides: a full card stops saves and logs.
+const APP_SPARE: u64 = 32 << 20;
+
+pub fn card_full(needed: u64) -> String {
+    format!("The SD card is too full for this update: it needs {} MB more. Nothing was changed.", needed.div_ceil(1 << 20))
+}
 
 /// Lets the Updates page stop a running download.
 #[derive(Clone, Default)]
-pub struct Cancel(Arc<AtomicBool>);
+pub struct Cancel(Arc<AtomicBool>, Arc<Mutex<Option<&'static str>>>, Arc<AtomicU64>);
 
 impl Cancel {
     pub fn new() -> Self {
@@ -151,11 +244,58 @@ impl Cancel {
         self.0.store(true, Ordering::SeqCst);
     }
 
+    /// Worker-owned phase; the UI only reads this small value, never does network work.
+    pub fn status(&self) -> Option<&'static str> {
+        self.1.try_lock().ok().and_then(|s| *s)
+    }
+
+    /// Expected size of the current file (components may be smaller than the app archive).
+    pub fn progress_total(&self) -> u64 {
+        self.2.load(Ordering::Relaxed)
+    }
+
+    /// Updates the worker phase; snapshot previews use the same text.
+    pub fn set_status(&self, status: &'static str) {
+        if let Ok(mut phase) = self.1.lock() {
+            *phase = Some(status);
+        }
+    }
+
     pub fn is_cancelled(&self) -> bool {
         self.0.load(Ordering::SeqCst)
     }
 }
 
+/// A channel inside a tailnet (a `*.ts.net` name: the Brick card's private channel, docs/TRIMUI-BRICK-REMOTE.md) is reached
+/// through Tailscale's local proxy (`proxy`, from POCKETUI_TS_PROXY): with userspace networking nothing else on the device
+/// can reach the tailnet, and MagicDNS names are only known to Tailscale. Every other address goes as it always did.
+#[cfg(feature = "brick")]
+fn proxy_args(url: &str, proxy: Option<&str>) -> Vec<OsString> {
+    let host = url.split_once("://").map_or("", |(_, rest)| rest.split(['/', ':', '?']).next().unwrap_or(""));
+    match proxy.filter(|p| !p.is_empty()) {
+        Some(p) if host.to_ascii_lowercase().ends_with(".ts.net") => vec!["--proxy".into(), p.into()],
+        _ => Vec::new(),
+    }
+}
+
+/// Only a `--features brick` build reads it: the ROCKNIX builds fetch exactly as before.
+#[cfg(feature = "brick")]
+fn ts_proxy() -> Option<String> {
+    std::env::var("POCKETUI_TS_PROXY").ok()
+}
+
+/// What a failed connection says: for a channel in the tailnet, that it goes over Tailscale; else as everywhere
+/// (`unreachable_because`: a wrong clock named).
+#[cfg(feature = "brick")]
+fn unreachable(url: &str, code: Option<i32>, wifi: &str) -> String {
+    if proxy_args(url, Some("x")).is_empty() {
+        unreachable_because(code, wifi)
+    } else {
+        "Couldn't reach the update server over Tailscale. Is Tailscale on and connected?".into()
+    }
+}
+
+#[cfg(not(feature = "brick"))]
 fn fetch(tools: &Tools, url: &str) -> Result<Vec<u8>, String> {
     if !scheme_allowed(tools.protocols, url) {
         return Err("The update address has to start with https://. Nothing was changed.".into());
@@ -166,7 +306,27 @@ fn fetch(tools: &Tools, url: &str) -> Result<Vec<u8>, String> {
         // The server is there but has no list (not published yet, or a wrong `update_url`): not a Wi-Fi problem.
         Some(CURL_HTTP_ERROR) => Err("No updates published yet. A new version installs like the first one; your games and settings stay.".into()),
         Some(CURL_PROTOCOL) => Err(NOT_HTTPS.into()),
-        _ => Err(crate::net_check::refine("Couldn't reach the update server. Check Wi-Fi.")),
+        code => Err(unreachable_because(code, "Couldn't reach the update server. Check Wi-Fi.")),
+    }
+}
+
+#[cfg(feature = "brick")]
+fn fetch(tools: &Tools, url: &str) -> Result<Vec<u8>, String> {
+    if !scheme_allowed(tools.protocols, url) {
+        return Err("The update address has to start with https://. Nothing was changed.".into());
+    }
+    let out = Command::new(tools.curl)
+        .args(curl_base(tools))
+        .args(proxy_args(url, ts_proxy().as_deref()))
+        .args(["--connect-timeout", "15", "--max-time", "60", url])
+        .output()
+        .map_err(|e| e.to_string())?;
+    match out.status.code() {
+        _ if out.status.success() => Ok(out.stdout),
+        // The server is there but has no list (not published yet, or a wrong `update_url`): not a Wi-Fi problem.
+        Some(CURL_HTTP_ERROR) => Err("No updates published yet. A new version installs like the first one; your games and settings stay.".into()),
+        Some(CURL_PROTOCOL) => Err(NOT_HTTPS.into()),
+        code => Err(unreachable(url, code, "Couldn't reach the update server. Check Wi-Fi.")),
     }
 }
 
@@ -186,12 +346,16 @@ pub fn parse_manifest(json: &[u8], sig_b64: &str, key: &[u8; 32]) -> Result<Mani
     serde_json::from_slice(json).map_err(|e| format!("update list: {e}"))
 }
 
-/// curl's arguments for a download to `dest`. A connection that doesn't come up in 20 s, or that
-/// stays under 10 KB/s for 30 s, is dropped (and retried); with `max_size` (from the signed list,
-/// 0 = unknown) curl refuses a file that is larger than announced.
+/// One bounded attempt. Retries belong to the signed source list, so a blocked host cannot
+/// consume all the time before the alternate host is tried. The worker also watches actual byte growth.
 fn download_args(tools: &Tools, url: &str, dest: &Path, max_size: u64) -> Vec<OsString> {
     let mut args = curl_base(tools);
-    args.extend(["--retry", "3", "-C", "-", "--connect-timeout", "20", "--speed-limit", "10240", "--speed-time", "30"].iter().map(OsString::from));
+    #[cfg(feature = "brick")]
+    args.extend(proxy_args(url, ts_proxy().as_deref()));
+    args.extend(["-C", "-", "--connect-timeout", "20", "--speed-limit", "1", "--speed-time", "30"].iter().map(OsString::from));
+    // curl's own limit only backs up the worker's (`download`), which ends a source first and says why.
+    args.push("--max-time".into());
+    args.push((source_deadline(tools, max_size).as_secs() + 10).to_string().into());
     if max_size > 0 {
         args.push("--max-filesize".into());
         args.push(max_size.to_string().into());
@@ -200,6 +364,16 @@ fn download_args(tools: &Tools, url: &str, dest: &Path, max_size: u64) -> Vec<Os
     args.push(dest.into());
     args.push(url.into());
     args
+}
+
+/// The slowest average a source may keep up for a whole file (the 10 KB/s curl's `--speed-limit` held before
+/// 0.3): a source gets `source_timeout` plus the file's size at that rate. A flat five minutes cut every system
+/// update (1.5 GB) and, on weak Wi-Fi, even the app, and the next source started again from nothing.
+const MIN_AVERAGE: u64 = 10 * 1024;
+
+/// How long one source may take for a file of `size` bytes (0: unknown, `source_timeout` alone).
+fn source_deadline(tools: &Tools, size: u64) -> Duration {
+    tools.source_timeout + Duration::from_secs(size / MIN_AVERAGE)
 }
 
 /// Downloads to `dest` with curl (resuming a partial file), reporting bytes so far to `progress`.
@@ -212,12 +386,21 @@ fn download(tools: &Tools, url: &str, dest: &Path, max_size: u64, cancel: &Cance
     // (`testutil::write_executable`).
     let mut tries = 0;
     let mut child = loop {
-        match Command::new(tools.curl).args(download_args(tools, url, dest, max_size)).stdout(Stdio::null()).stderr(Stdio::null()).spawn() {
+        match Command::new(tools.curl)
+            .args(download_args(tools, url, dest, max_size))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+        {
             Err(e) if e.raw_os_error() == Some(libc::ETXTBSY) && tries < 100 => tries += 1,
             spawned => break spawned.map_err(|e| e.to_string())?,
         }
         std::thread::sleep(Duration::from_millis(10));
     };
+    let started = Instant::now();
+    let deadline = source_deadline(tools, max_size);
+    let mut grew_at = started;
+    let mut high_water = std::fs::metadata(dest).map_or(0, |m| m.len());
     let too_large = || "The download is larger than announced. Nothing was installed.".to_string();
     loop {
         if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
@@ -230,15 +413,33 @@ fn download(tools: &Tools, url: &str, dest: &Path, max_size: u64, cancel: &Cance
                 // A release asset that was never uploaded (or a wrong name in the list): GitHub answers 404.
                 Some(CURL_HTTP_ERROR) => Err("The update file isn't on the server. Nothing was installed.".into()),
                 Some(CURL_PROTOCOL) => Err(NOT_HTTPS.into()),
-                _ => Err(crate::net_check::refine("Download failed. Check Wi-Fi.")),
+                Some(28) => Err("The download server stopped responding. Nothing was installed. Try again.".into()),
+                Some(CURL_WRITE_ERROR) => Err(CARD_WRITE.into()),
+                #[cfg(feature = "brick")]
+                _ if !proxy_args(url, Some("x")).is_empty() => Err("Couldn't reach the update server over Tailscale. Is Tailscale on and connected?".into()),
+                code => Err(clock_reason(code, clock_wrong()).unwrap_or("Download failed. Check Wi-Fi.").into()),
             };
         }
         let len = std::fs::metadata(dest).map_or(0, |m| m.len());
         progress(len);
+        if len > high_water {
+            high_water = len;
+            grew_at = Instant::now();
+            cancel.set_status("Downloading the update…");
+        }
         if cancel.is_cancelled() {
             let _ = child.kill();
             let _ = child.wait();
             return Err("Download cancelled.".into());
+        }
+        // Nothing new for a while: the server or the line is gone. Still coming, but too slowly for this file: say so.
+        if grew_at.elapsed() >= tools.no_progress || started.elapsed() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            if grew_at.elapsed() < tools.no_progress {
+                return Err(TOO_SLOW.into());
+            }
+            return Err("The download server stopped responding. Nothing was installed. Try again.".into());
         }
         // A server that doesn't announce its size is caught here instead of by curl.
         if max_size > 0 && len > max_size {
@@ -253,21 +454,73 @@ fn download(tools: &Tools, url: &str, dest: &Path, max_size: u64, cancel: &Cance
 
 /// Downloads `rel` to `dest` and checks size and SHA-256 against the signed list.
 fn download_checked(tools: &Tools, rel: &Release, manifest_url: &str, dest: &Path, cancel: &Cancel, progress: &dyn Fn(u64)) -> Result<(), String> {
-    if dest.exists() && std::fs::metadata(dest).map_or(0, |m| m.len()) > rel.size {
-        let _ = std::fs::remove_file(dest);
+    cancel.2.store(rel.size, Ordering::Relaxed);
+    // Validate every signed address before starting anything; never downgrade transport on fallback.
+    let urls: Vec<_> = std::iter::once(&rel.url).chain(&rel.mirrors).map(|u| resolve(manifest_url, u)).collect();
+    if urls.len() > 4 {
+        return Err("The update list names too many download servers. Nothing was installed.".into());
     }
-    let url = resolve(manifest_url, &rel.url);
-    if !scheme_allowed(tools.protocols, &url) {
+    if urls.iter().any(|u| !scheme_allowed(tools.protocols, u)) {
         return Err("The update list names a file that isn't on https. Nothing was installed.".into());
     }
-    download(tools, &url, dest, rel.size, cancel, progress)?;
-    let size = std::fs::metadata(dest).map_or(0, |m| m.len());
-    let hash = store::sha256_file(dest).map_err(|e| e.to_string())?;
-    if size != rel.size || hash != rel.sha256.to_lowercase() {
-        let _ = std::fs::remove_file(dest);
-        return Err("The download is damaged or was changed. Nothing was installed.".into());
+    if dest.exists() && std::fs::metadata(dest).map_or(0, |m| m.len()) > rel.size {
+        std::fs::remove_file(dest).map_err(|e| e.to_string())?;
     }
-    Ok(())
+    let mut last = String::new();
+    for (i, url) in urls.iter().enumerate() {
+        if cancel.is_cancelled() {
+            return Err("Download cancelled.".into());
+        }
+        if i > 0 {
+            // A failed source may have supplied wrong bytes. Never resume those on another host.
+            if dest.exists() {
+                std::fs::remove_file(dest).map_err(|e| e.to_string())?;
+            }
+            progress(0);
+        }
+        cancel.set_status(if i == 0 {
+            "Connecting to the update server…"
+        } else {
+            "Trying the next download server…"
+        });
+        let attempt = || {
+            download(tools, url, dest, rel.size, cancel, progress).and_then(|()| {
+                cancel.set_status("Checking the download…");
+                let size = std::fs::metadata(dest).map_or(0, |m| m.len());
+                let hash = store::sha256_file(dest).map_err(|e| e.to_string())?;
+                if size != rel.size || hash != rel.sha256.to_lowercase() {
+                    let _ = std::fs::remove_file(dest);
+                    return Err(DAMAGED.to_string());
+                }
+                Ok(())
+            })
+        };
+        // A part kept from an earlier try (a lost line, a power cut, which on a FAT card can leave junk at its end) is
+        // continued; when the whole then doesn't match, the part was bad, not the server: once more from nothing (the check
+        // removed it), before the next server.
+        let resumed = std::fs::metadata(dest).is_ok_and(|m| m.len() > 0);
+        let result = match attempt() {
+            Err(e) if resumed && e == DAMAGED && !cancel.is_cancelled() => {
+                progress(0);
+                attempt()
+            }
+            other => other,
+        };
+        match result {
+            Ok(()) => {
+                cancel.set_status("Preparing the update…");
+                return Ok(());
+            }
+            Err(e) => {
+                if cancel.is_cancelled() {
+                    return Err("Download cancelled.".into());
+                }
+                eprintln!("update: source {}/{} failed: {e}", i + 1, urls.len());
+                last = e;
+            }
+        }
+    }
+    Err(last)
 }
 
 /// Entries of a tar, refused if any would land outside the target directory.
@@ -335,12 +588,16 @@ pub fn install_app(rel: &Release, manifest_url: &str, root: &Path, cancel: &Canc
     let releases = root.join("releases");
     clear_leftovers(&releases, &rel.version);
     let tarball = releases.join(format!(".download-{}.tar.gz", rel.version));
+    let have = std::fs::metadata(&tarball).map_or(0, |m| m.len()).min(rel.size);
+    room_for_app(rel.size, have, crate::starter::free_bytes(&releases))?;
     download_checked(&TOOLS, rel, manifest_url, &tarball, cancel, progress)?;
+    crash_point("downloaded");
 
     // Only plain files and folders, no setuid bits (B4); see untar.rs.
     let staging = releases.join(format!(".staging-{}", rel.version));
     let _ = std::fs::remove_dir_all(&staging);
     let unpacked = std::fs::read(&tarball).map_err(|e| e.to_string()).and_then(|data| crate::untar::unpack(&data, &staging));
+    crash_point("unpacked");
     let _ = std::fs::remove_file(&tarball);
     let names = unpacked?;
     for required in ["pocket-ui", "pocket-core"] {
@@ -359,24 +616,113 @@ pub fn install_app(rel: &Release, manifest_url: &str, root: &Path, cancel: &Canc
         }
     }
 
+    // The programs on the card before anything points at them: a power cut right after the switch must find them whole.
+    if let Err(e) = crate::fsutil::sync_tree(&staging) {
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(format!("Couldn't write the update to the SD card ({e}). Nothing was changed."));
+    }
+    crash_point("synced");
     let dir = format!("releases/{}", rel.version);
     let _ = std::fs::remove_dir_all(root.join(&dir));
     std::fs::rename(&staging, root.join(&dir)).map_err(|e| e.to_string())?;
+    crate::fsutil::sync_dir(&releases);
+    crash_point("renamed");
     if let Some(old) = link_target(&root.join("current")).filter(|old| *old != dir) {
         link(&old, &root.join("previous")).map_err(|e| e.to_string())?;
     }
+    crash_point("previous");
+    // Synced with its folder, so `previous` is on the card too before `current` moves.
     crate::fsutil::write_atomic(&root.join("update-pending"), rel.version.as_bytes()).map_err(|e| e.to_string())?;
+    crash_point("pending");
     link(&dir, &root.join("current")).map_err(|e| e.to_string())?;
+    crash_point("current");
     link_files(root)?;
+    crate::fsutil::sync_dir(root);
+    crash_point("linked");
     prune(root);
     Ok(())
 }
+
+/// Tests (`crash_tests`): the install ends here the way a power cut or `kill -9` ends it, when POCKETUI_TEST_CRASH_AT
+/// names `step`.
+#[cfg(test)]
+fn crash_point(step: &str) {
+    if std::env::var("POCKETUI_TEST_CRASH_AT").is_ok_and(|s| s == step) {
+        // SAFETY: kill(2) on this process: SIGKILL ends it at once, nothing of it runs afterwards.
+        unsafe { libc::kill(libc::getpid(), libc::SIGKILL) };
+    }
+}
+
+#[cfg(not(test))]
+fn crash_point(_: &str) {}
 
 /// What `<bin> --version` has to print: exactly `<bin> <version>`. A substring test would take
 /// "pocket-ui 11.2.3" for 1.2.3.
 fn reports_version(stdout: &str, bin: &str, version: &str) -> bool {
     stdout.trim() == format!("{bin} {version}")
 }
+
+// ---------------------------------------------------------------------------------------------
+// App on the TrimUI Brick's own card (docs/TRIMUI-BRICK-REMOTE.md)
+
+/// The Brick card's public channel: the signed list on the website, the program folder's tarball on the GitHub release it names
+/// (docs/UPDATE-CHANNEL.md, "The Brick card"). A card is never offered the ROCKNIX tarball, which `install_brick` would refuse anyway.
+#[cfg(feature = "brick")]
+pub const BRICK_DEFAULT_URL: &str = "https://pocketui.xyz/updates/brick/update.json";
+
+/// The channel this build was given: in a `--features brick` build POCKETUI_UPDATE_URL (the Brick card's start script reads it from
+/// `app/update-url`; only a private beta card has one), else the Brick's public channel on its own card and the ROCKNIX one
+/// everywhere else. settings.json `update_url` still wins over all of them.
+#[cfg(feature = "brick")]
+pub fn default_url() -> String {
+    default_url_from(std::env::var("POCKETUI_UPDATE_URL").ok(), brick_card().is_some())
+}
+
+#[cfg(feature = "brick")]
+fn default_url_from(given: Option<String>, on_card: bool) -> String {
+    match given.as_deref().map(str::trim).filter(|u| !u.is_empty()) {
+        Some(u) => u.to_string(),
+        None if on_card => BRICK_DEFAULT_URL.to_string(),
+        None => DEFAULT_URL.to_string(),
+    }
+}
+
+/// The card's pocket-ui folder when this is the Brick's own card (POCKETUI_BRICK_CARD, set by its start script; read only by a
+/// `--features brick` build): an update replaces the program folder there instead of `APP_ROOT`'s releases.
+#[cfg(feature = "brick")]
+pub fn brick_card() -> Option<PathBuf> {
+    std::env::var_os("POCKETUI_BRICK_CARD").filter(|v| !v.is_empty()).map(PathBuf::from)
+}
+
+/// Installs the app: into the Brick card's folder there (`install_brick`), else as a release under `APP_ROOT` (`install_app`).
+#[cfg(feature = "brick")]
+pub fn install(rel: &Release, manifest_url: &str, cancel: &Cancel, progress: &dyn Fn(u64)) -> Result<(), String> {
+    match brick_card() {
+        Some(card) => install_brick(rel, manifest_url, &card, cancel, progress),
+        None => install_app(rel, manifest_url, Path::new(APP_ROOT), cancel, progress),
+    }
+}
+
+#[cfg(feature = "brick")]
+mod brick;
+#[cfg(feature = "brick")]
+mod brick_assets;
+#[cfg(feature = "brick")]
+pub(crate) mod brick_io;
+#[cfg(feature = "brick")]
+mod brick_seed;
+/// Install only changed bundled engine data before the Brick UI starts; unchanged BIOS files are never rewritten.
+#[cfg(feature = "brick")]
+pub fn seed_brick_data(source: &Path, destination: &Path) -> std::io::Result<()> {
+    brick_seed::seed(source, destination)
+}
+/// Seed engine data and publish its release marker only after every file is durable.
+#[cfg(feature = "brick")]
+pub fn seed_brick_data_for_release(source: &Path, destination: &Path, release: &str) -> std::io::Result<()> {
+    brick_seed::seed_release(source, destination, release)
+}
+#[cfg(feature = "brick")]
+pub use brick::install_brick;
 
 /// Removes releases other than current, previous and known-good.
 /// Hidden work files of an install that never finished (power loss, a version that was never retried):
@@ -455,18 +801,41 @@ pub enum Health {
     Confirmed,
     /// No frame within the watchdog time; update-pending is still there for the launcher.
     TimedOut,
+    /// A frame, but the player next to this pocket-ui doesn't run (`release_settled`); update-pending stays, as for
+    /// `TimedOut`.
+    Broken,
+}
+
+/// Before a just-installed version confirms itself: its folder `release` (where the running pocket-ui is) on the card,
+/// and its pocket-core starts and is the same version. The pocket-ui that installed it may be an older one that never
+/// synced (up to 0.2.x): until now a power cut could still leave empty programs behind a confirmed version. Err says why
+/// not; update-pending then stays and the launcher takes the previous version back.
+pub fn release_settled(release: &Path) -> Result<(), String> {
+    let _ = crate::fsutil::sync_tree(release);
+    let core = release.join("pocket-core");
+    let out = Command::new(&core).arg("--version").output();
+    if out.as_ref().is_ok_and(|o| o.status.success() && reports_version(&String::from_utf8_lossy(&o.stdout), "pocket-core", app_version())) {
+        Ok(())
+    } else {
+        Err(format!("{} doesn't start as pocket-core {}", core.display(), app_version()))
+    }
 }
 
 /// Runs on its own thread from the start of the process (`started`). Returns once update-pending
 /// is gone because the first frame appeared (`Confirmed`), or when `watchdog` has passed without
-/// one (`TimedOut`: the caller exits with `WATCHDOG_EXIT` and update-pending stays for the launcher).
-pub fn watch_health(root: &Path, started: Instant, presented: &dyn Fn() -> bool, poll: Duration, watchdog: Duration) -> Health {
+/// one (`TimedOut`: the caller exits with `WATCHDOG_EXIT` and update-pending stays for the launcher). `release`: the
+/// folder of the running programs, checked before the update is kept (`release_settled`, else `Broken`).
+pub fn watch_health(root: &Path, release: &Path, started: Instant, presented: &dyn Fn() -> bool, poll: Duration, watchdog: Duration) -> Health {
     if !pending_is_ours(root) {
         return Health::NotPending;
     }
     loop {
         match health_verdict(presented(), started.elapsed(), watchdog) {
             Verdict::Confirm => {
+                if let Err(why) = release_settled(release) {
+                    eprintln!("update: {why}");
+                    return Health::Broken;
+                }
                 confirm_running(root);
                 return Health::Confirmed;
             }
@@ -619,13 +988,25 @@ pub fn inspect_system(sys: &dyn System, current: Option<&str>, needs: &Needs) ->
 /// Opens the SYSTEM inside an update tar (unpacked into `work`, removed again) and checks it (`inspect_system`).
 fn check_os_tar(tools: &Tools, tar: &Path, work: &Path, current: Option<&str>, needs: &Needs) -> Result<OsCheck, String> {
     let names = tar_entries(tar)?;
-    let find = |file: &str| names.iter().find(|n| n.ends_with(&format!("/target/{file}")) && n.matches('/').count() == 2).cloned();
+    let find = |file: &str| {
+        names
+            .iter()
+            .find(|n| n.ends_with(&format!("/target/{file}")) && n.matches('/').count() == 2)
+            .cloned()
+    };
     let (Some(system), Some(_), Some(_), Some(_)) = (find("SYSTEM"), find("KERNEL"), find("SYSTEM.md5"), find("KERNEL.md5")) else {
         return Err("This is not a complete system update. It was not installed.".into());
     };
     let _ = std::fs::remove_dir_all(work);
     std::fs::create_dir_all(work).map_err(|e| e.to_string())?;
-    let extracted = Command::new("tar").arg("-xf").arg(tar).arg("-C").arg(work).arg(&system).status().is_ok_and(|s| s.success());
+    let extracted = Command::new("tar")
+        .arg("-xf")
+        .arg(tar)
+        .arg("-C")
+        .arg(work)
+        .arg(&system)
+        .status()
+        .is_ok_and(|s| s.success());
     let image = work.join(&system);
     let result = (|| {
         if !extracted {
@@ -769,6 +1150,34 @@ mod tests {
     use base64::Engine;
     use ed25519_dalek::{Signer, SigningKey};
 
+    #[cfg(feature = "brick")]
+    #[test]
+    fn brick_betas_count_up_from_the_date_builds_and_read_as_betas() {
+        assert!(newer("0.1.14-brick.6", "0.1.11-brick.202611032041"), "the first numbered beta over the last date build");
+        assert!(newer("0.1.14-brick.7", "0.1.14-brick.6") && !newer("0.1.14-brick.6", "0.1.14-brick.6"));
+        assert!(newer("0.1.15-brick.1", "0.1.14-brick.9"), "a new release base starts at 1 again");
+        assert!(newer("0.2.0-brick.7", "0.1.14-brick.6"), "update 7 on 0.2 over update 6 on 0.1.14");
+        assert_eq!(brick_short("0.2.0-brick.7"), "0.2.0 beta 7");
+        assert_eq!(brick_short("0.1.14-brick.6"), "0.1.14 beta 6");
+        assert_eq!(brick_long("0.1.14-brick.6"), "0.1.14 for TrimUI Brick (beta 6)");
+        assert_eq!(brick_long("0.1.11-brick.202611032041"), "0.1.11-brick.202611032041", "a date build stays as it is");
+        assert_eq!(brick_short("0.1.14"), "0.1.14");
+        assert_eq!(brick_long("0.2.1"), "0.2.1 for TrimUI Brick", "a public release");
+        assert!(newer("0.2.1", "0.2.0-brick.7") && newer("0.2.1-brick.8", "0.2.1"), "public over the beta before it, the next beta over both");
+    }
+
+    /// A card from the public zip has no `app/update-url`: it must ask the Brick channel, never the ROCKNIX one (whose tarball is a
+    /// ROCKNIX program folder). A private beta card keeps its channel; outside the card (the NextUI pak) the ROCKNIX default stays.
+    #[cfg(feature = "brick")]
+    #[test]
+    fn a_public_card_asks_the_brick_channel_and_a_beta_card_its_own() {
+        assert_eq!(default_url_from(None, true), BRICK_DEFAULT_URL);
+        assert_eq!(default_url_from(Some("  ".into()), true), BRICK_DEFAULT_URL, "an empty update-url is no channel");
+        assert_eq!(default_url_from(Some("https://beta.example/brick-updates/beta/update.json\n".into()), true), "https://beta.example/brick-updates/beta/update.json");
+        assert_eq!(default_url_from(None, false), DEFAULT_URL);
+        assert!(BRICK_DEFAULT_URL.starts_with("https://pocketui.xyz/updates/") && BRICK_DEFAULT_URL != DEFAULT_URL);
+    }
+
     #[test]
     fn compares_versions_by_number_groups() {
         assert!(newer("0.10.0", "0.9.3"));
@@ -776,6 +1185,14 @@ mod tests {
         assert!(!newer("0.1.0", "0.1.0"));
         assert!(!newer("0.1.0", "0.1.0-local"));
         assert!(newer("20261101", "20261001"));
+        assert!(newer("0.2.10", "0.2.9") && !newer("0.2.9", "0.2.10"), "numbers, not text");
+        assert!(newer("1.0.0", "0.99.99"));
+        assert!(!newer("", "0.2.0") && !newer("0.2.0", "0.2.0\n"));
+        // Every pocket-ui compares like this, 0.1.x and 0.2.x too, so a channel only ever names plain X.Y.Z
+        // (scripts/release-channel.sh refuses the rest): a suffix's number counts, and a missing group is lower.
+        assert!(newer("0.3.0-rc1", "0.3.0") && !newer("0.3.0", "0.3.0-rc1"), "0.3.0 would never be offered to an rc");
+        assert!(!newer("0.3.0", "0.3.0+dev") && !newer("0.3.0+dev", "0.3.0"));
+        assert!(newer("0.3.0", "0.3"));
     }
 
     #[test]
@@ -850,11 +1267,20 @@ mod tests {
             crate::testutil::write_executable(&src.join(bin), script);
         }
         let tar = dir.join(format!("pocket-ui-{version}.tar.gz"));
-        assert!(Command::new("tar").arg("-czf").arg(&tar).arg("-C").arg(&src).args(["pocket-ui", "pocket-core"]).status().unwrap().success());
+        assert!(Command::new("tar")
+            .arg("-czf")
+            .arg(&tar)
+            .arg("-C")
+            .arg(&src)
+            .args(["pocket-ui", "pocket-core"])
+            .status()
+            .unwrap()
+            .success());
         let data = std::fs::read(&tar).unwrap();
         let rel = Release {
             version: version.into(),
             url: format!("pocket-ui-{version}.tar.gz"),
+            mirrors: Vec::new(),
             sha256: store::sha256_hex(&data),
             size: data.len() as u64,
             notes: String::new(),
@@ -998,34 +1424,62 @@ mod tests {
             n >= 8
         };
         let start = Instant::now();
-        assert_eq!(watch_health(tmp.path(), start, &presented, Duration::from_millis(20), Duration::from_secs(30)), Health::Confirmed);
+        let release = release_with_player(tmp.path(), Some(app_version()));
+        assert_eq!(watch_health(tmp.path(), &release, start, &presented, Duration::ZERO, Duration::from_secs(30)), Health::Confirmed);
         assert!(!pending.exists(), "confirmed: the launcher keeps this version");
         assert!(polls.load(Ordering::SeqCst) >= 9, "waited for the frame instead of a timer");
-        assert!(start.elapsed() >= Duration::from_millis(140) && start.elapsed() < Duration::from_secs(10), "{:?}", start.elapsed());
+    }
+
+    /// A release folder whose pocket-core says `reported` as its version (None: a 0-byte file, as a power cut leaves a
+    /// program the kernel had not written back yet).
+    fn release_with_player(dir: &Path, reported: Option<&str>) -> PathBuf {
+        let release = dir.join("release");
+        std::fs::create_dir_all(&release).unwrap();
+        let body = reported.map_or_else(String::new, |v| format!("#!/bin/sh\necho pocket-core {v}\n"));
+        crate::testutil::write_executable(&release.join("pocket-core"), body);
+        release
+    }
+
+    /// An update whose player is empty (a power cut right after an older pocket-ui installed it without syncing), of
+    /// another version or missing is not kept, although pocket-ui itself shows its picture: the launcher goes back.
+    #[test]
+    fn a_new_version_whose_player_does_not_start_is_not_kept() {
+        for (case, reported) in [("empty", None), ("other version", Some("0.0.1")), ("missing", Some("-"))] {
+            let tmp = TempDir::new("health-broken");
+            let pending = tmp.path().join("update-pending");
+            std::fs::write(&pending, app_version()).unwrap();
+            let release = release_with_player(tmp.path(), reported);
+            if case == "missing" {
+                std::fs::remove_file(release.join("pocket-core")).unwrap();
+            }
+            assert_eq!(watch_health(tmp.path(), &release, Instant::now(), &|| true, Duration::ZERO, Duration::from_secs(30)), Health::Broken, "{case}");
+            assert!(pending.exists(), "{case}: update-pending stays, so the launcher rolls back");
+        }
     }
 
     #[test]
-    fn hanging_before_the_first_frame_times_out_and_leaves_update_pending_for_the_launcher() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_hanging_before_the_first_frame_times_out_and_leaves_update_pending_for_the_launcher() {
         let tmp = TempDir::new("health-hang");
         let pending = tmp.path().join("update-pending");
         std::fs::write(&pending, app_version()).unwrap();
         let start = Instant::now();
-        assert_eq!(watch_health(tmp.path(), start, &|| false, Duration::from_millis(10), Duration::from_millis(200)), Health::TimedOut);
+        assert_eq!(watch_health(tmp.path(), tmp.path(), start, &|| false, Duration::from_millis(10), Duration::from_millis(200)), Health::TimedOut);
         assert!(start.elapsed() >= Duration::from_millis(200), "not before the deadline: {:?}", start.elapsed());
-        assert!(start.elapsed() < Duration::from_secs(10), "{:?}", start.elapsed());
+        assert!(start.elapsed() < crate::testutil::timeout(Duration::from_secs(10)), "{:?}", start.elapsed());
         assert!(pending.exists(), "the launcher rolls back only while update-pending is there");
         // The deadline counts from the start of the process, not from when the watcher began.
         let long_ago = Instant::now() - Duration::from_secs(3600);
-        assert_eq!(watch_health(tmp.path(), long_ago, &|| false, Duration::from_millis(10), Duration::from_secs(20)), Health::TimedOut);
+        assert_eq!(watch_health(tmp.path(), tmp.path(), long_ago, &|| false, Duration::from_millis(10), Duration::from_secs(20)), Health::TimedOut);
     }
 
     #[test]
     fn nothing_is_watched_when_this_version_is_not_pending() {
         let tmp = TempDir::new("health-none");
         let never = || -> bool { panic!("must not even look for a frame") };
-        assert_eq!(watch_health(tmp.path(), Instant::now(), &never, Duration::from_millis(10), Duration::from_millis(50)), Health::NotPending);
+        assert_eq!(watch_health(tmp.path(), tmp.path(), Instant::now(), &never, Duration::from_millis(10), Duration::from_millis(50)), Health::NotPending);
         std::fs::write(tmp.path().join("update-pending"), "99.0.0").unwrap();
-        assert_eq!(watch_health(tmp.path(), Instant::now(), &never, Duration::from_millis(10), Duration::from_millis(50)), Health::NotPending);
+        assert_eq!(watch_health(tmp.path(), tmp.path(), Instant::now(), &never, Duration::from_millis(10), Duration::from_millis(50)), Health::NotPending);
         assert!(tmp.path().join("update-pending").exists(), "another version's marker is left alone");
     }
 
@@ -1113,11 +1567,11 @@ mod tests {
         assert!(args[0].contains('L'), "follows redirects (GitHub Releases to its download host): {args:?}");
         assert!(has_pair(&args, "--proto", "=https,file"), "https (or a file on the card) only: {args:?}");
         assert!(has_pair(&args, "--proto-redir", "=https"), "a redirect may only lead to https: {args:?}");
-        assert!(has_pair(&args, "--speed-limit", "10240"), "{args:?}");
+        assert!(has_pair(&args, "--speed-limit", "1"), "{args:?}");
         assert!(has_pair(&args, "--speed-time", "30"), "{args:?}");
         assert!(has_pair(&args, "--max-filesize", "1234"), "{args:?}");
         assert!(has_pair(&args, "-C", "-"), "still resumes: {args:?}");
-        assert!(has_pair(&args, "--retry", "3"), "{args:?}");
+        assert!(has_pair(&args, "--max-time", "310"), "the worker ends a source first and says why: {args:?}");
         assert!(has_pair(&args, "-o", "/d/u.tar.gz"), "{args:?}");
         assert_eq!(args.last().unwrap(), "https://h/u.tar.gz");
         let unknown = strs(&download_args(&TOOLS, "u", Path::new("/d/f"), 0));
@@ -1125,7 +1579,8 @@ mod tests {
     }
 
     #[test]
-    fn cancel_stops_curl_and_returns_quickly() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_cancel_stops_curl_and_returns_quickly() {
         let tmp = TempDir::new("cancel");
         let curl = fake_curl(tmp.path(), "echo $$ > \"$out.pid\"\nexec sleep 5");
         let tools = Tools { curl: &curl, unsquashfs: "unsquashfs", ..TOOLS };
@@ -1145,13 +1600,14 @@ mod tests {
         let err = download(&tools, "https://h/f", &dest, 1000, &cancel, &|_| {}).unwrap_err();
         t.join().unwrap();
         assert!(err.to_lowercase().contains("cancel"), "{err}");
-        assert!(start.elapsed() < Duration::from_secs(4), "{:?}", start.elapsed());
+        assert!(start.elapsed() < crate::testutil::timeout(Duration::from_secs(4)), "{:?}", start.elapsed());
         let pid: i32 = std::fs::read_to_string(tmp.path().join("f.tar.gz.pid")).unwrap().trim().parse().unwrap();
         assert!(!pid_alive(pid), "curl was killed and collected");
     }
 
     #[test]
-    fn a_download_larger_than_announced_is_stopped_and_removed() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_download_larger_than_announced_is_stopped_and_removed() {
         let tmp = TempDir::new("oversize");
         let curl = fake_curl(tmp.path(), "echo $$ > \"$out.pid\"\nhead -c 5000 /dev/zero > \"$out\"\nexec sleep 5");
         let tools = Tools { curl: &curl, unsquashfs: "unsquashfs", ..TOOLS };
@@ -1159,7 +1615,7 @@ mod tests {
         let start = Instant::now();
         let err = download(&tools, "https://h/f", &dest, 1000, &Cancel::new(), &|_| {}).unwrap_err();
         assert!(err.contains("larger than announced"), "{err}");
-        assert!(start.elapsed() < Duration::from_secs(4), "{:?}", start.elapsed());
+        assert!(start.elapsed() < crate::testutil::timeout(Duration::from_secs(4)), "{:?}", start.elapsed());
         assert!(!dest.exists(), "the oversized file is not left behind");
         let pid: i32 = std::fs::read_to_string(tmp.path().join("f.tar.gz.pid")).unwrap().trim().parse().unwrap();
         assert!(!pid_alive(pid));
@@ -1176,15 +1632,51 @@ mod tests {
         let dest = tmp.path().join("f");
         let run = |code: i32| {
             let curl = fake_curl(tmp.path(), &format!("exit {code}"));
-            let tools = Tools { curl: &curl, unsquashfs: "unsquashfs", ..TOOLS };
+            let tools = Tools {
+                curl: &curl,
+                unsquashfs: "unsquashfs",
+                ..TOOLS
+            };
             download(&tools, "https://h/f", &dest, 1000, &Cancel::new(), &|_| {})
         };
         assert!(run(0).is_ok());
         assert!(run(33).is_ok(), "the server can't resume but the file is complete");
         assert!(run(63).unwrap_err().contains("larger than announced"), "curl's own --max-filesize");
-        assert!(run(28).unwrap_err().contains("Download failed"), "timeout");
-        assert!(run(22).unwrap_err().contains("isn't on the server"), "404: a release file that was never uploaded");
+        assert!(run(28).unwrap_err().contains("stopped responding"), "timeout");
+        assert!(
+            run(22).unwrap_err().contains("isn't on the server"),
+            "404: a release file that was never uploaded"
+        );
         assert!(run(1).unwrap_err().contains("isn't https"), "a redirect to plain http");
+        assert!(run(23).unwrap_err().contains("SD card is full"), "curl couldn't write: a full card is not a Wi-Fi problem");
+    }
+
+    /// A full card is said before anything is downloaded, with what is missing, and the update never takes the room the next
+    /// save needs.
+    #[test]
+    fn an_app_update_needs_room_for_itself_and_leaves_room_for_saves() {
+        let mb = 1u64 << 20;
+        assert!(room_for_app(15 * mb, 0, None).is_ok(), "a card that can't be asked is not refused");
+        assert!(room_for_app(15 * mb, 0, Some(200 * mb)).is_ok());
+        // 15 MB to load, 45 MB unpacked, 32 MB left over: 92 MB.
+        let err = room_for_app(15 * mb, 0, Some(80 * mb)).unwrap_err();
+        assert_eq!(err, "The SD card is too full for this update: it needs 12 MB more. Nothing was changed.");
+        assert!(room_for_app(15 * mb, 0, Some(92 * mb)).is_ok());
+        // A download that is already there counts.
+        assert!(room_for_app(15 * mb, 15 * mb, Some(77 * mb)).is_ok());
+        assert!(room_for_app(15 * mb, 15 * mb, Some(76 * mb)).is_err());
+    }
+
+    /// With the clock in the past (a flat battery, no network time yet) the secure connection fails: that is said, not Wi-Fi.
+    #[test]
+    fn a_wrong_clock_is_named_when_the_secure_connection_fails() {
+        for code in CURL_TLS {
+            assert_eq!(clock_reason(Some(code), true), Some(CLOCK_WRONG));
+            assert_eq!(clock_reason(Some(code), false), None, "the clock is fine: something else");
+        }
+        assert_eq!(clock_reason(Some(6), true), None, "no name lookup is not the clock");
+        assert_eq!(clock_reason(None, true), None);
+        assert!(CLOCK_WRONG.contains("Settings › System › Time"));
     }
 
     #[test]
@@ -1200,10 +1692,23 @@ mod tests {
         // Refused before curl runs: this curl would fail the test if it were started.
         let tmp = TempDir::new("https-only");
         let curl = fake_curl(tmp.path(), "touch \"$0.ran\"; exit 0");
-        let tools = Tools { curl: &curl, unsquashfs: "unsquashfs", ..TOOLS };
+        let tools = Tools {
+            curl: &curl,
+            unsquashfs: "unsquashfs",
+            ..TOOLS
+        };
         let key = SigningKey::from_bytes(&[3u8; 32]).verifying_key().to_bytes();
-        assert!(fetch_manifest_with(&tools, "http://pocketui.xyz/u.json", &key).unwrap_err().contains("https://"));
-        let rel = Release { version: "1".into(), url: "http://h/a.tar.gz".into(), sha256: "0".repeat(64), size: 1, notes: String::new() };
+        assert!(fetch_manifest_with(&tools, "http://pocketui.xyz/u.json", &key)
+            .unwrap_err()
+            .contains("https://"));
+        let rel = Release {
+            version: "1".into(),
+            url: "http://h/a.tar.gz".into(),
+            mirrors: Vec::new(),
+            sha256: "0".repeat(64),
+            size: 1,
+            notes: String::new(),
+        };
         let err = download_checked(&tools, &rel, "https://pocketui.xyz/u.json", &tmp.path().join("a"), &Cancel::new(), &|_| {}).unwrap_err();
         assert!(err.contains("isn't on https"), "{err}");
         assert!(!Path::new(&format!("{curl}.ran")).exists(), "curl was not started");
@@ -1328,6 +1833,14 @@ mod tests {
         assert!(err.contains("damaged"), "{err}");
         assert!(!dest.exists());
 
+        // A part with junk in it (a power cut on a FAT card can leave that): continued, refused, and once more from nothing.
+        let mut junk = app[..70_000].to_vec();
+        junk[60_000..].fill(0);
+        std::fs::write(&dest, &junk).unwrap();
+        download_checked(&tools, &rel, &url, &dest, &Cancel::new(), &|_| {}).unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), app, "the player's next try works");
+        std::fs::remove_file(&dest).unwrap();
+
         // An asset that was never uploaded: GitHub's 404 behind the release URL.
         let missing = Release { url: rel.url.replace("app.tar.gz", "gone.tar.gz"), ..rel.clone() };
         let err = download_checked(&tools, &missing, &url, &dest, &Cancel::new(), &|_| {}).unwrap_err();
@@ -1344,9 +1857,16 @@ mod tests {
     fn download_reports_the_bytes_so_far() {
         let tmp = TempDir::new("progress");
         let curl = fake_curl(tmp.path(), "head -c 700 /dev/zero > \"$out\"");
-        let tools = Tools { curl: &curl, unsquashfs: "unsquashfs", ..TOOLS };
+        let tools = Tools {
+            curl: &curl,
+            unsquashfs: "unsquashfs",
+            ..TOOLS
+        };
         let seen = std::sync::atomic::AtomicU64::new(0);
-        download(&tools, "https://h/f", &tmp.path().join("f"), 1000, &Cancel::new(), &|n| seen.store(n, Ordering::SeqCst)).unwrap();
+        download(&tools, "https://h/f", &tmp.path().join("f"), 1000, &Cancel::new(), &|n| {
+            seen.store(n, Ordering::SeqCst)
+        })
+        .unwrap();
         assert_eq!(seen.load(Ordering::SeqCst), 700);
     }
 
@@ -1354,12 +1874,23 @@ mod tests {
     fn download_checked_resumes_a_short_partial_file_and_drops_an_oversized_one() {
         let tmp = TempDir::new("resume");
         let data = b"0123456789";
-        let rel = Release { version: "1".into(), url: "f".into(), sha256: store::sha256_hex(data), size: 10, notes: String::new() };
+        let rel = Release {
+            version: "1".into(),
+            url: "f".into(),
+            mirrors: Vec::new(),
+            sha256: store::sha256_hex(data),
+            size: 10,
+            notes: String::new(),
+        };
         let dest = tmp.path().join("f");
         // curl that "resumes": appends what is missing after the first `have` bytes.
         let resume = "have=$(wc -c < \"$out\" 2>/dev/null || echo 0)\nhave=$((have + 0))\nprintf 0123456789 | tail -c +$((have + 1)) >> \"$out\"";
         let curl = fake_curl(tmp.path(), resume);
-        let tools = Tools { curl: &curl, unsquashfs: "unsquashfs", ..TOOLS };
+        let tools = Tools {
+            curl: &curl,
+            unsquashfs: "unsquashfs",
+            ..TOOLS
+        };
         std::fs::write(&dest, "0123").unwrap();
         download_checked(&tools, &rel, "file:///x/update.json", &dest, &Cancel::new(), &|_| {}).unwrap();
         assert_eq!(std::fs::read(&dest).unwrap(), data, "the 4 bytes already there were kept");
@@ -1374,10 +1905,21 @@ mod tests {
         let tmp = TempDir::new("damaged");
         let dest = tmp.path().join("f");
         let curl = fake_curl(tmp.path(), "printf 0123456789 > \"$out\"");
-        let tools = Tools { curl: &curl, unsquashfs: "unsquashfs", ..TOOLS };
+        let tools = Tools {
+            curl: &curl,
+            unsquashfs: "unsquashfs",
+            ..TOOLS
+        };
         let good = store::sha256_hex(b"0123456789");
         for (sha, size) in [(good.clone(), 9), (good.clone(), 11), ("0".repeat(64), 10)] {
-            let rel = Release { version: "1".into(), url: "f".into(), sha256: sha, size, notes: String::new() };
+            let rel = Release {
+                version: "1".into(),
+                url: "f".into(),
+                mirrors: Vec::new(),
+                sha256: sha,
+                size,
+                notes: String::new(),
+            };
             let err = download_checked(&tools, &rel, "file:///x/update.json", &dest, &Cancel::new(), &|_| {}).unwrap_err();
             // One byte too many may also be seen while curl still runs (under load), which `download` refuses itself.
             let too_large_while_running = size == 9 && err.contains("larger than announced");
@@ -1385,7 +1927,14 @@ mod tests {
             assert!(!dest.exists());
         }
         // The hash in the list may be upper case.
-        let rel = Release { version: "1".into(), url: "f".into(), sha256: good.to_uppercase(), size: 10, notes: String::new() };
+        let rel = Release {
+            version: "1".into(),
+            url: "f".into(),
+            mirrors: Vec::new(),
+            sha256: good.to_uppercase(),
+            size: 10,
+            notes: String::new(),
+        };
         download_checked(&tools, &rel, "file:///x/update.json", &dest, &Cancel::new(), &|_| {}).unwrap();
     }
 
@@ -1439,11 +1988,20 @@ esac"#;
             std::fs::write(target.join("KERNEL.md5"), "x  KERNEL\n").unwrap();
         }
         let tar = dir.join(format!("{top}.tar"));
-        assert!(Command::new("tar").arg("-cf").arg(&tar).arg("-C").arg(dir.join("os-src")).arg(&top).status().unwrap().success());
+        assert!(Command::new("tar")
+            .arg("-cf")
+            .arg(&tar)
+            .arg("-C")
+            .arg(dir.join("os-src"))
+            .arg(&top)
+            .status()
+            .unwrap()
+            .success());
         let data = std::fs::read(&tar).unwrap();
         let rel = Release {
             version: version.into(),
             url: format!("{top}.tar"),
+            mirrors: Vec::new(),
             sha256: store::sha256_hex(&data),
             size: data.len() as u64,
             notes: String::new(),
@@ -1676,7 +2234,14 @@ esac"#;
         assert!(result.unwrap_err().contains("damaged"));
         assert!(staged_os_in(&update_dir).is_none());
         for name in ["update.tar.gz", "a..b.tar", "update"] {
-            let rel = Release { version: "1".into(), url: format!("https://h/{name}"), sha256: "0".repeat(64), size: 1, notes: String::new() };
+            let rel = Release {
+                version: "1".into(),
+                url: format!("https://h/{name}"),
+                mirrors: Vec::new(),
+                sha256: "0".repeat(64),
+                size: 1,
+                notes: String::new(),
+            };
             let (_, update_dir, result) = stage(&tmp, &rel, &url, CURRENT);
             assert!(result.unwrap_err().contains("unexpected file name"), "{name}");
             assert!(staged_os_in(&update_dir).is_none());
@@ -1742,7 +2307,14 @@ esac"#;
 
     #[test]
     fn stage_os_refuses_an_odd_file_name_before_touching_anything() {
-        let rel = Release { version: "1".into(), url: "https://h/system.zip".into(), sha256: "0".repeat(64), size: 1, notes: String::new() };
+        let rel = Release {
+            version: "1".into(),
+            url: "https://h/system.zip".into(),
+            mirrors: Vec::new(),
+            sha256: "0".repeat(64),
+            size: 1,
+            notes: String::new(),
+        };
         let err = stage_os(&rel, "https://h/update.json", &Cancel::new(), &|_| {}).unwrap_err();
         assert!(err.contains("unexpected file name"), "{err}");
     }
@@ -1882,10 +2454,25 @@ esac"#;
             std::fs::create_dir_all(&src).unwrap();
             std::fs::write(src.join(present), "#!/bin/sh\necho x\n").unwrap();
             let tar = tmp.path().join(format!("pocket-ui-{version}.tar.gz"));
-            assert!(Command::new("tar").arg("-czf").arg(&tar).arg("-C").arg(&src).arg(present).status().unwrap().success());
+            assert!(Command::new("tar")
+                .arg("-czf")
+                .arg(&tar)
+                .arg("-C")
+                .arg(&src)
+                .arg(present)
+                .status()
+                .unwrap()
+                .success());
             let data = std::fs::read(&tar).unwrap();
             let url = format!("pocket-ui-{version}.tar.gz");
-            let rel = Release { version: version.clone(), url, sha256: store::sha256_hex(&data), size: data.len() as u64, notes: String::new() };
+            let rel = Release {
+                version: version.clone(),
+                url,
+                mirrors: Vec::new(),
+                sha256: store::sha256_hex(&data),
+                size: data.len() as u64,
+                notes: String::new(),
+            };
             let manifest = format!("file://{}/update.json", tmp.path().display());
             let err = install_app(&rel, &manifest, &root, &Cancel::new(), &|_| {}).unwrap_err();
             assert!(err.contains(&format!("missing {missing}")), "{err}");
@@ -1913,13 +2500,24 @@ esac"#;
     fn download_checked_decides_what_to_do_with_a_file_that_is_already_there() {
         let tmp = TempDir::new("stale");
         let data = b"0123456789";
-        let rel = Release { version: "1".into(), url: "f".into(), sha256: store::sha256_hex(data), size: 10, notes: String::new() };
+        let rel = Release {
+            version: "1".into(),
+            url: "f".into(),
+            mirrors: Vec::new(),
+            sha256: store::sha256_hex(data),
+            size: 10,
+            notes: String::new(),
+        };
         let dest = tmp.path().join("f");
         let have_log = tmp.path().join("have");
-        // Logs how many bytes were there when curl started; exits 33 like a server that can't resume.
-        let body = format!("wc -c < \"$out\" 2>/dev/null | tr -d ' ' > {} || true\nexit 33", have_log.display());
+        // Logs how many bytes were there when curl started (each start a line); exits 33 like a server that can't resume.
+        let body = format!("{{ wc -c < \"$out\" 2>/dev/null || echo 0; }} | tr -d ' ' >> {}\nexit 33", have_log.display());
         let curl = fake_curl(tmp.path(), &body);
-        let tools = Tools { curl: &curl, unsquashfs: "unsquashfs", ..TOOLS };
+        let tools = Tools {
+            curl: &curl,
+            unsquashfs: "unsquashfs",
+            ..TOOLS
+        };
         let run = |content: Option<&str>| {
             let _ = std::fs::remove_file(&dest);
             let _ = std::fs::remove_file(&have_log);
@@ -1927,16 +2525,17 @@ esac"#;
                 std::fs::write(&dest, c).unwrap();
             }
             let r = download_checked(&tools, &rel, "file:///x/update.json", &dest, &Cancel::new(), &|_| {});
-            (r, std::fs::read_to_string(&have_log).unwrap_or_default().trim().to_string())
+            (r, std::fs::read_to_string(&have_log).unwrap_or_default().lines().next().unwrap_or_default().trim().to_string())
         };
         // Already complete: kept, curl is asked to resume from 10.
         let (r, have) = run(Some("0123456789"));
         assert!(r.is_ok(), "{r:?}");
         assert_eq!(have, "10");
-        // A partial file is kept for curl to continue.
+        // A partial file is kept for curl to continue (and, short after all, tried once more from nothing).
         let (r, have) = run(Some("0123"));
         assert!(r.is_err(), "still short: {r:?}");
         assert_eq!(have, "4");
+        assert_eq!(std::fs::read_to_string(&have_log).unwrap().lines().collect::<Vec<_>>(), ["4", "0"]);
         // Too big to be a start of this file: curl begins from nothing.
         let (_, have) = run(Some("0123456789abc"));
         assert!(have.is_empty() || have == "0", "{have:?}");
@@ -1945,3 +2544,380 @@ esac"#;
         assert!(have.is_empty() || have == "0", "{have:?}");
     }
 }
+
+#[cfg(all(test, feature = "brick"))]
+mod brick_card_tests {
+    use super::brick::install_brick_with;
+    use super::*;
+    use crate::testutil::{write_executable, TestDir};
+    use base64::Engine;
+    use ed25519_dalek::{Signer, SigningKey};
+
+    /// A program folder of version `version` whose programs print `reported` (None: they fail), packed as a .tar.gz in `dir`.
+    fn app_tarball(dir: &Path, version: &str, reported: Option<&str>, start: &str) -> (Release, PathBuf) {
+        let src = dir.join(format!("app-src-{version}"));
+        let _ = std::fs::remove_dir_all(&src);
+        for d in ["bin", "msg", "cores"] {
+            std::fs::create_dir_all(src.join(d)).unwrap();
+        }
+        for bin in ["pocket-ui", "pocket-core"] {
+            let body = reported.map_or_else(|| "#!/bin/sh\nexit 1\n".to_string(), |v| format!("#!/bin/sh\necho {bin} {v}\n"));
+            write_executable(&src.join("bin").join(bin), body);
+        }
+        for bin in ["pocket-fb", "brick-hw"] {
+            write_executable(&src.join("bin").join(bin), "#!/bin/sh\nexit 0\n");
+        }
+        write_executable(&src.join("start.sh"), start);
+        std::fs::write(src.join("RELEASE"), format!("{version}\n")).unwrap();
+        std::fs::write(src.join("msg/starting.png"), b"png").unwrap();
+        std::fs::write(src.join("cores/gpsp_libretro.so"), vec![7u8; 50_000]).unwrap();
+        let tar = dir.join(format!("brick-{version}.tar.gz"));
+        assert!(Command::new("tar").arg("-czf").arg(&tar).arg("-C").arg(&src).arg(".").status().unwrap().success());
+        let data = std::fs::read(&tar).unwrap();
+        let rel = Release { version: version.into(), url: format!("brick-{version}.tar.gz"), mirrors: Vec::new(), sha256: store::sha256_hex(&data), size: data.len() as u64, notes: String::new() };
+        (rel, tar)
+    }
+
+    const START: &str = "#!/bin/sh\nexit 0\n";
+
+    /// A card with version 1 running, a game with its cover, a save state, settings and a Tailscale login.
+    fn card(dir: &Path) -> PathBuf {
+        let root = dir.join("card");
+        let p = root.join("pocket-ui");
+        for d in ["app/bin", "storage/.config/pocket-ui", "storage/.cache/tailscale", "storage/pocket-ui"] {
+            std::fs::create_dir_all(p.join(d)).unwrap();
+        }
+        std::fs::write(p.join("app/RELEASE"), "1\n").unwrap();
+        std::fs::write(p.join("app/start.sh"), START).unwrap();
+        std::fs::write(p.join("app/bin/pocket-ui"), "old").unwrap();
+        std::fs::write(p.join("storage/.config/pocket-ui/settings.json"), "{\"theme\":\"neon\"}").unwrap();
+        std::fs::write(p.join("storage/.cache/tailscale/tailscaled.state"), "login").unwrap();
+        std::fs::write(p.join("authorized_keys"), "ssh-ed25519 AAAA test").unwrap();
+        for (f, data) in [("Roms/gba/F-Zero.gba", "rom"), ("Roms/gba/.media/F-Zero.png", "cover"), ("Roms/gba/F-Zero.srm", "save"), ("Saves/savestates/gba/F-Zero.state1", "state")] {
+            std::fs::create_dir_all(root.join(f).parent().unwrap()).unwrap();
+            std::fs::write(root.join(f), data).unwrap();
+        }
+        p
+    }
+
+    /// Every file of the card that is not the program, the update's work folder or the update's own mark, with its content.
+    fn players_files(p: &Path) -> Vec<(String, Vec<u8>)> {
+        fn walk(dir: &Path, base: &Path, out: &mut Vec<(String, Vec<u8>)>) {
+            for e in std::fs::read_dir(dir).unwrap().flatten() {
+                let rel = e.path().strip_prefix(base).unwrap().display().to_string();
+                if rel.starts_with("pocket-ui/app") || rel.starts_with("pocket-ui/.update") || rel == "pocket-ui/start.sh" || rel.ends_with("update-pending") {
+                    continue;
+                }
+                if e.path().is_dir() {
+                    walk(&e.path(), base, out);
+                } else {
+                    out.push((rel, std::fs::read(e.path()).unwrap()));
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(p.parent().unwrap(), p.parent().unwrap(), &mut out);
+        out.sort();
+        out
+    }
+
+    fn release_of(p: &Path, dir: &str) -> String {
+        std::fs::read_to_string(p.join(dir).join("RELEASE")).unwrap_or_default().trim().to_string()
+    }
+
+    fn plenty(_: &Path) -> Option<u64> {
+        Some(u64::MAX / 4)
+    }
+
+    fn install(rel: &Release, channel: &Path, p: &Path) -> Result<(), String> {
+        let url = format!("file://{}/update.json", channel.display());
+        install_brick_with(&TOOLS, rel, &url, p, &Cancel::new(), &|_| {}, &plenty, &crate::untar::unpack_file)
+    }
+
+    #[test]
+    fn downloading_the_app_does_not_write_or_clean_up_the_card() {
+        let dir = TestDir::new("brick-network-card-separation");
+        let p = card(&dir);
+        std::fs::create_dir_all(p.join("app.new")).unwrap();
+        std::fs::write(p.join("app.new/prior-attempt"), b"keep until downloads finish").unwrap();
+        let (rel, _) = app_tarball(&dir, "2", Some("2"), START);
+        let checks = std::cell::Cell::new(0);
+        let progress = |_| {
+            checks.set(checks.get() + 1);
+            assert_eq!(release_of(&p, "app"), "1");
+            assert_eq!(std::fs::read(p.join("app.new/prior-attempt")).unwrap(), b"keep until downloads finish");
+            assert!(!p.join(".update").exists());
+        };
+        let unpack = |archive: &Path, into: &Path, limit| {
+            assert!(archive.starts_with("/tmp") && !archive.starts_with(&p), "network output stays off the card");
+            crate::untar::unpack_file(archive, into, limit)
+        };
+        let url = format!("file://{}/update.json", dir.display());
+        install_brick_with(&TOOLS, &rel, &url, &p, &Cancel::new(), &progress, &plenty, &unpack).unwrap();
+        assert!(checks.get() > 0);
+        assert_eq!(release_of(&p, "app"), "2");
+    }
+
+    #[test]
+    fn retry_with_unfinished_recovery_preserves_the_only_remaining_assets() {
+        for marker in ["app/.asset-moves", "app/.restore-assets", "app.previous/.restore-assets"] {
+            let dir = TestDir::new("brick-retry-recovery");
+            let p = card(&dir);
+            std::fs::create_dir_all(p.join(marker).parent().unwrap()).unwrap();
+            std::fs::write(p.join(marker), "cores/only.so\n").unwrap();
+            std::fs::create_dir_all(p.join("app.new/cores")).unwrap();
+            std::fs::write(p.join("app.new/cores/only.so"), b"irreplaceable core").unwrap();
+            let (rel, _) = app_tarball(&dir, "2", Some("2"), START);
+            assert!(install(&rel, &dir, &p).unwrap_err().contains("Restart"));
+            assert_eq!(std::fs::read(p.join("app.new/cores/only.so")).unwrap(), b"irreplaceable core");
+            assert!(p.join(marker).exists());
+            assert!(!p.join(".update").exists());
+        }
+    }
+
+    #[test]
+    fn an_update_replaces_the_program_folder_keeps_the_previous_and_leaves_the_players_files() {
+        let dir = TestDir::new("brick-update-ok");
+        let p = card(&dir);
+        let before = players_files(&p);
+        let (rel, _) = app_tarball(&dir, "2", Some("2"), START);
+        install(&rel, &dir, &p).unwrap();
+        assert_eq!((release_of(&p, "app"), release_of(&p, "app.previous")), ("2".into(), "1".into()));
+        assert!(p.join("app/.ready").exists() && !p.join("app.new").exists());
+        assert_eq!(std::fs::read_to_string(p.join("storage/pocket-ui/update-pending")).unwrap(), "2", "the new version has to confirm itself");
+        assert_eq!(std::fs::metadata(p.join("app/cores/gpsp_libretro.so")).unwrap().len(), 50_000);
+        assert_eq!(players_files(&p), before, "Roms, covers, saves, settings, Tailscale's login and the keys are as they were");
+        assert!(std::fs::read_dir(p.join(".update")).unwrap().next().is_none(), "the download is gone after the switch");
+        // The next update keeps only the one before it.
+        let (rel3, _) = app_tarball(&dir, "3", Some("3"), START);
+        install(&rel3, &dir, &p).unwrap();
+        assert_eq!((release_of(&p, "app"), release_of(&p, "app.previous")), ("3".into(), "2".into()));
+    }
+
+    #[test]
+    fn a_list_with_a_wrong_signature_changes_nothing() {
+        let dir = TestDir::new("brick-update-sig");
+        let p = card(&dir);
+        let before = players_files(&p);
+        let (rel, _) = app_tarball(&dir, "2", Some("2"), START);
+        let json = serde_json::to_vec(&Manifest { format: 1, app: Some(rel), ..Default::default() }).unwrap();
+        let ours = SigningKey::from_bytes(&[5u8; 32]);
+        let other = SigningKey::from_bytes(&[6u8; 32]);
+        let forged = base64::engine::general_purpose::STANDARD.encode(other.sign(&json).to_bytes());
+        let err = parse_manifest(&json, &forged, &ours.verifying_key().to_bytes()).unwrap_err();
+        assert!(err.contains("isn't signed by us"), "{err}");
+        let mut changed = json.clone();
+        changed[10] ^= 1;
+        let good = base64::engine::general_purpose::STANDARD.encode(ours.sign(&json).to_bytes());
+        assert!(parse_manifest(&changed, &good, &ours.verifying_key().to_bytes()).is_err(), "a changed list with a good signature of the old one");
+        assert_eq!((release_of(&p, "app"), players_files(&p)), ("1".into(), before));
+        assert!(!p.join("app.new").exists() && !p.join(".update").exists());
+    }
+
+    #[test]
+    fn a_download_that_does_not_match_the_list_changes_nothing() {
+        let dir = TestDir::new("brick-update-hash");
+        let p = card(&dir);
+        let (mut rel, _) = app_tarball(&dir, "2", Some("2"), START);
+        rel.sha256 = "0".repeat(64);
+        let err = install(&rel, &dir, &p).unwrap_err();
+        assert!(err.contains("damaged"), "{err}");
+        assert_eq!(release_of(&p, "app"), "1");
+        assert!(!p.join("app.new").exists() && !p.join("app.previous").exists());
+    }
+
+    /// The network goes away in the middle of the download (the server closes after part of the file): the card runs the old version,
+    /// the part stays and the next try resumes it.
+    #[test]
+    fn network_loss_mid_download_keeps_the_old_version_and_the_next_try_resumes() {
+        if Command::new("curl").arg("--version").output().is_err() {
+            eprintln!("no curl on this machine: skipped");
+            return;
+        }
+        use std::io::{BufRead, BufReader, Write};
+        let dir = TestDir::new("brick-update-netloss");
+        let p = card(&dir);
+        let before = players_files(&p);
+        let (rel, tar) = app_tarball(&dir, "2", Some("2"), START);
+        let data = std::fs::read(&tar).unwrap();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let ranges = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let seen = ranges.clone();
+        std::thread::spawn(move || {
+            for (n, stream) in listener.incoming().enumerate() {
+                let Ok(mut stream) = stream else { continue };
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let (mut line, mut from) = (String::new(), 0usize);
+                while reader.read_line(&mut line).is_ok_and(|k| k > 0) && line != "\r\n" {
+                    if let Some(r) = line.to_ascii_lowercase().strip_prefix("range: bytes=") {
+                        from = r.trim().trim_end_matches('-').parse().unwrap_or(0);
+                    }
+                    line.clear();
+                }
+                seen.lock().unwrap().push(from);
+                if n == 0 {
+                    // Promises the whole file, sends 40 %, and the line goes dead.
+                    let _ = stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", data.len()).as_bytes());
+                    let _ = stream.write_all(&data[..data.len() * 2 / 5]);
+                    continue;
+                }
+                let head = format!(
+                    "HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {from}-{}/{}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    data.len() - 1,
+                    data.len(),
+                    data.len() - from
+                );
+                let _ = stream.write_all(head.as_bytes());
+                let _ = stream.write_all(&data[from..]);
+            }
+        });
+        let rel = Release { url: format!("{base}/brick-2.tar.gz"), ..rel };
+        // The test server speaks plain http; no curl retries, so the first try fails as it would with Wi-Fi gone.
+        let tools = Tools { protocols: "=http,file", redirects: "=http", ..TOOLS };
+        let dead = install_brick_with(&tools, &rel, "https://unused/update.json", &p, &Cancel::new(), &|_| {}, &plenty, &|a, b, l| {
+            crate::untar::unpack_file(a, b, l)
+        });
+        // curl itself retries (--retry 3) and resumes on the same server; a dead line for good is what the first answer
+        // stands for. Either the install failed and the card is untouched, or curl's own retry already resumed.
+        match dead {
+            Err(e) => {
+                assert!(e.contains("Download failed"), "{e}");
+                assert_eq!(release_of(&p, "app"), "1", "the old version still runs");
+                assert!(!p.join("app.new").exists() && !p.join("app.previous").exists());
+                let part = std::fs::metadata(super::brick_io::download_path(&p, "2")).map_or(0, |m| m.len());
+                assert!(part > 0 && part < data_len(&tar), "the part is kept for the next try ({part} bytes)");
+                install_brick_with(&tools, &rel, "https://unused/update.json", &p, &Cancel::new(), &|_| {}, &plenty, &crate::untar::unpack_file).unwrap();
+            }
+            Ok(()) => {}
+        }
+        assert!(ranges.lock().unwrap().iter().any(|&from| from > 0), "the rest was asked for with a range, not from the start");
+        assert_eq!(release_of(&p, "app"), "2");
+        assert_eq!(players_files(&p), before);
+    }
+
+    fn data_len(tar: &Path) -> u64 {
+        std::fs::metadata(tar).unwrap().len()
+    }
+
+    #[test]
+    fn a_full_card_is_said_before_the_download_and_while_unpacking_and_changes_nothing() {
+        let dir = TestDir::new("brick-update-full");
+        let p = card(&dir);
+        let before = players_files(&p);
+        let (rel, _) = app_tarball(&dir, "2", Some("2"), START);
+        let url = format!("file://{}/update.json", dir.display());
+        // Before: the space check, nothing downloaded.
+        let tiny = |_: &Path| Some(1_000_000u64);
+        let err = install_brick_with(&TOOLS, &rel, &url, &p, &Cancel::new(), &|_| {}, &tiny, &crate::untar::unpack_file).unwrap_err();
+        assert!(err.contains("too full") && err.contains("MB more") && err.contains("Nothing was changed"), "{err}");
+        assert!(!p.join(".update/download-2.tar.gz").exists());
+        // While unpacking (the card filled up meanwhile): half a folder is removed, the download stays for the next try.
+        let full = |a: &Path, into: &Path, l: u64| {
+            crate::untar::unpack_file(a, into, l)?;
+            Err(crate::untar::Refused::Full)
+        };
+        let err = install_brick_with(&TOOLS, &rel, &url, &p, &Cancel::new(), &|_| {}, &plenty, &full).unwrap_err();
+        assert!(err.contains("too full"), "{err}");
+        assert!(!p.join("app.new").exists(), "no half folder");
+        assert!(super::brick_io::download_path(&p, "2").exists(), "the download is kept in RAM");
+        assert_eq!((release_of(&p, "app"), players_files(&p)), ("1".into(), before.clone()));
+        assert!(!p.join("storage/pocket-ui/update-pending").exists());
+        // Room again: it goes on from the kept download.
+        install(&rel, &dir, &p).unwrap();
+        assert_eq!(release_of(&p, "app"), "2");
+        assert_eq!(players_files(&p), before);
+    }
+
+    #[test]
+    fn a_bad_build_is_refused_before_anything_is_switched() {
+        let dir = TestDir::new("brick-update-bad");
+        let p = card(&dir);
+        let before = players_files(&p);
+        // Programs that do not run here, or that are another version.
+        for (version, reported, why) in [("2", None, "doesn't start"), ("3", Some("33"), "doesn't start")] {
+            let (rel, _) = app_tarball(&dir, version, reported, START);
+            let err = install(&rel, &dir, &p).unwrap_err();
+            assert!(err.contains(why), "{version}: {err}");
+        }
+        // A start script that is not valid sh.
+        let (rel, _) = app_tarball(&dir, "4", Some("4"), "#!/bin/sh\nif then fi (\n");
+        assert!(install(&rel, &dir, &p).unwrap_err().contains("start script"));
+        // A folder without what the start scripts need.
+        let (rel, tar) = app_tarball(&dir, "5", Some("5"), START);
+        let src = dir.join("app-src-5");
+        std::fs::remove_file(src.join("bin/pocket-fb")).unwrap();
+        assert!(Command::new("tar").arg("-czf").arg(&tar).arg("-C").arg(&src).arg(".").status().unwrap().success());
+        let data = std::fs::read(&tar).unwrap();
+        let rel = Release { sha256: store::sha256_hex(&data), size: data.len() as u64, ..rel };
+        assert!(install(&rel, &dir, &p).unwrap_err().contains("missing bin/pocket-fb"));
+        // A list that says 6 for a folder that is 5 inside.
+        let rel = Release { version: "6".into(), ..rel };
+        let err = install(&rel, &dir, &p).unwrap_err();
+        assert!(err.contains("missing") || err.contains("not version"), "{err}");
+        assert_eq!((release_of(&p, "app"), players_files(&p)), ("1".into(), before));
+        assert!(!p.join("app.new").exists() && !p.join("app.previous").exists() && !p.join("storage/pocket-ui/update-pending").exists());
+    }
+
+    #[test]
+    fn the_tailnet_channel_goes_through_tailscales_proxy_and_says_so_when_it_cannot() {
+        // A tailnet's MagicDNS names end in this; built here so that no tailnet name stands in the source.
+        let tail = ["ts", "net"].join(".");
+        let to = |u: &str| proxy_args(u, Some("http://127.0.0.1:1055")).iter().map(|a| a.to_string_lossy().into_owned()).collect::<Vec<_>>();
+        assert_eq!(to(&format!("https://build-box.tail0000.{tail}/brick-updates/beta/update.json")), ["--proxy", "http://127.0.0.1:1055"]);
+        assert_eq!(to(&format!("https://BUILD-BOX.TAIL0000.{}:443/x", tail.to_uppercase())), ["--proxy", "http://127.0.0.1:1055"]);
+        assert!(to("https://pocketui.xyz/updates/stable/update.json").is_empty(), "the public channel goes as always");
+        assert!(to(&format!("https://{tail}.example.com/u.json")).is_empty() && to("file:///storage/u.json").is_empty());
+        let inside = format!("https://box.{tail}/u.json");
+        assert!(proxy_args(&inside, None).is_empty() && proxy_args(&inside, Some("")).is_empty());
+        assert!(unreachable(&inside, Some(60), "wifi").contains("over Tailscale"));
+    }
+    #[test]
+    fn small_update_moves_the_core_keeps_players_files_and_restores_the_complete_old_app() {
+        let dir = TestDir::new("small-brick-update");
+        let p = card(&dir);
+        let before = players_files(&p);
+        let (mut rel, tar) = app_tarball(&dir, "9", Some("9"), START);
+        let src = dir.join("app-src-9");
+        let data = std::fs::read(src.join("cores/gpsp_libretro.so")).unwrap();
+        std::fs::create_dir_all(p.join("app/cores")).unwrap();
+        std::fs::write(p.join("app/cores/gpsp_libretro.so"), &data).unwrap();
+        std::fs::remove_dir_all(src.join("cores")).unwrap();
+        let inventory = serde_json::json!({"format":1,"assets":[{"path":"cores/gpsp_libretro.so", "size":data.len(),
+            "sha256":store::sha256_hex(&data), "package":{"version":"9", "url":"https://blocked.invalid/not-needed",
+            "size":1,"sha256":"00"}}]});
+        std::fs::write(src.join("asset-packages.json"), serde_json::to_vec(&inventory).unwrap()).unwrap();
+        assert!(Command::new("tar").arg("-czf").arg(&tar).arg("-C").arg(&src).arg(".").status().unwrap().success());
+        rel.size = std::fs::metadata(&tar).unwrap().len();
+        rel.sha256 = store::sha256_file(&tar).unwrap();
+        install(&rel, &dir, &p).unwrap();
+        assert_eq!(release_of(&p, "app"), "9");
+        assert_eq!(players_files(&p), before);
+        assert_eq!(std::fs::read(p.join("app/cores/gpsp_libretro.so")).unwrap(), data);
+        assert!(!p.join("app.previous/cores/gpsp_libretro.so").exists(), "no bulk copy of unchanged assets");
+        assert_eq!(std::fs::read(p.join("start.sh")).unwrap(), include_bytes!("../deploy/brick/boot.sh"));
+        // The test build exits before confirming its first frame. The real fixed boot script must put back
+        // both the old executable tree and the moved core, preserving the player's data.
+        assert!(Command::new("sh").arg(p.join("start.sh")).env("BRICK_DATA", &p).status().unwrap().success());
+        assert_eq!(release_of(&p, "app"), "1");
+        assert_eq!(std::fs::read(p.join("app/cores/gpsp_libretro.so")).unwrap(), data);
+        assert!(!p.join("app/.asset-moves").exists() && !p.join("storage/pocket-ui/update-pending").exists());
+        // A write failure after the assets have moved must restore them before removing app.new.
+        let fail_ready = |a: &Path, into: &Path, l: u64| {
+            let entries = crate::untar::unpack_file(a, into, l)?;
+            std::fs::create_dir(into.join(".ready"))?;
+            Ok(entries)
+        };
+        let url = format!("file://{}/update.json", dir.display());
+        assert!(install_brick_with(&TOOLS, &rel, &url, &p, &Cancel::new(), &|_| {}, &plenty, &fail_ready).is_err());
+        assert_eq!(release_of(&p, "app"), "1");
+        assert_eq!(std::fs::read(p.join("app/cores/gpsp_libretro.so")).unwrap(), data);
+        assert!(!p.join("app.new").exists() && !p.join("app/.asset-moves").exists());
+    }
+
+}
+
+#[cfg(test)]
+mod crash_tests;
+#[cfg(test)]
+mod download_tests;

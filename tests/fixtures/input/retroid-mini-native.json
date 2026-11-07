@@ -1,0 +1,352 @@
+{
+  "provenance": "Read-only sysfs bitmaps and EVIOCGID/EVIOCGABS, 2026-11-07. Native hidden nodes opened through existing InputPlumber descriptors; no grabs or event injection. Face positions follow the independent Mini V2 source-to-virtual probe (docs/COMPARE-ROCKNIX.md) and Odin injected source-to-virtual check, 2026-11-07: NORTH/WEST pass through without swapping. The Odin check emitted trigger axes only despite digital trigger capability bits.",
+  "nodes": [
+    {
+      "name": "pm8941_pwrkey",
+      "id": {
+        "bustype": 0,
+        "vendor": 0,
+        "product": 0,
+        "version": 0
+      },
+      "bitmaps": {
+        "ev": "3",
+        "key": "10000000000000 0",
+        "abs": "0",
+        "sw": "0",
+        "rel": "0",
+        "ff": "0"
+      },
+      "abs": [],
+      "keys": [
+        116
+      ],
+      "expected_keys": [
+        {
+          "code": 116,
+          "physical": "POWER",
+          "menu_nintendo": "POWER",
+          "menu_xbox": "POWER",
+          "retro_mask": 0
+        }
+      ]
+    },
+    {
+      "name": "pm8941_resin",
+      "id": {
+        "bustype": 0,
+        "vendor": 0,
+        "product": 0,
+        "version": 0
+      },
+      "bitmaps": {
+        "ev": "3",
+        "key": "4000000000000 0",
+        "abs": "0",
+        "sw": "0",
+        "rel": "0",
+        "ff": "0"
+      },
+      "abs": [],
+      "keys": [
+        114
+      ],
+      "expected_keys": [
+        {
+          "code": 114,
+          "physical": "VOL_DOWN",
+          "menu_nintendo": "VOL_DOWN",
+          "menu_xbox": "VOL_DOWN",
+          "retro_mask": 0
+        }
+      ]
+    },
+    {
+      "name": "gpio-keys",
+      "id": {
+        "bustype": 25,
+        "vendor": 1,
+        "product": 1,
+        "version": 256
+      },
+      "bitmaps": {
+        "ev": "3",
+        "key": "8000000000000 0",
+        "abs": "0",
+        "sw": "0",
+        "rel": "0",
+        "ff": "0"
+      },
+      "abs": [],
+      "keys": [
+        115
+      ],
+      "expected_keys": [
+        {
+          "code": 115,
+          "physical": "VOL_UP",
+          "menu_nintendo": "VOL_UP",
+          "menu_xbox": "VOL_UP",
+          "retro_mask": 0
+        }
+      ]
+    },
+    {
+      "name": "Retroid Pocket Gamepad",
+      "id": {
+        "bustype": 3,
+        "vendor": 8224,
+        "product": 12289,
+        "version": 1
+      },
+      "bitmaps": {
+        "ev": "20000b",
+        "key": "f00000000 0 0 0 7cdb000000400000 0 0 0 0",
+        "abs": "30003f",
+        "sw": "0",
+        "rel": "0",
+        "ff": "107030000 0"
+      },
+      "abs": [
+        [
+          0,
+          -1408,
+          1408,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          -1408,
+          1408,
+          0,
+          0,
+          0
+        ],
+        [
+          2,
+          -1408,
+          1408,
+          0,
+          0,
+          0
+        ],
+        [
+          3,
+          -1408,
+          1408,
+          0,
+          0,
+          0
+        ],
+        [
+          4,
+          -1408,
+          1408,
+          0,
+          0,
+          0
+        ],
+        [
+          5,
+          -1408,
+          1408,
+          0,
+          0,
+          0
+        ],
+        [
+          20,
+          0,
+          1552,
+          0,
+          30,
+          0
+        ],
+        [
+          21,
+          0,
+          1552,
+          0,
+          30,
+          0
+        ]
+      ],
+      "keys": [
+        278,
+        304,
+        305,
+        307,
+        308,
+        310,
+        311,
+        314,
+        315,
+        316,
+        317,
+        318,
+        544,
+        545,
+        546,
+        547
+      ],
+      "expected_keys": [
+        {
+          "code": 278,
+          "physical": "BACK",
+          "menu_nintendo": "BACK",
+          "menu_xbox": "BACK",
+          "retro_mask": 0
+        },
+        {
+          "code": 304,
+          "physical": "SOUTH",
+          "menu_nintendo": "SOUTH",
+          "menu_xbox": "EAST",
+          "retro_mask": 1
+        },
+        {
+          "code": 305,
+          "physical": "EAST",
+          "menu_nintendo": "EAST",
+          "menu_xbox": "SOUTH",
+          "retro_mask": 256
+        },
+        {
+          "code": 307,
+          "physical": "NORTH",
+          "menu_nintendo": "NORTH",
+          "menu_xbox": "WEST",
+          "retro_mask": 512
+        },
+        {
+          "code": 308,
+          "physical": "WEST",
+          "menu_nintendo": "WEST",
+          "menu_xbox": "NORTH",
+          "retro_mask": 2
+        },
+        {
+          "code": 310,
+          "physical": "L1",
+          "menu_nintendo": "L1",
+          "menu_xbox": "L1",
+          "retro_mask": 1024
+        },
+        {
+          "code": 311,
+          "physical": "R1",
+          "menu_nintendo": "R1",
+          "menu_xbox": "R1",
+          "retro_mask": 2048
+        },
+        {
+          "code": 314,
+          "physical": "SELECT",
+          "menu_nintendo": "SELECT",
+          "menu_xbox": "SELECT",
+          "retro_mask": 4
+        },
+        {
+          "code": 315,
+          "physical": "START",
+          "menu_nintendo": "START",
+          "menu_xbox": "START",
+          "retro_mask": 8
+        },
+        {
+          "code": 316,
+          "physical": "MODE",
+          "menu_nintendo": "MODE",
+          "menu_xbox": "MODE",
+          "retro_mask": 0
+        },
+        {
+          "code": 317,
+          "physical": "L3",
+          "menu_nintendo": "L3",
+          "menu_xbox": "L3",
+          "retro_mask": 16384
+        },
+        {
+          "code": 318,
+          "physical": "R3",
+          "menu_nintendo": "R3",
+          "menu_xbox": "R3",
+          "retro_mask": 32768
+        },
+        {
+          "code": 544,
+          "physical": "UP",
+          "menu_nintendo": "UP",
+          "menu_xbox": "UP",
+          "retro_mask": 16
+        },
+        {
+          "code": 545,
+          "physical": "DOWN",
+          "menu_nintendo": "DOWN",
+          "menu_xbox": "DOWN",
+          "retro_mask": 32
+        },
+        {
+          "code": 546,
+          "physical": "LEFT",
+          "menu_nintendo": "LEFT",
+          "menu_xbox": "LEFT",
+          "retro_mask": 64
+        },
+        {
+          "code": 547,
+          "physical": "RIGHT",
+          "menu_nintendo": "RIGHT",
+          "menu_xbox": "RIGHT",
+          "retro_mask": 128
+        }
+      ],
+      "expected_axes": [
+        {
+          "code": 0,
+          "axis": "LEFT_X",
+          "hat": null
+        },
+        {
+          "code": 1,
+          "axis": "LEFT_Y",
+          "hat": null
+        },
+        {
+          "code": 2,
+          "axis": null,
+          "hat": null
+        },
+        {
+          "code": 3,
+          "axis": "RIGHT_X",
+          "hat": null
+        },
+        {
+          "code": 4,
+          "axis": "RIGHT_Y",
+          "hat": null
+        },
+        {
+          "code": 5,
+          "axis": null,
+          "hat": null
+        },
+        {
+          "code": 20,
+          "axis": "L2",
+          "hat": null
+        },
+        {
+          "code": 21,
+          "axis": "R2",
+          "hat": null
+        }
+      ]
+    }
+  ]
+}

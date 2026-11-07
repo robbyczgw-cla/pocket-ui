@@ -1571,7 +1571,7 @@ mod tests {
     #[test]
     fn huge_and_deep_pages_are_one_pass_and_bounded() {
         let deep = "<div>".repeat(200_000) + "<form><input type=submit></form>" + &"</div>".repeat(200_000);
-        let t = std::time::Instant::now();
+        let t = crate::testutil::clock::CpuInstant::now();
         let page = parse(&deep);
         assert_eq!(page.usable(), [0]);
         let many = "<form><input name=a>".repeat(5000) + &"<input name=b>".repeat(5000);

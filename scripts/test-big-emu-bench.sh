@@ -8,7 +8,16 @@ set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 python3 -I "$ROOT/scripts/big-emu-bench.py" selftest || exit 1
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-big-emu.XXXXXX")
-trap 'kill $(pidof dolphin-emu-nogui armsx2-qt) 2>/dev/null; [ -n "${KEEP:-}" ] || rm -rf "$tmp"' EXIT
+# Stop only this fixture's recorded children, checking ownership after PID reuse.
+cleanup() {
+  for emu_pid in $(cat "$tmp/emu-pids" 2>/dev/null); do
+    case $(2>/dev/null tr '\000' ' ' <"/proc/$emu_pid/cmdline") in
+      *"$tmp/bin/fake-emu.py"*) kill "$emu_pid" 2>/dev/null ;;
+    esac
+  done
+  [ -n "${KEEP:-}" ] || rm -rf "$tmp"
+}
+trap cleanup EXIT
 failed=0
 check() { # <what> <command...>
   what=$1; shift
@@ -70,6 +79,7 @@ cat >"$B/fake-emu.py" <<'X'
 import os, signal, sys, time
 cfg = dict(kv.split("=") for kv in open(sys.argv[1]).read().split())  # argv[1]: the game
 fps = float(cfg["fps"])
+with open(os.environ["FAKE"] + "/emu-pids", "a") as pids: pids.write(str(os.getpid()) + "\n")
 out = open(os.path.join(os.environ["BIG_FTDIR"], "dolphin-emu-nogui.%d" % os.getpid()), "w")
 signal.signal(signal.SIGTERM, lambda *a: (out.flush(), sys.exit(0)))
 S = os.environ["BIG_STORAGE"]
@@ -79,13 +89,29 @@ os.makedirs(S + "/.local/share/azahar-emu", exist_ok=True)
 t0 = time.monotonic(); n = 0
 while True:
     now = time.monotonic()
-    out.write("%d\n" % (now * 1e9)); n += 1
+    # A fixture supplies a known frame timeline, independent of host scheduling.
+    # The real emulator measurement still records actual presentation times.
+    out.write("%d\n" % ((t0 + n / fps) * 1e9)); n += 1
     if n % 30 == 0: out.flush()
     if "fan_after" in cfg and now - t0 > float(cfg["fan_after"]):
         open(os.environ["BIG_SYS"] + "/class/hwmon/hwmon9/pwm1", "w").write("51\n")
     if "die_after" in cfg and now - t0 > float(cfg["die_after"]):
         out.flush(); sys.exit(1)
     time.sleep(max(0, t0 + n / fps - time.monotonic()))
+X
+# Keep procps' matching (including -x for runemu.sh), but restrict every result
+# to this fixture. Another test's similarly named emulator is never signalled.
+export POCKETUI_FIXTURE_PIDOF=$(command -v pidof)
+cat >"$B/pidof" <<'X'
+#!/bin/sh
+result=
+for p in $("$POCKETUI_FIXTURE_PIDOF" "$@" 2>/dev/null); do
+  case $(2>/dev/null tr '\000' ' ' <"/proc/$p/cmdline") in
+    *"$FAKE/"*) result="$result $p" ;;
+  esac
+done
+[ -n "$result" ] || exit 1
+echo "$result"
 X
 # runemu.sh: starts the emulator in the foreground like ROCKNIX's, then "puts the governors back"
 cat >"$B/runemu.sh" <<'X'
@@ -118,6 +144,9 @@ run() { # <name> <args...>: output in $tmp/<name>.out, exit code in $rc
 has() { grep -q -- "$2" "$tmp/$1.out"; }
 
 mkfifo "$tmp/ui.in"
+# The reader belongs to the whole fixture, not just its first short-lived writer.
+# Keep one write descriptor open so EOF cannot end it between scenarios.
+exec 9<>"$tmp/ui.in"
 cat "$tmp/ui.in" >"$tmp/nudges" &
 reader=$!
 

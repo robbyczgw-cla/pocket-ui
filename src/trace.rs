@@ -112,7 +112,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_clock_goes_forward_in_microseconds() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_clock_goes_forward_in_microseconds() {
         let a = now_us();
         std::thread::sleep(std::time::Duration::from_millis(5));
         let b = now_us();

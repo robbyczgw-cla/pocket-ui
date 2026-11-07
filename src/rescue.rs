@@ -222,11 +222,24 @@ pub enum Choice {
 }
 
 impl Choice {
+    #[cfg(not(feature = "brick"))]
     pub fn label(self) -> &'static str {
         match self {
             Choice::Cancel => "Cancel",
             Choice::RestartUi => "Restart pocket-ui",
             Choice::QuitToSteam => "Quit to Steam",
+            Choice::OpenEs => "Open EmulationStation",
+            Choice::Reset => "Reset settings",
+            Choice::Report => crate::report::ROW,
+        }
+    }
+
+    #[cfg(feature = "brick")]
+    pub fn label(self) -> &'static str {
+        match self {
+            Choice::Cancel => "Cancel",
+            Choice::RestartUi => "Restart pocket-ui",
+            Choice::QuitToSteam => { #[cfg(feature = "brick")] { if crate::device::brick() { "Back to NextUI" } else { "Quit to Steam" } } #[cfg(not(feature = "brick"))] { "Quit to Steam" } }
             Choice::OpenEs => "Open EmulationStation",
             Choice::Reset => "Reset settings",
             Choice::Report => crate::report::ROW,
@@ -240,6 +253,13 @@ pub const ES_WARNING: [&str; 3] = [
     "In EmulationStation, do not use Updates. On this Pocket a system update there also rewrites the bootloader that Android needs.",
     "Do not use Factory reset either. It deletes pocket-ui and its settings.",
 ];
+
+/// SELECT + START on the Brick's own card: there is no NextUI on it (docs/TRIMUI-BRICK-STANDALONE.md), and `start.sh` starts pocket-ui
+/// again whenever it ends. The dialog said "Back to NextUI?" and then came back to pocket-ui (settings walk 06.11.).
+#[cfg(feature = "brick")]
+const BRICK_CARD_LEAVE: &str = "Restart pocket-ui?";
+#[cfg(feature = "brick")]
+const BRICK_CARD_LEAVE_BODY: &str = "Only pocket-ui starts again, in seconds. Your games, saves and settings stay as they are.";
 
 /// A dialog over the page: a title, what to know, and a short list of choices; Cancel first and selected, so A
 /// pressed by mistake does nothing.
@@ -267,7 +287,7 @@ impl Dialog {
 
     pub fn title(&self) -> &'static str {
         match self.kind {
-            DialogKind::Leave if crate::device::current().host_owned() => "Quit pocket-ui?",
+            DialogKind::Leave if crate::device::current().host_owned() => "Quit pocket-ui?", #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() && crate::brick_profile::standalone() => BRICK_CARD_LEAVE, #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() => "Back to NextUI?",
             DialogKind::Leave => "Leave pocket-ui?",
             DialogKind::OpenEs => "Open EmulationStation?",
             DialogKind::Reset => "Reset pocket-ui settings?",
@@ -278,7 +298,7 @@ impl Dialog {
     pub fn body(&self) -> Vec<String> {
         match self.kind {
             DialogKind::OpenEs => ES_WARNING.iter().map(|s| s.to_string()).collect(),
-            DialogKind::Leave if crate::device::current().host_owned() => vec!["Back to Steam. Your games, saves and settings stay as they are.".to_string()],
+            DialogKind::Leave if crate::device::current().host_owned() => vec!["Back to Steam. Your games, saves and settings stay as they are.".to_string()], #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() && crate::brick_profile::standalone() => vec![BRICK_CARD_LEAVE_BODY.to_string()], #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() => vec!["Back to NextUI. Your games, saves and settings stay as they are.".to_string()],
             DialogKind::Leave => std::iter::once(format!("Restart pocket-ui starts it afresh. {}", ES_WARNING[0])).chain(ES_WARNING[1..].iter().map(|s| s.to_string())).collect(),
             DialogKind::Reset => vec![
                 format!(
@@ -293,7 +313,7 @@ impl Dialog {
 
     pub fn choices(&self) -> &'static [Choice] {
         match self.kind {
-            DialogKind::Leave if crate::device::current().host_owned() => &[Choice::Cancel, Choice::QuitToSteam, Choice::Report],
+            DialogKind::Leave if crate::device::current().host_owned() => &[Choice::Cancel, Choice::QuitToSteam, Choice::Report], #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() && crate::brick_profile::standalone() => &[Choice::Cancel, Choice::RestartUi], #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() => &[Choice::Cancel, Choice::QuitToSteam],
             DialogKind::Leave => &[Choice::Cancel, Choice::RestartUi, Choice::Report, Choice::OpenEs],
             DialogKind::OpenEs => &[Choice::Cancel, Choice::OpenEs],
             DialogKind::Reset => &[Choice::Cancel, Choice::Reset],

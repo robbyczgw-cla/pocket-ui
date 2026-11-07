@@ -61,7 +61,7 @@ They are names, not descriptions, and the manual (still English) uses them:
 | Web companion | Web-Begleiter | the Pocket's Settings page is German, the pages in the browser stay English |
 | History, Play history, Year in review, Month in review | Verlauf, Spielverlauf, Jahresrückblick, Monatsrückblick | |
 | Session, streak | Sitzung, Serie | |
-| Look (Settings → Look → Look), look | Ansicht | "Choose a look" → "Wähl eine Ansicht" |
+| Look (Settings → Look → Layout), look | Ansicht | "Choose a look" → "Wähl eine Ansicht" |
 | Shelf, Minimal, Split, Cards, Cabinet (the looks) | Regal, Minimal, Geteilt, Karten, Vitrine | |
 | Appearance: Dark, Light, Automatic | Darstellung: Dunkel, Hell, Automatisch | |
 | Motion: Full, Reduced, Off | Bewegung: Voll, Reduziert, Aus | |
@@ -190,7 +190,7 @@ Extras, Sticker(s), Home, FPS, CPU, "Pocket" ("el Pocket", masculine); Little, B
 |---|---|---|
 | Settings | Ajustes | a path: "Ajustes › Jugando › Batería" |
 | Settings' categories: Look, Sound & feel, Playing, Games, Connections, System, Help & tools | Aspecto, Sonido y tacto, Jugando, Juegos, Conexiones, Sistema, Ayuda y herramientas | |
-| Look (Settings → Look → Look), look | Vista | "Choose a look" → "Elige una vista" |
+| Look (Settings → Look → Layout), look | Vista | "Choose a look" → "Elige una vista" |
 | Shelf, Minimal, Split, Cards, Cabinet (the looks) | Estante, Minimal, Dividida, Tarjetas, Vitrina | |
 | Appearance: Dark, Light, Automatic | Apariencia: Oscuro, Claro, Automático | |
 | Motion: Full, Reduced, Off | Movimiento: Completo, Reducido, Desactivado | |

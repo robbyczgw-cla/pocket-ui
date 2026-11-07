@@ -49,6 +49,7 @@ SHOTS = [
     ("settings", "settings", {}, False),
     ("updates", "settings:5:4", {}, False),
     ("bluetooth", "bluetooth:found", {}, False),
+    ("test-buttons", "test-buttons:bt", {}, False),
     ("backup", "backup", {}, False),
 ]
 

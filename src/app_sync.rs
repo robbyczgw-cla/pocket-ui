@@ -9,7 +9,7 @@ use pocket_ui::gfx::Canvas;
 use pocket_ui::pad::Button;
 use pocket_ui::palette::*;
 use pocket_ui::sync::{self, Config, CurlApi, Outcome, Prefs, Problem, Snapshot};
-use pocket_ui::sync_page::{Action, Event, SyncPage, ROWS};
+use pocket_ui::sync_page::{rows, Action, Event, SyncPage};
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
@@ -221,12 +221,24 @@ impl App {
         self.sync.loaded()?.note.as_ref().filter(|(_, at)| at.elapsed() < NOTE_FOR).map(|(text, _)| text.clone())
     }
 
-    /// Something of sync's moves on screen: the notice is up (it ends on its own), or the switch is working.
+    /// Something of sync's moves on screen: the switch is working. The still confirmation has its own expiry timer.
     pub(crate) fn sync_note_active(&self) -> bool {
-        self.sync_note().is_some() || self.sync.loaded().and_then(|s| s.page.as_ref()).is_some_and(|p| p.busy.is_some())
+        self.sync.loaded().and_then(|s| s.page.as_ref()).is_some_and(|p| p.busy.is_some())
     }
 
-    /// `--snapshot sync[:off|:on|:busy|:open|:bios|:library|:conflicts|:conflicts-list|:conflicts-card]` draws the page with made-up
+    /// The still confirmation changes only when it expires.
+    pub(crate) fn sync_note_wake(&mut self, now: Instant) -> Option<Instant> {
+        let end = self.sync.loaded()?.note.as_ref()?.1 + NOTE_FOR;
+        if now >= end {
+            self.sync.note = None;
+            self.request_redraw();
+            None
+        } else {
+            Some(end)
+        }
+    }
+
+    /// `--snapshot sync[:off|:nowifi|:on|:busy|:open|:bios|:library|:conflicts|:conflicts-list|:conflicts-card]` draws the page with made-up
     /// data, for checking the layout (`conflicts…`: two saves with two versions, `App::sync_conflicts_snapshot`).
     pub(crate) fn sync_snapshot(&mut self, state: &str) -> bool {
         let Some(rest) = state.strip_prefix("sync") else { return false };
@@ -234,7 +246,7 @@ impl App {
         let mode = parts.next().unwrap_or_default();
         let row: Option<usize> = parts.next().and_then(|r| r.parse().ok());
         let mut prefs = Prefs {
-            enabled: mode != "off" && mode != "",
+            enabled: !matches!(mode, "off" | "nowifi" | ""),
             ..Prefs::default()
         };
         if mode == "bios" {
@@ -244,7 +256,8 @@ impl App {
         if mode == "library" {
             prefs.library = true;
         }
-        let mut page = SyncPage::new(prefs, Some("192.0.2.57".into()));
+        // "nowifi": off and without an address, the line that says to connect first under the text.
+        let mut page = SyncPage::new(prefs, (mode != "nowifi").then(|| "192.0.2.57".into()));
         if page.prefs.enabled {
             let xml = include_str!("fixtures/syncthing-pocket.xml");
             page.cfg = Config::parse(xml).ok();
@@ -268,9 +281,9 @@ impl App {
         }
         // "sync:on:<row>" selects a row.
         page.sel = match (mode, row) {
-            (_, Some(row)) => row.min(ROWS.len() - 1),
-            ("bios", _) => ROWS.len() - 1,
-            ("library", _) => ROWS.iter().position(|r| *r == pocket_ui::sync_page::Row::Share(sync::Share::Library)).unwrap_or(0),
+            (_, Some(row)) => row.min(rows().len() - 1),
+            ("bios", _) => rows().len() - 1,
+            ("library", _) => rows().iter().position(|r| *r == pocket_ui::sync_page::Row::Share(sync::Share::Library)).unwrap_or(0),
             _ => 0,
         };
         self.sync.page = Some(page);
@@ -295,13 +308,13 @@ impl App {
         // The details under the list keep their room above the hints: with larger text (Settings → Text size) the
         // list shows fewer rows and scrolls, with a bar at the edge.
         let need = DETAILS_H + 6 * pocket_ui::type_scale::grow(28);
-        let visible = (((c.h - pad - NU_PILL - 10 - need - 14 - top) / row).max(3) as usize).min(ROWS.len());
-        let first = super::window_start(page.sel, visible, ROWS.len());
-        if ROWS.len() > visible {
+        let visible = (((c.h - pad - NU_PILL - 10 - need - 14 - top) / row).max(3) as usize).min(rows().len());
+        let first = super::window_start(page.sel, visible, rows().len());
+        if rows().len() > visible {
             let track = visible as i32 * row;
-            pocket_ui::kit::scrollbar(c, top, track, first, visible, ROWS.len());
+            pocket_ui::kit::scrollbar(c, top, track, first, visible, rows().len());
         }
-        for (i, r) in ROWS.iter().enumerate().skip(first).take(visible) {
+        for (i, r) in rows().iter().enumerate().skip(first).take(visible) {
             let y = top + (i - first) as i32 * row;
             self.hits.row(Area::new(pad, y, right - pad, row), i);
             let base = y + row / 2 + pocket_ui::type_scale::mid(font);
@@ -310,8 +323,8 @@ impl App {
                 let w = self.text.width(Face::Body, font, name) + 2 * NU_BTN_PAD;
                 // On a 480-line screen the rows are 24 px apart: the pill keeps 2 px above and below, not 4.
                 let m = if row < 40 { 2 } else { 4 };
-                c.round_rect(pad, y + m, right - pad, row - 2 * m, (row - 2 * m) / 2, pal().band);
-                c.round_rect(pad, y + m, w, row - 2 * m, (row - 2 * m) / 2, pal().select);
+                pocket_ui::retro::pill(c, pad, y + m, right - pad, row - 2 * m, (row - 2 * m) / 2, pal().band);
+                pocket_ui::retro::select(c, pad, y + m, w, row - 2 * m, (row - 2 * m) / 2, pal().select);
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, name);
             } else {
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, name);
@@ -320,17 +333,23 @@ impl App {
             let value = page.value(*r);
             self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, pal().text, &value);
         }
-        self.hits.list(page.sel, ROWS.len(), 0.0, row as f32);
+        self.hits.list(page.sel, rows().len(), 0.0, row as f32);
 
-        self.paint_sync_details(c, &page, top + visible as i32 * row + 14);
-
-        let a = if page.row() == pocket_ui::sync_page::Row::Versions { "Open" } else { "Change" };
-        self.nu_foot(c, &[("B", "Back"), ("A", a)], page.describe(page.row()), pal().text);
+        // "Two versions" opens only when something waits for a choice; with nothing waiting A does nothing, and says nothing.
+        // The foot first: where its explanation starts is where the details must end (two lines of it on a 1024-wide screen, the
+        // Brick: "Connect to Wi-Fi first" ran into them).
+        let hints: &[(&str, &str)] = match page.row() {
+            pocket_ui::sync_page::Row::Versions if page.waiting() == 0 => &[("B", "Back")],
+            pocket_ui::sync_page::Row::Versions => &[("B", "Back"), ("A", "Open")],
+            _ => &[("B", "Back"), ("A", "Change")],
+        };
+        let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, hints, page.describe(page.row()), 2, pal().text);
+        self.paint_sync_details(c, &page, top + visible as i32 * row + 14, foot);
         self.sync.page = Some(page);
     }
 
     /// Below the list: the status, then (when it is on) the device ID with its QR code and the web interface.
-    fn paint_sync_details(&mut self, c: &mut Canvas, page: &SyncPage, y0: i32) {
+    fn paint_sync_details(&mut self, c: &mut Canvas, page: &SyncPage, y0: i32, foot: i32) {
         // Each line a little lower than the one before with larger text: by the part of its type's growth above the
         // baseline (`d1` .. `d6`, all 0 in Normal).
         let g = |px: u32| pocket_ui::type_scale::grow(px) * 7 / 10;
@@ -365,7 +384,7 @@ impl App {
             // Above the hints' line (and the Wi-Fi line under them when there is one); with larger text the last
             // paragraph that reaches it is shortened with "…".
             let step = pocket_ui::type_scale::line(26, 8);
-            let bottom = c.h - NU_PAD - NU_PILL - 10 - if page.ip.is_none() { step + 10 } else { 0 };
+            let bottom = (c.h - NU_PAD - NU_PILL).min(foot) - 10 - if page.ip.is_none() { step + 10 + step / 2 } else { 0 };
             for l in lines {
                 let room = if y > bottom { 0 } else { ((bottom - y) / step + 1) as usize };
                 for line in self.text.wrap_prose_at_most(Face::Body, 26, l, right - left, room) {
@@ -375,8 +394,11 @@ impl App {
                 y += 10;
             }
             if page.ip.is_none() {
-                self.text
-                    .draw(c, Face::Body, 28, left, y + 10, pal().alert, "Connect to Wi-Fi first (Settings › Connections › Wi-Fi).");
+                // Smaller, or without the way there, where it would run off the screen (German at 1024 wide, the Brick).
+                let full = "Connect to Wi-Fi first (Settings › Connections › Wi-Fi).";
+                let line = if self.text.width(Face::Body, 25, full) <= right - left { full } else { "Connect to Wi-Fi first." };
+                let (px, line) = self.text.fit_sizes(Face::Body, &[28, 25], line, right - left);
+                self.text.draw(c, Face::Body, px, left, y + 10, pal().alert, &line);
             }
             return;
         }

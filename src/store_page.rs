@@ -421,7 +421,7 @@ impl App {
                 let w = self.text.width(Face::Body, NU_SMALL, &t) + 36;
                 let h = 44;
                 let x = right - NU_BTN_PAD - w + 18;
-                c.round_rect(x, y + (row - h) / 2, w, h, h / 2, pal().label);
+                pocket_ui::retro::pill(c, x, y + (row - h) / 2, w, h, h / 2, pal().label);
                 self.text.draw(c, Face::Body, NU_SMALL, x + 18, y + (row - h) / 2 + h / 2 + pocket_ui::type_scale::mid(NU_SMALL), pal().ink, &t);
             }
         }
@@ -505,8 +505,8 @@ impl App {
 
         // The label: the package as a pulled-out spine, its category on the edge.
         let (lh, r) = (196, 18);
-        c.round_rect(pad, top, right - pad, lh, r, page_colour(key));
-        c.round_rect(pad + STRIPE, top, right - pad - STRIPE, lh, r, pal().label);
+        pocket_ui::retro::pill(c, pad, top, right - pad, lh, r, page_colour(key));
+        pocket_ui::retro::pill(c, pad + STRIPE, top, right - pad - STRIPE, lh, r, pal().label);
         c.rect(pad + STRIPE, top, r, lh, pal().label);
         let x = pad + STRIPE + NU_BTN_PAD;
         let badge = match status {
@@ -583,8 +583,8 @@ impl App {
             Some(b) if busy && b.total > 0 => {
                 let (w, by) = (c.w - 2 * pad - 2 * NU_BTN_PAD, c.h - pad - NU_PILL - 90);
                 let frac = (self.store.done as f32 / b.total as f32).clamp(0.0, 1.0);
-                c.round_rect(pad + NU_BTN_PAD, by, w, 12, 6, pal().keycap);
-                c.round_rect(pad + NU_BTN_PAD, by, ((w as f32 * frac) as i32).max(12), 12, 6, pal().label);
+                pocket_ui::retro::pill(c, pad + NU_BTN_PAD, by, w, 12, 6, pal().keycap);
+                pocket_ui::retro::pill(c, pad + NU_BTN_PAD, by, ((w as f32 * frac) as i32).max(12), 12, 6, pal().label);
                 let line = format!("{}, {}", b.label, progress_text(b, self.store.done));
                 self.store_footer(c, &line, pal().chalk);
             }

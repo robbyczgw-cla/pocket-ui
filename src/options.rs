@@ -505,6 +505,8 @@ pub fn applies(key: &str, system: &str) -> bool {
         "lcd_colour" => system == "gba",
         // Earlier keeps save states: not for the systems that have none (ScummVM, PICO-8, TIC-80).
         crate::timeline::KEY => crate::hostsys::find(system).is_none_or(|h| h.no_states.is_none()),
+        // No fan (the H700 handhelds, the Brick): the row set a fan that isn't there (settings walk 06.11.).
+        "fan" => crate::device::current().has_fan(),
         _ => true,
     }
 }
@@ -800,13 +802,15 @@ mod tests {
             let (release_tx, release_rx) = mpsc::channel();
             crate::fsutil::write_json_checked_soon(&dir.join("writer.json"), &0, move |_| {
                 started_tx.send(()).unwrap();
-                let _ = release_rx.recv_timeout(Duration::from_secs(10));
+                let _ = release_rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(10)));
             }).unwrap();
-            started_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+            started_rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(10))).unwrap();
             settings.values.insert("rumble".into(), "off".into());
             settings.keep();
             let (done_tx, done_rx) = mpsc::channel();
+            let (thread_tx, thread_rx) = mpsc::channel();
             let change = std::thread::spawn(move || {
+                thread_tx.send(std::thread::current().id()).unwrap();
                 if reset {
                     settings.restore_defaults();
                 } else {
@@ -814,8 +818,15 @@ mod tests {
                 }
                 let _ = done_tx.send(());
             });
-            // Give the deletion time to run while the older write is blocked.
-            let _ = done_rx.recv_timeout(Duration::from_millis(100));
+            let thread = thread_rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(10))).unwrap();
+            crate::testutil::clock::wait_for(|| {
+                match done_rx.try_recv() {
+                    Ok(()) => panic!("the scope change skipped the pending-write barrier"),
+                    Err(mpsc::TryRecvError::Disconnected) => panic!("scope-change worker failed"),
+                    Err(mpsc::TryRecvError::Empty) => {}
+                }
+                crate::fsutil::waiting_for_writes(thread)
+            }, Duration::from_secs(10), "scope change reached the blocked card writer");
             release_tx.send(()).unwrap();
             change.join().unwrap();
             crate::fsutil::settle();

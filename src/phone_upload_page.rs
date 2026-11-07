@@ -40,7 +40,9 @@ pub struct PhonePage {
 }
 
 /// The warning under the code, always shown whole (security review L2): what plain HTTP on a Wi-Fi means, in plain words.
-pub const HELP: &str = "Not encrypted: someone else on this Wi-Fi could see the code and the games you send, and could change them on the way. Only use it on your own Wi-Fi at home. Nothing can be downloaded from the Pocket. B ends it.";
+/// One calm line: three of warning read as a reason not to use it at home, where it is meant (first-start walk
+/// 2026-11-06); the manual says what "not encrypted" means (docs/user/phone-upload.md).
+pub const HELP: &str = "Not encrypted, so use it on your own Wi-Fi at home. Nothing can be downloaded from the Pocket. B ends it.";
 
 /// Where the page's parts go on a `w` x `h` canvas: the warning's lines (all of them), the y they start at, and the
 /// QR code's size, which gives way to the warning rather than the other way round.
@@ -228,8 +230,8 @@ impl PhonePage {
             crate::kit::qr(c, MARGIN, top, q, &url, 4, true);
         } else {
             // No code that leads nowhere: an empty frame where it was.
-            c.round_rect(MARGIN, top, q, q, 12, pal().keycap);
-            c.round_rect(MARGIN + 4, top + 4, q - 8, q - 8, 10, pal().void);
+            crate::retro::pill(c, MARGIN, top, q, q, 12, pal().keycap);
+            crate::retro::pill(c, MARGIN + 4, top + 4, q - 8, q - 8, 10, pal().void);
         }
         let st = self.status().unwrap_or_default();
         if let Some(why) = closed {
@@ -246,7 +248,11 @@ impl PhonePage {
                 text.draw(c, Face::Body, 24, x, y, pal().dust, l);
                 y += l24;
             }
-            text.draw(c, Face::Body, 24, x, y + 8, pal().chalk, "A opens it again with a new code.");
+            // On two lines where it is wider than the column (a wide face, German).
+            for l in text.wrap_prose(Face::Body, 24, "A opens it again with a new code.", w).iter().take(2) {
+                text.draw(c, Face::Body, 24, x, y + 8, pal().chalk, l);
+                y += l24;
+            }
             return;
         }
         let label = text.fit(Face::Body, 24, "Or type this, a computer works too", w);
@@ -290,8 +296,8 @@ impl PhonePage {
                     let pct = (f.done.min(f.total) * 100).checked_div(f.total).unwrap_or(0) as i32;
                     let label = format!("{pct} %");
                     let lw = text.width(Face::Body, 21, &label) + 14;
-                    c.round_rect(x, bar_y, w - lw, 10, 5, pal().keycap);
-                    c.round_rect(x, bar_y, ((w - lw) * pct / 100).max(10), 10, 5, pal().chalk);
+                    crate::retro::pill(c, x, bar_y, w - lw, 10, 5, pal().keycap);
+                    crate::retro::pill(c, x, bar_y, ((w - lw) * pct / 100).max(10), 10, 5, pal().chalk);
                     text.draw_right(c, Face::Body, 21, x + w, bar_y + 12, pal().dust, &label);
                 }
                 FileState::Added => {
@@ -338,6 +344,20 @@ mod tests {
             }
         }
         crate::type_scale::set(crate::type_scale::TextSize::Normal);
+    }
+
+    /// First-start walk 2026-11-06: three lines of warning ("could see … could change them on the way") read as a reason
+    /// not to use the page at home. At normal text on the Mini V2 it is one or two lines, in every language, and still
+    /// says it isn't encrypted.
+    #[test]
+    fn the_warning_is_short_and_calm() {
+        let mut text = Text::new();
+        for lang in crate::i18n::Lang::ALL {
+            let help = crate::i18n::tr_in(lang, HELP);
+            let (lines, ..) = layout(&mut text, &help, 1240, 1080);
+            assert!(lines.len() <= 2, "{lang:?}: {lines:?}");
+            assert!(["encrypted", "verschlüsselt", "cifrar"].iter().any(|w| help.contains(w)), "{help}");
+        }
     }
 
     #[test]

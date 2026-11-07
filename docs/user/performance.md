@@ -12,7 +12,8 @@ Games: performance, **Fan** is Fan outside games on the shelf and Games: fan ove
 | **Fan outside games** | **Auto**, Very quiet, Quiet, Cool |
 | **Smooth fan** | **On**, Off |
 
-On a handheld with no fan (the experimental Anbernic H700 handhelds) the fan rows read "No fan" and only the processor speed can be changed.
+On a handheld with no fan (the experimental Anbernic H700 handhelds) the fan rows read "No fan" and only the processor speed can be changed. On devices where ROCKNIX controls the fan,
+they read "ROCKNIX". These read-only values have no change arrows; the hint bar offers only B Back.
 
 - **Games: performance** is how fast the processor may run while you play. **Auto**: the system decides; it speeds up
   and slows down as the game needs it. For PlayStation 2, GameCube, Wii and 3DS games that is full speed (they need

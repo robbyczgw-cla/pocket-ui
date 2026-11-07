@@ -6,15 +6,11 @@
 //! (`toast_len` in main.rs); a notice is for what went wrong or needs a decision, and it stays until A or B (or a tap)
 //! closes it, so a player who looked away still reads the reason.
 
-use std::time::{Duration, Instant};
-
 use crate::gfx::Canvas;
 use crate::palette::*;
 use crate::text::{Face, Text};
 
 pub const ERROR_FILE: &str = "/tmp/pocket-core.error";
-/// How long after it appears a notice asks for frames (nothing moves in it; the first frame is what matters).
-const FRESH: Duration = Duration::from_secs(1);
 /// The last line of every notice: how it goes away.
 pub const CLOSE_HINT: &str = "Press A to close.";
 /// The room the status corner (time, Wi-Fi, battery) takes at the top line's right end, and the place its left end.
@@ -25,9 +21,10 @@ pub const REPORT_HINT: &str = "To report it, hold SELECT + START and choose Repo
 
 pub struct Notice {
     text: String,
-    since: Instant,
     /// A game that didn't start: the card says how to report it.
     report: bool,
+    /// The hint that a newer pocket-ui is ready: A goes to Settings → System → Updates, B closes (`update_hint`).
+    updates: bool,
 }
 
 impl Notice {
@@ -38,8 +35,8 @@ impl Notice {
         let text = text.trim();
         (!text.is_empty()).then(|| Notice {
             text: text.to_string(),
-            since: Instant::now(),
             report: true,
+            updates: false,
         })
     }
 
@@ -52,7 +49,17 @@ impl Notice {
 
     /// A message of pocket-ui's own.
     pub fn new(text: impl Into<String>) -> Notice {
-        Notice { text: text.into(), since: Instant::now(), report: false }
+        Notice { text: text.into(), report: false, updates: false }
+    }
+
+    /// "pocket-ui <version> is ready": the card whose A opens the Updates page.
+    pub fn update_ready(version: &str) -> Notice {
+        Notice { text: crate::update_hint::text(version), report: false, updates: true }
+    }
+
+    /// Whether A on this card goes to Settings → System → Updates instead of only closing it.
+    pub fn opens_updates(&self) -> bool {
+        self.updates
     }
 
     pub fn text(&self) -> &str {
@@ -64,12 +71,6 @@ impl Notice {
         true
     }
 
-    /// Whether the shelf has to keep drawing for it: just after it appeared. Nothing moves in it after that, and it
-    /// has no end of its own to be drawn away at.
-    pub fn animating(&self) -> bool {
-        self.since.elapsed() < FRESH
-    }
-
     /// A card at the top of the screen, the OSD's surface and corners (`osd`), as wide as the text needs. It stays
     /// clear of the top line's ends (the place, the status corner) or, when it needs more room, spans the screen and
     /// covers them whole: never half a clock peeking out beside it.
@@ -79,14 +80,18 @@ impl Notice {
             return 0;
         }
         let clear = c.w - 2 * (MARGIN + CORNER);
-        let report = self.report;
+        let (report, updates) = (self.report, self.updates);
         let mut wrapped = |max: i32| {
             let mut lines = text.wrap_prose(Face::Body, 30, &self.text, max - 64);
             let own = lines.len();
             if report {
                 lines.extend(text.wrap_prose(Face::Body, 30, REPORT_HINT, max - 64));
             }
-            lines.push(CLOSE_HINT.to_string());
+            if updates {
+                lines.extend(text.wrap_prose(Face::Body, 30, crate::update_hint::ACTIONS, max - 64));
+            } else {
+                lines.push(CLOSE_HINT.to_string());
+            }
             (lines, own)
         };
         let (mut lines, mut own) = wrapped(clear);
@@ -104,10 +109,27 @@ impl Notice {
         let (x, y) = (c.w / 2 - w / 2, crate::osd::TOP);
         // For the snapshot checks of Settings → Text size: what lies under the card is not read; the rest of the page is.
         crate::text::boxes::covered_since(usize::MAX, c, (x, y, w, h));
-        c.round_rect(x, y, w, h, crate::osd::H / 2, SPINE);
-        c.rect(x + 16, y + 20, 6, h - 40, ALERT);
+        let retro = crate::retro::on();
+        if retro {
+            // Retro (`retro`): a pixel window, the alert mark a column of its blocks.
+            crate::retro::frame(c, x, y, w, h, crate::palette::pal().pill);
+            let u = crate::retro::U;
+            let mut by = y + 5 * u;
+            while by + 2 * u <= y + h - 4 * u {
+                c.rect(x + 4 * u, by, 2 * u, 2 * u, crate::palette::pal().alert);
+                by += 3 * u;
+            }
+        } else {
+            c.round_rect(x, y, w, h, crate::osd::H / 2, SPINE);
+            c.rect(x + 16, y + 20, 6, h - 40, ALERT);
+        }
         for (i, l) in lines.iter().enumerate() {
-            let colour = if i < own { CHALK } else { DUST };
+            let colour = match (retro, i < own) {
+                (true, true) => crate::palette::pal().chalk,
+                (true, false) => crate::palette::pal().dust,
+                (false, true) => CHALK,
+                (false, false) => DUST,
+            };
             text.draw(c, Face::Body, 30, x + 40, y + 46 + grow * 7 / 10 + i as i32 * step, colour, l);
         }
         y + h

@@ -28,6 +28,10 @@
 //! **H700** (Anbernic RG28XX, RG35XX SP; ROCKNIX's H700 image, `anbernic,rg28xx` / `anbernic,rg35xx-sp`): experimental
 //! like the others, 640x480, no fan, no touch, no sticks, 1 GB; the SP has a lid, the RG28XX no Wi-Fi (docs/DEVICES.md).
 //!
+//! **RG DS Plus** (Anbernic, ROCKNIX's RK3566 image, `anbernic,rg-ds-plus` / `Anbernic RG DS Plus`): experimental, two
+//! 1024x768 panels (pocket-ui on the upper one, the selected game on the lower one: `second_screen`), touch on the lower
+//! one only, a lid, one stick, no fan, 1 GB, two card slots. The heavy systems stay on ROCKNIX's emulators as on an H700.
+//!
 //! `POCKETUI_DEVICE` stands in for the device tree (snapshots, tests, the virtual device): a short name (`miniv2`,
 //! `mini`, `rp5`, `rp5-visionox`, `flip2`, `flip2-visionox`) or a `model` string.
 
@@ -70,7 +74,8 @@ impl Model {
             Model::Odin2Mini => "AYN Odin 2 Mini",
             Model::Odin2Portal => "AYN Odin 2 Portal",
             Model::H700(b) => b.name,
-            Model::SteamDeck => "Steam Deck",
+            Model::RgDsPlus => "Anbernic RG DS Plus",
+            Model::SteamDeck => "Steam Deck", #[cfg(feature = "brick")] Model::Brick => crate::brick_profile::NAME,
         }
     }
 
@@ -79,15 +84,17 @@ impl Model {
         match self {
             Model::MiniV2 => MINI_V2_SCREEN,
             Model::MiniV1 | Model::Nova => (1280, 960),
+            Model::RgDsPlus => (1024, 768),
             Model::H700(b) => b.screen,
-            Model::SteamDeck => (1280, 800),
+            Model::SteamDeck => (1280, 800), #[cfg(feature = "brick")] Model::Brick => crate::brick_profile::SCREEN,
             Model::Pocket5 | Model::Flip2 | Model::Pocket6 | Model::Odin2 | Model::Odin2Mini | Model::Odin2Portal => (1920, 1080),
         }
     }
 
-    /// Not tested on real hardware by the project (everything but the Mini V2).
+    /// Not tested on real hardware by the project (everything but the Mini V2, and the TrimUI Brick: About said "TrimUI Brick
+    /// (experimental)" on the handheld pocket-ui is released for).
     pub fn experimental(self) -> bool {
-        self != Model::MiniV2
+        self != Model::MiniV2 && { #[cfg(feature = "brick")] { self != Model::Brick } #[cfg(not(feature = "brick"))] { true } }
     }
 
     /// The project has played on it (🎮 in docs/DEVICES.md): the first start doesn't call it untested.
@@ -95,14 +102,17 @@ impl Model {
         match self {
             Model::MiniV2 | Model::Odin2Mini => true,
             Model::H700(b) => matches!(b.key, "rg35xx-plus" | "rg35xx-sp"),
+            // Played on since 02.11. (docs/TRIMUI-BRICK.md): the first start called it untested.
+            #[cfg(feature = "brick")]
+            Model::Brick => true,
             _ => false,
         }
     }
 
-    /// The Flip 2's hall sensor: `SW_LID` on a `gpio-keys` device (docs/SLEEP.md "Lid").
+    /// The Flip 2's hall sensor: `SW_LID` on a `gpio-keys` device (docs/SLEEP.md "Lid"); the RG DS Plus's too.
     pub fn has_lid(self) -> bool {
         match self {
-            Model::Flip2 => true,
+            Model::Flip2 | Model::RgDsPlus => true,
             Model::H700(b) => b.lid,
             _ => false,
         }
@@ -111,6 +121,13 @@ impl Model {
     /// The Allwinner H700 handhelds (ROCKNIX's H700 image): 1 GB, no fan, no touch; sticks and Wi-Fi per model.
     pub fn is_h700(self) -> bool {
         matches!(self, Model::H700(_))
+    }
+
+    /// Systems whose pocket-core cores are too heavy for the chip stay on ROCKNIX's own emulators
+    /// (`hostsys::H700_STAYS_ON_ROCKNIX`): the H700's Cortex-A53, and the RG DS Plus's Cortex-A55 until it is measured
+    /// (its DS games need DraStic anyway, which puts them on both screens).
+    pub fn small_chip(self) -> bool {
+        self.is_h700() || self == Model::RgDsPlus
     }
 
     /// A desktop Linux whose own system owns Wi-Fi, Bluetooth, sleep, fan and updates (the Steam Deck): pocket-ui hides those pages.
@@ -131,15 +148,23 @@ impl Model {
             Model::Odin2Mini => "odin2mini",
             Model::Odin2Portal => "odin2portal",
             Model::H700(b) => b.key,
-            Model::SteamDeck => "steamdeck",
+            Model::RgDsPlus => "rgdsplus",
+            Model::SteamDeck => "steamdeck", #[cfg(feature = "brick")] Model::Brick => "brick",
         }
     }
 }
 
 impl Device {
-    /// ROCKNIX SM8550 disables suspend and owns its userspace fan loop.
+    /// ROCKNIX SM8550 disables suspend and owns its userspace fan loop. The Brick's own card does not suspend either:
+    /// suspend is unproven on its firmware, so "sleep" is the screen off with the game paused (docs/TRIMUI-BRICK-STANDALONE.md).
+    #[cfg(not(feature = "brick"))]
     pub fn screen_off_only(&self) -> bool {
         self.is_sm8550()
+    }
+
+    #[cfg(feature = "brick")]
+    pub fn screen_off_only(&self) -> bool {
+        self.is_sm8550() || { #[cfg(feature = "brick")] { self.model == Some(Model::Brick) } #[cfg(not(feature = "brick"))] { false } }
     }
 
     /// The Snapdragon 8 Gen 2 handhelds (Adreno 740).
@@ -152,37 +177,67 @@ impl Device {
         self.model.is_some_and(Model::is_desktop)
     }
 
-    /// A fan the system can run. None on the H700 handhelds: the fan page says so instead of offering a fan.
+    /// A fan the system can run. None on the H700 handhelds and the RG DS Plus: the fan page says so instead of offering a fan.
+    #[cfg(not(feature = "brick"))]
     pub fn has_fan(&self) -> bool {
-        !self.model.is_some_and(|m| m.is_h700() || m.is_desktop())
+        !self.model.is_some_and(|m| m.is_h700() || m.is_desktop() || m == Model::RgDsPlus)
+    }
+
+    #[cfg(feature = "brick")]
+    pub fn has_fan(&self) -> bool {
+        !self.model.is_some_and(|m| m.is_h700() || m.is_desktop() || m == Model::RgDsPlus || { #[cfg(feature = "brick")] { m == Model::Brick } #[cfg(not(feature = "brick"))] { false } })
     }
 
     /// A touch screen. None on the H700 handhelds (the kernel has no touch driver there).
+    #[cfg(not(feature = "brick"))]
     pub fn has_touch(&self) -> bool {
         !self.model.is_some_and(Model::is_h700)
     }
 
+    #[cfg(feature = "brick")]
+    pub fn has_touch(&self) -> bool {
+        !self.model.is_some_and(|m| m.is_h700() || { #[cfg(feature = "brick")] { m == Model::Brick } #[cfg(not(feature = "brick"))] { false } })
+    }
+
     /// A second card slot, for a games card ROCKNIX reads by itself: every H700 handheld has one (TF2; every H700 device
-    /// tree in ROCKNIX's image has `mmc@4020000` and `mmc@4022000`, both with `cd-gpios`). The SM8250 and SM8550 trees
-    /// have one card slot (`sdhc_2`).
+    /// tree in ROCKNIX's image has `mmc@4020000` and `mmc@4022000`, both with `cd-gpios`), and the RG DS Plus (two TF
+    /// slots). The SM8250 and SM8550 trees have one card slot (`sdhc_2`).
     pub fn has_second_card_slot(&self) -> bool {
-        self.model.is_some_and(Model::is_h700)
+        self.model.is_some_and(|m| m.is_h700() || m == Model::RgDsPlus)
     }
 
     /// Analog sticks, and so the lights around them. Per model on the H700 handhelds.
+    #[cfg(not(feature = "brick"))]
     pub fn has_sticks(&self) -> bool {
         !self.model.is_some_and(Model::is_desktop) && !matches!(self.model, Some(Model::H700(b)) if !b.sticks)
     }
 
+    #[cfg(feature = "brick")]
+    pub fn has_sticks(&self) -> bool {
+        !self.model.is_some_and(Model::is_desktop) && !{ #[cfg(feature = "brick")] { self.model == Some(Model::Brick) } #[cfg(not(feature = "brick"))] { false } } && !matches!(self.model, Some(Model::H700(b)) if !b.sticks)
+    }
+
     /// A Wi-Fi chip. Not on the RG28XX and RG35XX 2024 (their device trees enable one anyway, the Plus tree they
     /// come from, so a chip that does answer still wins: `system_ctl::AutoHw` only calls it absent when none shows up).
+    #[cfg(not(feature = "brick"))]
     pub fn has_wifi(&self) -> bool {
         !matches!(self.model, Some(Model::H700(b)) if !b.wifi) && !self.host_owned()
     }
 
-    /// Memory in MB where the device is known to have less than the Mini V2's (1 GB on the H700, no swap).
+    #[cfg(feature = "brick")]
+    pub fn has_wifi(&self) -> bool {
+        !matches!(self.model, Some(Model::H700(b)) if !b.wifi) && !self.host_owned() && !{ #[cfg(feature = "brick")] { self.model == Some(Model::Brick) && !crate::brick_profile::standalone() } #[cfg(not(feature = "brick"))] { false } }
+    }
+
+    /// Memory in MB where the device is known to have less than the Mini V2's (1 GB on the H700 and the RG DS Plus, no swap).
+    #[cfg(not(feature = "brick"))]
     pub fn ram_mb(&self) -> Option<u32> {
-        self.model.filter(|m| m.is_h700()).map(|_| 1024)
+        self.model.filter(|m| m.small_chip()).map(|_| 1024)
+    }
+
+    #[cfg(feature = "brick")]
+    pub fn ram_mb(&self) -> Option<u32> {
+        self.model.filter(|m| m.small_chip() || { #[cfg(feature = "brick")] { *m == Model::Brick } #[cfg(not(feature = "brick"))] { false } }).map(|_| 1024)
     }
 
     /// Printed face letters on AYN's product images; saved menu choices still win.
@@ -200,7 +255,7 @@ impl Device {
     pub fn prompt_style(&self) -> crate::button_prompts::PromptStyle {
         use crate::button_prompts::PromptStyle;
         match self.model {
-            Some(Model::H700(_)) | None => PromptStyle::Nintendo,
+            Some(Model::H700(_) | Model::RgDsPlus) | None => PromptStyle::Nintendo,
             Some(_) => PromptStyle::Xbox,
         }
     }
@@ -208,7 +263,9 @@ impl Device {
     /// Touch ranges if evdev has none. The kernel already applies DT axis inversions.
     pub fn panel_size(&self) -> (u32, u32) {
         match self.model {
+            // Landscape like the screen: the Goodix's `touchscreen-size` is 1024x768 (the lower panel's).
             Some(Model::Nova) => (1280, 960),
+            Some(Model::RgDsPlus) => (1024, 768),
             _ => {
                 let (w, h) = self.screen();
                 (h, w)
@@ -281,6 +338,7 @@ pub fn identify(model: &str, compatible: &[u8]) -> Device {
             "ayn,odin2" => Some(Model::Odin2),
             "ayn,odin2mini" => Some(Model::Odin2Mini),
             "ayn,odin2portal" => Some(Model::Odin2Portal),
+            "anbernic,rg-ds-plus" => Some(Model::RgDsPlus),
             _ => None,
         })
         .or_else(|| {
@@ -297,6 +355,7 @@ pub fn identify(model: &str, compatible: &[u8]) -> Device {
         "AYN Odin 2" => Some(Model::Odin2),
         "AYN Odin 2 Mini" => Some(Model::Odin2Mini),
         "AYN Odin 2 Portal" => Some(Model::Odin2Portal),
+        "Anbernic RG DS Plus" => Some(Model::RgDsPlus),
         other => h700_board(other, &[]).map(Model::H700),
     });
     let found = found.or_else(|| (model == "Steam Deck").then_some(Model::SteamDeck));
@@ -306,13 +365,13 @@ pub fn identify(model: &str, compatible: &[u8]) -> Device {
 
 /// `POCKETUI_DEVICE`'s value: a short name or a `model` string.
 pub fn from_override(v: &str) -> Device {
-    let v = v.trim();
+    let v = v.trim(); #[cfg(feature = "brick")] if v.eq_ignore_ascii_case("brick") { return Device { model: Some(Model::Brick), panel: Panel::Original, reported: format!("{v} (POCKETUI_DEVICE)") }; }
     let lower = v.to_ascii_lowercase();
     let (key, panel) = match lower.strip_suffix("-visionox") {
         Some(k) => (k, Panel::Visionox),
         None => (lower.as_str(), Panel::Original),
     };
-    match [Model::MiniV2, Model::MiniV1, Model::Pocket5, Model::Flip2, Model::Pocket6, Model::Nova, Model::Odin2, Model::Odin2Mini, Model::Odin2Portal, Model::SteamDeck]
+    match [Model::MiniV2, Model::MiniV1, Model::Pocket5, Model::Flip2, Model::Pocket6, Model::Nova, Model::Odin2, Model::Odin2Mini, Model::Odin2Portal, Model::RgDsPlus, Model::SteamDeck]
         .into_iter()
         .chain(H700_BOARDS.iter().map(Model::H700))
         .find(|m| m.key() == key)
@@ -333,15 +392,23 @@ pub fn read(root: &Path) -> Device {
     if dmi("sys_vendor") == "Valve" && matches!(dmi("product_name").as_str(), "Jupiter" | "Galileo") {
         return Device { model: Some(Model::SteamDeck), panel: Panel::Original, reported: format!("Valve {}", dmi("product_name")) };
     }
-    let base = root.join("sys/firmware/devicetree/base");
+    let base = root.join("sys/firmware/devicetree/base"); #[cfg(feature = "brick")] if crate::brick_profile::detected(root) { return Device { model: Some(Model::Brick), panel: Panel::Original, reported: crate::brick_profile::REPORTED.to_string() }; }
     let model = std::fs::read_to_string(base.join("model")).unwrap_or_default();
     let compatible = std::fs::read(base.join("compatible")).unwrap_or_default();
     identify(&model, &compatible)
 }
 
 /// Cooling safety also recognises an otherwise unknown SM8550 board; do not inherit SM8250 cooling there.
+#[cfg(not(feature = "brick"))]
 pub fn rocknix_cooling(root: &Path) -> bool {
     (root == Path::new("/") && current().screen_off_only())
+        || std::fs::read(root.join("sys/firmware/devicetree/base/compatible")).is_ok_and(|b| b.split(|v| *v == 0).any(|c| c == b"qcom,sm8550"))
+        || std::fs::read_to_string(root.join("etc/os-release")).is_ok_and(|s| s.lines().any(|l| l.starts_with("HW_DEVICE=") && l.contains("SM8550")))
+}
+
+#[cfg(feature = "brick")]
+pub fn rocknix_cooling(root: &Path) -> bool {
+    (root == Path::new("/") && current().is_sm8550())
         || std::fs::read(root.join("sys/firmware/devicetree/base/compatible")).is_ok_and(|b| b.split(|v| *v == 0).any(|c| c == b"qcom,sm8550"))
         || std::fs::read_to_string(root.join("etc/os-release")).is_ok_and(|s| s.lines().any(|l| l.starts_with("HW_DEVICE=") && l.contains("SM8550")))
 }
@@ -376,10 +443,55 @@ pub fn hides(key: &str, sticks: bool, host_owned: bool) -> bool {
     }
 }
 
+/// The Tour cards a TrimUI Brick must not show because the page they send to is not there (the gap list: "the Tour promises switches that
+/// do nothing"): Screen frames without the GPU's picture path, RetroAchievements with NextUI's card, Players (no second controller), and on
+/// NextUI's card Over the game. Settings rows come from `app_settings_groups::brick_hides_with`; this is the Tour's side of it.
+#[cfg(feature = "brick")]
+pub fn brick_card_hidden(key: &str, standalone: bool) -> bool {
+    match key {
+        // Screen frames come with the GPU's picture path (`brick_profile::picture_rows_out`); RetroAchievements on the card's own Settings.
+        "frames" => crate::brick_profile::picture_rows_out(),
+        "achievements" => !standalone,
+        "players" => true,
+        "pixel_path_live" => !standalone,
+        _ => false,
+    }
+}
+
 /// `hides` for this device.
+#[cfg(not(feature = "brick"))]
 pub fn hides_here(key: &str) -> bool {
     let d = current();
     hides(key, d.has_sticks(), d.host_owned())
+}
+
+#[cfg(feature = "brick")]
+pub fn hides_here(key: &str) -> bool {
+    let d = current();
+    #[cfg(feature = "brick")]
+    if d.model == Some(Model::Brick) && brick_card_hidden(key, crate::brick_profile::standalone()) {
+        return true;
+    }
+    // The Brick's own card (no NextUI): the Wi-Fi page stays, there is a radio and a client of ours; so do the clock (`brick_standalone_keeps`),
+    // Tailscale, Updates (its private channel) and Kids mode, which is pocket-ui's alone (docs/TRIMUI-BRICK-STANDALONE.md, docs/TRIMUI-BRICK-MORE.md).
+    // On every Brick the motor and the lights are its own (`brick_hw`): Haptics and LEDs and their Tour cards stay, though it has no sticks.
+    #[cfg(feature = "brick")]
+    if d.model == Some(Model::Brick)
+        && (brick_standalone_keeps(key, crate::brick_profile::standalone())
+            || crate::brick_profile::standalone() && matches!(key, "tailscale" | "updates" | "kids" | "perf_fan")
+            || matches!(key, "haptics" | "leds"))
+    {
+        return false;
+    }
+    hides(key, d.has_sticks(), d.host_owned() || { #[cfg(feature = "brick")] { d.model == Some(Model::Brick) } #[cfg(not(feature = "brick"))] { false } })
+}
+
+/// The pages the Brick's own card (no NextUI) keeps though the Brick counts as host-owned for the rest: the Wi-Fi page
+/// (a radio and a client of ours) and the clock page (the card carries its own zone data and time helpers,
+/// docs/TRIMUI-BRICK-STANDALONE.md). With NextUI's card both stay out: NextUI owns them there.
+#[cfg(feature = "brick")]
+fn brick_standalone_keeps(key: &str, standalone: bool) -> bool {
+    standalone && matches!(key, "radios" | "time")
 }
 
 /// Settles the device before anything has read it (`--snapshot` with a `:device=`). False when it was read already.
@@ -389,6 +501,22 @@ pub fn force(d: Device) -> bool {
 
 #[cfg(test)]
 mod tests {
+    /// docs/TRIMUI-BRICK-MORE.md: the Tour leaves out the cards whose page the Brick has no row for, and every card it keeps names a real id.
+    #[cfg(feature = "brick")]
+    #[test]
+    fn the_brick_tour_leaves_out_cards_without_a_page() {
+        for id in ["frames", "achievements", "players"] {
+            assert!(crate::features::FEATURES.iter().any(|f| f.id == id), "{id} is a card");
+        }
+        assert!(brick_card_hidden("players", true) && brick_card_hidden("players", false), "no second controller");
+        assert!(brick_card_hidden("achievements", false) && !brick_card_hidden("achievements", true), "RetroAchievements on the card's own Settings");
+        assert_eq!(brick_card_hidden("frames", true), crate::brick_profile::picture_rows_out(), "Screen frames with the GPU's picture path");
+        assert!(brick_card_hidden("pixel_path_live", false) && !brick_card_hidden("pixel_path_live", true), "Over the game is on the card's own Settings");
+        for id in ["tailscale", "kids", "sounds", "lens"] {
+            assert!(!brick_card_hidden(id, true), "{id}");
+        }
+    }
+
     use super::*;
     use crate::testutil::TestDir;
 
@@ -407,6 +535,16 @@ mod tests {
         for name in ["Retroid Pocket Mini V2", "AYN Odin 2 Mini", "Anbernic RG35XX Plus", "Anbernic RG35XX SP"] {
             assert!(doc.lines().any(|l| l.starts_with("| 🎮") && l.contains(name)), "{name}");
         }
+    }
+
+    /// A real Brick, 2026-11-06: the first start's welcome told the owner pocket-ui "hasn't been tested on a TrimUI
+    /// Brick yet" on a Brick the project plays on.
+    #[cfg(feature = "brick")]
+    #[test]
+    fn the_brick_is_played_on_and_docs_devices_says_so() {
+        assert!(Model::Brick.played_on());
+        let doc = include_str!("../docs/DEVICES.md");
+        assert!(doc.lines().any(|l| l.starts_with("| 🎮") && l.contains(Model::Brick.name()) && l.contains("1024 × 768")));
     }
 
     #[test]
@@ -563,6 +701,31 @@ mod tests {
         assert_eq!(identify("Retroid Pocket Flip2\0", b"retroidpocket,rpflip2\0").about_line().as_deref(), Some("Retroid Pocket Flip 2 (experimental)"));
     }
 
+    /// The Brick's own card keeps the Wi-Fi and clock pages (its own radio client, zone data and time helpers); with
+    /// NextUI's card both stay NextUI's, and nothing else the Brick lacks comes back with them.
+    #[cfg(feature = "brick")]
+    #[test]
+    fn the_bricks_own_card_keeps_wifi_and_the_clock_only() {
+        for key in ["radios", "time"] {
+            assert!(brick_standalone_keeps(key, true), "{key} on the card");
+            assert!(!brick_standalone_keeps(key, false), "{key} with NextUI");
+        }
+        for key in ["store", "updates", "tools", "perf_fan", "tailscale", "sync", "usb_transfer"] {
+            assert!(!brick_standalone_keeps(key, true), "{key} stays out");
+        }
+    }
+
+    /// Sleep on the Brick's card is the screen off with the game waiting (suspend is unproven on its firmware); the SM8550
+    /// cooling rules are not the Brick's, and a ROCKNIX device keeps what it had.
+    #[cfg(feature = "brick")]
+    #[test]
+    fn the_brick_sleeps_dark_but_does_not_borrow_the_snapdragon_cooling_rules() {
+        let brick = from_override("brick");
+        assert!(brick.screen_off_only() && !brick.is_sm8550());
+        assert!(!from_override("miniv2").screen_off_only());
+        assert!(from_override("odin2mini").screen_off_only() && from_override("odin2mini").is_sm8550());
+    }
+
     #[test]
     fn sm8550_profiles_are_experimental_with_safe_capabilities_and_geometry() {
         for (key, model, screen, panel) in [
@@ -628,6 +791,26 @@ mod tests {
         }
     }
 
+    /// ROCKNIX's `rk3568-anbernic-rg-ds-plus.dts` (20261001): its strings, and what the profile says the device has. The
+    /// first RG DS (no Plus, 640x480, Android) is another device and stays unknown.
+    #[test]
+    fn the_rg_ds_plus_is_told_by_its_device_tree() {
+        let d = identify("Anbernic RG DS Plus\0", b"anbernic,rg-ds-plus\0rockchip,rk3568\0");
+        assert_eq!(d.model, Some(Model::RgDsPlus));
+        assert_eq!(identify("Anbernic RG DS Plus\0", b"").model, Some(Model::RgDsPlus), "the model alone");
+        assert_eq!(from_override("rgdsplus").model, Some(Model::RgDsPlus));
+        assert_eq!(identify("Anbernic RG DS\0", b"anbernic,rg-ds\0rockchip,rk3568\0").model, None);
+        assert!(d.experimental() && !d.screen_off_only() && !d.is_sm8550());
+        assert_eq!((d.screen(), d.panel_size()), ((1024, 768), (1024, 768)));
+        assert!(d.has_lid() && d.has_touch() && d.has_sticks() && d.has_wifi() && d.has_second_card_slot() && !d.has_fan());
+        assert_eq!(d.ram_mb(), Some(1024));
+        assert!(Model::RgDsPlus.small_chip() && !Model::RgDsPlus.is_h700() && !Model::MiniV2.small_chip());
+        assert_eq!(d.prompt_style(), crate::button_prompts::PromptStyle::Nintendo, "Anbernic: plain letters");
+        assert_eq!(d.menu_layout(), crate::button_layout::ButtonLayout::Nintendo);
+        assert_eq!(d.about_line().as_deref(), Some("Anbernic RG DS Plus (experimental)"));
+        assert!(include_str!("../deploy/package/install.sh").contains("MODELS_RK3566=\"Anbernic RG DS Plus\""));
+    }
+
     /// The installers keep their own lists of the models (shell, no Rust): the same names as `H700_BOARDS`, in the same order.
     #[test]
     fn the_installers_accept_exactly_the_h700_models_of_the_table() {
@@ -663,4 +846,11 @@ mod tests {
         assert_eq!(from_override("Retroid Pocket Flip2").model, Some(Model::Flip2));
         assert_eq!(from_override("something else").model, None);
     }
+}
+
+/// The TrimUI Brick under NextUI (docs/TRIMUI-BRICK.md): Settings leaves out what NextUI owns, as on the Steam Deck, without
+/// the Deck's other host_owned behaviour (windowing through `pocket-fb`, no Steam texts).
+#[cfg(feature = "brick")]
+pub fn brick() -> bool {
+    current().model == Some(Model::Brick)
 }

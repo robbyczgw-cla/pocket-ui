@@ -1,6 +1,7 @@
-# Colours and font
+# Colours and style
 
-Settings → Look → **Colours** and **Font**: the colours of every page and the type of every screen. Both are rows that
+Settings → Look → **Colours** and **Style**: the colours of every page and the type of every screen, or the whole Retro
+style. Both are rows that
 switch in place: Up/Down pick the row, A or Left/Right change the value, and the whole screen shows the change at once.
 The choices are saved with the look, and [Reset settings](settings-system.md#backup--reset) puts them back. How the hints
 draw the buttons (letters, Xbox colours, PlayStation shapes) is under
@@ -18,15 +19,24 @@ and a light version, and both follow the [appearance](settings.md#appearance).
 - **Green X**: bright green on black.
 - **Blue Station**: grey plastic with a deep blue.
 
-The pause menu, the power menu and the small messages over a game keep their dark colours.
+The pause menu, the power menu and the small messages over a game keep their dark colours (with the Retro style, its
+own dark colours).
 
-## Font
+## Style
 
-The type of every screen.
+The type of every screen, or the Retro style.
 
 - **Barlow**, the default: clean and narrow.
 - **Pixel**: pixel letters for titles, game names on spines and labels, for the full retro look. The small text
   (explanations, hints, lists) stays plain Barlow so it is easy to read.
 - **Rounded**: soft, round letters everywhere (Nunito).
+- **Retro**: every menu like an old handheld's. Pixel letters everywhere (sharp on every screen, with clear
+  LCD-style numbers), chunky pixel frames round the menus, the hint
+  keys and the messages, a flat selection bar with a small cursor, little colour pictures beside the Settings categories
+  and the pause menu's rows, and short blips as menu sounds (when [menu sounds](settings.md#sound--feel) are on). Your
+  shelf, the box art and Continue stay as they are, in every look. While Retro is on, the Colours row offers its own two
+  sets, each dark and light:
+  - **Cocoa**, the default: warm brown and cream, a tangerine selection.
+  - **Pea**: the four greens of an old handheld's screen; the little pictures turn green too.
 
 Long names that don't fit get smaller or shortened as with Barlow; the wider fonts fit a little less on a line.

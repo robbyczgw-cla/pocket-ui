@@ -108,7 +108,7 @@ impl App {
                         }
                     }
                     // Being decoded on the loader's thread: a faint tile until it comes.
-                    None => c.round_rect(x, y, w, sh, 6, faint),
+                    None => pocket_ui::retro::pill(c, x, y, w, sh, 6, faint),
                 },
                 None => self.paint_title_tile(c, tile, (x, y, w, sh), slot.dim.then_some(ink.under)),
             }
@@ -156,7 +156,7 @@ impl App {
     fn paint_title_tile(&mut self, c: &mut Canvas, tile: &Tile, (x, y, w, h): (i32, i32, i32, i32), dim: Option<u32>) {
         // It stands in for a cover, a picture of a fixed size: its type keeps the design's size (as a case's spine).
         let _fixed = pocket_ui::type_scale::fixed();
-        c.round_rect(x, y, w, h, 6, pal().spine);
+        pocket_ui::retro::pill(c, x, y, w, h, 6, pal().spine);
         c.rect(x, y, w, (h / 14).clamp(3, 8), stripe(&tile.system));
         // Behind another in a fan only its edge shows: no title to be cut by the one in front.
         if let Some(under) = dim {

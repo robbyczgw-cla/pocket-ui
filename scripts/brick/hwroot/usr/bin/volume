@@ -1,0 +1,23 @@
+#!/bin/sh
+# Stand-in for ROCKNIX's `volume` (pocket-ui calls `volume N`, 0..100): the Brick's sound chip has one master control,
+# "digital volume" (0..63, ALSA card 0 "audiocodec"). The level is kept in $BRICK_STATE/brick-volume so it survives a restart.
+#   volume N        set it (and remember it)
+#   volume restore  at start: put the remembered level (default 50) back and make sure the speaker and jack outputs are on
+AMIXER=${BRICK_AMIXER:-amixer}
+STATE=${BRICK_STATE:-/tmp}
+raw() { echo $(( ($1 * 63 + 50) / 100 )); }
+set_raw() { "$AMIXER" -c 0 -q cset name='digital volume' "$1" >/dev/null 2>&1; }
+case "${1:-}" in
+  restore)
+    pct=$(cat "$STATE/brick-volume" 2>/dev/null); pct=${pct:-50}
+    "$AMIXER" -c 0 -q cset name='HpSpeaker Switch' on >/dev/null 2>&1
+    "$AMIXER" -c 0 -q cset name='Headphone Switch' on >/dev/null 2>&1
+    set_raw "$(raw "$pct")"
+    ;;
+  ''|*[!0-9]*) echo "usage: volume N | volume restore" >&2; exit 2 ;;
+  *)
+    pct=$1; [ "$pct" -gt 100 ] && pct=100
+    mkdir -p "$STATE" 2>/dev/null; echo "$pct" >"$STATE/brick-volume"
+    set_raw "$(raw "$pct")"
+    ;;
+esac

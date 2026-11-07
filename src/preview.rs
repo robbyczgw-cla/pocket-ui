@@ -351,7 +351,7 @@ impl Live {
             let cx = if pen.1 == y { (x - INSET + 6).max(pen.0) } else { x - INSET + 6 };
             let caption = text.fit(Face::Body, CAPTION, caption, c.w - cx - 6);
             pen = (cx + text.draw(c, Face::Body, CAPTION, cx, y - INSET - 14, caption_color, &caption) + 28, y);
-            c.round_rect(x - INSET, y - INSET, w + 2 * INSET, h + 2 * INSET, 18, 0x1a1a1a);
+            crate::retro::pill(c, x - INSET, y - INSET, w + 2 * INSET, h + 2 * INSET, 18, 0x1a1a1a);
             c.rect(x, y, w, h, 0x000000);
         }
         match &self.images {
@@ -434,7 +434,8 @@ mod tests {
     }
 
     #[test]
-    fn the_menu_shot_is_the_whole_screen_and_only_the_one_asked_for_is_taken() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_menu_shot_is_the_whole_screen_and_only_the_one_asked_for_is_taken() {
         let (w, h) = (4u32, 3u32);
         let rgba: Vec<u8> = (0..w * h).flat_map(|i| [i as u8, 0x10, 0x20, 0xff]).collect();
         let shot = shot_from_screen(&rgba, w, h);
@@ -446,7 +447,7 @@ mod tests {
         write(&file, a, &[&shot]).unwrap();
         let t0 = Instant::now();
         assert!(wait_for_shot(&file, b, Duration::from_millis(30)).is_none(), "an older shot is not this menu's");
-        assert!(t0.elapsed() < Duration::from_millis(500));
+        assert!(t0.elapsed() < crate::testutil::timeout(Duration::from_millis(500)));
         let got = wait_for_shot(&file, a, Duration::from_millis(30)).expect("the shot");
         assert_eq!((got.pixels.w, got.pixels.h, got.pixels.px), (shot.w, shot.h, shot.px.clone()));
         assert_eq!(got.game, None, "no rectangle given");
@@ -496,7 +497,8 @@ mod tests {
     }
 
     #[test]
-    fn a_shot_reader_retries_a_partial_write_until_the_picture_is_complete() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_shot_reader_retries_a_partial_write_until_the_picture_is_complete() {
         let dir = crate::testutil::TestDir::new("shot-partial");
         let file = dir.join("shot.bin");
         let image = Pixels { w: 4, h: 3, px: vec![0x123456; 12] };

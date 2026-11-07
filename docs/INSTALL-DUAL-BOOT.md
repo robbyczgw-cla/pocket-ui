@@ -95,7 +95,7 @@ All three installs (card hook, Ports installer, SSH package) also accept ROCKNIX
 models of [DEVICES.md](DEVICES.md#anbernic-h700-handhelds-2026-10-27-installable-2026-10-29-experimental), experimental.
 The card for those is flashed from ROCKNIX's H700 image (DDR4 first, DDR3 if it doesn't start) and needs the model's
 `dtb.img` on its FAT partition; the step-by-step guide is in
-[Getting started](user/getting-started.md#anbernic-h700-handhelds-experimental). Another H700 handheld and the RG CubeXX are refused with a
+[Getting started](user/other-handhelds.md#anbernic-h700-handhelds-experimental). Another H700 handheld and the RG CubeXX are refused with a
 sentence and nothing is written.
 
 ## Go back to Android

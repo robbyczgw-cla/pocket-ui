@@ -273,6 +273,18 @@ pub fn build(i: &Input) -> Card {
     Card { system_name: i.system_name.to_string(), known, slots, dpad, left_stick, right_stick, shortcuts, note }
 }
 
+/// The Brick's two extra keys under the shortcuts, with what they do now (Settings > Lights & buttons); one that does
+/// nothing is left out.
+#[cfg(feature = "brick")]
+pub fn with_brick_keys(mut card: Card, keys: crate::brick_hw::FKeys) -> Card {
+    for (name, key) in [("F1", keys.f1), ("F2", keys.f2)] {
+        if key != crate::brick_hw::FKey::Nothing {
+            card.shortcuts.push((name, key.label()));
+        }
+    }
+    card
+}
+
 /// The card's colours: the shelf takes the palette in use, the pause menu its dark one.
 #[derive(Clone, Copy)]
 pub struct Colors {
@@ -321,8 +333,8 @@ fn outline_disc(c: &mut Canvas, cx: i32, cy: i32, r: i32, col: Colors, on: bool)
 
 fn outline_pill(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, col: Colors, on: bool) {
     let t = if on { 4 } else { 2 };
-    c.round_rect(x, y, w, h, h / 2, if on { col.accent } else { col.line });
-    c.round_rect(x + t, y + t, w - 2 * t, h - 2 * t, (h - 2 * t) / 2, col.bg);
+    crate::retro::pill(c, x, y, w, h, h / 2, if on { col.accent } else { col.line });
+    crate::retro::pill(c, x + t, y + t, w - 2 * t, h - 2 * t, (h - 2 * t) / 2, col.bg);
 }
 
 fn centered(c: &mut Canvas, text: &mut Text, size: u32, cx: i32, base: i32, color: u32, s: &str) {
@@ -395,10 +407,17 @@ fn paint_pad(c: &mut Canvas, text: &mut Text, card: &Card, area: (i32, i32, i32,
     let txt = text.fit(Face::Body, label_size, &txt, side);
     text.draw_right(c, Face::Body, label_size, lx - arm - 14, cy + crate::type_scale::mid(label_size), colour, &txt);
 
+    // The Brick has no sticks: none drawn (the D-pad is what it has).
+    #[cfg(feature = "brick")]
+    let sticks = crate::device::current().has_sticks();
+    #[cfg(not(feature = "brick"))]
+    let sticks = true;
     // The left stick under it; pressing it in is a button of its own on some consoles (L3).
-    outline_disc(c, lx, sy, r + 2, col, card.left_stick.changed);
-    centered(c, text, small, lx, sy + mid_s, col.dim, "L");
-    stick_label(c, text, (lx - r - 16, sy + mid_l, true), &stick_txt, press, stick_colour, col.dim, label_size, side);
+    if sticks {
+        outline_disc(c, lx, sy, r + 2, col, card.left_stick.changed);
+        centered(c, text, small, lx, sy + mid_s, col.dim, "L");
+        stick_label(c, text, (lx - r - 16, sy + mid_l, true), &stick_txt, press, stick_colour, col.dim, label_size, side);
+    }
 
     // Face buttons: Pocket X on top, Y at the left, A at the right, B at the bottom. Labels at the right of each
     // circle, except Y's, which stands at its left.
@@ -417,13 +436,15 @@ fn paint_pad(c: &mut Canvas, text: &mut Text, card: &Card, area: (i32, i32, i32,
         }
     }
     // The right stick under them.
-    outline_disc(c, rx, sy, r + 2, col, false);
-    centered(c, text, small, rx, sy + mid_s, col.dim, "R");
-    let (txt, colour) = slot_text(&card.right_stick, col);
-    let room = x0 + w - (rx + r + 16);
-    let press = card.right_stick.label.as_ref().and(card.slots[15].label.as_deref());
-    let size = stick_size(text, &txt, press, room);
-    stick_label(c, text, (rx + r + 16, sy + mid_l, false), &txt, press, colour, col.dim, size, room);
+    if sticks {
+        outline_disc(c, rx, sy, r + 2, col, false);
+        centered(c, text, small, rx, sy + mid_s, col.dim, "R");
+        let (txt, colour) = slot_text(&card.right_stick, col);
+        let room = x0 + w - (rx + r + 16);
+        let press = card.right_stick.label.as_ref().and(card.slots[15].label.as_deref());
+        let size = stick_size(text, &txt, press, room);
+        stick_label(c, text, (rx + r + 16, sy + mid_l, false), &txt, press, colour, col.dim, size, room);
+    }
 
     // --- SELECT and START side by side between the sticks.
     let pw = (w * 17 / 100).max(100);
@@ -735,5 +756,15 @@ mod tests {
             assert_eq!(ids.len(), p.buttons.len(), "{:?}: one name per button", p.systems);
             assert!(ids.iter().all(|i| controls::MENU_ORDER.contains(i) && !(4..=7).contains(i)), "{:?}", p.systems);
         }
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn the_brick_card_says_what_f1_and_f2_do_and_leaves_out_one_that_does_nothing() {
+        use crate::brick_hw::{FKey, FKeys};
+        let c = with_brick_keys(card_for("snes", &[], &[], None), FKeys { f1: FKey::Save, f2: FKey::Load });
+        assert_eq!(c.shortcuts, vec![("HOME", "Menu"), ("F1", "Quick save"), ("F2", "Quick load")]);
+        let c = with_brick_keys(card_for("snes", &[], &[], None), FKeys { f1: FKey::Nothing, f2: FKey::Screenshot });
+        assert_eq!(c.shortcuts, vec![("HOME", "Menu"), ("F2", "Screenshot")]);
     }
 }

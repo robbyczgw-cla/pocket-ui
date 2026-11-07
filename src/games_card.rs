@@ -172,23 +172,33 @@ mod tests {
     /// A device file going wakes the sleeping thread, and it says so after the settle time.
     #[cfg(target_os = "linux")]
     #[test]
-    fn a_device_file_going_is_noticed_without_polling() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_device_file_going_is_noticed_without_polling() {
         let dir = std::env::temp_dir().join(format!("pocket-games-card-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let dev = dir.join("mmcblk1p1");
         std::fs::write(&dev, b"").unwrap();
         let mounts = format!("{} {MOUNT} exfat rw 0 0\n", dev.display());
         let (tx, rx) = std::sync::mpsc::channel();
+        IN_USE.store(false, Ordering::Relaxed);
         let (d, m) = (dir.clone(), mounts);
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let tx = std::sync::Mutex::new(tx);
-            watch_paths(&d, &move || m.clone(), &move |c| {
+            let first = std::sync::atomic::AtomicBool::new(true);
+            watch_paths(&d, &move || {
+                if first.swap(false, Ordering::SeqCst) {
+                    ready_tx.send(()).unwrap();
+                }
+                m.clone()
+            }, &move |c| {
                 let _ = tx.lock().unwrap().send(c);
             })
         });
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        ready_rx.recv_timeout(crate::testutil::timeout(std::time::Duration::from_secs(6))).unwrap();
+        crate::testutil::clock::wait_for(|| IN_USE.load(Ordering::Relaxed), std::time::Duration::from_secs(6), "card observer initial snapshot");
         std::fs::remove_file(&dev).unwrap();
-        assert_eq!(rx.recv_timeout(std::time::Duration::from_secs(6)), Ok(Change::Gone));
+        assert_eq!(rx.recv_timeout(crate::testutil::timeout(std::time::Duration::from_secs(6))), Ok(Change::Gone));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -203,6 +213,7 @@ mod tests {
         let point = dir.join("mnt");
         std::fs::create_dir_all(&point).unwrap();
         let (tx, rx) = std::sync::mpsc::channel();
+        IN_USE.store(true, Ordering::Relaxed);
         let (d, p) = (dir.clone(), point.clone());
         std::thread::spawn(move || {
             let tx = std::sync::Mutex::new(tx);
@@ -214,11 +225,11 @@ mod tests {
                 let _ = tx.lock().unwrap().send(c);
             })
         });
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        crate::testutil::clock::wait_for(|| !IN_USE.load(Ordering::Relaxed), std::time::Duration::from_secs(6), "mount observer initial empty state");
         assert!(std::process::Command::new("mount").args(["-t", "tmpfs", "t"]).arg(&point).status().unwrap().success());
-        assert_eq!(rx.recv_timeout(std::time::Duration::from_secs(6)), Ok(Change::Came));
+        assert_eq!(rx.recv_timeout(crate::testutil::timeout(std::time::Duration::from_secs(6))), Ok(Change::Came));
         assert!(std::process::Command::new("umount").arg(&point).status().unwrap().success());
-        assert_eq!(rx.recv_timeout(std::time::Duration::from_secs(6)), Ok(Change::Left));
+        assert_eq!(rx.recv_timeout(crate::testutil::timeout(std::time::Duration::from_secs(6))), Ok(Change::Left));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

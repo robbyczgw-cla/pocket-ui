@@ -4,6 +4,8 @@
 //!   store-tool hash <file>                        SHA-256 for a catalog entry
 //!   store-tool update <key> <update.json> app|os|sd_image|install_zip <version> <file> [url] [notes]
 //!                                                  adds a release to the update channel and signs it
+//!   store-tool mirror <key> <update.json> app|os|sd_image|install_zip <url> [url] [url]
+//!                                                  sets signed fallback URLs and signs again
 //!   store-tool list <update.json>                 one line per file it names: kind, version, size, sha256, url
 //!                                                  (tab-separated, urls resolved; scripts/release-channel.sh --check)
 //!   store-tool verify <file> [<private-key-file>]  checks <file>.sig against the key pocket-ui has built in (or
@@ -27,33 +29,27 @@ fn main() {
                 use std::os::unix::fs::PermissionsExt;
                 let _ = std::fs::set_permissions(&args[2], std::fs::Permissions::from_mode(0o600));
             }
-            let public: Vec<String> = key
-                .verifying_key()
-                .to_bytes()
-                .iter()
-                .map(|b| format!("0x{b:02x}"))
-                .collect();
+            let public: Vec<String> = key.verifying_key().to_bytes().iter().map(|b| format!("0x{b:02x}")).collect();
             println!("pub const PUBLIC_KEY: [u8; 32] = [{}];", public.join(", "));
         }
         Some("sign") if args.len() == 4 => sign(&args[2], std::path::Path::new(&args[3])),
         Some("hash") if args.len() == 3 => {
             let data = std::fs::read(&args[2]).expect("read file");
-            println!(
-                "{}  {} bytes",
-                pocket_ui::store::sha256_hex(&data),
-                data.len()
-            );
+            println!("{}  {} bytes", pocket_ui::store::sha256_hex(&data), data.len());
         }
         // Puts a release into update.json and signs it again.
         Some("update") if (7..=9).contains(&args.len()) && matches!(args[4].as_str(), "app" | "os" | "sd_image" | "install_zip") => {
             let manifest_path = std::path::Path::new(&args[3]);
-            let mut manifest: pocket_ui::update::Manifest =
-                std::fs::read(manifest_path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+            let mut manifest: pocket_ui::update::Manifest = std::fs::read(manifest_path)
+                .ok()
+                .and_then(|b| serde_json::from_slice(&b).ok())
+                .unwrap_or_default();
             manifest.format = 1;
             let file = std::path::Path::new(&args[6]);
             let release = pocket_ui::update::Release {
                 version: args[5].clone(),
                 url: args.get(7).cloned().unwrap_or_else(|| file.file_name().unwrap().to_string_lossy().into_owned()),
+                mirrors: Vec::new(),
                 sha256: pocket_ui::store::sha256_file(file).expect("read release file"),
                 size: std::fs::metadata(file).expect("release file").len(),
                 notes: args.get(8).cloned().unwrap_or_default(),
@@ -68,13 +64,40 @@ fn main() {
             std::fs::write(manifest_path, serde_json::to_vec_pretty(&manifest).unwrap()).expect("write update.json");
             sign(&args[2], manifest_path);
         }
+        // Mirrors are part of the exact signed manifest bytes, never supplied by a host at runtime.
+        Some("mirror") if (6..=8).contains(&args.len()) => {
+            let path = std::path::Path::new(&args[3]);
+            let mut manifest: pocket_ui::update::Manifest = serde_json::from_slice(&std::fs::read(path).expect("read manifest")).expect("parse manifest");
+            let rel = match args[4].as_str() {
+                "app" => &mut manifest.app,
+                "os" => &mut manifest.os,
+                "sd_image" => &mut manifest.sd_image,
+                "install_zip" => &mut manifest.install_zip,
+                _ => panic!("unknown release kind"),
+            }
+            .as_mut()
+            .expect("release is missing");
+            assert!(
+                args[5..].iter().all(|u| u.starts_with("https://") || u.starts_with("file://")),
+                "mirrors must use https"
+            );
+            rel.mirrors = args[5..].to_vec();
+            std::fs::write(path, serde_json::to_vec_pretty(&manifest).unwrap()).expect("write manifest");
+            sign(&args[2], path);
+        }
         Some("list") if args.len() == 3 => {
-            let manifest: pocket_ui::update::Manifest =
-                serde_json::from_slice(&std::fs::read(&args[2]).expect("read update.json")).expect("parse update.json");
-            let entries = [("app", &manifest.app), ("os", &manifest.os), ("sd_image", &manifest.sd_image), ("install_zip", &manifest.install_zip)];
+            let manifest: pocket_ui::update::Manifest = serde_json::from_slice(&std::fs::read(&args[2]).expect("read update.json")).expect("parse update.json");
+            let entries = [
+                ("app", &manifest.app),
+                ("os", &manifest.os),
+                ("sd_image", &manifest.sd_image),
+                ("install_zip", &manifest.install_zip),
+            ];
             for (kind, rel) in entries {
                 if let Some(r) = rel {
-                    println!("{kind}\t{}\t{}\t{}\t{}", r.version, r.size, r.sha256, pocket_ui::update::resolve(&args[2], &r.url));
+                    for url in std::iter::once(&r.url).chain(&r.mirrors) {
+                        println!("{kind}\t{}\t{}\t{}\t{}", r.version, r.size, r.sha256, pocket_ui::update::resolve(&args[2], url));
+                    }
                 }
             }
         }
@@ -88,7 +111,11 @@ fn main() {
             match pocket_ui::store::verify_signed(&data, &sig, &public) {
                 Ok(()) => println!("verified {}", args[2]),
                 Err(e) => {
-                    let whose = if args.len() == 4 { "the given key" } else { "the key built into pocket-ui (store::PUBLIC_KEY)" };
+                    let whose = if args.len() == 4 {
+                        "the given key"
+                    } else {
+                        "the key built into pocket-ui (store::PUBLIC_KEY)"
+                    };
                     eprintln!("{}: {e} with {whose}", args[2]);
                     std::process::exit(1);
                 }

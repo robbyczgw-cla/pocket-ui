@@ -55,6 +55,12 @@ and say clearly where something is still being built or has not been confirmed o
 - Keeps your saves and save states in step with a computer, a phone or another handheld with Syncthing, and asks
   it to look for new saves when a game ends ([Sync](sync.md)).
 - Pairs Bluetooth controllers in one press, and uses them in the menus as soon as they connect ([Bluetooth](bluetooth.md)).
+  Each controller keeps its own button layout through reconnects ([Controller setup](controls-settings.md#controller-setup)),
+  and [Test buttons](settings-system.md#test-buttons) shows every button, trigger and stick light up.
+- Gives every menu an old handheld's look with one switch: the [Retro style](theme.md#style), pixel letters and frames,
+  little icons and blips, in Cocoa or Pea.
+- Starts in four calm steps on a new card: language, Wi-Fi, your games, the look ([First start](getting-started.md#3-first-start)).
+  Help & tools → First-start setup runs them again.
 - Puts the Pocket on your Tailscale network, with a QR code to sign in, so it can be reached from anywhere ([Tailscale](remote.md)).
 - Opens your library in a browser on your phone or computer, over Tailscale only: edit, upload games, BIOS and
   PortMaster files, see play time and the screen ([Web companion](web-companion.md)). Off until you switch it on.
@@ -76,17 +82,17 @@ and say clearly where something is still being built or has not been confirmed o
 
 ## Pages
 
-1. [Getting started](getting-started.md): installing, first start, Wi-Fi, adding games; [The GAMES drive](games-drive.md): games from a computer; [Second card](copy-games.md): games without Wi-Fi; [Game check](game-check.md): will your games start?; [games from your phone](phone-upload.md) over the same Wi-Fi; [Kids mode](kids-mode.md): a big simple shelf for a child.
+1. [Getting started](getting-started.md): installing, first start, Wi-Fi, adding games; [Other handhelds](other-handhelds.md): other Retroid devices, SM8550 and Anbernic H700; [The GAMES drive](games-drive.md): games from a computer; [Second card](copy-games.md): games without Wi-Fi; [Game check](game-check.md): will your games start?; [games from your phone](phone-upload.md) over the same Wi-Fi; [Kids mode](kids-mode.md): a big simple shelf for a child.
 2. [How to](how-to.md): update over Wi-Fi, a game that won't start, pair a controller, back up saves, sync with a second device.
 3. [Coming from ROCKNIX or Android](coming-from.md): what happens to your saves, states, favourites and settings.
 4. [Playing](playing.md): Home, finding a game, the looks, console pages, Recent games; [Easy](easy.md): the look with one big game at a time; [Easy to read, Zoom and Hold to toggle](easy-to-read.md): larger text in one switch, a magnifier for the pause menu, buttons that stay down. [Continue](continue.md): an open case means your moment is waiting, and A goes straight back.
-5. [The pause menu](pause-menu.md): save slots, Where I quit and Before load, quitting, Pixel Path.
+5. [The pause menu](pause-menu.md): what each emulator offers, quitting, Pixel Path; [Saving in the pause menu](pause-menu-saves.md): save slots, Where I quit and Before load, Earlier, when a save fails.
 6. [Options](options.md): picture, screen frames, controls, shortcuts, extras and run-ahead in a game; [their shorter list](options-big.md) for PlayStation 2, GameCube, Wii and 3DS.
 7. [Controls](controls.md): every button, screen by screen; [in Settings, setup and on the touch screen](controls-settings.md), with the power and volume keys; [the controls card](controls-card.md), which button is which on each console.
 8. [Settings](settings.md): the Settings categories and the entries of Look, Sound & feel, Playing and Games; [Connections, System and Help & tools](settings-system.md): Wi-Fi, Bluetooth, Tailscale, Sync, the clock, sleep, backups, the Tour and this guide; [quick settings, sleep and power](quick-settings.md); [storage](storage.md): what takes up space on the SD card, clean-ups, hidden games; [Bluetooth](bluetooth.md): pairing controllers, headphones and speakers.
 9. [Language](language.md): English, German or Spanish menus, and what stays English.
 10. [Night light](night-light.md): warmer, less blue colours in the evening, on a schedule or all the time.
-11. [Colours and font](theme.md): the colour sets and fonts for every screen, switched in place.
+11. [Colours and style](theme.md): the colour sets, fonts and the Retro style for every screen, switched in place.
 12. [Performance and fan](performance.md): what games start with, the fan in the menus, Smooth fan, the readout.
 13. [Features and the Tour](tour.md): every feature on a card, the first start's profiles, new in this version.
 14. [Your library](library.md): game cards, play status, ratings and notes; [Curator](curator.md): Lens, smart shelves, labels, Echoes, Versions and play history.

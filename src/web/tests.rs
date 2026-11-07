@@ -183,6 +183,28 @@ fn tailscaled_status_and_whois_are_read() {
     assert!(Whois::parse("not json").is_none());
 }
 
+/// docs/TRIMUI-BRICK-MORE.md: the Brick's card runs Tailscale in userspace when the firmware has no tunnel: no `tailscale0`, so the
+/// companion listens on 127.0.0.1 (where tailscaled hands tailnet connections), pairs every browser by code, and a browser may name the
+/// Pocket by its tailnet address. With a tunnel the plan is the usual one; a Wi-Fi address is never listened on.
+#[test]
+#[cfg(feature = "brick")]
+fn the_brick_card_listens_on_loopback_when_tailscale_runs_in_userspace() {
+    let wifi = Iface { name: "wlan0".into(), addr: "192.168.7.7".parse().unwrap(), index: 3 };
+    let lo = Iface { name: "lo".into(), addr: "127.0.0.1".parse().unwrap(), index: 1 };
+    let plan = net::plan_userspace(&[lo.clone(), wifi.clone()], 80);
+    assert_eq!(plan.len(), 1);
+    assert_eq!(plan[0].addr, "127.0.0.1:80".parse::<SocketAddr>().unwrap());
+    assert!(net::is_userspace(&plan[0]));
+    let ts = Iface { name: "tailscale0".into(), addr: "100.77.1.2".parse().unwrap(), index: 9 };
+    let tunnel = net::plan_userspace(&[lo, wifi, ts.clone()], 80);
+    assert_eq!(tunnel, net::plan(&[ts], 80), "a tunnel: bound to tailscale0 as everywhere");
+    assert!(!net::is_userspace(&tunnel[0]));
+    // Without the card (every other device) the plan has no loopback listener at all.
+    assert!(net::plan(&[], 80).is_empty());
+    let me = SelfNode::parse(r#"{"Self":{"UserID":1,"HostName":"brick","DNSName":"brick.tail1234.ts.net.","TailscaleIPs":["100.70.1.10","fd7a:115c:a1e0::1","192.168.7.7"]}}"#).unwrap();
+    assert_eq!(me.addrs, ["100.70.1.10".parse::<IpAddr>().unwrap(), "fd7a:115c:a1e0::1".parse().unwrap()], "only tailnet addresses count");
+}
+
 // --- pairing, sessions, CSRF -----------------------------------------------------------------------------------
 
 #[test]
@@ -474,11 +496,26 @@ fn leftovers_of_an_earlier_run_are_swept_only_in_the_uploads_folder() {
 #[test]
 fn an_upload_waits_while_a_game_runs() {
     let dir = tmp("wait");
-    let started = Instant::now();
-    let wait = move || started.elapsed() < Duration::from_millis(700);
-    let gate = files::Gate { wait: &wait, ..files::Gate::OPEN };
-    files::receive(&mut &b"data"[..], &dir.join("a.gba"), &up(&dir), 4, false, &gate).unwrap();
-    assert!(started.elapsed() >= Duration::from_millis(700), "it did not write before the game ended");
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let root = dir.to_path_buf();
+    let worker = std::thread::spawn(move || {
+        let polls = std::cell::Cell::new(0);
+        let wait = || {
+            if polls.replace(1) == 0 { return true; }
+            entered_tx.send(()).unwrap();
+            release_rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).unwrap();
+            false
+        };
+        let gate = files::Gate { wait: &wait, ..files::Gate::OPEN };
+        files::receive(&mut &b"data"[..], &root.join("a.gba"), &up(&root), 4, false, &gate).unwrap();
+    });
+    entered_rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(5))).expect("the upload really waits and polls again");
+    assert!(!dir.join("a.gba").exists());
+    assert!(walk(&up(&dir)).iter().all(|p| std::fs::metadata(p).unwrap().len() == 0), "no data written while playing");
+    release_tx.send(()).unwrap();
+    worker.join().unwrap();
+    assert_eq!(std::fs::read(dir.join("a.gba")).unwrap(), b"data");
 }
 
 #[test]
@@ -498,7 +535,7 @@ struct FakeTailnet {
 
 impl Tailnet for FakeTailnet {
     fn self_node(&self) -> Option<SelfNode> {
-        Some(SelfNode { user_id: 1, login: "owner@example.com".into(), tagged: false, hostname: "pocket".into(), dns_name: "pocket.tail1234.ts.net".into() })
+        Some(SelfNode { user_id: 1, login: "owner@example.com".into(), tagged: false, hostname: "pocket".into(), dns_name: "pocket.tail1234.ts.net".into(), #[cfg(feature = "brick")] addrs: Vec::new() })
     }
     fn whois(&self, peer: SocketAddr) -> Option<Whois> {
         self.peers.lock().unwrap().get(&peer.ip()).cloned()
@@ -569,7 +606,7 @@ fn rig_ctx(name: &str, owner: bool, tune: impl FnOnce(&mut Ctx)) -> Rig {
     tune(&mut ctx);
     let listen = Listen { addr: "127.0.0.1:0".parse().unwrap(), iface: "lo".into(), index: 0 };
     let server = super::server::Server::start(ctx, Some(vec![listen])).unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
     let addr = loop {
         if let Some(a) = shared.listening.lock().unwrap().first().copied() {
             break a;
@@ -598,7 +635,7 @@ impl Answer {
 impl Rig {
     fn raw(&self, req: &[u8]) -> Answer {
         let mut s = TcpStream::connect(self.addr).unwrap();
-        s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        s.set_read_timeout(Some(crate::testutil::timeout(Duration::from_secs(10)))).unwrap();
         s.write_all(req).unwrap();
         let mut out = Vec::new();
         let _ = s.read_to_end(&mut out);
@@ -668,7 +705,8 @@ fn a_foreign_host_name_is_refused_dns_rebinding() {
 }
 
 #[test]
-fn pairing_gives_a_cookie_and_wrong_codes_are_refused() {
+#[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+fn timing_pairing_gives_a_cookie_and_wrong_codes_are_refused() {
     let r = rig("api-pair", false);
     let post = |code: &str| r.req("POST", "/api/pair", &[("Content-Type", "application/json")], format!(r#"{{"code":"{code}"}}"#).as_bytes());
     let t = Instant::now();
@@ -889,11 +927,12 @@ fn library_lists_search_and_stats() {
 /// Tailscale socket.
 #[cfg(target_os = "linux")]
 #[test]
-fn a_socket_tied_to_an_interface_takes_nothing_from_another() {
+#[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+fn timing_a_socket_tied_to_an_interface_takes_nothing_from_another() {
     let lo = Listen { addr: "127.0.0.1:0".parse().unwrap(), iface: "lo".into(), index: 0 };
     let s = net::bind(&lo).expect("bind to lo");
     let addr = s.local_addr().unwrap();
-    assert!(TcpStream::connect_timeout(&addr, Duration::from_secs(2)).is_ok(), "the right interface answers");
+    assert!(TcpStream::connect_timeout(&addr, crate::testutil::timeout(Duration::from_secs(2))).is_ok(), "the right interface answers");
     let Some(other) = net::interfaces().into_iter().map(|i| i.name).find(|n| n != "lo") else { return };
     let tied = Listen { addr: "127.0.0.1:0".parse().unwrap(), iface: other, index: 0 };
     let s = match net::bind(&tied) {
@@ -934,7 +973,7 @@ fn a_cut_off_upload_keeps_nothing() {
     let r = rig("api-cut", false);
     let (cookie, csrf) = r.pair();
     let mut s = TcpStream::connect(r.addr).unwrap();
-    s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+    s.set_read_timeout(Some(crate::testutil::timeout(Duration::from_secs(10)))).unwrap();
     write!(s, "POST /api/upload?kind=rom&system=gba&name=Cut.gba HTTP/1.1\r\nHost: {}\r\nCookie: {cookie}\r\nX-CSRF-Token: {csrf}\r\nContent-Length: 100000\r\n\r\n", r.addr).unwrap();
     s.write_all(&[7u8; 4000]).unwrap();
     // The browser tab closes: the rest never comes.
@@ -967,7 +1006,8 @@ fn an_empty_library_answers_with_empty_lists() {
 }
 
 #[test]
-fn pairing_tries_from_several_connections_queue_a_second_apart() {
+#[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+fn timing_pairing_tries_from_several_connections_queue_a_second_apart() {
     let r = Arc::new(rig("api-pairgate", false));
     *r.shared.pairing.lock().unwrap() = Some(Pairing { code: "135790".into(), until: Instant::now() + Duration::from_secs(60), tries_left: 5 });
     let t = Instant::now();
@@ -1037,7 +1077,7 @@ fn a_taken_port_is_reported_not_waited_for() {
     let shared = Shared::new(busy.to_path_buf(), PathBuf::from("/nonexistent/es_systems.cfg"), Prefs { enabled: true, ..Prefs::default() });
     let ctx = Ctx::new(shared.clone(), Roots::under(Path::new("/nonexistent")), Box::new(FakeTailnet { peers: Arc::new(Mutex::new(HashMap::new())) }));
     let _server = super::server::Server::start(ctx, Some(vec![Listen { addr, iface: "lo".into(), index: 0 }])).unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
     while shared.problem.lock().unwrap().is_none() {
         assert!(Instant::now() < deadline, "no reason given");
         std::thread::sleep(Duration::from_millis(10));
@@ -1050,10 +1090,11 @@ fn a_taken_port_is_reported_not_waited_for() {
 
 /// F2: a client that trickles a pairing body gets the short deadline, not a minute per byte.
 #[test]
-fn a_trickled_body_runs_out_of_time() {
+#[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+fn timing_a_trickled_body_runs_out_of_time() {
     let r = rig_ctx("api-trickle", false, |ctx| ctx.deadline = Duration::from_millis(400));
     let mut s = TcpStream::connect(r.addr).unwrap();
-    s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+    s.set_read_timeout(Some(crate::testutil::timeout(Duration::from_secs(10)))).unwrap();
     let t = Instant::now();
     write!(s, "POST /api/pair HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{{", r.addr).unwrap();
     for _ in 0..6 {
@@ -1067,12 +1108,13 @@ fn a_trickled_body_runs_out_of_time() {
     let text = String::from_utf8_lossy(&out);
     assert!(text.starts_with("HTTP/1.1 400"), "{text}");
     assert!(text.contains("The request was cut off."), "{text}");
-    assert!(t.elapsed() < Duration::from_millis(2500), "{:?}", t.elapsed());
+    assert!(t.elapsed() < crate::testutil::timeout(Duration::from_millis(2500)), "{:?}", t.elapsed());
 }
 
 /// F2: the head's deadline counts from the accept, so a connection that waited in the queue is not given more.
 #[test]
-fn a_connection_that_waited_in_the_queue_has_had_its_time() {
+#[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+fn timing_a_connection_that_waited_in_the_queue_has_had_its_time() {
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let _client = TcpStream::connect(l.local_addr().unwrap()).unwrap();
     let (stream, peer) = l.accept().unwrap();
@@ -1083,12 +1125,13 @@ fn a_connection_that_waited_in_the_queue_has_had_its_time() {
     let conn = api::Conn { peer, local: stream.local_addr().unwrap(), accepted: Instant::now() - Duration::from_secs(2) };
     let t = Instant::now();
     api::handle(&ctx, &conn, stream);
-    assert!(t.elapsed() < Duration::from_millis(200), "it waited {:?} for a head whose time was up", t.elapsed());
+    assert!(t.elapsed() < crate::testutil::timeout(Duration::from_millis(200)), "it waited {:?} for a head whose time was up", t.elapsed());
 }
 
 /// F3: "busy" from the supervisor never waits for a client that reads nothing.
 #[test]
-fn busy_never_blocks_the_supervisor() {
+#[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+fn timing_busy_never_blocks_the_supervisor() {
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let client = TcpStream::connect(l.local_addr().unwrap()).unwrap();
     let (mut server_side, _) = l.accept().unwrap();
@@ -1105,33 +1148,35 @@ fn busy_never_blocks_the_supervisor() {
     server_side.set_nonblocking(false).unwrap();
     let t = Instant::now();
     super::server::reply_busy(server_side);
-    assert!(t.elapsed() < Duration::from_millis(200), "{:?}", t.elapsed());
+    assert!(t.elapsed() < crate::testutil::timeout(Duration::from_millis(200)), "{:?}", t.elapsed());
     drop(client);
 }
 
 /// F3, F7: switching off returns at once with a request hanging on a worker, and an upload under way stops at its
 /// next chunk without leaving anything.
 #[test]
-fn switching_off_stops_an_upload_and_never_waits_for_it() {
+#[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+fn timing_switching_off_stops_an_upload_and_never_waits_for_it() {
     let mut r = rig("api-stop", false);
     let (cookie, csrf) = r.pair();
     // One connection that never finishes its head, holding a worker.
     let mut idle = TcpStream::connect(r.addr).unwrap();
     idle.write_all(b"GET / HTTP/1.1\r\n").unwrap();
     let mut s = TcpStream::connect(r.addr).unwrap();
-    s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+    s.set_read_timeout(Some(crate::testutil::timeout(Duration::from_secs(10)))).unwrap();
     write!(s, "POST /api/upload?kind=rom&system=gba&name=Stop.gba HTTP/1.1\r\nHost: {}\r\nCookie: {cookie}\r\nX-CSRF-Token: {csrf}\r\nContent-Length: 4000000\r\n\r\n", r.addr).unwrap();
     s.write_all(&vec![1u8; 300_000]).unwrap();
-    std::thread::sleep(Duration::from_millis(300));
+    crate::testutil::clock::wait_for(|| walk(&r.root).iter().any(|p| p.file_name().unwrap().to_string_lossy().ends_with(".upload") && std::fs::metadata(p).is_ok_and(|m| m.len() > 0)),
+        Duration::from_secs(5), "upload worker wrote the first partial chunk");
     let t = Instant::now();
     r.server.take().unwrap().stop();
-    assert!(t.elapsed() < Duration::from_millis(1500), "stop waited {:?}", t.elapsed());
+    assert!(t.elapsed() < crate::testutil::timeout(Duration::from_millis(1500)), "stop waited {:?}", t.elapsed());
     // More of the file arrives: the worker reads it, sees the switch and stops.
     let _ = s.write_all(&vec![1u8; 600_000]);
     let mut out = String::new();
     let _ = s.read_to_string(&mut out);
     assert!(out.is_empty() || out.contains("switched off"), "{out}");
-    let deadline = Instant::now() + Duration::from_secs(3);
+    let deadline = Instant::now() + crate::testutil::timeout(Duration::from_secs(3));
     loop {
         let left: Vec<PathBuf> = walk(&r.root.join("roms/gba")).into_iter().filter(|p| !p.ends_with("Advance Wars (USA).gba")).collect();
         if left.is_empty() {

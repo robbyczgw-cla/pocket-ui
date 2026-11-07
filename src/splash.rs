@@ -1039,7 +1039,7 @@ mod tests {
         let mut watch = FakeWatch { now, stop_at: Some(ms(20_000)), sway_at: None, looked: AtomicU32::new(0) };
         let fmt = Format::xrgb(1080, 1240);
         let mut scene = Scene::new(1240, 1080);
-        let started = std::time::Instant::now();
+        let started = crate::testutil::clock::CpuInstant::now();
         let report = run(&mut scene, &mut Sink(0), &fmt, Turn::Cw, Timeline::new(Motion::Full, true), &mut clock, &mut watch);
         let spent = started.elapsed();
         let share = spent.as_secs_f64() / clock.now().as_secs_f64();

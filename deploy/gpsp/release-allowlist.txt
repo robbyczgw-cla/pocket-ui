@@ -1,10 +1,10 @@
-# Package-only allowlist; never use this to scan the source repository or its history.
-# gba-core-files.sh separately pins the SHA256 and requires the GPL text and corresponding source.
-cores/gpsp_libretro.so # gpSP GPL-2.0-or-later, libretro/gpsp 5819380c2ffb0900219d700a382ee68c464ebb99
-pocket-ui-*-rocknix-install/files/cores/gpsp_libretro.so # same pinned gpSP, install archive only
-pocket-ui/releases/*/cores/gpsp_libretro.so # same pinned gpSP, card seed only
-
-# gpSP's corresponding source includes the open GPL replacement BIOS, not a firmware dump.
-cores/gpsp/source.tar.gz!bios/open_gba_bios.bin # GPL-2.0 software BIOS from pinned gpSP bios/README.md
-pocket-ui-*-rocknix-install/files/cores/gpsp/source.tar.gz!bios/open_gba_bios.bin # same GPL software BIOS inside corresponding source only
-pocket-ui/releases/*/cores/gpsp/source.tar.gz!bios/open_gba_bios.bin # same GPL software BIOS inside corresponding source only
+# Only for packaged releases: pass --allowlist deploy/gpsp/release-allowlist.txt explicitly.
+# The default source-tree allowlist deliberately does not allow third-party core binaries.
+cores/gpsp_libretro.so # GPL-2.0-or-later gpSP 5819380c2ffb0900219d700a382ee68c464ebb99; pinned by gba-core-files.sh, COPYING/source/recipe alongside
+pocket-ui-*-rocknix-install/files/cores/gpsp_libretro.so # GPL-2.0-or-later gpSP 5819380c2ffb0900219d700a382ee68c464ebb99; verified install package with COPYING/source/recipe alongside
+pocket-ui/releases/*/cores/gpsp_libretro.so # GPL-2.0-or-later gpSP 5819380c2ffb0900219d700a382ee68c464ebb99; versioned image release with COPYING/source/recipe alongside
+# gpSP's corresponding source includes its own open BIOS replacement, not a console BIOS dump.
+# bios/README.md and bios/source/softwareinterrupts.c in that source archive identify GPL2 / GPL-2.0-or-later.
+cores/gpsp/source.tar.gz!bios/open_gba_bios.bin # GPL2 open GBA BIOS by Normmatt and VBA/VBA-M, source and terms in the pinned gpSP archive
+pocket-ui-*-rocknix-install/files/cores/gpsp/source.tar.gz!bios/open_gba_bios.bin # GPL2 open replacement BIOS with source/terms in gpSP 5819380
+pocket-ui/releases/*/cores/gpsp/source.tar.gz!bios/open_gba_bios.bin # GPL2 open replacement BIOS with source/terms in gpSP 5819380

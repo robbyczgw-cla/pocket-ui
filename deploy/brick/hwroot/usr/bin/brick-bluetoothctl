@@ -1,0 +1,12 @@
+#!/bin/sh
+# BlueZ 5.54 from the firmware; keep this card's pairing archive current after a change.
+CTL=${BRICK_BT_CTL:-/usr/bin/bluetoothctl}
+"$CTL" "$@"
+rc=$?
+case "${1:-}" in
+  pair|trust|remove)
+    if [ "$rc" = 0 ]; then
+      "$(dirname "$0")/brick-bluetooth" save || { echo 'Pairing archive could not be saved' >&2; exit 1; }
+    fi ;;
+esac
+exit "$rc"

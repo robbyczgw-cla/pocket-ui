@@ -62,6 +62,14 @@ impl BluetoothUi {
     }
 }
 
+/// The standalone Brick reads its running service, not ROCKNIX's setting.
+fn brick_bluetooth() -> bool {
+    #[cfg(feature = "brick")]
+    { pocket_ui::device::brick() && pocket_ui::brick_profile::standalone() }
+    #[cfg(not(feature = "brick"))]
+    { false }
+}
+
 /// `controllers.bluetooth.enabled=1` in ROCKNIX's system.cfg.
 fn enabled_in(cfg: &str) -> bool {
     cfg.lines().any(|l| l.trim() == "controllers.bluetooth.enabled=1")
@@ -120,7 +128,7 @@ impl App {
         let (real, hw, proxy) = (self.bluetooth.real, self.bluetooth.hw.clone(), self.proxy.clone());
         self.bluetooth.seen.refresh(
             LIST_VALUE_FOR,
-            move || if real { std::fs::read_to_string(SYSTEM_CFG).is_ok_and(|c| enabled_in(&c)) } else { hw.bluetooth() == Some(true) },
+            move || if real && !brick_bluetooth() { std::fs::read_to_string(SYSTEM_CFG).is_ok_and(|c| enabled_in(&c)) } else { hw.bluetooth() == Some(true) },
             move || {
                 let _ = proxy.send_event(UserEvent::SettingsValues);
             },
@@ -134,7 +142,7 @@ impl App {
     /// `--snapshot settings…`: the row's value read at once (never so in the running app).
     pub(crate) fn bluetooth_row_now(&self) {
         let ui = &self.bluetooth;
-        ui.seen.set(if ui.real { std::fs::read_to_string(SYSTEM_CFG).is_ok_and(|c| enabled_in(&c)) } else { ui.hw.bluetooth() == Some(true) });
+        ui.seen.set(if ui.real && !brick_bluetooth() { std::fs::read_to_string(SYSTEM_CFG).is_ok_and(|c| enabled_in(&c)) } else { ui.hw.bluetooth() == Some(true) });
     }
 
     pub(crate) fn open_bluetooth(&mut self) -> Option<SettingsPage> {
@@ -274,6 +282,16 @@ impl App {
     }
 
     pub(crate) fn bluetooth_event(&mut self, e: Event) {
+        // A forgotten controller gives up its player number (`players::Order::forget`); its button layout stays, for
+        // when it is paired again. Off the UI thread, in the same serialized transaction as the other order writes.
+        if let Event::Forgotten { address, result: Ok(()) } = &e {
+            let (dir, key) = (self.data_dir.clone(), format!("bt:{}", address.to_lowercase()));
+            std::thread::spawn(move || {
+                if let Err(err) = pocket_ui::players::Order::forget(&dir, &key) {
+                    eprintln!("players: can't forget {key}: {err}");
+                }
+            });
+        }
         let ui = self.bluetooth.get_mut();
         if let Some(page) = ui.page.as_mut() {
             page.event(e);
@@ -447,7 +465,7 @@ impl App {
         let (lines, color): (Vec<String>, u32) = if let Some(a) = &page.confirm_forget {
             headline(self, c, &format!("Forget {}?", name(a)), pal().alert);
             (
-                vec!["Press X again to forget it. To use it after that, pair it again. B keeps it.".into()],
+                vec!["Press X again to forget it. A controller also gives up its player number. To use it after that, pair it again. B keeps it.".into()],
                 pal().text,
             )
         } else if let Some(e) = &page.error {
@@ -516,6 +534,8 @@ impl App {
         } else if let Some(e) = page.snap.as_ref().and_then(|s| s.error.as_ref()) {
             headline(self, c, "Bluetooth does not answer", pal().alert);
             (vec![bluetooth::explain(Step::Looking, e)], pal().dust)
+        } else if brick_bluetooth() {
+            (vec!["Controllers and headphones. Connected headphones take the sound of games and menus; it comes back to the speaker when they go.".into()], pal().dust)
         } else if page.shown.iter().any(|d| !d.paired) {
             let hidden = match page.hidden {
                 0 => String::new(),
@@ -585,7 +605,7 @@ impl App {
 /// A small controller drawn in `color` at `x`, centred on `cy`; `bg` cuts out the d-pad and buttons.
 fn gamepad_mark(c: &mut Canvas, x: i32, cy: i32, color: u32, bg: u32) {
     let (w, h) = (40, 22);
-    c.round_rect(x, cy - h / 2, w, h, h / 2, color);
+    pocket_ui::retro::pill(c, x, cy - h / 2, w, h, h / 2, color);
     // The grips.
     c.disc(x + 8, cy + 7, 8, color);
     c.disc(x + w - 8, cy + 7, 8, color);

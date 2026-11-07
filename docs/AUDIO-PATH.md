@@ -44,6 +44,7 @@ Other rates stay below about 0.00019 dB. These are sampled gain values, not a co
 |---|---:|---:|---:|
 | H700 speaker / wired | 1024 | 64 ms | 48 ms |
 | Other Linux speaker / wired | 256 | 10 ms | 20 ms (48 ms for heavy cores) |
+| Time-paced core, e.g. PAL 50 Hz on a 60 Hz display | Output's usual value | Output's usual buffer | At least 48 ms and two source frames |
 | Bluetooth / no small quantum | ROCKNIX's existing value | 32 ms (64 ms on H700) | 48 ms |
 
 These are requested buffers, not measured end-to-end latency. H700 quarters graph wakeups versus 256 and uses the cycle-buffer path with a 64 ms PCM ring.
@@ -52,6 +53,48 @@ waveform measurements remain necessary alongside counters. A configured large qu
 undersized initial stream and unnecessary reopen before playback. The route keeper follows output changes and
 restores ROCKNIX's quantum at exit. Environment overrides remain available for controlled comparisons; Android
 retains its AAudio policy.
+
+`pocket-core::sync_audio_rate` also supplies the source/display cadence to `Audio::set_frame_timing`.
+A PAL 50 Hz source on a 60 Hz display repeats one picture every six display ticks, so audio bursts can be
+33.3 ms apart. It needs more than the short 20 ms queue even when every core frame meets its CPU budget.
+The rate controller measures fill before a delivery, while the writer starts after a delivery. Starting
+at the same numeric threshold left the controller a source frame below its intended reference after
+startup or resume. Both wait for `effective_target + regular_delivery`. The delivery comes from the
+source/display cadence, not the unusually large first SPU buffer after a state load. This alignment also
+applies to the longer PAL/cycle queue: PAL waits for 68 ms after a push to retain its intended 48 ms
+before-push reserve; a 60 Hz H700 source waits for about 64.7 ms. The steady requested targets remain
+20/48 ms. A video-mode change updates the shared cadence without changing resampler pitch.
+An explicit test target below 20 ms retains its own target plus a delivery, so prefill remains reachable.
+This extra packet is real buffering, not free latency: it can persist while the controller slowly settles.
+
+An empty resampler output never trims the queue. Previously a repeated PAL picture could hit the overflow
+cap just after resume, discard valid queued audio down to 20 ms, and starve before the next source frame.
+The active queue caps latency on pushes that actually supply samples. `preplay_dropped_frames` and
+`active_dropped_frames` sum to the total drop count before/after the first playing block;
+`min_playing_fill_frames` is the cumulative lowest remaining queue after a playing or resume pop
+(null before any such pop). Intentional pause fades remain separate from starvation.
+During startup, the producer feeds the complete PCM packet into the queue in restart-sized
+pieces, waiting for the writer to make room. This preserves the opening sound while route selection and
+PipeWire linking run, including an oversized restored SPU packet. Previously the preplay cap discarded the
+prefix repeatedly during a slow start, or let a prefix play before the next push removed its middle.
+Device silence is primed immediately before real PCM starts; priming it before waiting for the game queue
+lets the server drain that silence and burst-read the first game samples. Priming waits for two writes
+longer than 4 ms: the first may still be stream linking, followed by a fast server-buffer fill. A second
+paced write keeps that burst in planned silence rather than consuming the opening PCM. The 200-write
+and shutdown bounds remain. Startup backpressure is reported
+as `startup_backpressure_us`. A closed output, or two seconds without accepting another piece, reports the
+unplayed tail as dropped rather than trapping the game or claiming intact sound.
+Flow control continues until the route is decided, PCM has played, and the queue fits the current restart reserve.
+This also preserves the prefix queued for 48 ms when route selection chooses 20 ms before the first pop.
+After that handover, the existing active overflow policy remains unchanged. Host regressions check the
+first PCM prefix through a delayed stream, bounded stereo delivery, the startup route shrink, a linking write followed by fast server-buffer filling, the observed 2925-to-960-frame loss,
+and 240 seconds of PAL with 20 pauses, two-block writer bursts and a late delivery. The PAL test checks every
+sample's order and the full produced/consumed/queued/dropped balance through warmup and later playback.
+The resumed video clock anchors its first deadline when pause ends. An immediately presented first picture
+therefore cannot be followed by a second source frame on the same tick, accumulating an extra audio burst on
+every resume until the overflow cap discards it. This also protects sources near 60 Hz.
+With `POCKETUI_TRACE` enabled, `audio-push`, `audio-write`, `audio-pause` and `audio-underrun` record burst sizes, queue fill
+and missing frames against the common monotonic clock; normal games do not format or write these events.
 
 If the queue holds less than one 256-frame write, the writer consumes the available stereo prefix and zero-pads
 only the missing tail. Previously it emitted an entirely silent block and retained the valid prefix for later,

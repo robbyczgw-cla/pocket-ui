@@ -27,13 +27,8 @@ fn wayland(tmp: &Path) -> Option<Stub> {
     let path = tmp.join("wl");
     let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), path.to_str().unwrap()]).spawn().expect("python3");
     let stub = Stub(child, path);
-    for _ in 0..200 {
-        if stub.1.exists() {
-            return Some(stub);
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-    panic!("scripts/wayland-stub.py didn't start");
+    test_clock::wait_for(|| stub.1.exists(), std::time::Duration::from_secs(2), "Wayland stub listening");
+    Some(stub)
 }
 
 struct Ctx {
@@ -47,6 +42,7 @@ struct Shot {
     faults: Vec<String>,
     /// The launch's skip file was written: the game's window waits for nothing.
     skipped: bool,
+    png: PathBuf,
 }
 
 impl Ctx {
@@ -79,6 +75,7 @@ impl Ctx {
             visible: read(&visible).lines().map(str::to_string).collect(),
             faults: read(&boxes).lines().filter(|l| l.starts_with('E') || l.starts_with('O')).map(str::to_string).collect(),
             skipped: tmpdir.join("pocket-launch-skip").exists(),
+            png: self.tmp.join(format!("{n}.png")),
         }
     }
 }
@@ -109,7 +106,7 @@ fn the_card_after_a_long_break_its_note_a_button_and_the_switch() {
                 // The note as the player wrote it, never translated.
                 assert!(has(&s.visible, "Fire temple, key still missing."), "{lang} {size} {appearance}: the note: {:?}", s.visible);
                 assert!(s.faults.is_empty(), "{lang} {size} {appearance}: {:?}", s.faults);
-                assert!(!s.skipped, "{lang} {size}: no button, the hold runs its time");
+                assert!(!s.skipped, "{lang} {size}: no button, the reminder stays");
                 // A long note: three lines at most, ending in "…", inside the card.
                 let s = c.shot("shelf", appearance, "where-was-i:long", lang, size, "");
                 assert!(has(&s.visible, "Fire temple"), "{lang} {size}: {:?}", s.visible);
@@ -153,5 +150,45 @@ fn the_card_after_a_long_break_its_note_a_button_and_the_switch() {
     let s = c.shot("shelf", "dark", "where-was-i", "en", "1240x1080", r#", "no_where_was_i": true"#);
     assert!(!has(&s.visible, "Last played"), "switched off: {:?}", s.visible);
 
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// A slow game load: a PS1 start stood 160 s on a still screen. While pocket-core is still loading after a few seconds the
+/// launch says so, readable at the Brick's 1024x768 in every language, beside the card.
+#[test]
+fn a_slow_start_on_the_brick_says_it_is_loading() {
+    let tmp = std::env::temp_dir().join(format!("pocketui-brick-loading-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+    let ok = Command::new("python3")
+        .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.join("lib").to_str().unwrap(), "dark"])
+        .stdout(std::process::Stdio::null())
+        .status()
+        .expect("python3");
+    assert!(ok.success());
+    let c = Ctx { stub: wayland(&tmp), tmp: tmp.clone(), n: Default::default() };
+    for (lang, word) in [("en", "Loading the game…"), ("de", "Spiel wird geladen…"), ("es", "Cargando el juego…")] {
+        for appearance in ["dark", "light"] {
+            let s = c.shot("shelf", appearance, "where-was-i:loading", lang, "1024x768", "");
+            // The note stays clear of the reminder and readable over a game, even in the light appearance.
+            let faults: Vec<_> = s.faults.iter().filter(|f| f.contains(word) && !f.contains("‹hints›")).collect();
+            assert!(has(&s.visible, word) && faults.is_empty(), "{lang} {appearance}: {:?} {:?}", s.visible, faults);
+            let mut reader = png::Decoder::new(std::io::BufReader::new(std::fs::File::open(&s.png).unwrap())).read_info().unwrap();
+            let mut pixels = vec![0; reader.output_buffer_size()];
+            let info = reader.next_frame(&mut pixels).unwrap();
+            let (w, h, channels) = (info.width as usize, info.height as usize, info.color_type.samples());
+            let (mut light, mut dark) = (0, 0);
+            // The line the player reads: enough bright letter ink against a dark backing. Before the fix,
+            // Light painted dark letters into the game's black border; recording the words alone missed it.
+            for y in h - 100..h - 42 {
+                for x in w / 4..w * 3 / 4 {
+                    let rgb = &pixels[(y * w + x) * channels..][..3];
+                    light += usize::from(rgb.iter().all(|v| *v >= 192));
+                    dark += usize::from(rgb.iter().all(|v| *v <= 48));
+                }
+            }
+            assert!(light > 150 && dark > 150, "{lang} {appearance}: the loading text needs contrast (light {light}, dark {dark})");
+        }
+    }
     let _ = std::fs::remove_dir_all(&tmp);
 }

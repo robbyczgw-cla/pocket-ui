@@ -205,19 +205,21 @@ mod tests {
     }
 
     #[test]
-    fn a_hanging_command_is_cut_off_at_the_timeout() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_hanging_command_is_cut_off_at_the_timeout() {
         let t0 = Instant::now();
         let err = run_with_timeout(Command::new("sleep").arg("5"), Duration::from_millis(200)).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::TimedOut);
-        assert!(t0.elapsed() < Duration::from_secs(2), "waited {:?}", t0.elapsed());
+        assert!(t0.elapsed() < crate::testutil::timeout(Duration::from_secs(2)), "waited {:?}", t0.elapsed());
     }
 
     #[test]
-    fn a_shell_script_that_hangs_is_killed_with_its_children() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_shell_script_that_hangs_is_killed_with_its_children() {
         let t0 = Instant::now();
         let err = run_with_timeout(&mut sh("sleep 5; echo late"), Duration::from_millis(200)).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::TimedOut);
-        assert!(t0.elapsed() < Duration::from_secs(2), "waited {:?}", t0.elapsed());
+        assert!(t0.elapsed() < crate::testutil::timeout(Duration::from_secs(2)), "waited {:?}", t0.elapsed());
     }
 
     #[test]
@@ -235,12 +237,13 @@ mod tests {
     }
 
     #[test]
-    fn a_background_child_holding_the_pipe_does_not_hold_us_up() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_background_child_holding_the_pipe_does_not_hold_us_up() {
         // `sh` exits at once, but `sleep` keeps stdout open: Command::output would wait the full 5 s.
         let t0 = Instant::now();
         let out = run_with_timeout(&mut sh("sleep 5 & echo done"), Duration::from_secs(3)).unwrap();
         assert_eq!(out.stdout, b"done\n");
-        assert!(t0.elapsed() < Duration::from_secs(2), "waited {:?}", t0.elapsed());
+        assert!(t0.elapsed() < crate::testutil::timeout(Duration::from_secs(2)), "waited {:?}", t0.elapsed());
     }
 
     #[test]
@@ -250,17 +253,19 @@ mod tests {
     }
 
     #[test]
-    fn status_variant_times_out_too() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_status_variant_times_out_too() {
         let t0 = Instant::now();
         let err = status_with_timeout(Command::new("sleep").arg("5"), Duration::from_millis(200)).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::TimedOut);
-        assert!(t0.elapsed() < Duration::from_secs(2));
+        assert!(t0.elapsed() < crate::testutil::timeout(Duration::from_secs(2)));
         assert!(status_with_timeout(&mut sh("exit 0"), Duration::from_secs(5)).unwrap().success());
         assert!(!status_with_timeout(&mut sh("exit 1"), Duration::from_secs(5)).unwrap().success());
     }
 
     #[test]
-    fn a_stopped_command_ends_at_once_and_one_left_alone_returns_its_output() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_stopped_command_ends_at_once_and_one_left_alone_returns_its_output() {
         let stop = Arc::new(AtomicBool::new(false));
         let flag = stop.clone();
         std::thread::spawn(move || {
@@ -270,7 +275,7 @@ mod tests {
         let t0 = Instant::now();
         let err = run_until(&mut sh("sleep 5"), Duration::from_secs(10), &stop).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::Interrupted);
-        assert!(t0.elapsed() < Duration::from_secs(2), "waited {:?}", t0.elapsed());
+        assert!(t0.elapsed() < crate::testutil::timeout(Duration::from_secs(2)), "waited {:?}", t0.elapsed());
         let out = run_until(&mut sh("echo found"), Duration::from_secs(5), &AtomicBool::new(false)).unwrap();
         assert_eq!(out.stdout, b"found\n");
         let err = run_until(&mut sh("sleep 5"), Duration::from_millis(150), &AtomicBool::new(false)).unwrap_err();

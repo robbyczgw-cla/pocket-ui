@@ -158,8 +158,14 @@ pub fn current() -> Lang {
 }
 
 /// The tables, compiled in.
+#[cfg(not(feature = "brick"))]
 const DE: &str = include_str!("../assets/i18n/de.tsv");
+#[cfg(feature = "brick")]
+const DE: &str = concat!(include_str!("../assets/i18n/de.tsv"), include_str!("../assets/i18n/brick-de.tsv"));
+#[cfg(not(feature = "brick"))]
 const ES: &str = include_str!("../assets/i18n/es.tsv");
+#[cfg(feature = "brick")]
+const ES: &str = concat!(include_str!("../assets/i18n/es.tsv"), include_str!("../assets/i18n/brick-es.tsv"));
 
 /// FNV-1a: the keys are short, and SipHash's protection against crafted keys buys nothing here.
 #[derive(Default, Clone, Copy)]
@@ -643,7 +649,61 @@ pub fn tr(s: &str) -> String {
 
 /// [`tr`] in `lang`.
 pub fn tr_in(lang: Lang, s: &str) -> String {
-    lang.table().and_then(|t| t.translate(s)).map_or_else(|| s.to_string(), Cow::into_owned)
+    let text = lang.table().and_then(|t| t.translate(s)).map_or_else(|| s.to_string(), Cow::into_owned);
+    if is_name(s) { text } else { device_text(Tr::Same(&text)).to_string() }
+}
+
+/// Printed button names follow the hardware, after translation and before measuring/wrapping. Names of games
+/// bypass this in the caller; raw manual prose uses it too. Other devices keep their HOME key.
+pub fn device_text(text: Tr<'_>) -> Tr<'_> {
+    #[cfg(feature = "brick")]
+    if crate::device::current().model == Some(crate::device::Model::Brick)
+        && (text.contains("HOME") || text.contains("Pocket") || BRICK_PAGE_NAMES.iter().any(|(long, _)| text.contains(long)))
+    {
+        return Tr::Shared(Arc::from(brick_text(&text)));
+    }
+    text
+}
+
+/// What a line says on the Brick: MENU for HOME, Brick for the handheld's "Pocket" (`brick_words`), its page names.
+#[cfg(feature = "brick")]
+pub fn brick_text(s: &str) -> String {
+    let mut s = brick_words(&s.replace("HOME", "MENU"));
+    for (long, short) in BRICK_PAGE_NAMES {
+        s = s.replace(long, short);
+    }
+    s
+}
+
+/// Page names the Brick shortens (it has no fan: Settings › Playing › Performance, `perf_fan_page::title`), in the three
+/// languages as the tables have them: the pause menu's notes and the Tour pointed at "Performance & fan".
+#[cfg(feature = "brick")]
+const BRICK_PAGE_NAMES: [(&str, &str); 3] =
+    [("Performance & fan", "Performance"), ("Leistung & Lüfter", "Leistung"), ("Rendimiento y ventilador", "Rendimiento")];
+
+/// The Brick's own name where a line calls the handheld "the Pocket" (the Mini V2's word, in all three languages: "this Pocket",
+/// "dem Pocket", "el Pocket"): Settings, Tailscale, Sync, the power menu and Test buttons said "Pocket" on a Brick. Other things
+/// called Pocket keep it: "Retroid Pocket 5", "Neo Geo Pocket", "Game Boy Pocket", "GB Pocket", PocketCore, Pocket5.
+#[cfg(feature = "brick")]
+pub fn brick_words(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(at) = rest.find("Pocket") {
+        let (before, after) = (&rest[..at], &rest[at + "Pocket".len()..]);
+        out.push_str(before);
+        let named = ["Retroid ", "Geo ", "Boy ", "GB "].iter().any(|p| out.ends_with(p));
+        let word_starts = !out.ends_with(|c: char| c.is_alphanumeric() || c == '-');
+        let next = after.chars().next();
+        let word_ends = match next {
+            Some('s') => !after[1..].starts_with(|c: char| c.is_alphanumeric()),
+            Some(c) => !(c.is_alphanumeric() || c == '-' || c == '_'),
+            None => true,
+        };
+        out.push_str(if !named && word_starts && word_ends { "Brick" } else { "Pocket" });
+        rest = after;
+    }
+    out.push_str(rest);
+    out
 }
 
 /// What the painter draws for a string: the string itself, a line of the table, or a pattern's result.
@@ -1136,5 +1196,42 @@ mod tests {
         assert_eq!(Lang::from_system(Some(""), || Some("de_DE".into())), Lang::De);
         assert_eq!(Lang::from_system(Some("de_AT.UTF-8"), || None), Lang::De);
         assert_eq!(Lang::default(), Lang::En);
+    }
+}
+
+#[cfg(all(test, feature = "brick"))]
+mod brick_tests {
+    use super::*;
+
+    /// Settings walk 06.11.: on the Brick the Tailscale, Sync and remote-access lines, the power menu and Test buttons called the
+    /// handheld "the Pocket", in English, German and Spanish. Things that are really called Pocket keep the word.
+    #[test]
+    fn the_brick_is_called_the_brick_and_other_pockets_keep_their_name() {
+        for (line, shown) in [
+            ("Reach the Pocket from your other devices.", "Reach the Brick from your other devices."),
+            ("Log in to this Pocket from a computer on the same Wi-Fi, with SSH.", "Log in to this Brick from a computer on the same Wi-Fi, with SSH."),
+            ("Pocket", "Brick"),
+            ("Erreiche den Pocket von deinen anderen Geräten.", "Erreiche den Brick von deinen anderen Geräten."),
+            ("Los ajustes de este Pocket.", "Los ajustes de este Brick."),
+            ("die Einstellungen dieses Pockets", "die Einstellungen dieses Bricks"),
+            ("Retroid Pocket 5, Neo Geo Pocket Color, Game Boy Pocket, GB Pocket", "Retroid Pocket 5, Neo Geo Pocket Color, Game Boy Pocket, GB Pocket"),
+            ("PocketCore, Pocket5, PocketSlim, pocket-ui", "PocketCore, Pocket5, PocketSlim, pocket-ui"),
+        ] {
+            assert_eq!(brick_words(line), shown);
+        }
+    }
+
+    /// The pause menu's Performance note on a real Brick (2026-11-07) still sent players to "Performance & fan",
+    /// a page the Brick calls "Performance".
+    #[cfg(feature = "brick")]
+    #[test]
+    fn the_brick_names_its_performance_page_without_the_fan_in_every_language() {
+        for (lang, page) in [(Lang::En, "Performance"), (Lang::De, "Leistung"), (Lang::Es, "Rendimiento")] {
+            let line = "What games use unless you save one here: Quick settings, or Settings › Playing › Performance & fan.";
+            let translated = lang.table().and_then(|t| t.translate(line)).map_or_else(|| line.to_string(), Cow::into_owned);
+            let note = brick_text(&translated);
+            assert!(note.ends_with(&format!("{page}.")), "{lang:?}: {note}");
+            assert!(!note.contains("fan") && !note.contains("Lüfter") && !note.contains("ventilador"), "{lang:?}: {note}");
+        }
     }
 }

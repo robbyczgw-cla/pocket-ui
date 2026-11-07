@@ -74,13 +74,9 @@ fn file_owner(path: &Path, compressed: bool) -> Option<&'static str> {
     let file = std::fs::File::open(path).ok()?;
     let len = file.metadata().ok()?.len();
     if compressed {
-        const LIMIT: usize = 8 * 1024 * 1024;
-        if len > LIMIT as u64 { return None }
-        // Bound the read too: the file could grow after metadata was read.
-        let mut bytes = Vec::new();
-        file.take((LIMIT + 1) as u64).read_to_end(&mut bytes).ok()?;
-        if bytes.len() > LIMIT || bytes.get(..8) != Some(b"PCKSTZ\x01\0") { return None }
-        let state = miniz_oxide::inflate::decompress_to_vec_with_limit(bytes.get(32..)?, LIMIT).ok()?;
+        // Use the player's format and checksum validation. Damaged compressed bytes must never
+        // switch an existing mGBA Continue moment to gpSP merely because its payload looks like gpSP.
+        let state = crate::state_file::read(path).ok()?;
         Some(owner(state.len() as u64, &state))
     } else {
         // Raw states only need their length and BSON header, never a full state read at launch.
@@ -88,6 +84,10 @@ fn file_owner(path: &Path, compressed: bool) -> Option<&'static str> {
         file.take(20).read_exact(&mut header).ok()?;
         Some(owner(len, &header))
     }
+}
+
+fn compressed_auto_name(name: &str) -> bool {
+    name.ends_with(".pstate.auto.z") || name.ends_with(".pstate.auto.z.taken")
 }
 
 /// The game's name of a save slot's file (`slots::state_path`: `<stem>.pstate`, `<stem>.pstate1` to `.pstate7`).
@@ -104,7 +104,12 @@ fn scan(root: &Path) -> Owners {
     for system in ["gba", "gbah", "gbav"] {
         let mut files: Vec<_> = std::fs::read_dir(root.join(system)).into_iter().flatten().flatten().collect();
         // Current quit first, then taken. Within a stage the latest real capture wins, including raw/compressed.
-        files.sort_by_key(|e| std::cmp::Reverse(e.metadata().and_then(|m| m.modified()).ok()));
+        // As slots::auto_candidates does: compressed precedes raw when capture times tie.
+        files.sort_by_key(|e| std::cmp::Reverse((
+            e.metadata().and_then(|m| m.modified()).ok(),
+            e.file_name().to_str().is_some_and(compressed_auto_name),
+        )));
+        let mut unreadable = Vec::new();
         for taken in [false, true] {
             for entry in &files {
                 let name = entry.file_name();
@@ -113,8 +118,18 @@ fn scan(root: &Path) -> Owners {
                 let Some(stem) = suffixes.iter().find_map(|suffix| name.strip_suffix(suffix)) else { continue };
                 let key = (system.to_string(), stem.to_string());
                 if found.contains_key(&key) { continue }
-                let core = file_owner(&entry.path(), name.contains(".pstate.auto.z")).unwrap_or("mgba");
-                found.insert(key, core);
+                let compressed = compressed_auto_name(name);
+                match file_owner(&entry.path(), compressed) {
+                    Some(core) => {
+                        found.insert(key, core);
+                    }
+                    // As `Core::resume` does: a compressed moment that can't be read gives way to the next one, whose core
+                    // goes on. With none readable behind it, the slots decide (below), else the conservative mGBA as before.
+                    None if compressed => unreadable.push(key),
+                    None => {
+                        found.insert(key, "mgba");
+                    }
+                }
             }
         }
         // No Continue moment: the newest save slot decides (raw `.pstate`, `.pstate1`..`.pstate7`). A player who saved
@@ -127,6 +142,10 @@ fn scan(root: &Path) -> Owners {
             if found.contains_key(&key) { continue }
             let core = file_owner(&entry.path(), false).unwrap_or("mgba");
             found.insert(key, core);
+        }
+        // A game whose Continue moments can't be read and that has no slot: the conservative mGBA as before.
+        for key in unreadable {
+            found.entry(key).or_insert("mgba");
         }
     }
     found
@@ -196,6 +215,7 @@ mod tests {
         std::fs::remove_file(&old).unwrap();
         assert!(!scan(&d).contains_key(&("gba".into(), "Old".into())), "a fresh start no longer pins mGBA");
     }
+
     /// Review 0.3: slots saved on mGBA (0.2) with no Continue moment: the game stays on mGBA, so they still load.
     /// gpSP refuses them ("wrong size"), and nothing on the shelf says why.
     #[test]
@@ -224,4 +244,61 @@ mod tests {
         assert_eq!(slot_stem("Game.pstate.auto"), None);
     }
 
+    #[test]
+    fn compressed_continue_uses_its_core_and_damaged_data_does_not_switch_cores() {
+        let d = crate::testutil::TestDir::new("gba-compressed-owner");
+        std::fs::create_dir_all(d.join("gba")).unwrap();
+        let auto = d.join("gba/Game.pstate.auto.z");
+        let key = ("gba".into(), "Game".into());
+        crate::state_file::write(&auto, &gpsp_state()).unwrap();
+        assert_eq!(scan(&d).get(&key), Some(&"gpsp"));
+        let mut bytes = std::fs::read(&auto).unwrap();
+        bytes[24] ^= 1; // Payload still inflates, but its recorded raw checksum is damaged.
+        std::fs::write(&auto, &bytes).unwrap();
+        assert_eq!(scan(&d).get(&key), Some(&"mgba"), "a damaged header cannot claim gpSP ownership");
+        assert_eq!(std::fs::read(&auto).unwrap(), bytes, "the Continue moment is retained for recovery");
+        crate::state_file::write(&auto, b"existing mGBA moment").unwrap();
+        let taken = crate::slots::taken_auto_path(&auto);
+        std::fs::rename(&auto, &taken).unwrap();
+        assert_eq!(scan(&d).get(&key), Some(&"mgba"), "compressed crash recovery keeps mGBA too");
+        crate::state_file::write(&auto, &gpsp_state()).unwrap();
+        assert_eq!(scan(&d).get(&key), Some(&"gpsp"), "a new quit wins over the old taken moment");
+    }
+
+    #[test]
+    fn a_damaged_newest_moment_gives_way_to_the_core_of_the_one_continue_takes() {
+        // `Core::resume` passes over a compressed moment it can't read and takes the next one: its core must play it.
+        let d = crate::testutil::TestDir::new("gba-damaged-newest");
+        std::fs::create_dir_all(d.join("gba")).unwrap();
+        let auto = d.join("gba/Game.pstate.auto.z");
+        crate::state_file::write(&crate::slots::taken_auto_path(&auto), &gpsp_state()).unwrap();
+        std::fs::write(&auto, b"PCKSTZ\x01\0 cut off").unwrap();
+        assert_eq!(scan(&d).get(&("gba".into(), "Game".into())), Some(&"gpsp"));
+        // Nothing readable behind it: the slots decide, as without a Continue moment; with none either, mGBA.
+        std::fs::remove_file(crate::slots::taken_auto_path(&auto)).unwrap();
+        assert_eq!(scan(&d).get(&("gba".into(), "Game".into())), Some(&"mgba"));
+        std::fs::write(d.join("gba/Game.pstate2"), gpsp_state()).unwrap();
+        assert_eq!(scan(&d).get(&("gba".into(), "Game".into())), Some(&"gpsp"));
+    }
+
+    #[test]
+    fn continue_core_matches_player_when_capture_times_tie_and_names_contain_state_suffixes() {
+        let d = crate::testutil::TestDir::new("gba-owner-tie");
+        std::fs::create_dir_all(d.join("gba")).unwrap();
+        let raw = d.join("gba/Tied.pstate.auto");
+        let packed = d.join("gba/Tied.pstate.auto.z");
+        std::fs::write(&raw, b"existing mGBA moment").unwrap();
+        crate::state_file::write(&packed, &gpsp_state()).unwrap();
+        let at = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        for p in [&raw, &packed] {
+            std::fs::File::options().write(true).open(p).unwrap().set_modified(at).unwrap();
+        }
+        let selected = crate::slots::auto_candidates(&packed, false).into_iter().find(|p| p.is_file());
+        assert_eq!(selected, Some(packed), "the player prefers the compressed moment on a tie");
+        assert_eq!(scan(&d).get(&("gba".into(), "Tied".into())), Some(&"gpsp"), "core ownership must select that same moment");
+        let stem = "Unusual.pstate.auto.z";
+        let unusual = d.join(format!("gba/{stem}.pstate.auto"));
+        std::fs::write(&unusual, gpsp_state()).unwrap();
+        assert_eq!(scan(&d).get(&("gba".into(), stem.into())), Some(&"gpsp"), "the ROM name cannot turn a raw state into a compressed one");
+    }
 }

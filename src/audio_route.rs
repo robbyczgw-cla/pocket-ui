@@ -172,13 +172,42 @@ pub trait System: Send + 'static {
 /// The real system: sysfs, `pw-metadata`, `audio::force_quantum` and `audio::restore_quantum`.
 pub struct Real;
 
+/// The Brick has no PipeWire: its Bluetooth service writes the headset's address to `$BRICK_RUN/bt-audio` while the sound goes
+/// to it (BlueALSA behind ALSA's "pipewire" name, `deploy/brick/hwroot/usr/bin/brick-bluetooth`). That file is the "link" and the
+/// "default sink" here, so the keeper follows a headset as it does PipeWire's.
+#[cfg(feature = "brick")]
+pub fn brick_route() -> Option<String> {
+    brick_route_in(std::path::Path::new(&std::env::var("BRICK_RUN").unwrap_or_else(|_| "/tmp/pocket-ui".into())))
+}
+
+#[cfg(feature = "brick")]
+fn brick_route_in(run: &std::path::Path) -> Option<String> {
+    let text = std::fs::read_to_string(run.join("bt-audio")).ok()?;
+    let address = text.trim();
+    (!address.is_empty()).then(|| address.to_string())
+}
+
+/// The sink name `output_of` reads as Bluetooth, for the Brick's route file's address.
+#[cfg(feature = "brick")]
+pub fn brick_sink(address: &str) -> String {
+    format!("bluez_output.{}.1", address.replace(':', "_"))
+}
+
 impl System for Real {
     fn connections(&self) -> Option<Vec<String>> {
+        #[cfg(feature = "brick")]
+        if crate::device::brick() {
+            return Some(brick_route().into_iter().collect());
+        }
         let dir = std::fs::read_dir("/sys/class/bluetooth").ok()?;
         Some(connections(dir.filter_map(|e| e.ok()?.file_name().into_string().ok())))
     }
 
     fn default_sink(&self) -> Option<String> {
+        #[cfg(feature = "brick")]
+        if crate::device::brick() {
+            return brick_route().map(|a| brick_sink(&a));
+        }
         let out = crate::proc::run_with_timeout(
             std::process::Command::new("pw-metadata").args(["-n", "default", "0", "default.audio.sink"]),
             crate::proc::HELPER,
@@ -411,6 +440,13 @@ impl Keeper {
     /// done), for the writer thread: it sizes its ALSA buffer by it (`audio::Ring`).
     pub(crate) fn small_flag(&self) -> Arc<AtomicBool> {
         self.small.clone()
+    }
+
+    /// Where the sound goes as last seen, for the writer thread: on the Brick a change opens the stream again (its ALSA name points
+    /// somewhere else then; there is no quantum to tell it).
+    #[cfg(feature = "brick")]
+    pub(crate) fn bluetooth_flag(&self) -> Arc<AtomicBool> {
+        self.bluetooth.clone()
     }
 
     /// Set once the first look at the output is done and `small_flag` means something.
@@ -748,5 +784,41 @@ mod tests {
         k.keep();
         drop(k);
         assert_eq!(f.log(), ["force 256"], "kept for the next game");
+    }
+
+    /// The Brick's route file read as the system would be: headphones while it names an address, the speaker without it.
+    #[cfg(feature = "brick")]
+    struct BrickFake(std::path::PathBuf);
+    #[cfg(feature = "brick")]
+    impl System for BrickFake {
+        fn connections(&self) -> Option<Vec<String>> {
+            Some(brick_route_in(&self.0).into_iter().collect())
+        }
+        fn default_sink(&self) -> Option<String> {
+            brick_route_in(&self.0).map(|a| brick_sink(&a))
+        }
+        fn force(&self, _: u32) -> bool {
+            false
+        }
+        fn restore(&self) {}
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn the_brick_follows_its_headphones_by_the_route_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let (flag, small) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)));
+        let t0 = Instant::now();
+        let mut r = Router::start(BrickFake(dir.path().into()), 0, flag.clone(), small, t0);
+        assert_eq!(r.output(), Output::Speaker, "no file: the speaker");
+        std::fs::write(dir.path().join("bt-audio"), "AA:BB:CC:DD:EE:FF\n").unwrap();
+        r.tick(t0 + CHECK_EVERY);
+        assert_eq!(r.output(), Output::Bluetooth);
+        assert!(flag.load(Ordering::Relaxed), "the writer hears of it");
+        std::fs::write(dir.path().join("bt-audio"), "").unwrap();
+        r.tick(t0 + CHECK_EVERY * 2);
+        assert_eq!(r.output(), Output::Speaker, "an empty file is no headset");
+        assert!(!flag.load(Ordering::Relaxed));
+        assert_eq!(output_of(Some(&brick_sink("AA:BB:CC:DD:EE:FF"))), Output::Bluetooth);
     }
 }

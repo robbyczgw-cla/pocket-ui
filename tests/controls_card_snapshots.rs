@@ -31,13 +31,8 @@ fn wayland(tmp: &Path) -> Option<Stub> {
     let path = tmp.join("wayland-stub");
     let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), path.to_str().unwrap()]).spawn().expect("python3 for scripts/wayland-stub.py");
     let stub = Stub { path, child };
-    for _ in 0..200 {
-        if stub.path.exists() {
-            return Some(stub);
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-    panic!("scripts/wayland-stub.py didn't start");
+    test_clock::wait_for(|| stub.path.exists(), std::time::Duration::from_secs(2), "Wayland stub listening");
+    Some(stub)
 }
 
 fn copy_dir(from: &Path, to: &Path) {
@@ -69,6 +64,10 @@ fn ink(shot: &(usize, usize, Vec<u32>), (x, y, w, h): (usize, usize, usize, usiz
 }
 
 fn render(bin: &Path, tmp: &Path, state: &str, size: &str, text_size: &str, stub: Option<&Stub>) -> (usize, usize, Vec<u32>) {
+    render_on(bin, tmp, state, size, text_size, stub, None)
+}
+
+fn render_on(bin: &Path, tmp: &Path, state: &str, size: &str, text_size: &str, stub: Option<&Stub>, device: Option<(&str, &str)>) -> (usize, usize, Vec<u32>) {
     let data = tmp.join(format!("data-{}-{size}", state.replace(':', "-")));
     copy_dir(&tmp.join("dark").join("data"), &data);
     let png = tmp.join(format!("{}-{size}.png", state.replace(':', "-")));
@@ -78,6 +77,7 @@ fn render(bin: &Path, tmp: &Path, state: &str, size: &str, text_size: &str, stub
     if let Some(s) = stub {
         cmd.env("WAYLAND_DISPLAY", &s.path);
     }
+    if let Some((device, _)) = device { cmd.env("POCKETUI_DEVICE", device); }
     let out = cmd
         .args(["--snapshot", state, png.to_str().unwrap()])
         .env("POCKETUI_MOCK", "1")
@@ -86,7 +86,7 @@ fn render(bin: &Path, tmp: &Path, state: &str, size: &str, text_size: &str, stub
         .env("POCKETUI_SNAPSHOT_SIZE", size)
         .env("POCKETUI_TEXT_SIZE", text_size)
         .env("POCKETUI_TEXT_BOXES", &boxes)
-        .env("POCKETUI_LANG", "en")
+        .env("POCKETUI_LANG", device.map_or("en", |(_, lang)| lang))
         .env("POCKETUI_VISIBLE_TEXT", &transcript)
         .env_remove("POCKETUI_SCREENSHOTS")
         .output()
@@ -146,5 +146,30 @@ fn every_console_shows_a_card_and_a_console_without_names_says_so() {
         assert!(ink(&row, (0, h / 2, w, h / 2)) > (w * h) / 100, "{size}: the game card with its Controls row");
         let pause = render(&bin, &tmp, "controls-card-pause", size, text_size, stub.as_ref());
         assert!(ink(&pause, body) > (w * h) / 400, "{size}: Options > Controls draws the card of the game that runs");
+    }
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn printed_menu_key_is_used_on_brick_cards_and_hints_in_both_appearances() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.path().join("dark").to_str().unwrap(), "dark"]).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let stub = wayland(tmp.path());
+    let bin = Path::new(env!("CARGO_BIN_EXE_pocket-ui"));
+    for device in ["brick", "miniv2"] {
+        for appearance in ["dark", "light"] {
+            let settings = tmp.path().join("dark/data/settings.json");
+            let mut saved: serde_json::Value = serde_json::from_slice(&std::fs::read(&settings).unwrap()).unwrap();
+            saved["appearance"] = appearance.into();
+            std::fs::write(&settings, serde_json::to_vec(&saved).unwrap()).unwrap();
+            for (lang, state) in ["en", "de", "es"].into_iter().flat_map(|lang| ["controls-card:snes", "home"].map(|state| (lang, state))) {
+                render_on(bin, tmp.path(), state, "1024x768", "normal", stub.as_ref(), Some((device, lang)));
+                let visible = std::fs::read_to_string(tmp.path().join("visible.txt")).unwrap();
+                let (wanted, absent) = if device == "brick" { ("MENU", "HOME") } else { ("HOME", "MENU") };
+                assert!(visible.contains(wanted), "{device} {appearance} {state}: {visible}");
+                assert!(!visible.contains(absent), "{device} {appearance} {state}: {visible}");
+            }
+        }
     }
 }

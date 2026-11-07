@@ -5,7 +5,7 @@ sound, and to add games, followed by a choice for easier reading. A goes to the 
 
 1. **Play, and HOME is the menu**: pick a game and press A; tap HOME in a game for the [pause menu](pause-menu.md).
 2. **Continue where you stopped**: Home opens on the game you played last; quitting keeps the moment ([Home](playing.md#home)).
-3. **Saving**: Save, Load and Earlier are in the pause menu ([Earlier](pause-menu.md#earlier)).
+3. **Saving**: Save, Load and Earlier are in the pause menu ([Earlier](pause-menu-saves.md#earlier)).
 4. **Quick settings**: HOME on the shelf, START in the pause menu ([Quick settings](quick-settings.md#quick-settings)).
 5. **Add games**: each system's folder on the SD card, or file sharing over Wi-Fi ([Add games](getting-started.md#5-add-games)).
 6. **Settings**: everything on these cards, and everything you meet along the way, can be switched under START › Settings.
@@ -18,7 +18,7 @@ version](#new-in-this-version) shows what is new.
 ## The feature cards
 
 The feature cards, one per extra, come in two places: the first start's "Choose for yourself"
-([Getting started](getting-started.md#how-do-you-like-to-play)) and "New in this version" below. A card is the feature's name,
+([Getting started](settings-system.md#how-you-like-to-play)) and "New in this version" below. A card is the feature's name,
 one line about it, a small picture of its screen, and where it is in Settings.
 
 - A card with a switch has three rows: **On**, **Off** and **Later**. "Now" marks what is set. Up/Down choose, A takes
@@ -42,6 +42,7 @@ this device, Pixel Path, frames and "Continue your last game" are off by default
 | **Continue your last game** | Off | On | Settings → Playing → [On start](settings.md#on-start) (Last game) |
 | **Motion** | On | On | Settings → Sound & feel → [Motion](settings.md#motion) (Off on the card is Motion Off) |
 | **Easy to read** | As it is | As it is | Settings → Look → [Text size](settings.md#text-size) and Settings → Sound & feel → [Motion](settings.md#motion) ([Easy to read](easy-to-read.md#easy-to-read)): On is Large text and Reduced motion, Off is Normal text and Full motion; while it is on, the pause menu lists [Zoom](easy-to-read.md#zoom) |
+| **Retro** | As it is | As it is | Settings → Look → [Style](theme.md#style) → Retro; Off goes back to Barlow. After the update to 0.3.0 its card starts on On: A tries it, B leaves everything as it is |
 | **Menu sounds** | As it is | As it is | Settings → Sound & feel → Sounds |
 | **Haptics** | As it is | As it is | Settings → Sound & feel → Haptics |
 | **Stick lights** | As it is | As it is | Settings → Sound & feel → [LEDs](settings.md#leds) (On is Colour, unless Battery was chosen) |
@@ -65,5 +66,10 @@ The profile **For a child** sets none of these: [Kids mode](kids-mode.md) keeps 
 ## New in this version
 
 After an update, pocket-ui shows the cards of the features that are new since the version you had, at most three,
-once: when you are on Home with nothing open, even if the Pocket went straight into your last game first. Each has
-its switch, as on the feature cards above. A takes the choice and goes on, B puts the cards away. They don't come back; every switch is in Settings. A version without new features shows nothing, and so does the first start of a new Pocket.
+once: when you are on Home with nothing open, never over a game (if the Pocket went straight into your last game, they
+wait until you are back on Home). Each has its switch, as on the feature cards above. A takes the choice and goes on, B
+puts the cards away. A new look you can try starts on On instead: in 0.3.0 the **Retro** card's A says "Try Retro" and
+switches Settings → Look → Style to Retro at once, B leaves your style as it is. They don't come back; every switch is in Settings. A version without new features shows nothing, and so does the first start of a new Pocket.
+
+While you read a card, a long game title hidden behind it stops scrolling, so it uses no extra refreshes.
+Hidden Shelf and Cabinet artwork also leaves the card still while you read.

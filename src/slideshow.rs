@@ -203,7 +203,7 @@ pub fn state_title(file_name: &str) -> Option<String> {
     }
     let at = stem.rfind(".pstate")?;
     let rest = &stem[at + ".pstate".len()..];
-    let slot_ok = rest.is_empty() || rest == ".auto" || rest.bytes().all(|b| b.is_ascii_digit());
+    let slot_ok = rest.is_empty() || matches!(rest, ".auto" | ".auto.z") || rest.bytes().all(|b| b.is_ascii_digit());
     (slot_ok && at > 0).then(|| stem[..at].to_string())
 }
 
@@ -520,6 +520,7 @@ mod tests {
         assert_eq!(state_title("Tetris.pstate.png").as_deref(), Some("Tetris"));
         assert_eq!(state_title("Tetris.pstate3.png").as_deref(), Some("Tetris"));
         assert_eq!(state_title("Tetris.pstate.auto.png").as_deref(), Some("Tetris"));
+        assert_eq!(state_title("Tetris.pstate.auto.z.png").as_deref(), Some("Tetris"));
         assert_eq!(state_title("Tetris.pstate.undo.png"), None, "Before load is no memory");
         assert_eq!(state_title("Tetris.png"), None);
         assert_eq!(state_title("Tetris.pstate.auto"), None);

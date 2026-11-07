@@ -6,9 +6,9 @@
 #   build.sh assemble VERSION EPOCH
 #       /w/image.img (a copy of base.img) gets the boot files from /w/sd-efi, the initramfs hooks, the notes from
 #       /w/info, and pocket-ui from /w/bin on STORAGE. EPOCH (seconds) is the time stamp of every added file.
-# FAMILY=H700 or SM8550 (scripts/make-image-family.sh): that family's pins instead; strip-system works on its SYSTEM, and
-# assemble takes MODEL (and no boot files from /w/sd-efi): no GRUB, and on the H700 the FAT root gets dtb.img, a copy of
-# that model's tree from device_trees/.
+# FAMILY=H700, SM8550 or RK3566 (scripts/make-image-family.sh): that family's pins instead; strip-system works on its SYSTEM,
+# and assemble takes MODEL (and no boot files from /w/sd-efi): no GRUB; on the H700 the FAT root gets dtb.img, a copy of
+# that model's tree from device_trees/, and on the RK3566 extlinux.conf names that model's tree instead of the X55's.
 set -eu
 . /repo/scripts/image/pins.sh
 FAMILY=${FAMILY:-SM8250}
@@ -115,10 +115,36 @@ assemble() {
   mkdir -p "$S/fat/pocket-ui-info" "$S/storage/licences"
   if [ "$FAMILY" = SM8550 ]; then
     : # KERNEL carries the trees, ROCKNIX's ABL starts it: no boot files to add.
+  elif [ "$FAMILY" = RK3566 ]; then
+    # ROCKNIX's extlinux.conf with its one FDT line (the Powkiddy X55's tree) naming this model's tree; the rest unchanged.
+    mcopy -n -i "$FAT" "::/device_trees/$DTB_NAME.dtb" /tmp/tree.dtb
+    [ "$(md5 /tmp/tree.dtb)" = "$DTB_MD5_WANT" ] || die "device_trees/$DTB_NAME.dtb is not the expected tree (md5 $DTB_MD5_WANT)"
+    mcopy -n -i "$FAT" ::/extlinux/extlinux.conf /tmp/extlinux.orig
+    [ "$(md5 /tmp/extlinux.orig)" = "$RK3566_EXTLINUX_MD5" ] || die "extlinux/extlinux.conf is not ROCKNIX's (md5 $RK3566_EXTLINUX_MD5)"
+    [ "$(grep -c "^  FDT $RK3566_DEFAULT_FDT\$" /tmp/extlinux.orig)" = 1 ] || die "extlinux.conf has no single FDT $RK3566_DEFAULT_FDT line"
+    sed "s#^  FDT $RK3566_DEFAULT_FDT\$#  FDT /device_trees/$DTB_NAME.dtb#" /tmp/extlinux.orig >"$W/extlinux.conf"
+    [ "$(diff /tmp/extlinux.orig "$W/extlinux.conf" | grep -c '^[<>]')" = 2 ] || die "extlinux.conf: more than the FDT line changed"
   elif [ "$FAMILY" = H700 ]; then
     # The model's tree from ROCKNIX's own device_trees/, as ROCKNIX's install page has the player copy it by hand.
     mcopy -n -i "$FAT" "::/device_trees/$DTB_NAME.dtb" "$S/fat/dtb.img"
     [ "$(md5 "$S/fat/dtb.img")" = "$DTB_MD5_WANT" ] || die "device_trees/$DTB_NAME.dtb is not the expected tree (md5 $DTB_MD5_WANT)"
+    if is_ddr3 H700 "$MODEL"; then
+      # A DDR3 unit: the DDR4 card with the DDR3 image's first 16 MiB (partition table, U-Boot with the DDR3 RAM set-up) and its
+      # extlinux.conf (one more line, FDTOVERLAYS). KERNEL and SYSTEM are the same bytes in both images (the pins above).
+      [ -f "$W/base-ddr3.img" ] || die "$MODEL needs the DDR3 image at /w/base-ddr3.img"
+      [ "$(head -c $((P1_START * 512)) "$W/base-ddr3.img" | md5sum | cut -d' ' -f1)" = "$H700_DDR3_LOADER_MD5" ] || die "the DDR3 image's first 16 MiB are not the pinned ones"
+      D3="$W/base-ddr3.img@@$((P1_START * 512))"
+      for f in KERNEL SYSTEM; do
+        got=$(mcopy -n -i "$D3" "::/$f" - | md5sum | cut -d' ' -f1)
+        want=$H700_KERNEL_MD5
+        [ "$f" = SYSTEM ] && want=$H700_SYSTEM_MD5
+        [ "$got" = "$want" ] || die "the DDR3 image's $f (md5 $got) is not the DDR4 image's ($want): it needs its own build"
+      done
+      mcopy -n -i "$D3" ::/extlinux/extlinux.conf "$W/extlinux.conf"
+      [ "$(md5 "$W/extlinux.conf")" = "$H700_DDR3_EXTLINUX_MD5" ] || die "the DDR3 image's extlinux.conf is not the pinned one"
+      dd if="$W/base-ddr3.img" of="$IMG" bs=512 count="$P1_START" conv=notrunc status=none
+      [ "$(head -c $((P1_START * 512)) "$IMG" | md5sum | cut -d' ' -f1)" = "$H700_DDR3_LOADER_MD5" ] || die "the DDR3 loader did not land on the image"
+    fi
   else
     mkdir -p "$S/fat/EFI/BOOT" "$S/fat/boot/grub" "$S/fat/boot/pocket"
     cp "$E/EFI/BOOT/BOOTAA64.EFI" "$S/fat/EFI/BOOT/"
@@ -154,7 +180,7 @@ assemble() {
   echo "== FAT partition"
   # rocknix_abl/ holds ROCKNIX's replacement for Retroid's bootloader (abl) and scripts that flash it. This boot
   # path never uses it, and flashing it is what this setup avoids, so it is not on the card.
-  [ "$FAMILY" = H700 ] || mdeltree -i "$FAT" ::/rocknix_abl
+  case $FAMILY in H700 | RK3566) ;; *) mdeltree -i "$FAT" ::/rocknix_abl ;; esac
   # SYSTEM without the files in pins.sh SYSTEM_REMOVE (strip-system), and its .md5 in ROCKNIX's format.
   # A new SYSTEM_REMOVE (or a new mksquashfs) gives a new md5: then pins.sh is "unset" for one build, which prints it.
   sysmd5=$(md5 "$W/SYSTEM")
@@ -168,6 +194,11 @@ assemble() {
   mdel -i "$FAT" ::/SYSTEM ::/SYSTEM.md5
   mcopy -m -i "$FAT" "$W/SYSTEM" ::/SYSTEM
   mcopy -m -i "$FAT" "$S/SYSTEM.md5" ::/SYSTEM.md5
+  if [ "$FAMILY" = RK3566 ] || { [ "$FAMILY" = H700 ] && is_ddr3 H700 "$MODEL"; }; then
+    touch -d "@$EPOCH" "$W/extlinux.conf"
+    mdel -i "$FAT" ::/extlinux/extlinux.conf
+    mcopy -m -i "$FAT" "$W/extlinux.conf" ::/extlinux/extlinux.conf
+  fi
   (cd "$S/fat" && find . -mindepth 1 -type d | sed 's#^\./##' | sort) | while read -r d; do
     mmd -i "$FAT" "::/$d"
   done
@@ -198,6 +229,7 @@ assemble() {
     for f in pocket-ui pocket-core pocket-splash portmaster-setup.sh; do
       echo "write $S/storage/$f /$R/$f"
     done
+    [ ! -d "$W/bin/cores" ] || sh /repo/scripts/image/gba-debugfs.sh "$W/bin/cores" "$R" "$EPOCH"
     echo "write $S/storage/run-pocket-ui.sh /pocket-ui/run-pocket-ui.sh"
     # The layout scripts/dev.sh and the updater use (docs/UPDATES.md): fixed paths through current.
     echo "symlink /pocket-ui/current releases/$VERSION"

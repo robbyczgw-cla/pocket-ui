@@ -18,7 +18,7 @@ not yet tried on the device.
 ## States: slots 1-8, Auto, Before load (2026-10-22, not yet run on the Mini V2)
 
 Supersedes the slot choices of the sections below ("Save = slot 1, Quit/resume = slot 0" and the like); the model is
-`src/states.rs`, the user's view `docs/user/pause-menu.md` ("Save slots, Auto and Before load").
+`src/states.rs`, the user's view `docs/user/pause-menu-saves.md` ("Save slots, Auto and Before load").
 - Save writes manual slots 1-8 only. Quit and sleep write **Auto**, loaded by the next start. Every Load first writes
   **Before load**, until the next Quit (a Load of Before load itself leaves it as it is). None of the three shares a place.
 - ARMSX2: PINE takes any slot byte. 1-8 are ARMSX2's own, Auto is 99, Before load 98 (its menus have 1-10).
@@ -649,9 +649,13 @@ scripts/big-emu-bench.sh [--minutes 3] [--rumble] /storage/roms/wii/<game>.rvz /
   `.axf` have none and Azahar uses 0, so all 3DSX homebrew share one quick slot (the resume state is per
   ROM file). Azahar 2126.2 can't boot `.cia` (it has no CIA loader), and `.zcci`/`.zcxi`/`.zcia` would need
   decompressing: these keep Continue/Quit.
-- Quit: the resume state, then sway `[pid=N] kill` (a Qt close: Azahar stops the emulation and writes
-  qt-config.ini), 8 s, SIGTERM (Azahar has no handler, so it ends at once), 8 s, SIGKILL. Enforced in
-  qt-config.ini on every start: `confirmClose=false` and `saveStateWarning=false`, each with
+- Quit: the resume state, then Azahar's window in front again (`control::show_game`), sway `[pid=N] kill` (a Qt close:
+  Azahar stops the emulation and writes qt-config.ini), 8 s, SIGKILL. Covered by the menu, the close didn't finish
+  within its 8 s (most likely Qt's `ShutdownGame` waiting for the emulation thread, which waits for a picture a hidden
+  window doesn't present, as RetroArch's does): the Mini V2's Save & quit took 20.7 s on 06.11.2026, the save's
+  4.6 s and both 8 s waits. No SIGTERM: Azahar's SDL input (`SDL_Init(SDL_INIT_GAMECONTROLLER)` without
+  `SDL_HINT_NO_SIGNAL_HANDLERS`) installs SDL's handler, which only queues an SDL quit event the Qt frontend never
+  reads. Enforced in qt-config.ini on every start: `confirmClose=false` and `saveStateWarning=false`, each with
   `\default=false` (Azahar ignores a value whose `\default` is true). When `/storage/.config/azahar` is
   missing, pocket-ui first creates it from `/usr/config/azahar`, as the start script would.
 - Two screens: the Mini V2 has one panel (`DEVICE_HAS_DUAL_SCREEN` unset), so start_azahar.sh picks layout

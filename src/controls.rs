@@ -179,6 +179,26 @@ impl Mapping {
         self.target[id as usize].map_or("none", |t| KEYS[t as usize])
     }
 
+    /// Interactive assignment: move the previous action to the occupied button. Legacy duplicate
+    /// mappings remain readable; additional occupants are cleared so the new choice is unambiguous.
+    pub fn assign(&mut self, id: u8, next: Option<u8>) -> Vec<u8> {
+        let old = self.target[id as usize];
+        if old == next { return Vec::new(); }
+        let mut changed = vec![id];
+        let mut replacement = old;
+        if let Some(next) = next {
+            for other in 0..16u8 {
+                if other != id && self.target[other as usize] == Some(next) {
+                    self.target[other as usize] = replacement;
+                    replacement = None;
+                    changed.push(other);
+                }
+            }
+        }
+        self.target[id as usize] = next;
+        changed
+    }
+
     /// Mini V2 buttons (bit i = button i) → console buttons.
     pub fn translate(&self, pressed: u16) -> u16 {
         let mut out = 0;
@@ -403,6 +423,18 @@ impl Sticks {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn assigning_a_taken_game_action_swaps_and_saves_both_buttons() {
+        let mut m = Mapping::defaults("snes");
+        assert_eq!(m.assign(12, Some(8)), [12, 8]);
+        assert_eq!(m.translate(1 << 12), 1 << 8, "L2 presses A");
+        assert_eq!(m.translate(1 << 8), 1 << 12, "A keeps the previous L2 action");
+        assert_eq!(Mapping::from_file(&m.to_file(vec![])), m);
+        m.assign(12, None);
+        assert_eq!(m.translate(1 << 12), 0);
+        assert_eq!(m.translate(1 << 8), 1 << 12, "unassigning one button does not clear another");
+    }
 
     #[test]
     fn hold_to_toggle_presses_on_one_press_and_lets_go_on_the_next() {

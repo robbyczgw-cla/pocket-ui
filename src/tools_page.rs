@@ -74,6 +74,9 @@ impl ToolsPage {
             Button::North if self.busy.is_none() => {
                 self.confirm = None;
                 self.message = None;
+                // "Looking for tools…" until the scan answers, as on opening: X shows it did something, also when the
+                // answer is the same (the navigation explorer, 2026-11-07).
+                self.tools = None;
                 return Action::Rescan;
             }
             b if b == confirm => return self.start(),
@@ -181,6 +184,17 @@ mod tests {
         p.press(Button::Down, A, B);
         assert_eq!(p.confirm, None, "moving away cancels");
         assert_eq!(p.press(B, A, B), Action::Close);
+    }
+
+    /// The navigation explorer, 2026-11-07: X "Look again" on a page with no tools changed nothing a player could see.
+    /// It says "Looking for tools…" again until the scan answers, as on opening.
+    #[test]
+    fn looking_again_shows_the_look_until_the_scan_answers() {
+        let mut p = page();
+        assert_eq!(p.press(Button::North, A, B), Action::Rescan);
+        assert!(p.tools.is_none(), "looking");
+        p.event(Event::Scanned(Vec::new()));
+        assert_eq!(p.tools.as_ref().map(Vec::len), Some(0));
     }
 
     #[test]

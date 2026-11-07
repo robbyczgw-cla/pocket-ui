@@ -142,6 +142,10 @@ pub struct Settings {
     /// (Easy to read shows it too, `features::reading_on`); Zoom is always in Options.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub zoom_in_pause: bool,
+    /// Settings > System > Second screen (a handheld with two, `second_screen`), kept as its opposite so that unset is
+    /// Game info: the lower screen shows the selected game. Off: dark outside DS games.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
+    pub second_screen_off: bool,
     /// Read, never written: Easy began as a switch of this name. `load` turns it into the look.
     #[serde(default, deserialize_with = "lenient", skip_serializing)]
     pub big_shelf: bool,
@@ -156,9 +160,13 @@ pub struct Settings {
     /// Settings > Look → Colours (`palette::Colours`); Warm when unset.
     #[serde(default, deserialize_with = "lenient")]
     pub colours: crate::palette::Colours,
-    /// Settings > Look → Font: Barlow, Pixel or Rounded type (`font_style`); Barlow when unset, wrong or from before it.
+    /// Settings > Look → Style: Barlow, Pixel or Rounded type, or Retro (`font_style`, `retro`); Barlow when unset, wrong
+    /// or from before it.
     #[serde(default, deserialize_with = "lenient")]
     pub font: crate::font_style::FontStyle,
+    /// The Retro style's palette (`retro::Colours`), the Colours row's choice while Style is Retro; Cocoa when unset.
+    #[serde(default, deserialize_with = "lenient")]
+    pub retro_colours: crate::retro::Colours,
     /// Settings > Sound & feel > Motion; Full when unset.
     #[serde(default, deserialize_with = "lenient")]
     pub motion: Motion,
@@ -375,6 +383,20 @@ pub fn language(data_dir: &Path) -> crate::i18n::Lang {
         .unwrap_or_else(crate::i18n::Lang::system_default)
 }
 
+/// Settings → Look → Style and Retro's palette alone (pocket-core's overlays paint with them, `retro`): read once at a
+/// game's start; Barlow and Cocoa when the file or a field is missing.
+pub fn style(data_dir: &Path) -> (crate::font_style::FontStyle, crate::retro::Colours) {
+    #[derive(serde::Deserialize, Default)]
+    struct Only {
+        #[serde(default, deserialize_with = "lenient")]
+        font: crate::font_style::FontStyle,
+        #[serde(default, deserialize_with = "lenient")]
+        retro_colours: crate::retro::Colours,
+    }
+    let only = std::fs::read(data_dir.join(FILE)).ok().and_then(|b| serde_json::from_slice::<Only>(&b).ok()).unwrap_or_default();
+    (only.font, only.retro_colours)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -397,11 +419,13 @@ mod tests {
             forget_where_quit: true,
             no_where_was_i: true,
             zoom_in_pause: true,
+            second_screen_off: true,
             big_shelf: false,
             button_layout: crate::button_layout::ButtonLayout::Xbox,
             prompts: crate::button_prompts::PromptStyle::PlayStation,
             colours: crate::palette::Colours::GreyBrick,
             font: crate::font_style::FontStyle::Rounded,
+            retro_colours: crate::retro::Colours::Pea,
             motion: Motion::Reduced,
             frames: Frames::Every,
             seen_version: Some("0.2.0".into()),
@@ -796,6 +820,12 @@ mod tests {
         assert!(!std::fs::read_to_string(d.join(FILE)).unwrap().contains("no_where_was_i"), "On is not written");
         Settings { no_where_was_i: true, ..chosen() }.save(&d);
         assert!(Settings::load(&d).no_where_was_i);
+        // Second screen: Game info unless switched off.
+        Settings { second_screen_off: false, ..chosen() }.save(&d);
+        assert!(!Settings::load(&d).second_screen_off, "unset: Game info");
+        assert!(!std::fs::read_to_string(d.join(FILE)).unwrap().contains("second_screen_off"), "Game info is not written");
+        Settings { second_screen_off: true, ..chosen() }.save(&d);
+        assert!(Settings::load(&d).second_screen_off);
     }
 
     #[test]

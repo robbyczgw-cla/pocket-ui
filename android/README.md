@@ -1,7 +1,7 @@
 # Android launcher and pocket-core
 
 The native ARM64 APK uses the shared pocket-ui library. The launcher and the private `:player` Activity have
-separate native libraries; the player does not link winit, and its licence graph is checked independently. It has five launcher looks, search, favourites, Curator
+separate native libraries; the player does not link winit, and its licence graph is checked independently. It has six launcher looks, search, favourites, Curator
 facets, game boxes and an EGL/GLES 3 player using shared `libretro::Core` and the shared audio pipeline with AAudio.
 mGBA (GB/GBC/GBA), Nestopia (NES), bsnes (SNES) Gearsystem (SMS/GG), ClownMDEmu (Mega Drive cartridges), Beetle WonderSwan, Stella (2600), optional Gambatte (GB/GBC), Beetle PCE Fast (PC Engine), Beetle NGP (NGP/Color) and Handy (Lynx) are built and bundled; PPSSPP (PSP), melonDS DS and Mupen64Plus-Next (N64) are included in the internal test build. Other large systems use version-sensitive external intents.
 This is an incremental milestone, not feature parity with the complete Linux App or the full requested core set.
@@ -25,7 +25,7 @@ archive alongside an APK. Lockfiles and source revisions are pinned; build times
 The release keystore defaults to `~/.local/share/pocket-ui/android-signing/release.jks`, with its private password file
 beside it (override `ANDROID_SIGNING_DIR`). Both stay outside the repository, permissions 0600, directory 0700.
 The initial debug-signed spike must be uninstalled once; later versions signed with this release key update in place.
-Do not delete this identity. The APK is non-debuggable, version 0.1.7-android.1 / 10701.
+Do not delete this identity. The APK is non-debuggable, version 0.2.0-android.1 / 20001.
 
 Only isolated emulator serials with `ro.kernel.qemu=1` are accepted by smoke scripts. AVD name, port, display width,
 height and density can be set through `ANDROID_AVD_NAME`, `ANDROID_EMULATOR_PORT`, `ANDROID_DISPLAY_WIDTH`,
@@ -112,3 +112,48 @@ commands until the emulation thread acknowledges the pause, rather than consumin
 frame and polling. `cargo test --test ppsspp_pause` exercises the old and patched pause fragments
 with a two-frame readback stub. Rebuild the cores to include it; it does not affect an installed
 ROCKNIX core. Actual GLES/device validation remains necessary.
+
+## Android 0.2 preview
+
+The game card and the pause sheet offer **Controls**, with Android gamepad labels and the
+buttons actually drawn on the touch pad. A first start on each console opens this card;
+Back or A goes on, while an existing moment continues directly. **Zoom** in the pause sheet
+holds the frame still: pinch from the paused picture or on Zoom, drag to pan, or use the
+D-pad and A (2x/3x). Back returns to the pause sheet. It never changes the game's picture settings.
+
+Options → Controls → **Hold to toggle** chooses one console button for this game, or Off.
+One press holds it, the next lets it go. A badge names the held button. Pause, background,
+controller changes and loading a state release it. The gamepad's analog stick remains analog
+on analog consoles; its hat remains the D-pad.
+
+**Text size** and Android's font setting use the larger size, including changes while the
+app is open (system scale up to 200%). The two choices are not multiplied. **Haptics** is
+off on a fresh install and gates touch feedback in both Rust and Java; Android's own haptic
+setting also applies. Core/controller rumble remains unavailable.
+
+After more than two weeks, a successful internal resume can show **Where was I?** over
+its restored frame for four seconds. Any press or touch ends it. Easy omits total play time;
+Settings → **Remind me where I was** switches it off. External emulator apps own their resumes.
+
+Android Back opens the pause sheet during play and returns one page from Options, Controls,
+Zoom or Recovery. **Save & quit** remains the only menu exit. Background/audio-focus loss
+pauses and commits the moment; returning stays paused. Gamepad disconnection clears inputs,
+pauses and restores touch controls. Both Activities use safe areas for cutouts, system bars
+and gesture edges. Battery saver suppresses optional slideshow/media downloads and the
+player's startup animation without changing saved preferences or slowing the game.
+
+An old short PSP moment is refused by the shared size guard. The **Recovery** page explains
+that it could not load safely and where it is kept; Load still lists the preserved moment.
+Recovery uses the exact raw or compressed state selected by the core, with its matching preview, even when an older
+crash point from another app version is still present. A later automatic save cannot remove that retained moment.
+It does not relax the pinned PPSSPP parser's safety checks.
+
+Host regressions live in `src/android_02_tests.rs` (the Android controller/painters themselves):
+`cargo test --profile gate --lib android_02_tests`. `scripts/check-platforms.sh android` checks
+both native libraries. `scripts/android/02-smoke.py` drives a disposable AVD through actual SAF,
+Back, the new pages in both orientations/appearances at 100%/200% fonts, pinch, background
+save, a uinput gamepad, Hold to toggle, reminders and battery saver. Its helpers in
+`scripts/android/test/` are shell-only probes, never packaged in the APK. Build `Gestures.java`
+with the SDK and d8 to `/data/local/tmp/classes.dex`, and `gamepad.c` with the NDK to
+`/data/local/tmp/qa-gamepad`, before running the script. Inspect the saved screenshots;
+emulator checks cannot establish physical touch comfort, vibration, battery cost or driver quality.

@@ -138,6 +138,20 @@ pub fn login_url(output: &str) -> Option<String> {
 /// The name suggested for the Pocket in the tailnet.
 pub const SUGGESTED_HOSTNAME: &str = "pocket-mini";
 
+/// The TrimUI Brick's own card (docs/TRIMUI-BRICK-REMOTE.md): Tailscale is the card's (official static build), run by the card's
+/// stand-ins instead of ROCKNIX's service. `POCKETUI_TAILSCALE` is its CLI (a wrapper with the daemon's socket), and `tailscale up`
+/// leaves the firmware's DNS and firewall alone.
+#[cfg(feature = "brick")]
+fn brick_card() -> bool {
+    crate::device::brick() && crate::brick_profile::standalone()
+}
+
+/// `SUGGESTED_HOSTNAME`, or the Brick's own.
+#[cfg(feature = "brick")]
+pub fn suggested_hostname() -> &'static str {
+    if brick_card() { "pocket-brick" } else { SUGGESTED_HOSTNAME }
+}
+
 /// A name Tailscale accepts as a host name: a DNS label.
 pub fn valid_hostname(name: &str) -> bool {
     (1..=63).contains(&name.len())
@@ -346,6 +360,7 @@ pub struct Tools {
     pub timeouts: Timeouts,
 }
 
+#[cfg(not(feature = "brick"))]
 impl Default for Tools {
     fn default() -> Self {
         Tools {
@@ -361,6 +376,24 @@ impl Default for Tools {
     }
 }
 
+#[cfg(feature = "brick")]
+impl Default for Tools {
+    fn default() -> Self {
+        // On the Brick's card the CLI is the card's wrapper and the key file goes to the card's RAM folder (no /run there).
+        let brick = brick_card();
+        Tools {
+            tailscale: std::env::var_os("POCKETUI_TAILSCALE").filter(|_| brick).map_or_else(|| PathBuf::from("/usr/sbin/tailscale"), PathBuf::from),
+            systemctl: "systemctl".into(),
+            system_cfg: PathBuf::from("/storage/.config/system/configs/system.cfg"),
+            run_dir: std::env::var_os("XDG_RUNTIME_DIR").filter(|_| brick).map_or_else(|| PathBuf::from("/run"), PathBuf::from),
+            defaults: PathBuf::from("/storage/.config/tailscaled.defaults"),
+            defaults_src: PathBuf::from("/usr/config/tailscaled.defaults"),
+            net_dir: PathBuf::from("/sys/class/net"),
+            timeouts: Timeouts::default(),
+        }
+    }
+}
+
 const SERVICE: &str = "tailscaled";
 const KEY_FILE: &str = "pocket-ui-tailscale-key";
 /// ROCKNIX's own `tailscaled.defaults`, for the day neither copy exists.
@@ -368,8 +401,34 @@ const DEFAULTS: &str = "PORT=\"41641\"\nFLAGS=\"\"\n";
 
 /// The arguments of `tailscale up` for a login or a reconnect. Always `--reset` (so earlier flags cannot make it
 /// refuse), always `--ssh=false` (Tailscale SSH must not take over port 22), the key by file, never by value.
+#[cfg(not(feature = "brick"))]
 pub fn up_args(hostname: Option<&str>, key_file: Option<&Path>, timeout: Option<Duration>) -> Vec<String> {
     let mut args: Vec<String> = ["up", "--reset", "--ssh=false"].map(String::from).to_vec();
+    if let Some(name) = hostname {
+        args.push(format!("--hostname={name}"));
+    }
+    if let Some(file) = key_file {
+        args.push(format!("--auth-key=file:{}", file.display()));
+    }
+    if let Some(t) = timeout {
+        args.push(format!("--timeout={}s", t.as_secs().max(1)));
+    }
+    args
+}
+
+#[cfg(feature = "brick")]
+pub fn up_args(hostname: Option<&str>, key_file: Option<&Path>, timeout: Option<Duration>) -> Vec<String> {
+    up_args_for(brick_card(), hostname, key_file, timeout)
+}
+
+/// `up_args`; on the Brick's card (`brick`) also `--accept-dns=false --netfilter-mode=off`: the firmware's resolv.conf and firewall are
+/// in its own flash, which the card never changes. The private update channel is reached by name through Tailscale's local proxy.
+#[cfg(feature = "brick")]
+pub fn up_args_for(brick: bool, hostname: Option<&str>, key_file: Option<&Path>, timeout: Option<Duration>) -> Vec<String> {
+    let mut args: Vec<String> = ["up", "--reset", "--ssh=false"].map(String::from).to_vec();
+    if brick {
+        args.extend(["--accept-dns=false", "--netfilter-mode=off"].map(String::from));
+    }
     if let Some(name) = hostname {
         args.push(format!("--hostname={name}"));
     }
@@ -1127,7 +1186,8 @@ mod tests {
     // --- never blocks ---
 
     #[test]
-    fn a_hanging_tailscale_or_systemctl_costs_a_bounded_wait() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_hanging_tailscale_or_systemctl_costs_a_bounded_wait() {
         // The stand-ins sleep for ten minutes and the configured timeouts are 0.4 to 1.5 s. What is asserted is that the
         // call comes back by its timeout and not when the program ends: each is held to its timeout plus a slack that a
         // loaded machine (every process start slow, the suite's other tests running) can't use up, but that is nowhere
@@ -1156,15 +1216,16 @@ mod tests {
     }
 
     #[test]
-    fn spawn_returns_at_once_and_delivers_later() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_spawn_returns_at_once_and_delivers_later() {
         let (t, dir) = tools("spawn", "sleep 30");
         std::fs::write(dir.join("active"), "").unwrap();
         let (tx, rx) = std::sync::mpsc::channel();
         let t0 = Instant::now();
         spawn("test-snapshot", move || snapshot(&t), move |s| tx.send(s).unwrap());
-        assert!(t0.elapsed() < Duration::from_millis(100), "the caller waited {:?}", t0.elapsed());
+        assert!(t0.elapsed() < crate::testutil::timeout(Duration::from_millis(100)), "the caller waited {:?}", t0.elapsed());
         assert!(rx.try_recv().is_err(), "not done yet");
-        let s = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+        let s = rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(10))).unwrap();
         assert!(t0.elapsed() >= Duration::from_millis(1000), "the stand-in hangs; the timeout ended it");
         assert!(s.installed);
     }
@@ -1179,10 +1240,19 @@ mod tests {
         let args = up_args(None, Some(key), None);
         assert_eq!(args, ["up", "--reset", "--ssh=false", "--auth-key=file:/run/pocket-ui-tailscale-key"]);
         assert!(!args.iter().any(|a| a.contains("--ssh=true") || a == "--ssh"));
+        #[cfg(feature = "brick")]
+        {
+        // The Brick's own card: the firmware's DNS and firewall stay as they are (docs/TRIMUI-BRICK-REMOTE.md).
+        let brick = up_args_for(true, Some("pocket-brick"), None, None);
+        assert_eq!(brick, ["up", "--reset", "--ssh=false", "--accept-dns=false", "--netfilter-mode=off", "--hostname=pocket-brick"]);
+        assert_eq!(up_args_for(false, None, None, None), ["up", "--reset", "--ssh=false"]);
+        assert!(valid_hostname(suggested_hostname()) && valid_hostname("pocket-brick"));
+        }
     }
 
     #[test]
-    fn the_login_reads_the_address_as_it_is_printed_and_ends_when_tailscale_does() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_login_reads_the_address_as_it_is_printed_and_ends_when_tailscale_does() {
         // Prints the address on stderr like the real one, waits (the user is on the phone), then succeeds.
         let (t, dir) = tools("login", "echo \"ts $*\" >> $(dirname $0)/calls\nprintf '\\nTo authenticate, visit:\\n\\n\\thttps://login.tailscale.com/a/1b2c3d4e5f6a7b\\n\\n' >&2\nsleep 1\necho Success.");
         let cancel = AtomicBool::new(false);
@@ -1211,7 +1281,8 @@ mod tests {
     }
 
     #[test]
-    fn cancelling_a_login_ends_tailscale_up() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_cancelling_a_login_ends_tailscale_up() {
         let (t, _dir) = tools("cancel", "echo 'https://login.tailscale.com/a/abc' >&2\nsleep 30");
         let cancel = std::sync::Arc::new(AtomicBool::new(false));
         let flag = cancel.clone();
@@ -1226,11 +1297,12 @@ mod tests {
             &mut |_| flag.store(true, Ordering::Relaxed),
         );
         assert_eq!(r, Err("Cancelled".into()));
-        assert!(t0.elapsed() < Duration::from_secs(3), "waited {:?}", t0.elapsed());
+        assert!(t0.elapsed() < crate::testutil::timeout(Duration::from_secs(3)), "waited {:?}", t0.elapsed());
     }
 
     #[test]
-    fn a_login_nobody_approves_times_out_and_a_failure_says_why() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_login_nobody_approves_times_out_and_a_failure_says_why() {
         let (mut t, _dir) = tools("timeout", "echo 'https://login.tailscale.com/a/abc' >&2\nsleep 30");
         t.timeouts.login = Duration::from_millis(500);
         let t0 = Instant::now();
@@ -1244,7 +1316,7 @@ mod tests {
             &mut |_| {},
         );
         assert_eq!(r, Err("Timed out".into()));
-        assert!(t0.elapsed() < Duration::from_secs(3));
+        assert!(t0.elapsed() < crate::testutil::timeout(Duration::from_secs(3)));
         let (t, _dir) = tools("fails", "echo 'Error: backend error: invalid key' >&2\nexit 1");
         let r = login(
             &t,

@@ -94,6 +94,7 @@ pub fn page_hints(c: &mut Canvas, text: &mut Text, hints: &[(&str, &str)]) -> Ve
         x += key_w + 10;
         x += text.draw(c, Face::Body, 21, x, base, pal().dust, label);
         x += 36;
+        crate::nav_probe::hint(c, (start, key_top, x - start - 36, key_h), key, label);
         if let Some(b) = hint_button(key) {
             areas.push((Area::new(start - 8, base - 46, x - start - 20, 64), b));
         }
@@ -111,7 +112,11 @@ pub fn pill_hints(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, hints: &[(
     let gap = (PILL - BUTTON) / 2;
     let (w, shown) = pill_layout(text, c.w, hints);
     let (x0, y0) = (c.w - PAD - w, c.h - PAD - PILL);
-    c.round_rect(x0, y0, w, PILL, PILL / 2, pal().pill);
+    if crate::retro::on() {
+        crate::retro::frame(c, x0, y0, w, PILL, pal().pill);
+    } else {
+        c.round_rect(x0, y0, w, PILL, PILL / 2, pal().pill);
+    }
     // For the snapshot checks of Settings → Text size: nothing else may run under the pill.
     crate::text::boxes::area(c, (x0, y0, w, PILL), "‹hints›");
     let mut x = x0 + gap;
@@ -123,6 +128,7 @@ pub fn pill_hints(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, hints: &[(
         x += bw + gap;
         text.draw(c, Face::Body, SMALL, x, base, pal().soft, label);
         x += lw + gap * 2;
+        crate::nav_probe::hint(c, (start, y0, x - start - gap, PILL), key, label);
         if let Some(b) = hint_button(key) {
             hits.button(Area::new(start - gap, y0 - 8, x - start - gap, PILL + 16), b);
         }
@@ -135,7 +141,11 @@ pub fn pill_hints(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, hints: &[(
 /// PlayStation shapes, every other key as it is. Every hint key goes through here (both hint bars, the manual's chips).
 pub fn key_cap(c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, i32), key: &str, px: u32, base: i32, (bg, fg): (u32, u32)) {
     let (bg, fg) = button_prompts::colours(key).unwrap_or((bg, fg));
-    c.round_rect(x, y, w, h, h / 2, bg);
+    if crate::retro::on() {
+        crate::retro::cap(c, x, y, w, h, bg);
+    } else {
+        c.round_rect(x, y, w, h, h / 2, bg);
+    }
     let shown = button_prompts::shown(key);
     let tw = text.width(Face::Body, px, shown);
     text.draw(c, Face::Body, px, x + (w - tw) / 2, base, fg, shown);
@@ -256,7 +266,12 @@ pub fn footer_baseline(screen_h: i32) -> i32 {
 /// a paper pill round the name running into a grey band, which looked half loaded (the visual review 2026-11-04, 2).
 /// Everything on it is `pal().ink`, quieter parts `pal().label_dust`.
 pub fn selection(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32) {
+    crate::nav_probe::focus(c, (x, y, w, h));
     let (y, h) = (y + 4, h - 8);
+    if crate::retro::on() {
+        crate::retro::bar(c, x, y, w, h);
+        return;
+    }
     c.round_rect(x, y, w, h, h / 2, pal().select);
     crate::game_card_model::lift_shadow(c, x + h / 2, y + h, w - h, pal().t);
 }
@@ -273,6 +288,7 @@ pub fn selection_striped(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, stripe:
 /// baseline.
 pub fn row_label(c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, i32), font: u32, label: &str, selected: bool) -> i32 {
     let base = y + h / 2 + type_scale::mid(font);
+    crate::nav_probe::row(c, (x, y, w, h));
     if selected {
         selection(c, x, y, w, h);
     }
@@ -354,6 +370,18 @@ pub fn row_value_in(c: &mut Canvas, text: &mut Text, font: u32, right: i32, base
 /// bar, the selected one the pulled-out label's paper, lifted off a light page by the label's shadow (the selection in
 /// Light was paper on paper, the weakest in the app: Muse's review A11). The caller paints ink on the selected one.
 pub fn shelf_row(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, selected: bool) {
+    crate::nav_probe::row(c, (x, y, w, h));
+    if selected {
+        crate::nav_probe::focus(c, (x, y, w, h));
+    }
+    if crate::retro::on() {
+        if selected {
+            crate::retro::bar(c, x, y, w, h);
+        } else {
+            crate::retro::notched(c, x, y, w, h, pal().spine);
+        }
+        return;
+    }
     c.rect(x, y, w, h, if selected { pal().label } else { pal().spine });
     if selected {
         crate::game_card_model::lift_shadow(c, x, y + h, w, pal().t);
@@ -374,6 +402,10 @@ pub fn scrollbar(c: &mut Canvas, top: i32, track: i32, first: usize, visible: us
 /// A panel: a live readout or a state that is not a choice (Performance & fan's "Now", safe mode's "What happened"),
 /// a rounded box in the pill colour. Its text starts `PANEL_PAD` in.
 pub fn panel(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32) {
+    if crate::retro::on() {
+        crate::retro::frame(c, x, y, w, h, pal().pill);
+        return;
+    }
     c.round_rect(x, y, w, h, PANEL_R, pal().pill);
 }
 
@@ -382,6 +414,10 @@ pub fn panel(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32) {
 pub fn sheet(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32) {
     // For the snapshot checks of Settings → Text size: the page under the sheet is dimmed, not read.
     crate::text::boxes::covered();
+    if crate::retro::on() {
+        crate::retro::frame(c, x, y, w, h, pal().void);
+        return;
+    }
     c.rect(x, y, w, h, pal().void);
     if pal().t > 0 {
         c.frame(x, y, w, h, 1, pal().pick(VOID, 0xd6d0c4));

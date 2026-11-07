@@ -382,6 +382,15 @@ const CHOSEN: u32 = 1 << 31;
 /// The switches in use: as they start until `set` (pocket-core, tools, tests).
 static ON: AtomicU32 = AtomicU32::new(DEFAULT_BITS);
 
+/// The line under Playful cases while it still follows Animations: what it is, and that Cozy switches it on (the Brick,
+/// 2026-11-07: Sound & feel → Animations flipping Playful cases as well looked like a fault).
+pub const PLAYFUL_FOLLOWS: &str = "Cases spring and wiggle. Follows Animations: on with Cozy, off with Quick, until you switch it.";
+
+/// The line under an extra's row in Settings: `line`, or for Playful cases that it follows Animations until switched.
+pub fn row_line(e: Extra, x: &Extras, line: &'static str) -> &'static str {
+    if e == Extra::Playful && x.playful_animations.is_none() { PLAYFUL_FOLLOWS } else { line }
+}
+
 /// Whether extra `e` is on.
 pub fn on(e: Extra) -> bool {
     let bits = ON.load(Ordering::Relaxed);
@@ -489,6 +498,10 @@ mod tests {
         let z: Extras = serde_json::from_str(r#"{"playful_animations": "yes"}"#).unwrap();
         assert_eq!(z.playful_animations, None, "not a bool: follows Animations");
         crate::motion::set_cozy(false);
+        // And its row says so, until it is switched: Cozy turning it on is no surprise then.
+        assert_eq!(row_line(Extra::Playful, &x, Extra::Playful.blurb()), PLAYFUL_FOLLOWS);
+        assert_eq!(row_line(Extra::Playful, &y, Extra::Playful.blurb()), Extra::Playful.blurb(), "chosen: its own line");
+        assert_eq!(row_line(Extra::CrtOn, &x, Extra::CrtOn.blurb()), Extra::CrtOn.blurb());
     }
 
     #[test]

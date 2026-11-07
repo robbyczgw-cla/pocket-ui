@@ -19,6 +19,7 @@ use std::{
     time::{Duration, Instant},
 };
 use ui::{Command, Preferences, Ui};
+use pocket_ui::platform::data_dir;
 use winit::{
     application::ApplicationHandler,
     event::{ElementState, TouchPhase, WindowEvent},
@@ -29,14 +30,21 @@ use winit::{
 };
 /// How long a finger rests on a game before its card opens.
 const LONG_PRESS: Duration = Duration::from_millis(450);
-static BACK_PROXY: std::sync::OnceLock<std::sync::RwLock<Option<winit::event_loop::EventLoopProxy<()>>>> = std::sync::OnceLock::new();
+enum BridgeEvent { Back, Configuration }
+static BACK_PROXY: std::sync::OnceLock<std::sync::RwLock<Option<winit::event_loop::EventLoopProxy<BridgeEvent>>>> = std::sync::OnceLock::new();
 #[no_mangle]
 pub extern "system" fn Java_dev_pocket_spike_PocketActivity_nativeBack(_: *mut jni::sys::JNIEnv, _: jni::sys::jobject) -> jni::sys::jboolean {
     BACK_PROXY
         .get()
         .and_then(|p| p.read().ok())
-        .and_then(|p| p.as_ref().map(|p| p.send_event(()).is_ok()))
+        .and_then(|p| p.as_ref().map(|p| p.send_event(BridgeEvent::Back).is_ok()))
         .unwrap_or(false) as jni::sys::jboolean
+}
+#[no_mangle]
+pub extern "system" fn Java_dev_pocket_spike_PocketActivity_nativeConfigurationChanged(_: *mut jni::sys::JNIEnv, _: jni::sys::jobject) {
+    if let Some(proxy)=BACK_PROXY.get().and_then(|p|p.read().ok()) {
+        if let Some(proxy)=proxy.as_ref() {let _=proxy.send_event(BridgeEvent::Configuration);}
+    }
 }
 fn bridge(name: &str, args: &[&str]) -> String {
     pocket_ui::platform::android::strings(name, args).unwrap_or_default()
@@ -143,6 +151,7 @@ struct App {
     check_at: Instant,
     media: mpsc::Sender<(Game, bool)>,
     media_policy: bool,
+    battery_saver: bool,
     media_results: mpsc::Receiver<Media>,
     cover_key: String,
     cover: Option<pocket_ui::image::Image>,
@@ -323,6 +332,7 @@ impl App {
         let eligible = self.window.is_some()
             && self.ui.prefs.onboarding_done
             && self.ui.prefs.extras.idle_slideshow
+            && !self.battery_saver
             && self.ui.keyboard.is_none()
             && self.scan.is_none()
             && matches!(self.ui.screen, ui::Screen::Library | ui::Screen::Favorites)
@@ -375,6 +385,15 @@ impl App {
                     let game = g.clone();
                     // Rediscover's input: when this game was last started.
                     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+                    let reminder = if self.ui.is_frozen(&game.key) {
+                        pocket_ui::where_was_i::card(&pocket_ui::where_was_i::Facts {
+                            on: self.ui.prefs.remind_where.unwrap_or(true), kids: false,
+                            easy: self.ui.prefs.theme == pocket_ui::settings::Theme::Big,
+                            last_played: self.ui.prefs.played.get(&game.key).copied(),
+                            play_secs: self.ui.prefs.play_secs.get(&game.key).copied().unwrap_or(0),
+                            note: "",
+                        }, now)
+                    } else { None };
                     self.ui.prefs.played.insert(game.key.clone(), now);
                     // Decorations' input: the time away counts as played when the launcher is back (`game_returned`).
                     self.ui.prefs.playing = Some((game.key.clone(), now));
@@ -399,6 +418,9 @@ impl App {
                         log::info!("launch: {} frozen={frozen}", game.name);
                         let mut settings = serde_json::to_value(&self.ui.prefs).unwrap_or_default();
                         settings["frozen_shown"] = frozen.into();
+                        if let Some(card) = reminder {
+                            settings["reminder"] = serde_json::json!({"ago":card.ago,"played":card.played,"note":card.note});
+                        }
                         let settings = settings.to_string();
                         let _ = pocket_ui::platform::android::strings(
                             "launchInternal",
@@ -664,6 +686,9 @@ impl App {
         let (lw, lh) = if showing {
             // The slideshow paints at half the screen's size: smooth enough for slow movement, a quarter of the work.
             (((w / 2).max(1)), ((h / 2).max(1)))
+        } else if self.ui.controls_open {
+            // This shared prose painter uses the same mobile canvas as the player, without the box's extra enlargement.
+            pocket_ui::scaled_layout::mobile_size((w,h),density)
         } else if zoom < 1.0 {
             let (mw, mh) = pocket_ui::scaled_layout::mobile_size((w, h), density);
             let k = (w.min(h) as f32 * zoom / mw.min(mh) as f32).clamp(0.5, 1.0);
@@ -694,8 +719,13 @@ impl App {
         Some(size)
     }
 }
-impl ApplicationHandler for App {
-    fn user_event(&mut self, _: &ActiveEventLoop, _: ()) {
+impl ApplicationHandler<BridgeEvent> for App {
+    fn user_event(&mut self, _: &ActiveEventLoop, event: BridgeEvent) {
+        if matches!(event,BridgeEvent::Configuration) {
+            self.ui.cover_changed();
+            self.redraw();
+            return;
+        }
         if self.show_input() {
             return;
         }
@@ -993,14 +1023,17 @@ impl ApplicationHandler for App {
         if Instant::now() >= self.check_at {
             self.refresh();
             let connected = bridge("deviceControls", &[]) == "controller";
-            if connected && !self.ui.controller_connected {
+            if connected != self.ui.controller_connected {
                 // A controller was just connected: show its hints until the screen is touched again.
-                self.ui.touch_mode = false;
+                self.ui.touch_mode = !connected;
                 self.redraw();
             }
             self.ui.controller_connected = connected;
+            let saver = bridge("batterySaver", &[]) == "true";
+            if saver != self.battery_saver {log::info!("Android battery saver={saver}");}
+            self.battery_saver = saver;
             self.ui.wifi_ready = bridge("unmeteredWifi", &[]) == "true";
-            let policy = self.ui.prefs.download_media == Some(true) && self.ui.wifi_ready;
+            let policy = self.ui.prefs.download_media == Some(true) && self.ui.wifi_ready && !self.battery_saver;
             if policy != self.media_policy {
                 self.media_policy = policy;
                 self.cover_key.clear();
@@ -1121,7 +1154,7 @@ fn android_main(android: AndroidApp) {
                 request = next;
             }
             let (game, wanted) = request;
-            let download = wanted && bridge("unmeteredWifi", &[]) == "true";
+            let download = wanted && bridge("unmeteredWifi", &[]) == "true" && bridge("batterySaver", &[]) != "true";
             let image = picture(&game, false, download);
             if results.send(Media::Cover(game.key.clone(), image)).is_err() {
                 break;
@@ -1148,7 +1181,7 @@ fn android_main(android: AndroidApp) {
             }
         }
     });
-    let mut builder = EventLoop::builder();
+    let mut builder = EventLoop::<BridgeEvent>::with_user_event();
     builder.with_android_app(android);
     let event_loop = builder.build().expect("Android event loop");
     *BACK_PROXY
@@ -1171,6 +1204,7 @@ fn android_main(android: AndroidApp) {
         check_at: Instant::now(),
         media,
         media_policy: false,
+        battery_saver: false,
         media_results,
         cover_key: String::new(),
         cover: None,

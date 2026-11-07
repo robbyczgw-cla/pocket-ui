@@ -506,6 +506,7 @@ AYN Odin 2
 AYN Odin 2 Mini
 AYN Odin 2 Portal
 Anbernic RG28XX
+Anbernic RG DS Plus
 Anbernic RG35XX SP
 Anbernic RG35XX 2024
 Anbernic RG35XX Plus
@@ -555,7 +556,10 @@ roms/Sega Genesis
 Eden
 # The same word in Spanish, so its pattern changes nothing: a device's name with its note (About).
 re:\(experimental\)$
+TrimUI Brick
 Some Game (USA).chd
+Pocket UI
+Brick motor
 
 # A player's own note on the game card, as --snapshot where-was-i shows it (the player's words, never translated)
 Fire temple, key still missing.
@@ -575,3 +579,12 @@ Turbo R
 Z
 HOME
 re:^HOME \+ 
+
+# The menu button printed on TrimUI Brick.
+MENU
+re:^MENU \+
+
+8BitDo SN30 Pro
+
+# src/app_test_buttons.rs: the made-up unknown input of the test-buttons:unknown snapshot, a controller's own evdev name and code (data)
+8BitDo SN30 Pro: BTN_C 1

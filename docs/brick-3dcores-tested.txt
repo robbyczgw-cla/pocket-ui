@@ -1,0 +1,10 @@
+Brick 3D cores, builds of 2026-11-03 (zig 0.17.0 on an Apple-silicon Mac, aarch64-linux-gnu.2.33, scripts/brick-build-cores.sh)
+core                 commit   size      sha256 (two clean builds in different folders: identical)
+mupen64plus_next     f275caf  4644784   63e603f7916c21d6827d40f446630097959d6334f8520da45d17247d7627507c
+ppsspp               fa50bb1  18138248  f9f1783ea69e7a7bd560474a1fa57d3f7a65a5cdafaf130b4a2a8c93442a1fac
+flycast              c3763d8  34766936  9e7cd34c6ba326c0c586dca0abeb6910e35cc38c0dc7af909f9810959957c8dc
+Source archives (ppsspp, flycast) were identical in both builds too.
+NEEDED: all three: libm, libc, libpthread, libdl (Brick's glibc 2.33); ppsspp also librt; mupen64plus_next and ppsspp also libGLESv2.so.2 and
+libEGL.so.1 (the Brick's vendor libraries, not shipped); flycast loads GL through the frontend (glsm) and needs neither. Highest GLIBC symbol 2.33. NODELETE set.
+Load check (scripts/brick-core-check-qemu.sh, qemu-user, the Brick's glibc and vendor libraries): dlopen, retro_init, retro_deinit, dlclose all OK.
+No game was run and no 3D frame drawn: speed, GPU path and memory on the GE8300 are for the device.

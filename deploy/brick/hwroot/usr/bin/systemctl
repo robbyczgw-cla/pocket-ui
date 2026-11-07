@@ -1,0 +1,86 @@
+#!/bin/sh
+# Stand-in for the `systemctl` calls pocket-ui makes for power. There is no systemd on the Brick.
+#   poweroff / reboot   sync, then the firmware's own poweroff / reboot (BusyBox)
+#   suspend             screen off, Wi-Fi client and Bluetooth stopped, then the kernel's "mem" state (UNPROVEN on a real Brick);
+#                       the call returns when it has woken up, everything is put back first
+#   start|stop|is-active tailscaled   the card's Tailscale (brick-tailscale), started at boot when Settings > Tailscale is on
+#   start|stop|is-active sshd         Remote access (brick-ssh): dropbear with the device's password
+#   start|stop|restart|is-active syncthing   save sync (brick-syncthing), started at boot when Settings > Sync is on
+#   is-active <other>   "inactive" (nothing else here is a service)
+# Every other verb says it is not available (exit 1), so the caller's "did not work" path is the one that shows.
+HW=${BRICK_HW:-/mnt/SDCARD/pocket-ui/bin/brick-hw}
+STATE=${BRICK_STATE:-/tmp}
+POWER_STATE=${BRICK_POWER_STATE:-/sys/power/state}
+for a in "$@"; do case "$a" in --*) ;; *) if [ -z "${verb:-}" ]; then verb=$a; else unit=${unit:-$a}; fi ;; esac; done
+BIN=$(dirname "$0")
+case "${unit:-}" in
+  bluetooth|bluetooth.service) service=$BIN/brick-bluetooth ;;
+  tailscaled|tailscaled.service) service=$BIN/brick-tailscale ;;
+  sshd|sshd.service|dropbear) service=$BIN/brick-ssh ;;
+  syncthing|syncthing.service) service=$BIN/brick-syncthing ;;
+  *) service= ;;
+esac
+if [ -n "$service" ]; then
+  case "$verb" in
+    start|stop) exec "$service" "$verb" ;;
+    restart) "$service" stop; exec "$service" start ;;
+    is-active) if "$service" status; then echo active; exit 0; else echo inactive; exit 3; fi ;;
+  esac
+fi
+case "${verb:-}" in
+  poweroff)
+    # The lights go out with the Brick (the driver keeps its last effect on while the board powers down otherwise).
+    LA=${BRICK_LED_ANIM:-/sys/class/led_anim}
+    for z in l r lr m f1 f2; do echo 0 >"$LA/effect_$z" 2>/dev/null; done
+    echo 0 >"$LA/effect_enable" 2>/dev/null
+    echo 0 >"$LA/max_scale" 2>/dev/null
+    # and the driver's raw picture, which glows on past the effects (23 LEDs; 03.11.)
+    echo 0 >"$LA/anim_frames_enable" 2>/dev/null
+    [ -e "$LA/frame_hex" ] && printf '%s' '000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 ' >"$LA/frame_hex" 2>/dev/null
+    sync; ${BRICK_POWEROFF:-poweroff} ;;
+  reboot) sync; ${BRICK_REBOOT:-reboot} ;;
+  suspend)
+    # What the firmware's own key handler does (screen off, Bluetooth radio off, then "mem"), plus what NextUI's suspend script
+    # found necessary: the Wi-Fi client is stopped before and started after, and a refused or too-short sleep is tried again.
+    sync
+    was=$("$HW" bl-get 2>/dev/null)
+    "$HW" bl-set 0 2>/dev/null
+    for r in "${BRICK_RFKILL:-/sys/class/rfkill}"/rfkill*; do
+      [ "$(cat "$r/type" 2>/dev/null)" = bluetooth ] && echo 0 >"$r/state" 2>/dev/null
+    done
+    wpa=${BRICK_WPA_INIT:-/etc/init.d/wpa_supplicant}
+    [ -x "$wpa" ] && "$wpa" stop >/dev/null 2>&1
+    tries=0
+    while [ $tries -lt 3 ]; do
+      tries=$((tries + 1))
+      t0=$(cut -d. -f1 "${BRICK_UPTIME:-/proc/uptime}" 2>/dev/null)
+      if echo mem >"$POWER_STATE" 2>/dev/null; then break; fi
+      t1=$(cut -d. -f1 "${BRICK_UPTIME:-/proc/uptime}" 2>/dev/null)
+      [ $(( ${t1:-0} - ${t0:-0} )) -ge 5 ] && break        # it did sleep (the write reports an error on some wake-ups)
+      sleep "${BRICK_SUSPEND_RETRY:-3}"
+    done
+    [ -x "$wpa" ] && "$wpa" start >/dev/null 2>&1
+    # The udhcpc that ran through it must renew: the supplicant's restart takes the default route with it, and a udhcpc that just keeps
+    # running never puts it back (seen on the real Brick, 03.11.: LAN fine, nothing outside it, Tailscale offline).
+    if pids=$("${BRICK_PIDOF:-pidof}" udhcpc 2>/dev/null); then kill -USR1 $pids 2>/dev/null; else "${BRICK_UDHCPC:-udhcpc}" -i wlan0 -b >/dev/null 2>&1; fi
+    for r in "${BRICK_RFKILL:-/sys/class/rfkill}"/rfkill*; do
+      [ "$(cat "$r/type" 2>/dev/null)" = bluetooth ] && echo 1 >"$r/state" 2>/dev/null
+    done
+    [ -n "$was" ] && "$HW" bl-set "$was" 2>/dev/null
+    ;;
+  restart)
+    # The only service pocket-ui restarts is network time (`sync_time`). There is no timesyncd here: one shot of
+    # the firmware's ntpd sets the clock and goes (`-q`), and the note it leaves is what the timedatectl stand-in
+    # reports. No ntpd, no answer from the server: exit 1, and the page says the time could not be fetched.
+    case " $* " in *" systemd-timesyncd "*) ;; *) echo "systemctl: $* is not available on the Brick" >&2; exit 1 ;; esac
+    NTPD=${BRICK_NTPD:-ntpd}
+    command -v "$NTPD" >/dev/null 2>&1 || { echo "systemctl: no ntpd on this Brick" >&2; exit 1; }
+    if "$NTPD" -q -p "${BRICK_NTP_SERVER:-pool.ntp.org}" >/dev/null 2>&1; then
+      mkdir -p "${BRICK_STATE:-/mnt/SDCARD/pocket-ui/storage/.config/pocket-ui}" 2>/dev/null
+      : >"${BRICK_STATE:-/mnt/SDCARD/pocket-ui/storage/.config/pocket-ui}/ntp-synced" 2>/dev/null
+      exit 0
+    fi
+    exit 1 ;;
+  is-active) echo inactive; exit 3 ;;
+  *) echo "systemctl: $* is not available on the Brick" >&2; exit 1 ;;
+esac

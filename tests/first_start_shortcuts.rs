@@ -27,12 +27,7 @@ impl Card {
         assert!(ok.success());
         let stub = (cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|w| w.is_empty())).then(|| {
             let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), dir.path().join("wl").to_str().unwrap()]).spawn().unwrap();
-            for _ in 0..200 {
-                if dir.path().join("wl").exists() {
-                    break;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
+            test_clock::wait_for(|| dir.path().join("wl").exists(), std::time::Duration::from_secs(2), "Wayland stub listening");
             Stub(child)
         });
         Card { dir, _stub: stub }
@@ -71,21 +66,22 @@ fn sees(screen: &str, what: &str) -> bool {
     screen.lines().any(|l| l.contains(what))
 }
 
-/// B: no Wi-Fi chip (RG28XX): Welcome, look, play style, time zone, games. The Wi-Fi and Extras pages are not there.
+/// B: no Wi-Fi chip (RG28XX): the language, then the time zone in Wi-Fi's place, then your games. No Wi-Fi page.
 #[test]
-fn a_handheld_without_wifi_counts_five_steps_and_goes_from_the_play_style_to_the_zone() {
+fn a_handheld_without_wifi_asks_the_time_zone_in_wifis_place() {
     let card = Card::new();
-    for (lang, zone, steps_of) in [("en", "Time zone", "Step 4 of 5"), ("de", "Zeitzone", "Schritt 4 von 5"), ("es", "Zona horaria", "Paso 4 de 5")] {
-        // Welcome, A, A (the play style), A (The shelf): the zone, not Wi-Fi.
-        let page = card.screen("setup:first:aaa:device=rg28xx", lang, "640x480");
-        assert!(sees(&page, zone) && sees(&page, steps_of), "{lang}: {page}");
-        // A on the zone, then the games: the fifth step.
-        let games = card.screen("setup:first:aaaa:device=rg28xx", lang, "640x480");
-        assert!(games.contains(&steps_of.replace('4', "5")), "{lang}: {games}");
+    for (lang, zone, wifi, games) in [("en", "Time zone", "Wi-Fi", "Your games"), ("de", "Zeitzone", "WLAN", "Deine Spiele"), ("es", "Zona horaria", "Wi-Fi", "Tus juegos")] {
+        // The welcome, A: the zone, not Wi-Fi.
+        let page = card.screen("setup:first:a:device=rg28xx", lang, "640x480");
+        assert!(sees(&page, zone) && !page.lines().any(|l| l == wifi), "{lang}: {page}");
+        assert!(sees(&page, "Skip the rest") || lang != "en", "the first start's keys: {page}");
+        // A on its first row (Keep UTC): your games. B would go back to the welcome, as on every stage.
+        let found = card.screen("setup:first:aa:device=rg28xx", lang, "640x480");
+        assert!(sees(&found, games), "{lang}: {found}");
     }
-    // A handheld with Wi-Fi still has seven.
-    let page = card.screen("setup:first:aa:device=rg35xx-sp", "en", "640x480");
-    assert!(sees(&page, "Step 3 of 7"), "{page}");
+    // A handheld with Wi-Fi has its Wi-Fi page, with the Time zone row.
+    let page = card.screen("setup:first:a:device=rg35xx-sp", "en", "640x480");
+    assert!(sees(&page, "Wi-Fi") && sees(&page, "Time zone"), "{page}");
 }
 
 /// C: Kids Mode's page with no games offers the starter pack (X), in every language, without crowding the hints.
@@ -111,9 +107,9 @@ fn the_play_style_page_from_settings_has_four_answers_and_no_child_mode() {
         }
         assert!(!sees(&page, "For a child") && !sees(&page, "Für ein Kind") && !sees(&page, "Para un niño"), "{lang}: {page}");
     }
-    // The row itself: first in Help & tools, with where the switches stand.
-    let row = card.screen("settings:6:0", "en", "640x480");
-    assert!(sees(&row, "How you like to play") && sees(&row, "The shelf"), "{row}");
+    // The row itself: in Help & tools under First-start setup, with where the switches stand.
+    let row = card.screen("settings:6:1", "en", "640x480");
+    assert!(sees(&row, "How you like to play") && sees(&row, "The shelf") && sees(&row, "First-start setup"), "{row}");
 }
 
 /// E: Home with no games, offline: the one button leads to Wi-Fi, and says what waits afterwards. Online: the pack.
@@ -178,8 +174,8 @@ fn the_starter_page_in_kids_mode_says_where_b_goes() {
     }
 }
 
-/// The first start's last page ("You're all set") names HOME in a plain line (a first game in RetroArch or another emulator has no line over
-/// it), fits 640x480 in all three languages, and stays away in Kids Mode and in Settings' Add games.
+/// The first start's last stage names HOME in a plain line beside Finish (a first game in RetroArch or another emulator
+/// has no line over it), fits 640x480 in all three languages, and stays away in Kids Mode and in Settings' Add games.
 #[test]
 fn the_last_page_of_the_first_start_says_what_home_does() {
     let card = Card::new();
@@ -188,8 +184,7 @@ fn the_last_page_of_the_first_start_says_what_home_does() {
         ("de", "Im Spiel öffnet HOME das Menü: Speichern, Laden, Beenden."),
         ("es", "En un juego, HOME abre el menú: guardar, cargar, salir."),
     ] {
-        // Welcome, look, play style, The shelf, time zone, games (START): "You're all set" on a handheld without Wi-Fi.
-        let page = card.screen("setup:first:aaaas:device=rg28xx", lang, "640x480");
+        let page = card.screen("setup:first-look:device=rg28xx", lang, "640x480");
         assert!(sees(&page, line), "{lang}: {page}");
         // Settings' Add games is not the first start.
         assert!(!sees(&card.screen("setup:games", lang, "640x480"), line), "{lang}: Settings");
@@ -197,6 +192,6 @@ fn the_last_page_of_the_first_start_says_what_home_does() {
     let kids = Card::new();
     std::fs::create_dir_all(kids.dir.path().join("data")).unwrap();
     std::fs::write(kids.dir.path().join("data/kids.json"), br#"{"on":true}"#).unwrap();
-    let page = kids.screen("setup:first:aaaas:device=rg28xx", "en", "640x480");
+    let page = kids.screen("setup:first-look:device=rg28xx", "en", "640x480");
     assert!(!sees(&page, "HOME"), "Kids Mode: {page}");
 }

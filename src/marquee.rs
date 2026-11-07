@@ -7,16 +7,17 @@ use std::time::{Duration, Instant};
 use crate::gfx::Canvas;
 use crate::text::{Face, Text};
 
-/// How long the start of the title rests before (and between) passes.
+/// How long the start of the title rests before the pass and at its far end.
 const REST: Duration = Duration::from_millis(1500);
 
 pub struct Marquee {
     key: String,
     since: Instant,
     layout: (u32, i32, i32),
-    /// Something is scrolling in the frame being painted; the app keeps redrawing while it is set.
+    /// The selected name overflows in the last frame; keep its selection key even once the pass settles.
     active: bool,
-    was_active: bool,
+    /// Next visible change, rather than frames throughout the two rests.
+    wake: Option<Instant>,
 }
 
 impl Default for Marquee {
@@ -26,7 +27,7 @@ impl Default for Marquee {
             since: Instant::now(),
             layout: (0, 0, 0),
             active: false,
-            was_active: false,
+            wake: None,
         }
     }
 }
@@ -44,7 +45,10 @@ pub fn offset(t: Duration, travel: f32, px: u32) -> f32 {
     }
     let pass = travel / speed(px);
     let rest = REST.as_secs_f32();
-    let phase = t.as_secs_f32() % (2.0 * rest + 2.0 * pass);
+    let phase = t.as_secs_f32();
+    if phase >= 2.0 * rest + 2.0 * pass {
+        return 0.0;
+    }
     if phase < rest {
         0.0
     } else if phase < rest + pass {
@@ -56,25 +60,45 @@ pub fn offset(t: Duration, travel: f32, px: u32) -> f32 {
     }
 }
 
+/// A pass has two still rests and two moving legs, then ends. A delayed frame always paints its current
+/// position and computes the next change from that position, so a timer cannot spin on a past deadline.
+fn next_change(elapsed: Duration, travel: f32, px: u32) -> Option<Duration> {
+    if travel <= 0.0 { return None; }
+    let pass = Duration::from_secs_f32(travel / speed(px));
+    let end = REST * 2 + pass * 2;
+    if elapsed < REST {
+        Some(REST - elapsed)
+    } else if elapsed < REST + pass {
+        Some(Duration::from_micros(16_667).min(REST + pass - elapsed))
+    } else if elapsed < REST * 2 + pass {
+        Some(REST * 2 + pass - elapsed)
+    } else if elapsed < end {
+        Some(Duration::from_micros(16_667).min(end - elapsed))
+    } else {
+        None
+    }
+}
+
 impl Marquee {
     /// Call once at the start of each frame.
     pub fn begin_frame(&mut self) {
         if !self.active {
             self.key.clear();
         }
-        self.was_active = std::mem::take(&mut self.active);
+        self.active = false;
+        self.wake = None;
     }
 
-    /// True while the last frame drew a scrolling title (asks for the next frame).
-    pub fn animating(&self) -> bool {
-        self.active || self.was_active
+    /// The next visible change of the selected title; None once its one pass has returned home.
+    pub fn next_wake(&self) -> Option<Instant> {
+        self.wake
     }
 
     /// The next title drawn starts from rest, even if it is the one that was scrolling (a new screen).
     pub fn restart(&mut self) {
         self.key.clear();
         self.active = false;
-        self.was_active = false;
+        self.wake = None;
     }
 
     /// Draws the selected row's title in `max_w` pixels from `x`: as is when it fits, else scrolling.
@@ -95,7 +119,11 @@ impl Marquee {
             return;
         }
         self.active = true;
-        let off = offset(self.since.elapsed(), (width - max_w) as f32, px);
+        let now = Instant::now();
+        let elapsed = now.saturating_duration_since(self.since);
+        let travel = (width - max_w) as f32;
+        self.wake = next_change(elapsed, travel, px).map(|after| now + after);
+        let off = offset(elapsed, travel, px);
         if off <= 0.5 {
             let fitted = text.fit(face, px, s, max_w);
             text.draw(c, face, px, x, baseline, color, &fitted);
@@ -157,6 +185,30 @@ mod tests {
     }
 
     #[test]
+    fn idle_shelf_requests_no_redraw_after_the_title_has_returned_home() {
+        let mut text = Text::new();
+        let mut pixels = vec![0; 400 * 100];
+        let mut m = Marquee::default();
+        let title = "The Legend of Zelda: Link's Awakening DX";
+        m.begin_frame();
+        m.draw(&mut text, &mut Canvas::new(&mut pixels, 400, 100), Face::Body, 28, 10, 60, 180, 0xffffff, title);
+        assert!(m.next_wake().is_some(), "a long name still gets its reading pass");
+        let travel = (m.layout.2 - m.layout.1) as f32;
+        assert_eq!(next_change(Duration::ZERO, travel, 28), Some(REST), "sleep through the initial rest");
+        for second in 60..120 {
+            m.since = Instant::now() - Duration::from_secs(second);
+            m.begin_frame();
+            m.draw(&mut text, &mut Canvas::new(&mut pixels, 400, 100), Face::Body, 28, 10, 60, 180, 0xffffff, title);
+            assert!(m.next_wake().is_none(), "a clock/battery frame must not restart the title at {second}s");
+            assert_eq!(offset(Duration::from_secs(second), travel, 28), 0.0);
+        }
+        m.restart();
+        m.begin_frame();
+        m.draw(&mut text, &mut Canvas::new(&mut pixels, 400, 100), Face::Body, 28, 10, 60, 180, 0xffffff, title);
+        assert!(m.next_wake().is_some(), "reselecting the title gives it a fresh pass");
+    }
+
+    #[test]
     fn fitting_titles_do_not_animate() {
         let mut text = Text::new();
         let mut buf = vec![0u32; 400 * 100];
@@ -176,7 +228,7 @@ mod tests {
             0xffffff,
             "The Legend of Zelda: Link's Awakening DX",
         );
-        assert!(m.active && m.animating());
+        assert!(m.active && m.next_wake().is_some());
         assert!(buf.chunks(400).all(|row| row[130..].iter().all(|p| *p == 0)), "nothing drawn right of the row");
         assert!(
             buf.iter().any(|p| *p != 0),

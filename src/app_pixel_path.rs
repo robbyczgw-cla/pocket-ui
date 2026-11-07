@@ -346,7 +346,7 @@ impl App {
             let cy = y0 + 34 - lift;
             let colour = s.grade.colour();
             if i == sel && !about {
-                c.round_rect(pad, y0 + 2, right - pad, row - 6, 24, 0x222225);
+                pocket_ui::retro::pill(c, pad, y0 + 2, right - pad, row - 6, 24, 0x222225);
             }
             // The line to the next stage, in this stage's colour, quieter than the dots.
             if i + 1 < path.stages.len() {
@@ -459,7 +459,7 @@ impl App {
         }
         let h = fixed(font) + lines.len() as i32 * step;
         let (x, y) = (NU_PAD + 40, ((c.h - h) / 2).max(NU_PAD + NU_PILL + 10));
-        c.round_rect(x, y, w, h, 28, 0x1a1a1c);
+        pocket_ui::retro::window(c, x, y, w, h, 28, 0x1a1a1c);
         let colour = s.grade.colour();
         let base = y + inner + 30 + g1;
         c.disc(x + inner + 9, base - 11, 9, colour);

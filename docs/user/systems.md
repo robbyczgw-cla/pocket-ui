@@ -93,6 +93,10 @@ with the emulators ROCKNIX used for these systems before: RetroArch's N64 saves,
 `roms/psp/PSP/SAVEDATA` and each Dreamcast game's memory card, so a game saved there continues here and
 the other way round. The PSP needs no BIOS file: the fonts and tables its menus use (such as the save dialog) come with ROCKNIX, and
 pocket-ui copies the ones missing into `roms/bios/PPSSPP` before a PSP game starts, never replacing a file you put there.
+
+Jeanne d'Arc starts in ROCKNIX's standalone PPSSPP by default because its libretro build can stop in the
+opening movie. Save inside the game before quitting; standalone PPSSPP keeps its own save states.
+Any moments kept by pocket-core stay on the card. Your explicit choice under **Runs on** still wins.
 This happens once; later starts use the files already there.
 
 **Nintendo DS**: both screens are shown one above the other, as large as they fit. R3 switches to side by
@@ -229,7 +233,7 @@ Pause menu: Continue, Save, Load, Options, Quick settings, Quit (it follows Sett
 
 - **Save** and **Load** use the emulator's own slots 1 to 8, plus Where I quit and Before load (on 3DS: Azahar's one quick
   slot, the one ROCKNIX's HOME + R1 and HOME + L1 use). See
-  [Save slots](pause-menu.md#save-slots-where-i-quit-and-before-load).
+  [Save slots](pause-menu-saves.md#save-slots-where-i-quit-and-before-load).
 - **Options** sets resolution, renderer, aspect ratio and more for the game; see
   [Options](options-big.md).
 - **Quit** saves the moment, then closes the emulator ("Saving and quitting…"). This takes a few

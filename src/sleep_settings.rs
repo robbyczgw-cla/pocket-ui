@@ -89,7 +89,7 @@ pub struct Config {
     pub screen_off: Option<u32>,
     /// Minutes with the screen off before the system suspends (deep sleep); None = never.
     pub sleep_after: Option<u32>,
-    /// Hours in deep sleep before the Pocket saves and switches off (`auto_off`); None = never.
+    /// Minutes in deep sleep (or dark, where the screen only goes off) before the Pocket saves and switches off (`auto_off`); None = never.
     pub off_after: Option<u32>,
     pub short_press: ShortPress,
     pub hold: Hold,
@@ -109,6 +109,7 @@ impl Default for Config {
 
 /// `sleep.json` as written. The times are numbers with 0 for never, so that a missing key (a file from before) and
 /// "never" are told apart; `light_after` is the old key, read when `screen_off_secs` is missing and still written.
+#[cfg(not(feature = "brick"))]
 #[derive(Serialize, Deserialize)]
 struct Stored {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -127,8 +128,37 @@ struct Stored {
     hold: Option<String>,
 }
 
+#[cfg(feature = "brick")]
+#[derive(Serialize, Deserialize)]
+struct Stored {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    screen_off_secs: Option<u32>,
+    /// Some(None): written as null, "Off". None: not in the file.
+    #[serde(default, deserialize_with = "present")]
+    light_after: Option<Option<u32>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sleep_after_min: Option<u32>,
+    /// Hours, as before 2026-11-03 (still written, rounded up, for an older version); `off_after_min` wins where it is there.
+    #[serde(default = "default_off")]
+    off_after: Option<u32>,
+    /// Minutes, 0 for never (15 and 30 min are choices since 2026-11-03).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    off_after_min: Option<u32>,
+    /// Words, not an enum, so that a value of a newer version leaves the rest of the file readable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    short_press: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    hold: Option<String>,
+}
+
+#[cfg(not(feature = "brick"))]
 fn default_off() -> Option<u32> {
     crate::auto_off::DEFAULT
+}
+
+#[cfg(feature = "brick")]
+fn default_off() -> Option<u32> {
+    crate::auto_off::DEFAULT.map(|m| m.div_ceil(60))
 }
 
 /// A key that is there, even as null.
@@ -141,6 +171,7 @@ fn never_is_zero(v: u32) -> Option<u32> {
 }
 
 impl From<Stored> for Config {
+    #[cfg(not(feature = "brick"))]
     fn from(s: Stored) -> Config {
         let screen_off = match (s.screen_off_secs, s.light_after) {
             (Some(secs), _) => never_is_zero(secs),
@@ -156,15 +187,46 @@ impl From<Stored> for Config {
             hold: Hold::ALL.into_iter().find(|h| s.hold.as_deref() == Some(h.key())).unwrap_or_default(),
         }
     }
+
+    #[cfg(feature = "brick")]
+    fn from(s: Stored) -> Config {
+        let screen_off = match (s.screen_off_secs, s.light_after) {
+            (Some(secs), _) => never_is_zero(secs),
+            // Before this page: the minutes of Settings → Playing → Battery's "Sleep after".
+            (None, Some(minutes)) => minutes.filter(|m| *m > 0).map(|m| m.saturating_mul(60)),
+            (None, None) => SCREEN_OFF_DEFAULT,
+        };
+        Config {
+            screen_off,
+            sleep_after: s.sleep_after_min.map_or(SLEEP_AFTER_DEFAULT, never_is_zero),
+            off_after: match s.off_after_min { Some(m) => never_is_zero(m), None => s.off_after.map(|h| h.saturating_mul(60)) },
+            short_press: ShortPress::ALL.into_iter().find(|p| s.short_press.as_deref() == Some(p.key())).unwrap_or_default(),
+            hold: Hold::ALL.into_iter().find(|h| s.hold.as_deref() == Some(h.key())).unwrap_or_default(),
+        }
+    }
 }
 
 impl From<Config> for Stored {
+    #[cfg(not(feature = "brick"))]
     fn from(c: Config) -> Stored {
         Stored {
             screen_off_secs: Some(c.screen_off.unwrap_or(0)),
             light_after: Some(c.screen_off.map(|s| s.div_ceil(60))),
             sleep_after_min: Some(c.sleep_after.unwrap_or(0)),
             off_after: c.off_after,
+            short_press: Some(c.short_press.key().into()),
+            hold: Some(c.hold.key().into()),
+        }
+    }
+
+    #[cfg(feature = "brick")]
+    fn from(c: Config) -> Stored {
+        Stored {
+            screen_off_secs: Some(c.screen_off.unwrap_or(0)),
+            light_after: Some(c.screen_off.map(|s| s.div_ceil(60))),
+            sleep_after_min: Some(c.sleep_after.unwrap_or(0)),
+            off_after: c.off_after.map(|m| m.div_ceil(60)),
+            off_after_min: Some(c.off_after.unwrap_or(0)),
             short_press: Some(c.short_press.key().into()),
             hold: Some(c.hold.key().into()),
         }
@@ -227,6 +289,21 @@ pub enum Row {
 
 /// Kept short enough for the settings page in both languages.
 pub const NO_SLEEP: &str = "ROCKNIX sleep is unavailable here; the screen turns off instead.";
+/// The Brick's own card: the system could sleep, but it has not been proven on this firmware, and a game is never put at risk, so
+/// the screen goes off instead. Said as what happens (under Screen off in the power menu too), in one line on the Sleep & power page:
+/// at two the selected row's explanation was cut to one line with "…" (settings walk 06.11.).
+#[cfg(feature = "brick")]
+const NO_SLEEP_BRICK: &str = "The screen goes off and the game waits; any button wakes it.";
+
+/// `NO_SLEEP` for this device.
+#[cfg(feature = "brick")]
+pub fn no_sleep() -> &'static str {
+    #[cfg(feature = "brick")]
+    if crate::device::brick() {
+        return NO_SLEEP_BRICK;
+    }
+    NO_SLEEP
+}
 const SCREEN_ONLY_ROWS: [Row; 4] = [Row::ScreenOff, Row::Slideshow, Row::SwitchOff, Row::ShortPress];
 /// A Steam Deck: SteamOS owns sleep and the power button (docs/STEAMDECK.md); the slideshow is pocket-ui's own.
 const HOST_ROWS: [Row; 1] = [Row::Slideshow];
@@ -407,12 +484,23 @@ mod tests {
         serde_json::from_str(json).unwrap()
     }
 
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn screen_only_normalises_old_sleep_choices_but_keeps_the_explicit_off_timer() {
         let old = Config { sleep_after: Some(1), off_after: Some(8), short_press: ShortPress::Sleep, hold: Hold::Sleep, ..Config::default() };
         let safe = old.for_device(true);
         assert_eq!((safe.sleep_after, safe.short_press, safe.hold), (None, ShortPress::ScreenOff, Hold::Menu));
         assert_eq!(safe.off_after, Some(8));
+        assert_eq!(old.for_device(false), old, "SM8250 settings stay exactly as before");
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn screen_only_normalises_old_sleep_choices_but_keeps_the_explicit_off_timer() {
+        let old = Config { sleep_after: Some(1), off_after: Some(480), short_press: ShortPress::Sleep, hold: Hold::Sleep, ..Config::default() };
+        let safe = old.for_device(true);
+        assert_eq!((safe.sleep_after, safe.short_press, safe.hold), (None, ShortPress::ScreenOff, Hold::Menu));
+        assert_eq!(safe.off_after, Some(480));
         assert_eq!(old.for_device(false), old, "SM8250 settings stay exactly as before");
     }
 
@@ -426,6 +514,7 @@ mod tests {
         assert_eq!(parse("{}"), c, "no file, or an empty one");
     }
 
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn a_file_from_before_the_page_keeps_its_time() {
         // Settings → Playing → Battery's "Sleep after": Off, 1, 3 (the old default), 5 min.
@@ -438,12 +527,50 @@ mod tests {
         assert_eq!((old.sleep_after, old.short_press, old.hold), (Some(2), ShortPress::Sleep, Hold::Menu));
     }
 
+    #[cfg(feature = "brick")]
+    #[test]
+    fn a_file_from_before_the_page_keeps_its_time() {
+        // Settings → Playing → Battery's "Sleep after": Off, 1, 3 (the old default), 5 min.
+        assert_eq!(parse(r#"{"light_after":3,"off_after":3}"#).screen_off, Some(180), "3 min stays 3 min");
+        assert_eq!(parse(r#"{"light_after":1}"#).screen_off, Some(60));
+        assert_eq!(parse(r#"{"light_after":5,"off_after":8}"#).screen_off, Some(300));
+        assert_eq!(parse(r#"{"light_after":null}"#).screen_off, None, "Off is Never");
+        let old = parse(r#"{"light_after":3,"off_after":null}"#);
+        assert_eq!(old.off_after, None, "Switch off after sleeping: Off");
+        assert_eq!(parse(r#"{"off_after":3}"#).off_after, Some(180), "a file from before 2026-11-03 counts hours");
+        assert_eq!(parse(r#"{"off_after":1,"off_after_min":15}"#).off_after, Some(15), "the minutes win");
+        let v: serde_json::Value = serde_json::to_value(Config { off_after: Some(15), ..Config::default() }).unwrap();
+        assert_eq!((v["off_after"].as_u64(), v["off_after_min"].as_u64()), (Some(1), Some(15)), "an older version finds 1 h");
+        assert_eq!((old.sleep_after, old.short_press, old.hold), (Some(2), ShortPress::Sleep, Hold::Menu));
+    }
+
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn what_is_written_reads_back_the_same_and_older_versions_still_find_their_minutes() {
         let all = [
             Config::default(),
             Config { screen_off: None, sleep_after: None, off_after: None, short_press: ShortPress::ScreenOff, hold: Hold::Sleep },
             Config { screen_off: Some(30), sleep_after: Some(15), off_after: Some(8), ..Config::default() },
+            Config { screen_off: Some(180), ..Config::default() },
+        ];
+        for c in all {
+            let json = serde_json::to_string(&c).unwrap();
+            assert_eq!(parse(&json), c, "{json}");
+            let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+            // An older pocket-ui reads `light_after` in minutes: 30 s is 1 min for it, never is null.
+            let minutes = c.screen_off.map(|s| s.div_ceil(60));
+            assert_eq!(v["light_after"], serde_json::to_value(minutes).unwrap(), "{json}");
+        }
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn what_is_written_reads_back_the_same_and_older_versions_still_find_their_minutes() {
+        let all = [
+            Config::default(),
+            Config { screen_off: None, sleep_after: None, off_after: None, short_press: ShortPress::ScreenOff, hold: Hold::Sleep },
+            Config { screen_off: Some(30), sleep_after: Some(15), off_after: Some(480), ..Config::default() },
+            Config { off_after: Some(15), ..Config::default() },
             Config { screen_off: Some(180), ..Config::default() },
         ];
         for c in all {
@@ -465,6 +592,7 @@ mod tests {
         assert_eq!((c.screen_off, c.sleep_after, c.short_press, c.hold), (None, None, ShortPress::ScreenOff, Hold::Sleep));
     }
 
+    #[cfg(not(feature = "brick"))]
     #[test]
     fn the_choices_are_the_ones_on_the_page() {
         let mut c = Config { screen_off: None, ..Config::default() };
@@ -494,6 +622,46 @@ mod tests {
             seen.push(c.value(Row::SwitchOff));
         }
         assert_eq!(seen, ["Off", "1 h", "3 h", "8 h"]);
+
+        let mut c = Config::default();
+        assert_eq!((c.value(Row::ShortPress), c.value(Row::Hold)), ("Sleep".into(), "Power menu".into()));
+        c.step(Row::ShortPress, 1, false);
+        c.step(Row::Hold, 1, false);
+        assert_eq!((c.value(Row::ShortPress), c.value(Row::Hold)), ("Screen off".into(), "Sleep".into()));
+        c.step(Row::ShortPress, 1, true);
+        assert_eq!(c.short_press, ShortPress::Sleep, "A goes round");
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn the_choices_are_the_ones_on_the_page() {
+        let mut c = Config { screen_off: None, ..Config::default() };
+        let mut seen = vec![c.value(Row::ScreenOff)];
+        for _ in 0..6 {
+            c.step(Row::ScreenOff, 1, false);
+            seen.push(c.value(Row::ScreenOff));
+        }
+        assert_eq!(seen, ["Never", "30 s", "1 min", "2 min", "5 min", "5 min", "5 min"], "Right stops at the end");
+        c.step(Row::ScreenOff, 1, true);
+        assert_eq!(c.value(Row::ScreenOff), "Never", "A goes round");
+        c.step(Row::ScreenOff, -1, false);
+        assert_eq!(c.value(Row::ScreenOff), "Never", "Left stops at the start");
+
+        let mut c = Config { sleep_after: None, ..Config::default() };
+        let mut seen = vec![c.value(Row::SleepAfter)];
+        for _ in 0..4 {
+            c.step(Row::SleepAfter, 1, false);
+            seen.push(c.value(Row::SleepAfter));
+        }
+        assert_eq!(seen, ["Never", "1 min", "2 min", "5 min", "15 min"]);
+
+        let mut c = Config { off_after: None, ..Config::default() };
+        let mut seen = vec![c.value(Row::SwitchOff)];
+        for _ in 0..5 {
+            c.step(Row::SwitchOff, 1, false);
+            seen.push(c.value(Row::SwitchOff));
+        }
+        assert_eq!(seen, ["Off", "15 min", "30 min", "1 h", "3 h", "8 h"]);
 
         let mut c = Config::default();
         assert_eq!((c.value(Row::ShortPress), c.value(Row::Hold)), ("Sleep".into(), "Power menu".into()));

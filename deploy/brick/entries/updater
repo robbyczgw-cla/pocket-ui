@@ -1,0 +1,3 @@
+#!/bin/sh
+# Entry for a Brick that has NextUI's start script: it runs /mnt/SDCARD/.tmp_update/updater. All the work is in pocket-ui/start.sh.
+exec sh "$(dirname "$0")/../pocket-ui/start.sh" nextui-hook

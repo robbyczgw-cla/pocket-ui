@@ -1,0 +1,193 @@
+#!/bin/sh
+# A small stand-in for the NetworkManager `nmcli` calls pocket-ui's Wi-Fi page makes (there is no NetworkManager on the Brick):
+# scan, join, saved networks, forget, disconnect, the radio. It talks to the firmware's own wpa_supplicant through `wpa_cli`;
+# a "connection" is a wpa_supplicant network, its UUID is brick-net-<id>. Joining and forgetting are saved to the firmware's
+# /etc/wifi/wpa_supplicant.conf (`save_config`), as any Wi-Fi setup on the Brick does. FIRST VERSION: written from nmcli's
+# documented output and wpa_cli's, tested against a fake wpa_cli; not yet run against the real supplicant (docs/TRIMUI-BRICK-STANDALONE.md).
+WPA_CLI=${BRICK_WPA_CLI:-wpa_cli}
+SOCKETS=${BRICK_WPA_SOCKETS:-/etc/wifi/sockets}
+IFACE=${BRICK_WIFI_IFACE:-wlan0}
+RFKILL=${BRICK_RFKILL:-/sys/class/rfkill}
+wpa() { "$WPA_CLI" -p "$SOCKETS" -i "$IFACE" "$@" 2>/dev/null; }
+esc() { sed -e 's/\\/\\\\/g' -e 's/:/\\:/g'; }
+
+terse=0; fields=; gfields=; wait_s=30
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -t) terse=1; shift ;;
+    -s|-p|-m) shift ;;
+    -e|-c) shift 2 ;;
+    -f) fields=$2; shift 2 ;;
+    -g) gfields=$2; terse=1; shift 2 ;;
+    -w) wait_s=$2; shift 2 ;;
+    *) break ;;
+  esac
+done
+obj=${1:-}; shift
+
+fail() { echo "Error: $2" >&2; exit "$1"; }
+
+# --- the supplicant, as nmcli's words ------------------------------------------------------------------------------
+cur_ssid() { wpa status | sed -n 's/^ssid=//p' | head -1; }
+cur_id() { wpa status | sed -n 's/^id=//p' | head -1; }
+state() { wpa status | sed -n 's/^wpa_state=//p' | head -1; }
+# tab-separated "id ssid" of the saved networks
+networks() { wpa list_networks | awk -F'\t' 'NR>1 && $1 ~ /^[0-9]+$/ { print $1 "\t" $2 "\t" $4 }'; }
+id_of_ssid() { networks | awk -F'\t' -v s="$1" '$2 == s { print $1; exit }'; }
+id_of_uuid() { echo "${1#brick-net-}"; }
+dbm_to_pct() { awk -v d="$1" 'BEGIN { p = 2 * (d + 100); if (p < 0) p = 0; if (p > 100) p = 100; printf "%d", p }'; }
+security_of() { case "$1" in *WPA2*|*RSN*) echo WPA2 ;; *WPA*) echo WPA1 ;; *WEP*) echo WEP ;; *) echo "" ;; esac; }
+radio_on() {
+  for r in "$RFKILL"/rfkill*; do
+    [ "$(cat "$r/type" 2>/dev/null)" = wlan ] && { [ "$(cat "$r/soft" 2>/dev/null)" = 1 ] || [ "$(cat "$r/hard" 2>/dev/null)" = 1 ] && return 1; return 0; }
+  done
+  return 1
+}
+
+wait_connected() { # seconds
+  n=0
+  while [ "$n" -lt "$1" ]; do
+    [ "$(state)" = COMPLETED ] && return 0
+    case "$(state)" in 4WAY_HANDSHAKE|GROUP_HANDSHAKE) saw_handshake=1 ;; esac
+    sleep 1; n=$((n + 1))
+  done
+  return 1
+}
+
+wifi_list() {
+  rescan=no; while [ $# -gt 0 ]; do case "$1" in --rescan) rescan=$2; shift ;; esac; shift; done
+  [ "$rescan" = yes ] && { wpa scan >/dev/null; sleep "${BRICK_SCAN_WAIT:-3}"; }
+  active=$(cur_ssid)
+  [ -n "$fields" ] || fields=IN-USE,SSID,SIGNAL,SECURITY
+  wpa scan_results | awk -F'\t' 'NR>1 && $5 != "" { print $3 "\t" $4 "\t" $5 }' | while IFS='	' read -r dbm flags ssid; do
+    pct=$(dbm_to_pct "$dbm"); sec=$(security_of "$flags")
+    line=
+    for f in $(echo "$fields" | tr ',' ' '); do
+      case "$f" in
+        ACTIVE) [ "$ssid" = "$active" ] && v=yes || v=no ;;
+        IN-USE) [ "$ssid" = "$active" ] && v='*' || v= ;;
+        SSID) v=$ssid ;;
+        SIGNAL) v=$pct ;;
+        SECURITY) v=$sec ;;
+        *) v= ;;
+      esac
+      [ "$terse" = 1 ] && v=$(printf '%s' "$v" | esc)
+      line=${line:+$line:}$v
+    done
+    echo "$line"
+  done
+}
+
+wifi_connect() { # SSID [password P] [hidden yes] [ifname X]
+  ssid=$1; shift; psk=; hidden=
+  while [ $# -gt 0 ]; do case "$1" in password) psk=$2; shift ;; hidden) hidden=$2; shift ;; ifname) shift ;; esac; shift; done
+  radio_on || fail 1 "Wi-Fi is disabled."
+  id=$(id_of_ssid "$ssid"); made=
+  if [ -z "$id" ] || [ -n "$psk" ]; then
+    if [ -z "$id" ]; then
+      wpa scan_results | awk -F'\t' -v s="$ssid" '$5 == s { f = 1 } END { exit !f }' || [ "$hidden" = yes ] || fail 10 "No network with SSID '$ssid' found."
+      id=$(wpa add_network); made=1
+      wpa set_network "$id" ssid "\"$ssid\"" >/dev/null
+    fi
+    if [ -n "$psk" ]; then wpa set_network "$id" psk "\"$psk\"" >/dev/null; else wpa set_network "$id" key_mgmt NONE >/dev/null; fi
+    [ "$hidden" = yes ] && wpa set_network "$id" scan_ssid 1 >/dev/null
+  fi
+  wpa select_network "$id" >/dev/null; wpa enable_network "$id" >/dev/null
+  saw_handshake=
+  if wait_connected "$wait_s"; then
+    wpa save_config >/dev/null
+    echo "Device '$IFACE' successfully activated with 'brick-net-$id'."
+    exit 0
+  fi
+  [ -n "$made" ] && wpa remove_network "$id" >/dev/null
+  wpa reconnect >/dev/null
+  if [ -n "$saw_handshake" ] && [ -n "$psk" ]; then fail 4 "Connection activation failed: Secrets were required, but not provided."; fi
+  fail 3 "Timeout expired ($wait_s seconds)"
+}
+
+connection_field() { # uuid field
+  id=$(id_of_uuid "$1")
+  case "$2" in
+    802-11-wireless.ssid) networks | awk -F'\t' -v i="$id" '$1 == i { print $2 }' ;;
+    802-11-wireless.hidden) [ "$(wpa get_network "$id" scan_ssid)" = 1 ] && echo yes || echo no ;;
+    802-11-wireless-security.key-mgmt) case "$(wpa get_network "$id" key_mgmt)" in NONE) echo none ;; *) echo wpa-psk ;; esac ;;
+    802-11-wireless-security.psk) echo ;;     # wpa_supplicant never gives a key back
+    *) echo ;;
+  esac
+}
+
+case "$obj" in
+  radio)
+    case "${1:-}" in
+      wifi)
+        case "${2:-}" in
+          on|off) [ "$2" = on ] && v=0 || v=1; for r in "$RFKILL"/rfkill*; do [ "$(cat "$r/type" 2>/dev/null)" = wlan ] && echo "$v" >"$r/soft"; done ;;
+          *) if radio_on; then echo enabled; else echo disabled; fi ;;
+        esac ;;
+      *) fail 2 "unsupported" ;;
+    esac ;;
+  device|dev|d)
+    case "${1:-}" in
+      wifi|w)
+        case "${2:-list}" in
+          list|"") shift; [ "${1:-}" = list ] && shift; wifi_list "$@" ;;
+          rescan) wpa scan >/dev/null ;;
+          connect) shift 2; wifi_connect "$@" ;;
+          *) fail 2 "unsupported" ;;
+        esac ;;
+      show|status)
+        st=$(state); id=$(cur_id)
+        case "$st" in
+          COMPLETED) code="100 (connected)" ;;
+          ASSOCIATING|ASSOCIATED|AUTHENTICATING|4WAY_HANDSHAKE|GROUP_HANDSHAKE) code="50 (connecting (configuring))" ;;
+          *) code="30 (disconnected)" ;;
+        esac
+        [ "$st" = COMPLETED ] && [ -n "$id" ] && uuid="brick-net-$id" || uuid=--
+        for f in $(echo "${gfields:-GENERAL.STATE,GENERAL.CON-UUID,GENERAL.REASON}" | tr ',' ' '); do
+          case "$f" in
+            GENERAL.STATE) echo "$code" ;;
+            GENERAL.CON-UUID) echo "$uuid" ;;
+            GENERAL.REASON) echo "0 (No reason given)" ;;
+            *) echo ;;
+          esac
+        done ;;
+      disconnect) wpa disconnect >/dev/null ;;
+      *) fail 2 "unsupported" ;;
+    esac ;;
+  connection|con|c)
+    verb=${1:-show}; [ $# -gt 0 ] && shift
+    case "$verb" in
+      show)
+        if [ "${1:-}" = uuid ] || [ "${1:-}" = id ]; then
+          key=$1; val=$2
+          [ "$key" = id ] && val="brick-net-$(id_of_ssid "$val")"
+          for f in $(echo "$gfields" | tr ',' ' '); do connection_field "$val" "$f"; done
+        else
+          cur=$(cur_id); st=$(state)
+          networks | while IFS='	' read -r id ssid flags; do
+            on=no; stt=; [ "$id" = "$cur" ] && { on=yes; [ "$st" = COMPLETED ] && stt=activated || stt=activating; }
+            [ -n "$fields" ] || fields=NAME,UUID,TYPE,ACTIVE,STATE
+            line=
+            for f in $(echo "$fields" | tr ',' ' '); do
+              case "$f" in NAME) v=$ssid ;; UUID) v=brick-net-$id ;; TYPE) v=802-11-wireless ;; ACTIVE) v=$on ;; STATE) v=$stt ;; *) v= ;; esac
+              line=${line:+$line:}$(printf '%s' "$v" | esc)
+            done
+            echo "$line"
+          done
+        fi ;;
+      up)
+        [ "${1:-}" = uuid ] && id=$(id_of_uuid "$2") || id=$(id_of_ssid "$2")
+        [ -n "$id" ] || fail 10 "unknown connection"
+        wpa select_network "$id" >/dev/null; wpa enable_network "$id" >/dev/null
+        wait_connected "$wait_s" && { echo "Connection successfully activated"; exit 0; }
+        fail 3 "Timeout expired ($wait_s seconds)" ;;
+      delete)
+        if [ "${1:-}" = uuid ]; then id=$(id_of_uuid "$2"); else id=$(id_of_ssid "$2"); fi
+        [ -n "$id" ] || fail 10 "cannot delete unknown connection(s): '$2'."
+        wpa remove_network "$id" >/dev/null; wpa save_config >/dev/null
+        echo "Connection deleted." ;;
+      modify) exit 0 ;;     # nothing to keep: the supplicant retries forever and keeps the key in its own file
+      *) fail 2 "unsupported" ;;
+    esac ;;
+  *) fail 2 "unsupported" ;;
+esac

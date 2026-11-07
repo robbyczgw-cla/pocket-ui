@@ -337,7 +337,11 @@ impl Sink {
                 *lib.get::<SndClose>(b"snd_pcm_close").ok()?,
             )
         };
+        #[cfg(not(feature = "brick"))]
         let device = std::ffi::CString::new(std::env::var("POCKET_CORE_ALSA_DEVICE").unwrap_or_else(|_| "pipewire".into())).ok()?;
+        // The Brick: its headphones while brick-bluetooth names one (`brick_device`), read at every open.
+        #[cfg(feature = "brick")]
+        let device = std::ffi::CString::new(brick_device(crate::audio_route::brick_route().as_deref(), std::env::var("POCKET_CORE_ALSA_DEVICE").ok())).ok()?;
         let latency_us = std::env::var("POCKET_CORE_ALSA_US").ok().and_then(|v| v.parse().ok()).unwrap_or(ring.us());
         let mut pcm = std::ptr::null_mut();
         // The pipewire plugin names the stream after the program; PIPEWIRE_PROPS could name it, not needed.
@@ -361,10 +365,19 @@ impl Sink {
         })
     }
 
+    #[cfg(not(feature = "brick"))]
     pub fn name(&self) -> &'static str {
         match self {
             Sink::Pulse { .. } => "pulse",
             Sink::Alsa { .. } => "pipewire (alsa)",
+        }
+    }
+
+    #[cfg(feature = "brick")]
+    pub fn name(&self) -> &'static str {
+        match self {
+            Sink::Pulse { .. } => "pulse",
+            Sink::Alsa { .. } => { #[cfg(feature = "brick")] { if crate::audio_route::brick_route().is_some() { "bluetooth (bluealsa)" } else if std::env::var("POCKET_CORE_ALSA_DEVICE").is_ok_and(|d| d != "pipewire") { "alsa" } else { "pipewire (alsa)" } } #[cfg(not(feature = "brick"))] { "pipewire (alsa)" } }
         }
     }
 
@@ -467,6 +480,32 @@ fn write_alsa(pcm: *mut c_void, writei: SndWritei, recover: SndRecover, samples:
         rest = &rest[n as usize * 2..];
     }
     true
+}
+
+/// The ALSA name the Brick opens: "pocket_bt:DEV=<address>" (its asoundrc: BlueALSA behind a software volume) while a headset is the
+/// route, else the given device or "pipewire" (the chip). Only a plain Bluetooth address goes into the name: anything else could add
+/// arguments, so it counts as no headset.
+#[cfg(feature = "brick")]
+pub(crate) fn brick_device(route: Option<&str>, env: Option<String>) -> String {
+    let address = route.filter(|a| a.len() == 17 && a.bytes().enumerate().all(|(i, b)| if i % 3 == 2 { b == b':' } else { b.is_ascii_hexdigit() }));
+    match address {
+        Some(a) => format!("pocket_bt:DEV={a}"),
+        None => env.unwrap_or_else(|| "pipewire".into()),
+    }
+}
+
+#[cfg(all(test, feature = "brick"))]
+mod brick_tests {
+    use super::brick_device;
+
+    #[test]
+    fn the_brick_opens_its_headphones_by_address_and_nothing_odd_goes_into_the_name() {
+        assert_eq!(brick_device(Some("AA:BB:CC:DD:EE:0f"), None), "pocket_bt:DEV=AA:BB:CC:DD:EE:0f");
+        assert_eq!(brick_device(None, None), "pipewire", "no headset: the chip");
+        assert_eq!(brick_device(None, Some("hw:0".into())), "hw:0");
+        assert_eq!(brick_device(Some("AA:BB:CC:DD:EE:FF,PROFILE=sco"), None), "pipewire", "an argument smuggled in: no headset");
+        assert_eq!(brick_device(Some("AA-BB-CC-DD-EE-FF"), None), "pipewire");
+    }
 }
 
 /// Linux already sizes its queue for the selected PipeWire quantum.

@@ -5,7 +5,8 @@
 pocket-ui runs on ROCKNIX, on the three ROCKNIX images it ships for: **SM8250**, **SM8550** and **H700**. Each device
 below has a ROCKNIX device tree on that image (its path is given under the table) and a pocket-ui profile that knows its
 screen, sticks, fan, Wi-Fi and lid. The installers accept exactly these devices. 🎮 means the project has played on it;
-✅ means the same chip, the same ROCKNIX image and a pocket-ui profile. Reports are welcome (Settings › System ›
+✅ means the same chip, the same ROCKNIX image and a pocket-ui profile. ⏸ means parked: a profile from a
+prototype, not offered and not supported (the RG DS Plus on the RK3566 image). Reports are welcome (Settings › System ›
 About › Report a problem). How far each feature is proven: [STATUS.md](STATUS.md).
 
 The "Plays" line of each chip comes from what pocket-ui starts there (`hostsys`, `standalone.rs`, `hakux.rs`) and from the
@@ -13,7 +14,7 @@ runs in [STATUS.md](STATUS.md) and [BIG-EMULATORS.md](BIG-EMULATORS.md), in orde
 
 Add games shows one sentence under a system's Files and BIOS lines where the chip runs it, but not every game smoothly
 (`src/system_notes.rs`, the sources are named there): Snapdragon 865: PS2, GameCube, Wii, 3DS, Xbox. Snapdragon 8 Gen 2:
-PS2, GameCube, Xbox, PS3, Wii U, PS Vita. H700: Nintendo 64, PSP, Dreamcast, Nintendo DS, Saturn. Unknown handhelds and the Steam Deck
+PS2, GameCube, Xbox, PS3, Wii U, PS Vita. H700: Nintendo 64, PSP, Dreamcast, Nintendo DS, Saturn. RK3568 (RG DS Plus): Nintendo 64, PSP, Dreamcast, Saturn. Unknown handhelds and the Steam Deck
 show none. It changes nothing about which emulator plays a system.
 
 ### Snapdragon 865: ROCKNIX SM8250 image
@@ -63,6 +64,31 @@ ROCKNIX: `projects/ROCKNIX/devices/SM8550/linux/dts/qcom/qcs8550-{ayn-odin2mini,
 ROCKNIX: `projects/ROCKNIX/devices/H700/linux/dts/allwinner/sun50i-h700-anbernic-*.dts`. The RG CubeXX is on the same image;
 its square 720 × 720 screen is too heavy for pocket-ui for now, so the installers say no. Devices on these images that are
 not listed here have no pocket-ui profile, and the installers refuse them.
+
+### TrimUI Brick: on top of NextUI, not ROCKNIX
+
+The Brick (TrimUI tg5040) keeps its own system: pocket-ui runs on top of NextUI as a pak, no flashing
+([TRIMUI-BRICK.md](TRIMUI-BRICK.md)). It has no sticks, no fan and no touch, and the Brick builds' Settings leave out what it
+has no page for.
+
+| | Device | Screen | Sticks | Notes |
+|---|---|---|---|---|
+| 🎮 | **TrimUI Brick** | 1024 × 768 | no | Played on a real Brick, 2026-11-06 |
+
+### Rockchip RK3568: ROCKNIX RK3566 image (parked)
+
+Parked since 2026-11-05: no image and no release offers it, and it is not a supported device. The profile and the
+two-screen code stay in the source for later.
+
+**Plays, by console release:** NES, Master System, PC Engine, Mega Drive, Game Boy, SNES, PlayStation, Nintendo 64, Game Boy Color, Dreamcast, Game Boy Advance, Nintendo DS, PSP. Nintendo 64, Dreamcast, PSP and Nintendo DS start with ROCKNIX's own emulators here (DraStic puts a DS game on both screens). Four Cortex-A55, 1 GB of memory, no fan, Nintendo button labels. Not played on yet.
+
+| | Device | Screen | Sticks | Wi-Fi |
+|---|---|---|---|---|
+| ⏸ | Anbernic RG DS Plus (clamshell, two screens) | 2 × 1024 × 768, touch on the lower one | 1 | yes |
+
+ROCKNIX: `projects/ROCKNIX/devices/RK3566/linux/dts/rockchip/rk3568-anbernic-rg-ds-plus.dts` (the "Specific" RK3566 build).
+The other handhelds of that image, the first RG DS among them, have no pocket-ui profile, and the installers refuse them.
+The two screens: [DUAL-SCREEN.md](DUAL-SCREEN.md).
 
 ## The four devices
 
@@ -311,6 +337,19 @@ ellipsis, the letter-jump overlay and animation-dependent preview text. The prev
 - **Artifacts:** `screenshots/sm8550-contact.jpg` (1280×1245 JPEG, gitignored); checksums, Nova diagnostics
   and the comparison summary in `screenshots/sm8550-validation/` (also gitignored).
 - **Cleanup:** both own virtual containers were removed. No real handheld was contacted, and nothing was merged.
+
+## Anbernic RG DS Plus (2026-11-04, parked since 2026-11-05)
+
+ROCKNIX's **RK3566 image** ("Specific" build, 20261101 and newer; the chip is an RK3568: 4× Cortex-A55, Mali-G52, 1 GB).
+Built from ROCKNIX's sources before the device arrived; RG-DS-PLUS-FIRST-BOOT.md (outside the repo) is the first boot's
+checklist. `Model::RgDsPlus`: `anbernic,rg-ds-plus` / `Anbernic RG DS Plus`, 1024×768 (the upper panel; `panel_size` is
+landscape, the Goodix's `touchscreen-size`), lid, one stick, touch, two card slots, no fan, 1 GB, Nintendo labels and
+plain letters. `Model::small_chip` puts it with the H700 handhelds where the chip matters: N64, PSP, Dreamcast and DS stay
+on ROCKNIX (`hostsys::H700_STAYS_ON_ROCKNIX`), the game check's stray folders, `ram_mb`. The installer takes
+`HW_DEVICE=RK3566` with this model only (`MODELS_RK3566`); the first RG DS and every other RK3566 handheld are refused.
+The two panels, their backlights and the touch screen are one table, `second_screen::Panels` ([DUAL-SCREEN.md](DUAL-SCREEN.md)).
+Not checked yet: ROCKNIX's contract on the RK3566 image (`scripts/rocknix-contract.sh --host` on the device), the
+buttons (F is `BTN_MODE`, the HOME key), sleep on the RK3568, the charge current (ROCKNIX PR #3539).
 
 ## Anbernic H700 handhelds (2026-10-27, installable 2026-10-29, experimental)
 

@@ -87,13 +87,42 @@ H700_GZ_SHA256=cd070faf05754b77a3f8687e4add5e00fc7d261518d8fc95dea188f2ef9eb9d4
 H700_IMG_SHA256=960be0de75e58e6322fc1d6282e07b49774bc98c0655263fe27f4223520ac8b8
 H700_KERNEL_MD5=637d88be2fc50ceae70bfeb5ae3b98a1
 H700_SYSTEM_MD5=4af2ee93d11d320ee6834a11601b82fa
+# Everything before the first partition (16 MiB: the partition table, U-Boot 8 KiB in) of the DDR4 image.
+H700_LOADER_MD5=5a1aced17aae61b5ec3afc8f2e796207
+# The DDR3 image (models with "ddr3" as a fifth field in H700_MODELS). Its KERNEL and SYSTEM are byte for byte the DDR4 image's
+# (same pins above), so the DDR3 card is the DDR4 card with the two things that differ taken from the DDR3 image: the first
+# 16 MiB (U-Boot with the DDR3 RAM set-up) and extlinux/extlinux.conf (one more line, FDTOVERLAYS for the 1.2 V RAM regulator).
+# Checked 2026-11-05 against ROCKNIX-H700.aarch64-20261001-DDR3.img.gz; the 0.2.0 download built the same way by hand.
+H700_DDR3_IMG=ROCKNIX-H700.aarch64-20261001-DDR3.img
+H700_DDR3_URL=https://github.com/ROCKNIX/distribution/releases/download/20261001/ROCKNIX-H700.aarch64-20261001-DDR3.img.gz
+H700_DDR3_GZ_SHA256=222b1f8172ab5b4fef6b4b23c0482a474789cf83542a6d2e5f45dfbbf2ae1359
+H700_DDR3_IMG_SHA256=6089cd9a5aacf7b36a6c438ca73be76be90193060c1254b030448435b5f8f5b8
+H700_DDR3_LOADER_MD5=ca112618836167777a47d2fde901e258
+H700_DDR3_EXTLINUX_MD5=56f3b5ff7f6fd26d8a3a915fa68a0570
 # Models: "<image name> <dtb in device_trees/ without .dtb> <md5 of that dtb> <model string in the tree>".
-# The panel variants (rg35xx-plus-rev6-panel, rg35xx-sp-v2-panel) are newer screen revisions with their own tree:
-# not built until a unit shows a broken picture with these.
+# The panel variants (rg35xx-plus-r6, rg35xx-sp-v2: image names, the trees are ...-rev6-panel and ...-v2-panel) are newer screen revisions with their own tree, and
+# their model string is the plain model's. The other models are untested expectations (same image, same U-Boot, their own
+# tree); the md5s are those of ROCKNIX 20261001's device_trees/. The remaining panel trees (rg35xx-2024-rev6-panel,
+# rg35xx-h-rev6-panel, rg40xx-h-v2-panel, rg40xx-v-v2-panel, rg34xx-sp-v2-panel) are not built yet. DDR4 for all: ROCKNIX's
+# config.xml lists every tree under both DDR4 and DDR3 and names no model; its only DDR3 file is an overlay named for the
+# RG35XX 2024. A line with "ddr3" as its fifth field is the same model on the DDR3 image (rg40xx-h-ddr3: the 0.2.0 download for
+# RG40XX H units that stay black on the plain card); the other models are DDR4 only so far.
 H700_MODELS="
 rg35xx-plus sun50i-h700-anbernic-rg35xx-plus 7772960532233e284871ede57ba50426 Anbernic_RG35XX_Plus
 rg35xx-sp sun50i-h700-anbernic-rg35xx-sp 954098e16c57c69095a5db14822e4720 Anbernic_RG35XX_SP
 rg28xx sun50i-h700-anbernic-rg28xx a3618905df1a397b3a4192437ee90c77 Anbernic_RG28XX
+rg35xx-h sun50i-h700-anbernic-rg35xx-h a0b9663ed1a14b36d9b65cd95f3b94ae Anbernic_RG35XX_H
+rg35xx-pro sun50i-h700-anbernic-rg35xx-pro 0d801401c9cae0f96c0f8bebf128a6d8 Anbernic_RG35XX_Pro
+rg35xx-2024 sun50i-h700-anbernic-rg35xx-2024 f088ca547b7a62f437ff4b3e21c88aae Anbernic_RG35XX_2024
+rg40xx-h sun50i-h700-anbernic-rg40xx-h 7a4be234d2fa4e041844c18d94381296 Anbernic_RG40XX_H
+rg40xx-v sun50i-h700-anbernic-rg40xx-v 2f226e8cc0831a72c12b2ce5def18b6e Anbernic_RG40XX_V
+rg34xx sun50i-h700-anbernic-rg34xx 1f456bd28c466ce2c835cde613ad9289 Anbernic_RG34XX
+rg34xx-sp sun50i-h700-anbernic-rg34xx-sp 082d459946583421a098792520f97c87 Anbernic_RG34XX-SP
+rg-sp sun50i-h700-anbernic-rg-sp e7e56ee3dc6675ab5d967ce6766d4756 Anbernic_RG-SP
+rgcubexx sun50i-h700-anbernic-rgcubexx 7487cada10ee1c8516d9391386d25522 Anbernic_RG_CubeXX
+rg35xx-plus-r6 sun50i-h700-anbernic-rg35xx-plus-rev6-panel c2d994a36a7482f59068d83e64c80bfb Anbernic_RG35XX_Plus
+rg35xx-sp-v2 sun50i-h700-anbernic-rg35xx-sp-v2-panel aa22183a17906b56545d0f0127118198 Anbernic_RG35XX_SP
+rg40xx-h-ddr3 sun50i-h700-anbernic-rg40xx-h 7a4be234d2fa4e041844c18d94381296 Anbernic_RG40XX_H ddr3
 "
 # SYSTEM on an H700 card: ROCKNIX's, repacked without the files below (same reasons as the SM8250 list above; the
 # AYN/Mangmi firmware and rocknix_abl do not exist in the H700 SYSTEM). Everything else is unchanged.
@@ -159,6 +188,14 @@ usr/config/amiberry/whdboot/boot-data.zip Devs/Kickstarts/*.RTB
 # md5 of the repacked SM8550 SYSTEM; two strip runs side by side (2026-10-31) gave this md5.
 SM8550_POCKET_SYSTEM_MD5=ca26139c1ec4416b42bb3ea80a014e99
 
+# The RK3566 family (Anbernic RG DS Plus) has its pins in scripts/image/pins-rk3566.sh, a file the public export leaves
+# out (scripts/public-exclude.txt): the RG DS Plus image is a private test image. Looked for under $ROOT, /repo (the
+# build container) and the current folder; without it family_pins RK3566 gives empty values.
+for pu_rk in "${ROOT:-/nonexistent}/scripts/image/pins-rk3566.sh" /repo/scripts/image/pins-rk3566.sh scripts/image/pins-rk3566.sh; do
+  if [ -f "$pu_rk" ]; then . "$pu_rk"; break; fi
+done
+unset pu_rk
+
 # The firmware licence texts a family shares with deploy/image/firmware-licences/.
 H700_FW_SHARED="LICENCE.rtlwifi_firmware.txt wireless-regdb-LICENSE"
 SM8550_FW_SHARED="LICENCE.rtlwifi_firmware.txt LICENSE.QualcommAtheros_ath10k LICENSE.qcom qca-NOTICE.txt qcom-NOTICE.txt wireless-regdb-LICENSE"
@@ -166,9 +203,14 @@ SM8550_FW_SHARED="LICENCE.rtlwifi_firmware.txt LICENSE.QualcommAtheros_ath10k LI
 # A family's pins under one set of names, for the scripts all such families share.
 # Cards that make a GAMES drive at their first start (docs/SD-IMAGE.md, "The GAMES drive"), by model. ROCKNIX's layout, with
 # STORAGE over the whole card, is the standard on every image; two partitions for a player to think about are only worth
-# it on a handheld with no Wi-Fi chip, which has no file sharing (RG28XX; the RG35XX 2024 too, if it gets an image).
-H700_GAMES_DRIVE_MODELS="rg28xx"
+# it on a handheld with no Wi-Fi chip, which has no file sharing (RG28XX and RG35XX 2024: ROCKNIX's tree has no Wi-Fi node for the 2024).
+H700_GAMES_DRIVE_MODELS="rg28xx rg35xx-2024"
 SM8550_GAMES_DRIVE_MODELS=""
+# is_ddr3 FAMILY MODEL: the model's line in <FAMILY>_MODELS has "ddr3" as its fifth field (the DDR3 base image, H700 only).
+is_ddr3() {
+  eval "pu_models=\${${1}_MODELS:-}"
+  echo "$pu_models" | awk -v m="$2" '$1 == m && $5 == "ddr3" { f = 1 } END { exit !f }'
+}
 # has_games_drive FAMILY MODEL
 has_games_drive() {
   [ -n "$2" ] || return 1 # no model (the Mini V2 build): no GAMES drive; an empty list matched the empty name before
@@ -187,6 +229,12 @@ image_hostname() {
 
 family_pins() {
   for v in IMG URL GZ_SHA256 IMG_SHA256 KERNEL_MD5 SYSTEM_MD5 MODELS SYSTEM_REMOVE SYSTEM_ZIP_REMOVE POCKET_SYSTEM_MD5 FW_SHARED; do
-    eval "FAM_$v=\${${1}_$v}"
+    eval "FAM_$v=\${${1}_$v:-}"
   done
+  # A family on another ROCKNIX release (RK3566) names its own tag, commit and licence count; the others use the ones above.
+  eval "ROCKNIX_TAG=\${${1}_TAG:-$ROCKNIX_BASE_TAG} ROCKNIX_COMMIT=\${${1}_COMMIT:-$ROCKNIX_BASE_COMMIT}"
+  eval "ROCKNIX_LICENSE_FILES=\${${1}_LICENSE_FILES:-$ROCKNIX_BASE_LICENSE_FILES}"
 }
+ROCKNIX_BASE_TAG=$ROCKNIX_TAG
+ROCKNIX_BASE_COMMIT=$ROCKNIX_COMMIT
+ROCKNIX_BASE_LICENSE_FILES=$ROCKNIX_LICENSE_FILES

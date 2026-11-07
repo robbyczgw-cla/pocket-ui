@@ -138,7 +138,7 @@ fn paint_dialog_planned(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, d: &
     for (i, lines) in p.paragraphs.iter().enumerate() {
         let is_warning = warn && i > 0;
         if is_warning {
-            c.round_rect(left, ty + 10, 8, lines.len() as i32 * line_h - 4, 4, pal().alert);
+            pocket_ui::retro::pill(c, left, ty + 10, 8, lines.len() as i32 * line_h - 4, 4, pal().alert);
         }
         let colour = if i == 0 { pal().quiet } else { pal().text };
         for line in lines {
@@ -416,7 +416,7 @@ impl KidsDoor {
             for (i, digit) in gate.dials.digits.iter().enumerate() {
                 let x = x0 + i as i32 * (bw + gap);
                 let at = i == gate.dials.at;
-                c.round_rect(x, top, bw, bh, (26.0 * u) as i32, if at { k.accent } else { k.top });
+                pocket_ui::retro::pill(c, x, top, bw, bh, (26.0 * u) as i32, if at { k.accent } else { k.top });
                 let s = if i < gate.dials.at { "•".to_string() } else { digit.to_string() };
                 let px = (150.0 * u).round() as u32;
                 let tw = text.width(Face::Title, px, &s);

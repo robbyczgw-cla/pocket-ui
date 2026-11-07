@@ -388,6 +388,8 @@ games recognised
 after look up again
 
 # src/main.rs
+# --controller-bridge CLI diagnostic, printed only to stderr; the UI receives its exit status.
+missing emulator command
 Mario Kart 8
 Demon's Souls
 Seiken Densetsu 3 (Japan).bps
@@ -437,6 +439,10 @@ a damaged ELF file
 , and {s} more (see the log)
 BLOCKS
 WARNS
+
+# src/pad_bridge.rs: helper failures propagated to the CLI's stderr, never to the painter.
+no free controller bridge IDs
+uinput event node did not appear
 
 # src/pad.rs
 {s} {s}  src {s}
@@ -518,6 +524,14 @@ Thumb L
 Thumb R
 {s} = {s} | {s}
 
+# src/state_file.rs (io errors of a damaged state file, shown after a sentence of the table or logged; a timing mark)
+save: state compressed
+save state size is unsupported
+compressed save state header is damaged or unsupported
+compressed save state size is damaged
+compressed save state is damaged or truncated
+save state is too large
+
 # src/store.rs
 bad public key: {s}
 signature is not base64
@@ -595,6 +609,7 @@ the pause menu is open (buttons only)
 the first-start setup is open (buttons only)
 a system panel is open (buttons only)
 the last frame had nothing to touch
+the touch screen is the lower screen's, which only shows the game (buttons for the shelf)
 touch: ignored, {s}
 
 # src/wifi.rs
@@ -1104,10 +1119,137 @@ refused under POCKETUI_MOCK
 [Hotkeys]
 Hotkeys
 HOTKEY
+# TrimUI Brick prototype (--features brick): pocket-fb and brick-egl only write to their log, nothing is painted.
+the core wants desktop OpenGL {s}.{s}; this GPU has only GLES
+[hw] GL context: {s}
+the core wants GLES 3; only GLES 2 here
+cut short by the next
+window crossfade
+pocket_transition {s} {s} {s} {s}
+top left
+top right
+bottom left
+bottom right
+visible page at row {s}
+the surface
+frames, GPU only
+frames, picture uploaded each frame
+upload + its draw
+swap (waits for the flip)
+first frame
+usage: pocket-fb --wayland <socket> --ipc <socket> [--fb /dev/fb0] [--mode 1024x768x32] [--no-vsync] [--bgr] [--gl] [--gl-window null]
+eglGetConfigAttrib
+EGL {s}.{s}
+no GLES 3 config ({s}), trying GLES 2
+config R{s} G{s} B{s} A{s}
+no GLES 3 context ({s})
+context current on a {s} window
+eglSwapBuffers: EGL error 0x{s}
+GLES 3
+only GLES 2 here
+a picture of {s}x{s}, {s} bytes per row
+{s} bytes for {s}x{s} at {s} per row
+GL error 0x{s}
+libraries loaded
+EGL error 0x{s}
+FB-0
+No matching node.
+attribute vec2 p; void main() { gl_Position = vec4(p, 0.0, 1.0); }
+create surface
+eglBindAPI
+eglChooseConfig
+eglCreateContext
+eglCreatePbufferSurface
+eglCreateWindowSurface
+eglDestroyContext
+eglDestroySurface
+eglGetDisplay
+eglGetError
+eglGetProcAddress
+eglInitialize
+eglMakeCurrent
+eglQueryString
+eglSwapBuffers
+eglSwapInterval
+eglTerminate
+precision mediump float; uniform float t; void main() { gl_FragColor = vec4(t, 0.3, 1.0 - t, 1.0); }
+src/bin/pocket_fb.rs:929	"don't know {s}"
+usage: pocket-fb --wayland <socket> --ipc <socket> [--fb /dev/fb0] [--mode 1024x768x32] [--no-vsync] [--bgr]
+window: {s}
+{s}: FBIOGET_FSCREENINFO: {s}
+{s}: FBIOGET_VSCREENINFO: {s}
+{s}: mmap: {s}
+{s}: {s} bits per pixel
+{s}: {s} bytes, the visible page needs {s}
+{s}: {s} channels, wanted colour
+don't know {s}
+TRIMUI Player1
+TrimUI Brick (NextUI)
+not successful
+Remote
+RELEASE
+ui screenshot
+pocket_picture off
+no picture settings
+a picture of {s}x{s}, {s} bytes per row, {s} bytes
+pocket_picture {s} {s} {s} {s}
+{"menu": {s}, "step": {s}
+pocket_picture_shot {s} {s} {s}
+pocket_picture_preview {s} {s} {s} {s} {s}
+
+# src/second_screen.rs: the second window's title (sway's, never painted), sway commands, the panel table's log line
+pocket-ui game info
+for_window [app_id="{s}"] move container to output {s}; for_window [app_id="{s}"] fullscreen enable; no_focus [app_id="{s}"]
+[app_id="{s}"] move container to output {s}; focus output {s}
+output {s} power {s}
+{s} move scratchpad
+{s} scratchpad show, floating disable, move container to output {s}, fullscreen enable
+focus output {s}
+no mode
+CHECK: {s} (set {s})
+DSI-2
+DSI-1
+Goodix Capacitive TouchScreen
+
+# src/android_02_tests.rs: names in the test's made-up targets and game
+Jump
+Turbo Run
+Garden
+
+# src/app_card.rs: the marker of a second-screen description that isn't cached (GameCardData::note shows nothing for it)
+not cached
+
+# src/control.rs: sway's app_id pattern for the game window
+^(?!{s}(-second)?$).*
+^(?!{s}$).*
+
+# src/main.rs: sway command of --restore-second-screen
+output {s} power on
+
+# src/os_compat.rs: the HW_DEVICE value in ROCKNIX's os-release
+RK3566
+
+# src/second_screen.rs: the log line for a panel table with the same output or backlight twice
+top and bottom must be different outputs and backlights
+
+# src/update/download_tests.rs: HTTP responses of the test servers; src/main.rs: the Updates page's download line
+# (its phase and percent are translated through "Downloading the update…" and "{t} {n}%")
+HTTP/1.1 200 OK\r\nContent-Length: {s}\r\nConnection: close\r\n\r
+HTTP/1.1 302 Found\r\nLocation: {s}\r\nContent-Length: 0\r\n\r
+HTTP/1.1 200 OK\r\nContent-Length: {s}\r\n\r\nx
+HTTP/1.1 200 OK\r\nContent-Length: {s}\r\n\r\nwrong
+Downloading the update… {s}%
+Headphone Jack
 # H700 mixer controls (h700_volume): ALSA control names read and written, never shown
 Speaker Switch
 DAC Playback Volume
 DAC Playback Switch
 Line Out Playback Volume
 Line Out Playback Switch
-Headphone Jack
+
+# src/update.rs: a log line when a just-installed version's player doesn't start (release_settled); src/update/crash_tests.rs:
+# the names of the cases and the stand-in pocket-ui's crash
+{s} doesn't start as pocket-core {s}
+cut off at {s}, the new version {s}
+crashes on start
+exit 139

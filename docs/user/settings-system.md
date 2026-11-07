@@ -55,6 +55,7 @@ card and backups.
 | **Language** | **English**, **Deutsch** or **Español**: menus, hints and messages. See [Language](language.md) |
 | **Time** | Time zone, date and network time. See [Time](#time) |
 | **Sleep & power** | When the screen goes off and the device sleeps, the slideshow before it, when it switches off after sleeping, and what the power button does. The row shows the screen-off time ("2 min"). See [Sleep & power](#sleep--power) |
+| **Second screen** | Only on a handheld with two screens. **Game info** (the start): the lower screen shows the game Home rests on, its box and then its info page with your play time and save slots. **Off**: the lower screen stays dark. In a game it is off either way, except in DS games, which use both screens. Quitting a DS game brings Game info back, including after a temporary display error. |
 | **Kids mode** | A big, simple shelf for a child, with a PIN: see [Kids mode](kids-mode.md). Not on the Steam Deck |
 | **Updates** | New versions of pocket-ui and the system. See [Updates](updates.md) |
 | **Storage** | What takes up space on the SD card, what can go, and the games you hid. The row shows the free space ("41.2 GB free"). See [Storage](storage.md) |
@@ -65,7 +66,9 @@ card and backups.
 Settings → System → **Time**.
 
 - Choose a time zone by region and city. The list shows each city's offset from UTC and its local time right now.
-  A search row (the on-screen keyboard) finds a city by name.
+  A search row (the on-screen keyboard) finds a city by name, in English, German or Spanish: "wien", "viena" and
+  "vienna" all find Vienna, with or without accents. Cities with a name of their own in your language are listed by
+  it ("Wien", "Viena").
 - The clock changes at once on every screen, the time at the top right of Home too ([Home](playing.md#home)).
 - **Network time** shows whether the clock is in sync (it needs Wi-Fi). Press A on it to ask again.
 - **Date and time** sets the clock by hand, for a Pocket without Wi-Fi. A opens five boxes: year, month, day, hour
@@ -95,7 +98,7 @@ sleeping, and the power button's short press and hold. The rows and their choice
 [Sleep & power settings](quick-settings.md#sleep--power-settings), with what sleep does.
 
 On experimental Pocket 6 and Nova, screen off replaces Sleep; ROCKNIX controls the fan.
-See [Other Retroid devices](getting-started.md#other-retroid-devices).
+See [Other Retroid devices](other-handhelds.md#other-retroid-devices).
 
 ### Backup & reset
 
@@ -180,13 +183,37 @@ Settings → **Help & tools**. The Tour, this guide, ROCKNIX's tools, the bug re
 
 | Entry | What it holds |
 |---|---|
-| **How you like to play** | The first start's question again: The shelf, Easy, Enthusiast or Choose for yourself (the cards). The row shows where the switches stand now. See [Getting started](getting-started.md#how-do-you-like-to-play) |
+| **First-start setup** | The first start again from its first page: language, Wi-Fi, your games, how they stand. Your games, saves and settings stay; it ends on Home. See [Getting started](getting-started.md#3-first-start) |
+| **How you like to play** | The shelf, Easy, Enthusiast or Choose for yourself (the cards): pocket-ui's extras in one go. The row shows where the switches stand now. See [How you like to play](#how-you-like-to-play) |
 | **Tour** | The basics in 7 cards: playing and the HOME menu, continuing, saving, quick settings, adding games, Settings, then Easy to read (Large text and Reduced motion). See [Features and the Tour](tour.md) |
 | **Manual** | This guide, on the device. See [Manual](#manual) |
 | **Tools** | ROCKNIX's tools without its old menu: the emulators' own settings, RetroArch's menu, gamepad test and calibration, file manager, terminal, and tools installed from a store. See [Tools](#tools) |
+| **Test buttons** | Every controller's buttons, triggers and sticks light up while you press them, and the page says what each press does in menus and in games. See [Test buttons](#test-buttons) |
 | **Store** | Emulators, frames, themes and tools. Shown only on a device that has a store set up; there is no public store yet, so you will not see this row. See [Store](extras.md#store) |
 | **Report a problem** | Opens About with this row selected; A there saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)) and shows where it is. The same row is in About, and in the dialog of SELECT + START held, where you look when something has just gone wrong |
-| **About** | Version, the system underneath (on the SD card image "pocket-ui OS 0.2.1 · built on ROCKNIX 20261001 (SM8250)", on a ROCKNIX card with pocket-ui added just the ROCKNIX version), number of games, free space, network address, battery, where the logs are kept, and where the licence texts are (a Licences row when the page has the room: `/storage/pocket-ui/licences`: pocket-ui's licence, the credits, the licences of the programs it is built from and of its fonts; they come with the install package and the SD card image); on a Retroid Pocket 5, Flip 2 or first Mini also which one it is, marked experimental ([Getting started](getting-started.md#other-retroid-devices)). Two rows: **Report a problem** saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)); **Open EmulationStation…** opens ROCKNIX's own menu, after a warning ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)) |
+| **About** | Version, the system underneath (on the SD card image "pocket-ui OS 0.2.0 · built on ROCKNIX 20261001 (SM8250)", on a ROCKNIX card with pocket-ui added just the ROCKNIX version), number of games, free space, network address, battery, where the logs are kept, and where the licence texts are (a Licences row when the page has the room: `/storage/pocket-ui/licences`: pocket-ui's licence, the credits, the licences of the programs it is built from and of its fonts; they come with the install package and the SD card image); on a Retroid Pocket 5, Flip 2 or first Mini also which one it is, marked experimental ([Getting started](other-handhelds.md#other-retroid-devices)). Two rows: **Report a problem** saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)); **Open EmulationStation…** opens ROCKNIX's own menu, after a warning ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)); not on the TrimUI Brick, which has no EmulationStation |
+
+### How you like to play
+
+pocket-ui has more than it shows at first: Curator's Lens and Echoes, Pixel Path, screen frames, going straight back
+into your game, and more. This page sets them in one go (the first start doesn't ask: everything stands as it ships).
+Up/Down choose, A takes it and closes the page; under the rows the page says what the selected one switches on and
+off, in everyday words. The feature cards are described in [Features and the Tour](tour.md).
+
+- **The shelf**: "Your games on a shelf, as it comes." The start setting of a new Pocket: Lens & smart shelves,
+  Labels, Echoes, Versions and Motion are on; Up next, Pixel Path, Echoes beyond this device, frames on every console
+  and going straight back into your game are off. It puts every extra back as pocket-ui ships it, On start and
+  Screen frames too.
+- **Easy**: the same start settings with the [Easy](easy.md) look.
+- **Enthusiast**: "Suggestions, play statistics, picture details and frames, all on." All of Curator, Pixel Path in
+  the pause menu (the line over the game stays off), Auto screen frames on every console, and On start set to your
+  last game.
+- **Choose for yourself**: one card per feature, each with a small picture of what it does and three rows, **On**,
+  **Off** and **Later**. Up/Down choose, A takes the choice and shows the next card, B goes back a card, START skips
+  the rest. Later leaves the feature as it is.
+
+A profile only sets switches that Settings has too; each stays on its Settings page. Menu sounds, haptics and the
+stick lights are left as they are. Kids Mode has its own row: Settings → System → [Kids mode](kids-mode.md).
 
 ### Manual
 
@@ -203,8 +230,35 @@ you run. The pages are the ones listed on the first page; the title line shows w
 
 A swipe on the touch screen scrolls as well. Every page remembers where you were until pocket-ui restarts.
 Button names in the text are drawn like the buttons in the hint bar at the bottom of the screen, pictures are
-left out. A link to another page can be opened (A, or a tap); a link to a web address shows the address after its words. On the first-start screens "Welcome" and "You're all set", SELECT opens
+left out. A link to another page can be opened (A, or a tap); a link to a web address shows the address after its words. On the first-start screens, SELECT opens
 the manual and B comes back to that screen.
+
+### Test buttons
+
+Settings → Help & tools → **Test buttons** shows what a controller really sends, for a button that seems dead, a
+trigger that feels off, a stick that drifts, or when you want to see what your own layout does.
+
+![Test buttons: the controller drawn, a trigger half pulled, the last button pressed](pictures/test-buttons.webp)
+
+- **Left: the controllers.** The Pocket's own buttons, every Bluetooth controller and every USB controller, each with
+  its player number and how it is connected. A small light burns while something of that controller is down. The one
+  you press a button on (or push a stick of) is drawn on the right.
+- **The drawing.** Face buttons, D-pad, L1 and R1, SELECT, START, HOME and both sticks light up while they are down.
+  The letters on the four face buttons are what those buttons are in the menus, after the [Button layout](settings.md#button-layout)
+  and your own layout in Controller setup. A small dot on a button means your own layout moved it.
+- **Triggers** show how far they are pulled, in percent. The tick on the bar is where they count as pressed (55%); they
+  are let go again below 40%. A trigger that is only a button (some controllers) fills at once.
+- **Sticks** show where the stick is, as two numbers from -100 to 100. The small square in the middle is the dead zone:
+  menus ignore a stick that stays inside it.
+- **The last button pressed**, on which controller and player, and what it is **in menus** (A, B, X, Y or its own name)
+  and **in games** (the console's button, through your layout). If your layout moved it, the page says **Remapped to**
+  and the button it acts as. A press that pocket-ui does not know is shown as **Not recognised**, with the name the
+  controller gave it: useful in a bug report.
+
+Every button is a test here, B, START and HOME too, so none of them leaves the page. **Hold HOME for 2 seconds, or B and
+START together on one controller**; a bar shows how long to keep holding. A tap on the hint at the bottom right leaves
+as well. The volume and power keys keep their meaning. With two controllers, both can be pressed at the same time: each
+keeps its own lights, and the page names the one that pressed last.
 
 ### Tools
 

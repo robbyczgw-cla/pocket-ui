@@ -200,7 +200,7 @@ pub fn is_state_of(name: &str, base: &str) -> bool {
     let digits = |s: &str| s.chars().all(|c| c.is_ascii_digit());
     if let Some(r) = rest.strip_prefix(".pstate") {
         let r = r.trim_start_matches(|c: char| c.is_ascii_digit());
-        return matches!(r, "" | ".auto" | ".auto.taken" | ".auto.taken.retry" | ".undo");
+        return matches!(r, "" | ".auto" | ".auto.taken" | ".auto.taken.retry" | ".auto.z" | ".auto.z.taken" | ".auto.z.taken.retry" | ".undo");
     }
     if let Some(r) = rest.strip_prefix(".state") {
         let r = r.trim_start_matches(|c: char| c.is_ascii_digit());
@@ -355,6 +355,9 @@ mod tests {
             "Mario.pstate",
             "Mario.pstate3",
             "Mario.pstate.auto",
+            "Mario.pstate.auto.z",
+            "Mario.pstate.auto.z.taken.retry",
+            "Mario.pstate.auto.z.png",
             "Mario.pstate.auto.png",
             "Mario.pstate.auto.taken",
             "Mario.pstate.auto.taken.retry",

@@ -457,7 +457,7 @@ impl App {
             let base = ry + row / 2 + pocket_ui::type_scale::base(12, 37);
             let selected = i == p.sel;
             if selected {
-                c.round_rect(x0, ry + 6, c.w - 2 * x0, row - 12, (row - 12) / 2, pal().select);
+                pocket_ui::retro::select(c, x0, ry + 6, c.w - 2 * x0, row - 12, (row - 12) / 2, pal().select);
             }
             let (fg, dim) = if selected { (pal().ink, pal().ink) } else { (pal().text, pal().text) };
             let lw = self.text.draw(c, Face::Title, 37, left, base + 2, fg, &r.label);

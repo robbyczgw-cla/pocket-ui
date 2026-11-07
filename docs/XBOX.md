@@ -111,7 +111,7 @@ measured: the Odin 2 Mini and the pause menu's Continue with this core.
 
 `scripts/build-hakux-core.sh` builds the package from the fork's commit (`HAKUX_REPO` can point at a local clone) plus any patches in `deploy/hakux/patches/` (none today; applied
 with `git am`, committer and date fixed, so a patched commit has the same id everywhere) inside the fork's own Debian image on an
-aarch64 Docker host (`HAKUX_BUILD_HOST`, the MacBook Air), with the fork's pinned dependencies cached in `~/hakux-core-deps`
+aarch64 Docker host (`HAKUX_BUILD_HOST`, an Apple-silicon Mac), with the fork's pinned dependencies cached in `~/hakux-core-deps`
 there; `scripts/hakux-files.sh DIR DEST` copies everything that must travel with the core (both packages use it, so they cannot
 drift):
 `hakux_libretro.so`, the `.info` of `deploy/hakux/` (the one a test pins to "no save states"), `SOURCE.txt`, `BUILD-INFO`, our `patches/` and

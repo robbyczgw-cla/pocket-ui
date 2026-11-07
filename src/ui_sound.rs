@@ -11,6 +11,10 @@
 //!   on) are ElevenLabs sound effects too, cut and levelled by `scripts/ui-sounds/prep_media_sounds.py`
 //!   (`media-sounds.tsv`: prompt and cut of each). The mixer thread decodes all of them
 //!   once when it starts.
+//! - Retro style (`retro::on()`, one atomic load when a sound starts): Nav, Confirm, Back, Menu and Error play synthesised
+//!   chiptune blips instead of the files ([`blip`]: pulse wave, a pitch step or sweep, fast envelope, light low-pass; nothing
+//!   sampled). The mixer thread makes them once beside the files, levelled to 1.5-3 dB under the file each replaces
+//!   ([`loudest_rms_db`]), so the volume setting and [`Config::gain`] work as before and nothing clips.
 //! - The cases ([`opening`], [`going_in`]): X opens a game's case with its own sound, and the Cozy launch plays the
 //!   case opening and the game going into the console as it goes in ([`hit_at`]), and pocket-core a CRT switching on
 //!   with the picture's ([`Sound::CrtOn`]); Quick only a quiet click. They are queued at once with how long to wait ([`play_after`]), so
@@ -360,6 +364,93 @@ const ALL: [Sound; 17] = [
     Sound::CardIn,
     Sound::CrtOn,
 ];
+/// The sounds the Retro style swaps for blips while `retro::on()`: the menu's own, in this order in the bank after [`ALL`].
+const RETRO_SOUNDS: [Sound; 5] = [Sound::Nav, Sound::Confirm, Sound::Back, Sound::Menu, Sound::Error];
+
+/// One note of a blip: pitch at its start and end in Hz (0 = a rest), length in ms, pulse width.
+type Note = (f32, f32, f32, f32);
+
+/// What the Retro style's blip of `sound` is made of, and the level it is normalised to: the RMS of its loudest 50 ms
+/// ([`loudest_rms_db`]) in dBFS, 1.5 to 3 dB under the sample it replaces (`nav.wav` -18.6, `confirm.wav` -17.2, `back.wav`
+/// -21.2, `menu.wav` -10.2, `error.wav` -19.2), so a blip is never louder than the sound it stands in for.
+fn blip_notes(sound: Sound) -> Option<(&'static [Note], f32)> {
+    Some(match sound {
+        // A single short tick, one small step up.
+        Sound::Nav => (&[(1320.0, 1320.0, 14.0, 0.5), (1760.0, 1760.0, 16.0, 0.5)], -20.5),
+        // Two steps up (a fifth).
+        Sound::Confirm => (&[(880.0, 880.0, 34.0, 0.5), (1320.0, 1320.0, 42.0, 0.5)], -19.0),
+        // Two steps down.
+        Sound::Back => (&[(1320.0, 1320.0, 34.0, 0.5), (880.0, 880.0, 42.0, 0.5)], -23.0),
+        // A rising sweep on a thin pulse.
+        Sound::Menu => (&[(440.0, 1320.0, 100.0, 0.25)], -13.0),
+        // A low double blip.
+        Sound::Error => (&[(196.0, 196.0, 42.0, 0.5), (0.0, 0.0, 22.0, 0.5), (196.0, 196.0, 46.0, 0.5)], -21.0),
+        _ => return None,
+    })
+}
+
+/// The Retro blip for `sound`, mono at [`RATE`], or `None` for a sound with no blip. Synthesised here, nothing sampled: a
+/// pulse wave with a pitch step or sweep, 1 ms attack and a 6 ms release on every note (no clicks), a decay across each
+/// note, two one-pole low-passes at 7 kHz so it is not harsh, scaled to the level in [`blip_notes`].
+pub fn blip(sound: Sound) -> Option<Vec<i16>> {
+    let (notes, target_db) = blip_notes(sound)?;
+    let rate = RATE as f32;
+    let (mut phase, mut lp1, mut lp2) = (0.0f32, 0.0f32, 0.0f32);
+    let a = 1.0 - (-2.0 * std::f32::consts::PI * 7000.0 / rate).exp();
+    let mut out: Vec<f32> = Vec::new();
+    for &(f0, f1, ms, duty) in notes {
+        let n = (ms * rate / 1000.0).round() as usize;
+        let (att, rel) = ((rate / 1000.0) as usize, (rate * 0.006) as usize);
+        for i in 0..n {
+            let t = i as f32 / n as f32;
+            let hz = f0 + (f1 - f0) * t;
+            let raw = if hz > 0.0 {
+                phase = (phase + hz / rate).fract();
+                if phase < duty { 1.0 } else { -1.0 }
+            } else {
+                0.0
+            };
+            let env = (i as f32 / att as f32).min(1.0) * ((n - i) as f32 / rel as f32).min(1.0) * (1.0 - 0.35 * t);
+            lp1 += a * (raw * env - lp1);
+            lp2 += a * (lp1 - lp2);
+            out.push(lp2);
+        }
+    }
+    // The low-pass rings out a little past the last note: a short tail, faded to zero.
+    let tail = (rate * 0.002) as usize;
+    let last = out.last().copied().unwrap_or(0.0);
+    for i in 0..tail {
+        out.push(last * (1.0 - (i + 1) as f32 / tail as f32));
+    }
+    let rms = loudest_rms_db(&out.iter().map(|v| (v * 32767.0).round() as i16).collect::<Vec<_>>());
+    let k = 10f32.powf((target_db - rms) / 20.0);
+    Some(out.iter().map(|v| (v * 32767.0 * k).round().clamp(-32767.0, 32767.0) as i16).collect())
+}
+
+/// RMS in dBFS of the loudest 50 ms of `pcm` (a shorter sound counts as padded with silence to 50 ms): what a short
+/// sound sounds as loud as. Used to level the blips against the sample files.
+pub fn loudest_rms_db(pcm: &[i16]) -> f32 {
+    let w = RATE as usize / 20;
+    let sq: Vec<f64> = pcm.iter().map(|v| (*v as f64 / 32768.0).powi(2)).collect();
+    let mut sum: f64 = sq.iter().take(w).sum();
+    let mut best = sum;
+    for i in w..sq.len() {
+        sum += sq[i] - sq[i - w];
+        best = best.max(sum);
+    }
+    (10.0 * (best.max(1e-12) / w as f64).log10()) as f32
+}
+
+/// Index in the mixer's bank: [`ALL`] first, then the blips ([`RETRO_SOUNDS`]). The blip's when `retro` and it has one.
+fn bank_index(sound: Sound, retro: bool) -> usize {
+    if retro {
+        if let Some(k) = RETRO_SOUNDS.iter().position(|s| *s == sound) {
+            return ALL.len() + k;
+        }
+    }
+    ALL.iter().position(|s| *s == sound).unwrap_or(0)
+}
+
 /// The longest a sound may be asked to wait ([`play_after`]): a launch's whole sequence fits.
 const MAX_AFTER: Duration = Duration::from_secs(3);
 /// How long the output stays open after the last sound, writing silence: moving through a list then
@@ -740,11 +831,11 @@ pub fn close_when_done(restore_quantum: bool) {
     }
 }
 
-/// Whether pocket-ui is in front (no game or app running), awake with the screen on, and its sounds on: then the output
-/// stays open, writing silence, so the first sound after a quiet spell starts at once. Opening it costs 20 to 60 ms on a
+/// Whether pocket-ui is actively being browsed, awake with sounds on: the output stays open between presses.
+/// The app revokes this lease after two seconds without a press, so an idle shelf keeps no silent audio stream. Opening it costs 20 to 60 ms on a
 /// Mini V2 and 100 to 220 ms on an H700 (PipeWire's stream setup), and a speaker sink suspended after 5 s of quiet takes
 /// up to 0.8 s more to wake there (scripts/ui-sounds `ui_open_bench`). Called every turn of the event loop; only a
-/// change is sent.
+/// change is sent. A press after a longer rest reopens the output on the sound thread.
 pub fn keep_warm(warm: bool) {
     // Reconcile the route fence every turn, even without a Warm transition: a next game's missing ROM may have
     // returned to the shelf without game_ended, while sleep or Sounds Off must revoke periodic route work.
@@ -910,7 +1001,8 @@ fn mixer_with<O: MixerOutput>(
     configured_quantum: Option<u32>,
     mute_fresh: Duration,
 ) {
-    let bank: Vec<Vec<i16>> = ALL.iter().map(|s| synth(*s)).collect();
+    // The sample files, then the Retro style's blips (synthesised here, once, on this thread).
+    let bank: Vec<Vec<i16>> = ALL.iter().map(|s| synth(*s)).chain(RETRO_SOUNDS.iter().map(|s| blip(*s).unwrap_or_default())).collect();
     let debug = std::env::var_os("POCKETUI_SOUND_DEBUG").is_some();
     // Asks the quantum thread for a change. New sounds wait from this moment (`CHANGING`), not from when the thread
     // takes it up: a sound let in meanwhile played through the change, or was lost when the output reopened for it.
@@ -1062,7 +1154,8 @@ fn mixer_with<O: MixerOutput>(
             // The wait counts from when it was asked: the time it took to get here (opening the output) is part of it.
             let wait = (RATE as u128 * after.saturating_sub(asked.elapsed()).as_micros() / 1_000_000) as usize;
             let voice = Voice {
-                sound: ALL.iter().position(|s| *s == sound).unwrap_or(0),
+                // One atomic load: Retro on swaps the menu sounds for blips.
+                sound: bank_index(sound, crate::retro::on()),
                 pos: 0,
                 gain,
                 wait,
@@ -1227,7 +1320,8 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn the_quantum_monitor_dies_with_its_reader_and_releases_its_lock() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_quantum_monitor_dies_with_its_reader_and_releases_its_lock() {
         use std::os::fd::AsRawFd;
         use std::os::unix::process::{CommandExt, ExitStatusExt};
         let dir = TestDir::new("quantum-monitor-owner");
@@ -1259,7 +1353,7 @@ mod tests {
         let held = unsafe { libc::flock(probe.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0;
         stop_tx.send(()).unwrap();
         owner.join().unwrap();
-        let until = Instant::now() + Duration::from_secs(5);
+        let until = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
         let status = loop {
             if let Some(status) = child.try_wait().unwrap() { break Some(status); }
             if Instant::now() >= until {
@@ -1305,7 +1399,8 @@ mod tests {
     /// set again right after a game (before any sound) and holds while on the shelf, and a change by someone else is
     /// set right.
     #[test]
-    fn the_quantum_changes_in_order_and_every_raise_is_announced() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_quantum_changes_in_order_and_every_raise_is_announced() {
         let g = Graph::default();
         static CHANGING_T: AtomicBool = AtomicBool::new(false);
         static SEEN_T: AtomicU32 = AtomicU32::new(u32::MAX);
@@ -1337,7 +1432,7 @@ mod tests {
         drop(tx);
         let want = ["force 256", "restore", "force 256", "restore", "restore", "force 256", "force 256"];
         let t0 = Instant::now();
-        while g.0.lock().unwrap().len() < want.len() && t0.elapsed() < Duration::from_secs(3) {
+        while g.0.lock().unwrap().len() < want.len() && t0.elapsed() < crate::testutil::timeout(Duration::from_secs(3)) {
             std::thread::sleep(Duration::from_millis(5));
         }
         std::thread::sleep(Duration::from_millis(100));
@@ -1351,7 +1446,8 @@ mod tests {
     }
 
     #[test]
-    fn the_idle_shelf_follows_bluetooth_without_a_sound_or_a_quantum_event() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_idle_shelf_follows_bluetooth_without_a_sound_or_a_quantum_event() {
         use std::sync::{Arc, Mutex};
         static RAISING_T: AtomicBool = AtomicBool::new(false);
         static CHANGING_T: AtomicBool = AtomicBool::new(false);
@@ -1397,7 +1493,7 @@ mod tests {
         );
         let wait_for = |events: usize| {
             let start = Instant::now();
-            while graph.events.lock().unwrap().len() < events && start.elapsed() < Duration::from_secs(2) {
+            while graph.events.lock().unwrap().len() < events && start.elapsed() < crate::testutil::timeout(Duration::from_secs(2)) {
                 std::thread::sleep(Duration::from_millis(5));
             }
             assert_eq!(graph.events.lock().unwrap().len(), events);
@@ -1415,7 +1511,7 @@ mod tests {
         // the quantum worker has already started its 25 ms raise lead and has not read Leave yet.
         graph.connected.store(true, Ordering::Relaxed);
         let start = Instant::now();
-        while !RAISING_T.load(Ordering::Relaxed) && start.elapsed() < Duration::from_secs(2) {
+        while !RAISING_T.load(Ordering::Relaxed) && start.elapsed() < crate::testutil::timeout(Duration::from_secs(2)) {
             std::thread::sleep(Duration::from_millis(1));
         }
         assert!(RAISING_T.load(Ordering::Relaxed));
@@ -1456,7 +1552,8 @@ mod tests {
     }
 
     #[test]
-    fn the_mixer_releases_muted_warm_streams_and_recovers_without_ui_input() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_mixer_releases_muted_warm_streams_and_recovers_without_ui_input() {
         use std::sync::Arc;
         use std::sync::atomic::AtomicUsize;
         #[derive(Default)]
@@ -1499,7 +1596,7 @@ mod tests {
         });
         let wait_for = |predicate: &dyn Fn() -> bool| {
             let start = Instant::now();
-            while !predicate() && start.elapsed() < Duration::from_secs(2) {
+            while !predicate() && start.elapsed() < crate::testutil::timeout(Duration::from_secs(2)) {
                 std::thread::sleep(Duration::from_millis(5));
             }
             assert!(predicate());
@@ -1681,6 +1778,67 @@ mod tests {
         assert!(ms(a.len(), RATE).abs_diff(ms(b.len(), 32_000)) <= 1, "{} vs {}", a.len(), b.len());
         let peak = |v: &[i16]| v.iter().map(|s| s.unsigned_abs()).max().unwrap();
         assert!(peak(&b) as f32 > peak(&a) as f32 * 0.8, "{} vs {}", peak(&b), peak(&a));
+    }
+
+    /// (blip, intended length in ms: min, max)
+    const BLIPS: [(Sound, u32, u32); 5] = [(Sound::Nav, 25, 40), (Sound::Confirm, 60, 90), (Sound::Back, 60, 90), (Sound::Menu, 80, 120), (Sound::Error, 90, 130)];
+
+    #[test]
+    fn retro_blips_are_short_clean_quiet_and_as_loud_as_the_samples() {
+        for (s, min, max) in BLIPS {
+            let b = blip(s).unwrap();
+            let ms = b.len() as u32 * 1000 / RATE;
+            assert!((min..=max).contains(&ms), "{s:?}: {ms} ms");
+            assert!(b[0].unsigned_abs() < 100, "{s:?} first {}", b[0]);
+            assert!(b[b.len() - 1].unsigned_abs() < 100, "{s:?} last {}", b[b.len() - 1]);
+            let peak = b.iter().map(|v| v.unsigned_abs()).max().unwrap();
+            assert!(peak <= 29204, "{s:?}: peak {peak} is over -1 dBFS");
+            let (rb, rf) = (loudest_rms_db(&b), loudest_rms_db(&synth(s)));
+            assert!(rb <= rf && rb >= rf - 4.0, "{s:?}: blip {rb:.1} dB vs file {rf:.1} dB");
+        }
+        assert!(blip(Sound::Volume).is_none() && blip(Sound::Switcher).is_none());
+    }
+
+    #[test]
+    fn retro_picks_the_blip_by_the_style_and_nothing_else() {
+        for s in RETRO_SOUNDS {
+            assert_ne!(bank_index(s, true), bank_index(s, false), "{s:?}");
+            assert!(bank_index(s, true) < ALL.len() + RETRO_SOUNDS.len());
+        }
+        for s in ALL.iter().filter(|s| !RETRO_SOUNDS.contains(s)) {
+            assert_eq!(bank_index(*s, true), bank_index(*s, false), "{s:?} keeps its file");
+        }
+    }
+
+    /// Prints the level table and writes the WAVs: `POCKETUI_BLIP_DIR=/dir cargo test --profile gate --lib retro_blip_table -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "writes the blips' level table and WAV files for listening"]
+    fn retro_blip_table() {
+        println!("| sound | file peak | file RMS (50 ms) | file ms | blip peak | blip RMS (50 ms) | blip ms |\n|---|---|---|---|---|---|---|");
+        for (s, _, _) in BLIPS {
+            let (f, b) = (synth(s), blip(s).unwrap());
+            let peak = |v: &[i16]| 20.0 * (v.iter().map(|x| x.unsigned_abs()).max().unwrap() as f32 / 32768.0).log10();
+            println!("| {s:?} | {:.1} | {:.1} | {} | {:.1} | {:.1} | {} |", peak(&f), loudest_rms_db(&f), f.len() * 1000 / RATE as usize, peak(&b), loudest_rms_db(&b), b.len() * 1000 / RATE as usize);
+            if let Some(dir) = std::env::var_os("POCKETUI_BLIP_DIR") {
+                let mut w = Vec::new();
+                let n = b.len() as u32 * 2;
+                w.extend(b"RIFF");
+                w.extend((36 + n).to_le_bytes());
+                w.extend(b"WAVEfmt ");
+                w.extend(16u32.to_le_bytes());
+                w.extend([1, 0, 1, 0]);
+                w.extend(RATE.to_le_bytes());
+                w.extend((RATE * 2).to_le_bytes());
+                w.extend([2, 0, 16, 0]);
+                w.extend(b"data");
+                w.extend(n.to_le_bytes());
+                for v in &b {
+                    w.extend(v.to_le_bytes());
+                }
+                let name = format!("{}.wav", format!("{s:?}").to_lowercase());
+                std::fs::write(std::path::Path::new(&dir).join(name), w).unwrap();
+            }
+        }
     }
 
     #[test]

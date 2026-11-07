@@ -1,0 +1,25 @@
+#!/bin/sh
+# Stand-in for ROCKNIX's `wifictl enable|disable`: the radio's soft block, and the interface up or down. wpa_supplicant and udhcpc
+# are the firmware's own; TrimUI's start script stops them at boot when its Wi-Fi setting is off, so enable starts them again.
+SYSFS=${BRICK_RFKILL:-/sys/class/rfkill}
+STATE=${BRICK_STATE:-/tmp}
+WPA_INIT=${BRICK_WPA_INIT:-/etc/init.d/wpa_supplicant}
+UDHCPC=${BRICK_UDHCPC:-udhcpc}
+case "${1:-}" in
+  enable)
+    mkdir -p "$STATE" 2>/dev/null; rm -f "$STATE/wifi-off"
+    for r in "$SYSFS"/rfkill*; do [ "$(cat "$r/type" 2>/dev/null)" = wlan ] && echo 0 >"$r/soft"; done
+    ${BRICK_IFCONFIG:-ifconfig} wlan0 up 2>/dev/null
+    "${BRICK_PIDOF:-pidof}" wpa_supplicant >/dev/null 2>&1 || { [ -x "$WPA_INIT" ] && "$WPA_INIT" start; }   # TrimUI's own start stopped it when its Wi-Fi setting was off
+    # A udhcpc that kept running through a restarted wpa_supplicant renews its lease (else the default route can stay gone).
+    if pids=$("${BRICK_PIDOF:-pidof}" udhcpc 2>/dev/null); then kill -USR1 $pids 2>/dev/null; else "$UDHCPC" -i wlan0 -b >/dev/null 2>&1; fi
+    ;;
+  disable)
+    mkdir -p "$STATE" 2>/dev/null; : >"$STATE/wifi-off"
+    [ -x "$WPA_INIT" ] && "$WPA_INIT" stop
+    ${BRICK_KILLALL:-killall} udhcpc 2>/dev/null
+    for r in "$SYSFS"/rfkill*; do [ "$(cat "$r/type" 2>/dev/null)" = wlan ] && echo 1 >"$r/soft"; done
+    ${BRICK_IFCONFIG:-ifconfig} wlan0 down 2>/dev/null
+    ;;
+  *) echo "usage: wifictl enable|disable" >&2; exit 2 ;;
+esac

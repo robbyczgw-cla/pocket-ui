@@ -83,14 +83,14 @@ fn layout(text: &mut Text, d: &Data) -> (String, i32, i32) {
 
 /// Draws the pill with its top-left corner at (x, y). `bg` is the pill colour.
 pub fn paint(c: &mut Canvas, text: &mut Text, x: i32, y: i32, d: &Data, bg: u32) {
-    c.round_rect(x, y, W, H, H / 2, bg);
+    crate::retro::window(c, x, y, W, H, H / 2, bg);
     let base = y + H / 2 + crate::type_scale::mid(FONT);
     let (label, label_col, value_col) = layout(text, d);
     text.draw(c, Face::Body, FONT, x + PAD, base, CHALK, &label);
     text.draw_right(c, Face::Body, FONT, x + W - PAD, base, CHALK, &d.value);
     let (bx, bw) = (x + PAD + label_col, W - 2 * PAD - label_col - value_col);
     let by = y + (H - BAR_H) / 2;
-    c.round_rect(bx, by, bw, BAR_H, BAR_H / 2, TRACK);
+    crate::retro::pill(c, bx, by, bw, BAR_H, BAR_H / 2, TRACK);
     if d.centered {
         let mid = bx + bw / 2;
         let end = bx + (bw as f32 * d.frac) as i32;
@@ -102,7 +102,7 @@ pub fn paint(c: &mut Canvas, text: &mut Text, x: i32, y: i32, d: &Data, bg: u32)
     } else {
         let fill = ((bw as f32 * d.frac) as i32).max(if d.frac > 0.0 { BAR_H } else { 0 });
         if fill > 0 {
-            c.round_rect(bx, by, fill, BAR_H, BAR_H / 2, LABEL);
+            crate::retro::pill(c, bx, by, fill, BAR_H, BAR_H / 2, LABEL);
         }
     }
 }
@@ -110,7 +110,7 @@ pub fn paint(c: &mut Canvas, text: &mut Text, x: i32, y: i32, d: &Data, bg: u32)
 /// Draws a level bar of the quick settings rows (same look, any size).
 pub fn paint_bar(c: &mut Canvas, x: i32, y: i32, w: i32, frac: f32, centered: bool, fill: u32, track: u32) {
     let by = y - BAR_H / 2;
-    c.round_rect(x, by, w, BAR_H, BAR_H / 2, track);
+    crate::retro::pill(c, x, by, w, BAR_H, BAR_H / 2, track);
     if centered {
         let mid = x + w / 2;
         let end = x + (w as f32 * frac.clamp(0.0, 1.0)) as i32;
@@ -122,7 +122,7 @@ pub fn paint_bar(c: &mut Canvas, x: i32, y: i32, w: i32, frac: f32, centered: bo
     } else {
         let f = ((w as f32 * frac.clamp(0.0, 1.0)) as i32).max(if frac > 0.0 { BAR_H } else { 0 });
         if f > 0 {
-            c.round_rect(x, by, f, BAR_H, BAR_H / 2, fill);
+            crate::retro::pill(c, x, by, f, BAR_H, BAR_H / 2, fill);
         }
     }
 }

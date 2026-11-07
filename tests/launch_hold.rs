@@ -54,7 +54,7 @@ void retro_run(void) {
 "#;
 
 fn wait_for(mut done: impl FnMut() -> bool, log: &Path) {
-    let until = Instant::now() + Duration::from_secs(3);
+    let until = Instant::now() + test_clock::timeout(Duration::from_secs(3));
     while Instant::now() < until {
         if done() { return; }
         std::thread::sleep(Duration::from_millis(10));
@@ -76,7 +76,7 @@ fn resumed_game_stays_at_its_moment_and_every_exit_from_the_hold_works() {
     std::fs::write(&source, CORE).unwrap();
     assert!(Command::new("cc").args(["-shared", "-fPIC", "-o"]).arg(&so).arg(source).status().unwrap().success());
 
-    for scenario in ["quit", "skip", "press", "sleep", "wake-only", "dark", "pause", "deadline", "failed", "missing", "normal", "picture-pending"] {
+    for scenario in ["quit", "skip", "press", "sleep", "wake-only", "dark", "pause", "wait-for-button", "failed", "missing", "normal", "picture-pending"] {
         let root = dir.path().join(scenario);
         let states = root.join("states/gb");
         std::fs::create_dir_all(&states).unwrap();
@@ -103,7 +103,7 @@ fn resumed_game_stays_at_its_moment_and_every_exit_from_the_hold_works() {
             .env("POCKET_LAUNCH_HOLD_SKIP", &skip)
             .env("POCKET_LAUNCH_HOLD_READY", &ready)
             .env("POCKET_LAUNCH_HOLD_STILL", if scenario == "normal" { "0" } else { "1" })
-            .env("POCKET_LAUNCH_HOLD_UNTIL", (pocket_ui::startup::clock_ms() + if scenario == "deadline" { 1500.0 } else { 5900.0 }).to_string())
+            .env("POCKET_LAUNCH_HOLD_UNTIL", (pocket_ui::startup::clock_ms() + if scenario == "wait-for-button" { 1500.0 } else { 5900.0 }).to_string())
             .stdout(std::fs::File::create(&log).unwrap()).stderr(Stdio::null()).spawn().unwrap());
         let fifo = root.join("pocket-core.cmd");
         wait_for(|| std::fs::read_to_string(&log).unwrap_or_default().contains("display "), &log);
@@ -117,6 +117,11 @@ fn resumed_game_stays_at_its_moment_and_every_exit_from_the_hold_works() {
             assert!(!trace.exists(), "{scenario}: moment advanced while held");
         }
         match scenario {
+            "wait-for-button" => {
+                std::thread::sleep(Duration::from_millis(4300));
+                assert!(!trace.exists(), "reading past four seconds must not advance the game");
+                std::fs::write(&skip, b"").unwrap();
+            }
             "skip" => std::fs::write(&skip, b"").unwrap(),
             "press" => send("press B 150"),
             "sleep" => send("sleep\nwake"),
@@ -138,7 +143,7 @@ fn resumed_game_stays_at_its_moment_and_every_exit_from_the_hold_works() {
         assert!(game.0.wait().unwrap().success(), "{scenario}: {}", std::fs::read_to_string(&log).unwrap());
         if scenario == "quit" {
             let mut core = pocket_ui::libretro::Core::load(&so, &rom, &root, &root, &[]).unwrap();
-            assert_eq!(core.resume(&auto), pocket_ui::libretro::Resume::Resumed);
+            assert_eq!(core.resume(&pocket_ui::slots::auto_path(&states.join("Game"))), pocket_ui::libretro::Resume::Resumed, "{}", std::fs::read_to_string(&log).unwrap());
             let position = core.save_state().unwrap();
             // Compare with a fresh core advanced to the original moment: Quit preserved precisely that point.
             drop(core);
@@ -148,3 +153,6 @@ fn resumed_game_stays_at_its_moment_and_every_exit_from_the_hold_works() {
         }
     }
 }
+
+#[path = "../src/test_clock.rs"]
+mod test_clock;

@@ -102,6 +102,10 @@ EOF
   # first picture as pocket-ui does (POCKETUI_FRAME_FILE), then exits with the planned code.
   cat >"$T/fake-pocket-ui" <<EOF
 #!$TEST_SH
+if [ "\$1" = --restore-second-screen ]; then
+  echo "restore-second-screen \$2" >>"$T/calls"
+  exit 0
+fi
 n=\$((\$(cat "$T/runs" 2>/dev/null || echo 0) + 1))
 echo \$n >"$T/runs"
 echo "pocket-ui run \$n \$(readlink current 2>/dev/null) \$*" >>"$T/calls"
@@ -276,7 +280,7 @@ SETSID=; command -v setsid >/dev/null 2>&1 && SETSID=setsid
 # none of its own time limits allow (`bounded`), so that is a bug. The checks below then fail with their own message.
 launch() {
   env PATH="$T/bin:$PATH" POCKETUI_ROOT="$ROOT" POCKETUI_LOG="$T/log" POCKETUI_BACKLIGHT="$T/backlight" \
-    POCKETUI_DARK_FILE="$T/dark" POCKETUI_GAME_FILE="$T/game" POCKETUI_QUANTUM="$T/bin/quantum" \
+    POCKETUI_SECOND_RESTORE_FILE="$T/second.restore" POCKETUI_DARK_FILE="$T/dark" POCKETUI_GAME_FILE="$T/game" POCKETUI_QUANTUM="$T/bin/quantum" \
     POCKETUI_RESTART_DELAY="${DELAY:-0}" POCKETUI_RESTARTS="${RESTARTS:-3}" POCKETUI_GAME_GRACE=5 \
     POCKETUI_AS_ESSWAY="${ESSWAY:-}" POCKETUI_SWAY_WAIT="${SWAY_WAIT:-30}" POCKETUI_START_ES="$T/bin/start_es.sh" POCKETUI_ES_ONLY_FILE="$T/es-only" \
     POCKETUI_FRAME_FILE="$T/frame" POCKETUI_UI_PID_FILE="$T/ui.pid" POCKETUI_FIRST_FRAME_SECS="${FIRST_FRAME:-30}" \
@@ -374,7 +378,10 @@ echo "# clean-up after a crash during a frozen game in light sleep"
 setup "139 77"
 touch "$T/with-game"
 echo 120 >"$T/dark"
+touch "$T/second.restore"
 launch
+check "both panels recover after a crash in sleep" 'grep -qx "restore-second-screen 120" "$T/calls" && [ ! -f "$T/second.restore" ]'
+check "dual-panel recovery follows emulator cleanup and precedes restart" '[ "$(at "restore-second-screen")" -lt "$(at "pocket-ui run 2")" ]'
 pg=$(cat "$T/game-pgid" 2>/dev/null || echo 0)
 check "the frozen emulator was continued and asked to end" '[ -f "$T/emulator-term" ]'
 check "runemu.sh was spared and ran its clean-up" 'grep -q "cleanup after exit 0" "$T/runemu-cleanup" 2>/dev/null'
@@ -935,7 +942,8 @@ if [ \$n = 1 ]; then
 fi
 EOF
 FANCHECK=0.2 FANSTALE=20 launch
-check "the beat moved for the whole run" 'grep -qE "^beat writer: [0-9]{3,} beats, ended: note-gone" "$T/calls"'
+wait_for 'grep -q "^beat writer:" "$T/calls"'
+check "the beat moved for the whole run" 'grep -qE "^beat writer: [1-9][0-9]* beats, ended: note-gone" "$T/calls"'
 check "and the watchdog left it alone" '! grep -q "stopped answering" "$T/log"'
 check "and clean_up gave it back at the end" '[ ! -f "$T/fan.restore" ] && [ "$(trips)" = "$SYSTEM_TRIPS" ]'
 

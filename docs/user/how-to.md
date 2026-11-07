@@ -32,8 +32,9 @@ still doesn't start.
 2. Settings → Connections → **Bluetooth** → **Search for devices**, press **A**.
 3. Select the controller and press **A**. It pairs, trusts and connects in one go.
 
-It reconnects by itself the next time you switch it on. Headphones and speakers pair the same way. More:
-[Bluetooth](bluetooth.md).
+It reconnects by itself the next time you switch it on. Buttons in the wrong place? Give it its own layout in Settings →
+Playing → Buttons → [Controller setup](controls-settings.md#controller-setup), and check it with Settings → Help & tools →
+[Test buttons](settings-system.md#test-buttons). Headphones and speakers pair the same way. More: [Bluetooth](bluetooth.md).
 
 ![Bluetooth with a controller found](pictures/bluetooth.webp)
 

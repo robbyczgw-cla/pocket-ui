@@ -60,13 +60,8 @@ fn wayland(tmp: &Path) -> Option<Stub> {
     let path = tmp.join("wayland-stub");
     let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), path.to_str().unwrap()]).spawn().expect("python3 for scripts/wayland-stub.py");
     let stub = Stub { path, child };
-    for _ in 0..200 {
-        if stub.path.exists() {
-            return Some(stub);
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-    panic!("scripts/wayland-stub.py didn't start");
+    test_clock::wait_for(|| stub.path.exists(), std::time::Duration::from_secs(2), "Wayland stub listening");
+    Some(stub)
 }
 
 fn copy_dir(from: &Path, to: &Path) {
@@ -95,14 +90,21 @@ fn fake_library(dir: &Path) {
 /// them when empty), plus the `X` lines of the i18n record (a string drawn past the right edge) when `only` has an X,
 /// plus a line for each state that didn't render.
 fn render_all(tmp: &Path, bin: &Path, stub: Option<&Stub>, jobs: Vec<(String, &'static str, &'static str, bool, String)>, picture: Option<&str>, only: &str) -> Vec<String> {
+    render_all_in(tmp, bin, stub, jobs, picture, only, &[])
+}
+
+/// `render_all` with more of the environment set for every snapshot (`POCKETUI_RETRO=cocoa`: Settings → Look → Style →
+/// Retro in that palette).
+fn render_all_in(tmp: &Path, bin: &Path, stub: Option<&Stub>, jobs: Vec<(String, &'static str, &'static str, bool, String)>, picture: Option<&str>, only: &str, env: &[(&str, &str)]) -> Vec<String> {
     let (tmp, bin, stub) = (tmp.to_path_buf(), bin.to_path_buf(), stub.map(|s| s.path.clone()));
+    let env: Vec<(String, String)> = env.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
     let picture = picture.map(str::to_string);
     let only = only.to_string();
     let work = Arc::new(Mutex::new(jobs));
     let found = Arc::new(Mutex::new(Vec::new()));
     let threads: Vec<_> = (0..std::thread::available_parallelism().map_or(4, |n| n.get().min(8)))
         .map(|_| {
-            let (work, found, tmp, bin, stub, picture, only) = (work.clone(), found.clone(), tmp.clone(), bin.clone(), stub.clone(), picture.clone(), only.clone());
+            let (work, found, tmp, bin, stub, picture, only, env) = (work.clone(), found.clone(), tmp.clone(), bin.clone(), stub.clone(), picture.clone(), only.clone(), env.clone());
             std::thread::spawn(move || loop {
                 let Some((name, size, lang, safe, state)) = work.lock().unwrap().pop() else { break };
                 // Its own copy of the data folder: some states write into it, and they run side by side.
@@ -119,6 +121,7 @@ fn render_all(tmp: &Path, bin: &Path, stub: Option<&Stub>, jobs: Vec<(String, &'
                 if let Some(p) = &picture {
                     cmd.env("POCKETUI_SNAPSHOT_SIZE", p);
                 }
+                cmd.envs(env.iter().map(|(k, v)| (k, v)));
                 let out = cmd
                     .args(["--snapshot", &state, png.to_str().unwrap()])
                     .env("POCKETUI_MOCK", "1")
@@ -192,6 +195,175 @@ fn in_medium_and_large_text_no_string_runs_into_another_or_off_its_room() {
         found.len(),
         found.join("\n")
     );
+}
+
+/// Settings → Look → Style → Retro paints every page in Pixelify Sans, wider than Barlow: every state in Large text and
+/// German, at the Mini V2's size and at 640x480 (the H700 handhelds), with nothing that runs into another string, a hint
+/// bar or an edge. Cocoa and Pea share their sizes, so one palette stands for both.
+#[test]
+fn retro_in_large_german_text_no_string_runs_into_another_or_off_its_room() {
+    let _tmp_guard = tempfile::tempdir().unwrap();
+    let tmp = _tmp_guard.path().to_path_buf();
+    fake_library(&tmp);
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
+    let stub = wayland(&tmp);
+    let mut found = Vec::new();
+    for picture in [None, Some("640x480")] {
+        let jobs = states().into_iter().enumerate().map(|(i, (safe, state))| (format!("retro-{}-{i}", picture.unwrap_or("native")), "large", "de", safe, state)).collect();
+        found.extend(render_all_in(&tmp, &bin, stub.as_ref(), jobs, picture, "", &[("POCKETUI_RETRO", "cocoa")]).into_iter().map(|f| format!("{}: {f}", picture.unwrap_or("1240x1080"))));
+    }
+    drop(stub);
+    found.sort();
+    assert!(found.is_empty(), "{} problems with Retro in Large German text (O overlap, T touch, E side edge, V top/bottom edge):\n{}", found.len(), found.join("\n"));
+}
+
+/// "How do you like to play?" in Retro, Large text and Spanish on a 1024x768 screen (the Brick, 2026-11-07): the heading
+/// "¿Cómo te gusta jugar?" and the line under it touched. Every language, normal and Large, at 1024x768 and 640x480.
+#[test]
+fn retro_play_question_keeps_its_heading_off_the_line_under_it() {
+    let _tmp_guard = tempfile::tempdir().unwrap();
+    let tmp = _tmp_guard.path().to_path_buf();
+    fake_library(&tmp);
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
+    let stub = wayland(&tmp);
+    let mut found = Vec::new();
+    for picture in ["1024x768", "640x480"] {
+        let mut jobs = Vec::new();
+        for (i, size) in ["normal", "large"].into_iter().enumerate() {
+            for lang in ["en", "de", "es"] {
+                jobs.push((format!("retro-play-{picture}-{lang}-{i}"), size, lang, false, "setup:play".to_string()));
+            }
+        }
+        found.extend(render_all_in(&tmp, &bin, stub.as_ref(), jobs, Some(picture), "", &[("POCKETUI_RETRO", "cocoa")]).into_iter().map(|f| format!("{picture}: {f}")));
+    }
+    drop(stub);
+    found.sort();
+    assert!(found.is_empty(), "{} problems on the play question in Retro (O overlap, T touch, E side edge, V top/bottom edge):\n{}", found.len(), found.join("\n"));
+}
+
+/// The pause menu, its Save/Load slots, Options, quick settings and pocket-core's notes over a game in Retro, as
+/// the Retro clip showed them (06.11.2026): "Save & quit" in German ran through the rows' window on 640x480,
+/// Load's "Where I quit" ran under the preview window, the game's name was cut short by the battery line. Every one in
+/// Large text, German and Spanish, at 1240x1080, 640x480 and 1024x768, behind a long real name (Donkey Kong Country 3's):
+/// nothing may run into another string, a hint bar, a window's frame (the pause menu records its windows' lines,
+/// `retro::frame_lines_are_no_text`) or an edge.
+#[test]
+fn retro_pause_menu_in_large_german_and_spanish_text_stays_inside_its_windows() {
+    let _tmp_guard = tempfile::tempdir().unwrap();
+    let tmp = _tmp_guard.path().to_path_buf();
+    fake_library(&tmp);
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
+    let stub = wayland(&tmp);
+    let states = [
+        "menu:pocket-core", "menu:pocket-core:2", "menu:pocket-core:3", "menu:pocket-core:5", "menu:pocket-core:0:battery=all",
+        "menu:pocket-core:0:disc=1/3", "menu:pocket-core:5:save=full", "menu:retroarch", "menu:ps2", "menu:scummvm:3",
+        "slot-save", "slot-load", "slot-auto", "slot-undo", "slot-earlier", "slot-load:snes:card", "slot-save:psx",
+        "options", "game-quick", "game-twin-note", "game-save-warning", "achievements-menu", "players-menu:full",
+    ];
+    let game = [("POCKETUI_RETRO", "cocoa"), ("POCKETUI_SNAPSHOT_GAME", "snes|Donkey Kong Country 3: Dixie Kong's Double Trouble!|dkc3.sfc")];
+    let mut found = Vec::new();
+    for picture in [None, Some("640x480"), Some("1024x768")] {
+        let mut jobs = Vec::new();
+        for lang in ["de", "es"] {
+            for (i, state) in states.iter().enumerate() {
+                jobs.push((format!("retro-pause-{}-{lang}-{i}", picture.unwrap_or("native")), "large", lang, false, state.to_string()));
+            }
+        }
+        found.extend(render_all_in(&tmp, &bin, stub.as_ref(), jobs, picture, "", &game).into_iter().map(|f| format!("{}: {f}", picture.unwrap_or("1240x1080"))));
+    }
+    // And what was cut short there shows whole now: the longest names and Load's "Where I quit", and the game's name
+    // beside the battery line.
+    let whole = [
+        ("640x480", "de", "menu:pocket-core", "Donkey Kong Country 3: Dixie Kong's Double Trouble!", "Sichern & Ende"),
+        ("1024x768", "es", "slot-earlier", "Donkey Kong Country 3: Dixie Kong's Double Trouble!", "Guardar y salir"),
+        ("640x480", "de", "slot-auto", "Donkey Kong Country 3: Dixie Kong's Double Trouble!", "Wo ich aufhörte"),
+        ("640x480", "es", "slot-auto", "Donkey Kong Country 3: Dixie Kong's Double Trouble!", "Donde lo dejé"),
+        ("1240x1080", "en", "slot-auto", "Donkey Kong Country 3: Dixie Kong's Double Trouble!", "Where I quit"),
+        ("1240x1080", "en", "menu:pocket-core:0:battery=all", "Donkey Kong Country 3", "Donkey Kong Country 3"),
+    ];
+    for (i, (picture, lang, state, game, want)) in whole.into_iter().enumerate() {
+        let (data, seen) = (tmp.join(format!("data-whole-{i}")), tmp.join(format!("whole-{i}.txt")));
+        copy_dir(&tmp.join("data"), &data);
+        let mut cmd = Command::new(&bin);
+        if let Some(stub) = &stub {
+            cmd.env("WAYLAND_DISPLAY", &stub.path);
+        }
+        if picture != "1240x1080" {
+            cmd.env("POCKETUI_SNAPSHOT_SIZE", picture);
+        }
+        let out = cmd
+            .args(["--snapshot", state, tmp.join(format!("whole-{i}.png")).to_str().unwrap()])
+            .envs([("POCKETUI_MOCK", "1"), ("POCKETUI_LANG", lang), ("POCKETUI_TEXT_SIZE", "large"), ("POCKETUI_RETRO", "cocoa")])
+            .env("POCKETUI_SNAPSHOT_GAME", format!("snes|{game}|game.sfc"))
+            .env("POCKETUI_VISIBLE_TEXT", &seen)
+            .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
+            .env("POCKETUI_DATA", &data)
+            .output()
+            .expect("run pocket-ui");
+        let seen = std::fs::read_to_string(&seen).unwrap_or_default();
+        if !out.status.success() || !seen.lines().any(|l| l.trim() == want) {
+            found.push(format!("{state} ({picture}, {lang}): \"{want}\" not whole on the picture, which shows:\n{seen}"));
+        }
+    }
+    drop(stub);
+    found.sort();
+    assert!(found.is_empty(), "{} problems in Retro's pause menu (O overlap or a frame's line, T touch, E side edge, V top/bottom edge, or a name cut short):\n{}", found.len(), found.join("\n"));
+}
+
+/// Help & tools → Test buttons in Retro, as the Mini V2 showed it (06.11.2026): before the first press the second hint,
+/// "…what it does in menus and in games.", ran past the last-press panel's frame and off the screen ("s." was gone), in
+/// Medium English; Barlow's narrower letters just fitted. Every case of the page in Large text, English, German and
+/// Spanish at 1240x1080, 640x480 and 1024x768, plus the Mini V2's own Medium English: nothing may run into another string,
+/// the hint bar, the panel's frame (`retro::frame_lines_are_no_text`) or an edge, and the hint's last words show whole.
+#[test]
+fn retro_test_buttons_page_keeps_its_hints_inside_the_panel() {
+    let _tmp_guard = tempfile::tempdir().unwrap();
+    let tmp = _tmp_guard.path().to_path_buf();
+    fake_library(&tmp);
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
+    let stub = wayland(&tmp);
+    let states = ["test-buttons:idle", "test-buttons", "test-buttons:bt", "test-buttons:two", "test-buttons:remap", "test-buttons:hold", "test-buttons:unknown", "test-buttons:empty"];
+    let retro = [("POCKETUI_RETRO", "cocoa")];
+    let mut found = Vec::new();
+    for picture in [None, Some("640x480"), Some("1024x768")] {
+        let mut jobs = Vec::new();
+        for lang in ["en", "de", "es"] {
+            for (i, state) in states.iter().enumerate() {
+                jobs.push((format!("retro-tb-{}-{lang}-{i}", picture.unwrap_or("native")), "large", lang, false, state.to_string()));
+            }
+        }
+        if picture.is_none() {
+            jobs.push(("retro-tb-native-en-medium".to_string(), "medium", "en", false, "test-buttons:idle".to_string()));
+        }
+        found.extend(render_all_in(&tmp, &bin, stub.as_ref(), jobs, picture, "", &retro).into_iter().map(|f| format!("{}: {f}", picture.unwrap_or("1240x1080"))));
+    }
+    // The hint whole: its last line ends with the sentence's last word.
+    for (i, (picture, lang, size, end)) in [("1240x1080", "en", "medium", "in games."), ("640x480", "de", "large", "bewirkt."), ("1024x768", "es", "large", "juegos.")].into_iter().enumerate() {
+        let (data, seen) = (tmp.join(format!("data-tb-whole-{i}")), tmp.join(format!("tb-whole-{i}.txt")));
+        copy_dir(&tmp.join("data"), &data);
+        let mut cmd = Command::new(&bin);
+        if let Some(stub) = &stub {
+            cmd.env("WAYLAND_DISPLAY", &stub.path);
+        }
+        if picture != "1240x1080" {
+            cmd.env("POCKETUI_SNAPSHOT_SIZE", picture);
+        }
+        let out = cmd
+            .args(["--snapshot", "test-buttons:idle", tmp.join(format!("tb-whole-{i}.png")).to_str().unwrap()])
+            .envs([("POCKETUI_MOCK", "1"), ("POCKETUI_LANG", lang), ("POCKETUI_TEXT_SIZE", size), ("POCKETUI_RETRO", "cocoa")])
+            .env("POCKETUI_VISIBLE_TEXT", &seen)
+            .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
+            .env("POCKETUI_DATA", &data)
+            .output()
+            .expect("run pocket-ui");
+        let seen = std::fs::read_to_string(&seen).unwrap_or_default();
+        if !out.status.success() || !seen.lines().any(|l| l.trim().ends_with(end)) {
+            found.push(format!("test-buttons:idle ({picture}, {lang}, {size}): no line ends with \"{end}\"; the picture shows:\n{seen}"));
+        }
+    }
+    drop(stub);
+    found.sort();
+    assert!(found.is_empty(), "{} problems on Retro's Test buttons page (O overlap or the panel's frame, T touch, E side edge, V top/bottom edge, or a hint cut short):\n{}", found.len(), found.join("\n"));
 }
 
 /// 1024x768 is the shortest screen with a big type: in Large text no heading, line or choice may be
@@ -371,8 +543,8 @@ fn the_text_size_in_settings_json_is_used_and_shown_on_its_row() {
         std::fs::write(data.join("settings.json"), settings).unwrap();
         let record = tmp.join(format!("{name}.tsv"));
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
-        // Look's fifth row, Text size, selected: its value shows as "‹ Groß ›" or "‹ Normal ›".
-        cmd.args(["--snapshot", "settings:0:4", tmp.join(format!("{name}.png")).to_str().unwrap()])
+        // Look's seventh row, Text size, selected: its value shows as "‹ Groß ›" or "‹ Normal ›".
+        cmd.args(["--snapshot", "settings:0:6", tmp.join(format!("{name}.png")).to_str().unwrap()])
             .env("POCKETUI_MOCK", "1")
             .env("POCKETUI_LANG", "de")
             .env_remove("POCKETUI_TEXT_SIZE")
@@ -474,4 +646,65 @@ fn long_game_titles_fit_at_rest_in_both_languages_and_large_text() {
             }
         }
     }
+}
+
+/// A real Brick, 2026-11-06: on the first start's "Your games" the hint bar lay on top of the third row ("Box art"), at
+/// 1024x768 with 28 games found. At the sizes of every handheld (1024x768 and 640x480 are painted from 768 and 960 lines) and
+/// in Normal and Large text (Easy to read), in English, German and Spanish, with and without games and with the selection
+/// on Box art (its line over the rows), every row is on the picture, whole, and no text runs into the hint bar.
+#[test]
+fn your_games_rows_stay_above_the_hint_bar_on_the_small_screens() {
+    let tmp = tempfile::tempdir().unwrap();
+    fake_library(tmp.path());
+    let stub = wayland(tmp.path());
+    std::fs::write(tmp.path().join("data/sounds.json"), r#"{"on":false,"volume":0}"#).unwrap();
+    // A card with no games at all: the page says how to add some.
+    let empty = tmp.path().join("empty-systems.cfg");
+    std::fs::write(&empty, "<systemList>\n</systemList>\n").unwrap();
+    let rows = [
+        ("en", ["Continue", "Add more…", "Box art"]),
+        ("de", ["Fortsetzen", "Mehr hinzufügen …", "Cover"]),
+        ("es", ["Continuar", "Añadir más…", "Portada"]),
+    ];
+    let empty_rows = [
+        ("en", ["Add games…", "I'll add games later", "Box art"]),
+        ("de", ["Spiele hinzufügen …", "Spiele füge ich später hinzu", "Cover"]),
+        ("es", ["Añadir juegos…", "Añadiré juegos más tarde", "Portada"]),
+    ];
+    let mut found = Vec::new();
+    for dimensions in ["1024x768", "640x480"] {
+        for size in ["normal", "large"] {
+            for (library, table) in [(true, &rows), (false, &empty_rows)] {
+                for (lang, names) in table {
+                    // The first row selected, then Box art (Down twice): the line over the rows comes and goes.
+                    for keys in ["", "dd"] {
+                        let seen = tmp.path().join("games.txt");
+                        let boxes = tmp.path().join("games.box");
+                        let png = tmp.path().join("games.png");
+                        let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+                        cmd.args(["--snapshot", &format!("setup:first-games:{keys}"), png.to_str().unwrap()])
+                            .env("POCKETUI_MOCK", "1").env("POCKETUI_SOUND_QUANTUM", "0")
+                            .env("POCKETUI_ES_SYSTEMS", if library { tmp.path().join("es_systems.cfg") } else { empty.clone() })
+                            .env("POCKETUI_DATA", tmp.path().join("data"))
+                            .env("POCKETUI_SNAPSHOT_SIZE", dimensions).env("POCKETUI_TEXT_SIZE", size)
+                            .env("POCKETUI_LANG", lang).env("POCKETUI_TEXT_BOXES", &boxes).env("POCKETUI_VISIBLE_TEXT", &seen);
+                        if let Some(s) = &stub { cmd.env("WAYLAND_DISPLAY", &s.path); }
+                        let out = cmd.output().unwrap();
+                        let which = format!("{dimensions} {size} {lang} {} keys \"{keys}\"", if library { "with games" } else { "without games" });
+                        assert!(out.status.success(), "{which}: {}", String::from_utf8_lossy(&out.stderr));
+                        let visible = std::fs::read_to_string(&seen).unwrap_or_default();
+                        for name in names {
+                            if !visible.lines().any(|l| l.trim() == *name) {
+                                found.push(format!("{which}: the row \"{name}\" is not on the picture, which shows:\n{visible}"));
+                            }
+                        }
+                        let problems = std::fs::read_to_string(&boxes).unwrap_or_default();
+                        found.extend(problems.lines().filter(|l| l.starts_with("O\t") || l.starts_with("V\t")).map(|l| format!("{which}: {}", l.replace('\t', " | "))));
+                    }
+                }
+            }
+        }
+    }
+    drop(stub);
+    assert!(found.is_empty(), "{} problems on \"Your games\" (a row missing, text under the hint bar or cut by the picture's edge):\n{}", found.len(), found.join("\n"));
 }

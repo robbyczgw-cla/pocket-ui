@@ -6,6 +6,9 @@ use std::time::Duration;
 
 pub const RETROARCH_APP_ID: &str = "com.libretro.RetroArch";
 pub const OWN_APP_ID: &str = "pocket-ui";
+/// pocket-ui's window on the dual-screen add-on's second screen (`second_screen`). Not a game: the rules below that
+/// catch "every window but pocket-ui" leave it alone.
+pub const SECOND_APP_ID: &str = "pocket-ui-second";
 
 /// Sends one RetroArch network command (e.g. "SAVE_STATE", "LOAD_STATE", "QUIT") to localhost:55355.
 pub fn retroarch(cmd: &str) -> bool {
@@ -196,7 +199,7 @@ pub fn games_open_fullscreen() -> bool {
     if crate::desk::active() {
         return true;
     }
-    swaymsg(&format!(r#"for_window [app_id="^(?!{OWN_APP_ID}$).*"] fullscreen enable, focus"#))
+    swaymsg(&format!(r#"for_window [app_id="{}"] fullscreen enable, focus"#, game_app_pattern(crate::second_screen::offered())))
         && swaymsg(r#"for_window [class=".*"] fullscreen enable, focus"#)
 }
 
@@ -243,8 +246,12 @@ pub fn show_game() -> bool {
 
 /// Every window but pocket-ui: the game, whichever emulator it is (Wayland and XWayland). Used when the
 /// game's window id is unknown, e.g. sway answered too slowly under load when the menu opened.
+fn game_app_pattern(dual: bool) -> String {
+    if dual { format!("^(?!{OWN_APP_ID}(-second)?$).*") } else { format!("^(?!{OWN_APP_ID}$).*") }
+}
+
 fn games() -> [String; 2] {
-    [format!(r#"[app_id="^(?!{OWN_APP_ID}$).*"]"#), r#"[class=".*"]"#.to_string()]
+    [format!(r#"[app_id="{}"]"#, game_app_pattern(crate::second_screen::offered())), r#"[class=".*"]"#.to_string()]
 }
 
 fn show_ui_cmd() -> String {
@@ -401,9 +408,16 @@ mod tests {
     /// Without a window id (sway was slow to answer under game load) the menu and Continue must still
     /// move any game window, not only RetroArch: ARMSX2 stayed tiled next to pocket-ui after Continue.
     #[test]
+    fn single_screen_game_rules_keep_their_original_scope() {
+        assert_eq!(game_app_pattern(false), format!("^(?!{OWN_APP_ID}$).*"));
+        assert_eq!(game_app_pattern(true), format!("^(?!{OWN_APP_ID}(-second)?$).*"));
+    }
+
+    #[test]
     fn without_a_window_id_any_game_window_is_shown_and_hidden() {
         for cmd in [show_ui_cmd(), show_game_cmd()] {
-            assert!(cmd.contains(&format!(r#"[app_id="^(?!{OWN_APP_ID}$).*"]"#)), "any non-pocket-ui window: {cmd}");
+            assert!(cmd.contains(&format!(r#"[app_id="{}"]"#, game_app_pattern(crate::second_screen::offered()))), "any non-pocket-ui window: {cmd}");
+            assert_eq!(format!("{OWN_APP_ID}-second"), SECOND_APP_ID, "the second screen's window is not a game");
             assert!(cmd.contains(r#"[class=".*"]"#), "XWayland games too: {cmd}");
         }
         assert!(show_game_cmd().contains("fullscreen enable") && show_game_cmd().starts_with(&format!(r#"[app_id="{OWN_APP_ID}"] fullscreen disable"#)));
@@ -561,9 +575,10 @@ mod linux_tests {
     use std::time::{Duration, Instant};
 
     #[test]
-    fn child_ends_with_the_thread_that_started_it() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_child_ends_with_the_thread_that_started_it() {
         let mut child = std::thread::spawn(|| die_with_parent(Command::new("sleep").arg("30")).spawn().unwrap()).join().unwrap();
-        let end = Instant::now() + Duration::from_secs(3);
+        let end = Instant::now() + crate::testutil::timeout(Duration::from_secs(3));
         while Instant::now() < end {
             if let Some(status) = child.try_wait().unwrap() {
                 assert_eq!(status.signal(), Some(libc::SIGTERM));
@@ -598,7 +613,7 @@ mod linux_tests {
             crate::testutil::write_executable(&path, script);
             let child = Command::new(&path).process_group(0).spawn().unwrap();
             let pgid = child.id() as i32;
-            let end = Instant::now() + Duration::from_secs(3);
+            let end = Instant::now() + crate::testutil::timeout(Duration::from_secs(3));
             while !dir.join("up").exists() && Instant::now() < end {
                 std::thread::sleep(Duration::from_millis(20));
             }
@@ -608,6 +623,10 @@ mod linux_tests {
 
         /// How the leader ended, if it did within `within`.
         fn wait(&mut self, within: Duration) -> Option<std::process::ExitStatus> {
+            self.wait_unscaled(crate::testutil::timeout(within))
+        }
+
+        fn wait_unscaled(&mut self, within: Duration) -> Option<std::process::ExitStatus> {
             let end = Instant::now() + within;
             while Instant::now() < end {
                 if let Some(status) = self.child.try_wait().unwrap() {
@@ -641,10 +660,11 @@ mod linux_tests {
     }
 
     #[test]
-    fn sigkill_reaches_an_emulator_that_ignores_sigterm_but_not_runemu() {
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_sigkill_reaches_an_emulator_that_ignores_sigterm_but_not_runemu() {
         let mut game = FakeGame::start("runemu.sh", "");
         terminate_game(game.pgid, false);
-        assert!(game.wait(Duration::from_millis(500)).is_none(), "the emulator ignores SIGTERM");
+        assert!(game.wait_unscaled(Duration::from_millis(500)).is_none(), "the emulator ignores SIGTERM");
         terminate_game(game.pgid, true);
         let status = game.wait(Duration::from_secs(5)).expect("the game didn't end");
         assert_eq!(status.signal(), None, "runemu.sh itself was killed: {status:?}");

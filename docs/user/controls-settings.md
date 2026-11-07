@@ -13,8 +13,8 @@ Settings opens on seven categories (Look, Sound & feel, Playing, Games, Connecti
 |---|---|
 | D-pad Up / Down | Move. The list wraps around at the ends. |
 | HOME | Back to Home from wherever you are in Settings (the categories, a list, About, Battery, Lights, Night light, Cozy extras, Sleep & power, Curator). Pages with something under way (an update or a download, a sign-in, a pairing, a clean-up, a button being remapped) keep it: B goes back there. On Home and the shelf HOME still opens the quick settings. |
-| A | On a category: open its list. In the list: open. On Screen colour: back to Neutral. On Appearance, Colours, Font, Text size, Motion, Zoom in the pause menu, Animations, Sounds, Haptics, On start, Continue where I quit, Remind me where I was, Over the game, Screen frames and Language: switch. On Buttons: open its page. |
-| D-pad Left / Right | On Sounds: how loud. On Screen colour, Appearance, Colours, Font, Text size, Motion, Zoom in the pause menu, Animations, On start, Over the game, Screen frames and Language: switch. On the Buttons page: A or Left / Right switch the selected row, Button layout or Button symbols. |
+| A | On a category: open its list. In the list: open. On Screen colour: back to Neutral. On Appearance, Colours, Style, Text size, Motion, Zoom in the pause menu, Animations, Sounds, Haptics, On start, Continue where I quit, Remind me where I was, Over the game, Screen frames and Language: switch. On Buttons: open its page. |
+| D-pad Left / Right | On Sounds: how loud. On Screen colour, Appearance, Colours, Style, Text size, Motion, Zoom in the pause menu, Animations, On start, Over the game, Screen frames and Language: switch. On the Buttons page: A or Left / Right switch the selected row, Button layout or Button symbols. Controller setup opens the separate layout for each connected controller. |
 | B | In a category's list: back to the categories, the one you came from selected. On the categories: back to where you came from (the shelf, or a system's game list). |
 
 A page of Settings (Wi-Fi, Tools, Battery and the others below) goes back with B to its category's list, even when
@@ -25,8 +25,8 @@ it was opened from somewhere else.
 | Button | What it does |
 |---|---|
 | D-pad Up / Down, L1 / R1 | Move, one or five rows at a time. |
-| A | Connect (a saved network without its password), or open Other network… / Wi-Fi country. On a network that has said **Not answering** for a minute: type its password again. |
-| Y | Forget the selected saved network. Y again confirms, B keeps it. |
+| A | Connect, or open Other network… / Wi-Fi country / Scan again. On a saved network: its menu, **Connect** (without its password) and **Forget**; B closes it. On a network that has said **Not answering** for a minute: type its password again. |
+| Y | Forget the selected saved network straight away. Y again confirms, B keeps it. |
 | X | Scan again. |
 | B | Back. |
 
@@ -116,13 +116,17 @@ START on a PortMaster port's card ([Performance & fan](performance.md#portmaster
 
 | Screen | Buttons |
 |---|---|
-| Most steps | START: skip to the next step. B: back one step. A step opened from Settings returns to its category's list instead. SELECT on "Welcome" and "You're all set" opens the [manual](settings-system.md#manual). |
-| Welcome | Left / Right: the language, English or Deutsch, used at once ([Language](language.md)). A: start. |
-| Choose a look | Left / Right: change. A: keep this look. In the first start also Y: appearance (Dark, Light, Automatic), R1: text size (Normal, Medium, Large), L1: animations and B: back to Welcome. Opened from Settings there are no shortcut keys: Appearance, Motion, Animations and Systems on the shelf have their own rows. |
-| How do you like to play? | Up / Down: The shelf, Easy, Enthusiast, Choose for yourself. A: take it. B: back to the look. START: skip, everything stays as it is. |
-| Feature cards (Choose for yourself, New in this version) | Up / Down: On, Off, Later. A: take the choice, next card. L1 / R1 or Left / Right: previous / next card without choosing. B: back a card (first start) or close (new cards). START: skip the rest. |
+| Every first-start stage | Up / Down: every row and choice on the page. Left / Right: change the one you are on. A: take it; the way on is a row (Continue, Looks right) or A itself (Get started, Finish). B or L1: back to the stage before. START: skip the rest of the setup. L2: Easy to read on or off. Inside a keyboard or a list B, L1 and START are its own. A page opened from Settings returns to its category's list instead. SELECT opens the [manual](settings-system.md#manual). |
+| Your language | Up / Down: Language, Easy to read, For a child. Left / Right: change the row you are on (the language is used at once, [Language](language.md)). A: get started. Y: for a child, from any row. |
+| Wi-Fi (first start) | Up / Down: the networks, Other network…, Wi-Fi country, Time zone, Scan again, Continue (Continue offline). A: connect or open the row. X: scan again. B: back to your language. |
+| Time zone (first start) | Up / Down: Looks right (Keep UTC), Choose another…. A: take it. X: choose another. B: back to Wi-Fi. |
+| Your games | Up / Down: Continue, Add more… (or Add games…, I'll add games later), Box art. A: take it; on Box art A or Left / Right switch it. B: back to Wi-Fi. |
+| How your games stand | Up / Down: the layouts, then the rows Style, Colours and Appearance. Left / Right: change the layout or the row you are on. A: finish, straight to the shelf. B: back to your games. |
+| Choose a look (Settings) | Up / Down: the layouts, then the rows Appearance, Motion and Animations. Left / Right: change the layout or the row you are on. A: keep. B: cancel, back to Settings with the look as it was. |
+| How you like to play (Settings) | Up / Down: The shelf, Easy, Enthusiast, Choose for yourself. A: take it. B: back. |
+| Feature cards (Choose for yourself, New in this version) | Up / Down: On, Off, Later. A: take the choice, next card. L1 / R1 or Left / Right: previous / next card without choosing. B: back a card (How you like to play) or close (new cards). START: skip the rest. |
 | Tour (Settings → Help & tools → Tour) | A: next card, the last one closes. L1 / R1 or Left / Right: previous / next card. B: close. The first six cards explain; on Easy to read, Up/Down choose and A applies Large text and Reduced motion. |
-| Wi-Fi | Up / Down: choose a network. A: connect. X: scan again. |
+| Wi-Fi | Up / Down: the networks, then Other network…, Wi-Fi country and Scan again. A: connect; on a saved network its menu (Connect, Forget; the first start's connected one: Continue, Forget). X: scan again. Y: forget a saved network straight away. B: back. |
 | On-screen keyboard | D-pad: move. A: type. B: delete (back to the list when empty). L1: empty the field. X: Shift. Y: symbols. START: connect. |
 | Extras | Up / Down: choose. A: download (cover art) or browse (PortMaster). On Pictures, A or Left / Right: the next choice (Box art, Box art and screenshots, Off). |
 | PortMaster games | Up / Down: move. L1 / R1: page. Left / Right: Ready to play or Bring your own game files. A: install or remove. X: how to copy a game's files. B: back. |
@@ -218,3 +222,39 @@ after waking.
 For Wild Arms XF and Crisis Core in pocket-ui's own PSP host, GPU readbacks are skipped by
 default to avoid an exit-save hang. An explicit Emulator option saved for the game or console
 wins over this default. If effects look wrong, change the readback option in Emulator options.
+
+### Test buttons
+
+**Settings → Help & tools → Test buttons** lights up every button, trigger and stick of each connected controller and
+says what the last press does in menus and in games after your layout. A handheld without sticks (the TrimUI Brick, the RG35XX Plus)
+is drawn without them. Hold HOME for 2 seconds (or B and START
+together) to leave. See [Test buttons](settings-system.md#test-buttons).
+
+### Controller setup
+
+Open **Settings → Playing → Buttons → Controller setup**, or **Pause → Options → Controls → Controller setup**
+in a pocket-core game. The first row chooses the controller; its identity suffix distinguishes two pads with the
+same name, and its player number shows the remembered order. A or Left/Right switches the controller.
+
+Choose an action, press A, then press the wanted button on that controller. Analogue L2/R2 are captured too.
+A button already assigned to another action **swaps** with the previous button; a note confirms the swap.
+While it waits, the page says which controller to press. HOME on any controller cancels, and so does any
+button of the handheld's own controls while you set up another controller; with no press for 8 seconds it gives
+up by itself and nothing changes. Input from another controller cannot change the capture. B leaves the page;
+**Reset controller layout** restores only the selected controller.
+
+If the selected controller disconnects while the page waits, capture ends without changing the layout.
+Reconnect it and choose the action again. Held buttons are released when its input reader is replaced too,
+so a silent old connection cannot keep a direction or trigger held in the menus or game.
+
+The layout is saved automatically for the controller's identity and follows it through reconnects and player
+changes. It applies before the Nintendo/Xbox menu layout and before each game's Controls settings: the shelf,
+menus, pocket-core games and ROCKNIX's SDL Dolphin and ARMSX2 use it. The Steam Deck's host-owned input,
+RetroArch, Azahar (3DS), PortMaster and other external players keep their own controller setup.
+
+Trigger press is at 55% travel; release is below 40%, preventing repeated presses near the threshold. A digital
+trigger behaves like an ordinary button. Unchanged analogue triggers keep their travel in standalone games. A remapped trigger
+uses the same press/release thresholds as the menus. HOME, power and volume remain available for navigation and recovery.
+
+On the TrimUI Brick, volume keys while the mute slider is engaged show **Muted** and keep the
+previous level. Release the slider to return to that exact level.
