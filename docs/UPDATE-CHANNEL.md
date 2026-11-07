@@ -37,7 +37,9 @@ test channel on GitHub only, and so does a `--base-url` of its own unless `--dir
 up to 0.2.x knows no mirrors and downloads only `url`: an app that only GitHub's download host serves would
 reach none of the players whose network blocks it. It refuses an app over 80,000,000 bytes to leave margin
 below the Hobby upload limit, and a version that is not plain `X.Y.Z` (every pocket-ui compares versions by
-their numbers only: `0.3.0-rc1` would count as newer than `0.3.0`). It publishes nothing.
+their numbers only: `0.3.0-rc1` would count as newer than `0.3.0`). Only `--channel brick` also accepts
+four numeric groups, such as `0.3.0.1`: this hotfix updates `0.3.0` and is superseded by `0.3.1`.
+The ROCKNIX stable and beta channels still require three groups. It publishes nothing.
 `store-tool mirror KEY update.json app URL [URL] [URL]` signs alternate sources;
 `store-tool list` and `release-channel.sh --check` check every source, not only the primary.
 Card images, source archives and installers can stay on the release. Check the complete
@@ -102,6 +104,9 @@ the card zip. No Tailscale and no account are involved; a private beta card asks
 
 `brick-publish.sh --public` refuses a build with an `app/update-url`, a beta version (`X.Y.Z-brick.N`) and a key pocket-ui does not
 trust, and publishes nothing itself (tests: `scripts/test-brick-card.sh`, "public:").
+Public Brick releases may also use `X.Y.Z.W` for a Brick-only hotfix. Keep an accompanying GitHub release
+off Latest (`gh release create v<v> --latest=false`), so ROCKNIX keeps its three-part release as Latest.
+`scripts/test-brick-hotfix-version.py` checks the real publishers' channel and version validation without signing.
 
 ## Caching
 
@@ -325,7 +330,7 @@ There is no public catalog yet, so `store::DEFAULT_URL` stays empty and the Stor
   one; `--check` with all files there, one changed and one missing, and with the app's website copy not live yet.
   Every list it writes, and the live 0.2.2 list (`testdata/update-channel/`), is read with a frozen copy of the list
   as pocket-ui 0.1.7 to 0.2.2 read it: the app it finds is the same, on pocketui.xyz. Versions other than plain `X.Y.Z`
-  are refused.
+  are refused outside the Brick-only four-part hotfix exception above.
 
 Not tested: anything against the real pocketui.xyz or GitHub (nothing is published), the real key (not on the build
 machine), a device fetching from the public channel.

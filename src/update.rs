@@ -1166,6 +1166,16 @@ mod tests {
         assert!(newer("0.2.1", "0.2.0-brick.7") && newer("0.2.1-brick.8", "0.2.1"), "public over the beta before it, the next beta over both");
     }
 
+    #[cfg(feature = "brick")]
+    #[test]
+    fn a_brick_hotfix_updates_the_release_then_yields_to_the_next_release() {
+        assert!(newer("0.3.0.1", "0.3.0"));
+        assert!(!newer("0.3.0", "0.3.0.1"));
+        assert!(newer("0.3.1", "0.3.0.1"));
+        assert_eq!(brick_short("0.3.0.1"), "0.3.0.1");
+        assert_eq!(brick_long("0.3.0.1"), "0.3.0.1 for TrimUI Brick");
+    }
+
     /// A card from the public zip has no `app/update-url`: it must ask the Brick channel, never the ROCKNIX one (whose tarball is a
     /// ROCKNIX program folder). A private beta card keeps its channel; outside the card (the NextUI pak) the ROCKNIX default stays.
     #[cfg(feature = "brick")]

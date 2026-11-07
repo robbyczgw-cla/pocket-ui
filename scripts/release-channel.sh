@@ -5,7 +5,7 @@
 #                              [--key FILE] [--notes TEXT | --notes-file FILE] [--previous FILE]
 #                              [--os-tar FILE --os-version V] [--base-url URL] [--github-primary] [--allow-foreign-key]
 #     --repo        the public GitHub repository whose release v<version> will hold the files
-#     --version     pocket-ui version, plain X.Y.Z (default: from the file names in --in)
+#     --version     plain X.Y.Z; brick alone also accepts X.Y.Z.W hotfixes (default: from --in)
 #     --gba-core    pinned ARM64 gpSP build folder (licence and corresponding source included)
 #     --in          the artefacts (default release-out/): bin/pocket-ui and bin/pocket-core (or a ready
 #                   pocket-ui-<v>-aarch64.tar.gz), optional pocket-ui-<v>-rocknix-install.zip,
@@ -137,11 +137,14 @@ if [ -z "$VERSION" ]; then
 fi
 # Plain X.Y.Z: every pocket-ui compares versions by their numbers only (update::newer, the same up to 0.2.x), so 0.3.0-rc1
 # would count as newer than 0.3.0 (which would then never be offered to it) and 0.3 as older than 0.3.0.
+VERSION_BAD=
 case $VERSION in
-  [0-9]*.[0-9]*.[0-9]*) case $VERSION in *[!0-9.]* | *.*.*.* | *..*) VERSION_BAD=1 ;; *) VERSION_BAD= ;; esac ;;
+  ''|*[!0-9.]*|.*|*.|*..*|*.*.*.*.*) VERSION_BAD=1 ;;
+  *.*.*.*) [ "$CHANNEL" = brick ] || VERSION_BAD=1 ;;
+  *.*.*) ;;
   *) VERSION_BAD=1 ;;
 esac
-[ -z "$VERSION_BAD" ] || { echo "bad or no version: '$VERSION' (give --version, plain X.Y.Z)" >&2; exit 2; }
+[ -z "$VERSION_BAD" ] || { echo "bad or no version: '$VERSION' (give --version, plain X.Y.Z; brick also accepts X.Y.Z.W)" >&2; exit 2; }
 [ -z "$OS_TAR" ] || case $OS_VERSION in '' | *[!0-9]*) echo "--os-tar needs --os-version YYYYMMDD" >&2; exit 2 ;; esac
 [ -f "$KEY" ] || die "no signing key at $KEY (docs/UPDATE-CHANNEL.md, 'The signing key')"
 # The app on the website first, unless the files go somewhere of their own (--base-url) or a test channel wants GitHub only.

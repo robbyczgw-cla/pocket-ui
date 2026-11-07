@@ -11,13 +11,16 @@ Read-only inspection on 2026-11-03 found the XR829/XRadio transport, not an RTL/
 no physical chip marking was inspected. Alternative AIC and RTL init files are present but
 are not evidence those chips are fitted. The firmware init service `hciattach` starts the
 UART transport through procd at boot. Firmware `runtrimui-original.sh` starts BlueZ;
-our card takes over before that menu. The device already had system D-Bus and HCI transport,
-but neither bluetoothd nor BlueALSA was running.
+our card takes over before that menu. The NextUI-hook test device already had system D-Bus and HCI transport,
+but neither bluetoothd nor BlueALSA was running on that entry. A stock-firmware boot also starts
+the firmware's procd `bluetoothd -nd` service before the card's MainUI. This difference was reproduced
+with the public 0.3.0 card: its own service refused to enable Bluetooth with `foreign bluetoothd is running`.
 
 The firmware provides BlueZ 5.54 (`bluetoothd`, `bluetoothctl`, `hciconfig`, `btmgmt`),
 `hciattach`, `bluealsa`, `bluealsa-aplay` and both ALSA BlueALSA plugins.
 BlueALSA advertises A2DP Source/Sink with SBC. There was no `rtk_hciattach` on PATH.
-Vendor firmware init scripts were read to understand the interfaces; none is shipped or called.
+Vendor firmware init scripts are not shipped. Only the stock-firmware entry may ask the installed
+`/etc/bluetooth/bluetoothd` service to stop during a Bluetooth handover, as described below.
 The installed `bt_init.sh` is modified by NextUI and must not be treated as pristine stock.
 
 ## Card service and UI
@@ -38,7 +41,15 @@ The adapter is pairable but not discoverable. No discovery or pair request start
 
 Keys are restored from `storage/.config/pocket-ui/bluetooth.tar` to RAM, bound onto
 `/var/lib/bluetooth` before BlueZ starts. On the observed firmware `/var` points to `/tmp`.
-The service refuses a symlink at its storage target and refuses a foreign bluetoothd.
+The service refuses a symlink at its storage target and refuses a foreign bluetoothd, except for
+the stock-firmware handover. That entry exports `BRICK_BT_FIRMWARE_INIT=/etc/bluetooth/bluetoothd`.
+Every existing daemon must have the expected executable and the exact procd command `bluetoothd -nd`
+before that named service is stopped. An unknown command or storage link is refused without stopping it.
+The firmware's `/var/lib/bluetooth` symlink to `/etc/bluetooth/keys/` is removed in RAM, never followed;
+our own key directory is bound in its place. On stop or a failed start the empty RAM directory is replaced
+with the original symlink. Firmware keys are neither read into the card nor changed. The firmware daemon
+stays stopped when the player switches Bluetooth off; the next ordinary stock boot starts it as usual.
+Host fixtures may override `BRICK_BT_FIRMWARE_KEYS` and `BRICK_BT_FIRMWARE_PROC` for these checks.
 It does not use `/etc/bluetooth/keys` or import another UI's pairings. The card's FAT does
 not need to preserve Unix file modes. `brick-bluetoothctl` forwards to the firmware client
 and atomically archives keys after pair/trust/remove; stopping archives after BlueZ exits.
@@ -46,7 +57,8 @@ The last working archive remains if a bind mount or restore fails. The on/off pr
 `storage/.config/pocket-ui/bluetooth-on`. Startup honors it in the background.
 Only recorded PIDs whose command line still matches our program are signalled. The boot
 HCI transport and system bus remain running. Stopping powers the adapter off and unmounts
-our key store. No firmware Bluetooth init script, broad process kill, or vendor UI is used.
+our key store. There is no broad process kill or vendor UI. Outside the stock-firmware entry, firmware
+services remain untouched.
 
 ## Headphones (A2DP, update 7)
 
@@ -83,6 +95,8 @@ Status: built and host-tested; not yet heard on the real Brick.
 `scripts/test-brick-bluetooth.py` supplies host stubs for D-Bus, BlueZ, mount and rfkill.
 It covers service start/status/stop, repeat start, archive save/forget/restore, refusing a
 foreign daemon or missing bus, mount failure, stale PIDs and systemctl unit aliases.
+The factory regressions also cover enabling Bluetooth with procd already running, preserving stock
+pairings, restoring the firmware storage link, repeat start, failed mount, and refusing a different session.
 The backend also has a BlueZ 5.54 filter-fallback regression test. Run these after the
 release build reservation is lifted; this series has only had syntax/diff review so far.
 Compile both default and `--features brick`; run the targeted Bluetooth and settings tests,

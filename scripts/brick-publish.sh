@@ -71,7 +71,11 @@ if [ -n "$PUBLIC" ]; then
   case $PUBLIC in *[!A-Za-z0-9._/-]*|*/*/*) die "bad repository: $PUBLIC" ;; esac
   [ -n "$OUTDIR" ] || die "--public needs --out DIR"
   [ -e "$APP/update-url" ] && die "this build asks the channel in app/update-url ($(head -n 1 "$APP/update-url")): a public card must have none (build the card without BRICK_UPDATE_URL)"
-  case $VERSION in *-*) die "version $VERSION is a beta or test build; a public release is plain X.Y.Z" ;; esac
+  case $VERSION in
+    ''|*[!0-9.]*|.*|*.|*..*|*.*.*.*.*) die "version $VERSION is not plain X.Y.Z or a Brick-only X.Y.Z.W hotfix" ;;
+    *.*.*) ;;
+    *) die "version $VERSION is not plain X.Y.Z or a Brick-only X.Y.Z.W hotfix" ;;
+  esac
   grep -aqF 'asset-packages.json' "$APP/bin/pocket-ui" || die "this card's updater cannot install small asset packages; rebuild the public card with the new updater first"
   [ -z "$ZIP" ] || [ -s "$ZIP" ] || die "no card zip at $ZIP"
 elif [ -s "$APP/update-url" ] && ! grep -q "/brick-updates/$CHANNEL/update.json" "$APP/update-url"; then

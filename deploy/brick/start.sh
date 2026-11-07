@@ -261,6 +261,9 @@ for t in curl; do [ -x "$P/bin/$t" ] && ln -sf "$P/bin/$t" "$HW/usr/bin/$t" && l
 ln -sf "$P/hwroot/usr/bin/tailscale" "$RUN/bin/tailscale"
 export BRICK_APP=$P BRICK_DATA=$D BRICK_RUN=$RUN
 export POCKETUI_BRICK_BLUETOOTHCTL=$HW/usr/bin/brick-bluetoothctl
+# TrimUI's own entry already started its procd BlueZ service and linked its keys into flash.
+# The card service may hand over precisely that service, keeping the stock keys untouched.
+[ "$ENTRY" != stock-firmware ] || export BRICK_BT_FIRMWARE_INIT=${BRICK_BT_FIRMWARE_INIT:-/etc/bluetooth/bluetoothd}
 # Pairing data belongs to this card; the service uses the firmware BlueZ and its own agent.
 [ ! -e "$STATE/bluetooth-on" ] || { "$HW/usr/bin/brick-bluetooth" start >>"$LOG" 2>&1 & }
 # Tailscale comes up by itself when it was on (Settings > Tailscale writes tailscale.up=1, as on ROCKNIX), not waited for: it joins
