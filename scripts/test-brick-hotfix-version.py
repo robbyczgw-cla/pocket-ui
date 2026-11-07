@@ -49,7 +49,7 @@ class HotfixVersions(unittest.TestCase):
                     ('0.3.0-rc1', False), ('0.3.0.1.2', False), ('0.3..1', False)]:
                 with self.subTest(version=version):
                     (app / 'RELEASE').write_text(version)
-                    elf = b'\x7fELF\x02\x01' + bytes(12) + b'\xb7\x00' + version.encode() + b'.asset-moves.restore-assets'
+                    elf = b'\x7fELF\x02\x01' + bytes(12) + b'\xb7\x00' + version.encode() + b'.asset-moves.restore-assets.asset-packages.json'
                     for name in ['pocket-ui', 'pocket-core', 'pocket-fb']:
                         (app / 'bin' / name).write_bytes(elf)
                     p = subprocess.run(['bash', str(ROOT / 'scripts/brick-publish.sh'), str(app),
