@@ -1,7 +1,7 @@
 # Bluetooth on the standalone TrimUI Brick card
 
 Status: controllers and headphones (A2DP) built and host-tested; no hardware pairing or audio test yet.
-The NextUI pak and default ROCKNIX build keep their existing behavior.
+The alternate card entry and default ROCKNIX build keep their existing behavior.
 
 ## Firmware observations
 
@@ -11,7 +11,7 @@ Read-only inspection on 2026-11-03 found the XR829/XRadio transport, not an RTL/
 no physical chip marking was inspected. Alternative AIC and RTL init files are present but
 are not evidence those chips are fitted. The firmware init service `hciattach` starts the
 UART transport through procd at boot. Firmware `runtrimui-original.sh` starts BlueZ;
-our card takes over before that menu. The NextUI-hook test device already had system D-Bus and HCI transport,
+our card takes over before that menu. Earlier card-entry tests already had system D-Bus and HCI transport,
 but neither bluetoothd nor BlueALSA was running on that entry. A stock-firmware boot also starts
 the firmware's procd `bluetoothd -nd` service before the card's MainUI. This difference was reproduced
 with the public 0.3.0 card: its own service refused to enable Bluetooth with `foreign bluetoothd is running`.
@@ -21,7 +21,7 @@ The firmware provides BlueZ 5.54 (`bluetoothd`, `bluetoothctl`, `hciconfig`, `bt
 BlueALSA advertises A2DP Source/Sink with SBC. There was no `rtk_hciattach` on PATH.
 Vendor firmware init scripts are not shipped. Only the stock-firmware entry may ask the installed
 `/etc/bluetooth/bluetoothd` service to stop during a Bluetooth handover, as described below.
-The installed `bt_init.sh` is modified by NextUI and must not be treated as pristine stock.
+The installed `bt_init.sh` has been modified and must not be treated as pristine stock.
 
 ## Card service and UI
 
