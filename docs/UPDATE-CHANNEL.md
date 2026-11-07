@@ -104,8 +104,8 @@ the card zip. No Tailscale and no account are involved; a private beta card asks
 
 `brick-publish.sh --public` refuses a build with an `app/update-url`, a beta version (`X.Y.Z-brick.N`) and a key pocket-ui does not
 trust, and publishes nothing itself (tests: `scripts/test-brick-card.sh`, "public:").
-Public Brick releases may also use `X.Y.Z.W` for a Brick-only hotfix. Keep an accompanying GitHub release
-off Latest (`gh release create v<v> --latest=false`), so ROCKNIX keeps its three-part release as Latest.
+Public Brick releases may also use `X.Y.Z.W` for a Brick-only hotfix. If it becomes GitHub Latest,
+its notes must direct other handhelds to their unchanged ROCKNIX release; the stable channel stays unchanged.
 `scripts/test-brick-hotfix-version.py` checks the real publishers' channel and version validation without signing.
 
 ## Caching
