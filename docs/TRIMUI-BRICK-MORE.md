@@ -1,6 +1,6 @@
-# TrimUI Brick, own card: Kids mode, Screenshots, Web companion, Over the game, Tour (private prototype, branch `feat/trimui-brick-more`)
+# TrimUI Brick, own card: Kids mode, Screenshots, Web companion, Over the game, Tour (Beta)
 
-On top of `feat/trimui-brick-card1` ([TRIMUI-BRICK-STANDALONE.md](TRIMUI-BRICK-STANDALONE.md), [TRIMUI-BRICK-REMOTE.md](TRIMUI-BRICK-REMOTE.md)).
+On top of the Brick's own card ([TRIMUI-BRICK-STANDALONE.md](TRIMUI-BRICK-STANDALONE.md), [TRIMUI-BRICK-REMOTE.md](TRIMUI-BRICK-REMOTE.md)).
 All of it is pocket-ui's own code that ROCKNIX already has; the Brick only hid the rows. What changed is behind the `brick` feature and
 the standalone card (`POCKETUI_BRICK_STANDALONE`): NextUI's pak and every ROCKNIX build are as they were (the tests below say so).
 
@@ -20,7 +20,7 @@ the standalone card (`POCKETUI_BRICK_STANDALONE`): NextUI's pak and every ROCKNI
 | Tour | adds Tailscale and Kids mode's profile, leaves out the cards whose page the Brick has no row for (Screen frames, RetroAchievements, Players; Over the game on NextUI's card) | `device::hides_here`, `device::brick_card_hidden`, `features::available` |
 
 Left out on purpose: Screen frames (needs the shaders branch), RetroAchievements, the starter pack. Haptics and stick lights stay out of the Tour
-until `feat/trimui-brick-hw` is merged (its rows decide: `hides_here` must then stop hiding `haptics` and `leds` on the Brick).
+until the Brick's hardware page ([TRIMUI-BRICK-HW.md](TRIMUI-BRICK-HW.md)) is in the Tour (its rows decide: `hides_here` must then stop hiding `haptics` and `leds` on the Brick).
 
 ## The web companion on the card
 
@@ -35,7 +35,7 @@ is no `tailscale0`, and tailscaled hands a connection to the node's tailnet addr
 - The page's address is the node's name (`http://brick.<tailnet>.ts.net`) once tailscaled reports it; before that it reads "Waiting for
   Tailscale". A browser may also use the node's 100.x address as the Host (`SelfNode::addrs`), not other names (DNS rebinding stays refused).
 - tailscaled's socket is the card's: `POCKETUI_TAILSCALED_SOCKET=$RUN/tailscaled.sock` (start.sh), `LocalApi::default` reads it.
-- Not the phone page: that one (`phone_upload.rs`, `feat/trimui-brick-wifi-games`) is a separate, short-lived Wi-Fi server with a code in its path;
+- Not the phone page: that one (`phone_upload.rs`) is a separate, short-lived Wi-Fi server with a code in its path;
   it stays as it is, and its upload code is the companion's file code (`web::files`), so a file arrives by the same checks either way.
 
 ## Proof (host)

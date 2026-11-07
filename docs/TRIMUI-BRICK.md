@@ -1,4 +1,8 @@
-# TrimUI Brick under NextUI (private prototype, branch `feat/trimui-brick`)
+# TrimUI Brick under NextUI (design and reference; the Brick's first version)
+
+The public TrimUI Brick support (Beta since 0.3.0) is pocket-ui on a card of its own, see [TRIMUI-BRICK-STANDALONE.md](TRIMUI-BRICK-STANDALONE.md):
+your own microSD card, the Brick's stock firmware untouched, updates over Wi-Fi. This page is the design it grew from, the pak that runs on
+top of NextUI, and the reference for the framebuffer bridge and the test kit.
 
 Behind the `brick` Cargo feature. No ROCKNIX handheld builds any of this. A default build must retain the standard ROCKNIX code and embedded assets.
 The current compile-time isolation and its verification status are in [BRICK-CFG.md](BRICK-CFG.md).
@@ -129,7 +133,7 @@ Test on a computer: `cargo test --features brick --test brick_gles` (a stub GLES
 screen file). Only the device can say whether a second process may use the vendor's EGL while `pocket-fb --gl` holds the screen (on the
 copy it is the only one), and what the read-back costs on the GE8300.
 
-**Shaders, screen frames and picture effects (built 2026-11-03, `feat/trimui-brick-shaders`).** With `pocket-fb --gl` a game gets the same
+**Shaders, screen frames and picture effects (built 2026-11-03).** With `pocket-fb --gl` a game gets the same
 Picture options as on a ROCKNIX handheld: screen scaling, sharpness (sharp, crisp, soft), the effects (LCD grid with the GBA's colours,
 scanlines, CRT), every screen frame (the console's own, Ambient, the handhelds, TVs, cabinet, glow), and screen orientation.
 - *The way:* pocket-core still draws no GL (the Null WSI has one screen). It puts the core's picture in its window **at the core's own size**

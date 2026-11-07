@@ -1,6 +1,6 @@
 # Picture options on the Brick (shaders, frames, scaling)
 
-Built 2026-11-03 on `feat/trimui-brick-shaders`, merged with `feat/trimui-brick-card1`. How it works is in `docs/TRIMUI-BRICK.md`
+Built 2026-11-03 for the Brick's own card. How it works is in `docs/TRIMUI-BRICK.md`
 ("Shaders, screen frames and picture effects").
 
 ## Rule

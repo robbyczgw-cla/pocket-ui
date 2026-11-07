@@ -1,4 +1,4 @@
-# TrimUI Brick: its own hardware (private prototype, branch `feat/trimui-brick-hw`)
+# TrimUI Brick: its own hardware (Beta)
 
 Rumble, lights, the two extra keys and the mute slider, for pocket-ui on the Brick's own card
 ([TRIMUI-BRICK-STANDALONE.md](TRIMUI-BRICK-STANDALONE.md)). Brick hardware and `Button::F1/F2` are behind `--features brick`. The shared input corpus also

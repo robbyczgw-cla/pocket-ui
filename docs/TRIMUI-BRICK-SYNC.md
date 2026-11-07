@@ -1,4 +1,4 @@
-# Save sync on the Brick's own card (feat/trimui-brick-bt-sync)
+# Save sync on the Brick's own card
 
 Settings > Connections > Sync works on the standalone card as on ROCKNIX: the same page, the same Syncthing folders, the same pairing
 with other devices (src/sync.rs, docs/user/sync.md). What differs is only who runs Syncthing.

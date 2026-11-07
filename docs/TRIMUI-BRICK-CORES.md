@@ -49,13 +49,11 @@ The default ROCKNIX library suite passed 2967 tests (8 ignored); the UI binary p
 and the two other binary tests passed. The Brick profile passed its five targeted tests.
 The only Rust source changes are in the feature-gated Brick module and a `cfg(feature = "brick")`
 routing expression; no default routing, core list or Cargo dependency changed. The Brick UI compiles with `cargo check --features brick --bin pocket-ui`.
-The full gate stops on the private export scan: the unchanged base and this branch both have the same
-28 findings, ignoring shifted line numbers. This branch adds no finding; that gate is not reported as green.
 No real-device speed, controls, audio, saves or frame pacing were measured by this work.
 
 ## Second software-core addition
 
-`feat/trimui-brick-morecores2` adds these standalone-card folders. Core selection is confined to the
+These standalone-card folders were added second. Core selection is confined to the
 Brick feature, Brick device and standalone profile. In particular SG-1000 keeps Gearsystem instead
 of passing through the older Master System/Game Gear → PicoDrive substitution.
 

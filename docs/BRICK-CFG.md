@@ -1,4 +1,4 @@
-# Compile-time isolation of the private Brick build
+# Compile-time isolation of the Brick build
 
 The `brick` Cargo feature selects the TrimUI implementation at compile time. A build without
 features must retain the ROCKNIX implementation, including its embedded assets. Returning

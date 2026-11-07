@@ -1,8 +1,11 @@
-# TrimUI Brick: pocket-ui on its own card
+# TrimUI Brick: pocket-ui on its own card (Beta)
 
 An empty FAT card with one folder copied onto it, power on, straight into pocket-ui. No NextUI, no MinUI (their licences are
 not ours; nothing of them is read into the card or the repository). Take the card out, put the normal card back, and the Brick
-is what it was. Based on `feat/trimui-brick` ([TRIMUI-BRICK.md](TRIMUI-BRICK.md)), merged in.
+is what it was. Based on the first version under NextUI ([TRIMUI-BRICK.md](TRIMUI-BRICK.md)).
+
+**Beta (0.3.0).** The Brick is a public Beta: it runs from a microSD card of your own, the Brick's stock firmware is not touched, and
+new versions arrive over Wi-Fi as a signed update of the card's program folder. It has been tested on one Brick so far, so expect rough edges.
 
 **Boots on a real Brick since 2026-11-03** (card 1, then beta updates 2 to 7 over Wi-Fi), on a Brick that had run NextUI before;
 a Brick that never ran NextUI is still to be seen (the TrimUI entry below). Where a statement below says "read", it comes from a
@@ -132,9 +135,9 @@ the card, not ours to ship) put in `Roms/bios` is used by the core. Not run: a r
   `dc cvau` / `ic ivau` / `isb` sequence by CTR_EL0; with it the same JIT test ran 20000 times without a wrong result and gpSP runs 120 frames of a test GBA
   program on the Brick's own libraries (Docker, aarch64). pcsx_rearmed's ari64 has its own sync and needs nothing. The 59.98 fps and 1.35 ms per frame were measured on the real Brick with NextUI's own gpSP, not
   with this build; mGBA is on the card as the other choice.
-- **Governor.** The fix from `feat/trimui-brick` is in this branch (merged): `standalone.rs` settles to `performance` on the Brick instead of `ondemand`
+- **Governor.** The fix from the first version is in: `standalone.rs` settles to `performance` on the Brick instead of `ondemand`
   after a game. This card never sets `ondemand` itself.
-- **Not taken from `feat/trimui-brick-library`:** that branch is for NextUI's card (its `Roms/<Name> (<TAG>)` folders as systems, `Saves/<TAG>`
+- **Not taken from the NextUI library work:** that work was for NextUI's card (its `Roms/<Name> (<TAG>)` folders as systems, `Saves/<TAG>`
   copied in at the first start, `hostsys::route`, "cannot run" notices). None of that fits a card of our own, so it is not merged; the covers
   idea is done above with two lines of `start.sh`.
 

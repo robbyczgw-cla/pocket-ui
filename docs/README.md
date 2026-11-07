@@ -96,7 +96,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [ROCKNIX-H700-AUDIO-ISSUE-DRAFT.md](ROCKNIX-H700-AUDIO-ISSUE-DRAFT.md) | Draft, not submitted | Frozen-rootfs UCM finding, observed controls and untested upstream investigation proposal |
 | [SLEEP.md](SLEEP.md) | Reference and design notes | Sleep and power: research, what is built, a device test plan |
 | [DEVICES.md](DEVICES.md) | Design and reference | The Mini V2 and its experimental SM8250 siblings (Pocket 5, Flip 2, Mini V1): how pocket-ui tells them apart, what each gets, layouts at 1920x1080 and 1280x960, safety on untested hardware, installing |
-| [TRIMUI-BRICK.md](TRIMUI-BRICK.md) | Design and reference | A private prototype behind the `brick` feature: pocket-ui on the TrimUI Brick under Knulli, the framebuffer bridge, the test kit |
+| [TRIMUI-BRICK.md](TRIMUI-BRICK.md) | Design and reference | The TrimUI Brick (Beta) behind the `brick` feature: the first version under NextUI, the framebuffer bridge, the test kit |
 | [TRIMUI-BRICK-CORES.md](TRIMUI-BRICK-CORES.md) | Design and reference | Additional standalone software cores: pinned builds, licences, routing, real-library checks and limits |
 | [TRIMUI-BRICK-STANDALONE.md](TRIMUI-BRICK-STANDALONE.md) | Design and reference | The same Brick without NextUI: a card folder with its own start script, cores built for glibc 2.33, stand-ins for the firmware helpers, host tests |
 | [TRIMUI-BRICK-REMOTE.md](TRIMUI-BRICK-REMOTE.md) | Design and reference | The Brick's own card on the network: Tailscale, Remote access with dropbear, updates of the card's program folder from a private channel, the way back |

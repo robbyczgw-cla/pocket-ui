@@ -3,71 +3,127 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a minor version may change anything).
 
-Update downloads can use signed alternate servers, stop after 30 seconds without progress, and show connection and verification phases. A slow but steady download (a system update, weak Wi-Fi) is no longer cut off after five minutes.
-
 ## [Unreleased]
 
-- Brick updates finish downloading to RAM before writing to the card, limit bulk writes, and reuse unchanged components with recoverable rollback. Startup checks engine data instead of copying it again; only changed files are replaced atomically.
+## [0.3.0] - 2026-11-07
 
-- Brick: lower volume steps are easier to hear; 50–100% stays unchanged. Stored levels and OTA rollback values migrate without amplifying either output, including a missing or damaged format tag.
-- Brick: F1/F2 save and load again with the built-in pad's Xbox USB identity. Captured real F keys and their keyboard aliases run through the game-input and shortcut regression.
+### Added
 
-- First start on a 1024x768 screen (the TrimUI Brick): "Your games" no longer lets the hint bar cover the last row ("Box art"),
-  at every text size and language; the heading and the system pictures stand closer, and the pictures give way to
-  the count where the room is short. The welcome no longer calls a TrimUI Brick untested.
-- Report a problem handles Unicode sensor and kernel logs without crashing; very long Unicode game names also
-  stay safe in search. First-start Wi-Fi closes a saved-network menu with B before leaving the step, and Add games
-  keeps the selected tile visible on short screens. Read-only fan values have no change arrows, Starter pack's
-  Left/Right keep the focused game, Retro's first-start description fits, and available Load rows stay bright.
-  A saved Wi-Fi target missing from a fresh scan leaves the current network connected. The host navigation
-  regressions cover H700, Mini V2 and Odin 2 Mini profiles in the merge gate.
+- **Retro style**: Settings → Look → Style → Retro turns every menu into an old handheld's: pixel letters everywhere,
+  chunky pixel frames, a flat selection bar with a small cursor, little colour icons for the Settings categories and the
+  pause menu, short blips as menu sounds, and two colour sets of its own, Cocoa and Pea (dark and light). The shelf, the
+  box art and Continue stay as they are. Numbers use clear LCD-style digits and the pause menu, Save and Load, Options and
+  game notes fit at every size. The Font row is now called Style. After the update a "New in pocket-ui 0.3.0"
+  card offers it: A ("Try Retro") switches it on, B leaves the style as it was.
+- **TrimUI Brick (Beta)**: pocket-ui runs on the TrimUI Brick from a microSD card of its own. Unzip the card download onto an
+  empty card, put it in, switch on; the Brick's stock firmware is not touched, and with your usual card back the Brick is what
+  it was. The shelf, pause menu and settings fit its 1024x768 screen; Wi-Fi, Bluetooth pads and headphones, Kids Mode, games
+  from your phone, Tailscale and Sync are there, F1 and F2 are quick save and load, and the mute slider and lights work.
+  Updates come over Wi-Fi and replace only pocket-ui's own folder: your games, saves and settings stay, a new version that
+  doesn't start goes back to the one before, and a power cut during an update is recovered at the next start. It is a Beta:
+  tested on one Brick so far, so tell us what you find.
+- **A shorter first start**: your language, Wi-Fi, your games, how they stand. The time zone is guessed while the Wi-Fi
+  page is up and only asked when there is no clear guess; Box art is one switch on "Your games", which says what it found;
+  the look comes last, shown with your own games: the layouts to choose from, with Style (Barlow, Pixel, Rounded, Retro),
+  Colours and Appearance under them and the previews changing as you go, Retro's Cocoa and Pea included. "How do you like to
+  play?", the feature cards and the separate Extras page are no longer in the first start (Settings → Help & tools has
+  them). "For a child…" is a row on the first page; Kids Mode's steps come after the games, never with an empty shelf. Help &
+  tools has **First-start setup** to run it again. The time zone is asked once (Skip counts), Wi-Fi opened from the phone
+  page leads back to it, the time zone search knows German and Spanish city names (wien, viena), games you send during the
+  setup stand in the look, and the first shelf has no "new games" toast for them. "Your games" names each console.
+- **Controller setup**: each controller gets its own layout, kept for its identity through reconnects and player changes
+  (Settings → Playing → Buttons → Controller setup, also Pause → Options → Controls). It captures analogue triggers and
+  swaps a button that is already in use. SN30 Pro, Pro 2, Xbox, DualSense and Switch Pro are recognised with their SDL
+  layouts, including brake/gas trigger axes and right sticks on Z/RZ. Disconnected players keep their seats; ROCKNIX's SDL
+  Dolphin and ARMSX2 get the same layouts through separate virtual player pads. Azahar keeps its own controller setup (its
+  buttons are bound to the built-in pad), and a game starts even when the virtual pads can't be made.
+- **Test buttons** (Settings → Help & tools): every button, trigger and stick of each connected controller lights up while
+  pressed, with what the last press does in menus and in games after your layout; hold HOME for 2 seconds (or B and START)
+  to leave. In Retro the hints before the first press stay inside their panel.
+- **A newer pocket-ui is said once on the shelf**: "pocket-ui 0.3.0 is ready. Your games and settings stay." A opens
+  Settings → System → Updates, B closes it. Once per version, a little after the start and only with Wi-Fi, never over a
+  game, a page, the first start or in Kids Mode. It only reads the signed update list the Updates page reads;
+  `{"off": true}` in `update-hint.json` stops it.
+- Wi-Fi: a saved network has a menu with Connect and Forget.
 
-- Game audio keeps the beginning of its first packet while the output connects. PAL games also keep a full regular
-  delivery in their pause/resume reserve, avoiding a low warmup reference after returning to play.
+### Changed
 
-- Hint bars name only keys that do something there: no A on Sync's "Two versions" with nothing waiting, on Controller
-  setup's controller row with one controller, on Screen colour at Neutral (Left/Right are named instead), on Performance
-  & fan's fan rows without a fan, on the quick settings' unavailable profile rows, on "Runs on" with one emulator, on the
-  web companion's Pair and Paired browsers while they can't open, on Sleep & power's Short press where the screen only
-  turns off (Brick, SM8550 handhelds), and no "X Next link" with one link on a manual page.
-  Tools' "X Look again" says "Looking for tools…" until it has looked, and PC streaming without Moonlight no longer
-  answers A with "That did not work" (the page says why already). Found by the new D-pad explorer test.
+- **One control scheme everywhere** (`docs/UI-SCHEME.md`): Up/Down move through every row, Left/Right change the focused
+  one, A opens or confirms, and B goes back one step and does nothing else. The first start follows it too: B goes back a
+  stage (before, it skipped forward), and every way on is a row you can reach with the D-pad: Scan again, Continue or
+  Continue offline, For a child, Looks right / Choose another zone. Shortcut keys (X, Y, L1, L2, START) are named when there
+  is room and are never the only way to anything. START still skips the rest of the first start, L2 switches Easy to read.
+- **Every menu is reachable with the D-pad.** A new test walks every Settings page and setup page with the D-pad and fails on
+  a row it cannot reach. It found Settings → Look, where Up/Down only turned the layouts: Appearance, Motion and Animations
+  under them are rows now, B cancels a look you were trying out, and the hint bar names the keys of the row in focus. The
+  hint bars name only keys that do something there: no A where nothing is waiting or there is one choice, Left/Right on
+  rows that take them, and no arrows on values you can only read.
+- **Where was I?** waits for a button: the deadline of about four seconds is gone. The press that dismisses it starts play
+  and does nothing else.
+- Faster Quit and sleep saves in pocket-ui's own player: automatic moments are compressed before the durable write. Older
+  raw saves still load; manual slots keep their format. Downgrading to 0.2.x starts from the in-game save without
+  overwriting the compressed moment. Linux, Deck and Android share the format.
+- Still menus sleep between visible changes. Long selected names and Split previews make one pass and settle; toasts,
+  notices and the second-screen window stop requesting frames while still. Menu audio closes after browsing stops.
+- A game still loading after three seconds shows "Loading the game…" with a spinner, on every Linux device.
+- Update downloads can use signed alternate servers, stop after 30 seconds without progress, and show connection and
+  verification phases. A slow but steady download (a system update, weak Wi-Fi) is no longer cut off after five minutes.
+- Updates come from pocketui.xyz by default for every pocket-ui version, with GitHub as a signed backup.
+- Runs on starts with a "Default (…)" entry, the way back to the default emulator for a game or a console.
+- Settings → Look lists the layout first, then the style; Help & tools has First-start setup and Test buttons.
 
-- Linux controller input keeps measured built-in layouts ahead of colliding generic USB identities. Native Retroid controls keep their HAT2 trigger axes; Retroid/Odin face positions stay direct; controllers reporting triggers as keys and axes keep both sources until released. Captured device descriptors replay through game input, menu roles and shortcuts in the gate.
-- The Spanish welcome fits small screens with large Pixel text; the font checks now render Spanish as well as German.
+### Fixed
 
-- gpSP cartridge clocks follow real time, including after loading an older Continue moment.
-- Start over keeps Gambatte's live cartridge clock and its next battery-save flush.
-- A moment set aside on a full card survives the next successful Quit and moves into a free slot when space is available.
-- A crash after the first game picture keeps pocket-core and Continue. A confirmed failed start can try another
-  emulator once only when no pocket-core moments exist; old automatic emulator choices are cleared.
+- **Sound at the start of a game**: the first moments of a game's sound are no longer cut off while the output connects,
+  and a game restored from a Continue moment plays its opening sound whole. PAL games such as PlayStation titles keep their
+  sound after Resume too, including after pausing again and again.
+- Controllers: the built-in buttons of the supported handhelds keep their measured layout when a USB or Bluetooth pad
+  reports the same identity; a controller that drops out during a game gets its player back.
+- Switch off after sleeping only switches off with the game saved just before: a save that fails, or a game in RetroArch
+  (no moment for Continue), keeps the Pocket asleep instead of closing the game. On the Odin 2 Mini the screen output comes
+  on first, so the save can run.
+- Games that stop answering Pause, Quit or SIGTERM close through an independent guard, including stalls during loading,
+  Continue and teardown; the previous saved moment stays. A game waiting behind a switched-off screen is no longer taken
+  for a stalled one. Jeanne d'Arc defaults to standalone PPSSPP on ROCKNIX to avoid its libretro build's opening-movie hang;
+  explicit emulator choices still win.
+- Saves are harder to lose. A Continue moment that the card left damaged gives way to the moment before it, with a note,
+  instead of being thrown away together with it at the next Quit. A moment that doesn't fit on a full card is said over the
+  game and on the shelf. An in-game save the card can't read at the start is never written over.
+- A power cut right after an update can no longer leave empty programs behind: the new version is written to the SD card
+  before pocket-ui switches to it, and checks that its game player starts before it keeps itself; otherwise the previous
+  version comes back.
+- Updates check the SD card first and say how much room is missing instead of failing with "Check Wi-Fi"; a download too
+  slow for its time says so, a wrong clock is named as the reason a secure connection fails, and a part left by a power cut
+  that turns out bad is loaded once more on its own.
+- 3DS: Save & quit no longer waits 16 seconds after the save for Azahar to be forced shut. Its window comes to the front for
+  the close, and the wait for a signal Azahar ignores is gone.
+- First start and screens: the welcome and "Your games" keep clear of the hint bar on a 1024x768 screen (the Brick), the
+  Spanish welcome fits small screens with large text, and Add games keeps the selected tile in view on short screens.
+  "Report a problem" and search no longer fail on logs or game names with unusual letters. A saved Wi-Fi network that a
+  fresh scan doesn't see no longer disconnects the current one.
+- German and Spanish wording fixes from the 0.2 review.
 
-- Long startup messages over a game stay readable when its window first becomes fullscreen on a smaller panel.
+## [0.2.5] - 2026-11-07
 
-- 3DS: Save & quit no longer waits 16 seconds after the save for Azahar to be forced shut. Its window comes to the
-  front for the close (behind the menu its shutdown stalled), and the wait for a signal Azahar ignores is gone.
+### Fixed
 
-- Retro: Test buttons' hints before the first press wrap inside their panel (the second ran off the screen), and the
-  slot number in the selected Save/Load row is dark enough to read on the orange and green bars.
+- Pokémon Ruby, Sapphire and Emerald on gpSP keep time while the game is closed, including after loading an older moment.
+- Start over keeps the cartridge clock in Pokémon Gold, Silver and Crystal on Gambatte.
+- A crash after a game has shown a picture keeps pocket-core and Continue. A failed start may try the system emulator once; the next start tries pocket-core again, and existing moments prevent an automatic switch.
 
-- First start, from a walk as a new player: the time zone is asked once (Skip counts), Wi-Fi opened from the phone page
-  leads back to it, the time zone search knows German and Spanish city names (wien, viena) and lists show them, and the
-  first shelf has no "new games" toast for games you just sent. L1 Back is shown at the top and goes from the time zone
-  to Wi-Fi; Down on the welcome reaches Easy to read; B on the last stage asks before ending the setup; "Your games"
-  names each console; the phone page's warning is one calm line; hints that did nothing are gone.
+## [0.2.4] - 2026-11-06
 
-- PAL games such as PlayStation titles keep enough audio queued for repeated display frames. Returning from
-  pause no longer discards queued sound on a display tick that supplies no new samples. The resumed frame
-  clock prevents extra audio bursts accumulating across repeated pauses. Startup and resume wait for a
-  regular audio delivery above the effective target, avoiding a low initial fill without raising its steady target.
-  Large first audio packets restored from a state are streamed into a bounded queue without discarding their
-  beginning, including while the output route selects its buffer size.
+### Fixed
 
-- Retro: the pause menu, Save and Load, Options and pocket-core's notes over a game fit at every size. The rows' window
-  grows to its longest name (the preview window beside it gives way), values such as "Where I quit" stay inside it,
-  the game's name keeps its room beside the battery line, and notes keep their padding from the frame. The pixel
-  letters are drawn on whole pixels without grey edges, numbers use clear LCD-style digits, and B, C, S and Z no longer
-  read as 8, O, 8 and 2.
+- Continue moments skipped after an emulator or game-file change, or refused by a core, stay in a free slot past the next Save & quit. With every slot full, they wait safely for a free one.
+
+- H700 GBA games without a Continue moment keep using mGBA when their newest save slot belongs to mGBA, so existing slots still load.
+
+- Ordinary games no longer launch periodic PipeWire diagnostic helpers; measurements start them only when requested.
+
+## [0.2.3] - 2026-11-06
+
+### Fixed
 
 - On H700 with the affected ROCKNIX audio configuration, system volume also controls the speaker DAC,
   with a reduced maximum and physical mute at zero. Headphones keep their Line Out path; external mixer
@@ -75,91 +131,20 @@ Update downloads can use signed alternate servers, stop after 30 seconds without
   shelf redraws are suppressed during H700 games. Battery retains normal game speed instead of halving the CPU
   limit. Hardware loudness and timing validation remains pending.
 
-- A power cut right after an update can no longer leave empty programs behind: the new version is written to the SD
-  card before pocket-ui switches to it, and checks that its game player starts before it keeps itself; otherwise the
-  previous version comes back.
+## [0.2.2] - 2026-11-06
 
-- Updates check the SD card first and say how much room is missing instead of failing with "Check Wi-Fi"; a download
-  too slow for its time says so, a wrong clock is named as the reason a secure connection fails, and a part left by a
-  power cut that turns out bad is loaded once more on its own.
+### Fixed
 
-- Game audio uses prepared filters for high sample rates, including mGBA's 65536 Hz, with ARM64 NEON to reduce
-  processing time. Late frames keep the samples already queued and fill only the missing tail with silence.
-  H700 uses a larger audio cycle and buffers for more scheduling margin; the first stream fits the configured cycle.
+- Game audio uses prepared high-rate filters with ARM64 NEON. When a frame is late, queued samples stay audible
+  and only the missing tail is filled with silence. The first stream opens with the configured cycle buffer.
+- Anbernic H700 audio uses a 1024-frame graph cycle, a 48 ms software queue and a 64 ms PCM buffer for more
+  scheduling margin. Audio diagnostics distinguish queue waits, output errors and unavailable measurements.
 
-- Game audio logs now distinguish software queue waits from output errors, track stream progress and report
-  unavailable measurements explicitly, making audio problems easier to diagnose. PipeWire's per-stream error counts are sampled only
-  when a bench asks for them (`audio stats`), never beside an ordinary game.
+## [0.2.1] - 2026-11-06
 
-- Runs on starts with a "Default (…)" entry, the way back to the default emulator for a game or a console, and its
-  list stops at both ends instead of wrapping.
+### Fixed
 
-- GBA on Anbernic H700 handhelds defaults to bundled ARM64 gpSP in pocket-ui's own player, keeping the pause
-  menu, picture slots and Continue. Existing mGBA Continue moments, and without one mGBA save slots, stay with mGBA; Runs on still offers both cores
-  and respects saved game/console choices. Auto uses the CPU's full existing clock during play and restores the
-  previous governor and limit afterwards.
-  Cleanup from a previous game keeps that profile while pocket-core is still playing.
-
-- Separate controller layouts follow Bluetooth identities through reconnects and player changes. Settings → Playing
-  → Buttons → Controller setup (also Pause → Options → Controls) captures analogue triggers and swaps occupied
-  buttons. Linux input recognises SDL layouts for SN30 Pro, Pro 2, Xbox, DualSense and Switch Pro, including
-  brake/gas trigger axes and right sticks on Z/RZ. A controller that drops out during a game gets its player back;
-  at the start of a game the connected controllers take the players in the saved order without gaps, and forgetting a
-  controller on the Bluetooth page frees its player number. While a button is captured the page names the controller;
-  HOME on any pad or any button of the handheld cancels, and so do 8 seconds without a press. ROCKNIX's SDL Dolphin
-  and ARMSX2 receive the same layouts through separate virtual player pads (Azahar keeps its own controller setup, as
-  its buttons are bound to the built-in pad; a game also starts when the virtual pads can't be made).
-
-- Settings → Help & tools → Test buttons lights up every button, trigger (with its travel and the point it counts as
-  pressed) and stick (with its dead zone) of each connected controller, built-in, Bluetooth or USB, and says what the
-  last press does in menus and in games after the player's own layout. B, START and HOME can be tested too: hold HOME
-  for 2 seconds, or B and START together, to leave. German and Spanish included.
-
-- A newer pocket-ui is said once on the shelf: "pocket-ui 0.3.0 is ready. Your games and settings stay." A opens
-  Settings → System → Updates, B closes it. Each version is said once, a little after the start and only with Wi-Fi,
-  never over a game, a page, the first start or in Kids Mode. It only reads the signed update list the Updates page
-  reads; `{"off": true}` in `update-hint.json` stops the look.
-
-- After the update to 0.3.0 a "New in pocket-ui 0.3.0" card offers the Retro style, once, on the shelf and never over a
-  game: A ("Try Retro") switches Settings → Look → Style to Retro, B leaves the style as it was.
-
-- New: the Retro style. Settings → Look → Style → Retro turns every menu into an old handheld's: pixel letters
-  everywhere, chunky pixel frames, a flat selection bar with a small cursor, little colour icons for the Settings
-  categories and the pause menu, short blips as menu sounds, and two colour sets of its own, Cocoa and Pea (dark and
-  light). The shelf, the box art and Continue stay as they are. The Font row is now called Style.
-
-- **A shorter first start**: your language, Wi-Fi, your games, how they stand. The time zone is guessed while the Wi-Fi
-  page is up and only asked when there is no clear guess; Box art is one switch on "Your games", which says what it
-  found; the look comes last, shown with your own games, with a small Style panel (appearance, colours). B goes on at
-  every stage, L1 goes back one, START skips the rest, L2 switches Easy to read anywhere in it. "How do you like to play?", the feature
-  cards and the separate Extras page are no longer in the first start (Settings → Help & tools has them), and the last
-  page goes straight to the shelf. "For a child…" is a quiet Y on the first page; Kids Mode's steps come after the games,
-  never with an empty shelf. Settings → Look lists the layout first, then the style, with a new Easy to read row and
-  Motion moved in from Sound & feel; Help & tools has **First-start setup** to run it again. A restart in the middle of
-  an older first start opens the stage that comes next.
-
-- Switch off after sleeping only switches off with the game saved just before: a save that fails, or a game in
-  RetroArch (no moment for Continue), keeps the Pocket asleep instead of closing the game.
-
-- Still menus sleep between visible changes. Long selected names and Split previews make one pass and settle;
-  toasts, notices and the second-screen window stop requesting frames while still. Menu audio closes after browsing
-  stops, allowing the sound system to sleep too.
-
-- Games that stop answering Pause, Quit or SIGTERM now close through an independent guard, including stalls during
-  loading, Continue and teardown. The previous saved moment stays available. Jeanne d'Arc defaults to standalone
-  PPSSPP on ROCKNIX to avoid its libretro build's opening-movie hang; explicit emulator choices still win.
-  A game waiting behind a switched-off screen (Odin 2 Mini screen off, light sleep) is not taken for a stalled one: it
-  was closed after two minutes of screen off.
-
-- Faster Quit and sleep saves in pocket-ui's own player: automatic moments are compressed before the durable write.
-  Older raw saves still load; manual slots keep their format. Downgrading to 0.2.0/0.1.14 starts from the in-game save
-  without overwriting the compressed moment. Linux, Deck and Android share the format.
-
-- Saves are harder to lose. A Continue moment that the card left damaged gives way to the moment before it, with a note,
-  instead of being thrown away together with it at the next Quit. A moment pocket-ui's own host doesn't load (after
-  Runs on changed, a changed game file, a core that refuses it) goes into a free save slot and the message says which,
-  as on Android; before, the next Save & quit removed it. A moment that doesn't fit on a full card is said over the game
-  and on the shelf. An in-game save the card can't read at the start is never written over.
+- Game Boy Advance on Anbernic H700 handhelds uses gpSP in pocket-ui's own player, keeping the pause menu, picture slots and Continue. Existing mGBA Continue moments and saved emulator choices stay with their core. Games use full CPU speed under Auto and restore the previous profile on exit.
 
 ## [0.2.0] - 2026-11-05
 

@@ -1,4 +1,4 @@
-# TrimUI Brick: the smoke test after an installation (private, branch `feat/trimui-brick-smoke`)
+# TrimUI Brick: the smoke test after an installation
 
 Host tests were green for several Brick updates that then ran wrong on the device (lit LED raw picture in the dark, picture options and the FPS line
 without effect, the route lost, the clock too low in a game). `scripts/brick-smoke.sh` runs on the dev machine against the real Brick after every installation and looks at exactly those things.
@@ -33,6 +33,6 @@ mute first, keep it muted, darken right after pocket-ui is up, end dark and mute
 Without `--owner-ok` only 1-4 and 7 run (5 and 6 print SKIP). Use `--owner-ok` only when the owner is not using the Brick. The clean-up leaves the screen dark; if it is still on, the table says "the screen is STILL ON".
 The test game runs with the card's sound as it is; keep the Brick muted (slider) while it runs.
 
-What it cannot show: what the panel displays (a read of `/dev/fb0` proves the framebuffer, as in the first beta tests), and step 6 needs a pocket-ui that has the FIFO `play` command (this branch on): an older one prints FAIL `6-start-A` and says why.
+What it cannot show: what the panel displays (a read of `/dev/fb0` proves the framebuffer, as in the first beta tests), and step 6 needs a pocket-ui that has the FIFO `play` command (this version on): an older one prints FAIL `6-start-A` and says why.
 
 Test on a computer: `scripts/test-brick-smoke.sh` runs the same scripts against a fake sysfs/proc tree with a small simulator of pocket-ui's FIFOs; a healthy fake Brick passes, and each bug above (lit LEDs, `frame_hex` in the dark, options without effect, clock too low in a game or dark, no route, busy while dark, no `play`) is caught.

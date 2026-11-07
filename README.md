@@ -22,8 +22,13 @@ Your games on one shelf, press A and you're playing, right where you left off.</
   PlayStation 2.
 - **Every game in its case.** Box art on real cases, cartridges and discs, stickers for the games you finished, and
   six looks to choose from, including Easy: one big game at a time, for anyone you hand the handheld to.
-- **Set up on the handheld.** Wi-Fi, box art, Bluetooth pads, games sent from your phone, a Game check that tells you
-  why a game won't start, and updates over Wi-Fi that keep your saves.
+- **Retro, in one switch.** Settings → Look → Style → Retro turns every menu into an old handheld's: pixel letters,
+  chunky pixel frames, little icons and soft blips, in Cocoa or Pea. Your shelf and box art stay as they are.
+- **Set up on the handheld.** A calm first start in four steps (language, Wi-Fi, your games, the look) and you're on
+  your shelf. Box art, games sent from your phone, a Game check that tells you why a game won't start, and updates
+  over Wi-Fi that keep your saves.
+- **Bring your controller.** Bluetooth pads pair in one press and keep their own button layout through reconnects;
+  Test buttons shows every button, trigger and stick light up.
 - **Yours.** No account, no tracking, free and open source. Menus in English, German and Spanish.
 
 ## Get it
@@ -31,7 +36,9 @@ Your games on one shelf, press A and you're playing, right where you left off.</
 **[Download the latest version](../../releases/latest)** and follow the [install page](https://pocketui.xyz/install.html):
 
 - **Ready SD card image**: write it to a card with balenaEtcher or Raspberry Pi Imager and start. There is one for the
-  Retroid Pocket Mini V2 and one for each Anbernic H700 model.
+  Retroid Pocket Mini V2, the Pocket 6 and Nova, the AYN Odin 2 family and each Anbernic H700 model.
+- **TrimUI Brick (Beta)**: unzip the card download onto an empty microSD card and switch on. The Brick's own system isn't
+  touched, and updates come over Wi-Fi. Tested on one Brick so far.
 - **Already on ROCKNIX?** Unzip the Ports installer into `roms/ports` and pick **Install pocket-ui** under Ports.
   About five minutes, and **Uninstall pocket-ui** brings ROCKNIX's own menu back. Your games, saves and settings stay.
 
@@ -40,7 +47,7 @@ You bring your own games and, for a few systems, BIOS files; pocket-ui includes 
 
 **Runs on** handhelds with [ROCKNIX](https://rocknix.org): Retroid Pocket Mini V2, Mini, 5, Flip 2, 6 and Nova ·
 AYN Odin 2, Odin 2 Mini and Odin 2 Portal · Anbernic RG35XX Plus, H, Pro, 2024 and SP, RG28XX, RG40XX H and V,
-RG34XX, RG34XX-SP and RG-SP. Played on most: the Mini V2, the Odin 2 Mini and the RG35XX Plus. Which consoles run on
+RG34XX, RG34XX-SP and RG-SP · TrimUI Brick (Beta, from a card of its own). Played on most: the Mini V2, the Odin 2 Mini and the RG35XX Plus. Which consoles run on
 which chip: [docs/DEVICES.md](docs/DEVICES.md).
 
 ## Learn more
