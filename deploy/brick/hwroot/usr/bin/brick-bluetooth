@@ -1,5 +1,5 @@
 #!/bin/sh
-# Own BlueZ lifecycle, not the firmware/NextUI Bluetooth scripts. Firmware binaries stay on the device.
+# Own BlueZ lifecycle, not the firmware's Bluetooth scripts. Firmware binaries stay on the device.
 # Pairings live in RAM with an atomic card archive (FAT cannot keep BlueZ's permissions).
 DATA=${BRICK_DATA:-/mnt/SDCARD/pocket-ui}
 RUN=${BRICK_RUN:-/tmp/pocket-ui}
@@ -11,6 +11,10 @@ HCI=${BRICK_BT_HCI:-/sys/class/bluetooth/hci0}
 RFK=${BRICK_RFKILL:-/sys/class/rfkill}
 CTL=${BRICK_BT_CTL:-/usr/bin/bluetoothctl}
 DAEMON=${BRICK_BT_DAEMON:-/usr/bin/bluetoothd}
+# Only the stock-firmware entry enables this handover. Other foreign daemons stay untouched.
+FIRMWARE_INIT=${BRICK_BT_FIRMWARE_INIT:-}
+FIRMWARE_KEYS=${BRICK_BT_FIRMWARE_KEYS:-/etc/bluetooth/keys}
+FIRMWARE_PROC=${BRICK_BT_FIRMWARE_PROC:-/proc}
 # Headphones (A2DP, SBC): the firmware's BlueALSA sends what ALSA's "pipewire" device plays while a headset is connected.
 BLUEALSA=${BRICK_BLUEALSA:-/usr/bin/bluealsa}
 # While a headset is connected its address is in $ROUTE: pocket-core and pocket-ui then open ALSA's "pocket_bt:DEV=<address>"
@@ -21,6 +25,49 @@ ROUTE=$RUN/bt-audio
 SELF=$(readlink -f "$0")
 running_here=0
 mounted_here=0
+
+prepare_firmware() {
+  if pids=$("${BRICK_BT_PIDOF:-pidof}" bluetoothd 2>/dev/null); then
+    [ -n "$pids" ] || { echo 'foreign bluetoothd is running'; return 1; }
+  else pids=; fi
+  if [ -n "$pids" ]; then
+    [ -n "$FIRMWARE_INIT" ] && [ -x "$FIRMWARE_INIT" ] || { echo 'foreign bluetoothd is running'; return 1; }
+    # procd's exact firmware command. Validate every PID before asking that named service to stop.
+    expected=$(printf '%s\n%s' "$DAEMON" -nd)
+    for p in $pids; do
+      case "$p" in ''|*[!0-9]*) return 1 ;; esac
+      [ "$(readlink -f "$FIRMWARE_PROC/$p/exe")" = "$(readlink -f "$DAEMON")" ] &&
+        [ "$(tr '\000' '\n' <"$FIRMWARE_PROC/$p/cmdline")" = "$expected" ] || { echo 'foreign bluetoothd is running'; return 1; }
+    done
+  fi
+  # The firmware links this RAM path into flash. Never mount through that link or use its keys.
+  if [ -L "$STORE" ]; then
+    link=$(readlink "$STORE")
+    [ -n "$FIRMWARE_INIT" ] && [ "${link%/}" = "${FIRMWARE_KEYS%/}" ] || { echo 'BlueZ storage must not point into firmware'; return 1; }
+  fi
+  if [ -n "$pids" ]; then
+    LD_LIBRARY_PATH= "$FIRMWARE_INIT" stop || return 1
+    n=0
+    while "${BRICK_BT_PIDOF:-pidof}" bluetoothd >/dev/null 2>&1; do
+      [ "$n" -lt 5 ] || { echo 'firmware bluetoothd did not stop'; return 1; }
+      sleep 1; n=$((n + 1))
+    done
+    echo 'brick-bluetooth: firmware BlueZ handed over'
+  fi
+  if [ -L "$STORE" ]; then
+    printf '%s\n' "$link" >"$BT/firmware-storage.link" || return 1
+    rm "$STORE" || return 1
+  fi
+}
+
+restore_firmware_storage() {
+  [ -f "$BT/firmware-storage.link" ] || return 0
+  [ ! -e "$BT/mounted" ] || return 1
+  # Only the empty RAM directory we made can be replaced; preserve anything unexpected.
+  if [ -d "$STORE" ] && [ ! -L "$STORE" ]; then rmdir "$STORE" || return 1; fi
+  [ ! -e "$STORE" ] && [ ! -L "$STORE" ] || return 1
+  ln -s "$(cat "$BT/firmware-storage.link")" "$STORE" && rm "$BT/firmware-storage.link"
+}
 
 # Only signal PIDs saved by us and still running the expected executable/script.
 owned() {
@@ -100,6 +147,7 @@ cleanup() {
   if [ "$mounted_here" = 1 ]; then
     if "${BRICK_BT_UMOUNT:-umount}" "$STORE"; then rm -f "$BT/mounted"; fi
   fi
+  restore_firmware_storage || echo 'brick-bluetooth: could not restore firmware storage link' >&2
   [ "$running_here" != 1 ] || stop_child attach "${BRICK_BT_ATTACH:-/usr/bin/hciattach}"
   rm -f "$BT/service.pid" "$BT/agent.in"
   exit 0
@@ -128,11 +176,10 @@ case "${1:-}" in
   run)
     trap cleanup TERM INT EXIT
     rm -f "$BT/ready"
-    # Do not take over a foreign daemon: it may own another card's pairings and connections.
-    "${BRICK_BT_PIDOF:-pidof}" bluetoothd >/dev/null 2>&1 && { echo 'foreign bluetoothd is running'; exit 1; }
     [ -x "$CTL" ] && [ -x "$DAEMON" ] || exit 1
     [ -S "${BRICK_BT_BUS:-/var/run/dbus/system_bus_socket}" ] || { echo 'firmware system D-Bus is missing'; exit 1; }
     [ ! -e "$BT/mounted" ] || { echo 'previous storage mount is still in use; refusing to start'; exit 1; }
+    prepare_firmware || exit 1
     running_here=1
     rm -f "$BT/daemon.pid" "$BT/agent.pid" "$BT/attach.pid"
     # /var is RAM on the firmware. Create the standard BlueZ directory there, never in /etc.

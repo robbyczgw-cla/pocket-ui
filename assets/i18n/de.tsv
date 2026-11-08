@@ -55,7 +55,7 @@ User name	Benutzername
 Password for {s}	Passwort für {s}
 Next	Weiter
 Your user name on retroachievements.org.	Dein Benutzername auf retroachievements.org.
-Sent once to sign in, never kept. The Pocket keeps only the sign-in key.	Nur zur Anmeldung gesendet, nie gespeichert. Der Pocket behält nur den Schlüssel.
+Sent once to sign in, never kept. The Pocket keeps only the sign-in key.	Passwort einmal zur Anmeldung; gespeichert wird nur der Schlüssel.
 Type	Tippen
 Delete	Löschen
 Shift	Umschalt
@@ -1574,6 +1574,10 @@ Installed. Restarting…	Installiert. Startet neu …
 {t}, {s} available	{t}, {s} verfügbar
 {s}, update waiting for restart	{s}, Update wartet auf Neustart
 Check again	Erneut prüfen
+Install now	Jetzt installieren
+Check for updates automatically	Automatisch nach Updates suchen
+Check automatically	Automatisch suchen
+The battery is at {n}%. Plug in the charger first, so it cannot run out during the update.	Der Akku ist bei {n} %. Schließ zuerst das Ladegerät an, damit er während des Updates nicht leer wird.
 Install pocket-ui {s}	pocket-ui {s} installieren
 pocket-ui {s} is ready. Your games and settings stay.	pocket-ui {s} ist da. Deine Spiele und Einstellungen bleiben.
 Press A for Settings › System › Updates, B to close.	Mit A zu Einstellungen › System › Updates, mit B schließen.
@@ -2158,7 +2162,7 @@ Light from 07:00, dark from 20:00, local time.	Hell ab 07:00, dunkel ab 20:00.
 Forgetting {s}…	Vergesse {s} …
 Forget {s}? Press Y again. B keeps it.	{s} vergessen? Noch einmal Y. B behält es.
 Setting the Wi-Fi country…	WLAN-Land wird eingestellt …
-Welcome to your Pocket	Willkommen auf deinem Pocket
+Welcome to your Pocket	Willkommen bei Pocket
 A few short steps: a look you like, how you like to play, Wi-Fi, your time zone, your games.	Ein paar kurze Schritte: deine Ansicht, wie du spielst, WLAN, deine Zeitzone, deine Spiele.
 You can skip any of them and come back later.	Du kannst jeden überspringen und später zurückkommen.
 You can change it later in Settings.	Auch später in den Einstellungen.
@@ -2338,7 +2342,7 @@ Couldn't set the Wi-Fi country: {s}	Das WLAN-Land ließ sich nicht einstellen: {
 # --- Shelf hints
 Unpin	Lösen
 Pin	Anheften
-Recent games	Zuletzt gespielt
+Recent games	Zuletzt
 
 # --- Slots
 Before load	Vorher
@@ -4385,7 +4389,7 @@ For grown-ups: hold SELECT and START for 5 seconds.	Für Erwachsene: SELECT und 
 No limit	Keine Grenze
 This game won't start right now. Press a button to pick another one.	Dieses Spiel startet gerade nicht. Drück eine Taste und such dir ein anderes aus.
 {n} hidden	{n} ausgeblendet
-This device has no Wi-Fi, so the downloads aren't available.	Dieses Gerät hat kein WLAN, deshalb sind die Downloads nicht verfügbar.
+This device has no Wi-Fi, so the downloads aren't available.	Kein WLAN: Downloads sind nicht verfügbar.
 Splore is PICO-8's game browser, not a game, and it needs the PICO-8 program from lexaloffle.com in roms/pico-8. Your own PICO-8 games work without it.	Splore ist der Spielebrowser von PICO-8, kein Spiel, und braucht das PICO-8-Programm von lexaloffle.com in roms/pico-8. Deine eigenen PICO-8-Spiele laufen auch ohne.
 The clock is on UTC. Set your time zone in Settings › System › Time.	Die Uhr geht nach UTC. Stell deine Zeitzone unter Einstellungen › System › Uhrzeit ein.
 Forgot it? Put a file called {s} on the card and restart.	Vergessen? Leg eine Datei namens {s} auf die Karte und starte neu.
@@ -4529,7 +4533,7 @@ Menu	Menü
 Analog stick	Analogstick
 C buttons	C-Tasten
 C mode	C-Modus
-Hold R2 and the face buttons are C buttons.	R2 gedrückt halten: Dann sind die vier Tasten rechts die C-Tasten.
+Hold R2 and the face buttons are C buttons.	Mit R2 sind die vier rechten Tasten C-Tasten.
 In colour: what you changed in Options › Controls.	Farbig: was du unter Optionen › Steuerung geändert hast.
 Brighten solar sensor	Solarsensor heller
 Darken solar sensor	Solarsensor dunkler
@@ -4692,3 +4696,17 @@ There isn't enough free memory for this update. Restart the device and try again
 Unsafe update temporary folder.	Unsicherer temporärer Update-Ordner.
 Restart the device to finish recovering the previous update before trying again.	Starte das Gerät neu, damit das vorherige Update wiederhergestellt wird, und versuche es dann noch einmal.
 Pixel letters, frames and icons.	Pixelschrift, Rahmen und Symbole.
+No devices found	Keine Geräte gefunden
+Put the device in pairing mode, then select Search for devices.	Versetze das Gerät in den Kopplungsmodus und wähl Nach Geräten suchen.
+
+None · Y	Keine · Y
+
+Recent	Zuletzt
+No cheats found for this game	Keine Cheats für dieses Spiel gefunden
+The included cheat database has no matching codes. You can keep playing normally.	Die mitgelieferte Cheat-Datenbank enthält keine passenden Codes. Du kannst normal weiterspielen.
+
+# Optional GBA hardware picture in Cozy extras.
+GBA console	GBA-Konsole
+Choose the GBA console: Game Boy Advance or Game Boy Advance SP. Changes its picture everywhere and its cartridge slot at launch.	Wähl die GBA-Konsole: Game Boy Advance oder Game Boy Advance SP. Ändert ihr Bild überall und den Modulschacht beim Start.
+Game Boy Advance	Game Boy Advance
+Game Boy Advance SP	Game Boy Advance SP

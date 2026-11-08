@@ -39,7 +39,7 @@ impl App {
     /// On the Brick the card also says what F1 and F2 do.
     #[cfg(feature = "brick")]
     fn brick_card_keys(&self, card: Card) -> Card {
-        if !pocket_ui::device::brick() {
+        if !pocket_ui::brick_profile::fkeys() {
             return card;
         }
         controls_card::with_brick_keys(card, pocket_ui::brick_hw::FKeys::load(&self.data_dir))

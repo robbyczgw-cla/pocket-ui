@@ -24,6 +24,7 @@ use pocket_ui::text::Face;
 use pocket_ui::touch::{Area, Gesture};
 use winit::event_loop::ActiveEventLoop;
 
+use super::app_switcher::star_room;
 use super::{stripe, system_short, window_start, App, Item, Screen, UserEvent, CANCEL, CONFIRM};
 
 /// The query field under the heading.
@@ -492,7 +493,8 @@ impl App {
         let w = if page.kb.text.is_empty() {
             // The caret stands at the start; the hint begins after it, not under it.
             let after_caret = if typing { 16 } else { 0 };
-            self.text.draw(c, Face::Title, 50, text_x + after_caret, FIELD_Y + 62, dim, "Any game, by its name");
+            let (px, hint) = self.text.fit_sizes(Face::Title, &[50, 37], "Any game, by its name", room - after_caret);
+            self.text.draw(c, Face::Title, px, text_x + after_caret, FIELD_Y + 62, dim, &hint);
             0
         } else {
             // A long query shows its end, where the typing is. What was typed is the player's own: painted as it is,
@@ -556,7 +558,8 @@ impl App {
     fn paint_recent(&mut self, c: &mut Canvas, page: &SearchPage, bottom: i32) {
         let width = c.w - 2 * MARGIN;
         if page.recent.list.is_empty() {
-            self.text.draw(c, Face::Title, 37, MARGIN, LIST_TOP + 60, pal().chalk, "Type part of a game's name.");
+            let (px, hint) = self.text.fit_sizes(Face::Title, &[37, 28], "Type part of a game's name.", width);
+            self.text.draw(c, Face::Title, px, MARGIN, LIST_TOP + 60, pal().chalk, &hint);
             let games: usize = self.systems.iter().filter(|s| !self.hidden.contains(&s.name)).map(|s| s.games.len()).sum();
             let line = format!("Every game on the shelf is searched, {games} in all. Small typos are fine.");
             let line = self.text.fit(Face::Body, 28, &line, width);
@@ -647,7 +650,14 @@ impl App {
         self.text.draw(c, Face::Body, 21, bx + 34, by + bh / 2 + pocket_ui::type_scale::base(8, 21), if selected { pal().ink } else { pal().chalk }, &short);
         let title_x = tx + thumb + 22;
         let fav = self.favorites.contains(&path);
-        self.draw_title(c, Face::Title, 37, title_x, y + h / 2 + pocket_ui::type_scale::base(13, 37), bx - 20 - title_x, fg, &name, selected, fav);
+        // The name whole, or the part that tells the game apart, a step smaller before it is cut (`title_block::row`).
+        let room = bx - 20 - title_x - if fav { star_room(37) } else { 0 };
+        let (shown, px) = pocket_ui::title_block::row(&mut self.text, Face::Title, 37, &name, room);
+        let baseline = y + h / 2 + pocket_ui::type_scale::base(13, px);
+        let w = self.text.draw(c, Face::Title, px, title_x, baseline, fg, &shown);
+        if fav {
+            App::paint_title_star(c, title_x + w, baseline, px, fg);
+        }
     }
 
     /// The keyboard under the results while typing.

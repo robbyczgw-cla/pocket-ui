@@ -40,12 +40,12 @@ this device, Pixel Path, frames and "Continue your last game" are off by default
 |---|---|---|---|
 | **Continue where I quit** | As it is | As it is | Settings → Playing → [Continue where I quit](settings.md#continue-where-i-quit) |
 | **Continue your last game** | Off | On | Settings → Playing → [On start](settings.md#on-start) (Last game) |
-| **Motion** | On | On | Settings → Sound & feel → [Motion](settings.md#motion) (Off on the card is Motion Off) |
-| **Easy to read** | As it is | As it is | Settings → Look → [Text size](settings.md#text-size) and Settings → Sound & feel → [Motion](settings.md#motion) ([Easy to read](easy-to-read.md#easy-to-read)): On is Large text and Reduced motion, Off is Normal text and Full motion; while it is on, the pause menu lists [Zoom](easy-to-read.md#zoom) |
+| **Motion** | On | On | Settings → Sound & feel → [Motion](settings-sound.md#motion) (Off on the card is Motion Off) |
+| **Easy to read** | As it is | As it is | Settings → Look → [Text size](settings.md#text-size) and Settings → Sound & feel → [Motion](settings-sound.md#motion) ([Easy to read](easy-to-read.md#easy-to-read)): On is Large text and Reduced motion, Off is Normal text and Full motion; while it is on, the pause menu lists [Zoom](easy-to-read.md#zoom) |
 | **Retro** | As it is | As it is | Settings → Look → [Style](theme.md#style) → Retro; Off goes back to Barlow. After the update to 0.3.0 its card starts on On: A tries it, B leaves everything as it is |
 | **Menu sounds** | As it is | As it is | Settings → Sound & feel → Sounds |
 | **Haptics** | As it is | As it is | Settings → Sound & feel → Haptics |
-| **Stick lights** | As it is | As it is | Settings → Sound & feel → [LEDs](settings.md#leds) (On is Colour, unless Battery was chosen) |
+| **Stick lights** | As it is | As it is | Settings → Sound & feel → [LEDs](settings-sound.md#leds) (On is Colour, unless Battery was chosen) |
 | **Screen frames on every console** | Off | On | Settings → Playing → [Screen frames](settings.md#screen-frames) |
 | **Echoes** | On | On | Settings → Games → Curator |
 | **Versions** | On | On | Settings → Games → Curator ("Merge versions in mixed lists") |
@@ -59,7 +59,7 @@ this device, Pixel Path, frames and "Continue your last game" are off by default
 
 Cards without a switch, after those: **Search and the letter jump**, **Console credits**, **Players**, **Run-ahead**, **Runs on**,
 **RetroAchievements**, **Sync**, **Tailscale**, **Tools**, **Cozy extras** (real cases, the memory card, stickers and the other
-little touches, each switched in Settings → Look → [Cozy extras](settings.md#cozy-extras)) and **Performance & fan**.
+little touches, each switched in Settings → Look → [Cozy extras](settings-sound.md#cozy-extras)) and **Performance & fan**.
 
 The profile **For a child** sets none of these: [Kids mode](kids-mode.md) keeps its own choices and leaves the switches as they are.
 

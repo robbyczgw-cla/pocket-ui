@@ -542,10 +542,10 @@ impl App {
         if self.launch_at.is_some() {
             return;
         }
-        let (end, baseline) = self.kids_shelf_name_at(c, item, below, colours, NAME_SCALE);
+        let (end, star_at, baseline) = self.kids_shelf_name_at(c, item, below, colours, NAME_SCALE, 2);
         let u = c.h as f32 / 1080.0;
         if self.is_favorite(item) {
-            App::paint_name_star(c, end, baseline, (50.0 * u) as u32);
+            App::paint_name_star(c, end, star_at, (50.0 * u) as u32);
         }
         // Under the name, calm and short: system · year · players, a line or two of what the game is, time and last
         // played. A line without data is left out, with no gap.

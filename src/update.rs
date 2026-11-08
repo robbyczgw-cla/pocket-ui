@@ -116,9 +116,11 @@ pub fn brick_short(v: &str) -> String {
 /// The version on About: "0.1.14 for TrimUI Brick (beta 6)", a public release "0.2.1 for TrimUI Brick".
 #[cfg(feature = "brick")]
 pub fn brick_long(v: &str) -> String {
+    // The same card on a Smart Pro says so (`brick_profile::Board`); everything else, also a computer, the Brick as before.
+    let name = crate::brick_profile::board().unwrap_or(crate::brick_profile::Board::Brick).name();
     match brick_beta(v) {
-        Some((base, n)) => format!("{base} for TrimUI Brick (beta {n})"),
-        None if !v.contains('-') => format!("{v} for TrimUI Brick"),
+        Some((base, n)) => format!("{base} for {name} (beta {n})"),
+        None if !v.contains('-') => format!("{v} for {name}"),
         None => v.to_string(),
     }
 }
@@ -554,21 +556,41 @@ fn link_target(at: &Path) -> Option<String> {
 /// Files a release carries and that are linked from the root.
 const APP_FILES: [&str; 3] = ["pocket-ui", "pocket-core", "portmaster-setup.sh"];
 
-/// Moves a flat install (copied files, as dev.sh used to deploy) into releases/<version>-local
+/// Never overwrite a folder that current, previous or known-good may still name.
+/// A retry/rebuilt package can have the same version as an existing release.
+fn unused_release(root: &Path, version: &str) -> String {
+    let base = format!("releases/{version}");
+    let mut dir = base.clone();
+    let mut n = 0;
+    while std::fs::symlink_metadata(root.join(&dir)).is_ok() {
+        n += 1;
+        dir = format!("{base}-install-{n}");
+    }
+    dir
+}
+
+/// Copies a flat install (copied files, as dev.sh used to deploy) into releases/<version>-local
 /// so that it can become `previous`.
 pub fn ensure_layout(root: &Path) -> Result<(), String> {
     if root.join("current").exists() {
         return Ok(());
     }
-    let dir = format!("releases/{}-local", app_version());
+    let dir = unused_release(root, &format!("{}-local", app_version()));
     std::fs::create_dir_all(root.join(&dir)).map_err(|e| e.to_string())?;
     for f in APP_FILES {
         let flat = root.join(f);
         if flat.is_file() && !flat.is_symlink() {
-            std::fs::rename(&flat, root.join(&dir).join(f)).map_err(|e| e.to_string())?;
+            // Keep the flat boot path intact until each replacement link is ready.
+            std::fs::copy(&flat, root.join(&dir).join(f)).map_err(|e| e.to_string())?;
+            crash_point(&format!("layout-copied-{f}"));
         }
     }
+    crate::fsutil::sync_tree(&root.join(&dir)).map_err(|e| e.to_string())?;
+    crate::fsutil::sync_dir(&root.join("releases"));
+    crash_point("layout-synced");
     link(&dir, &root.join("current")).map_err(|e| e.to_string())?;
+    crate::fsutil::sync_dir(root);
+    crash_point("layout-current");
     link_files(root)
 }
 
@@ -577,6 +599,7 @@ fn link_files(root: &Path) -> Result<(), String> {
         let at = root.join(f);
         if link_target(&at).as_deref() != Some(&format!("current/{f}")) {
             link(&format!("current/{f}"), &at).map_err(|e| e.to_string())?;
+            crash_point(&format!("layout-linked-{f}"));
         }
     }
     Ok(())
@@ -622,8 +645,7 @@ pub fn install_app(rel: &Release, manifest_url: &str, root: &Path, cancel: &Canc
         return Err(format!("Couldn't write the update to the SD card ({e}). Nothing was changed."));
     }
     crash_point("synced");
-    let dir = format!("releases/{}", rel.version);
-    let _ = std::fs::remove_dir_all(root.join(&dir));
+    let dir = unused_release(root, &rel.version);
     std::fs::rename(&staging, root.join(&dir)).map_err(|e| e.to_string())?;
     crate::fsutil::sync_dir(&releases);
     crash_point("renamed");
@@ -1164,6 +1186,16 @@ mod tests {
         assert_eq!(brick_short("0.1.14"), "0.1.14");
         assert_eq!(brick_long("0.2.1"), "0.2.1 for TrimUI Brick", "a public release");
         assert!(newer("0.2.1", "0.2.0-brick.7") && newer("0.2.1-brick.8", "0.2.1"), "public over the beta before it, the next beta over both");
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn a_brick_hotfix_updates_the_release_then_yields_to_the_next_release() {
+        assert!(newer("0.3.0.1", "0.3.0"));
+        assert!(!newer("0.3.0", "0.3.0.1"));
+        assert!(newer("0.3.1", "0.3.0.1"));
+        assert_eq!(brick_short("0.3.0.1"), "0.3.0.1");
+        assert_eq!(brick_long("0.3.0.1"), "0.3.0.1 for TrimUI Brick");
     }
 
     /// A card from the public zip has no `app/update-url`: it must ask the Brick channel, never the ROCKNIX one (whose tarball is a

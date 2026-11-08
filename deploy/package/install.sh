@@ -67,6 +67,10 @@ die() {
   exit 1
 }
 field() { sed -n "s/^$1=\"\{0,1\}\([^\"]*\)\"\{0,1\}\$/\1/p" "$2" 2>/dev/null | head -1; }
+durable() { sync || die "cannot finish writing the install to the SD card"; }
+atomic_link() {
+  rm -f "$2.new-link" && ln -s "$1" "$2.new-link" && mv -Tf "$2.new-link" "$2"
+}
 
 [ -f "$F/VERSION" ] || die "files/VERSION is missing: unpack the whole package and run install.sh from its folder"
 VERSION=$(cat "$F/VERSION")
@@ -191,6 +195,11 @@ fi
 say "== installing"
 # The programs: releases/<version>, current and the fixed links, as scripts/dev.sh and the updater lay them out.
 REL=$APP/releases/$VERSION
+REL_NAME=$VERSION
+active=$(readlink "$APP/current" 2>/dev/null)
+case $active in
+  releases/"$VERSION"-install-*) REL=$APP/$active; REL_NAME=${active#releases/} ;;
+esac
 mkdir -p "$APP/releases" || die "cannot create $APP/releases"
 same_release() {
   # A core-only package repair must not be mistaken for an already-installed release.
@@ -203,17 +212,23 @@ if [ -d "$REL" ] && same_release; then
   rm -rf "$STAGE"
   ok "releases/$VERSION already in place"
 else
-  if [ -d "$REL" ]; then
-    rm -rf "$APP/releases/.old-$VERSION"
-    mv "$REL" "$APP/releases/.old-$VERSION" || die "cannot move the old releases/$VERSION aside"
-  fi
+  # A repair/rebuilt package must never move a folder that current, previous or known-good can still name.
+  n=0
+  while [ -e "$REL" ] || [ -L "$REL" ]; do
+    n=$((n + 1))
+    REL_NAME=$VERSION-install-$n
+    REL=$APP/releases/$REL_NAME
+  done
+  durable
   mv "$STAGE" "$REL" || die "cannot put releases/$VERSION in place"
-  rm -rf "$APP/releases/.old-$VERSION"
-  ok "releases/$VERSION"
+  durable
+  ok "releases/$REL_NAME"
 fi
 STAGE=
-cp "$F/run-pocket-ui.sh" "$APP/run-pocket-ui.sh.new" && chmod 755 "$APP/run-pocket-ui.sh.new" &&
-  mv -f "$APP/run-pocket-ui.sh.new" "$APP/run-pocket-ui.sh" || die "cannot write the launcher $APP/run-pocket-ui.sh"
+cp "$F/run-pocket-ui.sh" "$APP/run-pocket-ui.sh.new" && chmod 755 "$APP/run-pocket-ui.sh.new" ||
+  die "cannot write the launcher $APP/run-pocket-ui.sh"
+durable
+mv -f "$APP/run-pocket-ui.sh.new" "$APP/run-pocket-ui.sh" || die "cannot replace the launcher $APP/run-pocket-ui.sh"
 ok "launcher run-pocket-ui.sh"
 # Licences of pocket-ui, its Rust crates and the fonts: /storage/pocket-ui/licences (Settings > About names the folder).
 rm -rf "$APP/licences.new"
@@ -232,14 +247,15 @@ fi
 # A copy of uninstall.sh stays with the programs, for when the package folder is gone.
 cp "$HERE/uninstall.sh" "$APP/uninstall.sh" 2>/dev/null && chmod 755 "$APP/uninstall.sh"
 old=$(readlink "$APP/current" 2>/dev/null)
-if [ "$old" != "releases/$VERSION" ]; then
-  [ -z "$old" ] || ln -sfn "$old" "$APP/previous"
-  ln -sfn "releases/$VERSION" "$APP/current" || die "cannot point current at releases/$VERSION"
-  ok "current -> releases/$VERSION${old:+ (previous -> $old)}"
+if [ "$old" != "releases/$REL_NAME" ]; then
+  [ -z "$old" ] || atomic_link "$old" "$APP/previous" || die "cannot keep the previous version"
+  durable
+  atomic_link "releases/$REL_NAME" "$APP/current" || die "cannot point current at releases/$REL_NAME"
+  durable
+  ok "current -> releases/$REL_NAME${old:+ (previous -> $old)}"
 fi
 for f in pocket-ui pocket-core portmaster-setup.sh; do
-  [ -L "$APP/$f" ] || rm -f "$APP/$f"
-  ln -sfn "current/$f" "$APP/$f"
+  atomic_link "current/$f" "$APP/$f" || die "cannot link $f"
 done
 # A version left half-installed by the updater would be rolled back by the launcher; this one was checked above.
 rm -f "$APP/update-pending"
@@ -249,7 +265,10 @@ printf 'version=%s\ninstalled=%s\n' "$VERSION" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 
 if cmp -s "$F/10-pocket-ui.conf" "$DROPIN"; then
   ok "start entry already in place ($DROPIN)"
 else
-  mkdir -p "$DROPIN_DIR" && cp "$F/10-pocket-ui.conf" "$DROPIN.new" && chmod 644 "$DROPIN.new" && mv -f "$DROPIN.new" "$DROPIN" ||
+  mkdir -p "$DROPIN_DIR" && cp "$F/10-pocket-ui.conf" "$DROPIN.new" && chmod 644 "$DROPIN.new" ||
+    die "cannot write $DROPIN"
+  durable
+  mv -f "$DROPIN.new" "$DROPIN" ||
     die "cannot write $DROPIN"
   ok "start entry $DROPIN"
 fi
@@ -268,12 +287,16 @@ ok "systemd took the start entry"
 if cmp -s "$F/pocket-splash.service" "$SPLASH" && [ "$(readlink "$SPLASH_LINK" 2>/dev/null)" = ../pocket-splash.service ]; then
   ok "boot screen already in place ($SPLASH)"
 else
-  { cp "$F/pocket-splash.service" "$SPLASH.new" && chmod 644 "$SPLASH.new" && mv -f "$SPLASH.new" "$SPLASH" &&
-    mkdir -p "$UNITS/sysinit.target.wants" && ln -sfn ../pocket-splash.service "$SPLASH_LINK"; } ||
+  cp "$F/pocket-splash.service" "$SPLASH.new" && chmod 644 "$SPLASH.new" ||
+    die "cannot write the boot screen's unit $SPLASH"
+  durable
+  { mv -f "$SPLASH.new" "$SPLASH" && mkdir -p "$UNITS/sysinit.target.wants" &&
+    atomic_link ../pocket-splash.service "$SPLASH_LINK"; } ||
     die "cannot write the boot screen's unit $SPLASH"
   systemctl daemon-reload
   ok "boot screen $SPLASH (from the next start)"
 fi
+durable
 
 # Restarting essway ends EmulationStation (and a running game) and starts pocket-ui. Not from inside essway: that
 # would end this script halfway (an installer started from EmulationStation's menus).

@@ -33,7 +33,7 @@ The type of every screen, or the Retro style.
 - **Retro**: every menu like an old handheld's. Pixel letters everywhere (sharp on every screen, with clear
   LCD-style numbers), chunky pixel frames round the menus, the hint
   keys and the messages, a flat selection bar with a small cursor, little colour pictures beside the Settings categories
-  and the pause menu's rows, and short blips as menu sounds (when [menu sounds](settings.md#sound--feel) are on). Your
+  and the pause menu's rows, and short blips as menu sounds (when [menu sounds](settings-sound.md) are on). Your
   shelf, the box art and Continue stay as they are, in every look. While Retro is on, the Colours row offers its own two
   sets, each dark and light:
   - **Cocoa**, the default: warm brown and cream, a tangerine selection.

@@ -44,7 +44,7 @@ fn shot(tmp: &Path, stub: Option<&Stub>, state: &str, size: &str, lang: &str, te
     let _ = std::fs::remove_file(&boxes);
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
     cmd.args(["--snapshot", state, png.to_str().unwrap()])
-        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .env("POCKETUI_LANG", lang)
         .env("POCKETUI_TEXT_SIZE", text_size)
         .env("POCKETUI_SNAPSHOT_SIZE", size)
@@ -62,7 +62,7 @@ fn shot(tmp: &Path, stub: Option<&Stub>, state: &str, size: &str, lang: &str, te
 
 fn fake_library(tmp: &Path, rediscover: bool) {
     let mut cmd = Command::new("python3");
-    cmd.args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.to_str().unwrap(), "dark"]).stdout(std::process::Stdio::null());
+    cmd.env("POCKETUI_MOCK_NOW", FIXTURE_NOW).args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.to_str().unwrap(), "dark"]).stdout(std::process::Stdio::null());
     if rediscover {
         cmd.env("POCKETUI_REDISCOVER", "1");
     }

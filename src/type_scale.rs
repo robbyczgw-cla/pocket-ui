@@ -43,14 +43,60 @@ pub fn get() -> TextSize {
 
 /// Whether type is painted larger than the design right now (Medium or Large).
 pub fn scaled() -> bool {
-    (get() != TextSize::Normal || SYSTEM.with(|s| s.get()) != 1.0) && !FIXED.with(|f| f.get())
+    (get() != TextSize::Normal || SYSTEM.with(|s| s.get()) != 1.0 || on_brick()) && !FIXED.with(|f| f.get())
+}
+
+/// The TrimUI Brick's screen is 3.2" at 1024x768 (about 15.75 px a millimetre), so the design's sizes are smaller there
+/// than what is comfortable at arm's length: Body 28 is 1.8 mm high (em), the hint bar's 21 only 1.3 mm. The Brick's
+/// "Normal" therefore starts a little larger ([`brick_base`]); Medium and Large keep their sizes where those are larger, so on
+/// the Brick Normal is about what Medium is elsewhere and Large is Large. Every other build and
+/// device is the design as before (the `brick` feature is not in the default build). The Smart Pro's panel is a third coarser (`Board::larger_small_type`): it keeps the design's sizes.
+#[cfg(feature = "brick")]
+#[inline]
+fn on_brick() -> bool {
+    crate::brick_profile::board().is_some_and(|b| b.larger_small_type())
+}
+
+#[cfg(not(feature = "brick"))]
+#[inline]
+fn on_brick() -> bool {
+    false
+}
+
+/// The Brick's Normal for a design size `px`: the hint bar's and the small notes' 18 to 21 px are four pixels larger (the
+/// hint bar's 21 is 25, 1.6 mm high), 22 to 28 three (Body 28 is 31, 1.97 mm; facts and counters at 24 are 27); the
+/// Settings family's 30 (hint pill, explanations) is 32; its rows' 36, the titles (37 and up) and the pause menu's 46 are
+/// comfortable already and stay.
+#[cfg(feature = "brick")]
+pub(crate) fn brick_base(px: u32) -> u32 {
+    match px {
+        18..=21 => px + 4,
+        22..=28 => px + 3,
+        // So a heading at 30 stays above the body at 28's 31 (the order of the sizes is kept).
+        29..=31 => (px + 2).min(32),
+        _ => px,
+    }
+}
+
+#[cfg(feature = "brick")]
+#[inline]
+fn brick_floor(px: u32) -> u32 {
+    if on_brick() { brick_base(px) } else { px }
+}
+
+#[cfg(not(feature = "brick"))]
+#[inline]
+fn brick_floor(px: u32) -> u32 {
+    px
 }
 
 /// The size `Text` paints a design size `px` at.
 #[inline]
 pub fn px(px: u32) -> u32 {
     if scaled() {
-        grown_in(get(), px).max(SYSTEM.with(|s| (px as f32 * s.get()).round() as u32))
+        // On the Brick no size is smaller than its Normal (Medium's 31 is 32 there), and Large stays as it was.
+        let floor = brick_floor(px);
+        grown_in(get(), px).max(floor).max(SYSTEM.with(|s| (px as f32 * s.get()).round() as u32))
     } else {
         px
     }
@@ -184,6 +230,24 @@ mod tests {
         assert_eq!(unscaled(|| px(24)), 24, "a case's spine stays as thick as the case");
         assert_eq!(px(24), 30);
         set(TextSize::Normal);
+    }
+
+    /// The Brick's panel is 3.2" at 1024x768: about 15.75 px a millimetre. Read at arm's length the hint bar's type wants
+    /// 1.6 mm, text that is read (Body, a fact, an explanation) about 2.0 mm (the font's em), and nothing gets smaller.
+    #[cfg(feature = "brick")]
+    #[test]
+    fn the_bricks_normal_is_readable_at_arms_length_and_never_smaller_than_the_design() {
+        const PX_PER_MM: f32 = 15.75;
+        let mm = |px: u32| px as f32 / PX_PER_MM;
+        assert!(mm(brick_base(21)) >= 1.58, "hint bar: {} px", brick_base(21));
+        assert!(mm(brick_base(28)) >= 1.95, "Body: {} px", brick_base(28));
+        assert!(mm(brick_base(24)) >= 1.6, "facts and counters: {} px", brick_base(24));
+        for design in [36, 37, 46, 50, 67] {
+            assert_eq!(brick_base(design), design, "{design}: comfortable already");
+        }
+        for s in 1..200 {
+            assert!(brick_base(s) >= s && brick_base(s + 1) >= brick_base(s), "{s}: sizes keep their order");
+        }
     }
 
     #[test]

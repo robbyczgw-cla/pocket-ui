@@ -52,6 +52,8 @@ pub struct Preferences {
     #[serde(deserialize_with = "lenient")]
     pub font: pocket_ui::font_style::FontStyle,
     #[serde(deserialize_with = "lenient")]
+    pub gba_model: pocket_ui::system_art::GbaModel,
+    #[serde(deserialize_with = "lenient")]
     pub prompts: pocket_ui::button_prompts::PromptStyle,
     #[serde(deserialize_with = "lenient")]
     pub motion: pocket_ui::settings::Motion,
@@ -110,6 +112,7 @@ impl Preferences {
         pocket_ui::motion::set_level(self.motion);
         pocket_ui::motion::set_cozy(self.cozy.unwrap_or(true));
         pocket_ui::cozy_extras::set(self.extras);
+        pocket_ui::system_art::set_gba_model(self.gba_model);
     }
 }
 /// The rows of the Cozy extras sheet, in the Linux page's order (`Extra::PAGE_ROWS`): every one has its feature on a
@@ -510,7 +513,7 @@ impl Ui {
     fn count(&self) -> usize {
         match self.screen {
             Screen::Settings => SETTINGS.len(),
-            Screen::Extras => PHONE_EXTRAS.len() + 1,
+            Screen::Extras => PHONE_EXTRAS.len() + 2,
             Screen::GameCheck => self.check_rows().len(),
             Screen::Quick => 3,
             Screen::Stickers => STICKER_ROWS,
@@ -739,6 +742,11 @@ impl Ui {
                     self.prefs.apply_look();
                     self.tv = None;
                     self.cards.clear();
+                    Command::Persist
+                } else if self.menu == PHONE_EXTRAS.len() {
+                    self.prefs.gba_model = self.prefs.gba_model.next();
+                    self.prefs.apply_look();
+                    self.drop_pictures();
                     Command::Persist
                 } else {
                     self.navigate(Screen::Settings);
@@ -1499,6 +1507,7 @@ impl Ui {
                 .collect(),
             Screen::Extras => {
                 let mut rows: Vec<_> = PHONE_EXTRAS.iter().map(|e| row(e.label(), on_off(self.prefs.extras.get(*e)))).collect();
+                rows.push(row("GBA console", self.prefs.gba_model.label()));
                 rows.push(row("Back", ""));
                 rows
             }

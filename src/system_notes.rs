@@ -34,7 +34,7 @@ fn family(model: Model) -> Option<Family> {
         Model::Pocket6 | Model::Nova | Model::Odin2 | Model::Odin2Mini | Model::Odin2Portal => Some(Family::Sd8Gen2),
         Model::H700(_) => Some(Family::H700),
         Model::RgDsPlus => Some(Family::Rk3566),
-        Model::SteamDeck => None, #[cfg(feature = "brick")] Model::Brick => None,
+        Model::SteamDeck => None, #[cfg(feature = "brick")] Model::Brick(_) => None,
     }
 }
 

@@ -118,7 +118,7 @@ fn words(s: &str) -> bool {
 
 /// Names the made-up library and the computer's time zones bring: ROM file names without their extension, the zones
 /// as the time pages show them, and the comments of zone.tab.
-fn names_from_data(tmp: &Path) -> Vec<String> {
+fn names_from_data(tmp: &Path, lang: pocket_ui::i18n::Lang) -> Vec<String> {
     let mut out = Vec::new();
     if let Ok(systems) = std::fs::read_dir(tmp.join("roms")) {
         for sys in systems.flatten() {
@@ -155,6 +155,8 @@ fn names_from_data(tmp: &Path) -> Vec<String> {
     // The time zone pages list the computer's zones the way the device lists its own (`timezone::list`, `city_of`).
     for zone in pocket_ui::timezone::list(Path::new("/usr/share/zoneinfo"), Path::new("/usr/config/system/configs/tz")) {
         out.push(pocket_ui::timezone::city_of(&zone));
+        // The first-start clock also uses local place names, such as "Nueva York, 17:55".
+        out.push(pocket_ui::timezone::city_in(&zone, lang));
         out.push(pocket_ui::timezone::region_of(&zone).to_string());
         out.push(zone);
     }
@@ -210,7 +212,7 @@ fn copy_dir(from: &Path, to: &Path) {
 }
 
 fn fake_library(dir: &Path) {
-    let status = Command::new("python3")
+    let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), dir.to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()
@@ -255,7 +257,7 @@ fn every_string_is_translated_or_a_name(lang: &'static str) {
                 }
                 let out = cmd
                     .args(["--snapshot", &state, tmp.join(format!("{i}.png")).to_str().unwrap()])
-                    .env("POCKETUI_MOCK", "1")
+                    .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
                     .env("POCKETUI_LANG", lang)
                     .env("POCKETUI_I18N_MISSES", tmp.join(format!("{i}.tsv")))
                     .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
@@ -277,7 +279,7 @@ fn every_string_is_translated_or_a_name(lang: &'static str) {
 
     let (keep_exact, keep_patterns) = keep();
     let mut data = english_data();
-    data.extend(names_from_data(&tmp));
+    data.extend(names_from_data(&tmp, if lang == "es" { pocket_ui::i18n::Lang::Es } else { pocket_ui::i18n::Lang::De }));
     // Names (of games, systems, places, and what keep.txt keeps), longest first, for `bare` below.
     let mut names: Vec<String> = data.iter().chain(keep_exact.iter()).filter(|n| n.chars().count() >= 2 && n.chars().any(|c| c.is_uppercase() || c.is_ascii_digit() || c == '-')).cloned().collect();
     names.sort_by_key(|n| std::cmp::Reverse(n.len()));
@@ -376,7 +378,7 @@ fn the_system_language_decides_until_one_is_chosen() {
         let misses = tmp.join(format!("{name}.tsv"));
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
         cmd.args(["--snapshot", "setup:first", tmp.join(format!("{name}.png")).to_str().unwrap()])
-            .env("POCKETUI_MOCK", "1")
+            .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .env_remove("POCKETUI_LANG")
             .env("LANG", lang)
             .env("POCKETUI_I18N_MISSES", &misses)

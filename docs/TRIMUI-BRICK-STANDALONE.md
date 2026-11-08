@@ -46,9 +46,10 @@ Not done by either path for us: `keymon` (volume, brightness, power key: pocket-
 | Stack check | `scripts/brick-docker-check.sh CARD SYSROOT ROMS` | the card's real programs under the Brick's loader and libraries (aarch64 Docker): the updater runs 25 s, then one game per core |
 | Programs | `cargo zigbuild --release --features brick --target aarch64-unknown-linux-gnu.2.33 --bin pocket-ui --bin pocket-core --bin pocket-fb`, and `zig cc -target aarch64-linux-gnu.2.33 -O2 -s -ffile-prefix-map=$PWD=/pocket-ui deploy/brick/brick-hw.c -o brick-hw` (both without build paths: set `CARGO_TARGET_DIR`, then `. scripts/release-rustflags.sh`; the card refuses programs with one) | the 2.33 target links only against symbols the Brick's libc has |
 | Network parts | `scripts/brick-remote-parts.sh PARTS` | Tailscale, curl (pinned upstream builds) and dropbear (built with our patch), licences, sources ([TRIMUI-BRICK-REMOTE.md](TRIMUI-BRICK-REMOTE.md)) |
-| Card | `BRICK_PARTS=PARTS [BRICK_UPDATE_URL=…] scripts/brick-make-card.sh OUT BINS LIBS CORES VERSION` | `OUT/card/` (the folder) and `pocket-ui-brick-card-<version>.zip`; fails when anything the updater looks for is missing |
+| Cheat data | `python3 -I scripts/brick-cheats-data.py APP [--archive UPSTREAM.tar.gz]` (also run by the card builder) | pinned, unchanged `.cht` subset for the 26 Brick systems with upstream entries, packed into the one file `APP/cores/cht.pack`; inventory and CC BY-SA 4.0 notices |
+| Card | `BRICK_PARTS=PARTS [BRICK_UPDATE_URL=…] scripts/brick-make-card.sh OUT BINS LIBS CORES VERSION` | `OUT/card/` (the folder) and `pocket-ui-trimui-card-<version>.zip`; fails when anything the updater looks for is missing |
 | Update channel | `scripts/brick-publish.sh OUT/card --channel beta` | the program folder as a signed update in the private channel ([TRIMUI-BRICK-REMOTE.md](TRIMUI-BRICK-REMOTE.md)) |
-| Messages | `PYTHONPATH=<Pillow> python3 scripts/brick-messages.py deploy/brick/msg` | the three pictures (starting, files missing, does not start); committed, rerun only when a text changes |
+| Messages | `PYTHONPATH=<Pillow> python3 scripts/brick-messages.py deploy/brick/msg` | the three pictures (starting, files missing, does not start), each as 1024x768 (Brick) and `-wide` 1280x720 (Smart Pro; start.sh picks by the screen, pocket-fb does not scale); committed, rerun only when a text changes (the card test redraws them and compares) |
 | Tests | `scripts/test-brick-card.sh`, `cargo test --features brick --test brick_hwroot` | see "What is proven" |
 
 Card folder (copy the contents to the root of an empty FAT32 card):
@@ -61,6 +62,7 @@ Card folder (copy the contents to the root of an empty FAT32 card):
     pocket-ui/storage/, logs/, authorized_keys    the player's (made at the first start; not in the zip)
     pocket-ui/app/bin/             pocket-ui, pocket-core, pocket-fb, brick-hw; tailscale, tailscaled, curl, dropbearmulti
     pocket-ui/app/lib/             libwayland-client/-cursor/-egl, libxkbcommon, libffi.so.8 (Debian bookworm arm64; pocket-ui loads them at run time)
+    pocket-ui/app/cores/cht.pack   the bundled cheats as ONE file, available offline; database/MANIFEST.json pins source, checksum, systems and size
     pocket-ui/app/cores/           the base cores plus the additional software and 3D cores listed in TRIMUI-BRICK-CORES.md
     pocket-ui/app/hwroot/usr/bin/  the stand-in helpers (volume, pactl, brightness, systemctl, wifictl, nmcli, brick-power-off, brick-tailscale, brick-ssh, tailscale)
     pocket-ui/app/asoundrc         ALSA: the "pipewire" device pocket-ui and pocket-core play to is the sound chip, mixed (dmix), 21 ms
@@ -69,6 +71,40 @@ Card folder (copy the contents to the root of an empty FAT32 card):
     Roms/{gb,gbc,gba,nes,snes,psx,megadrive,mastersystem,gamegear}/ the games go here (a game's own save file, .srm, is written next to it)
     Roms/<system>/.media/          covers: <game file name without extension>.png (also where pocket-ui keeps covers it fetches)
     Saves/savestates/              pocket-ui's save states (bound onto /storage/roms/savestates; nothing is saved in the Brick)
+
+## Cheat database in card and OTA
+
+The Brick firmware has no libretro cheat database. The card builder therefore runs `scripts/brick-cheats-data.py`,
+which verifies the SHA256 of libretro-database commit `4de37d2c8042d9d0f608c43006c9b35438c536ce` (the ROCKNIX pin)
+and packs only the `.cht` files for systems with a core on this card into the single file `app/cores/cht.pack`
+(`src/cheat_pack.rs` documents the layout: an index per console folder, every file stored unchanged and deflated on its
+own, with its CRC-32). No ROMs or unsupported console databases are included. The helper downloads the archive once into
+`downloads/`; an offline build can set `BRICK_CHEATS_ARCHIVE` to a copy of that exact tar.gz. A wrong checksum or missing
+upstream notices stops the card build.
+
+**Why one file (08.11.2026):** the first version put the 23,174 files into `app/database/cht`. On the card's FAT with
+32 KB clusters that is 837 MB for 165 MB of text, and the OTA install of 0.3.0.1 → 0.3.1 took 10 min 12 s. Now the card
+and the OTA carry one 31.4 MB file. A lookup reads the index of one console folder and the few entries that match
+(`cheats::find_all`, same matching as before), never the whole file; a damaged or cut-off pack finds nothing instead of
+wrong codes. The folder form (`app/database/cht`, `/tmp/database/cht`, ROCKNIX's `/usr/share/libretro-database/cht`) is
+still searched too.
+
+**In the OTA the pack is an asset package of its own** (like a core, `scripts/brick-update-pack.py`): downloaded once,
+checked, and moved on unchanged by every later update, so a regular app update is ~23 MB again. It is in `cores/` on
+purpose: a Brick on 0.3.0.1 checks the asset list with its own old code (and `boot.sh`), which only accepts `cores/`,
+`bios-data/` and the six helpers, so a new folder would make the update refuse. `cores/` is bound to `/storage/cores`;
+nothing there reads a file that is not named `<core>_libretro.so`.
+
+The database is under **CC BY-SA 4.0**, as stated by upstream's LICENSE. `app/licences/libretro-database/` retains
+the complete LICENSE, README credits and a source/selection attribution. Cheat contents are unchanged; the selected
+collection keeps CC BY-SA 4.0. On startup the three bundled notices are also refreshed in the existing
+About licence folder when changed, so older cards receive them after OTA; other files are preserved. `app/database/MANIFEST.json`
+records the commit, source archive URL, checksum, systems, file count, raw byte size and the pack's name and size. The pinned
+subset has **23,174 cheat files / 165,144,228 bytes** (157.5 MiB as text) across 26 system folders; the pack is
+**31,367,177 bytes** (29.9 MiB). No database copy or download runs during boot or menu navigation.
+
+Packaging regressions: `python3 -I scripts/test-brick-cheats-data.py`, `python3 -I scripts/test-brick-update-pack.py`,
+and `BRICK_LICENCE_TESTS_ONLY=1 bash scripts/test-brick-card.sh` (the real startup under dash and BusyBox ash).
 
 ## The start script
 
@@ -161,7 +197,7 @@ With NextUI's card all of these stay hidden (NextUI owns them); `POCKETUI_BRICK_
   the latency from a button to the sound is not measured.
 - The headphone jack is not followed (plugging in or out during a game), no low-battery LED, no USB storage mode.
 - The public card's source: `BRICK_SOURCES_APART=1` puts the cores' source and pocket-ui's own (`scripts/source-archive.sh`, from the
-  exported tree) into `pocket-ui-brick-sources-<version>.zip`, published next to the card zip ([UPDATE-CHANNEL.md](UPDATE-CHANNEL.md#the-brick-card)).
+  exported tree) into `pocket-ui-trimui-sources-<version>.zip`, published next to the card zip ([UPDATE-CHANNEL.md](UPDATE-CHANNEL.md#the-brick-card)).
 
 ## Cores and licences
 

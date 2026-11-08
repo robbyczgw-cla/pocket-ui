@@ -1836,12 +1836,17 @@ log says `audio: Cycle buffer (32 ms)` on headphones.
 - **Source**: libretro-database's `.cht` files, which ROCKNIX ships in `/usr/share/libretro-database/cht` and
   mounts (with the user's additions in `/storage/database`) at `/tmp/database/cht` (`cheat_database_path` of
   RetroArch). Folder per console (`cheats::folder`: "Nintendo - Game Boy Advance", ...). `POCKET_CHEATS_DB`
-  points somewhere else for tests.
+  points somewhere else for tests. A Brick card also searches `<POCKETUI_BRICK_CARD>/app/cores/cht.pack`
+  (and a folder `app/database/cht`) before the ROCKNIX paths, so the card ZIP and OTA contain the same pinned subset. The
+  pack is ONE file of the unchanged `.cht` texts, each deflated on its own (`src/cheat_pack.rs`, built by
+  `scripts/brick-cheats-data.py`): 23,000 small files cost 837 MB on the card's FAT and ten minutes of OTA install. A
+  root that is a file is read as a pack, a folder as before; matching is the same for both.
 - **Matching** (`cheats::find`): by file name, no checksums. Brackets, case and punctuation are ignored ("&" =
   "and", "Name, The" = "The Name"). When the ROM names a region ("(USA)", "(U)", "(Europe)") only files for that
   region or for none are used; without one all files of the name are put together, plain name first, then Game
   Genie / Action Replay / Code Breaker variants, identical codes once, a clashing name gets "[Game Genie]".
-  `&eacute;` and friends are decoded. A game the database doesn't have has no Cheats page.
+  `&eacute;` and friends are decoded. On a Brick card an unmatched game keeps a Cheats page explaining
+  that the included database has no matching codes. Other hosts hide the page when there are no entries.
 - **Entries without a code** (`cheats::parse_cht_full`): the newer cht format has `cheatN_address`, `_value`,
   `_cheat_type` (0 none, 1 set to value, 2 increase ... as RetroArch's cheat manager), `_handler = 1` and an empty
   `_code`. Those are counted (`Parsed::unsupported`, equal ones of several files once) and the page ends with
@@ -1862,14 +1867,21 @@ log says `audio: Cycle buffer (32 ms)` on headphones.
 - **pocket-core**: at start and on `cheats` it reads that file and calls `retro_cheat_reset`, then
   `retro_cheat_set(i, true, code)` for each switched-on cheat (`Core::set_cheats`); log line `cheats: N on`, and a
   toast "2 cheats on" / "Cheats off". The code string goes to the core unchanged (`+` joins several), exactly what
-  RetroArch hands over, so what works there works here. Cores take cheats while paused; they act after Continue.
+  RetroArch hands over. For Snes9x, groups longer than its 255-byte input limit are split at `+` into individual
+  codes so the core cannot overflow its input buffer (the bundled database contains such groups).
+  Cores take cheats while paused; they act after Continue.
   Switching a cheat off stops the core writing; values it already wrote stay until the game changes them.
 - **Checked on the virtual device** (ROCKNIX's real database copied into the container): SNES Contra III, 74 + variant cheats
   listed, page screenshot looked at; with `POCKET_CORE_TEST=1` `peek 1f88` (work RAM, new test command) reads
   0 before and 0xFF after "Always Invincible" (7E1F88FF) and 0 -> 1 for "Infinite Bombs" (7E1F8C01) switched on while the
   game ran. GBC, GBA and NES games (ROMs renamed after database entries) start with cheats on and run at normal speed.
-  Not checked: that a real game visibly changes on the device, GBA Code Breaker and NES `0754:00` style codes in actual
-  play (same strings and cores as RetroArch).
+  This earlier container check did not establish effects in real commercial games. NES `0754:00` codes in actual
+  play remain unverified. The later Brick hardware check is documented below.
+- **Real Brick check** (2026-11-08): Advance Wars with gpSP, Contra III with Snes9x and Pokémon Crystal with
+  Gambatte changed the expected RAM through the actual pause-menu toggles, retained it across Continue and a
+  frontend save/load, and cleared the enabled list on Off. The native probe on these games also verified that
+  Off stops writes after loading an earlier on-state; Advance Wars passed with mGBA as well. See
+  [BRICK-CHEAT-PROBE.md](BRICK-CHEAT-PROBE.md) for addresses, limits and core behavior.
 
 ## Rumble and menu haptics (`src/rumble.rs`)
 - **Motor**: the Mini V2's device tree (`retroidpocket,rpminiv2`, read from the KERNEL of the image) has a Qualcomm

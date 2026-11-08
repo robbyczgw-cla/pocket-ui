@@ -46,6 +46,10 @@ fn wayland(tmp: &Path) -> Option<Stub> {
 
 /// Renders `state`; returns the visible text and the text painter's problems.
 fn shot(tmp: &Path, stub: Option<&Stub>, state: &str, size: &str, lang: &str, text_size: &str) -> (String, String) {
+    shot_in(tmp, stub, state, size, lang, text_size, &[])
+}
+
+fn shot_in(tmp: &Path, stub: Option<&Stub>, state: &str, size: &str, lang: &str, text_size: &str, env: &[(&str, &str)]) -> (String, String) {
     let png = tmp.join("shot.png");
     let (boxes, visible) = (tmp.join("text.box"), tmp.join("visible.txt"));
     let _ = std::fs::remove_file(&boxes);
@@ -61,7 +65,7 @@ fn shot(tmp: &Path, stub: Option<&Stub>, state: &str, size: &str, lang: &str, te
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
     cmd.args(["--snapshot", state, png.to_str().unwrap()])
         .env("PATH", path)
-        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .env("POCKETUI_LANG", lang)
         .env("POCKETUI_TEXT_SIZE", text_size)
         .env("POCKETUI_SNAPSHOT_SIZE", size)
@@ -72,6 +76,7 @@ fn shot(tmp: &Path, stub: Option<&Stub>, state: &str, size: &str, lang: &str, te
     if let Some(s) = stub {
         cmd.env("WAYLAND_DISPLAY", &s.path);
     }
+    cmd.envs(env.iter().copied());
     let out = cmd.output().unwrap();
     assert!(out.status.success() && png.exists(), "{state} at {size}: {}", String::from_utf8_lossy(&out.stderr));
     (std::fs::read_to_string(&visible).unwrap_or_default(), std::fs::read_to_string(&boxes).unwrap_or_default())
@@ -80,7 +85,7 @@ fn shot(tmp: &Path, stub: Option<&Stub>, state: &str, size: &str, lang: &str, te
 #[test]
 fn minimal_cards_and_split_open_the_info_page_and_nothing_is_cut_off() {
     let tmp = tempfile::tempdir().unwrap();
-    let status = Command::new("python3")
+    let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.path().to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()
@@ -119,7 +124,7 @@ fn minimal_cards_and_split_open_the_info_page_and_nothing_is_cut_off() {
 #[test]
 fn a_long_developer_takes_a_second_line_instead_of_ending_in_dots() {
     let tmp = tempfile::tempdir().unwrap();
-    let status = Command::new("python3")
+    let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.path().to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()
@@ -130,5 +135,49 @@ fn a_long_developer_takes_a_second_line_instead_of_ending_in_dots() {
         let (seen, problems) = shot(tmp.path(), stub.as_ref(), "info:minimal:gb:link", "640x480", lang, text_size);
         assert!(seen.contains("Nintendo Entertainment") && seen.contains("Analysis & Development"), "{lang}: the whole developer is there\n{seen}");
         assert!(problems.trim().is_empty(), "{lang}: {problems}");
+    }
+}
+
+/// 0.3.1: Retro/Large facts filled the right column on 1024x768 and silently hid the description.
+/// Down must reach it without moving the fixed game heading; every fact label must be readable along the way.
+#[test]
+fn textfit_031_description_is_reachable_below_the_facts() {
+    let tmp = tempfile::tempdir().unwrap();
+    let status = Command::new("python3")
+        .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.path().to_str().unwrap(), "dark"])
+        .stdout(std::process::Stdio::null()).status().unwrap();
+    assert!(status.success());
+    let stub = wayland(tmp.path());
+    for dimensions in ["1024x768", "640x480"] {
+        let mut all = String::new();
+        let mut reached = false;
+        let nav = tmp.path().join("description.nav");
+        for n in 0..=20 {
+            let state = format!("info:cards:ps2:revenge:{}", "d".repeat(n));
+            let (seen, problems) = shot_in(tmp.path(), stub.as_ref(), &state, dimensions, "es", "large",
+                &[("POCKETUI_RETRO", "cocoa"), ("POCKETUI_NAV_PROBE", nav.to_str().unwrap())]);
+            let words = seen.split_whitespace().collect::<Vec<_>>().join(" ");
+            assert!(words.contains("Burnout Revenge") && words.contains("2005"), "fixed title/year lost at {dimensions}, Down × {n}: {seen}");
+            assert!(problems.trim().is_empty(), "{dimensions}, Down × {n}: {problems}");
+            // The visible-text transcript can include a line with only a few pixels left at a scroll edge.
+            // Compare its painted ink height with the fixed metadata in the same body face: it must be readable whole.
+            let record = std::fs::read_to_string(&nav).unwrap();
+            let lines: Vec<_> = record.lines().filter_map(|line| {
+                let parts: Vec<_> = line.splitn(5, '\t').collect();
+                if parts.len() != 5 { return None; }
+                Some((parts[1].parse::<i32>().ok()?, parts[3].parse::<i32>().ok()?, parts[4]))
+            }).collect();
+            let metadata_height = lines.iter().find(|(_, _, text)| text.contains("2005"))
+                .map(|(top, bottom, _)| bottom - top).expect("fixed metadata");
+            reached |= lines.iter().any(|(top, bottom, text)| text.contains("descripción") &&
+                (bottom - top) * 4 >= metadata_height * 3);
+            all += &format!(" {words}");
+        }
+        assert!(reached, "{dimensions}: Down never reached a description or its missing-description note:\n{all}");
+        for label in ["Desarrollador", "Distribuidor", "Género", "Serie", "Jugadores"] {
+            assert!(all.contains(label), "{dimensions}: whole fact label {label} missing");
+        }
+        let rating = include_str!("../assets/i18n/es.tsv").lines().find_map(|l| l.strip_prefix("Rating\t")).unwrap();
+        assert!(all.split_whitespace().any(|w| w == rating), "{dimensions}: whole rating label {rating} missing");
     }
 }

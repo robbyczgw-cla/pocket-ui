@@ -12,6 +12,7 @@
 # Settings:
 #   SIZES="1920x1080 1280x960"  LOOKS="dark light"  TEXTS="normal medium large"  LANGS=en  JOBS=4
 #   STATES="home;settings" (some states, ";" between)   BIN=<pocket-ui> (default target/release/pocket-ui)
+#   KEEP=problems keeps only snapshots with findings, plus their text records.
 #   DEVICE=rp5 (POCKETUI_DEVICE for every snapshot; default none, the generic fallback)
 #   scripts/size-sweep.sh [OUT]   (default /tmp/pocketui-size-sweep; nothing of it belongs in git)
 # On Linux without a Wayland compositor it starts scripts/wayland-stub.py.
@@ -84,6 +85,18 @@ for look in $LOOKS; do
           [ -f "$dir/$name.png" ] && printf '%s\t%s\n' "$(md5sum <"$dir/$name.png" | cut -d' ' -f1)" "$line" >>"$OUT/$tag.md5"
           { cat "$dir/$name.box" "$dir/$name.audit" 2>/dev/null; grep '^[CXW]	' "$dir/$name.tsv" 2>/dev/null; } | sed "s|^|$line	|" >>"$OUT/$tag.problems" || true
         done <"$WORK/states"
+        if [ "$KEEP" = problems ]; then
+          rm -rf "${OUT:?}/$tag"
+          mkdir -p "$OUT/$tag"
+          while IFS= read -r line; do
+            name=$(printf '%s' "$line" | tr ':/ ,=()' '-------')
+            if [ -s "$dir/$name.box" ] || [ -s "$dir/$name.audit" ] || { [ -f "$dir/$name.tsv" ] && awk -F '\t' '$1 ~ /^[CXW]$/ { found=1 } END { exit !found }' "$dir/$name.tsv"; }; then
+              for ext in png box audit tsv; do
+                [ ! -f "$dir/$name.$ext" ] || mv "$dir/$name.$ext" "$OUT/$tag/"
+              done
+            fi
+          done <"$WORK/states"
+        fi
         if [ "$KEEP" = 1 ]; then
           rm -rf "${OUT:?}/$tag" && mkdir -p "$OUT/$tag" && mv "$dir"/*.png "$OUT/$tag/" 2>/dev/null || true
         fi

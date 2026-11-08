@@ -23,6 +23,7 @@ use pocket_ui::image::{self, Image};
 use pocket_ui::insert_scene::Scene;
 use pocket_ui::palette::*;
 use pocket_ui::text::Face;
+use pocket_ui::title_block;
 use pocket_ui::touch::Area;
 
 use super::{stripe, App, Button, Item, Screen, CANCEL, CONFIRM, REPEAT_DELAY};
@@ -996,7 +997,7 @@ impl App {
                 title: info.title,
                 front,
                 from,
-                game: None,
+                game: None, game_back: None,
                 // A frozen game or Motion below Full: no hold and no rig (`launch_animation`).
                 cozy: cabinet::starts_cozy(self.cozy(), pocket_ui::motion::level(), self.is_frozen_item(item)),
                 at_drive: None,
@@ -1758,29 +1759,77 @@ impl App {
         self.paint_top_line(c, Some(&shelf), pal().dust);
         let (title, _, _, meta) = self.describe(item);
         let fav = self.is_favorite(item);
-        self.draw_title(c, Face::Title, 50, MARGIN, 150 - lift(c.h), c.w - 2 * MARGIN, pal().chalk, &title, true, fav);
         // Whole shelves below the showcase can be off screen even on a large panel. Keep the current
         // position and both movement directions visible, instead of making the plinth look like the end.
+        let meta_y = 192 - lift(c.h);
         let total = self.cabinet.cab.shelves.len();
         let mut right = c.w - MARGIN;
         if total > 1 {
             let position = format!("{} / {}", s + 1, total);
             let width = self.text.width(Face::Body, 24, &position);
-            self.text.draw_right(c, Face::Body, 24, right - 24, 192 - lift(c.h), pal().dust, &position);
+            self.text.draw_right(c, Face::Body, 24, right - 24, meta_y, pal().dust, &position);
             for (x, up, available) in [(right - width - 42, true, s > 0), (right - 8, false, s + 1 < total)] {
                 if available {
                     for d in 0..7 {
-                        let y = if up { 174 + d } else { 186 - d } - lift(c.h);
+                        let y = if up { meta_y - 18 + d } else { meta_y - 6 - d };
                         c.rect(x - d, y, 2 * d + 1, 2, pal().dust);
                     }
                 }
             }
             right -= width + 80;
         }
-        let meta = self.text.fit(Face::Body, 28, &meta, right - MARGIN);
-        self.text.draw(c, Face::Body, 28, MARGIN, 192 - lift(c.h), pal().dust, &meta);
+        // A game's name whole. One line stays where it always was. A name that needs a second (a subtitle, smaller) has
+        // no room above the showcase for it, so it takes the meta row, and the meta line follows it on that row: the
+        // type goes a step smaller before the name is cut with "…" (`title_block`).
+        let mut meta_x = MARGIN;
+        // An open game's word ("Continue") stands at the right end of the meta row: neither the subtitle nor the meta line
+        // may run into it.
+        let word_right = right;
         if self.is_frozen_item(item) {
-            self.paint_frozen_word(c, right, 192 - lift(c.h), pal().chalk);
+            right -= self.frozen_word_width() + 24;
+        }
+        if matches!(item, Item::Game(..) | Item::Recent(_)) {
+            let star = if fav { super::app_switcher::star_room(50) } else { 0 };
+            // The type goes smaller while a second line would leave the first no room under the top line (Large text, the
+            // wider faces).
+            let mut size = 50;
+            let (lines, y) = loop {
+                let mut lines = title_block::layout(&mut self.text, Face::Title, size, &title, c.w - 2 * MARGIN - star, 2);
+                if lines.len() < 2 {
+                    break (lines, 150 - lift(c.h));
+                }
+                lines = title_block::layout(&mut self.text, Face::Title, size, &title, right - MARGIN - star - 140, 2);
+                let up = (title_block::step(&self.text, lines[0].px) + title_block::step(&self.text, lines.last().map_or(0, |l| l.px))) / 2;
+                let y = (150 - lift(c.h)).min(meta_y - up);
+                let least = super::app_status_corner::TOP_LINE + 12 + (pocket_ui::type_scale::px(lines[0].px) as f32 * 0.8) as i32;
+                if lines.len() < 2 || y >= least || size <= 30 {
+                    break (lines, y);
+                }
+                size = size * 5 / 6;
+            };
+            let first = &lines[0];
+            let w = self.text.draw(c, Face::Title, first.px, MARGIN, y, pal().chalk, &first.text);
+            title_block::note(first, y);
+            if fav && lines.len() == 1 {
+                App::paint_title_star(c, MARGIN + w, y, 50, pal().chalk);
+            }
+            if let Some(second) = lines.get(1) {
+                let w = self.text.draw(c, Face::Title, second.px, MARGIN, meta_y, pal().chalk, &second.text);
+                title_block::note(second, meta_y);
+                if fav {
+                    App::paint_title_star(c, MARGIN + w, meta_y, second.px, pal().chalk);
+                }
+                meta_x = MARGIN + w + 40 + if fav { super::app_switcher::star_room(second.px) } else { 0 };
+            }
+        } else {
+            self.draw_title(c, Face::Title, 50, MARGIN, 150 - lift(c.h), c.w - 2 * MARGIN, pal().chalk, &title, true, fav);
+        }
+        // The line a step smaller before it is cut with "…", where the subtitle and the open game's word leave it little room.
+        let size = if self.text.width(Face::Body, 28, &meta) > right - meta_x { 24 } else { 28 };
+        let meta = self.text.fit(Face::Body, size, &meta, right - meta_x);
+        self.text.draw(c, Face::Body, size, meta_x, meta_y, pal().dust, &meta);
+        if self.is_frozen_item(item) {
+            self.paint_frozen_word(c, word_right, meta_y, pal().chalk);
         }
     }
 
@@ -2204,6 +2253,25 @@ impl App {
         self.cabinet.box_game = None;
     }
 
+    /// A hardware variant changes cached console icons and the plain covers that carry them.
+    pub(crate) fn console_look_changed(&mut self) {
+        self.art.clear();
+        self.look_previews = None;
+        self.cabinet.consoles.clear();
+        self.cabinet.tv.pictures_changed();
+        // A system's plain case front embeds the console. Its key stays the ROM system,
+        // so these already-painted fronts must be dropped as well as the fitted sprites.
+        self.cabinet.shown.clear();
+        self.cabinet.shelf_shown.clear();
+        self.cabinet.shelf_row = None;
+        self.cabinet.shelf_lit = None;
+        self.cabinet.shelf_spine_only = None;
+        self.cabinet.shelf_front_for = None;
+        self.cabinet.shelf_waiting = false;
+        self.cabinet.bare_fronts.prune();
+        self.cases_look_changed();
+    }
+
     /// Covers read on the thread since the last frame, and pictures made for entries long gone.
     pub(crate) fn shelf_media_poll(&mut self) {
         self.cabinet_poll();
@@ -2585,7 +2653,7 @@ impl App {
     }
 
     /// The selected entry's words beside its front, from `top` down to `bottom`: "Continue" over the last game played,
-    /// the name in two lines at most, the meta line, and a system's fact sheet or a Curator or Favorites row's covers
+    /// the name whole (up to three lines, `title_block`), the meta line, and a system's fact sheet or a Curator or Favorites row's covers
     /// under them.
     fn paint_shelf_words(&mut self, c: &mut Canvas, item: Item, x: i32, top: i32, w: i32, bottom: i32) {
         use pocket_ui::type_scale::{line, px};
@@ -2608,11 +2676,37 @@ impl App {
             y += 10;
         }
         let fav = self.is_favorite(item);
-        let lines = self.text.wrap_at_most(Face::Title, 67, &title, w - 40, 2);
-        let last = lines.len().saturating_sub(1);
-        for (k, l) in lines.iter().enumerate() {
-            y += line(67, 0) - 6;
-            self.draw_title(c, Face::Title, 67, x, y, w, pal().chalk, l, false, fav && k == last);
+        if matches!(item, Item::Game(..) | Item::Recent(_)) {
+            // A game's name whole: a big main title and a smaller subtitle, up to three lines (two where the room under
+            // them is short) before the type goes one step smaller and only then "…". The lines below stand where the
+            // most lines would end, so they do not move from one game to the next (`title_block`).
+            let (step, meta_room) = (title_block::step(&self.text, 67), line(28, 10) + 10);
+            let room = bottom - y - meta_room;
+            let mut n = ((room / step.max(1)).clamp(2, 3)) as usize;
+            let star = if fav { super::app_switcher::star_room(67) } else { 0 };
+            let mut lines = title_block::layout(&mut self.text, Face::Title, 67, &title, w - 40 - star, n);
+            let mut step = step;
+            if n < 3 && !title_block::is_whole(&lines, &title) {
+                // Room for two lines only, and the name needs three: the type goes smaller until three fit.
+                let px = title_block::px_for(&self.text, 67, 3, room);
+                lines = title_block::layout(&mut self.text, Face::Title, px, &title, w - 40 - star, 3);
+                (n, step) = (3, title_block::step(&self.text, px));
+            }
+            let first = y + line(67, 0) - 6;
+            let (end, base) = title_block::paint(&mut self.text, c, Face::Title, &lines, x, first, pal().chalk, pal().dust, false);
+            if fav {
+                App::paint_title_star(c, end, base, lines[0].px, pal().chalk);
+            }
+            // Where the room is short, the meta line stands at the end of it for every game, so it does not move between a
+            // name of one line and one that needed the room's three (`title_block::px_for`).
+            y = if room < 3 * title_block::step(&self.text, 67) { y + room } else { first + (n as i32 - 1) * step };
+        } else {
+            let lines = self.text.wrap_at_most(Face::Title, 67, &title, w - 40, 2);
+            let last = lines.len().saturating_sub(1);
+            for (k, l) in lines.iter().enumerate() {
+                y += line(67, 0) - 6;
+                self.draw_title(c, Face::Title, 67, x, y, w, pal().chalk, l, false, fav && k == last);
+            }
         }
         // A system's short facts (its headline, Released, Sold, Inside…) under its name, as Split's panel has them.
         if matches!(item, Item::System(_)) && self.paint_system_facts(c, item, x, y + 48, w, bottom) {
@@ -2846,7 +2940,7 @@ mod shelf_tests {
                         rig_asked: false,
                         system: "gb".into(), ff: FormFactor::of("gb"),
                         medium: Medium::Gb, look, title: "Active launch".into(), kind: media::Game::of("gb", "1.gb"),
-                        has_cover: true, front: front.clone(), from: (0, 0, 140, 200), game: None, cozy: false, at_drive: None,
+                        has_cover: true, front: front.clone(), from: (0, 0, 140, 200), game: None, game_back: None, cozy: false, at_drive: None,
                     },
                 });
             }

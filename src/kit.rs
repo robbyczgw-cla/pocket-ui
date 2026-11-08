@@ -78,29 +78,36 @@ pub fn hint_bar_top(h: i32) -> i32 {
 /// label in Dust. Never a key without its word: at most four hints, and when they don't fit whole hints go, the least
 /// needed first (A, B, HOME and START stay longest; `type_scale::hints_that_fit`). Returns where each key can be tapped.
 pub fn page_hints(c: &mut Canvas, text: &mut Text, hints: &[(&str, &str)]) -> Vec<(Area, Button)> {
+    #[cfg(feature = "brick")]
+    let concise: Vec<_> = hints.iter().map(|&(key, label)|
+        (key, if crate::device::brick() && short_screen(c.h) && label == "Recent games" { "Recent" } else { label })).collect();
+    #[cfg(feature = "brick")]
+    let hints = concise.as_slice();
     let (mut x, base) = (MARGIN, c.h - 52);
     let mut areas = Vec::new();
+    // Between two hints: a little less on 1024x768, where the larger Brick type would otherwise push the fourth hint out.
+    let gap = if short_screen(c.h) { 24 } else { 36 };
     // The keys are 36 px around Body 21, taller with larger text (`type_scale`).
     let key_h = type_scale::row(36, 21);
     let key_top = hint_bar_top(c.h);
     // One letter in a round key, a word in a key as wide as it.
     let widths: Vec<(i32, i32)> = hints.iter().map(|(k, l)| (text.width(Face::Body, 21, button_prompts::shown(k)), text.width(Face::Body, 21, l))).collect();
-    let whole: Vec<i32> = widths.iter().map(|(kw, lw)| (kw + 24).max(key_h) + 10 + lw + 36).collect();
-    let shown = hints_shown(hints, &whole, c.w - MARGIN - 24 + 36);
+    let whole: Vec<i32> = widths.iter().map(|(kw, lw)| (kw + 24).max(key_h) + 10 + lw + gap).collect();
+    let shown = hints_shown(hints, &whole, c.w - MARGIN - 24 + gap);
     for (k, (key, label)) in shown {
         let key_w = (widths[k].0 + 24).max(key_h);
         let start = x;
         key_cap(c, text, (x, key_top, key_w, key_h), key, 21, base - 1, (pal().keycap, pal().chalk));
         x += key_w + 10;
         x += text.draw(c, Face::Body, 21, x, base, pal().dust, label);
-        x += 36;
-        crate::nav_probe::hint(c, (start, key_top, x - start - 36, key_h), key, label);
+        x += gap;
+        crate::nav_probe::hint(c, (start, key_top, x - start - gap, key_h), key, label);
         if let Some(b) = hint_button(key) {
-            areas.push((Area::new(start - 8, base - 46, x - start - 20, 64), b));
+            areas.push((Area::new(start - 8, base - 46, x - start - gap + 16, 64), b));
         }
     }
     // For the snapshot checks of Settings → Text size: nothing else may run into the hint bar.
-    crate::text::boxes::area(c, (MARGIN - 4, key_top, x - 36 - MARGIN + 8, key_h), "‹hints›");
+    crate::text::boxes::area(c, (MARGIN - 4, key_top, x - gap - MARGIN + 8, key_h), "‹hints›");
     areas
 }
 

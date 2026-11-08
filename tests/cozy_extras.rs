@@ -31,7 +31,7 @@ fn wayland(tmp: &Path) -> Option<Stub> {
 
 fn library(tmp: &Path) -> PathBuf {
     let lib = tmp.join("lib");
-    let ok = Command::new("python3")
+    let ok = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), lib.to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()
@@ -63,13 +63,18 @@ fn shot_in(tmp: &Path, lib: &Path, data: &Path, stub: &Option<Stub>, state: &str
     std::fs::write(&settings, json.to_string()).unwrap();
     let png = tmp.join(format!("{lang}-{}.png", state.replace([':', ' ', ','], "_")));
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+    let rendered_state = if let Some(s) = state.strip_suffix(":insert") {
+        cmd.env("POCKETUI_SNAPSHOT_LAUNCH_MS", "900");
+        s
+    } else { state };
     if let Some(s) = stub {
         cmd.env("WAYLAND_DISPLAY", &s.1);
     }
     let out = cmd
-        .args(["--snapshot", state, png.to_str().unwrap()])
-        .env("POCKETUI_MOCK", "1")
+        .args(["--snapshot", rendered_state, png.to_str().unwrap()])
+        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .env("POCKETUI_LANG", lang)
+        .env("POCKETUI_ROOM_TIME", "07:00")
         .env("POCKETUI_SNAPSHOT_SIZE", "1240x1080")
         .env("POCKETUI_ES_SYSTEMS", lib.join("es_systems.cfg"))
         .env("POCKETUI_DATA", data)
@@ -86,6 +91,59 @@ fn shot_in(tmp: &Path, lib: &Path, data: &Path, stub: &Option<Stub>, state: &str
 fn extras(data: &Path) -> serde_json::Value {
     let s: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(data.join("settings.json")).unwrap()).unwrap();
     s["extras"].clone()
+}
+
+#[test]
+fn the_dpad_reaches_the_gba_choice_and_every_console_view_uses_the_saved_sp() {
+    let tmp = tempfile::tempdir().unwrap();
+    let stub = wayland(tmp.path());
+    let lib = library(tmp.path());
+    let data = lib.join("data");
+    let views = ["shelf:gba:shelf", "shelf:gba:cabinet:games:0:insert", "shelf:gba:cards", "shelf:gba:split", "shelf:gba:minimal", "console:gba"];
+    // Compare the pictures that contain hardware, below the live status corner.
+    let pixels = |v: (i32, i32, Vec<u8>)| v.2[(v.0 * 110 * 3) as usize..].to_vec();
+    let before: Vec<_> = views.iter().map(|s| pixels(shot_in(tmp.path(), &lib, &data, &stub, s, "en", "shelf"))).collect();
+    // Up wraps from the first extra to the model choice; A selects SP, immediately saved.
+    shot_in(tmp.path(), &lib, &data, &stub, "cozy:0::ua", "en", "shelf");
+    let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(data.join("settings.json")).unwrap()).unwrap();
+    assert_eq!(saved["gba_model"], "sp", "reachable with the D-pad, under Cozy extras");
+    let mut sp_views = Vec::new();
+    for (state, original) in views.iter().zip(&before) {
+        let sp = pixels(shot_in(tmp.path(), &lib, &data, &stub, state, "en", "shelf"));
+        let changed = sp.iter().zip(original).filter(|(a,b)| a != b).count();
+        let minimum = if state.ends_with(":insert") { 15_000 } else { 300 };
+        assert!(changed > minimum, "{state}: selected SP must replace the classic hardware picture, including after restart ({changed} bytes changed)");
+        sp_views.push(sp);
+    }
+    // Right returns to the default; the same views return to their original hardware picture.
+    shot_in(tmp.path(), &lib, &data, &stub, "cozy:8::r", "en", "shelf");
+    for ((state, original), sp) in views.iter().zip(before).zip(sp_views) {
+        let restored = pixels(shot_in(tmp.path(), &lib, &data, &stub, state, "en", "shelf"));
+        if state.ends_with(":insert") {
+            // This frame is captured while the cartridge moves. Startup scheduling can
+            // advance it a few pixels: it must look like classic hardware again and be
+            // clearly unlike the SP, rather than match a moving frame pixel for pixel.
+            let difference = |a: &[u8], b: &[u8]| a.iter().zip(b).filter(|(a,b)| a != b).count();
+            let (classic, other) = (difference(&restored, &original), difference(&restored, &sp));
+            assert!(classic * 10 < other, "{state}: switching back restores classic hardware ({classic} bytes from classic, {other} from SP)");
+        } else {
+            assert!(restored == original, "{state}: switching back restores the default");
+        }
+    }
+    // A cold cabinet's first paint is at the start of its pull-out animation; a warm one
+    // has already advanced. Settle both before comparing hardware pictures pixel for pixel.
+    let settings = data.join("settings.json");
+    let mut saved: serde_json::Value = serde_json::from_slice(&std::fs::read(&settings).unwrap()).unwrap();
+    saved["motion"] = serde_json::json!("off");
+    std::fs::write(settings, saved.to_string()).unwrap();
+    for look in ["shelf", "cabinet", "cards", "minimal", "split"] {
+        // Paint classic first, then choose SP through the actual handler and paint again in
+        // the same process. A stale cached case front must not survive that choice.
+        let warm = pixels(shot_in(tmp.path(), &lib, &data, &stub, &format!("cozy:0::ua:{look}"), "en", "shelf"));
+        let cold = pixels(shot_in(tmp.path(), &lib, &data, &stub, &format!("shelf:gba:{look}"), "en", "shelf"));
+        assert!(warm == cold, "{look}: choosing SP immediately replaces already-painted hardware, without a restart");
+        shot_in(tmp.path(), &lib, &data, &stub, "cozy:8::r", "en", "shelf");
+    }
 }
 
 #[test]

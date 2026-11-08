@@ -6,7 +6,8 @@ pocket-ui runs on ROCKNIX, on the three ROCKNIX images it ships for: **SM8250**,
 below has a ROCKNIX device tree on that image (its path is given under the table) and a pocket-ui profile that knows its
 screen, sticks, fan, Wi-Fi and lid. The installers accept exactly these devices. 🎮 means the project has played on it;
 ✅ means the same chip, the same ROCKNIX image and a pocket-ui profile. ⏸ means parked: a profile from a
-prototype, not offered and not supported (the RG DS Plus on the RK3566 image). Reports are welcome (Settings › System ›
+prototype, not offered and not supported (the RG DS Plus on the RK3566 image). 🧪 means experimental on the same card as a played-on
+sibling: a profile from public sources on a chip the project plays on, the device itself never held (the TrimUI Smart Pro). Reports are welcome (Settings › System ›
 About › Report a problem). How far each feature is proven: [STATUS.md](STATUS.md).
 
 The "Plays" line of each chip comes from what pocket-ui starts there (`hostsys`, `standalone.rs`, `hakux.rs`) and from the
@@ -74,6 +75,9 @@ has no page for.
 | | Device | Screen | Sticks | Notes |
 |---|---|---|---|---|
 | 🎮 | **TrimUI Brick** | 1024 × 768 | no | Played on a real Brick, 2026-11-06 |
+| 🧪 | TrimUI Smart Pro | 1280 × 720 | 2 | The Brick's card and chip (A133P); experimental, feedback welcome ([TRIMUI-SMART-PRO.md](TRIMUI-SMART-PRO.md)) |
+
+The Smart Pro S (TG5050, an Allwinner A523 with a Mali GPU) is not supported: the same card says so there and changes nothing.
 
 ### Rockchip RK3568: ROCKNIX RK3566 image (parked)
 

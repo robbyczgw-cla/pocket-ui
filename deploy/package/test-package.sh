@@ -45,6 +45,12 @@ cat >"$T/bin/systemd-run" <<'EOF'
 #!/bin/sh
 echo "systemd-run $*" >>"$FAKE_ROOT/calls"
 EOF
+# Fixture installs must not flush unrelated host writes. The dedicated power-cut
+# observer below verifies durability ordering and models the loss of dirty data.
+cat >"$T/bin/sync" <<'EOF'
+#!/bin/sh
+echo "sync $*" >>"$FAKE_ROOT/calls"
+EOF
 # ROCKNIX's text_viewer, as far as the port installer uses it: -s <script> runs the script and shows its output (here:
 # collected in $VIEWER_OUT); the real one then waits for the player to press Close.
 cat >"$T/bin/fake-viewer" <<'EOF'
@@ -135,7 +141,12 @@ tree() { (cd "$T/root" && find . ! -name calls -exec sh -c 'for p; do
   if [ -L "$p" ]; then echo "$p -> $(readlink "$p")"; elif [ -f "$p" ]; then echo "$p $(stat -c %a "$p") $(cksum <"$p")"; else echo "$p/"; fi
 done' sh {} + | sort); }
 
-inst() { (cd "$T" && FAKE_ROOT=$T/root POCKETUI_INSTALL_ROOT=$T/root $SH "$T/pkg/install.sh" "$@" >"$T/out" 2>&1); }
+inst() {
+  # Standalone BusyBox ash prefers its sync applet over PATH: override it with a
+  # function too. $0 still names install.sh, so its package-relative paths work.
+  (cd "$T" && FAKE_ROOT=$T/root FAKE_SYNC=$T/bin/sync POCKETUI_INSTALL_ROOT=$T/root \
+    $SH -c 'sync() { "$FAKE_SYNC" "$@"; }; . "$0"' "$T/pkg/install.sh" "$@" >"$T/out" 2>&1)
+}
 uninst() { (cd "$T" && FAKE_ROOT=$T/root POCKETUI_INSTALL_ROOT=$T/root $SH "$T/root/storage/pocket-ui/uninstall.sh" "$@" >"$T/out" 2>&1); }
 uninst_pkg() { (cd "$T" && FAKE_ROOT=$T/root POCKETUI_INSTALL_ROOT=$T/root $SH "$T/pkg/uninstall.sh" "$@" >"$T/out" 2>&1); }
 said() { grep -q -- "$1" "$T/out"; }
@@ -261,7 +272,11 @@ for SH in $SHELLS; do
   # The same version, another build (a rebuilt package): replaced.
   echo different >"$r/$APP/releases/$V/pocket-core"
   inst --no-restart
-  check "$SH: same version, other build: replaced" 'cmp -s "$T/pkg/files/pocket-core" "$r/$APP/releases/$V/pocket-core" && [ -z "$(find "$r/$APP/releases" -name ".old-*")" ]'
+  check "$SH: same version, other build: switched without changing the previous build" \
+    'cmp -s "$T/pkg/files/pocket-core" "$r/$APP/current/pocket-core" && [ "$(cat "$r/$APP/releases/$V/pocket-core")" = different ] && [ "$(readlink "$r/$APP/previous")" = "releases/$V" ]'
+  before=$(tree | grep -v installed-by-package)
+  inst --no-restart
+  check "$SH: repaired package stays idempotent" '[ "$(tree | grep -v installed-by-package)" = "$before" ]'
 
   # Refusals: nothing changes.
   make_root
@@ -630,5 +645,6 @@ else
   echo "skip licence-files.sh (needs cargo; or POCKETUI_PACKAGE is set)"
 fi
 
+python3 "$HERE/test-power-cut.py" || fails=$((fails + 1))
 echo
 if [ $fails = 0 ]; then echo "all package tests passed ($SHELLS)"; else echo "$fails package tests failed"; exit 1; fi

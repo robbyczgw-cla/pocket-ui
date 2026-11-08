@@ -56,7 +56,7 @@ fn wayland_for_snapshots(tmp: &Path) -> Option<Stub> {
 }
 
 fn fake_library(dir: &Path) {
-    let status = Command::new("python3")
+    let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), dir.to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()
@@ -103,7 +103,7 @@ fn every_state_renders_at_640x480_without_panicking() {
                 }
                 let out = cmd
                     .args(["--snapshot", &state, png.to_str().unwrap()])
-                    .env("POCKETUI_MOCK", "1")
+                    .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
                     .env("POCKETUI_LANG", "en")
                     .env("POCKETUI_TEXT_SIZE", "normal")
                     .env("POCKETUI_SNAPSHOT_SIZE", SIZE)

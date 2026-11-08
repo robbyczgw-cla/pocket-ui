@@ -1,10 +1,11 @@
 #!/bin/bash
-# Builds the standalone TrimUI Brick card: one folder (and a zip of it) to copy onto an empty FAT card
+# Builds the standalone TrimUI card (Brick and Smart Pro, one card): one folder (and a zip of it) to copy onto an empty FAT card
 # (docs/TRIMUI-BRICK-STANDALONE.md).
 #   scripts/brick-make-card.sh OUT_DIR BINS_DIR LIBS_DIR CORES_DIR [VERSION]
 # VERSION    what the programs were built as (POCKETUI_VERSION; `pocket-ui --version` prints it): app/RELEASE, compared by the updater.
 #            A card meant for the update channel needs a version that counts up, e.g. 0.1.14-brick.6 (release 0.1.14, beta 6; docs/TRIMUI-BRICK-REMOTE.md, scripts/brick-publish.sh).
 # PARTS      (environment BRICK_PARTS) the output of scripts/brick-remote-parts.sh: Tailscale, curl, dropbear with their licences
+# BRICK_CHEATS_ARCHIVE (optional) offline copy of the pinned libretro-database tar.gz; otherwise fetched and cached in downloads/.
 # BRICK_UPDATE_URL  (optional) the update channel's update.json, written to app/update-url (docs/TRIMUI-BRICK-REMOTE.md); never public
 # BINS_DIR   pocket-ui, pocket-core, pocket-fb (cargo zigbuild --release --features brick --target aarch64-unknown-linux-gnu.2.33)
 #            (CARGO_TARGET_DIR set before `. scripts/release-rustflags.sh`) and brick-hw
@@ -12,8 +13,8 @@
 # LIBS_DIR   libwayland-client.so.0 libwayland-cursor.so.0 libwayland-egl.so.1 libxkbcommon.so.0 (Debian bookworm arm64, what pocket-ui
 #            loads) and libffi.so.8 (libwayland-client's; the Brick only has libffi.so.7)
 # CORES_DIR  the output of scripts/brick-build-cores.sh (cores/, licences/, sources/, CORES.txt)
-# Result: OUT_DIR/card/ (the folder), OUT_DIR/pocket-ui-brick-card-<version>.zip, and a check that everything the updater
-# looks for is in it. Nothing from NextUI or MinUI goes in (their licence is not ours); the Brick's own firmware stays on the Brick.
+# Result: OUT_DIR/card/ (the folder), OUT_DIR/pocket-ui-trimui-card-<version>.zip, and a check that everything the updater
+# looks for is in it. No part of TrimUI's firmware goes in; it stays on the handheld.
 set -eu
 OUT=${1:?out dir}; BINS=${2:?bins}; LIBS=${3:?libs}; CORES=${4:?cores dir}; PARTS=${BRICK_PARTS:?BRICK_PARTS: the folder scripts/brick-remote-parts.sh made}
 HERE=$(cd "$(dirname "$0")" && pwd); ROOT=$(dirname "$HERE")
@@ -31,9 +32,15 @@ rm -rf "$CARD"; mkdir -p "$CARD/.tmp_update" "$CARD/trimui/app" "$CARD/pocket-ui
 # pocket-ui/start.sh is the fixed part (it picks the program folder and takes a failed update back); app/ is the program, which an
 # update replaces as a whole; storage/, logs/ and authorized_keys next to it are the player's (start.sh makes them on the card).
 P=$CARD/pocket-ui/app
+# Cheat data lives in app/: the card zip and every OTA carry the same pinned subset and notices.
+if [ -n "${BRICK_CHEATS_ARCHIVE:-}" ]; then
+  python3 -I "$ROOT/scripts/brick-cheats-data.py" "$P" --archive "$BRICK_CHEATS_ARCHIVE"
+else
+  python3 -I "$ROOT/scripts/brick-cheats-data.py" "$P"
+fi
 cp "$ROOT/deploy/brick/boot.sh" "$CARD/pocket-ui/start.sh"
 cp "$ROOT/deploy/brick/start.sh" "$P/start.sh"
-cp "$ROOT/deploy/brick/entries/updater" "$CARD/.tmp_update/updater"                          # entry: NextUI's start script
+cp "$ROOT/deploy/brick/entries/updater" "$CARD/.tmp_update/updater"                          # entry: the firmware's start script
 cp "$ROOT/deploy/brick/entries/MainUI" "$ROOT/deploy/brick/entries/premainui.sh" "$ROOT/deploy/brick/entries/preload.sh" "$CARD/trimui/app/"   # entry: TrimUI's own
 for f in pocket-ui pocket-core pocket-fb brick-hw brick-egl; do cp "$BINS/$f" "$P/bin/$f"; done
 # Our own programs carry no build machine path (scripts/release-rustflags.sh with CARGO_TARGET_DIR set before it is sourced;
@@ -100,23 +107,25 @@ mkdir -p "$CARD/pocket-ui/sources/cores"; cp "$CORES"/sources/*.tar.gz "$CARD/po
 for d in tailscale curl dropbear syncthing; do mkdir -p "$P/licences/$d"; cp -R "$PARTS/licences/$d/." "$P/licences/$d/"; done
 mkdir -p "$P/sources/network"; cp -R "$PARTS/sources/." "$P/sources/network/"; cp "$PARTS/PARTS.txt" "$P/licences/NETWORK-PARTS.txt"
 cat >"$P/licences/README.txt" <<TXT
-pocket-ui on a TrimUI Brick (standalone card), $VERSION.
+pocket-ui on a TrimUI Brick or Smart Pro (standalone card), $VERSION.
 pocket-ui and its helpers: LICENSE, NOTICE.md and the third-party lists in pocket-ui/ (GPL-2.0-or-later and the crates' own licences).
 Cores: CORES-LICENCES.txt, and each core's own licence files in cores/. Where the source of each core (the exact commit it was built
 from) is: SOURCES.txt. snes9x, picodrive and fbneo are licensed for non-commercial use only (free to pass on under their licence terms, not to sell); see CORES-LICENCES.txt.
 Bundled libraries (libwayland-*: MIT, libxkbcommon: MIT-style, libffi: MIT-style): libwayland-COPYING.txt, libxkbcommon-LICENSE.txt, libffi-copyright.txt.
+Cheat database (cores/cht.pack, one file): libretro-database, CC BY-SA 4.0; full licence, upstream credits and subset attribution in libretro-database/.
+The pinned commit, source archive, checksum, system list and size are in ../database/MANIFEST.json. Each cheat file in the pack is unchanged.
 Time zone data (pocket-ui/zoneinfo): the IANA Time Zone Database, public domain.
 Network parts (NETWORK-PARTS.txt has their versions and checksums): Tailscale (BSD-3-Clause, tailscale/), Syncthing (MPL-2.0, syncthing/, unchanged), curl and its libraries
 (curl/), dropbear (MIT, dropbear/; changed by pocket-ui, the change is in ../sources/network/). Where each one's source is:
 ../sources/network/SOURCES.txt.
-Nothing of NextUI or MinUI is on this card. The Brick's own firmware libraries are used from the Brick, not copied.
+No part of TrimUI's firmware is on this card. The handheld's own firmware libraries are used from the handheld, not copied.
 TXT
 echo "pocket-ui brick standalone $VERSION (pocket-ui commit $COMMIT, $(date -u +%Y-%m-%d))" >"$P/VERSION"
 echo "$VERSION" >"$P/RELEASE"
 [ -n "${BRICK_UPDATE_URL:-}" ] && echo "$BRICK_UPDATE_URL" >"$P/update-url"
 cp "$P/VERSION" "$P/BUILD-INFO.txt"; { echo; cat "$CORES/CORES.txt"; } >>"$P/BUILD-INFO.txt"
 # Everything the updater looks for, in the folder.
-for f in bin/pocket-ui bin/pocket-core bin/pocket-fb bin/brick-hw bin/brick-egl lib/libwayland-client.so.0 lib/libffi.so.8 msg/starting.png msg/missing.png msg/missing.raw msg/crashed.png es_systems.cfg asoundrc \
+for f in bin/pocket-ui bin/pocket-core bin/pocket-fb bin/brick-hw bin/brick-egl lib/libwayland-client.so.0 lib/libffi.so.8 msg/starting.png msg/missing.png msg/missing.raw msg/crashed.png msg/starting-wide.png msg/missing-wide.png msg/missing-wide.raw msg/crashed-wide.png es_systems.cfg asoundrc \
   hwroot/usr/bin/volume hwroot/usr/bin/pactl hwroot/usr/bin/brightness hwroot/usr/bin/systemctl hwroot/usr/bin/wifictl hwroot/usr/bin/timedatectl zoneinfo/UTC hwroot/usr/bin/grim cores/gambatte_libretro.so cores/mgba_libretro.so \
   cores/nestopia_libretro.so cores/snes9x_libretro.so cores/pcsx_rearmed_libretro.so cores/gpsp_libretro.so cores/fceumm_libretro.so cores/picodrive_libretro.so VERSION; do [ -s "$P/$f" ] || die "the card folder has no $f"; done
 for f in .tmp_update/updater trimui/app/MainUI trimui/app/premainui.sh trimui/app/preload.sh pocket-ui/start.sh pocket-ui/app/start.sh pocket-ui/app/RELEASE \
@@ -183,14 +192,17 @@ app/              pocket-ui itself. An update replaces this folder as a whole; a
 storage/          your settings, the Tailscale login, the Remote access password (made at the first start).
 logs/             what pocket-ui writes down (boot.log first).
 authorized_keys   SSH keys that may log in as root when Remote access is on, one per line, as in ~/.ssh/authorized_keys (empty at first).
+
+This card is for the TrimUI Brick and the TrimUI Smart Pro (experimental). On a Smart Pro, update TrimUI's firmware to 1.1.1 first
+(1.0.4 at least); with older firmware pocket-ui cannot start and logs/FIRMWARE-TOO-OLD.txt says so.
 TXT
-# Keep this folder name free of NextUI's: a leftover .system or MinUI file would mean the wrong folder was copied over.
+# Keep this folder name free of other launchers' names: a leftover .system folder would mean the wrong folder was copied over.
 [ -e "$CARD/.system" ] && die ".system is in the card folder"
 # BRICK_SOURCES_APART=1 (the public release): the cores' and pocket-ui's source go into their own zip next to the card zip, on the same
 # release page, instead of into the card zip (half its size; every player downloads the card, few the source).
 # BRICK_POCKETUI_SOURCE: pocket-ui's own source tarball (scripts/source-archive.sh), put into that zip.
-ZIP=$OUT/pocket-ui-brick-card-$VERSION.zip
-SRCZIP=$OUT/pocket-ui-brick-sources-$VERSION.zip
+ZIP=$OUT/pocket-ui-trimui-card-$VERSION.zip
+SRCZIP=$OUT/pocket-ui-trimui-sources-$VERSION.zip
 rm -f "$ZIP" "$SRCZIP"
 if [ "${BRICK_SOURCES_APART:-0}" = 1 ]; then
   SRC=$OUT/sources-apart; rm -rf "$SRC"; mkdir -p "$SRC/sources"
@@ -198,8 +210,8 @@ if [ "${BRICK_SOURCES_APART:-0}" = 1 ]; then
   cp -R "$P/sources/network" "$SRC/sources/network"
   [ -z "${BRICK_POCKETUI_SOURCE:-}" ] || { [ -s "$BRICK_POCKETUI_SOURCE" ] || die "no pocket-ui source at $BRICK_POCKETUI_SOURCE"; cp "$BRICK_POCKETUI_SOURCE" "$SRC/sources/"; }
   cat >"$P/licences/SOURCES.txt" <<TXT
-The source of the cores on this card, and of pocket-ui itself, is in pocket-ui-brick-sources-$VERSION.zip, published next to
-pocket-ui-brick-card-$VERSION.zip on the same release page (https://github.com/robbyczgw-cla/pocket-ui/releases, tag of this version).
+The source of the cores on this card, and of pocket-ui itself, is in pocket-ui-trimui-sources-$VERSION.zip, published next to
+pocket-ui-trimui-card-$VERSION.zip on the same release page (https://github.com/robbyczgw-cla/pocket-ui/releases, tag of this version).
 Each core's exact commit: CORES-LICENCES.txt. The network parts' source is on this card too: pocket-ui/app/sources/network/.
 TXT
 else

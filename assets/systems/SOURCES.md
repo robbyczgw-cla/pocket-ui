@@ -1,5 +1,21 @@
 # System pictures: sources and licences
 
+## Optional Game Boy Advance SP (2026-11-08)
+
+`gba-sp.png` is a photo-derived **CC0 1.0** asset, **modified via PixelLab** from
+[Gameboy-Advance-SP-Mk2.jpg](https://commons.wikimedia.org/wiki/File:Gameboy-Advance-SP-Mk2.jpg),
+Evan-Amos, public domain (PD-self), photo retouch SerhioMagpie. Two photo conversions in total for the
+SP: this open console and the outer lid described in [the rig sources](../media/rig/SOURCES.md#gba-sp).
+The source photo contains a flush cartridge. PixelLab masked inpainting removes it and supplies the dark empty port; the original photographed blue rim is preserved. The lettering was removed using adjacent photographed plastic, the white background cut away.
+`tools/sp_photo.py` prepares both photographs and `tools/sp_finish.py` separates and registers the
+lid to its photographed hinge; no replacement console was drawn from code; the empty-port edit is confined to the photographed cartridge face.
+Every derived file is listed in [NOTICE.md](../../NOTICE.md#optional-game-boy-advance-sp-pictures).
+
+The original PD/CC0 sources were selected after reviewing the Commons Game Boy Advance SP category,
+including the CC0 open and closed Tribal Edition photographs by Benoît Prieur and the CC0 open SP
+by TylerMascola. The latter's worn finish and the oblique Tribal open view were less suitable than
+the clean Evan-Amos front photo. No CC BY-SA console source was needed.
+
 Each system card on the shelf shows a pixel-art picture of the console (`<system id>.png`, compiled into
 pocket-ui by `src/system_art.rs`). The pictures show the hardware only so that the system can be recognised
 at a glance. Every logo, brand name and product name printed on the hardware or its controller has been

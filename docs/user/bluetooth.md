@@ -4,6 +4,8 @@
 
 Settings → Connections → **Bluetooth** pairs game controllers, headphones, speakers and other Bluetooth devices with the Pocket.
 
+An empty list says **No devices found** and asks you to put the device in pairing mode, then select **Search for devices**.
+
 ![Bluetooth with controllers found nearby](pictures/bluetooth.webp)
 
 | Row | What A does |

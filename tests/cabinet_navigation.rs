@@ -7,13 +7,6 @@ impl Drop for Stub {
     fn drop(&mut self) { let _ = self.0.kill(); let _ = self.0.wait(); }
 }
 
-/// Share of pixels that differ. Clock-like corners may flicker between two paints; a moved selection changes far more.
-fn differing(a: &[u8], b: &[u8]) -> f64 {
-    assert_eq!(a.len(), b.len());
-    a.iter().zip(b).filter(|(x, y)| x != y).count() as f64 / a.len() as f64
-}
-const SAME: f64 = 0.005;
-
 #[test]
 fn every_shelf_can_be_reached_opened_and_left_at_every_panel_size() {
     let tmp = tempfile::tempdir().unwrap();
@@ -70,32 +63,31 @@ fn every_shelf_can_be_reached_opened_and_left_at_every_panel_size() {
                 reader.next_frame(&mut pixels).unwrap();
                 (painted, pixels)
             };
-            let (_, first) = run("");
-            let mut previous = first.clone();
+            let mut previous = None;
             for (k, (id, name)) in systems.iter().enumerate() {
                 // Down k times: the shelf is named on the screen, and the picture changed with the move.
                 let keys = "d".repeat(k);
                 let (painted, shown) = run(&keys);
                 assert!(painted.contains(name), "{size} {appearance}: shelf {name} is not shown after {k} Down presses: {painted}");
-                if k > 0 {
+                if let Some(previous) = previous {
                     assert_ne!(shown, previous, "{size} {appearance}: Down {k} changed nothing on the screen");
                 }
-                previous = shown;
+                previous = Some(shown);
                 // A on that shelf opens it: its game starts (the fixture is empty, so the player is told so by name).
                 let (opened, _) = run(&format!("{keys}a"));
                 assert!(opened.contains(&format!("Fixture {id} kann nicht starten")), "{size} {appearance}: A on {name} did not open it: {opened}");
             }
-            // Down past the last shelf stays on it.
-            let (_, past_end) = run("ddddddd");
-            let (_, last) = run("dddd");
-            // Up all the way is the first shelf again, looking the same however far the player had gone (the cabinet
-            // starts on its Continue entry, so "the first shelf" is what one Down and one Up show).
-            let (_, one_down) = run("d");
-            let (_, first_shelf) = run("du");
-            let (_, back) = run("ddddduuuuu");
-            assert!(differing(&past_end, &last) < SAME, "{size} {appearance}: Down past the end moved the selection");
-            assert!(differing(&back, &first_shelf) < SAME, "{size} {appearance}: Up does not return to the first shelf");
-            assert!(differing(&one_down, &first_shelf) > 10.0 * SAME, "{size} {appearance}: moving one shelf must look different from staying");
+            // Ask A which game the cursor would open. Comparing whole pictures here was flaky:
+            // the clock and decorative animation can move while the selected shelf stays put.
+            // This also catches a cursor on the wrong shelf even when all shelf names are painted.
+            for (keys, id, why) in [
+                ("ddddddda", "snes", "Down past the end stays on the last shelf"),
+                ("ddddduuuuua", "gba", "Up returns to the first shelf"),
+            ] {
+                let (opened, _) = run(keys);
+                assert!(opened.contains(&format!("Fixture {id} kann nicht starten")),
+                    "{size} {appearance}: {why}: {opened}");
+            }
         }
     }
 }

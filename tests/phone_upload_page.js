@@ -21,12 +21,23 @@ function page(systems, language = "en") {
   get("data").textContent = JSON.stringify({ systems, saves: ["srm"], disc: ["cue", "bin", "gdi", "raw", "iso"], prefer: { gdi: "dreamcast" } });
   get("folder").webkitdirectory = true;
   const sent = [];
+  const pending = new Set();
+  // Readiness is an API completion, not a quiet interval in the upload count:
+  // sheet reads and check requests may still be queued before any upload exists.
+  function later(callback) {
+    const task = {};
+    pending.add(task);
+    setImmediate(() => {
+      try { callback(); }
+      finally { pending.delete(task); }
+    });
+  }
   class Xhr {
     constructor() { this.upload = {}; this.status = 200; }
     open(_method, url) { this.url = url; }
     send() {
       const url = this.url;
-      setImmediate(() => {
+      later(() => {
         if (url.includes("/upload?")) sent.push(url.split("?")[1]);
         this.responseText = JSON.stringify({ ok: true, path: "p" });
         this.onload();
@@ -34,7 +45,7 @@ function page(systems, language = "en") {
     }
   }
   class Reader {
-    readAsText(f) { setImmediate(() => { this.result = f.text; this.onload(); }); }
+    readAsText(f) { later(() => { this.result = f.text; this.onload(); }); }
   }
   const sandbox = {
     document: { getElementById: get, querySelectorAll: () => [], createElement: (t) => new Node_(t), documentElement: {} },
@@ -65,12 +76,12 @@ function page(systems, language = "en") {
       sel.fire("change");
     },
     row(name) { return this.list.children.find((li) => li.children[0].textContent === name); },
-    // Until nothing more is sent for a while (a fixed wait was too short on a loaded build machine).
     async settle() {
-      for (let last = -1; last !== this.sent.length; ) {
-        last = this.sent.length;
-        await new Promise((done) => setTimeout(done, 40));
-      }
+      const until = Date.now() + 10000;
+      do {
+        await new Promise((done) => setImmediate(done));
+        assert.ok(Date.now() < until, "phone page did not finish its queued requests/readers");
+      } while (pending.size);
     },
   };
 }

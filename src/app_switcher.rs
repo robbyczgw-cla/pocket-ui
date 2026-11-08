@@ -18,7 +18,7 @@ const STAR: u32 = 0xf2c14e;
 const STAR_ON_PAPER: u32 = 0xb07a12;
 
 /// Room a star takes after a title set in `px`.
-fn star_room(px: u32) -> i32 {
+pub(crate) fn star_room(px: u32) -> i32 {
     px as i32 * 4 / 5
 }
 
@@ -123,11 +123,16 @@ impl App {
             self.text.draw(c, face, px, x, baseline, color, &fitted)
         };
         if fav {
-            let r = (px as i32 * 3 / 10).max(7);
-            let luma = (color >> 16 & 0xff) * 3 + (color >> 8 & 0xff) * 6 + (color & 0xff);
-            let star = if luma < 1000 { STAR_ON_PAPER } else { STAR };
-            switcher::star(c, x + w + px as i32 / 5 + r, baseline - px as i32 * 36 / 100, r, star);
+            App::paint_title_star(c, x + w, baseline, px, color);
         }
+    }
+
+    /// A starred game's star after a name of `color` set in `px`, ending at `x`: on paper's colours for a dark name.
+    pub(crate) fn paint_title_star(c: &mut Canvas, x: i32, baseline: i32, px: u32, color: u32) {
+        let r = (px as i32 * 3 / 10).max(7);
+        let luma = (color >> 16 & 0xff) * 3 + (color >> 8 & 0xff) * 6 + (color & 0xff);
+        let star = if luma < 1000 { STAR_ON_PAPER } else { STAR };
+        switcher::star(c, x + px as i32 / 5 + r, baseline - px as i32 * 36 / 100, r, star);
     }
 
     fn switcher_entry(&self, system: &str, name: &str, path: &std::path::Path, meta: String) -> Entry {

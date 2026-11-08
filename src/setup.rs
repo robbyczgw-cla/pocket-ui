@@ -856,7 +856,7 @@ impl Setup {
     fn paint_games(&self, c: &mut Canvas, text: &mut Text, dots: &str) {
         let width = c.w - 2 * MARGIN;
         // Something in roms isn't read: say so where the subtitle is (two lines move the title up a little).
-        let unread = unread_lines(&self.strays, &self.broken, "roms");
+        let unread = unread_lines(&self.strays, &self.broken);
         match unread.as_slice() {
             [] => {
                 text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Add your games");
@@ -1449,30 +1449,31 @@ fn count_catalog(catalog: &[SysInfo]) -> Counted {
     found.broken.dedup();
     if let Some(roms) = library::roms_root(catalog) {
         found.strays = library::stray_folders(&roms, catalog);
+        // Folders of another card ("Game Boy Advance (GBA)") are read as the system they are: their games count too.
+        for (id, dir) in library::foreign_folders(&roms, catalog) {
+            if let Some(s) = catalog.iter().find(|s| s.id == id) {
+                let n = library::count_games(&id, &dir, &s.extensions);
+                if n > 0 {
+                    *found.games.entry(id).or_insert(0) += n;
+                }
+            }
+        }
     }
     found
 }
 
-/// The lines Add games shows instead of its subtitle when something in `roms` isn't read: the stray folders (with
-/// the folder their games go in, when it can be guessed), then the disc games missing a file. At most two lines.
-pub fn unread_lines(strays: &[library::StrayFolder], broken: &[library::BrokenDisc], roms: &str) -> Vec<String> {
+/// The lines Add games shows instead of its subtitle when something in `roms` isn't read: the stray folders, then the
+/// disc games missing a file. At most two lines.
+pub fn unread_lines(strays: &[library::StrayFolder], broken: &[library::BrokenDisc]) -> Vec<String> {
     let mut lines = Vec::new();
     match strays {
         [] => {}
-        [one] => lines.push(match &one.meant {
-            Some(folder) => format!("Folder without a system: {}. Its games go in {roms}/{folder}.", one.name),
-            None => format!("Folder without a system: {}. The tiles below show the folder names.", one.name),
-        }),
+        [one] => lines.push(format!("Folder without a system: {}. The tiles below show the folder names.", one.name)),
         // More than two don't fit a line, and what to do would be the part cut off: the count and where the rest is said.
         many if many.len() > 2 => lines.push(format!("{} folders without a system. Settings › Games › Game check says where their games go.", many.len())),
         many => {
             let names: Vec<&str> = many.iter().map(|s| s.name.as_str()).collect();
-            let meant: Vec<String> = many.iter().filter_map(|s| s.meant.as_ref()).map(|f| format!("{roms}/{f}")).collect();
-            lines.push(if meant.is_empty() {
-                format!("Folders without a system: {}. The tiles below show the folder names.", names.join(", "))
-            } else {
-                format!("Folders without a system: {}. Their games go in {}.", names.join(", "), meant.join(", "))
-            });
+            lines.push(format!("Folders without a system: {}. The tiles below show the folder names.", names.join(", ")));
         }
     }
     let title = |b: &library::BrokenDisc| display_name_of(&b.sheet);
@@ -1938,6 +1939,12 @@ impl Setup {
     /// The network being brought up has been "Connecting…" for longer than `CONNECT_STUCK`.
     fn stuck(&self) -> bool {
         self.connecting_since.as_ref().is_some_and(|(_, since)| since.elapsed() >= CONNECT_STUCK)
+    }
+
+    /// The Wi-Fi list is still being read. Other pages may intentionally stay
+    /// loading while a player can inspect or leave them; that is not scan readiness.
+    pub fn wifi_scanning(&self) -> bool {
+        matches!(self.step, Step::Wifi) && self.scanning
     }
 
     /// True while something on screen moves (scan or connect in progress).
@@ -2808,7 +2815,7 @@ impl Setup {
         let d = crate::device::current();
         let mut ways = ways_for(d.host_owned(), d.has_wifi(), crate::usb_transfer::offered());
         #[cfg(feature = "brick")]
-        if d.model == Some(crate::device::Model::Brick) && !crate::brick_profile::file_sharing() {
+        if matches!(d.model, Some(crate::device::Model::Brick(_))) && !crate::brick_profile::file_sharing() {
             ways.retain(|w| *w != Way::Sharing);
         }
         ways
@@ -4124,19 +4131,37 @@ impl Setup {
                 // The rows under the words end above the hint bar: where the untested line and the third row (For a child)
                 // would run into it (1024x768), the page moves up by what is missing.
                 let step = crate::type_scale::line(28, 12);
-                let count = |text: &mut Text, l: &str| text.wrap_prose(Face::Body, 28, l, c.w - 2 * MARGIN).len().max(1) as i32;
-                let mut words_end = 360 + (lines.iter().map(|l| count(text, l)).sum::<i32>() - 1) * step;
-                if let Some(l) = &untested {
-                    words_end += 56 + (count(text, l) - 1) * step;
-                }
+                let count = |text: &mut Text, px: u32, l: &str| text.wrap_prose(Face::Body, px, l, c.w - 2 * MARGIN).len().max(1) as i32;
                 let rows = 2 + i32::from(kids_offered());
-                let rows_end = words_end.max(430) + 40 + rows * (pill_h() + 15) - 15;
-                let lift = (rows_end - (crate::kit::hint_bar_top(c.h) - 12)).max(0);
-                let dy = crate::ui_art::above_words_row(c, &row, MARGIN, false, 60, 300 - lift, 67) - lift;
-                text.draw(c, Face::Title, 67, MARGIN, 300 + dy, pal().chalk, "Welcome to your Pocket");
+                // How far the page moves up with the untested paragraph in `note_px` type.
+                let lift_for = |text: &mut Text, note_px: u32| {
+                    let mut words_end = 360 + (lines.iter().map(|l| count(text, 28, l)).sum::<i32>() - 1) * step;
+                    if let Some(l) = &untested {
+                        words_end += 56 + (count(text, note_px, l) - 1) * crate::type_scale::line(note_px, 12);
+                    }
+                    let rows_end = words_end.max(430) + 40 + rows * (pill_h() + 15) - 15;
+                    (rows_end - (crate::kit::hint_bar_top(c.h) - 12)).max(0)
+                };
+                // The title stands clear of the status corner (the clock of Easy to read and the dots) down to here; a
+                // longer page sets the paragraph about the device in a smaller type instead (German, Large).
+                let (mut note_px, mut lift) = (28, lift_for(text, 28));
+                if lift > 160 {
+                    (note_px, lift) = (24, lift_for(text, 24));
+                }
+                // The pictures give way when the lifted title leaves no room for them above it (the untested line, a third
+                // row and Large text at 1024x768): pushed back down they would put the rows under the hint bar again.
+                let k = crate::ui_art::empty_scale(c.h);
+                let caps = 300 - lift - crate::type_scale::px(67) as i32 * 3 / 4;
+                let dy = if caps - 28 - crate::ui_art::row_size(&row, k).1 >= 60 {
+                    crate::ui_art::above_words_row(c, &row, MARGIN, false, 60, 300 - lift, 67) - lift
+                } else {
+                    -lift
+                };
+                let (heading_px, heading) = text.fit_sizes(Face::Title, &[67, 50], "Welcome to your Pocket", c.w - 2 * MARGIN);
+                text.draw(c, Face::Title, heading_px, MARGIN, 300 + dy, pal().chalk, &heading);
                 let mut below = paragraphs(c, text, &lines, 360 + dy);
                 if let Some(line) = &untested {
-                    below = paragraphs(c, text, &[line.as_str()], below + 56);
+                    below = paragraphs_at(c, text, note_px, &[line.as_str()], below + 56);
                 }
                 // The languages in their own names; the line after them in the one chosen.
                 let on = crate::i18n::Lang::ALL.iter().position(|l| *l == crate::i18n::current()).unwrap_or(0);
@@ -4174,7 +4199,8 @@ impl Setup {
                 let (line, color) = self.wifi_status(&dots);
                 // A on the connected network: a drawn tick before the line (the font has none).
                 let tick = if self.confirming().is_some() { 48 } else { 0 };
-                let line = text.fit(Face::Body, 28, &line, c.w - 2 * MARGIN - tick);
+                // A little smaller before cut short ("Home isn't letting this Brick in. Press A to type the password again.").
+                let (line_px, line) = text.fit_sizes(Face::Body, &[28, 24], &line, c.w - 2 * MARGIN - tick);
                 if tick > 0 {
                     for i in 0..7 {
                         c.rect(MARGIN + i * 2, 178 + i * 2, 4, 4, color);
@@ -4183,7 +4209,7 @@ impl Setup {
                         c.rect(MARGIN + 12 + i * 2, 190 - i * 2, 4, 4, color);
                     }
                 }
-                text.draw(c, Face::Body, 28, MARGIN + tick, 192, color, &line);
+                text.draw(c, Face::Body, line_px, MARGIN + tick, 192, color, &line);
                 self.paint_networks(c, text);
                 let row = self.sel.checked_sub(self.lead());
                 let saved = row.and_then(|r| self.entries.get(r)).is_some_and(|e| e.saved.is_some());
@@ -4496,7 +4522,7 @@ impl Setup {
         }
         // What in roms isn't read, in plain words: specific help instead of a quiet "no games"; as many lines as fit
         // above the note.
-        for l in unread_lines(&self.strays, &self.broken, "roms").iter().take(2) {
+        for l in unread_lines(&self.strays, &self.broken).iter().take(2) {
             if y + 8 > room {
                 break;
             }
@@ -4544,7 +4570,8 @@ impl Setup {
         }
         let online = wifi::ip().is_some();
         let d = crate::device::current();
-        text.draw(c, Face::Body, 28, MARGIN, sub, pal().dust, extras_sub(online, d.host_owned(), d.has_wifi()));
+        let (px, subtitle) = text.fit_sizes(Face::Body, &[28, 24], extras_sub(online, d.host_owned(), d.has_wifi()), c.w - 2 * MARGIN);
+        text.draw(c, Face::Body, px, MARGIN, sub, pal().dust, &subtitle);
         let pictures = self.art == Art::Pictures;
         let covers = if self.covers_unreachable && !self.covers_running {
             "Couldn't reach the picture server. Try again later.".to_string()
@@ -5418,12 +5445,17 @@ fn done_line(games: usize) -> String {
 
 /// Lines of Body 28 in Dust from the baseline `y` on, 40 px apart, each wrapped to the page's width (larger text, a
 /// long translation); returns the last baseline.
-fn paragraphs(c: &mut Canvas, text: &mut Text, lines: &[&str], mut y: i32) -> i32 {
-    let step = crate::type_scale::line(28, 12);
+fn paragraphs(c: &mut Canvas, text: &mut Text, lines: &[&str], y: i32) -> i32 {
+    paragraphs_at(c, text, 28, lines, y)
+}
+
+/// `paragraphs` in type of `px`.
+fn paragraphs_at(c: &mut Canvas, text: &mut Text, px: u32, lines: &[&str], mut y: i32) -> i32 {
+    let step = crate::type_scale::line(px, 12);
     let mut last = y;
     for line in lines {
-        for part in text.wrap_prose(Face::Body, 28, line, c.w - 2 * MARGIN) {
-            text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &part);
+        for part in text.wrap_prose(Face::Body, px, line, c.w - 2 * MARGIN) {
+            text.draw(c, Face::Body, px, MARGIN, y, pal().dust, &part);
             last = y;
             y += step;
         }
@@ -5452,9 +5484,9 @@ pub fn paint_keyboard_noted(c: &mut Canvas, text: &mut Text, kb: &Keyboard, done
     let short = c.h < 900;
     let reserve = if short { 40 } else { 0 };
     paint_keyboard_room(c, text, kb, done, &kb.text, reserve);
-    let note = text.fit(Face::Body, 24, note, c.w - 2 * MARGIN);
+    let (px, note) = text.fit_sizes(Face::Body, &[24, 21], note, c.w - 2 * MARGIN);
     let y = if short { c.h - 100 - reserve + 30 } else { 790 };
-    text.draw(c, Face::Body, 24, MARGIN, y, pal().dust, &note);
+    text.draw(c, Face::Body, px, MARGIN, y, pal().dust, &note);
 }
 
 /// The keyboard, leaving `reserve` px above the hints free of keys.
@@ -7809,11 +7841,11 @@ mod tests {
         s = s.with_catalog(catalog.clone()).only(Only::Games);
         s.settle();
         assert!(s.strays.is_empty() && s.broken.is_empty());
-        assert!(unread_lines(&s.strays, &s.broken, "roms").is_empty(), "nothing unread: the usual subtitle");
+        assert!(unread_lines(&s.strays, &s.broken).is_empty(), "nothing unread: the usual subtitle");
         paint_it(&mut s);
 
-        std::fs::create_dir_all(dir.join("Sega Genesis")).unwrap();
-        std::fs::write(dir.join("Sega Genesis/Sonic.md"), b"x").unwrap();
+        std::fs::create_dir_all(dir.join("Old Stuff")).unwrap();
+        std::fs::write(dir.join("Old Stuff/Sonic.md"), b"x").unwrap();
         catalog[0].extensions.push("cue".into());
         std::fs::write(dir.join("gba/Lost Bin (Europe).cue"), "FILE \"Lost Bin (Europe).bin\" BINARY\n").unwrap();
         let (mut s, _) = setup("unread-2", "UTC", None);
@@ -7821,9 +7853,9 @@ mod tests {
         s.settle();
         assert_eq!(s.grid.as_ref().unwrap().games("gba"), 1, "the cue without its bin is not counted");
         assert_eq!(
-            unread_lines(&s.strays, &s.broken, "roms"),
+            unread_lines(&s.strays, &s.broken),
             [
-                "Folder without a system: Sega Genesis. Its games go in roms/megadrive.",
+                "Folder without a system: Old Stuff. The tiles below show the folder names.",
                 "Not on the shelf: Lost Bin. A file is missing: Lost Bin (Europe).bin",
             ]
         );
@@ -7835,26 +7867,26 @@ mod tests {
     #[test]
     fn a_disc_missing_a_file_says_so_before_the_long_file_name() {
         let disc = library::BrokenDisc { sheet: PathBuf::from("/storage/roms/psx/Crash Bandicoot (USA).cue"), missing: "Crash Bandicoot (USA) (Track 1).bin".into() };
-        let line = &unread_lines(&[], &[disc], "roms")[0];
+        let line = &unread_lines(&[], &[disc])[0];
         assert!(line.find("missing").unwrap() < line.find("Track 1").unwrap(), "{line}");
     }
 
     #[test]
     fn several_unread_things_are_listed_in_a_line_each_kind() {
-        let stray = |name: &str, meant: Option<&str>| library::StrayFolder { name: name.into(), meant: meant.map(str::to_string) };
+        let stray = |name: &str| library::StrayFolder { name: name.into() };
         let disc = |sheet: &str| library::BrokenDisc { sheet: PathBuf::from(format!("/storage/roms/psx/{sheet}")), missing: "x.bin".into() };
-        assert_eq!(unread_lines(&[stray("Stuff", None)], &[], "roms"), ["Folder without a system: Stuff. The tiles below show the folder names."]);
+        assert_eq!(unread_lines(&[stray("Stuff")], &[]), ["Folder without a system: Stuff. The tiles below show the folder names."]);
         assert_eq!(
-            unread_lines(&[stray("PS1", Some("psx")), stray("Stuff", None)], &[disc("A (USA).cue"), disc("B.cue")], "roms"),
-            ["Folders without a system: PS1, Stuff. Their games go in roms/psx.", "Not on the shelf, a disc file is missing: A, B"]
+            unread_lines(&[stray("Atari Jaguar"), stray("Stuff")], &[disc("A (USA).cue"), disc("B.cue")]),
+            ["Folders without a system: Atari Jaguar, Stuff. The tiles below show the folder names.", "Not on the shelf, a disc file is missing: A, B"]
         );
         assert_eq!(
-            unread_lines(&[stray("Junk", None), stray("Stuff", None)], &[], "roms"),
+            unread_lines(&[stray("Junk"), stray("Stuff")], &[]),
             ["Folders without a system: Junk, Stuff. The tiles below show the folder names."]
         );
         // New-player walk 2026-11-02: seven names, cut in the seventh, and what to do cut off with them.
         assert_eq!(
-            unread_lines(&[stray("GBA ROMS", None), stray("Sega Genesis", Some("megadrive")), stray("Stuff", None)], &[], "roms"),
+            unread_lines(&[stray("GBA ROMS"), stray("Xbox 360"), stray("Stuff")], &[]),
             ["3 folders without a system. Settings › Games › Game check says where their games go."]
         );
     }

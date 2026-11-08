@@ -149,3 +149,8 @@ on the label):
 4. `finish_cart.py raw.png <kind>.png <plastic> [--mask prep_mask.png]`: background off, the label grown from its middle
    and painted (214, 214, 214), the plastic set to #4b4c50 (GBA) or #9a9a9a (N64), every pixel solid or empty.
    `sheet_cart.py` makes the comparison sheet.
+
+## Rear faces at launch (2026-11-08)
+
+The front-view handhelds now turn their cartridges label-away before insertion. Their separate
+photo-to-PixelLab rear shells, attribution and per-image CC0 / CC BY-SA licences are in [REAR-SOURCES.md](REAR-SOURCES.md).

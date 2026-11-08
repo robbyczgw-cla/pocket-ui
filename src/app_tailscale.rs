@@ -53,6 +53,17 @@ fn view_kind(v: &View) -> u8 {
     }
 }
 
+/// The status panel's height and the step between its facts: the facts stand 40 px apart on a short screen (768 lines),
+/// so the note under it clears the footer, and a step more than the type's own growth in Large (their values are
+/// 37 px type, which grows past 40).
+fn tailscale_panel(c: &Canvas, page: &TailscalePage) -> (i32, i32) {
+    let snap = page.snap.clone().unwrap_or_default();
+    let connected_rows = snap.status.as_ref().filter(|_| snap.state() == State::Connected).map_or(0, |s| if s.peers_total > 0 { 3 } else { 2 });
+    let short = pocket_ui::kit::short_screen(c.h);
+    let step = (if short { 40 } else { 50 }) + pocket_ui::type_scale::grow(37);
+    ((if short { 96 } else { 104 }) + pocket_ui::type_scale::grow(44) + connected_rows * step, step)
+}
+
 impl App {
     /// Text for the Settings list: "On >" / "Off >", and "No network yet >" while it is on but Wi-Fi is not joined.
     /// From memory only: the status corner's last read of Wi-Fi, and what the page last saw of a cable.
@@ -266,9 +277,18 @@ impl App {
     }
 
     fn paint_tailscale_list(&mut self, c: &mut Canvas, page: &TailscalePage) {
-        let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(54, 34), 34u32);
+        let (pad, font) = (NU_PAD, 34u32);
         self.sheet_header(c, "Tailscale");
+        // The selected row's line and the hints first: what stands above them is fitted to where they start.
+        let hints = [("B", "Back"), ("A", if page.row() == Row::Switch { "Change" } else { "Open" })];
+        let foot_top = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, &hints, page.describe(page.row()), 2, pal().text);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
+        // Rows give way a little before the status panel runs into the footer (Large text at 1024x768 with the three
+        // facts of a connection): never below what a row of this type needs.
+        let n = ROWS.len() as i32;
+        let (full, floor) = (pocket_ui::type_scale::row(54, font), pocket_ui::type_scale::row(44, font));
+        let panel_h = tailscale_panel(c, page).0;
+        let row = ((foot_top + 8 - panel_h - 4 - top) / n).clamp(floor, full);
         for (i, r) in ROWS.iter().enumerate() {
             let y = top + i as i32 * row;
             self.hits.row(Area::new(pad, y, right - pad, row), i);
@@ -286,23 +306,58 @@ impl App {
         }
         self.hits.list(page.sel, ROWS.len(), 0.0, row as f32);
 
-        self.paint_tailscale_details(c, page, top + ROWS.len() as i32 * row + 14);
+        self.paint_tailscale_details(c, page, top + ROWS.len() as i32 * row + 14, foot_top);
+    }
 
-        self.nu_foot(c, &[("B", "Back"), ("A", if page.row() == Row::Switch { "Change" } else { "Open" })], page.describe(page.row()), pal().text);
+    /// The paragraphs of help that fit whole between the baseline `y` and `limit`, as (size, lines): all of them at the
+    /// largest of `sizes` that holds them, else the first ones; none at all when not even the first fits. Help gives way
+    /// before the rows do (docs/UI-SCHEME.md): a line cut in the middle is worse than a tip left out.
+    fn help_that_fits(&mut self, paragraphs: &[(&str, u32)], sizes: &[u32], width: i32, y: i32, limit: i32) -> Option<(u32, Vec<Vec<String>>)> {
+        for count in (1..=paragraphs.len()).rev() {
+            for &px in sizes {
+                let step = pocket_ui::type_scale::line(px, 8);
+                let wrapped: Vec<Vec<String>> = paragraphs[..count].iter().map(|(p, _)| self.text.wrap_prose(Face::Body, px, p, width)).collect();
+                let lines: i32 = wrapped.iter().map(|w| w.len() as i32).sum();
+                let last = y + (lines - 1) * step + (count as i32 - 1) * 10;
+                // The descenders of the last line and a little air stay clear of the footer.
+                if last + 12 <= limit {
+                    return Some((px, wrapped));
+                }
+            }
+        }
+        None
+    }
+
+    /// `help_that_fits`, drawn from the baseline `y` on; returns the baseline after it. With `required` and no room even
+    /// for the first paragraph, that one is drawn at the least size as far as it goes, ending with "…".
+    #[allow(clippy::too_many_arguments)]
+    fn paint_tailscale_help(&mut self, c: &mut Canvas, help: &[(&str, u32)], sizes: &[u32], (x, width): (i32, i32), mut y: i32, limit: i32, required: bool) -> i32 {
+        let Some((px, wrapped)) = self.help_that_fits(help, sizes, width, y, limit) else {
+            if let (true, Some((first, colour))) = (required, help.first()) {
+                let px = *sizes.last().unwrap_or(&22);
+                return self.text.paragraph(c, Face::Body, px, (x, y), width, pocket_ui::type_scale::line(px, 8), limit, *colour, first);
+            }
+            return y;
+        };
+        for (lines, (_, colour)) in wrapped.iter().zip(help) {
+            for line in lines {
+                self.text.draw(c, Face::Body, px, x, y, *colour, line);
+                y += pocket_ui::type_scale::line(px, 8);
+            }
+            y += 10;
+        }
+        y
     }
 
     /// Below the list: the status, and what to do or what the Pocket is called.
-    fn paint_tailscale_details(&mut self, c: &mut Canvas, page: &TailscalePage, y0: i32) {
+    fn paint_tailscale_details(&mut self, c: &mut Canvas, page: &TailscalePage, y0: i32, limit: i32) {
         let left = NU_PAD + NU_BTN_PAD;
         let right = c.w - NU_PAD - NU_BTN_PAD;
         let snap = page.snap.clone().unwrap_or_default();
         // The state in a panel, as Performance & fan's readout (`kit::panel`): with the address, the name and the
         // devices while connected.
-        let connected_rows = snap.status.as_ref().filter(|_| snap.state() == State::Connected).map_or(0, |s| if s.peers_total > 0 { 3 } else { 2 });
-        // The facts in the panel stand 40 px apart on a short screen (768 lines), so the note under it clears the footer.
-        let step = if pocket_ui::kit::short_screen(c.h) { 40 } else { 50 };
+        let (panel_h, step) = tailscale_panel(c, page);
         let short = pocket_ui::kit::short_screen(c.h);
-        let panel_h = if short { 96 } else { 104 } + pocket_ui::type_scale::grow(44) + connected_rows * step;
         pocket_ui::kit::panel(c, NU_PAD, y0 - 10, c.w - 2 * NU_PAD, panel_h);
         // What follows the panel starts this far under it.
         let below = y0 - 10 + panel_h + if short { 24 } else { 40 };
@@ -335,23 +390,12 @@ impl App {
             if s.peers_total > 0 {
                 line(self, c, "Devices", &format!("{} of {} online", s.peers_online, s.peers_total));
             }
-            y = below;
+            // A tip: left out when it doesn't fit whole above the footer.
             let note = "Tailscale only sets up the network. To log in with SSH, switch on Remote access too.";
-            for l in self.text.wrap_prose(Face::Body, 24, note, right - left) {
-                self.text.draw(c, Face::Body, 24, left, y, pal().dust, &l);
-                y += pocket_ui::type_scale::line(24, 8);
-            }
+            self.paint_tailscale_help(c, &[(note, pal().dust)], &[24, 22], (left, right - left), below, limit, false);
             return;
         }
         y = below;
-        // What a press could not do without a network: said calmly, in the page's own colour, not as an error.
-        if let Some(note) = page.note {
-            for line in self.text.wrap_prose(Face::Body, 26, note, right - left) {
-                self.text.draw(c, Face::Body, 26, left, y, pal().text, &line);
-                y += pocket_ui::type_scale::line(26, 8);
-            }
-            y += 10;
-        }
         // The service runs but does not answer: say what `tailscale` said, under the status.
         if let Some(e) = snap.error.as_ref().filter(|_| snap.state() == State::Starting) {
             let e = self.text.fit(Face::Body, 26, e, right - left);
@@ -368,13 +412,11 @@ impl App {
                 "Switch it on, then sign in with a QR code. It stays on after a restart.",
             ],
         };
-        for l in lines {
-            for line in self.text.wrap_prose(Face::Body, 26, l, right - left) {
-                self.text.draw(c, Face::Body, 26, left, y, pal().dust, &line);
-                y += pocket_ui::type_scale::line(26, 8);
-            }
-            y += 10;
-        }
+        // What a press could not do without a network (said calmly, in the page's own colour, not as an error) comes
+        // first, then what the page is about; the last paragraphs give way when the footer is near.
+        let mut help: Vec<(&str, u32)> = page.note.iter().map(|n| (*n, pal().text)).collect();
+        help.extend(lines.iter().map(|l| (*l, pal().dust)));
+        y = self.paint_tailscale_help(c, &help, &[26, 24, 22], (left, right - left), y, limit, true);
         // No network to reach the tailnet over: the small radio asleep under the words, aligned with them, when there
         // is room (`ui_art`; docs/DESIGN.md "Empty pages").
         if snap.state() == State::NoNetwork {

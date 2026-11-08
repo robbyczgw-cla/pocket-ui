@@ -730,10 +730,7 @@ impl Run<'_> {
                 });
                 continue;
             }
-            let (what, todo) = match &s.meant {
-                Some(m) => (format!("Folder without a system: {}.", s.name), format!("Its games go in roms/{m}. Rename the folder or move them.")),
-                None => (format!("Folder without a system: {}.", s.name), "Nothing reads this folder. Add games shows the name each system's folder has.".to_string()),
-            };
+            let (what, todo) = (format!("Folder without a system: {}.", s.name), "Nothing reads this folder. Add games shows the name each system's folder has.".to_string());
             self.add(Finding { group: Group::Place, name: s.name.clone(), system: String::new(), what, todo, place, fix: None });
         }
         Some(())
@@ -1457,7 +1454,7 @@ mod tests {
     #[test]
     fn wrong_folders_and_games_too_deep() {
         let c = Card::new("folders");
-        c.put("Sega Genesis/Sonic.md", b"x");
+        c.put("Retro Stuff/Sonic.md", b"x");
         c.put("GBA/Metroid.gba", b"x");
         c.put("Loose Game.sfc", b"x");
         c.put("snes/Collection/Set 1/Star Fox.sfc", b"x");
@@ -1467,11 +1464,11 @@ mod tests {
         let r = c.report();
         let place = only(&r, Group::Place);
         let by = |n: &str| place.iter().find(|f| f.place.as_deref().is_some_and(|p| p.contains(n))).unwrap_or_else(|| panic!("{n}: {place:?}"));
-        assert_eq!(by("Sega Genesis").todo, "Its games go in roms/megadrive. Rename the folder or move them.");
-        assert!(by("roms/GBA").todo.contains("roms/gba"), "ext4 tells GBA from gba");
+        assert_eq!(by("Retro Stuff").todo, "Nothing reads this folder. Add games shows the name each system's folder has.");
         assert_eq!(by("Loose Game").todo, "Move it to roms/snes.");
         assert!(by("Set 1").what.contains("too deep"));
-        assert_eq!(place.len(), 4, "the emulator's data folder says nothing: {place:?}");
+        // "GBA" is read as the Game Boy Advance (docs/OTHER-LAYOUTS.md), so it is no finding; the emulator's data folder says nothing.
+        assert_eq!(place.len(), 3, "{place:?}");
     }
 
     #[test]

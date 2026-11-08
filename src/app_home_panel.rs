@@ -178,26 +178,51 @@ impl App {
             &mut |s| text.borrow_mut().width(Face::Title, 24, s),
             &mut |s, max| text.borrow_mut().fit(Face::Title, 24, s, max),
         );
-        // The first word cut to "Ne…" (a tile too narrow for it): the console alone. A long name that goes on past the
+        // A title plus its console must both fit. The first word cut to "Ne…" (a tile too narrow for it): the console alone. A long name that goes on past the
         // second line ends in "…" at a word, as on the shelf.
         let first = tile.title.split_whitespace().next().unwrap_or("");
-        let whole = rows >= 2 && !shown.is_empty() && self.text.width(Face::Title, 24, first) <= w - 16;
+        let whole = rows > shown.len() as i32 && !shown.is_empty() && self.text.width(Face::Title, 24, first) <= w - 16;
         let (words, face_px) = if whole { (shown, 24) } else { (vec![console.clone()], 24) };
-        let show_console = whole && rows >= 3 && words.iter().all(|l| *l != console);
+        let show_console = whole && words.iter().all(|l| *l != console);
         let block = words.len() as i32 * step + if show_console { step } else { 0 };
         let mut cy = y + (h - block) * 2 / 5 + step - 6;
         if show_console {
-            let name = self.text.fit(Face::Body, 21, &console, w - 16);
-            let nw = self.text.width(Face::Body, 21, &name);
-            self.text.draw(c, Face::Body, 21, x + (w - nw) / 2, cy, pal().dust, &name);
+            let (face, px, name) = tile_console_line(&mut self.text, &tile.system, &console, Face::Body, [21, 16], w - 16);
+            let nw = self.text.width(face, px, &name);
+            self.text.draw(c, face, px, x + (w - nw) / 2, cy, pal().dust, &name);
             cy += step;
         }
         for line in &words {
-            let line = self.text.fit(Face::Title, face_px, line, w - 8);
-            let lw = self.text.width(Face::Title, face_px, &line);
-            self.text.draw(c, Face::Title, face_px, x + (w - lw) / 2, cy, pal().chalk, &line);
+            let (face, px, line) = if whole { (Face::Title, face_px, self.text.fit(Face::Title, face_px, line, w - 8)) }
+                else { tile_console_line(&mut self.text, &tile.system, line, Face::Title, [24, 18], w - 8) };
+            let lw = self.text.width(face, px, &line);
+            self.text.draw(c, face, px, x + (w - lw) / 2, cy, pal().chalk, &line);
             cy += step;
         }
         self.text.set_translate(true);
     }
+}
+
+/// Preserve the console's identity on a small title card: one smaller size, then a common short name.
+fn tile_console_line(text: &mut pocket_ui::text::Text, system: &str, name: &str, face: Face, sizes: [u32; 2], room: i32) -> (Face, u32, String) {
+    // The same narrow face as a case's last try: Retro's minimum pixel grid cannot shrink further.
+    for trial in [face, Face::Narrow] {
+        if text.width(trial, sizes[1], name) <= room {
+            let (px, line) = text.fit_sizes(trial, &sizes, name, room);
+            return (trial, px, line);
+        }
+    }
+    let short = match pocket_ui::consoles::canonical(system) {
+        "3do" => "3DO", "3ds" => "3DS", "atari2600" => "2600", "atari5200" => "5200", "atari7800" => "7800",
+        "atari800" => "800", "atarijaguar" => "Jaguar", "atarilynx" => "Lynx", "c64" => "C64",
+        "colecovision" => "CV", "dreamcast" => "DC", "fds" => "FDS", "gamecube" => "GC", "gamegear" => "GG",
+        "gb" => "GB", "gbc" => "GBC", "intellivision" => "INTV", "mastersystem" => "SMS", "megadrive" => "MD",
+        "neocd" => "Neo CD", "neogeo" => "Neo Geo", "ngpc" => "NGPC", "pcengine" => "PCE", "pokemini" => "POKEMINI",
+        "pc" => "DOS", "ps2" => "PS2", "ps3" => "PS3", "psvita" => "PS Vita", "saturn" => "Saturn", "segacd" => "Sega CD", "sg-1000" => "SG-1000",
+        "supergrafx" => "SGX", "virtualboy" => "VB", "wonderswan" => "WS", "zxspectrum" => "ZX",
+        _ => name,
+    };
+    let face = if text.width(face, sizes[1], short) <= room { face } else { Face::Narrow };
+    let (px, line) = text.fit_sizes(face, &sizes, short, room);
+    (face, px, line)
 }

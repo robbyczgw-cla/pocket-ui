@@ -88,7 +88,6 @@ impl App {
         true
     }
 
-    #[cfg(not(feature = "brick"))]
     pub(crate) fn paint_sleep_power(&mut self, c: &mut Canvas) {
         let page = self.sleep_page;
         let config = self.sleep.config;
@@ -97,86 +96,36 @@ impl App {
         self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         let heading_h = pocket_ui::type_scale::line(NU_SMALL, 30);
-        let mut y = top;
-        for (i, r) in rows().iter().enumerate() {
-            // The power button's rows under a heading of their own, a little apart from the times.
-            if r.starts_group() {
-                y += 14;
-                self.text.draw(c, Face::Body, NU_SMALL, pad + NU_BTN_PAD, y + heading_h - 14, pal().dust, BUTTON_HEADING);
-                y += heading_h;
-            }
-            self.hits.row(Area::new(pad, y, right - pad, row), i);
-            let base = y + row / 2 + pocket_ui::type_scale::mid(font);
-            let name = r.label();
-            let selected = i == page.sel;
-            if selected {
-                pocket_ui::kit::selection(c, pad, y, right - pad, row);
-                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, name);
-            } else {
-                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, name);
-            }
-            let value = config.value(*r);
-            let adjustable = !(pocket_ui::device::current().screen_off_only() && *r == Row::ShortPress);
-            let shown = if selected && adjustable { format!("‹ {value} ›") } else { value };
-            let vx = right - NU_BTN_PAD;
-            pocket_ui::kit::row_value(c, &mut self.text, font, vx, base, &shown, selected);
-            // The arrows of the selected row are buttons of their own for a finger.
-            if selected && adjustable {
-                let vw = self.text.width(Face::Body, font, &shown);
-                let aw = self.text.width(Face::Body, font, "‹ ") + 24;
-                self.hits.button(Area::new(vx - vw - 24, y, aw, row), Button::Left);
-                self.hits.button(Area::new(vx - aw + 24, y, aw, row), Button::Right);
-            }
-            y += row;
-        }
-        // Touch: the rows are not evenly spaced (the heading), so each has its own area above; the list only says
-        // which one is selected.
-        self.hits.list(page.sel, rows().len(), 0.0, row as f32);
-
-        // What the selected row does with its value now.
-        let (left, width) = (pad + NU_BTN_PAD, c.w - 2 * (pad + NU_BTN_PAD));
-        // Close under the rows: with the slideshow's row a German line needs its third line at Large text on 640x480.
-        let mut ly = y + 24 + pocket_ui::type_scale::px(NU_SMALL) as i32 / 2;
-        let step = pocket_ui::type_scale::line(NU_SMALL, 12);
-        let hints_top = c.h - pad - NU_PILL - 8;
-        if pocket_ui::device::current().screen_off_only() {
-            for line in self.text.wrap_prose(Face::Body, NU_SMALL, pocket_ui::sleep_settings::NO_SLEEP, width) {
-                self.text.draw(c, Face::Body, NU_SMALL, left, ly, pal().dust, &line);
-                ly += step;
-            }
-            ly += 12;
-        }
-        let room = ((hints_top - ly) / step + 1).max(1) as usize;
-        for line in self.text.wrap_prose_at_most(Face::Body, NU_SMALL, config.explain(page.row()), width, room) {
-            self.text.draw(c, Face::Body, NU_SMALL, left, ly, pal().text, &line);
-            ly += step;
-        }
-        // Short press on a handheld that only turns its screen off is fixed (no arrows above): no key offered for it (the
-        // navigation explorer found "A Next" doing nothing there, Brick 2026-11-07).
+        // The same footer and scrolling window as Controllers and Cozy extras: help gives way before rows do.
         let fixed = pocket_ui::device::current().screen_off_only() && page.row() == Row::ShortPress;
         let hints: &[(&str, &str)] = if fixed { &[("B", "Back")] } else { &[("B", "Back"), ("A", "Next"), ("< >", "Change")] };
-        self.nu_hints(c, hints);
-    }
-
-    #[cfg(feature = "brick")]
-    pub(crate) fn paint_sleep_power(&mut self, c: &mut Canvas) {
-        let page = self.sleep_page;
-        let config = self.sleep.config;
-        c.clear(pal().void);
-        let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
-        self.sheet_header(c, SETTINGS_NAME);
-        let (top, right) = (pad + NU_PILL + 12, c.w - pad);
-        let heading_h = pocket_ui::type_scale::line(NU_SMALL, 30);
+        let mut desc = config.explain(page.row()).to_string();
+        if pocket_ui::device::current().screen_off_only() {
+            #[cfg(feature = "brick")]
+            let note = pocket_ui::sleep_settings::no_sleep();
+            #[cfg(not(feature = "brick"))]
+            let note = pocket_ui::sleep_settings::NO_SLEEP;
+            desc = format!("{note}\n{desc}");
+        }
+        // The Brick's larger type needs room for both the screen-off note and the selected row's explanation.
+        // The existing scrolling window below reserves the whole footer before choosing the visible rows.
+        #[cfg(feature = "brick")]
+        let lines = if pocket_ui::device::brick() && pocket_ui::kit::short_screen(c.h) { 8 } else { 4 };
+        #[cfg(not(feature = "brick"))]
+        let lines = 4;
+        let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, hints, &desc, lines, pal().text);
+        // Reserve the group heading as well as complete rows, even when the scroll window begins inside that group.
+        let visible = (((foot - 12 - top - heading_h - 14) / row).max(1) as usize).min(rows().len());
+        let first = super::window_start(page.sel, visible, rows().len());
         let mut y = top;
-        for (i, r) in rows().iter().enumerate() {
+        for (i, r) in rows().iter().enumerate().skip(first).take(visible) {
             // The power button's rows under a heading of their own, a little apart from the times.
-            if r.starts_group() {
+            if r.starts_group() || (i == first && *r == Row::Hold) {
                 y += 14;
                 self.text.draw(c, Face::Body, NU_SMALL, pad + NU_BTN_PAD, y + heading_h - 14, pal().dust, BUTTON_HEADING);
                 y += heading_h;
             }
             self.hits.row(Area::new(pad, y, right - pad, row), i);
-            let base = y + row / 2 + pocket_ui::type_scale::mid(font);
             let selected = i == page.sel;
             let value = config.value(*r);
             let adjustable = !(pocket_ui::device::current().screen_off_only() && *r == Row::ShortPress);
@@ -184,13 +133,9 @@ impl App {
             let vx = right - NU_BTN_PAD;
             // The name leaves room for the value: at Large text "Presentación antes de apagar la pantalla" ran into "Desactivado" (Brick).
             let room = vx - self.text.width(Face::Body, font, &shown) - 12 - (pad + NU_BTN_PAD);
-            let name = self.text.fit(Face::Body, font, r.label(), room);
-            if selected {
-                pocket_ui::kit::selection(c, pad, y, right - pad, row);
-                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, &name);
-            } else {
-                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, &name);
-            }
+            let (name_px, name) = self.text.fit_sizes(Face::Body, &[font, 30], r.label(), room);
+            let base = pocket_ui::kit::row_label(c, &mut self.text,
+                (pad, y, right - pad, row), name_px, &name, selected);
             pocket_ui::kit::row_value(c, &mut self.text, font, vx, base, &shown, selected);
             // The arrows of the selected row are buttons of their own for a finger.
             if selected && adjustable {
@@ -201,38 +146,8 @@ impl App {
             }
             y += row;
         }
-        // Touch: the rows are not evenly spaced (the heading), so each has its own area above; the list only says
-        // which one is selected.
+        pocket_ui::kit::scrollbar(c, top, y - top, first, visible, rows().len());
+        // The heading makes row spacing uneven; explicit areas above keep taps on the row they name.
         self.hits.list(page.sel, rows().len(), 0.0, row as f32);
-
-        // What the selected row does with its value now.
-        let (left, width) = (pad + NU_BTN_PAD, c.w - 2 * (pad + NU_BTN_PAD));
-        // Close under the rows: with the slideshow's row a German line needs its third line at Large text on 640x480.
-        let mut ly = y + 24 + pocket_ui::type_scale::px(NU_SMALL) as i32 / 2;
-        let step = pocket_ui::type_scale::line(NU_SMALL, 12);
-        // The last baseline: its letters' feet stay above the hints (at Large text a line ran under them on the Brick's 768 lines).
-        let last = c.h - pad - NU_PILL - 8 - pocket_ui::type_scale::px(NU_SMALL) as i32 / 4;
-        let lines_from = |y: i32| if y > last { 0 } else { ((last - y) / step + 1) as usize };
-        if pocket_ui::device::current().screen_off_only() {
-            // The note goes when it would leave the selected row's explanation less than two lines (or all of it).
-            let note = self.text.wrap_prose(Face::Body, NU_SMALL, pocket_ui::sleep_settings::no_sleep(), width);
-            let explain = self.text.wrap_prose(Face::Body, NU_SMALL, config.explain(page.row()), width).len();
-            if lines_from(ly + note.len() as i32 * step + 12) >= explain.min(2) {
-                for line in note {
-                    self.text.draw(c, Face::Body, NU_SMALL, left, ly, pal().dust, &line);
-                    ly += step;
-                }
-                ly += 12;
-            }
-        }
-        let room = lines_from(ly);
-        for line in self.text.wrap_prose_at_most(Face::Body, NU_SMALL, config.explain(page.row()), width, room).into_iter().take(room) {
-            self.text.draw(c, Face::Body, NU_SMALL, left, ly, pal().text, &line);
-            ly += step;
-        }
-        // As in the other painter: Short press is fixed where the screen only turns off, so no key is offered for it.
-        let fixed = pocket_ui::device::current().screen_off_only() && page.row() == Row::ShortPress;
-        let hints: &[(&str, &str)] = if fixed { &[("B", "Back")] } else { &[("B", "Back"), ("A", "Next"), ("< >", "Change")] };
-        self.nu_hints(c, hints);
     }
 }

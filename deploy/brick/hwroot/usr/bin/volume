@@ -114,7 +114,7 @@ case "${1:-}" in
   restore)
     migrate || exit 1
     # Read the physical slider before any sound, rather than waiting for slider-watch's first poll.
-    if [ -n "${BRICK_HW:-}" ] && [ "$(cat "${BRICK_SLIDER_CFG:-/dev/null}" 2>/dev/null)" != nothing ]; then
+    if [ -n "${BRICK_HW:-}" ] && [ -z "${BRICK_NO_SLIDER:-}" ] && [ "$(cat "${BRICK_SLIDER_CFG:-/dev/null}" 2>/dev/null)" != nothing ]; then
       pin=$("$BRICK_HW" slider-get 2>/dev/null)
       if [ "$pin" = "${BRICK_SLIDER_MUTED:-1}" ]; then : >"$STATE/brick-muted"; fi
     fi
@@ -130,7 +130,7 @@ case "${1:-}" in
   bt) migrate && bt ;;
   ''|*[!0-9]*) echo 'usage: volume N | restore | mute | unmute | bt' >&2; exit 2 ;;
   *)
-    # MinUI/NextUI default: the physical mute holds; keys cannot secretly change the restore level.
+    # The usual handheld default: the physical mute holds; keys cannot secretly change the restore level.
     [ ! -e "$STATE/brick-muted" ] || exit 0
     pct=$(volume_percent "$1")
     old=$(volume_saved)

@@ -50,7 +50,7 @@ fn copy_dir(from: &Path, to: &Path) {
 fn shot(tmp: &Path, stub: &Option<Stub>, look: &str, size: &str, state: &str) -> (i32, i32, Vec<u8>) {
     let lib = tmp.join(format!("lib-{look}"));
     if !lib.exists() {
-        let ok = Command::new("python3")
+        let ok = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), lib.to_str().unwrap(), look])
             .stdout(std::process::Stdio::null())
             .status()
@@ -73,7 +73,7 @@ fn shot(tmp: &Path, stub: &Option<Stub>, look: &str, size: &str, state: &str) ->
     }
     let out = cmd
         .args(["--snapshot", state, png.to_str().unwrap()])
-        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .env("POCKETUI_LANG", "en")
         .env("POCKETUI_TEXT_SIZE", "normal")
         .env("POCKETUI_SNAPSHOT_SIZE", size)

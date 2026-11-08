@@ -285,7 +285,10 @@ timeout): **Screen off after** (Never, 30 s, 1, 2, 5 min), **Sleep after** (Neve
 after sleeping** (Off, 1, 3, 8 h; moved from Settings → Playing → Battery, which keeps the graph and the estimates),
 and under the heading Power button **Short press** (Sleep, Screen off) and **Hold** (Power menu, Sleep). Kept in
 `sleep.json` with the keys `screen_off_secs`, `sleep_after_min` (0 = never), `off_after`, `short_press`, `hold`;
-`Sleep::set_config` applies a change at once.
+`Sleep::set_config` applies a change at once. The painter uses the same footer and scrolling row window as Controllers
+and Cozy extras: the selected row is always fully visible above the help and hints, including Retro/Large on 1024x768.
+Names reserve the value's measured width and can use the next smaller body size; the power-button group heading stays
+with its visible rows. `tests/nav_explorer.rs` walks every row in Spanish at that corner and checks the painted text.
 
 - **Defaults.** Screen off after 2 min: NextUI turns its screen off after 60 s and a phone after 30 s to a minute, but
   in pocket-ui the game pauses when the screen goes off, and a long cutscene, a text or a replay can go a minute

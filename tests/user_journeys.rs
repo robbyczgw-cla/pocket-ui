@@ -272,6 +272,7 @@ mod fifo {
     struct Driver {
         card: Card,
         child: std::process::Child,
+        nav: Option<PathBuf>,
     }
     /// Writes an executable in a child, as testutil::write_executable does: another test's fork must not inherit a
     /// descriptor that can write it (ETXTBSY).
@@ -340,8 +341,9 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
                 use std::os::unix::process::CommandExt;
                 cmd.pre_exec(|| if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) });
             }
+            let nav = cmd.get_envs().find(|(key, _)| *key == "POCKETUI_NAV_PROBE").and_then(|(_, value)| value.map(PathBuf::from));
             let child = cmd.spawn().unwrap();
-            let mut driver = Self { card, child };
+            let mut driver = Self { card, child, nav };
             driver.wait(|d| d.card.tmp.join("ui.in").exists());
             driver
         }
@@ -380,10 +382,24 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         fn frame(&mut self) -> String {
             let png = self.card.tmp.join("frame.png");
             let _ = std::fs::remove_file(&png);
+            if let Some(nav) = &self.nav { let _ = std::fs::remove_file(nav); }
             self.send("frame");
             // The file exists while it is still being written: wait for the PNG's last chunk (IEND + its CRC).
             self.wait(|_| std::fs::read(&png).is_ok_and(|b| b.ends_with(&[b'I', b'E', b'N', b'D', 0xae, 0x42, 0x60, 0x82])));
+            // nav_probe_done follows write_png: don't let that previous capture satisfy a later nav request.
+            if let Some(nav) = self.nav.clone() {
+                self.wait(|_| std::fs::read_to_string(&nav).is_ok_and(|s| s.ends_with("@end\n")));
+            }
             std::fs::read_to_string(self.card.tmp.join("frame.txt")).unwrap()
+        }
+        /// The first frame whose words satisfy `ok`.
+        fn wait_frame(&mut self, ok: impl Fn(&str) -> bool) -> String {
+            let mut text = String::new();
+            self.wait(|d| {
+                text = d.frame();
+                ok(&text)
+            });
+            text
         }
         fn sees(&mut self, expected: &str) -> String {
             let mut text = String::new();
@@ -501,6 +517,65 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
     fn timing_a_version_that_was_said_before_is_not_said_again() {
         let mut d = Driver::start("update-hint-said", true, |tmp, cmd| {
             std::fs::write(tmp.join("data").join("update-hint.json"), r#"{"said":"99.0.0"}"#).unwrap();
+            cmd.env("POCKETUI_UPDATE_HINT", "99.0.0");
+        });
+        std::thread::sleep(Duration::from_millis(1500));
+        let shelf = d.frame();
+        assert!(!shelf.contains("is ready"), "{shelf}");
+    }
+
+    /// 0.3.1: the notice's A lands on the page with the new version and its notes; "Install" asks first ("Install now" /
+    /// "Later"), B and Later go back to the page, and nothing is installed by a single press.
+    #[test]
+    fn the_updates_page_asks_before_it_installs() {
+        let mut d = update_ready("update-ask");
+        d.sees("pocket-ui 99.0.0 is ready");
+        d.send("a");
+        let page = d.sees("Install pocket-ui 99.0.0");
+        assert!(page.contains("Mock notes") && page.contains("Check for updates automatically"), "the version's notes and the switch are on the page: {page}");
+        d.send("a");
+        let ask = d.sees("Install now");
+        assert!(ask.contains("Later") && !ask.contains("Check again"), "the question, nothing else to choose: {ask}");
+        // B only says "Later": the page again, nothing started.
+        d.send("b");
+        let back = d.sees("Check again");
+        assert!(back.contains("Install pocket-ui 99.0.0") && !back.contains("Installing"), "{back}");
+        // And so does choosing Later.
+        d.send("a");
+        d.sees("Install now");
+        d.send("down");
+        d.send("a");
+        let later = d.sees("Check again");
+        assert!(!later.contains("Installing") && later.contains("Install pocket-ui 99.0.0"), "{later}");
+    }
+
+    /// 0.3.1: Updates has a switch, On by default, that turns the look off and is still off after a restart.
+    #[test]
+    fn the_automatic_check_is_a_switch_on_the_updates_page_and_stays_off() {
+        let mut d = update_ready("update-switch");
+        d.sees("pocket-ui 99.0.0 is ready");
+        d.send("a");
+        let page = d.sees("Check for updates automatically");
+        assert!(page.lines().any(|l| l == "On"), "On by default: {page}");
+        // Install, Check again, the switch.
+        d.send("down\ndown");
+        d.send("a");
+        let off = d.wait_frame(|t| t.lines().any(|l| l == "Off"));
+        assert!(off.contains("Check for updates automatically"), "{off}");
+        let file = d.card.tmp.join("data").join("update-hint.json");
+        d.wait(|_| std::fs::read_to_string(&file).is_ok_and(|t| t.split_whitespace().collect::<String>().contains("\"off\":true")));
+        // Right turns it back on, the file forgets the Off.
+        d.send("right");
+        d.wait_frame(|t| t.lines().any(|l| l == "On"));
+        d.wait(|_| std::fs::read_to_string(&file).is_ok_and(|t| !t.contains("\"off\"")));
+    }
+
+    /// 0.3.1: switched Off, a newer version is not said at all (no request, no card).
+    #[test]
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_off_says_nothing_about_a_newer_version() {
+        let mut d = Driver::start("update-hint-off", true, |tmp, cmd| {
+            std::fs::write(tmp.join("data").join("update-hint.json"), r#"{"off":true}"#).unwrap();
             cmd.env("POCKETUI_UPDATE_HINT", "99.0.0");
         });
         std::thread::sleep(Duration::from_millis(1500));
@@ -791,6 +866,84 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         d.send("a");
         let shelf = d.sees("Tobu Tobu Girl");
         assert!(!shelf.contains("Please ask a grown-up"), "{shelf}");
+    }
+
+    /// A real launch handoff pipe distinguishes a failed start from a game which showed a frame
+    /// and then crashed. A time-only guess used to reroute Continue to another emulator.
+    #[test]
+    fn a_crash_after_a_picture_keeps_continue_and_a_failed_start_retries_only_once() {
+        for (evidence, saved_moment, retry) in [("starting\n", false, true), ("starting\nframe\n", false, false), ("starting\n", true, false), ("", false, false), ("starting\npresenting\n", false, false)] {
+            let mut d = Driver::start("crash-route", true, |tmp, cmd| {
+                let cfg = tmp.join("es_systems.cfg");
+                let text = std::fs::read_to_string(&cfg).unwrap().replace("</command>",
+                    "</command><emulators><emulator name=\"retroarch\"><cores><core default=\"true\">gambatte</core></cores></emulator></emulators>");
+                std::fs::write(cfg, text).unwrap();
+                std::fs::write(tmp.join("host"), "").unwrap();
+                std::fs::write(tmp.join("data/controls-card-seen"), "gb\n").unwrap();
+                let states = tmp.join("states/gb");
+                std::fs::create_dir_all(&states).unwrap();
+                if saved_moment {
+                    std::fs::write(states.join("Tobu Tobu Girl (World).pstate.auto"), b"my progress").unwrap();
+                }
+                cmd.env("POCKETUI_HOST_BIN", tmp.join("host")).env("POCKETUI_STATES", tmp.join("states"))
+                    .env("POCKETUI_NAV_PROBE", tmp.join("nav.tsv"));
+                // Each attempt reports first-frame evidence over the same inherited descriptor as pocket-core.
+                // Python's explicit os.write avoids shell-specific numeric-fd redirection limits.
+                executable(&tmp.join("run-game"), &format!(r#"#!/usr/bin/env python3
+import os, pathlib
+p = pathlib.Path(__file__ + '.starts')
+n = len(p.read_text()) if p.exists() else 0
+p.write_text('x' * (n + 1))
+fd = os.environ.get('POCKET_HANDOFF_FD')
+if fd:
+    os.write(int(fd), {evidence:?}.encode())
+    os.close(int(fd))
+raise SystemExit(1)
+"#));
+            });
+            d.sees("Game Boy");
+            d.send("a");
+            d.sees("Tobu Tobu Girl");
+            d.send("a");
+            d.wait(|d| d.log().contains("game exited after"));
+            if retry {
+                d.wait(|d| d.log().matches("game exited after").count() == 2);
+                assert!(d.log().contains(": retroarch for this launch"), "{}", d.log());
+                let notice = d.sees("didn't start");
+                assert!(notice.contains("Tobu Tobu Girl"), "{notice}");
+                assert_eq!(launches(&d), 2, "one fallback, no loop: {}", d.log());
+                assert!(d.log().contains("(emulator retroarch"), "{}", d.log());
+            } else {
+                // The visible shelf/notice is requested after the exit is handled, not merely reaped.
+                d.frame();
+                assert_eq!(launches(&d), 1, "never change the route of a played game or an existing moment: {}", d.log());
+                assert!(!d.log().contains("(emulator retroarch"), "{}", d.log());
+            }
+            if saved_moment {
+                assert_eq!(std::fs::read(d.card.tmp.join("states/gb/Tobu Tobu Girl (World).pstate.auto")).unwrap(), b"my progress");
+            }
+            d.send("b");
+            // A played game returns to Home; a failed start can stay in its game list.
+            // A title mentioned in Home's recents is not proof that the game list is open.
+            let nav = d.card.tmp.join("nav.tsv");
+            let _ = std::fs::remove_file(&nav);
+            d.send("nav");
+            d.wait(|_| std::fs::read_to_string(&nav).is_ok_and(|s| s.ends_with("@end\n")));
+            let before = std::fs::read_to_string(&nav).unwrap();
+            if before.contains("@where\tshelf:Home") {
+                let _ = std::fs::remove_file(&nav);
+                d.send("a\nnav");
+                d.wait(|_| std::fs::read_to_string(&nav).is_ok_and(|s| s.ends_with("@end\n")));
+            }
+            let shelf = d.sees("Tobu Tobu Girl");
+            assert!(!shelf.contains("didn't start"), "B gets back to the game list: {shelf}");
+            // A second explicit start always tries pocket-core again, including after the one-launch fallback.
+            d.send("a");
+            d.wait(|d| launches(d) >= if retry { 3 } else { 2 });
+            let log = d.log();
+            let requested = log.lines().filter(|l| l.starts_with("launch ") && l.contains("(emulator")).nth(if retry { 2 } else { 1 }).unwrap();
+            assert!(requested.contains("(emulator pocket-core"), "{requested}");
+        }
     }
 
     /// New-player walk 2026-11-02: HOME did nothing in Settings. It now leaves for Home from the plain pages, and keeps
@@ -1203,6 +1356,39 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         ui.send("a");
         let text = ui.sees("Tobu Tobu Girl");
         assert!(!text.contains("Ghost") && !text.contains("README"), "{text}");
+    }
+
+    /// H700 0.2.0 shipped slow GBA with mGBA. Fresh games must launch the lighter bundled gpSP;
+    /// an existing mGBA Continue must keep its owner. Real fps/audio remain a device release check.
+    #[test]
+    fn h700_fresh_gba_uses_gpsp_and_an_old_continue_keeps_mgba() {
+        for (suffix, expected) in [(None, "gpsp"), (Some(".pstate.auto"), "mgba")] {
+            let mut ui = Driver::start("h700-default-core", true, |tmp, cmd| {
+                let folder = tmp.join("gba");
+                std::fs::create_dir(&folder).unwrap();
+                std::fs::write(folder.join("Clock Demo.gba"), vec![0u8; 32768]).unwrap();
+                std::fs::write(tmp.join("es_systems.cfg"), format!("<systemList><system><name>gba</name><fullname>Game Boy Advance</fullname><path>{}</path><extension>.gba</extension><command>true</command><emulators><emulator name=\"retroarch\"><cores><core default=\"true\">mgba</core></cores></emulator></emulators></system></systemList>", folder.display())).unwrap();
+                std::fs::write(tmp.join("host"), "").unwrap();
+                std::fs::write(tmp.join("gpsp_libretro.so"), "bundled core").unwrap();
+                std::fs::write(tmp.join("data/controls-card-seen"), "gba\n").unwrap();
+                let states = tmp.join("states/gba");
+                std::fs::create_dir_all(&states).unwrap();
+                if let Some(suffix) = suffix {
+                    std::fs::write(states.join(format!("Clock Demo{suffix}")), b"old mGBA moment retained").unwrap();
+                }
+                cmd.env("POCKETUI_DEVICE", "rg35xx-plus").env("POCKETUI_HOST_BIN", tmp.join("host"))
+                    .env("POCKETUI_GBA_CORE", tmp.join("gpsp_libretro.so")).env("POCKETUI_STATES", tmp.join("states"));
+            });
+            ui.sees("Game Boy Advance");
+            ui.send("a");
+            ui.sees("Clock Demo");
+            ui.send("a");
+            ui.wait(|d| d.card.tmp.join("run-game.started").exists());
+            assert!(ui.log().contains(&format!("(emulator pocket-core, core {expected})")), "{}", ui.log());
+            if let Some(suffix) = suffix {
+                assert_eq!(std::fs::read(ui.card.tmp.join(format!("states/gba/Clock Demo{suffix}"))).unwrap(), b"old mGBA moment retained");
+            }
+        }
     }
 
     /// Seen on a device: Y on Easy's shelf moved the selection to the favourite's copy in front.
@@ -2134,6 +2320,63 @@ true
         ui.sees("Starter pack");
     }
 
+    #[test]
+    fn a_folder_no_system_knows_can_be_corrected_without_losing_or_restarting_the_game_list() {
+        let mut ui = Driver::start("typo-folder", true, |tmp, _| {
+            let typo = tmp.join("Retro Stuff");
+            std::fs::create_dir(&typo).unwrap();
+            std::fs::write(typo.join("Folder Demo.gb"), vec![0u8; 32768]).unwrap();
+        });
+        ui.sees("Game Boy");
+        ui.send("start");
+        ui.sees("Sound & feel");
+        ui.send("down\ndown\ndown\na");
+        ui.sees("Add games");
+        ui.send("down\na");
+        ui.sees("Wrong folder or file type");
+        // This card has missing Sega CD BIOS first, then the stray-folder group.
+        ui.send("down\na");
+        ui.sees("Retro Stuff");
+        ui.send("a");
+        let remedy = ui.sees("Nothing reads this folder");
+        assert!(remedy.contains("Retro Stuff"), "the folder is named: {remedy}");
+        // A player corrects it on their computer, then asks Game check to look again (X).
+        std::fs::rename(ui.card.tmp.join("Retro Stuff/Folder Demo.gb"), ui.card.tmp.join("gb/Folder Demo.gb")).unwrap();
+        let applied_before = ui.log().matches("library: the list read again is on the shelf").count();
+        ui.send("b\nb\nx");
+        ui.wait(|d| d.log().matches("game check:").count() >= 2);
+        let checked = ui.sees("games ready");
+        assert!(!checked.contains("Wrong folder or file type"), "the corrected folder is no longer a problem: {checked}");
+        // Game check and the library rescan are separate workers. If A opens
+        // the old one-game list first, the later swap correctly preserves Tobu
+        // instead of selecting the newly inserted Folder Demo above it.
+        ui.wait(|d| d.log().matches("library: the list read again is on the shelf").count() > applied_before);
+        ui.send("b\nhome");
+        ui.sees("Game Boy");
+        ui.send("a");
+        ui.sees("Folder Demo");
+        ui.send("down");
+        ui.sees("Tobu Tobu Girl"); // The previous game is still reachable beside the new one.
+        assert_eq!(std::fs::metadata(ui.card.tmp.join("gb/Folder Demo.gb")).unwrap().len(), 32768);
+    }
+
+    /// A folder another card calls the system ("Game Boy" for gb) is read as it, without a rename and without a word to the player.
+    #[test]
+    fn a_folder_with_another_cards_name_is_read_as_the_system() {
+        let mut ui = Driver::start("other-name-folder", true, |tmp, _| {
+            let other = tmp.join("Game Boy (GB)");
+            std::fs::create_dir(&other).unwrap();
+            std::fs::write(other.join("Folder Demo.gb"), vec![0u8; 32768]).unwrap();
+        });
+        ui.sees("Game Boy");
+        ui.send("a");
+        ui.sees("Folder Demo");
+        ui.send("down");
+        ui.sees("Tobu Tobu Girl"); // beside the game of the system's own folder
+        assert_eq!(std::fs::metadata(ui.card.tmp.join("Game Boy (GB)/Folder Demo.gb")).unwrap().len(), 32768, "the card is as it was");
+        assert!(ui.card.tmp.join("Game Boy (GB)").is_dir() && !ui.card.tmp.join("gb/Folder Demo.gb").exists());
+    }
+
     /// A fresh ROCKNIX card holds an empty roms/pico-8/Splore.png and nothing else; it is not a game without PICO-8,
     /// so the page is "No games yet", not a shelf with a game that does not start.
     #[test]
@@ -2331,7 +2574,9 @@ true
         ui.send("a");
         ui.sees("Hide from the shelf");
         ui.send("down\na");
-        let sheet = ui.sees("Delete Tobu Tobu Girl?");
+        ui.sees("Delete Tobu Tobu Girl?");
+        // The heading appears before the asynchronous file scan enables Delete: wait for its visible result.
+        let sheet = ui.sees("Frees 1 KB: 1 files.");
         assert!(rom.exists(), "the sheet only asks: {sheet}");
         ui.send("a");
         let again = ui.sees("Press A again to delete");
@@ -2346,6 +2591,9 @@ true
     fn named_cartridge_fixture(tmp: &Path, cmd: &mut Command) {
         let games = tmp.join("identified-games");
         std::fs::create_dir_all(&games).unwrap();
+        // The card's own `gb` folder would be read as a second folder of the system (docs/OTHER-LAYOUTS.md); these journeys
+        // are about exactly these two games.
+        std::fs::remove_dir_all(tmp.join("gb")).unwrap();
         let known = games.join("Supar Mario Land 2.gb");
         std::fs::write(&known, b"recognized A").unwrap();
         std::fs::write(games.join("Unknown Homebrew.gb"), b"unknown B").unwrap();
@@ -2416,6 +2664,7 @@ true
     fn manual_cartridge_lookup_changes_and_removes_the_actual_shelf_title() {
         let mut ui = Driver::start("identify-lookup", true, |tmp, cmd| {
             named_cartridge_fixture(tmp, cmd);
+            cmd.env("POCKETUI_NAV_PROBE", tmp.join("nav.txt"));
             executable(&tmp.join("identify-bin/ip"), "#!/bin/sh\nprintf '2: wlan0 inet 203.0.113.42/24 scope global wlan0\\n'\n");
         });
         ui.sees("Game Boy");
@@ -2440,6 +2689,7 @@ true
         let table = ui.card.tmp.join("data/identify/Nintendo - Game Boy.tsv");
         std::fs::write(&table, format!("{crc:08X}\tTetris (World)\n")).unwrap();
         let lookup = |ui: &mut Driver, prior_results: usize, expected: Option<&str>| {
+            let applied_before = ui.log().matches("library: the list read again is on the shelf").count();
             ui.send("x");
             // The card's hint bar shows four hints: Y Status stays, SELECT Details is left out (`kit::top_hints`).
             ui.sees("Status");
@@ -2451,7 +2701,16 @@ true
             let path = ui.card.tmp.join("identified-games/Supar Mario Land 2.gb");
             let names = pocket_ui::rom_id::known(&ui.card.tmp.join("data"), &[("gb".into(), path.clone())]);
             assert_eq!(names.get(&path).map(String::as_str), expected, "the real lookup cache must contain the expected new mapping");
+            // The worker logs its result before the UI handles LookedUp. That
+            // event recreates the card: B before it races a later fresh card.
+            ui.wait(|d| {
+                d.frame();
+                !std::fs::read_to_string(d.card.tmp.join("nav.txt")).unwrap().contains("@busy\tlookup\n")
+            });
             ui.send("b");
+            // A card holds a library swap off. Wait for that pending list to
+            // reach the shelf before opening the next status picker.
+            ui.wait(|d| d.log().matches("library: the list read again is on the shelf").count() > applied_before);
         };
         lookup(&mut ui, 0, Some("Tetris (World)"));
         let renamed = ui.sees("Tetris");
@@ -2470,6 +2729,9 @@ true
         let mut ui = Driver::start("connections-before-catalog", true, |tmp, _| {
             let games = tmp.join("connection-games");
             std::fs::create_dir_all(&games).unwrap();
+            // The card's own `gb` folder would be read as a second folder of the system (docs/OTHER-LAYOUTS.md); this journey
+            // is about exactly these two games.
+            std::fs::remove_dir_all(tmp.join("gb")).unwrap();
             for n in [2, 3] {
                 std::fs::write(games.join(format!("Pocket Review Racer {n}.gb")), "x").unwrap();
             }

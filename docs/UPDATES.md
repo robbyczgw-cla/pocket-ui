@@ -58,11 +58,11 @@ after the start, with Wi-Fi up (`status_corner::status().wifi`; no Wi-Fi = no ti
 loop), a thread fetches the same signed list (`update::fetch_manifest`, `UpdateEvent::Looked`) and keeps it for the
 Updates page. `update_hint::due` says a version when `app` is newer than the running one and not `said` yet; the
 notice (`Notice::update_ready`, A to the page, B closes) waits for `shelf_notice_free()` and writes `said` when it is
-shown. Next look `EVERY` (12 h) after a look that found nothing or said its hint, `RETRY` (1 h) after a failed one.
+shown. Next look `EVERY` (24 h) after a look that found nothing or said its hint; after a failed one `retry_after` (1 h, 2, 4, 8, at most 16 h). `update_hint::step(Facts)` is the one decision (Stop / Pause / Retry / Say / Look); a look also needs the buttons left alone for `IDLE_FOR` (10 s).
 Never during a game, never in Kids Mode, never on a host-owned device (Steam Deck) or with `POCKETUI_MOCK`, and only
 in a release build (`update::release_build`: the release scripts set `POCKETUI_VERSION`; a main or branch build carries
 Cargo.toml's older version and would announce the release over itself, `update_hint::looks`);
-`{"off": true}` in the file stops the look. Only `app`: the system image and the Store are not announced from here.
+The switch Settings → System → Updates → "Check for updates automatically" (On by default) is `{"off": true}` in the file: Off makes no request, says nothing and forgets what was found; the page's first-open check is skipped too ("Check again" still works by hand). A known newer version puts an amber dot (`App::update_dot`) on System and on its Updates row. On the page "Install pocket-ui X" asks first ("Install now" / "Later", B = Later; `Updates::confirm`); under 20 % and off the charger the line under it says to plug in (`update_hint::battery_warning`). Nothing installs without that second press. Only `app`: the system image and the Store are not announced from here.
 
 ## App: live, with automatic way back
 
@@ -90,6 +90,21 @@ the kernel writes them back, up to half a minute later; without the sync a cut i
 empty programs. Cut off at any step (`update::crash_tests`: SIGKILL at each step, then the real launcher on what is
 left), the next start runs the old version or the new one with `update-pending` and `previous` in place, and the next
 try of the install finishes.
+
+An existing release folder is never removed to make room for a build with the same version: the new build uses
+`<version>-install-N`, and the links still keep the old build available. Converting an older flat install copies and
+syncs its programs before replacing the flat paths with atomic links, so interruption cannot remove its boot path.
+The crash tests also cover these two cases, including a rebuilt version that fails on startup.
+
+The ROCKNIX package installer follows the same ordering: sync the staged programs before publishing their folder,
+sync the new launcher before replacing it, keep `previous` durable before switching `current`, and replace links by
+rename. The first boot entry is published only after its bytes and the boot chain are synced; a final sync precedes
+restart. A changed package with the same version gets a separate folder, and rerunning that package reuses it.
+`deploy/package/test-power-cut.py` observes every filesystem-command boundary of the real installer under dash,
+bash and BusyBox ash, for first install, upgrade and same-version replacement. It checks the existing programs and
+boot chain with all writes retained and with unsynced file data lost while the latest directory entries survive.
+Together with the process-kill/real-launcher tests this checks interruption and write ordering; it is not a physical
+SD-card power-loss test or protection against a card that ignores sync.
 
 `deploy/run-pocket-ui.sh` restarts on 75. If pocket-ui then exits with an error while
 `update-pending` is still there, it points `current` back at `previous` and writes `rolled-back`.

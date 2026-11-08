@@ -15,7 +15,7 @@ impl Drop for Stub {
 }
 
 fn fixture(tmp: &Path) -> (Option<Stub>, Option<PathBuf>) {
-    assert!(Command::new("python3")
+    assert!(Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null()).status().unwrap().success());
     std::fs::write(tmp.join("data/sounds.json"), r#"{"on":false,"volume":0}"#).unwrap();
@@ -39,7 +39,7 @@ fn shot(tmp: &Path, display: Option<&Path>, state: &str, lang: &str) -> String {
     let _ = std::fs::remove_file(&boxes);
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
     cmd.args(["--snapshot", state, png.to_str().unwrap()])
-        .env("POCKETUI_MOCK", "1").env("POCKETUI_LANG", lang).env("POCKETUI_SNAPSHOT_IMAGE_CARD", "1")
+        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).env("POCKETUI_LANG", lang).env("POCKETUI_SNAPSHOT_IMAGE_CARD", "1")
         .env("POCKETUI_SNAPSHOT_WIFI", "0").env("POCKETUI_SNAPSHOT_SIZE", "640x480").env("POCKETUI_MOTION_SCALE", "1")
         .env("POCKETUI_SOUND_QUANTUM", "0")
         .env("POCKETUI_DATA", tmp.join("data")).env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))

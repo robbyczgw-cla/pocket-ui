@@ -11,6 +11,9 @@ curator.json with two smart shelves). ROMS (default OUT/roms) is where the playe
     POCKETUI_MOCK=1 POCKETUI_ES_SYSTEMS=OUT/es_systems.cfg POCKETUI_DATA=OUT/data \\
       target/release/pocket-ui --snapshot curator:echoes:ps2:revenge out.png
 
+Set POCKETUI_MOCK_NOW to Unix seconds in tests, and pass the same value with POCKETUI_MOCK=1 to the UI.
+This pins the daily pick, recent sessions and year-ago dates together; by default the fixture uses the real clock.
+
 Includes games owned on several systems (Chrono Trigger on SNES, PS1 and DS; Final Fantasy VI on SNES as a fan
 translation and on GBA; Burnout Dominator on PS2 and PSP; Link's Awakening on GB and GBC), a remake (Ocarina of
 Time on N64 and 3DS) and a PortMaster port without data (Celeste Classic).
@@ -150,6 +153,7 @@ GAMELIST = """<?xml version="1.0"?>
 def main():
     if len(sys.argv) < 2:
         sys.exit(__doc__)
+    now = int(os.environ.get("POCKETUI_MOCK_NOW", time.time()))
     out = os.path.abspath(sys.argv[1])
     appearance = sys.argv[2] if len(sys.argv) > 2 else "dark"
     files_at = os.path.join(out, "roms")
@@ -192,7 +196,7 @@ def main():
             # Curator's Rediscover (src/connections.rs): EmulationStation's "last played", as ES writes it (UTC, noon).
             # Metroid Fusion a year ago today (this very time, so the date is the same in the device's zone), Golden Sun two
             # years ago, Advance Wars 400 days ago.
-            today = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+            today = datetime.datetime.fromtimestamp(now, datetime.timezone.utc)
             def es_date(d):
                 return d.strftime("%Y%m%dT%H%M%S")
             def year_ago(d, years):
@@ -213,7 +217,6 @@ def main():
     def path(system, f):
         return f"{roms}/{system}/{f}"
 
-    now = int(time.time())
     hour = 3600
     games = {
         path("ps2", "Burnout 3 - Takedown (USA).iso"): {"status": "completed", "status_set": True, "sessions": 22, "secs": 14 * hour, "stickers": [1], "rating": 5},

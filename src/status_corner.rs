@@ -303,7 +303,8 @@ static FROZEN_NOW: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
 /// painting takes. Without it a snapshot that crosses a minute (any one, a loaded machine makes it likely) paints
 /// "13:52" and then "13:53" in the same place, and the text check finds one clock painted over another.
 pub fn freeze_clock() {
-    let _ = FROZEN_NOW.set(SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64));
+    // Static probes use the same injected clock as their history and library.
+    let _ = FROZEN_NOW.set(crate::play_time::now_secs() as i64);
 }
 
 /// Seconds since 1970: the real time, or the frozen moment of a snapshot (`freeze_clock`).
@@ -438,6 +439,12 @@ pub fn wifi_now() -> bool {
 /// Snapshots (`POCKETUI_SNAPSHOT_WIFI`): the corner as if Wi-Fi were connected or not, whatever this computer has.
 pub fn force_wifi(connected: bool) {
     FORCED_WIFI.store(if connected { 2 } else { 1 }, Ordering::Relaxed);
+}
+
+/// Snapshots: the battery as made up, without the thread (the Updates page's "plug in first").
+pub fn force_battery(battery: Battery) {
+    let mut kept = STATUS.lock().unwrap_or_else(|e| e.into_inner());
+    kept.get_or_insert_with(Status::default).battery = Some(battery);
 }
 
 #[cfg(test)]

@@ -136,9 +136,9 @@ after sleep. If it still does not connect, select it in Settings → Connections
 
 **My games don't show up.**
 Check that each file is in the right system folder under `roms` (directly, or in one subfolder; nothing deeper is
-read) and has a file type that system accepts. A folder that isn't one of the systems' names (a "Sega Genesis" next to
-`megadrive`, or "GBA" instead of `gba`) is not read either: Settings → Games → Add games names such a folder under its
-title, with the folder its games go in when it can tell. A disc game whose `.cue` (or `.gdi`) names a file that isn't
+read) and has a file type that system accepts. A folder with the name another system gives (a "Sega Genesis" next to
+`megadrive`, "GBA" instead of `gba`, "Game Boy Advance (GBA)") is read as that system. A folder whose name no system
+has is not read: Settings → Games → Add games names such a folder under its title. A disc game whose `.cue` (or `.gdi`) names a file that isn't
 there is left off the shelf, because it could not start; Add games names it and the missing file. The list is read
 when pocket-ui starts and when you leave a step opened from Settings. A system appears on Home only once its folder
 holds at least one game.

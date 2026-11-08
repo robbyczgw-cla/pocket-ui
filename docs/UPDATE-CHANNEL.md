@@ -37,7 +37,9 @@ test channel on GitHub only, and so does a `--base-url` of its own unless `--dir
 up to 0.2.x knows no mirrors and downloads only `url`: an app that only GitHub's download host serves would
 reach none of the players whose network blocks it. It refuses an app over 80,000,000 bytes to leave margin
 below the Hobby upload limit, and a version that is not plain `X.Y.Z` (every pocket-ui compares versions by
-their numbers only: `0.3.0-rc1` would count as newer than `0.3.0`). It publishes nothing.
+their numbers only: `0.3.0-rc1` would count as newer than `0.3.0`). Only `--channel brick` also accepts
+four numeric groups, such as `0.3.0.1`: this hotfix updates `0.3.0` and is superseded by `0.3.1`.
+The ROCKNIX stable and beta channels still require three groups. It publishes nothing.
 `store-tool mirror KEY update.json app URL [URL] [URL]` signs alternate sources;
 `store-tool list` and `release-channel.sh --check` check every source, not only the primary.
 Card images, source archives and installers can stay on the release. Check the complete
@@ -89,19 +91,22 @@ The TrimUI Brick's own card ([TRIMUI-BRICK-REMOTE.md](TRIMUI-BRICK-REMOTE.md)) h
 the signed list at `https://pocketui.xyz/updates/brick/update.json` (`update::BRICK_DEFAULT_URL`, asked by a card that has no
 `app/update-url`, which is every card from the public zip), the files on the same GitHub release as the ROCKNIX ones. `app` is
 `pocket-ui-brick-<version>.tar.gz`, the card's whole program folder (the device installs it with `update::install_brick`);
-`install_zip` is `pocket-ui-brick-card-<version>.zip`, for people. Same key, same checks, same caching rule (it is under
-`/updates/`). The cores' source is not in the tarball: it is `pocket-ui-brick-sources-<version>.zip` on the same release, next to
+`install_zip` is `pocket-ui-trimui-card-<version>.zip`, for people. Same key, same checks, same caching rule (it is under
+`/updates/`). The cores' source is not in the tarball: it is `pocket-ui-trimui-sources-<version>.zip` on the same release, next to
 the card zip. No Tailscale and no account are involved; a private beta card asks the channel its `app/update-url` names instead.
 
     BRICK_PARTS=PARTS BRICK_SOURCES_APART=1 BRICK_POCKETUI_SOURCE=pocket-ui-<v>.tar.gz \
       scripts/brick-make-card.sh OUT BINS LIBS CORES <v>                 # no BRICK_UPDATE_URL: the card asks the public channel
-    scripts/brick-publish.sh OUT/card --public OWNER/pocket-ui --out brick-public --zip OUT/pocket-ui-brick-card-<v>.zip --notes "…"
-    gh release upload v<v> brick-public/release/* OUT/pocket-ui-brick-sources-<v>.zip --repo OWNER/pocket-ui
+    scripts/brick-publish.sh OUT/card --public OWNER/pocket-ui --out brick-public --zip OUT/pocket-ui-trimui-card-<v>.zip --notes "…"
+    gh release upload v<v> brick-public/release/* OUT/pocket-ui-trimui-sources-<v>.zip --repo OWNER/pocket-ui
     scripts/release-channel.sh --check brick-public/updates/brick/update.json
     # then brick-public/updates/brick/ into the website's updates/brick/, deployed with it
 
 `brick-publish.sh --public` refuses a build with an `app/update-url`, a beta version (`X.Y.Z-brick.N`) and a key pocket-ui does not
 trust, and publishes nothing itself (tests: `scripts/test-brick-card.sh`, "public:").
+Public Brick releases may also use `X.Y.Z.W` for a Brick-only hotfix. If it becomes GitHub Latest,
+its notes must direct other handhelds to their unchanged ROCKNIX release; the stable channel stays unchanged.
+`scripts/test-brick-hotfix-version.py` checks the real publishers' channel and version validation without signing.
 
 ## Caching
 
@@ -325,7 +330,7 @@ There is no public catalog yet, so `store::DEFAULT_URL` stays empty and the Stor
   one; `--check` with all files there, one changed and one missing, and with the app's website copy not live yet.
   Every list it writes, and the live 0.2.2 list (`testdata/update-channel/`), is read with a frozen copy of the list
   as pocket-ui 0.1.7 to 0.2.2 read it: the app it finds is the same, on pocketui.xyz. Versions other than plain `X.Y.Z`
-  are refused.
+  are refused outside the Brick-only four-part hotfix exception above.
 
 Not tested: anything against the real pocketui.xyz or GitHub (nothing is published), the real key (not on the build
 machine), a device fetching from the public channel.
@@ -340,7 +345,8 @@ machine), a device fetching from the public channel.
 ## Small standalone-card updates (public Brick channel)
 
 The first public card must be rebuilt with `update/brick_assets.rs`. `brick-publish.sh --public`
-refuses a UI binary without the `asset-packages.json` support marker; existing pre-release
+refuses a UI binary without the updater's work-file names `.asset-moves` and `.restore-assets` (the manifest's own name is not
+kept as text by an optimized build); existing pre-release
 candidate archives must never be distributed against the small-update channel. Old beta cards
 keep their private channel and its full archives. Full legacy archives remain installable by
 the new updater. The marker is a build compatibility guard; signatures and SHA-256 provide trust.
@@ -349,7 +355,8 @@ The public package builder (`scripts/brick-update-pack.py`) excludes `cores/`, `
 and six infrequently changing helper programs (`brick-egl`, `curl`, `dropbearmulti`, `syncthing`,
 `tailscale`, `tailscaled`). Everything else is a complete app archive. Its embedded
 `asset-packages.json` names each required file's exact size and SHA-256, and an immutable
-one-file package with signed primary/fallback URLs. The app tar's verified hash authenticates
+one-file package with signed primary/fallback URLs. The cheat database (`cores/cht.pack`, 31 MB, one file) is one of them:
+downloaded once and moved on unchanged, so regular app updates stay small. The app tar's verified hash authenticates
 this inventory. Neither the publisher nor the device accepts packages over 80,000,000 bytes.
 
 A matching installed immutable asset is hashed and moved into `app.new` with a durable recovery

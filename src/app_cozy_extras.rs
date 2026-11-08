@@ -1,5 +1,6 @@
 //! Part of the pocket-ui binary: Settings → Look → Cozy extras (`pocket_ui::cozy_extras` has the switches). A list of
-//! switches in the Settings style, one per extra you see (`Extra::PAGE_ROWS`), each On or Off; the selected one's line
+//! switches in the Settings style, one per extra you see (`Extra::PAGE_ROWS`), each On or Off, followed by the GBA
+//! console-model choice; the selected one's line
 //! under the list, with the looks it is seen in. The extras you hear or that move are rows of Sound & feel, the
 //! slideshow is in Sleep & power (`Extra::home`); all of them switch through [`App::switch_extra`].
 //!
@@ -18,6 +19,7 @@ use super::{settings_row, window_start, App, SettingsPage, CANCEL, CONFIRM, NU_B
 
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "Cozy extras";
+pub(crate) const GBA_MODEL_NAME: &str = "GBA console";
 
 fn rows() -> Vec<Extra> {
     Extra::shown()
@@ -58,15 +60,22 @@ impl App {
     /// A key on the page: A, Left or Right switch the selected extra, used and saved at once.
     pub(crate) fn cozy_extras_input(&mut self, sel: usize, b: Button) -> Option<SettingsPage> {
         let list = rows();
-        let sel = sel.min(list.len() - 1);
+        let len = list.len() + 1;
+        let sel = sel.min(len - 1);
         match b {
-            Button::Up => return Some(SettingsPage::CozyExtras((sel + list.len() - 1) % list.len())),
-            Button::Down => return Some(SettingsPage::CozyExtras((sel + 1) % list.len())),
+            Button::Up => return Some(SettingsPage::CozyExtras((sel + len - 1) % len)),
+            Button::Down => return Some(SettingsPage::CozyExtras((sel + 1) % len)),
             b if b == CANCEL => return Some(SettingsPage::List(settings_row(SETTINGS_NAME))),
             _ => {}
         }
         if b == CONFIRM || matches!(b, Button::Left | Button::Right) {
-            self.switch_extra(list[sel]);
+            if let Some(e) = list.get(sel) {
+                self.switch_extra(*e);
+            } else {
+                pocket_ui::system_art::set_gba_model(pocket_ui::system_art::gba_model().next());
+                self.console_look_changed();
+                self.save_settings();
+            }
         }
         Some(SettingsPage::CozyExtras(sel))
     }
@@ -79,8 +88,8 @@ impl App {
     }
 
     /// Where the page's switches stand: a change is what the menu sounds and haptics answer.
-    pub(crate) fn cozy_extras_mark(&self) -> cozy_extras::Extras {
-        cozy_extras::get()
+    pub(crate) fn cozy_extras_mark(&self) -> (cozy_extras::Extras, pocket_ui::system_art::GbaModel) {
+        (cozy_extras::get(), pocket_ui::system_art::gba_model())
     }
 
     pub(crate) fn paint_cozy_extras(&mut self, c: &mut Canvas, sel: usize) {
@@ -89,30 +98,33 @@ impl App {
         self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         let list = rows();
-        let sel = sel.min(list.len() - 1);
+        let len = list.len() + 1;
+        let sel = sel.min(len - 1);
         let x = cozy_extras::get();
         // The selected row's line and the looks it is seen in, under the list over the hints.
-        let e = list[sel];
-        let desc = match e.only() {
+        let desc = match list.get(sel) {
+            None => "Choose the GBA console: Game Boy Advance or Game Boy Advance SP. Changes its picture everywhere and its cartridge slot at launch.".to_string(),
+            Some(e) => match e.only() {
             Some(only) => format!("{}\n{only}", e.blurb()),
             None => e.blurb().to_string(),
+            },
         };
         let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, &[("B", "Back"), ("A", "Change")], &desc, 4, pal().text);
-        let visible = (((foot - 12 - top) / row).max(1) as usize).min(list.len());
-        let first = window_start(sel, visible, list.len());
-        for (i, e) in list.iter().enumerate().skip(first).take(visible) {
+        let visible = (((foot - 12 - top) / row).max(1) as usize).min(len);
+        let first = window_start(sel, visible, len);
+        for i in first..(first + visible).min(len) {
             let y = top + (i - first) as i32 * row;
             self.hits.row(Area::new(pad, y, right - pad, row), i);
-            let v = pocket_ui::settings_values::on_off(x.get(*e));
+            let (label, v) = list.get(i).map_or((GBA_MODEL_NAME, pocket_ui::system_art::gba_model().label()), |e| (e.label(), pocket_ui::settings_values::on_off(x.get(*e))));
             let shown = if i == sel { format!("‹ {v} ›") } else { v.to_string() };
             // The name gives way to the value; both stay inside the row (German, Large text, 640x480).
             let vw = self.text.width(Face::Body, font, &shown);
-            let name = self.text.fit(Face::Body, font, e.label(), right - pad - 2 * NU_BTN_PAD - vw - 24);
+            let name = self.text.fit(Face::Body, font, label, right - pad - 2 * NU_BTN_PAD - vw - 24);
             let base = pocket_ui::kit::row_label(c, &mut self.text, (pad, y, right - pad, row), font, &name, i == sel);
             pocket_ui::kit::row_value(c, &mut self.text, font, right - NU_BTN_PAD, base, &shown, i == sel);
         }
-        pocket_ui::kit::scrollbar(c, top, visible as i32 * row, first, visible, list.len());
-        self.hits.list(sel, list.len(), 0.0, row as f32);
+        pocket_ui::kit::scrollbar(c, top, visible as i32 * row, first, visible, len);
+        self.hits.list(sel, len, 0.0, row as f32);
     }
 
     /// `cozy[:<row>][:<keys off>][:<presses>]` for the screenshots and the journey test: the page at a row with the
@@ -134,8 +146,18 @@ impl App {
             }
             cozy_extras::set(x);
         }
+        let presses = parts.next().unwrap_or_default();
+        // Optional fourth field: paint a hardware view before changing the model and return
+        // to it afterwards. This exercises the player's warm case/icon caches in one App.
+        let warm = parts.next().filter(|look| ["shelf", "cabinet", "cards", "minimal", "split"].contains(look));
+        if let Some(look) = warm {
+            self.shelf_snapshot(&format!("gba:{look}"));
+            let (w,h) = super::snapshot_dims();
+            let mut buf = vec![0; (w*h) as usize];
+            self.paint(&mut Canvas::new(&mut buf,w,h));
+        }
         let mut page = SettingsPage::CozyExtras(row);
-        for key in parts.next().unwrap_or_default().chars() {
+        for key in presses.chars() {
             let b = match key {
                 'u' => Button::Up,
                 'd' => Button::Down,
@@ -150,7 +172,12 @@ impl App {
                 other => other,
             };
         }
-        self.settings_page = Some(page);
+        if let Some(look) = warm {
+            self.shelf_snapshot(&format!("gba:{look}"));
+            self.settings_page = None;
+        } else {
+            self.settings_page = Some(page);
+        }
         true
     }
 }

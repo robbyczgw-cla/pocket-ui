@@ -80,7 +80,7 @@ fn render_on(bin: &Path, tmp: &Path, state: &str, size: &str, text_size: &str, s
     if let Some((device, _)) = device { cmd.env("POCKETUI_DEVICE", device); }
     let out = cmd
         .args(["--snapshot", state, png.to_str().unwrap()])
-        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .env("POCKETUI_ES_SYSTEMS", tmp.join("dark").join("es_systems.cfg"))
         .env("POCKETUI_DATA", &data)
         .env("POCKETUI_SNAPSHOT_SIZE", size)
@@ -110,7 +110,7 @@ fn render_on(bin: &Path, tmp: &Path, state: &str, size: &str, text_size: &str, s
 fn every_console_shows_a_card_and_a_console_without_names_says_so() {
     let guard = tempfile::tempdir().unwrap();
     let tmp = guard.path().to_path_buf();
-    let status = Command::new("python3")
+    let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.join("dark").to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()
@@ -153,7 +153,7 @@ fn every_console_shows_a_card_and_a_console_without_names_says_so() {
 #[test]
 fn printed_menu_key_is_used_on_brick_cards_and_hints_in_both_appearances() {
     let tmp = tempfile::tempdir().unwrap();
-    let out = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.path().join("dark").to_str().unwrap(), "dark"]).output().unwrap();
+    let out = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.path().join("dark").to_str().unwrap(), "dark"]).output().unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let stub = wayland(tmp.path());
     let bin = Path::new(env!("CARGO_BIN_EXE_pocket-ui"));

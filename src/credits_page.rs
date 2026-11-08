@@ -249,8 +249,8 @@ impl CreditsPage {
             }
         }
         // The credit line: where the facts come from.
-        let credit = text.fit(Face::Body, 21, "Facts: Wikidata (CC0), Wikipedia · summaries written for pocket-ui", full_w);
-        text.draw_right(c, Face::Body, 21, c.w - MARGIN, c.h - 104, pal().dust, &credit);
+        let (px, credit) = text.fit_sizes(Face::Body, &[21, 18], "Facts: Wikidata (CC0), Wikipedia · summaries written for pocket-ui", full_w);
+        text.draw_right(c, Face::Body, px, c.w - MARGIN, c.h - 104, pal().dust, &credit);
         if self.max_scroll > 0 {
             let total = view + self.max_scroll;
             let bar_h = (view * view / total).max(40);

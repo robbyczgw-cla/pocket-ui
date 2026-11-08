@@ -297,7 +297,9 @@ impl PortalPage {
 
     fn paint_other_ways(&self, c: &mut Canvas, text: &mut Text) {
         let w = c.w - 2 * MARGIN;
-        text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Other ways online");
+        // Keep the heading's one-line slot; translated Retro/Large text can need the next smaller title size.
+        let (heading_px, heading) = text.fit_sizes(Face::Title, &[67, 50], "Other ways online", w);
+        text.draw(c, Face::Title, heading_px, MARGIN, 140, pal().chalk, &heading);
         // The ways scroll under the title and above the hint bar.
         let (top, bottom) = (180, c.h - 100);
         let mark = crate::text::boxes::mark();

@@ -70,6 +70,8 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
         node.children().find(|n| n.has_tag_name(tag)).and_then(|n| n.text()).map(|t| t.trim().to_string())
     };
 
+    // Folders of another card ("Game Boy Advance (GBA)", "Sega Genesis") that are a system's, read in place (`foreign_folders`).
+    let foreign = foreign_by_system(es_systems);
     let mut systems: Vec<System> = doc
         .descendants()
         .filter(|n| n.has_tag_name("system"))
@@ -85,6 +87,12 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
             // Systems pocket-core hosts may list more: DOS zips, game folders (`hostsys`).
             exts.extend(crate::hostsys::shelf_extensions(&name).iter().map(|e| e.to_string()));
             let mut games = scan_for(&name, &path, &exts);
+            if let Some(dirs) = foreign.get(&name) {
+                let mut have: std::collections::HashSet<PathBuf> = games.iter().map(|g| g.path.clone()).collect();
+                for dir in dirs {
+                    games.extend(scan_for(&name, dir, &exts).into_iter().filter(|g| have.insert(g.path.clone())));
+                }
+            }
             games.retain(|g| !crate::hostsys::not_a_game(&name, &g.path));
             let listed: Vec<PathBuf> = games.iter().map(|g| g.path.clone()).collect();
             let roms = Path::new(crate::hostsys::BIOS_DIR).parent().unwrap_or(Path::new("/storage/roms"));
@@ -141,6 +149,29 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
     systems.sort_by_key(|s| s.fullname.to_lowercase());
     learn_names(&systems);
     Ok(systems)
+}
+
+/// Every ROM folder of the card `es_systems` describes as (system id, folder): the systems' own and the folders of another
+/// card that are a system's (`foreign_folders`). What the gamelists and picture folders are read from.
+pub fn read_sources(es_systems: &Path) -> Vec<(String, PathBuf)> {
+    let catalog = all_systems(es_systems).unwrap_or_default();
+    let mut sources: Vec<(String, PathBuf)> = catalog.iter().map(|s| (s.id.clone(), s.path.clone())).collect();
+    if let Some(roms) = roms_root(&catalog) {
+        sources.extend(foreign_folders(&roms, &catalog));
+    }
+    sources
+}
+
+/// `foreign_folders` of the card `es_systems` describes, by system id. Empty without a roms folder.
+fn foreign_by_system(es_systems: &Path) -> std::collections::HashMap<String, Vec<PathBuf>> {
+    let mut by_system: std::collections::HashMap<String, Vec<PathBuf>> = Default::default();
+    let Ok(catalog) = all_systems(es_systems) else { return by_system };
+    if let Some(roms) = roms_root(&catalog) {
+        for (id, dir) in foreign_folders(&roms, &catalog) {
+            by_system.entry(id).or_default().push(dir);
+        }
+    }
+    by_system
 }
 
 /// Tells the interface that these are names of games (`i18n::learn_names`): a game called "Black" or "Time to Play"
@@ -300,10 +331,8 @@ pub fn misfiled_count(catalog: &[SysInfo]) -> usize {
 /// A folder in `roms` that is no system's folder, so nothing in it is read.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StrayFolder {
-    /// Its name as it is on the card: "Sega Genesis".
+    /// Its name as it is on the card: "Atari Jaguar".
     pub name: String,
-    /// The folder ROCKNIX reads for what it probably holds, when that can be guessed: "megadrive".
-    pub meant: Option<String>,
 }
 
 /// Folders of `roms` that ROCKNIX keeps for itself or that hold no games, never reported as strays.
@@ -315,76 +344,6 @@ const NOT_STRAYS: &[&str] = &[
     "reports",
     // Up to 0.1.8 a port's game files waited here; what a player left behind is no games.
     "port-files",
-];
-
-/// Common names people give system folders (lowercase, letters and digits only) and the ROCKNIX folder they mean;
-/// a guess is offered only for a folder this device has.
-const FOLDER_ALIASES: &[(&str, &str)] = &[
-    ("segagenesis", "megadrive"),
-    ("genesis", "megadrive"),
-    ("md", "megadrive"),
-    ("segamegadrive", "megadrive"),
-    ("megadrivegenesis", "megadrive"),
-    ("ps1", "psx"),
-    ("ps", "psx"),
-    ("playstation", "psx"),
-    ("playstation1", "psx"),
-    ("sonyplaystation", "psx"),
-    ("ps2", "ps2"),
-    ("playstation2", "ps2"),
-    ("snes", "snes"),
-    ("supernintendo", "snes"),
-    ("supernes", "snes"),
-    ("superfamicom", "sfc"),
-    ("nes", "nes"),
-    ("nintendo", "nes"),
-    ("famicom", "famicom"),
-    ("gameboy", "gb"),
-    ("gameboycolor", "gbc"),
-    ("gameboycolour", "gbc"),
-    ("gameboyadvance", "gba"),
-    ("gba", "gba"),
-    ("n64", "n64"),
-    ("nintendo64", "n64"),
-    ("nds", "nds"),
-    ("ds", "nds"),
-    ("nintendods", "nds"),
-    ("gamecube", "gamecube"),
-    ("gc", "gamecube"),
-    ("ngc", "gamecube"),
-    ("dreamcast", "dreamcast"),
-    ("dc", "dreamcast"),
-    ("saturn", "saturn"),
-    ("segasaturn", "saturn"),
-    ("segacd", "segacd"),
-    ("megacd", "segacd"),
-    ("sega32x", "sega32x"),
-    ("32x", "sega32x"),
-    ("mastersystem", "mastersystem"),
-    ("segamastersystem", "mastersystem"),
-    ("sms", "mastersystem"),
-    ("gamegear", "gamegear"),
-    ("segagamegear", "gamegear"),
-    ("gg", "gamegear"),
-    ("pcengine", "pcengine"),
-    ("turbografx16", "pcengine"),
-    ("turbografx", "pcengine"),
-    ("tg16", "pcengine"),
-    ("psp", "psp"),
-    ("playstationportable", "psp"),
-    ("psvita", "psvita"),
-    ("playstationvita", "psvita"),
-    ("arcade", "arcade"),
-    ("mame", "mame"),
-    ("neogeo", "neogeo"),
-    ("atari2600", "atari2600"),
-    ("2600", "atari2600"),
-    ("lynx", "atarilynx"),
-    ("atarilynx", "atarilynx"),
-    ("wonderswan", "wonderswan"),
-    ("neogeopocket", "ngp"),
-    ("dos", "pc"),
-    ("msdos", "pc"),
 ];
 
 /// The folder the systems' folders are in (`/storage/roms` on the device): the one most of them share.
@@ -406,9 +365,9 @@ pub fn computer_litter(name: &str) -> bool {
 }
 
 /// Folders directly in `roms` that no system of `catalog` reads and that hold at least one file a system takes,
-/// sorted by name, each with the folder it probably should be. Hidden folders, those starting with `_` and ROCKNIX's
-/// own ([`NOT_STRAYS`]) are left out. A "GBA" is a stray too on ext4, which tells it from "gba", and only "gba" is read (exFAT doesn't: there it is the same folder).
-/// Reads `roms` and up to two levels of each other folder; call it on a thread.
+/// sorted by name. A folder whose name means a system ("Sega Genesis", "GBA", "Game Boy Advance (GBA)") is read as that
+/// system (`foreign_folders`), so it is no stray: what is left is a name nothing knows. Hidden folders, those starting with
+/// `_` and ROCKNIX's own ([`NOT_STRAYS`]) are left out. Reads `roms` and up to two levels of each other folder; call it on a thread.
 pub fn stray_folders(roms: &Path, catalog: &[SysInfo]) -> Vec<StrayFolder> {
     let Ok(entries) = fs::read_dir(roms) else { return Vec::new() };
     let known: std::collections::HashSet<PathBuf> = catalog.iter().map(|s| s.path.clone()).collect();
@@ -419,10 +378,10 @@ pub fn stray_folders(roms: &Path, catalog: &[SysInfo]) -> Vec<StrayFolder> {
         .filter(|p| p.is_dir() && !known.contains(p))
         .filter_map(|p| {
             let name = p.file_name()?.to_str()?.to_string();
-            if name.starts_with(['.', '_']) || NOT_STRAYS.contains(&name.to_lowercase().as_str()) || !holds_games(&p, &exts) {
+            if name.starts_with(['.', '_']) || NOT_STRAYS.contains(&name.to_lowercase().as_str()) || system_for_folder(&name, catalog).is_some() || !holds_games(&p, &exts) {
                 return None;
             }
-            Some(StrayFolder { meant: guess_folder(&name, catalog), name })
+            Some(StrayFolder { name })
         })
         .collect();
     out.sort_by_key(|s| s.name.to_lowercase());
@@ -449,26 +408,53 @@ fn holds_games(dir: &Path, exts: &std::collections::HashSet<&str>) -> bool {
     subs.iter().any(|s| fs::read_dir(s).is_ok_and(|e| e.flatten().any(|e| e.path().is_file() && takes(&e.path()))))
 }
 
-/// The system folder a stray folder `name` probably should be: a system's folder or full name written another way
-/// ("GBA", "Game Boy Advance"), else a common name ([`FOLDER_ALIASES`]) of a system `catalog` has.
-fn guess_folder(name: &str, catalog: &[SysInfo]) -> Option<String> {
+/// The system of `catalog` a folder called `name` is: a system's folder or full name written another way ("GBA",
+/// "Game Boy Advance"), or the name another card gives it ("Game Boy Advance (GBA)", "Sega Genesis", `layouts::system_ids`).
+fn system_for_folder<'a>(name: &str, catalog: &'a [SysInfo]) -> Option<&'a SysInfo> {
     let plain = |s: &str| s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect::<String>();
-    let wanted = plain(name);
-    if wanted.is_empty() {
+    let wanted = [plain(name), plain(crate::layouts::split_tag(name).0)];
+    if wanted[0].is_empty() {
         return None;
     }
-    let folder = |s: &SysInfo| s.path.file_name().and_then(|n| n.to_str()).unwrap_or(&s.id).to_string();
-    if let Some(s) = catalog.iter().find(|s| plain(&folder(s)) == wanted || plain(&s.id) == wanted) {
-        return Some(folder(s));
+    let folder = |s: &SysInfo| s.path.file_name().and_then(|n| n.to_str()).map(plain).unwrap_or_else(|| plain(&s.id));
+    let mine = |matches: &dyn Fn(&SysInfo, &str) -> bool| wanted.iter().find_map(|w| catalog.iter().find(|s| matches(s, w)));
+    if let Some(s) = mine(&|s, w| folder(s) == *w || plain(&s.id) == *w) {
+        return Some(s);
     }
-    if let Some(s) = catalog.iter().find(|s| plain(&s.name) == wanted) {
-        return Some(folder(s));
+    if let Some(s) = mine(&|s, w| plain(&s.name) == *w) {
+        return Some(s);
     }
-    let id = FOLDER_ALIASES.iter().find(|(alias, _)| *alias == wanted).map(|(_, id)| *id)?;
-    catalog.iter().find(|s| s.id == id).map(folder)
+    crate::layouts::system_ids(name).into_iter().find_map(|id| catalog.iter().find(|s| s.id == id))
 }
 
-/// The emulator/core pair marked `default="true"`, else the first one listed.
+/// Folders of `roms` that are no system's folder but mean one: "Game Boy Advance (GBA)" from another handheld's card, "GBA",
+/// "Sega Genesis" (`system_for_folder`). They are read as that system, in place: the card keeps its names and nothing is
+/// moved or written. (system id, folder), sorted by folder. A folder that is one system's folder already (also on a card that
+/// ignores case, where `GBA` is `gba`) is not in the list. Reads `roms` only.
+pub fn foreign_folders(roms: &Path, catalog: &[SysInfo]) -> Vec<(String, PathBuf)> {
+    use std::os::unix::fs::MetadataExt;
+    let Ok(entries) = fs::read_dir(roms) else { return Vec::new() };
+    let same = |p: &Path| fs::metadata(p).map(|m| (m.dev(), m.ino())).ok();
+    let known: std::collections::HashSet<(u64, u64)> = catalog.iter().filter_map(|s| same(&s.path)).collect();
+    let mut out: Vec<(String, PathBuf)> = entries
+        .flatten()
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir() || (t.is_symlink() && e.path().is_dir())))
+        .filter_map(|e| {
+            let path = e.path();
+            let name = e.file_name().to_str()?.to_string();
+            if name.starts_with(['.', '_']) || NOT_STRAYS.contains(&name.to_lowercase().as_str()) || computer_litter(&name) {
+                return None;
+            }
+            if catalog.iter().any(|s| s.path == path) || same(&path).is_some_and(|id| known.contains(&id)) {
+                return None;
+            }
+            Some((system_for_folder(&name, catalog)?.id.clone(), path))
+        })
+        .collect();
+    out.sort_by_key(|(_, p)| p.to_string_lossy().to_lowercase());
+    out
+}
+
 fn default_core(sys: roxmltree::Node) -> (Option<String>, Option<String>) {
     let emulators: Vec<_> = sys.descendants().filter(|n| n.has_tag_name("emulator")).collect();
     let pair = |emu: roxmltree::Node, core: Option<roxmltree::Node>| {
@@ -1259,9 +1245,9 @@ mod tests {
         let roms = TestDir::new("unread-count");
         let psx = roms.join("psx");
         std::fs::create_dir_all(&psx).unwrap();
-        std::fs::create_dir_all(roms.join("Sega Genesis")).unwrap();
+        std::fs::create_dir_all(roms.join("Old Stuff")).unwrap();
         std::fs::write(psx.join("Lost.cue"), "FILE \"Lost.bin\" BINARY\n  TRACK 01 MODE2/2352\n").unwrap();
-        std::fs::write(roms.join("Sega Genesis/Sonic.md"), b"x").unwrap();
+        std::fs::write(roms.join("Old Stuff/Sonic.md"), b"x").unwrap();
         let sys = |id: &str, folder: &str, ext: &str| SysInfo { id: id.into(), name: id.into(), folder: folder.into(), path: roms.join(folder), extensions: vec![ext.into(), "cue".into()] };
         let catalog = vec![sys("psx", "psx", "bin"), sys("megadrive", "megadrive", "md")];
         assert_eq!(super::unread_count(&catalog), 2, "the cue without its bin and the folder no system reads");
@@ -1347,7 +1333,8 @@ mod tests {
         assert_eq!(report, ["Broken.cue", "Broken.m3u", "Gone.m3u"]);
     }
 
-    /// First-run test 2026-10-24, finding #10: a "Sega Genesis" folder next to megadrive was ignored without a word.
+    /// First-run test 2026-10-24, finding #10: a "Sega Genesis" folder next to megadrive was ignored without a word. Since the
+    /// other-layouts work such a folder is read as the system; what is left over is a name nothing knows.
     #[test]
     fn folders_of_no_system_are_found_with_the_folder_they_should_be() {
         let dir = TestDir::new("strays");
@@ -1379,19 +1366,16 @@ mod tests {
         std::fs::create_dir_all(dir.join("Empty")).unwrap();
         put(&dir, "Stuff/readme.txt", "x");
         put(&dir, "Deep/a/b/Game.gba", "x");
-        let found: Vec<(String, Option<String>)> = super::stray_folders(&dir, &catalog).into_iter().map(|s| (s.name, s.meant)).collect();
-        let want = [
-            ("Atari Jaguar", None),
-            ("GBA", Some("gba")),
-            ("PS1", Some("psx")),
-            ("Sega Genesis", Some("megadrive")),
-            ("Super Nintendo", Some("snes")),
-        ];
-        assert_eq!(found, want.map(|(n, m)| (n.to_string(), m.map(str::to_string))));
+        let found: Vec<String> = super::stray_folders(&dir, &catalog).into_iter().map(|s| s.name).collect();
+        // The folders that mean a system ("Sega Genesis", "GBA", "PS1") are read as it, so only a name nothing knows is left.
+        assert_eq!(found, ["Atari Jaguar"]);
+        let foreign: Vec<(String, String)> = super::foreign_folders(&dir, &catalog).into_iter().map(|(id, p)| (id, p.file_name().unwrap().to_string_lossy().into_owned())).collect();
+        let want = [("gba", "GBA"), ("psx", "PS1"), ("megadrive", "Sega Genesis"), ("snes", "Super Nintendo")];
+        assert_eq!(foreign, want.map(|(i, f)| (i.to_string(), f.to_string())));
         assert_eq!(super::roms_root(&catalog), Some(dir.to_path_buf()));
         assert!(super::stray_folders(&dir.join("missing"), &catalog).is_empty(), "no roms folder: nothing to report");
-        // An alias only points at a folder this device has.
-        assert_eq!(super::guess_folder("Dreamcast", &catalog), None);
+        // A name only matches a system this device has.
+        assert!(super::system_for_folder("Dreamcast", &catalog).is_none());
     }
 
     /// What a Mac and Windows leave on a drive they've had in them: on the shelf none of it may ever be a game.

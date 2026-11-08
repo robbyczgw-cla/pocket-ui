@@ -35,6 +35,7 @@ Start at [user/index.md](user/index.md).
 | [user/easy-to-read.md](user/easy-to-read.md) | Easy to read (larger text and calmer menus in one switch), the pause menu's Zoom and Controls → Hold to toggle |
 | [user/controls-settings.md](user/controls-settings.md) | The buttons in Settings, during setup, on the touch screen, and the power and volume keys |
 | [user/settings.md](user/settings.md) | How Settings opens, and the entries of Look, Sound & feel, Playing and Games |
+| [user/settings-sound.md](user/settings-sound.md) | The entries of Sound & feel: animations, Cozy touches, motion, sounds, haptics and LEDs |
 | [user/settings-system.md](user/settings-system.md) | The entries of Connections and System: Wi-Fi, Tailscale, remote access, time, sleep, backup, the manual |
 | [user/storage.md](user/storage.md) | Settings → System → Storage: what takes the room on the card, the clean-ups, the low-space notice, hidden games |
 | [user/bluetooth.md](user/bluetooth.md) | Settings → Connections → Bluetooth: pairing controllers, headphones and speakers, reconnecting, forgetting |
@@ -99,12 +100,14 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [TRIMUI-BRICK.md](TRIMUI-BRICK.md) | Design and reference | The TrimUI Brick (Beta) behind the `brick` feature: the first version under NextUI, the framebuffer bridge, the test kit |
 | [TRIMUI-BRICK-CORES.md](TRIMUI-BRICK-CORES.md) | Design and reference | Additional standalone software cores: pinned builds, licences, routing, real-library checks and limits |
 | [TRIMUI-BRICK-STANDALONE.md](TRIMUI-BRICK-STANDALONE.md) | Design and reference | The same Brick without NextUI: a card folder with its own start script, cores built for glibc 2.33, stand-ins for the firmware helpers, host tests |
+| [TRIMUI-SMART-PRO.md](TRIMUI-SMART-PRO.md) | Design and reference | The TrimUI Smart Pro on the same card (experimental): how the card tells it from the Brick, what differs, the firmware floor, what a report carries |
 | [TRIMUI-BRICK-REMOTE.md](TRIMUI-BRICK-REMOTE.md) | Design and reference | The Brick's own card on the network: Tailscale, Remote access with dropbear, updates of the card's program folder from a private channel, the way back |
 | [TRIMUI-BRICK-MORE.md](TRIMUI-BRICK-MORE.md) | Design and reference | The Brick's own card with Kids mode, screenshots (and the `grim` stand-in), the web companion over userspace Tailscale, Over the game and a Tour that fits |
 | [TRIMUI-BRICK-HW.md](TRIMUI-BRICK-HW.md) | Design and reference | The Brick's own hardware: rumble motor, the 23 LEDs, the F1/F2 keys and the mute slider, and the Settings page "Lights & buttons" |
 | [TRIMUI-BRICK-SYNC.md](TRIMUI-BRICK-SYNC.md) | Design and reference | Save sync on the Brick's own card: the card's Syncthing, its service and what differs from ROCKNIX |
 | [TRIMUI-BRICK-BLUETOOTH.md](TRIMUI-BRICK-BLUETOOTH.md) | Design and reference | Bluetooth on the Brick's own card: the BlueZ service, pairing kept on the card, controllers, and headphones over BlueALSA (A2DP) |
 | [TRIMUI-BRICK-SMOKE.md](TRIMUI-BRICK-SMOKE.md) | Testing | The smoke test on the real Brick after an installation: version, services, lights in the dark, picture options and the FPS line in a test game |
+| [BRICK-CHEAT-PROBE.md](BRICK-CHEAT-PROBE.md) | Testing | Cheat RAM effects, Continue, save states and disabling: core constraints, container checks and real Brick evidence |
 | [BRICK-CFG.md](BRICK-CFG.md) | Design and verification | Compile-time ownership of Brick code and assets, the standard-build reference and comparison evidence |
 | [BRICK-SHADERS.md](BRICK-SHADERS.md) | Design and reference | Picture options on the Brick through the GPU: the choices, their cost and the read-back proof |
 | [STEAMDECK.md](STEAMDECK.md) | Design and reference | pocket-ui on a Steam Deck (first preparation, run on a PC only): the Deck profile, EmuDeck library, emulators, bundle and Flatpak plan, Add to Steam, what needs real hardware |
@@ -128,6 +131,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [IDLE.md](IDLE.md) | Reference | Still menus: finite animation passes, input and timer scheduling, two-window presentation traces and repeatable idle measurements |
 | [LATENCY.md](LATENCY.md) | Reference | The speed guard: latency benchmark, baselines, comparing in CI |
 | [MEASURED.md](MEASURED.md) | Reference | The homepage's former numbers page: speed guard of 25 Oct, waking, sleep, CPU, pocket-ui against EmulationStation |
+| [OTHER-LAYOUTS.md](OTHER-LAYOUTS.md) | Reference | Cards from other systems: folder names, box art folders, how pocket-ui reads them in place, numbers for 5,000 and 13,000 games |
 | [COMPARE-ROCKNIX.md](COMPARE-ROCKNIX.md) | Reference | pocket-ui against stock ROCKNIX (EmulationStation + RetroArch) on a Mini V2, measured from outside the same way for both: method, limits, the plan of presses, how to run it |
 | [DESIGN.md](DESIGN.md) | Reference | Visual design of the shelf: colours, type, layout, motion |
 | [UI-SCHEME.md](UI-SCHEME.md) | Reference | The one control scheme every page follows: keys, focus, hint bar, rows, help lines |

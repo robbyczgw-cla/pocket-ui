@@ -1,0 +1,350 @@
+[
+  {
+    "version": "0.2.5",
+    "source": "https://github.com/robbyczgw-cla/pocket-ui/releases/download/v0.2.5/pocket-ui-0.2.5-rocknix-card.zip",
+    "sha256": "a68df48d5dd445d463fc140228f3c744377812f6751c496f4611a80f1c21516e",
+    "seed_sha256": "e00c7d5b7b0be48fd6dda361c15311f98f0493ecc090d5f1ab5df6637654c855",
+    "entries": [
+      {
+        "path": "current",
+        "kind": "link",
+        "target": "releases/0.2.5"
+      },
+      {
+        "path": "licences",
+        "kind": "directory"
+      },
+      {
+        "path": "licences/FONTS-OFL.txt",
+        "kind": "file",
+        "size": 13986,
+        "mode": 420,
+        "sha256": "5a8b908b8272fb75768f42526ecda1474b4be4d65b2b167085bab6337af77404"
+      },
+      {
+        "path": "licences/LICENSE",
+        "kind": "file",
+        "size": 17984,
+        "mode": 420,
+        "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6"
+      },
+      {
+        "path": "licences/NOTICE.md",
+        "kind": "file",
+        "size": 31100,
+        "mode": 420,
+        "sha256": "442c150b7f6104ade6c7c618fa200479c59027eff38ca1fddc6a4278bef79192"
+      },
+      {
+        "path": "licences/THIRD-PARTY-CRATES.md",
+        "kind": "file",
+        "size": 12908,
+        "mode": 420,
+        "sha256": "976a6874f103c4a3e968c62f98350aa1a090de2a89672fc6129faa026c54055e"
+      },
+      {
+        "path": "licences/THIRD-PARTY-LICENSES.txt",
+        "kind": "file",
+        "size": 1146292,
+        "mode": 420,
+        "sha256": "753ed0b8ca614f5ea461dd6295f6373576f7fbc874e3fd04322c8dc635e515b0"
+      },
+      {
+        "path": "pocket-core",
+        "kind": "link",
+        "target": "current/pocket-core"
+      },
+      {
+        "path": "pocket-ui",
+        "kind": "link",
+        "target": "current/pocket-ui"
+      },
+      {
+        "path": "portmaster-setup.sh",
+        "kind": "link",
+        "target": "current/portmaster-setup.sh"
+      },
+      {
+        "path": "releases",
+        "kind": "directory"
+      },
+      {
+        "path": "releases/0.2.5",
+        "kind": "directory"
+      },
+      {
+        "path": "releases/0.2.5/cores",
+        "kind": "directory"
+      },
+      {
+        "path": "releases/0.2.5/cores/SHA256SUMS",
+        "kind": "file",
+        "size": 511,
+        "mode": 420,
+        "sha256": "8234f7e16b32528724f1c1f6b50c5c3a32a4a87451c864b521e87e708634f707"
+      },
+      {
+        "path": "releases/0.2.5/cores/gpsp",
+        "kind": "directory"
+      },
+      {
+        "path": "releases/0.2.5/cores/gpsp/COPYING",
+        "kind": "file",
+        "size": 18092,
+        "mode": 420,
+        "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+      },
+      {
+        "path": "releases/0.2.5/cores/gpsp/SOURCE.txt",
+        "kind": "file",
+        "size": 275,
+        "mode": 420,
+        "sha256": "d202f5e9bf7abe94ef2448b7b448bdf2001528fee242ce614a10618d1dda15d8"
+      },
+      {
+        "path": "releases/0.2.5/cores/gpsp/build-gpsp.sh",
+        "kind": "file",
+        "size": 1316,
+        "mode": 420,
+        "sha256": "f3a841282ab353cc5e33cfec19deee8aee1d54c27c62a704b923190d041876dd"
+      },
+      {
+        "path": "releases/0.2.5/cores/gpsp/clear-cache.h",
+        "kind": "file",
+        "size": 1483,
+        "mode": 420,
+        "sha256": "604355c06ac0e8c3e15c9d6819cd9020af4b1749943ac34b98137893fc4a4a59"
+      },
+      {
+        "path": "releases/0.2.5/cores/gpsp/source.tar.gz",
+        "kind": "file",
+        "size": 460828,
+        "mode": 420,
+        "sha256": "97c7f7c90a9bbddb690c38bce7b261da888b2e61b4dcf93ef29e18ef38feabc1"
+      },
+      {
+        "path": "releases/0.2.5/cores/gpsp_libretro.so",
+        "kind": "file",
+        "size": 723480,
+        "mode": 493,
+        "sha256": "7e60aa52c9e81375cd5c342abc00e54717774a1af28691c78480c1d76057d202"
+      },
+      {
+        "path": "releases/0.2.5/pocket-core",
+        "kind": "file",
+        "size": 5819592,
+        "mode": 493,
+        "sha256": "f6a7bcd30b52f75f2dc665d3dafd8626db4acaf7c2cfc9c4ae8da276eacf4cd6"
+      },
+      {
+        "path": "releases/0.2.5/pocket-splash",
+        "kind": "file",
+        "size": 1922200,
+        "mode": 493,
+        "sha256": "85fcc1ff8445678528d19b310251849393854dd9dd42a87fa0e582fc3f0462b2"
+      },
+      {
+        "path": "releases/0.2.5/pocket-ui",
+        "kind": "file",
+        "size": 18353824,
+        "mode": 493,
+        "sha256": "d36e5b3373b7eb06e3b0fe8446bcea32329c1b0f0bc508633ef4cc7835729a8e"
+      },
+      {
+        "path": "releases/0.2.5/portmaster-setup.sh",
+        "kind": "file",
+        "size": 1423,
+        "mode": 493,
+        "sha256": "c7186b0fd912cdbcdb519d5171e113a77e57c5d98e5a930d4b66ce00b1d6ea92"
+      },
+      {
+        "path": "run-pocket-ui.sh",
+        "kind": "file",
+        "size": 32560,
+        "mode": 493,
+        "sha256": "5a6c2010ca8e468887b428a7eb82d6c74d395a1a39bbe44eaecb6ac7bda0efb7"
+      },
+      {
+        "path": "uninstall.sh",
+        "kind": "file",
+        "size": 5307,
+        "mode": 493,
+        "sha256": "798191e1c76f36d326bc8946d7bdde4a08877350067aea78e88ed834a4935ab2"
+      }
+    ]
+  },
+  {
+    "version": "0.3.0",
+    "source": "https://github.com/robbyczgw-cla/pocket-ui/releases/download/v0.3.0/pocket-ui-0.3.0-rocknix-card.zip",
+    "sha256": "252d5968aa158a8545a576672a958423a0f633668966a35540fe6fd4ef395201",
+    "seed_sha256": "1e172e46908a01585a57f44cc446709de7c26d29db96ee29a2ed939f5e86cfdd",
+    "entries": [
+      {
+        "path": "current",
+        "kind": "link",
+        "target": "releases/0.3.0"
+      },
+      {
+        "path": "licences",
+        "kind": "directory"
+      },
+      {
+        "path": "licences/FONTS-OFL.txt",
+        "kind": "file",
+        "size": 13986,
+        "mode": 420,
+        "sha256": "5a8b908b8272fb75768f42526ecda1474b4be4d65b2b167085bab6337af77404"
+      },
+      {
+        "path": "licences/LICENSE",
+        "kind": "file",
+        "size": 17984,
+        "mode": 420,
+        "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6"
+      },
+      {
+        "path": "licences/NOTICE.md",
+        "kind": "file",
+        "size": 32331,
+        "mode": 420,
+        "sha256": "d9a621adb6037046525e00879c545f64be004880663252bbb4d4a27927752b6b"
+      },
+      {
+        "path": "licences/THIRD-PARTY-CRATES.md",
+        "kind": "file",
+        "size": 12908,
+        "mode": 420,
+        "sha256": "976a6874f103c4a3e968c62f98350aa1a090de2a89672fc6129faa026c54055e"
+      },
+      {
+        "path": "licences/THIRD-PARTY-LICENSES.txt",
+        "kind": "file",
+        "size": 1146292,
+        "mode": 420,
+        "sha256": "753ed0b8ca614f5ea461dd6295f6373576f7fbc874e3fd04322c8dc635e515b0"
+      },
+      {
+        "path": "pocket-core",
+        "kind": "link",
+        "target": "current/pocket-core"
+      },
+      {
+        "path": "pocket-ui",
+        "kind": "link",
+        "target": "current/pocket-ui"
+      },
+      {
+        "path": "portmaster-setup.sh",
+        "kind": "link",
+        "target": "current/portmaster-setup.sh"
+      },
+      {
+        "path": "releases",
+        "kind": "directory"
+      },
+      {
+        "path": "releases/0.3.0",
+        "kind": "directory"
+      },
+      {
+        "path": "releases/0.3.0/cores",
+        "kind": "directory"
+      },
+      {
+        "path": "releases/0.3.0/cores/SHA256SUMS",
+        "kind": "file",
+        "size": 511,
+        "mode": 420,
+        "sha256": "6c830fb483d9e149dbaf79606aed133d1215cdbbc52d4e9473a2fc20da86ce70"
+      },
+      {
+        "path": "releases/0.3.0/cores/gpsp",
+        "kind": "directory"
+      },
+      {
+        "path": "releases/0.3.0/cores/gpsp/COPYING",
+        "kind": "file",
+        "size": 18092,
+        "mode": 420,
+        "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+      },
+      {
+        "path": "releases/0.3.0/cores/gpsp/SOURCE.txt",
+        "kind": "file",
+        "size": 275,
+        "mode": 420,
+        "sha256": "d202f5e9bf7abe94ef2448b7b448bdf2001528fee242ce614a10618d1dda15d8"
+      },
+      {
+        "path": "releases/0.3.0/cores/gpsp/build-gpsp.sh",
+        "kind": "file",
+        "size": 1321,
+        "mode": 420,
+        "sha256": "213fc4904244e253ae17183314394f740433d9ab84d439dd34b6c80943a6f11e"
+      },
+      {
+        "path": "releases/0.3.0/cores/gpsp/clear-cache.h",
+        "kind": "file",
+        "size": 1483,
+        "mode": 420,
+        "sha256": "604355c06ac0e8c3e15c9d6819cd9020af4b1749943ac34b98137893fc4a4a59"
+      },
+      {
+        "path": "releases/0.3.0/cores/gpsp/source.tar.gz",
+        "kind": "file",
+        "size": 460828,
+        "mode": 420,
+        "sha256": "97c7f7c90a9bbddb690c38bce7b261da888b2e61b4dcf93ef29e18ef38feabc1"
+      },
+      {
+        "path": "releases/0.3.0/cores/gpsp_libretro.so",
+        "kind": "file",
+        "size": 723480,
+        "mode": 493,
+        "sha256": "7e60aa52c9e81375cd5c342abc00e54717774a1af28691c78480c1d76057d202"
+      },
+      {
+        "path": "releases/0.3.0/pocket-core",
+        "kind": "file",
+        "size": 6057800,
+        "mode": 493,
+        "sha256": "a786efb7ac4880af7399463d6b028a2f16560c3ea80f6eb53648649419948db0"
+      },
+      {
+        "path": "releases/0.3.0/pocket-splash",
+        "kind": "file",
+        "size": 1989008,
+        "mode": 493,
+        "sha256": "7e79c2bea7fd877c3943d8261e99c6173f3b70ba935f7ef99a2463ab6d89c8c7"
+      },
+      {
+        "path": "releases/0.3.0/pocket-ui",
+        "kind": "file",
+        "size": 19278504,
+        "mode": 493,
+        "sha256": "d9c13a531366417c24fbf77d3e04a1a9ff02e1d651f74358c38c0e1f4e3232ca"
+      },
+      {
+        "path": "releases/0.3.0/portmaster-setup.sh",
+        "kind": "file",
+        "size": 1423,
+        "mode": 493,
+        "sha256": "c7186b0fd912cdbcdb519d5171e113a77e57c5d98e5a930d4b66ce00b1d6ea92"
+      },
+      {
+        "path": "run-pocket-ui.sh",
+        "kind": "file",
+        "size": 33127,
+        "mode": 493,
+        "sha256": "ea99191ddcf25319db073f8bac946979c2d3e858da18beabe457fb121104b665"
+      },
+      {
+        "path": "uninstall.sh",
+        "kind": "file",
+        "size": 5307,
+        "mode": 493,
+        "sha256": "798191e1c76f36d326bc8946d7bdde4a08877350067aea78e88ed834a4935ab2"
+      }
+    ]
+  }
+]

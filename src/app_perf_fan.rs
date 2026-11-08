@@ -392,6 +392,8 @@ impl App {
         // The widest label of each column, and where the right column starts.
         let labels = |app: &mut App, names: [&str; 2]| names.iter().map(|l| app.text.width(Face::Body, 26, l)).max().unwrap_or(0) + 24;
         let (lab_left, lab_right) = (labels(self, ["Hottest", "Battery draw"]), labels(self, ["Fan", "CPU"]));
+        // A single column needs the same measured label room: the Brick's larger German label can exceed the design width.
+        let label_w = label_w.max(lab_left).max(lab_right);
         let left_w = if cols > 1 {
             let value = ["Unknown", "99.9 °C", "99.9 W"].iter().map(|v| self.text.width(Face::Title, 32, v)).max().unwrap_or(0);
             lab_left + value + 36

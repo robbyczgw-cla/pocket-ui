@@ -40,7 +40,7 @@ case "${verb:-}" in
     sync; ${BRICK_POWEROFF:-poweroff} ;;
   reboot) sync; ${BRICK_REBOOT:-reboot} ;;
   suspend)
-    # What the firmware's own key handler does (screen off, Bluetooth radio off, then "mem"), plus what NextUI's suspend script
+    # What the firmware's own key handler does (screen off, Bluetooth radio off, then "mem"), plus what the usual suspend scripts
     # found necessary: the Wi-Fi client is stopped before and started after, and a refused or too-short sleep is tried again.
     sync
     was=$("$HW" bl-get 2>/dev/null)

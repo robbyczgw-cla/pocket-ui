@@ -14,6 +14,167 @@ pub const SCREEN: (u32, u32) = (1024, 768);
 /// The built-in pad as the kernel names it (`/proc/bus/input/devices`; trimui_inputd makes it from the keys).
 pub const PAD: &str = "TRIMUI Player1";
 
+/// Which TrimUI handheld of the A133P family this is: the `brick` build and its card run on both (docs/TRIMUI-SMART-PRO.md).
+/// Everything the two share (the firmware, the card, NextUI's way, 1 GB, no fan, no touch) is `device::brick()`; what differs is here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Board {
+    /// The TrimUI Brick: 3.2" 1024x768, no sticks, F1 and F2 beside the screen, the mute slider, the lights `brick_hw` drives.
+    Brick,
+    /// The TrimUI Smart Pro: 4.96" 1280x720, two sticks with L3 and R3, no F keys, no slider. Not played on by the project
+    /// (no device); its lights are a ring around each stick that nobody has mapped, so they stay dark (`leds`).
+    SmartPro,
+}
+
+impl Board {
+    pub const ALL: [Board; 2] = [Board::Brick, Board::SmartPro];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Board::Brick => NAME,
+            Board::SmartPro => "TrimUI Smart Pro",
+        }
+    }
+
+    /// The handheld's own word where a line calls it "the Pocket" (`i18n::brick_words`).
+    pub fn word(self) -> &'static str {
+        match self {
+            Board::Brick => "Brick",
+            Board::SmartPro => "Smart Pro",
+        }
+    }
+
+    /// What the device says about itself in the log and the report.
+    pub fn reported(self) -> &'static str {
+        match self {
+            Board::Brick => REPORTED,
+            Board::SmartPro => "TrimUI Smart Pro (NextUI)",
+        }
+    }
+
+    /// `POCKETUI_DEVICE`'s name (start.sh sets it after `board` in deploy/brick/start.sh).
+    pub fn key(self) -> &'static str {
+        match self {
+            Board::Brick => "brick",
+            Board::SmartPro => "smartpro",
+        }
+    }
+
+    pub fn by_key(key: &str) -> Option<Board> {
+        Board::ALL.into_iter().find(|b| b.key().eq_ignore_ascii_case(key.trim()))
+    }
+
+    /// The screen as fb0 has it. The Smart Pro's from its specification and every project that runs on it (no rotation).
+    pub fn screen(self) -> (u32, u32) {
+        match self {
+            Board::Brick => SCREEN,
+            Board::SmartPro => SMART_PRO_SCREEN,
+        }
+    }
+
+    /// Two analog sticks (and their presses, L3 and R3).
+    pub fn sticks(self) -> bool {
+        self == Board::SmartPro
+    }
+
+    /// F1 and F2 beside the screen: on the Brick they arrive as 317 and 318, which are the stick presses on the Smart Pro.
+    pub fn fkeys(self) -> bool {
+        self == Board::Brick
+    }
+
+    /// The mute slider (gpio243 on the Brick). The Smart Pro has none: nothing may read that pin as "muted" there.
+    pub fn slider(self) -> bool {
+        self == Board::Brick
+    }
+
+    /// Lights pocket-ui drives (`brick_hw`'s zones, read on the Brick). The Smart Pro's rings are the same driver with other zones;
+    /// until a tester has mapped them they stay off (start.sh writes them black) and Settings has no lights page.
+    pub fn leds(self) -> bool {
+        self == Board::Brick
+    }
+
+    /// The small type a step larger (`type_scale::brick_base`): the Brick's panel is 400 ppi (15.75 px a mm). The Smart Pro's
+    /// 4.96" at 1280x720 is about 296 ppi (11.7 px a mm): the design's Body 28 is 2.4 mm there, larger than the Brick's 31 (2.0 mm),
+    /// so it keeps the design's sizes.
+    pub fn larger_small_type(self) -> bool {
+        self == Board::Brick
+    }
+
+    /// The project has played on it (the first start doesn't call it untested; About says no "(experimental)").
+    pub fn played_on(self) -> bool {
+        self == Board::Brick
+    }
+
+    pub fn experimental(self) -> bool {
+        !self.played_on()
+    }
+}
+
+/// Settings › Sound & feel › Lights & buttons (the lights, F1 and F2, the mute slider): only where one of them is ours to drive.
+pub fn lights_page() -> bool {
+    board().is_some_and(|b| b.leds() || b.fkeys() || b.slider())
+}
+
+/// F1 and F2 on this device (`Board::fkeys`).
+pub fn fkeys() -> bool {
+    board().is_some_and(Board::fkeys)
+}
+
+/// What a report (Settings › System › About › Report a problem) adds on a board the project has not played on (the Smart Pro):
+/// the input devices as the kernel lists them (`input_devices`, the file below the report's root) and the end of the card's
+/// `boot.log` (which board start.sh found, the GPU's answer). Nothing on the Brick, whose reports stay as they were.
+pub fn report_section(input_devices: &Path) -> String {
+    let card = std::env::var_os("POCKETUI_BRICK_CARD").map(std::path::PathBuf::from);
+    report_section_for(board(), input_devices, card.as_deref())
+}
+
+fn report_section_for(board: Option<Board>, input_devices: &Path, card: Option<&Path>) -> String {
+    if !board.is_some_and(Board::experimental) {
+        return String::new();
+    }
+    let devices = std::fs::read_to_string(input_devices).unwrap_or_else(|_| "(missing)\n".into());
+    let boot = card.and_then(|d| std::fs::read_to_string(d.join("logs/boot.log")).ok());
+    let boot = boot.map_or_else(|| "(missing)\n".to_string(), |t| {
+        let lines: Vec<&str> = t.lines().collect();
+        lines[lines.len().saturating_sub(60)..].join("\n") + "\n"
+    });
+    format!("\n[input_devices]\n{devices}\n[boot_log]\n{boot}")
+}
+
+/// The Smart Pro's screen: 1280x720 (16:9), landscape as fb0 gives it.
+pub const SMART_PRO_SCREEN: (u32, u32) = (1280, 720);
+
+/// This device's board, when it is one of the family.
+pub fn board() -> Option<Board> {
+    match crate::device::current().model {
+        Some(crate::device::Model::Brick(b)) => Some(b),
+        _ => None,
+    }
+}
+
+/// The board, read below `root` (`/` on the device) when start.sh did not say (`POCKETUI_DEVICE`; NextUI's pak, the kit). By the
+/// screen first (fb0's `virtual_size`: 1024 wide on the Brick, 1280 on the Smart Pro), then the name TrimUI's own MainUI carries
+/// (`Trimui Brick`, `Trimui Smart Pro`). Nothing that says Smart Pro: the Brick, as before this existed, so a firmware that changes
+/// a string can't turn a Brick into something else.
+pub fn board_at(root: &Path) -> Board {
+    let fb = std::fs::read_to_string(root.join("sys/class/graphics/fb0/virtual_size")).unwrap_or_default();
+    board_from(&fb, || std::fs::read(root.join("usr/trimui/bin/MainUI")).unwrap_or_default())
+}
+
+/// `board_at` on what was read: fb0's `virtual_size` ("1280,2880") and, only when that says nothing, MainUI's bytes.
+pub fn board_from(fb_virtual_size: &str, main_ui: impl FnOnce() -> Vec<u8>) -> Board {
+    match fb_virtual_size.trim().split(',').next().and_then(|w| w.trim().parse::<u32>().ok()) {
+        Some(w) if w == SMART_PRO_SCREEN.0 => return Board::SmartPro,
+        Some(w) if w == SCREEN.0 => return Board::Brick,
+        _ => {}
+    }
+    let bytes = main_ui();
+    if bytes.windows(b"Trimui Smart Pro".len()).any(|w| w.eq_ignore_ascii_case(b"Trimui Smart Pro")) {
+        Board::SmartPro
+    } else {
+        Board::Brick
+    }
+}
+
 /// The Brick and the Brick Pro both: the stock system has `/usr/trimui/bin/MainUI`, NextUI's card has `.system`.
 /// CONFIRM (`read`, the string in `MainUI`): the Brick Pro. NextUI tells them apart by a string inside MainUI; the profile is the same here.
 pub fn detected(root: &Path) -> bool {
@@ -177,7 +338,7 @@ mod tests {
         std::fs::create_dir_all(&*d.join("mnt/SDCARD/.system")).unwrap();
         assert!(detected(&*d));
         let dev = device::read(&*d);
-        assert_eq!(dev.model, Some(Model::Brick));
+        assert_eq!(dev.model, Some(Model::Brick(Board::Brick)));
         assert_eq!((dev.screen(), dev.has_fan(), dev.has_touch(), dev.has_sticks(), dev.has_wifi()), ((1024, 768), false, false, false, false));
         assert_eq!(dev.ram_mb(), Some(1024));
         assert!(!dev.host_owned(), "the Brick is not the Deck: its windowing goes through pocket-fb");
@@ -185,7 +346,7 @@ mod tests {
 
     #[test]
     fn the_override_names_it_and_settings_leave_out_what_nextui_owns() {
-        assert_eq!(device::from_override("brick").model, Some(Model::Brick));
+        assert_eq!(device::from_override("brick").model, Some(Model::Brick(Board::Brick)));
         for k in ["radios", "store", "updates", "tools", "perf_fan", "time", "tailscale"] {
             assert!(device::hides(k, false, true), "{k}");
         }
@@ -238,6 +399,64 @@ mod tests {
         assert!(updated.contains("themepath=/storage/roms/bios/scummvm/theme"));
         assert!(updated.contains("savepath=/storage/roms/scummvm/.saves"));
         assert!(updated.ends_with("[game]\npath=/storage/roms/scummvm/game\n"));
+    }
+
+    /// The same card on a Smart Pro (docs/TRIMUI-SMART-PRO.md): found by fb0's width, then by MainUI's name; anything else stays the
+    /// Brick it was before the Smart Pro existed, so no firmware string can turn a Brick into something it is not.
+    #[test]
+    fn the_smart_pro_is_told_from_the_brick_by_its_screen_then_mainui() {
+        let never = || -> Vec<u8> { panic!("fb0 decided, MainUI is not read") };
+        assert_eq!(board_from("1280,2880\n", never), Board::SmartPro);
+        assert_eq!(board_from("1024,16384", never), Board::Brick);
+        assert_eq!(board_from("", || b"\0Trimui Smart Pro\0".to_vec()), Board::SmartPro);
+        assert_eq!(board_from("", || b"\0Trimui Brick\0".to_vec()), Board::Brick);
+        assert_eq!(board_from("800,600", Vec::new), Board::Brick);
+        let d = TestDir::new("smartpro-detect");
+        std::fs::create_dir_all(&*d.join("usr/trimui/bin")).unwrap();
+        std::fs::write(&*d.join("usr/trimui/bin/MainUI"), b"x").unwrap();
+        std::fs::create_dir_all(&*d.join("mnt/SDCARD/.system")).unwrap();
+        std::fs::create_dir_all(&*d.join("sys/class/graphics/fb0")).unwrap();
+        std::fs::write(&*d.join("sys/class/graphics/fb0/virtual_size"), "1280,2880").unwrap();
+        let dev = device::read(&*d);
+        assert_eq!((dev.model, dev.reported.as_str()), (Some(Model::Brick(Board::SmartPro)), "TrimUI Smart Pro (NextUI)"));
+    }
+
+    /// What a Smart Pro owner meets: its own name and screen, sticks (Settings and the Tour have the stick pages, menus move with the
+    /// left stick), no F keys or slider (317 and 318 are no F1 and F2 there), no lights page until the rings are mapped, the design's
+    /// type sizes (its panel is coarser than the Brick's), and it is called experimental. The Brick keeps every answer it had.
+    #[test]
+    fn the_smart_pro_profile_differs_from_the_brick_only_where_the_hardware_does() {
+        let sp = device::from_override("smartpro");
+        assert_eq!(sp.model, Some(Model::Brick(Board::SmartPro)));
+        assert_eq!((sp.screen(), sp.has_sticks(), sp.has_fan(), sp.has_touch(), sp.ram_mb()), ((1280, 720), true, false, false, Some(1024)));
+        let m = Model::Brick(Board::SmartPro);
+        assert_eq!((m.name(), m.experimental(), m.played_on()), ("TrimUI Smart Pro", true, false));
+        let sp = Board::SmartPro;
+        assert!(!sp.fkeys() && !sp.slider() && !sp.leds() && !sp.larger_small_type() && sp.sticks());
+        let brick = device::from_override("brick");
+        assert_eq!(brick.model, Some(Model::Brick(Board::Brick)));
+        assert_eq!((brick.screen(), brick.has_sticks()), ((1024, 768), false));
+        let b = Board::Brick;
+        assert!(b.fkeys() && b.slider() && b.leds() && b.larger_small_type() && !b.sticks() && b.played_on());
+        assert_eq!((Model::Brick(b).name(), Model::Brick(b).experimental()), ("TrimUI Brick", false));
+        assert_eq!((Board::by_key("SmartPro"), Board::by_key("brick"), Board::by_key("smart pro")), (Some(Board::SmartPro), Some(Board::Brick), None));
+    }
+
+    /// A Smart Pro owner's report (Report a problem) carries what we could not read ourselves: its input devices and the card's
+    /// boot.log (the board start.sh found, the GPU's answer), the last 60 lines. A Brick's report has none of it, as before.
+    #[test]
+    fn a_smart_pro_report_carries_its_input_devices_and_boot_log_and_a_bricks_does_not() {
+        let d = TestDir::new("smartpro-report");
+        std::fs::write(d.join("devices"), "N: Name=\"TRIMUI Player1\"\n").unwrap();
+        std::fs::create_dir_all(d.join("card/logs")).unwrap();
+        let boot: String = (0..100).map(|i| format!("line {i}\n")).collect();
+        std::fs::write(d.join("card/logs/boot.log"), boot + "board: smartpro (fb0 1280,1440)\n").unwrap();
+        let s = report_section_for(Some(Board::SmartPro), &d.join("devices"), Some(&d.join("card")));
+        assert!(s.contains("[input_devices]\nN: Name=\"TRIMUI Player1\"") && s.contains("[boot_log]\n") && s.contains("board: smartpro"), "{s}");
+        assert!(!s.contains("line 40\n") && s.contains("line 41\n"), "only the end of boot.log: {s}");
+        assert_eq!(report_section_for(Some(Board::Brick), &d.join("devices"), Some(&d.join("card"))), "");
+        assert_eq!(report_section_for(None, &d.join("devices"), None), "");
+        assert!(report_section_for(Some(Board::SmartPro), &d.join("none"), None).contains("[input_devices]\n(missing)"));
     }
 
     #[test]

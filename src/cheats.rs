@@ -32,6 +32,22 @@ pub fn db_roots() -> Vec<PathBuf> {
     if let Some(p) = std::env::var_os("POCKET_CHEATS_DB") {
         roots.push(PathBuf::from(p));
     }
+    #[cfg(feature = "brick")]
+    let card = crate::update::brick_card();
+    #[cfg(not(feature = "brick"))]
+    let card: Option<PathBuf> = None;
+    roots.extend(platform_roots(card.as_deref()));
+    roots
+}
+
+// The database lives inside app so a card install and an OTA replace the same data.
+fn platform_roots(card: Option<&Path>) -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if let Some(card) = card {
+        // The card's database is one file (docs/TRIMUI-BRICK-STANDALONE.md); a folder of .cht files still works.
+        roots.push(card.join("app/cores/cht.pack"));
+        roots.push(card.join("app/database/cht"));
+    }
     roots.push(PathBuf::from("/tmp/database/cht"));
     roots.push(PathBuf::from("/usr/share/libretro-database/cht"));
     roots
@@ -60,6 +76,12 @@ pub fn folder(system: &str) -> Option<&'static str> {
         "atari7800" => "Atari - 7800",
         "atarilynx" => "Atari - Lynx",
         "psx" => "Sony - PlayStation",
+        "psp" => "Sony - PlayStation Portable",
+        "dreamcast" => "Sega - Dreamcast",
+        "saturn" => "Sega - Saturn",
+        "pc" => "DOS",
+        "tic-80" => "TIC-80",
+        "fbn" | "neogeo" | "cps1" | "cps2" | "cps3" => "FBNeo - Arcade Games",
         _ => return None,
     })
 }
@@ -285,9 +307,38 @@ fn kind(tags: &[String]) -> Option<String> {
         })
 }
 
-/// The cheats for `rom` in the database under `roots`. Several files can match (a Game Genie and an Action
-/// Replay list, regions); their cheats are put together, identical codes once, in the order of the files
-/// (the plain name first).
+/// Where one `.cht` file's text is: a file of a database folder, or an entry of the Brick card's `cht.pack`.
+enum Source {
+    File(PathBuf),
+    Packed(crate::cheat_pack::Entry),
+}
+
+impl Source {
+    fn read(&self) -> Option<Vec<u8>> {
+        match self {
+            Source::File(p) => std::fs::read(p).ok(),
+            Source::Packed(e) => crate::cheat_pack::read(e),
+        }
+    }
+}
+
+/// The `.cht` files of `folder` under `root` (a database folder, or a pack file): their names without ".cht".
+fn candidates(root: &Path, folder: &str) -> Vec<(String, Source)> {
+    let cht = |name: &str| {
+        let p = Path::new(name);
+        p.extension().is_some_and(|x| x.eq_ignore_ascii_case("cht")).then(|| p.file_stem()?.to_str().map(String::from)).flatten()
+    };
+    if root.is_file() {
+        let Some(entries) = crate::cheat_pack::list(root, folder) else { return Vec::new() };
+        return entries.into_iter().filter_map(|e| Some((cht(&e.name)?, Source::Packed(e)))).collect();
+    }
+    let Ok(dir) = std::fs::read_dir(root.join(folder)) else { return Vec::new() };
+    dir.flatten().filter_map(|e| Some((cht(e.file_name().to_str()?)?, Source::File(e.path())))).collect()
+}
+
+/// The cheats for `rom` in the database under `roots` (database folders or pack files). Several files can match (a
+/// Game Genie and an Action Replay list, regions); their cheats are put together, identical codes once, in the order of
+/// the files (the plain name first).
 pub fn find(system: &str, rom: &Path, roots: &[PathBuf]) -> Vec<Cheat> {
     find_all(system, rom, roots).0
 }
@@ -302,16 +353,13 @@ pub fn find_all(system: &str, rom: &Path, roots: &[PathBuf]) -> (Vec<Cheat>, usi
     }
     let rom_regions = regions(&tags(stem));
     for root in roots {
-        let Ok(dir) = std::fs::read_dir(root.join(folder)) else { continue };
-        // (sort key, file, its tags)
-        let mut hits: Vec<(PathBuf, Vec<String>)> = dir
-            .flatten()
-            .filter(|e| e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("cht")))
-            .filter_map(|e| {
-                let path = e.path();
-                let name = path.file_stem()?.to_str()?.to_string();
-                (base(&name) == want).then(|| (path, tags(&name)))
-            })
+        // (file name without ".cht", where its text is, its tags)
+        let mut hits: Vec<(String, Source, Vec<String>)> = candidates(root, folder)
+            .into_iter()
+            .filter_map(|(name, src)| (base(&name) == want).then(|| {
+                let t = tags(&name);
+                (name, src, t)
+            }))
             .collect();
         if hits.is_empty() {
             continue;
@@ -322,16 +370,16 @@ pub fn find_all(system: &str, rom: &Path, roots: &[PathBuf]) -> (Vec<Cheat>, usi
                 let r = regions(t);
                 r.is_empty() || !r.is_disjoint(&rom_regions)
             };
-            if hits.iter().any(|(_, t)| fits(t)) {
-                hits.retain(|(_, t)| fits(t));
+            if hits.iter().any(|(_, _, t)| fits(t)) {
+                hits.retain(|(_, _, t)| fits(t));
             }
         }
         // Fewest tags first: the plain name, then the variants.
-        hits.sort_by(|a, b| a.1.len().cmp(&b.1.len()).then_with(|| a.0.cmp(&b.0)));
+        hits.sort_by(|a, b| a.2.len().cmp(&b.2.len()).then_with(|| a.0.cmp(&b.0)));
         let mut all: Vec<Cheat> = Vec::new();
         let mut unsupported: BTreeSet<String> = BTreeSet::new();
-        for (path, t) in hits {
-            let Ok(bytes) = std::fs::read(&path) else { continue };
+        for (_, src, t) in hits {
+            let Some(bytes) = src.read() else { continue };
             let label = kind(&t);
             let parsed = parse_cht_full(&String::from_utf8_lossy(&bytes));
             unsupported.extend(parsed.unsupported);
@@ -446,9 +494,19 @@ pub struct CheatMenu {
 }
 
 impl CheatMenu {
-    /// None when the database has nothing for this game (not even cheats pocket-core can't apply).
+    /// On a Brick card, an unmatched game gets an explanatory page; elsewhere it has no Cheats page.
     pub fn load(data_dir: &Path, system: &str, rom: &Path) -> Option<CheatMenu> {
-        Self::load_in(data_dir, system, rom, &db_roots(), true)
+        let menu = Self::load_in(data_dir, system, rom, &db_roots(), true);
+        #[cfg(feature = "brick")]
+        if menu.is_none() && crate::update::brick_card().is_some() {
+            return Some(Self::empty());
+        }
+        menu
+    }
+
+    /// Keep the page discoverable on a card even when this game has no database entry.
+    pub fn empty() -> Self {
+        Self { cheats: Vec::new(), unsupported: 0, keys: Vec::new(), on: BTreeSet::new(), store: PathBuf::new(), notify: false }
     }
 
     pub fn load_in(data_dir: &Path, system: &str, rom: &Path, roots: &[PathBuf], notify: bool) -> Option<CheatMenu> {
@@ -471,7 +529,7 @@ impl CheatMenu {
 
     /// The cheats, then "All off" (when there are cheats), then the line about those that can't be applied.
     pub fn count(&self) -> usize {
-        self.cheats.len() + usize::from(!self.cheats.is_empty()) + usize::from(self.unsupported > 0)
+        (self.cheats.len() + usize::from(!self.cheats.is_empty()) + usize::from(self.unsupported > 0)).max(1)
     }
 
     /// How many entries of the game's files pocket-core can't apply (the last line of the page says so).
@@ -479,11 +537,23 @@ impl CheatMenu {
         self.unsupported
     }
 
+    /// Whether this row offers a switch rather than an explanation only.
+    pub fn actionable(&self, sel: usize) -> bool {
+        !self.cheats.is_empty() && sel <= self.cheats.len()
+    }
+
     pub fn enabled(&self) -> usize {
         self.on.len()
     }
 
     pub fn rows(&self) -> Vec<Row> {
+        if self.cheats.is_empty() && self.unsupported == 0 {
+            return vec![Row {
+                name: "No cheats found for this game".into(),
+                value: String::new(),
+                desc: "The included cheat database has no matching codes. You can keep playing normally.".into(),
+            }];
+        }
         let mut rows: Vec<Row> = self
             .cheats
             .iter()
@@ -655,6 +725,133 @@ cheat1_desc = \"Pok&eacute;mon &amp; Friends\"\ncheat1_code = \"01FF57D8\"\nchea
     fn a_game_without_cheats_has_no_page() {
         let (dbdir, data) = (scratch("db2"), scratch("data2"));
         assert!(CheatMenu::load_in(&data, "gb", Path::new("/roms/gb/X.gb"), &[dbdir.to_path_buf()], false).is_none());
+    }
+
+    #[test]
+    fn brick_card_database_is_found_without_a_rocknix_database() {
+        let (card, data) = (scratch("brick-card"), scratch("brick-data"));
+        let root = card.join("app/database/cht");
+        db(&root, "Nintendo - Game Boy", &[("Tetris (World).cht", SAMPLE)]);
+        let roots = platform_roots(Some(&card));
+        let rom = Path::new("/roms/gb/Tetris (World).gb");
+        let mut menu = CheatMenu::load_in(&data, "gb", rom, &roots, false).expect("card includes cheats");
+        assert_eq!(menu.rows()[0].name, "Infinite Lives");
+        assert!(menu.press(0));
+        assert_eq!(active_codes_in(&data, "gb", rom, &roots), ["7E1F8A03+7E039203"]);
+    }
+
+    #[test]
+    fn missing_game_in_a_populated_brick_database_never_gets_another_games_cheats() {
+        let (card, data) = (scratch("brick-missing"), scratch("brick-missing-data"));
+        db(&card.join("app/database/cht"), "Nintendo - Game Boy", &[("Tetris (World).cht", SAMPLE)]);
+        let roots = platform_roots(Some(&card));
+        let rom = Path::new("/roms/gb/Homebrew with no cheats.gb");
+        assert!(CheatMenu::load_in(&data, "gb", rom, &roots, false).is_none());
+        assert!(active_codes_in(&data, "gb", rom, &roots).is_empty());
+        let mut empty = CheatMenu::empty();
+        assert_eq!(empty.count(), 1);
+        assert_eq!(empty.rows()[0].name, "No cheats found for this game");
+        assert!(empty.rows()[0].desc.contains("keep playing"));
+        assert!(!empty.actionable(0));
+        assert!(!empty.press(0));
+        assert_eq!(empty.enabled(), 0);
+    }
+
+    /// The same files as a folder tree and as one pack file.
+    fn tree_and_pack(base: &Path, files: &[(&str, &[(&str, &str)])]) -> (PathBuf, PathBuf) {
+        for (folder, list) in files {
+            db(&base.join("tree"), folder, list);
+        }
+        let packed: Vec<(&str, Vec<(String, Vec<u8>)>)> = files
+            .iter()
+            .map(|(f, l)| (*f, l.iter().map(|(n, b)| (n.to_string(), b.as_bytes().to_vec())).collect()))
+            .collect();
+        std::fs::write(base.join("cht.pack"), crate::cheat_pack::build(&packed)).unwrap();
+        (base.join("tree"), base.join("cht.pack"))
+    }
+
+    #[test]
+    fn a_pack_gives_the_same_cheats_as_the_folders_it_was_made_from() {
+        let t = scratch("pack-parity");
+        let snes = "Nintendo - Super Nintendo Entertainment System";
+        let files: &[(&str, &[(&str, &str)])] = &[
+            (snes, &[
+                ("Game (USA).cht", "cheat0_desc = \"Lives\"\ncheat0_code = \"AAAA\"\n"),
+                ("Game (Europe).cht", "cheat0_desc = \"Lives\"\ncheat0_code = \"EEEE\"\n"),
+                ("Game (USA) (Game Genie).cht", "cheat0_desc = \"Lives\"\ncheat0_code = \"GGGG\"\ncheat1_desc = \"Time\"\ncheat1_code = \"TTTT\"\n"),
+                ("Other Game (USA).cht", "cheat0_desc = \"x\"\ncheat0_code = \"X\"\n"),
+                ("Micro Mages.cht", "cheat0_desc = \"Coins\"\ncheat0_address = \"4298\"\ncheat0_value = \"6\"\ncheat0_cheat_type = \"1\"\n"),
+            ]),
+            ("Nintendo - Game Boy", &[("Tetris (World).cht", SAMPLE)]),
+        ];
+        let (tree, pack) = tree_and_pack(&t, files);
+        for (system, rom) in [
+            ("snes", "/r/Game (USA).sfc"),
+            ("snes", "/r/Game (E).smc"),
+            ("snes", "/r/Game.smc"),
+            ("snes", "/r/Micro Mages.sfc"),
+            ("snes", "/r/Nope.sfc"),
+            ("gb", "/r/Tetris (World).gb"),
+            ("gb", "/r/Tetris.gb"),
+            ("n64x", "/r/Game (USA).sfc"),
+        ] {
+            let rom = Path::new(rom);
+            assert_eq!(
+                find_all(system, rom, &[pack.clone()]),
+                find_all(system, rom, &[tree.clone()]),
+                "{system} {}",
+                rom.display()
+            );
+        }
+        assert_eq!(find("snes", Path::new("/r/Game (USA).sfc"), &[pack]).len(), 3, "USA lives, Game Genie lives, time");
+    }
+
+    #[test]
+    fn brick_card_pack_is_found_and_missing_games_still_get_the_empty_page() {
+        let (card, data) = (scratch("brick-pack"), scratch("brick-pack-data"));
+        std::fs::create_dir_all(card.join("app/cores")).unwrap();
+        let packed = vec![("Nintendo - Game Boy", vec![("Tetris (World).cht".to_string(), SAMPLE.as_bytes().to_vec())])];
+        std::fs::write(card.join("app/cores/cht.pack"), crate::cheat_pack::build(&packed)).unwrap();
+        let roots = platform_roots(Some(&card));
+        let rom = Path::new("/roms/gb/Tetris (World).gb");
+        let mut menu = CheatMenu::load_in(&data, "gb", rom, &roots, false).expect("the card's pack has cheats");
+        assert_eq!(menu.rows()[0].name, "Infinite Lives");
+        assert!(menu.press(0));
+        assert_eq!(active_codes_in(&data, "gb", rom, &roots), ["7E1F8A03+7E039203"]);
+        // A game the pack does not know: no cheats from another game, and the page the card shows says so.
+        let homebrew = Path::new("/roms/gb/Homebrew with no cheats.gb");
+        assert!(CheatMenu::load_in(&data, "gb", homebrew, &roots, false).is_none());
+        // A damaged pack is the same as no cheats: no crash, no wrong codes.
+        std::fs::write(card.join("app/cores/cht.pack"), b"cut off").unwrap();
+        assert!(CheatMenu::load_in(&data, "gb", rom, &roots, false).is_none());
+    }
+
+    /// Release check on real data: `POCKET_CHEATS_PARITY=<tree>:<pack>` (the unpacked database/cht and the cht.pack made
+    /// from it by brick-cheats-data.py): every file of the tree finds exactly the same cheats through the pack.
+    #[test]
+    #[ignore = "release check: needs the real database, see docs/TRIMUI-BRICK-STANDALONE.md"]
+    fn real_database_pack_matches_its_folders_for_every_entry() {
+        let spec = std::env::var("POCKET_CHEATS_PARITY").expect("POCKET_CHEATS_PARITY=<tree>:<pack>");
+        let (tree, pack) = spec.split_once(':').expect("<tree>:<pack>");
+        let (tree, pack) = (PathBuf::from(tree), PathBuf::from(pack));
+        let systems = ["atari2600", "atari7800", "atarilynx", "pc", "fbn", "pcengine", "pcenginecd", "supergrafx", "fds", "gb", "gbc", "gba",
+            "n64", "nds", "nes", "snes", "sega32x", "dreamcast", "gamegear", "mastersystem", "megadrive", "segacd", "saturn", "psx", "psp", "tic-80"];
+        let (mut files, mut with_cheats) = (0usize, 0usize);
+        for system in systems {
+            let folder = folder(system).unwrap_or_else(|| panic!("no folder for {system}"));
+            let Ok(dir) = std::fs::read_dir(tree.join(folder)) else { continue };
+            for e in dir.flatten() {
+                let name = e.file_name().to_string_lossy().into_owned();
+                let Some(stem) = name.strip_suffix(".cht") else { continue };
+                files += 1;
+                let rom = PathBuf::from(format!("/roms/{system}/{stem}.rom"));
+                let (a, b) = (find_all(system, &rom, &[tree.clone()]), find_all(system, &rom, &[pack.clone()]));
+                assert_eq!(a, b, "{system}: {stem}");
+                with_cheats += usize::from(!a.0.is_empty());
+            }
+        }
+        eprintln!("{files} files compared, {with_cheats} with cheats");
+        assert!(files > 20_000, "the real database has 23,174 files; found {files}");
     }
 
     #[test]

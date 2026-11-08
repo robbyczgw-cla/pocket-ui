@@ -45,7 +45,7 @@ impl Ctx {
         let (visible, boxes) = (self.tmp.join(format!("{}.txt", self.n.get())), self.tmp.join(format!("{}.tsv", self.n.get())));
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
         cmd.args(["--snapshot", state, self.tmp.join(format!("{}.png", self.n.get())).to_str().unwrap()])
-            .env("POCKETUI_MOCK", "1")
+            .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .env("POCKETUI_LANG", lang)
             .env("POCKETUI_VISIBLE_TEXT", &visible)
             .env("POCKETUI_TEXT_BOXES", &boxes)
@@ -71,7 +71,7 @@ fn frozen_games_show_in_every_look_and_not_when_switched_off_or_when_there_are_n
     let tmp = std::env::temp_dir().join(format!("pocketui-frozen-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).unwrap();
-    let ok = Command::new("python3")
+    let ok = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.join("lib").to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()

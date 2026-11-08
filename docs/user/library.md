@@ -7,6 +7,8 @@ what else you own by the same people.
 Long selected names scroll to the end and back once, then rest. Reselect the row to read it again. While a menu is
 still, pocket-ui sleeps between real changes such as the clock or battery indicator, including on a second screen.
 
+Home's small title cards keep the console readable by using a smaller size or its usual short name when there is no box art.
+
 ## Opening a card
 
 Select a game on the shelf, in a system's list or in Favourites and press **X** (the top face button).
@@ -36,8 +38,7 @@ slots on the game's memory card or cartridge and when the newest was saved, as i
 [pause menu](pause-menu-saves.md#save-slots-where-i-quit-and-before-load) (games on pocket-ui's own host), a PortMaster port's speed
 and "Update available, in Extras" when there is a newer version. At the right the title, the system and year ("Favourite" when it is one of
 yours), the facts (developer, publisher, genre, series, players, reviews) and the description from Wikipedia or your
-gamelist, with its source under it. A long description scrolls in its place; without one the page says "No
-description yet."
+gamelist, with its source under it. Facts and description scroll together below the fixed title and year, so a long list of facts never hides the description. Without one the page says "No description yet."
 
 | Button | On the info page |
 |---|---|
@@ -46,11 +47,13 @@ description yet."
 | Y | Set the play status or your rating. |
 | X | Write or change your note. |
 | START | [This game](options.md#this-game); on a PortMaster port its Performance & fan. |
-| D-pad Up / Down | Pick the developer, publisher, genre or series (the ones with an arrow), then scroll the description when it is longer than its place. |
-| L1 / R1 | Scroll the description a page. |
+| D-pad Up / Down | Pick the developer, publisher, genre or series (the ones with an arrow), then scroll through the facts and description. |
+| L1 / R1 | Scroll the facts and description a page. |
 | SELECT | Details: the card's full page with its rows (Echoes, Screenshots, Hide or delete…). SELECT there comes back to the info page. |
 
-The Shelf and Cabinet looks open the game box instead.
+Long game names on the info page and full Details page use a main title and a smaller subtitle, split at " - " or ": ". Up to three lines fit into the existing heading area; the type becomes smaller before words are shortened. The cover, system/year and facts stay in place.
+
+The Shelf and Cabinet looks open the game box instead. On the full details page, the headings above other games by the same developer or in the same series use a smaller size when needed to stay readable in full.
 
 ## The game box
 
@@ -120,7 +123,7 @@ card then shows **Series** Burnout. It takes two different games, never one game
 
 A value only leads somewhere when you have another game with it. One you don't (the only game of a studio on your
 card) is plain text without an arrow, and a game without any facts has nothing to pick: Down scrolls, A plays.
-If the library is still getting ready when you open a card, its connections appear there as soon as they are ready. Settings → Look → [Cozy extras](settings.md#cozy-extras) → **Game connections** switches
+If the library is still getting ready when you open a card, its connections appear there as soon as they are ready. Settings → Look → [Cozy extras](settings-sound.md#cozy-extras) → **Game connections** switches
 them off; the values are then only shown.
 
 ## What the card shows
@@ -321,7 +324,8 @@ those files, **never changes them**, and uses them where its own data has nothin
   first, and so do the facts from Wikidata; the card says under the facts where they are from.
 - **Box art**: a game without box art of its own shows the picture the gamelist names (a box, else a screenshot),
   where it is. Nothing is copied, and a picture of more than 1 MB is passed over, because drawing it while you scroll
-  would make the shelf stutter. Box art that pocket-ui downloads comes first.
+  would make the shelf stutter. A game that has a box on your card is not looked up online at all; one that has only
+  a screenshot still gets the collection's box, which then comes first.
 - **Favourites and ratings**: nothing is taken over by itself. Settings → Games → **From EmulationStation** counts
   them ("Your EmulationStation favourites: 42 games") and A adds the favourites to Favourites, or gives the games
   their stars as **My rating** (ES's 0.1 to 1.0 becomes one to five stars). It only adds: games already in Favourites
@@ -374,3 +378,16 @@ in Play history and the web companion show the same names as the system list.
 
 Curator (Lens, Surprise me, smart shelves, labels, Echoes, Up next, Versions, play history and the Year in review) has its own page:
 [Curator](curator.md).
+
+## A card from another handheld
+
+Cards from other systems work as they are; nothing has to be renamed, moved or scraped again. pocket-ui reads the games
+where they lie and never changes your folders.
+
+- **Folders**: next to `gba`, `snes` and the other folders, it reads a folder whose name means a system: `Game Boy Advance (GBA)`
+  (the word in brackets decides, so `(MGBA)` and `(SFC)` work), `GBA`, `FC`, `MD`, `PS`, `genesis`, `Sega Genesis`,
+  `Nintendo Game Boy Advance`. Two folders of one system are one list. A folder it does not know is named by
+  Settings → Games → Game check.
+- **Box art that is already there** is used before anything is downloaded: `images`, `Imgs`, `.media`, `covers`, ES-DE's
+  `downloaded_media` and the `box` folders of a catalogue. A picture of the box comes first, then a mix, then a screenshot;
+  logos, marquees and fan art never. Only when a game has no box of its own does pocket-ui fetch the collection's.

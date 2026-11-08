@@ -320,7 +320,7 @@ impl App {
         let room: Vec<_> = bluetooth::demo_devices().into_iter().map(|d| d.device).collect();
         let (on, devices) = match mode {
             "off" => (false, Vec::new()),
-            "empty" => (true, room.iter().filter(|d| d.paired).cloned().collect()),
+            "empty" => (true, Vec::new()),
             _ => (true, room),
         };
         let mut page = BluetoothPage::new();
@@ -534,6 +534,9 @@ impl App {
         } else if let Some(e) = page.snap.as_ref().and_then(|s| s.error.as_ref()) {
             headline(self, c, "Bluetooth does not answer", pal().alert);
             (vec![bluetooth::explain(Step::Looking, e)], pal().dust)
+        } else if page.shown.is_empty() {
+            headline(self, c, "No devices found", pal().dust);
+            (vec!["Put the device in pairing mode, then select Search for devices.".into()], pal().dust)
         } else if brick_bluetooth() {
             (vec!["Controllers and headphones. Connected headphones take the sound of games and menus; it comes back to the speaker when they go.".into()], pal().dust)
         } else if page.shown.iter().any(|d| !d.paired) {

@@ -33,3 +33,8 @@ static ROOT: Root = Root;
 
 #[path = "../../src/test_clock.rs"]
 mod test_clock;
+
+// Shared by the synthetic library and the UI child: 2026-11-08 12:00 UTC.
+// Tests of day transitions explicitly inject their other days.
+#[allow(dead_code)]
+const FIXTURE_NOW: &str = "1794139200";

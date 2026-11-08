@@ -102,7 +102,7 @@ searched. On the touch screen, tap the keys to type, tap a game to select it and
 
 The shelf has six looks. Choose one in Settings → Look → **Layout**, with a live preview. The look you
 choose is remembered. Each look comes dark or light: Appearance in Settings ([Appearance](settings.md#appearance)),
-and how much the menus move is [Motion](settings.md#motion).
+and how much the menus move is [Motion](settings-sound.md#motion).
 
 | Look | What it shows |
 |---|---|
@@ -159,14 +159,19 @@ spins up, a game card clicks into its slot), then the TV's soft thunk as it come
 other looks never have it.
 
 With **Cozy** and **Playful cases** the big consoles really take their game: the PlayStation's, GameCube's, Dreamcast's
-and Saturn's lid opens, the disc comes down onto the spindle and the lid shuts; the PS2's and Xbox's tray slides out and
+and Saturn's lid opens, the disc's case opens too, the disc is lifted out and lowered flat, label up, onto the spindle and the lid shuts; the PS2's and Xbox's tray slides out and
 takes the disc in; a SNES, N64 or Mega Drive cartridge is pushed down behind the slot's lip and clicks; a Game Boy or GBA
-cartridge goes in behind the top edge, a DS card behind the upper screen, and the Wii pulls its disc in through the slot. It takes about 1.6 seconds, and any button skips it at once.
+cartridge turns its label away and goes in behind the top edge (also on Game Boy Color); a DS card turns its label away before going behind the upper screen, and the Wii pulls its disc in through the slot. It takes about 1.6 seconds, and any button skips it at once.
+
+For GBA you can choose **Game Boy Advance SP** in Settings → Look → [Cozy extras](settings-sound.md#cozy-extras)
+→ **GBA console**. Its clamshell opens and stays open while the cartridge enters the bottom/front slot,
+contacts first and label facing the underside. Quick keeps that slot and orientation on its shorter timeline.
+The console pictures throughout the menus follow the choice; it starts with the original Game Boy Advance.
 
 On the other systems each game still goes in its own way (Settings → Sound & feel, on with Cozy): a
 cartridge is pushed into its slot and seats with a little squash as it clicks; a game card clicks all the way in; a disc
 console's tray slides out, the disc drops in and the tray shuts with the sound's clunk; the GameCube, PlayStation,
-Dreamcast and Mega-CD open their lid instead; the Wii and the PSP take the disc or UMD in through the slot. A case you
+Dreamcast and Mega-CD open their lid instead; the Wii takes the disc in through the slot. The PSP's UMD goes in a door at the PSP's back, so for now its start only lights the PSP up. A case you
 pick springs out of the shelf and wiggles once, the disc beside an open box turns slowly for a few seconds, and holding
 Left or Right on the Shelf tips the spines a little until they swing back.
 

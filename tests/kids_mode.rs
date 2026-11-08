@@ -25,7 +25,7 @@ impl Card {
     fn new() -> Card {
         // A short path: the stub's socket has to fit.
         let dir = tempfile::Builder::new().prefix("pui-kids-").tempdir_in("/tmp").unwrap();
-        let status = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), dir.path().to_str().unwrap(), "dark"]).stdout(std::process::Stdio::null()).status().unwrap();
+        let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), dir.path().to_str().unwrap(), "dark"]).stdout(std::process::Stdio::null()).status().unwrap();
         assert!(status.success());
         let stub = (cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|w| w.is_empty())).then(|| {
             let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), dir.path().join("wl").to_str().unwrap()]).spawn().unwrap();
@@ -49,7 +49,7 @@ impl Card {
         }
         let out = cmd
             .args(["--snapshot", state, png.to_str().unwrap()])
-            .env("POCKETUI_MOCK", "1")
+            .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .env("POCKETUI_LANG", "en")
             .env("POCKETUI_VISIBLE_TEXT", &words)
             .env("POCKETUI_DATA", tmp.join("data"))
@@ -169,7 +169,7 @@ open(sys.argv[1], 'wb').write(b'\x89PNG\r\n\x1a\n' + ch(b'IHDR', struct.pack('>I
     let tmp = card.data();
     let out = Command::new(env!("CARGO_BIN_EXE_pocket-ui"))
         .args(["--snapshot", "kids-flow:games-thread", tmp.join("shot.png").to_str().unwrap()])
-        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .env("POCKETUI_LANG", "en")
         .env("POCKETUI_DATA", tmp.join("data"))
         .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
@@ -208,7 +208,7 @@ open(sys.argv[1], 'wb').write(b'\x89PNG\r\n\x1a\n' + ch(b'IHDR', struct.pack('>I
     let tmp = card.data();
     let out = Command::new(env!("CARGO_BIN_EXE_pocket-ui"))
         .args(["--snapshot", "kids-shelf-thread", tmp.join("shot.png").to_str().unwrap()])
-        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .env("POCKETUI_LANG", "en")
         .env("POCKETUI_DATA", tmp.join("data"))
         .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))

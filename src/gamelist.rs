@@ -26,12 +26,14 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use serde::{Deserialize, Serialize};
 
+use crate::layouts::{ArtDir, Kind};
+
 /// The cache in the data dir.
 pub const FILE: &str = "gamelist-cache.json";
 /// The cache's format; another one is read as missing. Raise it when `parse` or `Entry` gives other results for the same
 /// file. (pocket-ui's own version is not in the key: an update must not make the first start parse every gamelist again
 /// before its first frame.)
-const VERSION: u32 = 2;
+const VERSION: u32 = 3;
 /// A gamelist larger than this is not read (a real one with 10 000 scraped games is about 8 MB).
 pub const MAX_BYTES: u64 = 32 * 1024 * 1024;
 /// Games taken from one file.
@@ -44,9 +46,10 @@ pub const FACT_MAX: usize = 100;
 pub const RATING_FULL: u8 = 100;
 /// Pictures of a game kept from one entry.
 const IMAGES_MAX: usize = 3;
-/// `<tag>`s that name a picture, best box art first: `cover` and `boxart` (ES-DE, Batocera), `thumbnail` (the box in
-/// Batocera, a small `image` in ES), `image` (a screenshot or the box). Wide logos (`marquee`) and `video` are no cover.
-const IMAGE_TAGS: [&str; 4] = ["cover", "boxart", "thumbnail", "image"];
+/// `<tag>`s that name box art: `cover` and `boxart` (ES-DE, Batocera), `thumbnail` (the box in Batocera, a small `image` in
+/// ES). `image` is `Entry::shots`: the box too when the entry names none and the picture is in no screenshots folder (ES's
+/// scraper writes whichever picture was asked for there). Wide logos (`marquee`), `fanart` and `video` are no cover.
+const BOX_TAGS: [&str; 3] = ["cover", "boxart", "thumbnail"];
 
 /// One `<game>` of a gamelist.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -81,6 +84,9 @@ pub struct Entry {
     /// Picture files, best cover first, as the XML names them (not checked to be there: they may still be copying).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub images: Vec<PathBuf>,
+    /// The `<image>` of the entry: a screenshot, unless the entry names no box and the file is in no screenshots folder.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shots: Vec<PathBuf>,
 }
 
 fn is_zero_u16(n: &u16) -> bool {
@@ -109,17 +115,23 @@ pub struct Locations {
     pub es_dirs: Vec<PathBuf>,
     /// ES-DE's folder: `gamelists/<system>/gamelist.xml` and `downloaded_media/<system>/…`.
     pub es_de: PathBuf,
+    /// muOS's `MUOS/info/catalogue` folders (`<System name>/box|preview/<game>.png`), where a card of it was copied.
+    pub catalogues: Vec<PathBuf>,
 }
 
 impl Locations {
     pub fn device() -> Locations {
         let root = std::env::var_os("POCKETUI_ES_HOME").map(PathBuf::from).filter(|p| p.is_absolute()).unwrap_or_else(|| PathBuf::from("/storage"));
-        Locations { es_dirs: vec![root.join(".config/emulationstation"), root.join(".emulationstation")], es_de: root.join("ES-DE") }
+        Locations {
+            es_dirs: vec![root.join(".config/emulationstation"), root.join(".emulationstation")],
+            es_de: root.join("ES-DE"),
+            catalogues: vec![root.join("MUOS/info/catalogue"), root.join("roms/MUOS/info/catalogue")],
+        }
     }
 
     /// Nothing is looked for outside the ROM folders (tests).
     pub fn none() -> Locations {
-        Locations { es_dirs: Vec::new(), es_de: PathBuf::new() }
+        Locations { es_dirs: Vec::new(), es_de: PathBuf::new(), catalogues: Vec::new() }
     }
 
     /// The gamelist files of a system, the first one wins for a game.
@@ -127,7 +139,7 @@ impl Locations {
         let mut v = vec![rom_dir.join("gamelist.xml")];
         v.extend(self.es_dirs.iter().map(|d| d.join("gamelists").join(system).join("gamelist.xml")));
         if !self.es_de.as_os_str().is_empty() {
-            v.push(self.es_de.join("gamelists").join(system).join("gamelist.xml"));
+            v.extend(es_de_names(system).into_iter().map(|n| self.es_de.join("gamelists").join(n).join("gamelist.xml")));
         }
         v
     }
@@ -137,9 +149,15 @@ impl Locations {
         if self.es_de.as_os_str().is_empty() {
             return None;
         }
-        let dir = self.es_de.join("downloaded_media").join(system);
-        dir.is_dir().then_some(dir)
+        es_de_names(system).into_iter().map(|n| self.es_de.join("downloaded_media").join(n)).find(|d| d.is_dir())
     }
+}
+
+/// The names ES-DE gives a system's folders under `gamelists/` and `downloaded_media/`: the id of this device, then ES-DE's own
+/// where it differs (`genesis` for `megadrive`).
+fn es_de_names(system: &str) -> Vec<&str> {
+    const OTHER: &[(&str, &str)] = &[("megadrive", "genesis"), ("segacd", "megacd"), ("pcengine", "tg16"), ("pcenginecd", "tg-cd"), ("snes", "sfc"), ("nes", "famicom"), ("sg-1000", "sg1000")];
+    std::iter::once(system).chain(OTHER.iter().filter(|(ours, _)| *ours == system).map(|(_, es)| *es)).collect()
 }
 
 // ---- parsing -------------------------------------------------------------------------------------------------
@@ -350,13 +368,15 @@ fn entry(block: &str, rom_dir: &Path) -> Option<Entry> {
     let path = resolve(&field(block, "path")?, rom_dir)?;
     let get = |tag: &str, max: usize| field(block, tag).map(|v| tidy(&v, max)).unwrap_or_default();
     let mut images: Vec<PathBuf> = Vec::new();
-    for tag in IMAGE_TAGS {
+    for tag in BOX_TAGS {
         if let Some(p) = field(block, tag).and_then(|v| resolve(&v, rom_dir)) {
             if !images.contains(&p) && images.len() < IMAGES_MAX {
                 images.push(p);
             }
         }
     }
+    // `<image>` is kept apart: a screenshot, or the box when the entry names none (`SystemData::ranked`).
+    let shots: Vec<PathBuf> = field(block, "image").and_then(|v| resolve(&v, rom_dir)).filter(|p| !images.contains(p)).into_iter().collect();
     Some(Entry {
         path,
         name: get("name", FACT_MAX),
@@ -370,6 +390,7 @@ fn entry(block: &str, rom_dir: &Path) -> Option<Entry> {
         favorite: field(block, "favorite").is_some_and(|f| matches!(f.trim().to_ascii_lowercase().as_str(), "true" | "1" | "yes")),
         last_played: field(block, "lastplayed").map_or(0, |d| when(&d)),
         images,
+        shots,
     })
 }
 
@@ -540,12 +561,14 @@ fn read_file(file: &Path, rom_dir: &Path) -> Option<Parsed> {
 
 // ---- a system's games and the index ----------------------------------------------------------------------------
 
-/// What the gamelists say about the games of one system.
+/// What the gamelists say about the games of one system, and the picture folders beside its games.
 #[derive(Clone, Default)]
 pub struct SystemData {
     by_path: HashMap<PathBuf, Arc<Entry>>,
     /// ES-DE's picture folder for the system.
     media: Option<PathBuf>,
+    /// The picture folders of each ROM folder of the system (`layouts::art_dirs`), and muOS's catalogue for it.
+    art: Vec<(Option<PathBuf>, Vec<ArtDir>)>,
     /// Gamelist files read.
     pub files: usize,
 }
@@ -556,7 +579,59 @@ impl SystemData {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.by_path.is_empty() && self.media.is_none()
+        self.by_path.is_empty() && self.media.is_none() && self.art.is_empty()
+    }
+
+    /// Takes in the data of another ROM folder of the same system ("Game Boy Advance (GBA)" beside `gba`).
+    fn merge(&mut self, other: SystemData) {
+        for (path, entry) in other.by_path {
+            self.by_path.entry(path).or_insert(entry);
+        }
+        self.media = self.media.take().or(other.media);
+        for art in other.art {
+            if !self.art.contains(&art) {
+                self.art.push(art);
+            }
+        }
+        self.files += other.files;
+    }
+
+    /// Picture files that may be the game's, best first, with what they show: the gamelist's own, ES-DE's folders by file
+    /// name, then the picture folders next to the games. None is checked to be there except those a listing found.
+    fn ranked(&self, rom: &Path) -> Vec<(Kind, PathBuf)> {
+        let mut v: Vec<(Kind, PathBuf)> = Vec::new();
+        if let Some(e) = self.get(rom) {
+            v.extend(e.images.iter().map(|p| (Kind::Box, p.clone())));
+            for p in &e.shots {
+                let folder = p.parent().and_then(|d| d.file_name()).map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+                let screenshot = ["screenshot", "snap", "title"].iter().any(|w| folder.contains(w));
+                v.push((if e.images.is_empty() && !screenshot { Kind::Likely } else { Kind::Shot }, p.clone()));
+            }
+        }
+        let stem = rom.file_stem().and_then(|s| s.to_str());
+        if let (Some(media), Some(stem)) = (&self.media, stem) {
+            for (kind, folder) in [(Kind::Box, "covers"), (Kind::Box, "3dboxes"), (Kind::Mix, "miximages"), (Kind::Shot, "screenshots"), (Kind::Shot, "titlescreens")] {
+                for ext in ["png", "jpg"] {
+                    v.push((kind, media.join(folder).join(format!("{stem}.{ext}"))));
+                }
+            }
+        }
+        // A game in a folder of its own ("Game/Game.cue") is named by the folder as often as by the file.
+        let names: Vec<&str> = stem.into_iter().chain(rom.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str())).collect();
+        for (dir, folders) in &self.art {
+            // A catalogue (muOS) lies outside the ROM folders and fits every game of the system.
+            if dir.as_ref().is_some_and(|d| !rom.starts_with(d)) {
+                continue;
+            }
+            for folder in folders {
+                if let Some((path, kind)) = names.iter().find_map(|name| folder.find(name)) {
+                    v.push((kind, path));
+                }
+            }
+        }
+        // Stable: within a kind the order above stays (gamelist, ES-DE, folders).
+        v.sort_by_key(|(kind, _)| *kind);
+        v
     }
 }
 
@@ -571,6 +646,15 @@ pub fn system(data_dir: &Path, loc: &Locations, system: &str, rom_dir: &Path) ->
                 data.by_path.entry(e.path.clone()).or_insert_with(|| e.clone());
             }
         }
+    }
+    let beside = crate::layouts::art_dirs(rom_dir);
+    if !beside.is_empty() {
+        data.art.push((Some(rom_dir.to_path_buf()), beside));
+    }
+    let ids = [system, crate::consoles::canonical(system)];
+    let catalogue: Vec<ArtDir> = loc.catalogues.iter().flat_map(|c| crate::layouts::catalogue_dirs(c, &ids)).collect();
+    if !catalogue.is_empty() {
+        data.art.push((None, catalogue));
     }
     data
 }
@@ -591,11 +675,18 @@ impl Index {
     /// Reads the gamelists of every `(system, ROM folder)`. On the scan's thread; writes the cache when something
     /// was parsed.
     pub fn load(data_dir: &Path, loc: &Locations, sources: &[(String, PathBuf)]) -> Index {
-        let mut systems = BTreeMap::new();
+        let mut systems: BTreeMap<String, SystemData> = BTreeMap::new();
         for (id, dir) in sources {
             let d = system(data_dir, loc, id, dir);
-            if !d.is_empty() {
-                systems.insert(id.clone(), d);
+            if d.is_empty() {
+                continue;
+            }
+            // Two ROM folders of one system (`gba` and "Game Boy Advance (GBA)") are one system's data.
+            match systems.get_mut(id) {
+                Some(have) => have.merge(d),
+                None => {
+                    systems.insert(id.clone(), d);
+                }
             }
         }
         flush(data_dir);
@@ -621,24 +712,24 @@ impl Index {
             && self.systems.iter().zip(&other.systems).all(|((a, x), (b, y))| {
                 a == b
                     && x.media == y.media
+                    && x.art == y.art
                     && x.by_path.len() == y.by_path.len()
                     && x.by_path.iter().all(|(p, e)| y.by_path.get(p).is_some_and(|o| Arc::ptr_eq(e, o) || **e == **o))
             })
     }
 
-    /// Picture files that may be the game's box art, best first: the XML's own, then ES-DE's folders by file name. The
-    /// caller takes the first that exists; none is checked here (this runs for every game on the shelf).
+    /// Picture files that may be the game's cover, best first: boxes (the XML's own, ES-DE's `covers`, the picture folders
+    /// beside the games), then mixes, then screenshots. The caller takes the first that exists; only listed files are
+    /// known to be there (this runs for every game on the shelf).
     pub fn cover_candidates(&self, system: &str, rom: &Path) -> Vec<PathBuf> {
-        let Some(sd) = self.systems.get(system) else { return Vec::new() };
-        let mut v: Vec<PathBuf> = sd.get(rom).map(|e| e.images.clone()).unwrap_or_default();
-        if let (Some(media), Some(stem)) = (&sd.media, rom.file_stem().and_then(|s| s.to_str())) {
-            for kind in ["covers", "3dboxes", "miximages", "screenshots", "titlescreens"] {
-                for ext in ["png", "jpg"] {
-                    v.push(media.join(kind).join(format!("{stem}.{ext}")));
-                }
-            }
-        }
-        v
+        self.systems.get(system).map(|sd| sd.ranked(rom).into_iter().map(|(_, p)| p).collect()).unwrap_or_default()
+    }
+
+    /// Whether the game has a picture of its box on the card, usable as a cover (`usable_cover`): then the box art
+    /// download leaves the game alone. A screenshot is no box.
+    pub fn has_box_art(&self, system: &str, rom: &Path) -> bool {
+        let Some(sd) = self.systems.get(system) else { return false };
+        usable_cover(sd.ranked(rom).into_iter().filter(|(k, _)| *k <= Kind::Likely).map(|(_, p)| p).collect()).is_some()
     }
 
     /// The games of `games` (system id, ROM) the gamelists mark as favourites.
@@ -746,11 +837,8 @@ mod tests {
         assert_eq!(a.desc, "Command troops & win. Two lines — and a <tag>.");
         assert_eq!((a.developer.as_str(), a.publisher.as_str(), a.genre.as_str(), a.players.as_str()), ("Intelligent Systems", "Nintendo", "Strategy", "1-4"));
         assert_eq!((a.year, a.rating, a.stars(), a.favorite), (2001, 80, 4, true));
-        assert_eq!(
-            a.images,
-            [Path::new("/storage/roms/gba/media/box/Advance Wars (USA).png"), Path::new("/storage/roms/gba/media/images/Advance Wars (USA).png")],
-            "the thumbnail (the box in Batocera) before the image"
-        );
+        assert_eq!(a.images, [Path::new("/storage/roms/gba/media/box/Advance Wars (USA).png")], "the thumbnail is the box in Batocera");
+        assert_eq!(a.shots, [Path::new("/storage/roms/gba/media/images/Advance Wars (USA).png")], "the image beside it is kept apart");
         assert_eq!(g[1].name, "Street Fighter II' Champion Edition", "CDATA");
         assert_eq!(g[1].path, Path::new("/storage/roms/gba/sf2ce.gba"), "no ./ is relative too");
         assert!(!g[1].favorite && g[1].stars() == 0 && g[1].year == 0);
@@ -941,7 +1029,7 @@ mod tests {
         std::fs::write(es_de.join("gamelists/gba/gamelist.xml"), "<gameList><game><path>./a.gba</path><name>From ES-DE</name><genre>Puzzle</genre></game><game><path>./b.gba</path><name>Only ES-DE</name></game></gameList>").unwrap();
         std::fs::write(es.join("gamelists/gba/gamelist.xml"), "<gameList><game><path>./a.gba</path><name>From ES</name></game></gameList>").unwrap();
         t.xml("<game><path>./a.gba</path><name>From the ROM folder</name></game>");
-        let loc = Locations { es_dirs: vec![es], es_de };
+        let loc = Locations { es_dirs: vec![es], es_de, catalogues: Vec::new() };
         let src = vec![("gba".to_string(), t.rom_dir())];
         let i = Index::load(&t.data(), &loc, &src);
         assert_eq!(i.files(), 3);

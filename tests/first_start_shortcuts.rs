@@ -23,7 +23,7 @@ struct Card {
 impl Card {
     fn new() -> Card {
         let dir = tempfile::Builder::new().prefix("pui-fs-").tempdir_in("/tmp").unwrap();
-        let ok = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), dir.path().to_str().unwrap(), "dark"]).stdout(std::process::Stdio::null()).status().unwrap();
+        let ok = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), dir.path().to_str().unwrap(), "dark"]).stdout(std::process::Stdio::null()).status().unwrap();
         assert!(ok.success());
         let stub = (cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|w| w.is_empty())).then(|| {
             let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), dir.path().join("wl").to_str().unwrap()]).spawn().unwrap();
@@ -46,7 +46,7 @@ impl Card {
         }
         let out = cmd
             .args(["--snapshot", state, png.to_str().unwrap()])
-            .env("POCKETUI_MOCK", "1")
+            .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .env("POCKETUI_LANG", lang)
             .env("POCKETUI_SNAPSHOT_SIZE", size)
             .env("POCKETUI_VISIBLE_TEXT", &words)

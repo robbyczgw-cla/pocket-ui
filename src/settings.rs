@@ -167,6 +167,9 @@ pub struct Settings {
     /// The Retro style's palette (`retro::Colours`), the Colours row's choice while Style is Retro; Cocoa when unset.
     #[serde(default, deserialize_with = "lenient")]
     pub retro_colours: crate::retro::Colours,
+    /// Settings → Look → Cozy extras → GBA console. Only the hardware picture changes.
+    #[serde(default, deserialize_with = "lenient")]
+    pub gba_model: crate::system_art::GbaModel,
     /// Settings > Sound & feel > Motion; Full when unset.
     #[serde(default, deserialize_with = "lenient")]
     pub motion: Motion,
@@ -426,6 +429,7 @@ mod tests {
             colours: crate::palette::Colours::GreyBrick,
             font: crate::font_style::FontStyle::Rounded,
             retro_colours: crate::retro::Colours::Pea,
+            gba_model: crate::system_art::GbaModel::Sp,
             motion: Motion::Reduced,
             frames: Frames::Every,
             seen_version: Some("0.2.0".into()),
@@ -488,6 +492,23 @@ mod tests {
         // All on is not written at all.
         Settings { extras: Default::default(), ..chosen() }.save(&d);
         assert!(!std::fs::read_to_string(d.join(FILE)).unwrap().contains("extras"));
+    }
+
+    #[test]
+    fn a_gba_from_before_the_model_choice_stays_classic_and_the_sp_choice_survives_restart() {
+        use crate::system_art::GbaModel;
+        let d = crate::testutil::TestDir::new("gba-model");
+        std::fs::write(d.join(FILE), r#"{"onboarded":true}"#).unwrap();
+        let mut s = Settings::load(&d);
+        assert_eq!(s.gba_model, GbaModel::Advance);
+        s.gba_model = GbaModel::Sp;
+        s.save(&d);
+        assert_eq!(Settings::load(&d).gba_model, GbaModel::Sp);
+        // A malformed/future preference must not discard the rest of the player's settings.
+        std::fs::write(d.join(FILE), r#"{"gba_model":"future","onboarded":true}"#).unwrap();
+        let s = Settings::load(&d);
+        assert_eq!(s.gba_model, GbaModel::Advance);
+        assert!(s.onboarded);
     }
 
     #[test]

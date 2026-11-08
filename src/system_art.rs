@@ -8,6 +8,39 @@ pub struct Sprite {
     pub px: Vec<u32>,
 }
 
+/// The player's GBA hardware picture, kept independently of the ROM system and emulator.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GbaModel {
+    #[default]
+    Advance,
+    Sp,
+}
+
+impl GbaModel {
+    pub fn label(self) -> &'static str {
+        match self { Self::Advance => "Game Boy Advance", Self::Sp => "Game Boy Advance SP" }
+    }
+    pub fn next(self) -> Self {
+        match self { Self::Advance => Self::Sp, Self::Sp => Self::Advance }
+    }
+}
+
+static GBA_MODEL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn gba_model() -> GbaModel {
+    if GBA_MODEL.load(std::sync::atomic::Ordering::Relaxed) { GbaModel::Sp } else { GbaModel::Advance }
+}
+
+pub fn set_gba_model(model: GbaModel) {
+    GBA_MODEL.store(model == GbaModel::Sp, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Shared by every console picture and the launch rig; `canonical` keeps the actual ROM system.
+pub fn picture_id(system: &str) -> &str {
+    if canonical(system) == "gba" && gba_model() == GbaModel::Sp { "gba-sp" } else { canonical(system) }
+}
+
 /// The systems with a picture of their own (assets/systems/<id>.png), by ROCKNIX system name.
 const ART: &[(&str, &[u8])] = &[
     ("3do", include_bytes!("../assets/systems/3do.png")),
@@ -27,6 +60,7 @@ const ART: &[(&str, &[u8])] = &[
     ("gamegear", include_bytes!("../assets/systems/gamegear.png")),
     ("gb", include_bytes!("../assets/systems/gb.png")),
     ("gba", include_bytes!("../assets/systems/gba.png")),
+    ("gba-sp", include_bytes!("../assets/systems/gba-sp.png")),
     ("gbc", include_bytes!("../assets/systems/gbc.png")),
     ("intellivision", include_bytes!("../assets/systems/intellivision.png")),
     ("mastersystem", include_bytes!("../assets/systems/mastersystem.png")),
@@ -109,7 +143,7 @@ const ALIASES: &[(&str, &str)] = &[
 ];
 
 fn slot(system: &str) -> Option<usize> {
-    let id = ALIASES.iter().find(|(alias, _)| *alias == system).map_or(system, |(_, id)| *id);
+    let id = picture_id(system);
     ART.iter().position(|(name, _)| *name == id)
 }
 

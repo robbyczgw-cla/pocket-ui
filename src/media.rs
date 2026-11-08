@@ -460,9 +460,10 @@ pub fn spine(text: &mut Text, m: Medium, k: f32, look: Look, title: &str) -> Pic
 /// The sizes a spine's title is written in: the ones the app paints anyway, so a spine made in a frame draws no
 /// letters of its own (tests/shelf_moves.rs).
 const SPINE_PX: [u32; 8] = [21, 24, 28, 30, 37, 44, 50, 67];
-/// Below them, only for a font wider than Barlow Condensed (`spine_fit`): one line or two at each, before "…"; a pixel
-/// font reads well this small.
-const WIDE_FONT_PX: [u32; 2] = [18, 16];
+/// Below them, in every font, when a title fits no other way (`spine_fit`): one size step and a second before a name is
+/// cut. Barlow Condensed and the pixel font read at both (the Brick's Nintendo 64 spines, 2026-11-07: "Conker's B…",
+/// "Super Sma…" with room for the whole name two steps down).
+const STEP_DOWN_PX: [u32; 2] = [18, 16];
 
 /// The title size for a spine label `w` pixels across: the largest of `SPINE_PX` up to `want` whose letters, capitals
 /// to descenders, still fit across the label with a little paper on both sides; 21 at the least.
@@ -494,6 +495,7 @@ pub fn spine_with(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, w
     paper(&mut p, (x, y, w, h), look.color);
     let pad = (4.0 * k).round() as i32;
     let (lines, px, face) = spine_fit(text, title, w, h - 2 * pad, want);
+    note_spine(m, title, &lines, px);
     let ink = ink_on(look.color);
     match lines.as_slice() {
         [one] => art::spine_title(text, &mut p, face, one, px, x, w, y + pad, h - 2 * pad, ink),
@@ -509,6 +511,16 @@ pub fn spine_with(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, w
         _ => {}
     }
     p
+}
+
+/// What a spine shows of a title, for tests/spine_names.rs: `POCKETUI_SPINE_LINES` names the file the spines made go to
+/// (title, size, lines, case), appended to.
+fn note_spine(m: Medium, title: &str, lines: &[String], px: u32) {
+    use std::io::Write;
+    let Some(path) = std::env::var_os("POCKETUI_SPINE_LINES") else { return };
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(f, "{title}\t{px}\t{}\t{m:?}", lines.join("|"));
+    }
 }
 
 /// The cut edge of a cardboard box: one template pixel all round in the same warm grey on every box, whatever its
@@ -583,40 +595,124 @@ fn main_title(title: &str) -> Option<(&str, &str)> {
     (main.len() >= 3 && !sub.is_empty()).then_some((main, sub))
 }
 
+/// A title's main part is the one that tells games apart when it ends in a number ("Donkey Kong Country 3", "Final
+/// Fantasy VII"); otherwise the subtitle does ("Ocarina of Time", "Super Circuit").
+fn main_is_numbered(main: &str) -> bool {
+    let last = main.split_whitespace().next_back().unwrap_or("");
+    last.chars().all(|c| c.is_ascii_digit()) && !last.is_empty()
+        || last.len() >= 2 && last.chars().all(|c| matches!(c, 'I' | 'V' | 'X'))
+}
+
+/// The parts of a "Series - Subtitle" name that tell the games apart, best first (`spine_fit` rung 5, and a search
+/// result's row, `title_block::row`): the subtitle, or the main part when it ends in a number (then the subtitle
+/// after it). A main part alone would stand for every game of its series, so it is not shown for a subtitle that does
+/// not fit: that is cut instead. Empty for a name without a subtitle.
+pub fn telling_parts(title: &str) -> Vec<&str> {
+    main_title(title)
+        .map(|(main, sub)| {
+            let sub_bare = sub.strip_prefix("The ").map(str::trim).filter(|r| !r.is_empty());
+            let numbered = main_is_numbered(main);
+            let mut v = if numbered { vec![main, sub] } else { vec![sub] };
+            v.extend(sub_bare);
+            // A numbered main part that fits no way loses its first words, not its number: "Kong Country 3", "Mario
+            // Advance 4" (cut it, and "Donkey Kong Countr…" would stand for two games).
+            if numbered {
+                v.extend(main.match_indices(' ').map(|(i, _)| main[i + 1..].trim()).filter(|t| t.contains(' ')));
+            }
+            v
+        })
+        .unwrap_or_default()
+}
+
+/// A candidate for the spine: its text and, for the whole title with a subtitle, the main part and the subtitle (they
+/// may stand on two lines of their own, without the dash).
+type Cand<'a> = (&'a str, Option<(&'a str, &'a str)>);
+
 /// How a title goes on a spine label `thick` pixels across and `len` long, at most `want` pixels: its lines (one, or
-/// two across a spine thick enough) and their size (one of `SPINE_PX`). Until it fits whole, in this order: a little
-/// smaller (seven tenths of `want`); on two lines, a subtitle on a line of its own without its dash; smaller still, down
-/// to 21 px (it still reads); the same again without the subtitle after " - " or ": " ("Prince of Persia"); and only
-/// then cut short with "…" (trailer frames, 2026-10-29: "Advance…", "Donkey Kon…" on spines that had the room).
+/// two across a spine thick enough) and their size. Until it fits, in this order (a title cut short on the Brick's
+/// Nintendo 64 shelf, 2026-11-07: "Conker's B…", "Super Sma…", "The Legend…" twice, "Mario Kar…" three times):
+/// 1. the whole title: a little smaller (seven tenths of `want`); on two lines, a subtitle on a line of its own without
+///    its dash; smaller still, down to 21 px (it still reads);
+/// 2. in a font wider than Barlow Condensed (Theme → Font: Pixel, Rounded), the same in Barlow Condensed (`Face::Narrow`);
+/// 3. the whole title one size step down and another (`STEP_DOWN_PX`, 18 and 16);
+/// 4. the title without its leading "The";
+/// 5. the part of a "Series - Subtitle" or "Series: Subtitle" name that tells the games apart (the subtitle, "Ocarina
+///    of Time"; the main part when it ends in a number, "Donkey Kong Country 3", then the subtitle, then the main part
+///    without its first words, "Kong Country 3"), each by the same steps;
+/// 6. only then cut short with "…", at 16 px, the first of those parts, in the narrowest face (trailer frames, 2026-10-29: "Donkey Kon…" on a spine with room).
 ///
-/// In a font wider than Barlow Condensed (Theme → Font: Pixel, Rounded) two more tries come before the "…": one or two
-/// lines at 18 and 16 px, then the title in Barlow Condensed (`Face::Narrow`) by the same rules. The face is the third
-/// value.
+/// The face is the third value.
 pub fn spine_fit(text: &mut Text, title: &str, thick: i32, len: i32, want: f32) -> (Vec<String>, u32, crate::text::Face) {
     use crate::text::Face;
     // As thick as the case: the design's sizes whatever Settings → Text size says (`type_scale`).
     let _fixed = crate::type_scale::fixed();
     let wide = text.style() != crate::font_style::FontStyle::Barlow;
-    if let Some((lines, px)) = spine_whole(text, Face::Title, title, thick, len, want, wide) {
-        return (lines, px, Face::Title);
-    }
-    if wide {
-        if let Some((lines, px)) = spine_whole(text, Face::Narrow, title, thick, len, want, false) {
-            return (lines, px, Face::Narrow);
+    let faces: &[Face] = if wide { &[Face::Title, Face::Narrow] } else { &[Face::Title] };
+    let split = main_title(title);
+    let bare = title.strip_prefix("The ").map(str::trim).filter(|r| !r.is_empty());
+    let parts = telling_parts(title);
+    let mut stages: Vec<Vec<Cand>> = vec![vec![(title, split)]];
+    stages.extend(bare.map(|b| vec![(b, None)]));
+    stages.push(parts.iter().map(|&t| (t, None)).collect());
+    for stage in &stages {
+        for &cand in stage {
+            for &face in faces {
+                if let Some((lines, px)) = spine_place(text, face, cand, thick, len, want, false) {
+                    return (lines, px, face);
+                }
+            }
+            for &face in faces {
+                if let Some((lines, px)) = spine_place(text, face, cand, thick, len, want, true) {
+                    return (lines, px, face);
+                }
+            }
         }
     }
-    // Only then cut short, at the least size, the title without its subtitle.
-    let across = |s: u32| (s as f32 * 0.86).round() as i32;
-    let s = SPINE_PX.into_iter().find(|&s| s as f32 <= want + 0.5 && across(s) <= thick - 6).unwrap_or(SPINE_PX[0]);
-    let short = main_title(title).map_or(title, |(main, _)| main);
-    (vec![text.fit(Face::Title, s, short, len)], s, Face::Title)
+    // Only then cut short: the part that tells the games apart, at the least size.
+    let (s, face) = (STEP_DOWN_PX[STEP_DOWN_PX.len() - 1], faces[faces.len() - 1]);
+    let short = parts.first().copied().unwrap_or(title);
+    (vec![text.fit(face, s, short, len)], s, face)
 }
 
-/// `spine_fit` in `face` without the cut: `None` when the title, whole or without its subtitle, fits no way. `wide`: the
-/// face is wider than Barlow Condensed, 18 and 16 px are tried as well.
+/// `spine_fit`'s rung for one candidate in `face` without the cut: `None` when it fits no way. `down`: the sizes of
+/// `STEP_DOWN_PX` (one line, or two across a spine thick enough for them), else the sizes down to 21.
 #[allow(clippy::too_many_arguments)]
-fn spine_whole(text: &mut Text, face: crate::text::Face, title: &str, thick: i32, len: i32, want: f32, wide: bool) -> Option<(Vec<String>, u32)> {
+fn spine_place(text: &mut Text, face: crate::text::Face, (t, split): Cand, thick: i32, len: i32, want: f32, down: bool) -> Option<(Vec<String>, u32)> {
     let across = |s: u32| (s as f32 * 0.86).round() as i32;
+    // The halves of a name are measured as they are (they are not words to translate, `spine_with`).
+    let two_lines = |text: &mut Text, s: u32| -> Option<Vec<String>> {
+        if 2 * across(s) + 2 > thick - 2 {
+            return None;
+        }
+        // The whole title on two lines: a subtitle on a line of its own, without its dash.
+        let lines = match split {
+            Some((main, sub)) => vec![main.to_string(), sub.to_string()],
+            None => text.wrap(face, s, t, len),
+        };
+        // Two lines of whole words: a word broken in pieces would not read.
+        let whole = split.is_some() || lines.join(" ") == t.split_whitespace().collect::<Vec<_>>().join(" ");
+        let translating = text.translating();
+        text.set_translate(false);
+        let fits = lines.iter().all(|l| text.width(face, s, l) <= len);
+        text.set_translate(translating);
+        (lines.len() == 2 && whole && fits).then_some(lines)
+    };
+    if down {
+        // The sizes that fit across the label; on a label too narrow for any, the least.
+        let mut steps: Vec<u32> = STEP_DOWN_PX.into_iter().filter(|&s| across(s) <= thick - 6).collect();
+        if steps.is_empty() {
+            steps.push(STEP_DOWN_PX[STEP_DOWN_PX.len() - 1]);
+        }
+        for s in steps {
+            if text.width(face, s, t) <= len {
+                return Some((vec![t.to_string()], s));
+            }
+            if let Some(lines) = two_lines(text, s) {
+                return Some((lines, s));
+            }
+        }
+        return None;
+    }
     // The sizes that fit across the label, largest first (the smallest of all on a label too narrow for any).
     let mut sizes: Vec<u32> = SPINE_PX.into_iter().rev().filter(|&s| s as f32 <= want + 0.5 && across(s) <= thick - 6).collect();
     if sizes.is_empty() {
@@ -624,64 +720,16 @@ fn spine_whole(text: &mut Text, face: crate::text::Face, title: &str, thick: i32
     }
     let near = (want * 0.7).max(SPINE_PX[0] as f32);
     let (big, small): (Vec<u32>, Vec<u32>) = sizes.iter().partition(|&&s| s as f32 >= near - 0.5);
-    // Two lines with two pixels between them and one of paper at each edge.
-    let two: Vec<u32> = sizes.iter().copied().filter(|&s| 2 * across(s) + 2 <= thick - 2).collect();
-    let split = main_title(title);
-    let mut tries = vec![title];
-    tries.extend(split.map(|(main, _)| main));
-    for (i, t) in tries.iter().enumerate() {
-        let one = |text: &mut Text, list: &[u32]| list.iter().copied().find(|&s| text.width(face, s, t) <= len);
-        if let Some(s) = one(text, &big) {
-            return Some((vec![t.to_string()], s));
-        }
-        for &s in &two {
-            // The whole title on two lines: a subtitle on a line of its own, without its dash.
-            let lines = match split.filter(|_| i == 0) {
-                Some((main, sub)) => vec![main.to_string(), sub.to_string()],
-                None => text.wrap(face, s, t, len),
-            };
-            // Two lines of whole words: a word broken in pieces would not read.
-            let whole = split.is_some() && i == 0 || lines.join(" ") == t.split_whitespace().collect::<Vec<_>>().join(" ");
-            // The halves of a name are measured as they are (they are not words to translate, `spine_with`).
-            let translating = text.translating();
-            text.set_translate(false);
-            let fits = lines.iter().all(|l| text.width(face, s, l) <= len);
-            text.set_translate(translating);
-            if lines.len() == 2 && whole && fits {
-                return Some((lines, s));
-            }
-        }
-        if let Some(s) = one(text, &small) {
-            return Some((vec![t.to_string()], s));
+    let one = |text: &mut Text, list: &[u32]| list.iter().copied().find(|&s| text.width(face, s, t) <= len);
+    if let Some(s) = one(text, &big) {
+        return Some((vec![t.to_string()], s));
+    }
+    for &s in &sizes {
+        if let Some(lines) = two_lines(text, s) {
+            return Some((lines, s));
         }
     }
-    // A font wider than Barlow Condensed (Theme → Font: Pixel, Rounded) goes a little smaller still, on one line, before
-    // anything is cut ("Chrono Trigg…" on a DS case's spine in Pixel): the title, then its main part.
-    if wide {
-        for (i, t) in tries.iter().enumerate() {
-            for s in WIDE_FONT_PX {
-                if text.width(face, s, t) <= len {
-                    return Some((vec![t.to_string()], s));
-                }
-                // Two lines of whole words across a spine thick enough for them at this size.
-                if 2 * across(s) + 2 <= thick - 2 {
-                    let lines = match split.filter(|_| i == 0) {
-                        Some((main, sub)) => vec![main.to_string(), sub.to_string()],
-                        None => text.wrap(face, s, t, len),
-                    };
-                    let whole = split.is_some() && i == 0 || lines.join(" ") == t.split_whitespace().collect::<Vec<_>>().join(" ");
-                    let translating = text.translating();
-                    text.set_translate(false);
-                    let fits = lines.iter().all(|l| text.width(face, s, l) <= len);
-                    text.set_translate(translating);
-                    if lines.len() == 2 && whole && fits {
-                        return Some((lines, s));
-                    }
-                }
-            }
-        }
-    }
-    None
+    one(text, &small).map(|s| (vec![t.to_string()], s))
 }
 
 /// The size a case's front is made at for `k` times its shelf size.
@@ -1052,6 +1100,24 @@ pub fn game_pic(text: &mut Text, g: Game, h: i32, look: Look, title: &str, cover
     Some(p)
 }
 
+/// Real rear shells for front-view handhelds' insert animations. The label is on the
+/// opposite face. Decoded once, on the first launch frame, just like the front templates.
+/// Photo sources, retouching and licences: assets/media/game/REAR-SOURCES.md.
+pub fn game_back(g: Game) -> Option<&'static Pic> {
+    const PNGS: [&[u8]; 4] = [
+        include_bytes!("../assets/media/game/gb-back.png"),
+        include_bytes!("../assets/media/game/gbc-back.png"),
+        include_bytes!("../assets/media/game/gba-back.png"),
+        include_bytes!("../assets/media/game/ds-back.png"),
+    ];
+    static PICS: [std::sync::OnceLock<Pic>; 4] = [const { std::sync::OnceLock::new() }; 4];
+    let i = match g { Game::Gb => 0, Game::Gbc => 1, Game::Gba => 2, Game::Card => 3, _ => return None };
+    Some(PICS[i].get_or_init(|| {
+        let s = crate::system_art::decode(PNGS[i]).expect("rear cartridge image");
+        Pic { w: s.w as i32, h: s.h as i32, px: s.px }
+    }))
+}
+
 /// The sizes a cartridge's label title is written in, smallest first.
 const LABEL_PX: [u32; 9] = [14, 16, 18, 21, 24, 28, 30, 37, 44];
 
@@ -1253,6 +1319,13 @@ impl DiscKind {
         self != DiscKind::Umd
     }
 
+    /// Whether the print leaves a ring at the rim for the title. A PlayStation's and a Saturn's labels are printed to
+    /// within a millimetre of the edge, as the scans of real discs show: the cover's art runs to the rim and the disc
+    /// stays as thin as it is (a black ring there made it a puck).
+    fn has_ring(self) -> bool {
+        !matches!(self, DiscKind::Ps1 | DiscKind::Saturn)
+    }
+
     /// The ring at the rim where it is the system's own: the PlayStation's black disc showing past its label, the
     /// PS2's blue, the Dreamcast's silver GD-ROM area, the Wii's white disc, the dark rims of the Saturn's and the
     /// Xbox's labels; the rest take the cover's colour.
@@ -1309,7 +1382,7 @@ pub fn disc_pic(text: &mut Text, kind: DiscKind, h: i32, look: Look, title: &str
     let cover = cover.filter(|c| c.w > 0 && c.h > 0);
     // The ring at the rim, in the cover's colour darkened: an eighth of the disc's radius, never more than a third of
     // the print (the GameCube's hub is large).
-    let ring = kind.is_round().then(|| r_out - (r_out * 0.13).min((r_out - r_in) / 3.0)).filter(|r| r_out - r > 3.0);
+    let ring = (kind.is_round() && kind.has_ring()).then(|| r_out - (r_out * 0.13).min((r_out - r_in) / 3.0)).filter(|r| r_out - r > 3.0);
     let ring_c = kind.ring().unwrap_or(mix(look.color, 0x000000, 110));
     let fitted = cover.map(|img| art::cover_fill(&trim_zones(&trim_bands(img), kind.band_zones()), bw.max(1), bh.max(1)));
     let (sw, sh) = (s.w as i32, s.h as i32);
@@ -1384,7 +1457,8 @@ pub fn disc_pic(text: &mut Text, kind: DiscKind, h: i32, look: Look, title: &str
         (Some(_), Some(r)) => ring_title(text, &mut p, (cx, cy), (r + 1.0, r_out), ink_on(ring_c), title),
         (Some(_), None) => {}
         // No cover: the title above the hole, where the print is wide enough for it; on a UMD's label.
-        (None, Some(r)) => {
+        (None, ring) if kind.is_round() => {
+            let r = ring.unwrap_or(r_out - 1.0);
             let top = cy - r * 0.8;
             let half = (r * r - (cy - top).powi(2)).max(0.0).sqrt() * 0.95;
             let room = ((cx - half) as i32, top as i32, (2.0 * half) as i32, (cy - r_in - 3.0 - top) as i32);
@@ -1392,8 +1466,7 @@ pub fn disc_pic(text: &mut Text, kind: DiscKind, h: i32, look: Look, title: &str
                 write_title(text, &mut p, room, look, title, 2);
             }
         }
-        (None, None) if !kind.is_round() => write_title(text, &mut p, (bx, by, bw, bh), look, title, 4),
-        (None, None) => {}
+        (None, _) => write_title(text, &mut p, (bx, by, bw, bh), look, title, 4),
     }
     p
 }
@@ -1965,7 +2038,8 @@ mod tests {
                 if h == 300 {
                     // The title: light pixels on the ring (with a cover) or above the hole (without).
                     let light = |p: &Pic, y0: i32, y1: i32| (y0..y1).flat_map(|y| (0..p.w).map(move |x| (x, y))).filter(|&(x, y)| luma(p.get(x, y) & 0xffffff) > 180 && p.get(x, y) >> 24 == 255).count();
-                    if k.is_round() {
+                    // (A PlayStation's and a Saturn's label is printed to the rim: the art runs out there, no ring for a title.)
+                    if k.is_round() && k.has_ring() {
                         assert!(light(&with, h * 3 / 4, h) > 40, "{k:?}: the title on the ring");
                     }
                     assert!(light(&plain, 0, h) > 40, "{k:?}: the title without a cover");
@@ -1997,6 +2071,27 @@ mod tests {
                     e.set_depth(png::BitDepth::Eight);
                     e.write_header().unwrap().write_image_data(&rgba).unwrap();
                 }
+            }
+        }
+    }
+
+    /// A PlayStation's and a Saturn's label is printed to within a millimetre of the rim: the cover's art runs out to the
+    /// edge, no black ring round it (which made a tipped disc look like a thick puck).
+    #[test]
+    fn a_playstation_or_saturn_disc_is_printed_almost_to_its_rim() {
+        let mut text = Text::new();
+        let look = Look { color: 0x2a3a6a, band: 0x7a6cb0, plastic: 0x141416 };
+        let (w, h) = (64u32, 64u32);
+        let cover = Image { w, h, px: (0..w * h).map(|i| (((i % w) * 5 + (i / w) * 3) % 24) | 0xd02000).collect() };
+        for kind in [DiscKind::Ps1, DiscKind::Saturn] {
+            let p = disc_pic(&mut text, kind, 300, look, "Game", Some(&cover));
+            let (cx, cy, r) = (p.w as f32 / 2.0, p.h as f32 / 2.0, p.h as f32 / 2.0);
+            // Along six directions below the middle, just inside the rim: still the cover's red.
+            for deg in [100.0f32, 130.0, 160.0, 200.0, 230.0, 260.0] {
+                let (s, c) = deg.to_radians().sin_cos();
+                let (x, y) = ((cx + c * r * 0.93) as i32, (cy + s * r * 0.93) as i32);
+                let px = p.get(x, y);
+                assert!(px >> 16 & 0xff > 0x90 && px >> 24 == 0xff, "{kind:?} at {deg} degrees, 93 % out: {px:08x} is not the cover's art");
             }
         }
     }
@@ -2235,14 +2330,50 @@ mod tests {
         // At three screen pixels a template pixel (the Mini V2), two lines across it: the subtitle on a line of its own.
         let (lines, ..) = spine_fit(&mut text, "Prince of Persia - The Sands of Time", 60, 91 * 3 - 12, 30.0);
         assert_eq!(lines, ["Prince of Persia", "The Sands of Time"], "the subtitle on a line of its own");
-        // A thin spine with no room for two lines: the subtitle goes before anything is cut.
-        let (lines, ..) = spine_fit(&mut text, "Astro Boy - Omega Factor", 30, 130, 30.0);
-        assert_eq!(lines, ["Astro Boy"]);
+        // A thin spine with no room for two lines: the part that tells the game apart goes before anything is cut.
+        let (lines, ..) = spine_fit(&mut text, "Astro Boy - Omega Factor", 30, 80, 30.0);
+        assert_eq!(lines, ["Omega Factor"]);
         // A short title stays at the size asked for.
         assert_eq!(spine_fit(&mut text, "F-Zero", thick, len, 30.0), (vec!["F-Zero".to_string()], 30, crate::text::Face::Title));
         // Only a title too long for anything is cut, at the least size.
         let (lines, px, _) = spine_fit(&mut text, "Supercalifragilistic Expialidocious Adventures", 30, 80, 30.0);
-        assert!(lines[0].ends_with('…') && px == 21, "{lines:?} {px}");
+        assert!(lines[0].ends_with('…') && px == 16, "{lines:?} {px}");
+    }
+
+    /// The Brick's Nintendo 64 shelf (Retro, 1024x768, photo 2026-11-07): a spine's label 30 px across and 132 long showed
+    /// "Conker's B…", "Diddy Kong…", "Super Sma…", "The Legend…" twice and "Mario Kar…". Every name stands whole or as the
+    /// part that tells it apart, none is cut, and no two spines of a shelf read the same, in every font.
+    #[test]
+    fn brick_n64_spines_are_whole_or_tell_apart() {
+        use crate::font_style::FontStyle;
+        let shelf = [
+            "Banjo-Kazooie", "Conker's Bad Fur Day", "Diddy Kong Racing", "GoldenEye 007", "Mario Kart 64", "Star Fox 64", "Super Mario 64",
+            "Super Smash Bros.", "The Legend of Zelda - Majora's Mask", "The Legend of Zelda - Ocarina of Time",
+        ];
+        for style in [FontStyle::Barlow, FontStyle::Pixel, FontStyle::Rounded] {
+            let mut text = Text::new().pinned_to(style);
+            let mut seen: Vec<(String, String)> = Vec::new();
+            for title in shelf {
+                let (lines, px, _) = spine_fit(&mut text, title, 30, 132, 15.0);
+                assert!(lines.iter().all(|l| !l.ends_with('…')), "{style:?} {title}: {lines:?} at {px}");
+                assert!(px >= 16, "{style:?} {title}: {px}");
+                seen.push((lines.join(" "), title.to_string()));
+            }
+            for (i, (a, ta)) in seen.iter().enumerate() {
+                assert!(seen[i + 1..].iter().all(|(b, _)| a != b), "{style:?}: {ta} reads like another spine ({a})");
+            }
+            let get = |t: &str| seen.iter().find(|(_, x)| x == t).unwrap().0.clone();
+            assert_eq!(get("The Legend of Zelda - Ocarina of Time"), "Ocarina of Time");
+            assert_eq!(get("The Legend of Zelda - Majora's Mask"), "Majora's Mask");
+            assert_eq!(get("Mario Kart 64"), "Mario Kart 64");
+        }
+        // A numbered main part tells the games apart, not the subtitle.
+        let mut text = Text::new();
+        assert_eq!(spine_fit(&mut text, "Donkey Kong Country 3 - Dixie Kong's Double Trouble!", 30, 140, 15.0).0, ["Donkey Kong Country 3"]);
+        // Too long even so: the number stays, the first words go.
+        assert_eq!(spine_fit(&mut text, "Donkey Kong Country 3 - Dixie Kong's Double Trouble!", 30, 120, 15.0).0, ["Kong Country 3"]);
+        // A name that fits stays whole, with its leading "The".
+        assert_eq!(spine_fit(&mut text, "The Legend of Zelda", 30, 132, 15.0).0, ["The Legend of Zelda"]);
     }
 
     /// The Pixel and Rounded fonts are wider than Barlow Condensed: a title that fits a thin spine in Barlow still fits
@@ -2257,17 +2388,14 @@ mod tests {
             // A spine a little shorter than the title at 21 px in this font.
             let len = text.width(Face::Title, 21, "Chrono Trigger") * 9 / 10;
             let (lines, px, face) = spine_fit(&mut text, "Chrono Trigger", thick, len, 21.0);
-            if style == FontStyle::Barlow {
-                // Barlow Condensed keeps its least size, 21, and is cut as before.
-                assert!(lines[0].ends_with('…') && px == 21 && face == Face::Title, "{style:?}: {lines:?} at {px}");
-            } else {
-                assert!(lines == ["Chrono Trigger"] && WIDE_FONT_PX.contains(&px) && face == Face::Title, "{style:?}: {lines:?} at {px}");
-            }
-            // Too long for the wide face even at 16 px, but not for Barlow Condensed: in that, whole.
+            // Whole in every font: a size step down, or Barlow Condensed in a wider font.
+            assert!(lines == ["Chrono Trigger"] && (STEP_DOWN_PX.contains(&px) || face == Face::Narrow), "{style:?}: {lines:?} at {px}");
+            // Too long for the wide face at 21 px, but not for Barlow Condensed: in that, whole.
             let len = Text::new().pinned_to(FontStyle::Barlow).width(Face::Title, 21, "Final Fantasy Tactics Advance") + 2;
             let (lines, _, face) = spine_fit(&mut text, "Final Fantasy Tactics Advance", thick, len, 21.0);
             assert!(lines == ["Final Fantasy Tactics Advance"], "{style:?}: {lines:?}");
-            assert_eq!(face == Face::Narrow, style == FontStyle::Pixel, "{style:?}: only a face that needs it goes narrow");
+            // A wider font's title goes narrow (21 px) before it goes a size step down in its own face.
+            assert_eq!(face == Face::Narrow, style != FontStyle::Barlow, "{style:?}: only a face that needs it goes narrow");
         }
     }
 

@@ -1603,8 +1603,21 @@ impl Core {
                 reset();
             }
             let Ok(set) = self.lib.get::<unsafe extern "C" fn(c_uint, bool, *const c_char)>(b"retro_cheat_set") else { return };
-            for (i, code) in codes.iter().enumerate() {
-                if let Ok(c) = CString::new(code.as_str()) {
+            // Snes9x copies each call into a 256-byte buffer. Long database groups are independent
+            // '+'-joined codes, so hand over their members separately instead of overflowing that buffer.
+            let codes: Vec<&str> = codes.iter().flat_map(|code| {
+                if self.name.eq_ignore_ascii_case("snes9x") && code.len() >= 256 {
+                    code.split('+').collect::<Vec<_>>()
+                } else {
+                    vec![code.as_str()]
+                }
+            }).collect();
+            for (i, code) in codes.into_iter().enumerate() {
+                if self.name.eq_ignore_ascii_case("snes9x") && code.len() >= 256 {
+                    eprintln!("cheats: Snes9x code exceeds its 255-byte limit");
+                    continue;
+                }
+                if let Ok(c) = CString::new(code) {
                     set(i as c_uint, true, c.as_ptr());
                 }
             }
@@ -2420,18 +2433,25 @@ bool retro_unserialize(const void *d, size_t n) {
         // Keep the LIVE clock, even if it has changed since the last flush.
         set_rtc(&mut core, b"CLOCK-02");
         core.run(0);
+        let continued_at = position(&core);
+        g.quit(core);
+        let (mut core, resumed) = g.start();
+        assert_eq!(resumed, Resume::Resumed, "Continue resumes the game as well as its cartridge");
+        assert_eq!(position(&core), continued_at);
+        assert_eq!(core.memory(MEMORY_RTC).unwrap(), b"CLOCK-02", "Continue keeps the saved cartridge clock");
+        set_rtc(&mut core, b"CLOCK-03"); // Clock has ticked since the last disk flush.
         assert_ne!(position(&core), 0);
         core.restart();
         assert_eq!(position(&core), 0, "Start over still resets the console");
-        assert_eq!(core.memory(MEMORY_RTC).unwrap(), b"CLOCK-02", "the cartridge keeps ticking");
+        assert_eq!(core.memory(MEMORY_RTC).unwrap(), b"CLOCK-03", "the cartridge keeps ticking");
         core.write_sram_in_background();
         core.saver.wait();
-        assert_eq!(std::fs::read(rtc_file(&g)).unwrap(), b"CLOCK-02", "periodic flush must not persist a reset clock");
+        assert_eq!(std::fs::read(rtc_file(&g)).unwrap(), b"CLOCK-03", "periodic flush must not persist a reset clock");
         core.restart();
         core.write_sram().unwrap();
         drop(core);
         let (mut core, _) = g.start();
-        assert_eq!(core.memory(MEMORY_RTC).unwrap(), b"CLOCK-02", "a later cold start keeps the same clock");
+        assert_eq!(core.memory(MEMORY_RTC).unwrap(), b"CLOCK-03", "a later cold start keeps the same clock");
     }
 
     #[test]
@@ -3124,6 +3144,7 @@ void retro_get_system_av_info(struct av *a) { memset(a, 0, sizeof *a); a->bw = a
 bool retro_load_game(const void *g) { return env(16, vars); }
 void retro_unload_game(void) {}
 static unsigned char state[80];
+void retro_reset(void) { memset(state, 0, sizeof state); }
 /* GET_AUDIO_VIDEO_ENABLE as the core saw it during its last frame and its last serialize/unserialize (-1: not answered). */
 static int av_run = -1, av_state = -1;
 static int ask_av(void) { int f = -1; return env(47 | 0x10000, &f) ? f : -1; }
@@ -3188,6 +3209,18 @@ static unsigned char wram[0x800];
 void *retro_get_memory_data(unsigned id) { return id == 2 ? wram : NULL; }
 size_t retro_get_memory_size(unsigned id) { return id == 2 ? sizeof wram : 0; }
 void *stub_wram(void) { return wram; }
+/* Snes9x's fixed per-call buffer; keep the submitted codes to prove a long group loses nothing. */
+static char applied_cheats[8192];
+static bool cheat_overflow;
+void retro_cheat_reset(void) { applied_cheats[0] = 0; cheat_overflow = false; }
+void retro_cheat_set(unsigned i, bool on, const char *code) {
+    (void)i; if (!on) return;
+    if (strlen(code) >= 256) cheat_overflow = true;
+    if (applied_cheats[0]) strcat(applied_cheats, "+");
+    strncat(applied_cheats, code, sizeof applied_cheats - strlen(applied_cheats) - 1);
+}
+const char *stub_cheats(void) { return applied_cheats; }
+bool stub_cheat_overflow(void) { return cheat_overflow; }
 struct desc { unsigned long long flags; void *ptr; size_t offset, start, select, disconnect, len; const char *addrspace; };
 bool stub_memory_map(void) {
     struct desc d[2] = { { 0, wram, 0, 0, 0, 0, 0x400, "W" }, { 0, wram + 0x400, 0, 0x6000, 0, 0, 0x400, NULL } };
@@ -3263,7 +3296,7 @@ void stub_frame(unsigned w, unsigned h, size_t pitch, unsigned bpp) {
                 &[("gpsp_rtc_time_source", "deterministic")]).unwrap();
             core.save_state().unwrap()
         };
-        let core = Core::load(&gpsp, &stub.dir.join("Game.gba"), &stub.dir, &stub.dir, &[]).unwrap();
+        let mut core = Core::load(&gpsp, &stub.dir.join("Game.gba"), &stub.dir, &stub.dir, &[]).unwrap();
         unsafe {
             let now: unsafe extern "C" fn(u32) = hook(&core, "stub_wall_time");
             let clock: unsafe extern "C" fn() -> u32 = hook(&core, "stub_cartridge_time");
@@ -3273,6 +3306,33 @@ void stub_frame(unsigned w, unsigned h, size_t pitch, unsigned bpp) {
             now(2600);
             core.load_state(&old).unwrap();
             assert_eq!(clock(), 2600, "loading that same slot later cannot freeze the clock again");
+            core.run(0);
+            assert_ne!(core.save_state().unwrap()[0], 0, "the game has progressed");
+            now(3200);
+            core.restart();
+            assert_eq!(core.save_state().unwrap()[0], 0, "Start over really resets the game");
+            assert_eq!(clock(), 3200, "Start over resets the console, not the cartridge's real clock");
+            now(3800);
+            core.load_state(&old).unwrap();
+            assert_eq!(clock(), 3800, "Continue from an old slot after Start over still follows wall time");
+        }
+    }
+
+    #[test]
+    fn long_snes_cheat_groups_apply_every_code_without_overflowing_the_core() {
+        let _l = globals();
+        let stub = Stub::new("long-cheats");
+        let mut core = stub.load();
+        core.name = "Snes9x".into();
+        let code = vec!["7E1F8A03"; 40].join("+");
+        core.set_cheats(std::slice::from_ref(&code));
+        unsafe {
+            let applied: unsafe extern "C" fn() -> *const c_char = hook(&core, "stub_cheats");
+            let overflow: unsafe extern "C" fn() -> bool = hook(&core, "stub_cheat_overflow");
+            assert!(!overflow(), "a database group must never overflow Snes9x's 256-byte buffer");
+            assert_eq!(CStr::from_ptr(applied()).to_str().unwrap(), code, "every member of the cheat remains active");
+            core.set_cheats(&[]);
+            assert_eq!(CStr::from_ptr(applied()).to_bytes(), b"", "All off clears every member too");
         }
     }
 

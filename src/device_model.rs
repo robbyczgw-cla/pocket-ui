@@ -29,7 +29,7 @@ pub enum Model {
     RgDsPlus,
     /// Valve Steam Deck (SteamOS, Gamescope): 1280x800, a desktop Linux that owns Wi-Fi, Bluetooth, sleep and fan itself
     /// (docs/STEAMDECK.md). Found by `POCKETUI_DEVICE=steamdeck` or DMI (`Valve`: `Jupiter`, `Galileo`).
-    SteamDeck, #[cfg(feature = "brick")] Brick,
+    SteamDeck, #[cfg(feature = "brick")] Brick(crate::brick_profile::Board),
 }
 
 /// What differs between the Anbernic H700 models (`H700_BOARDS`, docs/DEVICES.md has the same table). The

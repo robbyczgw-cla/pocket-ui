@@ -153,7 +153,7 @@ asset_recovery_tests() {
     check 'legacy copy-based update still rolls back and keeps the original data' 'rollback_done'
   done
 }
-asset_recovery_tests
+if [ "${BRICK_LICENCE_TESTS_ONLY:-0}" != 1 ]; then asset_recovery_tests; fi
 if [ "${BRICK_BOOT_TESTS_ONLY:-0}" = 1 ]; then
   if [ "$fails" = 0 ]; then echo 'test-brick-card recovery: all passed'; else echo "test-brick-card recovery: $fails FAILED"; exit 1; fi
   exit 0
@@ -175,7 +175,8 @@ make_card() { # dir
 # the bridge: with --picture it writes down which picture; else it makes the two sockets and waits
 echo "pocket-fb $*" >>"$BRICK_TEST_LOG"
 case "$1" in
-  --picture) sleep "${4:-0}"; exit 0 ;;
+  --picture) echo "$$ $2" >>"$BRICK_TEST_LOG.pictures"; exec sleep "${4:-0}" ;;
+  --message) exec sleep "${4:-0}" ;;
 esac
 exec python3 -I - "$2" "$4" <<'PY'
 import socket, sys, time, os
@@ -208,15 +209,16 @@ X
   chmod +x "$WORK/fw/bin/trimui_inputd"
 }
 fake_pocket_ui() { # card, script body [, program folder]
-  printf '#!/bin/sh\n%s\n' "$2" >"$1/pocket-ui/${3:-app}/bin/pocket-ui"; chmod +x "$1/pocket-ui/${3:-app}/bin/pocket-ui"
+  printf '#!/bin/sh\n[ "$1" = --version ] && { echo "${BRICK_TEST_VERSION:-pocket-ui test}"; exit 0; }\n%s\n' "$2" >"$1/pocket-ui/${3:-app}/bin/pocket-ui"; chmod +x "$1/pocket-ui/${3:-app}/bin/pocket-ui"
 }
 run_updater() { # shell card seconds -> exit code; the environment moves every path
   sh=$1; c=$2; limit=$3
-  : >"$WORK/log"
+  : >"$WORK/log"; echo '8 7 1 7' >"$WORK/printk"
   BRICK_TEST_LOG=$WORK/log BRICK_CARD=$c BRICK_FB=$WORK/fb BRICK_FBSYS=$WORK/fbsys BRICK_RUN=$WORK/run BRICK_FIRMWARE=$WORK/fw BRICK_STORAGE=$WORK/storage \
-  BRICK_BATTERY=$WORK/bat BRICK_RFKILL=$WORK/rfk BRICK_NO_MOUNT=1 BRICK_NO_POWEROFF=1 BRICK_SHOW_FOR=1 BRICK_FB_BYTES=64 BRICK_FB_MODE=8x2x32 \
+  BRICK_BATTERY=$WORK/bat BRICK_RFKILL=$WORK/rfk BRICK_NO_MOUNT=1 BRICK_NO_POWEROFF=1 BRICK_SHOW_FOR=${SHOW_FOR_TEST:-1} BRICK_FB_BYTES=64 BRICK_FB_MODE=8x2x32 \
   BRICK_FW_ZONEINFO=$WORK/zoneinfo BRICK_FW_LOCALTIME=$WORK/fw-localtime BRICK_NTPD=$WORK/no-ntpd BRICK_NTP_DELAY=0 \
-  BRICK_AMIXER=$WORK/amixer BRICK_SPEAKER=$WORK/mute BRICK_PIDOF=${BRICK_PIDOF:-$WORK/no-pidof} BRICK_KILLALL=${BRICK_KILLALL:-true} \
+  BRICK_MODEL_FILE=$WORK/etc-model BRICK_DT=$WORK/dt BRICK_CPUINFO=$WORK/cpuinfo \
+  BRICK_AMIXER=$WORK/amixer BRICK_SPEAKER=$WORK/mute BRICK_PRINTK=$WORK/printk BRICK_PIDOF=${BRICK_PIDOF:-$WORK/no-pidof} BRICK_KILLALL=${BRICK_KILLALL:-true} \
   setsid timeout "$limit" $sh "$c/${ENTRY:-.tmp_update/updater}" >"$WORK/out" 2>&1 &
   pid=$!; wait "$pid"; rc=$?
   kill -TERM -- "-$pid" 2>/dev/null     # whatever the updater left running (bridge, daemons) was started by this run
@@ -230,6 +232,33 @@ printf '#!/bin/sh\nexit 1\n' >"$WORK/no-pidof"; chmod +x "$WORK/no-pidof"
 mkdir -p "$WORK/zoneinfo/Europe"; : >"$WORK/zoneinfo/Europe/London"; : >"$WORK/zoneinfo/UTC"
 ln -s /usr/share/zoneinfo/Europe/London "$WORK/fw-tmp-localtime"; ln -s "$WORK/fw-tmp-localtime" "$WORK/fw-localtime"
 printf '#!/bin/sh\nexit 0\n' >"$WORK/amixer"; chmod +x "$WORK/amixer"
+
+# The About folder already exists on a card updated from a version without bundled cheats.
+# Exercise the real starter in both supported shells, including a second notice update.
+for SH in dash "busybox ash"; do
+  C=$WORK/licence-card; make_card "$C"
+  src=$C/pocket-ui/app/licences/libretro-database
+  dst=$WORK/storage/pocket-ui/licences/libretro-database
+  mkdir -p "$src" "$dst"
+  echo old >"$WORK/storage/pocket-ui/licences/README.txt"
+  echo keep >"$dst/player-note.txt"
+  for notice in LICENSE README.md ATTRIBUTION.txt; do echo "new $notice" >"$src/$notice"; done
+  echo stale >"$dst/LICENSE"
+  fake_pocket_ui "$C" 'echo "ui start" >>"$BRICK_TEST_LOG"; sleep 30'
+  rc=$(run_updater "$SH" "$C" 4)
+  check "About under $SH: OTA adds missing notices and refreshes stale licence text" \
+    '[ "$rc" = 124 ] && cmp -s "$src/LICENSE" "$dst/LICENSE" && cmp -s "$src/README.md" "$dst/README.md" && cmp -s "$src/ATTRIBUTION.txt" "$dst/ATTRIBUTION.txt"'
+  check "About under $SH: existing player files and licence index survive" \
+    'grep -qx keep "$dst/player-note.txt" && grep -qx old "$WORK/storage/pocket-ui/licences/README.txt"'
+  echo updated >"$src/ATTRIBUTION.txt"
+  rc=$(run_updater "$SH" "$C" 4)
+  check "About under $SH: a later update replaces only the bundled notices" \
+    '[ "$rc" = 124 ] && cmp -s "$src/ATTRIBUTION.txt" "$dst/ATTRIBUTION.txt" && grep -qx keep "$dst/player-note.txt"'
+done
+if [ "${BRICK_LICENCE_TESTS_ONLY:-0}" = 1 ]; then
+  [ "$fails" = 0 ] || exit 1
+  echo 'test-brick-card licences: all passed'; exit 0
+fi
 
 for SH in dash "busybox ash"; do
   echo "== updater under $SH"
@@ -256,6 +285,19 @@ for SH in dash "busybox ash"; do
   rc=$(run_updater "$SHBIN" "$C" 45)
   check "no picture at all: grey, not black" "[ -s $WORK/fb ] && [ \"\$(tr -d '\\200' <$WORK/fb | wc -c)\" = 0 ]"
 
+  # 3s. On the Smart Pro (fb0 1280 wide) the failure pictures are the 1280x720 ones: pocket-fb shows a picture top left without
+  # scaling, so the Brick's 1024x768 would be cut at the bottom and sit left of centre. The raw frame and the grey fallback match.
+  make_card "$C"; rm -f "$C/pocket-ui/app/bin/pocket-ui"; echo 1280,2880 >"$WORK/fbsys/virtual_size"
+  rc=$(run_updater "$SHBIN" "$C" 45)
+  check "Smart Pro, missing binary: the wide 'missing' picture was asked for" "grep -q 'picture .*/msg/missing-wide.png' $WORK/log"
+  make_card "$C"; rm -f "$C/pocket-ui/app/bin/pocket-ui" "$C/pocket-ui/app/bin/pocket-fb"; : >"$WORK/fbsys/pan"; : >"$WORK/fb"
+  rc=$(run_updater "$SHBIN" "$C" 45)
+  check "Smart Pro, no bridge: the wide raw frame is on the screen file" "cmp -s $WORK/fb $C/pocket-ui/app/msg/missing-wide.raw"
+  make_card "$C"; rm -f "$C/pocket-ui/app/bin/pocket-ui" "$C/pocket-ui/app/msg/missing-wide.png"
+  rc=$(run_updater "$SHBIN" "$C" 45)
+  check "Smart Pro, wide picture not on the card: the plain one instead, not nothing" "grep -q 'picture .*/msg/missing.png' $WORK/log"
+  rm -f "$WORK/fbsys/virtual_size"
+
   # 4. pocket-ui that ends at once: three tries, then the picture; not forever.
   make_card "$C"; fake_pocket_ui "$C" 'echo "ui start" >>"$BRICK_TEST_LOG"; exit 3'
   rc=$(run_updater "$SHBIN" "$C" 40)
@@ -274,6 +316,8 @@ for SH in dash "busybox ash"; do
   check "healthy: still running when stopped from outside (124)" "[ $rc = 124 ]"
   check "healthy: started more than once" "[ \"\$(grep -c '^ui start' $WORK/log)\" -ge 2 ]"
   check "healthy: the pad's input daemon was started" "grep -q '^trimui_inputd' $WORK/log"
+  check "healthy: kernel messages no longer go to the serial console" "[ \"\$(cat $WORK/printk)\" = 3 ]"
+
   check "healthy: the backlight follower was started on the stand-in panel" "grep -q 'brick-hw watch .*/hwroot/sys/class/backlight/panel 70' $WORK/log"
   check "healthy: the mute slider is followed" "grep -q 'brick-hw slider-watch' $WORK/log"
   check "healthy: device is brick" "grep -q '^POCKETUI_DEVICE=brick' $WORK/log"
@@ -284,6 +328,40 @@ for SH in dash "busybox ash"; do
   check "healthy: the fake root has battery, radio and stand-ins" "[ -L $WORK/run/hwroot/sys/class/power_supply/battery ] && [ -x $WORK/run/hwroot/usr/bin/volume ] && [ -d $WORK/run/hwroot/run/systemd/system ]"
   check "healthy: library root, folders and cores' folder are made" "[ -d $C/Roms/gba ] && [ -d $C/Roms/snes ] && [ -d $C/pocket-ui/storage/.config/emulationstation ]"
   check "healthy: the clock's links are built (firmware zone through two links, no choice yet)" "[ -L $WORK/run/hwroot/usr/share/zoneinfo ] && [ \"\$(readlink $WORK/run/hwroot/etc/localtime)\" = ../usr/share/zoneinfo/Europe/London ] && grep -q '^TZ=.*/Europe/London' $WORK/log"
+
+  # 5s. The same card on a Smart Pro (fb0 1280 wide; docs/TRIMUI-SMART-PRO.md): pocket-ui is told so, and nothing reads the Brick's
+  # mute-slider pin there (on the Smart Pro it is something else).
+  make_card "$C"; fake_pocket_ui "$C" 'echo "ui start" >>"$BRICK_TEST_LOG"; env | grep -E "^(POCKETUI_DEVICE|BRICK_NO_SLIDER)=" >>"$BRICK_TEST_LOG"; sleep 2'
+  echo 1280,2880 >"$WORK/fbsys/virtual_size"
+  rc=$(BRICK_FAST_END=1 run_updater "$SHBIN" "$C" 5)
+  check "Smart Pro: found by its screen, pocket-ui is told" "grep -q '^POCKETUI_DEVICE=smartpro' $WORK/log && grep -q 'board: smartpro' $C/pocket-ui/logs/boot.log"
+  check "Smart Pro: no mute-slider follower, and volume restore leaves the pin alone" "! grep -q 'brick-hw slider-watch' $WORK/log && grep -q '^BRICK_NO_SLIDER=1' $WORK/log"
+  check "Smart Pro: the pad's daemon runs as on the Brick" "grep -q '^trimui_inputd' $WORK/log"
+  echo 1024,16384 >"$WORK/fbsys/virtual_size"
+  rc=$(BRICK_FAST_END=1 run_updater "$SHBIN" "$C" 5)
+  check "Brick by its screen: as before (slider followed, device brick)" "grep -q '^POCKETUI_DEVICE=brick' $WORK/log && grep -q 'brick-hw slider-watch' $WORK/log && ! grep -q BRICK_NO_SLIDER $WORK/log"
+  rm -f "$WORK/fbsys/virtual_size"
+  printf 'xx Trimui Smart Pro xx' >"$WORK/fw/bin/MainUI"
+  rc=$(BRICK_FAST_END=1 run_updater "$SHBIN" "$C" 5)
+  check "Smart Pro by MainUI's name when fb0 says nothing" "grep -q '^POCKETUI_DEVICE=smartpro' $WORK/log"
+  printf 'xx Trimui Brick xx' >"$WORK/fw/bin/MainUI"
+  rc=$(BRICK_FAST_END=1 run_updater "$SHBIN" "$C" 5)
+  check "anything else stays a Brick" "grep -q '^POCKETUI_DEVICE=brick' $WORK/log"
+  rm -f "$WORK/fw/bin/MainUI"
+
+  # 5v. A Smart Pro on firmware 1.0.3 or older (glibc 2.29): nothing of ours can start; the card says why in a file and stops.
+  make_card "$C"; fake_pocket_ui "$C" 'echo "ui start" >>"$BRICK_TEST_LOG"; sleep 2'
+  rc=$(BRICK_TEST_VERSION="pocket-ui: /lib/libc.so.6: version \`GLIBC_2.33' not found" run_updater "$SHBIN" "$C" 20)
+  check "old firmware: ends with 1, pocket-ui never started, the file says to update" "[ $rc = 1 ] && ! grep -q '^ui start' $WORK/log && grep -q 'update TrimUI' $C/pocket-ui/logs/FIRMWARE-TOO-OLD.txt"
+
+  # 5u. A Smart Pro S (TG5050, an A523): the card is not for it. A note on the screen, nothing written to its hardware.
+  make_card "$C"; fake_pocket_ui "$C" 'echo "ui start" >>"$BRICK_TEST_LOG"; sleep 2'
+  echo TG5050 >"$WORK/etc-model"; echo 1280,1440 >"$WORK/fbsys/virtual_size"
+  rc=$(run_updater "$SHBIN" "$C" 20)
+  check "Smart Pro S: ends by itself with 1, pocket-ui never started" "[ $rc = 1 ] && ! grep -q '^ui start' $WORK/log"
+  check "Smart Pro S: no pad daemon, no hardware follower started" "! grep -q '^trimui_inputd' $WORK/log && ! grep -q 'brick-hw' $WORK/log"
+  check "Smart Pro S: the screen says it does not run there yet" "grep -q 'pocket-fb --message pocket-ui does not run' $WORK/log"
+  rm -f "$WORK/etc-model" "$WORK/fbsys/virtual_size"
 
   # 5b. A zone chosen on the clock page (its name kept on the card) is the zone of the next start; a name the zone data
   # has no file for falls back to the firmware's zone instead of none.
@@ -321,12 +399,19 @@ for SH in dash "busybox ash"; do
   rc=$(ENTRY=pocket-ui/app/start.sh run_updater "$SHBIN" "$C" 5)
   check "engine data failure: requests rollback without starting UI or publishing success" "[ $rc = 76 ] && grep -q '^seed-failed' $WORK/log && ! grep -q '^ui start' $WORK/log && [ ! -e $C/Roms/bios/.pocket-ui-data ] && [ -s $C/pocket-ui/storage/pocket-ui/update-pending ]"
 
+  # 5c. The boot picture ends before pocket-ui starts. Until 08.11. its pocket-fb outlived the kill (aimed at the subshell around
+  # it) and held the screen beside the real bridge for the picture's whole 10 minutes.
+  make_card "$C"; rm -f "$WORK/log.pictures"
+  fake_pocket_ui "$C" 'for p in $(cut -d" " -f1 "$BRICK_TEST_LOG.pictures" 2>/dev/null); do kill -0 "$p" 2>/dev/null && echo "starting picture alive" >>"$BRICK_TEST_LOG"; done; echo "ui start" >>"$BRICK_TEST_LOG"; sleep 2'
+  rc=$(SHOW_FOR_TEST=30 BRICK_FAST_END=1 run_updater "$SHBIN" "$C" 6)
+  check "boot picture: shown, and gone before pocket-ui starts" "grep -q 'starting.png' $WORK/log.pictures && grep -q '^ui start' $WORK/log && ! grep -q 'starting picture alive' $WORK/log"
+
   # 6. The same through TrimUI's own firmware's entry (trimui/app/MainUI): same script, same result, the log says which entry.
   make_card "$C"; fake_pocket_ui "$C" 'echo "ui start" >>"$BRICK_TEST_LOG"; exit 3'
   rc=$(ENTRY=trimui/app/MainUI run_updater "$SHBIN" "$C" 40)
   check "stock entry: crash loop ends by itself with 1, three tries" "[ $rc = 1 ] && [ \"\$(grep -c '^ui start' $WORK/log)\" = 3 ]"
   check "stock entry: the log names the entry" "grep -q 'boot via stock-firmware' $C/pocket-ui/logs/boot.log"
-  check "nextui entry: the log names the entry" "rc=\$(run_updater '$SHBIN' '$C' 40); grep -q 'boot via nextui-hook' $C/pocket-ui/logs/boot.log"
+  check "updater entry: the log names the entry" "rc=\$(run_updater '$SHBIN' '$C' 40); grep -q 'boot via updater-hook' $C/pocket-ui/logs/boot.log"
   check "stock entry: premainui.sh succeeds, preload.sh says 'no card UI ran' (1), so the firmware's own menu is the fallback" "sh $C/trimui/app/premainui.sh && ! sh $C/trimui/app/preload.sh"
   # 7. Wi-Fi: started unless pocket-ui's switch put it off (TrimUI's start script has stopped it when its own setting was off).
   make_card "$C"; fake_pocket_ui "$C" 'sleep 3'; mkdir -p "$C/pocket-ui/storage/.config/pocket-ui"
@@ -376,7 +461,7 @@ echo where >"$CZ/parts/sources/SOURCES.txt"; echo "tailscale 1 00" >"$CZ/parts/P
 if BRICK_PARTS=$CZ/parts BRICK_UPDATE_URL=https://example.test/brick-updates/beta/update.json BRICK_LICENCE_FILES=$CZ/lic.sh \
    "$ROOT/scripts/brick-make-card.sh" "$CZ/out" "$CZ/bins" "$CZ/libs" "$CZ/cores" test >"$CZ/make.log" 2>&1; then
   ok "brick-make-card builds a card from stand-in parts"
-  ZIP=$CZ/out/pocket-ui-brick-card-test.zip
+  ZIP=$CZ/out/pocket-ui-trimui-card-test.zip
   mkdir "$CZ/unpacked"
   python3 -I - "$ZIP" "$CZ/unpacked" <<'PY' && ok "the zip lists its folders as directory entries" || bad "the zip stores a folder as a file"
 import stat, sys, zipfile
@@ -406,7 +491,7 @@ PY
   echo src >"$CZ/pocket-ui-src.tar.gz"
   if BRICK_PARTS=$CZ/parts BRICK_LICENCE_FILES=$CZ/lic.sh BRICK_SOURCES_APART=1 BRICK_POCKETUI_SOURCE=$CZ/pocket-ui-src.tar.gz \
      "$ROOT/scripts/brick-make-card.sh" "$CZ/pub" "$CZ/bins" "$CZ/libs" "$CZ/cores" 0.2.1 >"$CZ/pub.log" 2>&1; then
-    check "public card: no update-url, no cores' source in the card zip, both in the sources zip with pocket-ui's" "! unzip -l $CZ/pub/pocket-ui-brick-card-0.2.1.zip | grep -q -e update-url -e 'sources/cores/' && unzip -l $CZ/pub/pocket-ui-brick-sources-0.2.1.zip | grep -q 'sources/cores/fbneo-abc123.tar.gz' && unzip -l $CZ/pub/pocket-ui-brick-sources-0.2.1.zip | grep -q 'sources/pocket-ui-src.tar.gz' && unzip -l $CZ/pub/pocket-ui-brick-sources-0.2.1.zip | grep -q 'sources/network/SOURCES.txt' && unzip -p $CZ/pub/pocket-ui-brick-card-0.2.1.zip pocket-ui/app/licences/SOURCES.txt | grep -q 'pocket-ui-brick-sources-0.2.1.zip'"
+    check "public card: no update-url, no cores' source in the card zip, both in the sources zip with pocket-ui's" "! unzip -l $CZ/pub/pocket-ui-trimui-card-0.2.1.zip | grep -q -e update-url -e 'sources/cores/' && unzip -l $CZ/pub/pocket-ui-trimui-sources-0.2.1.zip | grep -q 'sources/cores/fbneo-abc123.tar.gz' && unzip -l $CZ/pub/pocket-ui-trimui-sources-0.2.1.zip | grep -q 'sources/pocket-ui-src.tar.gz' && unzip -l $CZ/pub/pocket-ui-trimui-sources-0.2.1.zip | grep -q 'sources/network/SOURCES.txt' && unzip -p $CZ/pub/pocket-ui-trimui-card-0.2.1.zip pocket-ui/app/licences/SOURCES.txt | grep -q 'pocket-ui-trimui-sources-0.2.1.zip'"
   else
     bad "brick-make-card failed for the public card: $(tail -3 "$CZ/pub.log" | tr '\n' ' ')"
   fi
@@ -548,7 +633,9 @@ if [ -n "$ST" ]; then
   PO=$PB/public; ppub() { STORE_TOOL=$ST POCKETUI_SIGNING_KEY=$PB/key BRICK_PUBLISH_VERIFY_KEY=$PB/key "$ROOT/scripts/brick-publish.sh" "$PB/app" --public owner/pocket-ui --out "$PO" "$@"; }
   build 0.2.1; echo zip >"$PB/card.zip"
   check "public: an old updater cannot publish a small update" "! ppub >$PB/err 2>&1 && grep -q 'rebuild the public card' $PB/err"
-  printf 'asset-packages.json' >>"$PB/app/bin/pocket-ui"
+  printf '.asset-moves' >>"$PB/app/bin/pocket-ui"
+  check "public: an updater with only half of the small-update support is refused" "! ppub >$PB/err 2>&1 && grep -q 'rebuild the public card' $PB/err"
+  printf '.asset-moves .restore-assets' >>"$PB/app/bin/pocket-ui"  # as a real optimized build: no 'asset-packages.json' text in it
   mkdir -p "$PB/app/cores"; printf core >"$PB/app/cores/test_libretro.so"
   check "public: the list names the GitHub release's tarball and the card zip, signed, and the tarball is the program folder" "ppub --zip $PB/card.zip --notes 'first public' >$PB/out 2>&1 && \"$ST\" verify $PO/updates/brick/update.json $PB/key >/dev/null && \"$ST\" list $PO/updates/brick/update.json | awk -F'\\t' '\$1==\"app\"' | grep -q \"0.2.1	\$(wc -c <$PO/release/pocket-ui-brick-0.2.1.tar.gz)	\$(sha256sum $PO/release/pocket-ui-brick-0.2.1.tar.gz | cut -d' ' -f1)	https://github.com/owner/pocket-ui/releases/download/v0.2.1/pocket-ui-brick-0.2.1.tar.gz\" && \"$ST\" list $PO/updates/brick/update.json | grep -q 'install_zip.*releases/download/v0.2.1/card.zip' && tar -tzf $PO/release/pocket-ui-brick-0.2.1.tar.gz | grep -qx 'RELEASE' && [ -s $PO/release/card.zip ] && grep -q 'nothing uploaded' $PB/out"
   check "public: website first, GitHub fallback, and core packages kept outside the regular app" "\"$ST\" list $PO/updates/brick/update.json | grep -q 'https://pocketui.xyz/updates/brick/pocket-ui-brick-0.2.1.tar.gz' && tar -xOf $PO/release/pocket-ui-brick-0.2.1.tar.gz asset-packages.json | grep -q 'cores/test_libretro.so' && ! tar -tzf $PO/release/pocket-ui-brick-0.2.1.tar.gz | grep -q '^cores/' && [ -n \"\$(ls $PO/updates/brick/assets/*.tar.gz)\" ]"
@@ -558,7 +645,7 @@ if [ -n "$ST" ]; then
   rm -f "$PB/app/update-url"; build 0.2.1-brick.8
   check "public: a beta version is refused" "! ppub >$PB/err 2>&1 && grep -q 'plain X.Y.Z' $PB/err"
   build 0.2.1
-  printf 'asset-packages.json' >>"$PB/app/bin/pocket-ui"
+  printf '.asset-moves .restore-assets' >>"$PB/app/bin/pocket-ui"  # as a real optimized build: no 'asset-packages.json' text in it
   check "public: a list signed with a key pocket-ui does not trust is refused" "! STORE_TOOL=$ST POCKETUI_SIGNING_KEY=$PB/other BRICK_PUBLISH_VERIFY_KEY=$PB/key $ROOT/scripts/brick-publish.sh $PB/app --public owner/pocket-ui --out $PB/public2 >/dev/null 2>&1"
 else
   echo "skip publishing (no store-tool built; STORE_TOOL=...)"
@@ -901,6 +988,37 @@ f.write(struct.pack("qqHHi", 0, 0, 1, 116, 1)); time.sleep(2.5); f.write(struct.
   check "no such input device: says so and exits (1)" "[ $rc = 1 ] && echo '$NOWHERE' | grep -q axp2202-pek"
 else
   echo "skip power (no cc)"
+fi
+
+# The card's own texts and pictures name no other frontend (a rule for everything public), and every message exists in both
+# sizes: 1024x768 for the Brick, 1280x720 for the Smart Pro. The pictures' words live in scripts/brick-messages.py; when Pillow is
+# there the committed files are drawn again and compared, so a text change without new pictures fails.
+echo '== card texts and message pictures'
+OTHER='nextui|minui|knulli|onionos|spruceos|muos|batocera|emuelec|jelos'  # ROCKNIX is our own base, not another frontend
+check "no other frontend's name in the card's texts, scripts and picture source" "! grep -r -i -I -E '$OTHER' $ROOT/deploy/brick --exclude-dir=dropbear $ROOT/scripts/brick-messages.py $ROOT/scripts/brick-make-card.sh"
+# Every message has both languages, English first, in the same order and with every line filled: the generator's data is read without Pillow.
+check "every message has an English and a German title and lines (English first)" "python3 -I -c '
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location(\"bm\", sys.argv[1]); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+for name, msg in m.MESSAGES.items():
+    assert list(msg)[1:] == [\"en\", \"de\"], (name, \"English must come first, then German\")
+    for lang in (\"en\", \"de\"):
+        title, lines = msg[lang]
+        assert title.strip() and lines and all(l.strip() for l in lines), (name, lang)
+    assert msg[\"en\"][0] != msg[\"de\"][0] and msg[\"en\"][1] != msg[\"de\"][1], (name, \"the German text is the English one\")
+' $ROOT/scripts/brick-messages.py"
+check "the 'does not run on this handheld' text is in English and German" "grep -q 'back to TrimUI.s menu.||pocket-ui laeuft auf diesem' $ROOT/deploy/brick/start.sh"
+png_size() { python3 -I -c 'import struct,sys; d=open(sys.argv[1],"rb").read(24); print("%dx%d" % struct.unpack(">II", d[16:24]))' "$1"; }
+for n in starting missing crashed; do
+  check "message $n.png is 1024x768 (Brick)" "[ \"\$(png_size $ROOT/deploy/brick/msg/$n.png)\" = 1024x768 ]"
+  check "message $n-wide.png is 1280x720 (Smart Pro)" "[ \"\$(png_size $ROOT/deploy/brick/msg/$n-wide.png)\" = 1280x720 ]"
+done
+check "missing.raw is one 1024x768 frame, missing-wide.raw one 1280x720 frame" "[ \$(wc -c <$ROOT/deploy/brick/msg/missing.raw) = 3145728 ] && [ \$(wc -c <$ROOT/deploy/brick/msg/missing-wide.raw) = 3686400 ]"
+if PYTHONPATH=${PILLOW_PATH:-} python3 -c 'import PIL' 2>/dev/null; then
+  mkdir -p "$WORK/msgs"; PYTHONPATH=${PILLOW_PATH:-} python3 "$ROOT/scripts/brick-messages.py" "$WORK/msgs" >/dev/null
+  check "the committed message pictures are what scripts/brick-messages.py draws" "diff -rq $WORK/msgs $ROOT/deploy/brick/msg"
+else
+  echo "skip   message pictures against the generator (no Pillow; PILLOW_PATH=<folder with Pillow> to run it)"
 fi
 
 echo

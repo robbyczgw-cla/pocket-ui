@@ -1475,9 +1475,9 @@ pub mod linux {
     /// `button`, for the device called `name`: the H700 pad's X and Y cross over, so printed X is `North` and printed
     /// Y is `West` like on every other pad. This is the only place evdev keys become `Button`, for the UI and the core.
     pub(super) fn button_on(name: &str, code: KeyCode) -> Option<Button> {
-        // The Brick's F1 and F2 arrive as the thumb-stick presses (317, 318) on its pad, which has no sticks.
+        // The Brick's F1 and F2 arrive as the thumb-stick presses (317, 318) on its pad, which has no sticks (the Smart Pro's: L3, R3).
         #[cfg(feature = "brick")]
-        if crate::brick_profile::is_pad(name) {
+        if crate::brick_profile::is_pad(name) && crate::brick_profile::board().is_none_or(|b| b.fkeys()) {
             match code {
                 KeyCode::BTN_THUMBL | KeyCode::KEY_F1 => return Some(Button::F1),
                 KeyCode::BTN_THUMBR | KeyCode::KEY_F2 => return Some(Button::F2),

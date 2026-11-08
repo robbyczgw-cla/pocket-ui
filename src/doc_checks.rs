@@ -254,7 +254,7 @@ fn names(text: &str, word: &str) -> bool {
 #[test]
 fn the_settings_table_lists_every_settings_row_in_order() {
     // Settings is two pages (the manual's 30 000 px limit): Look, Sound & feel, Playing and Games, then Connections, System and Help & tools.
-    let md = format!("{}\n{}", read("docs/user/settings.md"), read("docs/user/settings-system.md"));
+    let md = format!("{}\n{}\n{}", read("docs/user/settings.md"), read("docs/user/settings-sound.md"), read("docs/user/settings-system.md"));
     // The categories, in their order, each naming its entries.
     let open = first_table(&section(&md, "Open Settings"));
     let doc: Vec<String> = open.iter().map(|r| bold(&r[0])).collect();
@@ -286,14 +286,16 @@ fn the_settings_table_lists_every_settings_row_in_order() {
 
 #[test]
 fn every_cozy_extra_is_described_with_its_start() {
-    let rows = first_table(&section(&read("docs/user/settings.md"), "Cozy extras"));
+    let rows = first_table(&section(&read("docs/user/settings-sound.md"), "Cozy extras"));
     let doc: Vec<String> = rows.iter().map(|r| bold(&r[0])).collect();
-    let code: Vec<&str> = pocket_ui::cozy_extras::Extra::shown().iter().map(|e| e.label()).collect();
-    assert_eq!(doc, code, "docs/user/settings.md, \"Cozy extras\": one row per extra on the page, in its order");
+    let mut code: Vec<&str> = pocket_ui::cozy_extras::Extra::shown().iter().map(|e| e.label()).collect();
+    code.push(super::app_cozy_extras::GBA_MODEL_NAME);
+    assert_eq!(doc, code, "docs/user/settings.md, \"Cozy extras\": every switch and the GBA model selector, in page order");
     for (r, e) in rows.iter().zip(pocket_ui::cozy_extras::Extra::shown()) {
         let start = if e.default_on() { "On" } else { "Off" };
         assert_eq!(r[2], start, "docs/user/settings.md, \"Cozy extras\": {}'s start", e.label());
     }
+    assert_eq!(rows.last().unwrap()[2], pocket_ui::system_art::GbaModel::default().label(), "Cozy extras: the GBA selector starts with the classic model");
 }
 
 #[test]
@@ -419,7 +421,7 @@ fn look_appearance_motion_on_start_and_screen_frames_choices_are_described() {
         looks, themes,
         "docs/user/playing.md, \"Looks\": one row per look, in the order of Settings → Look"
     );
-    let settings = read("docs/user/settings.md");
+    let settings = format!("{}\n{}", read("docs/user/settings.md"), read("docs/user/settings-sound.md"));
     for (title, names) in [
         ("Appearance", Appearance::ALL.iter().map(|a| a.name()).collect::<Vec<_>>()),
         ("Motion", Motion::ALL.iter().map(|m| m.name()).collect()),

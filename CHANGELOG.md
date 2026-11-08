@@ -5,6 +5,44 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-08
+
+### Added
+
+- An optional Game Boy Advance SP look in Settings → Look → Cozy extras → GBA console. The choice is saved and changes the console pictures throughout the app; the classic GBA remains the default. At launch the SP opens, then the cartridge turns label-side down and slides into its initially empty bottom slot.
+
+- **Updates tell you, quietly**: Settings → System → Updates has a switch, "Check for updates automatically" (On). When on, pocket-ui looks at most once a day (and once after it starts), only with Wi-Fi, never during a game, and a small dot on System and Updates says a newer version is there, next to the once-per-version note on the shelf. "Install pocket-ui …" now asks first ("Install now" or "Later") and suggests the charger when the battery is under 20 %. Off asks the server nothing at all.
+- **Cards from other systems work as they are.** Next to the usual folders, pocket-ui reads a folder with the name another system gives ("Game Boy Advance (GBA)", "GBA", "Sega Genesis", "Nintendo Game Boy Advance"), in place and without a rename. Box art already on the card (`images`, `Imgs`, `.media`, `covers`, a gamelist's pictures, the media folders other frontends keep) is used before anything is downloaded, boxes before mixes before screenshots; nothing on the card is written.
+- **TrimUI Smart Pro, experimental (feedback welcome):** one TrimUI card for the Brick and the Smart Pro. It finds which
+  of the two it is and sets itself up for it: 1280×720, both sticks for menus and games, no Brick-only keys or lights.
+  About says "experimental", and Report a problem includes what helps us most there (the input devices and the start log).
+  The card zip is now `pocket-ui-trimui-card-<version>.zip`. On a Smart Pro S the card says it doesn't run there yet.
+- **TrimUI Brick: cheats work.** The libretro cheat database is on the card and in the update (a pinned subset with its notices), the Cheats page in the pause menu lists a game's cheats, and a game without any says so instead of showing an empty page. Tried on a real Brick with GBA (gpSP and mGBA), SNES and Game Boy Color games: cheats on, Continue, Save and Load, Quit.
+
+### Changed
+
+- TrimUI Brick: the Normal text size is one step larger (hint bar 21 → 25 px, body 28 → 31 px, Settings explanations 30 → 32); H700 and ROCKNIX handhelds are unchanged.
+- TrimUI Brick: the interface draws more smoothly (scrolling 34 → 43 frames per second in the measured journey); idle CPU is the same.
+- An empty Bluetooth list says to put the device in pairing mode and search; sparse libraries show a note instead of an empty place.
+
+### Fixed
+
+- Brick: the start picture no longer stays running in the background for ten minutes after the Brick switches on.
+- Starting a PlayStation, Saturn, Dreamcast or GameCube game in Cozy looks like the real thing: the disc's case opens and the disc is lifted off its tray instead of sliding out of a closed case, it is carried flat, label up, and lowered onto the spindle (it no longer floats upright and flips over), it is thin and printed to the rim (PlayStation, Saturn) instead of a black-ringed puck, the Saturn's and Dreamcast's discs are as wide as the real ones next to their consoles, and the Saturn's lid is black underneath too. The open lid of the PlayStation, Saturn and Dreamcast comes up out of the console's rear wall instead of floating above it like a second disc. The PSP, whose UMD goes in a door at its back, no longer shows a disc dropping on its screen: its start lights it up until it has its own animation.
+- A game's long name is shown whole beside or under its cover in the Shelf, Cabinet, Cards, Split and Easy looks: "The Legend of Zelda" big and "Ocarina of Time" smaller under it, up to three lines, instead of "The Legend of Zelda - …" cut after two. The line under the name ("Not played yet") no longer moves while you scroll.
+- Names on the spines of the Shelf and the Cabinet are whole or tell the game apart instead of "Conker's B…", "Mario Kar…" (three of them) and "The Legend…" (twice): a smaller size step, no leading "The", "Ocarina of Time" for "The Legend of Zelda - Ocarina of Time", "Kong Country 3" for "Donkey Kong Country 3 - Dixie Kong's Double Trouble!"; "…" only when nothing else fits.
+- Names in the search results are whole or tell the game apart instead of "The Legend of Zelda: Link's Aw…": a size step smaller, no leading "The", then "Link's Awakening DX" for "The Legend of Zelda: Link's Awakening DX" (so it never reads like the plain Link's Awakening); "…" only when nothing else fits.
+- ROCKNIX installs and updates keep the previous programs available if interrupted, including a rebuilt package with
+  the same version and an older installation with loose program files. The package installer finishes writing the
+  programs and boot launcher to the card before switching to them.
+- Text that was cut off now fits, in English, German and Spanish, Barlow and Retro, normal and large text: the LED hint, the Port files heading, Wi-Fi "other ways", Sleep, the info page's facts and notes, the player-assignment hint, the welcome heading, empty-search hints, N64 controls (R2/C), the start-price heading, system and console names (in lists, on console pages, on narrow Curator cards), the "more games in this series" heading, Tailscale help, the first start's device paragraph and Safe mode's "Switch off". On the Brick additionally: Home facts and hints, Info rating and saves labels, Credits, the password keyboard's privacy note, "Entrar", Extras without Wi-Fi, Pixel Path, Performance, Sleep.
+- Long game names are whole in the details header too (up to three lines; cover, year and facts stay put); the NES info header keeps its year beside a long console name, with or without the favourite mark.
+- Cartridges go into their console label-away (also Game Boy, Game Boy Color and DS), with their real back sides; a console's open lid stands up out of its rear wall.
+- Retro: the letters C and c are open, Z has its diagonal and the 5 a flat top in the bundled Pixelify Sans.
+- Just Play's card in the Cards look (and its panel in Split) no longer prints its short line ("One press") over its name at Large text in Retro or in German and Spanish: the line wraps or gets smaller instead of ending in "…".
+- Cabinet: the line under a game's name and its subtitle stay clear of the "Continue" word beside it, also on the Brick's 1024x768 screen.
+- Brick: the system no longer writes every log message to a slow hidden serial port. That held up the sound for a moment while Wi-Fi reconnected, and other Brick systems traced rare freezes to it.
+
 ## [0.3.0] - 2026-11-07
 
 ### Added

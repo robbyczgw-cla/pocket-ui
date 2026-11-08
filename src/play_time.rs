@@ -1,4 +1,20 @@
 //! Portable display of accumulated playing time.
+
+/// One wall clock for recorded history and relative display; test overrides require hardware mocks.
+pub fn now_secs() -> u64 {
+    // Snapshot fixtures and their relative history share one explicit clock. Cache the optional
+    // override once; a real device never accepts it without the existing hardware mock switch.
+    static MOCK_NOW: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
+    if let Some(now) = *MOCK_NOW.get_or_init(|| {
+        std::env::var_os("POCKETUI_MOCK").and_then(|_| {
+            std::env::var("POCKETUI_MOCK_NOW").ok().map(|s| s.parse().expect("POCKETUI_MOCK_NOW must be Unix seconds"))
+        })
+    }) {
+        return now;
+    }
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
 /// "under a minute", "12 min", "1 h 05 min".
 pub fn duration(secs: u64) -> String {
     let m = secs / 60;
@@ -11,13 +27,7 @@ pub fn duration(secs: u64) -> String {
 
 /// "just now", "5 min ago", "3 h ago", "2 days ago".
 pub fn ago(then: u64) -> String {
-    ago_from(
-        then,
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0),
-    )
+    ago_from(then, now_secs())
 }
 
 /// `ago` as seen at `now` (Unix seconds).

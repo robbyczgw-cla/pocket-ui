@@ -567,7 +567,9 @@ impl FilesPage {
     pub fn paint(&mut self, c: &mut Canvas, text: &mut Text, share: &Share, toggle: &Toggle) {
         c.clear(pal().void);
         let w = c.w - 2 * MARGIN;
-        text.draw(c, Face::Title, 67, MARGIN, 124, pal().chalk, "Copy your game files");
+        // Keep the heading's one-line slot; translated Retro/Large text can need the next smaller title size.
+        let (heading_px, heading) = text.fit_sizes(Face::Title, &[67, 50], "Copy your game files", w);
+        text.draw(c, Face::Title, heading_px, MARGIN, 124, pal().chalk, &heading);
         let lead = if self.blocked {
             format!(
                 "{} can't start yet: it needs files from your own copy of the game, and they aren't there.",

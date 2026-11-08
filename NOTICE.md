@@ -170,7 +170,42 @@ The consoles with their lids and trays that take a game in Cozy's launch (`asset
 public-domain photos (Evan Amos, Wikimedia Commons) and one CC0 photo of a disc tray, all logos and lettering painted out:
 file by file in [assets/media/rig/SOURCES.md](assets/media/rig/SOURCES.md).
 
+## Cartridge backs at a game's start
+
+The derived images below are **modified via PixelLab** (cropped, lettering removed with the
+photograph's own plastic, brightness/colour adjusted, converted to pixel art and cut out).
+Each derived PNG is marked with the stated licence, separately from the program's GPL;
+its author, source and licence are also recorded in its PNG text metadata. For the GBA
+CC BY-SA image keep the attribution and licence, identify further changes, and share
+adaptations under CC BY-SA 4.0. The other three derived images are released under CC0 1.0.
+The photographers do not endorse this application.
+
+| Derived asset (in `assets/media/game/`) | Author | Photograph / source | Licence of source and derived asset | Modification |
+| --- | --- | --- | --- | --- |
+| `gba-back.png` | ITEagle Europe – Sebastiaan Broekhoven | [Game Boy Advance game cartridges - rear view.jpg](https://commons.wikimedia.org/wiki/File:Game_Boy_Advance_game_cartridges_-_rear_view.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | modified via PixelLab |
+| `gb-back.png` | Christopher Wells | [Baseball cartridge (JP), 02_cartridge_back.jpg](https://archive.org/details/baseball-cartridge-jp) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | modified via PixelLab |
+| `gbc-back.png` | Christopher Wells | [Harvest Moon 3 GBC cartridge (JP), 02_cartridge_back.jpg](https://archive.org/details/harvest-moon-3-gbc-cartridge-jp) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | modified via PixelLab |
+| `ds-back.png` | Christopher Wells | [Lux-Pain cartridge (NA), 02_cartridge_back.jpg](https://archive.org/details/lux-pain-cartridge-na) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | modified via PixelLab |
+
+Full preparation and attribution: [assets/media/game/REAR-SOURCES.md](assets/media/game/REAR-SOURCES.md).
+
 ## System pictures
+
+### Optional Game Boy Advance SP pictures
+
+These five derived assets are dedicated under **[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)**,
+an exception to the general system-picture licence below. Each was **modified via PixelLab**.
+
+| Derived asset | Photo author | Source | Original licence | Changes |
+|---|---|---|---|---|
+| `assets/systems/gba-sp.png` | Evan-Amos; photo retouch SerhioMagpie | [Gameboy-Advance-SP-Mk2.jpg](https://commons.wikimedia.org/wiki/File:Gameboy-Advance-SP-Mk2.jpg) | Public domain (PD-self) | modified via PixelLab; inserted cartridge removed by masked inpainting, lettering removed, cut out |
+| `assets/media/rig/gba-sp/base.png` | Evan-Amos; photo retouch SerhioMagpie | [Gameboy-Advance-SP-Mk2.jpg](https://commons.wikimedia.org/wiki/File:Gameboy-Advance-SP-Mk2.jpg) | Public domain (PD-self) | modified via PixelLab; inserted cartridge removed by masked inpainting, lower shell separated |
+| `assets/media/rig/gba-sp/over.png` | Evan-Amos; photo retouch SerhioMagpie | [Gameboy-Advance-SP-Mk2.jpg](https://commons.wikimedia.org/wiki/File:Gameboy-Advance-SP-Mk2.jpg) | Public domain (PD-self) | modified via PixelLab; empty-port edit, photographed shell and slot rim separated as occlusion layer |
+| `assets/media/rig/gba-sp/under.png` | Evan-Amos; photo retouch SerhioMagpie | [Gameboy-Advance-SP-Mk2.jpg](https://commons.wikimedia.org/wiki/File:Gameboy-Advance-SP-Mk2.jpg) | Public domain (PD-self) | modified via PixelLab; photographed screen panel registered to hinge |
+| `assets/media/rig/gba-sp/top.png` | Benoît Prieur | [Game Boy Advance SP Tribal Edition - 1.JPG](https://commons.wikimedia.org/wiki/File:Game_Boy_Advance_SP_Tribal_Edition_-_1.JPG) | CC0 1.0 | modified via PixelLab; photographed outer lid straightened, tribal decoration removed, recoloured Pearl Blue, registered to hinge |
+
+The SP reuses the GBA cartridge faces, including the **CC BY-SA 4.0** rear asset credited above;
+the console picture's CC0 dedication does not change that cartridge licence.
 
 The pixel-art console pictures in `assets/systems/` (compiled into pocket-ui by `src/system_art.rs`) are
 described in full, file by file, in [assets/systems/SOURCES.md](assets/systems/SOURCES.md). In short:
@@ -223,7 +258,7 @@ described file by file in [assets/ui-art/SOURCES.md](assets/ui-art/SOURCES.md). 
 | Font | Where | Licence | Notes |
 |---|---|---|---|
 | Barlow Medium, Barlow Condensed SemiBold (version 1.408) | `assets/fonts/`; compiled into the binaries (`src/text.rs`, `src/font_style.rs`) | SIL Open Font License 1.1 | Copyright 2017 The Barlow Project Authors ([source](https://github.com/jpt/barlow)), designer Jeremy Tribby. Licence text: `assets/fonts/OFL.txt` |
-| Pixelify Sans SemiBold and Regular, Nunito ExtraBold and SemiBold | `assets/fonts/`; compiled into the binaries (`src/font_style.rs`), used by Settings → Theme → Font (Pixel, Rounded) | SIL Open Font License 1.1 | Copyright 2021 The Pixelify Sans Project Authors ([source](https://github.com/eifetx/Pixelify-Sans)); Copyright 2014 The Nunito Project Authors ([source](https://github.com/googlefonts/nunito)). Static Latin instances of the official variable fonts. Licence texts: `assets/fonts/OFL.txt` |
+| Pixelify Sans SemiBold and Regular, Nunito ExtraBold and SemiBold | `assets/fonts/`; compiled into the binaries (`src/font_style.rs`), used by Settings → Theme → Font (Pixel, Rounded) | SIL Open Font License 1.1 | Copyright 2021 The Pixelify Sans Project Authors ([source](https://github.com/eifetx/Pixelify-Sans)); Copyright 2014 The Nunito Project Authors ([source](https://github.com/googlefonts/nunito)). Static Latin instances of the official variable fonts; the Pixelify Sans files are modified: the letters C and c (the original's read as O and o), Z and 5 are redrawn (`scripts/pixelify-glyphs.py`), advance widths and spacing unchanged, no Reserved Font Name is declared. Licence texts: `assets/fonts/OFL.txt` |
 | Titillium Web Regular, Bold | `store/test-catalog/src/fonts/`; packed into the test store's `type-titillium` package only, not compiled in | SIL Open Font License 1.1 | Copyright (c) 2009-2011 Accademia di Belle Arti di Urbino and students of MA course of Visual design. Licence text: `store/test-catalog/src/fonts/OFL.txt` (also inside the package as `Titillium-OFL.txt`) |
 | Noto Sans CJK SC Regular | Not shipped: pocket-ui uses the system's copy if present (ROCKNIX installs it at `/usr/share/fonts/truetype/noto-cjk/`), for Japanese, Chinese and Korean letters (`src/text_fallback.rs`) | SIL Open Font License 1.1 (ROCKNIX's package) | Nothing of it is in this repository or our binaries |
 | 8x8 bitmap glyphs (crate `font8x8` 0.3.1) | linked as a Rust crate | MIT | The crate says the glyph data comes from public-domain IBM VGA fonts |
@@ -275,7 +310,12 @@ that means shipping `assets/fonts/OFL.txt` with it.
   installed through PortMaster; each port has its own licence. pocket-ui lists ports that need no extra
   game files and ports that need the player's own files (it explains where to copy them and never downloads them).
 - **Cheat files** (`.cht`, `src/cheats.rs`): read from `/usr/share/libretro-database/cht`, which ROCKNIX
-  ships. Not in this repository.
+  ships. The Brick card and its OTA also carry an unchanged subset for the card's systems, under CC BY-SA 4.0,
+  pinned by `scripts/brick-cheats-data.py` to commit `4de37d2c8042d9d0f608c43006c9b35438c536ce`.
+  The package includes upstream LICENSE and README.md plus subset attribution in `app/licences/libretro-database/`,
+  with source URL, archive checksum and inventory in `app/database/MANIFEST.json`. The files are stored unchanged, each
+  compressed on its own, in one file (`app/cores/cht.pack`, `src/cheat_pack.rs`). The data is fetched at card
+  build time; it is not checked into this repository.
 - **Wikidata** (game facts: year, developer, publisher, genre, series, players, review scores):
   `assets/gamedb.bin`, built by `scripts/build-gamedb.py` from the [Wikidata](https://www.wikidata.org) query
   service. Wikidata's data is released under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/); the

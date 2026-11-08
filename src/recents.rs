@@ -1,7 +1,6 @@
 //! Recently played games, newest first, stored as JSON in the data directory.
 
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
@@ -25,9 +24,7 @@ pub struct Recents {
     pub list: Vec<Recent>,
 }
 
-pub fn now_secs() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
-}
+pub use crate::play_time::now_secs;
 
 impl Recents {
     pub fn load(data_dir: &Path) -> Self {

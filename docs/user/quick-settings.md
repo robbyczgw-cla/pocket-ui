@@ -101,7 +101,7 @@ Switch off after timer (Off by default), counted while the screen is off on batt
 
 Settings → System → **Sleep & power**. Up/Down choose a row, Left/Right change it, A goes on to its next choice; the
 line under the rows says what the selected choice does. A change applies at once. The last two rows are under the
-heading **Power button**.
+heading **Power button**. On a short screen or with larger text, the list scrolls as you move: the selected row stays above the help and hint bar.
 
 | Row | Choices (default in bold) |
 |---|---|

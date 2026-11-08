@@ -1,5 +1,6 @@
 //! Shared pocket-ui library with target-owned composition.
 pub mod trace;
+pub mod frame_pace;
 pub mod state_policy;
 pub mod audio_diagnostics;
 pub mod audio_pw_stats;

@@ -238,6 +238,11 @@ errors, the `Bluetooth` seam with `Bluetoothctl` and `MockBluetooth`, `pair_trus
 (the page as a state machine: `press` returns an `Action`, threads answer with an `Event`; no I/O, all tested),
 `src/app_bluetooth.rs` (worker threads, poller, painting, `--snapshot bluetooth[:off|:empty|:search|:found|:pairing|:connected|:error|:forget]`).
 
+When Bluetooth is on and the device list is empty, the details area says "No devices found" and explains pairing
+mode and Search for devices. Errors, switching and an active search keep their own messages. The `bluetooth:empty`
+snapshot contains no paired or discovered devices; `tests/empty_views.rs` checks its explanation in both Barlow and
+Retro, including German and Spanish with Large text.
+
 How ROCKNIX does Bluetooth (read in the ROCKNIX tree, `packages/network/bluez`, `packages/rocknix/sources/scripts`):
 BlueZ 5.83 with `storagedir=/storage/.cache/bluetooth`, `AutoEnable=true`, `JustWorksRepairing=always`,
 `ClassicBondedOnly=false`. `rocknix-bluetooth enable|disable` starts or stops `bluetooth.service` and

@@ -131,7 +131,7 @@ fn shown_on(opens: Opens, store: bool, sticks: bool, host_owned: bool) -> bool {
 fn brick_has(opens: Opens) -> bool {
     #[cfg(feature = "brick")]
     {
-        pocket_ui::device::brick() && matches!(opens, Opens::Haptics | Opens::Leds)
+        pocket_ui::device::brick() && (matches!(opens, Opens::Haptics) || matches!(opens, Opens::Leds) && pocket_ui::brick_profile::lights_page())
     }
     #[cfg(not(feature = "brick"))]
     {
@@ -567,7 +567,10 @@ impl App {
             } else {
                 pocket_ui::ui_art::paint_tinted(&mut band, pocket_ui::ui_art::Art::Icon(ICONS[g]), pad + NU_BTN_PAD, y + row / 2 - 8 * icon_k, icon_k, ink);
             }
-            self.text.draw(&mut band, Face::Body, font, pad + NU_BTN_PAD + indent, base, ink, name);
+            let name_w = self.text.draw(&mut band, Face::Body, font, pad + NU_BTN_PAD + indent, base, ink, name);
+            if name == "System" && self.update_dot() {
+                Self::paint_update_dot(&mut band, pad + NU_BTN_PAD + indent + name_w, base - pocket_ui::type_scale::mid(font), font);
+            }
             pocket_ui::kit::row_value_in(&mut band, &mut self.text, font, right - NU_BTN_PAD, base, ">", (ink, mix(pal().dust, pal().ink, (app_motion::under(g, hl) * 255.0) as u32)));
         }
         pocket_ui::kit::scrollbar(c, top, visible as i32 * row, first, visible, n);
@@ -1014,10 +1017,10 @@ mod tests {
 /// The rows the TrimUI Brick leaves out beside what a host-owned device leaves out (docs/TRIMUI-BRICK.md): everything that needs a
 /// compositor effect (night light, the picture over the game, screenshots; screen frames only while the bridge has no GPU path, `brick_picture`), ROCKNIX (From EmulationStation, Sleep & power
 /// through systemd, PC streaming), or a network state this system does not give pocket-ui (Wi-Fi is NextUI's): the starter pack,
-/// pictures & extras, the web companion, RetroAchievements. A row that does nothing is worse than none.
+/// pictures & extras, the web companion, RetroAchievements. A row that does nothing is worse than none. The Smart Pro has sticks, so `hides` keeps its lights row: it has nothing of ours to light or assign there (`brick_profile::lights_page`).
 #[cfg(feature = "brick")]
 fn brick_hides(opens: Opens) -> bool {
-    pocket_ui::device::brick() && brick_hides_with(opens, pocket_ui::brick_profile::standalone())
+    pocket_ui::device::brick() && (brick_hides_with(opens, pocket_ui::brick_profile::standalone()) || matches!(opens, Opens::Leds) && !pocket_ui::brick_profile::lights_page())
 }
 
 /// The Brick's own card has these of what NextUI's card leaves out (docs/TRIMUI-BRICK-REMOTE.md): Wi-Fi, Remote access (the card's

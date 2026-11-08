@@ -176,12 +176,62 @@ fn every_step_of_an_install_can_be_cut_off_and_the_player_still_gets_a_working_v
             // The player tries again (the old version still offers the new one): it finishes from what is there.
             if i < SWITCHED {
                 install_app(&rel, &url, &root, &Cancel::new(), &|_| {}).unwrap_or_else(|e| panic!("{what}: the next try: {e}"));
-                assert_eq!(link_target(&root.join("current")).as_deref(), Some(format!("releases/{NEW}").as_str()), "{what}");
+                let version = Command::new(root.join("pocket-ui")).arg("--version").output().unwrap();
+                assert!(version.status.success(), "{what}: the retried install starts");
+                assert_eq!(String::from_utf8_lossy(&version.stdout).trim(), format!("pocket-ui {NEW}"), "{what}");
                 assert_eq!(link_target(&root.join("previous")).as_deref(), Some(format!("releases/{OLD}").as_str()), "{what}: the way back");
                 assert_eq!(std::fs::read_to_string(root.join("update-pending")).unwrap(), NEW, "{what}");
                 let hidden: Vec<_> = std::fs::read_dir(root.join("releases")).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().starts_with('.')).map(|e| e.file_name()).collect();
                 assert!(hidden.is_empty(), "{what}: left behind {hidden:?}");
             }
         }
+    }
+}
+
+#[test]
+fn reinstall_cut_off_at_any_step_preserves_the_active_and_rollback_programs() {
+    for active in [false, true] {
+        for step in STEPS {
+            let t = TestDir::new("update-reinstall-crash");
+            let (root, channel, runs_file) = (t.join("root"), t.join("channel"), t.join("runs"));
+            std::fs::create_dir_all(&root).unwrap();
+            card(&root, &runs_file);
+            // Another working build already has the incoming version's folder name.
+            // It is either the active build or the last working rollback target.
+            let existing = root.join("releases").join(NEW);
+            programs(&existing, NEW, false, &runs_file);
+            link(&format!("releases/{NEW}"), &root.join("known-good")).unwrap();
+            if active {
+                link(&format!("releases/{NEW}"), &root.join("current")).unwrap();
+            }
+            let before = std::fs::read(existing.join("pocket-ui")).unwrap();
+            let (rel, url) = offered(&channel, true, &runs_file);
+            install_cut_off_at(step, &root, &rel, &url);
+            assert_eq!(std::fs::read(existing.join("pocket-ui")).unwrap(), before,
+                "{step}: a reinstall must not overwrite a version the launcher can still need (active={active})");
+            boot(&t, &root);
+            let ran = runs(&runs_file);
+            assert!(!ran.is_empty(), "{step}: the player gets a working version");
+            assert!(!root.join("es-fallback").exists(), "{step}: a working previous version is available");
+            assert_eq!(ran.last().map(String::as_str), Some(if active { NEW } else { OLD }));
+        }
+    }
+}
+
+#[test]
+fn converting_a_flat_install_never_removes_its_boot_path() {
+    for step in ["layout-copied-pocket-ui", "layout-copied-pocket-core", "layout-synced", "layout-current", "layout-linked-pocket-ui", "layout-linked-pocket-core"] {
+        let t = TestDir::new("update-flat-crash");
+        let (root, channel, runs_file) = (t.join("root"), t.join("channel"), t.join("runs"));
+        programs(&root, OLD, false, &runs_file);
+        let (rel, url) = offered(&channel, false, &runs_file);
+        install_cut_off_at(step, &root, &rel, &url);
+        for bin in ["pocket-ui", "pocket-core"] {
+            let out = Command::new(root.join(bin)).arg("--version").output().unwrap();
+            assert!(out.status.success(), "{step}: the original {bin} still starts");
+            assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), format!("{bin} {OLD}"));
+        }
+        boot(&t, &root);
+        assert_eq!(runs(&runs_file), [OLD], "{step}: the launcher still shows the old interface");
     }
 }

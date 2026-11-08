@@ -41,7 +41,7 @@ fn wayland(tmp: &Path) -> Option<Stub> {
 
 fn library(tmp: &Path) -> PathBuf {
     let lib = tmp.join("lib");
-    let ok = Command::new("python3")
+    let ok = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), lib.to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()
@@ -144,7 +144,7 @@ fn shot(tmp: &Path, lib: &Path, data: &Path, stub: &Option<Stub>, look: &str, ap
     let state = format!("shelf:snes:{look}:games:0");
     let out = cmd
         .args(["--snapshot", &state, png.to_str().unwrap()])
-        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .env("POCKETUI_LANG", "en")
         .env("POCKETUI_SNAPSHOT_SIZE", size)
         .env("POCKETUI_ES_SYSTEMS", lib.join("es_systems.cfg"))

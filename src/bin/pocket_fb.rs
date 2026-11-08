@@ -1343,10 +1343,13 @@ struct Args {
     hold: u64,
     gl: bool,
     gl_window: String,
+    /// `--gl-trust`: the GPU's picture counts as shown without reading it back from fb0. The Smart Pro's display shows the GL layer,
+    /// not fb0 (docs/TRIMUI-SMART-PRO.md), so the Brick's proof (fb0's visible page holds what was drawn) would always fail there.
+    gl_trust: bool,
 }
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
-    let mut out = Args { wayland: String::new(), ipc: String::new(), fb: "/dev/fb0".into(), mode: None, vsync: true, bgr: false, picture: None, message: None, ipc_send: None, hold: 5, gl: false, gl_window: "null".into() };
+    let mut out = Args { wayland: String::new(), ipc: String::new(), fb: "/dev/fb0".into(), mode: None, vsync: true, bgr: false, picture: None, message: None, ipc_send: None, hold: 5, gl: false, gl_window: "null".into(), gl_trust: false };
     let mut it = args;
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -1356,6 +1359,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
             "--no-vsync" => out.vsync = false,
             "--bgr" => out.bgr = true,
             "--gl" => out.gl = true,
+            "--gl-trust" => out.gl_trust = true,
             "--gl-window" => out.gl_window = it.next().ok_or("--gl-window <null|pbuffer>")?,
             "--picture" => out.picture = Some(it.next().ok_or("--picture <file.png>")?),
             "--message" => out.message = Some(it.next().ok_or("--message <text, | starts a new line>")?),
@@ -1374,13 +1378,13 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
         }
     }
     if out.picture.is_none() && out.message.is_none() && out.ipc_send.is_none() && (out.wayland.is_empty() || out.ipc.is_empty()) {
-        return Err("usage: pocket-fb --wayland <socket> --ipc <socket> [--fb /dev/fb0] [--mode 1024x768x32] [--no-vsync] [--bgr] [--gl] [--gl-window null]".into());
+        return Err("usage: pocket-fb --wayland <socket> --ipc <socket> [--fb /dev/fb0] [--mode 1024x768x32] [--no-vsync] [--bgr] [--gl] [--gl-trust] [--gl-window null]".into());
     }
     Ok(out)
 }
 
 /// `--picture`: as XRGB8888, top left, for `hold` seconds or until a signal; Fb's Drop puts the screen back.
-fn show_picture(fb: &mut Fb, path: &str, hold: u64) -> Result<(), String> {
+fn show_picture(fb: &mut Fb, path: &str, hold: u64, gl: Option<&str>) -> Result<(), String> {
     let file = std::fs::File::open(path).map_err(|e| format!("{path}: {e}"))?;
     let mut decoder = png::Decoder::new(file);
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
@@ -1406,16 +1410,42 @@ fn show_picture(fb: &mut Fb, path: &str, hold: u64) -> Result<(), String> {
     let t = Instant::now();
     fb.show(&xrgb, info.width, info.height, info.width as usize * 4);
     println!("pocket-fb: {}x{} on the screen in {:.2} ms, format {:?}", info.width, info.height, t.elapsed().as_secs_f64() * 1000.0, fb.format);
+    hold_still(fb, &xrgb, (info.width, info.height), hold, gl);
+    Ok(())
+}
+
+/// A still picture (`--picture`, `--message`), already on fb0, held for `hold` seconds or until a signal. With `--gl` it goes through
+/// the GPU as well: on a display that shows the GL layer and not fb0 (the Smart Pro) fb0 alone is a black screen. A GPU that fails
+/// here costs a line; fb0 still has the picture.
+fn hold_still(fb: &mut Fb, xrgb: &[u8], (w, h): (u32, u32), hold: u64, gl: Option<&str>) {
+    let mut presenter = gl.and_then(|window| match Presenter::new(window, (fb.width as i32, fb.height as i32), &mut |line| eprintln!("pocket-fb: gl: {line}")) {
+        Ok(p) => Some(p),
+        Err(e) => {
+            eprintln!("pocket-fb: GL failed at {e}; the picture is on fb0 only");
+            None
+        }
+    });
+    if let Some(p) = presenter.as_mut() {
+        // Twice: whichever of the WSI's buffers is shown holds the picture.
+        for _ in 0..2 {
+            if let Err(e) = p.show(xrgb, w, h, w as usize * 4) {
+                eprintln!("pocket-fb: GL failed: {e}; the picture is on fb0 only");
+                break;
+            }
+        }
+    }
     let until = Instant::now() + Duration::from_secs(hold);
     while Instant::now() < until && !STOP.load(Ordering::Relaxed) {
         std::thread::sleep(Duration::from_millis(50));
     }
-    Ok(())
+    if presenter.take().is_some() {
+        fb.restore_pan();
+    }
 }
 
 /// `--message`: white 8x8 letters at 4x on dark blue, `|` starts a new line, for `hold` seconds. What the launcher says when
 /// a library, a game or the framebuffer is missing and pocket-ui cannot run to say it itself.
-fn show_message(fb: &mut Fb, text: &str, hold: u64) -> Result<(), String> {
+fn show_message(fb: &mut Fb, text: &str, hold: u64, gl: Option<&str>) -> Result<(), String> {
     use font8x8::legacy::BASIC_LEGACY;
     const SCALE: usize = 4;
     let (w, h) = (fb.width as usize, fb.height as usize);
@@ -1448,10 +1478,7 @@ fn show_message(fb: &mut Fb, text: &str, hold: u64) -> Result<(), String> {
         }
     }
     fb.show(&xrgb, w as u32, h as u32, w * 4);
-    let until = Instant::now() + Duration::from_secs(hold);
-    while Instant::now() < until && !STOP.load(Ordering::Relaxed) {
-        std::thread::sleep(Duration::from_millis(50));
-    }
+    hold_still(fb, &xrgb, (w as u32, h as u32), hold, gl);
     Ok(())
 }
 
@@ -1479,7 +1506,7 @@ const CHECK_COLOUR: (u8, u8, u8) = (8, 16, 24);
 
 /// The GPU's way, if it works here. None, said in the log, and the copy goes on: no black screen because of the GPU. A surface the
 /// blob accepts is not enough: what was drawn must be on the page the kernel shows, so that is read back after a few swaps.
-fn start_gl(fb: &mut Fb, window: &str) -> Option<Presenter> {
+fn start_gl(fb: &mut Fb, window: &str, trust: bool) -> Option<Presenter> {
     let mut gl = match Presenter::new(window, (fb.width as i32, fb.height as i32), &mut |line| eprintln!("pocket-fb: gl: {line}")) {
         Ok(gl) => gl,
         Err(e) => {
@@ -1487,6 +1514,16 @@ fn start_gl(fb: &mut Fb, window: &str) -> Option<Presenter> {
             return None;
         }
     };
+    if trust && !fb.plain_file {
+        if let Err(e) = gl.flood(CHECK_COLOUR) {
+            eprintln!("pocket-fb: GL failed: {e}; using the CPU copy");
+            drop(gl);
+            fb.restore_pan();
+            return None;
+        }
+        eprintln!("pocket-fb: GL draws; shown without a read-back from fb0 (--gl-trust)");
+        return Some(gl);
+    }
     if !fb.plain_file {
         let mut seen = None;
         for _ in 0..12 {
@@ -1518,13 +1555,13 @@ fn run() -> Result<(), String> {
     }
     let mut fb = Fb::open(&args.fb, args.mode, args.vsync, args.bgr)?;
     if let Some(path) = &args.picture {
-        return show_picture(&mut fb, path, args.hold);
+        return show_picture(&mut fb, path, args.hold, args.gl.then_some(args.gl_window.as_str()));
     }
     if let Some(text) = &args.message {
-        return show_message(&mut fb, text, args.hold);
+        return show_message(&mut fb, text, args.hold, args.gl.then_some(args.gl_window.as_str()));
     }
     let _ = SCREEN.set((fb.width, fb.height));
-    let gl = if args.gl { start_gl(&mut fb, &args.gl_window) } else { None };
+    let gl = if args.gl { start_gl(&mut fb, &args.gl_window, args.gl_trust) } else { None };
     let gl_to_file = fb.plain_file && gl.is_some();
     let wayland = listen(&args.wayland)?;
     let ipc = listen(&args.ipc)?;

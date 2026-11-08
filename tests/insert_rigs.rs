@@ -41,7 +41,7 @@ impl World {
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
         let lib = tmp.join("lib");
-        let done = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), lib.to_str().unwrap(), "dark"]).output().expect("python3");
+        let done = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), lib.to_str().unwrap(), "dark"]).output().expect("python3");
         assert!(done.status.success(), "{}", String::from_utf8_lossy(&done.stderr));
         let stub = wayland(&tmp);
         World { tmp, lib, stub }
@@ -63,7 +63,7 @@ impl World {
         }
         let out = cmd
             .args(["--snapshot", &format!("shelf:{system}:shelf:games:{row}"), png.to_str().unwrap()])
-            .env("POCKETUI_MOCK", "1")
+            .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .env("POCKETUI_LANG", "en")
             .env("POCKETUI_SNAPSHOT_SIZE", "1280x960")
             .env("POCKETUI_SNAPSHOT_LAUNCH_MS", ms.to_string())

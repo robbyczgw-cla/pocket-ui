@@ -71,8 +71,16 @@ if [ -n "$PUBLIC" ]; then
   case $PUBLIC in *[!A-Za-z0-9._/-]*|*/*/*) die "bad repository: $PUBLIC" ;; esac
   [ -n "$OUTDIR" ] || die "--public needs --out DIR"
   [ -e "$APP/update-url" ] && die "this build asks the channel in app/update-url ($(head -n 1 "$APP/update-url")): a public card must have none (build the card without BRICK_UPDATE_URL)"
-  case $VERSION in *-*) die "version $VERSION is a beta or test build; a public release is plain X.Y.Z" ;; esac
-  grep -aqF 'asset-packages.json' "$APP/bin/pocket-ui" || die "this card's updater cannot install small asset packages; rebuild the public card with the new updater first"
+  case $VERSION in
+    ''|*[!0-9.]*|.*|*.|*..*|*.*.*.*.*) die "version $VERSION is not plain X.Y.Z or a Brick-only X.Y.Z.W hotfix" ;;
+    *.*.*) ;;
+    *) die "version $VERSION is not plain X.Y.Z or a Brick-only X.Y.Z.W hotfix" ;;
+  esac
+  # The updater's small-package support shows as the two work files it leaves on the card (src/update/brick_assets.rs). Not the name
+  # asset-packages.json: an optimized build compares it as immediate values, so the text is not in the binary (0.3.0 build, 07.11.).
+  for m in .asset-moves .restore-assets; do
+    grep -aqF "$m" "$APP/bin/pocket-ui" || die "this card's updater cannot install small asset packages; rebuild the public card with the new updater first"
+  done
   [ -z "$ZIP" ] || [ -s "$ZIP" ] || die "no card zip at $ZIP"
 elif [ -s "$APP/update-url" ] && ! grep -q "/brick-updates/$CHANNEL/update.json" "$APP/update-url"; then
   echo "brick-publish: note: this build looks for updates at $(cat "$APP/update-url"), not in channel $CHANNEL" >&2
@@ -133,7 +141,8 @@ fi
 NAME=pocket-ui-brick-$VERSION.tar.gz
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/brick-publish.XXXXXX"); trap 'rm -rf "$TMP"' EXIT
 # Reproducible: the same folder gives the same bytes (sorted names, no owners, no times, gzip without a name or time).
-tar --sort=name --owner=0 --group=0 --numeric-owner --mtime=@0 --format=ustar -C "$APP" -cf - . | gzip -9n >"$TMP/$NAME"
+# GNU long-name headers preserve upstream cheat filenames whose basename exceeds ustar's limit.
+tar --sort=name --owner=0 --group=0 --numeric-owner --mtime=@0 --format=gnu -C "$APP" -cf - . | gzip -9n >"$TMP/$NAME"
 # --- the mirror (optional): the tarball there first, checked by its size over the tailnet ---------------------------------
 TARBALL_URL=$NAME
 MIRROR=${BRICK_MIRROR:-}

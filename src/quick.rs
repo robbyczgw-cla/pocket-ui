@@ -369,7 +369,7 @@ impl Sys {
             rocknix_keys: crate::fn_keys::rocknix_handles_volume(std::path::Path::new("/")),
             quiet_game_osd: crate::mako_osd::quiet_h700_games(),
             #[cfg(feature = "brick")]
-            brick_slider: crate::device::current().model == Some(crate::device::Model::Brick),
+            brick_slider: crate::brick_profile::board().is_some_and(|b| b.slider()),
             vol_held: None,
             vol_down: [false; 2],
             held: None,

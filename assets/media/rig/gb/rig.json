@@ -27,7 +27,7 @@
    ]
   ]
  },
- "behind": true,
+ "behind": true, "label_away": true,
  "led": {
   "at": [
    71.0,

@@ -1,8 +1,8 @@
 #!/bin/sh
-# pocket-ui on a TrimUI Brick, without NextUI: the card's start script (docs/TRIMUI-BRICK-STANDALONE.md). Two thin entries call
-# pocket-ui/start.sh (deploy/brick/boot.sh: it picks the program folder and takes a failed update back), which runs this file as
+# pocket-ui on a TrimUI handheld (Brick or Smart Pro), from its own card: the card's start script (docs/TRIMUI-BRICK-STANDALONE.md).
+# Two thin entries call pocket-ui/start.sh (deploy/brick/boot.sh: it picks the program folder and takes a failed update back), which runs this file as
 # pocket-ui/app/start.sh:
-#   .tmp_update/updater        for a Brick whose /usr/trimui/bin/runtrimui.sh is NextUI's (it runs that file when it exists)
+#   .tmp_update/updater        for a handheld whose /usr/trimui/bin/runtrimui.sh runs that file when it exists
 #   trimui/app/MainUI          for a Brick on TrimUI's own firmware (runtrimui-original.sh runs it when /mnt/SDCARD/trimui exists;
 #                              premainui.sh and preload.sh next to it are its two companions)
 # The program is pocket-ui/app (P below, replaced as a whole by an update); what is the player's stays in pocket-ui (D): storage/
@@ -49,17 +49,22 @@ say() { echo "$(date '+%H:%M:%S' 2>/dev/null) $*" >>"$LOG" 2>/dev/null; }
 
 # A picture of pocket-fb (it knows the screen's page and format); without pocket-fb a failure picture is the raw frame, else a grey
 # screen. The "starting" picture is only ever pocket-fb's: there is nothing to say about a start that has no bridge.
+# pocket-fb shows a picture top left without scaling, so every message has a size per screen: <name>.png is 1024x768 (Brick),
+# <name>-wide.png is 1280x720 (Smart Pro); the wide one is only used where it is on the card.
+msgfile() { # name extension
+  if [ "$BOARD" = smartpro ] && [ -r "$P/msg/$1-wide.$2" ]; then echo "$P/msg/$1-wide.$2"; else echo "$P/msg/$1.$2"; fi
+}
 show() { # name seconds
   name=$1; secs=${2:-0}
-  if [ -x "$P/bin/pocket-fb" ] && [ -r "$P/msg/$name.png" ]; then
-    LD_LIBRARY_PATH="$P/lib:$FW/lib" "$P/bin/pocket-fb" --picture "$P/msg/$name.png" --hold "$secs" --fb "$FB" ${BRICK_FB_MODE:+--mode "$BRICK_FB_MODE"} >>"$LOG" 2>&1 && return 0
+  if [ -x "$P/bin/pocket-fb" ] && [ -r "$(msgfile "$name" png)" ]; then
+    LD_LIBRARY_PATH="$P/lib:$FW/lib" "$P/bin/pocket-fb" --picture "$(msgfile "$name" png)" --hold "$secs" --fb "$FB" ${BRICK_FB_MODE:+--mode "$BRICK_FB_MODE"} $STILL_GL >>"$LOG" 2>&1 && return 0
   fi
   [ "$name" = starting ] && return 0
   [ -w "$FBSYS/pan" ] && echo 0,0 >"$FBSYS/pan" 2>/dev/null
-  if [ -r "$P/msg/$name.raw" ]; then
-    cat "$P/msg/$name.raw" >"$FB" 2>/dev/null
+  if [ -r "$(msgfile "$name" raw)" ]; then
+    cat "$(msgfile "$name" raw)" >"$FB" 2>/dev/null
   else
-    head -c "${BRICK_FB_BYTES:-3145728}" /dev/zero | tr '\000' '\200' >"$FB" 2>/dev/null
+    head -c "${BRICK_FB_BYTES:-$([ "$BOARD" = smartpro ] && echo 3686400 || echo 3145728)}" /dev/zero | tr '\000' '\200' >"$FB" 2>/dev/null
   fi
   [ "$secs" -gt 0 ] 2>/dev/null && sleep "$secs"
 }
@@ -96,8 +101,35 @@ undo_mounts() {
 mkdir -p "$D/logs" 2>/dev/null
 [ -f "$LOG" ] && [ "$(wc -c <"$LOG" 2>/dev/null || echo 0)" -gt 200000 ] && mv -f "$LOG" "$LOG.old"
 say "=== boot via $ENTRY, $(cat "$P/VERSION" 2>/dev/null) battery $(cat "$BATTERY/capacity" 2>/dev/null)% $(cat "$BATTERY/status" 2>/dev/null)"
-show starting "$SHOW_FOR" &
-STARTING=$!
+
+# --- which TrimUI handheld (docs/TRIMUI-SMART-PRO.md) --------------------------------------------------------------
+# The same card runs on the Brick and the Smart Pro (both A133P, TrimUI's firmware). By the screen first (fb0 is 1024 wide on the
+# Brick, 1280 on the Smart Pro), then the name in TrimUI's own MainUI; nothing that says Smart Pro is a Brick, as before. The
+# Smart Pro S (A523, another chip and system) is not supported: the card says so and writes nothing to its hardware.
+board() {
+  case "$(cut -d, -f1 "$FBSYS/virtual_size" 2>/dev/null)" in
+    1280) echo smartpro; return ;;
+    1024) echo brick; return ;;
+  esac
+  if grep -q "Trimui Smart Pro" "$FW/bin/MainUI" 2>/dev/null; then echo smartpro; else echo brick; fi
+}
+# The S's firmware names itself TG5050 (/etc/model, /proc/cpuinfo's Hardware line); its chip is a sun55i.
+chip() { { cat "${BRICK_MODEL_FILE:-/etc/model}"; tr '\000' ' ' <"${BRICK_DT:-/proc/device-tree}/compatible"; grep -i -m 2 'hardware\|model name' "${BRICK_CPUINFO:-/proc/cpuinfo}"; } 2>/dev/null | tr '\n' ' '; }
+BOARD=${BRICK_BOARD:-$(board)}
+CHIP=$(chip)
+case "$CHIP" in *TG5050*|*tg5050*|*sun55i*|*[Aa]523*) UNSUPPORTED="an A523 (the Smart Pro S)" ;; *) UNSUPPORTED= ;; esac
+say "board: $BOARD (fb0 $(cat "$FBSYS/virtual_size" 2>/dev/null), chip: ${CHIP:-unknown})"
+# The Smart Pro's display shows the GPU's layer, not fb0 (other projects' finding; no picture of ours has been seen there yet): its
+# pictures go through the GPU too, and the bridge trusts the GPU without the Brick's read-back from fb0. The Brick: as before.
+STILL_GL=; GL_TRUST=
+if [ "$BOARD" = smartpro ] && [ "${POCKET_BRICK_GL:-1}" != 0 ] && [ ! -e "$D/gl-off" ]; then STILL_GL="--gl --gl-window ${POCKET_GL_WINDOW:-null}"; GL_TRUST=--gl-trust; fi
+# pocket-fb itself in the background, not `show` in a subshell: `$!` must be the picture's own PID, or the kills below end only
+# the subshell and the picture's pocket-fb holds the screen beside the real bridge for SHOW_FOR seconds (seen 08.11.).
+STARTING=
+if [ -x "$P/bin/pocket-fb" ] && [ -r "$(msgfile starting png)" ]; then
+  LD_LIBRARY_PATH="$P/lib:$FW/lib" "$P/bin/pocket-fb" --picture "$(msgfile starting png)" --hold "$SHOW_FOR" --fb "$FB" ${BRICK_FB_MODE:+--mode "$BRICK_FB_MODE"} $STILL_GL >>"$LOG" 2>&1 &
+  STARTING=$!
+fi
 # A card copied over one of the older layout (before app/, up to brick-7f95a8fd) keeps that layout's program files beside app/: never
 # used, and pocket-ui/VERSION would name the old version. Only those go; storage/, logs/, authorized_keys and Roms stay.
 if [ -f "$D/bin/pocket-ui" ] && [ -f "$P/bin/pocket-ui" ]; then
@@ -117,16 +149,47 @@ if [ -n "$missing" ]; then
   give_up missing
 fi
 
+# Our programs need the C library of TrimUI's firmware 1.0.4 and later (glibc 2.33); a Smart Pro on 1.0.3 or older has 2.29, and none of
+# them would start, not even the one that paints the failure pictures. Said where a person looks: a file beside boot.log.
+if out=$(LD_LIBRARY_PATH="$P/lib:$FW/lib" "$P/bin/pocket-ui" --version 2>&1) || :; case "$out" in *GLIBC*) true ;; *) false ;; esac; then
+  say "the firmware's C library is too old for pocket-ui ($out)"
+  echo "This handheld's firmware is too old for pocket-ui: update TrimUI's firmware to 1.0.4 or later (1.1.1 or later on a Smart Pro), then start again. ($out)" >"$D/logs/FIRMWARE-TOO-OLD.txt"
+  kill "$STARTING" 2>/dev/null; wait "$STARTING" 2>/dev/null
+  give_up missing
+fi
+rm -f "$D/logs/FIRMWARE-TOO-OLD.txt" 2>/dev/null
+
+# A chip this card is not made for: a note on the screen, nothing written to its hardware.
+if [ -n "$UNSUPPORTED" ]; then
+  say "this is $UNSUPPORTED: pocket-ui does not run here yet, stopping before the hardware"
+  kill "$STARTING" 2>/dev/null; wait "$STARTING" 2>/dev/null
+  if [ -x "$P/bin/pocket-fb" ] && LD_LIBRARY_PATH="$P/lib:$FW/lib" "$P/bin/pocket-fb" --message "pocket-ui does not run on|this handheld yet.|Take the card out to get|back to TrimUI's menu.||pocket-ui laeuft auf diesem|Geraet noch nicht.|Karte herausnehmen, dann|startet TrimUI's Menue." --hold "$SHOW_FOR" --fb "$FB" >>"$LOG" 2>&1; then :; else show missing "$SHOW_FOR"; fi
+  say "showed the unsupported note for $SHOW_FOR s, powering off"
+  sync
+  [ -n "${BRICK_NO_POWEROFF:-}" ] || poweroff
+  exit 1
+fi
+
 # --- 3. the hardware ----------------------------------------------------------------------------------------------
 # TrimUI's own runtrimui-original.sh has done, before it runs the card's MainUI: the 5 V rail, rumble off, the DIP-switch pin, syslogd,
 # bluetoothd, the LED effect, the USB mode, and it has STOPPED wpa_supplicant and udhcpc and put wlan0 down when its own setting says
 # Wi-Fi is off (/mnt/UDISK/system.json "wifi":0). It has NOT started keymon, trimui_inputd, scened, trimui_btmanager or hardwareservice
-# (it looks for them in the card's trimui/app, where we have none). NextUI's start script does none of that before the updater hook.
+# (it looks for them in the card's trimui/app, where we have none). The updater hook runs before any of that.
 # So the same set-up runs here for both (all of it harmless twice), and what neither does for us is done below.
 echo 107 >/sys/class/gpio/export 2>/dev/null; echo -n out >/sys/class/gpio/gpio107/direction 2>/dev/null
 echo -n 1 >/sys/class/gpio/gpio107/value 2>/dev/null            # the 5 V rail (the pad's board)
 echo 227 >/sys/class/gpio/export 2>/dev/null; echo -n out >/sys/class/gpio/gpio227/direction 2>/dev/null
 echo -n 0 >/sys/class/gpio/gpio227/value 2>/dev/null            # rumble off
+# The Smart Pro's sticks have power rails of their own (gpio110, gpio114: PD14, PD18), which every other project on it switches on;
+# without them the sticks may read nothing. Its motor needs a voltage before it moves (it boots with none): pocket-ui sets one per
+# pulse between these (µV; 0.5 V to 2.2 V is what feels right there, 3.3 V too strong). Neither is done on a Brick.
+if [ "$BOARD" = smartpro ]; then
+  for g in 110 114; do
+    echo $g >/sys/class/gpio/export 2>/dev/null; echo -n out >/sys/class/gpio/gpio$g/direction 2>/dev/null; echo -n 1 >/sys/class/gpio/gpio$g/value 2>/dev/null
+  done
+  export POCKETUI_MOTOR_VOLTAGE=${POCKETUI_MOTOR_VOLTAGE:-500000,2200000}
+  say "Smart Pro: stick rails on (gpio110, gpio114), motor $POCKETUI_MOTOR_VOLTAGE"
+fi
 if [ -x "$FW/bin/trimui_inputd" ] && ! pidof trimui_inputd >/dev/null 2>&1; then
   mkdir -p /tmp/trimui_inputd
   ( cd "$FW/bin" && LD_LIBRARY_PATH="$FW/lib" exec ./trimui_inputd ) >>"$LOG" 2>&1 &   # the pad: "TRIMUI Player1" appears after it
@@ -134,7 +197,14 @@ if [ -x "$FW/bin/trimui_inputd" ] && ! pidof trimui_inputd >/dev/null 2>&1; then
 else
   say "trimui_inputd: $(pidof trimui_inputd 2>/dev/null || echo 'not found')"
 fi
+# The kernel prints every message to a serial console nobody reads (console=ttyS0,115200 loglevel=8), with interrupts off while it
+# does, and every interrupt is on CPU 0: a burst (Wi-Fi joining, the Wi-Fi chip starting again) held off the sound card's past its
+# 21 ms buffer (xruns, 08.11.), and other Brick systems traced I2C timeouts and a kernel panic to the same console. Only critical
+# messages go there now; dmesg and pstore keep them all.
+[ ! -w "${BRICK_PRINTK:-/proc/sys/kernel/printk}" ] || echo 3 >"${BRICK_PRINTK:-/proc/sys/kernel/printk}"
 echo 0 >/sys/class/led_anim/effect_enable 2>/dev/null
+# The Smart Pro's rings: nobody has mapped them for us, so they stay dark (one brightness for all of them there).
+[ "$BOARD" = smartpro ] && echo 0 >/sys/class/led_anim/max_scale 2>/dev/null
 # The driver's raw picture glows on past the effects (03.11.): black from the start, pocket-ui puts the choice on.
 echo 0 >/sys/class/led_anim/anim_frames_enable 2>/dev/null
 [ -e /sys/class/led_anim/frame_hex ] && printf '%s' '000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 ' >/sys/class/led_anim/frame_hex 2>/dev/null
@@ -187,11 +257,22 @@ fi
 mkdir -p "$STORAGE/roms/bios" "$STORAGE/roms/savestates" "$STORAGE/pocket-ui/licences" 2>>"$LOG"
 mkdir -p "$STORAGE/home" && cp -f "$P/asoundrc" "$STORAGE/home/.asoundrc" 2>>"$LOG"     # ALSA's "pipewire" device = the sound chip
 [ -f "$STORAGE/pocket-ui/licences/README.txt" ] || cp -R "$P"/licences/. "$STORAGE/pocket-ui/licences/" 2>/dev/null   # Settings > About names this folder
+# An OTA can add this database to a card whose About licence folder was copied by an older app.
+# Refresh only our three notices when changed; never remove the player's other licence files.
+if [ -d "$P/licences/libretro-database" ]; then
+  mkdir -p "$STORAGE/pocket-ui/licences/libretro-database" 2>>"$LOG"
+  for notice in LICENSE README.md ATTRIBUTION.txt; do
+    if [ -f "$P/licences/libretro-database/$notice" ]; then
+      cmp -s "$P/licences/libretro-database/$notice" "$STORAGE/pocket-ui/licences/libretro-database/$notice" ||
+        cp -f "$P/licences/libretro-database/$notice" "$STORAGE/pocket-ui/licences/libretro-database/$notice" 2>>"$LOG"
+    fi
+  done
+fi
 cp -f "$P/es_systems.cfg" "$STORAGE/.config/emulationstation/es_systems.cfg" 2>>"$LOG"
 
 # --- 5. stand-ins for the helpers ---------------------------------------------------------------------------------
 # pocket-ui's hardware seam looks below a root folder (system_ctl RealHw::with_root; POCKETUI_HW_ROOT): sysfs files for the
-# backlight and battery, and programs in usr/bin. The programs are ours (hwroot/usr/bin), not NextUI's.
+# backlight and battery, and programs in usr/bin. The programs are ours (hwroot/usr/bin).
 HW=$RUN/hwroot
 rm -rf "$HW"; mkdir -p "$HW/sys/class/backlight" "$HW/sys/class/power_supply" "$HW/usr/bin" "$HW/run/systemd/system" "$HW/storage" "$HW/etc" "$HW/usr/share"
 # The clock: the card carries its own zone data (pocket-ui/zoneinfo, IANA, public domain), because the firmware's may hold
@@ -239,6 +320,7 @@ BRICK_POWER_CMD="$P/hwroot/usr/bin/brick-power-off" BRICK_POWER_LOG=$LOG "$P/bin
 POWERPID=$!
 export BRICK_STATE=$STATE BRICK_HW=$P/bin/brick-hw BRICK_SPEAKER=${BRICK_SPEAKER:-/sys/class/speaker/mute}
 export BRICK_SLIDER_CFG="$D/brick-slider" BRICK_SLIDER_MUTED=${BRICK_SLIDER_MUTED:-1}
+[ "$BOARD" = brick ] || export BRICK_NO_SLIDER=1
 [ -x "$P/hwroot/usr/bin/volume" ] && "$P/hwroot/usr/bin/volume" restore >>"$LOG" 2>&1
 # Network time, one try in the background (Wi-Fi may need a few seconds; the clock page can ask again). Without a right
 # clock the TLS of every download fails, so the try matters more than the display does. Never blocks the start.
@@ -247,8 +329,13 @@ export BRICK_SLIDER_CFG="$D/brick-slider" BRICK_SLIDER_MUTED=${BRICK_SLIDER_MUTE
 # After the volume is restored, so a slider found in the muted position keeps the speaker off.
 # The mute slider (gpio243): the position that means "muted" is BRICK_SLIDER_MUTED: 1, the slider down (read on the real Brick with its owner, 03.11.; 0 is up),
 # and the sound chip's switches are `volume mute|unmute`. Settings > Lights & buttons > Mute slider writes "mute" or "nothing" to $D/brick-slider.
-BRICK_SLIDER_CFG="$D/brick-slider" BRICK_SLIDER_CMD="$P/hwroot/usr/bin/volume" BRICK_SLIDER_MUTED=${BRICK_SLIDER_MUTED:-1} "$P/bin/brick-hw" slider-watch >>"$LOG" 2>&1 &
-SLIDERPID=$!
+# The Smart Pro has no slider: nothing follows that pin there (BRICK_NO_SLIDER also keeps `volume restore` from reading it).
+if [ "$BOARD" = brick ]; then
+  BRICK_SLIDER_CFG="$D/brick-slider" BRICK_SLIDER_CMD="$P/hwroot/usr/bin/volume" BRICK_SLIDER_MUTED=${BRICK_SLIDER_MUTED:-1} "$P/bin/brick-hw" slider-watch >>"$LOG" 2>&1 &
+  SLIDERPID=$!
+else
+  SLIDERPID=
+fi
 # The network keeper: a lost default route on wlan0 gets its lease renewed (brick-net; seen on the real Brick after a Wi-Fi restart).
 BRICK_NET_LOG="$LOG" "$P/hwroot/usr/bin/brick-net" watch >/dev/null 2>&1 &
 NETPID=$!
@@ -261,6 +348,9 @@ for t in curl; do [ -x "$P/bin/$t" ] && ln -sf "$P/bin/$t" "$HW/usr/bin/$t" && l
 ln -sf "$P/hwroot/usr/bin/tailscale" "$RUN/bin/tailscale"
 export BRICK_APP=$P BRICK_DATA=$D BRICK_RUN=$RUN
 export POCKETUI_BRICK_BLUETOOTHCTL=$HW/usr/bin/brick-bluetoothctl
+# TrimUI's own entry already started its procd BlueZ service and linked its keys into flash.
+# The card service may hand over precisely that service, keeping the stock keys untouched.
+[ "$ENTRY" != stock-firmware ] || export BRICK_BT_FIRMWARE_INIT=${BRICK_BT_FIRMWARE_INIT:-/etc/bluetooth/bluetoothd}
 # Pairing data belongs to this card; the service uses the firmware BlueZ and its own agent.
 [ ! -e "$STATE/bluetooth-on" ] || { "$HW/usr/bin/brick-bluetooth" start >>"$LOG" 2>&1 & }
 # Tailscale comes up by itself when it was on (Settings > Tailscale writes tailscale.up=1, as on ROCKNIX), not waited for: it joins
@@ -281,7 +371,7 @@ WL=$RUN/wayland-0; IPC=$RUN/sway.sock
 export LD_LIBRARY_PATH=$P/lib:$FW/lib
 export PATH=$HW/usr/bin:$PATH
 export WAYLAND_DISPLAY=$WL SWAYSOCK=$IPC XDG_RUNTIME_DIR=$RUN
-export POCKETUI_DEVICE=brick POCKETUI_HW_ROOT=$HW POCKETUI_BACKLIGHT=$HW/sys/class/backlight/panel POCKETUI_BATTERY=$BATTERY
+export POCKETUI_DEVICE=$BOARD POCKETUI_HW_ROOT=$HW POCKETUI_BACKLIGHT=$HW/sys/class/backlight/panel POCKETUI_BATTERY=$BATTERY
 export POCKETUI_HOST_BIN=$P/bin/pocket-core POCKETUI_POWER_KEY=1
 export POCKETUI_BRICK_STANDALONE=1 POCKET_CORE_SOFTWARE=1 HOME=$STORAGE/home BRICK_FB=$P/bin/pocket-fb POCKETUI_TAILSCALED_SOCKET=$RUN/tailscaled.sock   # BRICK_FB: the grim stand-in asks pocket-fb for the screen
 # Settings > Tailscale drives the card's tailscaled through this CLI; Updates fetch the card's channel (app/update-url) through Tailscale's
@@ -300,13 +390,15 @@ FBGL=
 if [ "${POCKET_BRICK_GL:-1}" = 0 ] || [ -e "$D/gl-off" ]; then say "GL: off by choice: CPU copy"
 elif [ ! -x "$P/bin/brick-egl" ]; then say "GL: no bin/brick-egl: CPU copy"
 else
+  # Our pictures hold the GPU on the Smart Pro: the starting picture goes before the probe asks for it.
+  if [ -n "$STILL_GL" ] && [ -n "$STARTING" ]; then kill "$STARTING" 2>/dev/null; wait "$STARTING" 2>/dev/null; STARTING=; fi
   "$P/bin/brick-egl" --probe --window "${POCKET_GL_WINDOW:-null}" >>"$LOG" 2>&1 &
   gp=$!
   ( sleep "${BRICK_GL_PROBE_SECONDS:-10}"; kill -KILL "$gp" 2>/dev/null ) >/dev/null 2>&1 &
   gk=$!
   wait "$gp"; gc=$?
   kill "$gk" 2>/dev/null
-  if [ "$gc" = 0 ]; then FBGL="--gl --gl-window ${POCKET_GL_WINDOW:-null}"; say "GL: the probe works, the screen goes through the GPU"
+  if [ "$gc" = 0 ]; then FBGL="--gl --gl-window ${POCKET_GL_WINDOW:-null} $GL_TRUST"; say "GL: the probe works, the screen goes through the GPU"
   else say "GL: the probe failed (exit $gc): CPU copy"; fi
 fi
 

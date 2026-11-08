@@ -629,7 +629,12 @@ enum UpdateEvent {
 #[derive(Clone, Copy, PartialEq)]
 enum UpdateAction {
     Check,
+    /// "Install pocket-ui X": asks first (`InstallNow` / `Later`).
     InstallApp,
+    InstallNow,
+    Later,
+    /// A switch: whether pocket-ui looks for a newer version by itself (`app_update_hint`).
+    Auto,
     StageOs,
     CancelOs,
 }
@@ -649,6 +654,8 @@ struct Updates {
     message: Option<String>,
     /// The new app version is in place; pocket-ui restarts once this moment has passed.
     restart_at: Option<Instant>,
+    /// "Install pocket-ui X" was chosen and waits for "Install now" or "Later".
+    confirm: bool,
 }
 
 impl Updates {
@@ -1272,8 +1279,10 @@ struct App {
     menu_shot: app_menu_open::MenuShot,
     /// pocket-ui just put itself in front of a game: frames wait for the full size (`app_menu_open`).
     raise: app_menu_open::Raise,
-    /// When the last frame was presented; animations pace themselves from it.
+    /// When the last frame was presented; quiet pages time their refreshes from it.
     frame_at: Instant,
+    /// The next animation frame's deadline, with painting inside the refresh budget.
+    frame_due: Instant,
     /// HOME is held in a game (HOME + SELECT opens the switcher).
     home_down: bool,
     favorites: pocket_ui::favorites::Favorites,
@@ -3422,7 +3431,9 @@ impl App {
         // Explanation of the selected row (or the last confirmation) beside the hints or over them, as on every page
         // of Settings (`kit::footer`); the hints say what B, A and Left/Right do here.
         let desc = footer.unwrap_or_else(|| rows.get(sel).map(|r| r.2.clone()).unwrap_or_default());
+        let explanation = self.menu.as_ref().is_some_and(|m| matches!(m.page, Page::Cheats { .. }) && m.cheats.as_ref().is_some_and(|c| !c.actionable(sel)));
         let hints: &[(&str, &str)] = match rows.get(sel).map(|r| r.1.as_str()) {
+            _ if explanation => &[("B", "Back")],
             Some(">") => &[("B", "Back"), ("A", "Open")],
             Some("") | None => &[("B", "Back"), ("A", "Choose")],
             Some(_) => PICTURE_HINTS,
@@ -3612,7 +3623,9 @@ impl App {
                 }
                 Opens::Updates => {
                     self.updates.sel = 0;
-                    if self.updates.manifest.is_none() && self.updates.busy.is_none() {
+                    self.updates.confirm = false;
+                    // Off: nothing is asked until "Check again" is chosen.
+                    if self.updates.manifest.is_none() && self.updates.busy.is_none() && self.update_auto() {
                         self.update_action(UpdateAction::Check);
                     }
                     Some(SettingsPage::Updates)
@@ -3843,12 +3856,20 @@ impl App {
             (Some(SettingsPage::Storage), b) => self.storage_input(b),
             (Some(SettingsPage::Gamelist), b) => self.gamelist_input(b),
             (Some(SettingsPage::Screenshots), b) => self.gallery_input(b),
+            // B on the question only says "Later".
+            (Some(SettingsPage::Updates), b) if b == CANCEL && self.updates.confirm => {
+                self.updates.confirm = false;
+                self.updates.sel = 0;
+                Some(SettingsPage::Updates)
+            }
             (Some(SettingsPage::Updates), b) if b == CANCEL => Some(SettingsPage::List(settings_row("Updates"))),
             (Some(SettingsPage::Updates), b) => {
                 let n = self.update_actions().len();
                 match b {
                     Button::Up => self.updates.sel = (self.updates.sel + n - 1) % n,
                     Button::Down => self.updates.sel = (self.updates.sel + 1) % n,
+                    // The switch also turns with Left/Right.
+                    Button::Left | Button::Right if self.update_actions().get(self.updates.sel) == Some(&UpdateAction::Auto) => self.update_action(UpdateAction::Auto),
                     // While a download runs, A stops it.
                     b if b == CONFIRM && self.updates.busy.is_some() => {
                         self.updates.request_cancel();
@@ -4017,6 +4038,9 @@ impl App {
                     let base = y + row / 2 + pocket_ui::type_scale::mid(font);
                     let under = (app_motion::under(local, hl) * 255.0) as u32;
                     let name_w = self.text.draw(&mut band, Face::Body, font, pad + NU_BTN_PAD, base, mix(pal().text, pal().ink, under), name);
+                    if matches!(SETTINGS[i].1, Opens::Updates) && self.update_dot() {
+                        Self::paint_update_dot(&mut band, pad + NU_BTN_PAD + name_w, base - pocket_ui::type_scale::mid(font), font);
+                    }
                     // The row's value, from memory, cut to the room the name leaves (`app_settings_groups`).
                     // A connected network's name is shown as typed ("Off" or "Unknown" can be a name), in the fit and the paint.
                     let typed = app_settings_groups::value_is_typed(i);
@@ -4282,6 +4306,7 @@ impl App {
             // The style in use (`font_style`, process wide): the Theme page sets it and the next save keeps it.
             font: pocket_ui::font_style::get(),
             retro_colours: pocket_ui::retro::colours(),
+            gba_model: pocket_ui::system_art::gba_model(),
             motion: pocket_ui::motion::level(),
             frames: self.frames,
             over_game: self.over_game,
@@ -4346,6 +4371,9 @@ impl App {
     /// What the Updates page offers right now, in display order.
     fn update_actions(&self) -> Vec<UpdateAction> {
         let m = self.updates.manifest.as_ref();
+        if self.updates.confirm {
+            return vec![UpdateAction::InstallNow, UpdateAction::Later];
+        }
         let mut actions = Vec::new();
         if m.and_then(|m| m.app.as_ref()).is_some_and(|a| update::newer(&a.version, update::app_version())) {
             actions.push(UpdateAction::InstallApp);
@@ -4356,11 +4384,17 @@ impl App {
             actions.push(UpdateAction::StageOs);
         }
         actions.push(UpdateAction::Check);
+        actions.push(UpdateAction::Auto);
         actions
     }
 
     /// Starts `action` on a worker thread; results come back as `UserEvent::Update`.
     fn update_action(&mut self, action: UpdateAction) {
+        // The switch works at any time, even while something downloads.
+        if action == UpdateAction::Auto {
+            self.set_update_auto(!self.update_auto(), Instant::now());
+            return;
+        }
         if self.updates.busy.is_some() {
             return;
         }
@@ -4378,6 +4412,16 @@ impl App {
                 std::thread::spawn(move || send(UpdateEvent::Checked(update::fetch_manifest(&url))));
             }
             UpdateAction::InstallApp => {
+                self.updates.confirm = true;
+                self.updates.sel = 0;
+            }
+            UpdateAction::Later => {
+                self.updates.confirm = false;
+                self.updates.sel = 0;
+            }
+            UpdateAction::Auto => {}
+            UpdateAction::InstallNow => {
+                self.updates.confirm = false;
                 let Some(rel) = manifest.app else { return };
                 let cancel = update::Cancel::new();
                 self.updates.start(format!("Installing pocket-ui {}", rel.version), rel.size, Some(cancel.clone()));
@@ -4419,7 +4463,7 @@ impl App {
             }
             UpdateEvent::Checked(Ok(m)) => {
                 self.updates.manifest = Some(m);
-                let none = self.update_actions() == [UpdateAction::Check];
+                let none = !self.update_actions().iter().any(|a| matches!(a, UpdateAction::InstallApp | UpdateAction::StageOs | UpdateAction::CancelOs));
                 self.updates.message = none.then(|| "Everything is up to date.".to_string());
             }
             UpdateEvent::Checked(Err(e)) | UpdateEvent::Done(Err(e)) => self.updates.message = Some(e),
@@ -4470,14 +4514,30 @@ impl App {
                 UpdateAction::InstallApp => format!("Install pocket-ui {}", m.as_ref().and_then(|m| m.app.as_ref()).map_or("", |a| &a.version)),
                 UpdateAction::StageOs => format!("Get system {}", m.as_ref().and_then(|m| m.os.as_ref()).map_or("", |o| &o.version)),
                 UpdateAction::CancelOs => "Remove the waiting system update".to_string(),
+                UpdateAction::InstallNow => "Install now".to_string(),
+                UpdateAction::Later => "Later".to_string(),
+                UpdateAction::Auto => "Check for updates automatically".to_string(),
             };
             let y = top + (i as i32 + if brick { 1 } else { 2 }) * row + row / 3;
             let base = y + row / 2 + pocket_ui::type_scale::mid(font);
-            if i == self.updates.sel && !busy {
+            let selected = i == self.updates.sel && !busy;
+            if selected {
                 pocket_ui::kit::selection(c, pad, y, right - pad, row);
-                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, &label);
+            }
+            let ink = if selected { pal().ink } else if busy && *action != UpdateAction::Auto { pal().dust } else { pal().text };
+            if *action == UpdateAction::Auto {
+                // The switch: its state at the right; the label gives way to it ("Check automatically" where the full one is too long).
+                let value = self.text.translated(pocket_ui::settings_values::on_off(self.update_auto())).to_string();
+                let room = c.w - 2 * (pad + NU_BTN_PAD) - self.text.width(Face::Body, font, &value) - 24;
+                let full = self.text.translated(&label).to_string();
+                let label = if self.text.width(Face::Body, font, &full) <= room { full } else { self.text.fit(Face::Body, font, "Check automatically", room) };
+                let was = self.text.translating();
+                self.text.set_translate(false);
+                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, ink, &label);
+                self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, ink, &value);
+                self.text.set_translate(was);
             } else {
-                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, if busy { pal().dust } else { pal().text }, &label);
+                self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, ink, &label);
             }
         }
         // Bottom: progress while busy, else the last result, else the notes of the selected action.
@@ -4495,6 +4555,15 @@ impl App {
                 }
             }
             Some((label, _)) => format!("{label}…"),
+            None if self.updates.confirm => {
+                // Under a fifth and not on the charger: the charger first (a flat battery in the middle of an install is the
+                // one way this goes wrong).
+                let battery = pocket_ui::status_corner::status().battery;
+                match pocket_ui::update_hint::battery_warning(battery) {
+                    Some(warning) => warning,
+                    None => m.as_ref().and_then(|m| m.app.as_ref()).map(|a| a.notes.clone()).unwrap_or_default(),
+                }
+            }
             None => self.updates.message.clone().unwrap_or_else(|| match actions.get(self.updates.sel) {
                 Some(UpdateAction::InstallApp) => m.as_ref().and_then(|m| m.app.as_ref()).map(|a| a.notes.clone()).unwrap_or_default(),
                 Some(UpdateAction::StageOs) => m.as_ref().and_then(|m| m.os.as_ref()).map(|o| o.notes.clone()).unwrap_or_default(),
@@ -4612,7 +4681,14 @@ impl App {
         let in_game = self.running.is_some();
         let busy = pocket_ui::covers::busy();
         let online = !in_game && !busy && !self.cover_run.running() && pocket_ui::wifi::ip().is_some();
+        // A card that came with its own box art (EmulationStation, NextUI, Anbernic …) keeps it: ask for pictures only
+        // once the gamelists and picture folders are read (`gamelist_event` asks again), and not for games that have one.
+        if online && self.covers_wait_for_gamelists() {
+            println!("covers ({why}): waiting for the card's own pictures");
+            return;
+        }
         let games = if online { self.all_games() } else { Vec::new() };
+        let games: Vec<(String, PathBuf)> = games.into_iter().filter(|(sys, rom)| !self.gamelist.index.has_box_art(sys, rom)).collect();
         let missing = if online { self.cover_run.missing(&self.data_dir, &games) } else { Vec::new() };
         // Screenshots and title screens follow the box art, unless Settings > Games > Extras says box art only.
         let pictures = self.cover_run.missing_pictures(&self.data_dir, &games, self.pictures.wanted());
@@ -4848,6 +4924,7 @@ impl App {
             return;
         }
         self.frame_at = Instant::now();
+        self.frame_due = pocket_ui::frame_pace::after_paint(started, self.frame_at, FRAME);
         // Speed guard: what is on screen and the last input it already shows (docs/LATENCY.md).
         if pocket_ui::trace::on() {
             self.trace_frame(self.frame_at - started, w.get(), h.get());
@@ -5231,7 +5308,8 @@ impl App {
                 max -= self.frozen_word_width() + 20;
                 self.paint_frozen_word(&mut band, 72 + max_w, y + 41, fg);
             }
-            self.draw_title(&mut band, Face::Body, 36, 72, y + 43, max, fg, &title, i == self.sel, fav);
+            let (px, title) = self.system_name_for_row(self.items[i], Face::Body, 36, 30, title, max);
+            self.draw_title(&mut band, Face::Body, px, 72, y + 43, max, fg, &title, i == self.sel, fav);
         }
         self.hits.list(self.sel, self.items.len(), 0.0, row as f32);
     }
@@ -5266,7 +5344,8 @@ impl App {
                 max -= self.frozen_word_width() + 16;
                 self.paint_frozen_word(&mut band, 68 + list_w - 40, y + 36, fg);
             }
-            self.draw_title(&mut band, Face::Body, 28, 68, y + 38, max, fg, &title, i == self.sel, fav);
+            let (px, title) = self.system_name_for_row(self.items[i], Face::Body, 28, 24, title, max);
+            self.draw_title(&mut band, Face::Body, px, 68, y + 38, max, fg, &title, i == self.sel, fav);
         }
         self.hits.list(self.sel, self.items.len(), 0.0, row as f32);
         let Some(item) = self.items.get(self.sel).copied() else { return };
@@ -5298,11 +5377,21 @@ impl App {
                 let (aw, ah) = (art.w as i32, art.h as i32);
                 c.blit_sprite(&art, px + (pw - aw) / 2, top + 20 + (310 - short - ah) / 2, 0);
             }
-            let big = self.text.fit(Face::Title, 67, &big, pw - 64);
-            self.text.draw(c, Face::Title, 67, px + 32, top + 380 - short, mix(pal().on_wash, color, 60), &big);
+            // A line too wide for the panel (Just Play's "One press" in Retro) goes smaller before it is cut.
+            let (big_px, big) = self.text.fit_sizes(Face::Title, &[67, 56, 48, 40], &big, pw - 64);
+            self.text.draw(c, Face::Title, big_px, px + 32, top + 380 - short, mix(pal().on_wash, color, 60), &big);
         }
-        let title = self.text.fit(Face::Title, 50, &title, pw);
-        self.text.draw(c, Face::Title, 50, px, top + 500 - short, pal().text, &title);
+        // A game's name whole, in up to three lines, its subtitle smaller; the meta line stands where the third would
+        // end, so nothing moves from one game to the next (`title_block`).
+        let mut meta_at = top + 548 - short;
+        if matches!(item, Item::Game(..) | Item::Recent(_)) {
+            let lines = pocket_ui::title_block::layout(&mut self.text, Face::Title, 50, &title, pw, 3);
+            pocket_ui::title_block::paint(&mut self.text, c, Face::Title, &lines, px, top + 500 - short, pal().text, pal().split_dim, false);
+            meta_at += 2 * pocket_ui::title_block::step(&self.text, 50);
+        } else {
+            let title = self.text.fit(Face::Title, 50, &title, pw);
+            self.text.draw(c, Face::Title, 50, px, top + 500 - short, pal().text, &title);
+        }
         // A system with a fact sheet: its headline and short facts in the room under the name.
         if self.paint_system_facts(c, item, px, top + 548 - short, pw, c.h - 110) {
             return;
@@ -5313,8 +5402,11 @@ impl App {
             }
             return;
         }
-        let meta = self.text.fit(Face::Body, 28, &meta, pw);
-        self.text.draw(c, Face::Body, 28, px, top + 548 - short, pal().split_dim, &meta);
+        // Split has room for a second line under a row's line too ("Less browsing. More playing."), not a game's.
+        let lines = if matches!(item, Item::Game(..) | Item::Recent(_)) { vec![self.text.fit(Face::Body, 28, &meta, pw)] } else { self.text.wrap_prose_at_most(Face::Body, 28, &meta, pw, 2) };
+        for (k, line) in lines.iter().enumerate() {
+            self.text.draw(c, Face::Body, 28, px, meta_at + k as i32 * pocket_ui::type_scale::line(28, 12), pal().split_dim, line);
+        }
     }
 
     /// Cards: a horizontal carousel of rounded cards over a wash of the selected system's colour.
@@ -5333,7 +5425,8 @@ impl App {
         // headline 206. A shorter screen (1024x768) starts higher and makes the cards lower so that the lines stay above
         // the hints (`kh`, down to 0.6).
         let top = if c.h < 1000 { 100 } else { 150 };
-        let kh = ((c.h - 100 - top - 222) as f32 / 460.0).clamp(0.6, 1.0);
+        // A game's name takes a second line (its subtitle) under the first: room for it (`title_block`).
+        let kh = ((c.h - 100 - top - 222 - pocket_ui::title_block::step(&self.text, 67)) as f32 / 460.0).clamp(0.6, 1.0);
         let slot = (460.0 * kh).round() as i32;
         // Cards within reach of the glide, farthest first so the selected one lies on top. Each takes its size,
         // shade and place from how far it is from the middle; the one in the middle is lifted a little (3 % larger,
@@ -5381,30 +5474,56 @@ impl App {
                 c.blit_sprite_to(art, x + (w - aw) / 2, y + 64 + (h - 64 - 80 - ah) / 2, (near * 120.0) as u8, pal().void);
             }
             let own_line = matches!(card, Item::System(_) | Item::Favorites | Item::Streaming | Item::Search | Item::JustPlay) || card.is_curator();
-            if own_line && art.is_none() && !side.is_empty() {
-                // No picture (Curator's entries, Favorites, Search, PC streaming): their line ("70 games · 21 filters",
-                // "3 shelves") is the card's content, large in its middle as on Split's panel, not a blank body.
-                // Too wide for one line: a line per part ("70 games" / "21 filters"), each cut with "…" if need be.
-                let lines: Vec<String> = if self.text.width(Face::Title, 44, &side) <= w - 48 {
-                    vec![side]
-                } else {
-                    side.split(" · ").take(3).map(|p| self.text.fit(Face::Title, 44, p, w - 48)).collect()
-                };
-                let n = lines.len() as i32;
-                let first = y + 64 + (h - 64 - 80 - n * 52) / 2 + 40;
-                for (k, line) in lines.iter().enumerate() {
-                    self.text.draw(c, Face::Title, 44, x + 24, first + k as i32 * 52, 0xffffff, line);
-                }
-            } else {
-                let short = if own_line { side } else { system_short(&self.systems, &sys) };
-                let short = self.text.fit(Face::Body, 21, &short, w - 48);
-                self.text.draw(c, Face::Body, 21, x + 24, y + 44, 0xffffff, &short);
-            }
             // A name too wide for the card takes a second line rather than ending in "…" ("Game Boy Advance").
             // A word wider than the card on its own (a wide font, Large text) makes the name smaller, not cut.
             let tp = self.text.title_px(Face::Title, 37, &t, w - 48, 21);
             let lines = self.text.title_lines(Face::Title, tp, &t, w - 48);
             let last = lines.len() as i32 - 1;
+            let mut body_drawn = false;
+            if own_line && art.is_none() && !side.is_empty() {
+                // No picture (Curator's entries, Favorites, Search, PC streaming, Just Play): their line ("70 games · 21 filters",
+                // "3 shelves", "One press") is the card's content, large in its middle as on Split's panel, not a blank body.
+                // Too wide for one line: a line per part ("70 games" / "21 filters"), each wrapped and not cut. The room is
+                // what the name (one or two lines at the bottom) leaves: a smaller size, never a line over the name's.
+                let room = (y + h - 32 - last * 44 - pocket_ui::type_scale::px(tp) as i32 * 10 / 11 - 8) - (y + 64);
+                let room_w = w - 48;
+                for px in [44u32, 36, 30, 26] {
+                    let parts: Vec<&str> = if self.text.width(Face::Title, px, &side) <= room_w { vec![side.as_str()] } else { side.split(" · ").take(3).collect() };
+                    let mut lines: Vec<String> = Vec::new();
+                    for part in parts {
+                        let wrapped = self.text.title_lines(Face::Title, px, part, room_w);
+                        if wrapped.iter().any(|l| l.ends_with('…')) {
+                            lines.clear();
+                            break;
+                        }
+                        lines.extend(wrapped);
+                    }
+                    let step = pocket_ui::type_scale::px(px) as i32 * 52 / 44;
+                    if lines.is_empty() || lines.len() as i32 * step > room.max(0) {
+                        continue;
+                    }
+                    let n = lines.len() as i32;
+                    let first = y + 64 + (room - n * step) / 2 + pocket_ui::type_scale::px(px) as i32 * 10 / 11;
+                    for (k, line) in lines.iter().enumerate() {
+                        self.text.draw(c, Face::Title, px, x + 24, first + k as i32 * step, 0xffffff, line);
+                    }
+                    body_drawn = true;
+                    break;
+                }
+            }
+            if !body_drawn {
+                // Nothing to show in the middle (a system card's picture stands there) or no room for it beside the name:
+                // the line goes small in the card's corner, wrapped in two lines at most before it is cut.
+                if own_line && !side.is_empty() {
+                    for (k, line) in self.text.wrap_at_most(Face::Body, 21, &side, w - 48, 2).iter().enumerate() {
+                        self.text.draw(c, Face::Body, 21, x + 24, y + 44 + k as i32 * pocket_ui::type_scale::line(21, 4), 0xffffff, line);
+                    }
+                } else {
+                    let short = if own_line { side } else { system_short(&self.systems, &sys) };
+                    let short = self.text.fit(Face::Body, 21, &short, w - 48);
+                    self.text.draw(c, Face::Body, 21, x + 24, y + 44, 0xffffff, &short);
+                }
+            }
             for (k, line) in lines.iter().enumerate() {
                 self.text.draw(c, Face::Title, tp, x + 24, y + h - 32 - (last - k as i32) * 44, 0xffffff, line);
             }
@@ -5414,11 +5533,27 @@ impl App {
         // Cards flip sideways; a swipe up or down does the same.
         self.hits.list(self.sel, self.items.len(), 330.0, 150.0);
         let fav = self.is_favorite(item);
-        let tw = self.title_width(Face::Title, 67, &title, fav).min(c.w - 2 * MARGIN);
-        self.draw_title(c, Face::Title, 67, center - tw / 2, top + slot + 110, c.w - 2 * MARGIN, pal().text, &title, true, fav);
+        let mut under = 0;
+        if !matches!(item, Item::System(_)) {
+            // A name whole, in up to three lines with a game's subtitle smaller, as far as the room above the hints
+            // goes; the meta line stands where the last of them would end, so it does not move from game to game
+            // (`title_block`).
+            let (step, first) = (pocket_ui::title_block::step(&self.text, 67), top + slot + 110);
+            let n = 1 + ((c.h - 110 - 34 - first - 50) / step.max(1)).clamp(0, 2);
+            let star = if fav { app_switcher::star_room(67) } else { 0 };
+            let lines = pocket_ui::title_block::layout(&mut self.text, Face::Title, 67, &title, c.w - 2 * MARGIN - star, n as usize);
+            let (end, base) = pocket_ui::title_block::paint(&mut self.text, c, Face::Title, &lines, center, first, pal().text, pal().chalk, true);
+            if fav {
+                App::paint_title_star(c, end, base, 67, pal().text);
+            }
+            under = (n - 1) * step;
+        } else {
+            let tw = self.title_width(Face::Title, 67, &title, fav).min(c.w - 2 * MARGIN);
+            self.draw_title(c, Face::Title, 67, center - tw / 2, top + slot + 110, c.w - 2 * MARGIN, pal().text, &title, true, fav);
+        }
         let meta = self.text.fit(Face::Body, 28, &meta, c.w - 2 * MARGIN);
         let mw = self.text.width(Face::Body, 28, &meta);
-        self.text.draw(c, Face::Body, 28, center - mw / 2, top + slot + 160, pal().chalk, &meta);
+        self.text.draw(c, Face::Body, 28, center - mw / 2, top + slot + 160 + under, pal().chalk, &meta);
         if self.is_frozen_item(item) {
             // The word in the top corner of the card in the middle.
             self.paint_frozen_word(c, center + 165, top + 34, 0xffffff);
@@ -5429,6 +5564,15 @@ impl App {
             let hw = self.text.width(Face::Body, 28, &headline);
             self.text.draw(c, Face::Body, 28, center - hw / 2, top + slot + 206, pal().chalk, &headline);
         }
+    }
+
+    /// Only system rows use a known short system name when their full name still cannot fit one size smaller.
+    /// Game names keep their own title painter and marquee.
+    fn system_name_for_row(&mut self, item: Item, face: Face, px: u32, smaller: u32, title: String, room: i32) -> (u32, String) {
+        let Item::System(system) = item else { return (px, title) };
+        if self.text.width(face, px, &title) <= room { return (px, title); }
+        if self.text.width(face, smaller, &title) <= room { return (smaller, title); }
+        (px, system_short(&self.systems, &self.systems[system].name))
     }
 
     /// (title, system id for the stripe, text on the spine's right, meta line on the label)
@@ -5552,6 +5696,7 @@ fn snapshot_cheats(state: &str, tmp: &std::path::Path) -> Option<CheatMenu> {
             memory(3, "Start with all items")
         ),
         "cheats-only" => memory(0, "Coins to 99"),
+        "cheats-empty" => return Some(CheatMenu::empty()),
         _ => return pocket_ui::cheats::CheatMenu::load(tmp, "gbc", rom),
     };
     let root = tmp.join("cht-demo");
@@ -5773,6 +5918,7 @@ fn snapshot(app: &mut App, args: &[String]) {
             // The first start at a stage: Wi-Fi with made-up networks (its Time zone row from the guess), your games,
             // the look (keys: a, b, x Style…, d, r, s).
             "first-wifi" => setup.at_stage("wifi").with_wifi_demo(),
+            "first-wifi-empty" => setup.at_stage("wifi").with_net_demo(pocket_ui::net_state::demo::empty()),
             "first-games" => setup.at_stage("games"),
             "first-look" => setup.at_stage("look"),
             // Settings › Help & tools › How you like to play: without "For a child".
@@ -5855,6 +6001,15 @@ fn snapshot(app: &mut App, args: &[String]) {
         let mut buf = vec![0u32; (w * h) as usize];
         let mut c = Canvas::new(&mut buf, w, h);
         app.paint(&mut c);
+        write_png(&buf, w, h, out);
+        return;
+    }
+    // Cozy extras can return to a warmed hardware view. Finish it before the generic pause-menu
+    // fixture below creates a running game/menu over that returned Home view.
+    if app.cozy_extras_snapshot(state) {
+        app.frozen_snapshot();
+        let mut buf = vec![0u32; (w * h) as usize];
+        app.paint(&mut Canvas::new(&mut buf, w, h));
         write_png(&buf, w, h, out);
         return;
     }
@@ -6126,7 +6281,7 @@ fn snapshot(app: &mut App, args: &[String]) {
         app.paint_manual(&mut Canvas::new(&mut buf, w, h));
         app.manual.scroll_by(at.get(1).copied().unwrap_or(0));
     }
-    if manual_at.is_some() || app.store_snapshot(state) || app.starter_snapshot(state) || app.sync_snapshot(state) || app.leds_snapshot(state) || app.night_light_snapshot(state) || app.cozy_extras_snapshot(state) || app.buttons_snapshot(state) || app.controllers_snapshot(state) || app.tailscale_snapshot(state) || app.web_snapshot(state) || app.bluetooth_snapshot(state) || app.perf_fan_snapshot(state) || app.sleep_power_snapshot(state) || app.report_snapshot(state) || app.port_perf_snapshot(state) || app.achievements_snapshot(state) || app.tools_snapshot(state) || app.test_buttons_snapshot(state) || app.game_check_snapshot(state) || app.pc_streaming_snapshot(state) || app.backup_snapshot(state) || app.storage_snapshot(state) || app.gamelist_snapshot(state) {
+    if manual_at.is_some() || app.store_snapshot(state) || app.starter_snapshot(state) || app.sync_snapshot(state) || app.leds_snapshot(state) || app.night_light_snapshot(state) || app.buttons_snapshot(state) || app.controllers_snapshot(state) || app.tailscale_snapshot(state) || app.web_snapshot(state) || app.bluetooth_snapshot(state) || app.perf_fan_snapshot(state) || app.sleep_power_snapshot(state) || app.report_snapshot(state) || app.port_perf_snapshot(state) || app.achievements_snapshot(state) || app.tools_snapshot(state) || app.test_buttons_snapshot(state) || app.game_check_snapshot(state) || app.pc_streaming_snapshot(state) || app.backup_snapshot(state) || app.storage_snapshot(state) || app.gamelist_snapshot(state) {
     } else if let Some(kind) = state.strip_prefix("updates") {
         // The Updates page after "Get system" with a made-up list: "updates:note" staged with a note of what the new
         // system lacks, "updates:refused" refused because pocket-ui would break (`os_compat`).
@@ -6143,7 +6298,24 @@ fn snapshot(app: &mut App, args: &[String]) {
                 cancel.set_status(if kind == ":connecting" { "Connecting to the update server…" } else { "Trying the next download server…" });
                 app.updates.start("Installing pocket-ui 0.3.0".into(), 100, Some(cancel));
             }
+            // The page with a newer pocket-ui on offer: its notes, then the question, with a flat battery or a full one.
+            ":ready" | ":confirm" | ":confirm-low" | ":confirm-charging" | ":off" => {
+                let app_release = update::Release { version: "99.0.0".into(), url: "x.tar".into(), mirrors: Vec::new(), sha256: String::new(), size: 1, notes: "Update notice: pocket-ui tells you once when a new version is out. Switch it off in Updates. Fixes long game names on the shelf.".into() };
+                app.updates.manifest = Some(Manifest { format: 1, app: Some(app_release), ..Default::default() });
+                app.updates.message = None;
+                app.updates.confirm = kind.starts_with(":confirm");
+                if kind == ":off" {
+                    app.update_hint.state.set_auto(false);
+                }
+                if kind == ":confirm-low" || kind == ":confirm-charging" {
+                    pocket_ui::status_corner::force_battery(pocket_ui::status_corner::Battery { percent: 14, charging: kind == ":confirm-charging" });
+                }
+            }
             ":timeout" => app.updates.message = Some("The download server stopped responding. Nothing was installed. Try again.".into()),
+            ":unreachable" => {
+                app.updates.manifest = None;
+                app.update_event(UpdateEvent::Checked(Err("Couldn't reach the update server. Check Wi-Fi.".into())));
+            }
             _ => {}
         }
         app.settings_page = Some(SettingsPage::Updates);
@@ -6160,6 +6332,11 @@ fn snapshot(app: &mut App, args: &[String]) {
             _ => SettingsPage::Groups(g),
         });
         // The values the list reads on a thread, read here at once (`settings_values`).
+        // ":dot": a newer pocket-ui is known (the dot on System and on its Updates row).
+        if state.ends_with(":dot") {
+            let release = update::Release { version: "99.0.0".into(), url: "x.tar".into(), mirrors: Vec::new(), sha256: String::new(), size: 1, notes: String::new() };
+            app.updates.manifest = Some(Manifest { format: 1, app: Some(release), ..Default::default() });
+        }
         let connected = pocket_ui::status_corner::status().wifi;
         pocket_ui::settings_values::set(pocket_ui::settings_values::read(&*app.sys.shared_hw(), &app.sys.net(), &app.data_dir, connected));
         // And the About page's (`ABOUT`) and the Bluetooth row's.
@@ -6186,7 +6363,7 @@ fn snapshot(app: &mut App, args: &[String]) {
         "category" => Page::Emulator { cat: Some(n(0)), sel: n(1) },
         "controls" => Page::Controls { sel: n(0) },
         "controls-card-pause" => Page::ControlsCard,
-        "cheats" | "cheats-more" | "cheats-only" => Page::Cheats { sel: n(0) },
+        "cheats" | "cheats-more" | "cheats-only" | "cheats-empty" => Page::Cheats { sel: n(0) },
         "achievements-list" => Page::Achievements { sel: n(0) },
         "ps2-options" | "gc-options" | "wii-options" | "3ds-options" | "gc-more" | "wii-more" => Page::Standalone { sel: n(0) },
         _ => Page::Main,
@@ -7856,7 +8033,7 @@ impl ApplicationHandler<UserEvent> for App {
             if now >= end { return now; }
             let fade = pocket_ui::motion::span(pocket_ui::motion::Kind::Fade, pocket_ui::motion::PAGE);
             if pocket_ui::motion::appearing(*at, now) || now >= end - fade {
-                self.frame_at + FRAME
+                self.frame_due
             } else {
                 end - fade
             }
@@ -7875,7 +8052,7 @@ impl ApplicationHandler<UserEvent> for App {
         if self.animating() {
             // One frame per refresh: redrawing as soon as the last frame is out ran animations at thousands
             // of frames a second, which a scrolling title would keep up for as long as it is selected.
-            let due = self.frame_at + FRAME;
+            let due = self.frame_due;
             if now >= due {
                 self.request_redraw();
             }
@@ -8217,6 +8394,7 @@ fn main() {
     app_settings_groups::set_store_offered(pocket_ui::store::catalog_url(settings.store_url.as_deref()).is_some());
     pocket_ui::motion::set_level(settings.motion);
     pocket_ui::cozy_extras::set(settings.extras);
+    pocket_ui::system_art::set_gba_model(settings.gba_model);
     pocket_ui::motion::set_cozy(settings.animations_or_default() == pocket_ui::settings::Animations::Cozy);
     // The first start since the device started fades in from black after the boot screen (`boot_fade`); the mark is
     // left even with Motion Off, so that turning it on later doesn't fade a restart.
@@ -8446,6 +8624,7 @@ fn main() {
         menu_shot: Default::default(),
         raise: Default::default(),
         frame_at: Instant::now(),
+        frame_due: Instant::now(),
         home_down: false,
         favorites,
         marquee: Default::default(),
@@ -8457,7 +8636,8 @@ fn main() {
         manual: pocket_ui::manual::Reader::new(),
         manual_hold: None,
         manual_from_setup: false,
-        updates: Updates::default(),
+        // A mock run's stand-in list (`POCKETUI_UPDATE_HINT`) also has its pocket-ui on the Updates page, with notes.
+        updates: Updates { manifest: app_update_hint::mock_manifest(), ..Updates::default() },
         update_url: settings.update_url.clone(),
         store,
         starter: Default::default(),

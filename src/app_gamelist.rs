@@ -30,6 +30,11 @@ const DETAILS_H: i32 = 330;
 pub(crate) struct GamelistUi {
     /// What the gamelists said at the last read (empty until the first read is through, and without gamelists).
     pub index: Arc<Index>,
+    /// The first read is through (its result is in `index`, empty or not): the box art download waits for it, so it never
+    /// fetches a cover for a game whose card already has one.
+    pub read_once: bool,
+    /// `auto_covers` asked before the first read was through and waits for it.
+    covers_waiting: bool,
     /// The cover file found for a game (None: there is none), looked for once per game.
     covers: std::cell::RefCell<HashMap<PathBuf, Option<PathBuf>>>,
     /// A read is running (on its thread).
@@ -49,43 +54,67 @@ impl App {
         }
         let busy = self.gamelist.loading.clone();
         let (proxy, data_dir, es_systems, current) = (self.proxy.clone(), self.data_dir.clone(), self.es_systems.clone(), self.gamelist.index.clone());
+        let first = !self.gamelist.read_once;
         let spawned = std::thread::Builder::new().name("gamelist".into()).spawn(move || {
             let t0 = Instant::now();
-            let sources: Vec<(String, PathBuf)> = pocket_ui::library::all_systems(&es_systems).unwrap_or_default().into_iter().map(|s| (s.id, s.path)).collect();
+            // Folders of another card ("Game Boy Advance (GBA)") are a system's too: their gamelists and pictures count.
+            let sources = pocket_ui::library::read_sources(&es_systems);
             let fresh = Index::load(&data_dir, &Locations::device(), &sources);
             let same = fresh.same_as(&current);
             if !same || !fresh.is_empty() {
                 println!("gamelist: {} files read ({why}) in {:?}{}", fresh.files(), t0.elapsed(), if same { ", nothing changed" } else { "" });
             }
             busy.store(false, Ordering::SeqCst);
-            if !same {
+            if !same || first {
                 let _ = proxy.send_event(UserEvent::Gamelist(Arc::new(fresh)));
             }
         });
         if spawned.is_err() {
             self.gamelist.loading.store(false, Ordering::SeqCst);
+            // No read is coming: the download must not wait for one.
+            self.gamelist.read_once = true;
         }
     }
 
     /// The gamelists were read and differ from what the App has.
     pub(crate) fn gamelist_event(&mut self, index: Arc<Index>) {
+        // The first read comes back even when it found nothing new (the box art download waits for it): then the App has
+        // nothing to refresh, and Curator's index is left alone.
+        let changed = !index.same_as(&self.gamelist.index);
         self.gamelist.index = index;
-        // Their developers, publishers, genres and "last played" go into Connections and Rediscover: both are made again
-        // with the next index, on the catalog there is (`app_connections`).
-        self.curator.connections.stale = true;
-        self.curator.touch();
-        self.gamelist.covers.borrow_mut().clear();
-        self.gamelist.to_add.set(None);
-        // Games that had no cover may have one now.
-        self.cabinet.covers_changed();
-        let found = self.gamelist_found();
-        if let Some(page) = self.gamelist.page.as_mut() {
-            page.found = found;
+        self.gamelist.read_once = true;
+        if changed {
+            // Their developers, publishers, genres and "last played" go into Connections and Rediscover: both are made again
+            // with the next index, on the catalog there is (`app_connections`).
+            self.curator.connections.stale = true;
+            self.curator.touch();
+            self.gamelist.covers.borrow_mut().clear();
+            self.gamelist.to_add.set(None);
+            // Games that had no cover may have one now.
+            self.cabinet.covers_changed();
+            let found = self.gamelist_found();
+            if let Some(page) = self.gamelist.page.as_mut() {
+                page.found = found;
+            }
+            self.request_redraw();
         }
-        self.request_redraw();
+        // The box art download was held back until the card's own pictures were known.
+        if std::mem::take(&mut self.gamelist.covers_waiting) {
+            self.auto_covers("gamelists read");
+        }
     }
 
-    /// The cover a gamelist (or ES-DE's picture folders) has for the game, for a game pocket-ui has no cover of its own
+    /// The box art download may start only once the card's own pictures are known (`gamelist_event`); until then it asks
+    /// again when the first read is through. Games whose card has a box on it are left out of the download.
+    pub(crate) fn covers_wait_for_gamelists(&mut self) -> bool {
+        if self.gamelist.read_once {
+            return false;
+        }
+        self.gamelist.covers_waiting = true;
+        true
+    }
+
+    /// The cover a gamelist, ES-DE's picture folders or the folders beside the games (`layouts`) have for the game, for a game pocket-ui has no cover of its own
     /// for. Looked for once per game (a few `stat`s); a picture over `gamelist::COVER_MAX_BYTES` is passed over.
     pub(crate) fn gamelist_cover(&self, system: &str, rom: &Path) -> Option<PathBuf> {
         if self.gamelist.index.is_empty() {
@@ -234,8 +263,9 @@ impl App {
 
     /// Reads the gamelists now, on this thread: snapshots and tests, which paint right after.
     pub(crate) fn gamelist_load_now(&mut self) {
-        let sources: Vec<(String, PathBuf)> = pocket_ui::library::all_systems(&self.es_systems).unwrap_or_default().into_iter().map(|s| (s.id, s.path)).collect();
+        let sources = pocket_ui::library::read_sources(&self.es_systems);
         self.gamelist.index = Arc::new(Index::load(&self.data_dir, &Locations::device(), &sources));
+        self.gamelist.read_once = true;
         self.gamelist.covers.borrow_mut().clear();
     }
 

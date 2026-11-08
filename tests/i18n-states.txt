@@ -32,6 +32,7 @@ about:device=flip2
 setup:first:a
 setup:first:y
 setup:first-wifi
+setup:first-wifi-empty
 setup:first-wifi:uu
 setup:first-games
 setup:first-games:dd
@@ -169,6 +170,13 @@ battery:3
 battery:3:samples
 updates:note
 updates:refused
+updates:unreachable
+updates:ready
+updates:confirm
+updates:confirm-low
+updates:off
+settings:5:dot
+settings:5:5:dot
 manual
 leave
 leave:1
@@ -294,6 +302,7 @@ cozy:4
 cozy:5
 cozy:6
 cozy:7
+cozy:8
 cozy:0:case_sounds,cabinet_tv,pause_memory_card
 perf
 perf:3
@@ -540,7 +549,10 @@ controls:18
 cheats
 cheats-more
 cheats-only
+cheats-empty
 notice:twin
+notice:bios:toast
+notice:update
 game-twin-note
 notice:several
 notice:password

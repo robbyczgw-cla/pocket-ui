@@ -31,6 +31,7 @@ pub mod cabinet;
 pub mod cabinet_art;
 pub mod phone_shelves;
 pub mod media;
+pub mod title_block;
 pub mod slideshow;
 pub mod motion;
 pub mod keyboard;

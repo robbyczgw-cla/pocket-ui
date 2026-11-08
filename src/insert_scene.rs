@@ -126,6 +126,7 @@ const SLOTS: &[(&str, f32, f32, f32)] = &[
     ("gb", 0.58, 0.10, 1.0),
     ("gbc", 0.62, 0.08, 1.0),
     ("gba", 0.55, 0.10, 1.0),
+    ("gba-sp", 0.19, 0.835, 1.0),
     ("nds", 0.57, 0.07, 1.0),
     ("3ds", 0.60, 0.07, 1.0),
     ("psp", 0.48, 0.40, 1.0),
@@ -167,18 +168,20 @@ pub const STAND_IN: &str = "ports";
 
 /// Where the medium goes on `system`'s picture; a picture not listed has its console in its middle.
 pub fn slot_of(system: &str) -> SlotAt {
-    let id = if crate::system_art::get(system).is_some() { crate::system_art::canonical(system) } else { STAND_IN };
+    let id = if crate::system_art::get(system).is_some() { crate::system_art::picture_id(system) } else { STAND_IN };
     SLOTS.iter().find(|s| s.0 == id).map_or(SlotAt { x: 0.5, y: None, body: 1.0 }, |s| SlotAt { x: s.1, y: Some(s.2), body: s.3 })
 }
 
-/// Systems whose games come on a medium pocket-ui has no picture of (floppy disk, tape) or on none (an arcade board):
-/// their start shows no medium going in, a false disc would be wrong. The case fades and the machine lights up.
+/// Systems whose games come on a medium pocket-ui has no picture of (floppy disk, tape) or on none (an arcade board), or
+/// go in where the console's picture doesn't show it: their start shows no medium going in, a false one would be wrong.
+/// The case fades and the machine lights up. A PSP takes its UMD in a door at its back, label out; until it has a rig
+/// of its own it must not show the disc dropping on its screen.
 pub fn lights_up_only(system: &str) -> bool {
     // The CD32 has the Amiga's picture but its games are discs.
     system != "amigacd32"
         && matches!(
             crate::system_art::canonical(system),
-            "arcade" | "c64" | "c128" | "c16" | "vic20" | "pet" | "amiga" | "amiga500" | "amiga1200" | "zxspectrum" | "zx81" | "msx" | "msx2" | "atarist"
+            "psp" | "arcade" | "c64" | "c128" | "c16" | "vic20" | "pet" | "amiga" | "amiga500" | "amiga1200" | "zxspectrum" | "zx81" | "msx" | "msx2" | "atarist"
                 | "atari800" | "amstradcpc" | "x68000" | "x1" | "pc-8800" | "pc-9800" | "bbcmicro" | "apple2" | "dragon" | "trs-80"
         )
 }
@@ -242,6 +245,23 @@ fn enlarged(p: Pic, n: i32) -> Pic {
     Pic { w, h, px }
 }
 
+/// How far open a lid is (0 shut, 1 all the way) before it is drawn behind its console's rear wall instead of over it.
+const LID_BEHIND_OPEN: f32 = 0.35;
+
+/// The black tray inside a jewel case (PlayStation and Saturn games come in one, `assets/media/case/ps1.json`).
+const CASE_TRAY: u32 = 0x15161a;
+
+/// A rectangle of `rgb` over what is on `c`, `alpha` of 256.
+fn fill_alpha(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, rgb: u32, alpha: u32) {
+    let keep = 256 - alpha.min(256);
+    for yy in y.max(0)..(y + h).min(c.h) {
+        for xx in x.max(0)..(x + w).min(c.w) {
+            let d = &mut c.buf[(yy * c.w + xx) as usize];
+            *d = mix(*d & 0xffffff, rgb, 255 - (keep * 255 / 256));
+        }
+    }
+}
+
 /// How much of the case still shows, 1-0: it fades while the medium leaves it.
 fn case_shown(st: cabinet::Insert) -> f32 {
     1.0 - ((st.carry - 0.3) / 0.4).clamp(0.0, 1.0)
@@ -263,6 +283,8 @@ pub struct Scene {
     /// The cartridge or card that comes out of the case, made on the first frame of the animation (after the game's
     /// process is started, so nothing is added before it) from the cover on the case's front; None for a disc.
     pub game: Option<Rc<Pic>>,
+    /// Reverse face, read once after launch starts; no image creation in the frame loop.
+    pub game_back: Option<Rc<Pic>>,
     /// Cozy or Quick when it started: its length and when the cartridge is in.
     pub cozy: bool,
     /// Playful animations: the disc at its size over the drive, made once (each frame only scales it a little).
@@ -295,10 +317,15 @@ impl Scene {
         }
     }
 
-    /// Asks for the console's own mechanism, once: Cozy + Playful only.
+    /// Asks for the console's own mechanism, once: Cozy + Playful, and the SP's bottom slot in every mode.
     pub fn load_rig(&mut self, blocks: i32) {
         if !self.rig_asked {
-            self.rig = (self.cozy && crate::playful::on()).then(|| Rigged::load(&self.system, self.kind, blocks)).flatten().map(Rc::new);
+            if ir::label_away(&self.system) {
+                self.game_back = crate::media::game_back(self.kind).map(|p| Rc::new(p.clone()));
+            }
+            // The SP also needs its bottom-slot geometry in Quick and without playful motion.
+            let sp = crate::system_art::picture_id(&self.system) == "gba-sp";
+            self.rig = ((self.cozy && crate::playful::on()) || sp).then(|| Rigged::load(&self.system, self.kind, blocks)).flatten().map(Rc::new);
             self.rig_asked = true;
         }
     }
@@ -438,6 +465,8 @@ impl Scene {
         } else {
             let Some(pic) = game_pic else { return };
             let (gw, gh) = (pic.w as f32, pic.h as f32);
+            let (width, back) = ir::face_at(ir::label_away(&system), fly);
+            let pic = if back { self.game_back.clone().unwrap_or(pic) } else { pic };
             // The cartridge shrinks onto the slot and sinks in, partly: it stays out of its slot as it does in the real
             // console. A game card goes in all the way.
             let end_w = (bw * if game == Game::Card { 0.2 } else { 0.36 }).clamp(if game == Game::Card { 60.0 * k } else { 90.0 * k }, 230.0 * k);
@@ -450,7 +479,7 @@ impl Scene {
             };
             let start = (fx + fw / 2.0 + out * (fw / 2.0 + gw * 0.45), fy + fh / 2.0);
             let end = (slot_cx as f32, slot_y as f32 - end_h / 2.0);
-            let (w, h) = (lerp(gw, end_w, fly), lerp(gh, end_h, fly));
+            let (w, h) = (lerp(gw, end_w, fly) * width, lerp(gh, end_h, fly));
             let (cx, cy) = (lerp(start.0, end.0, fly), lerp(start.1, end.1, fly) + st.sink * end_h * depth);
             if st.rise > 0.4 {
                 c.round_rect(slot_cx - end_w as i32 / 2 - px(8), slot_y - px(4), end_w as i32 + px(16), px(9), px(4), bar);
@@ -500,8 +529,9 @@ impl Scene {
         let Some(pic) = self.game.clone() else { return };
         let rig = pics.rig;
         let scale = pics.scale;
-        let st = cabinet::insert_at(elapsed, true);
-        let pose = ir::pose(rig.kind(), elapsed);
+        let st = cabinet::insert_at(elapsed, self.cozy);
+        let mechanism_time = if self.cozy { elapsed } else { elapsed.mul_f32(cabinet::IN_AT_COZY.as_secs_f32() / cabinet::IN_AT.as_secs_f32()) };
+        let pose = ir::pose(rig.kind(), mechanism_time);
         art::dim(c, 0, c.h, 256 - (st.dim * 256.0) as u32);
         let (bw, bh) = (pics.base.w, pics.base.h);
         let px = |n: i32| (n as f32 * k) as i32;
@@ -516,12 +546,16 @@ impl Scene {
         let beside = kind.size_beside(medium, from.3);
         let near_h = beside.1 as f32;
         let near_w = if kind.is_round() { near_h * pic.w as f32 / pic.h.max(1) as f32 } else { beside.0 as f32 };
-        let start = (fx + fw / 2.0 + pose.out * (fw / 2.0 + near_w * 0.45), fy + fh / 2.0);
+        // A disc lies on the tray of its jewel case, which opens (its cover swings away on the hinge at the left) and lets
+        // it be lifted out; a cartridge or card slides out of its case.
+        let opens = kind.is_round() && rig.kind() != ir::Kind::Cart;
+        let start = if opens { (fx + fw / 2.0, fy + fh / 2.0) } else { (fx + fw / 2.0 + pose.out * (fw / 2.0 + near_w * 0.45), fy + fh / 2.0) };
         let m = rig.medium_at(start, screen, (near_w, near_h), &pose, scale);
         let draw_medium = |c: &mut Canvas| {
+            let pic = if m.back { self.game_back.as_deref().unwrap_or(&pic) } else { &pic };
             let (sx, sy) = (pic.w as f32 / 2.0, pic.h as f32 / 2.0);
             let o = (m.at.0 - m.u.0 - m.v.0, m.at.1 - m.u.1 - m.v.1);
-            art::blit_affine(c, &pic, o, (m.u.0 / sx, m.u.1 / sx), (m.v.0 / sy, m.v.1 / sy), 256, all);
+            art::blit_affine(c, pic, o, (m.u.0 / sx, m.u.1 / sx), (m.v.0 / sy, m.v.1 / sy), 256, all);
         };
 
         // Behind the case while it comes out, in front once it is on its way.
@@ -530,11 +564,17 @@ impl Scene {
         if rig.behind && flying {
             draw_medium(c);
         }
+        // A lid hinged behind the console's rear wall (`Lid::tuck`) stands up out of it: while it is open it is drawn first,
+        // the console over it, so what of the lid has gone down behind the wall is hidden and it is plainly fixed there.
+        let lid_behind = matches!(rig.mech(), Mech::Lid(l) if l.tuck > 0.0) && pose.open > LID_BEHIND_OPEN;
+        if let (Mech::Lid(l), true) = (rig.mech(), lid_behind) {
+            draw_lid(c, l, &pics, (ox, oy), pose.open, shade);
+        }
         art::blit(c, &pics.base, ox.round() as i32, oy.round() as i32, shade, all);
         // The lid stands behind the disc coming down, and shuts over it; the tray is under it always.
         let lid_later = pose.landed >= 1.0;
         match rig.mech() {
-            Mech::Lid(l) if !lid_later => draw_lid(c, l, &pics, (ox, oy), pose.open, shade),
+            Mech::Lid(l) if !lid_later && !lid_behind => draw_lid(c, l, &pics, (ox, oy), pose.open, shade),
             Mech::Tray(t) => {
                 if let Some(tray) = &pics.top {
                     art::blit_affine(c, tray, screen(rig.tray_at(t, pose.open)), (scale, 0.0), (0.0, scale), shade, all);
@@ -542,11 +582,24 @@ impl Scene {
             }
             _ => {}
         }
+        if opens && pose.out > 0.0 && case_fade > 0 {
+            // What the cover uncovers: the case's black tray.
+            fill_alpha(c, from.0, from.1, front.w, front.h, CASE_TRAY, case_fade);
+        }
         if !flying {
             draw_medium(c);
         }
         if case_fade > 0 {
-            art::blit(c, &front, from.0, from.1, case_fade, all);
+            if opens {
+                // The cover turns about the hinge on its left edge: narrower and darker, edge-on when it is open.
+                let cos = (pose.out * std::f32::consts::FRAC_PI_2).cos();
+                if cos * front.w as f32 >= 1.0 {
+                    let shade = (case_fade as f32 * (0.55 + 0.45 * cos)) as u32;
+                    art::blit_affine(c, &front, (fx, fy), (cos, 0.0), (0.0, 1.0), shade, all);
+                }
+            } else {
+                art::blit(c, &front, from.0, from.1, case_fade, all);
+            }
         }
         // A disc coming down is in front of everything; once it is down the parts in front of it hide it.
         let coming_down = rig.kind() != ir::Kind::Cart && pose.landed < 1.0;
@@ -564,11 +617,17 @@ impl Scene {
         if let Some(over) = &pics.over {
             art::blit(c, over, ox.round() as i32, oy.round() as i32, shade, all);
         }
+        // The SP's foreground includes its controls as well as the slot rim. Its
+        // closed screen must cover those controls, then reveal them as it opens.
+        if let Some(lid) = rig.clamshell {
+            let opening = if self.cozy && crate::playful::on() { ((mechanism_time.as_secs_f32() * 1000.0 - 160.0) / 500.0).clamp(0.0, 1.0) } else { 1.0 };
+            draw_lid(c, lid, &pics, (ox, oy), crate::cabinet::ease_out(opening), shade);
+        }
         if flying && !rig.behind && coming_down {
             draw_medium(c);
         }
         if let Mech::Lid(l) = rig.mech() {
-            if lid_later {
+            if lid_later && !lid_behind {
                 draw_lid(c, l, &pics, (ox, oy), pose.open, shade);
             }
         }
@@ -685,12 +744,13 @@ mod tests {
     use super::*;
 
     fn scene(system: &str, cozy: bool) -> Scene {
-        let kind = Game::of(system, "x.rom");
-        let medium = Medium::of(system);
+        let hardware = if system == "gba-sp" { "gba" } else { system };
+        let kind = Game::of(hardware, "x.rom");
+        let medium = Medium::of(hardware);
         let look = Look { color: 0x8040c0, band: 0x8040c0, plastic: art::plastic(system) };
         let front = Rc::new(Pic::new(120, 180, 0xff40_6080));
         let game = Rc::new(Pic::new(90, 90, 0xffc0_c0c0));
-        Scene { system: system.into(), ff: FormFactor::of(system), medium, look, title: "T".into(), kind, has_cover: false, front, from: (40, 40, 120, 180), game: Some(game), cozy, at_drive: None, rig: None, rig_asked: false }
+        Scene { system: system.into(), ff: FormFactor::of(hardware), medium, look, title: "T".into(), kind, has_cover: false, front, from: (40, 40, 120, 180), game: Some(game), game_back: None, cozy, at_drive: None, rig: None, rig_asked: false }
     }
 
     fn frame(s: &mut Scene, ms: u64, stage: Stage) -> Vec<u32> {
@@ -731,6 +791,80 @@ mod tests {
             quick.load_rig(2);
             assert!(quick.rig.is_none(), "{system}: Quick never loads a rig");
         }
+    }
+
+    #[test]
+    fn rear_slot_handhelds_show_the_back_in_rendered_frames_while_top_loaders_keep_the_label() {
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(true);
+        // Contrasting faces identify what actually gets painted, independent of a game's cover.
+        // A regression that keeps drawing the front despite the plan's `back` flag fails here.
+        for (system, back) in [("gba", true), ("gba-sp", true), ("gb", true), ("gbc", true), ("nds", true), ("snes", false), ("n64", false), ("psx", false)] {
+            for cozy in [true, false] {
+                let mut s = scene(system, cozy);
+                s.load_rig(2);
+                s.game = Some(Rc::new(Pic::new(90, 90, 0xffff_0000)));
+                s.game_back = Some(Rc::new(Pic::new(90, 90, 0xff00_00ff)));
+                let ms = if cozy { 900 } else { 150 };
+                let painted = frame(&mut s, ms, STAGE);
+                let count = |color| painted.iter().filter(|p| **p == color).count();
+                if back {
+                    assert!(count(0x0000ff) > 100 && count(0xff0000) == 0, "{system} cozy={cozy}: reverse face before the slot");
+                } else {
+                    assert!(count(0xff0000) > 100 && count(0x0000ff) == 0, "{system} cozy={cozy}: printed face stays visible");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_sp_closed_lid_covers_the_controls_and_opening_reveals_them() {
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(true);
+        let mut s = scene("gba-sp", true);
+        s.load_rig(2);
+        let r = Rc::get_mut(s.rig.as_mut().expect("SP hardware")).unwrap();
+        let over = r.over.as_mut().expect("SP controls and slot rim");
+        // Mark the D-pad on the actual foreground picture. It must be hidden by the
+        // closed outer lid, then visible once the photographed screen swings up.
+        for y in 150 * 2..158 * 2 {
+            for x in 86 * 2..94 * 2 {
+                over.px[(y * over.w + x) as usize] = 0xffff00ff;
+            }
+        }
+        let marked = |pixels: &[u32]| pixels.iter().filter(|p| {
+            let (red, green, blue) = (*p >> 16 & 255, *p >> 8 & 255, *p & 255);
+            red > 64 && blue > 64 && green < 8
+        }).count();
+        let shut = frame(&mut s, 160, STAGE);
+        let open = frame(&mut s, 900, STAGE);
+        assert_eq!(marked(&shut), 0, "closed SP lid must cover the controls instead of being painted behind them");
+        assert!(marked(&open) > 100, "opening the SP must reveal its controls");
+    }
+
+    #[test]
+    fn the_sp_slot_is_empty_before_the_cartridge_arrives_and_filled_only_after_insertion() {
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(true);
+        let mut s = scene("gba-sp", true);
+        s.load_rig(2);
+        let r = s.rig.as_ref().expect("SP hardware");
+        let (a, b) = r.rig.seat.slot.expect("bottom slot");
+        let (ox, oy) = ((720 - r.base.w) / 2, STAGE.floor - 10 - r.base.h);
+        // Sample the interior along the photographed slot mouth, away from its blue rim.
+        let points: Vec<_> = (30..=70).step_by(5).map(|percent| {
+            let t = percent as f32 / 100.0;
+            let x = ox + ((a.0 + (b.0 - a.0) * t) * r.scale).round() as i32;
+            let y = oy + ((a.1 + (b.1 - a.1) * t) * r.scale).round() as i32;
+            (y * 720 + x) as usize
+        }).collect();
+        let before = frame(&mut s, 650, STAGE);
+        let after = frame(&mut s, 1200, STAGE);
+        let brightness = |p: u32| [p & 255, (p >> 8) & 255, (p >> 16) & 255].into_iter().max().unwrap();
+        let empty = points.iter().filter(|i| brightness(before[**i]) <= 38).count();
+        assert!(empty * 5 >= points.len() * 4, "SP slot already contains a flat cartridge before insertion: {empty}/{} interior samples are a dark empty opening", points.len());
+        let filled = points.iter().filter(|i| brightness(after[**i]) > brightness(before[**i]) + 15).count();
+        assert!(filled * 2 >= points.len(), "SP cartridge must visibly fill the previously empty slot after it seats: {filled}/{} samples changed", points.len());
     }
 
     #[test]
@@ -792,7 +926,7 @@ mod tests {
 
     #[test]
     fn a_phone_keeps_every_rig_and_its_medium_on_screen_whatever_way_it_is_held() {
-        for system in ["psx", "ps2", "gamecube", "snes", "snes-us", "gba", "gb", "n64", "megadrive", "dreamcast", "saturn", "xbox", "nds", "wii"] {
+        for system in ["psx", "ps2", "gamecube", "snes", "snes-us", "gba", "gba-sp", "gb", "n64", "megadrive", "dreamcast", "saturn", "xbox", "nds", "wii"] {
             let game = if system == "snes-us" { Game::SnesUs } else { Game::of(system, "x.rom") };
             let system = if system == "snes-us" { "snes" } else { system };
             let f = ir::files(system, game).expect(system);
@@ -810,6 +944,10 @@ mod tests {
                 let s = f.rig.seat;
                 let hover_top = top as f32 + (s.hover.1 - s.v.0.hypot(s.v.1)) * n as f32;
                 assert!(hover_top >= 0.0, "{system} {n} on {w}x{h}: the medium hangs off the top ({hover_top})");
+                if f.rig.bottom_slot {
+                    let hover_bottom = top as f32 + (s.hover.1 + s.u.1.abs() + s.v.1.abs()) * n as f32;
+                    assert!(hover_bottom <= h as f32, "{system}: bottom-entry cartridge must stay visible ({hover_bottom} > {h})");
+                }
                 let x0 = (w - base.0 * n) / 2;
                 let reach = s.u.0.hypot(s.u.1) * n as f32;
                 let (left, right) = (x0 as f32 + s.hover.0 * n as f32 - reach, x0 as f32 + s.hover.0 * n as f32 + reach);
@@ -882,6 +1020,8 @@ mod tests {
         for system in ["c64", "amiga", "zxspectrum", "atari800", "msx", "mame", "fbneo", "cps2", "naomi", "arcade"] {
             assert!(lights_up_only(system), "{system}");
         }
+        // A UMD goes in the PSP's back door, label out: a disc dropped on its screen is wrong, so no medium until the PSP has a rig.
+        assert!(lights_up_only("psp"));
         // Real cartridges and discs keep their medium.
         for system in ["atari5200", "atari7800", "psx", "nes", "amigacd32", "neogeo", "dreamcast"] {
             assert!(!lights_up_only(system), "{system}");
@@ -893,5 +1033,33 @@ mod tests {
         // At the handhelds' 2 the blocks are the art's old doubling.
         let p = Pic { w: 2, h: 1, px: vec![1, 2] };
         assert_eq!(enlarged(p, 2).px, vec![1, 1, 2, 2, 1, 1, 2, 2]);
+    }
+
+    #[test]
+    fn a_disc_case_opens_and_the_disc_lifts_off_its_tray_it_does_not_slide_out_sideways() {
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(true);
+        const DISC: u32 = 0xff00ff;
+        let count = |px: &[u32], c: u32| px.iter().filter(|p| **p & 0xffffff == c).count();
+        for system in ["psx", "saturn", "dreamcast", "gamecube"] {
+            let mut s = scene(system, true);
+            s.load_rig(2);
+            s.game = Some(Rc::new(Pic::new(90, 90, 0xff00_0000 | DISC)));
+            let (shut, open) = (frame(&mut s, 60, STAGE), frame(&mut s, 400, STAGE));
+            let cover = count(&shut, 0x406080);
+            assert!(cover > 8000, "{system}: the case's front stands on the shelf ({cover})");
+            assert!(count(&open, 0x406080) < cover / 4, "{system}: the cover swings away on its hinge, the case opens");
+            // The disc lies on the tray in the middle of the case until it is lifted, as wide as the case is.
+            let (mut n, mut sx) = (0usize, 0usize);
+            for (i, p) in open.iter().enumerate() {
+                if *p & 0xffffff == DISC {
+                    n += 1;
+                    sx += i % 720;
+                }
+            }
+            assert!(n > 2000, "{system}: the disc is seen once the case is open ({n})");
+            let middle = 40 + 120 / 2;
+            assert!(sx / n.max(1) < middle + 12 && sx / n.max(1) + 12 > middle, "{system}: the disc rests at the case's middle, its mean x is {}", sx / n.max(1));
+        }
     }
 }

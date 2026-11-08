@@ -484,7 +484,7 @@ fn system_txt(src: &Sources, now: u64) -> String {
         s.push('\n');
     }
     s.push_str("\n[os_release]\n");
-    s.push_str(if os.trim().is_empty() { "(missing)\n" } else { &os });
+    s.push_str(if os.trim().is_empty() { "(missing)\n" } else { &os }); #[cfg(feature = "brick")] s.push_str(&crate::brick_profile::report_section(&src.sys("proc/bus/input/devices")));
     s
 }
 

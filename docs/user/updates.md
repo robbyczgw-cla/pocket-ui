@@ -37,16 +37,22 @@ for network time over Wi-Fi."
 When a newer pocket-ui is out, the shelf says so once, a little after the start and only with Wi-Fi: "pocket-ui 0.3.0
 is ready. Your games and settings stay." **A** opens Settings → System → Updates, **B** only closes it. Each version is
 said once, whatever you pressed; the next version says it again. It never comes over a game, over a page or the first
-start, not in Kids Mode, and only on a released pocket-ui (a test build from the developers stays quiet). While the Pocket stays on it looks again every twelve hours. It only asks the signed list
-that the Updates page reads (no account, nothing about you or your games is sent). It stays quiet for the system
-(ROCKNIX) and for ports; those are only in Settings → System → Updates. To switch it off, put `{"off": true}` in
-`update-hint.json` in pocket-ui's data folder (`/storage/.config/pocket-ui/`).
+start, not in Kids Mode, and only on a released pocket-ui (a test build from the developers stays quiet). Until you
+update, a small amber dot sits on System in Settings and on its Updates row.
+
+pocket-ui looks quietly, at most once a day (and once after it starts), only with Wi-Fi, never during a game and only
+when you are not pressing buttons. If the server does not answer it waits longer each time. It only asks the signed list
+that the Updates page reads (no account, nothing about you or your games is sent). Nothing is ever installed by itself.
+It stays quiet for the system (ROCKNIX) and for ports; those are only in Settings → System → Updates.
+
+To switch it off, open Settings → System → Updates and set **Check for updates automatically** to Off (Left/Right or A).
+Then pocket-ui asks nothing and says nothing; **Check again** still works when you want it.
 
 ## The Updates page
 
 ![Settings → System with the Updates row and the installed version](pictures/updates.webp)
 
-The first time you open the page, pocket-ui checks for updates by itself. The page shows:
+The first time you open the page, pocket-ui checks for updates by itself (unless you switched the automatic check off). The page shows:
 
 - **pocket-ui**: the installed version, and a newer one if available ("0.2.0, 0.2.1 available").
 - **System**: the installed system version, and a newer one if available, or "update waiting for
@@ -57,7 +63,7 @@ Below that are the actions that apply right now:
 
 | Action | What it does |
 |---|---|
-| **Install pocket-ui …** | Downloads and installs the new pocket-ui. It restarts by itself ("Installed. Restarting…"). |
+| **Install pocket-ui …** | Asks first: **Install now** downloads and installs the new pocket-ui and restarts it by itself ("Installed. Restarting…"), **Later** (or B) goes back. If the battery is under 20 % and not charging, the page says to plug in the charger first. |
 | **Get system …** | Downloads and checks a new system version. It is installed the next time the system starts. |
 | **Remove the waiting system update** | Cancels a system update that was downloaded but not installed yet. |
 | **Check again** | Checks for updates again. |
@@ -89,6 +95,10 @@ downloads over secure connections (https).
 The previous version is kept on the SD card until the next update replaces it. So is the last version that ran for two
 minutes with its screen: if a later version keeps stopping, that one comes back, and if it stops too, pocket-ui opens
 in [safe mode](safe-mode.md).
+
+On ROCKNIX, the installer also writes the new programs to the card before switching to them. If power fails during
+installation, a complete interface remains available at the next start. Installing a rebuilt copy of the same version
+keeps the old programs in a separate folder, too. Run the installer again to finish an interrupted installation.
 
 ## System updates and the bootloader
 

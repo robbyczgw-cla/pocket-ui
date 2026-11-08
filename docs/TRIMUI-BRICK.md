@@ -174,6 +174,14 @@ scanlines, CRT), every screen frame (the console's own, Ambient, the handhelds, 
 Lines of `src/bin/pocket_core.rs` and the shared files with a `brick` addition keep it at their end: no line moves, so a default
 build keeps every panic location and its bytes. Keep it that way, and compare with a build of `main` in the same folder.
 
+## Type size on the 3.2" panel
+
+The panel is about 15.75 px a millimetre (400 ppi), the RG35XX's logical 1280×960 canvas about 18 and the Mini's 1240×1080 about 16.5,
+so a design size is not smaller on the Brick than elsewhere, but all of them are under what is comfortable at arm's length (Body 2.0 mm,
+the hint bar 1.6 mm). The Brick's Normal text size is therefore a step above the design for the small sizes (hint bar 21 → 25, Body 28 → 31,
+Settings' explanations 30 → 32; rows, titles and the pause menu stay), and Medium and Large are never smaller than it. The rule is
+`type_scale::brick_base`, the table is in docs/DESIGN.md ("Text size").
+
 ## Cabinet navigation on the 1024×768 panel
 
 Cabinet draws only whole shelves below the selected game preview, so a library with five systems need not

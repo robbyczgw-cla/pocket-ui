@@ -18,9 +18,8 @@
 #  - the shell tests (launcher test in one lane, the small ones in another) run beside cargo on hosts with 8+ cores
 #    after compilation and the serial Rust timing tier. They never retry a red verdict.
 #  - paths changed against the merge base with main (GATE_BASE=<ref>; a remote gate: the list comes from tools/remote-gate.sh)
-#    skip what cannot be affected, and say so ("gate: SKIPPED ..."): shell tests may skip ordinary Markdown and Rust
-#    sources no shell script names. Licence files and every unknown path run them. The integration tests (unit tests and
-#    doc checks still run) skip when only docs/ Markdown (not docs/user/, the manual), root *.md or LICENSE changed.
+#    select a short gate only for strictly allowlisted, unembedded documents (scripts/gate-select.py).
+#    Source, scripts, runtime assets/translations/manual, Cargo, unknown and mixed changes run every tier.
 #    No list, or GATE_FULL=1:
 #    everything runs. GATE_LEAKS_DONE=1 (set by remote-gate.sh, which scans where .git is; the remote host has no .git) skips the scan.
 #  - GATE_PROFILE=release runs the tests with the production profile (thin LTO, one codegen unit, panic=abort for the
@@ -102,42 +101,42 @@ if [ -f .gate-changed ]; then changed=$(cat .gate-changed)
 elif base=$(git merge-base "${GATE_BASE:-main}" HEAD 2>/dev/null); then
     changed=$( { git diff --name-only "$base"; git ls-files -o --exclude-standard; } | sort -u )
 fi
-# Every skipped path must be known harmless. Source references include all shell scripts, not just the test entry
-# points: e.g. check-core-licences.sh reads src/hostsys.rs. Other assets, configuration and unknown paths run the suite.
-# Rust files under src/ and tests/ are safe here when no shell script names them: shell tests use stand-in binaries,
-# not the Rust test executables. A Rust test change still runs all Rust integration and timing tests.
-docs_only=0 shell_tests=1 why_shell=
-if [ -n "$changed" ] && [ -z "${GATE_FULL:-}" ]; then
-    srcrefs=$(find deploy scripts -type f -name '*.sh' -exec grep -hoE '(src|tests)/[a-zA-Z0-9_./-]+\.rs' {} + 2>/dev/null | sort -u)
-    docs_only=1 shell_tests=0
-    while IFS= read -r f; do
-        case $f in
-            docs/user/*) docs_only=0 ;;
-            docs/*.md|LICENSE) ;;
-            */*) docs_only=0 ;;
-            *.md) ;;
-            *) docs_only=0 ;;
-        esac
-        case $f in
-            LICENSE|NOTICE.md|assets/fonts/OFL.txt) shell_tests=1; why_shell=$f ;;
-            docs/*.md) ;;
-            tests/*[!a-zA-Z0-9_./-]*) shell_tests=1; why_shell=$f ;;
-            src/*.rs|tests/*.rs) case "
-$srcrefs
-" in *"
-$f
-"*) shell_tests=1; why_shell=$f ;; esac ;;
-            */*) shell_tests=1; why_shell=$f ;;
-            *.md) ;;
-            *) shell_tests=1; why_shell=$f ;;
-        esac
-    done <<EOF
-$changed
-EOF
+# The short path is a strict allowlist. Embedded manual/translation inputs and
+# every unknown, source, script, image or Cargo change retain the complete gate.
+docs_only=0 shell_tests=1 why_shell=full
+if [ -n "$changed" ] && [ -z "${GATE_FULL:-}" ] && [ -f scripts/gate-select.py ]; then
+    mode=$(printf '%s\n' "$changed" | python3 scripts/gate-select.py "$(pwd)") || exit 1
+    [ "$mode" != docs ] || docs_only=1
+fi
+if [ "$docs_only" -eq 1 ]; then
+    # These are the same active document, link/index and translation contracts
+    # as the full gate. No player test is ignored or moved to another tier.
+    : >"$T"
+    for filter in doc_checks:: i18n::; do
+        part=$(mktemp) || exit 1
+        if nice -n "$nice_increment" cargo test $pflag --lib --bins "$filter" -q >"$part" 2>&1 &&
+            awk '/^test result: ok\./ { passed += $4 } END { exit !(passed > 0) }' "$part"; then
+            cat "$part" >>"$T"
+            rm -f "$part"
+        else
+            cat "$part" >>"$T"
+            rm -f "$part"
+            echo "GATE: documentation/i18n checks FAILED ($filter; $T; empty checks also fail)"
+            tail -20 "$T"
+            exit 1
+        fi
+    done
+    echo "gate: docs-only; document/link/index+i18n checks $(( $(date +%s) - start )) s; leak scan checked before compilation"
+    echo "gate: SKIPPED player, Brick, timing, platform and shell tiers: strictly unembedded documentation only"
+    short_passed=$(awk '/^test result: ok\./ { passed += $4 } END { print passed + 0 }' "$T") || exit 1
+    echo "GATE: ok ($short_passed passed)"
+    exit 0
 fi
 
 # The shell tests: the launcher test and the small ones. Each has its own log and exit-code file in $RCD.
 RCD=$(mktemp -d "${TMPDIR:-/tmp}/gate-rc.XXXXXX") || { echo "GATE: cannot create shell test result directory"; exit 1; }
+# A fresh scope per gate; no render is reused across runs or different binaries.
+export POCKETUI_SNAPSHOT_CACHE_DIR="$RCD/snapshots"
 shell_launcher() { sh deploy/test-run-pocket-ui.sh >"$L" 2>&1; echo $? >"$RCD/l"; }
 shell_small() {
     # The device check's shell test (fake ssh and /proc, about 3 s): scripts/verify-device.sh, docs/DEVELOPING.md "Deploy".
@@ -197,19 +196,33 @@ case $runner in
         ;;
     *) echo "GATE: unknown GATE_RUNNER (use auto, cargo or nextest)"; exit 2 ;;
 esac
+runner_done=$(date +%s)
 # The ordinary library tier covers every captured public controller. The private
 # Brick feature must run the SAME corpus too: otherwise a default gate can miss an
 # ID collision that only changes the built-in Brick's F keys. Fixture gate trees and
 # public exports without this feature keep their ordinary integration tier.
 if [ "$trc" -eq 0 ] && [ "$docs_only" -eq 0 ] && [ -f src/input_corpus_tests.rs ] && grep -Eq '^[[:space:]]*brick[[:space:]]*=' Cargo.toml; then
     nice -n "$nice_increment" cargo test $pflag --features brick --lib input_corpus_tests -q >>"$T" 2>&1 || trc=1
+    # The ordinary integration tier excludes the Brick settings walk and the
+    # Brick-only text regressions. Run those cases, keeping the public text matrix in its usual tier. The Smart Pro's
+    # D-pad explorer (same card, 1280x720; its text fit is in brick_settings_walk) runs here too.
+    for suite in brick_settings_walk text_size long_titles search_titles nav_explorer; do
+        [ "$trc" -eq 0 ] || break
+        [ -f "tests/$suite.rs" ] || continue
+        case $suite in text_size) filter=textfit_brick_031_ ;; long_titles) filter=info_titles_031_ ;; nav_explorer) filter=on_the_smart_pro ;; *) filter= ;; esac
+        nice -n "$nice_increment" cargo test $pflag --features brick --test "$suite" $filter -q >>"$T" 2>&1 || trc=1
+    done
 fi
+brick_done=$(date +%s)
+# Timing cases must measure a real renderer, not a stored static layout probe.
+unset POCKETUI_SNAPSHOT_CACHE_DIR
 # The ignored timing tier is mandatory for both cargo and nextest. It gets one
 # attempt, one test thread, and runs after compilation; failure stays red.
 if [ "$trc" -eq 0 ]; then
     if [ "$docs_only" -eq 1 ]; then timing_targets="--lib --bins"; else timing_targets=; fi
     nice -n "$nice_increment" sh scripts/test-timing.sh "$profile" $timing_targets >>"$T" 2>&1 || trc=1
 fi
+timing_done=$(date +%s)
 # The Steam Deck's and Android's own code (scripts/check-platforms.sh): checks, not builds; after the tests. Android is
 # skipped where no NDK is installed; GATE_ANDROID_TARGET_DIR (set by the remote gate) keeps its files out of the host target dir.
 prc_platforms=0 platforms_log=/tmp/gate-platforms-$name.log
@@ -227,6 +240,16 @@ if [ "$shell_tests" -eq 1 ]; then
     sdone=$(date +%s)
 fi
 lrc=$(shell_rc l) vrc=$(shell_rc v) crc=$(shell_rc c) prc=$(shell_rc p) qrc=$(shell_rc q) grc=$(shell_rc g) frc=$(shell_rc f)
+cache_rc=0
+if [ -f "$RCD/snapshots/stats.jsonl" ]; then
+    cp "$RCD/snapshots/stats.jsonl" "/tmp/gate-snapshots-$name.jsonl" || cache_rc=1
+    python3 - "$RCD/snapshots/stats.jsonl" <<'CACHE' || cache_rc=1
+import json, sys
+rows = [json.loads(line) for line in open(sys.argv[1])]
+hits = sum(bool(row.get("hit")) for row in rows)
+print(f"gate: shared snapshots {len(rows)} requests, {hits} reused, {len(rows)-hits} renderer starts")
+CACHE
+fi
 rm -rf "$RCD"
 end=$(date +%s)
 cp "$T" /tmp/gate-test.log
@@ -239,6 +262,7 @@ if [ "$shell_tests" -eq 1 ]; then
 else
     echo "gate: profile $profile; tests $((tdone - start)) s, total $((end - start)) s"
 fi
+echo "gate: stages runner+doc $((runner_done - start)) s, brick corpus+UI $((brick_done - runner_done)) s, serial timing $((timing_done - brick_done)) s, platforms $((tdone - timing_done)) s, shells $((sdone - tdone)) s"
 if [ "$docs_only" -eq 1 ]; then
     echo "gate: SKIPPED integration tests: only documents changed ($(echo "$changed" | wc -l) files, none read by the Rust build or the manual); unit tests with the doc checks ran"
 fi
@@ -247,6 +271,10 @@ if [ "$shell_tests" -eq 0 ]; then
 fi
 
 fail=0
+if [ "$cache_rc" -ne 0 ]; then
+  echo "GATE: snapshot cache accounting FAILED"
+  fail=1
+fi
 if [ "$shell_run_rc" -ne 0 ]; then
   echo "GATE: shell test coordinator FAILED (exit $shell_run_rc; incomplete run)"
   fail=1

@@ -75,7 +75,7 @@ fn run(tmp: &Path, wayland: &Option<Stub>, look: &str, lang: &str) -> Bench {
     copy_dir(&tmp.join("data"), &data);
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
     cmd.args(["--snapshot", &format!("bench-shelf:{look}"), tmp.join("bench.png").to_str().unwrap()])
-        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .env("POCKETUI_LANG", lang)
         .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
         .env("POCKETUI_DATA", &data);
@@ -130,7 +130,7 @@ fn check(look: &str, lang: &str, b: &Bench) -> Result<(), String> {
 fn a_move_on_home_draws_no_letters_runs_no_patterns_and_is_quick_in_every_look() {
     let _tmp_guard = tempfile::tempdir().unwrap();
     let tmp = _tmp_guard.path().to_path_buf();
-    let status = Command::new("python3")
+    let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()

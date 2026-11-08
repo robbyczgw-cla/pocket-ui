@@ -93,7 +93,7 @@ impl App {
     /// The Battery lights follow the charger and the level: looked at again every half minute, written only when the look changes.
     /// The time of the next look, for the loop's wake-up; None when the lights are not on Battery.
     pub(crate) fn brick_leds_tick(&mut self, now: Instant) -> Option<Instant> {
-        if !pocket_ui::device::brick() {
+        if !pocket_ui::brick_profile::board().is_some_and(|b| b.leds()) {
             return None;
         }
         let dark = self.sleep.state() != pocket_ui::sleep::State::Awake;

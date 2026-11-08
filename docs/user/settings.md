@@ -18,7 +18,7 @@ Left/Right, right in the list, and the selected one shows **‹ ›** round its 
 | Category | What is in it |
 |---|---|
 | **Look** | Layout, Systems on the shelf, Cozy extras, Appearance, Colours, Style, Text size, Screen colour, Night light. See [Look](#look) |
-| **Sound & feel** | Animations, Playful cases, Old-TV switch-on, Motion, Zoom in the pause menu, Sounds, Case sounds, Haptics, LEDs. See [Sound & feel](#sound--feel) |
+| **Sound & feel** | Animations, Playful cases, Old-TV switch-on, Motion, Zoom in the pause menu, Sounds, Case sounds, Haptics, LEDs. See [Sound & feel](settings-sound.md) |
 | **Playing** | On start, Continue where I quit, Remind me where I was, Buttons, Over the game, Screen frames, Performance & fan, Battery, RetroAchievements. See [Playing](#playing) |
 | **Games** | Add games, Game check, Starter pack, Pictures & extras, From EmulationStation, Screenshots, Curator, PC streaming. See [Games](#games) |
 | **Connections** | Wi-Fi, Bluetooth, Tailscale, Sync, Remote access (SSH), Web companion. See [Connections](settings-system.md#connections) |
@@ -36,6 +36,8 @@ category's list instead of moving on. The first start's time zone has no page of
 **Time** does the same job. Settings → Help & tools → **First-start setup** runs the whole first start again
 ([Getting started](getting-started.md#3-first-start)).
 
+**Sound & feel** (what moves, what you hear and what you feel) has a page of its own: [Settings: Sound & feel](settings-sound.md).
+
 ## Look
 
 Settings → **Look**. How pocket-ui looks, in the first start's order: first how your games stand (the layout, which
@@ -46,7 +48,7 @@ Easy to read, Large text and Reduced motion together, is a card of the [Tour](to
 |---|---|
 | **Layout** | How your games stand: Shelf, Easy, Minimal, Split, Cards or Cabinet, each a live preview of your own shelf. See [Choose a look](#choose-a-look) |
 | **Systems on the shelf** | Which systems are on Home, a tick each. The row says "1 hidden" (or 2, 3...) while a system with games is off the shelf: this is the way back. See [Systems on the shelf](#systems-on-the-shelf) |
-| **Cozy extras** | The little touches you see, each on or off on its own: the TV on the cabinet, stickers, printed discs, the memory card in the pause menu, light by time of day, decorations, game connections, Rediscover. See [Cozy extras](#cozy-extras) |
+| **Cozy extras** | The little touches you see, each on or off on its own: the TV on the cabinet, stickers, printed discs, the memory card in the pause menu, light by time of day, decorations, game connections, Rediscover. See [Cozy extras](settings-sound.md#cozy-extras) |
 | **Appearance** | **Dark** (the default), **Light** or **Automatic**. A or Left/Right switches it. See [Appearance](#appearance) |
 | **Colours** | The colours of every page: Warm, Indigo Cube, Grey Brick, Green X or Blue Station; with the Retro style, Cocoa or Pea. A or Left/Right switches it. See [Colours and style](theme.md) |
 | **Style** | Barlow, Pixel or Rounded type, or **Retro**: pixel letters, frames and icons everywhere, with its own colours and menu sounds. A or Left/Right switches it. See [Colours and style](theme.md#style) |
@@ -60,7 +62,7 @@ Settings → Look → **Layout** is the first start's last page ("How your games
 the shelf itself with a few of your systems and one game (with its box art when it has one; on an SD card without
 games, a built-in set of "Sample game"s). It works like every list: Left/Right switch between the six looks, and the
 shelf behind Settings takes the look at once. See [Playing](playing.md#looks) for what each look does. Under the
-preview are three rows, the [appearance](#appearance), the [motion](#motion) and the [animations](#animations):
+preview are three rows, the [appearance](#appearance), the [motion](settings-sound.md#motion) and the [animations](settings-sound.md#animations):
 Down reaches each one (a bar beside it shows which), Left/Right change it, Up goes back to the looks. A keeps
 everything as shown; B ("Cancel") goes back to Settings and puts back the look and the rows as they were when you
 came. The hint bar names the keys of the row you are on.
@@ -138,95 +140,6 @@ The first start does not have this list; every system is on the shelf until you 
 
 When no system has games yet, the page says so and shows how they come: once games are on the SD card, their systems
 show up here.
-
-## Sound & feel
-
-Settings → **Sound & feel**. What moves, what you hear and what you feel in your hands.
-
-| Entry | What it holds |
-|---|---|
-| **Animations** | **Cozy**: watch your game slide into the console, and the pages, the box and the menus move a little slower and softer. **Quick**: straight into the game, the animations as short as they get. A or Left/Right switches it. Cozy in the Shelf and Cabinet looks until you choose, Quick in the others. See [Animations](#animations) |
-| **Playful cases** | Cases spring out and wiggle, each game goes into its console its own way, the open box's disc turns, spines lean as you scroll ([Playing](playing.md#starting-a-game)). Shelf and Cabinet looks only, with Motion on Full. **On with Cozy, Off with Quick** until you switch it. A or Left/Right switches it |
-| **Old-TV switch-on** | The game's picture comes on like an old TV when it starts. Shelf and Cabinet looks only, with Animations on Cozy and Motion on Full. **On** at the start. A or Left/Right switches it |
-| **Motion** | **Full** (the default), **Reduced** or **Off**: how much the menus move. A or Left/Right switches it. See [Motion](#motion) |
-| **Zoom in the pause menu** | Whether the pause menu's first page lists Zoom: **Off** (the default) or **On**. Zoom is always under Options, and listed here too while Easy to read is on. A switches it. See [Zoom in the pause menu](#zoom-in-the-pause-menu) |
-| **Sounds** | Soft clicks in the menus (not the game's volume or the screen brightness: those are on HOME, [Quick settings](quick-settings.md)). A turns them on or off, Left/Right set how loud. See [Playing](playing.md#menu-sounds) |
-| **Case sounds** | Cases click open, cartridges and discs go in with a sound, the old TV hums on. Shelf and Cabinet looks only. Needs Sounds on; the menu sounds are not affected. **On** at the start. A or Left/Right switches it |
-| **Haptics** | A very short tick in the menus as the selection moves. A turns it on or off. Off by default |
-| **LEDs** | The lights around the sticks: off, one colour, or the battery colours. Only on a device with sticks. On the TrimUI Brick the row is called **Lights & buttons** and holds the Brick's own lights, the F1 and F2 keys and the mute slider. See [LEDs](#leds) |
-
-Playful cases, Old-TV switch-on and Case sounds sit beside the switches they need (Animations, Motion, Sounds). While
-one of those keeps them from showing, the line at the bottom says which.
-
-### Animations
-
-Settings → Sound & feel → **Animations**. The first start doesn't ask: the look decides until you choose here.
-
-- **Cozy**: when you start a game in the Shelf or the Cabinet look, you watch its case open and the cartridge or disc slide into the console
-  (about a second, with a click). Pages, the game's box and the menus take about a third longer and ease in more softly.
-- **Quick**: straight into the game; the animations as short as they get.
-
-Until you choose, the look decides: Cozy for Shelf and Cabinet, Quick for Minimal, Card and Split. Once you choose, it stays
-yours, whatever look you pick later. With Cozy, a game of pocket-core's is shown once the animation is over, so it starts
-about a second later than with Quick (a game that needs longer to load is not held at all); any button skips the rest.
-The picture then comes on like an old TV, in a third of a second: dark, a bright line in the middle, and the picture opens out of it
-(with Motion on Full; Quick and Reduced skip it, and a button press cuts it short).
-**Motion** (Reduced, Off) still overrides it: nothing slides where Motion says so.
-
-### Motion
-
-Settings → Sound & feel → **Motion**; A or Left/Right switches it (the first start keeps the default; its Easy to read,
-L2, switches Reduced on with Large text).
-
-- **Full**, the default: the selection glides to the row you move to, lists scroll smoothly, pages slide in,
-  the game card rises out of its label, the hints and small messages fade.
-- **Reduced**: only fades. Pages and messages still fade in, but nothing slides, grows or glides.
-- **Off**: no animation at all; every press shows its result in the next frame.
-
-None of them makes anything slower: a press changes what is selected or opened at once, whichever you choose,
-and pressing again in the middle of a movement takes it straight to the new place. The choice is saved at once.
-
-### Zoom in the pause menu
-
-Settings → Sound & feel → **Zoom in the pause menu**: the [pause menu](pause-menu.md) on pocket-ui's own host lists **Zoom** before
-Quit. **Off** is the default, because the magnifier is a help for small text and most players never need it: then Zoom is a
-row of Options, next to Picture and Controls, and can be a [shortcut](options.md#shortcuts) (HOME + X). While
-[Easy to read](easy-to-read.md#easy-to-read) is on, the row is on the first page whatever this switch says. A switches it.
-See [Zoom](easy-to-read.md#zoom).
-
-### Cozy extras
-
-Settings → Look → **Cozy extras** switches the little touches you see, one by one, for when you like some of them and
-not others. Up/Down move, A (or Left/Right) switches the selected one **On** or **Off**; it takes effect at once and is
-kept across restarts. The line under the list says what the selected one does and in which looks you see it. Reset
-settings (System → Backup & reset) puts them back as they start. The extras you hear or that move are entries of
-[Sound & feel](#sound--feel) (Playful cases, Old-TV switch-on, Case sounds); the slideshow before the screen goes off
-is in System → [Sleep & power](quick-settings.md#sleep--power-settings).
-
-| Extra | What it does | Start |
-|---|---|---|
-| **TV on the cabinet** | A small old TV on top of the cabinet shows the selected game. Cabinet look only | On |
-| **Stickers on cases** | Your stickers on the cases. Off hides them on the shelf and the box; they stay on the game and on its card's Stickers & labels row. Shelf and Cabinet looks only | On |
-| **Printed discs** | Discs printed with their cover's art and title. Off: a plain disc in its console's colour. Shelf and Cabinet looks only | On |
-| **Memory card in the pause menu** | Save and Load in the pause menu show the game's whole memory card or cartridge with its blocks instead of the slim row of blocks. The info page and the box's back always show it | Off |
-| **Light by time of day** | The room's light follows your Pocket's clock: cool and bright in the morning, warm in the evening with the lamp glowing, dim at night. Very gentle: covers and text keep their colours. Shelf and Cabinet looks only | On |
-| **Decorations** | Things on your shelves that grow with your play: the plant grows with your hours, a trophy after your first completed game, a framed "100 %" after your first 100 % sticker, a small figurine for each system you played for 10 hours. Only where a shelf has room. This works with Light by time of day on or off. Off: the shelves as they were. Shelf and Cabinet looks only | On |
-| **Game connections** | The developer, publisher, series and genre on the info page and the box's back lead to your other games with the same one ([Connections](library.md#connections)). Off: they are only shown | On |
-| **Rediscover** | Games you haven't played for a long time, as a row in Curator's list | On |
-
-### LEDs
-
-Settings → Sound & feel → **LEDs** is for the lights around the two sticks. They are **off** unless you turn them on here:
-ROCKNIX lights them at full brightness out of the box, and pocket-ui switches them off the first time it starts.
-
-- **Lights** has three choices. **Off** keeps them dark. **Colour** makes both sticks glow in one colour. **Battery**
-  uses ROCKNIX's own battery colours: green when charged, orange and then red as it runs low, always at full brightness.
-- **Colour** (only with Lights on Colour) picks a calm colour: blue, warm, teal, green, violet or rose. **The game's**
-  is warm in the menus and takes the colour of the system you are playing while a game runs.
-- **Brightness** (also only with Colour) has four steps: 25, 50, 75 and 100%.
-
-Left/Right change the selected row, A moves on to the next choice. The choice takes effect at once, is kept across restarts,
-and is the one ROCKNIX applies at the next boot. The lights also go dark while the device sleeps, as ROCKNIX does it.
 
 ## Playing
 

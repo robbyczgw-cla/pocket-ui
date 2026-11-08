@@ -22,7 +22,7 @@ RetroAchievements isn't available for this game.	RetroAchievements no está disp
 RetroAchievements: {s}	RetroAchievements: {s}
 {n} of {m} achievements in {s}	{n} de {m} logros en {s}
 Log out	Cerrar sesión
-Sign in	Iniciar sesión
+Sign in	Entrar
 Press A again to log out. B keeps you signed in.	Pulsa A otra vez para cerrar sesión. B la mantiene.
 Removes the sign-in key from the Pocket.	Quita la clave de acceso del Pocket.
 With your retroachievements.org account.	Con tu cuenta de retroachievements.org.
@@ -55,7 +55,7 @@ User name	Usuario
 Password for {s}	Contraseña de {s}
 Next	Siguiente
 Your user name on retroachievements.org.	Tu usuario en retroachievements.org.
-Sent once to sign in, never kept. The Pocket keeps only the sign-in key.	Se envía una vez para iniciar sesión, nunca se guarda. El Pocket solo guarda la clave de acceso.
+Sent once to sign in, never kept. The Pocket keeps only the sign-in key.	Se envía una vez al entrar; solo se guarda la clave, nunca la contraseña.
 Type	Escribir
 Delete	Borrar
 Shift	Mayús
@@ -257,7 +257,7 @@ Label	Etiqueta
 # --- My rating, sort orders, Surprise me (Curator)
 Status and rating	Estado y puntuación
 My rating	Mi puntuación
-Rating	Puntuación
+Rating	Nota
 None. Press Y	Ninguna. Pulsa Y
 Stars	Estrellas
 Rating removed	Puntuación quitada
@@ -446,7 +446,7 @@ Players	Jugadores
 Player {n}	Jugador {n}
 No controller	Sin mando
 Press A on the controller for Player {n}.	Pulsa A en el mando para el jugador {n}.
-One press per controller, then the next player is selected.	Una pulsación por mando; luego se selecciona al siguiente jugador.
+One press per controller, then the next player is selected.	Una pulsación por mando, por orden de jugador.
 Waiting for a free player: {s}	Esperando un jugador libre: {s}
 Choose	Elegir
 
@@ -813,7 +813,7 @@ Sources	Fuentes
 Emulator	Emulador
 Scroll	Desplazar
 Hardware	Hardware
-Launch price	Precio de lanzamiento
+Launch price	Precio inicial
 Also known as {s}	También conocida como {s}
 Timeline	Cronología
 Discontinued	Retirada
@@ -1581,6 +1581,10 @@ Installed. Restarting…	Instalado. Reiniciando…
 {t}, {s} available	{t}, {s} disponible
 {s}, update waiting for restart	{s}, actualización a la espera de reinicio
 Check again	Comprobar de nuevo
+Install now	Instalar ahora
+Check for updates automatically	Buscar actualizaciones automáticamente
+Check automatically	Buscar automáticamente
+The battery is at {n}%. Plug in the charger first, so it cannot run out during the update.	La batería está al {n} %. Conecta antes el cargador, para que no se agote durante la actualización.
 Install pocket-ui {s}	Instalar pocket-ui {s}
 pocket-ui {s} is ready. Your games and settings stay.	pocket-ui {s} ya está disponible. Tus juegos y ajustes se quedan.
 Press A for Settings › System › Updates, B to close.	Pulsa A para ir a Ajustes › Sistema › Actualizaciones, B para cerrar.
@@ -1982,7 +1986,7 @@ fills the screen	llena la pantalla
 OK	OK
 Turn off file sharing	Desactivar compartir archivos
 Turn on file sharing	Activar compartir archivos
-Copy your game files	Copia los archivos de tu juego
+Copy your game files	Copia tus juegos
 {s} can't start yet: it needs files from your own copy of the game, and they aren't there.	{s} aún no puede iniciarse: necesita archivos de tu propia copia del juego, y no están.
 {s} needs files from your own copy of the game. pocket-ui doesn't download them.	{s} necesita archivos de tu propia copia del juego. pocket-ui no los descarga.
 and /{s}	y /{s}
@@ -3725,7 +3729,7 @@ The network answers every address with its own page.	La red responde a cualquier
 pocket-ui checks again every {n} seconds and says when you're online.	pocket-ui vuelve a comprobar cada {n} segundos y avisa cuando tengas conexión.
 Other ways	Otras formas
 Hotspot, front desk	Punto de acceso, recepción
-Other ways online	Otras formas de conectarse
+Other ways online	Otras conexiones
 Your phone's hotspot	El punto de acceso de tu teléfono
 Turn on the hotspot on your phone and choose it on the Wi-Fi page. It uses your mobile data, and works on every network.	Activa el punto de acceso en tu teléfono y elígelo en la página de Wi-Fi. Usa tus datos móviles y funciona en cualquier red.
 Wi-Fi sharing from a phone	Compartir Wi-Fi desde un teléfono
@@ -4016,7 +4020,7 @@ Printed discs	Discos impresos
 Game connections	Conexiones entre juegos
 Light by time of day	Luz según la hora del día
 Decorations	Decoraciones
-Slideshow before screen off	Presentación antes de apagar la pantalla
+Slideshow before screen off	Presentación previa
 Playful cases	Cajas juguetonas
 Cases click open, cartridges and discs go in with a sound. Menu sounds stay as they are.	Las cajas se abren con un clic, los cartuchos y discos entran con sonido. Los sonidos de menú no cambian.
 The game's picture comes on like an old TV when it starts.	La imagen del juego se enciende como una tele antigua al iniciarse.
@@ -4382,7 +4386,7 @@ For grown-ups: hold SELECT and START for 5 seconds.	Para adultos: mantén SELECT
 No limit	Sin límite
 This game won't start right now. Press a button to pick another one.	Este juego no arranca ahora. Pulsa un botón para elegir otro.
 {n} hidden	{n} ocultos
-This device has no Wi-Fi, so the downloads aren't available.	Este dispositivo no tiene Wi-Fi, así que las descargas no están disponibles.
+This device has no Wi-Fi, so the downloads aren't available.	Sin Wi-Fi, las descargas no están disponibles.
 Splore is PICO-8's game browser, not a game, and it needs the PICO-8 program from lexaloffle.com in roms/pico-8. Your own PICO-8 games work without it.	Splore es el explorador de juegos de PICO-8, no un juego, y necesita el programa PICO-8 de lexaloffle.com en roms/pico-8. Tus propios juegos de PICO-8 funcionan sin él.
 The clock is on UTC. Set your time zone in Settings › System › Time.	El reloj va en UTC. Elige tu zona horaria en Ajustes › Sistema › Hora.
 Forgot it? Put a file called {s} on the card and restart.	¿Lo olvidaste? Pon un archivo llamado {s} en la tarjeta y reinicia.
@@ -4526,7 +4530,7 @@ Menu	Menú
 Analog stick	Stick analógico
 C buttons	Botones C
 C mode	Modo C
-Hold R2 and the face buttons are C buttons.	Mantén R2 y los cuatro botones de la derecha son los botones C.
+Hold R2 and the face buttons are C buttons.	Con R2, los cuatro botones derechos son C.
 In colour: what you changed in Options › Controls.	En color: lo que cambiaste en Opciones › Controles.
 Brighten solar sensor	Sensor solar: más luz
 Darken solar sensor	Sensor solar: menos luz
@@ -4689,3 +4693,17 @@ There isn't enough free memory for this update. Restart the device and try again
 Unsafe update temporary folder.	La carpeta temporal de actualización no es segura.
 Restart the device to finish recovering the previous update before trying again.	Reinicia el dispositivo para terminar de recuperar la actualización anterior antes de intentarlo de nuevo.
 Pixel letters, frames and icons.	Letras, marcos e iconos de píxeles.
+No devices found	No se encontraron dispositivos
+Put the device in pairing mode, then select Search for devices.	Pon el dispositivo en modo de vinculación y selecciona Buscar dispositivos.
+
+None · Y	Ninguna · Y
+
+Recent	Recientes
+No cheats found for this game	No se encontraron trucos para este juego
+The included cheat database has no matching codes. You can keep playing normally.	La base de datos incluida no tiene códigos para este juego. Puedes seguir jugando normalmente.
+
+# Optional GBA hardware picture in Cozy extras.
+GBA console	Consola GBA
+Choose the GBA console: Game Boy Advance or Game Boy Advance SP. Changes its picture everywhere and its cartridge slot at launch.	Elige la consola GBA: Game Boy Advance o Game Boy Advance SP. Cambia su imagen en todas las pantallas y la ranura del cartucho al iniciar.
+Game Boy Advance	Game Boy Advance
+Game Boy Advance SP	Game Boy Advance SP

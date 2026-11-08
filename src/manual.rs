@@ -60,6 +60,7 @@ pub const PAGES: &[(&str, &str)] = &[
     ("controls-settings", include_str!("../docs/user/controls-settings.md")),
     ("controls-card", include_str!("../docs/user/controls-card.md")),
     ("settings", include_str!("../docs/user/settings.md")),
+    ("settings-sound", include_str!("../docs/user/settings-sound.md")),
     ("settings-system", include_str!("../docs/user/settings-system.md")),
     #[cfg(not(feature = "brick"))]
     ("quick-settings", include_str!("../docs/user/quick-settings.md")),

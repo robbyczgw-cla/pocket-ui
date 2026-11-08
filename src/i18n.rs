@@ -657,7 +657,7 @@ pub fn tr_in(lang: Lang, s: &str) -> String {
 /// bypass this in the caller; raw manual prose uses it too. Other devices keep their HOME key.
 pub fn device_text(text: Tr<'_>) -> Tr<'_> {
     #[cfg(feature = "brick")]
-    if crate::device::current().model == Some(crate::device::Model::Brick)
+    if matches!(crate::device::current().model, Some(crate::device::Model::Brick(_)))
         && (text.contains("HOME") || text.contains("Pocket") || BRICK_PAGE_NAMES.iter().any(|(long, _)| text.contains(long)))
     {
         return Tr::Shared(Arc::from(brick_text(&text)));
@@ -699,7 +699,7 @@ pub fn brick_words(s: &str) -> String {
             Some(c) => !(c.is_alphanumeric() || c == '-' || c == '_'),
             None => true,
         };
-        out.push_str(if !named && word_starts && word_ends { "Brick" } else { "Pocket" });
+        out.push_str(if !named && word_starts && word_ends { crate::brick_profile::board().unwrap_or(crate::brick_profile::Board::Brick).word() } else { "Pocket" });
         rest = after;
     }
     out.push_str(rest);

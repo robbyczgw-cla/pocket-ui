@@ -22,6 +22,28 @@ Nintendo-Game-Boy-Advance-Purple-FL.jpg, Evan Amos, public domain, https://commo
 Painted out with the surrounding plastic (tools/gba_prep.py): Nintendo emboss, GAME BOY ADVANCE sticker, START/SELECT/POWER/PHONES/VOLUME lettering.
 PixelLab i2p x2 (strength 300). Medium sticks out behind the top edge (behind:true), no over.png.
 
+## gba-sp
+
+All four rig PNGs are **CC0 1.0**, **modified via PixelLab** (two photo conversions plus a masked empty-port edit):
+`base.png`, `over.png` and `under.png` derive from Evan-Amos's public-domain
+[Gameboy-Advance-SP-Mk2.jpg](https://commons.wikimedia.org/wiki/File:Gameboy-Advance-SP-Mk2.jpg)
+(PD-self; photo retouch SerhioMagpie). `top.png` derives from Benoît Prieur's **CC0 1.0**
+[Game Boy Advance SP Tribal Edition - 1.JPG](https://commons.wikimedia.org/wiki/File:Game_Boy_Advance_SP_Tribal_Edition_-_1.JPG).
+The open photo supplies the actual lower shell, hinge, inner bezel and screen. The outer-lid photo is
+straightened, its tribal decoration removed using adjacent photographed plastic, and recoloured Pearl Blue.
+Lettering is removed; PixelLab output is cut out and registered with `assets/systems/tools/sp_finish.py`.
+The clamshell's two sides share the photographed hinge, open before insertion and remain open.
+The cartridge approaches the **bottom/front** slot contacts first, label facing the underside;
+its in-plane turn rotates both axes together, never mirrors the picture. The same geometry is used in Quick.
+The GBA rear cartridge retains its separate CC BY-SA 4.0 licence: [game sources](../game/SOURCES.md).
+
+The SP source photograph contains a flush inserted cartridge. A masked PixelLab inpaint removes it from the system picture and `base.png`. `over.png` retains the photographed lower shell and blue rim, with the empty mouth transparent: the moving cartridge is drawn between the dark recess and the shell. All five SP assets are individually credited and dedicated CC0 1.0 in NOTICE.md.
+
+Physical references (orientation only, no art copied): [Nintendo SP instruction booklet, section 5](https://csassets.nintendo.com/noaext/image/private/t_KA_PDF/agsmanual_english?_a=DATC1RAAZAA0),
+[iFixit bottom-shell replacement, step 1](https://www.ifixit.com/Guide/Nintendo+Game+Boy+Advance+SP+Bottom+Shell+Replacement/12735)
+(underside view with labelled GBA cartridge), and [Willem's real open SP](https://willem.com/en/2017-03-26_repairing-a-nintendo-gameboy-advance-sp/)
+(front view with the GB cartridge's screw/rear face up).
+
 ## megadrive
 Sega-Genesis-Mk2-Console-01.jpg, Evan Amos (Wikimedia Commons), Public domain.
 https://commons.wikimedia.org/wiki/File:Sega-Genesis-Mk2-Console-01.jpg
@@ -86,3 +108,6 @@ Round 2: tray rebuilt at 130 mm out (+1 credit), 5 art px transparent padding at
 
 ## All rigs, 2026-11-02
 The photo's light backdrop left on `base.png`'s outline was cleared: an edge pixel of low colour clearly lighter than the plastic within 5 pixels (30 to 670 pixels a console), and on the GBA three grey patches of the photo's shadow at its corners. No PixelLab. The GameCube's `under.png` kept the photo's white backdrop along the lid's front edge: filled with the plastic above it.
+
+## Discs, 2026-11-08
+No new pictures. The Saturn's `under.png` (the lid's underside) was darkened to the brightness of its top (RGB x 0.446; it was a pale grey slab above a black console, the underside of that lid is the same black moulding): a recolour of the existing PixelLab picture, no new conversion. The Saturn's and Dreamcast's `seat.u`/`seat.v` were enlarged by 1.25 and 1.1 so their discs are as wide beside the console as the real 12 cm disc (tests in `src/insert_rig.rs`).

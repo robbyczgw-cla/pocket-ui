@@ -251,8 +251,13 @@ impl Page {
             self.sources = Some(at);
             hits.scroll = Some(scroll_list(at, self.sources_max));
         } else {
-            let title = text.fit(Face::Title, 67, &console.name, full_w - corner_w);
-            text.draw(c, Face::Title, 67, MARGIN, TITLE_BASE, pal().text, &title);
+            // A complete system name in the existing title slot: one size smaller, then a known short alias.
+            let room = full_w - corner_w;
+            let name = if text.width(Face::Title, 50, &console.name) > room {
+                console.aka.iter().min_by_key(|name| name.len()).unwrap_or(&console.name)
+            } else { &console.name };
+            let (px, title) = text.fit_sizes(Face::Title, &[67, 50], name, room);
+            text.draw(c, Face::Title, px, MARGIN, TITLE_BASE, pal().text, &title);
             if let Some(h) = &console.lines.headline {
                 let h = text.fit(Face::Body, 28, h, full_w);
                 text.draw(c, Face::Body, 28, MARGIN, HEAD_BASE, look.dim, &h);
@@ -554,13 +559,24 @@ const FACT_KEY: i32 = 190;
 #[allow(clippy::too_many_arguments)]
 pub fn paint_facts(c: &mut Canvas, text: &mut Text, rows: &[Row], x: i32, first: i32, w: i32, bottom: i32, label: u32, value: u32) -> usize {
     // Taller rows and a wider label column with larger text (Settings → Text size, `type_scale`).
-    let (step, key) = (crate::type_scale::row(FACT_ROW, 28), crate::type_scale::wide(FACT_KEY, 28));
+    let regular = crate::type_scale::row(FACT_ROW, 28);
+    // The Brick's larger minimum must not cost a fact when one smaller line keeps more whole rows in the same band.
+    let compact = crate::type_scale::line(24, 12);
+    let regular_rows = ((bottom - first + regular) / regular).max(0) as usize;
+    let compact_rows = ((bottom - first + compact) / compact).max(0) as usize;
+    #[cfg(feature = "brick")]
+    let brick = crate::device::brick();
+    #[cfg(not(feature = "brick"))]
+    let brick = false;
+    let smaller = brick && rows.len() > regular_rows && compact_rows > regular_rows;
+    let (font, step) = if smaller { (24, compact) } else { (28, regular) };
+    let key = crate::type_scale::wide(FACT_KEY, 28);
     let room = bottom - first + step;
     let shown = consoles::rows_that_fit(rows, room, step);
     for (i, r) in shown.iter().enumerate() {
         let y = first + i as i32 * step;
-        text.draw(c, Face::Body, 28, x, y, label, r.label);
-        let (v, px) = consoles::pick_value(&r.values, w - key, 28, 24, |s, px| text.width(Face::Body, px, s));
+        text.draw(c, Face::Body, font, x, y, label, r.label);
+        let (v, px) = consoles::pick_value(&r.values, w - key, font, 24, |s, px| text.width(Face::Body, px, s));
         text.draw(c, Face::Body, px, x + key, y, value, &v);
     }
     shown.len()

@@ -42,6 +42,8 @@ boot() {
     mount_part() { echo "mount_part $*" >>$T/calls; }
     mount() { echo "mount $*" >>$T/calls; }
     progress() { echo "progress $*" >>$T/calls; }
+    # The card is a fixture: record the barrier without flushing unrelated host writes.
+    sync() { echo "sync $*" >>$T/calls; }
     disk=LABEL=STORAGE
     check_update() { echo "check_update" >>$T/calls; }
     mount_storage() { if [ -f $FL/mount-storage.sh ]; then . $FL/mount-storage.sh; else mount_part "$disk" /storage rw,noatime; fi; }
@@ -325,6 +327,7 @@ firststart() {
       umount() { "$T/gtools/umount" "$@"; }
       blkid() { "$T/gtools/blkid" "$@"; }
       reboot() { "$T/gtools/reboot" "$@"; }
+      sync() { echo "sync $*" >>"$T/g/calls"; }
       . "$HERE/games-first-start.sh"
     ' >/dev/null 2>&1
 }

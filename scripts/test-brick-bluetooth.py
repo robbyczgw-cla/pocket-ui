@@ -106,6 +106,63 @@ else:
         self.assertFalse((self.d / 'card.mount').exists())
         self.assertFalse((self.d / 'state/bluetooth-on').exists())
 
+    def factory_service(self, *, foreign=False):
+        """TrimUI's original menu starts procd BlueZ and links its persistent keys."""
+        keys = self.d / 'firmware-keys'
+        keys.mkdir()
+        (keys / 'stock-pairing').write_text('keep the stock pairing')
+        Path(self.env['BRICK_BT_STORE']).symlink_to(keys)
+        self.env['BRICK_BT_FIRMWARE_KEYS'] = str(keys)
+        proc = self.d / 'firmware-proc/424242'
+        proc.mkdir(parents=True)
+        self.env['BRICK_BT_FIRMWARE_PROC'] = str(proc.parent)
+        (proc / 'exe').symlink_to(self.env['BRICK_BT_DAEMON'])
+        daemon = self.env['BRICK_BT_DAEMON']
+        (proc / 'cmdline').write_bytes((daemon + '\0' + ('--other' if foreign else '-nd') + '\0').encode())
+        (self.d / 'firmware-running').touch()
+        self.stub('BRICK_BT_PIDOF', 'pidof', '''import os, sys
+from pathlib import Path
+if Path(os.environ['BRICK_BT_FIRMWARE_PROC']).parent.joinpath('firmware-running').exists():
+    print('424242')
+else: sys.exit(1)
+''')
+        self.stub('BRICK_BT_FIRMWARE_INIT', 'firmware-init', '''import os, sys
+from pathlib import Path
+assert sys.argv[1:] == ['stop']
+root = Path(os.environ['BRICK_BT_FIRMWARE_PROC']).parent
+(root / 'firmware-stopped').touch()
+(root / 'firmware-running').unlink()
+''')
+        return keys
+
+    def test_factory_boot_can_enable_bluetooth_without_changing_stock_pairings(self):
+        keys = self.factory_service()
+        self.call('start')
+        self.call('status')
+        self.assertTrue((self.d / 'firmware-stopped').exists())
+        self.assertFalse(Path(self.env['BRICK_BT_STORE']).is_symlink())
+        self.assertEqual(list(keys.iterdir()), [keys / 'stock-pairing'])
+        self.assertEqual((keys / 'stock-pairing').read_text(), 'keep the stock pairing')
+        self.call('stop')
+        self.assertTrue(Path(self.env['BRICK_BT_STORE']).is_symlink())
+        self.assertEqual(Path(self.env['BRICK_BT_STORE']).resolve(), keys)
+        self.call('start')
+        self.call('status')
+
+    def test_factory_handover_refuses_a_daemon_from_another_session(self):
+        keys = self.factory_service(foreign=True)
+        self.assertNotEqual(self.call('start', check=False).returncode, 0)
+        self.assertFalse((self.d / 'firmware-stopped').exists())
+        self.assertTrue(Path(self.env['BRICK_BT_STORE']).is_symlink())
+        self.assertEqual((keys / 'stock-pairing').read_text(), 'keep the stock pairing')
+
+    def test_failed_factory_mount_restores_the_stock_storage_link(self):
+        keys = self.factory_service()
+        self.env['BRICK_BT_MOUNT'] = '/bin/false'
+        self.assertNotEqual(self.call('start', check=False).returncode, 0)
+        self.assertTrue(Path(self.env['BRICK_BT_STORE']).is_symlink())
+        self.assertEqual(Path(self.env['BRICK_BT_STORE']).resolve(), keys)
+
     def test_absent_bus_does_not_start_or_mount(self):
         self.env['BRICK_BT_BUS'] = str(self.d / 'missing-bus')
         self.assertNotEqual(self.call('start', check=False).returncode, 0)

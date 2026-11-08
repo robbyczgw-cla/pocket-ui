@@ -58,7 +58,7 @@ fn shot(tmp: &Path, stub: Option<&Stub>, state: &str, lang: &str, text_size: &st
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
     cmd.args(["--snapshot", &format!("{state}:device=rgdsplus"), png.to_str().unwrap()])
         .env("PATH", path)
-        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .env("POCKETUI_LANG", lang)
         .env("POCKETUI_TEXT_SIZE", text_size)
         .env("POCKETUI_SNAPSHOT_SIZE", "1024x768")
@@ -91,7 +91,7 @@ fn the_lower_screen_at_large_text_in_german() {
 
 fn check(langs: &[(&str, &str)]) {
     let tmp = tempfile::tempdir().unwrap();
-    let status = Command::new("python3")
+    let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.path().to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()

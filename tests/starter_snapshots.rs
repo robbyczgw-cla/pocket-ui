@@ -58,7 +58,7 @@ fn painted(tmp: &Path, stub: &Option<Stub>, state: &str) -> Vec<String> {
     }
     let out = cmd
         .args(["--snapshot", state, png.to_str().unwrap()])
-        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .env("POCKETUI_LANG", "de")
         .env("POCKETUI_I18N_MISSES", &record)
         .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
@@ -73,7 +73,7 @@ fn painted(tmp: &Path, stub: &Option<Stub>, state: &str) -> Vec<String> {
 fn an_empty_card_shows_the_starter_pack_and_the_page_speaks_plainly() {
     let _tmp_guard = tempfile::tempdir().unwrap();
     let tmp = _tmp_guard.path().to_path_buf();
-    let status = Command::new("python3")
+    let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()
@@ -119,7 +119,7 @@ fn an_empty_card_shows_the_starter_pack_and_the_page_speaks_plainly() {
 fn the_offline_note_on_an_empty_home_wraps_inside_the_screen() {
     let tmp_guard = tempfile::tempdir().unwrap();
     let tmp = tmp_guard.path();
-    let status = Command::new("python3")
+    let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()
@@ -133,7 +133,7 @@ fn the_offline_note_on_an_empty_home_wraps_inside_the_screen() {
     }
     let out = cmd
         .args(["--snapshot", "starter-home:offline", png.to_str().unwrap()])
-        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .env("POCKETUI_LANG", "de")
         .env("POCKETUI_TEXT_SIZE", "large")
         .env("POCKETUI_SNAPSHOT_SIZE", "1280x800")
@@ -157,7 +157,7 @@ fn the_offline_note_on_an_empty_home_wraps_inside_the_screen() {
 fn the_store_pages_are_never_blank_without_a_catalog() {
     let _tmp_guard = tempfile::tempdir().unwrap();
     let tmp = _tmp_guard.path().to_path_buf();
-    let status = Command::new("python3")
+    let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()

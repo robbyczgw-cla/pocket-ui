@@ -147,6 +147,24 @@ millimetre) and held at arm's length, so Body 28 (capitals about 1.2 mm high) is
 read rather than glanced at (a fact, an explanation, a note under a list); 21 is for the hint bar, credits and short
 notes beside larger text. Section headings on a page are Title 37 (the console page, credits, the game card).
 
+### A game's big name (`src/title_block.rs`)
+The name of the selected game beside or under its cover (Shelf, Cabinet, Cards, Split, Easy) is shown whole. A name with
+a subtitle ("The Legend of Zelda - Ocarina of Time", at the first " - " or ": ") is a big main title and a smaller
+line under it without the dash ("Ocarina of Time", seven tenths of the size); a name that fits one line stays as it is.
+At most three lines in all (the Cabinet two: its title and the meta row are all the room above the showcase has, so
+the subtitle takes the meta row and the meta line follows it); only when they do not hold it, the type goes a step
+smaller (five sixths, down to 55 % of the size), and only then the last line ends in "…". The lines under the name
+stand where the most lines would end, so they do not move from one game to the next while the shelf scrolls (on a
+screen where the Shelf look's room holds two lines, they stand at the end of that room for every game). A title that is
+no game's name (a Curator entry, "Today: ...") is only wrapped. The compact info header and full Details label use
+the same main/subtitle rule within their existing heading band (`layout_in`): up to three lines, then smaller steps
+until the baselines fit above the system/year. Their cover, year, facts and label foot keep their positions.
+`tests/long_titles.rs` holds all of this.
+A name on one line of a list row (the search results, `title_block::row`) follows the spine's rule: the whole name, a
+step smaller, without its leading "The", then the part that tells the games apart (`media::telling_parts`: "Link's
+Awakening DX", "Kong Country 3"), the first two sizes for each before a smaller one; "…" only when nothing fits.
+`tests/search_titles.rs` holds that.
+
 ### Font styles (`src/font_style.rs`)
 Settings → Look → Style (settings.json `"font"`: `barlow`, `pixel`, `rounded`, `retro`; Barlow when unset or wrong) swaps the
 two faces; everything above (the scale, Body 28 as the smallest read text) holds for each:
@@ -230,6 +248,25 @@ bar, and the category keeps that room for all its rows, so the list does not mov
 (`type_scale::unscaled`/`fixed`): the titles on the Cabinet's case spines and its shelf cards (as thick as the case),
 the Tour's pictures of screens. pocket-core's overlay over a game is not scaled.
 
+**The TrimUI Brick** (`brick` feature, `type_scale::brick_base`) has a 3.2" panel at 1024×768, about 15.75 px a millimetre, and the
+design's small sizes are too small there at arm's length (Body 28 is 1.8 mm high, the hint bar's 21 only 1.3 mm). Its Normal is
+therefore a little larger for the sizes up to Body 28: 18 to 21 px four more (the hint bar's 21 is 25, 1.6 mm), 22 to 28 three
+more (Body 28 is 31, 2.0 mm; facts and counters at 24 are 27), the Settings family's 30 two more (32), and from 36 up (rows, titles, the
+pause menu) nothing. Medium and Large keep the sizes of the table above where they are larger, so on the Brick Normal is about what
+Medium is elsewhere. The case spines and shelf cards stay fixed (`unscaled`). Other devices and the default build are the design
+as before. Before dropping a short system fact on the Brick, the facts try Body 24 with its normal line spacing in
+that same band, only when it preserves an additional complete row. The info page tries the next smaller metadata/value size and a compact
+"None · Y" rating hint before cutting it; its label/value column widths stay fixed and Retro tries the next distinct pixel-grid step; if Retro keeps two sizes on the same pixel grid, the Favourite mark takes one visible step down before losing the year; long metadata also tries the next distinct Retro size and an existing console alias (such as NES), reserving the complete year before trimming only an unknown system name; Credits and keyboard notes also try one smaller size. The Brick recent-games hint is "Recent" (German "Zuletzt"). Pixel Path keeps its short-screen grades under their stage names, one step smaller and closer, reserving the selected explanation and live line above the hints. The Performance readings measure the single-column labels as they do in two columns. The Extras subtitle fits at 28 or 24; Spanish keeps the no-Wi-Fi explanation short. Sleep & power allows its existing footer up to eight lines on a short Brick screen, so both the screen-off note and selected explanation remain complete; the existing list scrolls above that reserved area.
+
+Three pages that are taller than a short screen (721 to 899 lines, 1024x768) in Large text give way in a fixed order,
+never by running under the hints: **Tailscale** paints the selected row's line and the hints first, lets its rows shrink to
+what a row of that type needs, makes the facts of a connection stand as far apart as their type is tall, and shows the
+help paragraphs that fit whole above the footer, at 26, 24 or 22 px, the last paragraphs (and the tip about SSH) left out
+before one is cut ("…" only as the last resort, for the first paragraph); the first start's **welcome step** (with the
+"not tested on this device" paragraph and the third row) lifts its title and drops the two pictures above it when the
+lifted title leaves them no room; **safe mode** shows the window of its five rows round the selected one, with a scroll
+bar, when even the least row height leaves less room than they need.
+
 **Cost.** Normal is the design to the pixel and costs one thread-local read per string. The glyph cache is keyed by
 the size painted, so Normal and Large sit side by side: switching draws the new size's glyphs once (on the prewarm
 thread, which starts again at the switch), nothing is thrown away or drawn twice. The manual lays its pages out again
@@ -302,7 +339,8 @@ logical dimensions and reduction; their text-box findings describe the logical c
   still being read the label stays plain for a moment.
 - **Spine titles** (`media::spine_with`, `spine_px`): the cover's main colour on the label (`media::cover_colors`, the
   system's colour without a cover), the title read top to bottom at the text size's size (Normal 30 px, Large 37 on a
-  wide label at 1080 lines), never wider than the label with paper on both sides; a long title ends in "…", nothing
+  wide label at 1080 lines), never wider than the label with paper on both sides; a long title is made smaller, loses its
+  "The" or shows the part of it that tells the game apart before it ends in "…" (`media::spine_fit`), nothing
   scrolls on a spine. Sizes are the ones the app paints anyway, so a spine made in a frame draws no letters of its own.
 - **Where the shelf rests:** the selection keeps a fifth of the shelf beside it; the row glides (220 ms, Motion Off:
   jumps) and fades into the page where it goes on past an end. A row that fits stands still from the left; where it
@@ -467,7 +505,7 @@ centred).
 - **A game without box art** is a printed title card, as on the shelf: the spine colour with the system's stripe on
   top, the system's short name small (Body 21 Dust) over the name (Title 24 Chalk, centred, two lines), in whole words,
   at the design's size in every text size (it is a picture). Where the tile is too narrow for the name in whole words
-  (1024x768), the system's name alone, never a word cut to "Ne…". A cover being decoded is a faint tile (the page mixed 40 % towards label Dust); before Curator's index
+  (1024x768), the system's name alone, never a word cut to "Ne…". The console name tries one smaller size and the existing narrow face before a common short name; the tile keeps its fixed size. A cover being decoded is a faint tile (the page mixed 40 % towards label Dust); before Curator's index
   three of them stand where the covers will be, with no words. An empty list says in words how to fill it.
 - **Calm**: nothing moves but the label's own pull; covers come from the image cache and the picture loader's thread
   only, so a panel never decodes on the UI thread. Minimal and Cards show no panel (Cards keeps the spine's line
@@ -475,8 +513,7 @@ centred).
   day's pick on its front.
 
 ## Game card (`src/game_card.rs`)
-X on a game. The game stays a pulled-out paper label (300 px, its system's stripe, title 67 or 50 on two
-lines, box art at the right end, the player's status and time at its foot); everything under it is Chalk
+X on a game. The game stays a pulled-out paper label (300 px, its system's stripe, title starting at 67 or 50, box art at the right end, the player's status and time at its foot); everything under it is Chalk
 and Dust on black in two columns, "About the game" (facts, label column in Dust) and "Your game" (status,
 time, note), then the description and "More by …" / "Other games in …" as ordinary spines, each part under a
 heading in Title 37 Dust. Only that part
@@ -496,10 +533,8 @@ X on a game in the Minimal, Cards and Split looks (Shelf and Cabinet keep the bo
 screen, Chalk and Dust on the page: the cover at the left in the room `game_info::cover_room` gives it (a printed
 title card with the console when there is none, the label's lift shadow in Light), the player's lines under it (the
 status with its mark across the column, then Played, Last, Rating, Unlocked, a port's Speed and notes, a note), the
-text column beside the cover or the player's lines, whichever is wider. In it the title in Title 50 on two lines at
-most, system · year in Dust (and "Favourite" in amber), the facts one line each with their keys in Dust, and the
-description in the room left above the hints: it scrolls there (up/down, L1/R1) with the card's 36 px fade and 4 px
-bar. The data is the box back's (`CardData`, `game_box::about` for the description and its credit). Narrower than
+text column beside the cover or the player's lines, whichever is wider. In it the title starts at Title 50, with up to three main/subtitle lines fitted inside its fixed band, then system · year in Dust (and "Favourite" in amber), the facts one line each with their keys in Dust, and the
+description below them. Facts and description share the scroll area below the fixed title/year (up/down, L1/R1), with the card's 36 px fade and 4 px bar. A picked fact scrolls into view. The data is the box back's (`CardData`, `game_box::about` for the description and its credit). Narrower than
 900 px the cover goes on top and the player's lines under the facts. Hints: A Play, B Back, Y Status, START This game,
 SELECT Details (the full page; SELECT there comes back). Snapshots: `info:<look>:<system>:<name>`.
 
@@ -717,9 +752,15 @@ Shelf look (`Medium::of`):
   Boy Advance box, 24 on the thin jewel case; it was 21 to 24, too small at arm's length). A long title is never cut
   while there is another way (`media::spine_fit`, trailer frames of 2026-10-29: "Advance…", "Donkey Kon…"): a little
   smaller (seven tenths of its size); on two lines across a thick spine, a subtitle on a line of its own without its
-  dash ("Prince of Persia" over "The Sands of Time"); smaller still, down to 21 px; the same without the subtitle after
-  " - " or ": "; in a font wider than Barlow Condensed (Theme → Font: Pixel, Rounded) one or two lines at 18 or 16 px, then the title in Barlow Condensed by the same rules; only then
-  with "…" (tests/spine_titles.rs: long official titles at 640 × 480 and 1280 × 720 in all three fonts). Cases with a
+  dash ("Prince of Persia" over "The Sands of Time"); smaller still, down to 21 px; in a font wider than Barlow Condensed
+  (Theme → Font: Pixel, Rounded) the same in Barlow Condensed; one size step down and another, 18 and 16 px; without a
+  leading "The"; then the part of "Series - Subtitle" or "Series: Subtitle" that tells the games apart (the subtitle,
+  "Ocarina of Time" for "The Legend of Zelda - Ocarina of Time", "Majora's Mask"; the main part when it ends in a number,
+  "Donkey Kong Country 3", and without its first words if that is too long, "Kong Country 3"; a main part alone
+  ("The Legend of Zelda") would stand on a shelf for several games, so it is never shown for a subtitle that does not
+  fit); only then cut with "…", at 16 px (the Brick's Nintendo 64 shelf, 2026-11-07: "Conker's B…", "Mario Kar…" three
+  times, "The Legend…" twice; tests/spine_names.rs: real Nintendo 64, SNES, GBA and DS names, both looks, four screen sizes,
+  Barlow and Retro; tests/spine_titles.rs: long official titles at 640 × 480 and 1280 × 720 in all three fonts). Cases with a
   band at the top (Mega Drive, the light Sega case, the generic ones) paint it in the cover's **accent**
   (`media::cover_colors`: a clear colour of the cover far from the main one, at least 1.5 % of it; the main one again when
   there is none). Without a cover: the system's stripe, darkened. The colours are read on the `cabinet-art` thread
@@ -800,10 +841,30 @@ Two rows of Settings → Look → Cozy extras, both on from the start, Shelf loo
   cut in two at its quiet point, `scripts/ui-sounds/split_disc_in.py`, the other systems keep the whole sound); a cartridge clicks at
   `IN_AT_COZY` and stays in view; the launch fade keeps its end and runs after the clunk; the game's window comes up at
   1600 ms (`FADE_AT_COZY` + the fade). Any button ends all that at once: the hold, the fade and the sounds still waiting. A lid is one picture turned in 3D about its hinge (`Lid::map`, `cabinet_art::blit_affine`),
-  a printed disc lies down along the seat's two axes, parts in front of the medium are `over.png`. Art from public-domain photos
+  a printed disc lies down along the seat's two axes, parts in front of the medium are `over.png`. A disc comes the way the
+  consoles' manuals have it (checked 08.11.2026 against the PlayStation manuals and photos of open consoles): its jewel case
+  opens (the cover swings away about its left hinge between 120 and 420 ms, `insert_scene::paint_rig`, the case's black tray
+  under it), the disc lies on the tray and is lifted off, carried flat with its label up (`Rig::medium_at`: over its place it
+  already lies as it will in its seat, it is never held upright) and lowered onto the spindle or tray. A PlayStation's and a
+  Saturn's disc is printed to the rim (`media::DiscKind::has_ring`) and every disc is as wide beside its console as the real
+  one (`insert_rig` tests), a lid's underside is the console's own plastic (the Saturn's is black). The PSP has no rig yet
+  (its UMD goes into a door at the back, label out): its start shows no medium, the case fades and the console lights up
+  (`insert_scene::lights_up_only`), never a disc dropped on its screen. A lid is hinged under its console's rear lip
+  (`Lid::tuck` in `rig.json`: the hinge sits a few art pixels behind the wall): open past a third it is drawn behind the
+  console, so its foot is hidden by the wall and it stands up out of the console as a real PlayStation's, Saturn's or
+  Dreamcast's lid does (open-lid photos on Commons: "Playstation opened.jpg", "Lettore CD PS.jpg"), not as a grey disc above it. Art from public-domain photos
   through PixelLab (`assets/media/rig/SOURCES.md`), read on the first frame, gone with the animation (at most 6 MB).
-  `POCKETUI_RIG_ASSETS=<dir>` reads rigs from disk for working on them. 3DS, Vita, PSP and all others: the
-  plain animation below; Quick, a frozen game, and Motion Reduced or Off: no rig and no hold (`cabinet::starts_cozy`).
+  Front-view GB/GBC/GBA and DS cartridges turn label-away on their flight, showing a separate photographed rear
+  shell before entering the rear slot. SNES/N64 keep the label facing the player and discs keep their printed face up.
+  `tests::every_insert_uses_the_real_slot_direction_and_label_side` checks each rig's physical direction and face.
+  Look → Cozy extras → GBA console can select Game Boy Advance SP, with the original GBA as default.
+  Every hardware picture resolves through `system_art::picture_id`; changing the choice drops fitted icons and
+  already-painted system-case fronts. The photo-derived SP clamshell opens before insertion and remains open;
+  its cartridge rotates contacts-first into the bottom/front slot, label to the underside. Quick and reduced
+  motion keep this slot geometry with the screen already open and without adding a hold.
+  `POCKETUI_RIG_ASSETS=<dir>` reads rigs from disk for working on them. 3DS, Vita and all others: the
+  plain animation below (the PSP: no medium, see above); Quick, a frozen game, and Motion Reduced or Off:
+  no rig except the SP's bottom-slot geometry, and no hold (`cabinet::starts_cozy`).
 - **The game box** (X on a game; SELECT switches to the page and back, `game_box.rs`): the card as the game's box in its case's style, front and
   back, turned over with Left/Right in 280 ms (Motion Off: at once) by narrowing one face to its edge and widening
   the other. The front is the case as it stands on the shelf, opened: its game slides out of it to its right in

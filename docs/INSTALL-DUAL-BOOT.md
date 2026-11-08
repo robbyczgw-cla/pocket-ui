@@ -150,6 +150,12 @@ changes nothing. `uninstall.sh` (also copied to `/storage/pocket-ui/`) removes t
 and puts back what pocket-ui changes at run time outside its folders (its Syncthing drop-in, `smb.conf`); pocket-ui's
 settings stay unless `--purge`, `/storage/roms` is never touched.
 
+The installer syncs programs, launcher and boot entry before publishing them and switches links with atomic renames.
+It never moves an existing release out of the way: a different build with the same version uses a separate
+`<version>-install-N` folder and keeps the old one as `previous`. The next run of that package reuses the matching build.
+The package suite includes `test-power-cut.py`: command-boundary interruption and dirty-data-loss models under all
+three shells ([UPDATES.md](UPDATES.md)). Before the first boot entry is installed ROCKNIX keeps its original interface.
+
 Tested against a fake root by `deploy/package/test-package.sh` (part of the gate), and the real package once in the
 virtual device's base image (ROCKNIX 20261001's own userland, arm64, with a stand-in `systemctl`, 2026-10-26):
 `--check`, the install, a second install and the uninstall passed; the compatibility check found everything but the

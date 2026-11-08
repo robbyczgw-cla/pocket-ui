@@ -1659,7 +1659,7 @@ impl App {
     fn open_sticker_sheet(&mut self, path: &Path) {
         let meta = self.library.get(path);
         let case = meta.case;
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+        let now = pocket_ui::recents::now_secs() as i64;
         let this_year = pocket_ui::play_history::civil(now / 86_400).0.clamp(0, i32::from(u16::MAX)) as u16;
         let release = self.card.as_ref().and_then(|o| o.card.data.year);
         let year = case.goty.unwrap_or_else(|| case_stickers::default_year(release, this_year));

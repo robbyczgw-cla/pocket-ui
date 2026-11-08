@@ -22,7 +22,9 @@ def sha(path):
 
 def archive(root, files, dest, extra=None):
     with dest.open('wb') as raw, gzip.GzipFile(filename='', fileobj=raw, mode='wb', mtime=0, compresslevel=9) as gz:
-        with tarfile.open(fileobj=gz, mode='w|', format=tarfile.USTAR_FORMAT) as out:
+        # Upstream cheat filenames can exceed ustar's 100-byte basename limit.
+        # The Brick's checked extractor accepts GNU long-name headers.
+        with tarfile.open(fileobj=gz, mode='w|', format=tarfile.GNU_FORMAT) as out:
             for path in files:
                 info = out.gettarinfo(str(path), str(path.relative_to(root)))
                 if not info.isfile() and not info.isdir():

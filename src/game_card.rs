@@ -830,28 +830,24 @@ impl Card {
             text_w -= cw + 12;
         }
         let tx = x + STRIPE + 36;
-        // The title as large as it fits: 67, else 50 on up to two lines.
-        let mut base = y + 104;
-        if text.width(Face::Title, 67, &d.title) <= text_w {
-            text.draw(c, Face::Title, 67, tx, base, pal().ink, &d.title);
+        // Keep the paper label's cover, metadata and foot fixed while the same main/subtitle
+        // rule used on the shelf fits up to three lines into the existing heading band.
+        let (size, base, old_lines) = if text.width(Face::Title, 67, &d.title) <= text_w {
+            (67, y + 104, 1)
         } else {
-            let lines = text.wrap(Face::Title, 50, &d.title, text_w);
-            base = y + 80;
-            for (i, line) in lines.iter().take(2).enumerate() {
-                let line = if i == 1 && lines.len() > 2 {
-                    text.fit(Face::Title, 50, &format!("{line} {}", lines[2..].join(" ")), text_w)
-                } else {
-                    line.clone()
-                };
-                text.draw(c, Face::Title, 50, tx, base + i as i32 * type_scale::line(50, 6), pal().ink, &line);
-            }
-            base += type_scale::line(50, 6) * (lines.len().min(2) as i32 - 1);
-        }
+            (50, y + 80, text.wrap(Face::Title, 50, &d.title, text_w).len().clamp(1, 2))
+        };
+        let meta_y = base + type_scale::line(50, 6) * (old_lines as i32 - 1) + 50 + type_scale::grow(28);
+        let title_top = base - type_scale::px(size) as i32;
+        let room = meta_y - type_scale::px(28) as i32 - 12 - title_top;
+        let lines = crate::title_block::layout_in(text, Face::Title, size, &d.title, text_w, room);
+        let first = title_top + type_scale::px(lines.first().map_or(size, |l| l.px)) as i32;
+        crate::title_block::paint(text, c, Face::Title, &lines, tx, first, pal().ink, pal().label_dust, false);
         let mut meta = vec![d.system.clone()];
         meta.extend(d.year.map(|y| y.to_string()));
         meta.extend(d.players.clone());
         let meta = text.fit(Face::Body, 28, &meta.join(" · "), text_w);
-        text.draw(c, Face::Body, 28, tx, base + 50 + type_scale::grow(28), pal().label_dust, &meta);
+        text.draw(c, Face::Body, 28, tx, meta_y, pal().label_dust, &meta);
         // The player's own line at the foot of the label: status mark, status, time.
         let foot = y + LABEL_H - 40;
         let mut fx = tx;
@@ -1130,9 +1126,9 @@ impl Card {
         .into_iter()
         .flatten()
         {
-            let heading = text.fit(Face::Title, 37, &format!("{heading}, in your library"), full_w);
+            let (heading_px, heading) = text.fit_sizes(Face::Title, &[37, 28], &format!("{heading}, in your library"), full_w);
             y += 12;
-            text.draw(c, Face::Title, 37, MARGIN, y, pal().dust, &heading);
+            text.draw(c, Face::Title, heading_px, MARGIN, y, pal().dust, &heading);
             y += 22;
             for g in games {
                 c.rect(MARGIN, y, full_w, spine_h(), pal().spine);

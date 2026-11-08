@@ -21,7 +21,7 @@
  *   brick-hw led-set RRGGBB [PCT]  every zone (lr, m, f1, f2) static in that colour at PCT percent (default 50)
  *   brick-hw led-off               the lights dark
  *   All sysfs paths below $BRICK_SYS (default none): the host test points it at a fake tree. The sysfs files are the Brick's own kernel
- *   interface, read from the device and Knulli's same-driver script for the value ranges (0..60), none of NextUI's code.
+ *   interface, read from the device for the value ranges (0..60); no code of other projects.
  *
  * The ioctl numbers are those of Allwinner's sunxi display driver (DISP_LCD_SET_BRIGHTNESS 0x102, DISP_LCD_GET_BRIGHTNESS
  * 0x103, arguments {screen, value, 0, 0}); `bl-get` is how a device is checked without changing anything. Plain C, glibc only. */

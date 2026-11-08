@@ -170,9 +170,10 @@ impl Look {
     }
 }
 
-/// The driver is there (any Brick; not the Smart Pro's single ring, whose zones differ).
+/// The driver is there, on a board whose zones are these (the Brick; the Smart Pro's rings are the same driver, unmapped:
+/// `brick_profile::Board::leds`, so nothing of ours lights them).
 pub fn leds_present(root: &Path) -> bool {
-    has(root, &format!("{LED_DIR}/effect_enable")) && has(root, &format!("{LED_DIR}/effect_lr"))
+    has(root, &format!("{LED_DIR}/effect_enable")) && has(root, &format!("{LED_DIR}/effect_lr")) && crate::brick_profile::board().is_none_or(|b| b.leds())
 }
 
 fn hex(c: (u8, u8, u8)) -> String {

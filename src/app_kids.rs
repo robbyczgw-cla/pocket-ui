@@ -787,21 +787,40 @@ impl App {
     /// The game's name under the case, never cut: smaller when it is long, two lines when that isn't enough.
     /// Returns where the last line ends and its baseline.
     pub(crate) fn kids_shelf_name(&mut self, c: &mut Canvas, item: Item, below: i32, colours: Colours) -> (i32, i32) {
-        self.kids_shelf_name_at(c, item, below, colours, 1.0)
+        let (end, baseline, _) = self.kids_shelf_name_at(c, item, below, colours, 1.0, 0);
+        (end, baseline)
     }
 
-    /// `kids_shelf_name` with its type and its distance from the case scaled (Easy's calmer shelf).
-    pub(crate) fn kids_shelf_name_at(&mut self, c: &mut Canvas, item: Item, below: i32, colours: Colours, scale: f32) -> (i32, i32) {
+    /// `kids_shelf_name` with its type and its distance from the case scaled (Easy's calmer shelf). With `reserve`
+    /// lines (Easy: two) the name is a big main title with its subtitle smaller under it, up to three lines, and the
+    /// baseline returned is never above where the reserved lines end, so what stands under the name does not move
+    /// from one game to the next (`title_block`).
+    pub(crate) fn kids_shelf_name_at(&mut self, c: &mut Canvas, item: Item, below: i32, colours: Colours, scale: f32, reserve: usize) -> (i32, i32, i32) {
         let u = c.h as f32 / 1080.0;
         let px = |v: f32| (v * u * scale).round() as u32;
         let title = self.case_title(item);
         let width = c.w - (80.0 * u) as i32;
+        if reserve > 0 {
+            let p = px(92.0);
+            let centre = below + (88.0 * u * scale) as i32;
+            let first = centre + p as i32 * 34 / 100;
+            let lines = pocket_ui::title_block::layout(&mut self.text, Face::Title, p, &title, width, 3);
+            let at = pocket_ui::title_block::positions(&mut self.text, Face::Title, &lines, c.w / 2, first, true);
+            let mut end = (c.w / 2, first);
+            for (l, (x, y)) in lines.iter().zip(at) {
+                let w = self.text.width(Face::Title, l.px, &l.text);
+                self.kids_words(c, Face::Title, l.px, x, y, if l.sub { colours.spark } else { colours.ink }, colours.top, &l.text);
+                pocket_ui::title_block::note(l, y);
+                end = (x + w, y);
+            }
+            return (end.0, end.1, end.1.max(first + (reserve as i32 - 1) * pocket_ui::title_block::step(&self.text, p)));
+        }
         let one_line = [92.0, 80.0, 70.0].into_iter().map(px).find(|p| self.text.width(Face::Title, *p, &title) <= width);
         let centre = below + (88.0 * u * scale) as i32;
         if let Some(p) = one_line {
             let tw = self.text.width(Face::Title, p, &title);
             self.kids_words(c, Face::Title, p, (c.w - tw) / 2, centre + p as i32 * 34 / 100, colours.ink, colours.top, &title);
-            ((c.w + tw) / 2, centre + p as i32 * 34 / 100)
+            ((c.w + tw) / 2, centre + p as i32 * 34 / 100, centre + p as i32 * 34 / 100)
         } else {
             let p = px(58.0);
             let lines = self.text.wrap_at_most(Face::Title, p, &title, width, 2);
@@ -814,7 +833,7 @@ impl App {
                 end = ((c.w + tw) / 2, y);
                 y += step;
             }
-            end
+            (end.0, end.1, end.1)
         }
     }
 

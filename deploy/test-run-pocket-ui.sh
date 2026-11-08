@@ -297,14 +297,15 @@ launch() {
     kill -9 $pid
   fi
   wait $pid 2>/dev/null
-  # Did the logger outlive the launcher (essway mode: EmulationStation takes over the process)? Then end it.
+  # Did the logger outlive the launcher (essway mode: EmulationStation takes over the process)?
+  # Keep it until the scenario assertions finish; killing it here races the no-TERM assertion.
   # The launcher starts the logger in the background: on a loaded machine it may not have written its pid yet when the
   # launcher execs EmulationStation, so WAIT_LOGD waits for that event itself (or for the logger's own exit note).
   [ -n "${WAIT_LOGD:-}" ] && wait_for '[ -s "$T/logd-pid" ] || [ -e "$T/logd-dead" ]'
   logd_left=0
   if [ -f "$T/logd-pid" ] && kill -0 "$(cat "$T/logd-pid")" 2>/dev/null; then
     logd_left=1
-    kill "$(cat "$T/logd-pid")" 2>/dev/null
+    LOGGERS_LEFT="$LOGGERS_LEFT $(cat "$T/logd-pid")"
   fi
   # The launcher's process group (setsid): what it left running is ended by the next setup and at the end.
   [ -n "$SETSID" ] && GROUPS_LEFT="$GROUPS_LEFT $pid"
@@ -315,10 +316,13 @@ launch() {
 # Without this every gate left one or two sleeping launchers behind for good (2026-10-25: about 100, one of them
 # holding the merge queue's lock). Not right after launch(): some checks read what the helpers write afterwards.
 end_groups() {
+  for logger in $LOGGERS_LEFT; do kill -TERM "$logger" 2>/dev/null; done
+  LOGGERS_LEFT=
   for g in $GROUPS_LEFT; do kill -TERM -"$g" 2>/dev/null; done
   GROUPS_LEFT=
 }
 GROUPS_LEFT=
+LOGGERS_LEFT=
 # Removes the scenario's folder; a program that was just stopped may still write into it for a moment, which makes the
 # first rm fail with "Directory not empty".
 drop_scratch() {

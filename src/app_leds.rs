@@ -194,15 +194,13 @@ impl App {
             y += pocket_ui::type_scale::line(NU_SMALL, 12);
         }
         if !Leds::system().present() {
-            self.text.draw(
-                c,
-                Face::Body,
-                NU_SMALL,
-                left,
-                y + 14,
-                pal().dust,
-                "No lights around the sticks found on this machine.",
-            );
+            // The Spanish note is wider than one line in Retro/Large. Keep its starting point and wrap into
+            // the free room below the description, as the description itself does.
+            for (i, line) in self.text.wrap_prose(Face::Body, NU_SMALL,
+                "No lights around the sticks found on this machine.", c.w - left - pad - NU_BTN_PAD).iter().enumerate() {
+                self.text.draw(c, Face::Body, NU_SMALL, left,
+                    y + 14 + i as i32 * pocket_ui::type_scale::line(NU_SMALL, 12), pal().dust, line);
+            }
         }
         self.nu_hints(c, &[("B", "Back"), ("A", "Next"), ("< >", "Change")]);
     }

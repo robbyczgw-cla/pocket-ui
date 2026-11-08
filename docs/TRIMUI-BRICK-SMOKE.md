@@ -36,3 +36,98 @@ The test game runs with the card's sound as it is; keep the Brick muted (slider)
 What it cannot show: what the panel displays (a read of `/dev/fb0` proves the framebuffer, as in the first beta tests), and step 6 needs a pocket-ui that has the FIFO `play` command (this version on): an older one prints FAIL `6-start-A` and says why.
 
 Test on a computer: `scripts/test-brick-smoke.sh` runs the same scripts against a fake sysfs/proc tree with a small simulator of pocket-ui's FIFOs; a healthy fake Brick passes, and each bug above (lit LEDs, `frame_hex` in the dark, options without effect, clock too low in a game or dark, no route, busy while dark, no `play`) is caught.
+
+
+## Release journey and timing on the Brick
+
+`scripts/device-check.sh --journey` adds a scratch-data release journey to the
+existing device-check tooling. Run it from the host when nobody is playing:
+
+```sh
+scripts/device-check.sh --journey --label public-0.3.0.1 --expect-version 0.3.0.1 --out /tmp/brick-public-journey
+```
+
+It uses the installed UI and core. For a comparison, pass local ARM executables
+with `--binary /path/to/pocket-ui --core /path/to/pocket-core`; they run from RAM
+and never replace the installed application. The host needs Python 3, sshpass,
+OpenSSH, ImageMagick's `convert`, a host in `~/.config/pocket-ui/brick-host`, the
+password file `~/.config/pocket-brick/remote-password`, and a small legal GB ROM
+in `~/.config/pocket-ui/brick-smoke.gb` (or `--rom`). Keep these files private.
+
+The seven phases acquire the shared host `/tmp/brick-device.lock` separately with
+nonblocking `flock -n` (a busy device fails before mutation),
+release it between phases, and reserve cleanup time within a nine-minute limit.
+`--phase first-start|perf|game|controls|settings|network|idle` reruns one phase.
+`--phase perf-idle` combines the two measurements in one scratch UI, returns to
+the Cabinet system shelf (or Home in list looks) after Details, and avoids repeating an ARM upload in a short device slot.
+The output directory must be new. Each step writes PASS/FAIL and a JPEG;
+`result.json`, `restore.json`, native timing traces and logs explain failures.
+A foreign running game returns BLOCKED before changing files. A failed or
+blocked phase makes the command exit nonzero. Inspect every phase result before
+accepting a release; later steps continuing does not cancel an earlier failure.
+
+**Known release blocker:** a real WLAN rfkill off/on cycle unexpectedly reset the
+Brick firmware kernel. Its exact cause is unresolved; do not treat unchanged pstore
+as proof that no reset occurred. The default network phase leaves the radio alone,
+records BLOCKED (so the overall smoke stays nonzero), and only checks OTA.
+`--wifi-cycle` is an explicit hazardous opt-in for a separately coordinated
+investigation, not the normal release command. No repeat is needed to validate
+UI frame pacing. Every input checks the original kernel boot ID in the same shell
+command before writing the FIFO. A changed boot prevents later keys from reaching
+the replacement UI; cleanup saves dmesg/pstore on the host, reports failure and
+requires recovery from `config-before.tar`, because RAM backups disappeared.
+Initial kernel/pstore snapshots are already saved on the host before the UI starts.
+
+The journey covers scratch onboarding; D-pad selection and A on the scratch
+cartridge (including the first-console controls card); game → pause → Save → Quit →
+Continue; real F1/F2 input events; the installed slider watcher and volume helper;
+D-pad reachability of Settings; a brief WLAN radio off/on cycle; an automatic
+check against the Brick update channel without pressing Install; and new app,
+kernel and pstore crash checks. The Settings explorer compares painted rows with
+D-pad focus, enters only rows whose A hint says Open, and never activates service
+switches. Both D-pad directions are explored, including rows above the initial
+selection; all D-pad and A/B transitions wait for their native frame before checking the page.
+Read-only or empty pages can have no selected row; B must still return to the original parent row. The remote slider check replays its GPIO input into the real watcher;
+it cannot prove that the mechanical switch or its wiring works. Volume changes
+are checked against the real codec while a wrapper and guard keep physical sound
+off. The opt-in radio script restores WLAN autonomously if SSH drops; it cannot
+recover from a kernel reset.
+
+The installed UI is paused by its exact PID while a scratch process uses private
+settings, ROM, SRAM, moments and home directory. Its FIFO and pre-existing core
+files are parked and restored by rename. The script backs up original config
+files, compares them afterwards, verifies installed UI/core/audio-file hashes,
+and checks that its bounded guard ended. Config hashes are compared before the
+original UI resumes, so its normal battery history writer cannot race the check. Unknown original files are never deleted.
+CPU governors and frequency limits are recorded and restored after a game.
+ALSA route and gain controls are compared too; the DAC stays zero for the night mute.
+Backups can contain private settings: keep the output outside the repository.
+Sessions end muted, dimmed to dark, with no test game or guard left running.
+
+`perf` uses the installed library and look with a scratch library cache. Existing
+identity, picture and description caches are copied with timestamps preserved, so
+a steady shelf sample does not trigger a fresh checksum scan of every ROM. The automatic
+update notice is disabled in the scratch data, so release and development builds
+both stay on the shelf during an idle sample. The manual OTA check remains real.
+The phase reports the UI process's first rendered frame, held-D-pad frame intervals and paint times,
+and native input-to-frame menu timings. These are application frames, not a
+panel refresh measurement. `--cold` drops filesystem caches before process start;
+it is not a firmware cold boot. Measure a real boot separately from kernel
+start ticks and the boot log, retaining the evidence and clock assumptions.
+`idle` uses `scripts/baseline-device.sh`; `--idle-seconds` accepts 5–360 seconds.
+The sampler pins the exact scratch PID, so a stopped owner with the same name
+cannot be selected after kernel PID wrap. CPU time comes from the process group counters, including finished workers, with
+the kernel's `AT_CLKTCK` clock rate. After 15 seconds to settle, an optional private
+ftrace instance counts scheduler wakeups for the UI threads during the idle sample.
+Its filter covers threads alive at sample start; later-created workers are excluded.
+If unavailable, wakeups stay null with a reason; the baseline helper's context
+switches remain a separately labelled proxy. Pre-existing trace settings and buffers
+are untouched. Any debugfs mount belongs below the session's scratch directory;
+cleanup verifies that both the trace instance and mount have gone. Battery discharge is left unmeasured
+while charging; a short sample with integer battery percentages cannot establish
+an accurate hourly discharge rate. Night runs keep the screen at 3/255 while on.
+
+Host regression checks: `python3 scripts/test-brick-journey.py`, plus the existing
+`scripts/test-device-check.sh`. They guard exclusion with shell flock, child
+survival without BusyBox nohup, restoration inputs, service-row refusal, real
+input encoding, D-pad reachability and held-input timing boundaries.

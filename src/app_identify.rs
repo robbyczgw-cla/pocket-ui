@@ -46,6 +46,10 @@ pub(crate) struct Identify {
 }
 
 impl Identify {
+    pub(crate) fn lookup_pending(&self) -> bool {
+        self.looking.is_some()
+    }
+
     pub(crate) fn new() -> Self {
         Identify { due: true, ..Default::default() }
     }

@@ -30,7 +30,7 @@ impl Card {
         // A short path: the stub's socket has to fit.
         let dir = tempfile::Builder::new().prefix("pui-big-").tempdir_in("/tmp").unwrap();
         let script = format!("{ROOT}/scripts/curator-fake-library.py");
-        let status = Command::new("python3").args(["-I", &script, dir.path().to_str().unwrap(), "dark"]).stdout(std::process::Stdio::null()).status().unwrap();
+        let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).args(["-I", &script, dir.path().to_str().unwrap(), "dark"]).stdout(std::process::Stdio::null()).status().unwrap();
         assert!(status.success());
         let stub = (cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|w| w.is_empty())).then(|| {
             let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), dir.path().join("wl").to_str().unwrap()]).spawn().unwrap();
@@ -54,7 +54,7 @@ impl Card {
         }
         let out = cmd
             .args(["--snapshot", state, png.to_str().unwrap()])
-            .env("POCKETUI_MOCK", "1")
+            .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .env("POCKETUI_LANG", lang)
             // A file there: the games route to pocket-core, as on a device.
             .env("POCKETUI_HOST_BIN", "/bin/sh")

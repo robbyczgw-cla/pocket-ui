@@ -20,7 +20,7 @@ now ("On now, until 07:00."). The choice is saved at once and kept across restar
 ## How it behaves
 
 - **It fades.** The colours change over a second or two when the schedule switches on or off, and when you change the
-  strength, even in the middle of a game. Nothing jumps. With [Motion](settings.md#motion) on Off, it changes at once.
+  strength, even in the middle of a game. Nothing jumps. With [Motion](settings-sound.md#motion) on Off, it changes at once.
 - **It follows your clock.** The schedule uses the time of your time zone ([Time](settings-system.md#time)); changing the
   zone moves it. There is no sunset or sunrise: the device has no location, only a time zone, so the times are the
   ones you set. The Pocket does not check the clock all night: it wakes once, at the next switch time, and when it

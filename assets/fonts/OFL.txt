@@ -2,6 +2,12 @@ The fonts in this directory and their licences. Every font below is under the SI
 of each follows its own heading (Barlow first, then Pixelify Sans, then Nunito). Pixelify Sans and Nunito are static
 instances of the official variable fonts (weights 600 and 800/600), cut down to Latin with fonttools.
 
+Modification: the two Pixelify Sans files (PixelifySans-Regular.ttf, PixelifySans-SemiBold.ttf) were changed by pocket-ui
+(Robby Czesany, 2026): the glyphs C, c, Z and 5 are redrawn (an open C and c, a diagonal Z, a 5 with a flat top; the
+originals read as O, o, 2 and S on small screens); every other glyph, all advance widths and side bearings are the
+original's. scripts/pixelify-glyphs.py in the pocket-ui source makes the change. The fonts keep their name; no Reserved
+Font Name is declared for Pixelify Sans. As modified versions they stay under this same licence.
+
 Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.

@@ -1253,3 +1253,164 @@ Line Out Playback Switch
 cut off at {s}, the new version {s}
 crashes on start
 exit 139
+
+# Cheat database lookup folder (never painted)
+FBNeo - Arcade Games
+
+# 0.3.1 release check: never painted on their own: translation tables (timezone.rs city names in de/es, i18n.rs), log and probe labels, step names of the first-start walk, update/BIOS error texts, mock notes
+gamelists read
+settings:List {s}
+controls card
+port files
+where was I
+recent games
+Mock notes: what is new in this version.
+temporary file made
+folder synced
+Reach the Brick from your other devices.
+Log in to this Brick from a computer on the same Wi-Fi, with SSH.
+Erreiche den Pocket von deinen anderen Geräten.
+Erreiche den Brick von deinen anderen Geräten.
+Los ajustes de este Pocket.
+Los ajustes de este Brick.
+die Einstellungen dieses Pockets
+die Einstellungen dieses Bricks
+Retroid Pocket 5, Neo Geo Pocket Color, Game Boy Pocket, GB Pocket
+PocketCore, Pocket5, PocketSlim, pocket-ui
+Leistung & Lüfter
+Leistung
+Rendimiento y ventilador
+Rendimiento
+Update notice: pocket-ui tells you once when a new version is out. Switch it off in Updates. Fixes long game names on the shelf.
+invalid engine-data release
+bluetooth (bluealsa)
+how you like to play
+feature cards
+wifi: sign-in
+wifi: other ways
+wifi: sign-in form
+wifi: hidden
+wifi: country
+ports: own files
+your games
+shelf systems
+zone: regions
+zone: {s}
+zone: search
+retiring an older moment
+battery note
+Khartum
+Jartum
+Tunis
+Túnez
+Asunción
+Bogotá
+Havanna
+La Habana
+Los Angeles
+Los Ángeles
+Mexiko-Stadt
+Ciudad de México
+New York
+Nueva York
+Panama
+Panamá
+São Paulo
+Bagdad
+Damaskus
+Damasco
+Ho-Chi-Minh-Stadt
+Ciudad Ho Chi Minh
+Hongkong
+Hong Kong
+Jakarta
+Yakarta
+Jerusalem
+Jerusalén
+Kathmandu
+Katmandú
+Kalkutta
+Calcuta
+Riad
+Seoul
+Seúl
+Shanghai
+Shanghái
+Singapur
+Taipeh
+Taipéi
+Teheran
+Teherán
+Tokio
+Azoren
+Azores
+Kanaren
+Canarias
+Amsterdam
+Athen
+Atenas
+Belgrad
+Belgrado
+Berlin
+Berlín
+Brüssel
+Bruselas
+Bukarest
+Bucarest
+Kopenhagen
+Copenhague
+Dublin
+Dublín
+Istanbul
+Estambul
+Kiew
+Kiev
+Lissabon
+Lisboa
+London
+Londres
+Luxemburg
+Luxemburgo
+Monaco
+Mónaco
+Moskau
+Moscú
+Paris
+París
+Prag
+Praga
+Rom
+Roma
+Sofia
+Sofía
+Stockholm
+Estocolmo
+Vatikan
+Vaticano
+Wien
+Viena
+Vilnius
+Vilna
+Warschau
+Varsovia
+Zürich
+Zúrich
+Malediven
+Maldivas
+Addis Abeba
+Adís Abeba
+Algier
+Argel
+Kairo
+El Cairo
+{s} for TrimUI Brick
+doesn't start
+{s} Recovery will finish at the next start.
+{s} Recovery will finish at the next start: {s}
+BIOS seed path is a link or not a regular file/directory
+BIOS seed temporary names are occupied
+invalid BIOS data release
+
+# 0.3.1 release check: log/report and command-line texts, never painted
+TrimUI Smart Pro (NextUI)
+usage: pocket-fb --wayland <socket> --ipc <socket> [--fb /dev/fb0] [--mode 1024x768x32] [--no-vsync] [--bgr] [--gl] [--gl-trust] [--gl-window null]

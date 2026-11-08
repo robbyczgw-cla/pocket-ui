@@ -48,6 +48,7 @@ struct Control {
 #[derive(Clone, Debug, Default)]
 struct Frame {
     at: String,
+    busy: bool,
     strings: Vec<(Rect, String)>,
     rows: Vec<Rect>,
     focus: Vec<Rect>,
@@ -97,6 +98,7 @@ impl Frame {
                 let n = |i: usize| v.get(i).and_then(|s| s.parse::<i32>().ok()).unwrap_or(0);
                 match key {
                     "where" => f.at = rest.to_string(),
+                    "busy" => f.busy = true,
                     "list" => f.list = Some((n(0) as usize, n(1) as usize)),
                     "hit" => f.hits.push(((n(0), n(1), n(2), n(3)), n(4) as usize)),
                     "hash" => f.hash = rest.to_string(),
@@ -455,16 +457,17 @@ impl Ui {
     fn watched(&mut self, keys: &[&str]) -> Result<(Frame, Vec<Frame>), Exited> {
         let mut f = self.press(keys)?;
         let mut seen = vec![f.clone()];
-        for _ in 0..20 {
+        let until = Instant::now() + test_clock::timeout(Duration::from_secs(10));
+        loop {
             std::thread::sleep(Duration::from_millis(3));
             let g = self.press(&[])?;
             seen.push(g.clone());
-            if g.same(&f) {
+            if g.same(&f) && !g.busy {
                 return Ok((g, seen));
             }
+            assert!(Instant::now() < until, "page did not finish its asynchronous read: {}", g.at);
             f = g;
         }
-        Ok((f, seen))
     }
 }
 
@@ -1145,7 +1148,8 @@ fn run(profile: Profile, part: Part) {
         Part::Overlays => {
             // A game first (the stand-in), then HOME: the pause menu.
             explore(true, Vec::new(), &[&["home"][..], &["powermenu"][..], &["leave"][..], &["a", "a", "home"][..]]);
-            explore(true, vec![("POCKETUI_UPDATE_HINT", "99.0.0")], &[&[][..]]);
+            // The card, and the Updates page it opens (Install and its question, Check again, the switch).
+            explore(true, vec![("POCKETUI_UPDATE_HINT", "99.0.0")], &[&[][..], &["a"][..]]);
         }
         Part::FirstStart => explore(false, Vec::new(), &[&[][..]]),
     }
@@ -1186,6 +1190,9 @@ const RG_DS_PLUS_LARGE: Profile = Profile { name: "rgdsplus-1024x768-large", dev
 /// The TrimUI Brick on its own card (1024x768), as tests/brick_settings_walk.rs runs it.
 #[cfg(feature = "brick")]
 const BRICK: Profile = Profile { name: "brick-1024x768", device: "brick", text_size: "normal", extra_env: &[("POCKETUI_BRICK_STANDALONE", "1")] };
+/// The same card on a TrimUI Smart Pro (1280x720, sticks; docs/TRIMUI-SMART-PRO.md).
+#[cfg(feature = "brick")]
+const SMART_PRO: Profile = Profile { name: "smartpro-1280x720", device: "smartpro", text_size: "normal", extra_env: &[("POCKETUI_BRICK_STANDALONE", "1")] };
 const ODIN_2_MINI: Profile = Profile { name: "odin2mini", device: "odin2mini", text_size: "normal", extra_env: &[] };
 
 // The merge gate: each part once, at a different size (1024x768 is the tightest page, where hints give way first).
@@ -1264,6 +1271,27 @@ fn quick_settings_power_menu_pause_menu_and_update_card_on_the_brick() {
 #[test]
 fn the_first_start_step_by_step_on_the_brick() {
     run(BRICK, Part::FirstStart);
+}
+
+// The Smart Pro beta (a Brick build's gate runs these too: `scripts/gate.sh`, filter `on_the_smart_pro`): its Settings without the
+// Brick's lights page, the overlays and the first start at 1280x720.
+
+#[cfg(feature = "brick")]
+#[test]
+fn every_settings_page_on_the_smart_pro() {
+    run(SMART_PRO, Part::Settings);
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn quick_settings_power_menu_pause_menu_and_update_card_on_the_smart_pro() {
+    run(SMART_PRO, Part::Overlays);
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn the_first_start_step_by_step_on_the_smart_pro() {
+    run(SMART_PRO, Part::FirstStart);
 }
 
 // Device regressions run in the merge gate too: the broad walk at one size cannot cover a short grid,
@@ -1514,4 +1542,78 @@ exit 0
     assert!(!f.names_hint("a"), "the initial, offline Off state has no A yet");
     std::fs::write(card.path().join("bin/remote-ready"), "").unwrap();
     assert!(!ex.changes_again("a", &f, &path), "the loaded page now offers A: do not report that action against its old B-only hint bar");
+}
+
+/// 0.3.1: at 1024x768, Retro/Large/Spanish, Sleep & power drew its last rows under the hints.
+/// Walk every row with the D-pad: its whole selection must stay on the page, above the actual hint text.
+#[test]
+fn textfit_031_sleep_rows_scroll_into_view_in_large_spanish() {
+    let profiles = vec![Profile { name: "sleep-retro-large-es", text_size: "large", ..RG_DS_PLUS }];
+    #[cfg(feature = "brick")]
+    let profiles = { let mut all = profiles; all.push(Profile { name: "sleep-brick-retro-large-es", text_size: "large", ..BRICK }); all };
+    for profile in profiles {
+    let card = Card::new(&profile);
+    let boxes = card.path().join("sleep.box");
+    let mut ui = Ui::start(&card, &profile, true, 1,
+        &[("POCKETUI_LANG", "es"), ("POCKETUI_RETRO", "cocoa"), ("POCKETUI_TEXT_BOXES", boxes.to_str().unwrap())]);
+    ui.settled(&["start"]).unwrap();
+    open_named(&mut ui, "Sistema");
+    let mut f = ui.settled(&[]).unwrap();
+    for _ in 0..MAX_WALK {
+        if f.focused().is_some_and(|name| name.starts_with("Suspensión")) { break; }
+        f = ui.settled(&["down"]).unwrap();
+    }
+    assert!(f.focused().is_some_and(|name| name.starts_with("Suspensión")), "Sleep row offered");
+    let mut f = ui.settled(&["a"]).unwrap();
+    let total = f.list.expect("sleep list").1;
+    let mut seen = BTreeSet::new();
+    for _ in 0..total {
+        let (selected, count) = f.list.expect("sleep list");
+        assert_eq!(count, total);
+        seen.insert(selected);
+        let row = f.controls().into_iter().find(|c| c.focused)
+            .unwrap_or_else(|| panic!("row {selected} has no visible focus:\n{}", f.text()));
+        let hint_top = f.strings.iter().filter(|(_, s)| f.hints.iter().any(|(key, label)| key == s || label == s))
+            .map(|(r, _)| r.1).min().expect("visible hints");
+        assert!(row.rect.1 >= 0 && row.rect.3 < hint_top,
+            "row {selected} is not fully above the hints: {:?}, hints at {hint_top}", row.rect);
+        let faults = std::fs::read_to_string(&boxes).unwrap();
+        assert!(faults.trim().is_empty(), "row {selected}: {faults}");
+        f = ui.settled(&["down"]).unwrap();
+    }
+    assert_eq!(seen.len(), total, "every sleep row is reachable");
+    assert_eq!(f.list.unwrap().0, 0, "Down wraps to the first row");
+    }
+}
+
+/// 0.3.1 (rest): on a handheld nobody on the project has played on (the RG DS Plus, 1024x768) the welcome step has the "not
+/// tested yet" paragraph, and Large text or a longer language put its last rows under the hint bar. Every row Down reaches is
+/// whole above the hints, and nothing on the page runs into anything else.
+#[test]
+fn textfit_rest_031_first_start_rows_stay_above_the_hints_with_the_untested_hint() {
+    for (size, lang) in [("large", "en"), ("large", "de"), ("large", "es"), ("normal", "es"), ("normal", "de")] {
+        for style in ["off", "cocoa"] {
+            let profile = Profile { name: "first-untested", text_size: size, ..RG_DS_PLUS };
+            let card = Card::new(&profile);
+            let boxes = card.path().join("first.box");
+            let at = format!("{style} {size} {lang}");
+            let mut ui = Ui::start(&card, &profile, false, 1,
+                &[("POCKETUI_LANG", lang), ("POCKETUI_RETRO", style), ("POCKETUI_TEXT_BOXES", boxes.to_str().unwrap())]);
+            let mut f = ui.settled(&[]).unwrap();
+            let mut seen = BTreeSet::new();
+            for _ in 0..4 {
+                let row = f.controls().into_iter().find(|c| c.focused).unwrap_or_else(|| panic!("{at}: no focused row:\n{}", f.text()));
+                // The hint bar's own words: not a row of the same name ("Language" is both), not the L2 key in the top corner.
+                let rows = f.controls();
+                let hint_top = f.strings.iter().filter(|(r, s)| r.1 > row.rect.1 && f.hints.iter().any(|(key, label)| key == s || label == s) && !rows.iter().any(|c| inside(centre(r), &c.rect)))
+                    .map(|(r, _)| r.1).min().expect("visible hints");
+                assert!(row.rect.1 >= 0 && row.rect.3 < hint_top, "{at}: row {:?} is not fully above the hints: {:?}, hints at {hint_top}", row.name, row.rect);
+                seen.insert(row.name);
+                let faults = std::fs::read_to_string(&boxes).unwrap_or_default();
+                assert!(faults.trim().is_empty(), "{at}: {faults}");
+                f = ui.settled(&["down"]).unwrap();
+            }
+            assert!(seen.len() >= 2, "{at}: Down reaches the welcome step's rows: {seen:?}");
+        }
+    }
 }

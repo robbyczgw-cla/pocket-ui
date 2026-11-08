@@ -328,13 +328,18 @@ impl App {
         // stay above the hints (docs/DEVICES.md).
         let full = 104 + pocket_ui::type_scale::grow(28);
         let row = full - ((1080 - c.h).max(0) + 6) / 7;
+        // At native 768 lines reserve the selected explanation and the live line above the hint pill too.
+        let row = if pocket_ui::kit::short_screen(c.h) {
+            let bottom = c.h - pad - NU_PILL - 8;
+            row.min((bottom - top - 26 - pocket_ui::type_scale::grow(28) - 40 - 12 - pocket_ui::type_scale::px(28) as i32 / 3) / 7)
+        } else { row };
         // The dot, the value and its line move up by half of what a row gave up, and the line closer to the value;
         // with larger text there is no room for that, and only the selected stage keeps its line, where it was.
         let tight = row < full && pocket_ui::type_scale::grow(28) > 0;
         // On 768 lines (rows 59 px) a value and its line don't fit in a row at all: the rows show the values, and the
         // selected stage's line is read under them, above the last seconds of play.
         let cramped = row < 70;
-        let (lift, line_dy) = if tight || cramped { (0, 40) } else { ((full - row) / 2, 40 - (full - row) / 2) };
+        let (lift, line_dy) = if cramped { (0, 26) } else if tight { (0, 40) } else { ((full - row) / 2, 40 - (full - row) / 2) };
         let (dot_x, name_x, value_x) = (pad + 34, pad + 74, pad + 74 + pocket_ui::type_scale::wide(162, 28));
         let Some(path) = path else {
             self.text.draw(c, Face::Body, 30, name_x, top + 60, 0x9a978f, "Reading the path…");
@@ -365,8 +370,10 @@ impl App {
             let grade_w = if large { 0 } else { self.text.width(Face::Body, 26, s.grade.name()) };
             if s.grade != Grade::Unknown {
                 if large {
-                    let word = self.text.fit(Face::Body, 22, s.grade.name(), value_x - name_x - 16);
-                    self.text.draw(c, Face::Body, 22, name_x, base + line_dy, colour, &word);
+                    // The short rows have no value explanation beside this line: keep the whole grade there, one step smaller.
+                    let (px, width) = if cramped { (18, right - NU_BTN_PAD - name_x) } else { (22, value_x - name_x - 16) };
+                    let word = self.text.fit(Face::Body, px, s.grade.name(), width);
+                    self.text.draw(c, Face::Body, px, name_x, base + line_dy, colour, &word);
                 } else {
                     self.text.draw_right(c, Face::Body, 26, right - NU_BTN_PAD, base - 2, colour, s.grade.name());
                 }
@@ -380,7 +387,7 @@ impl App {
         }
 
         // The last seconds of play (the game is paused behind the menu).
-        let mut live_base = top + 7 * row + 26 + pocket_ui::type_scale::grow(28);
+        let mut live_base = top + 7 * row + 26 + pocket_ui::type_scale::grow(28) + if cramped { 12 } else { 0 };
         if cramped {
             if let Some(s) = path.stages.get(sel).filter(|s| !s.line.is_empty()) {
                 let line = self.text.fit(Face::Body, 28, &s.line, right - NU_BTN_PAD - name_x);

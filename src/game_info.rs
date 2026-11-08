@@ -1,8 +1,8 @@
 //! The game's info page (X on a game in the Minimal, Cards and Split looks; Shelf and Cabinet open the box,
 //! `game_box`): everything about the game on one screen, nothing to turn over. The cover at the left (on top on a
 //! narrow screen) with the player's own lines under it (status, time played, last played, rating, achievements, a
-//! port's speed and update note); at the right the title, the system and year, the facts, and the description, which
-//! scrolls in its own place with up and down (L1/R1 a page) when it is longer than the room left for it.
+//! port's speed and update note); at the right the title, the system and year, the facts and description, which
+//! share one scroll area with up and down (L1/R1 a page). The cover, title, system and year stay fixed.
 //!
 //! It reads the same `CardData` as the box's back and shows the same things, in the shelf's calm Chalk and Dust on the
 //! page. Whatever is missing gets words of its own ("No description yet.", "Not yet"), never a gap. A plays, B goes
@@ -19,13 +19,16 @@ use crate::text::{Face, Text};
 use crate::type_scale;
 use std::rc::Rc;
 
-/// The scroll of the description; the rest of the page stands still.
+/// The scroll of facts and description; the cover and heading stand still.
 #[derive(Default, Debug)]
 pub struct InfoView {
     /// No controls act on a passive second-screen page.
     pub passive: bool,
     pub scroll: i32,
     max_scroll: i32,
+    view_h: i32,
+    /// Link rows in the scroll area's unscrolled content: keep a newly selected fact visible.
+    link_offsets: Vec<(i32, i32)>,
     /// The fact the selection is on (an index into `CardData::links`): A opens its list of games (Connections). None:
     /// A plays.
     pub link: Option<usize>,
@@ -156,6 +159,13 @@ impl InfoView {
             (false, Some(i)) if self.scroll == 0 => self.link = i.checked_sub(1),
             _ => return false,
         }
+        if let Some(&(top, h)) = self.link.and_then(|i| self.link_offsets.get(i)) {
+            if top < self.scroll {
+                self.scroll = top.max(0);
+            } else if top + h > self.scroll + self.view_h {
+                self.scroll = (top + h - self.view_h).clamp(0, self.max_scroll);
+            }
+        }
         true
     }
 
@@ -204,28 +214,99 @@ impl InfoView {
             (rx, top, c.w - side - rx)
         };
         let (yx, yw) = if narrow(c.w) { (side, tw) } else { (side, tx - 48 - side) };
-        // The right column: the title on two lines at most, then the system and year (and the Favourites mark).
+        // Reuse the shelf's main/subtitle rule inside the existing title band. The cover, metadata
+        // and facts keep their old positions, including headings whose old wrap used two lines.
         let title_step = type_scale::line(50, 6);
         ty += 44 + type_scale::grow(50);
-        let lines = text.wrap(Face::Title, 50, &d.title, tw);
-        for (i, line) in lines.iter().take(2).enumerate() {
-            let line = if i == 1 && lines.len() > 2 { format!("{line} {}", lines[2..].join(" ")) } else { line.clone() };
-            let line = text.fit(Face::Title, 50, &line, tw);
-            text.draw(c, Face::Title, 50, tx, ty + i as i32 * title_step, pal().chalk, &line);
-        }
-        ty += title_step * (lines.len().clamp(1, 2) as i32 - 1) + type_scale::line(28, 22);
+        let old_lines = text.wrap(Face::Title, 50, &d.title, tw).len().clamp(1, 2);
+        let meta_y = ty + title_step * (old_lines as i32 - 1) + type_scale::line(28, 22);
+        let title_top = ty - type_scale::px(50) as i32;
+        let room = meta_y - type_scale::px(28) as i32 - 12 - title_top;
+        let lines = crate::title_block::layout_in(text, Face::Title, 50, &d.title, tw, room);
+        let first = title_top + type_scale::px(lines.first().map_or(50, |l| l.px)) as i32;
+        crate::title_block::paint(text, c, Face::Title, &lines, tx, first, pal().chalk, pal().dust, false);
+        ty = meta_y;
         let mut meta = vec![d.system.clone()];
         meta.extend(d.year.map(|y| y.to_string()));
-        let fav_w = if d.favorite { text.width(Face::Body, 28, "Favourite") + 24 } else { 0 };
-        let meta = text.fit(Face::Body, 28, &meta.join(" · "), tw - fav_w);
-        let mw = text.draw(c, Face::Body, 28, tx, ty, pal().dust, &meta);
+        // Retro's 28 and 24 share a pixel grid at Large: let the Favourite mark take the next visible step before losing the year.
+        let fav_px = if d.favorite && text.width(Face::Body, 24, &meta.join(" · ")) + text.width(Face::Body, 28, "Favourite") + 24 > tw { 21 } else { 28 };
+        let fav_w = if d.favorite { text.width(Face::Body, fav_px, "Favourite") + 24 } else { 0 };
+        let sizes: &[u32] = if crate::retro::on() { &[28, 24, 21] } else { &[28, 24] };
+        let room = tw - fav_w;
+        let least = *sizes.last().unwrap();
+        if text.width(Face::Body, least, &meta.join(" · ")) > room {
+            // Use the console's existing short name before cutting its label; never lose the game's year.
+            #[cfg(not(target_os = "android"))]
+            if let Some(console) = crate::consoles::all().iter().find(|c| c.name == d.system || c.aka.contains(&d.system)) {
+                if let Some(short) = console.aka.iter().filter(|name| name.len() < d.system.len()).min_by_key(|name| name.len()) { meta[0] = short.clone(); }
+            }
+            if let Some(year) = d.year {
+                let suffix = format!(" · {year}");
+                let name_room = room - text.width(Face::Body, least, &suffix);
+                meta[0] = text.fit(Face::Body, least, &meta[0], name_room);
+            }
+        }
+        let (meta_px, meta) = text.fit_sizes(Face::Body, sizes, &meta.join(" · "), room);
+        let mw = text.draw(c, Face::Body, meta_px, tx, ty, pal().dust, &meta);
         if d.favorite {
-            text.draw(c, Face::Body, 28, tx + mw + 24, ty, pal().amber, "Favourite");
+            text.draw(c, Face::Body, fav_px, tx + mw + 24, ty, pal().amber, "Favourite");
         }
         ty += row;
         if let Some(why) = &d.broken {
             ty = crate::game_card::paint_problem(c, text, why, (tx, ty, tw));
         }
+        // Keep the title/year and cover fixed; facts and description share the room below the metadata.
+        let dtop = (ty - type_scale::px(28) as i32).clamp(0, bottom);
+        let dbot = bottom.clamp(dtop, c.h);
+        let view_h = dbot - dtop;
+        self.view_h = view_h;
+        if view_h <= 0 {
+            return;
+        }
+        if !narrow(c.w) {
+            paint_your(c, text, &your, cover, (yx, yw), top + fh + 24 + 30 + type_scale::grow(28));
+        }
+        let height = {
+            let mut body = c.rows(dtop, dbot);
+            let mut y = self.paint_facts(&mut body, text, d, (tx, tw), ty - dtop - self.scroll);
+            if narrow(body.w) {
+                y = paint_your(&mut body, text, &your, cover, (yx, yw), y);
+            }
+            let about_y = y - row + 60 + type_scale::grow(28);
+            about_y + paint_about(&mut body, text, d, (tx, tw - 16), about_y) + self.scroll
+        };
+        self.max_scroll = (height - view_h).max(0);
+        self.scroll = self.scroll.min(self.max_scroll);
+        self.link_offsets = self.link_rects.iter().map(|&(_, y, _, h)| (y + self.scroll, h)).collect();
+        // A tap only opens the visible part of a link, never a row clipped behind the fixed heading.
+        for (_, y, _, h) in &mut self.link_rects {
+            let end = (*y + *h).min(view_h);
+            *y = (*y).max(0);
+            *h = (end - *y).max(0);
+            *y += dtop;
+        }
+        // Text running under an edge fades out there, as on the card's page; a thin bar says where the view is.
+        let fade = (view_h / 6).min(36);
+        for k in 0..fade {
+            let amount = (255 - k * 255 / fade.max(1)) as u8;
+            if self.scroll > 0 {
+                c.shade_rect(tx, dtop + k, tw, 1, pal().void, amount);
+            }
+            if self.scroll < self.max_scroll {
+                c.shade_rect(tx, dbot - 1 - k, tw, 1, pal().void, amount);
+            }
+        }
+        if self.max_scroll > 0 {
+            let bar_h = (view_h * view_h / (view_h + self.max_scroll)).max(30);
+            let bar_y = dtop + (view_h - bar_h) * self.scroll / self.max_scroll.max(1);
+            c.rect(tx + tw - 4, dtop, 4, view_h, pal().spine);
+            c.rect(tx + tw - 4, bar_y, 4, bar_h, pal().dust);
+        }
+    }
+
+    /// Facts in the scrolling column, from baseline `ty`; returns the baseline after the last row.
+    fn paint_facts(&mut self, c: &mut Canvas, text: &mut Text, d: &CardData, (tx, tw): (i32, i32), mut ty: i32) -> i32 {
+        let row = type_scale::row(44, 28);
         // The facts, one line each, the key in Dust.
         let facts = facts(d);
         self.link_rects = vec![(0, 0, 0, 0); d.links.len()];
@@ -241,8 +322,8 @@ impl InfoView {
             let key_w = keys_w(text, facts.iter().map(|(k, _)| *k), tw / 2);
             for (i, (k, v)) in facts.iter().enumerate() {
                 // A key wider than its column (German at Large) is shortened, never run into its value.
-                let k = text.fit(Face::Body, 28, k, key_w - 24);
-                text.draw(c, Face::Body, 28, tx, ty, pal().dust, &k);
+                let (px, k) = text.fit_sizes(Face::Body, &[28, 24], k, key_w - 24);
+                text.draw(c, Face::Body, px, tx, ty, pal().dust, &k);
                 // A developer, series or genre the player has other games of: an arrow after it, a pill when selected.
                 match d.links.iter().position(|(f, _)| *f == i) {
                     Some(l) => {
@@ -274,42 +355,9 @@ impl InfoView {
                 ty += row;
             }
         }
-        if narrow(c.w) {
-            ty = paint_your(c, text, &your, cover, (yx, yw), ty);
-        } else {
-            paint_your(c, text, &your, cover, (yx, yw), top + fh + 24 + 30 + type_scale::grow(28));
-        }
-        // The description in the room that is left, scrolling there.
-        let dtop = (ty - row + 30).clamp(0, c.h);
-        let dbot = bottom.clamp(dtop, c.h);
-        let view_h = dbot - dtop;
-        if view_h <= 0 {
-            return;
-        }
-        let height = {
-            let mut body = c.rows(dtop, dbot);
-            paint_about(&mut body, text, d, (tx, tw - 16), 30 + type_scale::grow(28) - self.scroll)
-        };
-        self.max_scroll = (height - view_h).max(0);
-        self.scroll = self.scroll.min(self.max_scroll);
-        // Text running under an edge fades out there, as on the card's page; a thin bar says where the view is.
-        let fade = (view_h / 6).min(36);
-        for k in 0..fade {
-            let amount = (255 - k * 255 / fade.max(1)) as u8;
-            if self.scroll > 0 {
-                c.shade_rect(tx, dtop + k, tw, 1, pal().void, amount);
-            }
-            if self.scroll < self.max_scroll {
-                c.shade_rect(tx, dbot - 1 - k, tw, 1, pal().void, amount);
-            }
-        }
-        if self.max_scroll > 0 {
-            let bar_h = (view_h * view_h / (view_h + self.max_scroll)).max(30);
-            let bar_y = dtop + (view_h - bar_h) * self.scroll / self.max_scroll.max(1);
-            c.rect(tx + tw - 4, dtop, 4, view_h, pal().spine);
-            c.rect(tx + tw - 4, bar_y, 4, bar_h, pal().dust);
-        }
+        ty
     }
+
 }
 
 /// How wide a column of `keys` is (the widest and a gap), at most `max`.
@@ -340,12 +388,14 @@ fn your_w(text: &mut Text, rows: &[(&'static str, Val)]) -> i32 {
 fn paint_your(c: &mut Canvas, text: &mut Text, rows: &[(&'static str, Val)], cover: Option<&Rc<Image>>, (x, w): (i32, i32), mut y: i32) -> i32 {
     let row = type_scale::row(44, 28);
     let key_w = keys_w(text, rows.iter().map(|(k, _)| *k), w / 2);
+    // Retro's 28/24 can share a pixel grid: 21 is then the next visibly smaller step. Keep the value column intact.
+    let sizes: &[u32] = if crate::retro::on() { &[28, 24, 21] } else { &[28, 24] };
     for (k, v) in rows {
         // A line without a key (a port's notes) runs under the value before it, across the column.
         let (vx, vw) = if k.is_empty() { (x, w) } else { (x + key_w, w - key_w) };
         if !k.is_empty() {
-            let k = text.fit(Face::Body, 28, k, key_w - 24);
-            text.draw(c, Face::Body, 28, x, y, pal().dust, &k);
+            let (px, k) = text.fit_sizes(Face::Body, sizes, k, key_w - 20);
+            text.draw(c, Face::Body, px, x, y, pal().dust, &k);
         }
         match v {
             Val::Text(s) => {
@@ -353,8 +403,10 @@ fn paint_your(c: &mut Canvas, text: &mut Text, rows: &[(&'static str, Val)], cov
                 text.draw(c, Face::Body, 28, vx, y, pal().chalk, &s);
             }
             Val::Quiet(s) => {
-                let s = text.fit(Face::Body, 28, s, vw);
-                text.draw(c, Face::Body, 28, vx, y, pal().dust, &s);
+                // Keep the rating's action whole even when Retro's next size shares the same pixel grid.
+                let source = if *s == "None. Press Y" && text.width(Face::Body, 24, s) > vw { "None · Y" } else { s };
+                let (px, s) = text.fit_sizes(Face::Body, sizes, source, vw);
+                text.draw(c, Face::Body, px, vx, y, pal().dust, &s);
             }
             Val::Status(s) => {
                 let mut sx = vx;

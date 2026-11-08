@@ -57,7 +57,7 @@ impl Ctx {
         let (visible, boxes) = (self.tmp.join(format!("{n}.txt")), self.tmp.join(format!("{n}.tsv")));
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
         cmd.args(["--snapshot", state, self.tmp.join(format!("{n}.png")).to_str().unwrap()])
-            .env("POCKETUI_MOCK", "1")
+            .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .env("POCKETUI_LANG", lang)
             .env("POCKETUI_SNAPSHOT_SIZE", size)
             .env("POCKETUI_VISIBLE_TEXT", &visible)
@@ -90,7 +90,7 @@ fn the_card_after_a_long_break_its_note_a_button_and_the_switch() {
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).unwrap();
     // The made-up library behind the fading shelf, as a player's start leaves it.
-    let ok = Command::new("python3")
+    let ok = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.join("lib").to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()
@@ -160,7 +160,7 @@ fn a_slow_start_on_the_brick_says_it_is_loading() {
     let tmp = std::env::temp_dir().join(format!("pocketui-brick-loading-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).unwrap();
-    let ok = Command::new("python3")
+    let ok = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.join("lib").to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()

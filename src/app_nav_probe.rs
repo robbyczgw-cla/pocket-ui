@@ -93,6 +93,12 @@ impl App {
         let Some(path) = std::env::var_os(pocket_ui::nav_probe::ENV) else { return };
         let mut out = std::fs::read_to_string(&path).unwrap_or_default();
         out += &format!("@where\t{}\n", self.nav_where());
+        if self.setup.as_ref().is_some_and(|setup| setup.wifi_scanning()) {
+            out += "@busy\twifi\n";
+        }
+        if self.identify.lookup_pending() {
+            out += "@busy\tlookup\n";
+        }
         // The quick settings and the power menu keep their own touch map: the App's is the covered page's.
         let covered = self.sys.quick_open() || self.sys.power_menu_open();
         if let Some((sel, len)) = self.hits.list_state().filter(|_| !covered) {

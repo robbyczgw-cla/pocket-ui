@@ -457,7 +457,7 @@ impl App {
         }
         // The Brick's two extra keys, F1 and F2, as chips between the shoulders: on the built-in pad of a Brick only.
         #[cfg(feature = "brick")]
-        if pad.controller.is_builtin() && pocket_ui::device::brick() {
+        if pad.controller.is_builtin() && pocket_ui::brick_profile::fkeys() {
             for (b, cx) in [(Button::F1, 405), (Button::F2, 595)] {
                 let down = pad.is_down(b);
                 let font = label_px(22);

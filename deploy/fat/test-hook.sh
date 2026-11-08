@@ -76,6 +76,8 @@ boot() {
     mount_part() { echo "mount_part $*" >>$T/calls; }
     mount() { echo "mount $*" >>$T/calls; }
     progress() { echo "progress $*" >>$T/calls; }
+    # The card is a fixture: record the barrier without flushing unrelated host writes.
+    sync() { echo "sync $*" >>$T/calls; }
     df() { echo "Filesystem 1K-blocks Used Available Use% Mounted on"; echo "/dev/fake 100000 0 $FAKE_FREE_KB 0% /storage"; }
     disk=LABEL=STORAGE
     mount_storage() { if [ -f $PU_FLASH/mount-storage.sh ]; then . $PU_FLASH/mount-storage.sh; else mount_part "$disk" /storage rw,noatime; fi; }

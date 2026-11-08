@@ -588,3 +588,34 @@ re:^MENU \+
 
 # src/app_test_buttons.rs: the made-up unknown input of the test-buttons:unknown snapshot, a controller's own evdev name and code (data)
 8BitDo SN30 Pro: BTN_C 1
+
+# 0.3.1 release check: system short names on the Layouts page and layout-test words, shown as written
+INTV
+Neo CD
+NGPC
+POKEMINI
+SG-1000
+Retroid
+Geo
+Boy
+Brick
+HORIZONTAL
+MGBA
+SUPA
+SG1000
+SEGACD
+PCECD
+LYNX
+COLECO
+FBNEO
+ARCADE
+NEOGEO
+
+# 0.3.1 release check: the mock list of the updates snapshots (version 99.0.0, made-up notes), not product text
+99.0.0 available >
+Update notice: pocket-ui tells you once when a new version is out. Switch it off in Updates. Fixes long game names on the shelf.
+Updates. Fixes long game names on the shelf.
+
+# 0.3.1 release check: the Smart Pro's names (a product name and the word that stands for "the Pocket")
+TrimUI Smart Pro
+Smart Pro

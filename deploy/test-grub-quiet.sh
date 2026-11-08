@@ -43,7 +43,12 @@ menuentry "Restart" {
 EOF
   cp "$CFG" "$T/original"
 }
-run() { (cd "$T" && POCKETUI_FLASH=$T/flash $SH "$SCRIPT" "$@" >"$T/out" 2>&1); }
+# All files are under the fake flash. Keep sync boundaries local to the fixture,
+# including BusyBox ash, whose built-in applet can bypass a PATH-only stub.
+run() {
+  (cd "$T" && POCKETUI_FLASH=$T/flash FAKE_SYNC_LOG=$T/sync.log \
+    $SH -c 'sync() { printf "%s\n" "sync $*" >>"$FAKE_SYNC_LOG"; }; . "$0"' "$SCRIPT" "$@" >"$T/out" 2>&1)
+}
 said() { grep -q -- "$1" "$T/out"; }
 kernel_line() { grep '^ *linux /boot/pocket/Image ' "$1"; }
 # Every file under the fake /flash with its checksum: "nothing changed" compares two of these.

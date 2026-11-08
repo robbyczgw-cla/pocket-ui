@@ -54,7 +54,7 @@ fn german(en: &str) -> String {
 }
 
 /// The rows of Settings → Look → Cozy extras and System → Sleep & power, in their order.
-const COZY: [&str; 8] = ["TV on the cabinet", "Stickers on cases", "Printed discs", "Memory card in the pause menu", "Light by time of day", "Decorations", "Game connections", "Rediscover"];
+const COZY: [&str; 9] = ["TV on the cabinet", "Stickers on cases", "Printed discs", "Memory card in the pause menu", "Light by time of day", "Decorations", "Game connections", "Rediscover", "GBA console"];
 const SLEEP: [&str; 6] = ["Screen off after", "Slideshow before screen off", "Sleep after", "Switch off after sleeping", "Short press", "Hold"];
 
 /// The line naming what is in each category, as at the bottom of the categories (the Look key ends with a zero-width mark).
@@ -83,7 +83,7 @@ fn shot(tmp: &Path, stub: &Option<Stub>, state: &str, lang: &str, size: &str, te
     let (visible, boxes) = (tmp.join(format!("{name}.txt")), tmp.join(format!("{name}.tsv")));
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
     cmd.args(["--snapshot", state, tmp.join(format!("{name}.png")).to_str().unwrap()])
-        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .env("POCKETUI_LANG", lang)
         .env("POCKETUI_TEXT_SIZE", text)
         .env("POCKETUI_SNAPSHOT_SIZE", size)
@@ -111,7 +111,7 @@ fn every_choice_is_a_row_and_shows_whole() {
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).unwrap();
     std::fs::write(tmp.join("none.cfg"), "<systemList></systemList>").unwrap();
-    let ok = Command::new("python3")
+    let ok = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.join("lib").to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()
@@ -140,8 +140,8 @@ fn every_choice_is_a_row_and_shows_whole() {
             }
             failed.extend(page.faults.iter().map(|f| format!("{lang} {size} {text} categories:{g}: {f}")));
         }
-        // Cozy extras and Sleep & power: each row whole when selected (8 rows at Large text on 640x480 scroll, as every
-        // list of 8 does), its line never cut.
+        // Cozy extras and Sleep & power: each row whole when selected (9 rows at Large text on 640x480 scroll, as every
+        // list of 9 does), its line never cut.
         for (state, rows) in [("cozy", &COZY[..]), ("sleep", &SLEEP[..])] {
             for (r, row) in rows.iter().enumerate() {
                 let s = shot(&tmp, &stub, &format!("{state}:{r}"), lang, size, text, true);
@@ -154,6 +154,11 @@ fn every_choice_is_a_row_and_shows_whole() {
                 failed.extend(s.faults.iter().map(|f| format!("{lang} {size} {text} {state}:{r}: {f}")));
             }
         }
+        let sp = shot(&tmp, &stub, "cozy:8::a", lang, size, text, true);
+        if !sp.visible.iter().any(|line| line.contains("Game Boy Advance SP")) {
+            failed.push(format!("{lang} {size} {text}: the full selected SP model name must be readable"));
+        }
+        failed.extend(sp.faults.iter().map(|f| format!("{lang} {size} {text} GBA SP choice: {f}")));
         for (g, (cat, rows)) in TREE.iter().enumerate() {
             for (r, row) in rows.iter().enumerate() {
                 let state = format!("settings:{g}:{r}");
@@ -204,7 +209,7 @@ fn typed_text_is_painted_as_typed() {
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).unwrap();
     std::fs::write(tmp.join("none.cfg"), "<systemList></systemList>").unwrap();
-    let ok = Command::new("python3")
+    let ok = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.join("lib").to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()
@@ -252,7 +257,7 @@ fn the_line_under_continue_where_i_quit_says_what_off_does() {
         let visible = tmp.join(format!("{forget}.txt"));
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
         cmd.args(["--snapshot", "settings:2:1", tmp.join(format!("{forget}.png")).to_str().unwrap()])
-            .env("POCKETUI_MOCK", "1")
+            .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .env("POCKETUI_LANG", "en")
             .env("POCKETUI_VISIBLE_TEXT", &visible)
             .env("POCKETUI_DATA", &data)

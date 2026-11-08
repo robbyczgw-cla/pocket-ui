@@ -67,7 +67,7 @@ fn render(bin: &Path, tmp: &Path, state: &str, stub: Option<&Stub>) -> Vec<u32> 
     }
     let out = cmd
         .args(["--snapshot", state, png.to_str().unwrap()])
-        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .env("POCKETUI_ES_SYSTEMS", tmp.join("lib").join("es_systems.cfg"))
         .env("POCKETUI_DATA", &data)
         .env_remove("POCKETUI_SCREENSHOTS")
@@ -81,7 +81,7 @@ fn render(bin: &Path, tmp: &Path, state: &str, stub: Option<&Stub>) -> Vec<u32> 
 fn a_refresh_keeps_every_row_of_the_card() {
     let _tmp_guard = tempfile::tempdir().unwrap();
     let tmp = _tmp_guard.path().to_path_buf();
-    let status = Command::new("python3")
+    let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.join("lib").to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()

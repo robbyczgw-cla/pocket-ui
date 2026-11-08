@@ -577,6 +577,12 @@ impl Text {
         self.raw = !on;
     }
 
+    /// `line`, a piece of a game's name laid out on its own (`title_block`), is painted as it is in every language, as the
+    /// lines of `wrap` are for a name (`i18n::Cache::name_line`).
+    pub fn keep_as_name(&mut self, line: &str) {
+        self.tr.name_line(line);
+    }
+
     /// Whether strings are translated now (`set_translate`).
     pub fn translating(&self) -> bool {
         !self.raw
@@ -946,7 +952,7 @@ pub mod boxes {
     fn record() -> Option<&'static Mutex<Vec<Painted>>> {
         static REC: OnceLock<Option<Mutex<Vec<Painted>>>> = OnceLock::new();
         REC.get_or_init(|| {
-            ["POCKETUI_TEXT_BOXES", "POCKETUI_VISIBLE_TEXT", "POCKETUI_LAYOUT_AUDIT", crate::nav_probe::ENV].iter()
+            ["POCKETUI_TEXT_BOXES", "POCKETUI_VISIBLE_TEXT", "POCKETUI_LAYOUT_AUDIT", "POCKETUI_TITLE_BLOCKS", crate::nav_probe::ENV].iter()
                 .any(|key| std::env::var_os(key).is_some_and(|p| !p.is_empty()))
                 .then(|| Mutex::new(Vec::new()))
         }).as_ref()
@@ -1107,6 +1113,22 @@ pub mod boxes {
         }
     }
 
+    /// A line of the big game name (`title_block`) painted at `px`, its baseline at `y`, for tests/long_titles.rs:
+    /// `POCKETUI_TITLE_BLOCKS` names the file the lines of the picture go to (size, main or sub, baseline, text).
+    pub fn note_title(px: u32, sub: bool, y: i32, text: &str) {
+        if std::env::var_os("POCKETUI_TITLE_BLOCKS").is_none() {
+            return;
+        }
+        if let Ok(mut v) = titles().lock() {
+            v.push(format!("{px}\t{}\t{y}\t{text}", if sub { "sub" } else { "main" }));
+        }
+    }
+
+    fn titles() -> &'static Mutex<Vec<String>> {
+        static TITLES: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+        TITLES.get_or_init(|| Mutex::new(Vec::new()))
+    }
+
     fn sizes() -> &'static Mutex<Vec<(u32, String)>> {
         static SIZES: OnceLock<Mutex<Vec<(u32, String)>>> = OnceLock::new();
         SIZES.get_or_init(|| Mutex::new(Vec::new()))
@@ -1138,6 +1160,9 @@ pub mod boxes {
             v.clear();
         }
         if let Ok(mut v) = sizes().lock() {
+            v.clear();
+        }
+        if let Ok(mut v) = titles().lock() {
             v.clear();
         }
         if let Some(Ok(mut rec)) = record().map(|r| r.lock()) {
@@ -1208,6 +1233,9 @@ pub mod boxes {
             let text = placed.iter().filter(|(_, _, s)| !s.starts_with("‹hints") && !s.starts_with("‹row") && *s != "‹frame›")
                 .map(|(_, _, s)| *s).collect::<Vec<_>>().join("\n");
             let _ = std::fs::write(path, text);
+        }
+        if let (Some(path), Ok(v)) = (std::env::var_os("POCKETUI_TITLE_BLOCKS"), titles().lock()) {
+            let _ = std::fs::write(path, v.join("\n"));
         }
         if let Some(path) = std::env::var_os("POCKETUI_LAYOUT_AUDIT") {
             let _ = std::fs::write(path, layout_audit(&placed));
@@ -1604,35 +1632,69 @@ mod tests {
         assert!(t.wrap_at_most(Face::Body, 28, s, 300, 0).is_empty());
     }
 
+    /// How many pixels of `a` and `b` (painted at `px`) differ, with the pen on the same baseline, an ink pixel being
+    /// one at half coverage or more; and the height of a capital in screen pixels.
+    fn glyph_difference(t: &mut Text, face: Face, px: u32, a: char, b: char) -> (usize, usize) {
+        let ((ma, ga), (mb, gb)) = (t.glyph(face, px, a).clone(), t.glyph(face, px, b).clone());
+        let capital = t.glyph(face, px, 'H').0.height;
+        // Ink at (x, y) from the pen on the baseline, y down, as `draw` places a glyph's rows.
+        let at = |m: &Metrics, g: &[u8], x: i32, y: i32| {
+            let (col, row) = (x - m.xmin, y + m.height as i32 + m.ymin);
+            (0..m.width as i32).contains(&col) && (0..m.height as i32).contains(&row) && g[row as usize * m.width + col as usize] >= 128
+        };
+        let mut differ = 0;
+        for y in -(ma.height.max(mb.height) as i32) - 2..2 {
+            for x in -2..(ma.width.max(mb.width) as i32 + 4) {
+                differ += usize::from(at(&ma, &ga, x, y) != at(&mb, &gb, x, y));
+            }
+        }
+        (differ, capital)
+    }
+
+    /// Look-alike pairs and how many font pixels (n x n each) of ink they must differ by: the letters and digits of a
+    /// pixel face that read as another (Retro clip, 06.11.2026; "Chrono Trigger" read "Ohrono", "description"
+    /// "desoription", 07.11.2026). The small c is the o minus the three pixels of its right side, and the font's own
+    /// outlines sit a few units off the pixel grid (a stroke of 102 units on a pixel of 92), so it gets two; the
+    /// notch it had before was one.
+    const LOOK_ALIKES: [(char, char, usize); 7] = [('8', 'S', 3), ('5', 'S', 3), ('0', 'O', 3), ('2', 'Z', 3), ('8', 'B', 3), ('C', 'O', 3), ('c', 'o', 2)];
+    /// The sizes the pixel faces are painted at: the status corner, rows, headings, the titles on cards (50 and 67, a
+    /// Large text and 1240x1080 grow them) and the biggest a title gets.
+    const LOOK_ALIKE_SIZES: [u32; 15] = [21, 28, 30, 37, 44, 46, 50, 56, 67, 80, 96, 120, 150, 180, 240];
+
     /// Retro's letters as the Retro clip showed them (06.11.2026): Pixelify between whole pixels per font pixel came
-    /// out with grey edges and strokes of two and three pixels, its "8" read as "S", "Z" as "2", "C" as "O". At the
-    /// sizes the pause menu and its notes use, every pixel is ink or not, and those pairs differ by whole font pixels.
+    /// out with grey edges and strokes of two and three pixels, its "8" read as "S", "Z" as "2", "C" as "O". At every
+    /// size, from the pause menu's notes to the biggest title, every pixel is ink or not, and the look-alikes differ by
+    /// whole font pixels.
     #[test]
     fn retro_letters_are_crisp_and_digits_tell_apart_from_letters() {
         let mut t = Text::builtin().pinned_to(FontStyle::Retro);
         for face in [Face::Body, Face::Title] {
-            for px in [28, 30, 37, 46, 50, 56] {
-                for ch in "Slot 3 · heute 11:41 48% Zurück SELECT".chars() {
+            for px in LOOK_ALIKE_SIZES {
+                for ch in "Slot 3 · heute 11:41 48% Zurück SELECT Chrono Trigger description".chars() {
                     let (_, bitmap) = t.glyph(face, px, ch).clone();
                     assert!(bitmap.iter().all(|&v| v == 0 || v == 255), "{face:?} {px} px {ch:?}: grey edges");
                 }
-                for (a, b) in [('8', 'S'), ('5', 'S'), ('0', 'O'), ('2', 'Z'), ('8', 'B'), ('C', 'O')] {
-                    let ((ma, ga), (mb, gb)) = (t.glyph(face, px, a).clone(), t.glyph(face, px, b).clone());
-                    // The font pixel in screen pixels: the capitals are seven high.
-                    let n = (mb.height.max(ma.height) / 7).max(1);
-                    // Ink at (x, y) from the pen on the baseline, y down, as `draw` places a glyph's rows.
-                    let at = |m: &Metrics, g: &[u8], x: i32, y: i32| {
-                        let (col, row) = (x - m.xmin, y + m.height as i32 + m.ymin);
-                        (0..m.width as i32).contains(&col) && (0..m.height as i32).contains(&row) && g[row as usize * m.width + col as usize] > 0
-                    };
-                    let mut differ = 0;
-                    for y in -(ma.height.max(mb.height) as i32) - 2..2 {
-                        for x in -2..(ma.width.max(mb.width) as i32 + 4) {
-                            differ += usize::from(at(&ma, &ga, x, y) != at(&mb, &gb, x, y));
-                        }
-                    }
-                    assert!(differ >= 3 * n * n, "{face:?} {px} px: {a:?} and {b:?} differ by {differ} pixels only (font pixel {n})");
+                for (a, b, pixels) in LOOK_ALIKES {
+                    let (differ, capital) = glyph_difference(&mut t, face, px, a, b);
+                    // Whole font pixels: a capital is seven of them high.
+                    let n = (capital / 7).max(1);
+                    assert!(differ >= pixels * n * n, "{face:?} {px} px: {a:?} and {b:?} differ by {differ} pixels only (font pixel {n})");
                 }
+            }
+        }
+    }
+
+    /// The Pixel look (Settings → Look → Font) paints Pixelify Sans' titles as the font draws them, at any size: its
+    /// C, c, Z and 5 are the letters the Retro style's pixels use (`scripts/pixelify-glyphs.py`), so those pairs
+    /// differ by whole font pixels at every size as well.
+    #[test]
+    fn pixel_font_look_alikes_tell_apart_at_every_size() {
+        let mut t = Text::builtin().pinned_to(FontStyle::Pixel);
+        for px in LOOK_ALIKE_SIZES {
+            for (a, b, pixels) in LOOK_ALIKES.into_iter().filter(|&(a, b, _)| "Cc5".contains(a) || b == 'Z') {
+                let (differ, _) = glyph_difference(&mut t, Face::Title, px, a, b);
+                let font_pixel = px as f32 * crate::font_style::PIXELIFY_PIXEL;
+                assert!(differ as f32 >= pixels as f32 * font_pixel * font_pixel, "Pixel {px} px: {a:?} and {b:?} differ by {differ} pixels only (font pixel {font_pixel})");
             }
         }
     }

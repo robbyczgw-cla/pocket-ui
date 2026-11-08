@@ -19,6 +19,9 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 include!("common/root.rs");
+#[path = "common/snapshot.rs"]
+mod snapshot;
+use snapshot::SnapshotCommand;
 
 fn states() -> Vec<(bool, String)> {
     std::fs::read_to_string(Path::new(&ROOT).join("tests/i18n-states.txt"))
@@ -77,7 +80,7 @@ fn copy_dir(from: &Path, to: &Path) {
 }
 
 fn fake_library(dir: &Path) {
-    let status = Command::new("python3")
+    let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), dir.to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()
@@ -90,12 +93,12 @@ fn fake_library(dir: &Path) {
 /// them when empty), plus the `X` lines of the i18n record (a string drawn past the right edge) when `only` has an X,
 /// plus a line for each state that didn't render.
 fn render_all(tmp: &Path, bin: &Path, stub: Option<&Stub>, jobs: Vec<(String, &'static str, &'static str, bool, String)>, picture: Option<&str>, only: &str) -> Vec<String> {
-    render_all_in(tmp, bin, stub, jobs, picture, only, &[])
+    render_all_in(tmp, bin, stub, jobs, picture, only, &[], false)
 }
 
 /// `render_all` with more of the environment set for every snapshot (`POCKETUI_RETRO=cocoa`: Settings → Look → Style →
 /// Retro in that palette).
-fn render_all_in(tmp: &Path, bin: &Path, stub: Option<&Stub>, jobs: Vec<(String, &'static str, &'static str, bool, String)>, picture: Option<&str>, only: &str, env: &[(&str, &str)]) -> Vec<String> {
+fn render_all_in(tmp: &Path, bin: &Path, stub: Option<&Stub>, jobs: Vec<(String, &'static str, &'static str, bool, String)>, picture: Option<&str>, only: &str, env: &[(&str, &str)], reuse: bool) -> Vec<String> {
     let (tmp, bin, stub) = (tmp.to_path_buf(), bin.to_path_buf(), stub.map(|s| s.path.clone()));
     let env: Vec<(String, String)> = env.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
     let picture = picture.map(str::to_string);
@@ -122,17 +125,16 @@ fn render_all_in(tmp: &Path, bin: &Path, stub: Option<&Stub>, jobs: Vec<(String,
                     cmd.env("POCKETUI_SNAPSHOT_SIZE", p);
                 }
                 cmd.envs(env.iter().map(|(k, v)| (k, v)));
-                let out = cmd
+                cmd
                     .args(["--snapshot", &state, png.to_str().unwrap()])
-                    .env("POCKETUI_MOCK", "1")
+                    .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
                     .env("POCKETUI_LANG", lang)
                     .env("POCKETUI_TEXT_SIZE", size)
                     .env("POCKETUI_TEXT_BOXES", &boxes)
                     .env("POCKETUI_I18N_MISSES", &misses)
                     .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
-                    .env("POCKETUI_DATA", &data)
-                    .output()
-                    .expect("run pocket-ui");
+                    .env("POCKETUI_DATA", &data);
+                let out = if reuse { cmd.snapshot_output() } else { cmd.output() }.expect("run pocket-ui");
                 let mut found = found.lock().unwrap();
                 if !out.status.success() || !png.exists() {
                     found.push(format!("{state} ({size}, {lang}) didn't render: {}", String::from_utf8_lossy(&out.stderr)));
@@ -210,7 +212,7 @@ fn retro_in_large_german_text_no_string_runs_into_another_or_off_its_room() {
     let mut found = Vec::new();
     for picture in [None, Some("640x480")] {
         let jobs = states().into_iter().enumerate().map(|(i, (safe, state))| (format!("retro-{}-{i}", picture.unwrap_or("native")), "large", "de", safe, state)).collect();
-        found.extend(render_all_in(&tmp, &bin, stub.as_ref(), jobs, picture, "", &[("POCKETUI_RETRO", "cocoa")]).into_iter().map(|f| format!("{}: {f}", picture.unwrap_or("1240x1080"))));
+        found.extend(render_all_in(&tmp, &bin, stub.as_ref(), jobs, picture, "", &[("POCKETUI_RETRO", "cocoa")], false).into_iter().map(|f| format!("{}: {f}", picture.unwrap_or("1240x1080"))));
     }
     drop(stub);
     found.sort();
@@ -234,7 +236,7 @@ fn retro_play_question_keeps_its_heading_off_the_line_under_it() {
                 jobs.push((format!("retro-play-{picture}-{lang}-{i}"), size, lang, false, "setup:play".to_string()));
             }
         }
-        found.extend(render_all_in(&tmp, &bin, stub.as_ref(), jobs, Some(picture), "", &[("POCKETUI_RETRO", "cocoa")]).into_iter().map(|f| format!("{picture}: {f}")));
+        found.extend(render_all_in(&tmp, &bin, stub.as_ref(), jobs, Some(picture), "", &[("POCKETUI_RETRO", "cocoa")], false).into_iter().map(|f| format!("{picture}: {f}")));
     }
     drop(stub);
     found.sort();
@@ -269,7 +271,7 @@ fn retro_pause_menu_in_large_german_and_spanish_text_stays_inside_its_windows() 
                 jobs.push((format!("retro-pause-{}-{lang}-{i}", picture.unwrap_or("native")), "large", lang, false, state.to_string()));
             }
         }
-        found.extend(render_all_in(&tmp, &bin, stub.as_ref(), jobs, picture, "", &game).into_iter().map(|f| format!("{}: {f}", picture.unwrap_or("1240x1080"))));
+        found.extend(render_all_in(&tmp, &bin, stub.as_ref(), jobs, picture, "", &game, false).into_iter().map(|f| format!("{}: {f}", picture.unwrap_or("1240x1080"))));
     }
     // And what was cut short there shows whole now: the longest names and Load's "Where I quit", and the game's name
     // beside the battery line.
@@ -293,7 +295,7 @@ fn retro_pause_menu_in_large_german_and_spanish_text_stays_inside_its_windows() 
         }
         let out = cmd
             .args(["--snapshot", state, tmp.join(format!("whole-{i}.png")).to_str().unwrap()])
-            .envs([("POCKETUI_MOCK", "1"), ("POCKETUI_LANG", lang), ("POCKETUI_TEXT_SIZE", "large"), ("POCKETUI_RETRO", "cocoa")])
+            .env("POCKETUI_MOCK_NOW", FIXTURE_NOW).envs([("POCKETUI_MOCK", "1"), ("POCKETUI_LANG", lang), ("POCKETUI_TEXT_SIZE", "large"), ("POCKETUI_RETRO", "cocoa")])
             .env("POCKETUI_SNAPSHOT_GAME", format!("snes|{game}|game.sfc"))
             .env("POCKETUI_VISIBLE_TEXT", &seen)
             .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
@@ -335,7 +337,7 @@ fn retro_test_buttons_page_keeps_its_hints_inside_the_panel() {
         if picture.is_none() {
             jobs.push(("retro-tb-native-en-medium".to_string(), "medium", "en", false, "test-buttons:idle".to_string()));
         }
-        found.extend(render_all_in(&tmp, &bin, stub.as_ref(), jobs, picture, "", &retro).into_iter().map(|f| format!("{}: {f}", picture.unwrap_or("1240x1080"))));
+        found.extend(render_all_in(&tmp, &bin, stub.as_ref(), jobs, picture, "", &retro, false).into_iter().map(|f| format!("{}: {f}", picture.unwrap_or("1240x1080"))));
     }
     // The hint whole: its last line ends with the sentence's last word.
     for (i, (picture, lang, size, end)) in [("1240x1080", "en", "medium", "in games."), ("640x480", "de", "large", "bewirkt."), ("1024x768", "es", "large", "juegos.")].into_iter().enumerate() {
@@ -350,7 +352,7 @@ fn retro_test_buttons_page_keeps_its_hints_inside_the_panel() {
         }
         let out = cmd
             .args(["--snapshot", "test-buttons:idle", tmp.join(format!("tb-whole-{i}.png")).to_str().unwrap()])
-            .envs([("POCKETUI_MOCK", "1"), ("POCKETUI_LANG", lang), ("POCKETUI_TEXT_SIZE", size), ("POCKETUI_RETRO", "cocoa")])
+            .env("POCKETUI_MOCK_NOW", FIXTURE_NOW).envs([("POCKETUI_MOCK", "1"), ("POCKETUI_LANG", lang), ("POCKETUI_TEXT_SIZE", size), ("POCKETUI_RETRO", "cocoa")])
             .env("POCKETUI_VISIBLE_TEXT", &seen)
             .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
             .env("POCKETUI_DATA", &data)
@@ -415,7 +417,7 @@ fn save_preview_notes_stay_above_the_hints_on_native_and_small_outputs() {
                     let png = tmp.path().join("preview.png");
                     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
                     cmd.args(["--snapshot", state, png.to_str().unwrap()])
-                        .env("POCKETUI_MOCK", "1").env("POCKETUI_SOUND_QUANTUM", "0")
+                        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).env("POCKETUI_SOUND_QUANTUM", "0")
                         .env("POCKETUI_ES_SYSTEMS", tmp.path().join("es_systems.cfg"))
                         .env("POCKETUI_DATA", tmp.path().join("data"))
                         .env("POCKETUI_SNAPSHOT_SIZE", dimensions).env("POCKETUI_TEXT_SIZE", size)
@@ -450,7 +452,7 @@ fn pages_found_overlapping_at_1024x768_keep_their_lines_apart() {
             let png = tmp.path().join("pages.png");
             let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
             cmd.args(["--snapshot", state, png.to_str().unwrap()])
-                .env("POCKETUI_MOCK", "1").env("POCKETUI_SOUND_QUANTUM", "0")
+                .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).env("POCKETUI_SOUND_QUANTUM", "0")
                 .env("POCKETUI_ES_SYSTEMS", tmp.path().join("es_systems.cfg"))
                 .env("POCKETUI_DATA", tmp.path().join("data"))
                 .env("POCKETUI_SNAPSHOT_SIZE", "1024x768").env("POCKETUI_TEXT_SIZE", "normal")
@@ -483,7 +485,7 @@ fn shelf_hint_keys_stay_on_screen_when_the_last_labels_are_hidden() {
                     let png = tmp.path().join("hints.png");
                     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
                     cmd.args(["--snapshot", "shelf:snes:shelf:games:0", png.to_str().unwrap()])
-                        .env("POCKETUI_MOCK", "1").env("POCKETUI_SOUND_QUANTUM", "0")
+                        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).env("POCKETUI_SOUND_QUANTUM", "0")
                         .env("POCKETUI_ES_SYSTEMS", tmp.path().join("es_systems.cfg"))
                         .env("POCKETUI_DATA", tmp.path().join("data"))
                         .env("POCKETUI_SNAPSHOT_SIZE", dimensions).env("POCKETUI_TEXT_SIZE", size)
@@ -515,7 +517,7 @@ fn sticker_sheets_fit_short_outputs_and_scroll_to_the_last_choice() {
                     let png = tmp.path().join("stickers.png");
                     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
                     cmd.args(["--snapshot", &state, png.to_str().unwrap()])
-                        .env("POCKETUI_MOCK", "1").env("POCKETUI_SOUND_QUANTUM", "0")
+                        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).env("POCKETUI_SOUND_QUANTUM", "0")
                         .env("POCKETUI_ES_SYSTEMS", tmp.path().join("es_systems.cfg"))
                         .env("POCKETUI_DATA", tmp.path().join("data"))
                         .env("POCKETUI_SNAPSHOT_SIZE", dimensions).env("POCKETUI_TEXT_SIZE", size)
@@ -545,7 +547,7 @@ fn the_text_size_in_settings_json_is_used_and_shown_on_its_row() {
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
         // Look's seventh row, Text size, selected: its value shows as "‹ Groß ›" or "‹ Normal ›".
         cmd.args(["--snapshot", "settings:0:6", tmp.join(format!("{name}.png")).to_str().unwrap()])
-            .env("POCKETUI_MOCK", "1")
+            .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .env("POCKETUI_LANG", "de")
             .env_remove("POCKETUI_TEXT_SIZE")
             .env("POCKETUI_I18N_MISSES", &record)
@@ -582,7 +584,7 @@ fn settings_categories_all_fit_without_a_scroll_bar() {
         let png = tmp.join(format!("groups-{size}.png"));
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
         cmd.args(["--snapshot", "settings", png.to_str().unwrap()])
-            .env("POCKETUI_MOCK", "1")
+            .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .env("POCKETUI_LANG", "de")
             .env_remove("POCKETUI_TEXT_SIZE")
             .env("POCKETUI_ES_SYSTEMS", tmp.join("none.cfg"))
@@ -614,7 +616,7 @@ fn long_game_titles_fit_at_rest_in_both_languages_and_large_text() {
     }
     for look in ["dark", "light"] {
         let lib = tmp.path().join(look);
-        let status = Command::new("python3")
+        let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), lib.to_str().unwrap(), look])
             .env("POCKETUI_TEXT_FIT", "1").stdout(std::process::Stdio::null()).status().unwrap();
         assert!(status.success());
@@ -628,7 +630,7 @@ fn long_game_titles_fit_at_rest_in_both_languages_and_large_text() {
                         let visible = tmp.path().join("visible.txt");
                         let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
                         cmd.args(["--snapshot", state, png.to_str().unwrap()])
-                            .env("POCKETUI_MOCK", "1").env("POCKETUI_LANG", lang)
+                            .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).env("POCKETUI_LANG", lang)
                             .env("POCKETUI_TEXT_SIZE", size).env("POCKETUI_SNAPSHOT_SIZE", dimensions)
                             .env("POCKETUI_TEXT_BOXES", &boxes).env("POCKETUI_VISIBLE_TEXT", &visible)
                             .env("POCKETUI_ES_SYSTEMS", lib.join("es_systems.cfg"))
@@ -683,7 +685,7 @@ fn your_games_rows_stay_above_the_hint_bar_on_the_small_screens() {
                         let png = tmp.path().join("games.png");
                         let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
                         cmd.args(["--snapshot", &format!("setup:first-games:{keys}"), png.to_str().unwrap()])
-                            .env("POCKETUI_MOCK", "1").env("POCKETUI_SOUND_QUANTUM", "0")
+                            .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).env("POCKETUI_SOUND_QUANTUM", "0")
                             .env("POCKETUI_ES_SYSTEMS", if library { tmp.path().join("es_systems.cfg") } else { empty.clone() })
                             .env("POCKETUI_DATA", tmp.path().join("data"))
                             .env("POCKETUI_SNAPSHOT_SIZE", dimensions).env("POCKETUI_TEXT_SIZE", size)
@@ -707,4 +709,390 @@ fn your_games_rows_stay_above_the_hint_bar_on_the_small_screens() {
     }
     drop(stub);
     assert!(found.is_empty(), "{} problems on \"Your games\" (a row missing, text under the hint bar or cut by the picture's edge):\n{}", found.len(), found.join("\n"));
+}
+
+/// The looks every text-fit check below goes through: Barlow with Retro off and on, and Retro in the pixel font it ships
+/// with (the widest one: about a fifth wider than Barlow).
+// These two independent bug guards paint the same first-start cells. Share only
+// their pictures; both keep all their assertions. Other matrices proved unique
+// or assert write-back behavior, so they execute the renderer directly.
+const FIRST_START_STATES: &[&str] = &["setup:first", "setup:first:device=rp5", "setup:first:device=mini",
+    "setup:first:device=nova", "setup:first:device=rp6", "setup:first:device=odin2mini"];
+
+const BARLOW_LOOKS: [(&str, &str); 2] = [("off", "barlow"), ("cocoa", "barlow")];
+const ALL_LOOKS: [(&str, &str); 3] = [("off", "barlow"), ("cocoa", "barlow"), ("cocoa", "pixel")];
+
+/// Reuse the text painter's edge/overlap checks for the 0.3.1 sweep's small fixes, at every requested corner.
+fn check_settings_setup_textfit(states: &[&str]) {
+    check_settings_setup_textfit_faults(states, "OVETX");
+}
+
+fn check_settings_setup_textfit_faults(states: &[&str], faults: &str) {
+    check_textfit_in(states, faults, &BARLOW_LOOKS);
+}
+
+fn check_textfit_in(states: &[&str], faults: &str, looks: &[(&str, &str)]) {
+    check_textfit_jobs(states, faults, looks, false);
+}
+
+/// `check_textfit_in`, with the states as safe mode (`--safe`) when `safe`.
+fn check_textfit_jobs(states: &[&str], faults: &str, looks: &[(&str, &str)], safe: bool) {
+    let tmp = tempfile::tempdir().unwrap();
+    fake_library(tmp.path());
+    let bin = std::env::var_os("POCKETUI_NAV_BINARY").map_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui")), PathBuf::from);
+    let stub = wayland(tmp.path());
+    let mut found = Vec::new();
+    for (style, font) in looks {
+        for picture in ["640x480", "1024x768", "1240x1080", "1280x720"] {
+            let mut jobs = Vec::new();
+            for size in ["normal", "large"] {
+                for lang in ["en", "de", "es"] {
+                    for (i, state) in states.iter().enumerate() {
+                        jobs.push((format!("textfit-031-{style}-{font}-{picture}-{size}-{lang}-{i}"), size, lang, safe, state.to_string()));
+                    }
+                }
+            }
+            found.extend(render_all_in(tmp.path(), &bin, stub.as_ref(), jobs, Some(picture), faults,
+                &[("POCKETUI_RETRO", style), ("POCKETUI_FONT", font)], states == FIRST_START_STATES)
+                .into_iter().map(|f| format!("{style}/{font} {picture}: {f}")));
+            // A heading made into an ellipsis is still a lost label, even though it no longer crosses the edge.
+            for record in std::fs::read_dir(tmp.path()).unwrap().flatten().filter(|e| e.path().extension().is_some_and(|e| e == "tsv") && e.file_name().to_string_lossy().starts_with(&format!("textfit-031-{style}-{font}-{picture}-"))) {
+                let text = std::fs::read_to_string(record.path()).unwrap();
+                for heading in ["Welcome to your Pocket", "Copy your game files", "Other ways online",
+                    "Any game, by its name", "Type part of a game's name.", "Other games in Burnout, in your library"] {
+                    if text.lines().any(|l| l == format!("C\t{heading}")) {
+                        found.push(format!("{}: heading cut short: {heading}", record.file_name().to_string_lossy()));
+                    }
+                }
+            }
+        }
+    }
+    found.sort();
+    assert!(found.is_empty(), "Text clipped on a settings/setup page:\n{}", found.join("\n"));
+}
+
+/// Retro/Large/Spanish cut the missing-lights sentence at the screen's right edge.
+#[test]
+fn textfit_031_missing_lights_note_stays_inside_the_page() {
+    check_settings_setup_textfit(&["leds:off:0", "leds:colour:1", "leds:colour-game:2", "leds:battery:0"]);
+}
+
+/// The Spanish and German translations of "Copy your game files" ran off their page at Large.
+#[test]
+fn textfit_031_port_files_heading_stays_inside_the_page() {
+    check_settings_setup_textfit(&["port-files:on:wargus.zip", "port-files:off:wargus.zip:6", "setup:ports-shared:rx"]);
+}
+
+/// The captive portal's "Other ways online" heading lost its end in Retro/Large/Spanish.
+#[test]
+fn textfit_031_other_ways_heading_stays_inside_the_page() {
+    check_settings_setup_textfit(&["setup:wifi-portal-sheet:da", "setup:wifi-portal-sheet-nomac:da"]);
+}
+
+/// The Players page's Spanish instruction lost its last words at the right edge in Retro/Large.
+#[test]
+fn textfit_031_players_instruction_stays_inside_the_page() {
+    check_settings_setup_textfit(&["players:two", "players:promoted", "players:gap", "players:four", "players:five"]);
+}
+
+
+#[test]
+fn textfit_031_welcome_heading_stays_inside_the_page() {
+    check_settings_setup_textfit_faults(FIRST_START_STATES, "EX");
+}
+
+#[test]
+fn textfit_031_empty_search_hints_stay_inside_the_page() {
+    check_settings_setup_textfit(&["search:fresh", "search:empty"]);
+}
+
+#[test]
+fn textfit_031_n64_controls_note_stays_inside_the_page() {
+    check_settings_setup_textfit(&["controls-card:n64"]);
+}
+
+#[test]
+fn textfit_031_console_launch_price_label_stays_inside_the_page() {
+    check_settings_setup_textfit(&["console:psx:6"]);
+}
+
+/// A known system name must show whole, or use a known short system name; dots in the name lose its identity.
+fn check_system_names(states: &[(&str, &str, &str)], themes: &[&str]) {
+    let tmp = tempfile::tempdir().unwrap();
+    fake_library(tmp.path());
+    // Keep NES visible but unselected at every height: selected rows can marquee, and the Split
+    // panel names the selected system too. A two-system fixture isolates the list label itself.
+    if states.iter().any(|(state, _, _)| *state == "home") {
+        let cfg = tmp.path().join("es_systems.cfg");
+        let source = std::fs::read_to_string(&cfg).unwrap();
+        let systems: String = source.split("<system>")
+            .filter(|s| s.starts_with("<name>nes</name>") || s.starts_with("<name>psx</name>"))
+            .map(|s| format!("<system>{}</system>", s.split("</system>").next().unwrap())).collect();
+        std::fs::write(cfg, format!("<systemList>{systems}</systemList>")).unwrap();
+    }
+    let stub = wayland(tmp.path());
+    let bin = std::env::var_os("POCKETUI_NAV_BINARY").map_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui")), PathBuf::from);
+    for theme in themes {
+        std::fs::write(tmp.path().join("data/settings.json"), format!(r#"{{"onboarded":true,"theme":"{theme}"}}"#)).unwrap();
+        for dimensions in ["1280x720", "1024x768", "640x480", "1240x1080"] {
+            for style in ["off", "cocoa"] {
+                for size in ["normal", "large"] {
+                    for lang in ["en", "de", "es"] {
+                        for (state, full, short) in states {
+                            let visible = tmp.path().join("name.txt");
+                            let misses = tmp.path().join("name.tsv");
+                            let _ = std::fs::remove_file(&misses);
+                            let mut cmd = Command::new(&bin);
+                            cmd.args(["--snapshot", state, tmp.path().join("name.png").to_str().unwrap()])
+                                .env("POCKETUI_MOCK", "1").env("POCKETUI_SNAPSHOT_SIZE", dimensions)
+                                .env("POCKETUI_RETRO", style).env("POCKETUI_FONT", "barlow")
+                                .env("POCKETUI_TEXT_SIZE", size).env("POCKETUI_LANG", lang)
+                                .env("POCKETUI_VISIBLE_TEXT", &visible).env("POCKETUI_I18N_MISSES", &misses)
+                                .env("POCKETUI_ES_SYSTEMS", tmp.path().join("es_systems.cfg"))
+                                .env("POCKETUI_DATA", tmp.path().join("data"));
+                            if let Some(s) = &stub { cmd.env("WAYLAND_DISPLAY", &s.path); }
+                            let out = cmd.output().unwrap();
+                            assert!(out.status.success(), "{state}: {}", String::from_utf8_lossy(&out.stderr));
+                            let seen = std::fs::read_to_string(&visible).unwrap();
+                            assert!(seen.lines().any(|l| l == *full || l == *short),
+                                "{state} {theme} {dimensions} {style} {size} {lang}: neither whole name nor short name:\n{seen}");
+                            let cuts = std::fs::read_to_string(&misses).unwrap_or_default();
+                            assert!(!cuts.lines().any(|l| l == format!("C\t{full}")),
+                                "{state} {theme} {dimensions} {style} {size} {lang}: system name cut short");
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn textfit_031_system_rows_keep_known_names_whole() {
+    check_system_names(&[("home", "Nintendo Entertainment System", "NES")], &["split", "minimal"]);
+}
+
+#[test]
+fn textfit_031_console_system_heading_keeps_a_whole_name() {
+    check_system_names(&[("console:snes", "Super Nintendo Entertainment System", "SNES"),
+        ("console:nes", "Nintendo Entertainment System", "NES")], &["split"]);
+}
+
+/// The full info page's series heading ended in dots in Retro/Large/Spanish.
+#[test]
+fn textfit_031_other_games_in_series_heading_stays_whole() {
+    check_settings_setup_textfit(&["curator:card:ps2:revenge:dddddddddd"]);
+}
+
+/// 0.3.1 (rest): Settings › Tailscale at Large text on a 1024x768 screen drew the help under the selected row's line and the
+/// facts of a connection into each other. Every state of the page, in every look.
+#[test]
+fn textfit_rest_031_tailscale_help_stays_above_the_footer() {
+    check_textfit_in(&["tailscale", "tailscale:off", "tailscale:loggedout", "tailscale:login", "tailscale:connected", "tailscale:busy",
+        "tailscale:key", "tailscale:name", "tailscale:error", "tailscale:offline", "tailscale:offline-loggedout", "tailscale:offline-note"],
+        "OVETX", &ALL_LOOKS);
+}
+
+/// 0.3.1 (rest): on a handheld nobody has played on, the first start's "not tested yet" paragraph and the third row pushed
+/// the rows under the hint bar at 1024x768.
+#[test]
+fn textfit_rest_031_first_start_with_the_untested_hint_keeps_its_rows_above_the_hints() {
+    check_textfit_in(FIRST_START_STATES, "OVETX", &ALL_LOOKS);
+}
+
+/// 0.3.1 (rest): safe mode's last row, "Power off", ran off the bottom of the picture in German at Large text; and every row
+/// can be the selected one on the page, whole, above the hints.
+#[test]
+fn textfit_rest_031_safe_mode_rows_are_whole_and_reachable() {
+    check_textfit_jobs(&["rescue", "rescue:1", "rescue:2", "rescue:3", "rescue:4", "rescue:3:es", "rescue:2:reset"], "OVETX", &ALL_LOOKS, true);
+}
+
+/// 0.3.1 (rest): whichever row of safe mode is selected (Down from the top, as the D-pad does), its whole band is on the
+/// page, above the hints: the list shows the window round the selection when the five rows don't all fit.
+#[test]
+fn textfit_rest_031_every_safe_mode_row_can_be_selected_in_full_view() {
+    let tmp = tempfile::tempdir().unwrap();
+    fake_library(tmp.path());
+    let bin = std::env::var_os("POCKETUI_NAV_BINARY").map_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui")), PathBuf::from);
+    let stub = wayland(tmp.path());
+    let mut found = Vec::new();
+    for (style, font) in ALL_LOOKS {
+        for picture in ["640x480", "1024x768", "1280x720"] {
+            for size in ["normal", "large"] {
+                for lang in ["en", "de", "es"] {
+                    for row in 0..5 {
+                        let state = format!("rescue:{row}");
+                        let probe = tmp.path().join("rescue.probe");
+                        let _ = std::fs::remove_file(&probe);
+                        let mut cmd = Command::new(&bin);
+                        cmd.args(["--safe", "--snapshot", &state, tmp.path().join("rescue.png").to_str().unwrap()])
+                            .env("POCKETUI_MOCK", "1").env("POCKETUI_SNAPSHOT_SIZE", picture).env("POCKETUI_LANG", lang)
+                            .env("POCKETUI_TEXT_SIZE", size).env("POCKETUI_RETRO", style).env("POCKETUI_FONT", font)
+                            .env("POCKETUI_NAV_PROBE", &probe).env("POCKETUI_DATA", tmp.path().join("data"))
+                            .env("POCKETUI_ES_SYSTEMS", tmp.path().join("es_systems.cfg"));
+                        if let Some(s) = &stub { cmd.env("WAYLAND_DISPLAY", &s.path); }
+                        let out = cmd.output().unwrap();
+                        let at = format!("{style}/{font} {picture} {size} {lang} row {row}");
+                        assert!(out.status.success(), "{at}: {}", String::from_utf8_lossy(&out.stderr));
+                        let record = std::fs::read_to_string(&probe).unwrap_or_default();
+                        // "x0 y0 x1 y1 <tab> text": the marks the painters left (`nav_probe`).
+                        let rects = |mark: &str| -> Vec<Vec<i32>> {
+                            record.lines().filter_map(|l| {
+                                let v: Vec<&str> = l.splitn(5, '\t').collect();
+                                (v.len() == 5 && v[4].starts_with(mark)).then(|| v[..4].iter().map(|n| n.parse().unwrap_or(0)).collect())
+                            }).collect()
+                        };
+                        let (focus, hints) = (rects("‹nav:focus›"), rects("‹nav:hint›"));
+                        match (focus.first(), hints.iter().map(|h| h[1]).min()) {
+                            (Some(f), Some(hint_top)) if f[1] >= 0 && f[3] <= hint_top => {}
+                            (f, h) => found.push(format!("{at}: selected row {f:?} is not whole above the hints at {h:?}")),
+                        }
+                    }
+                }
+            }
+        }
+    }
+    drop(stub);
+    assert!(found.is_empty(), "{} safe-mode rows out of view:\n{}", found.len(), found.join("\n"));
+}
+
+/// The Brick's larger Normal/Medium minimum must keep the short facts, controls and explanatory lines whole.
+/// Reuse the snapshot fixture, visible-text record and overlap record used by the other text-fit regressions.
+#[cfg(feature = "brick")]
+fn check_brick_031_visible(states: &[&str], expected: &[(&str, &[&str])]) {
+    check_brick_031_visible_in(states, expected, true);
+}
+
+#[cfg(feature = "brick")]
+fn check_brick_031_visible_in(states: &[&str], expected: &[(&str, &[&str])], standalone: bool) {
+    check_brick_031_visible_fixture(states, expected, standalone, |_| {});
+}
+
+#[cfg(feature = "brick")]
+fn check_brick_031_visible_fixture(states: &[&str], expected: &[(&str, &[&str])], standalone: bool, prepare: impl FnOnce(&Path)) {
+    let tmp = tempfile::tempdir().unwrap();
+    fake_library(tmp.path());
+    prepare(tmp.path());
+    let stub = wayland(tmp.path());
+    let bin = std::env::var_os("POCKETUI_NAV_BINARY").map_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui")), PathBuf::from);
+    let mut found = Vec::new();
+    for style in ["barlow", "retro"] {
+        for size in ["normal", "medium", "large"] {
+            for (lang, words) in expected {
+                for state in states {
+                    let seen = tmp.path().join("brick-visible.txt");
+                    let boxes = tmp.path().join("brick.box");
+                    let mut cmd = Command::new(&bin);
+                    cmd.args(["--snapshot", state, tmp.path().join("brick.png").to_str().unwrap()])
+                        .env("POCKETUI_MOCK", "1").env("POCKETUI_DEVICE", "brick").env("POCKETUI_BRICK_STANDALONE", if standalone { "1" } else { "" })
+                        .env("POCKETUI_SOUND_QUANTUM", "0").env("POCKETUI_LANG", lang)
+                        .env("POCKETUI_TEXT_SIZE", size).env("POCKETUI_SNAPSHOT_SIZE", "1024x768")
+                        .env("POCKETUI_FONT", style).env("POCKETUI_RETRO", if style == "retro" { "cocoa" } else { "off" })
+                        .env("POCKETUI_VISIBLE_TEXT", &seen).env("POCKETUI_TEXT_BOXES", &boxes)
+                        .env("POCKETUI_ES_SYSTEMS", tmp.path().join("es_systems.cfg"))
+                        .env("POCKETUI_DATA", tmp.path().join("data"));
+                    if let Some(s) = &stub { cmd.env("WAYLAND_DISPLAY", &s.path); }
+                    let out = cmd.output().unwrap();
+                    assert!(out.status.success(), "{state}: {}", String::from_utf8_lossy(&out.stderr));
+                    let visible = std::fs::read_to_string(&seen).unwrap();
+                    for word in *words {
+                        if !visible.lines().any(|line| word.split('|').any(|variant| line == variant.replace("Pocket", "Brick"))) {
+                            found.push(format!("{state} {style}/{size}/{lang}: missing whole {word:?}:\n{visible}"));
+                        }
+                    }
+                    let problems = std::fs::read_to_string(&boxes).unwrap();
+                    found.extend(problems.lines().filter(|l| l.starts_with("O\t") || l.starts_with("E\t") || l.starts_with("T\t") || l.starts_with("V\t"))
+                        .map(|l| format!("{state} {style}/{size}/{lang}: {l}")));
+                }
+            }
+        }
+    }
+    assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn textfit_brick_031_system_facts_keep_the_ended_line() {
+    check_brick_031_visible(&["home", "shelf:psx:split"],
+        &[("en", &["Ended"]), ("de", &["Eingestellt"]), ("es", &["Fin"])]);
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn textfit_brick_031_home_keeps_the_recent_games_hint() {
+    check_brick_031_visible(&["home"],
+        &[("en", &["Recent"]), ("de", &["Zuletzt"]), ("es", &["Recientes"])]);
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn textfit_brick_031_info_keeps_rating_and_save_labels_whole() {
+    check_brick_031_visible(&["info:split:snes:chrono"],
+        &[("en", &["None. Press Y|None · Y", "Save slots", "Not yet"]), ("de", &["Keine. Drück Y|Keine · Y", "Spielstände", "Noch nicht"]),
+          ("es", &["Ninguna. Pulsa Y|Ninguna · Y", "Ranuras", "Aún no"])]);
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn textfit_brick_031_credits_keep_the_source_line_whole() {
+    check_brick_031_visible(&["console:gb:credits:8"],
+        &[("en", &["Facts: Wikidata (CC0), Wikipedia · summaries written for pocket-ui"]),
+          ("de", &["Fakten: Wikidata (CC0), Wikipedia · Zusammenfassungen für pocket-ui geschrieben"]),
+          ("es", &["Datos: Wikidata (CC0), Wikipedia · resúmenes escritos para pocket-ui"])]);
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn textfit_brick_031_password_note_stays_whole() {
+    check_brick_031_visible(&["achievements:password"],
+        &[("en", &["Sent once to sign in, never kept. The Pocket keeps only the sign-in key."]),
+          ("de", &["Passwort einmal zur Anmeldung; gespeichert wird nur der Schlüssel."]),
+          ("es", &["Se envía una vez al entrar; solo se guarda la clave, nunca la contraseña."])]);
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn textfit_brick_031_pixel_path_grades_stay_clear_of_the_selected_explanation() {
+    check_brick_031_visible(&["pixel-path:gba", "pixel-path:snes:2", "pixel-path:patched", "pixel-path:compromised",
+        "pixel-path:pal", "pixel-path:bluetooth"], &[("en", &[]), ("de", &[]), ("es", &[])]);
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn textfit_brick_031_extras_without_wifi_keeps_the_explanation_whole() {
+    // The NextUI profile has no network page; the standalone card offers Wi-Fi setup instead.
+    check_brick_031_visible_in(&["setup:extras", "setup:extras:da"],
+        &[("en", &["This device has no Wi-Fi, so the downloads aren't available."]),
+          ("de", &["Kein WLAN: Downloads sind nicht verfügbar."]),
+          ("es", &["Sin Wi-Fi, las descargas no están disponibles."])], false);
+    check_brick_031_visible(&["setup:extras"],
+        &[("en", &["Connect to Wi-Fi first to use these."]),
+          ("de", &["Verbinde dich zuerst mit dem WLAN, um sie zu nutzen."]),
+          ("es", &["Conéctate primero a Wi-Fi para usarlos."])]);
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn textfit_brick_031_performance_readings_keep_a_gap_after_their_labels() {
+    check_brick_031_visible(&["perf", "perf:3", "perf:1:veryquiet", "perf:2:veryquiet"],
+        &[("en", &[]), ("de", &[]), ("es", &[])]);
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn textfit_brick_031_info_keeps_the_year_beside_a_favourite() {
+    check_brick_031_visible(&["info:split:snes:chrono"],
+        &[("en", &["Super Nintendo · 1995"]), ("de", &["Super Nintendo · 1995"]), ("es", &["Super Nintendo · 1995"])]);
+    check_brick_031_visible(&["info:split:nes:final"],
+        &[("en", &["Nintendo Entertainment System · 1990|NES · 1990"]), ("de", &["Nintendo Entertainment System · 1990|NES · 1990"]), ("es", &["Nintendo Entertainment System · 1990|NES · 1990"])]);
+    check_brick_031_visible_fixture(&["info:split:nes:final"],
+        &[("en", &["Nintendo Entertainment System · 1990|NES · 1990", "Favourite"]),
+          ("de", &["Nintendo Entertainment System · 1990|NES · 1990", "Favorit"]),
+          ("es", &["Nintendo Entertainment System · 1990|NES · 1990", "Favorito"])], true, |tmp| {
+            let file = tmp.join("data/favorites.json");
+            let mut favorites: serde_json::Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+            let path = std::fs::read_dir(tmp.join("roms/nes")).unwrap().flatten().map(|e| e.path()).find(|p| p.extension().is_some_and(|e| e == "nes")).unwrap();
+            favorites.as_array_mut().unwrap().push(serde_json::json!({"system": "nes", "name": "Final Fantasy III", "path": path}));
+            std::fs::write(file, serde_json::to_vec(&favorites).unwrap()).unwrap();
+        });
 }

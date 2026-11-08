@@ -109,7 +109,7 @@ impl Launch {
             has_cover: cover.is_some(),
             front: Rc::new(front),
             from,
-            game: None,
+            game: None, game_back: None,
             cozy,
             at_drive: None,
             rig: None,

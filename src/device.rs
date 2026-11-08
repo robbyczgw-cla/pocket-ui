@@ -75,7 +75,7 @@ impl Model {
             Model::Odin2Portal => "AYN Odin 2 Portal",
             Model::H700(b) => b.name,
             Model::RgDsPlus => "Anbernic RG DS Plus",
-            Model::SteamDeck => "Steam Deck", #[cfg(feature = "brick")] Model::Brick => crate::brick_profile::NAME,
+            Model::SteamDeck => "Steam Deck", #[cfg(feature = "brick")] Model::Brick(b) => b.name(),
         }
     }
 
@@ -86,7 +86,7 @@ impl Model {
             Model::MiniV1 | Model::Nova => (1280, 960),
             Model::RgDsPlus => (1024, 768),
             Model::H700(b) => b.screen,
-            Model::SteamDeck => (1280, 800), #[cfg(feature = "brick")] Model::Brick => crate::brick_profile::SCREEN,
+            Model::SteamDeck => (1280, 800), #[cfg(feature = "brick")] Model::Brick(b) => b.screen(),
             Model::Pocket5 | Model::Flip2 | Model::Pocket6 | Model::Odin2 | Model::Odin2Mini | Model::Odin2Portal => (1920, 1080),
         }
     }
@@ -94,7 +94,7 @@ impl Model {
     /// Not tested on real hardware by the project (everything but the Mini V2, and the TrimUI Brick: About said "TrimUI Brick
     /// (experimental)" on the handheld pocket-ui is released for).
     pub fn experimental(self) -> bool {
-        self != Model::MiniV2 && { #[cfg(feature = "brick")] { self != Model::Brick } #[cfg(not(feature = "brick"))] { true } }
+        self != Model::MiniV2 && { #[cfg(feature = "brick")] { !matches!(self, Model::Brick(b) if !b.experimental()) } #[cfg(not(feature = "brick"))] { true } }
     }
 
     /// The project has played on it (🎮 in docs/DEVICES.md): the first start doesn't call it untested.
@@ -104,7 +104,7 @@ impl Model {
             Model::H700(b) => matches!(b.key, "rg35xx-plus" | "rg35xx-sp"),
             // Played on since 02.11. (docs/TRIMUI-BRICK.md): the first start called it untested.
             #[cfg(feature = "brick")]
-            Model::Brick => true,
+            Model::Brick(b) => b.played_on(),
             _ => false,
         }
     }
@@ -149,7 +149,7 @@ impl Model {
             Model::Odin2Portal => "odin2portal",
             Model::H700(b) => b.key,
             Model::RgDsPlus => "rgdsplus",
-            Model::SteamDeck => "steamdeck", #[cfg(feature = "brick")] Model::Brick => "brick",
+            Model::SteamDeck => "steamdeck", #[cfg(feature = "brick")] Model::Brick(b) => b.key(),
         }
     }
 }
@@ -164,7 +164,7 @@ impl Device {
 
     #[cfg(feature = "brick")]
     pub fn screen_off_only(&self) -> bool {
-        self.is_sm8550() || { #[cfg(feature = "brick")] { self.model == Some(Model::Brick) } #[cfg(not(feature = "brick"))] { false } }
+        self.is_sm8550() || { #[cfg(feature = "brick")] { matches!(self.model, Some(Model::Brick(_))) } #[cfg(not(feature = "brick"))] { false } }
     }
 
     /// The Snapdragon 8 Gen 2 handhelds (Adreno 740).
@@ -185,7 +185,7 @@ impl Device {
 
     #[cfg(feature = "brick")]
     pub fn has_fan(&self) -> bool {
-        !self.model.is_some_and(|m| m.is_h700() || m.is_desktop() || m == Model::RgDsPlus || { #[cfg(feature = "brick")] { m == Model::Brick } #[cfg(not(feature = "brick"))] { false } })
+        !self.model.is_some_and(|m| m.is_h700() || m.is_desktop() || m == Model::RgDsPlus || { #[cfg(feature = "brick")] { matches!(m, Model::Brick(_)) } #[cfg(not(feature = "brick"))] { false } })
     }
 
     /// A touch screen. None on the H700 handhelds (the kernel has no touch driver there).
@@ -196,7 +196,7 @@ impl Device {
 
     #[cfg(feature = "brick")]
     pub fn has_touch(&self) -> bool {
-        !self.model.is_some_and(|m| m.is_h700() || { #[cfg(feature = "brick")] { m == Model::Brick } #[cfg(not(feature = "brick"))] { false } })
+        !self.model.is_some_and(|m| m.is_h700() || { #[cfg(feature = "brick")] { matches!(m, Model::Brick(_)) } #[cfg(not(feature = "brick"))] { false } })
     }
 
     /// A second card slot, for a games card ROCKNIX reads by itself: every H700 handheld has one (TF2; every H700 device
@@ -214,7 +214,7 @@ impl Device {
 
     #[cfg(feature = "brick")]
     pub fn has_sticks(&self) -> bool {
-        !self.model.is_some_and(Model::is_desktop) && !{ #[cfg(feature = "brick")] { self.model == Some(Model::Brick) } #[cfg(not(feature = "brick"))] { false } } && !matches!(self.model, Some(Model::H700(b)) if !b.sticks)
+        !self.model.is_some_and(Model::is_desktop) && !{ #[cfg(feature = "brick")] { matches!(self.model, Some(Model::Brick(b)) if !b.sticks()) } #[cfg(not(feature = "brick"))] { false } } && !matches!(self.model, Some(Model::H700(b)) if !b.sticks)
     }
 
     /// A Wi-Fi chip. Not on the RG28XX and RG35XX 2024 (their device trees enable one anyway, the Plus tree they
@@ -226,7 +226,7 @@ impl Device {
 
     #[cfg(feature = "brick")]
     pub fn has_wifi(&self) -> bool {
-        !matches!(self.model, Some(Model::H700(b)) if !b.wifi) && !self.host_owned() && !{ #[cfg(feature = "brick")] { self.model == Some(Model::Brick) && !crate::brick_profile::standalone() } #[cfg(not(feature = "brick"))] { false } }
+        !matches!(self.model, Some(Model::H700(b)) if !b.wifi) && !self.host_owned() && !{ #[cfg(feature = "brick")] { matches!(self.model, Some(Model::Brick(_))) && !crate::brick_profile::standalone() } #[cfg(not(feature = "brick"))] { false } }
     }
 
     /// Memory in MB where the device is known to have less than the Mini V2's (1 GB on the H700 and the RG DS Plus, no swap).
@@ -237,7 +237,7 @@ impl Device {
 
     #[cfg(feature = "brick")]
     pub fn ram_mb(&self) -> Option<u32> {
-        self.model.filter(|m| m.small_chip() || { #[cfg(feature = "brick")] { *m == Model::Brick } #[cfg(not(feature = "brick"))] { false } }).map(|_| 1024)
+        self.model.filter(|m| m.small_chip() || { #[cfg(feature = "brick")] { matches!(m, Model::Brick(_)) } #[cfg(not(feature = "brick"))] { false } }).map(|_| 1024)
     }
 
     /// Printed face letters on AYN's product images; saved menu choices still win.
@@ -365,7 +365,7 @@ pub fn identify(model: &str, compatible: &[u8]) -> Device {
 
 /// `POCKETUI_DEVICE`'s value: a short name or a `model` string.
 pub fn from_override(v: &str) -> Device {
-    let v = v.trim(); #[cfg(feature = "brick")] if v.eq_ignore_ascii_case("brick") { return Device { model: Some(Model::Brick), panel: Panel::Original, reported: format!("{v} (POCKETUI_DEVICE)") }; }
+    let v = v.trim(); #[cfg(feature = "brick")] if let Some(b) = crate::brick_profile::Board::by_key(v) { return Device { model: Some(Model::Brick(b)), panel: Panel::Original, reported: format!("{v} (POCKETUI_DEVICE)") }; }
     let lower = v.to_ascii_lowercase();
     let (key, panel) = match lower.strip_suffix("-visionox") {
         Some(k) => (k, Panel::Visionox),
@@ -392,7 +392,7 @@ pub fn read(root: &Path) -> Device {
     if dmi("sys_vendor") == "Valve" && matches!(dmi("product_name").as_str(), "Jupiter" | "Galileo") {
         return Device { model: Some(Model::SteamDeck), panel: Panel::Original, reported: format!("Valve {}", dmi("product_name")) };
     }
-    let base = root.join("sys/firmware/devicetree/base"); #[cfg(feature = "brick")] if crate::brick_profile::detected(root) { return Device { model: Some(Model::Brick), panel: Panel::Original, reported: crate::brick_profile::REPORTED.to_string() }; }
+    let base = root.join("sys/firmware/devicetree/base"); #[cfg(feature = "brick")] if crate::brick_profile::detected(root) { let b = crate::brick_profile::board_at(root); return Device { model: Some(Model::Brick(b)), panel: Panel::Original, reported: b.reported().to_string() }; }
     let model = std::fs::read_to_string(base.join("model")).unwrap_or_default();
     let compatible = std::fs::read(base.join("compatible")).unwrap_or_default();
     identify(&model, &compatible)
@@ -469,21 +469,21 @@ pub fn hides_here(key: &str) -> bool {
 pub fn hides_here(key: &str) -> bool {
     let d = current();
     #[cfg(feature = "brick")]
-    if d.model == Some(Model::Brick) && brick_card_hidden(key, crate::brick_profile::standalone()) {
+    if matches!(d.model, Some(Model::Brick(_))) && brick_card_hidden(key, crate::brick_profile::standalone()) {
         return true;
     }
     // The Brick's own card (no NextUI): the Wi-Fi page stays, there is a radio and a client of ours; so do the clock (`brick_standalone_keeps`),
     // Tailscale, Updates (its private channel) and Kids mode, which is pocket-ui's alone (docs/TRIMUI-BRICK-STANDALONE.md, docs/TRIMUI-BRICK-MORE.md).
     // On every Brick the motor and the lights are its own (`brick_hw`): Haptics and LEDs and their Tour cards stay, though it has no sticks.
     #[cfg(feature = "brick")]
-    if d.model == Some(Model::Brick)
-        && (brick_standalone_keeps(key, crate::brick_profile::standalone())
-            || crate::brick_profile::standalone() && matches!(key, "tailscale" | "updates" | "kids" | "perf_fan")
-            || matches!(key, "haptics" | "leds"))
-    {
-        return false;
+    if let Some(Model::Brick(b)) = d.model {
+        // The Smart Pro's lights are not mapped yet (`Board::leds`): no page, no card, until they are.
+        if key == "leds" && !b.leds() { return true; }
+        if brick_standalone_keeps(key, crate::brick_profile::standalone()) || crate::brick_profile::standalone() && matches!(key, "tailscale" | "updates" | "kids" | "perf_fan") || matches!(key, "haptics" | "leds") {
+            return false;
+        }
     }
-    hides(key, d.has_sticks(), d.host_owned() || { #[cfg(feature = "brick")] { d.model == Some(Model::Brick) } #[cfg(not(feature = "brick"))] { false } })
+    hides(key, d.has_sticks(), d.host_owned() || { #[cfg(feature = "brick")] { matches!(d.model, Some(Model::Brick(_))) } #[cfg(not(feature = "brick"))] { false } })
 }
 
 /// The pages the Brick's own card (no NextUI) keeps though the Brick counts as host-owned for the rest: the Wi-Fi page
@@ -542,9 +542,10 @@ mod tests {
     #[cfg(feature = "brick")]
     #[test]
     fn the_brick_is_played_on_and_docs_devices_says_so() {
-        assert!(Model::Brick.played_on());
+        let brick = Model::Brick(crate::brick_profile::Board::Brick);
+        assert!(brick.played_on());
         let doc = include_str!("../docs/DEVICES.md");
-        assert!(doc.lines().any(|l| l.starts_with("| 🎮") && l.contains(Model::Brick.name()) && l.contains("1024 × 768")));
+        assert!(doc.lines().any(|l| l.starts_with("| 🎮") && l.contains(brick.name()) && l.contains("1024 × 768")));
     }
 
     #[test]
@@ -852,5 +853,5 @@ mod tests {
 /// the Deck's other host_owned behaviour (windowing through `pocket-fb`, no Steam texts).
 #[cfg(feature = "brick")]
 pub fn brick() -> bool {
-    current().model == Some(Model::Brick)
+    matches!(current().model, Some(Model::Brick(_)))
 }

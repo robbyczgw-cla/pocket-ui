@@ -265,7 +265,7 @@ pub static FEATURES: &[Feature] = &[
         plain: "gentle animations",
         line: "Selections glide and pages slide in. Off shows every press at once, without animation.",
         place: "Settings › Sound & feel › Motion",
-        guide: "settings.md#motion",
+        guide: "settings-sound.md#motion",
         since: "0.1.0",
         // Off is Motion Off; Reduced counts as not Full, and a card left on Off keeps it.
         switch: Some(Switch {
@@ -371,7 +371,7 @@ pub static FEATURES: &[Feature] = &[
         plain: "lights around the sticks",
         line: "The lights around the sticks glow in one calm colour. Colour and brightness in Settings.",
         place: "Settings › Sound & feel › LEDs",
-        guide: "settings.md#leds",
+        guide: "settings-sound.md#leds",
         since: "0.1.0",
         switch: Some(Switch {
             get: |s| s.leds.mode != leds::Mode::Off,
@@ -725,7 +725,7 @@ pub static FEATURES: &[Feature] = &[
         plain: "Cozy extras",
         line: "The little touches, each on its own: real cases, the memory card, stickers, printed discs and more.",
         place: crate::cozy_extras::PAGE,
-        guide: "settings.md#cozy-extras",
+        guide: "settings-sound.md#cozy-extras",
         since: "0.1.0",
         switch: None,
         simple: Pick::Keep,
