@@ -74,6 +74,10 @@ next download server; slow Wi-Fi is fine as long as data keeps coming. When no s
 ("The download server stopped responding…" or "Download failed. Check Wi-Fi."). The release notes of the selected
 update appear at the bottom. If everything is current, the page says "Everything is up to date."
 
+Once a completed download is being committed to the card, cancellation can be too late: the update finishes and
+restarts normally. Keep the device charged while installation finishes. A missing shelf notice can also mean that
+this version was already announced; **Check again** on the Updates page still shows what is available.
+
 ## What makes it safe
 
 **Only our updates are accepted.** The list of available updates is signed. If the signature does

@@ -5,7 +5,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 
 // One request, with a bounded lifetime even when a test fails. The returned guard collects the server.
-struct Server(String, Option<std::thread::JoinHandle<()>>);
+struct Server(String, Option<std::thread::JoinHandle<()>>, Arc<std::sync::atomic::AtomicUsize>);
 impl Server {
     fn new(reply: Vec<u8>, stall: bool) -> Self {
         Self::paced(reply, stall, None)
@@ -15,6 +15,8 @@ impl Server {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let address = listener.local_addr().unwrap();
+        let hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let called = hits.clone();
         let join = std::thread::spawn(move || {
             let deadline = Instant::now() + Duration::from_secs(5);
             while Instant::now() < deadline {
@@ -26,6 +28,7 @@ impl Server {
                         while reader.read_line(&mut line).is_ok_and(|n| n > 0) && line != "\r\n" {
                             line.clear();
                         }
+                        called.fetch_add(1, Ordering::SeqCst);
                         match pace {
                             Some((piece, pause)) => {
                                 for part in reply.chunks(piece) {
@@ -50,7 +53,7 @@ impl Server {
                 }
             }
         });
-        Self(format!("http://{address}/asset"), Some(join))
+        Self(format!("http://{address}/asset"), Some(join), hits)
     }
     fn bytes(data: &[u8]) -> Self {
         Self::new(
@@ -85,6 +88,7 @@ fn release(url: String, mirrors: Vec<String>, data: &[u8]) -> Release {
         version: "9".into(),
         url,
         mirrors,
+        preferred_sources: Vec::new(),
         sha256: store::sha256_hex(data),
         size: data.len() as u64,
         notes: String::new(),
@@ -204,4 +208,54 @@ fn a_download_too_slow_for_its_time_says_so() {
     let dir = TestDir::new("too-slow");
     let err = download_checked(&tools, &release(slow.0.clone(), vec![], &data), "http://unused/u.json", &dir.join("f"), &Cancel::new(), &|_| {}).unwrap_err();
     assert_eq!(err, TOO_SLOW);
+}
+
+#[test]
+fn preferred_source_is_used_before_the_legacy_website() {
+    let data = b"signed payload";
+    let website = Server::bytes(data);
+    let github = Server::bytes(data);
+    let mut rel = release(website.0.clone(), vec![github.0.clone()], data);
+    rel.preferred_sources = vec![github.0.clone()];
+    let dir = TestDir::new("preferred-first");
+    download_checked(&tools(), &rel, "http://unused/update.json", &dir.join("app"), &Cancel::new(), &|_| {}).unwrap();
+    assert_eq!(std::fs::read(dir.join("app")).unwrap(), data);
+    assert_eq!(github.2.load(Ordering::SeqCst), 1);
+    assert_eq!(website.2.load(Ordering::SeqCst), 0, "a working preferred source avoids the website download");
+}
+
+#[test]
+fn broken_preferred_source_falls_back_to_legacy_url_once() {
+    for corrupt in [false, true] {
+        let data = b"signed payload";
+        let website = Server::bytes(data);
+        let github = if corrupt { Server::bytes(b"wrong payload!") } else {
+            Server::new(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_vec(), false)
+        };
+        let mut rel = release(website.0.clone(), vec![github.0.clone()], data);
+        rel.preferred_sources = vec![github.0.clone()];
+        assert_eq!(rel.download_urls("http://unused/update.json"), [github.0.clone(), website.0.clone()]);
+        let dir = TestDir::new("preferred-fallback");
+        download_checked(&tools(), &rel, "http://unused/update.json", &dir.join("app"), &Cancel::new(), &|_| {}).unwrap();
+        assert_eq!(std::fs::read(dir.join("app")).unwrap(), data);
+        assert_eq!(github.2.load(Ordering::SeqCst), 1);
+        assert_eq!(website.2.load(Ordering::SeqCst), 1);
+    }
+}
+
+#[test]
+fn preferred_sources_are_signed_and_cannot_downgrade_https() {
+    use base64::Engine;
+    use ed25519_dalek::{Signer, SigningKey};
+    let key = SigningKey::from_bytes(&[7; 32]);
+    let json = br#"{"format":1,"app":{"version":"9","url":"https://website/u","preferred_sources":["https://github/u"],"sha256":"aa","size":10}}"#;
+    let sig = base64::engine::general_purpose::STANDARD.encode(key.sign(json).to_bytes());
+    let manifest = parse_manifest(json, &sig, &key.verifying_key().to_bytes()).unwrap();
+    assert_eq!(manifest.app.unwrap().preferred_sources, ["https://github/u"]);
+    let changed = String::from_utf8(json.to_vec()).unwrap().replace("github", "attacker");
+    assert!(parse_manifest(changed.as_bytes(), &sig, &key.verifying_key().to_bytes()).is_err());
+    let mut rel = release("https://website/u".into(), vec![], b"x");
+    rel.preferred_sources = vec!["http://github/u".into()];
+    let dir = TestDir::new("unsafe-preferred-source");
+    assert!(download_checked(&TOOLS, &rel, "https://website/update.json", &dir.join("app"), &Cancel::new(), &|_| {}).unwrap_err().contains("isn't on https"));
 }

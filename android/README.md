@@ -132,11 +132,11 @@ off on a fresh install and gates touch feedback in both Rust and Java; Android's
 setting also applies. Core/controller rumble remains unavailable.
 
 After more than two weeks, a successful internal resume can show **Where was I?** over
-its restored frame for four seconds. Any press or touch ends it. Easy omits total play time;
+its restored frame until a press or touch ends it. That press only dismisses the card. Easy omits total play time;
 Settings → **Remind me where I was** switches it off. External emulator apps own their resumes.
 
 Android Back opens the pause sheet during play and returns one page from Options, Controls,
-Zoom or Recovery. **Save & quit** remains the only menu exit. Background/audio-focus loss
+Zoom or Recovery. **Save & quit** is the normal menu exit. If a Load and its rollback both fail, **Return to library** closes the protected session without saving it. Background/audio-focus loss
 pauses and commits the moment; returning stays paused. Gamepad disconnection clears inputs,
 pauses and restores touch controls. Both Activities use safe areas for cutouts, system bars
 and gesture edges. Battery saver suppresses optional slideshow/media downloads and the
@@ -157,3 +157,32 @@ save, a uinput gamepad, Hold to toggle, reminders and battery saver. Its helpers
 with the SDK and d8 to `/data/local/tmp/classes.dex`, and `gamepad.c` with the NDK to
 `/data/local/tmp/qa-gamepad`, before running the script. Inspect the saved screenshots;
 emulator checks cannot establish physical touch comfort, vibration, battery cost or driver quality.
+
+## Android 0.3 internal QA
+
+Settings calls the font choice **Style** and includes Retro, with its own saved Cocoa/Pea colours in launcher and
+player. Selected game names use the shared three-line title/subtitle layout in every phone look; their reserved
+band keeps system text and Play in place. The current main's shared disc/cart launch scenes and retained-moment
+reader are used without a separate Android implementation.
+
+SAF scans recognise the same foreign folder aliases as the card scanner. Artwork in `Imgs`, `.media`, `covers`,
+`images`, `media/*`, listed gamelists and ES-DE `downloaded_media` is tried before cached downloads. Pictures stay
+inside the granted roots, are decoded on the media worker (at most 8 MiB input, 1024 px output), and never write
+back to the card. Optional XML/CHT is limited to 256 KiB per file and 8 MiB per root; unavailable/oversized optional
+files do not hide the games. The listing never guesses access outside a selected tree.
+
+A same-stem `.cht` beside a game adds **Cheats** to pause → Options for mGBA, Gambatte, bsnes and Nestopia.
+The shared parser and core API apply code cheats; memory-write formats are explained, never pretended to work.
+Choices start Off, persist by provider/game/core identity, and a failed setting write changes neither switch nor
+core. Other bundled cores and external apps have no Android Cheats page in this preview. No cheat database is
+downloaded or bundled. Nestopia's bounded per-call buffer gets split code groups just as Snes9x does.
+
+Load saves Before load before entering the core. A refused partially applied load rolls back; a failed rollback
+blocks play, automatic/manual saves and SRAM/RTC writes through core destruction. The player can load another
+moment or explicitly return to the library, preserving earlier files. A successful state write remains successful
+if only its optional thumbnail fails. Android **Updates** explains APK installation; it does not poll or install
+Linux/SD update packages. `ANDROID_QA_VERSION=0.3.1` gives this internal APK its independent version while the main
+source crate still carries the development version. Use the existing signing key to keep app data on updates.
+
+`02-smoke.py` accepts `ANDROID_SMOKE_STYLE=retro`, `ANDROID_SMOKE_JPEG=1` (Pillow) and `ANDROID02_MATRIX_ONLY=1`.
+JPEG evidence is at most 150 KB per picture. The full journey also checks that reminders wait for a press.

@@ -39,6 +39,13 @@ kernel ─► systemd ─► sway.service ─► essway.service ─► run-pocke
   pocket-ui's first frame after a boot fades in from black (`boot_fade`). It never holds the boot up and never
   becomes DRM master ([BOOT-SPLASH.md](BOOT-SPLASH.md)).
 
+Update jobs and the quiet notice schedule have typed, process-local phases (`Updates`, `UpdateHintUi`). The update
+worker reports observations around the existing installer effects (`src/update/runtime.rs`); a separate read-only
+worker classifies existing recovery/known-good markers (`src/update/observation.rs`). `src/app_update_status.rs`
+adds these cached fields to the UI's one tmpfs status projection. Observation never chooses recovery or changes
+cancellation checks, durable markers, flushes, or rename ordering
+([UPDATES.md](UPDATES.md#observing-a-job-without-changing-it), [status schema](DEVICE-TESTS.md#where-the-ui-is-tmppocket-uistatus)).
+
 ## The processes
 
 | Process | Role |
@@ -74,6 +81,13 @@ reacts to the buttons that open the pause menu. pocket-core and pocket-ui talk t
   a write of the battery save or the cartridge clock fails, removed once one gets through and at the start. pocket-ui
   reads it when the pause menu opens (a line, and a question before Quit) and after the game (a notice on the shelf)
   (`src/save_trouble.rs`, `src/app_save_trouble.rs`, [HOST.md](HOST.md#when-a-save-cant-be-written)).
+
+The Linux core's FIFO grammar is decoded by `core_command::Command`; its command words remain
+compatible across UI/core versions. `core_status::Snapshot` derives the current play state from the
+existing flags and writes `/tmp/pocket-core.status` using the shared v1 `ui_status::Writer`, on
+change, by atomic rename on tmpfs without `fsync`. This optional observation carries machine codes,
+never game names or paths; the existing save/handoff protocol remains authoritative
+([core status fields](DEVICE-TESTS.md#where-the-core-is)).
 
 ## Start
 
@@ -173,6 +187,8 @@ setting and saves on every exit either way. PlayStation 2, GameCube, Wii and 3DS
 core's after Runs on changed, another file's, one the core refuses) goes into a free slot with its picture
 (`frozen_phone::set_aside`, shared with Android), never under a name the next Quit removes; a damaged one (checksum)
 gives way to the moment before it (`Core::resume`). docs/HOST.md "When a save can't be written".
+
+Exit saves return an explicit outcome: the fast-switch `saved` line is sent only after the required saves succeeded. On failure the normal process-exit path shows the existing notice on the shelf and cancels a pending switch. Load refuses to mutate the core when Before load could not be captured. A failed autosave cannot copy the older Auto into Earlier. In-game shortcut input is suppressed while paused, sleeping or dark, and dark-playing suppresses touch too. Standalone resume progress is bound to its launch id.
 
 ## Switching games
 
@@ -382,7 +398,7 @@ watchdog copies the profile's key back into `system.cfg` when they differ (`wifi
 | Test buttons (Settings → Help & tools) | `src/button_test.rs`, `src/app_test_buttons.rs` | Per-controller lights, trigger travel and sticks from the events before they are merged; the physical button is found by undoing the controller's layout and the Button layout; every pad event but volume and power belongs to the page while it is open; leaving is a 2 s hold of HOME (or B + START). See [development notes](DEVELOPING.md#identity-bound-linux-controller-layouts) |
 | Controllers and players (couch co-op) | `src/pad.rs` (`Mux`, `Controller`), `players.rs`, `players_page.rs`, `app_players.rs`, `rumble.rs` | Every device is read on its own and merged (review SOL-09): pocket-ui acts on the merged pad (`PadState::merge`), pocket-core gives each libretro port 0-3 the controller in that seat (`players::Inputs`), each player's rumble goes to their own controller. The seats live in pocket-core (`/tmp/pocket-core.players.json`), the order chosen on the Players page in `players.json` ([HOST.md](HOST.md#players-couch-co-op-srcplayersrs)) |
 | Font style | `src/font_style.rs`, `Text::sync` in `src/text.rs` | Barlow, Pixel (title face only) or Rounded; one atomic holds the style, each `Text` compares it at its next glyph and only on a change swaps its faces (parsed once per process, on first use) and clears its glyph cache; alternative faces are scaled to Barlow's capital height so layouts built on Barlow keep their baselines; a store theme's own fonts and safe mode are not touched ([DESIGN.md](DESIGN.md#font-styles-srcfont_stylers)) |
-| Button layout | `src/button_layout.rs`, the pad closure in `main` | Which physical face button plays A, B, X, Y in pocket-ui's menus (Nintendo as printed, or Xbox); applied once, on the pad threads, before the UI thread sees an event, so all screens (and a Bluetooth controller) follow it; games, touch, the FIFO and safe mode are untouched ([DEVELOPING.md](DEVELOPING.md)) |
+| Button layout | `src/button_layout.rs`, `button_layout_model.rs`, the pad closure in `main` | Which physical face button plays A, B, X, Y in pocket-ui's menus (Nintendo as printed, or Xbox); applied once, on the pad threads, before the UI thread sees an event, so all screens (and a Bluetooth controller) follow it; games, touch, the FIFO and safe mode are untouched ([DEVELOPING.md](DEVELOPING.md)) |
 | Colours, Font (Settings → Look), Buttons (Settings → Playing) | Settings rows that switch in place (`Opens::Colours`, `Opens::Font` in `main.rs`), the Buttons page `src/app_buttons.rs` (Button layout and Button symbols, the face buttons' picture), `src/button_prompts.rs`, `palette::Colours`, `src/font_style.rs`; the look previews are painted again when `app_look::style_mark` changes | Colours: `pal()` mixes the dark and light palette of the `Scheme` in use (an atomic checked per call, so a change shows in the next frame on every thread); the Cabinet's wood (`cabinet_art::wood`, cached per page colour, which differs per scheme), plates and slot light read `palette::scheme()`. Saved in settings.json's `"colours"`, Warm when unset. Button symbols: one atomic read by `kit::key_cap` (every hint key) and the manual's controls picture; the PlayStation shapes are private-use characters `Text` rasterises itself (`button_prompts::raster`). Saved in settings.json's `"prompts"`, the device's default when unset |
 | Idle menu scheduling | `src/main.rs` (`about_to_wait`), `frame_pace.rs`, `marquee.rs`, `picture_cycle.rs`, `app_second_screen.rs` | `ControlFlow::Wait` / `WaitUntil` block until input, worker news or the earliest real deadline. Long names and Split previews make one pass and settle; clock/battery frames never restart them. Toasts and sync confirmations wait through their still lifetime. Static notices request no animation frames. Moving frames use a 16.667 ms budget from paint start (`frame_pace::after_paint`), so painting is not followed by another full refresh wait; late frames can redraw immediately. Menu audio is warmed for two seconds of browsing, then closes. The lower window paces animations from its own last presentation and tracks image dependencies separately; `POCKETUI_TRACE` records successful lower presentations as `second-frame`. See [IDLE.md](IDLE.md) |
 | Motion | `src/motion.rs`, `app_motion.rs` | Glides, page transitions and fades, Full / Reduced / Off; a press always acts at once, an animation never delays it ([DESIGN.md](DESIGN.md#motion-srcmotionrs-srcapp_motionrs)) |
@@ -398,7 +414,7 @@ watchdog copies the profile's key back into `system.cfg` when they differ (`wifi
 | Pages that open before their answer is in (Settings → Games → Add games, the first start's time zone step, Settings → System → Time) | `setup.rs` (`go_to_games`, `enter_zone`, `look_zone`, `SetupEvent::GameCounts` / `Zone` / `ZoneOffsets`), `quick.rs` (`open_time`, `load_zones`, `load_offsets`, `poll_all`) | Nothing walks a folder, runs a process or reads a zone file on the UI thread, when the page opens or in a frame. Add games opens with the counts the shelf knows (`ShelfSystem::games`) and a thread counts every ROM folder, then the numbers swap in and the selection stays on its tile. The same thread (`count_catalog`) lists the folders of `roms` that are no system's (`library::stray_folders`, with the folder their games probably belong in) and the disc games left out for a missing file (`library::look_at_folder`); the page names them under its title (`unread_lines`). The time zone step opens with "Looking at your time zone…" while a thread runs `iw reg get`, reads the zoneinfo tree and tables and the offsets of the zones it shows; the lists' offsets come the same way, blank until they are in. The Time page opens with "…" for the zone and its offset (`Polled::timezone`, `zone_offset`, read by `poll_all` while the page is open), and a line under Search… while the zone list (`Polled::zones`, read once) is not in; a city list's offsets are read by the worker (`want_offsets`). Date and time set by hand (`manual_time`) is set by the same worker (`Hw::set_clock`, job `set-clock`; the row says "Setting…" until it answers, `quick::tests::setting_the_clock_never_runs_on_the_ui_thread`). Tests: `quick::tests::the_time_page_never_looks_at_the_system_on_the_ui_thread`, `setup::tests::the_zone_step_opens_at_once_and_never_looks_at_the_system_on_the_ui_thread` (both with `system_ctl::spy::Spy`, which records every look made on the test's thread) and `…the_games_step_opens_with_the_known_counts_and_counts_the_folders_on_a_thread` |
 | Wi-Fi watchdog | `wifi::watchdog` (`src/wifi.rs`) | A thread started with pocket-ui: repairs a saved profile that lost its key from ROCKNIX's `system.cfg` once, and writes the profile's key back into `system.cfg` when EmulationStation emptied it ([system.cfg](#rocknixs-systemcfg)), then checks the address every 15 s (kept for `wifi::ip`, so the UI has it from the first moments) and, while Wi-Fi is switched on, reconnects a dropped network after 30 s, 1 min, 2 min, then every 5 min, but only to a saved network the radio really heard since the drop (`iw dev wlan0 scan dump`, `wifi::heard_within`; nmcli and iwd go on listing an access point that went away until the next scan, and a try at it fails with "Secrets were required" and makes iwd shun it when it comes back), and at once when one is heard again (it asks for a scan at each look for the first 10 min offline); a saved connect the player started that fails that way while the network isn't heard says out of range instead of asking for the password (`wifi::gone`); scans and reconnects use the shared `net_state` lane, with fresh device-state checks and a boot/resume settle window (`wifi_activation.rs`); a connection already active or activating for the requested SSID is reused |
 | The shared Wi-Fi picture: radio, connection, last scan | `src/net_state.rs` (`NetState`); read by `quick.rs` (`Sys::wire_net`) and `setup.rs` (`Setup::apply_snapshot`) | One worker thread (`net-state`) does everything that changes the radio or the connection (switch, scan, connect, forget, country), one at a time; a generation drops the looks and scans that began before a change; both surfaces are told after every change and read the snapshot from memory. The Wi-Fi page also looks at the radio every 4 s on a thread of its own while it is up (`Setup::keep_radio_watch`, ends with the page); the radio switch and `wifi::scan_checked` (40 s timeout) run only on these threads ([SYSTEM-CONTROLS.md](SYSTEM-CONTROLS.md#quick-settings-home-on-the-shelf)) |
-| Sync | `src/sync.rs`, `sync_page.rs`, `app_sync.rs` | While any game runs, the battery-save and save-state folders (and the standalone emulator's) are paused in Syncthing, and resumed when it ends; folders left paused by a pocket-ui that stopped are resumed at the next start ([user/sync.md](user/sync.md), [SECURITY-HARDENING.md](SECURITY-HARDENING.md)) |
+| Sync | `src/sync.rs`, `sync_page.rs`, `app_sync.rs` | While any game runs, the battery-save and save-state folders (and the standalone emulator's) are paused in Syncthing, and resumed when it ends; folders recorded as owned by a pocket-ui that stopped are resumed at the next start, retrying failed resumes after the existing five-second discovery wait; unowned pauses stay paused ([SYNC-OWNERSHIP.md](SYNC-OWNERSHIP.md), [user/sync.md](user/sync.md), [SECURITY-HARDENING.md](SECURITY-HARDENING.md)) |
 | Saves with two versions | `src/sync_conflicts.rs`, `sync_conflict_page.rs`, `app_sync_conflicts.rs` | One `sync-conflicts` thread (started after the first frame) looks for Syncthing's `.sync-conflict-` copies in the folders of the shares that are on: 20 s after the start, after every game (at once and 30 s later), when Settings → Sync opens and every 5 minutes, never while a game runs; names only (directory entries, a few levels deep, at most 40,000 per folder), a `stat` only for a copy found. It reports a changed result as an event; the UI thread ties the copies to games (same folder and name, a state's name, a memory card to every game of its system) and paints the card's row, the one-time shelf notice and the page from that list. Keeping a version runs on a thread of its own: the version in use is copied to `/storage/roms/sync-backups/<date>` and flushed before the chosen copy is renamed over it, the other copies are moved there (copied and removed across file systems); the folder is in the saves folder's `.stignore`. The copies told about are kept in `sync-conflicts.json` ([user/sync.md](user/sync.md#two-versions-of-a-save)) |
 | Library data | `src/library_sync.rs`, `app_library_sync.rs` | One `library-sync` thread (low priority, started after the first frame) merges the curation with the other devices' through the Syncthing folder `<data>/library-sync/<device>/`, each device writing only its own folder: 15 s after the start, after every game (at once and 30 s later), when Settings → Sync opens or a row is switched, and when a `stat` once a minute finds a changed file; never while a game runs. A pass reads `library.json`, `favorites.json`, `curator.json` and the play log, stamps what changed since the own folder's state with its file's mtime, merges every device's values field by field (last writer wins, tombstones for removals; play history a de-duplicated union) and sends the changes as an event. The UI thread applies them with the stores' own types (skipping any the player changed meanwhile) and saves once; only then does the thread write the own folder. Other devices' sessions reach the pages through `play_log::set_extra`, never the own `play-log.bin` ([SYNC-CURATION.md](SYNC-CURATION.md)) |
 | "This game" page (START on a card) | `src/this_game_page.rs`, `app_this_game.rs` | the pause menu's own rows (`options::GROUPS`, `emu_menu`, `emu_settings`) for a game that is not running; every change is written at once as the game's own settings (`game-settings/<system>/<game>.json`, system.cfg), the files pocket-core and the pause menu read ([options.md](user/options.md#this-game)) |
@@ -525,6 +541,11 @@ painter (`src/text.rs`) looks each string up by its English wording in a table c
 of `settings.json`; until it is made, the system language EmulationStation set (`system.language`, which the launcher
 passes on as `LANG`) decides. What `Text::fit` and `Text::wrap` give back is translated already and is painted as it is (`i18n::Cache::is_translated`): a second look-up of it would run every pattern of the table over it. See [DEVELOPING.md](DEVELOPING.md#translations).
 
+Game/system name components explicitly use `Text::literal`, `card_name`/`draw_name` and
+`title_block::name_layout`/`name_layout_in`. A title line carries its literal identity through
+measurement and drawing, so wrapped/truncated fragments never enter word-level translation.
+This also covers metadata names encountered before library loading has learned them.
+
 The text size works the same way (Settings → Look → Text size, `src/type_scale.rs`): the pages ask for the
 design's sizes and the text painter paints, measures, fits and wraps each at the size of the setting, with its glyph
 cache keyed by the size painted; the pages take their row heights and line steps from the same module, so a page with
@@ -564,7 +585,7 @@ The `src/platform/` seam owns OS I/O at the existing call boundaries. Cover/pict
 
 `src/lib.rs` selects `linux_modules.rs` or `android_modules.rs`. The Android entry depends on the normal shared
 library; `platform/` supplies Android SAF/JNI, HTTPS/system queries and AAudio. `library_names.rs` and
-`look_settings.rs` hold shared pure rules/values, re-exported by Linux. The complete composition, supported subset,
+`look_settings.rs` hold shared pure rules/values, re-exported by Linux. `button_layout_model.rs` likewise holds the printed layout used by both targets; Linux `button_layout.rs` re-exports its type and owns physical menu remapping and device defaults. The complete composition, supported subset,
 intent table and build/emulator scripts are documented in [ANDROID-MVP.md](ANDROID-MVP.md) and
 [the Android build guide](../android/README.md). The older feasibility section above records the original spike.
 
@@ -626,6 +647,12 @@ on-device correctness checks. Android's native player does not use the pocket-co
 these startup defaults. Its pinned PPSSPP build instead applies `ppsspp-pause-drain.patch`, using
 `ThreadFrameUntilCondition` during pause as the upstream stop path does. A ROCKNIX core must
 be rebuilt separately with that patch; a pocket-ui update alone cannot change its pause protocol.
+
+The Brick's F1/F2 are global system shortcuts (`brick-keys.json`), outside the controller permutation and the game's
+16-button RetroPad mapping. Controls directs players to Lights & buttons; pressing an F key during Controller setup
+ends capture with that explanation and preserves the layout. See [F-key assignment scope](TRIMUI-BRICK-HW.md#f1f2-assignment-scope).
+The mute-slider choice is in the same settings directory: the launcher exports that path for both volume restore and
+the hardware watcher, migrating a legacy top-level choice only when the current settings file is absent.
 
 ### Standalone Brick Bluetooth
 
@@ -705,3 +732,12 @@ Front-view GB/GBC/GBA and DS turn the label away before entering their rear slot
 `media::game_back` decodes the photographed rear shell once on the first launch frame;
 subsequent frames map the cached pictures. See [DESIGN.md](DESIGN.md) and
 [the rear-shell sources and licences](../assets/media/game/REAR-SOURCES.md).
+
+
+Android's SAF listing also feeds `document_art::Index`: a per-grant read-only index over shared folder conventions
+and tolerant gamelist parsing. Covers are resolved before network caches, decoded on the existing media worker,
+and bounded before bitmap allocation. Exact-game CHT sidecars use the shared cheat parser with private identity
+stores and direct core calls. Android's moment transaction keeps Before load durable before entering the core;
+a failed rollback blocks every save (including core Drop) until a verified Load, or an explicit return to library.
+Retro palette preferences and three-line selected-title bands belong to both Android native processes.
+TrimUI board differences live in `brick_profile::Board`: Brick Pro reuses the Brick screen and Smart Pro analog input. Its identity is checked before framebuffer width; input requires verified plain-Brick identity before enabling the legacy F-key aliases; capability bitmaps alone are identical. See [TRIMUI-BRICK-PRO.md](TRIMUI-BRICK-PRO.md).

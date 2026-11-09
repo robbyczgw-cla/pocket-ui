@@ -27,7 +27,21 @@ impl Decoder {
         Self::with_caps(id.bus_type().0, id.vendor(), id.product(), id.version(), dev.name().unwrap_or(""), keys, ranges)
     }
 
-    pub fn with_caps(bus: u16, vendor: u16, product: u16, version: u16, name: &str, mut keys: Vec<u16>, mut ranges: Vec<(u16, i32, i32)>) -> Self {
+    pub fn with_caps(bus: u16, vendor: u16, product: u16, version: u16, name: &str, keys: Vec<u16>, ranges: Vec<(u16, i32, i32)>) -> Self {
+        #[cfg(feature = "brick")]
+        let legacy_fkeys = crate::brick_profile::legacy_input_fkeys();
+        #[cfg(not(feature = "brick"))]
+        let legacy_fkeys = false;
+        Self::with_caps_profile((bus, vendor, product, version), name, keys, ranges, legacy_fkeys)
+    }
+
+    /// Fixture readers supply the verified physical profile: the Brick advertises the Pro's unused Xbox capabilities too.
+    /// Live readers use `with_caps`, which verifies the firmware identity instead of trusting the caller.
+    #[doc(hidden)]
+    pub fn with_caps_profile(id: (u16, u16, u16, u16), name: &str, mut keys: Vec<u16>, mut ranges: Vec<(u16, i32, i32)>, legacy_fkeys: bool) -> Self {
+        let (bus, vendor, product, version) = id;
+        #[cfg(not(feature = "brick"))]
+        let _ = legacy_fkeys;
         // Same two loops as SDL_sysjoystick.c (BTN_JOYSTICK first, then smaller key codes).
         keys.sort_by_key(|k| (*k < 0x120, *k));
         ranges.sort_by_key(|a| a.0);
@@ -43,7 +57,11 @@ impl Decoder {
         let known_layout = brick || native_mcu || super::linux::is_h700_pad(name);
         let z_stick = !known_layout && !has(Abs::ABS_RX) && !has(Abs::ABS_RY) && has(Abs::ABS_Z) && has(Abs::ABS_RZ);
         for &key in &keys {
-            if let Some(mut b) = super::linux::button_on(name, KeyCode(key)) {
+            #[cfg(feature = "brick")]
+            let mapped = super::linux::button_on_with_legacy_fkeys(name, KeyCode(key), legacy_fkeys);
+            #[cfg(not(feature = "brick"))]
+            let mapped = super::linux::button_on(name, KeyCode(key));
+            if let Some(mut b) = mapped {
                 // xpad follows Xbox X/Y codes (BTN_NORTH/BTN_WEST), rather than Sony's positional convention.
                 if vendor == 0x045e && !known_layout { b = match b { Button::North => Button::West, Button::West => Button::North, b => b }; }
                 // 8BitDo's generic HID descriptor has A before B; these are Nintendo letters.
@@ -211,11 +229,11 @@ mod tests {
     #[cfg(feature = "brick")]
     fn the_real_brick_pad_saves_and_loads_with_f_keys_despite_its_xbox_id() {
         use crate::hotkeys::{Action, Enabled, Hotkeys};
-        // Captured capabilities of TRIMUI Player1: it borrows the Xbox 360 USB ID,
-        // but has F keys instead of stick clicks and analog L2/R2 instead of a right stick.
-        let mut decoder = Decoder::with_caps(3, 0x045e, 0x028e, 0x0114, "TRIMUI Player1",
-            vec![304,305,307,308,310,311,314,315,316,317,318],
-            vec![(0,0,255),(1,0,255),(2,0,255),(5,0,255),(16,-1,1),(17,-1,1)]);
+        // The verified plain Brick borrows the Xbox 360 ID and advertises dummy stick axes too.
+        // Physical F keys still use thumb codes; identity, not these capabilities, establishes that.
+        let mut decoder = Decoder::with_caps_profile((3, 0x045e, 0x028e, 0x0114), "TRIMUI Player1",
+            vec![59,60,304,305,307,308,310,311,314,315,316,317,318],
+            vec![(0,-32767,32767),(1,-32767,32767),(2,0,255),(3,-32767,32767),(4,-32767,32767),(5,0,255),(16,-1,1),(17,-1,1)], true);
         let input = Inputs::new(vec![], None);
         input.feed(PadEvent::Connected { source: 3, controller: Controller::builtin() }, |_| {});
         input.arrange();
@@ -238,6 +256,46 @@ mod tests {
                 matches!(e, PadEvent::Button { button: b, pressed: true, .. } if *b == button)), "{button:?} must retain its real Brick position");
         }
     }
+    #[test]
+    #[cfg(feature = "brick")]
+    fn brickpro_stick_click_never_quick_saves_or_loads_even_with_legacy_board_detection() {
+        use crate::hotkeys::{Action, Enabled, Hotkeys};
+        // This test also runs with POCKETUI_DEVICE=brick: without verified plain-Brick identity the guess must fail safe.
+        let mut decoder = Decoder::with_caps(3, 0x045e, 0x028e, 0x0114, "TRIMUI Player1",
+            vec![59,60,304,305,307,308,310,311,314,315,316,317,318],
+            vec![(0,-32768,32767),(1,-32768,32767),(2,0,255),(3,-32768,32767),(4,-32768,32767),(5,0,255),(16,-1,1),(17,-1,1)]);
+        let input = Inputs::new(vec![], None);
+        input.feed(PadEvent::Connected { source: 3, controller: Controller::builtin() }, |_| {});
+        input.arrange();
+        let mut hotkeys = Hotkeys::new(Enabled::default());
+        hotkeys.set_f_keys([Some(Action::Save), Some(Action::Load)]);
+        for (code, want) in [(317,Button::L3),(318,Button::R3)] {
+            let mut seen = false;
+            for down in [1,2,0] {
+                for e in decoder.event(3, InputEvent::new(1, code, down)) {
+                    seen |= matches!(e, PadEvent::Button { button, pressed: true, .. } if button == want);
+                    input.feed(e, |merged| hotkeys.feed(merged));
+                }
+            }
+            let actions = hotkeys.take();
+            assert!(actions.is_empty(), "stick click {code} issued {actions:?}");
+            assert!(seen, "stick click {code} must reach the game as {want:?}");
+        }
+        for (code, want) in [(59,Action::Save),(60,Action::Load)] {
+            for down in [1,0] { for e in decoder.event(3, InputEvent::new(1,code,down)) { input.feed(e, |e| hotkeys.feed(e)); } }
+            assert_eq!(hotkeys.take(), vec![want], "the separate F key must still work");
+        }
+        for (index, (code, want)) in [(0,Axis::LeftX),(1,Axis::LeftY),(3,Axis::RightX),(4,Axis::RightY)].into_iter().enumerate() {
+            let events = decoder.event(3, InputEvent::new(3,code,-32768));
+            assert!(events.iter().any(|e|
+                matches!(e, PadEvent::Axis { axis, value, .. } if *axis == want && *value == -1.0)), "{want:?} stays analog");
+            for event in events { input.feed(event, |_| {}); }
+            assert_eq!(input.sticks(0).analog(true)[index], -32767, "{want:?} reaches the core's analog inputs");
+            for event in decoder.event(3, InputEvent::new(3,code,0)) { input.feed(event, |_| {}); }
+            assert_eq!(input.sticks(0).analog(true)[index], 0, "{want:?} centers");
+        }
+    }
+
     #[test]
     fn every_mode_has_both_triggers_in_the_menu_and_in_a_game() {
         for c in cases() {

@@ -817,6 +817,9 @@ pub struct Core {
     /// The battery save is on the card but couldn't be read (an input/output error): nothing is written over it
     /// (`read_sram`), and `save_trouble` says so.
     sram_unreadable: bool,
+    /// Android stops every save, including Drop, after a load and its rollback both failed.
+    #[cfg(target_os = "android")]
+    saves_blocked: bool,
     /// The cartridge clock's file (`MEMORY_RTC`), and what is on disk: like `sram_path` and `sram_written`.
     rtc_path: PathBuf,
     rtc_written: Vec<u8>,
@@ -1007,6 +1010,8 @@ impl Core {
                 sram_written: Vec::new(),
                 sram_time: None,
                 sram_unreadable: false,
+                #[cfg(target_os = "android")]
+                saves_blocked: false,
                 rtc_path: save_dir.join(format!("{stem}.rtc")),
                 rtc_written: Vec::new(),
                 saver: crate::save_writer::SaveWriter::new(),
@@ -1094,12 +1099,21 @@ impl Core {
         took
     }
 
+    /// Blocks Android SRAM/RTC writes after an unverified load, including the final Drop flush.
+    #[cfg(target_os = "android")]
+    pub fn block_saves(&mut self, blocked: bool) {
+        self.saver.wait();
+        self.saves_blocked = blocked;
+    }
+
     /// Writes the game's battery save and its cartridge clock (each if the game has one and it changed, or its last
     /// write failed) next to RetroArch's, now and on this thread (quit, sleep), through `fsutil::write_atomic`: a power
     /// cut can't leave half a save behind, and a failed write leaves the last good file in place. A background write
     /// still running finishes first, so it can't land after this one. One try, never a wait for the card to recover:
     /// Err says why a file (this one or an earlier flush's) didn't reach the card (`save_trouble`).
     pub fn write_sram(&mut self) -> Result<(), crate::save_trouble::Trouble> {
+        #[cfg(target_os = "android")]
+        if self.saves_blocked { return Err(crate::save_trouble::Trouble::Unwritable); }
         self.saver.wait();
         for id in [MEMORY_SAVE_RAM, MEMORY_RTC] {
             if id == MEMORY_SAVE_RAM && self.sram_unreadable {
@@ -1120,6 +1134,8 @@ impl Core {
     /// The periodic flush (every 10 s): like `write_sram`, but the game thread only copies the bytes;
     /// `save_writer` writes them. A failed write is tried again at the next flush.
     pub fn write_sram_in_background(&mut self) {
+        #[cfg(target_os = "android")]
+        if self.saves_blocked { return; }
         for id in [MEMORY_SAVE_RAM, MEMORY_RTC] {
             if id == MEMORY_SAVE_RAM && self.sram_unreadable {
                 continue;
@@ -1329,14 +1345,21 @@ impl Core {
         let again = state != *battery_auto;
         // The note belongs to the exit that wrote the state passed over, never to an older one: that one must not win over
         // the battery save on the card.
-        let battery_unsaved = crate::slots::take_battery_unsaved(battery_auto) && !passed_over;
         // Keep raw legacy moments in their raw namespace until a new exit writes compressed Auto. No migration
         // write at startup, and even a full card can still resume an old moment.
         let taken = crate::slots::taken_auto_path(battery_auto);
         let retry = crate::slots::retry_auto_path(battery_auto);
         let to = if again { &retry } else { &taken };
         let state_time = std::fs::metadata(&state).and_then(|m| m.modified()).ok();
-        let _ = std::fs::rename(&state, to);
+        if let Err(e) = std::fs::rename(&state, to) {
+            // Never feed a possibly crash-inducing moment to the core unless its retry stage advanced.
+            // A failed claim leaves the original intact for Load/recovery.
+            eprintln!("resume: couldn't claim {} for this start: {e}", state.display());
+            self.taken = Some((Resume::Failed, state));
+            return Resume::Failed;
+        }
+        // A claim that failed must not consume the state's newer-battery exception either.
+        let battery_unsaved = crate::slots::take_battery_unsaved(battery_auto) && !passed_over;
         // After a downgrade both namespaces can hold an Auto; the one not chosen is older. It goes where a state given up
         // on goes (Load still lists it), or a crash or a quit without saving would bring it back at the next start.
         for other in groups.iter().filter(|g| *g != battery_auto) {
@@ -1603,18 +1626,18 @@ impl Core {
                 reset();
             }
             let Ok(set) = self.lib.get::<unsafe extern "C" fn(c_uint, bool, *const c_char)>(b"retro_cheat_set") else { return };
-            // Snes9x copies each call into a 256-byte buffer. Long database groups are independent
+            // Snes9x and Nestopia copy each call into a 256-byte buffer. Long database groups are independent
             // '+'-joined codes, so hand over their members separately instead of overflowing that buffer.
             let codes: Vec<&str> = codes.iter().flat_map(|code| {
-                if self.name.eq_ignore_ascii_case("snes9x") && code.len() >= 256 {
+                if (self.name.eq_ignore_ascii_case("snes9x") || self.name.eq_ignore_ascii_case("nestopia")) && code.len() >= 256 {
                     code.split('+').collect::<Vec<_>>()
                 } else {
                     vec![code.as_str()]
                 }
             }).collect();
             for (i, code) in codes.into_iter().enumerate() {
-                if self.name.eq_ignore_ascii_case("snes9x") && code.len() >= 256 {
-                    eprintln!("cheats: Snes9x code exceeds its 255-byte limit");
+                if (self.name.eq_ignore_ascii_case("snes9x") || self.name.eq_ignore_ascii_case("nestopia")) && code.len() >= 256 {
+                    eprintln!("cheats: {} code exceeds its 255-byte limit", self.name);
                     continue;
                 }
                 if let Ok(c) = CString::new(code) {
@@ -2580,6 +2603,28 @@ bool retro_unserialize(const void *d, size_t n) {
     }
 
     #[test]
+    fn save_safety_a_moment_not_claimed_for_retry_never_reaches_the_core() {
+        let _globals = globals();
+        let g = Game::new("claim-refused", "srm");
+        let source = Core::load(&g.core, &g.rom, &g.dir, &g.dir, &[]).unwrap();
+        for _ in 0..20 { source.run(0); }
+        let previous = source.save_state().unwrap();
+        crate::state_file::write(&g.state, &previous).unwrap();
+        drop(source);
+        // Even root cannot replace this directory by a state file: deterministic rename failure.
+        std::fs::create_dir(g.taken()).unwrap();
+        crate::slots::battery_unsaved(&g.state, true);
+        let mut core = Core::load(&g.core, &g.rom, &g.dir, &g.dir, &[]).unwrap();
+        let fresh = core.save_state().unwrap();
+        assert_ne!(fresh, previous);
+        let resumed = core.resume(&g.state);
+        assert_eq!(core.save_state().unwrap(), fresh, "unclaimed crash-inducing Auto must not be tried repeatedly");
+        assert_eq!(resumed, Resume::Failed);
+        assert_eq!(crate::state_file::read(&g.state).unwrap(), previous, "the previous moment stays whole");
+        assert!(crate::slots::take_battery_unsaved(&g.state), "an unattempted moment retains its battery provenance");
+    }
+
+    #[test]
     fn a_crash_without_an_in_game_save_resumes_from_the_quit_point() {
         let _l = globals();
         let g = Game::new("lost", "srm");
@@ -2754,7 +2799,7 @@ bool retro_unserialize(const void *d, size_t n) {
     }
 
     #[test]
-    fn a_parking_that_fails_keeps_todays_behaviour_for_that_start_and_loses_nothing() {
+    fn a_parking_that_fails_keeps_the_saved_moment_and_does_not_retry_without_a_claim() {
         let _l = globals();
         let g = Game::new("nosave-obstructed", "srm");
         first_session(&g);
@@ -2767,7 +2812,8 @@ bool retro_unserialize(const void *d, size_t n) {
         core.keep_resume_point(&g.state);
         assert!(g.taken().exists(), "the moment is still there");
         let (core, r) = g.start();
-        assert_eq!((r, position(&core)), (Resume::ResumedAgain, 5), "as before this change, for that one start");
+        assert_eq!((r, position(&core)), (Resume::Failed, 0), "a failed claim must not mutate the game");
+        assert!(g.taken().exists(), "the saved moment remains available for recovery");
     }
 
     #[test]
@@ -3323,16 +3369,18 @@ void stub_frame(unsigned w, unsigned h, size_t pitch, unsigned bpp) {
         let _l = globals();
         let stub = Stub::new("long-cheats");
         let mut core = stub.load();
-        core.name = "Snes9x".into();
-        let code = vec!["7E1F8A03"; 40].join("+");
-        core.set_cheats(std::slice::from_ref(&code));
-        unsafe {
-            let applied: unsafe extern "C" fn() -> *const c_char = hook(&core, "stub_cheats");
-            let overflow: unsafe extern "C" fn() -> bool = hook(&core, "stub_cheat_overflow");
-            assert!(!overflow(), "a database group must never overflow Snes9x's 256-byte buffer");
-            assert_eq!(CStr::from_ptr(applied()).to_str().unwrap(), code, "every member of the cheat remains active");
-            core.set_cheats(&[]);
-            assert_eq!(CStr::from_ptr(applied()).to_bytes(), b"", "All off clears every member too");
+        for name in ["Snes9x", "Nestopia"] {
+            core.name = name.into();
+            let code = vec!["7E1F8A03"; 40].join("+");
+            core.set_cheats(std::slice::from_ref(&code));
+            unsafe {
+                let applied: unsafe extern "C" fn() -> *const c_char = hook(&core, "stub_cheats");
+                let overflow: unsafe extern "C" fn() -> bool = hook(&core, "stub_cheat_overflow");
+                assert!(!overflow(), "a database group must never overflow Snes9x's 256-byte buffer");
+                assert_eq!(CStr::from_ptr(applied()).to_str().unwrap(), code, "every member of the cheat remains active");
+                core.set_cheats(&[]);
+                assert_eq!(CStr::from_ptr(applied()).to_bytes(), b"", "All off clears every member too");
+            }
         }
     }
 

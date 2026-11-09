@@ -6,6 +6,7 @@
 #
 #   sh install.sh             checks, installs, then restarts the interface: pocket-ui comes up
 #   sh install.sh --check     only the checks; nothing changes
+#   sh install.sh --check-installed   checks, then exit 0 if complete or 3 if install/repair is needed
 #   sh install.sh --no-restart   installs, but pocket-ui only comes up at the next start of the device
 #   --allow-untested-rocknix  a ROCKNIX older than the tested one, if pocket-ui's own check passes (newer ones need no option)
 #   --allow-other-device      another SM8250 device than these (untested, unknown to pocket-ui; never for an H700 or RK3566 one)
@@ -44,10 +45,11 @@ SPLASH_LINK=$UNITS/sysinit.target.wants/pocket-splash.service
 ES_ONLY=$R/tmp/pocket-ui.es-only
 F=$HERE/files
 
-CHECK_ONLY=0 RESTART=1 ANY_ROCKNIX=0 ANY_DEVICE=0
+CHECK_ONLY=0 CHECK_INSTALLED=0 RESTART=1 ANY_ROCKNIX=0 ANY_DEVICE=0
 for a in "$@"; do
   case $a in
     --check) CHECK_ONLY=1 ;;
+    --check-installed) CHECK_ONLY=1 CHECK_INSTALLED=1 ;;
     --no-restart) RESTART=0 ;;
     --allow-untested-rocknix) ANY_ROCKNIX=1 ;;
     --allow-other-device) ANY_DEVICE=1 ;;
@@ -186,28 +188,52 @@ fi
 printf '%s\n' "$report" | grep '^WARNS ' | sed 's/^WARNS  */  note  /'
 ok "pocket-ui's compatibility check of this system"
 
-if [ $CHECK_ONLY = 1 ]; then
-  rm -rf "$STAGE"
-  say "" "All checks passed. Nothing was changed (--check). Run sh install.sh to install."
-  exit 0
-fi
-
-say "== installing"
-# The programs: releases/<version>, current and the fixed links, as scripts/dev.sh and the updater lay them out.
+# Shared identity for the query and install: compare bytes, not the version marker.
 REL=$APP/releases/$VERSION
 REL_NAME=$VERSION
 active=$(readlink "$APP/current" 2>/dev/null)
 case $active in
   releases/"$VERSION"-install-*) REL=$APP/$active; REL_NAME=${active#releases/} ;;
 esac
-mkdir -p "$APP/releases" || die "cannot create $APP/releases"
 same_release() {
   # A core-only package repair must not be mistaken for an already-installed release.
   if [ -d "$STAGE/cores" ]; then
     [ -d "$REL/cores" ] && diff -r "$STAGE/cores" "$REL/cores" >/dev/null 2>&1 || return 1
   elif [ -d "$REL/cores" ]; then return 1; fi
-  for f in pocket-ui pocket-core pocket-splash portmaster-setup.sh; do cmp -s "$STAGE/$f" "$REL/$f" || return 1; done
+  for f in pocket-ui pocket-core pocket-splash portmaster-setup.sh; do
+    [ -x "$REL/$f" ] && cmp -s "$STAGE/$f" "$REL/$f" || return 1
+  done
 }
+same_install() {
+  [ ! -e "$APP/update-pending" ] || return 1
+  [ "$(readlink "$APP/current" 2>/dev/null)" = "releases/$REL_NAME" ] && same_release || return 1
+  for f in pocket-ui pocket-core portmaster-setup.sh; do
+    [ "$(readlink "$APP/$f" 2>/dev/null)" = "current/$f" ] || return 1
+  done
+  [ -x "$APP/run-pocket-ui.sh" ] && cmp -s "$F/run-pocket-ui.sh" "$APP/run-pocket-ui.sh" &&
+    [ -x "$APP/uninstall.sh" ] && cmp -s "$HERE/uninstall.sh" "$APP/uninstall.sh" &&
+    cmp -s "$F/10-pocket-ui.conf" "$DROPIN" && cmp -s "$F/pocket-splash.service" "$SPLASH" &&
+    [ "$(readlink "$SPLASH_LINK" 2>/dev/null)" = ../pocket-splash.service ] &&
+    diff -r "$LIC" "$APP/licences" >/dev/null 2>&1 || return 1
+  if [ -d "$HERE/hakux" ]; then
+    (cd "$APP/hakux" && sha256sum -c "$HERE/hakux/SHA256SUMS" >/dev/null 2>&1) || return 1
+  fi
+  systemctl show -p DropInPaths --value essway 2>/dev/null | grep -q 10-pocket-ui.conf &&
+    systemctl show -p Environment --value essway 2>/dev/null | grep -q POCKETUI_AS_ESSWAY=1
+}
+if [ $CHECK_ONLY = 1 ]; then
+  result=0
+  if [ $CHECK_INSTALLED = 1 ]; then
+    same_install || result=3
+  fi
+  rm -rf "$STAGE"
+  say "" "All checks passed. Nothing was changed (--check). Run sh install.sh to install."
+  exit "$result"
+fi
+
+say "== installing"
+# The programs: releases/<version>, current and the fixed links, as scripts/dev.sh and the updater lay them out.
+mkdir -p "$APP/releases" || die "cannot create $APP/releases"
 if [ -d "$REL" ] && same_release; then
   rm -rf "$STAGE"
   ok "releases/$VERSION already in place"

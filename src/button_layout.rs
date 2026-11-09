@@ -30,14 +30,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 
 use crate::pad::{Button, PadEvent};
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ButtonLayout {
-    /// A on the right, as printed on the Mini V2 and original Odin 2.
-    Nintendo,
-    /// A at the bottom, B on the right, X on the left, Y on top, as on an Xbox controller.
-    Xbox,
-}
+pub use crate::button_layout_model::ButtonLayout;
 
 impl Default for ButtonLayout {
     fn default() -> Self {

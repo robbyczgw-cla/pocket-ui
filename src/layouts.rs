@@ -287,6 +287,19 @@ fn suffixed(stem: &str) -> Option<(&str, Kind)> {
     Some((stem, Kind::Mix))
 }
 
+/// The game stem and kind of a picture in a listed provider folder (no filesystem access).
+pub fn listed_picture(folder: &str, file: &str) -> Option<(String, Kind)> {
+    let stem = picture(file)?;
+    let (name, kind) = match folder_kind(folder)? {
+        Folder::Box => (stem, Kind::Box),
+        Folder::Mix => (stem, Kind::Mix),
+        Folder::Shot => (stem, Kind::Shot),
+        Folder::Suffixed => suffixed(stem)?,
+        Folder::Wrapper => return None,
+    };
+    Some((name.to_lowercase(), kind))
+}
+
 /// One picture folder, listed: lowercase game name → (file name, what it shows).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ArtDir {

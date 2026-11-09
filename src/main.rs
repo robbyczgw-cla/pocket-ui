@@ -168,6 +168,10 @@ mod app_clock;
 mod app_update_hint;
 // Where the App is and what the frame's list registered, for the navigation explorer (tests/nav_explorer.rs).
 mod app_nav_probe;
+// Where the App is: the page in front and what covers it, for `@where` and the status file /tmp/pocket-ui.status.
+mod app_where;
+use app_where::Painter;
+mod app_update_status;
 mod app_controls_card;
 mod app_storage;
 // Safe mode (the rescue page) and the dialog before EmulationStation (`pocket_ui::rescue`).
@@ -284,6 +288,8 @@ enum UserEvent {
     BigMoments(u64, Vec<pocket_ui::frozen::Moment>),
     /// Applying PS2, GameCube, Wii or 3DS options by a restart: the resume state was written (or not).
     OptionsSaved(bool),
+    /// A standalone load left the game unchanged because Before load could not be kept.
+    LoadBlocked(u64),
     Setup(SetupEvent),
     Update(UpdateEvent),
     Store(store_page::Event),
@@ -310,6 +316,10 @@ enum UserEvent {
     /// The command FIFO's `leave`: the dialog SELECT + START held opens (`app_rescue`).
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     Leave,
+    /// The command FIFO's `wake`: the screen on from light sleep, without a button a page could take (`app_where`,
+    /// docs/DEVICE-TESTS.md).
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    Wake,
     /// FIFO `play <system> <file>`: starts a game the way the shelf does (the Brick smoke test, `scripts/brick-smoke.sh`). Only files below a
     /// `.pocket-ui-test` folder; anything else is ignored.
     #[cfg(feature = "brick")]
@@ -618,6 +628,8 @@ const SETTINGS: [SettingsRow; app_settings_groups::count()] = app_settings_group
 enum UpdateEvent {
     Checked(Result<Manifest, String>),
     Progress(u64),
+    Worker { job: u64, snapshot: update::WorkerSnapshot },
+    Inspected(update::observation::Inspection),
     /// An install finished: `Ok(true)` for the app (restart next), `Ok(false)` for the system.
     Done(Result<bool, String>),
     /// The system update was staged; the note says what the new system lacks that pocket-ui uses (`os_compat`).
@@ -639,49 +651,152 @@ enum UpdateAction {
     CancelOs,
 }
 
-/// The Updates page: what the channel offers and what is being done about it.
+#[derive(Default)]
+enum UpdatePhase {
+    #[default]
+    Idle,
+    Confirming,
+    Running(UpdateJob),
+    Finished(UpdateReport),
+}
+
+enum UpdateTask {
+    Check,
+    App { version: String, total: u64, cancel: update::Cancel },
+    System { version: String, total: u64, cancel: update::Cancel },
+}
+
+#[derive(Clone)]
+enum UpdateTarget { Check, App(String), System(String) }
+
+impl UpdateTarget {
+    fn kind(&self) -> &'static str { match self { Self::Check => "check", Self::App(_) => "app", Self::System(_) => "system" } }
+    fn version(&self) -> Option<&str> { match self { Self::Check => None, Self::App(v) | Self::System(v) => Some(v) } }
+}
+
+impl UpdateTask {
+    fn cancel(&self) -> Option<&update::Cancel> {
+        match self { Self::Check => None, Self::App { cancel, .. } | Self::System { cancel, .. } => Some(cancel) }
+    }
+    fn target(&self) -> UpdateTarget {
+        match self { Self::Check => UpdateTarget::Check, Self::App { version, .. } => UpdateTarget::App(version.clone()), Self::System { version, .. } => UpdateTarget::System(version.clone()) }
+    }
+    fn label(&self) -> String {
+        match self { Self::Check => "Checking for updates".into(), Self::App { version, .. } => format!("Installing pocket-ui {version}"), Self::System { version, .. } => format!("Getting system {version}") }
+    }
+    fn total(&self) -> u64 {
+        match self { Self::Check => 0, Self::App { total, .. } | Self::System { total, .. } => *total }
+    }
+}
+
+struct UpdateJob {
+    id: u64,
+    task: UpdateTask,
+    label: String,
+    since: Instant,
+    worker: update::WorkerSnapshot,
+}
+
+#[derive(Clone, Copy)]
+enum UpdateOutcome { Checked, Installed, OsStaged, Failed }
+
+impl UpdateOutcome {
+    fn code(self) -> &'static str { match self { Self::Checked => "checked", Self::Installed => "installed", Self::OsStaged => "os-staged", Self::Failed => "failed" } }
+}
+
+struct UpdateReport {
+    id: u64,
+    target: UpdateTarget,
+    outcome: UpdateOutcome,
+    worker: update::WorkerSnapshot,
+    cancel_requested: bool,
+}
+
+/// The page's typed process-local job. The installer and launcher still own the disk protocol.
 #[derive(Default)]
 struct Updates {
     sel: usize,
     manifest: Option<Manifest>,
-    /// Running download or install: label and expected size.
-    busy: Option<(String, u64)>,
-    /// When `busy` was set; a stuck job stops blocking auto-sleep after `update::BUSY_BLOCKS_SLEEP_FOR`.
-    busy_since: Option<Instant>,
-    /// Stops the running download (not available for the check).
-    cancel: Option<update::Cancel>,
+    phase: UpdatePhase,
+    next_job: u64,
     done: u64,
     message: Option<String>,
-    /// The new app version is in place; pocket-ui restarts once this moment has passed.
+    /// Shared with backup restoration, independently of the update job.
     restart_at: Option<Instant>,
-    /// "Install pocket-ui X" was chosen and waits for "Install now" or "Later".
-    confirm: bool,
 }
 
 impl Updates {
-    fn start(&mut self, label: String, total: u64, cancel: Option<update::Cancel>) {
-        self.busy = Some((label, total));
-        self.busy_since = Some(Instant::now());
-        self.cancel = cancel;
+    fn start(&mut self, task: UpdateTask) {
+        self.next_job = self.next_job.wrapping_add(1).max(1);
+        let worker = task.cancel().map_or_else(update::WorkerSnapshot::default, |c| c.snapshot());
+        self.phase = UpdatePhase::Running(UpdateJob { id: self.next_job, label: task.label(), task, since: Instant::now(), worker });
     }
 
-    fn finish(&mut self) {
-        self.busy = None;
-        self.busy_since = None;
-        self.cancel = None;
+    fn finish(&mut self, outcome: UpdateOutcome) {
+        if let UpdatePhase::Running(job) = std::mem::take(&mut self.phase) {
+            let cancel_requested = job.task.cancel().is_some_and(|c| c.is_cancelled());
+            self.phase = UpdatePhase::Finished(UpdateReport { id: job.id, target: job.task.target(), outcome, worker: job.worker, cancel_requested });
+        }
     }
 
-    /// A download is running and has not been told to stop yet.
-    fn can_cancel(&self) -> bool {
-        self.cancel.as_ref().is_some_and(|c| !c.is_cancelled())
+    fn is_busy(&self) -> bool { matches!(self.phase, UpdatePhase::Running(_)) }
+    fn confirming(&self) -> bool { matches!(self.phase, UpdatePhase::Confirming) }
+    fn set_confirmation(&mut self, on: bool) {
+        if on { self.phase = UpdatePhase::Confirming; } else if self.confirming() { self.phase = UpdatePhase::Idle; }
     }
-
-    /// Stops the running download; false when there is none.
+    fn busy_since(&self) -> Option<Instant> { match &self.phase { UpdatePhase::Running(j) => Some(j.since), _ => None } }
+    fn cancel(&self) -> Option<&update::Cancel> { match &self.phase { UpdatePhase::Running(j) => j.task.cancel(), _ => None } }
+    fn busy(&self) -> Option<(&str, u64)> {
+        match &self.phase {
+            UpdatePhase::Running(j) if j.task.cancel().is_some_and(|c| c.is_cancelled()) => Some(("Cancelling", 0)),
+            UpdatePhase::Running(j) => Some((&j.label, j.task.total())),
+            _ => None,
+        }
+    }
+    fn can_cancel(&self) -> bool { self.cancel().is_some_and(|c| !c.is_cancelled()) }
     fn request_cancel(&mut self) -> bool {
-        let Some(cancel) = self.cancel.as_ref().filter(|c| !c.is_cancelled()) else { return false };
+        let Some(cancel) = self.cancel().filter(|c| !c.is_cancelled()) else { return false };
         cancel.cancel();
-        self.busy = Some(("Cancelling".into(), 0));
         true
+    }
+    fn progress(&mut self, bytes: u64) {
+        self.done = bytes;
+        if let UpdatePhase::Running(job) = &mut self.phase { job.worker.bytes = bytes; }
+    }
+}
+
+#[cfg(test)]
+mod update_job_characterisation {
+    use super::*;
+
+    #[test]
+    fn cancellation_keeps_progress_and_the_original_sleep_timeout() {
+        let mut updates = Updates::default();
+        let cancel = update::Cancel::new();
+        updates.start(UpdateTask::App { version: "9.8.7".into(), total: 100, cancel: cancel.clone() });
+        let since = updates.busy_since();
+        updates.done = 42;
+        assert!(updates.can_cancel() && updates.request_cancel());
+        assert!(cancel.is_cancelled());
+        assert!(!updates.can_cancel() && !updates.request_cancel());
+        assert_eq!(updates.busy(), Some(("Cancelling", 0)));
+        assert_eq!(updates.busy_since(), since, "Cancel must not extend the auto-sleep block");
+        assert_eq!(updates.done, 42, "the last received bytes are retained");
+        assert!(!update::busy_blocks_sleep(since, since.unwrap() + update::BUSY_BLOCKS_SLEEP_FOR));
+        updates.finish(UpdateOutcome::Failed);
+        assert!(!updates.is_busy() && updates.busy_since().is_none() && updates.cancel().is_none());
+    }
+
+    #[test]
+    fn a_manifest_check_has_no_cancel_action_and_does_not_clear_a_backup_restart() {
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let mut updates = Updates { restart_at: Some(deadline), ..Updates::default() };
+        updates.start(UpdateTask::Check);
+        assert!(!updates.can_cancel() && !updates.request_cancel());
+        assert!(updates.busy_since().is_some());
+        assert_eq!(updates.restart_at, Some(deadline));
+        updates.finish(UpdateOutcome::Failed);
+        assert_eq!(updates.restart_at, Some(deadline), "backup restoration shares this deadline");
     }
 }
 
@@ -904,6 +1019,8 @@ struct QuickMenu {
 #[derive(Clone, Copy, PartialEq, Hash, Debug)]
 enum Page {
     Main,
+    /// A load was refused before mutation because its undo capture failed.
+    LoadBlocked,
     /// The list of groups plus "Keep for" and "Restore defaults".
     Options { sel: usize },
     Group { group: usize, sel: usize },
@@ -1349,6 +1466,11 @@ struct App {
     /// The dialog before leaving for EmulationStation (SELECT + START held, Escape, Settings → About), over everything.
     leave: Option<pocket_ui::rescue::Dialog>,
     touch_rec: touch::Recognizer,
+    /// The window's pointer (a Steam Deck trackpad as a mouse, its touch screen through Gamescope, a desk mouse):
+    /// where it is in window pixels, whether its left button is down, and the wheel's fraction (`app_touch`).
+    cursor: Option<(f64, f64)>,
+    mouse_down: bool,
+    wheel_carry: f32,
     /// Why touches were ignored last, so the log says it once per change (`app_touch`).
     ignore_log: touch::IgnoreLog,
     /// Settings > Sounds.
@@ -1410,6 +1532,8 @@ struct App {
     clock_look: Option<Instant>,
     /// The look for a newer pocket-ui and its once-per-version notice (`app_update_hint`).
     update_hint: app_update_hint::UpdateHintUi,
+    update_inspection: update::observation::Inspection,
+    update_inspector: Option<std::sync::mpsc::Sender<()>>,
     /// The "Runs on" page while it is open (`app_emu_choice.rs`).
     emu: app_emu_choice::EmuChoiceUi,
     /// The "This game" page over a game's card while it is open (`app_this_game.rs`).
@@ -1505,6 +1629,16 @@ struct App {
     tour: app_tour::TourUi,
     /// The last frame had the status corner: when its clock turns to the next minute (`app_status_corner`).
     corner_minute: Option<Instant>,
+    /// Which of `paint`'s painters painted the last frame (`app_where`: `@painted`, which `Place::painter` must name).
+    painted: app_where::Painter,
+    /// The status file, `/tmp/pocket-ui.status` (`app_where::status_tick`); None where there is no command FIFO.
+    status: Option<pocket_ui::ui_status::Writer>,
+    /// A write of it failed and the log said so (once).
+    status_failed: bool,
+    /// What the inputs since the last navigation record asked for: "tick" (the haptic tick, whether or not menu haptics
+    /// are on), "sound:Nav" (the sound chosen, whether or not sounds are on). Only under `POCKETUI_NAV_PROBE`
+    /// (`app_nav_probe`'s `@feedback`, tests/nav_explorer.rs).
+    feedback: Vec<String>,
 }
 
 impl App {
@@ -1957,7 +2091,7 @@ impl App {
             self.notice = Some(Notice::new(pocket_ui::fallback::port_not_started_notice(&run.name)));
         } else if never_started && !run.hosted() {
             // A system whose BIOS pocket-ui knows: the files missing are named, not guessed at (`hostsys::missing_bios`).
-            let bios = pocket_ui::hostsys::find(&run.system).and_then(|s| s.missing_bios(std::path::Path::new(pocket_ui::hostsys::BIOS_DIR)));
+            let bios = pocket_ui::hostsys::find(&run.system).and_then(|s| s.missing_bios(&pocket_ui::hostsys::bios_dir()));
             self.notice = Some(Notice::new(pocket_ui::fallback::not_started_notice_on(&run.system, &run.name, bios.as_deref())));
             // The Steam Deck's big emulators are Flatpaks: say so when the one for this game isn't installed.
             if pocket_ui::desk::active() && run.emulator.split('.').count() >= 3 && !pocket_ui::desk::flatpak_installed(&run.emulator) {
@@ -2325,6 +2459,10 @@ impl App {
         }
         let Some(menu) = self.menu.as_mut() else { return };
         if menu.quitting {
+            return;
+        }
+        if menu.page == Page::LoadBlocked {
+            if b == CONFIRM || b == CANCEL { menu.page = Page::Main; }
             return;
         }
         if menu.page == Page::PixelPath {
@@ -2785,7 +2923,10 @@ impl App {
         if standalone::active() {
             match action {
                 Some(SaveAction::Save) => standalone::save(Target::Slot(menu.slot as u8 + 1), menu.frame),
-                Some(SaveAction::Load(target)) => standalone::load(target, menu.frame),
+                Some(SaveAction::Load(target)) => {
+                    let proxy = self.proxy.clone();
+                    standalone::load(target, menu.frame, move |id| { let _ = proxy.send_event(UserEvent::LoadBlocked(id)); });
+                }
                 // Earlier is pocket-core's only.
                 Some(SaveAction::Earlier | SaveAction::Restart) | None => {}
             }
@@ -2922,6 +3063,11 @@ impl App {
         let fade = if self.menu.as_ref().is_some_and(|m| m.page == Page::PixelPath) { app_pixel_path::PAGE_FADE } else { 225 };
         self.paint_game_behind(c, VOID, fade);
         let Some(menu) = self.menu.as_ref() else { return };
+        if menu.page == Page::LoadBlocked {
+            Notice::new(pocket_ui::save_trouble::UNDO_FAILED).paint(c, &mut self.text);
+            self.nu_hints(c, &[("A", "Back"), ("B", "Back")]);
+            return;
+        }
         if menu.page == Page::PixelPath {
             self.paint_pixel_path(c);
             return;
@@ -3314,7 +3460,10 @@ impl App {
             }
             Page::Controls { sel } => {
                 let rows = menu.emu.as_ref().map(|e| e.control_rows()).unwrap_or_default();
-                let mut lines: Vec<(String, String, String)> = vec![("Controls card".into(), ">".into(), "Which button is which on this console, and what HOME does.".into()), ("Controller setup".into(), ">".into(), "A separate layout for each controller, in menus and games.".into())];
+                let card_desc = "Which button is which on this console, and what HOME does.";
+                #[cfg(feature = "brick")]
+                let card_desc = if pocket_ui::brick_profile::fkeys() { pocket_ui::brick_hw::FKEYS_REMAP_NOTE } else { card_desc };
+                let mut lines: Vec<(String, String, String)> = vec![("Controls card".into(), ">".into(), card_desc.into()), ("Controller setup".into(), ">".into(), "A separate layout for each controller, in menus and games.".into())];
                 lines.extend(rows.into_iter().map(|Row { name, value, desc }| (name, value, desc)));
                 (lines, sel, None, Some("Controls".to_string()))
             }
@@ -3359,20 +3508,21 @@ impl App {
             }
             Page::Achievements { sel } => {
                 let snap = menu.achievements.clone().unwrap_or_default();
-                let heading = if snap.state == pocket_ui::achievements::snapshot::State::Ready && snap.total > 0 {
-                    format!("Achievements   {}", snap.headline())
-                } else {
-                    "Achievements".to_string()
-                };
+                let heading = "Achievements".to_string();
                 (pocket_ui::achievements_page::menu_rows(&snap), sel, None, Some(heading))
             }
             Page::QuitUnsaved { sel } => {
                 let rows = menu.save_trouble.map(Self::quit_question_rows).unwrap_or_default();
                 (rows, sel, None, Some(pocket_ui::save_trouble::QUESTION.to_string()))
             }
-            Page::Main | Page::PixelPath | Page::EmuChoice | Page::Players | Page::Zoom | Page::PortPerf | Page::ControlsCard => return,
+            Page::Main | Page::LoadBlocked | Page::PixelPath | Page::EmuChoice | Page::Players | Page::Zoom | Page::PortPerf | Page::ControlsCard => return,
         };
 
+        let achievement_counts = if matches!(menu.page, Page::Achievements { .. }) {
+            menu.achievements.as_ref().filter(|s| s.state == pocket_ui::achievements::snapshot::State::Ready && s.total > 0).map(|s| s.headline())
+        } else {
+            None
+        };
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
         // The heading ("Options   <game>") stops short of the status pill, which is wider with Wi-Fi and "charging".
         let pill_left = self.status_pill(c);
@@ -3382,8 +3532,17 @@ impl App {
             let h = self.text.fit(Face::Title, 50, h, pill_left - 24 - (pad + NU_BTN_PAD));
             self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, &h);
         }
-        let top = pad + NU_PILL + 12;
+        let mut top = pad + NU_PILL + 12;
         let right = c.w - pad;
+        // Counts are information, not part of the title: Retro's wider title face must not hide the points.
+        if let Some(counts) = achievement_counts {
+            let step = pocket_ui::type_scale::line(NU_SMALL, 8);
+            for line in self.text.wrap_prose(Face::Body, NU_SMALL, &counts, right - (pad + NU_BTN_PAD)) {
+                self.text.draw(c, Face::Body, NU_SMALL, pad + NU_BTN_PAD, top + NU_SMALL as i32, pal().dust, &line);
+                top += step;
+            }
+            top += 12;
+        }
         // Long lists (a core's options) scroll; the explanation below keeps room for up to five lines over the hint
         // pill. The Picture page with Large text shows fewer rows, so its preview keeps a useful size (`picture_page`).
         let foot = c.h - pocket_ui::kit::footer_baseline(c.h) + 5 * pocket_ui::type_scale::line(NU_SMALL, 10);
@@ -3623,9 +3782,9 @@ impl App {
                 }
                 Opens::Updates => {
                     self.updates.sel = 0;
-                    self.updates.confirm = false;
+                    self.updates.set_confirmation(false);
                     // Off: nothing is asked until "Check again" is chosen.
-                    if self.updates.manifest.is_none() && self.updates.busy.is_none() && self.update_auto() {
+                    if self.updates.manifest.is_none() && !self.updates.is_busy() && self.update_auto() {
                         self.update_action(UpdateAction::Check);
                     }
                     Some(SettingsPage::Updates)
@@ -3857,8 +4016,8 @@ impl App {
             (Some(SettingsPage::Gamelist), b) => self.gamelist_input(b),
             (Some(SettingsPage::Screenshots), b) => self.gallery_input(b),
             // B on the question only says "Later".
-            (Some(SettingsPage::Updates), b) if b == CANCEL && self.updates.confirm => {
-                self.updates.confirm = false;
+            (Some(SettingsPage::Updates), b) if b == CANCEL && self.updates.confirming() => {
+                self.updates.set_confirmation(false);
                 self.updates.sel = 0;
                 Some(SettingsPage::Updates)
             }
@@ -3871,7 +4030,7 @@ impl App {
                     // The switch also turns with Left/Right.
                     Button::Left | Button::Right if self.update_actions().get(self.updates.sel) == Some(&UpdateAction::Auto) => self.update_action(UpdateAction::Auto),
                     // While a download runs, A stops it.
-                    b if b == CONFIRM && self.updates.busy.is_some() => {
+                    b if b == CONFIRM && self.updates.is_busy() => {
                         self.updates.request_cancel();
                     }
                     b if b == CONFIRM => {
@@ -4371,7 +4530,7 @@ impl App {
     /// What the Updates page offers right now, in display order.
     fn update_actions(&self) -> Vec<UpdateAction> {
         let m = self.updates.manifest.as_ref();
-        if self.updates.confirm {
+        if self.updates.confirming() {
             return vec![UpdateAction::InstallNow, UpdateAction::Later];
         }
         let mut actions = Vec::new();
@@ -4395,7 +4554,7 @@ impl App {
             self.set_update_auto(!self.update_auto(), Instant::now());
             return;
         }
-        if self.updates.busy.is_some() {
+        if self.updates.is_busy() {
             return;
         }
         let url = self.manifest_url();
@@ -4408,23 +4567,24 @@ impl App {
         self.updates.done = 0;
         match action {
             UpdateAction::Check => {
-                self.updates.start("Checking for updates".into(), 0, None);
+                self.updates.start(UpdateTask::Check);
                 std::thread::spawn(move || send(UpdateEvent::Checked(update::fetch_manifest(&url))));
             }
             UpdateAction::InstallApp => {
-                self.updates.confirm = true;
+                self.updates.set_confirmation(true);
                 self.updates.sel = 0;
             }
             UpdateAction::Later => {
-                self.updates.confirm = false;
+                self.updates.set_confirmation(false);
                 self.updates.sel = 0;
             }
             UpdateAction::Auto => {}
             UpdateAction::InstallNow => {
-                self.updates.confirm = false;
+                self.updates.set_confirmation(false);
                 let Some(rel) = manifest.app else { return };
                 let cancel = update::Cancel::new();
-                self.updates.start(format!("Installing pocket-ui {}", rel.version), rel.size, Some(cancel.clone()));
+                self.updates.start(UpdateTask::App { version: rel.version.clone(), total: rel.size, cancel: cancel.clone() });
+                self.observe_update_worker(&cancel);
                 std::thread::spawn(move || {
                     #[cfg(feature = "brick")]
                     let result = update::install(&rel, &url, &cancel, &|n| send(UpdateEvent::Progress(n)));
@@ -4436,7 +4596,8 @@ impl App {
             UpdateAction::StageOs => {
                 let Some(rel) = manifest.os else { return };
                 let cancel = update::Cancel::new();
-                self.updates.start(format!("Getting system {}", rel.version), rel.size, Some(cancel.clone()));
+                self.updates.start(UpdateTask::System { version: rel.version.clone(), total: rel.size, cancel: cancel.clone() });
+                self.observe_update_worker(&cancel);
                 std::thread::spawn(move || {
                     send(match update::stage_os(&rel, &url, &cancel, &|n| send(UpdateEvent::Progress(n))) {
                         Ok(note) => UpdateEvent::OsStaged(note),
@@ -4451,10 +4612,23 @@ impl App {
         }
     }
 
+    fn observe_update_worker(&self, cancel: &update::Cancel) {
+        let UpdatePhase::Running(job) = &self.updates.phase else { return };
+        let (job, proxy) = (job.id, self.proxy.clone());
+        cancel.observe(move |snapshot| { let _ = proxy.send_event(UserEvent::Update(UpdateEvent::Worker { job, snapshot })); });
+    }
+
     fn update_event(&mut self, e: UpdateEvent) {
-        match e {
+        let outcome = match e {
+            UpdateEvent::Inspected(inspection) => { self.update_inspection = inspection; return; }
             UpdateEvent::Progress(n) => {
-                self.updates.done = n;
+                self.updates.progress(n);
+                return;
+            }
+            UpdateEvent::Worker { job, snapshot } => {
+                if let UpdatePhase::Running(active) = &mut self.updates.phase {
+                    if active.id == job { active.worker = snapshot; }
+                }
                 return;
             }
             UpdateEvent::Looked(result) => {
@@ -4465,16 +4639,19 @@ impl App {
                 self.updates.manifest = Some(m);
                 let none = !self.update_actions().iter().any(|a| matches!(a, UpdateAction::InstallApp | UpdateAction::StageOs | UpdateAction::CancelOs));
                 self.updates.message = none.then(|| "Everything is up to date.".to_string());
+                UpdateOutcome::Checked
             }
-            UpdateEvent::Checked(Err(e)) | UpdateEvent::Done(Err(e)) => self.updates.message = Some(e),
+            UpdateEvent::Checked(Err(e)) | UpdateEvent::Done(Err(e)) => { self.updates.message = Some(e); UpdateOutcome::Failed },
             UpdateEvent::Done(Ok(true)) => {
                 self.updates.message = Some("Installed. Restarting…".into());
                 self.updates.restart_at = Some(Instant::now() + Duration::from_millis(1500));
+                UpdateOutcome::Installed
             }
-            UpdateEvent::Done(Ok(false)) | UpdateEvent::OsStaged(None) => self.updates.message = Some(os_staged_message(None)),
-            UpdateEvent::OsStaged(Some(note)) => self.updates.message = Some(os_staged_message(Some(&note))),
-        }
-        self.updates.finish();
+            UpdateEvent::Done(Ok(false)) | UpdateEvent::OsStaged(None) => { self.updates.message = Some(os_staged_message(None)); UpdateOutcome::OsStaged },
+            UpdateEvent::OsStaged(Some(note)) => { self.updates.message = Some(os_staged_message(Some(&note))); UpdateOutcome::OsStaged },
+        };
+        self.updates.finish(outcome);
+        if let Some(inspector) = &self.update_inspector { let _ = inspector.send(()); }
         self.updates.sel = 0;
     }
 
@@ -4507,7 +4684,7 @@ impl App {
             self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, pal().text, value);
         }
         let actions = self.update_actions();
-        let busy = self.updates.busy.is_some();
+        let busy = self.updates.is_busy();
         for (i, action) in actions.iter().enumerate() {
             let label = match action {
                 UpdateAction::Check => "Check again".to_string(),
@@ -4541,21 +4718,21 @@ impl App {
             }
         }
         // Bottom: progress while busy, else the last result, else the notes of the selected action.
-        let footer = match &self.updates.busy {
-            Some((label, total)) if *total > 0 => {
+        let footer = match self.updates.busy() {
+            Some((label, total)) if total > 0 => {
                 let (w, y) = (c.w - 2 * pad - 2 * NU_BTN_PAD, c.h - pad - NU_PILL - 90);
-                let total = self.updates.cancel.as_ref().map(|c| c.progress_total()).filter(|n| *n > 0).unwrap_or(*total);
+                let total = self.updates.cancel().map(|c| c.progress_total()).filter(|n| *n > 0).unwrap_or(total);
                 let frac = (self.updates.done as f32 / total as f32).clamp(0.0, 1.0);
                 pocket_ui::retro::pill(c, pad + NU_BTN_PAD, y, w, 12, 6, pal().keycap);
                 pocket_ui::retro::pill(c, pad + NU_BTN_PAD, y, ((w as f32 * frac) as i32).max(12), 12, 6, pal().band);
-                match self.updates.cancel.as_ref().and_then(|c| c.status()) {
-                    Some("Downloading the update…") if self.updates.can_cancel() => format!("Downloading the update… {}%", (frac * 100.0) as u32),
-                    Some(phase) if self.updates.can_cancel() => phase.to_string(),
+                match self.updates.cancel().and_then(|c| c.phase()) {
+                    Some(update::WorkerPhase::Downloading) if self.updates.can_cancel() => format!("Downloading the update… {}%", (frac * 100.0) as u32),
+                    Some(phase) if self.updates.can_cancel() && phase.label().is_some() => phase.label().unwrap().to_string(),
                     _ => format!("{label}, {}%", (frac * 100.0) as u32),
                 }
             }
             Some((label, _)) => format!("{label}…"),
-            None if self.updates.confirm => {
+            None if self.updates.confirming() => {
                 // Under a fifth and not on the charger: the charger first (a flat battery in the middle of an install is the
                 // one way this goes wrong).
                 let battery = pocket_ui::status_corner::status().battery;
@@ -4763,9 +4940,8 @@ impl App {
         if pocket_ui::device::brick() && self.sleep.state() != pocket_ui::sleep::State::Awake {
             return false;
         }
-        let shelf_visible = self.running.is_none() && self.settings_page.is_none() && self.setup.is_none() && !self.tour.is_open()
-            && self.card.is_none() && self.console.is_none() && self.menu.is_none() && self.switcher.is_none()
-            && !self.find.is_open() && self.curator.page.is_none();
+        // Only a shelf that is drawn moves (`app_where`): not behind a page, Kids Mode or a game.
+        let shelf_visible = self.shelf_in_front();
         self.setup.as_ref().is_some_and(|s| s.animating()) || self.switcher.as_ref().is_some_and(|s| s.animating()) ||
         self.quit.is_some() || self.kids_animating() || self.pull_moving(Instant::now()) || self.motion_animating(Instant::now()) || self.sync_note_active() || self.tailscale_animating() || self.bluetooth_animating() || self.tools_animating() || self.test_buttons_animating() || self.game_check_animating() || self.pc_streaming_animating() || self.backup_animating() || (self.updates.restart_at.is_some() && self.running.is_none()) || self.launch_at.is_some_and(|t| t.elapsed() < FADE + self.cabinet.launch_delay() + LAST_FADE_FRAME) || (self.theme == Theme::Cabinet && shelf_visible && self.cabinet.animating(Instant::now())) || (self.theme == Theme::Shelf && shelf_visible && self.shelf_media_animating(Instant::now())) || self.stream_message_due() || self.exit_since.is_some() || (if self.sys.quiet_game_controls(&self.sys_ctx()) { self.sys.animating_on_screen(Instant::now()) } else { self.sys.animating(Instant::now()) }) || (self.manual.moving() && self.settings_page == Some(SettingsPage::Manual)) || self.appearance_animating() || self.card.as_ref().is_some_and(|o| o.card.boxed.as_ref().is_some_and(|b| b.animating(Instant::now()))) || self.find_animating() || self.boot_fade.active()
     }
@@ -4961,36 +5137,44 @@ impl App {
         pocket_ui::text::boxes::reset();
         // Set again when this frame paints the status corner (`app_status_corner`).
         self.corner_minute = None;
+        // Which painter this frame's page is (`app_where`), set by the branch that paints it.
+        self.painted = Painter::Home;
         // Powering off: "Saving…", "Switching off…" over everything.
         if let Some(msg) = self.sleep.overlay() {
+            self.painted = Painter::PoweringOff;
             c.clear(pal().void);
             self.centered(c, 0, 0, c.w, c.h, &msg);
             return;
         }
         // Kids Mode paints its own few screens (`app_kids`).
         if self.kids_paint(c) {
+            self.painted = Painter::Kids;
             return;
         }
         // PC streaming looks for the PC for up to 12 s before Moonlight's own window comes up over this one; a tool's
         // window takes a moment too.
         if let Some(run) = self.running.as_ref().filter(|r| r.is_app() && self.launch_at.is_some_and(|t| t.elapsed() >= FADE)) {
             let msg = if run.emulator == pocket_ui::tools::EMULATOR { format!("Starting {}", run.name) } else { "Looking for your PC".to_string() };
+            self.painted = Painter::AppStarting;
             c.clear(pal().void);
             self.centered(c, 0, 0, c.w, c.h, &msg);
             return;
         }
         // The manual, also over the first-start setup.
         if self.settings_page == Some(SettingsPage::Manual) {
+            self.painted = Painter::Manual;
             self.in_column(c, |app, c| app.paint_settings(c));
             return;
         }
         // The feature cards: Settings → Tour, "New in this version" (`app_tour`).
         if self.tour.is_open() {
+            self.painted = Painter::Tour;
             self.paint_tour(c);
             return;
         }
         // The look step of setup previews the real shelf in each theme; the one shown is the one in use.
         if let Some(i) = self.setup.as_ref().and_then(|s| s.previewing()) {
+            self.painted = Painter::Setup;
             // Painted in the appearance the screen is going to, also while it fades there.
             let light = self.fader.light();
             // And in the interface's language (the welcome step before it can change it).
@@ -5020,6 +5204,7 @@ impl App {
         // "How do you like to play?" shows two of the look previews beside the choices (`features::paint_profiles`).
         let play = self.setup.as_ref().is_some_and(|s| s.at_play_step());
         if play {
+            self.painted = Painter::Setup;
             let light = self.fader.light();
             let size = pocket_ui::type_scale::get();
             if self.look_previews.is_none()
@@ -5047,71 +5232,86 @@ impl App {
             return;
         }
         if self.setup.is_some() {
+            self.painted = Painter::Setup;
             self.paint_setup_in_column(c);
             return;
         }
         if self.settings_page.is_some() {
+            self.painted = Painter::Settings;
             self.in_column(c, |app, c| app.paint_settings(c));
             return;
         }
         if self.port_files.is_some() && self.running.is_none() {
+            self.painted = Painter::PortFiles;
             self.paint_port_files(c);
             return;
         }
         // The controls card, over a game's card or the shelf (`app_controls_card`).
         if self.controls_card_open() && self.running.is_none() {
+            self.painted = Painter::ControlsCard;
             self.paint_controls_card(c);
             return;
         }
         // Curator's pages, over the card or the shelf (`app_curator`).
         if self.curator.page.is_some() && self.running.is_none() {
+            self.painted = Painter::Curator;
             self.paint_curator(c);
             return;
         }
         // "Runs on" (`app_emu_choice`), over the card or the console page it was opened from; over "This game" when that
         // is where it was opened.
         if self.emu_choice_on_shelf() {
+            self.painted = Painter::RunsOn;
             self.paint_emu_choice(c);
             return;
         }
         // "This game" (`app_this_game`), over the card.
         if self.this_game_on_shelf() {
+            self.painted = Painter::ThisGame;
             self.paint_this_game(c);
             return;
         }
         // A port's Performance & fan, over its card (`app_port_perf`).
         if self.port_perf_open() {
+            self.painted = Painter::PortPerf;
             self.paint_port_perf(c);
             return;
         }
         // A game's screenshots, over its card (`app_gallery`).
         if self.gallery_over_card() {
+            self.painted = Painter::Gallery;
             self.paint_gallery(c);
             return;
         }
         // A save's two versions, over its card (`app_sync_conflicts`).
         if self.conflicts_over_card() {
+            self.painted = Painter::Conflicts;
             self.paint_conflicts(c);
             return;
         }
         if self.card.is_some() && self.running.is_none() {
+            self.painted = Painter::Card;
             self.paint_card(c);
             return;
         }
         if self.console.is_some() && self.running.is_none() {
+            self.painted = Painter::Console;
             self.paint_console(c);
             return;
         }
         // The search (`app_search`); a game's card opened from it is painted over it, above.
         if self.find.is_open() && self.running.is_none() {
+            self.painted = Painter::Search;
             self.in_column(c, |app, c| app.paint_search(c));
             return;
         }
         if self.switcher.is_some() {
+            self.painted = Painter::Switcher;
             self.paint_switcher(c);
             return;
         }
         if self.menu.is_some() && self.sys.quick_over_game() {
+            self.painted = Painter::Pause;
             // The quick settings opened from the pause menu: the paused game behind them, darkened only as far as
             // the rows stay readable, so a brightness change can be judged on the game (`quick_paint` draws the rows).
             self.paint_game_behind(c, VOID, QUICK_OVER_GAME_FADE);
@@ -5119,10 +5319,12 @@ impl App {
         }
         // The Big shelf's Continue or Stop, also over the game picture.
         if self.big_pause() {
+            self.painted = Painter::BigPause;
             pocket_ui::palette::scoped(0, || self.kids_paint_pause(c));
             return;
         }
         if self.menu.is_some() {
+            self.painted = Painter::Pause;
             // The pause menu sits over the game picture: dark in both appearances.
             pocket_ui::palette::scoped(0, || self.paint_menu(c));
             return;
@@ -5385,9 +5587,14 @@ impl App {
         // end, so nothing moves from one game to the next (`title_block`).
         let mut meta_at = top + 548 - short;
         if matches!(item, Item::Game(..) | Item::Recent(_)) {
-            let lines = pocket_ui::title_block::layout(&mut self.text, Face::Title, 50, &title, pw, 3);
+            let lines = pocket_ui::title_block::name_layout(&mut self.text, Face::Title, 50, &title, pw, 3);
             pocket_ui::title_block::paint(&mut self.text, c, Face::Title, &lines, px, top + 500 - short, pal().text, pal().split_dim, false);
             meta_at += 2 * pocket_ui::title_block::step(&self.text, 50);
+        } else if matches!(item, Item::System(_)) {
+            self.text.literal(|text| {
+                let title = text.fit(Face::Title, 50, &title, pw);
+                text.draw(c, Face::Title, 50, px, top + 500 - short, pal().text, &title);
+            });
         } else {
             let title = self.text.fit(Face::Title, 50, &title, pw);
             self.text.draw(c, Face::Title, 50, px, top + 500 - short, pal().text, &title);
@@ -5467,17 +5674,24 @@ impl App {
             // in five sizes between the two resting ones (each is made once and kept).
             let q = (near * 4.0).round() / 4.0;
             let qlerp = |a: f32, b: f32| (a + (b - a) * q).round() as i32;
-            let (aw_max, ah_max) = (qlerp(340.0 * 1.03, 270.0) - 40, (qlerp(460.0 * 1.03, 370.0) as f32 * kh) as i32 - 64 - 80);
+            // The console name has an 80 px title band above the 32 px bottom margin. Reserve both so a
+            // two-line neighbour (Game Boy Color in Large Retro) never paints over its console picture.
+            let name_room = if matches!(card, Item::System(_) | Item::Game(..) | Item::Recent(_)) { 80 + 32 } else { 80 };
+            let (aw_max, ah_max) = (qlerp(340.0 * 1.03, 270.0) - 40, (qlerp(460.0 * 1.03, 370.0) as f32 * kh) as i32 - 64 - name_room);
             let art = self.system_art(card, aw_max, ah_max);
             if let Some(art) = &art {
                 let (aw, ah) = (art.w as i32, art.h as i32);
-                c.blit_sprite_to(art, x + (w - aw) / 2, y + 64 + (h - 64 - 80 - ah) / 2, (near * 120.0) as u8, pal().void);
+                c.blit_sprite_to(art, x + (w - aw) / 2, y + 64 + (h - 64 - name_room - ah) / 2, (near * 120.0) as u8, pal().void);
             }
             let own_line = matches!(card, Item::System(_) | Item::Favorites | Item::Streaming | Item::Search | Item::JustPlay) || card.is_curator();
             // A name too wide for the card takes a second line rather than ending in "…" ("Game Boy Advance").
             // A word wider than the card on its own (a wide font, Large text) makes the name smaller, not cut.
-            let tp = self.text.title_px(Face::Title, 37, &t, w - 48, 21);
-            let lines = self.text.title_lines(Face::Title, tp, &t, w - 48);
+            let name = matches!(card, Item::System(_) | Item::Game(..) | Item::Recent(_));
+            let (tp, lines) = if name { self.text.card_name(&t, w - 48) } else {
+                let px = self.text.title_px(Face::Title, 37, &t, w - 48, 21);
+                (px, self.text.title_lines(Face::Title, px, &t, w - 48))
+            };
+            let title_step = if name { pocket_ui::title_block::step(&self.text, tp) } else { 44 };
             let last = lines.len() as i32 - 1;
             let mut body_drawn = false;
             if own_line && art.is_none() && !side.is_empty() {
@@ -5525,7 +5739,8 @@ impl App {
                 }
             }
             for (k, line) in lines.iter().enumerate() {
-                self.text.draw(c, Face::Title, tp, x + 24, y + h - 32 - (last - k as i32) * 44, 0xffffff, line);
+                if name { self.text.draw_name(c, Face::Title, tp, x + 24, y + h - 32 - (last - k as i32) * title_step, 0xffffff, line); }
+                else { self.text.draw(c, Face::Title, tp, x + 24, y + h - 32 - (last - k as i32) * title_step, 0xffffff, line); }
             }
         }
         // For the snapshot checks of Settings → Text size: the neighbours are cut by the screen's edges on purpose.
@@ -5541,7 +5756,8 @@ impl App {
             let (step, first) = (pocket_ui::title_block::step(&self.text, 67), top + slot + 110);
             let n = 1 + ((c.h - 110 - 34 - first - 50) / step.max(1)).clamp(0, 2);
             let star = if fav { app_switcher::star_room(67) } else { 0 };
-            let lines = pocket_ui::title_block::layout(&mut self.text, Face::Title, 67, &title, c.w - 2 * MARGIN - star, n as usize);
+            let layout = if matches!(item, Item::Game(..) | Item::Recent(_)) { pocket_ui::title_block::name_layout } else { pocket_ui::title_block::layout };
+            let lines = layout(&mut self.text, Face::Title, 67, &title, c.w - 2 * MARGIN - star, n as usize);
             let (end, base) = pocket_ui::title_block::paint(&mut self.text, c, Face::Title, &lines, center, first, pal().text, pal().chalk, true);
             if fav {
                 App::paint_title_star(c, end, base, 67, pal().text);
@@ -5864,6 +6080,8 @@ fn snapshot(app: &mut App, args: &[String]) {
             #[cfg(not(feature = "brick"))]
             "switched-off" => pocket_ui::auto_off::Note { hours: 3, brightness: None }.text(),
             "twin" => pocket_ui::frozen::SHARED.to_string(),
+            "save-failed" => pocket_ui::save_trouble::MOMENT_FAILED.to_string(),
+            "undo-failed" => pocket_ui::save_trouble::UNDO_FAILED.to_string(),
             "fallback" => pocket_ui::fallback::notice("retroarch"),
             "kept" => pocket_ui::frozen_phone::aside_line_handheld(pocket_ui::frozen_phone::Aside::Kept),
             k => pocket_ui::archive::message(k, "Sonic The Hedgehog (USA, Europe).zip"),
@@ -6285,7 +6503,7 @@ fn snapshot(app: &mut App, args: &[String]) {
     } else if let Some(kind) = state.strip_prefix("updates") {
         // The Updates page after "Get system" with a made-up list: "updates:note" staged with a note of what the new
         // system lacks, "updates:refused" refused because pocket-ui would break (`os_compat`).
-        let os = update::Release { version: "20261101".into(), url: "x.tar".into(), mirrors: Vec::new(), sha256: String::new(), size: 1, notes: String::new() };
+        let os = update::Release { version: "20261101".into(), url: "x.tar".into(), preferred_sources: Vec::new(), mirrors: Vec::new(), sha256: String::new(), size: 1, notes: String::new() };
         app.updates.manifest = Some(Manifest { format: 1, os: Some(os), ..Default::default() });
         app.updates.message = Some(if kind == ":refused" {
             "This system update would break pocket-ui (libxkbcommon.so.0 is missing: pocket-ui can't open its window). It was not installed.".into()
@@ -6295,15 +6513,15 @@ fn snapshot(app: &mut App, args: &[String]) {
         match kind {
             ":connecting" | ":fallback" => {
                 let cancel = update::Cancel::new();
-                cancel.set_status(if kind == ":connecting" { "Connecting to the update server…" } else { "Trying the next download server…" });
-                app.updates.start("Installing pocket-ui 0.3.0".into(), 100, Some(cancel));
+                cancel.set_phase(if kind == ":connecting" { update::WorkerPhase::Connecting } else { update::WorkerPhase::Fallback });
+                app.updates.start(UpdateTask::App { version: "0.3.0".into(), total: 100, cancel });
             }
             // The page with a newer pocket-ui on offer: its notes, then the question, with a flat battery or a full one.
             ":ready" | ":confirm" | ":confirm-low" | ":confirm-charging" | ":off" => {
-                let app_release = update::Release { version: "99.0.0".into(), url: "x.tar".into(), mirrors: Vec::new(), sha256: String::new(), size: 1, notes: "Update notice: pocket-ui tells you once when a new version is out. Switch it off in Updates. Fixes long game names on the shelf.".into() };
+                let app_release = update::Release { version: "99.0.0".into(), url: "x.tar".into(), preferred_sources: Vec::new(), mirrors: Vec::new(), sha256: String::new(), size: 1, notes: "Update notice: pocket-ui tells you once when a new version is out. Switch it off in Updates. Fixes long game names on the shelf.".into() };
                 app.updates.manifest = Some(Manifest { format: 1, app: Some(app_release), ..Default::default() });
                 app.updates.message = None;
-                app.updates.confirm = kind.starts_with(":confirm");
+                app.updates.set_confirmation(kind.starts_with(":confirm"));
                 if kind == ":off" {
                     app.update_hint.state.set_auto(false);
                 }
@@ -6334,7 +6552,7 @@ fn snapshot(app: &mut App, args: &[String]) {
         // The values the list reads on a thread, read here at once (`settings_values`).
         // ":dot": a newer pocket-ui is known (the dot on System and on its Updates row).
         if state.ends_with(":dot") {
-            let release = update::Release { version: "99.0.0".into(), url: "x.tar".into(), mirrors: Vec::new(), sha256: String::new(), size: 1, notes: String::new() };
+            let release = update::Release { version: "99.0.0".into(), url: "x.tar".into(), preferred_sources: Vec::new(), mirrors: Vec::new(), sha256: String::new(), size: 1, notes: String::new() };
             app.updates.manifest = Some(Manifest { format: 1, app: Some(release), ..Default::default() });
         }
         let connected = pocket_ui::status_corner::status().wifi;
@@ -6551,6 +6769,14 @@ fn snapshot(app: &mut App, args: &[String]) {
     }
     // "…:save=full", "quit-unsaved[:<row>][:unwritable]": saves that don't reach the card (`app_save_trouble`).
     app.save_trouble_snapshot(state);
+    if name == "load-blocked" {
+        if let Some(menu) = app.menu.as_mut() { menu.page = Page::LoadBlocked; }
+        match state.split(':').nth(1) {
+            Some("a") => app.menu_input(CONFIRM),
+            Some("b") => app.menu_input(CANCEL),
+            _ => {}
+        }
+    }
     if name == "pixel-path" {
         let mut it = state.split(':').skip(1);
         let case = it.next().unwrap_or("gba");
@@ -7075,6 +7301,12 @@ fn spawn_command_fifo(proxy: EventLoopProxy<UserEvent>) {
                     let _ = proxy.send_event(UserEvent::Leave);
                     continue;
                 }
+                // The screen on from light sleep, and no button: a helper's next key then goes to the page it reads in
+                // the status file, never to a page a waking B would have left (docs/DEVICE-TESTS.md).
+                "wake" => {
+                    let _ = proxy.send_event(UserEvent::Wake);
+                    continue;
+                }
                 // SELECT and START held and let go: Kids Mode's way out, for its journey.
                 "holddown" | "holdup" if test_driver_dir().is_some() => {
                     let pressed = line.trim() == "holddown";
@@ -7113,72 +7345,20 @@ fn spawn_command_fifo(proxy: EventLoopProxy<UserEvent>) {
 }
 
 impl App {
-    /// Where the menus stand: a change after a direction button is what a haptic tick answers.
-    fn ui_position(&self) -> impl PartialEq {
-        (
-            self.screen,
-            self.sel,
-            self.settings_page,
-            self.menu.as_ref().map(|m| (m.page, m.sel, m.slot, m.settings.as_ref().map(|s| s.values.clone()), m.cheats.as_ref().map(|c| c.enabled()), m.players.as_ref().map(|p| p.mark()))),
-            self.sync_row(),
-            self.tailscale_row(),
-            self.bluetooth_row(),
-            self.perf_fan_row(),
-            self.curator_mark(),
-            self.achievements_row(),
-            self.find_mark(),
-            // feat/tools-wifi's pages together: a tuple compares at most twelve fields.
-            (self.tools_row(), self.pc_streaming_row(), self.backup_row(), self.emu_choice_mark(), self.tour_mark(), self.web_row(), self.night_light_row(), self.storage_row(), self.gamelist_row(), self.gallery_row(), self.this_game_mark(), (self.cozy_extras_mark(), self.game_check_mark(), self.controls_card_mark())),
-        )
+    /// Notes what an input asked for, for the navigation explorer's `@feedback` (nothing without `POCKETUI_NAV_PROBE`).
+    fn note_feedback(&mut self, what: &str) {
+        if pocket_ui::nav_probe::on() {
+            self.feedback.push(what.to_string());
+        }
     }
 
-    /// The screen as the UI sounds see it: what covers it, and a fingerprint of everything that moves.
-    fn sound_view(&self) -> pocket_ui::ui_sound::View {
-        use pocket_ui::ui_sound::{Overlay, View};
-        use std::hash::{Hash, Hasher};
-        let mut h = std::collections::hash_map::DefaultHasher::new();
-        (self.screen, self.sel, self.settings_page, self.updates.sel, self.theme, self.sync_row(), self.tailscale_row(), self.bluetooth_row(), self.perf_fan_row(), self.achievements_row(), self.find_mark(), self.curator_mark()).hash(&mut h);
-        // The pages of feat/tools-wifi, apart: a tuple hashes at most twelve fields.
-        (self.tools_row(), self.pc_streaming_row(), self.backup_row(), self.web_row(), self.night_light_row(), self.starter.mark(), self.storage_row(), self.gamelist_row(), self.gallery_row(), self.game_check_mark()).hash(&mut h);
-        if let Some(m) = &self.menu {
-            (m.page, m.sel, m.slot, m.quitting, m.settings.as_ref().map(|s| &s.values), m.cheats.as_ref().map(|c| c.enabled()), m.pixel.as_ref().map(|p| p.mark())).hash(&mut h);
-            m.players.as_ref().map(|p| p.mark()).hash(&mut h);
+    /// The haptic tick for a move: a direction (or a held one stepping again) changed what the page shows
+    /// (`feedback_view`, the same mark the UI sounds compare).
+    fn tick_after(&mut self, before: pocket_ui::ui_sound::View) {
+        if before != self.feedback_view() {
+            self.note_feedback("tick");
+            pocket_ui::rumble::tick();
         }
-        if let Some(sw) = &self.switcher {
-            (sw.sel, sw.entries.len(), sw.entries.iter().filter(|e| e.favorite).count(), sw.switching).hash(&mut h);
-        }
-        (self.setup.as_ref().map(|s| s.ui_mark()), self.store.ui_mark(), self.sys.ui_mark(), self.tour_mark(), self.frames, self.over_game, self.cozy_extras_mark()).hash(&mut h);
-        // Settings' own switches without a page: Appearance, Motion, and the Buttons page's two.
-        app_settings_groups::Switches::now(self.appearance, self.button_layout).hash(&mut h);
-        if let Some(open) = &self.card {
-            (open.card.scroll, open.card.mode_mark(), open.card.data.status, &open.card.data.note).hash(&mut h);
-        }
-        if let Some((page, _)) = &self.port_files {
-            (&page.dir, page.scroll()).hash(&mut h);
-        }
-        if let Some(open) = &self.console {
-            (open.system, open.page.mark()).hash(&mut h);
-        }
-        (pocket_ui::rumble::menu_haptics(), self.sound, self.sleep.config, self.toast.as_ref().map(|t| t.1), self.pixel_path).hash(&mut h);
-        self.sleep_page.sel.hash(&mut h);
-        self.emu_choice_mark().hash(&mut h);
-        self.this_game_mark().hash(&mut h);
-        self.controls_card_mark().hash(&mut h);
-        self.port_perf_mark().hash(&mut h);
-        self.conflicts_mark().hash(&mut h);
-        let overlay = if self.sys.power_menu_open() {
-            Overlay::PowerMenu
-        } else if self.switcher.is_some() {
-            Overlay::Switcher
-        } else if self.sys.quick_open() {
-            // Also over the pause menu it was opened from.
-            Overlay::QuickSettings
-        } else if self.menu.is_some() {
-            Overlay::PauseMenu
-        } else {
-            Overlay::None
-        };
-        View { overlay, at: h.finish() }
     }
 
     /// Plays what `input` sounds like, now that it turned `before` into the screen as it is.
@@ -7187,9 +7367,13 @@ impl App {
         let refused = ui_sound::take_refused();
         // The input played its own sound (X opening a case, A starting the launch's): not a second one.
         if ui_sound::take_played() {
+            self.note_feedback("sound:own");
             return;
         }
-        if let Some(sound) = ui_sound::sound_for(input, before, self.sound_view(), refused) {
+        if let Some(sound) = ui_sound::sound_for(input, before, self.feedback_view(), refused) {
+            if pocket_ui::nav_probe::on() {
+                self.feedback.push(format!("sound:{sound:?}"));
+            }
             self.play_sound(sound);
         }
     }
@@ -7306,9 +7490,15 @@ impl App {
                         pocket_ui::text::boxes::finish(&buf, w as i32, h as i32);
                     }
                     self.nav_probe_done(&buf);
+                    self.feedback.clear();
                 }
             }
             UserEvent::Leave => self.open_leave(pocket_ui::rescue::DialogKind::Leave),
+            UserEvent::Wake => {
+                if !self.sleep.wake_from_light("the command FIFO's wake") {
+                    return;
+                }
+            }
             #[cfg(feature = "brick")]
             UserEvent::Play(system, path) => {
                 let name = path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -7346,6 +7536,13 @@ impl App {
             UserEvent::GameSaved { pgid } => self.game_saved(pgid),
             UserEvent::MenuShot { seq, image } => self.menu_shot_arrived(seq, image),
             UserEvent::OptionsSaved(saved) => self.options_saved(saved),
+            UserEvent::LoadBlocked(id) => {
+                if standalone::still(id) {
+                    if self.menu.is_none() { self.open_menu(); }
+                    if let Some(menu) = self.menu.as_mut() { menu.page = Page::LoadBlocked; }
+                    self.request_redraw();
+                }
+            }
             UserEvent::Sync(e) => self.sync_event(e),
             UserEvent::Tailscale(e) => self.tailscale_event(e),
             UserEvent::Web(e) => self.web_event(e),
@@ -7748,21 +7945,21 @@ impl ApplicationHandler<UserEvent> for App {
             self.request_redraw();
             return;
         }
-        let moved_from = (pocket_ui::rumble::menu_haptics()
+        let moved_from = ((pocket_ui::rumble::menu_haptics() || pocket_ui::nav_probe::on())
             && matches!(&ev, UserEvent::Pad(PadEvent::Button { button: Button::Up | Button::Down | Button::Left | Button::Right | Button::L1 | Button::R1 | Button::L2 | Button::R2, pressed: true, .. })))
-        .then(|| self.ui_position());
+        .then(|| self.feedback_view());
         let sound_input = match &ev {
             UserEvent::Pad(PadEvent::Button { button, pressed: true, .. }) => Some(pocket_ui::ui_sound::Input::Press(*button)),
             UserEvent::Pad(PadEvent::Button { button, pressed: false, .. }) => Some(pocket_ui::ui_sound::Input::Release(*button)),
             _ => None,
         };
-        let sound_from = sound_input.map(|_| self.sound_view());
+        let sound_from = sound_input.map(|_| self.feedback_view());
         // A sound played by hand for an input that never reached `sound_after` doesn't silence this one.
         pocket_ui::ui_sound::take_played();
         self.volume_step = false;
         self.user_event_inner(el, ev);
-        if moved_from.is_some_and(|before| before != self.ui_position()) {
-            pocket_ui::rumble::tick();
+        if let Some(before) = moved_from {
+            self.tick_after(before);
         }
         if let (Some(input), Some(before)) = (sound_input, sound_from) {
             let input = if std::mem::take(&mut self.volume_step) { pocket_ui::ui_sound::Input::VolumeStep } else { input };
@@ -7814,6 +8011,23 @@ impl ApplicationHandler<UserEvent> for App {
                 };
                 let pressed = state == ElementState::Pressed;
                 self.user_event(el, UserEvent::Pad(PadEvent::Button { source: 0, button, pressed }));
+            }
+            // A pointer (the Deck's trackpads and touch screen reach Gamescope as a mouse): in the menus it taps
+            // and scrolls like a finger (`app_touch`); a game keeps its own.
+            WindowEvent::CursorMoved { position, .. } => {
+                let size = self.window.as_ref().map_or((0, 0), |w| (w.inner_size().width, w.inner_size().height));
+                self.mouse_moved(el, (position.x, position.y), size);
+            }
+            WindowEvent::MouseInput { state, button: winit::event::MouseButton::Left, .. } => {
+                let size = self.window.as_ref().map_or((0, 0), |w| (w.inner_size().width, w.inner_size().height));
+                self.mouse_button(el, state == ElementState::Pressed, size);
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                let lines = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(_, y) => y,
+                    winit::event::MouseScrollDelta::PixelDelta(p) => (p.y / 50.0) as f32,
+                };
+                self.mouse_wheel(el, lines);
             }
             _ => {}
         }
@@ -7872,8 +8086,11 @@ impl ApplicationHandler<UserEvent> for App {
         let draining = self.drain_tick(now);
         if let Some((b, next)) = self.held {
             if now >= next {
-                let before = self.sound_view();
+                let before = self.feedback_view();
                 self.step(b);
+                if pocket_ui::rumble::menu_haptics() || pocket_ui::nav_probe::on() {
+                    self.tick_after(before);
+                }
                 self.sound_after(pocket_ui::ui_sound::Input::Repeat(b), before);
                 // A held L2/R2 goes letter by letter slowly enough to read (`letters::REPEAT`).
                 let every = if matches!(b, Button::L2 | Button::R2) || self.big_live() && matches!(b, Button::Up | Button::Down) { pocket_ui::letters::REPEAT } else { REPEAT_EVERY };
@@ -8076,6 +8293,10 @@ impl ApplicationHandler<UserEvent> for App {
             }
             wake = Some(wake.map_or(next, |w| w.min(next)));
         }
+        // The status file, when what it says changed (`app_where`); again when the quiet after waking ends.
+        if let Some(t) = self.status_tick(now) {
+            wake = Some(wake.map_or(t, |w| w.min(t)));
+        }
         el.set_control_flow(wake.map_or(ControlFlow::Wait, ControlFlow::WaitUntil));
     }
 }
@@ -8086,7 +8307,7 @@ impl App {
         pocket_ui::sleep::Ctx {
             menu_open: self.menu.is_some(),
             busy: self.quit.as_ref().is_some_and(|q| q.busy(Instant::now()))
-                || (self.updates.busy.is_some() && update::busy_blocks_sleep(self.updates.busy_since, Instant::now()))
+                || (self.updates.is_busy() && update::busy_blocks_sleep(self.updates.busy_since(), Instant::now()))
                 // A store install or tool (review N5), with the same cap.
                 || update::busy_blocks_sleep(self.store.loaded().and_then(|s| s.busy_since()), Instant::now())
                 // A starter pack download keeps the Pocket awake the same way (`app_starter`).
@@ -8312,7 +8533,21 @@ fn main() {
             let root = std::path::Path::new(update::APP_ROOT);
             // The folder of this pocket-ui (releases/<version>/ through the links): its pocket-core is checked before the update is kept.
             let release = std::env::current_exe().ok().and_then(|p| p.parent().map(PathBuf::from)).unwrap_or_default();
-            match update::watch_health(root, &release, started, &update::frame_presented, Duration::from_millis(200), update::WATCHDOG_AFTER) {
+            use update::observation::{record_health, HealthObservation};
+            record_health(HealthObservation::Watching);
+            let presented = || {
+                let ready = update::frame_presented();
+                if ready { record_health(HealthObservation::Confirming); }
+                ready
+            };
+            let health = update::watch_health(root, &release, started, &presented, Duration::from_millis(200), update::WATCHDOG_AFTER);
+            record_health(match health {
+                update::Health::NotPending => HealthObservation::NotPending,
+                update::Health::Confirmed => HealthObservation::Confirmed,
+                update::Health::TimedOut => HealthObservation::TimedOut,
+                update::Health::Broken => HealthObservation::Broken,
+            });
+            match health {
                 update::Health::TimedOut => {
                     eprintln!("update: no frame within {:?}, exiting so that the previous version comes back", update::WATCHDOG_AFTER);
                     std::process::exit(update::WATCHDOG_EXIT);
@@ -8564,6 +8799,13 @@ fn main() {
     #[cfg(feature = "brick")]
     let brick_state = app_brick_hw::State::load(&data_dir);
     let update_hint = app_update_hint::UpdateHintUi::new(pocket_ui::update_hint::State::load(&data_dir), Instant::now());
+    // Inspection stays on its own worker. Mock/snapshot fixtures have no installed layout to inspect.
+    let update_inspector = if std::env::var_os("POCKETUI_MOCK").is_some() || std::env::args().any(|a| a == "--snapshot") { None } else {
+        let notify = proxy.clone();
+        Some(update::observation::watch(pocket_ui::device::current().host_owned(), move |inspection| {
+            let _ = notify.send_event(UserEvent::Update(UpdateEvent::Inspected(inspection)));
+        }))
+    };
     let mut app = App {
         proxy,
         started,
@@ -8663,6 +8905,9 @@ fn main() {
         hits: Default::default(),
         leave: None,
         touch_rec: Default::default(),
+        cursor: None,
+        mouse_down: false,
+        wheel_carry: 0.0,
         ignore_log: Default::default(),
         sound: sound_config,
         leds: leds_config,
@@ -8693,6 +8938,8 @@ fn main() {
         gallery: Default::default(),
         clock_look: Some(Instant::now() + app_clock::FIRST_LOOK),
         update_hint,
+        update_inspection: Default::default(),
+        update_inspector,
         emu: Default::default(),
         this_game: None,
         controls_card: None,
@@ -8728,6 +8975,10 @@ fn main() {
         over_game: settings.over_game,
         tour: app_tour::TourUi::new(settings.tour_later.clone(), settings.seen_version.clone()),
         corner_minute: None,
+        painted: app_where::Painter::Home,
+        status: app_where::status_writer(),
+        status_failed: false,
+        feedback: Vec::new(),
     };
     // Sleep and Power off in the quick settings go through the sleep module on the UI thread.
     {
@@ -8771,6 +9022,10 @@ fn main() {
         let args: Vec<String> = std::env::args().skip(i + 1).collect();
         app_status_corner::snapshot_knobs();
         snapshot(&mut app, &args);
+        // tests/where_states.rs: which painter painted the snapshot and where the App says it is (`app_where`).
+        if let Some(record) = std::env::var_os("POCKETUI_WHERE_RECORD") {
+            let _ = std::fs::write(record, format!("{}\t{}\n", app.painted.name(), app.where_now()));
+        }
         // Snapshot actions can enqueue sticker edits too: keep their files complete before this process exits.
         pocket_ui::fsutil::settle();
         return;

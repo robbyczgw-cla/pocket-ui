@@ -41,6 +41,20 @@ impl App {
         let mut parts = rest.split(':');
         let row = parts.next().and_then(|r| r.parse().ok()).unwrap_or(0);
         match parts.next() {
+            #[cfg(feature = "brick")]
+            Some(which @ ("brick-f1" | "brick-f2")) => {
+                self.controller_setup.key = "builtin".into();
+                self.controller_setup.capture = Some(Capture::new(Button::South, Instant::now()));
+                // This snapshot represents the verified plain Brick, including its physical identity;
+                // the host has no stock MainUI from which the live reader could establish that.
+                let mut decode = pocket_ui::pad::decode::Decoder::with_caps_profile((3, 0x045e, 0x028e, 0x0114),
+                    "TRIMUI Player1", vec![304,305,307,308,310,311,314,315,316,317,318], vec![], true);
+                let code = if which == "brick-f1" { 317 } else { 318 };
+                for down in [1, 0] {
+                    for e in decode.event(900, evdev::InputEvent::new(1, code, down)) { self.controller_capture(&e); }
+                }
+                assert_eq!(bindings::Profiles::load(&self.data_dir).layout("builtin"), Layout::default(), "shortcuts must not change game controls");
+            }
             Some("capture-proof") => {
                 self.controller_setup.capture = Some(Capture::new(Button::South, Instant::now()));
                 // The same normalized events the app receives from a Pro 2's brake trigger.
@@ -115,6 +129,14 @@ impl App {
         // Button layout is an involution; the device layout is a permutation. Undo both to capture physical input.
         let mut layout = bindings::layout(&key);
         let physical = layout.physical(self.button_layout.role(button));
+        #[cfg(feature = "brick")]
+        if pocket_ui::brick_profile::fkeys() && matches!(physical, Button::F1 | Button::F2) {
+            // They bypass the game's RetroPad mapping. End capture with the supported setting instead of timing out.
+            self.controller_setup.capture = None;
+            self.controller_setup.note = pocket_ui::brick_hw::FKEYS_REMAP_NOTE.into();
+            self.request_redraw();
+            return true;
+        }
         if !BUTTONS.contains(&physical) { return true; }
         let swapped = layout.assign(physical, target).is_some();
         self.controller_setup.capture = None;

@@ -187,6 +187,8 @@ scripts/make-image-h700.sh --version V           # make-image-family.sh --family
 scripts/check-image-h700.sh build/image-h700/pocket-ui-V-rg35xx-sp.img.xz
 scripts/image/rocknix-source.sh OUT --device H700   # the source bundle of the H700 build (source-bundle.sh --device H700)
 sh scripts/image/test-h700-pins.sh                   # pins, notes and model list (part of the gate)
+sh scripts/image/test-storage-budget.sh              # STORAGE room and what build.sh writes there (part of the gate)
+sh scripts/image/storage-budget.sh BIN_DIR           # do these AArch64 programs fit into STORAGE? (release-check.sh runs it)
 ```
 
 **Rebuilding for a release**: build the three binaries from the
@@ -199,6 +201,43 @@ differences; anything else is a finding to explain from `git diff` of the two pu
 `sh scripts/image/release-sums.sh OUT_DIR BUILD_DIR...` for `SHA256SUMS-images` / `SHA256SUMS-images-more`. The export itself:
 `export-public.sh --allow-hand-commits --update PUBLIC_CLONE ...` (the public repository has hand commits from 0.1.x); a test that times out
 on a busy build machine gets one more try alone and is named as FLAKED in the report.
+
+**Image and release receipts.** An output file and its checksum are the `assembled` stage. Both builders write
+`<image>.img.xz.receipt.json` with the image and accompanying notes' SHA-256 and byte counts. `--no-check` leaves
+that stage in place. For compressed images with notes and `SHA256SUMS`, the normal `check-image.sh` and
+`check-image-family.sh` entrypoints supervise their existing checks, record `<image>.img.xz.check.log`, and hash both
+files again afterwards. Only an unchanged pair with `IMAGE OK`, a successful grow check and the STORAGE headroom
+from `pins.sh` becomes `checked`. A failed/interrupted check leaves it assembled. Standalone/raw diagnostic images
+can still be checked without generating a release receipt.
+
+After preparing the image-only release checksum lists, run:
+
+```sh
+python3 -I scripts/image/receipt.py release IMAGE_DIR --tag vVERSION
+sh scripts/upload-images.sh vVERSION IMAGE_DIR --repo OWNER/REPO --dry-run
+```
+
+The first command verifies every image, note and checked receipt and writes `image-release.receipt.json` at stage
+`releasable`, binding the exact `SHA256SUMS-images`, `SHA256SUMS-images-more` and/or `SHA256SUMS-images-sm8550` files.
+The second fully rehashes the files and shows the upload plan. An upload uses that same command without `--dry-run`;
+it refuses the whole set before calling `gh` if any image, note, checksum list or receipt differs. It uploads only
+the enumerated images, notes and image checksum lists; the unrelated installer `SHA256SUMS`, local logs and receipts
+are excluded. Keep the receipt beside the outputs when moving a finished set. A receipt attests offline file
+checks, with binary-version capability recorded separately; hardware first-boot/game checks and publication approval
+remain separate.
+
+Existing finished builds need no rebuild. Import their original build/check logs and `SHA256SUMS`:
+
+```sh
+python3 -I scripts/image/receipt.py import-release IMAGE_DIR --tag vVERSION --log BUILD_LOG --log ANOTHER_BUILD_LOG
+```
+
+Each image needs exactly one supplied log containing its latest check block and the image/notes hashes printed
+before that check. A matching name or a bare `IMAGE OK` is insufficient. The importer requires zero warnings inside
+the image checks, the successful grow check and the landed STORAGE floor. The known missing-aarch64-container
+`--version` warning remains an explicit limitation. Original logs and images are unchanged. The same fixtures cover
+legacy import, current check entrypoints, altered bytes with restored size/mtime and refusal before any upload:
+`python3 -I scripts/image/test-receipts.py` (also in the merge gate).
 
 **What differs from the Mini V2 image.** ROCKNIX's H700 image boots through its own U-Boot (written 8 KiB into the card,
 before the first partition) and `extlinux/extlinux.conf` (`LINUX /KERNEL`, `FDT /dtb.img`). So there is no GRUB, no
@@ -259,7 +298,8 @@ Windows PC opens as a normal drive, with `roms/<system>/` ready. What and why:
   `/usr/lib/rocknix/fs-resize` while `.please_resize_me` exists, so ROCKNIX's `fs-resize.target` starts it; SYSTEM stays
   pinned, and with the file missing or not runnable from `/flash` ROCKNIX's script runs as it always did. It uses what
   SYSTEM has (`parted`, `partprobe`, `e2fsck`, `resize2fs`, `tune2fs`, `mkfs.exfat`, `fsck.exfat`, `blkid`; there is no `sfdisk`).
-- *A power cut.* The marker goes last, so the next start runs the script again. Each step looks at what's there first. A
+- *A power cut.* The grow marker stays until the card is ready. Its removal is synced before deleting the split's ownership
+  state, so an interrupted final cleanup cannot send a completed GAMES partition through stock resize. Each step looks at what's there first. A
   table with two partitions, then p2 grown, then p3 are each a single sector written. `.pocket-games-state` (`table`, then
   `formatting`), on STORAGE and written before the table changes, tells our p3 from one that was already there. mkfs only runs
   on an empty p3 or on one whose formatting this script began and that doesn't check out. `.pocket-games-tries` ends a
@@ -368,8 +408,8 @@ the three `--version` ones, which warned because the virtual device's base image
   CC BY-NC-SA 4.0, non-commercial, no BIOS files.
 - STORAGE: label `STORAGE`, `e2fsck -fn` clean, **exactly** the expected files with owner `0:0` and mode;
   `.please_resize_me` present, no `.config`/`.cache`; drop-in, boot screen unit, launcher and `portmaster-setup.sh` are
-  the repository's; the three programs are aarch64 ELF; a warning when STORAGE is more than 24 MB full before the first start (the programs
-  have to fit into its 32 MB).
+  the repository's; the three programs are aarch64 ELF; a failure when fewer than `P2_MIN_HEADROOM_BLOCKS` (128 blocks of
+  4 KiB = 512 KiB) are free before the first start (see "STORAGE room").
 - Nothing from a developer device: no `.config/pocket-ui` (so the first-start setup runs), no `dev-ssh`, no `.ssh`
   or host keys, no Wi-Fi files (`*.psk`, iwd, NetworkManager, wpa_supplicant), no recents, saves, ROMs or BIOS
   files, no `update-pending`, `previous` or `dev.env`.
@@ -390,8 +430,8 @@ The notes (`pocket-ui-info/README.txt` on the card, and `pocket-ui-<version>-rp-
 - **Free, non-commercial distribution only**: ROCKNIX "includes components licensed for non-commercial use only"
   (libretro cores such as snes9x, genesis_plus_gx, picodrive, fbneo) and its artwork is NC.
 - **pocket-ui and pocket-core: GNU GPL version 2 or later.** `LICENSE`, `NOTICE.md` and `licences/` (the crates' texts,
-  `THIRD-PARTY-CRATES.md`, the fonts' OFL, from `scripts/licence-files.sh`) go to `pocket-ui-info/`, the texts also to
-  `/storage/pocket-ui/licences` (Settings → About).
+  `THIRD-PARTY-CRATES.md`, the fonts' OFL, from `scripts/licence-files.sh`) go to `pocket-ui-info/`, `/storage/pocket-ui/licences`
+  (Settings → About) is a link to that folder: STORAGE has no second copy (it has no room for one, see "STORAGE room").
 - **ROCKNIX's licences:** its `LICENSE.md` and the 75 texts of its `licenses/` folder at the tag (none of them is
   inside SYSTEM) go to `pocket-ui-info/rocknix-licenses/`.
 - **Firmware:** `pocket-ui-info/firmware-licences/` (see "SYSTEM without a few files").
@@ -485,3 +525,20 @@ which card is in it.
 8. Restart once more: pocket-ui comes up directly, with the settings kept.
 9. Back to Android: Vol Down + Power → Switch boot mode → Android → Start. Android starts with the card in.
 10. Swap the original card back and set Boot mode: Loader again.
+
+## STORAGE room
+
+ROCKNIX's STORAGE is a 32 MiB ext4 (8192 blocks of 4 KiB, a 4 MiB journal, 7027 blocks free; the same on the SM8250, SM8550
+and H700 base images, `pins.sh` `P2_FREE_BLOCKS`) and stays that size until the first start grows it to the card. The three
+programs are about 27.6 MB of it and grow with every release (0.3.0 to 0.3.1: 67 blocks). On 2026-11-08 the 0.3.1 images
+stopped in `build.sh` ("Could not allocate block"): with the licence texts stored a second time (303 blocks) the programs were
+43 blocks short. Since then the licence texts are on the card once, in `pocket-ui-info/licences` on the FAT partition, and
+`/storage/pocket-ui/licences` is a link to `/flash/pocket-ui-info/licences`; an update (`install.sh`) replaces the link with a
+real folder on the grown STORAGE. The journal cannot be made smaller (4 MiB is the least ext4 takes at 4 KiB blocks), and
+ROCKNIX keeps it when it grows the file system, so it is left as it is.
+
+Three things keep it from happening again: `build.sh` stops when ROCKNIX's free block count is not the pinned one;
+`check.sh` and `check-h700.sh` fail an image with fewer than `P2_MIN_HEADROOM_BLOCKS` (128 blocks, about two releases) free;
+and `scripts/image/storage-budget.sh BIN_DIR` works it out from the release programs without building an image: the release
+check runs it (`POCKET_STORAGE_BIN_DIR`, or a build in `target/aarch64-unknown-linux-gnu*/release`) and fails when the
+programs no longer fit or leave too little. With the link the 0.3.1 programs leave about 1 MiB.

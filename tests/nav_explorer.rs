@@ -19,6 +19,9 @@
 //! Needs python3 for scripts/wayland-stub.py on Linux without a compositor (as tests/user_journeys.rs).
 #![cfg(target_os = "linux")]
 
+#[path = "common/executable.rs"]
+mod fixture_executable;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::os::fd::FromRawFd;
@@ -57,6 +60,12 @@ struct Frame {
     list: Option<(usize, usize)>,
     hits: Vec<(Rect, usize)>,
     hash: String,
+    /// Which painter painted the frame, and the one `@where`'s page belongs to (`src/app_where.rs`); empty from a binary
+    /// that doesn't say.
+    painted: String,
+    painter: String,
+    /// What the keys before this frame asked for (`@feedback`: "tick", "sound:Nav"…); None from a binary that doesn't say.
+    feedback: Option<String>,
 }
 
 fn centre(r: &Rect) -> (i32, i32) {
@@ -102,6 +111,9 @@ impl Frame {
                     "list" => f.list = Some((n(0) as usize, n(1) as usize)),
                     "hit" => f.hits.push(((n(0), n(1), n(2), n(3)), n(4) as usize)),
                     "hash" => f.hash = rest.to_string(),
+                    "painted" => f.painted = rest.to_string(),
+                    "painter" => f.painter = rest.to_string(),
+                    "feedback" => f.feedback = Some(rest.to_string()),
                     _ => {}
                 }
                 continue;
@@ -319,11 +331,7 @@ impl Card {
 /// Writes an executable in a child, as tests/user_journeys.rs does: another test's fork must not inherit a descriptor that can
 /// write it (ETXTBSY).
 fn executable(path: &Path, body: &str) {
-    let mut writer = Command::new("sh").args(["-c", r#"cat > "$1" && chmod 755 "$1""#, "sh"]).arg(path).stdin(std::process::Stdio::piped()).spawn().unwrap();
-    let mut input = writer.stdin.take().unwrap();
-    input.write_all(body.as_bytes()).unwrap();
-    drop(input);
-    assert!(writer.wait().unwrap().success());
+    fixture_executable::publish(path, body).unwrap();
 }
 
 /// Also lets a regression test be replayed against the saved pre-fix executable.
@@ -463,7 +471,9 @@ impl Ui {
             let g = self.press(&[])?;
             seen.push(g.clone());
             if g.same(&f) && !g.busy {
-                return Ok((g, seen));
+                // The keys' feedback is in the first record after them: the settled frame carries all of it.
+                let feedback = seen.iter().filter_map(|s| s.feedback.clone()).reduce(|a, b| format!("{a} {b}"));
+                return Ok((Frame { feedback, ..g }, seen));
             }
             assert!(Instant::now() < until, "page did not finish its asynchronous read: {}", g.at);
             f = g;
@@ -533,6 +543,17 @@ struct Report {
     notes: BTreeSet<String>,
     /// Replays that had to go one button at a time.
     slow_replays: usize,
+    /// Per page: how often Up or Down moved the selection, and how often that move asked for the haptic tick and for a
+    /// sound (`@feedback`). Every move gives both, on every page (2026-11-08: the switcher, quick settings, the power
+    /// menu, the first start and more gave no tick).
+    feedback: BTreeMap<String, Feedback>,
+}
+
+#[derive(Default, Clone, Copy, Debug)]
+struct Feedback {
+    moves: usize,
+    ticks: usize,
+    sounds: usize,
 }
 
 struct Explorer<'a> {
@@ -645,7 +666,9 @@ impl<'a> Explorer<'a> {
 
     fn press(&mut self, keys: &[&str]) -> Result<Frame, Exited> {
         let ui = self.ui.as_mut().expect("a running UI");
-        ui.settled(keys)
+        let f = ui.settled(keys)?;
+        self.check_where(&f);
+        Ok(f)
     }
 
     /// `keys` did something: a frame on the way, or the one it settled on, is not `before`.
@@ -653,7 +676,18 @@ impl<'a> Explorer<'a> {
         let ui = self.ui.as_mut().expect("a running UI");
         let (f, seen) = ui.watched(keys)?;
         let changed = seen.iter().any(|g| !g.same(before));
+        for g in &seen {
+            self.check_where(g);
+        }
         Ok((f, changed))
+    }
+
+    /// `@where` names the page that was painted: a page the record names wrongly is one the walk would take for another
+    /// (the Date and time page was "settings:List System" and never explored, 2026-11-08).
+    fn check_where(&mut self, f: &Frame) {
+        if !f.painted.is_empty() && !f.painter.is_empty() && f.painted != f.painter {
+            self.fail(format!("{}: the {} painter painted it, but @where names a page of the {} painter", f.at, f.painted, f.painter));
+        }
     }
 
     /// Back where `want` was (its page and focused row, and its words): B while the page differs, the same key again while
@@ -724,6 +758,7 @@ impl<'a> Explorer<'a> {
                 return (frames, Walked::Left);
             }
             self.check_focus(&last, &f, dir);
+            self.note_feedback(&last, &f);
             if f.same(&last) {
                 return (frames, Walked::Stopped);
             }
@@ -996,6 +1031,19 @@ impl<'a> Explorer<'a> {
 
     /// The list moved its selection (`@list`): the picture changed, and the focus mark is on the selected row when it is on
     /// the list at all (a page with tiles above the list keeps the focus there).
+    /// A move of the selection (the focused row or the list's selected row changed): did it ask for a tick and a sound?
+    fn note_feedback(&mut self, before: &Frame, after: &Frame) {
+        let Some(said) = &after.feedback else { return };
+        let moved = after.focused() != before.focused() || after.list.map(|l| l.0) != before.list.map(|l| l.0);
+        if !moved || after.at != before.at {
+            return;
+        }
+        let e = self.report.feedback.entry(after.at.clone()).or_default();
+        e.moves += 1;
+        e.ticks += usize::from(said.split(' ').any(|w| w == "tick"));
+        e.sounds += usize::from(said.split(' ').any(|w| w.starts_with("sound:")));
+    }
+
     fn check_focus(&mut self, before: &Frame, after: &Frame, dir: &str) {
         // Grids need no touch-list metadata. A move must still leave a visible selection on a drawn control.
         if before.focused().is_some() && after.focused().is_none() && after.controls().len() > 1 {
@@ -1161,10 +1209,22 @@ fn run(profile: Profile, part: Part) {
         for (p, n) in r.pages {
             *all.pages.entry(p).or_default() += n;
         }
+        for (p, f) in r.feedback {
+            let e = all.feedback.entry(p).or_default();
+            (e.moves, e.ticks, e.sounds) = (e.moves + f.moves, e.ticks + f.ticks, e.sounds + f.sounds);
+        }
+    }
+    for (p, f) in &all.feedback {
+        if f.ticks < f.moves || f.sounds < f.moves {
+            all.failures.insert(format!("[{}] {p}: of {} moves of the selection, {} asked for the haptic tick and {} for a sound", profile.name, f.moves, f.ticks, f.sounds));
+        }
     }
     let mut out = format!("{} {part:?}: {} pages, {starts} starts, {:.0} s\n", profile.name, all.pages.len(), started.elapsed().as_secs_f64());
     for p in all.pages.keys() {
         out += &format!("  page {p}\n");
+    }
+    for (p, f) in &all.feedback {
+        out += &format!("  feedback {p}: {} moves, {} ticks, {} sounds\n", f.moves, f.ticks, f.sounds);
     }
     for n in &all.notes {
         out += &format!("  note {n}\n");

@@ -36,7 +36,9 @@ Azahar make their folders when they first start, and pocket-ui adds them after t
 Syncthing, and so is the folder of a PlayStation 2, GameCube, Wii or 3DS game's emulator: nothing is sent from them
 and nothing arrives in them, so the running game can't overwrite a save that comes in in the meantime. When the game ends,
 the folders carry on and the new saves go out at once (with **Sync after playing**, below, or within about ten
-seconds otherwise). A folder you paused yourself in Syncthing's web interface stays paused.
+seconds otherwise). After a restart, pocket-ui retries resuming folders it recorded as paused by
+the game if Syncthing temporarily refuses. A folder you paused yourself in Syncthing's web interface stays paused.
+If a power cut happened before pocket-ui could record its pause, resume that folder yourself in the web interface.
 
 **Earlier states stay here.** The states the pause menu's [Earlier](pause-menu-saves.md#earlier) keeps by itself (up to 1 GB, a
 new one every 5 minutes of play) are left out of **Save states** by its `.stignore` (`*.pstate.earlier*`,

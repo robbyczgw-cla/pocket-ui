@@ -220,6 +220,41 @@ fn fake_library(dir: &Path) {
     assert!(status.success(), "curator-fake-library.py failed");
 }
 
+fn made_translations(text: &str) -> Vec<String> {
+    // The painter substitutes hardware names before wrapping; its O records precede that substitution.
+    // Keep the raw translation too: some snapshot states select another device (e.g. sleep on Nova).
+    // Untranslated P fragments never count as pieces of a translation.
+    text.lines().filter_map(|l| l.strip_prefix("O\t"))
+        .flat_map(|s| [s.to_string(), pocket_ui::i18n::device_text(pocket_ui::i18n::Tr::Same(s)).to_string()]).collect()
+}
+
+fn translated_piece(made: &[String], part: bool, core: &str) -> bool {
+    if part {
+        return false;
+    }
+    // Hint measurement can rejoin wrapped word pieces with spaces ("behalte n."). They still spell a known
+    // translation; this exception never applies to P fragments left in English inside a translated pattern.
+    let compact = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+    made.iter().any(|t| t.contains(core)
+        || (core.contains(char::is_whitespace) && compact(t).contains(&compact(core))))
+}
+
+#[test]
+fn translated_lines_follow_the_device_wording_without_excusing_english_parts() {
+    use pocket_ui::i18n::{device_text, Tr};
+    let made = made_translations("O\tSchaltet den Pocket aus.\nO\tTailscale verbindet den Pocket mit Handy und Computer.\nM\tTurn off the Pocket.\n");
+    for line in ["Schaltet den Pocket aus.", "Tailscale verbindet den Pocket mit Handy"] {
+        assert!(translated_piece(&made, false, line), "raw wording for states that select another device");
+        let painted = device_text(Tr::Same(line)).to_string();
+        assert!(translated_piece(&made, false, &painted), "translated device wording: {painted}");
+        assert!(!translated_piece(&made, true, &painted), "untranslated pattern parts must still be checked");
+    }
+    assert!(!translated_piece(&made, false, "Turn off the Brick."));
+    assert!(!translated_piece(&made, false, "Turn off the Pocket."));
+    assert!(translated_piece(&made, false, "Schaltet den Po cket aus."));
+    assert!(!translated_piece(&made, true, "Schaltet den Po cket aus."));
+}
+
 #[test]
 #[ignore = "release check: sh scripts/release-check.sh"]
 fn every_string_in_the_german_snapshots_is_translated_or_a_name() {
@@ -287,8 +322,12 @@ fn every_string_is_translated_or_a_name(lang: &'static str) {
     let mut missing: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (i, (_, state)) in states().iter().enumerate() {
         let text = std::fs::read_to_string(tmp.join(format!("{i}.tsv"))).unwrap_or_default();
-        let made: Vec<&str> = text.lines().filter_map(|l| l.strip_prefix("O\t")).collect();
+        let made = made_translations(&text);
         let shown: Vec<&str> = text.lines().filter_map(|l| l.strip_prefix("M\t")).map(str::trim).collect();
+        // English fact sentences already accepted by keep.txt can wrap onto a final "series." line. Keep the
+        // same data policy for those M pieces; it does not excuse untranslated P fragments of UI patterns.
+        let kept_shown: Vec<&str> = shown.iter().copied()
+            .filter(|s| keep_patterns.iter().any(|p| keep_match(p, s))).collect();
         // `M`: painted as it is; `P`: a part a pattern left in English, inside a German line (never excused by it).
         for (part, m) in text.lines().filter_map(|l| l.strip_prefix("M\t").map(|m| (false, m)).or_else(|| l.strip_prefix("P\t").map(|m| (true, m)))) {
             let core = m.trim().trim_end_matches('…').trim();
@@ -307,12 +346,13 @@ fn every_string_is_translated_or_a_name(lang: &'static str) {
                 whole == core || whole.starts_with(core) || (core.chars().count() >= 6 && whole.ends_with(core)) || (core.chars().count() >= 12 && whole.contains(core))
             };
             if !words(core)
-                || (!part && made.iter().any(|t| t.contains(core)))
+                || translated_piece(&made, part, core)
                 // Measured letter by letter on the way to a longer one, which is checked itself.
                 || shown.iter().any(|w| w.len() > core.len() && w.starts_with(core))
                 || keep_exact.contains(m.trim())
                 || keep_exact.iter().any(|k| piece_of(k))
                 || keep_patterns.iter().any(|p| keep_match(p, m.trim()))
+                || (!part && kept_shown.iter().any(|s| piece_of(s)))
                 || data.iter().any(|d| piece_of(d))
                 || !words(&bare())
             {

@@ -6,7 +6,7 @@
 #   scripts/brick-publish.sh CARD --public OWNER/NAME --out DIR [--tag vX.Y.Z] [--zip CARD.zip] [--notes TEXT]
 #   writes DIR/release/ (the tarball, and the card zip when given: files for the GitHub release <tag> of OWNER/NAME) and
 #   DIR/updates/brick/update.json + .sig (for pocketui.xyz/updates/brick/, the address a public card asks, update::BRICK_DEFAULT_URL),
-#   app and immutable per-file core/data packages on pocketui.xyz first, GitHub fallback. A beta card is refused.
+#   app and immutable per-file core/data packages on GitHub first, pocketui.xyz fallback. A beta card is refused.
 #   After the upload: scripts/release-channel.sh --check DIR/updates/brick/update.json, then deploy the list with the website.
 # CARD        what scripts/brick-make-card.sh made (OUT/card), or its pocket-ui/app folder
 # --channel   the channel's folder name (default beta): <web>/brick-updates/<channel>/
@@ -110,8 +110,8 @@ if [ -n "$PUBLIC" ]; then
     || die "the small app / asset packages could not be prepared"
   # GitHub Releases take files under 2 GiB.
   for f in "$OUTDIR/release/$NAME" ${ZIP:+"$ZIP"}; do [ "$(wc -c <"$f" | tr -d ' ')" -lt 2147483648 ] || die "$(basename "$f") is 2 GiB or more: GitHub refuses it"; done
-  "$ST" update "$KEY" "$OUTDIR/updates/brick/update.json" app "$VERSION" "$OUTDIR/release/$NAME" "https://pocketui.xyz/updates/brick/$NAME" "$NOTES" >/dev/null
-  "$ST" mirror "$KEY" "$OUTDIR/updates/brick/update.json" app "$BASE/$NAME" >/dev/null
+  "$ST" update "$KEY" "$OUTDIR/updates/brick/update.json" app "$VERSION" "$OUTDIR/release/$NAME" "$BASE/$NAME" "$NOTES" >/dev/null
+  "$ST" mirror "$KEY" "$OUTDIR/updates/brick/update.json" app "https://pocketui.xyz/updates/brick/$NAME" >/dev/null
   if [ -n "$ZIP" ]; then
     cp "$ZIP" "$OUTDIR/release/"
     "$ST" update "$KEY" "$OUTDIR/updates/brick/update.json" install_zip "$VERSION" "$ZIP" "$BASE/$(basename "$ZIP")" "$NOTES" >/dev/null

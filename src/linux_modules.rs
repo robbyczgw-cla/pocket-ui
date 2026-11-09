@@ -65,6 +65,8 @@ pub mod palette;
 pub mod kit;
 /// What a frame offers the D-pad, for tests/nav_explorer.rs (off unless POCKETUI_NAV_PROBE is set).
 pub mod nav_probe;
+/// Where the UI is, one line in /tmp/pocket-ui.status for agents and test helpers (docs/DEVICE-TESTS.md).
+pub mod ui_status;
 pub mod appearance;
 pub mod setup;
 // The feature registry, its cards and their previews (first start, Settings → Tour, "New in this version").
@@ -120,6 +122,7 @@ pub mod frame_cache;
 pub mod preview;
 pub mod core_options;
 pub mod controls;
+pub mod button_layout_model;
 pub mod controls_card;
 pub mod emu_menu;
 pub mod slots;
@@ -389,3 +392,10 @@ pub mod brick_gles;
 pub mod brick_picture;
 #[cfg(feature = "brick")]
 pub mod brick_hw;
+
+/// Backward-compatible pocket-core FIFO decoding.
+pub mod core_command;
+
+/// Read-only pocket-core play state, using the shared v1 status writer.
+pub mod core_status;
+pub mod document_art;

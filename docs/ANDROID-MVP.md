@@ -496,3 +496,22 @@ Resume keeps the pause sheet open. See the Android framework's
 and [edge-to-edge guidance](https://developer.android.com/develop/ui/views/layout/edge-to-edge).
 SAF remains the only access to external game files; app-private copies, saves and settings
 remain in the sandbox. The existing external-emulator intents retain their own lifecycle.
+
+
+## Android 0.3 internal refresh
+
+See [Android 0.3 QA behavior](../android/README.md#android-03-internal-qa). `Preferences.retro_colours` is passed to
+both native processes. Phone title bands and result rows use `title_block`; `layouts::system_ids` and
+`layouts::listed_picture` serve the SAF scan as well as the card conventions. `document_art::Index` resolves artwork
+and exact-stem cheat sidecars from bounded documents; `gamelist::parse` supplies tolerant XML parsing without its
+filesystem scanner. `PocketActivity.readPicture` decodes only a granted document on the existing media worker.
+`CheatMenu::from_text`/`try_press` provide per-identity persisted choices without a command FIFO. The player calls
+the shared core cheat API directly. `android/src/moments.rs` checks the undo/rollback transaction; Android's
+`Core::block_saves` also protects the destructor after a failed rollback. The save guard is Android-only; the shared bounded-code handling also protects Nestopia on Linux.
+
+The internal APK version can be overridden by `ANDROID_QA_VERSION` (strict numeric major.minor.patch); normal builds
+still derive it from Cargo. Updating Android remains a signed-APK operation, separate from the SD updater.
+
+Android phone rows, selected bands and box headers use explicit literal name scopes (`draw_name`/`title_block::name_layout_in`), including their accessibility labels. The pause header uses `play_cards::paint_game_title`; Options remains interface text. DE/ES framebuffer regressions compare real name regions against literal reference painting in both orientations at 100%/200%.
+
+Phone box-header title baselines and the system-line gap use `type_scale::px`, so Android font scaling cannot make their ink overlap. The regression inspects actual painted title/system ink in portrait and landscape.

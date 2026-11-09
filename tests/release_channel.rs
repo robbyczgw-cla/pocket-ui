@@ -114,6 +114,7 @@ fn builds_a_signed_list_that_names_the_files_of_the_github_release() {
     // The website first (pocket-ui up to 0.2.x downloads only `url`), the same file on GitHub as its signed mirror.
     assert_eq!(app.url, format!("https://pocketui.xyz/updates/stable/pocket-ui-{VERSION}-aarch64.tar.gz"));
     assert_eq!(app.mirrors, [format!("{base}/pocket-ui-{VERSION}-aarch64.tar.gz")]);
+    assert_eq!(app.preferred_sources, app.mirrors);
     assert_eq!(sha(&site.join(format!("updates/stable/pocket-ui-{VERSION}-aarch64.tar.gz"))), app.sha256, "the website's copy goes with the list");
     assert_eq!(app.notes, "Faster menus.", "NOTES.txt");
     let tarball = site.join(format!("github/pocket-ui-{VERSION}-aarch64.tar.gz"));
@@ -303,6 +304,7 @@ fn direct_app_is_copied_with_a_signed_identical_github_fallback() {
     let name = format!("pocket-ui-{VERSION}-aarch64.tar.gz");
     assert_eq!(app.url, format!("https://pocketui.xyz/updates/stable/{name}"));
     assert_eq!(app.mirrors, [format!("https://github.com/owner/pocket-ui/releases/download/v{VERSION}/{name}")]);
+    assert_eq!(app.preferred_sources, app.mirrors);
     assert_eq!(sha(&site.join("updates/stable").join(&name)), app.sha256);
     assert_eq!(sha(&site.join("github").join(&name)), app.sha256);
     let listed = Command::new(STORE_TOOL).arg("list").arg(site.join("updates/stable/update.json")).output().unwrap();
@@ -383,7 +385,7 @@ fn a_test_channel_can_keep_the_app_on_github_only() {
     assert!(!site.join(format!("updates/stable/pocket-ui-{VERSION}-aarch64.tar.gz")).exists(), "nothing for the website but the list");
 }
 
-/// The update list exactly as every pocket-ui from 0.1.7 to 0.2.2 reads it (their src/update.rs, unchanged in between):
+/// The update list exactly as every pocket-ui from 0.1.0 to 0.2.5 reads it (their src/update.rs, unchanged in between):
 /// `format`, and in every entry that is there `version`, `url`, `sha256` and `size` with these types; a field they
 /// don't know is skipped. Those versions stay in players' hands and leave only through an update they can read: a
 /// list they can't parse, or an app they can only get from a host their network blocks, strands every one of them.
@@ -393,6 +395,20 @@ mod oldest_client {
     pub struct Release {
         pub version: String,
         pub url: String,
+        pub sha256: String,
+        pub size: u64,
+        #[serde(default)]
+        pub notes: String,
+    }
+
+    /// Public 0.3.0/0.3.1 clients also know mirrors, but not preferences.
+    #[allow(dead_code)]
+    #[derive(serde::Deserialize)]
+    pub struct MirroredRelease {
+        pub version: String,
+        pub url: String,
+        #[serde(default)]
+        pub mirrors: Vec<String>,
         pub sha256: String,
         pub size: u64,
         #[serde(default)]
@@ -437,15 +453,22 @@ fn every_list_we_write_is_read_by_the_oldest_pocket_ui_in_players_hands() {
         ("the live 0.2.2 list", std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/update-channel/stable-0.2.2.json")).unwrap()),
     ];
     for (what, json) in lists {
-        let old: oldest_client::Manifest = serde_json::from_slice(&json).unwrap_or_else(|e| panic!("{what}: 0.1.7–0.2.2 can't read it: {e}"));
+        let old: oldest_client::Manifest = serde_json::from_slice(&json).unwrap_or_else(|e| panic!("{what}: 0.1.0–0.2.5 can't read it: {e}"));
         let now: Manifest = serde_json::from_slice(&json).unwrap();
+        let object: serde_json::Value = serde_json::from_slice(&json).unwrap();
+        let old_mirrored: oldest_client::MirroredRelease = serde_json::from_value(object["app"].clone()).unwrap();
         let (app, new) = (old.app.expect(what), now.app.expect(what));
+        assert_eq!(old_mirrored.url, new.url, "0.3.0/0.3.1 keep the legacy primary");
+        assert_eq!(old_mirrored.mirrors, new.mirrors, "0.3.0/0.3.1 retain their existing fallback");
         assert_eq!((app.version, app.sha256, app.size), (new.version, new.sha256, new.size), "{what}: both read the same app");
         if what != "a test channel" {
+            if what != "the live 0.2.2 list" {
+                assert!(!new.preferred_sources.is_empty(), "new clients prefer GitHub while old clients retain the website");
+            }
             assert!(app.url.starts_with("https://pocketui.xyz/updates/"), "{what}: the only source an old pocket-ui tries: {}", app.url);
         }
     }
-    // The archive as 0.1.7 to 0.2.2 install it (their untar.rs): only plain files and folders (a link, device or anything else
+    // The archive as 0.1.0 to 0.2.5 install it (their untar.rs): only plain files and folders (a link, device or anything else
     // refuses the whole update), pocket-ui and pocket-core at the top, both printing `<name> <version>` (checked on the device).
     let (_, site) = build(&tmp.0, &inp, &key, &[]);
     let listing = Command::new("tar").arg("-tvzf").arg(site.join(format!("updates/stable/pocket-ui-{VERSION}-aarch64.tar.gz"))).output().unwrap();
@@ -498,4 +521,30 @@ fn check_takes_the_website_copy_next_to_the_list_before_it_is_live() {
     let out = check();
     assert_eq!(out.status.code(), Some(1), "{}", text(&out));
     assert!(text(&out).contains("CHANGED  app"), "{}", text(&out));
+}
+
+#[test]
+fn brick_channel_uses_github_first_and_retains_the_identical_website_copy() {
+    let tmp = Tmp::new("brick-source-order");
+    let inp = release_out(&tmp.0);
+    let (key, public) = throwaway_key(&tmp.0);
+    let (out, site) = build(&tmp.0, &inp, &key, &["--channel", "brick"]);
+    assert!(out.status.success(), "{}", text(&out));
+    let path = site.join("updates/brick/update.json");
+    let manifest = parse_manifest(&std::fs::read(&path).unwrap(), &std::fs::read_to_string(path.with_extension("json.sig")).unwrap(), &public).unwrap();
+    let app = manifest.app.unwrap();
+    let name = format!("pocket-ui-{VERSION}-aarch64.tar.gz");
+    assert_eq!(app.url, format!("https://github.com/owner/pocket-ui/releases/download/v{VERSION}/{name}"));
+    assert_eq!(app.mirrors, [format!("https://pocketui.xyz/updates/brick/{name}")]);
+    assert_eq!(sha(&site.join("updates/brick").join(&name)), app.sha256);
+}
+
+#[test]
+fn brick_parts_keep_unchanged_bytes_on_their_existing_github_release() {
+    let out = Command::new("python3")
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/test-brick-repoint-parts.py"))
+        .env("STORE_TOOL", STORE_TOOL)
+        .output().unwrap();
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(text(&out).contains("Ran 1 test"), "{}", text(&out));
 }

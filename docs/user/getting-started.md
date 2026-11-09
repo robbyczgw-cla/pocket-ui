@@ -69,6 +69,9 @@ card (switch on Samba in ROCKNIX's Network Settings, then open `\\<device name o
 nothing and **Close** takes you back to EmulationStation. To remove pocket-ui again, open EmulationStation (in pocket-ui: Settings → Help & tools → About → Open
 EmulationStation…, or hold SELECT and START), then start **Ports → Uninstall pocket-ui** (the installer leaves it there).
 
+Running the installer again repairs missing or damaged program files, even with the same version number. A complete
+matching install is left in place. Your games and saves stay as they are.
+
 If pocket-ui is not installed, ROCKNIX's own menu (EmulationStation) appears instead. If pocket-ui keeps stopping, it
 goes back to the last version that worked, then to a [safe mode](safe-mode.md) page; EmulationStation only opens by
 itself if pocket-ui cannot start at all.

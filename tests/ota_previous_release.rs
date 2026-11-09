@@ -3,6 +3,9 @@
 //! this tree's pocket-ui. Layouts come from checksummed public 0.2.5/0.3.0 card artifacts.
 //! ARM payloads are represented by marker files; this does not execute the archived ARM code.
 #![cfg(target_os = "linux")]
+#[path = "common/executable.rs"]
+mod fixture_executable;
+
 use std::{fs, os::unix::fs::{symlink, PermissionsExt}, path::Path, process::{Child, Command}, time::Duration};
 use pocket_ui::update::{self, Cancel, Release};
 include!("common/root.rs");
@@ -15,8 +18,7 @@ fn program(path: &Path, version: &str, ui: bool) {
     let real = env!("CARGO_BIN_EXE_pocket-ui").replace('\'', "'\\''");
     let name = if ui { "pocket-ui" } else { "pocket-core" };
     let rest = if ui { format!("exec '{real}' \"$@\"\n") } else { "exit 0\n".into() };
-    fs::write(path, format!("#!/bin/sh\n[ \"$1\" = --version ] && echo '{name} {version}' && exit 0\n{rest}")).unwrap();
-    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    fixture_executable::publish(path, format!("#!/bin/sh\n[ \"$1\" = --version ] && echo '{name} {version}' && exit 0\n{rest}")).unwrap();
 }
 
 #[test]
@@ -65,7 +67,7 @@ fn ota_from_public_layouts_keeps_settings_progress_and_games_across_two_starts()
         let tar = tmp.path().join("app.tar.gz");
         assert!(Command::new("tar").arg("-czf").arg(&tar).arg("-C").arg(&src).args(["pocket-ui", "pocket-core"]).status().unwrap().success());
         let bytes = fs::read(&tar).unwrap();
-        let rel = Release { version: "0.3.1".into(), url: "app.tar.gz".into(), mirrors: vec![],
+        let rel = Release { version: "0.3.1".into(), url: "app.tar.gz".into(), preferred_sources: Vec::new(), mirrors: vec![],
             sha256: pocket_ui::store::sha256_hex(&bytes), size: bytes.len() as u64, notes: String::new() };
         update::install_app(&rel, &format!("file://{}/update.json", tmp.path().display()), &root, &Cancel::new(), &|_| {}).unwrap();
         assert_eq!(fs::read_link(root.join("previous")).unwrap(), Path::new(&format!("releases/{previous}")));

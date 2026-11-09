@@ -23,7 +23,11 @@ KEEP = os.path.join(ROOT, "assets", "i18n", "keep.txt")
 SKIP = os.path.join(ROOT, "assets", "i18n", "skip.txt")
 
 # Files that show nothing on the screen (tools, tests, the docs check).
-SKIP_FILES = {"doc_checks.rs", "bin/hello_pad.rs", "bin/store_tool.rs", "manual.rs", "curator/tests.rs", "web/tests.rs", "testutil.rs"}
+SKIP_FILES = {"doc_checks.rs", "bin/hello_pad.rs", "bin/store_tool.rs", "manual.rs", "curator/tests.rs", "web/tests.rs", "testutil.rs",
+              # Where the UI is: machine codes for `@where`, /tmp/pocket-ui.status and logs, never painted (DEVICE-TESTS.md).
+              "app_where.rs", "ui_status.rs",
+              # pocket-core's FIFO contract tests (`#[cfg(test)]`): command words, never painted.
+              "bin/pocket_core/core_contract.rs"}
 # Calls whose strings are for a log, a developer or the machine.
 SKIP_CALLS = {
     "println", "eprintln", "print", "eprint", "panic", "assert", "assert_eq", "assert_ne", "debug_assert",
@@ -34,6 +38,7 @@ SKIP_CALLS = {
     "entry", "open", "read", "write", "create", "write_all", "status", "spawn", "output", "file", "setting",
     "position", "parse", "trim_start_matches", "trim_end_matches", "rsplit_once", "lines", "with_extension",
     "is_some_and", "eq", "eq_ignore_ascii_case", "send", "log_line", "sh", "run", "systemctl", "swaymsg",
+    "wake_from_light",
 }
 
 

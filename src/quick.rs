@@ -489,6 +489,19 @@ impl Sys {
         matches!(self.screen, Screen::Quick { .. })
     }
 
+    /// The Date and time page's view while it is up (Settings → System → Date and time, or from the quick settings), by
+    /// name for the status file and `@where`: "time", "time:regions", "time:zones", "time:search", "time:clock".
+    pub fn time_view(&self) -> Option<&'static str> {
+        match &self.screen {
+            Screen::Time(TimePage::Summary { .. }) => Some("time"),
+            Screen::Time(TimePage::Regions { .. }) => Some("time:regions"),
+            Screen::Time(TimePage::Zones { .. }) => Some("time:zones"),
+            Screen::Time(TimePage::Search(_)) => Some("time:search"),
+            Screen::Time(TimePage::SetClock(_)) => Some("time:clock"),
+            _ => None,
+        }
+    }
+
     /// Changes whenever what the panels show moves (selection, page, typed text): for the UI sounds.
     pub fn ui_mark(&self) -> u64 {
         use std::hash::{Hash, Hasher};
@@ -1829,7 +1842,9 @@ impl Sys {
                                 ..Default::default()
                             }))
                         } else {
-                            TimePage::Regions { sel: 1 }
+                            // On the region these cities are in ("Search…" is row 0), not on the first region.
+                            let at = timezone::regions(zones).iter().position(|r| r == heading).map_or(1, |i| i + 1);
+                            TimePage::Regions { sel: at }
                         };
                     }
                     b if b == CONFIRM => {
@@ -2613,6 +2628,31 @@ mod tests {
         // B on the summary leaves the page.
         tap(&mut s, Button::South, &SHELF, now);
         assert!(!s.is_open());
+    }
+
+    /// B on a region's cities goes back to that region's row, not to the first region: the navigation explorer found "Africa"
+    /// selected after Europe's cities once it walked Date and time (2026-11-08; before, `@where` named the page after
+    /// the Settings list under it, and the explorer never went in).
+    #[test]
+    fn b_on_a_regions_cities_goes_back_to_that_region() {
+        let (mut s, _hw) = sys();
+        let now = Instant::now();
+        s.open_time(now);
+        assert!(s.take_polled());
+        tap(&mut s, Button::East, &SHELF, now);
+        let regions = timezone::regions(s.zone_list());
+        assert!(regions.len() > 2, "{regions:?}");
+        for (i, region) in regions.iter().enumerate() {
+            let Screen::Time(page) = &mut s.screen else { panic!("the time page") };
+            *page = TimePage::Regions { sel: i + 1 };
+            tap(&mut s, Button::East, &SHELF, now);
+            assert!(matches!(&s.screen, Screen::Time(TimePage::Zones { heading, .. }) if heading == region), "{region}'s cities");
+            tap(&mut s, Button::South, &SHELF, now);
+            match &s.screen {
+                Screen::Time(TimePage::Regions { sel }) => assert_eq!(regions[sel - 1], *region, "B from {region}'s cities"),
+                _ => panic!("back on the regions"),
+            }
+        }
     }
 
     #[test]

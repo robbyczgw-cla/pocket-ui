@@ -43,6 +43,20 @@ enum Row {
     TurnOff,
 }
 
+/// The screen Kids Mode paints (`App::kids_view`): its setup steps, the PIN, the grown-up's page, the time warning and
+/// pause, "ask a grown-up", time up, or the child's shelf.
+#[derive(Clone, Copy, PartialEq, Hash, Debug)]
+pub(crate) enum KidsView {
+    Flow,
+    Pin,
+    Adult(usize),
+    Warning,
+    Pause,
+    Stuck,
+    TimeUp,
+    Shelf,
+}
+
 #[derive(Default)]
 pub(crate) enum Page {
     #[default]
@@ -622,23 +636,37 @@ impl App {
         if self.kids.adding.is_some() && self.setup.is_none() && self.settings_page.is_none() {
             self.kids_back_from_adding();
         }
-        if self.kids.flow.is_some() {
-            self.kids_paint_flow(c);
-            return true;
-        }
-        if !self.kids.entered || (self.kids.adding.is_some() && (self.setup.is_some() || self.settings_page.is_some())) {
-            return false;
-        }
-        match self.kids.page {
-            Page::Pin(_) => self.kids_paint_pin(c),
-            Page::Adult(sel) => self.kids_paint_adult(c, sel),
-            Page::Shelf if self.running.is_some() && self.menu.is_some() && self.kids.warning.is_some() => self.kids_paint_warning(c),
-            Page::Shelf if self.running.is_some() && self.menu.is_some() => self.kids_paint_pause(c),
-            Page::Shelf if self.kids.stuck && self.running.is_none() => self.kids_paint_stuck(c),
-            Page::Shelf if self.kids_time_up() && self.cabinet.insert.is_none() => self.kids_paint_time_up(c),
-            Page::Shelf => self.kids_paint_shelf(c),
+        let Some(view) = self.kids_view() else { return false };
+        match view {
+            KidsView::Flow => self.kids_paint_flow(c),
+            KidsView::Pin => self.kids_paint_pin(c),
+            KidsView::Adult(sel) => self.kids_paint_adult(c, sel),
+            KidsView::Warning => self.kids_paint_warning(c),
+            KidsView::Pause => self.kids_paint_pause(c),
+            KidsView::Stuck => self.kids_paint_stuck(c),
+            KidsView::TimeUp => self.kids_paint_time_up(c),
+            KidsView::Shelf => self.kids_paint_shelf(c),
         }
         true
+    }
+
+    /// Which of the mode's screens is painted, if one is (`kids_paint` paints it; `app_where` names it).
+    pub(crate) fn kids_view(&self) -> Option<KidsView> {
+        if self.kids.flow.is_some() {
+            return Some(KidsView::Flow);
+        }
+        if !self.kids.entered || (self.kids.adding.is_some() && (self.setup.is_some() || self.settings_page.is_some())) {
+            return None;
+        }
+        Some(match self.kids.page {
+            Page::Pin(_) => KidsView::Pin,
+            Page::Adult(sel) => KidsView::Adult(sel),
+            Page::Shelf if self.running.is_some() && self.menu.is_some() && self.kids.warning.is_some() => KidsView::Warning,
+            Page::Shelf if self.running.is_some() && self.menu.is_some() => KidsView::Pause,
+            Page::Shelf if self.kids.stuck && self.running.is_none() => KidsView::Stuck,
+            Page::Shelf if self.kids_time_up() && self.cabinet.insert.is_none() => KidsView::TimeUp,
+            Page::Shelf => KidsView::Shelf,
+        })
     }
 
     /// A child's Blue or Pink; on the Big shelf the player's own colours.
@@ -796,6 +824,14 @@ impl App {
     /// baseline returned is never above where the reserved lines end, so what stands under the name does not move
     /// from one game to the next (`title_block`).
     pub(crate) fn kids_shelf_name_at(&mut self, c: &mut Canvas, item: Item, below: i32, colours: Colours, scale: f32, reserve: usize) -> (i32, i32, i32) {
+        let translating = self.text.translating();
+        if matches!(item, Item::Game(..) | Item::Recent(_) | Item::System(_)) { self.text.set_translate(false); }
+        let result = self.kids_shelf_name_inner(c, item, below, colours, scale, reserve);
+        self.text.set_translate(translating);
+        result
+    }
+
+    fn kids_shelf_name_inner(&mut self, c: &mut Canvas, item: Item, below: i32, colours: Colours, scale: f32, reserve: usize) -> (i32, i32, i32) {
         let u = c.h as f32 / 1080.0;
         let px = |v: f32| (v * u * scale).round() as u32;
         let title = self.case_title(item);

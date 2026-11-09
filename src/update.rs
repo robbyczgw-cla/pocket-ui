@@ -25,8 +25,9 @@ use std::ffi::OsString;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(test)]
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -64,10 +65,28 @@ pub struct Release {
     /// Additional signed sources, tried in order after `url`, with exactly the same size and SHA-256.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mirrors: Vec<String>,
+    /// Signed sources preferred by new clients. Older clients keep using `url`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub preferred_sources: Vec<String>,
     pub sha256: String,
     pub size: u64,
     #[serde(default)]
     pub notes: String,
+}
+
+impl Release {
+    /// The distinct signed sources in attempt order. Resolve before deduplicating so
+    /// an absolute mirror of the relative primary does not consume another attempt.
+    pub fn download_urls(&self, manifest_url: &str) -> Vec<String> {
+        let mut urls = Vec::new();
+        for source in self.preferred_sources.iter().chain(std::iter::once(&self.url)).chain(&self.mirrors) {
+            let url = resolve(manifest_url, source);
+            if !urls.contains(&url) {
+                urls.push(url);
+            }
+        }
+        urls
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -233,40 +252,9 @@ pub fn card_full(needed: u64) -> String {
     format!("The SD card is too full for this update: it needs {} MB more. Nothing was changed.", needed.div_ceil(1 << 20))
 }
 
-/// Lets the Updates page stop a running download.
-#[derive(Clone, Default)]
-pub struct Cancel(Arc<AtomicBool>, Arc<Mutex<Option<&'static str>>>, Arc<AtomicU64>);
-
-impl Cancel {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn cancel(&self) {
-        self.0.store(true, Ordering::SeqCst);
-    }
-
-    /// Worker-owned phase; the UI only reads this small value, never does network work.
-    pub fn status(&self) -> Option<&'static str> {
-        self.1.try_lock().ok().and_then(|s| *s)
-    }
-
-    /// Expected size of the current file (components may be smaller than the app archive).
-    pub fn progress_total(&self) -> u64 {
-        self.2.load(Ordering::Relaxed)
-    }
-
-    /// Updates the worker phase; snapshot previews use the same text.
-    pub fn set_status(&self, status: &'static str) {
-        if let Ok(mut phase) = self.1.lock() {
-            *phase = Some(status);
-        }
-    }
-
-    pub fn is_cancelled(&self) -> bool {
-        self.0.load(Ordering::SeqCst)
-    }
-}
+mod runtime;
+pub mod observation;
+pub use runtime::{BytesScope, Cancel, CancelBoundary, WorkerPhase, WorkerSnapshot};
 
 /// A channel inside a tailnet (a `*.ts.net` name: the Brick card's private channel, docs/TRIMUI-BRICK-REMOTE.md) is reached
 /// through Tailscale's local proxy (`proxy`, from POCKETUI_TS_PROXY): with userspace networking nothing else on the device
@@ -427,7 +415,7 @@ fn download(tools: &Tools, url: &str, dest: &Path, max_size: u64, cancel: &Cance
         if len > high_water {
             high_water = len;
             grew_at = Instant::now();
-            cancel.set_status("Downloading the update…");
+            cancel.set_phase(WorkerPhase::Downloading);
         }
         if cancel.is_cancelled() {
             let _ = child.kill();
@@ -456,9 +444,11 @@ fn download(tools: &Tools, url: &str, dest: &Path, max_size: u64, cancel: &Cance
 
 /// Downloads `rel` to `dest` and checks size and SHA-256 against the signed list.
 fn download_checked(tools: &Tools, rel: &Release, manifest_url: &str, dest: &Path, cancel: &Cancel, progress: &dyn Fn(u64)) -> Result<(), String> {
-    cancel.2.store(rel.size, Ordering::Relaxed);
+    cancel.begin_file(rel.size);
+    let report = |n| { cancel.bytes(n); progress(n); };
+    let progress: &dyn Fn(u64) = &report;
     // Validate every signed address before starting anything; never downgrade transport on fallback.
-    let urls: Vec<_> = std::iter::once(&rel.url).chain(&rel.mirrors).map(|u| resolve(manifest_url, u)).collect();
+    let urls = rel.download_urls(manifest_url);
     if urls.len() > 4 {
         return Err("The update list names too many download servers. Nothing was installed.".into());
     }
@@ -480,14 +470,10 @@ fn download_checked(tools: &Tools, rel: &Release, manifest_url: &str, dest: &Pat
             }
             progress(0);
         }
-        cancel.set_status(if i == 0 {
-            "Connecting to the update server…"
-        } else {
-            "Trying the next download server…"
-        });
+        cancel.set_phase(if i == 0 { WorkerPhase::Connecting } else { WorkerPhase::Fallback });
         let attempt = || {
             download(tools, url, dest, rel.size, cancel, progress).and_then(|()| {
-                cancel.set_status("Checking the download…");
+                cancel.set_phase(WorkerPhase::CheckingDownload);
                 let size = std::fs::metadata(dest).map_or(0, |m| m.len());
                 let hash = store::sha256_file(dest).map_err(|e| e.to_string())?;
                 if size != rel.size || hash != rel.sha256.to_lowercase() {
@@ -504,13 +490,14 @@ fn download_checked(tools: &Tools, rel: &Release, manifest_url: &str, dest: &Pat
         let result = match attempt() {
             Err(e) if resumed && e == DAMAGED && !cancel.is_cancelled() => {
                 progress(0);
+                cancel.set_phase(if i == 0 { WorkerPhase::Connecting } else { WorkerPhase::Fallback });
                 attempt()
             }
             other => other,
         };
         match result {
             Ok(()) => {
-                cancel.set_status("Preparing the update…");
+                cancel.set_phase(WorkerPhase::Preparing);
                 return Ok(());
             }
             Err(e) => {
@@ -607,6 +594,8 @@ fn link_files(root: &Path) -> Result<(), String> {
 
 /// Downloads, checks and switches to `rel`. The caller restarts pocket-ui afterwards.
 pub fn install_app(rel: &Release, manifest_url: &str, root: &Path, cancel: &Cancel, progress: &dyn Fn(u64)) -> Result<(), String> {
+    cancel.boundary(CancelBoundary::Download);
+    cancel.set_phase(WorkerPhase::Layout);
     ensure_layout(root)?;
     let releases = root.join("releases");
     clear_leftovers(&releases, &rel.version);
@@ -615,6 +604,7 @@ pub fn install_app(rel: &Release, manifest_url: &str, root: &Path, cancel: &Canc
     room_for_app(rel.size, have, crate::starter::free_bytes(&releases))?;
     download_checked(&TOOLS, rel, manifest_url, &tarball, cancel, progress)?;
     crash_point("downloaded");
+    cancel.set_phase(WorkerPhase::Unpacking);
 
     // Only plain files and folders, no setuid bits (B4); see untar.rs.
     let staging = releases.join(format!(".staging-{}", rel.version));
@@ -623,6 +613,7 @@ pub fn install_app(rel: &Release, manifest_url: &str, root: &Path, cancel: &Canc
     crash_point("unpacked");
     let _ = std::fs::remove_file(&tarball);
     let names = unpacked?;
+    cancel.set_phase(WorkerPhase::Validating);
     for required in ["pocket-ui", "pocket-core"] {
         if !names.iter().any(|n| n.path == required && !n.dir) {
             let _ = std::fs::remove_dir_all(&staging);
@@ -639,12 +630,14 @@ pub fn install_app(rel: &Release, manifest_url: &str, root: &Path, cancel: &Canc
         }
     }
 
+    cancel.set_phase(WorkerPhase::Flushing);
     // The programs on the card before anything points at them: a power cut right after the switch must find them whole.
     if let Err(e) = crate::fsutil::sync_tree(&staging) {
         let _ = std::fs::remove_dir_all(&staging);
         return Err(format!("Couldn't write the update to the SD card ({e}). Nothing was changed."));
     }
     crash_point("synced");
+    cancel.set_phase(WorkerPhase::Activating);
     let dir = unused_release(root, &rel.version);
     std::fs::rename(&staging, root.join(&dir)).map_err(|e| e.to_string())?;
     crate::fsutil::sync_dir(&releases);
@@ -661,6 +654,7 @@ pub fn install_app(rel: &Release, manifest_url: &str, root: &Path, cancel: &Canc
     link_files(root)?;
     crate::fsutil::sync_dir(root);
     crash_point("linked");
+    cancel.set_phase(WorkerPhase::Pruning);
     prune(root);
     Ok(())
 }
@@ -1104,12 +1098,14 @@ fn stage_os_in(
     cancel: &Cancel,
     progress: &dyn Fn(u64),
 ) -> Result<Option<String>, String> {
+    cancel.boundary(CancelBoundary::Download);
     let name = rel.url.rsplit('/').next().unwrap_or_default();
     if !name.ends_with(".tar") || name.contains("..") {
         return Err("The system update has an unexpected file name.".into());
     }
     let tar = staging.join(name);
     download_checked(tools, rel, manifest_url, &tar, cancel, progress)?;
+    cancel.set_phase(WorkerPhase::Validating);
     let checked = check_os_tar(tools, &tar, &staging.join("check"), Some(current), needs).inspect_err(|e| {
         eprintln!("update: system {} refused: {e}", rel.version);
         let _ = std::fs::remove_file(&tar);
@@ -1124,6 +1120,7 @@ fn stage_os_in(
         let _ = std::fs::remove_file(&tar);
         return Err("The system update doesn't match its description. It was not installed.".into());
     }
+    cancel.set_phase(WorkerPhase::StagingSystem);
     cancel_os_in(update_dir);
     std::fs::create_dir_all(update_dir).map_err(|e| e.to_string())?;
     // On our SD image the initramfs hook (deploy/image/mount-storage.sh) installs only a tar named here with the hash
@@ -1313,11 +1310,49 @@ mod tests {
             version: version.into(),
             url: format!("pocket-ui-{version}.tar.gz"),
             mirrors: Vec::new(),
+            preferred_sources: Vec::new(),
             sha256: store::sha256_hex(&data),
             size: data.len() as u64,
             notes: String::new(),
         };
         (rel, format!("file://{}/update.json", dir.display()))
+    }
+
+    #[test]
+    fn a_cancel_during_program_validation_still_finishes_the_app_install() {
+        let dir = TestDir::new("update-late-cancel");
+        let root = dir.join("root");
+        let (mut rel, url) = fake_release(&dir, "9.8.7", true);
+        let (ready, resume) = (dir.join("validating"), dir.join("resume"));
+        let quote = |p: &Path| format!("'{}'", p.to_string_lossy().replace('\'', "'\\''"));
+        crate::testutil::write_executable(&dir.join("src-9.8.7/pocket-ui"), format!(
+            "#!/bin/sh\n: > {}\ni=0\nwhile [ ! -e {} ] && [ \"$i\" -lt 600 ]; do i=$((i+1)); sleep 0.1; done\n[ -e {} ] || exit 1\necho 'pocket-ui 9.8.7'\n",
+            quote(&ready), quote(&resume), quote(&resume)));
+        let tar = dir.join("pocket-ui-9.8.7.tar.gz");
+        assert!(Command::new("tar").arg("-czf").arg(&tar).arg("-C").arg(dir.join("src-9.8.7"))
+            .args(["pocket-ui", "pocket-core"]).status().unwrap().success());
+        let bytes = std::fs::read(tar).unwrap();
+        rel.size = bytes.len() as u64;
+        rel.sha256 = store::sha256_hex(&bytes);
+        // Unblocks the owned installer even when the assertion below panics.
+        struct Resume(PathBuf);
+        impl Drop for Resume { fn drop(&mut self) { let _ = std::fs::write(&self.0, b"resume"); } }
+        let cancel = Cancel::new();
+        std::thread::scope(|scope| {
+            let worker = scope.spawn(|| install_app(&rel, &url, &root, &cancel, &|_| {}));
+            let unblock = Resume(resume.clone());
+            let deadline = Instant::now() + crate::testutil::timeout(Duration::from_secs(60));
+            while !ready.exists() && !worker.is_finished() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert!(ready.exists(), "the new program reached validation");
+            cancel.cancel();
+            drop(unblock);
+            worker.join().unwrap().unwrap();
+        });
+        assert!(cancel.is_cancelled());
+        assert_eq!(link_target(&root.join("current")).as_deref(), Some("releases/9.8.7"));
+        assert_eq!(std::fs::read_to_string(root.join("update-pending")).unwrap(), "9.8.7");
     }
 
     #[test]
@@ -1737,6 +1772,7 @@ mod tests {
             version: "1".into(),
             url: "http://h/a.tar.gz".into(),
             mirrors: Vec::new(),
+            preferred_sources: Vec::new(),
             sha256: "0".repeat(64),
             size: 1,
             notes: String::new(),
@@ -1910,6 +1946,7 @@ mod tests {
             version: "1".into(),
             url: "f".into(),
             mirrors: Vec::new(),
+            preferred_sources: Vec::new(),
             sha256: store::sha256_hex(data),
             size: 10,
             notes: String::new(),
@@ -1930,6 +1967,17 @@ mod tests {
         std::fs::write(&dest, "0123456789abcdef").unwrap();
         download_checked(&tools, &rel, "file:///x/update.json", &dest, &Cancel::new(), &|_| {}).unwrap();
         assert_eq!(std::fs::read(&dest).unwrap(), data);
+        // A resumed corrupt prefix retries the same source cleanly. Its cancellation window reopens for that attempt.
+        std::fs::write(&dest, "xxxx").unwrap();
+        let cancel = Cancel::new();
+        let phases = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let seen = Arc::clone(&phases);
+        cancel.observe(move |snapshot| seen.lock().unwrap().push(snapshot));
+        download_checked(&tools, &rel, "file:///x/update.json", &dest, &cancel, &|_| {}).unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), data);
+        let phases = phases.lock().unwrap();
+        let checked = phases.iter().position(|s| s.phase == WorkerPhase::CheckingDownload).unwrap();
+        assert!(phases[checked + 1..].iter().any(|s| s.phase == WorkerPhase::Connecting && s.cancel_effective));
     }
 
     #[test]
@@ -1948,6 +1996,7 @@ mod tests {
                 version: "1".into(),
                 url: "f".into(),
                 mirrors: Vec::new(),
+                preferred_sources: Vec::new(),
                 sha256: sha,
                 size,
                 notes: String::new(),
@@ -1963,6 +2012,7 @@ mod tests {
             version: "1".into(),
             url: "f".into(),
             mirrors: Vec::new(),
+            preferred_sources: Vec::new(),
             sha256: good.to_uppercase(),
             size: 10,
             notes: String::new(),
@@ -2034,6 +2084,7 @@ esac"#;
             version: version.into(),
             url: format!("{top}.tar"),
             mirrors: Vec::new(),
+            preferred_sources: Vec::new(),
             sha256: store::sha256_hex(&data),
             size: data.len() as u64,
             notes: String::new(),
@@ -2270,6 +2321,7 @@ esac"#;
                 version: "1".into(),
                 url: format!("https://h/{name}"),
                 mirrors: Vec::new(),
+                preferred_sources: Vec::new(),
                 sha256: "0".repeat(64),
                 size: 1,
                 notes: String::new(),
@@ -2343,6 +2395,7 @@ esac"#;
             version: "1".into(),
             url: "https://h/system.zip".into(),
             mirrors: Vec::new(),
+            preferred_sources: Vec::new(),
             sha256: "0".repeat(64),
             size: 1,
             notes: String::new(),
@@ -2501,6 +2554,7 @@ esac"#;
                 version: version.clone(),
                 url,
                 mirrors: Vec::new(),
+                preferred_sources: Vec::new(),
                 sha256: store::sha256_hex(&data),
                 size: data.len() as u64,
                 notes: String::new(),
@@ -2536,6 +2590,7 @@ esac"#;
             version: "1".into(),
             url: "f".into(),
             mirrors: Vec::new(),
+            preferred_sources: Vec::new(),
             sha256: store::sha256_hex(data),
             size: 10,
             notes: String::new(),
@@ -2606,7 +2661,7 @@ mod brick_card_tests {
         let tar = dir.join(format!("brick-{version}.tar.gz"));
         assert!(Command::new("tar").arg("-czf").arg(&tar).arg("-C").arg(&src).arg(".").status().unwrap().success());
         let data = std::fs::read(&tar).unwrap();
-        let rel = Release { version: version.into(), url: format!("brick-{version}.tar.gz"), mirrors: Vec::new(), sha256: store::sha256_hex(&data), size: data.len() as u64, notes: String::new() };
+        let rel = Release { version: version.into(), url: format!("brick-{version}.tar.gz"), preferred_sources: Vec::new(), mirrors: Vec::new(), sha256: store::sha256_hex(&data), size: data.len() as u64, notes: String::new() };
         (rel, tar)
     }
 

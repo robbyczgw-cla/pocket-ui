@@ -82,8 +82,10 @@ impl App {
                 let _ = proxy.send_event(UserEvent::GameCheck(gen, Event::Failed));
                 return;
             };
-            let roms = pocket_ui::library::roms_root(&catalog).unwrap_or_else(|| std::path::Path::new(pocket_ui::hostsys::BIOS_DIR).parent().unwrap_or(std::path::Path::new("/storage/roms")).to_path_buf());
-            let input = Input { catalog, shelf, bios_dir: roms.join("bios"), roms, h700 };
+            let roms = pocket_ui::library::roms_root(&catalog).unwrap_or_else(|| std::path::Path::new("/storage/roms").to_path_buf());
+            // The Deck's BIOS folder is its own (`POCKETUI_BIOS`), not a `bios` beside the games' folders.
+            let bios_dir = if pocket_ui::hostsys::bios_moved() { pocket_ui::hostsys::bios_dir() } else { roms.join("bios") };
+            let input = Input { catalog, shelf, bios_dir, roms, h700 };
             let mut sent = Instant::now();
             let mut progress = |done: usize, total: usize, system: &str| {
                 if sent.elapsed().as_millis() >= PROGRESS_EVERY_MS {

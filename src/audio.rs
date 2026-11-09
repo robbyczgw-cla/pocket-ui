@@ -1487,6 +1487,46 @@ mod tests {
         Some(Sink::Pulse { _lib: None, stream: std::ptr::NonNull::<c_void>::dangling().as_ptr(), write: counted_write, latency: fake_latency, free: fake_free, observation: Default::default() })
     }
 
+    static SAVE_PCM_ACCEPTED: AtomicUsize = AtomicUsize::new(0);
+    static SAVE_PCM_FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    unsafe extern "C" fn save_pcm_write(_: *mut c_void, data: *const c_void, bytes: usize, _: *mut c_int) -> c_int {
+        let pcm = unsafe { std::slice::from_raw_parts(data as *const i16, bytes / 2) };
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        if pcm.iter().any(|s| *s != 0) {
+            let frames = pcm.len() / 2;
+            if !SAVE_PCM_FAILED.swap(true, Ordering::SeqCst) {
+                SAVE_PCM_ACCEPTED.fetch_add(frames / 2, Ordering::SeqCst);
+                return -1; // A backend may have accepted a prefix before its write failed.
+            }
+            SAVE_PCM_ACCEPTED.fetch_add(frames, Ordering::SeqCst);
+        }
+        0
+    }
+    fn save_pcm_sink(_: Ring) -> Option<Sink> {
+        Some(Sink::Pulse { _lib: None, stream: std::ptr::NonNull::<c_void>::dangling().as_ptr(),
+            write: save_pcm_write, latency: fake_latency, free: fake_free, observation: Default::default() })
+    }
+
+    #[test]
+    #[ignore = "known failure: reopen loses the failed PCM tail; audio behavior needs separate measured review"]
+    fn save_safety_audio_reopen_keeps_unaccepted_pcm() {
+        SAVE_PCM_ACCEPTED.store(0, Ordering::SeqCst);
+        SAVE_PCM_FAILED.store(false, Ordering::SeqCst);
+        let audio = Audio::start(save_pcm_sink(Ring::Short).unwrap(), 48000.0, false, None, save_pcm_sink);
+        audio.queue.lock().unwrap().extend(std::iter::repeat_n(12000, 4096 * 2));
+        let until = std::time::Instant::now() + crate::testutil::timeout(std::time::Duration::from_secs(3));
+        while (!audio.queue.lock().unwrap().is_empty() || SAVE_PCM_ACCEPTED.load(Ordering::SeqCst) == 0)
+            && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        // Let the final popped block reach the backend before close.
+        while SAVE_PCM_ACCEPTED.load(Ordering::SeqCst) < 3968 && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        drop(audio);
+        assert_eq!(SAVE_PCM_ACCEPTED.load(Ordering::SeqCst), 4096, "reopen must not discard an unaccepted tail");
+    }
+
     #[cfg(feature = "brick")]
     static BT_REOPENS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     #[cfg(feature = "brick")]

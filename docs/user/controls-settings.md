@@ -243,6 +243,9 @@ button of the handheld's own controls while you set up another controller; with 
 up by itself and nothing changes. Input from another controller cannot change the capture. B leaves the page;
 **Reset controller layout** restores only the selected controller.
 
+On the TrimUI Brick, F1/F2 are reserved shortcuts. Pressing one during capture ends it with an explanation;
+no game button changes. Choose their global shortcut actions in Settings → Sound & feel → **Lights & buttons**.
+
 If the selected controller disconnects while the page waits, capture ends without changing the layout.
 Reconnect it and choose the action again. Held buttons are released when its input reader is replaced too,
 so a silent old connection cannot keep a direction or trigger held in the menus or game.
@@ -258,3 +261,5 @@ uses the same press/release thresholds as the menus. HOME, power and volume rema
 
 On the TrimUI Brick, volume keys while the mute slider is engaged show **Muted** and keep the
 previous level. Release the slider to return to that exact level.
+
+Game and system names keep their original wording in every interface language, including wrapped cover and card labels.

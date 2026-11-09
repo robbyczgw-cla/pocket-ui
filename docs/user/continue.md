@@ -84,6 +84,15 @@ out the total play time. In the Android app, the **Remind me where I was** row i
 A failed resume shows no reminder. In particular, a short old PSP moment opens **Recovery**
 with an explanation; the moment remains under Load and the in-game save is kept safe.
 
+## On a Steam Deck
+
+Games pocket-ui plays itself (the libretro systems) continue the same way: their moments live in pocket-ui's data
+folder on the Deck, the last five stand open, and [Where was I?](#where-was-i) greets you after a long break.
+The big emulators (PCSX2, Dolphin and the other apps) keep their own saves, as everywhere; their games stand
+closed. SteamOS's power button puts the Deck to sleep: pocket-ui writes the moment of the game that is running
+first and waits briefly for it to finish. If it cannot save before SteamOS sleeps, the game remains in memory;
+an empty battery can then lose that progress. Waking the Deck returns to the game in memory.
+
 ## In-game saves
 
 In-game saves (the kind a cartridge keeps, "battery saves") on pocket-ui's own host are written

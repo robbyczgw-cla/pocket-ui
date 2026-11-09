@@ -9,9 +9,21 @@
 #   - each category's line under Settings names its rows in order
 #   - the manual's pages are not too long for the screen (editorial advice)
 #   - the D-pad explorer (tests/nav_explorer.rs) at the sizes and text size the gate leaves out
+#   - the programs still fit into the SD image's 32 MiB STORAGE with room to grow (scripts/image/storage-budget.sh). It needs
+#     the AArch64 release programs: POCKET_STORAGE_BIN_DIR=<folder with pocket-ui, pocket-core, pocket-splash>, or a build in
+#     target/aarch64-unknown-linux-gnu*/release. Without them it fails: a release must not outgrow the image silently (0.3.1 did).
 # Placeholder integrity, language choice, clipping, saves, launch, quit, update and input stay in the gate.
 cd "$(dirname "$0")/.." || exit 2
 export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-4}
+BUDGET_BIN=${POCKET_STORAGE_BIN_DIR:-}
+if [ -z "$BUDGET_BIN" ]; then
+    for d in target/aarch64-unknown-linux-gnu*/release; do [ -s "$d/pocket-ui" ] && BUDGET_BIN=$d; done
+fi
+if [ -z "$BUDGET_BIN" ]; then
+    echo "release check: no AArch64 programs to measure for the SD image's STORAGE budget: set POCKET_STORAGE_BIN_DIR to the release programs' folder"
+    echo "RELEASE CHECK: FAILED"; exit 1
+fi
+sh scripts/image/storage-budget.sh "$BUDGET_BIN" || { echo "RELEASE CHECK: FAILED (STORAGE budget)"; exit 1; }
 python3 scripts/doc-missing.py || echo "release check: documentation is missing entries (above)"
 cargo test --profile "${GATE_PROFILE:-gate}" --lib --bins --test i18n_snapshots -q -- --include-ignored \
     every_string_in_the_source_has_a_german_line_or_is_listed \

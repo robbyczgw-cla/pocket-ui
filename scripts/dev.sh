@@ -5,7 +5,11 @@
 #                        With pocket-ui as the boot UI it also puts the boot screen's unit in place
 #                        (deploy/pocket-splash.service, docs/BOOT-SPLASH.md); it shows from the next start of the device.
 #   dev.sh deploy --artifact SHA|latest-main   install a checked main artifact without compiling
-#   dev.sh send up down a   drive the UI through its command FIFO
+#   dev.sh send [--at GLOB] [--launch] up down a   drive the UI through its command FIFO; reads where it is first
+#                        (scripts/ui-status.sh): --at waits for that page or presses nothing, `a` is refused where it starts a
+#                        game unless --launch, and on a dark screen (`wake` turns it on, never `b`)
+#   dev.sh expect GLOB [SECONDS]   wait until the UI is at that page (/tmp/pocket-ui.status), instead of a fixed sleep
+#   dev.sh status        where the UI is, its sleep and its game, as /tmp/pocket-ui.status says
 #   dev.sh shot NAME     screenshot to screenshots/NAME.png
 #   dev.sh stop          stop pocket-ui, EmulationStation comes back
 #
@@ -134,12 +138,13 @@ PYARTIFACT
     # Not just "the copy worked": the right binary runs, once, in the unit, with a clean environment (docs/DEVELOPING.md).
     VERIFY_SOUND_BEFORE=$SOUND_BEFORE VERIFY_BUILD_DIR=$BUILD "$SOURCE_ROOT/scripts/verify-device.sh" "$HOST"
     ;;
-  send)
-    # One SSH session for the whole sequence: many quick logins trip sshd's rate limit.
-    shift
-    # A FIFO without a reader blocks the writer: give up if pocket-ui isn't running.
-    ssh "$HOST" "pidof pocket-ui >/dev/null || { echo 'pocket-ui is not running' >&2; exit 1; }
-      for cmd in $*; do timeout 2 sh -c \"echo \$cmd > /tmp/pocket-ui.in\" || exit 1; sleep 0.2; done"
+  send|expect|status)
+    # One SSH session for the whole sequence (many quick logins trip sshd's rate limit), with the status reader in it:
+    # every argument single-quoted for the remote shell, so a page name with spaces stays one.
+    args=
+    for a in "$@"; do args="$args '$(printf '%s' "$a" | sed "s/'/'\\\\''/g")'"; done
+    # shellcheck disable=SC2029  # the quoted arguments are meant to expand here
+    ssh "$HOST" "sh -s --$args" <"$ROOT/scripts/ui-status.sh"
     ;;
   shot)
     mkdir -p "$ROOT/screenshots"
@@ -156,7 +161,7 @@ PYARTIFACT
     ssh "$HOST" 'cat /var/log/pocket-ui.log'
     ;;
   *)
-    echo "usage: dev.sh deploy|send CMD...|shot NAME|stop|log" >&2
+    echo "usage: dev.sh deploy|send [--at GLOB] [--launch] CMD...|expect GLOB [SECONDS]|status|shot NAME|stop|log" >&2
     exit 2
     ;;
 esac

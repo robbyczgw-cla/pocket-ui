@@ -2,6 +2,9 @@
 //! over real sockets (docs/TRIMUI-BRICK.md). `cargo test --features brick --test brick_fb`.
 #![cfg(all(feature = "brick", target_os = "linux"))]
 
+#[path = "common/executable.rs"]
+mod fixture_executable;
+
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
@@ -379,10 +382,8 @@ fn the_real_pocket_ui_reaches_the_framebuffer() {
     wait_for("the sockets", || dir.path().join("w").exists() && dir.path().join("i").exists());
     // A stand-in pocket-core keeps loading after the launch fade, as a stalled card read does. It is one
     // process, bounded to 11 seconds, and pocket-ui's parent-death signal ends it if the UI exits early.
-    use std::os::unix::fs::PermissionsExt;
     let host = dir.path().join("host");
-    std::fs::write(&host, format!("#!/usr/bin/env python3\nimport time,pathlib\ntime.sleep(3)\npathlib.Path({:?}).write_text('loading')\ntime.sleep(8)\n", pocket_ui::startup::loading_path())).unwrap();
-    std::fs::set_permissions(&host, std::fs::Permissions::from_mode(0o755)).unwrap();
+    fixture_executable::publish(&host, format!("#!/usr/bin/env python3\nimport time,pathlib\ntime.sleep(3)\npathlib.Path({:?}).write_text('loading')\ntime.sleep(8)\n", pocket_ui::startup::loading_path())).unwrap();
     std::fs::create_dir_all(dir.path().join("data")).unwrap();
     std::fs::write(dir.path().join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"shelf","motion":"off","art":"off"}"#).unwrap();
     std::fs::create_dir_all(dir.path().join(".pocket-ui-test")).unwrap();

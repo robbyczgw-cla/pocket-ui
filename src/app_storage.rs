@@ -270,8 +270,9 @@ impl App {
     /// A notice put on the shelf now would be seen: Home or a list, nothing over it and no notice up (`app_clock` asks
     /// the same).
     pub(crate) fn shelf_notice_free(&self) -> bool {
-        let covered = self.running.is_some() || self.setup.is_some() || self.settings_page.is_some() || self.card.is_some() || self.menu.is_some() || self.switcher.is_some() || self.curator.page.is_some() || self.find.is_open();
-        !covered && !self.notice.as_ref().is_some_and(Notice::active)
+        // The shelf itself with nothing over it (`app_where`): not a console page, the controls card, the quick settings or
+        // another notice.
+        self.shelf_alone()
     }
 
     /// Nearly full and not said yet: a notice on the shelf, once (remembered only when it was shown: a game that had

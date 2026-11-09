@@ -12,6 +12,7 @@ use pocket_ui::touch::{self, Gesture, TapAction, TouchEvent};
 use winit::application::ApplicationHandler;
 use winit::event_loop::ActiveEventLoop;
 
+use super::app_where::Place;
 use super::{App, UserEvent, CONFIRM};
 
 impl App {
@@ -80,8 +81,10 @@ impl App {
         let (w, h) = self.screen_size();
         let (x, y) = touch::to_px((ev.x, ev.y), w, h);
         let gesture = self.touch_rec.feed(ev.phase, x, y, std::time::Instant::now(), self.hits.pitch());
+        // The page in front takes the finger (`app_where`, the page `paint` painted): never one under it.
+        let place = self.where_now().place;
         // This overlay owns its hit map; search, a cabinet or the game card underneath must never take its tap.
-        if self.controls_card_open() {
+        if place == Place::ControlsCard {
             if let Some(Gesture::Tap { x, y }) = gesture {
                 if let TapAction::Press(b) = self.hits.tap(x, y) {
                     self.tap_button(el, b);
@@ -89,8 +92,9 @@ impl App {
             }
             return;
         }
-        // Add games: a tap on a way selects it, a tap on the selected one does it; its hints are buttons.
-        if self.setup.is_some() {
+        // Add games: a tap on a way selects it, a tap on the selected one does it; its hints are buttons. (The manual opened
+        // over it with SELECT is a page of its own: its links and its swipe, not the ways behind it.)
+        if matches!(place, Place::Setup { .. }) {
             if let Some(Gesture::Tap { x, y }) = gesture {
                 match self.hits.tap(x, y) {
                     TapAction::Press(b) => self.tap_button(el, b),
@@ -108,12 +112,12 @@ impl App {
             return;
         }
         // The search: keys, result rows and its list's swipe (`app_search`); its hints go the usual way below.
-        if self.find.is_open() && self.search_touch(el, gesture) {
+        if place == Place::Search && self.search_touch(el, gesture) {
             return;
         }
         // The cabinet: a tap pulls out the case under it (and plays the one already out), a swipe moves along
         // the shelf sideways and between the shelves up and down.
-        if self.cabinet_in_front() {
+        if matches!(place, Place::Shelf(_)) && self.cabinet_in_front() {
             match gesture {
                 Some(Gesture::Tap { x, y }) => match self.cabinet_tap(x, y) {
                     Some(true) => return self.tap_button(el, CONFIRM),
@@ -136,7 +140,7 @@ impl App {
             }
         }
         // The card's Curator rows: a tap selects one, a tap on the selected one opens it (`app_curator`).
-        if let Some(Gesture::Tap { y, .. }) = gesture.filter(|_| self.card.is_some() && self.curator.page.is_none() && !self.gallery_over_card()) {
+        if let Some(Gesture::Tap { y, .. }) = gesture.filter(|_| matches!(place, Place::Card(_))) {
             match self.curator_card_tap(y) {
                 Some(true) => return self.tap_button(el, CONFIRM),
                 Some(false) => return self.request_redraw(),
@@ -144,7 +148,7 @@ impl App {
             }
         }
         // The manual: a tap on a link to another page opens it.
-        if let Some(Gesture::Tap { x, y }) = gesture.filter(|_| self.settings_page == Some(crate::SettingsPage::Manual)) {
+        if let Some(Gesture::Tap { x, y }) = gesture.filter(|_| matches!(place, Place::Settings { page: crate::SettingsPage::Manual, .. })) {
             if self.manual.tap_link(x, y) {
                 return self.request_redraw();
             }
@@ -167,6 +171,50 @@ impl App {
             // The list follows the finger: a swipe up shows what is further down, so the selection goes down.
             Some(Gesture::Scroll { steps, .. }) => self.steps(el, self.hits.clamp_steps(-steps)),
             None => {}
+        }
+    }
+
+    /// The window's pointer moved (winit pixels of the window's inside). Only a drag counts, as a finger would.
+    pub(crate) fn mouse_moved(&mut self, el: &ActiveEventLoop, pos: (f64, f64), size: (u32, u32)) {
+        self.cursor = Some(pos);
+        if self.mouse_down {
+            if let Some(ev) = self.mouse_touch(touch::Phase::Move, size) {
+                self.touch_event(el, ev);
+            }
+        }
+    }
+
+    /// The pointer's left button: a click is a tap where it is, a drag the swipe it makes — the same rules as a
+    /// finger (`touch_event`), so a trackpad can do nothing a touch couldn't.
+    pub(crate) fn mouse_button(&mut self, el: &ActiveEventLoop, pressed: bool, size: (u32, u32)) {
+        self.mouse_down = pressed;
+        let phase = if pressed { touch::Phase::Down } else { touch::Phase::Up };
+        if let Some(ev) = self.mouse_touch(phase, size) {
+            self.touch_event(el, ev);
+        }
+    }
+
+    fn mouse_touch(&self, phase: touch::Phase, size: (u32, u32)) -> Option<TouchEvent> {
+        let (x, y) = self.cursor?;
+        if size.0 == 0 || size.1 == 0 {
+            return None;
+        }
+        Some(TouchEvent { phase, x: (x / size.0 as f64).clamp(0.0, 0.999) as f32, y: (y / size.1 as f64).clamp(0.0, 0.999) as f32 })
+    }
+
+    /// The wheel (a circling trackpad, the left pad of the shipped layout): the selection follows it, as far as
+    /// this page's rows reach; a game, the pause menu and the other blocked screens keep theirs (`touch_blocked`).
+    pub(crate) fn mouse_wheel(&mut self, el: &ActiveEventLoop, lines: f32) {
+        let n = touch::wheel_steps(lines, &mut self.wheel_carry);
+        if n == 0 || self.touch_blocked().is_some() || self.sys.quick_open() || self.sys.power_menu_open() {
+            return;
+        }
+        if !self.sleep.touched() {
+            return;
+        }
+        let n = self.hits.clamp_steps(n);
+        if n != 0 {
+            self.steps(el, n);
         }
     }
 

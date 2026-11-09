@@ -724,9 +724,22 @@ mod tests {
     }
 
     #[test]
+    fn a_supported_other_card_folder_is_ready_without_renaming() {
+        let mut phone = Phone::default();
+        let zip = zip_of(&[("Homebrew.gb", b"game")]);
+        let size = zip.len() as i64;
+        phone.zips.insert("content://p/Game Boy/Homebrew.zip".into(), zip);
+        let o = run(&phone, vec![root(vec![file("Game Boy/Homebrew.zip", size, "")])]);
+        assert_eq!((o.report.total, o.report.ready), (1, 1), "{:#?}", o.report.findings);
+        assert!(o.report.all_good(), "{:#?}", o.report.findings);
+        assert!(of(&o, Group::Place).is_empty(), "An accepted other-card folder needs no rename");
+    }
+
+    #[test]
     fn a_folder_named_like_a_system_gets_the_exact_advice() {
-        let o = run(&Phone { apps: vec!["psx"], ..Phone::default() }, vec![root(vec![file("Game Boy/x.zip", 300, "")])]);
-        assert_eq!(of(&o, Group::Place)[0].todo, "Rename the folder to gameboy.");
+        // A spelling outside the accepted other-card names still gets a precise repair.
+        let o = run(&Phone { apps: vec!["psx"], ..Phone::default() }, vec![root(vec![file("P S X/Disc.chd", 3000, "")])]);
+        assert_eq!(of(&o, Group::Place)[0].todo, "Rename the folder to psx.");
         // The folder that was chosen is psx itself: its name isn't part of the paths.
         let chosen = Root { name: "psx".into(), ..root(vec![file("Game.chd", 3000, ""), file("Other.cue", 30, "FILE \"Other.bin\" BINARY"), file("Other.bin", 3000, "")]) };
         let o = run(&Phone::default(), vec![chosen]);

@@ -188,6 +188,7 @@ cp "$W/info/README.txt" "$OUT/$NAME.txt"
 [ $KEEP = 1 ] || rm -rf "$W"
 ls -l "$OUT/$NAME.img.xz" "$OUT/$NAME.txt" "$OUT/SHA256SUMS"
 cat "$OUT/SHA256SUMS"
+python3 -I "$ROOT/scripts/image/receipt.py" assemble "$OUT/$NAME.img.xz" --version "$VERSION"
 
 if [ $CHECK = 1 ]; then
   say "checking (scripts/check-image.sh)"

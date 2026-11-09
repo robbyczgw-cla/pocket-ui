@@ -70,6 +70,12 @@ P1_START=32768
 P1_SIZE=4194304
 P2_START=4227072
 P2_SIZE=65536
+# ROCKNIX's STORAGE as it comes on every base image we use (SM8250, SM8550, H700 DDR4 and DDR3; read with dumpe2fs on 2026-11-08):
+# ext4, 8192 blocks of 4 KiB with a 4 MiB journal (the smallest ext4 allows at this block size), 7027 of them free. build.sh checks
+# it before it writes; scripts/image/storage-budget.sh adds up what goes in. The room we keep free on top of the programs is
+# P2_MIN_HEADROOM_BLOCKS: about two releases of growth (0.3.0 to 0.3.1 took 67 blocks).
+P2_FREE_BLOCKS=7027
+P2_MIN_HEADROOM_BLOCKS=128
 
 # ---------------------------------------------------------------------------------------------------------------
 # H700 family (Allwinner; Anbernic RG35XX Plus, RG35XX SP, RG28XX): scripts/make-image-h700.sh. Same ROCKNIX tag and

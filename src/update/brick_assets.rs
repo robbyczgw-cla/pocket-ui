@@ -84,7 +84,7 @@ fn from_json(
     let mut needed = 32u64 << 20;
     for asset in assets.assets {
         if cancel.is_cancelled() { return Err("Download cancelled.".into()); }
-        cancel.set_status("Checking installed cores and data…"); progress(0);
+        cancel.set_phase(super::WorkerPhase::CheckingAssets); progress(0);
         if safe_old(card, &asset) {
             reused.push(asset.path.clone());
             entries.push((asset, None));
@@ -207,6 +207,7 @@ mod tests {
             version: "9".into(),
             url: format!("file://{}", file.display()),
             mirrors: vec![],
+            preferred_sources: Vec::new(),
             sha256: store::sha256_file(&file).unwrap(),
             size: std::fs::metadata(file).unwrap().len(),
             notes: String::new(),

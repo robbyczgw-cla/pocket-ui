@@ -5,7 +5,10 @@
 #                                    (default), rp5, flip2, mini1: that device's screen, touch panel and device tree
 #   vdev.sh lid close|open           the Flip 2's lid (a container started with --device flip2)
 #   vdev.sh deploy [--no-build]      zigbuild, copy into the container, (re)start pocket-ui
-#   vdev.sh send up down a           drive the UI through its command FIFO
+#   vdev.sh send [--at GLOB] [--launch] up down a   drive the UI through its command FIFO, reading where it is first
+#                                    (scripts/ui-status.sh, as dev.sh: --at waits for the page, `a` where it starts a game
+#                                    only with --launch, `wake` for a dark screen)
+#   vdev.sh expect GLOB [SECONDS] | status   wait for a page / say where the UI is (/tmp/pocket-ui.status)
 #   vdev.sh pad press A 150          in-game input through the virtual pad (see docs/VIRTUAL-DEVICE.md)
 #   vdev.sh shot NAME                screenshot to screenshots/NAME.png
 #   vdev.sh log [-f] [NAME]          pocket-ui log (default), or boot|sway|pipewire|pad|core
@@ -166,7 +169,13 @@ cmd_send() {
   [ $# -gt 0 ] || die "usage: vdev.sh send up down a ..."
   # The lid is the pad's (a switch, not a button of the UI's FIFO): `send lid close` is `lid close`.
   if [ "$1" = lid ]; then shift; cmd_lid "$@"; return; fi
-  dx vsend "$@"
+  cmd_ui send "$@"
+}
+
+# scripts/ui-status.sh inside the container (as dev.sh runs it over SSH): send, expect, status.
+cmd_ui() {
+  need_running
+  docker exec -i "$C" sh -s -- "$@" <"$ROOT/scripts/ui-status.sh"
 }
 
 cmd_lid() {
@@ -265,6 +274,7 @@ case "${1:-}" in
   down) cmd_down ;;
   deploy) shift; cmd_deploy "$@" ;;
   send) shift; cmd_send "$@" ;;
+  expect | status) cmd_ui "$@" ;;
   pad) shift; cmd_pad "$@" ;;
   lid) shift; need_running; cmd_lid "$@" ;;
   shot) shift; cmd_shot "$@" ;;
@@ -275,7 +285,7 @@ case "${1:-}" in
   run-core) shift; cmd_run_core "$@" ;;
   image) shift; cmd_image "$@" ;;
   *)
-    echo "usage: vdev.sh up [--device miniv2|rp5|flip2|mini1|rp6|nova|odin2mini|odin2|odin2portal|rg28xx|rg35xx-sp]|down|deploy|send CMD...|pad ...|lid close|open|shot NAME|log|sh|run-core CORE ROM|stop|ls|image" >&2
+    echo "usage: vdev.sh up [--device miniv2|rp5|flip2|mini1|rp6|nova|odin2mini|odin2|odin2portal|rg28xx|rg35xx-sp]|down|deploy|send [--at GLOB] [--launch] CMD...|expect GLOB [S]|status|pad ...|lid close|open|shot NAME|log|sh|run-core CORE ROM|stop|ls|image" >&2
     echo "       VDEV_NAME=<name> picks the instance (default: dev), see the header of this file" >&2
     exit 2
     ;;

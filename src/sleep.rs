@@ -1304,6 +1304,8 @@ pub struct Sleep {
     state: State,
     timers: Timers,
     game: Option<Game>,
+    /// The host watcher reads a copy without borrowing the UI or doing work on its thread.
+    host_game: Option<Arc<std::sync::Mutex<Option<Game>>>>,
     /// We stopped the game's processes (not the pause menu).
     stopped_game: bool,
     /// The pause menu was open when sleep began.
@@ -1378,6 +1380,12 @@ impl Sleep {
         }
         #[cfg(target_os = "linux")]
         sleep.spawn_watcher();
+        // A Steam Deck: SteamOS suspends on its power button without asking pocket-ui. Watch logind's signal and get
+        // the running game's moment on the card first, as deep sleep does on the handhelds (`spawn_host_sleep`).
+        #[cfg(target_os = "linux")]
+        if host_owned {
+            spawn_host_sleep(sleep.host_game.as_ref().unwrap().clone());
+        }
         // A Steam Deck: SteamOS owns the battery, sleep and the power key (docs/STEAMDECK.md), so no critical-battery power-off.
         if !host_owned {
             sleep.spawn_battery_guard();
@@ -1461,6 +1469,7 @@ impl Sleep {
             sys,
             state: State::Awake,
             game: None,
+            host_game: host_owned.then(|| Arc::new(std::sync::Mutex::new(None))),
             stopped_game: false,
             menu_open: false,
             brightness: None,
@@ -1567,6 +1576,23 @@ impl Sleep {
         self.state
     }
 
+    /// Until when a button press is still swallowed because the screen has just come on (`quiet_after_wake`); None when
+    /// presses count. The status file says `sleep=waking` until then (`app_where`).
+    pub fn quiet_until(&self, now: Instant) -> Option<Instant> {
+        self.woke_at.map(|t| t + WAKE_QUIET).filter(|&t| t > now)
+    }
+
+    /// Wakes the screen from light sleep without a button (the command FIFO's `wake`, for test helpers that must never
+    /// press a key a page could take). True when it was dark; false, and nothing done, when awake, in deep sleep or
+    /// powering off.
+    pub fn wake_from_light(&mut self, by: &str) -> bool {
+        if self.state != State::Light {
+            return false;
+        }
+        self.wake_light(by);
+        true
+    }
+
     /// Text to show full screen while powering off ("Saving…").
     pub fn overlay(&self) -> Option<String> {
         self.overlay.lock().ok()?.clone()
@@ -1582,11 +1608,17 @@ impl Sleep {
     }
 
     pub fn game_started(&mut self, game: Game) {
+        if let Some(shared) = &self.host_game {
+            *shared.lock().unwrap_or_else(|e| e.into_inner()) = Some(game.clone());
+        }
         self.game = Some(game);
         self.timers.last_input = Instant::now();
     }
 
     pub fn game_ended(&mut self) {
+        if let Some(shared) = &self.host_game {
+            *shared.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        }
         self.game = None;
         self.stopped_game = false;
         // A game that ended by itself behind the dark screen: from now on it is light sleep, Sleep after counting.
@@ -2719,6 +2751,120 @@ impl Sleep {
             }
         });
     }
+}
+
+/// One line of `dbus-monitor --system` on logind's `PrepareForSleep`: `Some(true)` as the suspend starts,
+/// `Some(false)` when the system is back. The signal's line carries no value; the next line is `boolean true`.
+fn host_sleep_line(line: &str, pending: &mut bool) -> Option<bool> {
+    if line.contains("member=PrepareForSleep") {
+        *pending = true;
+        return None;
+    }
+    if !*pending {
+        return None;
+    }
+    match line.trim() {
+        "boolean true" => {
+            *pending = false;
+            Some(true)
+        }
+        "boolean false" => {
+            *pending = false;
+            Some(false)
+        }
+        _ => None,
+    }
+}
+
+/// The logind watcher and the delay inhibitor that gives it time, on the host itself or out of our Flatpak
+/// (`flatpak-spawn --host`, as `runemu.sh` reaches the other Flatpaks).
+fn host_sleep_commands(in_flatpak: bool) -> (Vec<&'static str>, Vec<&'static str>) {
+    let mut monitor = vec!["dbus-monitor", "--system", "type='signal',sender='org.freedesktop.login1',interface='org.freedesktop.login1.Manager',member='PrepareForSleep'"];
+    let mut inhibit = vec!["systemd-inhibit", "--what=sleep", "--mode=delay", "--who=pocket-ui", "--why=Saves the game before sleeping", "cat"];
+    if in_flatpak {
+        monitor.splice(0..0, ["flatpak-spawn", "--host"]);
+        inhibit.splice(0..0, ["flatpak-spawn", "--host"]);
+    }
+    (monitor, inhibit)
+}
+
+/// Holds the host's delay lock until pocket-core has completed this request, within logind's usual 5 s budget.
+fn save_host_core_moment(path: &Path, request: impl FnOnce() -> bool) -> bool {
+    let before = crate::fsutil::stamp(path);
+    request() && crate::fsutil::wait_new_version(path, before, Duration::from_secs(4), Duration::from_millis(100), None)
+}
+
+/// The moment of the game that runs, before the host suspends: pocket-core writes its auto-resume state (the deep
+/// sleep's `autosave`), the one standalone with a resume state saves his; every other emulator keeps its own saves.
+/// True only when a new moment was confirmed. The host still owns whether it suspends after its deadline.
+fn save_for_host_sleep(game: Option<&Game>) -> bool {
+    crate::battery_history::flush();
+    let Some(game) = game else { return false };
+    let saved = match &game.kind {
+        GameKind::PocketCore { auto_state } => save_host_core_moment(auto_state, || control::pocket_core("autosave")),
+        GameKind::Standalone => crate::standalone::save_resume_state(),
+        GameKind::RetroArch | GameKind::Other => false,
+    };
+    if saved {
+        println!("sleep: the host is suspending; the game's new moment is confirmed");
+    } else {
+        eprintln!("sleep: the host is suspending without a confirmed new moment; the game stays in memory");
+    }
+    saved
+}
+
+/// Watches the host's suspend (the Steam Deck's power button, SteamOS) on its own thread, for the whole run. A
+/// delay inhibitor holds the suspend (logind waits up to its 5 s by itself) while the moment is written, then is let
+/// go; after the wake it is taken again. Without `dbus-monitor` on the host the thread logs once and ends: the games
+/// then sleep in memory as they do without us, and an empty battery still ends them without a moment.
+#[cfg(target_os = "linux")]
+fn spawn_host_sleep(game: Arc<std::sync::Mutex<Option<Game>>>) {
+    use std::io::{BufRead, BufReader};
+    std::thread::spawn(move || {
+        let in_flatpak = std::env::var_os("FLATPAK_ID").is_some();
+        let (monitor, inhibit) = host_sleep_commands(in_flatpak);
+        let take_inhibitor = |inhibit: &[&str]| {
+            Command::new(inhibit[0]).args(&inhibit[1..]).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().ok()
+        };
+        loop {
+            let mut child = match Command::new(monitor[0]).args(&monitor[1..]).stdout(Stdio::piped()).stderr(Stdio::null()).spawn() {
+                Ok(c) => c,
+                Err(e) => {
+                    println!("sleep: no host suspend watch ({}: {e})", monitor.join(" "));
+                    return;
+                }
+            };
+            let mut inhibitor = take_inhibitor(&inhibit);
+            let mut pending = false;
+            if let Some(out) = child.stdout.take() {
+                for line in BufReader::new(out).lines().map_while(Result::ok) {
+                    match host_sleep_line(&line, &mut pending) {
+                        Some(true) => {
+                            let current = game.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                            save_for_host_sleep(current.as_ref());
+                            if let Some(mut held) = inhibitor.take() {
+                                // Closing the pipe ends its `cat`, and with it the delay lock (as `Inhibitor`).
+                                drop(held.stdin.take());
+                                let _ = held.wait();
+                            }
+                        }
+                        Some(false) => {
+                            println!("sleep: the host is back from its suspend");
+                            inhibitor = take_inhibitor(&inhibit);
+                        }
+                        None => {}
+                    }
+                }
+            }
+            let _ = child.kill();
+            let _ = child.wait();
+            if let Some(mut held) = inhibitor.take() {
+                drop(held.stdin.take());
+                let _ = held.wait();
+            }
+            std::thread::sleep(Duration::from_secs(5));
+        }
+    });
 }
 #[cfg(test)]
 mod tests {
@@ -4200,6 +4346,44 @@ mod tests {
         let sys = System::new(None, "false".into(), false);
         let sleep = Sleep::build_on(host_owned, dir.to_path_buf(), sys, Arc::new(|| {}), InhibitorSlot::Have(None));
         (SleepDir(dir, sleep.own_suspend.clone()), sleep)
+    }
+
+    #[test]
+    fn host_suspend_keeps_waiting_for_a_slow_moment_and_never_accepts_the_old_one() {
+        let dir = crate::testutil::TestDir::new("host-suspend-moment");
+        let path = dir.join("game.pstate.auto.z");
+        std::fs::write(&path, b"previous moment").unwrap();
+        let dest = path.clone();
+        let writer = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(1000));
+            std::fs::write(dest, b"current moment").unwrap();
+        });
+        assert!(save_host_core_moment(&path, || true));
+        let kept = std::fs::read(&path).unwrap();
+        writer.join().unwrap();
+        assert_eq!(kept, b"current moment", "the inhibitor must stay until this save, even after 800 ms");
+        assert!(!save_host_core_moment(&path, || true), "an unchanged previous save is no success");
+        assert!(!save_host_core_moment(&path, || false), "a refused request is no success");
+    }
+
+    #[test]
+    fn the_hosts_suspend_signal_is_the_boolean_after_prepare_for_sleep() {
+        let mut pending = false;
+        let signal = "signal time=1.0 sender=:1.2 -> destination=(null) serial=3 path=/org/freedesktop/login1; interface=org.freedesktop.login1.Manager; member=PrepareForSleep";
+        assert_eq!(host_sleep_line("   boolean true", &mut pending), None, "a value without its signal counts for nothing");
+        assert_eq!(host_sleep_line(signal, &mut pending), None);
+        assert_eq!(host_sleep_line("   boolean true", &mut pending), Some(true), "the suspend starts");
+        assert_eq!(host_sleep_line("   boolean true", &mut pending), None, "once only");
+        assert_eq!(host_sleep_line(signal, &mut pending), None);
+        assert_eq!(host_sleep_line("   boolean false", &mut pending), Some(false), "the system is back");
+        let (monitor, inhibit) = host_sleep_commands(false);
+        assert_eq!(monitor[0], "dbus-monitor");
+        assert!(monitor[2].contains("PrepareForSleep"), "{monitor:?}");
+        assert_eq!(inhibit[0], "systemd-inhibit");
+        assert!(inhibit.contains(&"--mode=delay"), "a delay lock, so the moment is written first: {inhibit:?}");
+        let (monitor, inhibit) = host_sleep_commands(true);
+        assert_eq!(&monitor[..2], ["flatpak-spawn", "--host"], "out of the Flatpak both run on the host");
+        assert_eq!(&inhibit[..2], ["flatpak-spawn", "--host"]);
     }
 
     #[test]

@@ -751,6 +751,10 @@ fn code_color() -> u32 {
 fn link_color() -> u32 {
     crate::palette::pal().pick(0xf2efe8, 0x1a1916)
 }
+// The link keeps its page ink while focused. A chip is a key's foreground in Retro and washes that ink out.
+fn focused_link_fill(p: &crate::palette::Palette) -> u32 {
+    p.pill
+}
 fn grid_color() -> u32 {
     crate::palette::pal().pick(0x2c2c30, 0xd6d0c4)
 }
@@ -1584,6 +1588,11 @@ impl Reader {
         }
     }
 
+    /// Where the reader is: the page, how far down, and which link A follows (the UI sounds and the haptic tick compare it).
+    pub fn mark(&self) -> (usize, i32, usize) {
+        (self.page, self.scroll(), self.focus)
+    }
+
     pub fn scroll(&self) -> i32 {
         self.scroll[self.page]
     }
@@ -1668,7 +1677,9 @@ impl Reader {
             }
             // The link A opens has a frame behind it.
             if let Some(&(lx, ly, lw, lh, _)) = self.links.get(self.focus.min(self.links.len().saturating_sub(1))) {
-                crate::retro::pill(c, lx - 6, ly, lw + 12, lh - 4, 10, crate::palette::pal().chip);
+                let p = crate::palette::pal();
+                crate::retro::pill(c, lx - 6, ly, lw + 12, lh - 4, 10, focused_link_fill(&p));
+                c.frame(lx - 6, ly - 2, lw + 12, lh, 1, p.chip);
             }
             paint(laid, text, c, x, top, self.scroll[page], h);
         }
@@ -1690,6 +1701,19 @@ impl Reader {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_focused_manual_link_stays_readable_in_every_appearance_and_retro_palette() {
+        let schemes: Vec<_> = crate::palette::Colours::ALL.iter().map(|c| c.scheme())
+            .chain([&crate::retro::COCOA, &crate::retro::PEA]).collect();
+        for scheme in schemes {
+            for p in [&scheme.dark, &scheme.light] {
+                let ink = p.pick(0xf2efe8, 0x1a1916);
+                let contrast = crate::palette::contrast(ink, focused_link_fill(p));
+                assert!(contrast >= 4.5, "the link A opens must stay readable: {contrast:.2}:1");
+            }
+        }
+    }
 
     fn plain(t: &str) -> Span {
         Span {

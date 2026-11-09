@@ -61,6 +61,10 @@ impl Ui {
     pub(super) fn target(&mut self, area: Area, label: &str, action: Action) {
         self.region(area, label.into(), action);
     }
+    /// A game/system data name remains literal for screen readers too.
+    fn name_target(&mut self, area: Area, name: &str, action: Action) {
+        self.regions.push(Region { area, label: name.into(), action });
+    }
     /// What Play does for the selected game: goes back to its moment when it stands open.
     fn play_word(&self) -> &'static str {
         if self.game().is_some_and(|g| self.is_frozen(&g.key)) {
@@ -93,7 +97,8 @@ impl Ui {
         self.pill_in(c, text, area, label, colors, action);
     }
     pub(super) fn pill_in(&mut self, c: &mut Canvas, text: &mut Text, area: Area, label: &str, (bg, fg): (u32, u32), action: Action) {
-        c.round_rect(area.x, area.y, area.w, area.h, area.h / 2, bg);
+        if pocket_ui::retro::on() { pocket_ui::retro::frame_at(c, area.x, area.y, area.w, area.h, bg, self.d(2.0).max(1)); }
+        else { c.round_rect(area.x, area.y, area.w, area.h, area.h / 2, bg); }
         let mut size = self.sp(16.0);
         let room = area.w - self.d(24.0);
         while size > self.sp(12.0) && text.width(Face::Title, size, label) > room {
@@ -479,7 +484,7 @@ impl Ui {
             }
             self.side_panel(c, text, (shelf_w + self.d(16.0), room.top, side - self.d(16.0), room.bottom - room.top), cover);
         } else {
-            let strip = self.d(76.0);
+            let strip = self.name_band() + self.d(TARGET + 26.0) + pocket_ui::type_scale::px(self.sp(14.0)) as i32;
             let area = Room { bottom: room.bottom - strip, ..room };
             if list {
                 self.paint_list_phone(c, text, area, c.w);
@@ -499,18 +504,17 @@ impl Ui {
         let h = self.d(TARGET);
         let gap = self.d(8.0);
         let bottom = room.bottom - h - gap;
-        let picture_bottom = bottom - self.d(78.0);
+        let name_h = self.name_band().min(((bottom - room.top - pocket_ui::type_scale::px(self.sp(14.0)) as i32 - self.d(20.0)) / 2).max(1));
+        let picture_bottom = bottom - name_h - pocket_ui::type_scale::px(self.sp(14.0)) as i32 - self.d(20.0);
         let available = (picture_bottom - room.top).max(1);
         if let Some(pic) = self.front_pic(text, index, true, (c.w - 2 * room.margin, available), cover) {
             art::blit(c, &pic, (c.w - pic.w) / 2, room.top + (available - pic.h) / 2, 256, (room.top, picture_bottom));
         }
         if let Some(game) = self.game().cloned() {
-            let size = self.sp(22.0);
-            let name = text.fit(Face::Title, size, &game.name, c.w - 2 * room.margin);
-            text.draw(c, Face::Title, size, room.margin, picture_bottom + self.d(28.0), pal().chalk, &name);
+            self.paint_name(c, text, &game.name, Area::new(room.margin, picture_bottom, c.w - 2 * room.margin, name_h));
             let line = self.system_line(&game);
-            text.draw(c, Face::Body, self.sp(14.0), room.margin, picture_bottom + self.d(52.0), pal().dust, &line);
-            self.target(Area::new(room.margin, picture_bottom, c.w - 2 * room.margin, self.d(64.0)), &game.name, Action::Press(Button::North));
+            text.draw_name(c, Face::Body, self.sp(14.0), room.margin, bottom - self.d(12.0), pal().dust, &line);
+            self.name_target(Area::new(room.margin, picture_bottom, c.w - 2 * room.margin, bottom - picture_bottom), &game.name, Action::Press(Button::North));
             let arrow = h;
             self.pill(c, text, Area::new(room.margin, bottom, arrow, h), "‹", false, Action::Press(Button::Left));
             self.pill(c, text, Area::new(c.w - room.margin - arrow, bottom, arrow, h), "›", false, Action::Press(Button::Right));
@@ -551,20 +555,19 @@ impl Ui {
         c.rect(0, y, c.w, h, pal().void);
         c.rect(0, y, c.w, 1, pal().pill);
         let bh = self.d(TARGET);
-        let by = y + (h - bh) / 2;
-        let play_w = self.d(104.0);
-        let info_w = self.d(72.0);
-        let play = Area::new(c.w - margin - play_w, by, play_w, bh);
-        let info = Area::new(play.x - self.d(8.0) - info_w, by, info_w, bh);
-        let name_w = info.x - margin - self.d(12.0);
-        let name = text.fit(Face::Title, self.sp(20.0), &game.name, name_w);
-        text.draw(c, Face::Title, self.sp(20.0), margin, y + h / 2 - self.d(2.0), pal().chalk, &name);
+        let by = y + h - bh - self.d(8.0);
+        let info_w = self.d(88.0);
+        let info = Area::new(margin, by, info_w, bh);
+        let play = Area::new(info.x + info.w + self.d(8.0), by, c.w - 2 * margin - info_w - self.d(8.0), bh);
+        let name_w = c.w - 2 * margin;
+        self.paint_name(c, text, &game.name, Area::new(margin, y + self.d(4.0), name_w, self.name_band()));
         let line = self.system_line(&game);
-        let system = text.fit(Face::Body, self.sp(14.0), &line, name_w);
-        text.draw(c, Face::Body, self.sp(14.0), margin, y + h / 2 + self.d(20.0), pal().dust, &system);
-        // Read out, not tapped: the name's target below lies over it.
-        self.target(Area::new(margin, y + h / 2 + self.d(4.0), name_w, self.d(20.0)), &line, Action::Label);
-        self.target(Area::new(margin, y, name_w, h), &game.name, Action::Press(Button::North));
+        let size = self.sp(14.0);
+        let system = text.fit_name(Face::Body, size, &line, name_w);
+        let system_base = by - self.d(8.0);
+        text.draw_name(c, Face::Body, size, margin, system_base, pal().dust, &system);
+        self.name_target(Area::new(margin, system_base - pocket_ui::type_scale::px(size) as i32, name_w, pocket_ui::type_scale::px(size) as i32), &line, Action::Label);
+        self.name_target(Area::new(margin, y, name_w, by - y), &game.name, Action::Press(Button::North));
         self.pill(c, text, info, "Info", false, Action::Press(Button::North));
         self.play_pill(c, text, play);
     }
@@ -579,19 +582,13 @@ impl Ui {
         self.play_pill(c, text, Area::new(x + info_w + gap, buttons_y, w - info_w - gap, bh));
         let system_base = buttons_y - self.d(14.0);
         let line = self.system_line(&game);
-        let system = text.fit(Face::Body, self.sp(14.0), &line, w);
-        text.draw(c, Face::Body, self.sp(14.0), x, system_base, pal().dust, &system);
-        self.target(Area::new(x, system_base - self.d(14.0), w, self.d(18.0)), &line, Action::Label);
-        let size = self.sp(22.0);
-        let lines = text.wrap_at_most(Face::Title, size, &game.name, w, 2);
-        let step = size as i32 + self.d(2.0);
-        let mut base = system_base - self.d(22.0) - (lines.len() as i32 - 1) * step;
-        let name_top = base - size as i32;
-        for line in &lines {
-            text.draw(c, Face::Title, size, x, base, pal().chalk, line);
-            base += step;
-        }
-        self.target(Area::new(x, name_top, w, system_base - name_top), &game.name, Action::Press(Button::North));
+        let system = text.fit_name(Face::Body, self.sp(14.0), &line, w);
+        text.draw_name(c, Face::Body, self.sp(14.0), x, system_base, pal().dust, &system);
+        self.name_target(Area::new(x, system_base - self.d(14.0), w, self.d(18.0)), &line, Action::Label);
+        let name_bottom = system_base - pocket_ui::type_scale::px(self.sp(14.0)) as i32 - self.d(8.0);
+        let name_top = (name_bottom - self.name_band()).max(y + self.d(8.0));
+        self.paint_name(c, text, &game.name, Area::new(x, name_top, w, (name_bottom - name_top).max(1)));
+        self.name_target(Area::new(x, name_top, w, system_base - name_top), &game.name, Action::Press(Button::North));
         let pic_h = name_top - y - self.d(16.0);
         if pic_h < self.d(60.0) {
             return;
@@ -605,6 +602,15 @@ impl Ui {
             let fitted = sprite.fitted(w * 3 / 4, pic_h * 3 / 4);
             c.blit_sprite(&fitted, x + (w - fitted.w as i32) / 2, y + (pic_h - fitted.h as i32) / 2, 0);
         }
+    }
+    /// A stable three-line band: changing games never moves the system line or play buttons.
+    fn name_band(&self) -> i32 {
+        3 * pocket_ui::type_scale::px(self.sp(22.0)) as i32 + self.d(12.0)
+    }
+    fn paint_name(&self, c: &mut Canvas, text: &mut Text, name: &str, area: Area) {
+        let lines = pocket_ui::title_block::name_layout_in(text, Face::Title, self.sp(22.0), name, area.w, area.h);
+        let baseline = area.y + lines.first().map_or(0, |l| pocket_ui::type_scale::px(l.px) as i32);
+        pocket_ui::title_block::paint(text, c, Face::Title, &lines, area.x, baseline, pal().chalk, pal().dust, false);
     }
     /// The Cabinet's TV showing the game's picture, in (x, y, w, h).
     fn paint_tv(&mut self, c: &mut Canvas, (tx, ty, tw, th): (i32, i32, i32, i32), cover: Option<&Image>) {
@@ -736,7 +742,7 @@ impl Ui {
         }
         for (area, name, pos) in targets {
             if area.h > self.d(12.0) {
-                self.target(area, &name, Action::Row(pos));
+                self.name_target(area, &name, Action::Row(pos));
             }
         }
         self.scrollbar(c, room.top, view, total * row_h);
@@ -898,7 +904,7 @@ impl Ui {
         }
         for (area, name, pos) in targets {
             if area.h > self.d(12.0) && area.w > self.d(12.0) {
-                self.target(area, &name, pos.map_or(Action::Label, Action::Row));
+                self.name_target(area, &name, pos.map_or(Action::Label, Action::Row));
             }
         }
         self.scrollbar(c, room.top, view, content);
@@ -938,15 +944,15 @@ impl Ui {
                     text.draw_right(&mut clip, Face::Body, self.sp(13.0), x + w - self.d(12.0) - star_w, y + h / 2 + self.d(5.0), fg, &super::tr("Continue"));
                     star_w += text.width(Face::Body, self.sp(13.0), &super::tr("Continue")) + self.d(12.0);
                 }
-                let name = text.fit(Face::Title, self.sp(18.0), &game.name, w - self.d(32.0) - star_w);
-                text.draw(&mut clip, Face::Title, self.sp(18.0), x + self.d(18.0), y + h / 2 - self.d(2.0), fg, &name);
-                text.draw(&mut clip, Face::Body, self.sp(13.0), x + self.d(18.0), y + h / 2 + self.d(18.0), quiet, game.system);
+                let (name, name_size) = text.literal(|text| pocket_ui::title_block::row(text, Face::Title, self.sp(18.0), &game.name, w - self.d(32.0) - star_w));
+                text.draw_name(&mut clip, Face::Title, name_size, x + self.d(18.0), y + h / 2 - self.d(2.0), fg, &name);
+                text.draw_name(&mut clip, Face::Body, self.sp(13.0), x + self.d(18.0), y + h / 2 + self.d(18.0), quiet, game.system);
                 targets.push((Area::new(x, room.top + y, w, pitch).clip_y(room.top, room.bottom), game.name.clone(), pos));
             }
         }
         for (area, name, pos) in targets {
             if area.h > self.d(12.0) {
-                self.target(area, &name, Action::Row(pos));
+                self.name_target(area, &name, Action::Row(pos));
             }
         }
         self.scrollbar(c, room.top, view, self.visible.len() as i32 * pitch);
@@ -1040,7 +1046,7 @@ impl Ui {
         self.step = ((pitch_sum / pitch_n.max(1)).max(self.d(24.0)) as f32, 0.0);
         self.scroll_max = 0.0;
         for (area, name, pos) in targets {
-            self.target(area, &name, Action::Row(pos));
+            self.name_target(area, &name, Action::Row(pos));
         }
     }
     /// What the player earned, standing on the board at `base` from `from.0` to `from.1`: the plant at its stage, the
@@ -1321,15 +1327,15 @@ impl Ui {
             if let Some(game) = self.game().cloned().filter(|_| boxed) {
                 let ts = self.sp(22.0);
                 let mut y = self.d(16.0);
-                for line in text.wrap_at_most(Face::Title, ts, &game.name, col_w, 2) {
-                    y += ts as i32;
-                    text.draw(c, Face::Title, ts, col_x, y, pal().chalk, &line);
+                for line in text.literal(|text| text.wrap_at_most(Face::Title, ts, &game.name, col_w, 2)) {
+                    y += pocket_ui::type_scale::px(ts) as i32;
+                    text.draw_name(c, Face::Title, ts, col_x, y, pal().chalk, &line);
                     y += self.d(4.0);
                 }
-                y += self.d(18.0);
-                let system = text.fit(Face::Body, self.sp(14.0), game.system, col_w);
-                text.draw(c, Face::Body, self.sp(14.0), col_x, y, pal().dust, &system);
-                self.target(Area::new(col_x, 0, col_w, y + self.d(8.0)), &game.name, Action::Label);
+                y += pocket_ui::type_scale::px(self.sp(14.0)) as i32 + self.d(8.0);
+                let system = text.fit_name(Face::Body, self.sp(14.0), game.system, col_w);
+                text.draw_name(c, Face::Body, self.sp(14.0), col_x, y, pal().dust, &system);
+                self.name_target(Area::new(col_x, 0, col_w, y + self.d(8.0)), &game.name, Action::Label);
             }
             let play_h = self.d(52.0);
             let mut y = c.h - hint_h - self.d(12.0) - play_h;
@@ -1351,14 +1357,14 @@ impl Ui {
                 let mut y = self.d(28.0);
                 if let Some(game) = game {
                     let ts = self.sp(26.0);
-                    for line in text.wrap_at_most(Face::Title, ts, &game.name, c.w - 2 * margin, 2) {
-                        y += ts as i32;
-                        text.draw(c, Face::Title, ts, margin, y, pal().chalk, &line);
+                    for line in text.literal(|text| text.wrap_at_most(Face::Title, ts, &game.name, c.w - 2 * margin, 2)) {
+                        y += pocket_ui::type_scale::px(ts) as i32;
+                        text.draw_name(c, Face::Title, ts, margin, y, pal().chalk, &line);
                         y += self.d(4.0);
                     }
-                    y += self.d(20.0);
-                    text.draw(c, Face::Body, self.sp(15.0), margin, y, pal().dust, game.system);
-                    self.target(Area::new(margin, 0, c.w - 2 * margin, y + self.d(8.0)), &game.name, Action::Label);
+                    y += pocket_ui::type_scale::px(self.sp(15.0)) as i32 + self.d(8.0);
+                    text.draw_name(c, Face::Body, self.sp(15.0), margin, y, pal().dust, game.system);
+                    self.name_target(Area::new(margin, 0, c.w - 2 * margin, y + self.d(8.0)), &game.name, Action::Label);
                 }
                 y + self.d(8.0)
             } else {
@@ -1519,7 +1525,8 @@ fn ajar_front(front: art::Pic, inside: &art::Pic, peek: i32) -> art::Pic {
     pic
 }
 fn c_band(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, color: u32) {
-    c.round_rect(x, y, w, h, h / 2, color);
+    if pocket_ui::retro::on() { pocket_ui::retro::plain_bar(c, x, y, w, h, color); }
+    else { c.round_rect(x, y, w, h, h / 2, color); }
 }
 use pocket_ui::type_scale;
 

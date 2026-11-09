@@ -8,10 +8,31 @@
 //! routes verified systems to pocket-core (`host_core`, `route`); the others stay on their default emulator until
 //! they have been checked.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// ROCKNIX's BIOS folder, the system directory pocket-core gives the cores.
 pub const BIOS_DIR: &str = "/storage/roms/bios";
+
+/// The BIOS folder in use: `BIOS_DIR` on the handhelds. `POCKETUI_BIOS` moves it where there is no `/storage`
+/// (the Steam Deck launcher points it into pocket-ui's data and links the player's EmuDeck/RetroDECK BIOS files
+/// into it; docs/STEAMDECK.md), like `POCKETUI_STATES` for the states.
+pub fn bios_dir() -> PathBuf {
+    static DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| bios_dir_from(std::env::var("POCKETUI_BIOS").ok().as_deref())).clone()
+}
+
+fn bios_dir_from(value: Option<&str>) -> PathBuf {
+    match value.map(str::trim) {
+        Some(v) if !v.is_empty() => PathBuf::from(v),
+        _ => PathBuf::from(BIOS_DIR),
+    }
+}
+
+/// Whether the launcher moved the BIOS folder (`POCKETUI_BIOS`, the Deck): checks that otherwise look beside the
+/// games (`<roms>/bios` on a card) then look in `bios_dir()` instead.
+pub fn bios_moved() -> bool {
+    std::env::var("POCKETUI_BIOS").ok().as_deref().map(str::trim).is_some_and(|v| !v.is_empty())
+}
 
 /// One BIOS requirement: any one of `files` (in the bios folder) satisfies it.
 pub struct Bios {
@@ -678,6 +699,14 @@ mod tests {
         for light in ["gb", "gba", "snes", "nes", "megadrive"] {
             assert_eq!(route_on(light, bios, true), route_on(light, bios, false), "{light}");
         }
+    }
+
+    #[test]
+    fn the_bios_folder_moves_only_with_pocketui_bios() {
+        assert_eq!(bios_dir_from(None), Path::new("/storage/roms/bios"), "the handhelds keep their folder");
+        assert_eq!(bios_dir_from(Some("  ")), Path::new("/storage/roms/bios"), "an empty value moves nothing");
+        assert_eq!(bios_dir_from(Some("/data/pocket-ui/bios")), Path::new("/data/pocket-ui/bios"), "the Deck launcher's folder");
+        assert_eq!(crate::hostsys::bios_dir(), Path::new(BIOS_DIR), "no variable in the test process");
     }
 
     #[test]

@@ -49,6 +49,7 @@
 //! [colour|cabinet]` draws a built-in frame around a game picture (no effects; Ambient is GPU only), `--export-frame <system> <w> <h> <dir>`
 //! writes it as a frame pack (a template for frame designers, see docs/FRAMES.md).
 
+use pocket_ui::core_command::{Command as CoreCommand, Load as CoreLoad, Quit};
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -245,7 +246,31 @@ impl Stats {
     }
 }
 
+/// A successful battery flush and a successfully written moment are separate outcomes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MomentSaved { Written, Unavailable, Failed }
+
+#[derive(Clone, Copy, Debug)]
+struct AutoSaveOutcome {
+    moment: MomentSaved,
+    battery: Option<pocket_ui::save_trouble::Trouble>,
+}
+
+impl AutoSaveOutcome {
+    fn complete(self) -> bool { self.moment != MomentSaved::Failed && self.battery.is_none() }
+}
+
+// Child regressions isolate their notices from any running host test. Normal runtime names stay unchanged.
+fn save_runtime_file(path: &str) -> PathBuf {
+    #[cfg(test)]
+    if let Some(root) = std::env::var_os("POCKET_SAVE_SAFETY_CHILD") {
+        return PathBuf::from(root).join(Path::new(path).file_name().unwrap());
+    }
+    PathBuf::from(path)
+}
+
 struct App {
+    status: pocket_ui::core_status::Publisher,
     core: Core,
     window: Option<Window>,
     gfx: Option<Gfx>, #[cfg(feature = "brick")] soft: Option<pocket_ui::soft_screen::SoftScreen>, #[cfg(feature = "brick")] brick_gles: Option<pocket_ui::brick_gles::BrickGles>, #[cfg(feature = "brick")] brick_picture: BrickPicture,
@@ -500,7 +525,7 @@ impl App {
 
     /// The finger as the core's pointer: on the picture as drawn (Nintendo DS: on its bottom screen).
     fn touch_pointer(&self) -> Option<(i16, i16)> {
-        let at = self.touch.frame()?;
+        let at = self.touch.frame_for_game(self.dark)?;
         let gfx = self.gfx.as_ref()?;
         let (w, h) = self.view;
         let picture = gfx.video.picture(w, h, Self::display_aspect(&self.core, &self.video_src.0), &self.video);
@@ -1171,22 +1196,49 @@ impl App {
     /// first, so the state is never older than it (see `Core::resume`).
     /// A battery save that fails (a full or failing card) doesn't hold the state back: it is tried once, and the
     /// state, if it gets written, then holds the newer save (`slots::battery_unsaved`, `Core::resume`).
-    fn save_auto(&mut self) {
+    fn save_auto(&mut self) -> AutoSaveOutcome {
         let battery = self.core.write_sram();
         self.note_save_trouble(battery.err().or(self.core.save_trouble()));
         pocket_ui::trace::step("save: battery save checked");
         let path = slots::auto_path(&self.states);
-        match self.save_to(&path) {
+        let moment = match self.save_to(&path) {
             Ok(()) => {
                 slots::auto_written(&path);
                 slots::battery_unsaved(&path, battery.is_err());
                 self.flash_frame_light();
+                MomentSaved::Written
             }
             // The moment didn't reach the card (a full one: a 4 MB state that no longer fits beside an 8 KB battery save).
             // The previous moment stays; the player hears of it, over the game and on the shelf after a Quit, instead of
             // finding an older moment at the next start (save-safety review 2026-11-06).
-            Err(Some(e)) if e.raw_os_error().is_some() => self.note_save_trouble(Some(pocket_ui::save_trouble::Trouble::of(&e))),
-            Err(_) => {}
+            Err(Some(e)) => {
+                self.note_save_trouble(Some(pocket_ui::save_trouble::Trouble::of(&e)));
+                MomentSaved::Failed
+            }
+            Err(None) if !self.core.has_states() => MomentSaved::Unavailable,
+            Err(None) => MomentSaved::Failed,
+        };
+        let outcome = AutoSaveOutcome { moment, battery: battery.err().or(self.core.save_trouble()) };
+        if !outcome.complete() {
+            self.hud.note(pocket_ui::save_trouble::MOMENT_FAILED);
+            let text = self.hud.save_trouble.map_or(pocket_ui::save_trouble::MOMENT_FAILED, |t| t.after_quit());
+            let _ = std::fs::write(save_runtime_file(ERROR_FILE), text);
+        } else if std::fs::read_to_string(save_runtime_file(ERROR_FILE)).is_ok_and(|s| s == pocket_ui::save_trouble::MOMENT_FAILED || [pocket_ui::save_trouble::Trouble::Full, pocket_ui::save_trouble::Trouble::Unwritable, pocket_ui::save_trouble::Trouble::Unreadable].iter().any(|t| s == t.after_quit())) {
+            let _ = std::fs::remove_file(save_runtime_file(ERROR_FILE));
+        }
+        outcome
+    }
+
+    fn autosave(&mut self) {
+        let outcome = self.save_auto();
+        if outcome.moment == MomentSaved::Written {
+            self.timeline_after_autosave();
+        }
+    }
+
+    fn save_for_handoff(&mut self) {
+        if self.save_exit().complete() {
+            pocket_ui::fast_switch::request();
         }
     }
 
@@ -1196,7 +1248,7 @@ impl App {
     fn note_save_trouble(&mut self, now: Option<pocket_ui::save_trouble::Trouble>) {
         if self.hud.save_trouble != now {
             self.hud.save_trouble = now;
-            pocket_ui::save_trouble::publish_to(Path::new(pocket_ui::save_trouble::FILE), now);
+            pocket_ui::save_trouble::publish_to(&save_runtime_file(pocket_ui::save_trouble::FILE), now);
         }
     }
 
@@ -1208,7 +1260,7 @@ impl App {
     }
 
     /// The exit save: the auto state, and "Before load" ends with the session.
-    fn save_exit(&mut self) {
+    fn save_exit(&mut self) -> AutoSaveOutcome {
         pocket_ui::fast_switch::saving(true);
         // For the device test of a slow card (`quit::still_saving`): the save takes this much longer.
         if let Some(ms) = std::env::var("POCKET_TEST_SAVE_DELAY_MS").ok().and_then(|m| m.parse().ok()) {
@@ -1220,10 +1272,11 @@ impl App {
         if self.core.name == "PPSSPP" {
             spawn_exit_watchdog(limit, self.states.clone());
         }
-        self.save_auto();
+        let outcome = self.save_auto();
         CORE_CALLS.stop();
         slots::clear_undo(&self.states);
         pocket_ui::fast_switch::saving(false);
+        outcome
     }
 
     /// The pause menu's "Quit" with Continue where I quit off: the battery save as on every exit, but no new auto state.
@@ -1294,6 +1347,10 @@ impl App {
                     first.make_ascii_uppercase();
                 }
                 self.hud.toast(format!("{what} is empty"));
+                return;
+            }
+            slots::Loaded::UndoUnavailable => {
+                self.hud.toast(pocket_ui::save_trouble::UNDO_FAILED);
                 return;
             }
             slots::Loaded::Loaded => {
@@ -1511,8 +1568,18 @@ impl App {
         self.write_snapshot();
     }
 
+    fn status_snapshot(&self, quit: Option<Quit>) -> pocket_ui::core_status::Snapshot {
+        pocket_ui::core_status::Snapshot { paused: self.paused, sleeping: self.sleeping, dark: self.dark,
+            held: self.hold, quit, slot: self.slot, discs: self.discs, save_trouble: self.hud.save_trouble }
+    }
+
+    fn publish_status(&mut self, quit: Option<Quit>) {
+        let now = self.status_snapshot(quit);
+        let _ = self.status.offer(now);
+    }
+
     /// Runs commands from pocket-ui between frames; returns how to quit when one says so.
-    fn handle_commands(&mut self) -> Option<Exit> {
+    fn handle_commands(&mut self) -> Option<Quit> {
         let cmds: Vec<String> = self.early.take().into_iter().chain(self.commands.try_iter()).collect();
         // Loads, options, cheats, the pause: the game may have changed from outside (`RunAhead::forget`). Pixel Path's
         // requests and audio diagnostics only read.
@@ -1522,14 +1589,8 @@ impl App {
         // Only the newest preview request is worth drawing; it runs after the settings before it.
         let mut preview = None;
         for cmd in cmds {
-            let cmd = cmd.trim();
-            let words: Vec<&str> = cmd.split_whitespace().collect();
-            // Slots count from 1 on the wire, as on screen.
-            let slot_arg = |i: usize| words.get(i).and_then(|n| n.parse::<usize>().ok()).and_then(|n| n.checked_sub(1)).filter(|n| *n < slots::SLOTS);
-            // Everything after the key, spaces included (core option values can have them).
-            let rest = |prefix: &str| cmd.strip_prefix(prefix).and_then(|r| r.split_once(' ')).map(|(k, v)| (k, v.trim()));
-            match words.as_slice() {
-                ["audio", "stats"] => {
+            match CoreCommand::parse(&cmd, std::env::var_os("POCKET_CORE_TEST").is_some()) {
+                CoreCommand::AudioStats => {
                     if let Some(audio) = &mut self.audio {
                         // The first request starts the PipeWire sampler (`Audio::observe_pipewire`); games never do.
                         audio.observe_pipewire();
@@ -1538,7 +1599,7 @@ impl App {
                         println!("audio sample {{\"schema\":1,\"available\":false,\"reason\":\"audio stream did not open\"}}");
                     }
                 }
-                ["pause"] if !self.paused => {
+                CoreCommand::Pause if !self.paused => {
                     self.toggled.iter_mut().for_each(controls::HoldToggle::clear);
                     self.hold = false;
                     self.crt_on = false;
@@ -1561,14 +1622,14 @@ impl App {
                     println!("play paused");
                 }
                 // Paused already (or asleep): it draws nothing, so it says so again.
-                ["pause"] => { PROGRESS.answered(); pocket_ui::fast_switch::announce_paused(); },
-                ["resume"] if self.paused => {
+                CoreCommand::Pause => { PROGRESS.answered(); pocket_ui::fast_switch::announce_paused(); },
+                CoreCommand::Resume if self.paused => {
                     self.paused = false;
                     self.paused_at = None;
                     self.after_pause();
                     println!("play resumed");
                 }
-                ["sleep"] if !self.sleeping => {
+                CoreCommand::Sleep if !self.sleeping => {
                     self.toggled.iter_mut().for_each(controls::HoldToggle::clear);
                     self.hold = false;
                     self.crt_on = false;
@@ -1582,7 +1643,7 @@ impl App {
                     self.ex.dark(true);
                     println!("asleep");
                 }
-                ["screen", "off"] if !self.dark => {
+                CoreCommand::ScreenOff if !self.dark => {
                     self.toggled.iter_mut().for_each(controls::HoldToggle::clear);
                     self.hold = false;
                     self.crt_on = false;
@@ -1593,7 +1654,7 @@ impl App {
                     println!("screen off, playing on");
                 }
                 // Also sent after a suspend pocket-ui didn't start itself: the quantum is reset either way.
-                ["wake"] => {
+                CoreCommand::Wake => {
                     self.hold = false;
                     self.crt_on = false;
                     if let Some(a) = &self.audio {
@@ -1601,6 +1662,7 @@ impl App {
                     }
                     // The screen is back: the button that woke it reaches the game only once it was let go.
                     if std::mem::take(&mut self.dark) {
+                        self.touch.after_pause();
                         self.held_mask = std::array::from_fn(|p| self.input.buttons(p));
                         #[cfg(feature = "brick")]
                         println!("screen on (sound underruns so far: {})", self.underruns());
@@ -1616,38 +1678,26 @@ impl App {
                         println!("awake{}", if self.paused { " (still paused)" } else { "" });
                     }
                 }
-                ["autosave"] => {
-                    self.save_auto();
-                    self.timeline_after_autosave();
+                CoreCommand::Autosave => {
+                    self.autosave();
                 }
                 // The pause menu's Pixel Path page asks a few times a second while it is open.
-                ["pixelpath", seq] => self.write_pixel_path(seq.parse().unwrap_or(0)),
+                CoreCommand::PixelPath(seq) => self.write_pixel_path(seq),
                 // The pause menu's background, right after "pause" (`pocket_ui::preview::SHOT_FILE`).
-                ["shot", seq] => self.write_shot(seq.parse().unwrap_or(0)),
-                ["preview", ..] => {
-                    let n: Vec<u32> = words[1..].iter().filter_map(|v| v.parse().ok()).collect();
-                    if let [w, h, more @ ..] = &n[..] {
-                        preview = Some((*w, *h, more.first().copied().unwrap_or(0)));
-                    }
-                }
-                ["save", ..] => self.save_slot(slot_arg(1).unwrap_or(self.slot)),
-                ["load", name @ ("auto" | "undo")] => self.load_named(name),
+                CoreCommand::Shot(seq) => self.write_shot(seq),
+                CoreCommand::Preview(w, h, seq) => preview = Some((w, h, seq)),
+                CoreCommand::Save(slot) => self.save_slot(slot.unwrap_or(self.slot)),
+                CoreCommand::Load(CoreLoad::Named(name)) => self.load_named(name),
                 // Load, last stop: the game from its start.
-                ["restart"] => self.start_over(),
+                CoreCommand::Restart => self.start_over(),
                 // "load earlier3 <time>": a state of Earlier as the menu listed it (`pocket_ui::timeline`).
-                ["load", name, listed @ ..] if pocket_ui::timeline::Name::parse(name).is_some() => {
-                    self.load_earlier(name, listed.first().and_then(|t| t.parse().ok()));
-                }
-                ["load", ..] => self.load_slot(slot_arg(1).unwrap_or(self.slot)),
-                ["slot", ..] => {
-                    if let Some(n) = slot_arg(1) {
-                        self.set_slot(n);
-                    }
-                }
-                ["reload"] => self.reload_settings(),
+                CoreCommand::Load(CoreLoad::Earlier(name, listed)) => self.load_earlier(name, listed),
+                CoreCommand::Load(CoreLoad::Slot(slot)) => self.load_slot(slot.unwrap_or(self.slot)),
+                CoreCommand::Slot(n) => self.set_slot(n),
+                CoreCommand::Reload => self.reload_settings(),
                 // "players": the pause menu's Players page wrote a new order (`players::COMMAND`).
-                [players::COMMAND] => self.input.reorder(players::Order::load(&data_dir()).order),
-                ["cheats"] => {
+                CoreCommand::Players => self.input.reorder(players::Order::load(&data_dir()).order),
+                CoreCommand::Cheats => {
                     let n = pocket_ui::cheats::apply(&self.core, &data_dir(), &self.video_src.0, &self.video_src.1);
                     println!("cheats: {n} on");
                     self.pixel_live.cheats = n;
@@ -1659,27 +1709,15 @@ impl App {
                 }
                 // "look <warmth> <contrast> [<night light kelvin>]": the colour temperature changed (Select + Vol), or a
                 // step of the night light's fade (0 or no number: it is off).
-                ["look", w, c, rest @ ..] => {
-                    let night = rest.first().and_then(|n| n.parse().ok()).unwrap_or(0);
-                    let look = pocket_ui::display::Look { warmth: w.parse().unwrap_or(0), contrast: c.parse().unwrap_or(0), soft: true, night }.clamped();
+                CoreCommand::Look(warmth, contrast, night) => {
+                    let look = pocket_ui::display::Look { warmth, contrast, soft: true, night }.clamped();
                     self.hud.set_look(&look);
                 }
-                // "note <sentence>": a line of pocket-ui's at the bottom for a few seconds (after a switch-off after
-                // sleeping, `pocket_ui::auto_off`).
-                ["note", ..] => {
-                    if let Some(text) = cmd.strip_prefix("note ") {
-                        self.hud.note(text.trim());
-                    }
-                }
-                // "osd Brightness|60 %|0.600|0": a level bar over the picture.
-                ["osd", ..] => {
-                    if let Some(wire) = cmd.strip_prefix("osd ") {
-                        self.hud.osd(wire.trim());
-                    }
-                }
+                CoreCommand::Note(text) => self.hud.note(text),
+                CoreCommand::Osd(wire) => self.hud.osd(wire),
                 // "disc next", or "disc <n>" (1-based) from the pause menu's Disc row (`pocket_ui::disc`).
-                ["disc", which] => {
-                    let to = match *which {
+                CoreCommand::Disc(which) => {
+                    let to = match which {
                         "next" => self.core.next_disc(),
                         n => n.parse::<u32>().ok().filter(|n| *n >= 1 && self.core.set_disc(n - 1)),
                     };
@@ -1697,73 +1735,50 @@ impl App {
                 }
                 // Test input, only with POCKET_CORE_TEST=1: "press A 150" holds a button for 150 ms,
                 // "axis lx 0.8" holds a stick position (lx ly rx ry, -1..1; 0 lets go).
-                ["press", name, ..] if std::env::var_os("POCKET_CORE_TEST").is_some() => {
-                    let ms: u64 = words.get(2).and_then(|m| m.parse().ok()).unwrap_or(100);
-                    let names = ["B", "Y", "SELECT", "START", "UP", "DOWN", "LEFT", "RIGHT", "A", "X", "L", "R", "L2", "R2", "L3", "R3"];
-                    if let Some(bit) = names.iter().position(|n| n.eq_ignore_ascii_case(name)) {
-                        self.input.inject(1 << bit, true);
-                        self.inject_release.push((1 << bit, Instant::now() + Duration::from_millis(ms)));
-                    }
+                CoreCommand::Press(button, ms) => {
+                    self.input.inject(button, true);
+                    self.inject_release.push((button, Instant::now() + Duration::from_millis(ms)));
                 }
                 // "achievement-demo": an unlock card and its sound as a real unlock shows them (screenshots, sound checks).
-                ["achievement-demo"] if std::env::var_os("POCKET_CORE_TEST").is_some() => {
+                CoreCommand::AchievementDemo => {
                     self.hud.achievement(1, "Demo: First steps into the dungeon", 10, "");
                 }
                 // "peek <hex offset>": one byte of the core's work RAM, printed.
-                ["peek", at] if std::env::var_os("POCKET_CORE_TEST").is_some() => {
-                    let at = usize::from_str_radix(at.trim_start_matches("0x"), 16).unwrap_or(0);
-                    println!("peek {at:#x} = {:?}", self.core.peek_ram(at));
-                }
-                ["axis", name, value] if std::env::var_os("POCKET_CORE_TEST").is_some() => {
-                    use pocket_ui::pad::Axis;
-                    let axis = match *name {
-                        "lx" => Some(Axis::LeftX),
-                        "ly" => Some(Axis::LeftY),
-                        "rx" => Some(Axis::RightX),
-                        "ry" => Some(Axis::RightY),
-                        _ => None,
-                    };
-                    if let (Some(axis), Ok(v)) = (axis, value.parse::<f32>()) {
-                        self.input.sticks(0).set(axis, v);
-                    }
-                }
+                CoreCommand::Peek(at) => println!("peek {at:#x} = {:?}", self.core.peek_ram(at)),
+                CoreCommand::Axis(axis, value) => self.input.sticks(0).set(axis, value),
                 // "opt <key> <value>": a core option changed in the pause menu's Emulator page.
-                ["opt", ..] => {
-                    if let Some((key, value)) = rest("opt ") {
-                        #[cfg(not(feature = "brick"))]
-                        self.core.set_option(key, value);
-                        // The Brick: one line per change, so its log says whether the core has the option and takes the value.
-                        #[cfg(feature = "brick")]
-                        {
-                            let took = self.core.set_option(key, value);
-                            println!("core option: {key} = {value} ({})", if took { "the core reads it on its next frame" } else { "not one of the core's values, or already so" });
-                        }
+                CoreCommand::Option(key, value) => {
+                    #[cfg(not(feature = "brick"))]
+                    self.core.set_option(key, value);
+                    #[cfg(feature = "brick")]
+                    {
+                        let took = self.core.set_option(key, value);
+                        println!("core option: {key} = {value} ({})", if took { "the core reads it on its next frame" } else { "not one of the core's values, or already so" });
                     }
                 }
                 // "ctl <button> <console button|none>", "ctl stick_dpad on|off" or "ctl hold_toggle <console button|none>": the Controls page.
-                ["ctl", ..] => {
-                    if let Some((key, value)) = rest("ctl ") {
-                        if self.mapping.set(key, value) {
-                            self.write_snapshot();
-                        }
+                CoreCommand::Control(key, value) => {
+                    if self.mapping.set(key, value) {
+                        self.write_snapshot();
                     }
                 }
                 // "set <key> <value>": a change in the pause menu, applied before it is saved.
-                ["set", key, value] => {
+                CoreCommand::Set(key, value) => {
                     // Kids Mode keeps the picture as large as fits (`VideoSettings::for_kids`); the menu can't change it.
-                    let kids_picture = matches!(*key, "scaling" | "frame") && pocket_ui::kids::Config::load(&data_dir()).on;
+                    let kids_picture = matches!(key, "scaling" | "frame") && pocket_ui::kids::Config::load(&data_dir()).on;
                     if !kids_picture && !self.video.set(key, value) {
                         self.ex.set(key, value);
                     }
                     #[cfg(feature = "brick")] if !kids_picture { self.brick_picture.changed(key, value); }
                 }
-                ["quit", ..] => {
-                    if let Some(exit) = Exit::from_command(&words) {
-                        return Some(exit);
-                    }
+                CoreCommand::Quit(exit) => {
+                    self.publish_status(Some(exit));
+                    return Some(exit);
                 }
                 _ => {}
             }
+            self.ex.hotkeys.lock().unwrap().suppress(self.paused || self.sleeping || self.dark);
+            self.publish_status(None);
         }
         if let Some((w, h, seq)) = preview {
             self.preview(w, h, seq);
@@ -1883,29 +1898,6 @@ impl App {
     }
 }
 
-/// How a quit ends the session (`App::handle_commands`).
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum Exit {
-    /// The exit save: battery save and auto-resume state (SELECT + START, a closed window, SIGTERM, `quit`).
-    Save,
-    /// `quit nosave`: the battery save only.
-    WithoutSaving,
-    /// `quit handoff` (`fast_switch::QUIT_FOR_SWITCH`): `Save`, then pocket-ui hears when it is done.
-    Handoff,
-}
-
-impl Exit {
-    /// `quit` and `quit nosave` (`control::QUIT_WITHOUT_SAVING`); anything else is no quit.
-    fn from_command(words: &[&str]) -> Option<Exit> {
-        match words {
-            ["quit"] => Some(Exit::Save),
-            ["quit", "nosave"] => Some(Exit::WithoutSaving),
-            ["quit", "handoff"] => Some(Exit::Handoff),
-            _ => None,
-        }
-    }
-}
-
 impl ApplicationHandler for App {
     fn resumed(&mut self, el: &ActiveEventLoop) { #[cfg(feature = "brick")] if self.soft.is_some() { return; }
         if self.gfx.is_none() {
@@ -1931,7 +1923,9 @@ impl ApplicationHandler for App {
         if let WindowEvent::CloseRequested = event {
             pocket_ui::fast_switch::mark("quit received (window closed)");
             PROGRESS.exiting();
+            self.publish_status(Some(Quit::Save));
             self.save_exit();
+            self.publish_status(Some(Quit::Save));
             pocket_ui::fast_switch::mark("exit save done");
             el.exit();
         }
@@ -1961,9 +1955,10 @@ impl ApplicationHandler for App {
         }
         // Commands save and load states, which takes seconds: no frame (`exit_guard::Limits`).
         PROGRESS.busy(true);
-        let exit = if self.should_exit() { Some(Exit::Save) } else { self.handle_commands() };
+        let exit = if self.should_exit() { Some(Quit::Save) } else { self.handle_commands() };
         if let Some(exit) = exit {
             PROGRESS.exiting();
+            self.publish_status(Some(exit));
             // Fade out now: the exit save stalls for a while (16-40 MB states of 3D cores), which
             // would otherwise cut the sound off mid-sample.
             if let Some(a) = &self.audio {
@@ -1972,14 +1967,14 @@ impl ApplicationHandler for App {
             pocket_ui::fast_switch::mark("quit received");
             match exit {
                 _ if self.bench.is_some() => {}
-                Exit::Save => self.save_exit(),
-                Exit::WithoutSaving => self.exit_without_saving(),
+                Quit::Save => { self.save_exit(); }
+                Quit::SkipResume => self.exit_without_saving(),
                 // The switcher: the same exit save; the hand-over line follows once the system is back (`main`).
-                Exit::Handoff => {
-                    self.save_exit();
-                    pocket_ui::fast_switch::request();
+                Quit::ForSwitch => {
+                    self.save_for_handoff();
                 }
             }
+            self.publish_status(Some(exit));
             pocket_ui::fast_switch::mark("exit save done");
             el.exit();
             return;
@@ -1987,7 +1982,12 @@ impl ApplicationHandler for App {
         // A frame, or the pause waiting for its next command: a Pause or Quit is due within `Limits::unanswered`.
         PROGRESS.busy(false);
         if !self.paused && !self.sleeping {
+            let before = self.status_snapshot(None);
             self.step();
+            // The hold or save health can change in a frame. Unchanged frames allocate and write nothing.
+            if before != self.status_snapshot(None) {
+                self.publish_status(None);
+            }
         }
         PROGRESS.checkpoint();
     }
@@ -2102,7 +2102,6 @@ fn another_pocket_core_runs() -> bool {
 
 /// Where the reason a game could not start is left for pocket-ui to show.
 const ERROR_FILE: &str = pocket_ui::notice::ERROR_FILE;
-const BIOS_DIR: &str = "/storage/roms/bios";
 
 /// What the process was doing while a core loaded a game that took long. A PlayStation disc on the Brick's card took 111 s to the first
 /// frame (2026-11-02) with the main thread in disk wait and nothing in the log to say where: from the third second on, every five
@@ -2271,11 +2270,11 @@ fn main() {
                 use std::io::BufRead;
                 let Ok(f) = std::fs::OpenOptions::new().read(true).write(true).open(fifo) else { return };
                 for line in std::io::BufReader::new(f).lines().map_while(Result::ok) {
-                    let words: Vec<_> = line.split_whitespace().collect();
-                    if words == ["pause"] || Exit::from_command(&words).is_some() {
+                    let command = CoreCommand::parse(&line, false);
+                    if command.urgent() {
                         PROGRESS.request();
                     }
-                    if Exit::from_command(&words).is_some() {
+                    if matches!(command, CoreCommand::Quit(_)) {
                         // The UI must give the independent guard time to keep the previous moment and exit.
                         pocket_ui::fast_switch::saving(true);
                     }
@@ -2291,14 +2290,15 @@ fn main() {
 
     pocket_ui::startup::mark("fifo");
     let host = hostsys::find(&system);
+    let bios_dir = hostsys::bios_dir();
     #[cfg(feature = "brick")]
     {
-        let missing_bios = host.and_then(|h| h.missing_bios(Path::new(BIOS_DIR)));
-        let missing_bios = pocket_ui::brick_profile::missing_bios(&system, Path::new(BIOS_DIR)).or(missing_bios);
+        let missing_bios = host.and_then(|h| h.missing_bios(&bios_dir));
+        let missing_bios = pocket_ui::brick_profile::missing_bios(&system, &bios_dir).or(missing_bios);
         if let Some(msg) = missing_bios { fail(&msg); }
     }
     #[cfg(not(feature = "brick"))]
-    if let Some(msg) = host.and_then(|h| h.missing_bios(Path::new(BIOS_DIR))) {
+    if let Some(msg) = host.and_then(|h| h.missing_bios(&bios_dir)) {
         fail(&msg);
     }
     let save_dir = rom.parent().map_or_else(|| PathBuf::from("/storage/roms/misc"), Path::to_path_buf); #[cfg(feature = "brick")] let save_dir = std::env::var_os("POCKET_CORE_SAVE_DIR").map(|d| PathBuf::from(d).join(&system)).inspect(|d| { let _ = std::fs::create_dir_all(d); }).unwrap_or(save_dir);
@@ -2316,7 +2316,7 @@ fn main() {
         std::env::set_var("GALLIUM_THREAD", "0");
     }
     // Dreamcast: one memory card per game, the same file the standalone Flycast uses (`vfs`).
-    let dc_cards = Path::new(BIOS_DIR).join("dc");
+    let dc_cards = bios_dir.join("dc");
     if core_options::core_id(core_so) == "flycast" && dc_cards.is_dir() {
         pocket_ui::vfs::share_flycast_vmus(&dc_cards);
     }
@@ -2333,22 +2333,22 @@ fn main() {
     // ScummVM's ROCKNIX list names the game folder rather than being a game (`hostsys::content_path`).
     let content = hostsys::content_path(&system, &rom);
     if core_options::core_id(core_so) == "scummvm" {
-        #[cfg(feature = "brick")] let card_prepared = pocket_ui::brick_profile::prepare_scummvm(Path::new(BIOS_DIR));
+        #[cfg(feature = "brick")] let card_prepared = pocket_ui::brick_profile::prepare_scummvm(&bios_dir);
         #[cfg(feature = "brick")]
-        if !card_prepared { hostsys::prepare_scummvm(Path::new(BIOS_DIR)); }
+        if !card_prepared { hostsys::prepare_scummvm(&bios_dir); }
         #[cfg(not(feature = "brick"))]
-        hostsys::prepare_scummvm(Path::new(BIOS_DIR));
+        hostsys::prepare_scummvm(&bios_dir);
     }
     // PPSSPP's atlas, VFPU tables and fonts live in <system dir>/PPSSPP; ROCKNIX ships them only for its standalone PPSSPP.
     if core_options::core_id(core_so) == "ppsspp" {
-        hostsys::prepare_ppsspp(Path::new(hostsys::PPSSPP_ASSETS_SRC), Path::new(BIOS_DIR));
+        hostsys::prepare_ppsspp(Path::new(hostsys::PPSSPP_ASSETS_SRC), &bios_dir);
     }
     let loaded = {
         let _loading = pocket_ui::startup::watch_load();
         // The Brick: what the load read from the card, every 5 s after the first 3 (a slow card or a stall shows here).
         #[cfg(feature = "brick")]
         let load_log = watch_load();
-        let loaded = Core::load(core_so, &content, Path::new(BIOS_DIR), &save_dir, &options);
+        let loaded = Core::load(core_so, &content, &bios_dir, &save_dir, &options);
         #[cfg(feature = "brick")]
         load_log.done();
         loaded
@@ -2463,6 +2463,10 @@ fn main() {
     let event_loop = EventLoop::new().expect("event loop");
     event_loop.set_control_flow(ControlFlow::Poll);
     let mut app = App {
+        // Host test cores isolate the new diagnostic file just like their existing command FIFO.
+        status: pocket_ui::core_status::Publisher::new(if std::env::var_os("POCKET_CORE_TEST").is_some() {
+            std::env::temp_dir().join("pocket-core.status")
+        } else { PathBuf::from(pocket_ui::core_status::FILE) }),
         core,
         window: None,
         gfx: None, #[cfg(feature = "brick")] soft: None, #[cfg(feature = "brick")] brick_gles: None, #[cfg(feature = "brick")] brick_picture: BrickPicture::default(),
@@ -2553,6 +2557,7 @@ fn main() {
     app.core.take_snapshot_dirty();
     // Multi-disc games: the discs for the pause menu's Disc row, known once the game is loaded (`publish_discs`).
     app.publish_discs();
+    app.publish_status(None);
     PROGRESS.checkpoint();
     pocket_ui::startup::mark("resume");
     STARTED.set(started).ok();
@@ -2646,12 +2651,12 @@ mod tests {
     #[test]
     fn quit_commands() {
         let words = |c: &'static str| c.split_whitespace().collect::<Vec<_>>();
-        assert_eq!(Exit::from_command(&words("quit")), Some(Exit::Save));
-        assert_eq!(Exit::from_command(&words(pocket_ui::control::QUIT_WITHOUT_SAVING)), Some(Exit::WithoutSaving));
+        assert_eq!(Quit::from_command(&words("quit")), Some(Quit::Save));
+        assert_eq!(Quit::from_command(&words(pocket_ui::control::QUIT_WITHOUT_SAVING)), Some(Quit::SkipResume));
         // A garbled line is no quit at all, least of all a saving one.
-        assert_eq!(Exit::from_command(&words("quit later")), None);
-        assert_eq!(Exit::from_command(&words("quitnosave")), None);
-        assert_eq!(Exit::from_command(&words(pocket_ui::fast_switch::QUIT_FOR_SWITCH)), Some(Exit::Handoff));
+        assert_eq!(Quit::from_command(&words("quit later")), None);
+        assert_eq!(Quit::from_command(&words("quitnosave")), None);
+        assert_eq!(Quit::from_command(&words(pocket_ui::fast_switch::QUIT_FOR_SWITCH)), Some(Quit::ForSwitch));
     }
 }
 
@@ -2807,3 +2812,11 @@ impl App {
 #[cfg(test)]
 #[path = "pocket_core/quit_regression.rs"]
 mod psp_quit_regression;
+
+#[cfg(test)]
+#[path = "pocket_core/save_safety.rs"]
+mod save_safety;
+
+#[cfg(test)]
+#[path = "pocket_core/core_contract.rs"]
+mod core_contract;

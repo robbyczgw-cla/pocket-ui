@@ -4,6 +4,9 @@
 //! and the text painter's record (`POCKETUI_TEXT_BOXES`, as tests/text_size.rs) must show nothing cut off or
 //! overlapping. Needs python3 for the made-up library and, on Linux without a compositor, scripts/wayland-stub.py.
 
+#[path = "common/executable.rs"]
+mod fixture_executable;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -59,8 +62,7 @@ fn shot_in(tmp: &Path, stub: Option<&Stub>, state: &str, size: &str, lang: &str,
     let bin = tmp.join("offline-bin");
     std::fs::create_dir_all(&bin).unwrap();
     let curl = bin.join("curl");
-    std::fs::write(&curl, "#!/bin/sh\nexit 7\n").unwrap();
-    std::fs::set_permissions(&curl, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    fixture_executable::publish(&curl, "#!/bin/sh\nexit 7\n").unwrap();
     let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
     cmd.args(["--snapshot", state, png.to_str().unwrap()])

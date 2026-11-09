@@ -80,6 +80,11 @@ fn scan(tree: &str) -> Result<ui::Library, String> {
     Ok(ui::library(document_library::scan(docs)))
 }
 fn picture(game: &Game, snaps: bool, download: bool) -> Option<pocket_ui::image::Image> {
+    for uri in if snaps { &game.pictures } else { &game.covers } {
+        if let Ok(path) = pocket_ui::platform::android::strings("readPicture", &[uri]) {
+            if let Some(image) = pocket_ui::image::load_png(std::path::Path::new(&path)) { return Some(image); }
+        }
+    }
     // Deterministic FNV key; provider identity remains stable when the display name changes.
     let hash = game
         .key
@@ -418,6 +423,7 @@ impl App {
                         log::info!("launch: {} frozen={frozen}", game.name);
                         let mut settings = serde_json::to_value(&self.ui.prefs).unwrap_or_default();
                         settings["frozen_shown"] = frozen.into();
+                        settings["cheat_text"] = game.cheats.clone().into();
                         if let Some(card) = reminder {
                             settings["reminder"] = serde_json::json!({"ago":card.ago,"played":card.played,"note":card.note});
                         }

@@ -1,13 +1,13 @@
 # What each platform has
 
-One table of what a player can use, taken from the code and the docs (0.3.1). "Not seen" means the code has it but nobody has
+One table of what a player can use, taken from the code and the docs (0.2.0). "Not seen" means the code has it but nobody has
 watched it on that platform's real device. ROCKNIX handhelds are the reference: every feature below was seen there, unless its row says otherwise.
 Android was seen on the emulator only; the Steam Deck on one SteamOS session over SSH (docs/STEAMDECK.md).
 
 | Feature | ROCKNIX handhelds | Android | Steam Deck |
 |---|---|---|---|
 | Insert animations (the console takes the game) | yes | yes, at the phone's pixels (emulator) | in the code (shared with the handhelds), not seen |
-| Continue (open cases: A goes straight back to the saved moment) | yes | yes (emulator) | no: the host owns the emulators and their states |
+| Continue (open cases: A goes straight back to the saved moment) | yes | yes (emulator) | yes for the games pocket-ui plays itself (their states live in its data folder), not seen; the big emulators keep their own saves and stand closed |
 | Kids mode | yes | no: not in scope, the Android app has no such mode | no: Steam's own button can't be closed, so the row and the profile are gone |
 | Game check | yes | yes (emulator); no "hide a twin" fix | in the code, not seen |
 | Second card (copying games without Wi-Fi) | yes, where the handheld has a slot; USB file transfer (MTP) is retired, see [DEVICES.md](DEVICES.md) | no | no |
@@ -17,7 +17,7 @@ Android was seen on the emulator only; the Steam Deck on one SteamOS session ove
 | Case stickers | yes, editable | yes (emulator), the five case stickers; no Curator stickers of your own | in the code, not seen |
 | Memory card (pause menu) | yes | yes (emulator) | in the code, not seen |
 | Game connections | yes | yes (emulator) | in the code, not seen |
-| Pause menu | yes | yes, touch and controller looks | yes; full for PCSX2, Continue and Quit over other emulator apps |
+| Pause menu | yes | yes, touch and controller looks | yes; full for PCSX2, Continue and Quit over other emulator apps; HOME is a back button (L5/R5, the shipped Steam Input layout), the Steam button stays Steam's |
 | Achievements | yes | no | in the code, not seen |
 | Screen frames | yes, all built-in frames | only the small Console and CRT TV surrounds | in the code, not seen |
 | Spanish | yes | in the code, not seen | in the code, not seen |

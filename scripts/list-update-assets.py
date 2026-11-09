@@ -16,7 +16,7 @@ with tarfile.open(sys.argv[1], 'r|*') as archive:
             raise ValueError('unsupported asset list')
         for asset in data['assets']:
             rel = asset['package']
-            for url in [rel['url']] + rel.get('mirrors', []):
+            for url in dict.fromkeys(rel.get('preferred_sources', []) + [rel['url']] + rel.get('mirrors', [])):
                 if not url.startswith(('https://', 'file://')) or any(c.isspace() for c in url):
                     raise ValueError('unsafe asset URL')
                 print('asset', rel['version'], rel['size'], rel['sha256'], url, sep='\t')

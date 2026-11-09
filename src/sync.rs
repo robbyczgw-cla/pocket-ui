@@ -1385,20 +1385,30 @@ pub fn release_leftover_holds() {
     if !holds_left(Path::new(HELD_PATH)) {
         return;
     }
-    std::thread::spawn(|| loop {
+    std::thread::spawn(|| recover_leftover_holds(|| {
         if !crate::standalone::emulator_running() {
             if let Ok(mut cfg) = Config::read() {
                 let mut api = CurlApi::new(&cfg);
                 if api.health() {
-                    if let Err(e) = apply_holds(&mut api, &mut cfg, Path::new(HELD_PATH)) {
-                        println!("sync: resuming folders left paused: {e}");
-                    }
-                    return;
+                    return Some(apply_holds(&mut api, &mut cfg, Path::new(HELD_PATH)));
                 }
             }
         }
-        std::thread::sleep(Duration::from_secs(5));
-    });
+        None
+    }, || std::thread::sleep(Duration::from_secs(5))));
+}
+
+// Keep the startup worker's retry rule separate from system discovery, so interruption and
+// retry tests can use an isolated service and a controlled wait without reading the device's /storage.
+fn recover_leftover_holds(mut attempt: impl FnMut() -> Option<Result<(), String>>, mut wait: impl FnMut()) {
+    loop {
+        match attempt() {
+            Some(Ok(())) => return,
+            Some(Err(e)) => println!("sync: resuming folders left paused: {e}"),
+            None => {}
+        }
+        wait();
+    }
 }
 
 #[cfg(test)]
@@ -2210,5 +2220,10 @@ mod tests {
         std::fs::write(dir.join(".stignore"), "mine\n").unwrap();
         write_saves_ignore(&dir).unwrap();
         assert_eq!(std::fs::read_to_string(dir.join(".stignore")).unwrap(), "mine\n");
+    }
+
+    mod ownership {
+        use super::*;
+        include!("sync_ownership_tests.rs");
     }
 }

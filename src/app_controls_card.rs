@@ -54,7 +54,7 @@ impl App {
         let core_names = CoreOptionsFile::read(&core_options::file_path(&self.data_dir, system), path).map(|f| f.controls.targets).unwrap_or_default();
         let hosted = self.resolve_runner(sys, Some(path), Path::new(super::host_bin()).exists()).runner.emulator == pocket_ui::emu_choice::POCKET_CORE;
         let shortcuts = hosted.then(|| Shortcuts::from_values(&settings.effective()));
-        let card = controls_card::build(&Input { system, system_name: &sys.fullname, mapping: &mapping, core_names: &core_names, shortcuts });
+        let card = controls_card::build(&Input { system, system_name: &sys.fullname, mapping: &mapping, core_names: &core_names, shortcuts, layout: pocket_ui::device::current().menu_layout(), deck: pocket_ui::device::current().model == Some(pocket_ui::device::Model::SteamDeck) });
         #[cfg(feature = "brick")]
         let card = self.brick_card_keys(card);
         Some(card)
@@ -65,7 +65,11 @@ impl App {
         (pocket_ui::hostsys::find(system).is_some() || controls_card::has_names(system)).then(|| CuratorRow {
             kind: RowKind::Controls,
             title: "Controls".into(),
-            line: "Which button of the Pocket does what".into(),
+            line: if pocket_ui::device::current().model == Some(pocket_ui::device::Model::SteamDeck) {
+                "Which button of the Deck does what".into()
+            } else {
+                "Which button of the Pocket does what".into()
+            },
         })
     }
 
@@ -262,7 +266,7 @@ impl App {
         let mapping = Mapping::from_values(&system, &settings.values);
         let core_names = CoreOptionsFile::read(&core_options::file_path(&self.data_dir, &system), &path).map(|f| f.controls.targets).unwrap_or_default();
         let shortcuts = Some(Shortcuts::from_values(&settings.effective()));
-        let card = controls_card::build(&Input { system: &system, system_name: &sys.fullname, mapping: &mapping, core_names: &core_names, shortcuts });
+        let card = controls_card::build(&Input { system: &system, system_name: &sys.fullname, mapping: &mapping, core_names: &core_names, shortcuts, layout: pocket_ui::device::current().menu_layout(), deck: pocket_ui::device::current().model == Some(pocket_ui::device::Model::SteamDeck) });
         #[cfg(feature = "brick")]
         let card = self.brick_card_keys(card);
         let launch = flags.contains(&"first").then(|| (system.clone(), name.clone(), path.clone()));

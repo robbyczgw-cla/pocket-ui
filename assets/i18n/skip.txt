@@ -512,6 +512,8 @@ cpu{s} at {s} of {s} MHz
 back from deep sleep
 @DEFAULT_SINK@
 a stick
+boolean true
+boolean false
 
 # src/standalone.rs
 Pad1
@@ -1414,3 +1416,59 @@ invalid BIOS data release
 # 0.3.1 release check: log/report and command-line texts, never painted
 TrimUI Smart Pro (NextUI)
 usage: pocket-fb --wayland <socket> --ipc <socket> [--fb /dev/fb0] [--mode 1024x768x32] [--no-vsync] [--bgr] [--gl] [--gl-trust] [--gl-window null]
+
+# src/app_where.rs, app_curator.rs, app_kids.rs, game_card.rs: stable page/painter
+# identifiers for @where, /tmp/pocket-ui.status and navigation tests; never painted.
+Stickers
+time warning
+ask a grown-up
+time up
+Starter
+Leds
+Controllers
+Web
+Gamelist
+Main
+Group { group: {s} }
+Standalone
+Games({s})
+Favorites
+Shelf({s})
+Sticker({s})
+Connection
+powering off
+runs on
+port performance
+save versions
+recent games (game)
+app starting
+port perf
+big pause
+Groups
+Manage
+
+# src/main.rs: wake-reason log; src/ui_status.rs: status serialization fixture.
+the command FIFO's wake
+settings:List Look
+
+# src/bin/pocket_core/core_contract.rs: FIFO decoder test commands, never painted.
+save 0
+save 9
+save invalid
+save 2 extra words
+load 2 extra words
+load auto extra
+slot 2 extra
+look 12 invalid 6500 extra
+look	999 -2 wrong
+set frame ambient extra
+set frame ambient
+quit later
+quit nosave extra
+quit handoff extra
+# src/android_02_tests.rs: provider paths and raw CHT fixture data, never UI text
+Game Boy Advance (GBA)/Imgs/Game (USA).jpg
+Game Boy Advance (GBA)/Game (Europe).cht
+cheat0_desc = "Wrong region"\ncheat0_code = "123"
+cheat0_desc = "Lives"\ncheat0_code = "010301C0"
+cheat0_desc = "Lives"\ncheat0_code = "010301C0"\ncheat1_desc = "Unsupported"\ncheat1_address = "12"\ncheat1_value = "3"\ncheat1_cheat_type = "1"

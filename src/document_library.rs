@@ -39,10 +39,17 @@ pub struct Game {
     pub missing: Vec<String>,
     /// The document's size (`Document::size`).
     pub size: i64,
+    /// Read-only provider pictures, best cover first. Never filesystem paths.
+    pub covers: Vec<String>,
+    pub pictures: Vec<String>,
+    /// A same-name .cht beside this game, read on the scan worker.
+    pub cheats: String,
 }
 
 /// Common ES-DE and Daijisho aliases. An ancestor system wins over a generic disc/archive extension.
 pub fn system(id: &str) -> Option<(&'static str, &'static str, &'static str, u32)> {
+    let normalized = id.to_ascii_lowercase();
+    let id = normalized.as_str();
     Some(match id {
         "gb" | "gameboy" => ("gb", "Game Boy", "retroarch:gambatte", 0x80a878),
         "gbc" | "gameboycolor" => ("gbc", "Game Boy Color", "retroarch:gambatte", 0x80a878),
@@ -72,7 +79,10 @@ pub fn system(id: &str) -> Option<(&'static str, &'static str, &'static str, u32
         "lnx" | "lynx" | "atarilynx" => ("atarilynx", "Atari Lynx", "retroarch:handy", 0xc97468),
         "a26" | "atari2600" => ("atari2600", "Atari 2600", "retroarch:stella", 0xc97468),
         "neogeo" | "arcade" | "fbneo" => ("neogeo", "Neo Geo / Arcade", "retroarch:mame", 0x80a878),
-        _ => return None,
+        _ => {
+            let id = crate::layouts::system_ids(id).into_iter().find(|alias| *alias != id && SYSTEM_IDS.contains(alias))?;
+            return system(id);
+        },
     })
 }
 /// The canonical id of every system above.
@@ -168,6 +178,7 @@ pub fn scan(documents: Vec<Document>) -> Vec<Game> {
             None => missing.entry(sheet).or_default().push(file),
         }
     }
+    let art = crate::document_art::Index::new(&documents);
     let mut seen = HashSet::new();
     let mut games = Vec::new();
     for d in documents {
@@ -187,9 +198,12 @@ pub fn scan(documents: Vec<Document>) -> Vec<Game> {
         games.push(Game {
             name,
             key,
-            uri: d.uri,
+            uri: d.uri.clone(),
             size: d.size,
             missing: missing.remove(&d.relative).unwrap_or_default(),
+            covers: art.pictures(&d, false),
+            pictures: art.pictures(&d, true),
+            cheats: art.cheats(&d),
             relative: d.relative,
             system,
             system_id,

@@ -639,8 +639,7 @@ impl PortTab {
     }
 }
 
-/// Where BIOS files go (see docs/user/getting-started.md).
-const BIOS_DIR: &str = "/storage/roms/bios";
+/// Where BIOS files go (see docs/user/getting-started.md): `crate::hostsys::bios_dir()` (`POCKETUI_BIOS` on the Deck).
 
 /// A system with games, for Settings > Look > Systems on the shelf.
 #[derive(Clone, Debug)]
@@ -1070,7 +1069,7 @@ impl Setup {
                 };
                 let line = text.fit(Face::Body, 24, &format!("{}, {count}", sys.folder), w);
                 text.draw(c, Face::Body, 24, x, top + 86, pal().dust, &line);
-                let (exts, bios) = systems_grid::details(sys, std::path::Path::new(BIOS_DIR));
+                let (exts, bios) = systems_grid::details(sys, &crate::hostsys::bios_dir());
                 text.draw(c, Face::Body, 24, x, top + 124, pal().dust, "Files");
                 let exts = if exts.is_empty() { "any".to_string() } else { exts };
                 let exts = text.fit(Face::Body, 24, &exts, w - label_w);
@@ -3065,7 +3064,7 @@ impl Setup {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
         match &self.step {
-            Step::Welcome => (0u8, crate::i18n::current()).hash(&mut h),
+            Step::Welcome => (0u8, crate::i18n::current(), self.welcome_row, self.kids_wanted, crate::type_scale::get()).hash(&mut h),
             Step::Look => (1u8, self.appearance, self.motion, self.look_row, self.animations_shown(), self.theme).hash(&mut h),
             Step::Play { sel } => (15u8, sel).hash(&mut h),
             Step::Cards(c) => (16u8, c.mark()).hash(&mut h),

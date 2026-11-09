@@ -31,15 +31,24 @@ case "${verb:-}" in
   poweroff)
     # The lights go out with the Brick (the driver keeps its last effect on while the board powers down otherwise).
     LA=${BRICK_LED_ANIM:-/sys/class/led_anim}
-    for z in l r lr m f1 f2; do echo 0 >"$LA/effect_$z" 2>/dev/null; done
+    zones="l r lr m f1 f2"
+    [ "${POCKETUI_DEVICE:-brick}" != brickpro ] || zones="f1 f2 m lr rear"
+    for z in $zones; do echo 0 >"$LA/effect_$z" 2>/dev/null; done
     echo 0 >"$LA/effect_enable" 2>/dev/null
     echo 0 >"$LA/max_scale" 2>/dev/null
     # and the driver's raw picture, which glows on past the effects (23 LEDs; 03.11.)
     echo 0 >"$LA/anim_frames_enable" 2>/dev/null
-    [ -e "$LA/frame_hex" ] && printf '%s' '000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 ' >"$LA/frame_hex" 2>/dev/null
+    [ "${POCKETUI_DEVICE:-brick}" = brick ] && [ -e "$LA/frame_hex" ] && printf '%s' '000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 ' >"$LA/frame_hex" 2>/dev/null
     sync; ${BRICK_POWEROFF:-poweroff} ;;
   reboot) sync; ${BRICK_REBOOT:-reboot} ;;
   suspend)
+    # Stock trimui_inputd parks its i2c-3 polling while this marker exists (see TRIMUI-BRICK-PRO.md).
+    # Never enter the kernel unless input has been paused. Always release it, including failed writes/signals.
+    INPUTD_FLAG=${BRICK_INPUTD_SUSPEND:-/tmp/system_suspend}
+    if ! : >"$INPUTD_FLAG"; then echo "suspend: cannot pause trimui_inputd" >&2; exit 1; fi
+    trap 'rm -f "$INPUTD_FLAG"' EXIT
+    trap 'exit 1' HUP INT TERM
+    sleep "${BRICK_INPUTD_DRAIN:-0.2}"
     # What the firmware's own key handler does (screen off, Bluetooth radio off, then "mem"), plus what the usual suspend scripts
     # found necessary: the Wi-Fi client is stopped before and started after, and a refused or too-short sleep is tried again.
     sync
@@ -51,14 +60,18 @@ case "${verb:-}" in
     wpa=${BRICK_WPA_INIT:-/etc/init.d/wpa_supplicant}
     [ -x "$wpa" ] && "$wpa" stop >/dev/null 2>&1
     tries=0
+    slept=0
     while [ $tries -lt 3 ]; do
       tries=$((tries + 1))
       t0=$(cut -d. -f1 "${BRICK_UPTIME:-/proc/uptime}" 2>/dev/null)
-      if echo mem >"$POWER_STATE" 2>/dev/null; then break; fi
+      if echo mem >"$POWER_STATE" 2>/dev/null; then slept=1; break; fi
       t1=$(cut -d. -f1 "${BRICK_UPTIME:-/proc/uptime}" 2>/dev/null)
-      [ $(( ${t1:-0} - ${t0:-0} )) -ge 5 ] && break        # it did sleep (the write reports an error on some wake-ups)
+      [ $(( ${t1:-0} - ${t0:-0} )) -ge 5 ] && { slept=1; break; }        # it did sleep (the write reports an error on some wake-ups)
       sleep "${BRICK_SUSPEND_RETRY:-3}"
     done
+    # Input must return before potentially slow network restarts, on success AND refusal.
+    rm -f "$INPUTD_FLAG"
+    trap - EXIT HUP INT TERM
     [ -x "$wpa" ] && "$wpa" start >/dev/null 2>&1
     # The udhcpc that ran through it must renew: the supplicant's restart takes the default route with it, and a udhcpc that just keeps
     # running never puts it back (seen on the real Brick, 03.11.: LAN fine, nothing outside it, Tailscale offline).
@@ -67,6 +80,8 @@ case "${verb:-}" in
       [ "$(cat "$r/type" 2>/dev/null)" = bluetooth ] && echo 1 >"$r/state" 2>/dev/null
     done
     [ -n "$was" ] && "$HW" bl-set "$was" 2>/dev/null
+    [ "$slept" = 1 ] || exit 1
+    exit 0
     ;;
   restart)
     # The only service pocket-ui restarts is network time (`sync_time`). There is no timesyncd here: one shot of

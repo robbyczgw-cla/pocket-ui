@@ -17,10 +17,11 @@
 #                   carried over; its signature is checked first
 #     --os-tar      a system update tar of our own image build, with --os-version (its version, YYYYMMDD)
 #     --base-url    where the files will be (default https://github.com/OWNER/NAME/releases/download/v<version>)
-#     --direct-app  the app on pocketui.xyz first, the same bytes at --base-url as its signed mirror (80 MB guard;
-#                   nothing deployed). The default unless --base-url is given: pocket-ui up to 0.2.x knows no mirrors
-#                   and downloads only `url`, so the app must not depend on GitHub's download host, which some
-#                   players' networks don't reach.
+#     --direct-app  keep identical app bytes on pocketui.xyz and --base-url (80 MB guard; nothing deployed).
+#                   Stable: website in legacy `url`, GitHub preferred by new clients and kept as mirror.
+#                   Brick: GitHub in `url`, website fallback; all public Brick clients know mirrors.
+#                   The default unless --base-url is given. Stable clients up to 0.2.5 know no mirrors
+#                   and download only `url`, so their source remains reachable without GitHub.
 #     --github-primary  the app only at --base-url (GitHub), for a test channel
 #     --allow-foreign-key  sign with a key pocket-ui does not have built in (tests); devices would refuse the result
 #
@@ -249,9 +250,15 @@ add app "$VERSION" "$GH/$APP"
 if [ "$DIRECT_APP" = 1 ]; then
   [ "$(size_of "$GH/$APP")" -le 80000000 ] || die "app exceeds the 80 MB direct-hosting budget"
   cp "$GH/$APP" "$CH/$APP"
-  "$TOOL" update "$KEY" "$INDEX" app "$VERSION" "$GH/$APP" "$SITE/updates/$CHANNEL/$APP" "$NOTES" >/dev/null
-  "$TOOL" mirror "$KEY" "$INDEX" app "$BASE_URL/$APP" >/dev/null
-  printf '  %-12s %-10s %s (first; the line above is its mirror)\n' app "$VERSION" "$SITE/updates/$CHANNEL/$APP"
+  if [ "$CHANNEL" = brick ]; then
+    "$TOOL" mirror "$KEY" "$INDEX" app "$SITE/updates/$CHANNEL/$APP" >/dev/null
+    printf '  %-12s %-10s %s (website fallback)\n' app "$VERSION" "$SITE/updates/$CHANNEL/$APP"
+  else
+    "$TOOL" update "$KEY" "$INDEX" app "$VERSION" "$GH/$APP" "$SITE/updates/$CHANNEL/$APP" "$NOTES" >/dev/null
+    "$TOOL" mirror "$KEY" "$INDEX" app "$BASE_URL/$APP" >/dev/null
+    "$TOOL" prefer "$KEY" "$INDEX" app "$BASE_URL/$APP" >/dev/null
+    printf '  %-12s %-10s %s (legacy primary; new clients prefer GitHub)\n' app "$VERSION" "$SITE/updates/$CHANNEL/$APP"
+  fi
 fi
 if [ -n "$OS_TAR" ]; then
   [ -f "$OS_TAR" ] || die "no system tar $OS_TAR"

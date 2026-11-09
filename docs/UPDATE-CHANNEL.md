@@ -6,7 +6,13 @@ rolls back is in [UPDATES.md](UPDATES.md); this page is about where the files li
 ## Bounded downloads and alternate sources (0.3)
 
 A release may add `"mirrors": ["https://github.com/owner/repo/releases/download/vX/file"]`.
-`url` remains the first source, so older clients still work; all sources serve **identical bytes**.
+Without `preferred_sources`, `url` is the first source. From 0.3.2, an optional signed
+`"preferred_sources": ["https://github.com/owner/repo/releases/download/vX/file"]`
+is tried before `url`, then `mirrors`. Duplicate resolved addresses are tried once; at most four distinct
+sources are allowed. Every source serves **identical bytes**, with the same mandatory size and SHA-256 check.
+The stable channel keeps the website in `url`: clients 0.1.0 through 0.2.5 ignore both optional source fields,
+and 0.3.0 through 0.3.1 ignore `preferred_sources`. They can still install the normal transition update.
+New clients prefer GitHub and fall back to that website copy. A changed preference requires a new signature.
 The complete list of sources is signed with the existing Ed25519 key. Size and SHA-256 checks
 apply equally to every source. HTTPS and HTTPS-only redirects remain enforced (`file://` for offline tests).
 A changed mirror list without a fresh signature is refused.
@@ -41,6 +47,7 @@ their numbers only: `0.3.0-rc1` would count as newer than `0.3.0`). Only `--chan
 four numeric groups, such as `0.3.0.1`: this hotfix updates `0.3.0` and is superseded by `0.3.1`.
 The ROCKNIX stable and beta channels still require three groups. It publishes nothing.
 `store-tool mirror KEY update.json app URL [URL] [URL]` signs alternate sources;
+`store-tool prefer KEY update.json app URL [URL] [URL]` signs preferred sources for new clients;
 `store-tool list` and `release-channel.sh --check` check every source, not only the primary.
 Card images, source archives and installers can stay on the release. Check the complete
 website deployment size and remaining monthly transfer before requesting a public deploy.
@@ -84,6 +91,10 @@ Why the split:
   it (below).
 - **Neither host is trusted.** The list is signed and every file is checked against its sha256, so a changed file or
   list on either host is refused. What the hosts have to provide is HTTPS, anonymous reads and stable URLs.
+
+The stable release tooling emits the signed GitHub preference by default while retaining the website
+copy and legacy `url`. `--github-primary` remains an explicit test-channel option with no website copy.
+Release tooling must use a rebuilt `store-tool` that supports `prefer`.
 
 ## The Brick card
 
@@ -343,6 +354,12 @@ machine), a device fetching from the public channel.
 - A download page on the website that reads `sd_image` and `install_zip` from the list.
 
 ## Small standalone-card updates (public Brick channel)
+
+All public Brick clients support `mirrors`. New Brick app and component packages use GitHub as `url`
+and pocketui.xyz as the signed fallback. Keep both copies. Package hashes and names remain content-based;
+releases retain old GitHub parts tags for unchanged bytes. Existing 0.3.1 app archives keep their embedded
+package source order and hashes; changing the outer app URL does not repack that archive.
+
 
 The first public card must be rebuilt with `update/brick_assets.rs`. `brick-publish.sh --public`
 refuses a UI binary without the updater's work-file names `.asset-moves` and `.restore-assets` (the manifest's own name is not

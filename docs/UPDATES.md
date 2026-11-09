@@ -18,7 +18,13 @@ device test uses). Only `https://` and `file://` are fetched, and a redirect is 
 ## Bounded downloads and alternate sources (0.3)
 
 A release may add `"mirrors": ["https://github.com/owner/repo/releases/download/vX/file"]`.
-`url` remains the first source, so older clients still work; all sources serve **identical bytes**.
+Without `preferred_sources`, `url` is the first source. From 0.3.2, an optional signed
+`"preferred_sources": ["https://github.com/owner/repo/releases/download/vX/file"]`
+is tried before `url`, then `mirrors`. Duplicate resolved addresses are tried once; at most four distinct
+sources are allowed. Every source serves **identical bytes**, with the same mandatory size and SHA-256 check.
+The stable channel keeps the website in `url`: clients 0.1.0 through 0.2.5 ignore both optional source fields,
+and 0.3.0 through 0.3.1 ignore `preferred_sources`. They can still install the normal transition update.
+New clients prefer GitHub and fall back to that website copy. A changed preference requires a new signature.
 The complete list of sources is signed with the existing Ed25519 key. Size and SHA-256 checks
 apply equally to every source. HTTPS and HTTPS-only redirects remain enforced (`file://` for offline tests).
 A changed mirror list without a fresh signature is refused.
@@ -47,6 +53,7 @@ UI log without URLs or credentials. The progress counter restarts on a change of
 under `/updates/<channel>/`, with GitHub as the signed fallback. It refuses an app over
 80,000,000 bytes to leave margin below the Hobby upload limit. It publishes nothing.
 `store-tool mirror KEY update.json app URL [URL] [URL]` signs alternate sources;
+`store-tool prefer KEY update.json app URL [URL] [URL]` signs preferred sources for new clients;
 `store-tool list` and `release-channel.sh --check` check every source, not only the primary.
 Card images, source archives and installers can stay on the release. Check the complete
 website deployment size and remaining monthly transfer before requesting a public deploy.
@@ -62,7 +69,36 @@ shown. Next look `EVERY` (24 h) after a look that found nothing or said its hint
 Never during a game, never in Kids Mode, never on a host-owned device (Steam Deck) or with `POCKETUI_MOCK`, and only
 in a release build (`update::release_build`: the release scripts set `POCKETUI_VERSION`; a main or branch build carries
 Cargo.toml's older version and would announce the release over itself, `update_hint::looks`);
-The switch Settings → System → Updates → "Check for updates automatically" (On by default) is `{"off": true}` in the file: Off makes no request, says nothing and forgets what was found; the page's first-open check is skipped too ("Check again" still works by hand). A known newer version puts an amber dot (`App::update_dot`) on System and on its Updates row. On the page "Install pocket-ui X" asks first ("Install now" / "Later", B = Later; `Updates::confirm`); under 20 % and off the charger the line under it says to plug in (`update_hint::battery_warning`). Nothing installs without that second press. Only `app`: the system image and the Store are not announced from here.
+The switch Settings → System → Updates → "Check for updates automatically" (On by default) is `{"off": true}` in the file: Off makes no request, says nothing and forgets what was found; the page's first-open check is skipped too ("Check again" still works by hand). A known newer version puts an amber dot (`App::update_dot`) on System and on its Updates row. On the page "Install pocket-ui X" asks first ("Install now" / "Later", B = Later; `UpdatePhase::Confirming`); under 20 % and off the charger the line under it says to plug in (`update_hint::battery_warning`). Nothing installs without that second press. Only `app`: the system image and the Store are not announced from here.
+
+## Observing a job without changing it
+
+The Updates page keeps one process-local `UpdatePhase`: idle, asking for confirmation, running a typed task, or a
+finished report. A running check has no cancellation handle; an app/system job owns its handle and start time.
+`src/update/runtime.rs` names worker phases around the existing effects. The cancel flag remains independent of
+whether the next existing check can still honor it. In particular, a valid app/OS download has no cancellation check
+in the commit sequence; Brick checks through staging, before moving reused assets. A late request can finish installing.
+No new checks, durable states, or changes to sync/rename order are introduced by these observations.
+
+The quiet hint also has one in-memory phase: stopped (with reason and any retained candidate), waiting (deadline and
+candidate), or checking (with the schedule to resume). Switching automatic checks off during a request still ignores its
+answer; toggling back on never starts a second request. Kids Mode's existing stopped schedule remains stopped until
+automatic checks are toggled or the app restarts. `update-hint.json` keeps its existing `said`/`off` format.
+
+`src/app_update_status.rs` appends update fields to the UI's single `/tmp/pocket-ui.status` projection
+([schema](DEVICE-TESTS.md#where-the-ui-is-tmppocket-uistatus)): job identity, typed phase, current-file byte scope,
+cancellation boundary and request, notice suppression, and pending/confirmed/stable evidence. It reads cached
+observations only. `src/update/observation.rs` inspects existing markers on a worker every five seconds and after a job
+finishes, waking the loop only when evidence changes. It never writes, confirms, restores, or repairs a marker.
+Inspection may overlap installation, so its recovery classification describes a sampled layout, not an instruction
+to recover. Unknown evidence stays explicit. No URLs, filesystem paths, translated messages or errors enter the line.
+The existing tmpfs writer replaces the file atomically only on change and never fsyncs it.
+
+Characterisation tests pin cancellation progress/sleep timing, manual confirmation and notice consumption, a real
+install whose late cancellation is ignored, and the original off-state scheduling. Runtime tests cover observer lock
+release, current-file resets and cancellation boundaries; inspection fixtures distinguish marker ownership, retained
+confirmation markers, exact-release versus version-level known-good evidence and interrupted Brick asset moves.
+The existing SIGKILL/C8 and Brick boot fixtures remain the durability checks. These observations do not replace them.
 
 ## App: live, with automatic way back
 

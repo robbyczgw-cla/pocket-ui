@@ -36,7 +36,26 @@ Hardware facts below name their source. Volume mixer ranges were read on the rea
 
 LED tests are light: not while the owner sleeps.
 
+## F1/F2 assignment scope
+
+F1/F2 select global system shortcuts in **Settings > Sound & feel > Lights & buttons**, not console buttons.
+`brick-keys.json` is loaded by pocket-core when a game starts; changed save/load/screenshot actions apply on the next launch.
+Nothing disables the shortcut without passing the key to the core. `controls::Mapping` and controller layouts cover the
+16 RetroPad buttons only. mGBA and every other hosted core have the same boundary. The Controls page explains it;
+Controller setup receives F1/F2 before merging input and ends capture with that explanation instead of silently waiting
+until timeout. The Smart Pro keeps L3/R3 and has no F-key guidance.
+
 ## Tests (host)
+
+- `cargo test --features brick --lib the_saved_slider_choice_reaches_the_card_watcher`: saves Nothing through the Settings
+  writer and boots a fake card under dash and BusyBox ash. The watcher must read that choice, prefer it over the legacy file,
+  migrate a legacy-only choice, and use the mute default when neither file exists. The same launcher probes run separately with
+  `BRICK_SLIDER_TESTS_ONLY=1 bash scripts/test-brick-card.sh`. The regression is mandatory in the merge gate's Brick tier.
+- `cargo test --features brick --test brick_settings_walk fkeys`: real descriptor identity and evdev 317/318 through
+  decoder and capture; unchanged controller layout, explanatory text in English/German/Spanish at Normal/Large text,
+  and the same assignment scope on Controls and Lights & buttons. The capture regression fails before the fix.
+- `cargo test --features brick --lib hotkeys`: includes fresh F1/F2 actions after pause/sleep/dark suppression, with no
+  delayed or repeated action from a suspended press.
 
 - `cargo test --features brick --lib brick_hw leds hotkeys rumble`: the motor on a fake tree (on, off, drop, voltage range, no pin), the LED writes on a fake `led_anim` (static, breath, off, a missing zone file, no driver), the battery look (charging, full, low, at the limit, no reading), the cover colour made calm, F-key choices (default, saved, unknown value, junk file), F1/F2 in `Hotkeys` (press edge, Shortcuts and Kids Mode off).
 - `scripts/test-brick-hw.sh`: the real `brick-hw` C helper against a fake sysfs: `led-set/-off`, `motor-pulse/-info`, `slider-get/-watch` (both polarities, one call per change), `volume mute/unmute`.
@@ -44,6 +63,12 @@ LED tests are light: not while the owner sleeps.
 - Default build unchanged: see the commit message for the byte comparison.
 
 ## Volume curve and mute
+
+The Settings writer, `volume restore`, and `brick-hw slider-watch` share `storage/.config/pocket-ui/brick-slider`.
+`start.sh` exports `BRICK_SLIDER_CFG` once from `$STATE`, before restoring volume, and the watcher inherits it.
+An older top-level `pocket-ui/brick-slider` is copied into Settings only if no Settings file exists; the older file is
+kept for rollback. An existing Settings choice wins. This repairs the launcher path mismatch where Does nothing was
+saved correctly but never reached the volume helper or watcher.
 
 The card's `volume`, `pactl` and `brick-volume-profile` share curve 3. Below 50%, a 5% key
 step is one or two codec attenuation ticks (1.16 or 2.32 dB); from 50% upward it remains two

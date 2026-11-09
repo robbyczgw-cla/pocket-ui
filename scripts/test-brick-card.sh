@@ -13,6 +13,8 @@ ok() { echo "ok   $*"; }
 bad() { echo "FAIL $*"; fails=$((fails + 1)); }
 check() { if eval "$2"; then ok "$1"; else bad "$1: $2"; fi; }
 
+if python3 "$ROOT/scripts/test-brickpro.py"; then ok "Brick Pro identity and inputd suspend handshake"; else bad "Brick Pro regression tests"; fi
+
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/brick-card-test.XXXXXX"); trap 'rm -rf "$WORK"' EXIT
 
 # Exercise power loss with tiny program folders: no daemons, hardware or sleeps.
@@ -153,7 +155,7 @@ asset_recovery_tests() {
     check 'legacy copy-based update still rolls back and keeps the original data' 'rollback_done'
   done
 }
-if [ "${BRICK_LICENCE_TESTS_ONLY:-0}" != 1 ]; then asset_recovery_tests; fi
+if [ "${BRICK_LICENCE_TESTS_ONLY:-0}" != 1 ] && [ "${BRICK_SLIDER_TESTS_ONLY:-0}" != 1 ]; then asset_recovery_tests; fi
 if [ "${BRICK_BOOT_TESTS_ONLY:-0}" = 1 ]; then
   if [ "$fails" = 0 ]; then echo 'test-brick-card recovery: all passed'; else echo "test-brick-card recovery: $fails FAILED"; exit 1; fi
   exit 0
@@ -198,6 +200,9 @@ X
   cat >"$p/bin/brick-hw" <<'X'
 #!/bin/sh
 echo "brick-hw $*" >>"$BRICK_TEST_LOG"
+if [ "$1" = slider-watch ] && [ "${BRICK_SLIDER_TESTS_ONLY:-0}" = 1 ]; then
+  echo "slider-config=$BRICK_SLIDER_CFG choice=$(cat "$BRICK_SLIDER_CFG" 2>/dev/null || echo missing)" >>"$BRICK_TEST_LOG"
+fi
 [ "$1" = watch ] && exec sleep 600
 exit 0
 X
@@ -217,7 +222,7 @@ run_updater() { # shell card seconds -> exit code; the environment moves every p
   BRICK_TEST_LOG=$WORK/log BRICK_CARD=$c BRICK_FB=$WORK/fb BRICK_FBSYS=$WORK/fbsys BRICK_RUN=$WORK/run BRICK_FIRMWARE=$WORK/fw BRICK_STORAGE=$WORK/storage \
   BRICK_BATTERY=$WORK/bat BRICK_RFKILL=$WORK/rfk BRICK_NO_MOUNT=1 BRICK_NO_POWEROFF=1 BRICK_SHOW_FOR=${SHOW_FOR_TEST:-1} BRICK_FB_BYTES=64 BRICK_FB_MODE=8x2x32 \
   BRICK_FW_ZONEINFO=$WORK/zoneinfo BRICK_FW_LOCALTIME=$WORK/fw-localtime BRICK_NTPD=$WORK/no-ntpd BRICK_NTP_DELAY=0 \
-  BRICK_MODEL_FILE=$WORK/etc-model BRICK_DT=$WORK/dt BRICK_CPUINFO=$WORK/cpuinfo \
+  BRICK_MODEL_FILE=$WORK/etc-model BRICK_DT=$WORK/dt BRICK_CPUINFO=$WORK/cpuinfo BRICK_I2C3=$WORK/i2c-3 \
   BRICK_AMIXER=$WORK/amixer BRICK_SPEAKER=$WORK/mute BRICK_PRINTK=$WORK/printk BRICK_PIDOF=${BRICK_PIDOF:-$WORK/no-pidof} BRICK_KILLALL=${BRICK_KILLALL:-true} \
   setsid timeout "$limit" $sh "$c/${ENTRY:-.tmp_update/updater}" >"$WORK/out" 2>&1 &
   pid=$!; wait "$pid"; rc=$?
@@ -232,6 +237,41 @@ printf '#!/bin/sh\nexit 1\n' >"$WORK/no-pidof"; chmod +x "$WORK/no-pidof"
 mkdir -p "$WORK/zoneinfo/Europe"; : >"$WORK/zoneinfo/Europe/London"; : >"$WORK/zoneinfo/UTC"
 ln -s /usr/share/zoneinfo/Europe/London "$WORK/fw-tmp-localtime"; ln -s "$WORK/fw-tmp-localtime" "$WORK/fw-localtime"
 printf '#!/bin/sh\nexit 0\n' >"$WORK/amixer"; chmod +x "$WORK/amixer"
+
+if [ "${BRICK_SLIDER_TESTS_ONLY:-0}" = 1 ]; then
+  # The Rust regression supplies the file written by Slider::Nothing.save (the Settings page's real writer).
+  # A standalone shell run uses the same saved choice, without requiring a host Rust binary.
+  for SH in dash "busybox ash"; do
+    for saved in current legacy default; do
+      C=$WORK/slider-card; make_card "$C"
+      cfg=$C/pocket-ui/storage/.config/pocket-ui/brick-slider
+      mkdir -p "$(dirname "$cfg")"
+      case $saved in
+        current)
+          if [ -n "${BRICK_SLIDER_TEST_CHOICE:-}" ]; then cp "$BRICK_SLIDER_TEST_CHOICE" "$cfg"; else echo nothing >"$cfg"; fi
+          echo mute >"$C/pocket-ui/brick-slider" ;;
+        legacy) echo nothing >"$C/pocket-ui/brick-slider" ;;
+      esac
+      fake_pocket_ui "$C" 'sleep 30'
+      rc=$(run_updater "$SH" "$C" 4)
+      check "slider $saved under $SH: launcher reaches the watcher" '[ "$rc" = 124 ] && grep -q "brick-hw slider-watch" "$WORK/log"'
+      if [ "$saved" = default ]; then
+        check "slider $saved under $SH: watcher uses the Settings path, missing means mute" \
+          'grep -Fxq "slider-config=$cfg choice=missing" "$WORK/log"'
+      else
+        check "slider $saved under $SH: Nothing reaches the watcher through the Settings path" \
+          'grep -Fxq "slider-config=$cfg choice=nothing" "$WORK/log" && grep -qx nothing "$cfg"'
+        check "slider $saved under $SH: volume restore honors Nothing before reading the pin" \
+          '! grep -q "^brick-hw slider-get$" "$WORK/log"'
+        if [ "$saved" = legacy ]; then
+          check "slider legacy under $SH: old choice survives migration" 'grep -qx nothing "$C/pocket-ui/brick-slider"'
+        fi
+      fi
+    done
+  done
+  [ "$fails" = 0 ] || exit 1
+  echo 'test-brick-card slider: all passed'; exit 0
+fi
 
 # The About folder already exists on a card updated from a version without bundled cheats.
 # Exercise the real starter in both supported shells, including a second notice update.
@@ -348,6 +388,13 @@ for SH in dash "busybox ash"; do
   rc=$(BRICK_FAST_END=1 run_updater "$SHBIN" "$C" 5)
   check "anything else stays a Brick" "grep -q '^POCKETUI_DEVICE=brick' $WORK/log"
   rm -f "$WORK/fw/bin/MainUI"
+
+  # Brick Pro shares the Brick's screen but must get sticks, separate F keys and no slider pin.
+  printf 'xx Trimui Brick Pro xx' >"$WORK/fw/bin/MainUI"
+  echo 1024,16384 >"$WORK/fbsys/virtual_size"
+  rc=$(BRICK_FAST_END=1 run_updater "$SHBIN" "$C" 5)
+  check "Brick Pro: own profile despite 1024-wide screen, no slider read or follower" "grep -q '^POCKETUI_DEVICE=brickpro' $WORK/log && grep -q '^BRICK_NO_SLIDER=1' $WORK/log && ! grep -q 'brick-hw slider-watch' $WORK/log"
+  rm -f "$WORK/fw/bin/MainUI" "$WORK/fbsys/virtual_size"
 
   # 5v. A Smart Pro on firmware 1.0.3 or older (glibc 2.29): nothing of ours can start; the card says why in a file and stops.
   make_card "$C"; fake_pocket_ui "$C" 'echo "ui start" >>"$BRICK_TEST_LOG"; sleep 2'
@@ -564,7 +611,8 @@ for SH in dash "busybox ash"; do
   # this card, so 1 comes back by itself, as for one that crashed before its picture. Not the failure picture, not a card to repair.
   make_card "$C"; mkdir -p "$C/pocket-ui/storage/pocket-ui"
   stage_v2 "$C" 'echo "v2 runs" >>"$BRICK_TEST_LOG"; rm -f $BRICK_DATA/storage/pocket-ui/update-pending; exit 139'; fake_pocket_ui "$C" "$INSTALL_V2"
-  rc=$(BRICK_FAST_END=1 run_updater "$SH" "$C" 20)
+  # Use the real quick-end window: a one-second override resets the counter when an instant exit crosses a clock tick.
+  rc=$(BRICK_FAST_END=20 run_updater "$SH" "$C" 20)
   check "update crashing after its picture: 1 comes back by itself" "[ \"\$(cat $C/pocket-ui/app/RELEASE)\" = 1 ] && grep -q '^v1 back' $WORK/log && [ \"\$(cat $C/pocket-ui/storage/pocket-ui/rolled-back)\" = 2 ]"
   check "update crashing after its picture: three quick ends (the first one is the GPU's way back), no failure picture" "[ \"\$(grep -c '^v2 runs' $WORK/log)\" = 3 ] && ! grep -q 'picture .*/msg/crashed.png' $WORK/log && grep -q 'never ran 120 s on this card' $C/pocket-ui/logs/boot.log"
   check "update crashing after its picture: 2 is kept aside, update-pending is gone" "[ \"\$(cat $C/pocket-ui/app.failed/RELEASE)\" = 2 ] && [ ! -e $C/pocket-ui/storage/pocket-ui/update-pending ]"
@@ -638,7 +686,7 @@ if [ -n "$ST" ]; then
   printf '.asset-moves .restore-assets' >>"$PB/app/bin/pocket-ui"  # as a real optimized build: no 'asset-packages.json' text in it
   mkdir -p "$PB/app/cores"; printf core >"$PB/app/cores/test_libretro.so"
   check "public: the list names the GitHub release's tarball and the card zip, signed, and the tarball is the program folder" "ppub --zip $PB/card.zip --notes 'first public' >$PB/out 2>&1 && \"$ST\" verify $PO/updates/brick/update.json $PB/key >/dev/null && \"$ST\" list $PO/updates/brick/update.json | awk -F'\\t' '\$1==\"app\"' | grep -q \"0.2.1	\$(wc -c <$PO/release/pocket-ui-brick-0.2.1.tar.gz)	\$(sha256sum $PO/release/pocket-ui-brick-0.2.1.tar.gz | cut -d' ' -f1)	https://github.com/owner/pocket-ui/releases/download/v0.2.1/pocket-ui-brick-0.2.1.tar.gz\" && \"$ST\" list $PO/updates/brick/update.json | grep -q 'install_zip.*releases/download/v0.2.1/card.zip' && tar -tzf $PO/release/pocket-ui-brick-0.2.1.tar.gz | grep -qx 'RELEASE' && [ -s $PO/release/card.zip ] && grep -q 'nothing uploaded' $PB/out"
-  check "public: website first, GitHub fallback, and core packages kept outside the regular app" "\"$ST\" list $PO/updates/brick/update.json | grep -q 'https://pocketui.xyz/updates/brick/pocket-ui-brick-0.2.1.tar.gz' && tar -xOf $PO/release/pocket-ui-brick-0.2.1.tar.gz asset-packages.json | grep -q 'cores/test_libretro.so' && ! tar -tzf $PO/release/pocket-ui-brick-0.2.1.tar.gz | grep -q '^cores/' && [ -n \"\$(ls $PO/updates/brick/assets/*.tar.gz)\" ]"
+  check "public: GitHub first, website fallback, and core packages kept outside the regular app" "python3 $ROOT/scripts/check-channel-sources.py brick $PO/updates/brick/update.json owner/pocket-ui && \"$ST\" list $PO/updates/brick/update.json | grep -q 'https://pocketui.xyz/updates/brick/pocket-ui-brick-0.2.1.tar.gz' && tar -xOf $PO/release/pocket-ui-brick-0.2.1.tar.gz asset-packages.json | grep -q 'cores/test_libretro.so' && ! tar -tzf $PO/release/pocket-ui-brick-0.2.1.tar.gz | grep -q '^cores/' && [ -n \"\$(ls $PO/updates/brick/assets/*.tar.gz)\" ]"
   check "public: nothing goes into the private channel" "! \"$ST\" list $CH/update.json | grep -q '0.2.1'"
   echo https://beta.example/brick-updates/beta/update.json >"$PB/app/update-url"
   check "public: a build that asks a private channel (app/update-url) is refused" "! ppub >$PB/err 2>&1 && grep -q 'must have none' $PB/err"
@@ -876,7 +924,7 @@ sh -c "trap 'echo usr1 >>$N/got' USR1; while :; do sleep 1; done" & UD2=$!
 sleep 1
 printf '#!/bin/sh\necho %s\n' "$UD2" >"$N/pidof2"; printf '#!/bin/sh\necho "wpa $1" >>%s/calls\n' "$N" >"$N/wpa"; printf '#!/bin/sh\ncase "$1" in bl-get) echo 100;; esac\n' >"$N/hw"
 chmod +x "$N/pidof2" "$N/wpa" "$N/hw"; : >"$N/state"
-check "after a suspend the supplicant is started again and the running udhcpc renews its lease" "BRICK_PIDOF=$N/pidof2 BRICK_WPA_INIT=$N/wpa BRICK_HW=$N/hw BRICK_POWER_STATE=$N/state BRICK_RFKILL=$N/no-rfkill $HW/systemctl suspend; sleep 2; grep -q 'wpa stop' $N/calls && grep -q 'wpa start' $N/calls && grep -q mem $N/state && [ -s $N/got ]"
+check "after a suspend the supplicant is started again and the running udhcpc renews its lease" "BRICK_PIDOF=$N/pidof2 BRICK_WPA_INIT=$N/wpa BRICK_HW=$N/hw BRICK_POWER_STATE=$N/state BRICK_INPUTD_SUSPEND=$N/system_suspend BRICK_RFKILL=$N/no-rfkill $HW/systemctl suspend; sleep 2; grep -q 'wpa stop' $N/calls && grep -q 'wpa start' $N/calls && grep -q mem $N/state && [ -s $N/got ]"
 : >"$N/got"
 check "wifictl enable renews a running udhcpc as well" "BRICK_PIDOF=$N/pidof2 BRICK_WPA_INIT=$N/wpa BRICK_IFCONFIG=true BRICK_RFKILL=$N/no-rfkill BRICK_STATE=$N $HW/wifictl enable; sleep 2; [ -s $N/got ]"
 kill $UD2 2>/dev/null; wait $UD2 2>/dev/null

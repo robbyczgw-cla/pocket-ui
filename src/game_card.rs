@@ -832,22 +832,26 @@ impl Card {
         let tx = x + STRIPE + 36;
         // Keep the paper label's cover, metadata and foot fixed while the same main/subtitle
         // rule used on the shelf fits up to three lines into the existing heading band.
-        let (size, base, old_lines) = if text.width(Face::Title, 67, &d.title) <= text_w {
+        let (size, base, old_lines) = text.literal(|text| if text.width(Face::Title, 67, &d.title) <= text_w {
             (67, y + 104, 1)
         } else {
             (50, y + 80, text.wrap(Face::Title, 50, &d.title, text_w).len().clamp(1, 2))
-        };
+        });
         let meta_y = base + type_scale::line(50, 6) * (old_lines as i32 - 1) + 50 + type_scale::grow(28);
         let title_top = base - type_scale::px(size) as i32;
         let room = meta_y - type_scale::px(28) as i32 - 12 - title_top;
-        let lines = crate::title_block::layout_in(text, Face::Title, size, &d.title, text_w, room);
+        let lines = crate::title_block::name_layout_in(text, Face::Title, size, &d.title, text_w, room);
         let first = title_top + type_scale::px(lines.first().map_or(size, |l| l.px)) as i32;
         crate::title_block::paint(text, c, Face::Title, &lines, tx, first, pal().ink, pal().label_dust, false);
         let mut meta = vec![d.system.clone()];
         meta.extend(d.year.map(|y| y.to_string()));
-        meta.extend(d.players.clone());
-        let meta = text.fit(Face::Body, 28, &meta.join(" · "), text_w);
-        text.draw(c, Face::Body, 28, tx, meta_y, pal().label_dust, &meta);
+        // System/year are data; the player-count wording is ours. Translate
+        // that part before fitting the complete caption as literal text.
+        meta.extend(d.players.as_ref().map(|players| crate::i18n::tr(players)));
+        text.literal(|text| {
+            let meta = text.fit(Face::Body, 28, &meta.join(" · "), text_w);
+            text.draw(c, Face::Body, 28, tx, meta_y, pal().label_dust, &meta);
+        });
         // The player's own line at the foot of the label: status mark, status, time.
         let foot = y + LABEL_H - 40;
         let mut fx = tx;
@@ -904,8 +908,11 @@ impl Card {
             let key_w = rows.iter().map(|(k, _)| text.width(Face::Body, 28, k)).max().map_or(key_w, |w| key_w.max(w + text.width(Face::Body, 28, "  ")));
             for (k, v) in rows {
                 text.draw(c, Face::Body, 28, lx, ly, pal().dust, k);
-                for (i, line) in text.wrap(Face::Body, 28, &v, lw - key_w).iter().take(2).enumerate() {
-                    text.draw(c, Face::Body, 28, lx + key_w, ly + i as i32 * tight(), pal().chalk, line);
+                let name = ["Listed as", "Developer", "Publisher", "Series"].contains(&k);
+                let lines = if name { text.wrap_name(Face::Body, 28, &v, lw - key_w) } else { text.wrap(Face::Body, 28, &v, lw - key_w) };
+                for (i, line) in lines.iter().take(2).enumerate() {
+                    if name { text.draw_name(c, Face::Body, 28, lx + key_w, ly + i as i32 * tight(), pal().chalk, line); }
+                    else { text.draw(c, Face::Body, 28, lx + key_w, ly + i as i32 * tight(), pal().chalk, line); }
                     if i == 1 {
                         ly += tight();
                     }
@@ -1137,10 +1144,13 @@ impl Card {
                     Some(year) => format!("{} · {year}", g.system),
                     None => g.system.clone(),
                 };
-                let side_w = text.width(Face::Body, 28, &side);
-                text.draw_right(c, Face::Body, 28, MARGIN + full_w - 28, y + spine_h() / 2 + type_scale::base(10, 28), pal().dust, &side);
-                let name = text.fit(Face::Title, 37, &g.name, full_w - STRIPE - 56 - side_w - 32);
-                text.draw(c, Face::Title, 37, MARGIN + STRIPE + 28, y + spine_h() / 2 + type_scale::base(13, 37), pal().chalk, &name);
+                let side_w = text.literal(|text| {
+                    let width = text.width(Face::Body, 28, &side);
+                    text.draw_right(c, Face::Body, 28, MARGIN + full_w - 28, y + spine_h() / 2 + type_scale::base(10, 28), pal().dust, &side);
+                    width
+                });
+                let name = text.fit_name(Face::Title, 37, &g.name, full_w - STRIPE - 56 - side_w - 32);
+                text.draw_name(c, Face::Title, 37, MARGIN + STRIPE + 28, y + spine_h() / 2 + type_scale::base(13, 37), pal().chalk, &name);
                 y += spine_h() + 10;
             }
             y += 22;
@@ -1193,8 +1203,8 @@ impl Card {
         let total = 2 * (row + gap) - gap;
         let top = (c.h - 100 - total) / 2 + 50;
         sheet(c, x - 48, top - 110, w + 96, total + 158);
-        let title = text.fit(Face::Title, 50, &self.data.title, w);
-        text.draw(c, Face::Title, 50, x, top - 32, pal().chalk, &title);
+        let title = text.fit_name(Face::Title, 50, &self.data.title, w);
+        text.draw_name(c, Face::Title, 50, x, top - 32, pal().chalk, &title);
         let choices = [
             ("Hide from the shelf", "It stays on the SD card. Settings › System › Storage brings it back."),
             ("Delete from the SD card…", "Shows what it frees and asks again."),
@@ -1394,14 +1404,17 @@ impl Card {
             let side = if r.current { "now" } else { "" };
             let side_w = if side.is_empty() { 0 } else { text.width(Face::Body, 28, side) + 32 };
             let tw = w - STRIPE - 56 - side_w;
+            let name = matches!(&r.choice, crate::gamedb::Choice::Entry(_));
+            let row_title = crate::media::printed_title(&r.title, name);
+            let row_meta = crate::media::printed_title(&r.meta, name);
             if r.meta.is_empty() {
-                let title = text.fit(Face::Title, 37, &r.title, tw);
-                text.draw(c, Face::Title, 37, x + STRIPE + 28, y + row / 2 + type_scale::base(13, 37), fg, &title);
+                let title = text.fit_name(Face::Title, 37, &row_title, tw);
+                text.draw_name(c, Face::Title, 37, x + STRIPE + 28, y + row / 2 + type_scale::base(13, 37), fg, &title);
             } else {
-                let title = text.fit(Face::Title, 37, &r.title, tw);
-                text.draw(c, Face::Title, 37, x + STRIPE + 28, y + 38 + type_scale::grow(37), fg, &title);
-                let meta = text.fit(Face::Body, 26, &r.meta, tw);
-                text.draw(c, Face::Body, 26, x + STRIPE + 28, y + 71 + type_scale::grow(37) + type_scale::grow(26), dim, &meta);
+                let title = text.fit_name(Face::Title, 37, &row_title, tw);
+                text.draw_name(c, Face::Title, 37, x + STRIPE + 28, y + 38 + type_scale::grow(37), fg, &title);
+                let meta = text.fit_name(Face::Body, 26, &row_meta, tw);
+                text.draw_name(c, Face::Body, 26, x + STRIPE + 28, y + 71 + type_scale::grow(37) + type_scale::grow(26), dim, &meta);
             }
             if !side.is_empty() {
                 text.draw_right(c, Face::Body, 28, x + w - 28, y + row / 2 + type_scale::base(10, 28), dim, side);

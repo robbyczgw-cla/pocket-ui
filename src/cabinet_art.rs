@@ -806,6 +806,7 @@ pub fn cover_fit(img: &Image, w: i32, h: i32) -> Image {
 /// search's glass) and the name under it, centred, the pair a little above the label's middle (it read as an empty
 /// box with both at the top, Muse's review of 2026-10-29).
 pub fn plain_label(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i32), look: Look, title: &str, art: Option<&Sprite>) {
+    text.literal(|text| {
     for row in 0..h {
         let c = mix(look.color, 0x000000, 20 + (row as u32 * 90 / h.max(1) as u32));
         p.fill(x, y + row, w, 1, OPAQUE | c);
@@ -815,8 +816,6 @@ pub fn plain_label(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i
     let _fixed = crate::type_scale::fixed();
     // A game's name as it is, word for word: split over two lines, each is measured and painted as a string of its own,
     // and "Sonic Adventure" read "Sonic Aventura" in Spanish (new-player walk 2026-11-02).
-    let translating = text.translating();
-    text.set_translate(translating && !crate::i18n::is_name(title));
     // A sixth of the label, or smaller until the name fits in two lines (never a lone word of it on a line of its
     // own), at the sizes the app paints anyway: a front made in a frame draws no letters of its own
     // (tests/shelf_moves.rs). 18 and 20 only for a long word on a small case ("Überrasch mich" at 1024x768 ended
@@ -889,7 +888,7 @@ pub fn plain_label(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i
             break;
         }
     }
-    text.set_translate(translating);
+    })
 }
 
 /// `title` on two lines of about the same width, at most `max` wide ("Gran" over "Turismo 4", not "Gran Turismo" over

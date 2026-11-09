@@ -2323,3 +2323,26 @@ even when start evidence is Unknown; that safe stop does not depend on fallback 
 Regression coverage: `clock_regression_*` exercises old gpSP moments via the real host option ABI and a controlled
 clock, and reset/flush/cold-start via an RTC-clearing stub. `fast_switch::tests::a_sigkill_after_a_frame_never_becomes_a_start_failure`
 kills a real child before the pipe reader starts; fallback tests protect every kind of moment and migrate both legacy JSON formats.
+
+### Save and load failures
+
+A failed exit save never sends the fast-switch `saved` line. The UI waits for the game to end and shows the save failure on the shelf; a game chosen in the switcher does not start over that notice. The previous written moment stays available. The FIFO commands and save file names are unchanged.
+
+Load first keeps the running moment as Before load. If that capture fails, Load leaves the game where it is and explains why; it never calls the core with the target state. Earlier only copies an Auto written successfully by the current autosave, never the older Auto left after a failed attempt. A Continue moment must be renamed to its taken/retry name before it reaches the core; a failed rename leaves the moment intact and starts without applying it.
+
+Shortcuts gathered while the core is paused, asleep or dark are dropped. Dark-playing also ignores touch until a new touch after waking. Standalone resume progress belongs to its launch, so an older worker cannot dismiss the current game's progress.
+
+### Core command and state contract
+
+The Linux host decodes its existing line FIFO in `core_command::Command`, with `Quit::{Save,
+SkipResume, ForSwitch}` for the three unchanged quit strings. Unknown commands still do nothing;
+slot defaults, accepted extra words, literal-space option/control payloads and newest-preview
+coalescing are preserved. The FIFO reader uses the same decoder to recognize urgent pause/quit.
+No new response, handshake or required command was added.
+
+`core_status::Snapshot` derives `Play::{Playing, Held, MenuPaused, Asleep, DarkPlaying, Exiting}`
+from the host's existing flags and publishes `/tmp/pocket-core.status` through the shared v1 status
+writer. It is optional diagnostic output; neither the UI nor the core relies on it to control a game
+or confirm a save. See [Where the core is](DEVICE-TESTS.md#where-the-core-is) for the field contract,
+precedence, stale-process rule and compatibility guarantees. The audio and frame scheduling paths
+keep their existing behavior.

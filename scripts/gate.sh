@@ -149,7 +149,7 @@ shell_small() {
     sh deploy/test-grub-quiet.sh >"$Q" 2>&1; echo $? >"$RCD/q"
     # The SD image check's reading of grub.cfg (about 1 s): scripts/image/grub-checks.sh against deploy/sd-efi/grub.cfg.
     # Plus the family parameter of scripts/image/rocknix-source.sh (--dry-run, nothing fetched).
-    { sh scripts/image/test-grub-checks.sh && sh scripts/image/test-rocknix-source.sh && sh scripts/image/test-h700-pins.sh; } >"$G" 2>&1; echo $? >"$RCD/g"
+    { sh scripts/image/test-grub-checks.sh && sh scripts/image/test-rocknix-source.sh && sh scripts/image/test-h700-pins.sh && sh scripts/image/test-storage-budget.sh && python3 -I scripts/image/test-receipts.py; } >"$G" 2>&1; echo $? >"$RCD/g"
     # The FAT-card install hook against a fake /flash and /storage (about 2 s): deploy/fat/mount-storage.sh.in; then the
     # SD image's boot hook with its update guard (about 1 s): deploy/image/mount-storage.sh.
     { sh deploy/fat/test-hook.sh && sh deploy/image/test-mount-storage.sh; } >"$F" 2>&1; echo $? >"$RCD/f"
@@ -203,6 +203,8 @@ runner_done=$(date +%s)
 # public exports without this feature keep their ordinary integration tier.
 if [ "$trc" -eq 0 ] && [ "$docs_only" -eq 0 ] && [ -f src/input_corpus_tests.rs ] && grep -Eq '^[[:space:]]*brick[[:space:]]*=' Cargo.toml; then
     nice -n "$nice_increment" cargo test $pflag --features brick --lib input_corpus_tests -q >>"$T" 2>&1 || trc=1
+    # The Settings writer and the card's hardware watcher must agree on the slider file, including legacy cards.
+    nice -n "$nice_increment" cargo test $pflag --features brick --lib the_saved_slider_choice_reaches_the_card_watcher -q >>"$T" 2>&1 || trc=1
     # The ordinary integration tier excludes the Brick settings walk and the
     # Brick-only text regressions. Run those cases, keeping the public text matrix in its usual tier. The Smart Pro's
     # D-pad explorer (same card, 1280x720; its text fit is in brick_settings_walk) runs here too.

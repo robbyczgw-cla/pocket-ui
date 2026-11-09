@@ -103,15 +103,20 @@ mkdir -p "$D/logs" 2>/dev/null
 say "=== boot via $ENTRY, $(cat "$P/VERSION" 2>/dev/null) battery $(cat "$BATTERY/capacity" 2>/dev/null)% $(cat "$BATTERY/status" 2>/dev/null)"
 
 # --- which TrimUI handheld (docs/TRIMUI-SMART-PRO.md) --------------------------------------------------------------
-# The same card runs on the Brick and the Smart Pro (both A133P, TrimUI's firmware). By the screen first (fb0 is 1024 wide on the
-# Brick, 1280 on the Smart Pro), then the name in TrimUI's own MainUI; nothing that says Smart Pro is a Brick, as before. The
+# The same card runs on the Brick, Brick Pro and Smart Pro (A133P, TrimUI firmware). Pro identity must precede fb0. The
 # Smart Pro S (A523, another chip and system) is not supported: the card says so and writes nothing to its hardware.
 board() {
+  # Both Bricks are 1024 wide. Pro identity (stock MainUI string / TG4040) or its unique stick bus wins first.
+  if [ -e "${BRICK_I2C3:-/dev/i2c-3}" ] ||
+    { for f in "${BRICK_MODEL_FILE:-/etc/model}" "${BRICK_DT:-/proc/device-tree}/model" "${BRICK_DT:-/proc/device-tree}/compatible" "$FW/bin/MainUI"; do cat "$f"; echo; done; } 2>/dev/null |
+      tr '\000' ' ' | grep -Eiq 'trimui brick pro|trimui,brick-?pro|(^|[^a-z0-9])tg4040([^a-z0-9]|$)'; then
+    echo brickpro; return
+  fi
   case "$(cut -d, -f1 "$FBSYS/virtual_size" 2>/dev/null)" in
     1280) echo smartpro; return ;;
     1024) echo brick; return ;;
   esac
-  if grep -q "Trimui Smart Pro" "$FW/bin/MainUI" 2>/dev/null; then echo smartpro; else echo brick; fi
+  if grep -qi "Trimui Smart Pro" "$FW/bin/MainUI" 2>/dev/null; then echo smartpro; else echo brick; fi
 }
 # The S's firmware names itself TG5050 (/etc/model, /proc/cpuinfo's Hardware line); its chip is a sun55i.
 chip() { { cat "${BRICK_MODEL_FILE:-/etc/model}"; tr '\000' ' ' <"${BRICK_DT:-/proc/device-tree}/compatible"; grep -i -m 2 'hardware\|model name' "${BRICK_CPUINFO:-/proc/cpuinfo}"; } 2>/dev/null | tr '\n' ' '; }
@@ -190,6 +195,11 @@ if [ "$BOARD" = smartpro ]; then
   export POCKETUI_MOTOR_VOLTAGE=${POCKETUI_MOTOR_VOLTAGE:-500000,2200000}
   say "Smart Pro: stick rails on (gpio110, gpio114), motor $POCKETUI_MOTOR_VOLTAGE"
 fi
+# The kernel prints every message to a serial console nobody reads (console=ttyS0,115200 loglevel=8), with interrupts off while it
+# does, and every interrupt is on CPU 0: a burst (Wi-Fi joining, the Wi-Fi chip starting again) held off the sound card's past its
+# 21 ms buffer (xruns, 08.11.), and other Brick systems traced I2C timeouts and a kernel panic to the same console. Only critical
+# messages go there now; dmesg and pstore keep them all.
+[ ! -w "${BRICK_PRINTK:-/proc/sys/kernel/printk}" ] || echo 3 >"${BRICK_PRINTK:-/proc/sys/kernel/printk}"
 if [ -x "$FW/bin/trimui_inputd" ] && ! pidof trimui_inputd >/dev/null 2>&1; then
   mkdir -p /tmp/trimui_inputd
   ( cd "$FW/bin" && LD_LIBRARY_PATH="$FW/lib" exec ./trimui_inputd ) >>"$LOG" 2>&1 &   # the pad: "TRIMUI Player1" appears after it
@@ -197,17 +207,12 @@ if [ -x "$FW/bin/trimui_inputd" ] && ! pidof trimui_inputd >/dev/null 2>&1; then
 else
   say "trimui_inputd: $(pidof trimui_inputd 2>/dev/null || echo 'not found')"
 fi
-# The kernel prints every message to a serial console nobody reads (console=ttyS0,115200 loglevel=8), with interrupts off while it
-# does, and every interrupt is on CPU 0: a burst (Wi-Fi joining, the Wi-Fi chip starting again) held off the sound card's past its
-# 21 ms buffer (xruns, 08.11.), and other Brick systems traced I2C timeouts and a kernel panic to the same console. Only critical
-# messages go there now; dmesg and pstore keep them all.
-[ ! -w "${BRICK_PRINTK:-/proc/sys/kernel/printk}" ] || echo 3 >"${BRICK_PRINTK:-/proc/sys/kernel/printk}"
 echo 0 >/sys/class/led_anim/effect_enable 2>/dev/null
 # The Smart Pro's rings: nobody has mapped them for us, so they stay dark (one brightness for all of them there).
-[ "$BOARD" = smartpro ] && echo 0 >/sys/class/led_anim/max_scale 2>/dev/null
+[ "$BOARD" = brick ] || echo 0 >/sys/class/led_anim/max_scale 2>/dev/null
 # The driver's raw picture glows on past the effects (03.11.): black from the start, pocket-ui puts the choice on.
 echo 0 >/sys/class/led_anim/anim_frames_enable 2>/dev/null
-[ -e /sys/class/led_anim/frame_hex ] && printf '%s' '000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 ' >/sys/class/led_anim/frame_hex 2>/dev/null
+[ "$BOARD" = brick ] && [ -e /sys/class/led_anim/frame_hex ] && printf '%s' '000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 ' >/sys/class/led_anim/frame_hex 2>/dev/null
 # Wi-Fi: on, unless pocket-ui's own switch put it off (the stand-in wifictl keeps that in $STATE/wifi-off). Not waited for.
 [ -e "$STATE/wifi-off" ] || [ ! -x "$P/hwroot/usr/bin/wifictl" ] || { BRICK_STATE=$STATE "$P/hwroot/usr/bin/wifictl" enable >>"$LOG" 2>&1 & }
 
@@ -319,7 +324,17 @@ HWPID=$!
 BRICK_POWER_CMD="$P/hwroot/usr/bin/brick-power-off" BRICK_POWER_LOG=$LOG "$P/bin/brick-hw" power-watch 6 >>"$LOG" 2>&1 &
 POWERPID=$!
 export BRICK_STATE=$STATE BRICK_HW=$P/bin/brick-hw BRICK_SPEAKER=${BRICK_SPEAKER:-/sys/class/speaker/mute}
-export BRICK_SLIDER_CFG="$D/brick-slider" BRICK_SLIDER_MUTED=${BRICK_SLIDER_MUTED:-1}
+# The Settings writer uses this same state folder. Both volume restore and the watcher inherit this single path.
+# Older launchers read a file beside storage/. Keep it for rollback, but never replace a newer Settings choice with it.
+export BRICK_SLIDER_CFG="$STATE/brick-slider" BRICK_SLIDER_MUTED=${BRICK_SLIDER_MUTED:-1}
+if [ ! -e "$BRICK_SLIDER_CFG" ] && [ -f "$D/brick-slider" ]; then
+  mkdir -p "$STATE"
+  if cp "$D/brick-slider" "$BRICK_SLIDER_CFG.migrating" && mv "$BRICK_SLIDER_CFG.migrating" "$BRICK_SLIDER_CFG"; then
+    say "mute slider: kept the older choice in Settings"
+  else
+    say "mute slider: could not keep the older choice in Settings"
+  fi
+fi
 [ "$BOARD" = brick ] || export BRICK_NO_SLIDER=1
 [ -x "$P/hwroot/usr/bin/volume" ] && "$P/hwroot/usr/bin/volume" restore >>"$LOG" 2>&1
 # Network time, one try in the background (Wi-Fi may need a few seconds; the clock page can ask again). Without a right
@@ -328,10 +343,10 @@ export BRICK_SLIDER_CFG="$D/brick-slider" BRICK_SLIDER_MUTED=${BRICK_SLIDER_MUTE
 
 # After the volume is restored, so a slider found in the muted position keeps the speaker off.
 # The mute slider (gpio243): the position that means "muted" is BRICK_SLIDER_MUTED: 1, the slider down (read on the real Brick with its owner, 03.11.; 0 is up),
-# and the sound chip's switches are `volume mute|unmute`. Settings > Lights & buttons > Mute slider writes "mute" or "nothing" to $D/brick-slider.
-# The Smart Pro has no slider: nothing follows that pin there (BRICK_NO_SLIDER also keeps `volume restore` from reading it).
+# and the sound chip's switches are `volume mute|unmute`. Settings > Lights & buttons > Mute slider writes "mute" or "nothing" to $BRICK_SLIDER_CFG.
+# The Pro boards have no verified mute-slider semantics: nothing follows that pin there (BRICK_NO_SLIDER also keeps `volume restore` from reading it).
 if [ "$BOARD" = brick ]; then
-  BRICK_SLIDER_CFG="$D/brick-slider" BRICK_SLIDER_CMD="$P/hwroot/usr/bin/volume" BRICK_SLIDER_MUTED=${BRICK_SLIDER_MUTED:-1} "$P/bin/brick-hw" slider-watch >>"$LOG" 2>&1 &
+  BRICK_SLIDER_CMD="$P/hwroot/usr/bin/volume" "$P/bin/brick-hw" slider-watch >>"$LOG" 2>&1 &
   SLIDERPID=$!
 else
   SLIDERPID=

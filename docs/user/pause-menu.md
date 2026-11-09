@@ -329,3 +329,5 @@ Performance in Quick settings and Settings → Playing → Performance & fan app
 
 ScummVM, PICO-8 and TIC-80 on pocket-ui's own host have no save states either. Their menu has no Save or Load and
 says where their saving is, for example "No save states for ScummVM: START opens its own Save and Load".
+
+If the game cannot keep Before load, Load leaves you where you are and says so. Free space on the card or keep playing before trying again. If Quit cannot save, you return to the shelf with a message; the previous saved moment stays. A game chosen in the switcher waits until you have read the message and choose again.

@@ -2,6 +2,9 @@
 //! misses, damaged entries and unsuccessful renders. No renderer is mocked by a
 //! cache hit unless its original complete response has actually been produced.
 #![cfg(unix)]
+#[path = "common/executable.rs"]
+mod fixture_executable;
+
 use std::{fs, path::Path, process::Command};
 #[path = "common/snapshot.rs"]
 mod snapshot;
@@ -37,13 +40,12 @@ impl Drop for Env { fn drop(&mut self) {
 
 #[test]
 fn shared_snapshots_keep_the_actual_pixels_and_probes_and_never_reuse_changed_or_failed_inputs() {
-    use std::os::unix::fs::PermissionsExt;
     let tmp = tempfile::tempdir().unwrap();
     let cache = tmp.path().join("cache");
     let _env = Env(std::env::var_os("POCKETUI_SNAPSHOT_CACHE_DIR"));
     std::env::set_var("POCKETUI_SNAPSHOT_CACHE_DIR", &cache);
     let program = tmp.path().join("renderer");
-    fs::write(&program, r#"#!/usr/bin/env python3
+    fixture_executable::publish(&program, r#"#!/usr/bin/env python3
 import hashlib, json, os, pathlib, struct, sys, zlib, xml.etree.ElementTree as E
 with open(os.environ['SNAPSHOT_FIXTURE_CALLS'], 'a') as f: f.write('render\n')
 i = sys.argv.index('--snapshot')
@@ -61,7 +63,6 @@ pathlib.Path(output).write_bytes(png)
 if state=='mutate': (roms/'game.gb').write_text('unexpected mutation')
 if state=='failed': sys.exit(1)
 "#).unwrap();
-    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
     let (one, two) = (tmp.path().join("one"), tmp.path().join("two"));
     fixture(&one); fixture(&two);
     let count = tmp.path().join("calls");

@@ -322,7 +322,7 @@ fn when(s: &str) -> u64 {
         return 0;
     }
     let (h, mi, sec) = if s.get(8..9) == Some("T") { (num(9, 11).unwrap_or(0), num(11, 13).unwrap_or(0), num(13, 15).unwrap_or(0)) } else { (0, 0, 0) };
-    let day = crate::play_history::day_of(y as i32, m, d);
+    let day = crate::civil_date::day_of(y as i32, m, d);
     (day * 86_400 + i64::from(h.min(23) * 3600 + mi.min(59) * 60 + sec.min(59))).max(0) as u64
 }
 
@@ -651,7 +651,11 @@ pub fn system(data_dir: &Path, loc: &Locations, system: &str, rom_dir: &Path) ->
     if !beside.is_empty() {
         data.art.push((Some(rom_dir.to_path_buf()), beside));
     }
-    let ids = [system, crate::consoles::canonical(system)];
+    #[cfg(not(target_os = "android"))]
+    let canonical = crate::consoles::canonical(system);
+    #[cfg(target_os = "android")]
+    let canonical = system;
+    let ids = [system, canonical];
     let catalogue: Vec<ArtDir> = loc.catalogues.iter().flat_map(|c| crate::layouts::catalogue_dirs(c, &ids)).collect();
     if !catalogue.is_empty() {
         data.art.push((None, catalogue));

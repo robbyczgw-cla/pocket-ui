@@ -88,6 +88,11 @@ impl Trouble {
     }
 }
 
+/// A failed state write leaves older saves alone; shown after exit and over the game.
+pub const MOMENT_FAILED: &str = "Couldn't keep this moment. Your earlier saves are kept.";
+/// Load is refused before calling the core when its undo point could not be kept.
+pub const UNDO_FAILED: &str = "Couldn't load: Before load couldn't be saved. Your game is unchanged.";
+
 /// The pause menu's question before Quit while saves fail, and its two answers (Keep playing first: B and A on the
 /// first row both leave things as they are).
 pub const QUESTION: &str = "Couldn't save. Quit anyway?";

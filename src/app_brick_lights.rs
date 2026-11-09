@@ -19,6 +19,7 @@ pub(crate) const TITLE: &str = "Lights & buttons";
 
 /// The short value of that row: "Lights off" while they are dark (the first start), else what the lights do (Battery, or the colour).
 pub(crate) fn list_value(cfg: &leds::Config) -> &'static str {
+    if pocket_ui::brick_profile::board().is_some_and(|b| b.fkeys() && !b.leds()) { return "F1 / F2"; }
     match cfg.mode {
         Mode::Off => "Lights off",
         _ => cfg.summary(),
@@ -68,6 +69,7 @@ impl Row {
 /// Colour, brightness and the lights one by one only mean something for the colour mode. One level down, a light's hue and saturation
 /// show only with its own colour, its speed only with an effect that moves, and its colour rows not while it shows the battery.
 pub(crate) fn rows(mode: Mode, detail: bool, light: &pocket_ui::brick_hw::LightPref) -> Vec<Row> {
+    if pocket_ui::brick_profile::board().is_some_and(|b| b.fkeys() && !b.leds()) { return vec![Row::F1, Row::F2]; }
     if detail {
         let mut r = vec![Row::Light];
         if !matches!(light.glow, Glow::Battery | Glow::Rainbow) {
@@ -178,7 +180,7 @@ impl App {
             Row::Colour => self.leds.hue.blurb(),
             Row::Brightness => "How bright the lights glow.",
             Row::Each => "Colour, effect and brightness of the grips, the middle and the two F keys one by one. A: open.",
-            Row::F1 | Row::F2 => "Quick save, quick load, screenshot, Recent games, the pause menu, or nothing.",
+            Row::F1 | Row::F2 => "Shortcuts for all games; not game buttons. Choose their action here.",
             Row::Slider => "The slider on the side mutes the sound, or does nothing.",
             Row::Light => "Which light to set.",
             Row::LColour => "Its own colour, or the one above. Own colour: pick the hue and the saturation below.",

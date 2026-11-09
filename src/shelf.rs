@@ -51,6 +51,11 @@ pub enum Item {
 }
 
 impl Item {
+    /// A game/system name or a player's own shelf/sticker wording, rather than our UI copy.
+    pub fn title_is_name(self) -> bool {
+        matches!(self, Item::Game(..) | Item::Recent(_) | Item::System(_) | Item::SmartShelf(_) | Item::Sticker(_))
+    }
+
     /// Adds the apps to Home's list: "PC streaming" after the recent games and Favorites, before the systems,
     /// when `streaming` (Moonlight is installed).
     pub fn with_apps(mut items: Vec<Item>, streaming: bool) -> Vec<Item> {

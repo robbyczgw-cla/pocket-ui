@@ -95,7 +95,7 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
             }
             games.retain(|g| !crate::hostsys::not_a_game(&name, &g.path));
             let listed: Vec<PathBuf> = games.iter().map(|g| g.path.clone()).collect();
-            let roms = Path::new(crate::hostsys::BIOS_DIR).parent().unwrap_or(Path::new("/storage/roms"));
+            let roms = Path::new("/storage/roms");
             for dir in crate::hostsys::folder_games(&name, &path, roms, &listed) {
                 let title = display_name(dir.file_name().and_then(|n| n.to_str()).unwrap_or("?"));
                 games.push(Game { name: title, path: dir });

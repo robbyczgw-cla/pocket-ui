@@ -149,7 +149,7 @@ fn current() -> Option<Session> {
     SESSION.lock().ok()?.clone()
 }
 
-fn still(id: u64) -> bool {
+pub fn still(id: u64) -> bool {
     current().is_some_and(|s| s.id == id)
 }
 
@@ -231,11 +231,15 @@ pub fn skip_next_resume() {
 }
 
 static SKIP_RESUME: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static RESUMING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static RESUMING: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// The thread that loads the moment into the emulator is still at it (`resume`).
 pub fn resuming() -> bool {
-    RESUMING.load(std::sync::atomic::Ordering::Relaxed)
+    RESUMING.load(std::sync::atomic::Ordering::Relaxed) != 0
+}
+
+fn finish_resume(id: u64) {
+    let _ = RESUMING.compare_exchange(id, 0, std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// Called before the game is started: writes what the integration needs (and, once, the tuned defaults) into
@@ -299,10 +303,10 @@ pub fn launch(system: &str, emulator: &str, core: &str, rom: &Path, data_dir: &P
     if let Ok(mut s) = SESSION.lock() {
         *s = Some(session.clone());
     }
-    RESUMING.store(true, std::sync::atomic::Ordering::Relaxed);
+    RESUMING.store(id, std::sync::atomic::Ordering::Relaxed);
     std::thread::spawn(move || {
         resume(session, skip);
-        RESUMING.store(false, std::sync::atomic::Ordering::Relaxed);
+        finish_resume(id);
     });
     true
 }
@@ -323,6 +327,7 @@ fn transit_of(s: &Session) -> Option<(PathBuf, PathBuf, PathBuf)> {
 pub fn exited() {
     if let Ok(mut s) = SESSION.lock() {
         *s = None;
+        RESUMING.store(0, std::sync::atomic::Ordering::Relaxed);
     }
     guest::ended();
     restore_performance();
@@ -490,13 +495,17 @@ pub fn save(target: Target, frame: Option<Image>) {
 /// Load from the pause menu (the game has just been resumed): the state about to be replaced is kept first as
 /// "Before load" (`frame`, the picture the menu was opened on, is its preview), and a Quit after the load writes the
 /// auto state from the game as it is then.
-pub fn load(target: Target, frame: Option<Image>) {
+pub fn load(target: Target, frame: Option<Image>, blocked: impl FnOnce(u64) + Send + 'static) {
     let Some(s) = current() else { return };
     std::thread::spawn(move || {
         let Some(_turn) = turn(&s) else { return };
         if s.states().is_some_and(|st| st.path(target).is_some()) {
             // Loading "Before load" itself leaves it as it is: it is what the next Load of it brings back.
-            if target != Target::Undo && save_target(&s, Target::Undo) {
+            if target != Target::Undo {
+                if !save_target(&s, Target::Undo) {
+                    blocked(s.id);
+                    return;
+                }
                 write_preview(&s, Target::Undo, frame);
             }
             load_target(&s, target);
@@ -2149,6 +2158,20 @@ mod tests {
     }
 
     #[test]
+    fn save_safety_ended_worker_cannot_hide_the_next_games_resume_progress() {
+        let _session = SESSION_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+        *SESSION.lock().unwrap() = Some(session(8_100_002));
+        RESUMING.store(8_100_002, std::sync::atomic::Ordering::Relaxed);
+        finish_resume(8_100_001);
+        let still_resuming = resuming();
+        finish_resume(8_100_002);
+        let finished = !resuming();
+        *SESSION.lock().unwrap() = None;
+        assert!(still_resuming, "an old launch must not dismiss the current game's progress");
+        assert!(finished);
+    }
+
+    #[test]
     #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
     fn timing_actions_take_turns_and_a_finished_games_worker_does_nothing() {
         let _session = SESSION_TESTS.lock().unwrap_or_else(|e| e.into_inner());
@@ -2627,6 +2650,24 @@ mod tests {
         // Nothing to park: nothing restored.
         let empty = dir.join("1.00.cst");
         assert_eq!(azahar::park(&empty).unwrap(), None);
+    }
+
+    #[test]
+    #[ignore = "known failure: copied Undo has no durable transit provenance; needs a separately reviewed file protocol"]
+    fn save_safety_copied_undo_after_crash_must_not_replace_auto() {
+        let d = TestDir::new("copied-undo-crash");
+        let quick = d.join("quick" );
+        let auto = d.join("auto");
+        let undo = d.join("undo");
+        std::fs::write(&quick, b"manual slot").unwrap();
+        std::fs::write(&auto, b"latest quit").unwrap();
+        std::fs::write(&undo, b"before load").unwrap();
+        azahar::park(&quick).unwrap();
+        // Same fallback as through_transit_load/azahar::load on a filesystem without hard links.
+        std::fs::copy(&undo, &quick).unwrap();
+        azahar::recover(&quick, &auto, &undo);
+        assert_eq!(std::fs::read(&quick).unwrap(), b"manual slot");
+        assert_eq!(std::fs::read(&auto).unwrap(), b"latest quit", "an interrupted Undo load is not a new quit moment");
     }
 
     #[test]

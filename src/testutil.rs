@@ -1,9 +1,9 @@
 //! Helpers shared by the unit tests.
 
-use std::io::Write;
 use std::ops::Deref;
 use std::path::Path;
-use std::process::{Command, Stdio};
+#[path = "../tests/common/executable.rs"]
+mod executable;
 
 /// A scratch folder for one test: it exists as long as the `TestDir` does and is removed, with everything in it, when
 /// it is dropped, also when the test panics. Use it instead of `std::env::temp_dir().join(..)` + `create_dir_all`, which
@@ -60,24 +60,15 @@ impl AsRef<Path> for TestDir {
 /// So the file is written by a child process (`sh`, contents on its stdin): no descriptor that can write to the
 /// script ever exists in this process, so no fork of ours can carry one, and once the child has exited no one
 /// holds the file open. The pipe to the child is close-on-exec and isn't the script, so it can't cause the error.
+/// Changed contents are published by atomic rename; a previous worker may still be running the old file.
 pub(crate) fn write_executable(path: &Path, contents: impl AsRef<[u8]>) {
-    let mut child = Command::new("sh")
-        .args(["-c", r#"cat > "$1" && chmod 755 "$1""#, "sh"])
-        .arg(path)
-        .stdin(Stdio::piped())
-        .spawn()
-        .unwrap_or_else(|e| panic!("sh to write {}: {e}", path.display()));
-    // Taken out of `child` so that it is closed (end of input for `cat`) before the wait.
-    let mut stdin = child.stdin.take().unwrap();
-    stdin.write_all(contents.as_ref()).unwrap_or_else(|e| panic!("writing {}: {e}", path.display()));
-    drop(stdin);
-    let status = child.wait().unwrap();
-    assert!(status.success(), "writing {} failed: {status}", path.display());
+    executable::publish(path, contents).unwrap_or_else(|e| panic!("writing {}: {e}", path.display()));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
     use std::os::unix::fs::PermissionsExt;
 
     #[test]

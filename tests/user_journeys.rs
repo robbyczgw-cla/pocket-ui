@@ -2,6 +2,9 @@
 //! Assertions read the text recorded during rendering and the layout diagnostics, rather than private App fields.
 //! No device, user library or external service is used.
 
+#[path = "common/executable.rs"]
+mod fixture_executable;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -277,16 +280,7 @@ mod fifo {
     /// Writes an executable in a child, as testutil::write_executable does: another test's fork must not inherit a
     /// descriptor that can write it (ETXTBSY).
     fn executable(path: &Path, body: &str) {
-        let mut writer = Command::new("sh")
-            .args(["-c", r#"cat > "$1" && chmod 755 "$1""#, "sh"])
-            .arg(path)
-            .stdin(std::process::Stdio::piped())
-            .spawn()
-            .unwrap();
-        let mut input = writer.stdin.take().unwrap();
-        input.write_all(body.as_bytes()).unwrap();
-        drop(input);
-        assert!(writer.wait().unwrap().success());
+        super::fixture_executable::publish(path, body).unwrap();
     }
 
     impl Driver {
@@ -360,8 +354,9 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
                 std::thread::sleep(Duration::from_millis(5));
             }
             panic!(
-                "journey did not finish; visible text:\n{}\nUI log:\n{}",
+                "journey did not finish; visible text:\n{}\nUI status:\n{}\nUI log:\n{}",
                 std::fs::read_to_string(self.card.tmp.join("frame.txt")).unwrap_or_default(),
+                std::fs::read_to_string(self.card.tmp.join("ui.status")).unwrap_or_else(|e| e.to_string()),
                 self.log()
             );
         }
@@ -498,6 +493,31 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         }
         let shelf = d.frame();
         assert!(!shelf.contains("is ready") && !shelf.contains("Check again"), "{shelf}");
+    }
+
+    #[test]
+    fn update_status_explains_the_confirmation_and_consumed_notice() {
+        let mut d = update_ready("update-status");
+        d.sees("pocket-ui 99.0.0 is ready");
+        let path = d.card.tmp.join("ui.status");
+        d.wait(|_| std::fs::read_to_string(&path).is_ok_and(|s|
+            pocket_ui::ui_status::parse(&s).iter().any(|(k, v)| k == "cover" && v.split(',').any(|c| c == "notice"))));
+        let fields = || pocket_ui::ui_status::parse(&std::fs::read_to_string(&path).unwrap()).into_iter().collect::<std::collections::BTreeMap<_, _>>();
+        assert_eq!(fields().get("update.notice").map(String::as_str), Some("shown"));
+        assert_eq!(fields().get("update.notice.schedule").map(String::as_str), Some("waiting"));
+        d.send("a");
+        d.sees("Install pocket-ui 99.0.0");
+        d.send("a");
+        d.sees("Install now");
+        d.wait(|_| fields().get("update").is_some_and(|v| v == "confirming"));
+        let status = fields();
+        assert_eq!(status.get("update.cancel").map(String::as_str), Some("unavailable"));
+        assert_eq!(status.get("update.version").map(String::as_str), Some("99.0.0"));
+        assert_eq!(status.get("update.notice.reason").map(String::as_str), Some("already-said"));
+        d.send("b");
+        d.sees("Check again");
+        d.wait(|_| fields().get("update").is_some_and(|v| v == "idle"));
+        assert!(!std::fs::read_to_string(path).unwrap().contains("mock.tar.gz"), "status contains no download address");
     }
 
     #[test]
@@ -2919,6 +2939,198 @@ true
             });
         }
         assert!(!ui.card.tmp.join("run-game.started").exists(), "no game was started by a press on the show: {}", ui.log());
+    }
+
+    /// The text drawn inside the focus mark of a navigation record (`‹nav:focus›`), if any.
+    fn focused_in(record: &str) -> Option<String> {
+        let rect = |l: &str| -> Option<([i32; 4], String)> {
+            let v: Vec<&str> = l.splitn(5, '\t').collect();
+            let n = |i: usize| v.get(i)?.parse::<i32>().ok();
+            Some(([n(0)?, n(1)?, n(2)?, n(3)?], v.get(4)?.to_string()))
+        };
+        let all: Vec<([i32; 4], String)> = record.lines().filter_map(rect).collect();
+        let (f, _) = all.iter().find(|(_, s)| s == "‹nav:focus›")?;
+        all.iter()
+            .filter(|(r, s)| !s.starts_with('‹') && r[0] >= f[0] - 2 && r[2] <= f[2] + 2 && r[1] >= f[1] - 2 && r[3] <= f[3] + 2)
+            .map(|(_, s)| s.clone())
+            .next()
+    }
+
+    /// The navigation record now (`nav`), without a key.
+    fn nav_record(d: &mut Driver) -> String {
+        let nav = d.nav.clone().expect("POCKETUI_NAV_PROBE");
+        let mut record = String::new();
+        let _ = std::fs::remove_file(&nav);
+        d.send("nav");
+        d.wait(|_| {
+            record = std::fs::read_to_string(&nav).unwrap_or_default();
+            record.ends_with("@end\n")
+        });
+        record
+    }
+
+    /// Report a problem (from the dialog SELECT + START opens) writes its report on a thread, and About shows "Writing…"
+    /// until it is done; the "OK" row comes by itself then. The navigation record says the page is busy meanwhile, as it
+    /// does for a Wi-Fi scan: the explorer took that row's coming for a move of Down's (2026-11-09, gate, 640x480:
+    /// "settings:About: 1 move, 0 ticks, 0 sounds"). Held here by the one file only the report reads, a FIFO.
+    #[test]
+    fn about_says_it_is_busy_while_its_report_is_written() {
+        let mut d = Driver::start("report-busy", true, |tmp, cmd| {
+            std::fs::create_dir_all(tmp.join("data/logs")).unwrap();
+            let fifo = std::ffi::CString::new(tmp.join("data/logs/portal-last.html").to_str().unwrap()).unwrap();
+            assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+            cmd.env("POCKETUI_NAV_PROBE", tmp.join("nav.txt")).env("POCKETUI_REPORTS", tmp.join("reports"));
+        });
+        d.sees("Game Boy");
+        d.send("leave");
+        d.sees("Report a problem");
+        for _ in 0..8 {
+            if focused_in(&nav_record(&mut d)).is_some_and(|f| f.starts_with("Report a problem")) {
+                break;
+            }
+            d.send("down");
+        }
+        assert!(focused_in(&nav_record(&mut d)).is_some_and(|f| f.starts_with("Report a problem")), "the dialog's Report a problem row");
+        d.send("a");
+        let mut record = String::new();
+        d.wait(|d| {
+            record = nav_record(d);
+            record.contains("@where\tsettings:About")
+        });
+        assert!(record.contains("@busy\treport"), "while the report is written the page says it is busy:\n{record}");
+        // Let the report read its last file: it finishes, and the page is no longer busy.
+        let fifo = d.card.tmp.join("data/logs/portal-last.html");
+        let writer = std::thread::spawn(move || {
+            let _ = std::fs::write(fifo, "<html>sign-in</html>\n");
+        });
+        d.wait(|d| !nav_record(d).contains("@busy\treport"));
+        writer.join().unwrap();
+    }
+
+    /// The navigation record after `key` (`POCKETUI_NAV_PROBE`): where the UI is and what the key asked for (`@feedback`:
+    /// "tick" for the haptic tick, "sound:Nav"…), whether or not menu haptics and sounds are on.
+    fn feedback_of(d: &mut Driver, key: &str) -> (String, String) {
+        let nav = d.nav.clone().expect("POCKETUI_NAV_PROBE");
+        let mut record = String::new();
+        // A record first, so only `key`'s feedback is in the next one.
+        for keys in ["nav".to_string(), format!("{key}\nnav")] {
+            let _ = std::fs::remove_file(&nav);
+            d.send(&keys);
+            d.wait(|_| {
+                record = std::fs::read_to_string(&nav).unwrap_or_default();
+                record.ends_with("@end\n")
+            });
+        }
+        let field = |name: &str| record.lines().find_map(|l| l.strip_prefix(&format!("@{name}\t"))).unwrap_or_default().to_string();
+        (field("where"), field("feedback"))
+    }
+
+    /// Every move of the selection asks for the haptic tick and a sound, on the pages of the shelf too (the navigation
+    /// explorer walks the menus): until 2026-11-08 the switcher, a card's pickers and the console page moved without a tick
+    /// (`App::ui_position` didn't list them). The settings stay as they are: haptics off by default, the sounds as set.
+    #[test]
+    fn every_move_on_the_shelf_side_asks_for_a_tick_and_a_sound() {
+        let mut d = Driver::start("feedback-shelf", true, |tmp, cmd| {
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"minimal"}"#).unwrap();
+            let recents = serde_json::json!([
+                {"system": "gb", "name": "Tobu Tobu Girl", "path": tmp.join("gb/Tobu Tobu Girl (World).gb"), "last_played": 1794100000u64, "play_secs": 60},
+                {"system": "segacd", "name": "Pocket CD Demo", "path": tmp.join("segacd/Pocket CD Demo (USA).cue"), "last_played": 1794000000u64, "play_secs": 60},
+            ]);
+            std::fs::write(tmp.join("data/recents.json"), recents.to_string()).unwrap();
+            cmd.env("POCKETUI_NAV_PROBE", tmp.join("nav.txt"));
+        });
+        d.sees("Game Boy");
+        let mut gaps = Vec::new();
+        let mut moved = |d: &mut Driver, want: &str, key: &str| {
+            let (at, said) = feedback_of(d, key);
+            assert!(at.starts_with(want), "expected {want}, at {at}");
+            let words: Vec<&str> = said.split(' ').collect();
+            if !words.contains(&"tick") || !words.iter().any(|w| w.starts_with("sound:")) {
+                gaps.push(format!("{at}: {key} gave \"{said}\""));
+            }
+        };
+        moved(&mut d, "shelf:Home", "down");
+        moved(&mut d, "shelf:Home", "up");
+        // Recent games (SELECT).
+        d.send("select");
+        d.sees("Recent games");
+        moved(&mut d, "recent games", "down");
+        d.send("b");
+        d.wait(|d| !d.frame().contains("Recent games"));
+        // A game's card (X on the first recent game), and its status picker (Y).
+        d.send("x");
+        d.sees("None. Press Y");
+        d.send("y");
+        d.wait(|d| d.frame().contains("Playing now"));
+        moved(&mut d, "card:Status", "down");
+        d.send("b");
+        d.send("b");
+        d.wait(|d| !d.frame().contains("None. Press Y"));
+        // A system's console page (X on Game Boy, below the recent games).
+        let (at, _) = feedback_of(&mut d, "down\ndown");
+        assert!(at.starts_with("shelf:"), "{at}");
+        d.send("x");
+        d.wait(|d| d.nav.clone().is_some_and(|_| true) && d.frame().contains("Game Boy"));
+        let (at, _) = feedback_of(&mut d, "");
+        if at == "console" {
+            moved(&mut d, "console", "down");
+        }
+        assert!(gaps.is_empty(), "moves without a tick or a sound:\n{}", gaps.join("\n"));
+    }
+
+    /// scripts/ui-status.sh, as a helper on a device runs it, against this UI's status file and command FIFO: its exit code,
+    /// what it printed and what it said on stderr.
+    fn ui_status(d: &Driver, args: &[&str]) -> (i32, String, String) {
+        let out = Command::new("sh")
+            .arg(format!("{ROOT}/scripts/ui-status.sh"))
+            .args(args)
+            .env("POCKETUI_STATUS", d.card.tmp.join("ui.status"))
+            .env("POCKETUI_FIFO", d.card.tmp.join("ui.in"))
+            .output()
+            .unwrap();
+        (out.status.code().unwrap_or(-1), String::from_utf8_lossy(&out.stdout).into_owned(), String::from_utf8_lossy(&out.stderr).into_owned())
+    }
+
+    /// Device-test incident 2026-11-08: a key helper pressed B to leave a page, then A for the page it expected, and the
+    /// A landed on the shelf and started a game. The helper reads where the UI is (/tmp/pocket-ui.status, here
+    /// <dir>/ui.status) before every key: `--at` waits for the page, A where it would start a game is refused, and a dark
+    /// screen is woken by `wake`, which no page takes as a button. Missed before because nothing on a device could say
+    /// where the UI was: `@where` existed only for the headless explorer.
+    #[test]
+    fn a_helper_reads_where_the_ui_is_and_never_starts_a_game_blind() {
+        let mut d = Driver::start("ui-status", true, |tmp, cmd| {
+            std::fs::write(tmp.join("data/sleep.json"), r#"{"screen_off_secs":0,"sleep_after_min":0,"short_press":"screen_off"}"#).unwrap();
+            cmd.env("POCKETUI_POWER_KEY", "1").env("POCKETUI_BACKLIGHT", tmp.join("no-backlight"));
+        });
+        d.sees("Settings");
+        let (rc, out, err) = ui_status(&d, &["expect", "shelf:Home", "20"]);
+        assert_eq!((rc, out.trim()), (0, "shelf:Home"), "{err}");
+        let line = std::fs::read_to_string(d.card.tmp.join("ui.status")).unwrap();
+        assert!(line.starts_with("v=1\trev=") && line.contains("\tplace=shelf:Home\tcover=none\tsleep=awake\tgame=none"), "{line}");
+        // The incident's shape, guarded: Settings open, then "B, A" for a page that is no longer there.
+        assert_eq!(ui_status(&d, &["send", "--at", "shelf:Home", "start"]).0, 0);
+        assert_eq!(ui_status(&d, &["expect", "settings:Groups", "10"]).0, 0);
+        let (rc, _, err) = ui_status(&d, &["send", "--at", "settings:Groups", "b", "a"]);
+        assert_eq!(rc, 3, "A on the shelf after B must be refused: {err}");
+        assert!(err.contains("starts a game"), "{err}");
+        assert_eq!(ui_status(&d, &["expect", "shelf:Home", "5"]).0, 0, "B went back to the shelf");
+        // --at a page the UI isn't on: nothing pressed.
+        let (rc, _, err) = ui_status(&d, &["send", "--at", "settings:*", "a"]);
+        assert_eq!(rc, 3, "{err}");
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(!d.card.tmp.join("run-game.started").exists(), "no game was started: {}", d.log());
+        // A dark screen: a key would only wake it (and the next one would land on a page the helper didn't mean).
+        assert_eq!(ui_status(&d, &["send", "start"]).0, 0);
+        assert_eq!(ui_status(&d, &["expect", "settings:Groups", "10"]).0, 0);
+        d.send("power");
+        d.wait(|d| d.log().contains("sleep: power key, screen off"));
+        d.wait(|d| std::fs::read_to_string(d.card.tmp.join("ui.status")).is_ok_and(|l| l.contains("\tsleep=light\t")));
+        let (rc, _, err) = ui_status(&d, &["send", "b"]);
+        assert_eq!(rc, 4, "a key on a dark screen is refused: {err}");
+        let (rc, _, err) = ui_status(&d, &["send", "wake"]);
+        assert_eq!(rc, 0, "{err}");
+        let (rc, out, err) = ui_status(&d, &["expect", "settings:Groups", "5"]);
+        assert_eq!((rc, out.trim()), (0, "settings:Groups"), "wake pressed nothing: still on the page it woke on ({err})");
     }
 
     #[test]

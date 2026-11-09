@@ -101,6 +101,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [TRIMUI-BRICK-CORES.md](TRIMUI-BRICK-CORES.md) | Design and reference | Additional standalone software cores: pinned builds, licences, routing, real-library checks and limits |
 | [TRIMUI-BRICK-STANDALONE.md](TRIMUI-BRICK-STANDALONE.md) | Design and reference | The same Brick without NextUI: a card folder with its own start script, cores built for glibc 2.33, stand-ins for the firmware helpers, host tests |
 | [TRIMUI-SMART-PRO.md](TRIMUI-SMART-PRO.md) | Design and reference | The TrimUI Smart Pro on the same card (experimental): how the card tells it from the Brick, what differs, the firmware floor, what a report carries |
+| [TRIMUI-BRICK-PRO.md](TRIMUI-BRICK-PRO.md) | Design and reference | Experimental Brick Pro on the same TrimUI card: detection, separate stick clicks and F keys, suspend handshake, evidence and hardware limits |
 | [TRIMUI-BRICK-REMOTE.md](TRIMUI-BRICK-REMOTE.md) | Design and reference | The Brick's own card on the network: Tailscale, Remote access with dropbear, updates of the card's program folder from a private channel, the way back |
 | [TRIMUI-BRICK-MORE.md](TRIMUI-BRICK-MORE.md) | Design and reference | The Brick's own card with Kids mode, screenshots (and the `grim` stand-in), the web companion over userspace Tailscale, Over the game and a Tour that fits |
 | [TRIMUI-BRICK-HW.md](TRIMUI-BRICK-HW.md) | Design and reference | The Brick's own hardware: rumble motor, the 23 LEDs, the F1/F2 keys and the mute slider, and the Settings page "Lights & buttons" |
@@ -138,6 +139,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [CURATOR.md](CURATOR.md) | Design notes and reference | Curator (Lens, smart shelves, stickers, Echoes, Versions) and Pixel Path: the design, then what was built ("Developer notes", "Pixel Path as built") |
 | [HISTORY.md](HISTORY.md) | Reference | Play history: the session log and its file, what counts, Curator → History and the Year in review, the read API for the web companion |
 | [SYNC-CURATION.md](SYNC-CURATION.md) | Reference | Settings → Sync → Library data: one folder per device, values with times, the field-by-field merge with tombstones, the play history union, what is left out |
+| [SYNC-OWNERSHIP.md](SYNC-OWNERSHIP.md) | Reference and design notes | Save-sync pause ownership, failed-resume retry tests, the remaining interruption ambiguity and the manual-recovery follow-up |
 | [CURATOR-DATA.md](CURATOR-DATA.md) | Reference | Curator's data: Wikidata facts and versions by work, the feel-tag vocabulary and labelling, ROM file-name facts, the reader APIs |
 | [STATUS.md](STATUS.md) | Reference | The feature status ledger: one row per feature with how it was verified (device-measured, device smoke-checked, virtual device only, host tests only, not built), the evidence and what is still open |
 | [LEDS.md](LEDS.md) | Reference | The lights around the sticks: ROCKNIX's scripts, what Settings → Sound & feel → LEDs writes, a device checklist |

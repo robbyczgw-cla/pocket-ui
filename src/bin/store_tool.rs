@@ -5,7 +5,8 @@
 //!   store-tool update <key> <update.json> app|os|sd_image|install_zip <version> <file> [url] [notes]
 //!                                                  adds a release to the update channel and signs it
 //!   store-tool mirror <key> <update.json> app|os|sd_image|install_zip <url> [url] [url]
-//!                                                  sets signed fallback URLs and signs again
+//!   store-tool prefer <key> <update.json> app|os|sd_image|install_zip <url> [url] [url]
+//!                                                  sets signed fallback/preferred URLs and signs again
 //!   store-tool list <update.json>                 one line per file it names: kind, version, size, sha256, url
 //!                                                  (tab-separated, urls resolved; scripts/release-channel.sh --check)
 //!   store-tool verify <file> [<private-key-file>]  checks <file>.sig against the key pocket-ui has built in (or
@@ -50,6 +51,7 @@ fn main() {
                 version: args[5].clone(),
                 url: args.get(7).cloned().unwrap_or_else(|| file.file_name().unwrap().to_string_lossy().into_owned()),
                 mirrors: Vec::new(),
+                preferred_sources: Vec::new(),
                 sha256: pocket_ui::store::sha256_file(file).expect("read release file"),
                 size: std::fs::metadata(file).expect("release file").len(),
                 notes: args.get(8).cloned().unwrap_or_default(),
@@ -65,7 +67,7 @@ fn main() {
             sign(&args[2], manifest_path);
         }
         // Mirrors are part of the exact signed manifest bytes, never supplied by a host at runtime.
-        Some("mirror") if (6..=8).contains(&args.len()) => {
+        Some("mirror" | "prefer") if (6..=8).contains(&args.len()) => {
             let path = std::path::Path::new(&args[3]);
             let mut manifest: pocket_ui::update::Manifest = serde_json::from_slice(&std::fs::read(path).expect("read manifest")).expect("parse manifest");
             let rel = match args[4].as_str() {
@@ -79,9 +81,14 @@ fn main() {
             .expect("release is missing");
             assert!(
                 args[5..].iter().all(|u| u.starts_with("https://") || u.starts_with("file://")),
-                "mirrors must use https"
+                "sources must use https"
             );
-            rel.mirrors = args[5..].to_vec();
+            if args[1] == "prefer" {
+                rel.preferred_sources = args[5..].to_vec();
+            } else {
+                rel.mirrors = args[5..].to_vec();
+            }
+            assert!(rel.download_urls("").len() <= 4, "at most four distinct signed sources");
             std::fs::write(path, serde_json::to_vec_pretty(&manifest).unwrap()).expect("write manifest");
             sign(&args[2], path);
         }
@@ -95,8 +102,8 @@ fn main() {
             ];
             for (kind, rel) in entries {
                 if let Some(r) = rel {
-                    for url in std::iter::once(&r.url).chain(&r.mirrors) {
-                        println!("{kind}\t{}\t{}\t{}\t{}", r.version, r.size, r.sha256, pocket_ui::update::resolve(&args[2], url));
+                    for url in r.download_urls(&args[2]) {
+                        println!("{kind}\t{}\t{}\t{}\t{}", r.version, r.size, r.sha256, url);
                     }
                 }
             }
@@ -124,7 +131,7 @@ fn main() {
         _ => {
             eprintln!(
                 "usage: store-tool keygen <key> | sign <key> <catalog.json> | hash <file> | verify <file> [<key>] | list <update.json>\n       \
-                 store-tool update <key> <update.json> app|os|sd_image|install_zip <version> <file> [url] [notes]"
+                 store-tool update <key> <update.json> app|os|sd_image|install_zip <version> <file> [url] [notes]\n       store-tool mirror|prefer <key> <update.json> app|os|sd_image|install_zip <url> [url] [url]"
             );
             std::process::exit(2);
         }

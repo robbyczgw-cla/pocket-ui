@@ -567,8 +567,9 @@ impl Sys {
                     text.draw_right(c, Face::Body, FONT, c.w - PAD - BTN_PAD, base, pal().text, value);
                 }
                 let (desc, wrong) = self.time_note(sel, at);
-                // Date and time while network time has set the clock: nothing to open (A only says why).
-                let hints: &[(&str, &str)] = if sel == BY_HAND_ROW && synced { &[("B", "Back")] } else { &[("B", "Back"), ("A", "Open")] };
+                // Date and time while network time has set the clock: nothing to open, A only says why, and the bar says so
+                // (it showed B alone: the explorer found A working unnamed once it reached this page, 2026-11-08).
+                let hints: &[(&str, &str)] = if sel == BY_HAND_ROW && synced { &[("B", "Back"), ("A", "Explain")] } else { &[("B", "Back"), ("A", "Open")] };
                 self.footer(c, text, hints, &desc, if wrong == Clock::Fine { pal().text } else { pal().amber });
             }
             TimePage::Regions { sel } => {

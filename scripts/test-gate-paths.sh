@@ -32,7 +32,7 @@ chmod +x "$T/bin/cargo"
 printf '#!/bin/sh\necho 1\n' >"$T/bin/nproc"
 chmod +x "$T/bin/nproc"
 for suite in deploy/test-run-pocket-ui.sh scripts/test-verify-device.sh scripts/test-check-core-licences.sh \
-    deploy/package/test-package.sh deploy/test-grub-quiet.sh scripts/image/test-grub-checks.sh scripts/image/test-rocknix-source.sh scripts/image/test-h700-pins.sh deploy/fat/test-hook.sh \
+    deploy/package/test-package.sh deploy/test-grub-quiet.sh scripts/image/test-grub-checks.sh scripts/image/test-rocknix-source.sh scripts/image/test-h700-pins.sh scripts/image/test-storage-budget.sh deploy/fat/test-hook.sh \
     deploy/image/test-mount-storage.sh; do
     mkdir -p "$T/tree/$(dirname "$suite")"
     cat >"$T/tree/$suite" <<'SUITE'
@@ -41,6 +41,11 @@ printf '%s\n' "$0" >>"$GATE_FIXTURE_CALLS"
 case $0 in */test-package.sh) [ "${GATE_FIXTURE_FAIL:-0}" = 0 ] || exit 1 ;; esac
 SUITE
 done
+cat >"$T/tree/scripts/image/test-receipts.py" <<'RECEIPTS'
+import os, sys
+with open(os.environ['GATE_FIXTURE_CALLS'], 'a') as calls:
+    calls.write(sys.argv[0] + '\n')
+RECEIPTS
 # A transitive shell helper must keep the Rust source it names in the shell test set.
 printf '# helper reads src/hostsys.rs\n' >"$T/tree/scripts/nested/helpers/check.sh"
 printf '# helper reads tests/shell_input.rs\n' >>"$T/tree/scripts/nested/helpers/check.sh"
@@ -74,43 +79,43 @@ check() {
     pass=$((pass + 1))
     echo "ok $label"
 }
-check 'LICENSE still runs package tests' 10 0 LICENSE
-check 'NOTICE still runs package tests' 10 0 NOTICE.md
-check 'font licence runs package tests' 10 0 assets/fonts/OFL.txt
-check 'deleted or empty licence is rejected by required package suite' 10 0 LICENSE '' 1
+check 'LICENSE still runs package tests' 12 0 LICENSE
+check 'NOTICE still runs package tests' 12 0 NOTICE.md
+check 'font licence runs package tests' 12 0 assets/fonts/OFL.txt
+check 'deleted or empty licence is rejected by required package suite' 12 0 LICENSE '' 1
 check 'ordinary docs use only doc and i18n checks' 0 1 docs/DEVELOPING.md
 check 'root Markdown skips shell and integration tests' 0 1 README.md
-check 'manual changes retain the full gate' 10 0 docs/user/settings.md
-check 'Markdown outside docs is unknown' 10 0 assets/new-input.md
-check 'unknown doc configuration runs all tests' 10 0 docs/new-input.conf
-check 'one Rust source selects the full gate' 10 0 src/unreferenced_feature.rs
-check 'transitive shell source input runs shell tests' 10 0 src/hostsys.rs
-check 'one Rust test selects the full gate' 10 0 tests/layout_contract.rs
-check 'Brick text regression changes retain the full gate' 10 0 tests/text_size.rs
-check 'transitive shell test input runs shell tests' 10 0 tests/shell_input.rs
-check 'unknown test data still runs shell tests' 10 0 tests/new-input.txt
-check 'Rust test path with spaces remains unknown' 10 0 'tests/new input.rs'
-check 'Rust test changes cannot cancel deploy tests' 10 0 'tests/layout_contract.rs
+check 'manual changes retain the full gate' 12 0 docs/user/settings.md
+check 'Markdown outside docs is unknown' 12 0 assets/new-input.md
+check 'unknown doc configuration runs all tests' 12 0 docs/new-input.conf
+check 'one Rust source selects the full gate' 12 0 src/unreferenced_feature.rs
+check 'transitive shell source input runs shell tests' 12 0 src/hostsys.rs
+check 'one Rust test selects the full gate' 12 0 tests/layout_contract.rs
+check 'Brick text regression changes retain the full gate' 12 0 tests/text_size.rs
+check 'transitive shell test input runs shell tests' 12 0 tests/shell_input.rs
+check 'unknown test data still runs shell tests' 12 0 tests/new-input.txt
+check 'Rust test path with spaces remains unknown' 12 0 'tests/new input.rs'
+check 'Rust test changes cannot cancel deploy tests' 12 0 'tests/layout_contract.rs
 deploy/run-pocket-ui.sh'
-check 'full override retains shell tests after Rust test changes' 10 0 tests/layout_contract.rs 1
-check 'non-Rust source input is unknown' 10 0 src/new-input.c
-check 'unknown assets run shell tests' 10 0 assets/new-input.txt
-check 'unknown root files run shell tests' 10 0 new-input
-check 'deploy changes run shell tests' 10 0 deploy/run-pocket-ui.sh
-check 'script changes run shell tests' 10 0 scripts/test-gate-paths.sh
-check 'Cargo metadata changes run shell tests' 10 0 Cargo.toml
-check 'docs cannot cancel licence tests' 10 0 'LICENSE
+check 'full override retains shell tests after Rust test changes' 12 0 tests/layout_contract.rs 1
+check 'non-Rust source input is unknown' 12 0 src/new-input.c
+check 'unknown assets run shell tests' 12 0 assets/new-input.txt
+check 'unknown root files run shell tests' 12 0 new-input
+check 'deploy changes run shell tests' 12 0 deploy/run-pocket-ui.sh
+check 'script changes run shell tests' 12 0 scripts/test-gate-paths.sh
+check 'Cargo metadata changes run shell tests' 12 0 Cargo.toml
+check 'docs cannot cancel licence tests' 12 0 'LICENSE
 README.md'
-check 'docs cannot cancel unknown input tests' 10 0 'assets/new-input
+check 'docs cannot cancel unknown input tests' 12 0 'assets/new-input
 README.md'
-check 'path with spaces remains one unknown path' 10 0 'assets/new input.md'
+check 'path with spaces remains one unknown path' 12 0 'assets/new input.md'
 check 'Markdown path with spaces remains one document' 0 1 'docs/new document.md'
 check 'unembedded translation audit notes use short path' 0 1 assets/i18n/skip.txt
-check 'runtime translation tables retain full gate' 10 0 assets/i18n/de.tsv
-check 'mixed docs and Rust retain full gate' 10 0 'docs/DEVELOPING.md
+check 'runtime translation tables retain full gate' 12 0 assets/i18n/de.tsv
+check 'mixed docs and Rust retain full gate' 12 0 'docs/DEVELOPING.md
 src/main.rs'
-check 'no change list runs everything' 10 0 ''
-check 'full override runs everything' 10 0 docs/DEVELOPING.md 1
+check 'no change list runs everything' 12 0 ''
+check 'full override runs everything' 12 0 docs/DEVELOPING.md 1
 # Short-path failures must stay red, including a link/index or translation failure.
 printf '%s\n' docs/DEVELOPING.md >"$T/tree/.gate-changed"
 for which in DOC_FAIL I18N_FAIL DOC_EMPTY I18N_EMPTY; do
@@ -122,25 +127,25 @@ for which in DOC_FAIL I18N_FAIL DOC_EMPTY I18N_EMPTY; do
 done
 mkdir -p "$T/tree/src"
 printf 'std::fs::read_to_string("docs/player-contract.md");\n' >"$T/tree/src/runtime.rs"
-check 'on-disk player contract outside doc tier remains full path' 10 0 docs/player-contract.md
+check 'on-disk player contract outside doc tier remains full path' 12 0 docs/player-contract.md
 rm "$T/tree/src/runtime.rs"
 printf 'include_str!("../docs/embedded.md");\n' >"$T/tree/src/embedded.rs"
-check 'compiled document cannot use short path' 10 0 docs/embedded.md
+check 'compiled document cannot use short path' 12 0 docs/embedded.md
 printf 'include_str! { "../docs/embedded.md" };\n' >"$T/tree/src/embedded.rs"
-check 'alternate embed delimiter remains full path' 10 0 docs/embedded.md
+check 'alternate embed delimiter remains full path' 12 0 docs/embedded.md
 printf 'include_str!(concat!("../docs/", env!("NAME")));\n' >"$T/tree/src/embedded.rs"
-check 'unknown dynamic embed remains full path' 10 0 docs/DEVELOPING.md
+check 'unknown dynamic embed remains full path' 12 0 docs/DEVELOPING.md
 printf 'include_str!("docs/embedded.md");\n' >"$T/tree/build.rs"
 rm "$T/tree/src/embedded.rs"
-check 'build script embedded document remains full path' 10 0 docs/embedded.md
+check 'build script embedded document remains full path' 12 0 docs/embedded.md
 rm "$T/tree/build.rs"
 mkdir -p "$T/tree/tests"
 printf 'include_str!("../docs/embedded.md");\n' >"$T/tree/tests/embed.rs"
-check 'integration fixture embedded document remains full path' 10 0 docs/embedded.md
+check 'integration fixture embedded document remains full path' 12 0 docs/embedded.md
 rm "$T/tree/tests/embed.rs"
 mkdir -p "$T/tree/docs"
 ln -s ../README.md "$T/tree/docs/link.md"
-check 'document symlink remains full path' 10 0 docs/link.md
+check 'document symlink remains full path' 12 0 docs/link.md
 rm "$T/tree/docs/link.md"
 printf '%s\n' src/main.rs >"$T/tree/.gate-changed"
 # A red timing result cannot be retried into green.

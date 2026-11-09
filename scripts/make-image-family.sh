@@ -221,6 +221,9 @@ rm -f "$W/image.img" "$W/base-ddr3.img"
 [ $KEEP = 1 ] || rm -rf "$W"
 for n in $NAMES; do ls -l "$OUT/$n.img.xz" "$OUT/$n.txt"; done
 cat "$OUT/SHA256SUMS"
+for n in $NAMES; do
+  python3 -I "$ROOT/scripts/image/receipt.py" assemble "$OUT/$n.img.xz" --version "$VERSION"
+done
 
 if [ $CHECK = 1 ]; then
   bad=0

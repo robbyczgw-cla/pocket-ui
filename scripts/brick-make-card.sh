@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds the standalone TrimUI card (Brick and Smart Pro, one card): one folder (and a zip of it) to copy onto an empty FAT card
+# Builds the standalone TrimUI card (Brick, Brick Pro and Smart Pro, one card): one folder (and a zip of it) to copy onto an empty FAT card
 # (docs/TRIMUI-BRICK-STANDALONE.md).
 #   scripts/brick-make-card.sh OUT_DIR BINS_DIR LIBS_DIR CORES_DIR [VERSION]
 # VERSION    what the programs were built as (POCKETUI_VERSION; `pocket-ui --version` prints it): app/RELEASE, compared by the updater.
@@ -107,7 +107,7 @@ mkdir -p "$CARD/pocket-ui/sources/cores"; cp "$CORES"/sources/*.tar.gz "$CARD/po
 for d in tailscale curl dropbear syncthing; do mkdir -p "$P/licences/$d"; cp -R "$PARTS/licences/$d/." "$P/licences/$d/"; done
 mkdir -p "$P/sources/network"; cp -R "$PARTS/sources/." "$P/sources/network/"; cp "$PARTS/PARTS.txt" "$P/licences/NETWORK-PARTS.txt"
 cat >"$P/licences/README.txt" <<TXT
-pocket-ui on a TrimUI Brick or Smart Pro (standalone card), $VERSION.
+pocket-ui on a TrimUI Brick, Brick Pro or Smart Pro (standalone card), $VERSION.
 pocket-ui and its helpers: LICENSE, NOTICE.md and the third-party lists in pocket-ui/ (GPL-2.0-or-later and the crates' own licences).
 Cores: CORES-LICENCES.txt, and each core's own licence files in cores/. Where the source of each core (the exact commit it was built
 from) is: SOURCES.txt. snes9x, picodrive and fbneo are licensed for non-commercial use only (free to pass on under their licence terms, not to sell); see CORES-LICENCES.txt.
@@ -193,7 +193,7 @@ storage/          your settings, the Tailscale login, the Remote access password
 logs/             what pocket-ui writes down (boot.log first).
 authorized_keys   SSH keys that may log in as root when Remote access is on, one per line, as in ~/.ssh/authorized_keys (empty at first).
 
-This card is for the TrimUI Brick and the TrimUI Smart Pro (experimental). On a Smart Pro, update TrimUI's firmware to 1.1.1 first
+This card is for the TrimUI Brick, TrimUI Brick Pro (experimental) and TrimUI Smart Pro (experimental). On a Smart Pro, update TrimUI's firmware to 1.1.1 first
 (1.0.4 at least); with older firmware pocket-ui cannot start and logs/FIRMWARE-TOO-OLD.txt says so.
 TXT
 # Keep this folder name free of other launchers' names: a leftover .system folder would mean the wrong folder was copied over.

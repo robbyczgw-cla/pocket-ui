@@ -30,6 +30,9 @@ class Packaging(unittest.TestCase):
                     inventory = json.load(archive.extractfile('asset-packages.json'))
                 snapshots.append({p.name: p.read_bytes() for p in (channel / 'assets').iterdir()})
                 for asset in inventory['assets']:
+                    package = asset['package']
+                    self.assertTrue(package['url'].startswith('https://github.com/owner/repo/releases/download/v' + version + '/'))
+                    self.assertEqual(package['mirrors'], ['https://pocketui.xyz/updates/brick/assets/' + package['url'].rsplit('/', 1)[1]])
                     file = release / asset['package']['url'].rsplit('/', 1)[1]
                     self.assertEqual(pack.sha(file), asset['package']['sha256'])
                     with tarfile.open(file) as archive:

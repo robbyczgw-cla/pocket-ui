@@ -21,8 +21,8 @@ sh scripts/check-binary-paths.sh "$bin/pocket-ui" "$bin/pocket-core" || { echo "
 b=target/deck-bundle
 rm -rf "$b"; mkdir -p "$b"
 cp "$bin/pocket-ui" "$bin/pocket-core" "$b/"
-cp deploy/steamdeck/pocket-ui-deck.sh deploy/steamdeck/runemu.sh deploy/steamdeck/gen-es-systems.py deploy/steamdeck/add-to-steam.py deploy/steamdeck/fetch-cores.sh deploy/steamdeck/install.sh "$b/"
+cp deploy/steamdeck/pocket-ui-deck.sh deploy/steamdeck/runemu.sh deploy/steamdeck/gen-es-systems.py deploy/steamdeck/add-to-steam.py deploy/steamdeck/fetch-cores.sh deploy/steamdeck/install.sh deploy/steamdeck/controller_neptune.vdf "$b/"
 if [ -n "${CORES_DIR:-}" ]; then mkdir -p "$b/cores"; cp "$CORES_DIR"/*_libretro.so "$b/cores/"; fi
-v=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+v=${POCKETUI_VERSION:-$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)}
 tar -C target -czf "target/pocket-ui-deck-$v.tar.gz" deck-bundle
 ls -la "target/pocket-ui-deck-$v.tar.gz"

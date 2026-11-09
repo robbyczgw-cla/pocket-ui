@@ -546,6 +546,10 @@ emulator
 controls
 controls:1
 controls:18
+controllers:1:brick-f1
+controllers:1:brick-f2
+leds:off:1
+leds:off:2
 cheats
 cheats-more
 cheats-only
@@ -880,3 +884,9 @@ updates:timeout
 # Safe one-launch retry and a set-aside moment waiting for card space.
 notice:fallback
 notice:kept
+
+notice:save-failed
+notice:undo-failed
+load-blocked
+load-blocked:a
+load-blocked:b

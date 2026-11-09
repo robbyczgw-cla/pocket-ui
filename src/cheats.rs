@@ -16,8 +16,12 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+#[cfg(not(target_os = "android"))]
 use crate::control;
+#[cfg(not(target_os = "android"))]
 use crate::emu_menu::Row;
+#[cfg(target_os = "android")]
+pub struct Row { pub name: String, pub value: String, pub desc: String }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Cheat {
@@ -527,6 +531,35 @@ impl CheatMenu {
         })
     }
 
+    /// A same-game sidecar supplied by a document provider. The caller supplies a private game/core identity.
+    pub fn from_text(store: PathBuf, text: &str) -> Option<Self> {
+        let parsed = parse_cht_full(text);
+        if parsed.cheats.is_empty() && parsed.unsupported.is_empty() { return None; }
+        let keys = keys(&parsed.cheats);
+        let saved = crate::fsutil::read_json_or_backup::<serde_json::Value>(&store);
+        let on = saved.and_then(|v| serde_json::from_value::<BTreeSet<String>>(v["on"].clone()).ok()).unwrap_or_default().into_iter().filter(|k| keys.contains(k)).collect();
+        Some(Self { cheats: parsed.cheats, unsupported: parsed.unsupported.len(), keys, on, store, notify: false })
+    }
+
+    /// Codes in database order, from the switches whose persistence succeeded.
+    pub fn codes(&self) -> Vec<String> {
+        self.cheats.iter().zip(&self.keys).filter(|(_, k)| self.on.contains(*k)).map(|(c, _)| c.code.clone()).collect()
+    }
+
+    /// A failed write leaves both the visible switch and the running core unchanged.
+    pub fn try_press(&mut self, sel: usize) -> Result<bool, &'static str> {
+        if !self.actionable(sel) { return Ok(false); }
+        let before = self.on.clone();
+        if sel == self.cheats.len() { self.on.clear(); }
+        else if !self.on.remove(&self.keys[sel]) { self.on.insert(self.keys[sel].clone()); }
+        if self.on == before { return Ok(false); }
+        if !save_on(&self.store, &self.on) {
+            self.on = before;
+            return Err("Could not save the cheat setting");
+        }
+        Ok(true)
+    }
+
     /// The cheats, then "All off" (when there are cheats), then the line about those that can't be applied.
     pub fn count(&self) -> usize {
         (self.cheats.len() + usize::from(!self.cheats.is_empty()) + usize::from(self.unsupported > 0)).max(1)
@@ -599,9 +632,8 @@ impl CheatMenu {
             self.on.clear();
         }
         save_on(&self.store, &self.on);
-        if self.notify {
-            control::pocket_core("cheats");
-        }
+        #[cfg(not(target_os = "android"))]
+        if self.notify { control::pocket_core("cheats"); }
         true
     }
 }

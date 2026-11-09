@@ -192,6 +192,43 @@ public class PocketActivity extends NativeActivity {
         android.util.Log.i(TAG, "SAF multi-root scan roots=" + scanned + " entries=" + files.length());
         return files.toString();
     }
+    /** Worker-only: decode a granted provider picture into a bounded private PNG. No writes to the card. */
+    public String readPicture(String document) {
+        android.graphics.Bitmap bitmap = null;
+        try {
+            Uri uri = Uri.parse(document);
+            if (!"content".equals(uri.getScheme())) return "";
+            byte[] bytes;
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                byte[] block = new byte[16384]; int n;
+                while ((n = in.read(block)) != -1) {
+                    if (out.size() + n > 8388608) return "";
+                    out.write(block, 0, n);
+                }
+                bytes = out.toByteArray();
+            }
+            android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options();
+            options.inJustDecodeBounds = true;
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+            if (options.outWidth <= 0 || options.outHeight <= 0 || options.outWidth > 16384 || options.outHeight > 16384) return "";
+            options.inSampleSize = 1;
+            while (options.outWidth / options.inSampleSize > 1024 || options.outHeight / options.inSampleSize > 1024) options.inSampleSize *= 2;
+            options.inJustDecodeBounds = false;
+            bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+            if (bitmap == null) return "";
+            File folder = new File(getCacheDir(), "document-art");
+            if (!folder.isDirectory() && !folder.mkdirs()) return "";
+            // The one media worker consumes this file before its next bridge call; no growing artwork cache.
+            File file = new File(folder, "current.png");
+            try (OutputStream out = new FileOutputStream(file)) {
+                if (!bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)) return "";
+            }
+            return file.getAbsolutePath();
+        } catch (Exception e) { android.util.Log.w(TAG, "Provider picture unavailable", e); return ""; }
+        finally { if (bitmap != null) bitmap.recycle(); }
+    }
+
     private static String rootPrefix(int index, String root) throws Exception {
         if (index == 0) return "";
         byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(root.getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -260,7 +297,7 @@ public class PocketActivity extends NativeActivity {
         ArrayDeque<String[]> pending = new ArrayDeque<>();
         pending.add(new String[]{DocumentsContract.getTreeDocumentId(tree), "", "0"});
         HashSet<String> visited = new HashSet<>();
-        int seen = 0;
+        int seen = 0, metadataBytes = 0;
         while (!pending.isEmpty()) {
             String[] folder = pending.removeFirst();
             if (!visited.add(folder[0])) continue;
@@ -284,14 +321,19 @@ public class PocketActivity extends NativeActivity {
                         entry.put("relative", relative);
                         entry.put("id", id);
                         entry.put("authority", tree.getAuthority());
-                        if (name.toLowerCase(Locale.ROOT).matches(".*\\.(m3u|cue|gdi)$")) {
+                        boolean optionalText = name.equalsIgnoreCase("gamelist.xml") || name.toLowerCase(Locale.ROOT).endsWith(".cht");
+                        if ((optionalText && metadataBytes < 8388608) || name.toLowerCase(Locale.ROOT).matches(".*\\.(m3u|cue|gdi)$")) {
                             Uri document = DocumentsContract.buildDocumentUriUsingTree(tree, id);
                             try (InputStream in = getContentResolver().openInputStream(document)) {
                                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                                 byte[] bytes = new byte[4096]; int n;
                                 while (out.size() <= 262144 && (n = in.read(bytes)) != -1) out.write(bytes, 0, n);
-                                if (out.size() > 262144) throw new IOException("Disc sheet too large: " + relative);
-                                entry.put("sheet", sheetText(out.toByteArray()));
+                                if (out.size() > 262144) {
+                                    if (!optionalText) throw new IOException("Disc sheet too large: " + relative);
+                                } else { entry.put("sheet", sheetText(out.toByteArray())); if (optionalText) metadataBytes += out.size(); }
+                            } catch (IOException | SecurityException e) {
+                                if (!optionalText) throw e;
+                                android.util.Log.w(TAG, "Optional game metadata unavailable", e);
                             }
                         }
                         entry.put("size", cursor.isNull(3) ? -1 : cursor.getLong(3));

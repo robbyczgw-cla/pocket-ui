@@ -2,14 +2,14 @@
 
 The Smart Pro is the Brick's sibling: the same chip (Allwinner A133P, PowerVR GE8300), the same TrimUI firmware family (TinaLinux,
 kernel 4.9.191, glibc 2.33 from firmware 1.0.4 on), the same way in from a card (`runtrimui.sh` runs the card's `trimui/app/MainUI`).
-One TrimUI card for both ([TRIMUI-BRICK-STANDALONE.md](TRIMUI-BRICK-STANDALONE.md); `pocket-ui-trimui-card-<version>.zip`), one update
+One TrimUI card for the family ([TRIMUI-BRICK-STANDALONE.md](TRIMUI-BRICK-STANDALONE.md); `pocket-ui-trimui-card-<version>.zip`), one update
 channel (the Brick's, `updates/brick/update.json`: existing Bricks ask for that address); what differs is one profile.
 Nobody on the project has held a Smart Pro. Everything below comes from public sources (other projects' code read for facts,
 TrimUI's firmware notes); About says "experimental", and the project asks owners for feedback.
 
 ## Which one it is
 
-`brick_profile::Board` (`Model::Brick(Board)`, the H700 boards' pattern): `Brick` or `SmartPro`. Everything the two share is
+`brick_profile::Board` (`Model::Brick(Board)`, the H700 boards' pattern): `Brick`, `SmartPro`, or `BrickPro` (see its linked reference). Everything they share is
 `device::brick()`; every difference is a method of `Board`.
 
 | | Brick | Smart Pro |
@@ -62,3 +62,5 @@ last 60 lines of the card's `boot.log`: the board start.sh found, the GPU's answ
 Whether our GPU way shows a picture there; the real stick ranges (and the right stick's axis order, which one source gives the
 other way round); the ring zones; what the function switch should do; the motor's feel; battery, mixer and the backlight's lowest
 useful value (other projects use 4 of 255 there, the Brick 1).
+
+The same card also has [experimental Brick Pro support](TRIMUI-BRICK-PRO.md). It shares the Brick screen and the Smart Pro analog-input path; both Pro stick profiles still need hardware confirmation.

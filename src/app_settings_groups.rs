@@ -306,7 +306,7 @@ pub(crate) fn groups_input_with(page: SettingsPage, b: Button, store: bool) -> O
 }
 
 /// Where Settings' switches without a page of their own stand (Look → Appearance, Colours, Font; Sound & feel →
-/// Motion; Playing → Buttons' two): part of `App::sound_view`, so that switching one clicks as any other change does.
+/// Motion; Playing → Buttons' two): part of `App::feedback_view`, so that switching one clicks as any other change does.
 /// Each process-wide choice is read where it lives; the App's own two are handed in.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) struct Switches {

@@ -223,7 +223,14 @@ do what these lines say, by where the button sits (the right face button is A). 
 
 HOME, and SELECT + START held to quit, always work on the real buttons, whatever you change here.
 
+On the TrimUI Brick, **F1 and F2 are system shortcuts**. Their global actions are chosen in
+Settings → Sound & feel → **Lights & buttons**; they cannot be assigned to console buttons here
+or in Controller setup. This applies to every hosted core, including mGBA.
+
 ## Cheats
+
+On a Steam Deck, the launcher uses a cheat database already downloaded by RetroArch, from its Flatpak or ordinary
+configuration folder. No database comes with the Deck package. The big emulator apps keep their own cheats.
 
 Games on pocket-ui's own host get a **Cheats** page in the Options menu when the libretro cheat database has cheats for
 them. The Brick brings the database with its card and updates; there the page says "No cheats found for this game" when

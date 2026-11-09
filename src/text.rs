@@ -81,6 +81,8 @@ pub struct Text {
     tr: crate::i18n::Cache,
     /// Off while the manual's English pages are painted (`set_translate`).
     raw: bool,
+    /// A literal game/system name also bypasses device-specific wording substitutions.
+    naming: bool,
     /// For the snapshot checks only (`i18n::recording`): the first pieces of words `wrap` broke inside, so that one that
     /// is painted is noted (`i18n::note_broken`); a wrap only measured to try a size is not.
     broken: std::collections::HashSet<String>,
@@ -268,6 +270,7 @@ impl Text {
             drawn: 0,
             tr: Default::default(),
             raw: false,
+            naming: false,
             broken: Default::default(),
         }
     }
@@ -583,6 +586,44 @@ impl Text {
         self.tr.name_line(line);
     }
 
+    /// Measure and paint a game/system name literally, restoring the caller's language mode.
+    /// Keep the scope around both operations: measuring must not consume a one-use name exemption.
+    pub fn literal<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        let translating = self.translating();
+        let naming = self.naming;
+        self.naming = true;
+        self.set_translate(false);
+        let result = f(self);
+        self.set_translate(translating);
+        self.naming = naming;
+        result
+    }
+
+    /// Fit a data name for a compact row (metadata choices, related games, management sheets).
+    pub fn fit_name(&mut self, face: Face, px: u32, name: &str, width: i32) -> String {
+        self.literal(|text| text.fit(face, px, name, width))
+    }
+
+    /// Wrap a data name without interpreting words inside it as UI copy.
+    pub fn wrap_name(&mut self, face: Face, px: u32, name: &str, width: i32) -> Vec<String> {
+        self.literal(|text| text.wrap(face, px, name, width))
+    }
+
+    /// A name already fitted/wrapped by its component; never translate the resulting fragments.
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_name(&mut self, c: &mut crate::gfx::Canvas, face: Face, px: u32, x: i32, y: i32, colour: u32, name: &str) -> i32 {
+        self.literal(|text| text.draw(c, face, px, x, y, colour, name))
+    }
+
+    /// The printed name on a carousel card, fitted before it is painted.
+    pub fn card_name(&mut self, title: &str, width: i32) -> (u32, Vec<String>) {
+        let lines = crate::title_block::name_layout_in(self, Face::Title, 37, title, width, 80);
+        // Printed cards use one size for every line. A subtitle may have been
+        // fitted smaller than the name; keeping the first size would undo that fit.
+        let px = lines.iter().map(|line| line.px).min().unwrap_or(37);
+        (px, lines.into_iter().map(|line| line.text).collect())
+    }
+
     /// Whether strings are translated now (`set_translate`).
     pub fn translating(&self) -> bool {
         !self.raw
@@ -591,6 +632,7 @@ impl Text {
     /// `s` in the interface's language (`crate::i18n`); a borrowed string or a shared one, never a new allocation
     /// for a string painted in the frame before.
     pub fn translated<'a>(&mut self, s: &'a str) -> crate::i18n::Tr<'a> {
+        if self.naming { return crate::i18n::Tr::Same(s); }
         let translated = if self.raw { crate::i18n::Tr::Same(s) } else { self.tr.get(s) };
         if crate::i18n::is_name(s) { translated } else { crate::i18n::device_text(translated) }
     }

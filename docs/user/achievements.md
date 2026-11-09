@@ -42,7 +42,8 @@ removes the key from the Pocket. What you unlocked stays on the site.
 In a game on pocket-ui's own host, while you are signed in, the pause menu (HOME) has an **Achievements** entry
 right after Options ([The pause menu](pause-menu.md)). It lists
 the game's achievements: the ones still locked first, with your progress where the game counts it ("612/1000"),
-otherwise their points; then the unlocked ones. The top line says how many you have and how many points. The
+otherwise their points; then the unlocked ones. Below the heading, a separate line keeps the full achievement and
+point totals readable in Retro and with Large text. The
 selected achievement's description is at the bottom. **B** goes back.
 
 If the game isn't known to RetroAchievements, or the Pocket was offline when the game started and has never seen

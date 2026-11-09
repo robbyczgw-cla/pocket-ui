@@ -72,8 +72,8 @@ def prepare(app, release, channel, github, version):
             import shutil
             shutil.copyfile(target, channel / 'assets' / name)
             assets.append({'path': str(relative), 'size': path.stat().st_size, 'sha256': sha(path),
-                           'package': {'version': version, 'url': f'https://pocketui.xyz/updates/brick/assets/{name}',
-                                       'mirrors': [f'{github}/{name}'], 'size': target.stat().st_size, 'sha256': digest}})
+                           'package': {'version': version, 'url': f'{github}/{name}',
+                                       'mirrors': [f'https://pocketui.xyz/updates/brick/assets/{name}'], 'size': target.stat().st_size, 'sha256': digest}})
         else:
             if relative.as_posix() == 'asset-packages.json':
                 raise ValueError('input already contains asset-packages.json')
