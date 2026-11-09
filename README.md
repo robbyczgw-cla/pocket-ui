@@ -15,10 +15,16 @@ Your games on one shelf, press A and you're playing, right where you left off.</
 
 ## Why you'll like it
 
+- **Press play, the old way.** The cartridge slides into its console, a disc drops into its case, the old TV flickers
+  on, and you're playing. Handhelds play in their own frame, a GBA or GBA SP.
+- **Every game has a story.** Turn the box over for pictures from the game and what it's about, and see the other games
+  of the series you own.
+- **Bring your card as it is.** Folders like "GBA" or "Game Boy Advance (GBA)" are found as they are, and box art
+  already on the card is used.
 - **Straight back in.** A game starts from the picture of where you left it, and the shelf is up in a blink.
   Coming back after weeks? It tells you when you last played and shows the note you left yourself.
 - **One pause menu for every console.** HOME gives you Continue, 8 save slots with pictures, Earlier (a step back of
-  a few minutes), screen frames, CRT and LCD looks, cheats and the controls of that console, from Game Boy to
+  a few minutes), screen frames, CRT and LCD looks, cheats (on the Brick too) and the controls of that console, from Game Boy to
   PlayStation 2.
 - **Every game in its case.** Box art on real cases, cartridges and discs, stickers for the games you finished, and
   six looks to choose from, including Easy: one big game at a time, for anyone you hand the handheld to.
@@ -47,7 +53,7 @@ You bring your own games and, for a few systems, BIOS files; pocket-ui includes 
 
 **Runs on** handhelds with [ROCKNIX](https://rocknix.org): Retroid Pocket Mini V2, Mini, 5, Flip 2, 6 and Nova ·
 AYN Odin 2, Odin 2 Mini and Odin 2 Portal · Anbernic RG35XX Plus, H, Pro, 2024 and SP, RG28XX, RG40XX H and V,
-RG34XX, RG34XX-SP and RG-SP · TrimUI Brick (Beta, from a card of its own). Played on most: the Mini V2, the Odin 2 Mini and the RG35XX Plus. Which consoles run on
+RG34XX, RG34XX-SP and RG-SP · TrimUI Brick (Beta, from a card of its own) and TrimUI Smart Pro (experimental, same card). Played on most: the Mini V2, the Odin 2 Mini and the RG35XX Plus. Which consoles run on
 which chip: [docs/DEVICES.md](docs/DEVICES.md).
 
 ## Learn more
