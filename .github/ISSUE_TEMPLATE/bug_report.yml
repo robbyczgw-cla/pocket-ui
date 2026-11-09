@@ -13,6 +13,23 @@ body:
       label: Device
       options:
         - Retroid Pocket Mini V2
+        - Anbernic RG35XX SP
+        - Anbernic RG35XX Plus
+        - Anbernic RG35XX H
+        - Anbernic RG35XX Pro
+        - Anbernic RG35XX 2024
+        - Anbernic RG28XX
+        - Anbernic RG34XX
+        - Anbernic RG34XX SP
+        - Anbernic RG40XX H
+        - Anbernic RG40XX V
+        - Anbernic RG SP
+        - AYN Odin 2 / Odin 2 Mini / Odin 2 Portal
+        - Retroid Pocket 5 / Flip 2 / 6 (ROCKNIX)
+        - Another ROCKNIX handheld
+        - TrimUI Brick
+        - TrimUI Smart Pro (experimental)
+        - TrimUI Brick Pro (experimental)
         - Another device (not supported, but tell us)
         - Virtual device (scripts/vdev.sh)
     validations:
@@ -20,10 +37,10 @@ body:
   - type: input
     id: rocknix
     attributes:
-      label: ROCKNIX version
-      description: "In the report file's system.txt, or `cat /etc/os-release` over SSH, or the version EmulationStation showed before. For example 20261001."
+      label: ROCKNIX version or TrimUI firmware
+      description: "ROCKNIX: the report file's system.txt, or `cat /etc/os-release` over SSH, for example 20261001. TrimUI: the firmware version in TrimUI's own settings, for example 1.1.1. Leave empty if you don't know."
     validations:
-      required: true
+      required: false
   - type: input
     id: version
     attributes:
@@ -37,6 +54,9 @@ body:
       label: How did you install it?
       options:
         - SD card image
+        - TrimUI card (zip unpacked onto an SD card)
+        - Update over Wi-Fi (Settings → System → Updates)
+        - Ports installer on ROCKNIX
         - Manual install on a ROCKNIX card (docs/INSTALL-DUAL-BOOT.md, appendix)
         - Developer deploy (scripts/dev.sh deploy)
         - Other
@@ -64,7 +84,7 @@ body:
     id: report
     attributes:
       label: Report file
-      description: "On the Pocket: Settings → System → About → Report a problem. It saves `report-<date>-<time>.zip` in the `reports` folder of the games share (`roms/reports` on the SD card), with versions, logs and settings, and with Wi-Fi names, addresses, accounts and game names left out (the manual's troubleshooting page, \"Report a problem\"). Drag the zip into this box."
+      description: "On the Pocket: Settings → System → About → Report a problem. It saves `report-<date>-<time>.zip` in the `reports` folder of the games share (`roms/reports` on the SD card; the Report page tells you where it saved it), with versions, logs and settings, and with Wi-Fi names, addresses, accounts and game names left out (the manual's troubleshooting page, \"Report a problem\"). Drag the zip into this box."
       placeholder: Drop report-2026-10-26-140507.zip here
   - type: textarea
     id: log
